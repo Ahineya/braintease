@@ -132,6 +132,11 @@ impl Type {
     pub fn is_pointer(&self) -> bool {
         matches!(self, Type::Pointer { .. })
     }
+
+    /// Struct or union (typedefs must already be resolved)
+    pub fn is_aggregate(&self) -> bool {
+        matches!(self, Type::Struct { .. } | Type::Union { .. })
+    }
     
     /// Check if this type can be assigned from another type
     pub fn is_assignable_from(&self, other: &Type) -> bool {

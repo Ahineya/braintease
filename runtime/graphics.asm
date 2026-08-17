@@ -191,6 +191,8 @@ L_graphics_init_1:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     STORE T6, SB, SC
+; Set SP = FP+31 so callee frame is above spills
+    ADDI SP, FP, 31
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T4, R0
@@ -209,6 +211,8 @@ L_graphics_init_1:
     ADD SC, FP, R0
     ADDI SC, SC, 19
     STORE T0, SB, SC
+; Set SP = FP+31 so callee frame is above spills
+    ADDI SP, FP, 31
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T1, R0
@@ -450,6 +454,8 @@ L_set_pixel_5:
     ADD SC, FP, R0
     ADDI SC, SC, 26
     STORE T3, SB, SC
+; Set SP = FP+34 so callee frame is above spills
+    ADDI SP, FP, 34
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S1, R0
@@ -671,6 +677,8 @@ L_get_pixel_9:
     ADD SC, FP, R0
     ADDI SC, SC, 23
     STORE S2, SB, SC
+; Set SP = FP+33 so callee frame is above spills
+    ADDI SP, FP, 33
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S2, R0
@@ -836,6 +844,8 @@ L_clear_screen_16:
     ADD SC, FP, R0
     ADDI SC, SC, 16
     STORE T3, SB, SC
+; Set SP = FP+31 so callee frame is above spills
+    ADDI SP, FP, 31
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T4, R0
@@ -954,6 +964,8 @@ L_graphics_flush_19:
     ADD SC, FP, R0
     ADDI SC, SC, 9
     STORE S2, SB, SC
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0
@@ -1153,6 +1165,8 @@ L_draw_hline_22:
     ADD SC, FP, R0
     ADDI SC, SC, 20
     STORE T7, SB, SC
+; Set SP = FP+33 so callee frame is above spills
+    ADDI SP, FP, 33
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0
@@ -1380,6 +1394,8 @@ L_draw_vline_27:
     ADD SC, FP, R0
     ADDI SC, SC, 20
     STORE T7, SB, SC
+; Set SP = FP+33 so callee frame is above spills
+    ADDI SP, FP, 33
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0
@@ -1904,6 +1920,8 @@ L_draw_line_44:
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE S2, SB, SC
+; Set SP = FP+43 so callee frame is above spills
+    ADDI SP, FP, 43
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T1, R0
@@ -2289,6 +2307,8 @@ L_draw_rect_58:
     ADD SC, FP, R0
     ADDI SC, SC, 21
     STORE T4, SB, SC
+; Set SP = FP+33 so callee frame is above spills
+    ADDI SP, FP, 33
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T0, R0
@@ -2375,6 +2395,8 @@ L_draw_rect_59:
     ADD SC, FP, R0
     ADDI SC, SC, 25
     STORE S1, SB, SC
+; Set SP = FP+33 so callee frame is above spills
+    ADDI SP, FP, 33
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S2, R0
@@ -2457,6 +2479,8 @@ L_draw_rect_62:
     ADD SC, FP, R0
     ADDI SC, SC, 29
     STORE T6, SB, SC
+; Set SP = FP+33 so callee frame is above spills
+    ADDI SP, FP, 33
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0
@@ -2547,6 +2571,8 @@ L_draw_rect_65:
     ADD SC, FP, R0
     ADDI SC, SC, 33
     STORE S2, SB, SC
+; Set SP = FP+34 so callee frame is above spills
+    ADDI SP, FP, 34
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T7, R0
@@ -2840,6 +2866,8 @@ L_fill_rect_74:
     ADD SC, FP, R0
     ADDI SC, SC, 24
     STORE S3, SB, SC
+; Set SP = FP+35 so callee frame is above spills
+    ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S1, R0
@@ -3085,6 +3113,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE S3, SB, SC
+; Set SP = FP+35 so callee frame is above spills
+    ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T7, R0
@@ -3148,6 +3178,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 25
     STORE T7, SB, SC
+; Set SP = FP+35 so callee frame is above spills
+    ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S1, R0
@@ -3211,6 +3243,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 28
     STORE S1, SB, SC
+; Set SP = FP+35 so callee frame is above spills
+    ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0
@@ -3274,6 +3308,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE S3, SB, SC
+; Set SP = FP+35 so callee frame is above spills
+    ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T7, R0
@@ -3337,6 +3373,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE T7, SB, SC
+; Set SP = FP+35 so callee frame is above spills
+    ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S1, R0
@@ -3400,6 +3438,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 37
     STORE S1, SB, SC
+; Set SP = FP+38 so callee frame is above spills
+    ADDI SP, FP, 38
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0
@@ -3463,6 +3503,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S3, SB, SC
+; Set SP = FP+41 so callee frame is above spills
+    ADDI SP, FP, 41
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T7, R0
@@ -3526,6 +3568,8 @@ L_draw_circle_79:
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T7, SB, SC
+; Set SP = FP+44 so callee frame is above spills
+    ADDI SP, FP, 44
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S1, R0
@@ -3804,6 +3848,8 @@ L_fill_circle_89:
     ADD SC, FP, R0
     ADDI SC, SC, 20
     STORE T2, SB, SC
+; Set SP = FP+33 so callee frame is above spills
+    ADDI SP, FP, 33
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T7, R0
@@ -3984,6 +4030,8 @@ L_draw_char_93:
     ADD SC, FP, R0
     ADDI SC, SC, 20
     STORE T5, SB, SC
+; Set SP = FP+32 so callee frame is above spills
+    ADDI SP, FP, 32
 ; Pushing 1 arguments to stack
 ; Push arg 4 (scalar) to stack
     STORE T5, SB, SP
@@ -4106,17 +4154,17 @@ L_draw_string_97:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("load_f28_op17_t10_bank_val")
     LI T6, -1
-    BEQ T4, T6, L_bc_cbe98ce3_use_global
+    BEQ T4, T6, L_bc_59823a7f_use_global
     LI T3, -2
-    BEQ T4, T3, L_bc_cbe98ce3_use_stack
+    BEQ T4, T3, L_bc_59823a7f_use_stack
     ADD T5, T4, R0
-    BEQ R0, R0, L_bc_cbe98ce3_done
-L_bc_cbe98ce3_use_global:
+    BEQ R0, R0, L_bc_59823a7f_done
+L_bc_59823a7f_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_cbe98ce3_done
-L_bc_cbe98ce3_use_stack:
+    BEQ R0, R0, L_bc_59823a7f_done
+L_bc_59823a7f_use_stack:
     ADD T5, SB, R0
-L_bc_cbe98ce3_done:
+L_bc_59823a7f_done:
 ; LOAD: Using bank register T5 for load
     LOAD T6, T5, T2
     BEQ T6, R0, L_draw_string_99
@@ -4184,7 +4232,7 @@ L_draw_string_98:
     ADDI SC, SC, 20
     STORE T1, SB, SC
     LI T1, -1
-    BEQ T7, T1, L_bc_10489e15_use_global
+    BEQ T7, T1, L_bc_a468ed68_use_global
 ; Spill t10 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 21
@@ -4194,15 +4242,15 @@ L_draw_string_98:
     ADDI SC, SC, 22
     STORE T4, SB, SC
     LI T2, -2
-    BEQ T7, T2, L_bc_10489e15_use_stack
+    BEQ T7, T2, L_bc_a468ed68_use_stack
     ADD S0, T7, R0
-    BEQ R0, R0, L_bc_10489e15_done
-L_bc_10489e15_use_global:
+    BEQ R0, R0, L_bc_a468ed68_done
+L_bc_a468ed68_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_10489e15_done
-L_bc_10489e15_use_stack:
+    BEQ R0, R0, L_bc_a468ed68_done
+L_bc_a468ed68_use_stack:
     ADD S0, SB, R0
-L_bc_10489e15_done:
+L_bc_a468ed68_done:
 ; LOAD: Using bank register S0 for load
     LOAD T1, S0, S1
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -4254,6 +4302,8 @@ L_bc_10489e15_done:
     ADD SC, FP, R0
     ADDI SC, SC, 32
     STORE T4, SB, SC
+; Set SP = FP+34 so callee frame is above spills
+    ADDI SP, FP, 34
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T6, R0
@@ -4495,17 +4545,17 @@ L_fast_sin_102:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("gep_new_bank_f34_op9_t3")
     LI T0, -1
-    BEQ T2, T0, L_bc_db2afd2a_use_global
+    BEQ T2, T0, L_bc_1ad70577_use_global
     LI T6, -2
-    BEQ T2, T6, L_bc_db2afd2a_use_stack
+    BEQ T2, T6, L_bc_1ad70577_use_stack
     ADD T1, T2, R0
-    BEQ R0, R0, L_bc_db2afd2a_done
-L_bc_db2afd2a_use_global:
+    BEQ R0, R0, L_bc_1ad70577_done
+L_bc_1ad70577_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_db2afd2a_done
-L_bc_db2afd2a_use_stack:
+    BEQ R0, R0, L_bc_1ad70577_done
+L_bc_1ad70577_use_stack:
     ADD T1, SB, R0
-L_bc_db2afd2a_done:
+L_bc_1ad70577_done:
 ; LOAD: Using bank register T1 for load
     LOAD T5, T1, T7
     MOVE RV0, T5

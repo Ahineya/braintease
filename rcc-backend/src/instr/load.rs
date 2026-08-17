@@ -118,6 +118,9 @@ pub fn lower_load(
     trace!("  Using {bank_reg:?} for bank");
     
     // Step 3: Allocate destination register and generate LOAD instruction
+    // Pin address and bank so dest allocation cannot spill/reuse them.
+    mgr.pin_register(addr_reg);
+    mgr.pin_register(bank_reg);
     let dest_reg = mgr.get_register(result_name.clone());
     debug!("  Allocated {dest_reg:?} for result {result_name}");
     
@@ -128,6 +131,8 @@ pub fn lower_load(
     let load_inst = AsmInst::Load(dest_reg, bank_reg, addr_reg);
     trace!("  Generated LOAD: {load_inst:?}");
     insts.push(load_inst);
+    mgr.unpin_register(addr_reg);
+    mgr.unpin_register(bank_reg);
     
     // Step 4: If loading a fat pointer, also load the bank component
     if result_type.is_pointer() {

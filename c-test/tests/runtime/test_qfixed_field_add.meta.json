@@ -1,0 +1,6 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "q_add of nested q16_16_t fields of the same parent struct",
+  "timeout_secs": 15
+}

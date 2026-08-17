@@ -62,19 +62,13 @@ pub fn generate_assignment(
     let lhs_type = lhs.get_type();
     let rhs_type = rhs.get_type();
     
-    // Check if we're assigning structs
-    if matches!(lhs_type, Type::Struct { .. }) && matches!(rhs_type, Type::Struct { .. }) {
-        // For struct assignment, we need to copy all fields
-        // Generate the RHS - for structs, this will return a pointer
+    // Struct and union assignment copies the object word-by-word.
+    // The RHS generates as a pointer to the source object.
+    if lhs_type.is_aggregate() && rhs_type.is_aggregate() {
         let rhs_val = gen.generate(rhs)?;
-        
-        // Copy struct contents
         copy_struct(gen, rhs_val.clone(), lhs_addr, &lhs_type)?;
-        
-        // Return the RHS pointer as the result of the assignment expression
         Ok(rhs_val)
     } else {
-        // For non-struct types, generate and store normally
         let rhs_val = gen.generate(rhs)?;
         gen.builder.build_store(rhs_val.clone(), lhs_addr)?;
         Ok(rhs_val)

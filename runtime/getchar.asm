@@ -30,6 +30,8 @@ getchar:
     ADD SC, FP, R0
     ADDI SC, SC, 9
     STORE S2, SB, SC
+; Set SP = FP+29 so callee frame is above spills
+    ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S2, R0
@@ -74,6 +76,8 @@ L_getchar_2:
     ADD SC, FP, R0
     ADDI SC, SC, 11
     STORE T1, SB, SC
+; Set SP = FP+29 so callee frame is above spills
+    ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T1, R0
@@ -97,6 +101,8 @@ L_getchar_3:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     STORE S3, SB, SC
+; Set SP = FP+29 so callee frame is above spills
+    ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0

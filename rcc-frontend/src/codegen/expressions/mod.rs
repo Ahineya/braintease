@@ -224,7 +224,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                             element_type: Box::new(elem_ir_type),
                         }
                     }
-                    Type::Struct { .. } | Type::Union { .. } => {
+                    Type::Struct { .. } | Type::Union { .. } if expr_type.is_aggregate() => {
                         let struct_size = expr_type.size_in_words()
                             .ok_or_else(|| CodegenError::InternalError {
                                 message: "Cannot determine aggregate size for compound literal".to_string(),
@@ -298,37 +298,33 @@ impl<'a> TypedExpressionGenerator<'a> {
                 // Check if the field is an array type, struct type, or pointer type
                 // Arrays and structs should decay to pointers when accessed (not loaded)
                 // Pointers should be returned as FatPtr for further operations
-                match expr_type {
-                    Type::Array { .. } | Type::Struct { .. } | Type::Union { .. } => {
-                        // Aggregates decay to pointers when accessed as values
-                        Ok(field_ptr)
-                    }
-                    Type::Pointer { target, .. } => {
-                        // For pointer fields, load the value as a fat pointer
-                        // The backend's load instruction will handle loading both components
-                        // Convert the pointee type to IR type for the FatPtr
-                        let pointee_ir_type = convert_type(target, rcc_common::SourceLocation::new_simple(0, 0))?;
-                        let ptr_load_type = crate::ir::IrType::FatPtr(Box::new(pointee_ir_type));
-                        let temp_id = self.builder.build_load(field_ptr, ptr_load_type)
-                            .map_err(|e| CodegenError::InternalError {
-                                message: e,
-                                location: rcc_common::SourceLocation::new_simple(0, 0),
-                            })?;
-                        // The loaded pointer has a dynamically loaded bank, so mark as Mixed
-                        Ok(Value::FatPtr(FatPointer {
-                            addr: Box::new(Value::Temp(temp_id)),
-                            bank: BankTag::Mixed,
-                        }))
-                    }
-                    _ => {
-                        // For other fields (scalars), load the value normally
-                        let temp_id = self.builder.build_load(field_ptr, field_type_ir)
-                            .map_err(|e| CodegenError::InternalError {
-                                message: e,
-                                location: rcc_common::SourceLocation::new_simple(0, 0),
-                            })?;
-                        Ok(Value::Temp(temp_id))
-                    }
+                if matches!(expr_type, Type::Array { .. }) || expr_type.is_aggregate() {
+                    // Aggregates decay to pointers when accessed as values
+                    Ok(field_ptr)
+                } else if let Type::Pointer { target, .. } = expr_type {
+                    // For pointer fields, load the value as a fat pointer
+                    // The backend's load instruction will handle loading both components
+                    // Convert the pointee type to IR type for the FatPtr
+                    let pointee_ir_type = convert_type(target, rcc_common::SourceLocation::new_simple(0, 0))?;
+                    let ptr_load_type = crate::ir::IrType::FatPtr(Box::new(pointee_ir_type));
+                    let temp_id = self.builder.build_load(field_ptr, ptr_load_type)
+                        .map_err(|e| CodegenError::InternalError {
+                            message: e,
+                            location: rcc_common::SourceLocation::new_simple(0, 0),
+                        })?;
+                    // The loaded pointer has a dynamically loaded bank, so mark as Mixed
+                    Ok(Value::FatPtr(FatPointer {
+                        addr: Box::new(Value::Temp(temp_id)),
+                        bank: BankTag::Mixed,
+                    }))
+                } else {
+                    // For other fields (scalars), load the value normally
+                    let temp_id = self.builder.build_load(field_ptr, field_type_ir)
+                        .map_err(|e| CodegenError::InternalError {
+                            message: e,
+                            location: rcc_common::SourceLocation::new_simple(0, 0),
+                        })?;
+                    Ok(Value::Temp(temp_id))
                 }
             }
             
@@ -337,7 +333,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                 let cond_value = self.generate(condition)?;
                 
                 // Arrays in a ternary decay to pointers (C99).
-                let is_aggregate = matches!(expr_type, Type::Struct { .. } | Type::Union { .. });
+                let is_aggregate = expr_type.is_aggregate();
                 let value_type = match expr_type {
                     Type::Array { element_type, .. } => Type::Pointer {
                         target: element_type.clone(),

@@ -1,0 +1,6 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "Pass a nested struct field by value as a single argument",
+  "timeout_secs": 10
+}

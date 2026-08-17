@@ -1,0 +1,6 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "Assign a struct-returning call into a nested struct field",
+  "timeout_secs": 10
+}

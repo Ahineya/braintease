@@ -10,7 +10,7 @@ use super::utils::convert_type_default;
 use crate::codegen::CodegenError;
 
 fn is_aggregate(ty: &Type) -> bool {
-    matches!(ty, Type::Struct { .. } | Type::Union { .. })
+    ty.is_aggregate()
 }
 
 /// Copy `size_words` words from `src_ptr` to `dst_ptr`.

@@ -464,17 +464,17 @@ L_umul16_6:
     ADDI SC, SC, 52
     STORE S0, SB, SC
     LI S3, -1
-    BEQ T2, S3, L_bc_d82096db_use_global
+    BEQ T2, S3, L_bc_01041406_use_global
     LI T0, -2
-    BEQ T2, T0, L_bc_d82096db_use_stack
+    BEQ T2, T0, L_bc_01041406_use_stack
     ADD S0, T2, R0
-    BEQ R0, R0, L_bc_d82096db_done
-L_bc_d82096db_use_global:
+    BEQ R0, R0, L_bc_01041406_done
+L_bc_01041406_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_d82096db_done
-L_bc_d82096db_use_stack:
+    BEQ R0, R0, L_bc_01041406_done
+L_bc_01041406_use_stack:
     ADD S0, SB, R0
-L_bc_d82096db_done:
+L_bc_01041406_done:
     STORE T6, S0, T5
 ; Load instruction: t77 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
@@ -497,17 +497,17 @@ L_bc_d82096db_done:
     ADDI SC, SC, 53
     STORE T7, SB, SC
     LI T1, -1
-    BEQ S1, T1, L_bc_aeac8bd8_use_global
+    BEQ S1, T1, L_bc_8afa6aea_use_global
     LI T3, -2
-    BEQ S1, T3, L_bc_aeac8bd8_use_stack
+    BEQ S1, T3, L_bc_8afa6aea_use_stack
     ADD T7, S1, R0
-    BEQ R0, R0, L_bc_aeac8bd8_done
-L_bc_aeac8bd8_use_global:
+    BEQ R0, R0, L_bc_8afa6aea_done
+L_bc_8afa6aea_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_aeac8bd8_done
-L_bc_aeac8bd8_use_stack:
+    BEQ R0, R0, L_bc_8afa6aea_done
+L_bc_8afa6aea_use_stack:
     ADD T7, SB, R0
-L_bc_aeac8bd8_done:
+L_bc_8afa6aea_done:
     STORE T4, T7, T0
 ; Jump to epilogue
     BEQ R0, R0, L_umul16_99999
@@ -889,21 +889,21 @@ L_u32_sub_17:
     ADDI SC, SC, 18
     STORE T6, SB, SC
     LI T6, -1
-    BEQ T1, T6, L_bc_74972ee9_use_global
+    BEQ T1, T6, L_bc_4c29c99c_use_global
 ; Spill t5 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 21
     STORE T4, SB, SC
     LI T4, -2
-    BEQ T1, T4, L_bc_74972ee9_use_stack
+    BEQ T1, T4, L_bc_4c29c99c_use_stack
     ADD S0, T1, R0
-    BEQ R0, R0, L_bc_74972ee9_done
-L_bc_74972ee9_use_global:
+    BEQ R0, R0, L_bc_4c29c99c_done
+L_bc_4c29c99c_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_74972ee9_done
-L_bc_74972ee9_use_stack:
+    BEQ R0, R0, L_bc_4c29c99c_done
+L_bc_4c29c99c_use_stack:
     ADD S0, SB, R0
-L_bc_74972ee9_done:
+L_bc_4c29c99c_done:
     STORE T0, S0, T3
 ; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
@@ -950,7 +950,7 @@ L_bc_74972ee9_done:
     ADDI SC, SC, 29
     STORE T0, SB, SC
     LI T0, -1
-    BEQ T7, T0, L_bc_7ae8313e_use_global
+    BEQ T7, T0, L_bc_092e4d5d_use_global
 ; Spill t18 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 30
@@ -960,15 +960,15 @@ L_bc_74972ee9_done:
     ADDI SC, SC, 31
     STORE T1, SB, SC
     LI T3, -2
-    BEQ T7, T3, L_bc_7ae8313e_use_stack
+    BEQ T7, T3, L_bc_092e4d5d_use_stack
     ADD S1, T7, R0
-    BEQ R0, R0, L_bc_7ae8313e_done
-L_bc_7ae8313e_use_global:
+    BEQ R0, R0, L_bc_092e4d5d_done
+L_bc_092e4d5d_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_7ae8313e_done
-L_bc_7ae8313e_use_stack:
+    BEQ R0, R0, L_bc_092e4d5d_done
+L_bc_092e4d5d_use_stack:
     ADD S1, SB, R0
-L_bc_7ae8313e_done:
+L_bc_092e4d5d_done:
     STORE S2, S1, T4
 ; Jump to epilogue
     BEQ R0, R0, L_u32_sub_99999
@@ -1402,6 +1402,8 @@ L_u32_div_q16_25:
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T0, SB, SC
+; Set SP = FP+44 so callee frame is above spills
+    ADDI SP, FP, 44
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T2, R0
@@ -1487,6 +1489,8 @@ L_u32_div_q16_29:
     ADD SC, FP, R0
     ADDI SC, SC, 49
     STORE T3, SB, SC
+; Set SP = FP+50 so callee frame is above spills
+    ADDI SP, FP, 50
 ; Pushing 2 arguments to stack
 ; Push arg 5 (fat ptr) to stack
     STORE T3, SB, SP
@@ -1606,17 +1610,17 @@ L_u32_div_q16_22:
     ADDI T6, T6, 10
     LOAD S0, SB, T6
     LI S2, -1
-    BEQ T1, S2, L_bc_b03b7301_use_global
+    BEQ T1, S2, L_bc_0f56a5e0_use_global
     LI T3, -2
-    BEQ T1, T3, L_bc_b03b7301_use_stack
+    BEQ T1, T3, L_bc_0f56a5e0_use_stack
     ADD RV0, T1, R0
-    BEQ R0, R0, L_bc_b03b7301_done
-L_bc_b03b7301_use_global:
+    BEQ R0, R0, L_bc_0f56a5e0_done
+L_bc_0f56a5e0_use_global:
     ADD RV0, GP, R0
-    BEQ R0, R0, L_bc_b03b7301_done
-L_bc_b03b7301_use_stack:
+    BEQ R0, R0, L_bc_0f56a5e0_done
+L_bc_0f56a5e0_use_stack:
     ADD RV0, SB, R0
-L_bc_b03b7301_done:
+L_bc_0f56a5e0_done:
     STORE S0, RV0, S1
 ; Load instruction: t76 = load FatPtr(FatPointer { addr: Temp(11), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(11), bank: Stack })
@@ -1654,17 +1658,17 @@ L_bc_b03b7301_done:
     ADDI SC, SC, 53
     STORE S3, SB, SC
     LI S3, -1
-    BEQ T2, S3, L_bc_3dada8e5_use_global
+    BEQ T2, S3, L_bc_df2beeb3_use_global
     LI T5, -2
-    BEQ T2, T5, L_bc_3dada8e5_use_stack
+    BEQ T2, T5, L_bc_df2beeb3_use_stack
     ADD T7, T2, R0
-    BEQ R0, R0, L_bc_3dada8e5_done
-L_bc_3dada8e5_use_global:
+    BEQ R0, R0, L_bc_df2beeb3_done
+L_bc_df2beeb3_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_3dada8e5_done
-L_bc_3dada8e5_use_stack:
+    BEQ R0, R0, L_bc_df2beeb3_done
+L_bc_df2beeb3_use_stack:
     ADD T7, SB, R0
-L_bc_3dada8e5_done:
+L_bc_df2beeb3_done:
     STORE T0, T7, S2
 ; Jump to epilogue
     BEQ R0, R0, L_u32_div_q16_99999
@@ -1733,17 +1737,17 @@ L_q_add_32:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f8_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_8d30d31c_use_global
+    BEQ S2, T3, L_bc_82daa7b9_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_8d30d31c_use_stack
+    BEQ S2, T2, L_bc_82daa7b9_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_8d30d31c_done
-L_bc_8d30d31c_use_global:
+    BEQ R0, R0, L_bc_82daa7b9_done
+L_bc_82daa7b9_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_8d30d31c_done
-L_bc_8d30d31c_use_stack:
+    BEQ R0, R0, L_bc_82daa7b9_done
+L_bc_82daa7b9_use_stack:
     ADD T4, SB, R0
-L_bc_8d30d31c_done:
+L_bc_82daa7b9_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -1765,21 +1769,21 @@ L_bc_8d30d31c_done:
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_ab7ea6ce_use_global
+    BEQ S2, S1, L_bc_fd20186b_use_global
 ; Spill param_bank_f8_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 19
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_ab7ea6ce_use_stack
+    BEQ S2, S0, L_bc_fd20186b_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_ab7ea6ce_done
-L_bc_ab7ea6ce_use_global:
+    BEQ R0, R0, L_bc_fd20186b_done
+L_bc_fd20186b_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_ab7ea6ce_done
-L_bc_ab7ea6ce_use_stack:
+    BEQ R0, R0, L_bc_fd20186b_done
+L_bc_fd20186b_use_stack:
     ADD T2, SB, R0
-L_bc_ab7ea6ce_done:
+L_bc_fd20186b_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -1809,23 +1813,23 @@ L_bc_ab7ea6ce_done:
     ADD SC, FP, R0
     ADDI SC, SC, 18
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f8_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 23
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f8_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 24
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f8_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 25
@@ -1835,7 +1839,7 @@ L_bc_ab7ea6ce_done:
     ADDI SC, SC, 26
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_f817bb2c_use_global
+    BEQ T4, T7, L_bc_da08edae_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 27
@@ -1845,31 +1849,31 @@ L_bc_ab7ea6ce_done:
     ADDI SC, SC, 28
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_f817bb2c_use_stack
+    BEQ T4, T0, L_bc_da08edae_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_f817bb2c_done
-L_bc_f817bb2c_use_global:
+    BEQ R0, R0, L_bc_da08edae_done
+L_bc_da08edae_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_f817bb2c_done
-L_bc_f817bb2c_use_stack:
+    BEQ R0, R0, L_bc_da08edae_done
+L_bc_da08edae_use_stack:
     ADD S3, SB, R0
-L_bc_f817bb2c_done:
+L_bc_da08edae_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f8_op7_1")
+; Spill param_bank_f8_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 29
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f8_op7_1")
-; Spill param_bank_f8_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 29
-    STORE S2, SB, SC
 ; Spill load_f8_op13_t8_resolved_bank_8_f8_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 30
@@ -1879,21 +1883,21 @@ L_bc_f817bb2c_done:
     ADDI SC, SC, 31
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_49375400_use_global
+    BEQ T4, S1, L_bc_b7fc824f_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 32
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_49375400_use_stack
+    BEQ T4, T3, L_bc_b7fc824f_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_49375400_done
-L_bc_49375400_use_global:
+    BEQ R0, R0, L_bc_b7fc824f_done
+L_bc_b7fc824f_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_49375400_done
-L_bc_49375400_use_stack:
+    BEQ R0, R0, L_bc_b7fc824f_done
+L_bc_b7fc824f_use_stack:
     ADD T2, SB, R0
-L_bc_49375400_done:
+L_bc_b7fc824f_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -1909,6 +1913,10 @@ L_bc_49375400_done:
     STORE T4, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD T1, FP, R0
+; Spill load_f8_op18_t12_resolved_bank_8_f8_op19 to slot 18
+    ADD SC, FP, R0
+    ADDI SC, SC, 35
+    STORE S3, SB, SC
     ADDI S3, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t17 to Stack
@@ -1916,15 +1924,15 @@ L_bc_49375400_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f8_op28_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f8_op18_t12_resolved_bank_8_f8_op19 to slot 18
-    ADD SC, FP, R0
-    ADDI SC, SC, 35
-    STORE S3, SB, SC
 ; Spill t12 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T7, SB, SC
     LOAD T7, SB, S3
+; Spill t11 to slot 20
+    ADD SC, FP, R0
+    ADDI SC, SC, 37
+    STORE T5, SB, SC
     ADDI T5, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t19 to Stack
@@ -1932,10 +1940,6 @@ L_bc_49375400_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(19), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f8_op30_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t11 to slot 20
-    ADD SC, FP, R0
-    ADDI SC, SC, 37
-    STORE T5, SB, SC
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -1962,6 +1966,10 @@ L_bc_49375400_done:
     ADDI SC, SC, 39
     STORE T4, SB, SC
     LOAD T0, SB, T3
+; Spill param_bank_f8_op7_1 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 19
+    STORE T4, SB, SC
     ADDI T4, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t24 to Stack
@@ -1969,10 +1977,6 @@ L_bc_49375400_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(24), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f8_op35_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill param_bank_f8_op7_1 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T4, SB, SC
 ; Spill load_f8_op23_t15_resolved_bank_8_f8_op24 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 40
@@ -2035,19 +2039,23 @@ L_q_add_35:
     STORE S1, SB, SC
     LOAD S1, SB, T3
     STORE S1, SB, T2
-    ADD S2, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t32 to Stack
 ; Spill t14 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE S2, SB, SC
+    ADD S2, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t32 to Stack
 ; Spill t17 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE S3, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD S3, FP, R0
+; Spill t19 to slot 27
+    ADD SC, FP, R0
+    ADDI SC, SC, 44
+    STORE T5, SB, SC
     ADD T5, S3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t33 to Stack
@@ -2055,10 +2063,6 @@ L_q_add_35:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(33), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f8_op47_t34 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t19 to slot 27
-    ADD SC, FP, R0
-    ADDI SC, SC, 44
-    STORE T5, SB, SC
 ; Spill t21 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 45
@@ -2161,17 +2165,17 @@ L_q_sub_36:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f10_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_59c9529d_use_global
+    BEQ S2, T3, L_bc_d1e6571e_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_59c9529d_use_stack
+    BEQ S2, T2, L_bc_d1e6571e_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_59c9529d_done
-L_bc_59c9529d_use_global:
+    BEQ R0, R0, L_bc_d1e6571e_done
+L_bc_d1e6571e_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_59c9529d_done
-L_bc_59c9529d_use_stack:
+    BEQ R0, R0, L_bc_d1e6571e_done
+L_bc_d1e6571e_use_stack:
     ADD T4, SB, R0
-L_bc_59c9529d_done:
+L_bc_d1e6571e_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -2193,21 +2197,21 @@ L_bc_59c9529d_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_1d5d5fca_use_global
+    BEQ S2, S1, L_bc_86291adc_use_global
 ; Spill param_bank_f10_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_1d5d5fca_use_stack
+    BEQ S2, S0, L_bc_86291adc_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_1d5d5fca_done
-L_bc_1d5d5fca_use_global:
+    BEQ R0, R0, L_bc_86291adc_done
+L_bc_86291adc_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_1d5d5fca_done
-L_bc_1d5d5fca_use_stack:
+    BEQ R0, R0, L_bc_86291adc_done
+L_bc_86291adc_use_stack:
     ADD T2, SB, R0
-L_bc_1d5d5fca_done:
+L_bc_86291adc_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -2237,23 +2241,23 @@ L_bc_1d5d5fca_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f10_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f10_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f10_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -2263,7 +2267,7 @@ L_bc_1d5d5fca_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_793ddaf5_use_global
+    BEQ T4, T7, L_bc_0bf01b60_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -2273,31 +2277,31 @@ L_bc_1d5d5fca_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_793ddaf5_use_stack
+    BEQ T4, T0, L_bc_0bf01b60_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_793ddaf5_done
-L_bc_793ddaf5_use_global:
+    BEQ R0, R0, L_bc_0bf01b60_done
+L_bc_0bf01b60_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_793ddaf5_done
-L_bc_793ddaf5_use_stack:
+    BEQ R0, R0, L_bc_0bf01b60_done
+L_bc_0bf01b60_use_stack:
     ADD S3, SB, R0
-L_bc_793ddaf5_done:
+L_bc_0bf01b60_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f10_op7_1")
+; Spill param_bank_f10_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 28
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f10_op7_1")
-; Spill param_bank_f10_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 28
-    STORE S2, SB, SC
 ; Spill load_f10_op13_t8_resolved_bank_10_f10_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 29
@@ -2307,21 +2311,21 @@ L_bc_793ddaf5_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_54708167_use_global
+    BEQ T4, S1, L_bc_665d8a6c_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_54708167_use_stack
+    BEQ T4, T3, L_bc_665d8a6c_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_54708167_done
-L_bc_54708167_use_global:
+    BEQ R0, R0, L_bc_665d8a6c_done
+L_bc_665d8a6c_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_54708167_done
-L_bc_54708167_use_stack:
+    BEQ R0, R0, L_bc_665d8a6c_done
+L_bc_665d8a6c_use_stack:
     ADD T2, SB, R0
-L_bc_54708167_done:
+L_bc_665d8a6c_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -2343,6 +2347,10 @@ L_bc_54708167_done:
     STORE S3, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD S3, FP, R0
+; Spill t12 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 35
+    STORE T7, SB, SC
     ADDI T7, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -2350,22 +2358,11 @@ L_bc_54708167_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f10_op28_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t12 to slot 19
-    ADD SC, FP, R0
-    ADDI SC, SC, 35
-    STORE T7, SB, SC
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T5, SB, SC
     LOAD T5, SB, T7
-    ADDI T6, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
-; Load instruction: t21 = load FatPtr(FatPointer { addr: Temp(20), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(20), bank: Stack })
-; LOAD: Pointer load_src_ptr_f10_op30_t21 has bank info: Stack
-; LOAD: Using bank register Sb for load
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 16
@@ -2374,6 +2371,13 @@ L_bc_54708167_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     STORE T4, SB, SC
+    ADDI T6, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t20 to Stack
+; Load instruction: t21 = load FatPtr(FatPointer { addr: Temp(20), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(20), bank: Stack })
+; LOAD: Pointer load_src_ptr_f10_op30_t21 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill t13 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 37
@@ -2430,6 +2434,10 @@ L_q_sub_39:
 ; GEP: Setting bank info for t25 to Stack
 ; Recompute alloca t2 at FP+0
     ADD T3, FP, R0
+; Spill param_bank_f10_op7_1 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 18
+    STORE T4, SB, SC
     ADDI T4, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t26 to Stack
@@ -2437,10 +2445,6 @@ L_q_sub_39:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(26), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f10_op39_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill param_bank_f10_op7_1 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE T4, SB, SC
 ; Spill load_f10_op23_t15_resolved_bank_10_f10_op24 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 39
@@ -2453,6 +2457,10 @@ L_q_sub_39:
 ; Recompute alloca t9 at FP+2
     ADD S1, FP, R0
     ADDI S1, S1, 2
+; Spill t14 to slot 25
+    ADD SC, FP, R0
+    ADDI SC, SC, 41
+    STORE S2, SB, SC
     ADDI S2, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -2460,10 +2468,6 @@ L_q_sub_39:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(28), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f10_op41_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t14 to slot 25
-    ADD SC, FP, R0
-    ADDI SC, SC, 41
-    STORE S2, SB, SC
 ; Spill t18 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 42
@@ -2474,6 +2478,10 @@ L_q_sub_39:
     ADD T7, T0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t31 to Stack
+; Spill t20 to slot 27
+    ADD SC, FP, R0
+    ADDI SC, SC, 43
+    STORE T6, SB, SC
     ADD T6, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t32 to Stack
@@ -2481,11 +2489,11 @@ L_q_sub_39:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(32), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f10_op44_t33 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t20 to slot 27
-    ADD SC, FP, R0
-    ADDI SC, SC, 43
-    STORE T6, SB, SC
     LOAD S0, SB, T6
+; Spill t24 to slot 28
+    ADD SC, FP, R0
+    ADDI SC, SC, 44
+    STORE S3, SB, SC
     ADD S3, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t34 to Stack
@@ -2493,10 +2501,6 @@ L_q_sub_39:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(34), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f10_op46_t35 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t24 to slot 28
-    ADD SC, FP, R0
-    ADDI SC, SC, 44
-    STORE S3, SB, SC
     LOAD T5, SB, S3
     SUB S0, S0, T5
 ; Load instruction: t37 = load FatPtr(FatPointer { addr: Temp(17), bank: Stack })
@@ -2579,17 +2583,17 @@ L_q_neg_40:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f12_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_dbb64dcd_use_global
+    BEQ S2, T5, L_bc_88d6f75e_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_dbb64dcd_use_stack
+    BEQ S2, T4, L_bc_88d6f75e_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_dbb64dcd_done
-L_bc_dbb64dcd_use_global:
+    BEQ R0, R0, L_bc_88d6f75e_done
+L_bc_88d6f75e_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_dbb64dcd_done
-L_bc_dbb64dcd_use_stack:
+    BEQ R0, R0, L_bc_88d6f75e_done
+L_bc_88d6f75e_use_stack:
     ADD T6, SB, R0
-L_bc_dbb64dcd_done:
+L_bc_88d6f75e_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -2603,25 +2607,22 @@ L_bc_dbb64dcd_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f12_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_fcdef55f_use_global
+    BEQ S2, T5, L_bc_ca6f16d6_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_fcdef55f_use_stack
+    BEQ S2, T4, L_bc_ca6f16d6_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_fcdef55f_done
-L_bc_fcdef55f_use_global:
+    BEQ R0, R0, L_bc_ca6f16d6_done
+L_bc_ca6f16d6_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_fcdef55f_done
-L_bc_fcdef55f_use_stack:
+    BEQ R0, R0, L_bc_ca6f16d6_done
+L_bc_ca6f16d6_use_stack:
     ADD T0, SB, R0
-L_bc_fcdef55f_done:
+L_bc_ca6f16d6_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADDI S0, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t9 to Stack
 ; Spill t2 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 12
@@ -2630,6 +2631,13 @@ L_bc_fcdef55f_done:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     STORE S2, SB, SC
+    ADDI S0, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t9 to Stack
+; Spill load_f12_op4_t4_resolved_bank_12_f12_op5 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE T6, SB, SC
     ADDI T6, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t10 to Stack
@@ -2637,10 +2645,6 @@ L_bc_fcdef55f_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f12_op14_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f12_op4_t4_resolved_bank_12_f12_op5 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T6, SB, SC
 ; Spill t4 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
@@ -2726,6 +2730,10 @@ L_q_neg_42:
 ; GEP: Setting bank info for t20 to Stack
 ; Recompute alloca t1 at FP+0
     ADD S2, FP, R0
+; Spill t7 to slot 11
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE T5, SB, SC
     ADD T5, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t21 to Stack
@@ -2733,10 +2741,6 @@ L_q_neg_42:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(21), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f12_op24_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t7 to slot 11
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T5, SB, SC
 ; Spill t6 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -2822,17 +2826,17 @@ L_q_abs_44:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f14_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_51f52ae2_use_global
+    BEQ S2, T5, L_bc_19ff0483_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_51f52ae2_use_stack
+    BEQ S2, T4, L_bc_19ff0483_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_51f52ae2_done
-L_bc_51f52ae2_use_global:
+    BEQ R0, R0, L_bc_19ff0483_done
+L_bc_19ff0483_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_51f52ae2_done
-L_bc_51f52ae2_use_stack:
+    BEQ R0, R0, L_bc_19ff0483_done
+L_bc_19ff0483_use_stack:
     ADD T6, SB, R0
-L_bc_51f52ae2_done:
+L_bc_19ff0483_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -2846,17 +2850,17 @@ L_bc_51f52ae2_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f14_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_e10c8b87_use_global
+    BEQ S2, T5, L_bc_5c70881d_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_e10c8b87_use_stack
+    BEQ S2, T4, L_bc_5c70881d_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_e10c8b87_done
-L_bc_e10c8b87_use_global:
+    BEQ R0, R0, L_bc_5c70881d_done
+L_bc_5c70881d_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_e10c8b87_done
-L_bc_e10c8b87_use_stack:
+    BEQ R0, R0, L_bc_5c70881d_done
+L_bc_5c70881d_use_stack:
     ADD T0, SB, R0
-L_bc_e10c8b87_done:
+L_bc_5c70881d_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -2895,6 +2899,10 @@ L_q_abs_45:
     ADD S1, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t12 to Stack
+; Spill t4 to slot 3
+    ADD SC, FP, R0
+    ADDI SC, SC, 17
+    STORE T3, SB, SC
     ADD T3, T6, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t13 to Stack
@@ -2902,19 +2910,12 @@ L_q_abs_45:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f14_op16_t14 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t4 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE T3, SB, SC
 ; Spill t3 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE T7, SB, SC
     LOAD T7, SB, S1
     STORE T7, SB, T3
-    ADDI S3, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t15 to Stack
 ; Spill t0 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 19
@@ -2923,13 +2924,9 @@ L_q_abs_45:
     ADD SC, FP, R0
     ADDI SC, SC, 20
     STORE S2, SB, SC
-    ADDI T2, T6, 1
+    ADDI S3, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t16 to Stack
-; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(15), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(15), bank: Stack })
-; LOAD: Pointer load_src_ptr_f14_op19_t17 has bank info: Stack
-; LOAD: Using bank register Sb for load
+; GEP: Setting bank info for t15 to Stack
 ; Spill t5 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 21
@@ -2938,6 +2935,13 @@ L_q_abs_45:
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE S2, SB, SC
+    ADDI T2, T6, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t16 to Stack
+; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(15), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(15), bank: Stack })
+; LOAD: Pointer load_src_ptr_f14_op19_t17 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill param_bank_f14_op3_0 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 23
@@ -2990,6 +2994,8 @@ L_q_abs_45:
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE T0, SB, SC
+; Set SP = FP+35 so callee frame is above spills
+    ADDI SP, FP, 35
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T6, R0
@@ -3103,17 +3109,17 @@ L_q_mul_48:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f16_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_be0d8ee5_use_global
+    BEQ S2, T3, L_bc_1edce6ea_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_be0d8ee5_use_stack
+    BEQ S2, T2, L_bc_1edce6ea_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_be0d8ee5_done
-L_bc_be0d8ee5_use_global:
+    BEQ R0, R0, L_bc_1edce6ea_done
+L_bc_1edce6ea_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_be0d8ee5_done
-L_bc_be0d8ee5_use_stack:
+    BEQ R0, R0, L_bc_1edce6ea_done
+L_bc_1edce6ea_use_stack:
     ADD T4, SB, R0
-L_bc_be0d8ee5_done:
+L_bc_1edce6ea_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -3135,21 +3141,21 @@ L_bc_be0d8ee5_done:
     ADDI SC, SC, 42
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_4aec3804_use_global
+    BEQ S2, S1, L_bc_f46a38fd_use_global
 ; Spill param_bank_f16_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_4aec3804_use_stack
+    BEQ S2, S0, L_bc_f46a38fd_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_4aec3804_done
-L_bc_4aec3804_use_global:
+    BEQ R0, R0, L_bc_f46a38fd_done
+L_bc_f46a38fd_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_4aec3804_done
-L_bc_4aec3804_use_stack:
+    BEQ R0, R0, L_bc_f46a38fd_done
+L_bc_f46a38fd_use_stack:
     ADD T2, SB, R0
-L_bc_4aec3804_done:
+L_bc_f46a38fd_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -3179,23 +3185,23 @@ L_bc_4aec3804_done:
     ADD SC, FP, R0
     ADDI SC, SC, 42
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f16_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 47
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f16_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 48
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f16_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 48
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 49
@@ -3205,7 +3211,7 @@ L_bc_4aec3804_done:
     ADDI SC, SC, 50
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_7aaac98d_use_global
+    BEQ T4, T7, L_bc_da4bd217_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 51
@@ -3215,31 +3221,31 @@ L_bc_4aec3804_done:
     ADDI SC, SC, 52
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_7aaac98d_use_stack
+    BEQ T4, T0, L_bc_da4bd217_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_7aaac98d_done
-L_bc_7aaac98d_use_global:
+    BEQ R0, R0, L_bc_da4bd217_done
+L_bc_da4bd217_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_7aaac98d_done
-L_bc_7aaac98d_use_stack:
+    BEQ R0, R0, L_bc_da4bd217_done
+L_bc_da4bd217_use_stack:
     ADD S3, SB, R0
-L_bc_7aaac98d_done:
+L_bc_da4bd217_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f16_op7_1")
+; Spill param_bank_f16_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 53
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f16_op7_1")
-; Spill param_bank_f16_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 53
-    STORE S2, SB, SC
 ; Spill load_f16_op13_t8_resolved_bank_16_f16_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 54
@@ -3249,21 +3255,21 @@ L_bc_7aaac98d_done:
     ADDI SC, SC, 55
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_9c78a098_use_global
+    BEQ T4, S1, L_bc_47e7eb5b_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 56
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_9c78a098_use_stack
+    BEQ T4, T3, L_bc_47e7eb5b_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_9c78a098_done
-L_bc_9c78a098_use_global:
+    BEQ R0, R0, L_bc_47e7eb5b_done
+L_bc_47e7eb5b_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_9c78a098_done
-L_bc_9c78a098_use_stack:
+    BEQ R0, R0, L_bc_47e7eb5b_done
+L_bc_47e7eb5b_use_stack:
     ADD T2, SB, R0
-L_bc_9c78a098_done:
+L_bc_47e7eb5b_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -3281,6 +3287,10 @@ L_bc_9c78a098_done:
     STORE T1, SB, T3
 ; Recompute alloca t2 at FP+0
     ADD T1, FP, R0
+; Spill load_f16_op18_t12_resolved_bank_16_f16_op19 to slot 18
+    ADD SC, FP, R0
+    ADDI SC, SC, 59
+    STORE S3, SB, SC
     ADD S3, T1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t17 to Stack
@@ -3288,10 +3298,6 @@ L_bc_9c78a098_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op30_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f16_op18_t12_resolved_bank_16_f16_op19 to slot 18
-    ADD SC, FP, R0
-    ADDI SC, SC, 59
-    STORE S3, SB, SC
 ; Spill t12 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 60
@@ -3327,13 +3333,6 @@ L_q_mul_49:
     ADD T1, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t23 to Stack
-    ADD T6, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t24 to Stack
-; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(23), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(23), bank: Stack })
-; LOAD: Pointer load_src_ptr_f16_op35_t25 has bank info: Stack
-; LOAD: Using bank register Sb for load
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 41
@@ -3342,6 +3341,13 @@ L_q_mul_49:
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE T4, SB, SC
+    ADD T6, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t24 to Stack
+; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(23), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(23), bank: Stack })
+; LOAD: Pointer load_src_ptr_f16_op35_t25 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill t13 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 62
@@ -3352,13 +3358,17 @@ L_q_mul_49:
     STORE T4, SB, SC
     LOAD T0, SB, T1
     STORE T0, SB, T6
-    ADDI T4, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t26 to Stack
 ; Spill param_bank_f16_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T4, SB, SC
+    ADDI T4, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t26 to Stack
+; Spill load_f16_op23_t15_resolved_bank_16_f16_op24 to slot 23
+    ADD SC, FP, R0
+    ADDI SC, SC, 64
+    STORE T2, SB, SC
     ADDI T2, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t27 to Stack
@@ -3366,10 +3376,6 @@ L_q_mul_49:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(26), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op38_t28 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f16_op23_t15_resolved_bank_16_f16_op24 to slot 23
-    ADD SC, FP, R0
-    ADDI SC, SC, 64
-    STORE T2, SB, SC
 ; Spill t15 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 65
@@ -3418,6 +3424,8 @@ L_q_mul_49:
     ADD SC, FP, R0
     ADDI SC, SC, 75
     STORE S2, SB, SC
+; Set SP = FP+76 so callee frame is above spills
+    ADDI SP, FP, 76
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -3468,6 +3476,10 @@ L_q_mul_49:
     ADDI S2, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t40 to Stack
+; Spill t31 to slot 35
+    ADD SC, FP, R0
+    ADDI SC, SC, 76
+    STORE T7, SB, SC
     ADDI T7, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t41 to Stack
@@ -3475,10 +3487,6 @@ L_q_mul_49:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(40), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op51_t42 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t31 to slot 35
-    ADD SC, FP, R0
-    ADDI SC, SC, 76
-    STORE T7, SB, SC
 ; Spill t33 to slot 36
     ADD SC, FP, R0
     ADDI SC, SC, 77
@@ -3536,13 +3544,17 @@ L_q_mul_52:
 ; Recompute alloca t9 at FP+2
     ADD T0, FP, R0
     ADDI T0, T0, 2
-    ADD S0, T0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t49 to Stack
 ; Spill t36 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 81
     STORE S0, SB, SC
+    ADD S0, T0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t49 to Stack
+; Spill t35 to slot 41
+    ADD SC, FP, R0
+    ADDI SC, SC, 82
+    STORE T6, SB, SC
     ADD T6, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t50 to Stack
@@ -3550,23 +3562,23 @@ L_q_mul_52:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(49), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op59_t51 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t35 to slot 41
-    ADD SC, FP, R0
-    ADDI SC, SC, 82
-    STORE T6, SB, SC
 ; Spill t37 to slot 42
     ADD SC, FP, R0
     ADDI SC, SC, 83
     STORE T4, SB, SC
     LOAD T4, SB, S0
     STORE T4, SB, T6
-    ADDI T3, T0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t52 to Stack
 ; Spill t39 to slot 43
     ADD SC, FP, R0
     ADDI SC, SC, 84
     STORE T3, SB, SC
+    ADDI T3, T0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t52 to Stack
+; Spill t38 to slot 44
+    ADD SC, FP, R0
+    ADDI SC, SC, 85
+    STORE T2, SB, SC
     ADDI T2, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t53 to Stack
@@ -3574,10 +3586,6 @@ L_q_mul_52:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(52), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op62_t54 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t38 to slot 44
-    ADD SC, FP, R0
-    ADDI SC, SC, 85
-    STORE T2, SB, SC
 ; Spill t40 to slot 45
     ADD SC, FP, R0
     ADDI SC, SC, 86
@@ -3630,6 +3638,8 @@ L_q_mul_52:
     ADD SC, FP, R0
     ADDI SC, SC, 97
     STORE T1, SB, SC
+; Set SP = FP+98 so callee frame is above spills
+    ADDI SP, FP, 98
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S1, R0
@@ -3681,6 +3691,10 @@ L_q_mul_52:
     ADDI T1, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t66 to Stack
+; Spill t57 to slot 57
+    ADD SC, FP, R0
+    ADDI SC, SC, 98
+    STORE S3, SB, SC
     ADDI S3, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t67 to Stack
@@ -3688,10 +3702,6 @@ L_q_mul_52:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(66), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op75_t68 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t57 to slot 57
-    ADD SC, FP, R0
-    ADDI SC, SC, 98
-    STORE S3, SB, SC
 ; Spill t59 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 99
@@ -3748,6 +3758,10 @@ L_q_mul_54:
     STORE S1, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD S1, FP, R0
+; Spill t64 to slot 66
+    ADD SC, FP, R0
+    ADDI SC, SC, 107
+    STORE T2, SB, SC
     ADDI T2, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t77 to Stack
@@ -3755,10 +3769,6 @@ L_q_mul_54:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(77), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op78_t78 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t64 to slot 66
-    ADD SC, FP, R0
-    ADDI SC, SC, 107
-    STORE T2, SB, SC
 ; Spill t66 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 108
@@ -3771,6 +3781,10 @@ L_q_mul_54:
 ; Recompute alloca t9 at FP+2
     ADD S0, FP, R0
     ADDI S0, S0, 2
+; Spill t67 to slot 69
+    ADD SC, FP, R0
+    ADDI SC, SC, 110
+    STORE S3, SB, SC
     ADDI S3, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t79 to Stack
@@ -3778,10 +3792,6 @@ L_q_mul_54:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(79), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op80_t80 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t67 to slot 69
-    ADD SC, FP, R0
-    ADDI SC, SC, 110
-    STORE S3, SB, SC
     LOAD T7, SB, S3
 ; Recompute alloca t69 at FP+13
     ADD S2, FP, R0
@@ -3816,6 +3826,8 @@ L_q_mul_54:
     ADD SC, FP, R0
     ADDI SC, SC, 116
     STORE T4, SB, SC
+; Set SP = FP+117 so callee frame is above spills
+    ADDI SP, FP, 117
 ; Pushing 1 arguments to stack
 ; Push arg 3 (fat ptr) to stack
     STORE T4, SB, SP
@@ -3889,6 +3901,8 @@ L_q_mul_54:
     ADD SC, FP, R0
     ADDI SC, SC, 122
     STORE S2, SB, SC
+; Set SP = FP+123 so callee frame is above spills
+    ADDI SP, FP, 123
 ; Pushing 1 arguments to stack
 ; Push arg 3 (fat ptr) to stack
     STORE S2, SB, SP
@@ -3962,6 +3976,8 @@ L_q_mul_54:
     ADD SC, FP, R0
     ADDI SC, SC, 128
     STORE S3, SB, SC
+; Set SP = FP+129 so callee frame is above spills
+    ADDI SP, FP, 129
 ; Pushing 1 arguments to stack
 ; Push arg 3 (fat ptr) to stack
     STORE S3, SB, SP
@@ -4035,6 +4051,8 @@ L_q_mul_54:
     ADD SC, FP, R0
     ADDI SC, SC, 134
     STORE T2, SB, SC
+; Set SP = FP+135 so callee frame is above spills
+    ADDI SP, FP, 135
 ; Pushing 1 arguments to stack
 ; Push arg 3 (fat ptr) to stack
     STORE T2, SB, SP
@@ -4266,6 +4284,10 @@ L_q_mul_60:
     STORE S2, SB, SC
     LOAD S2, SB, S3
     STORE S2, SB, T0
+; Spill t108 to slot 96
+    ADD SC, FP, R0
+    ADDI SC, SC, 137
+    STORE T3, SB, SC
     ADD T3, T1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t125 to Stack
@@ -4273,10 +4295,6 @@ L_q_mul_60:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(76), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op152_t126 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t108 to slot 96
-    ADD SC, FP, R0
-    ADDI SC, SC, 137
-    STORE T3, SB, SC
 ; Spill t112 to slot 97
     ADD SC, FP, R0
     ADDI SC, SC, 138
@@ -4393,6 +4411,8 @@ L_q_mul_61:
     ADD SC, FP, R0
     ADDI SC, SC, 152
     STORE RV0, SB, SC
+; Set SP = FP+153 so callee frame is above spills
+    ADDI SP, FP, 153
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S0, R0
@@ -4444,6 +4464,10 @@ L_q_mul_61:
     ADDI S0, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t148 to Stack
+; Spill t139 to slot 112
+    ADD SC, FP, R0
+    ADDI SC, SC, 153
+    STORE T0, SB, SC
     ADDI T0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t149 to Stack
@@ -4451,10 +4475,6 @@ L_q_mul_61:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(148), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op175_t150 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t139 to slot 112
-    ADD SC, FP, R0
-    ADDI SC, SC, 153
-    STORE T0, SB, SC
 ; Spill t141 to slot 113
     ADD SC, FP, R0
     ADDI SC, SC, 154
@@ -4538,17 +4558,17 @@ L_q_div_64:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f18_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_f79ad479_use_global
+    BEQ S2, T3, L_bc_9ace233e_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_f79ad479_use_stack
+    BEQ S2, T2, L_bc_9ace233e_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_f79ad479_done
-L_bc_f79ad479_use_global:
+    BEQ R0, R0, L_bc_9ace233e_done
+L_bc_9ace233e_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_f79ad479_done
-L_bc_f79ad479_use_stack:
+    BEQ R0, R0, L_bc_9ace233e_done
+L_bc_9ace233e_use_stack:
     ADD T4, SB, R0
-L_bc_f79ad479_done:
+L_bc_9ace233e_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -4570,21 +4590,21 @@ L_bc_f79ad479_done:
     ADDI SC, SC, 32
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_04827d15_use_global
+    BEQ S2, S1, L_bc_8719f32a_use_global
 ; Spill param_bank_f18_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 33
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_04827d15_use_stack
+    BEQ S2, S0, L_bc_8719f32a_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_04827d15_done
-L_bc_04827d15_use_global:
+    BEQ R0, R0, L_bc_8719f32a_done
+L_bc_8719f32a_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_04827d15_done
-L_bc_04827d15_use_stack:
+    BEQ R0, R0, L_bc_8719f32a_done
+L_bc_8719f32a_use_stack:
     ADD T2, SB, R0
-L_bc_04827d15_done:
+L_bc_8719f32a_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -4614,23 +4634,23 @@ L_bc_04827d15_done:
     ADD SC, FP, R0
     ADDI SC, SC, 32
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f18_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 37
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f18_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 38
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f18_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 38
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 39
@@ -4640,7 +4660,7 @@ L_bc_04827d15_done:
     ADDI SC, SC, 40
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_48c519c0_use_global
+    BEQ T4, T7, L_bc_ebc3e57a_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 41
@@ -4650,31 +4670,31 @@ L_bc_04827d15_done:
     ADDI SC, SC, 42
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_48c519c0_use_stack
+    BEQ T4, T0, L_bc_ebc3e57a_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_48c519c0_done
-L_bc_48c519c0_use_global:
+    BEQ R0, R0, L_bc_ebc3e57a_done
+L_bc_ebc3e57a_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_48c519c0_done
-L_bc_48c519c0_use_stack:
+    BEQ R0, R0, L_bc_ebc3e57a_done
+L_bc_ebc3e57a_use_stack:
     ADD S3, SB, R0
-L_bc_48c519c0_done:
+L_bc_ebc3e57a_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f18_op7_1")
+; Spill param_bank_f18_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 43
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f18_op7_1")
-; Spill param_bank_f18_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 43
-    STORE S2, SB, SC
 ; Spill load_f18_op13_t8_resolved_bank_18_f18_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 44
@@ -4684,21 +4704,21 @@ L_bc_48c519c0_done:
     ADDI SC, SC, 45
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_12d62709_use_global
+    BEQ T4, S1, L_bc_09c1ef85_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 46
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_12d62709_use_stack
+    BEQ T4, T3, L_bc_09c1ef85_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_12d62709_done
-L_bc_12d62709_use_global:
+    BEQ R0, R0, L_bc_09c1ef85_done
+L_bc_09c1ef85_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_12d62709_done
-L_bc_12d62709_use_stack:
+    BEQ R0, R0, L_bc_09c1ef85_done
+L_bc_09c1ef85_use_stack:
     ADD T2, SB, R0
-L_bc_12d62709_done:
+L_bc_09c1ef85_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -4838,13 +4858,17 @@ L_q_div_68:
     ADDI S0, S0, 7
 ; Recompute alloca t2 at FP+0
     ADD T1, FP, R0
-    ADD T2, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t35 to Stack
 ; Spill load_f18_op23_t15_resolved_bank_18_f18_op24 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 54
     STORE T2, SB, SC
+    ADD T2, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t35 to Stack
+; Spill t15 to slot 24
+    ADD SC, FP, R0
+    ADDI SC, SC, 55
+    STORE S1, SB, SC
     ADD S1, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t36 to Stack
@@ -4852,23 +4876,23 @@ L_q_div_68:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(35), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op51_t37 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t15 to slot 24
-    ADD SC, FP, R0
-    ADDI SC, SC, 55
-    STORE S1, SB, SC
 ; Spill t14 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 56
     STORE S2, SB, SC
     LOAD S2, SB, T2
     STORE S2, SB, S1
-    ADDI T3, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t38 to Stack
 ; Spill t16 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 57
     STORE T3, SB, SC
+    ADDI T3, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t38 to Stack
+; Spill t20 to slot 27
+    ADD SC, FP, R0
+    ADDI SC, SC, 58
+    STORE T5, SB, SC
     ADDI T5, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t39 to Stack
@@ -4876,10 +4900,6 @@ L_q_div_68:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(38), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op54_t40 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t20 to slot 27
-    ADD SC, FP, R0
-    ADDI SC, SC, 58
-    STORE T5, SB, SC
 ; Spill t26 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 59
@@ -4928,6 +4948,8 @@ L_q_div_68:
     ADD SC, FP, R0
     ADDI SC, SC, 69
     STORE S3, SB, SC
+; Set SP = FP+70 so callee frame is above spills
+    ADDI SP, FP, 70
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S0, R0
@@ -4978,6 +5000,10 @@ L_q_div_68:
     ADDI S3, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t52 to Stack
+; Spill t43 to slot 39
+    ADD SC, FP, R0
+    ADDI SC, SC, 70
+    STORE T6, SB, SC
     ADDI T6, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t53 to Stack
@@ -4985,10 +5011,6 @@ L_q_div_68:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(52), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op67_t54 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t43 to slot 39
-    ADD SC, FP, R0
-    ADDI SC, SC, 70
-    STORE T6, SB, SC
 ; Spill t45 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 71
@@ -5046,13 +5068,17 @@ L_q_div_71:
 ; Recompute alloca t9 at FP+2
     ADD S2, FP, R0
     ADDI S2, S2, 2
-    ADD T1, S2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t61 to Stack
 ; Spill t48 to slot 44
     ADD SC, FP, R0
     ADDI SC, SC, 75
     STORE T1, SB, SC
+    ADD T1, S2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t61 to Stack
+; Spill t47 to slot 45
+    ADD SC, FP, R0
+    ADDI SC, SC, 76
+    STORE S1, SB, SC
     ADD S1, T0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t62 to Stack
@@ -5060,23 +5086,23 @@ L_q_div_71:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(61), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op75_t63 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t47 to slot 45
-    ADD SC, FP, R0
-    ADDI SC, SC, 76
-    STORE S1, SB, SC
 ; Spill t49 to slot 46
     ADD SC, FP, R0
     ADDI SC, SC, 77
     STORE T3, SB, SC
     LOAD T3, SB, T1
     STORE T3, SB, S1
-    ADDI S0, S2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t64 to Stack
 ; Spill t51 to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE S0, SB, SC
+    ADDI S0, S2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t64 to Stack
+; Spill t50 to slot 48
+    ADD SC, FP, R0
+    ADDI SC, SC, 79
+    STORE T5, SB, SC
     ADDI T5, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t65 to Stack
@@ -5084,10 +5110,6 @@ L_q_div_71:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(64), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op78_t66 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t50 to slot 48
-    ADD SC, FP, R0
-    ADDI SC, SC, 79
-    STORE T5, SB, SC
 ; Spill t52 to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 80
@@ -5140,6 +5162,8 @@ L_q_div_71:
     ADD SC, FP, R0
     ADDI SC, SC, 91
     STORE T2, SB, SC
+; Set SP = FP+92 so callee frame is above spills
+    ADDI SP, FP, 92
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T0, R0
@@ -5191,6 +5215,10 @@ L_q_div_71:
     ADDI T2, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t78 to Stack
+; Spill t69 to slot 61
+    ADD SC, FP, R0
+    ADDI SC, SC, 92
+    STORE T7, SB, SC
     ADDI T7, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t79 to Stack
@@ -5198,10 +5226,6 @@ L_q_div_71:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(78), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op91_t80 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t69 to slot 61
-    ADD SC, FP, R0
-    ADDI SC, SC, 92
-    STORE T7, SB, SC
 ; Spill t71 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 93
@@ -5222,6 +5246,10 @@ L_q_div_73:
     STORE T4, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD T4, FP, R0
+; Spill t67 to slot 64
+    ADD SC, FP, R0
+    ADDI SC, SC, 95
+    STORE RV0, SB, SC
     ADD RV0, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t83 to Stack
@@ -5229,15 +5257,15 @@ L_q_div_73:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(83), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op94_t84 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t67 to slot 64
-    ADD SC, FP, R0
-    ADDI SC, SC, 95
-    STORE RV0, SB, SC
 ; Spill t72 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 96
     STORE T3, SB, SC
     LOAD T3, SB, RV0
+; Spill t74 to slot 66
+    ADD SC, FP, R0
+    ADDI SC, SC, 97
+    STORE S2, SB, SC
     ADDI S2, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t85 to Stack
@@ -5245,10 +5273,6 @@ L_q_div_73:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(85), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op96_t86 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t74 to slot 66
-    ADD SC, FP, R0
-    ADDI SC, SC, 97
-    STORE S2, SB, SC
 ; Spill t73 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 98
@@ -5261,6 +5285,10 @@ L_q_div_73:
 ; Recompute alloca t9 at FP+2
     ADD S0, FP, R0
     ADDI S0, S0, 2
+; Spill t77 to slot 69
+    ADD SC, FP, R0
+    ADDI SC, SC, 100
+    STORE T0, SB, SC
     ADD T0, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t87 to Stack
@@ -5268,15 +5296,15 @@ L_q_div_73:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(87), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op98_t88 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t77 to slot 69
-    ADD SC, FP, R0
-    ADDI SC, SC, 100
-    STORE T0, SB, SC
 ; Spill t76 to slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 101
     STORE T5, SB, SC
     LOAD T5, SB, T0
+; Spill t78 to slot 71
+    ADD SC, FP, R0
+    ADDI SC, SC, 102
+    STORE T2, SB, SC
     ADDI T2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t89 to Stack
@@ -5284,10 +5312,6 @@ L_q_div_73:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(89), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op100_t90 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t78 to slot 71
-    ADD SC, FP, R0
-    ADDI SC, SC, 102
-    STORE T2, SB, SC
 ; Spill t80 to slot 72
     ADD SC, FP, R0
     ADDI SC, SC, 103
@@ -5340,6 +5364,8 @@ L_q_div_73:
     ADD SC, FP, R0
     ADDI SC, SC, 114
     STORE RV0, SB, SC
+; Set SP = FP+115 so callee frame is above spills
+    ADDI SP, FP, 115
 ; Pushing 2 arguments to stack
 ; Push arg 5 (fat ptr) to stack
     STORE RV0, SB, SP
@@ -5480,6 +5506,8 @@ L_q_div_74:
     ADD SC, FP, R0
     ADDI SC, SC, 125
     STORE T5, SB, SC
+; Set SP = FP+126 so callee frame is above spills
+    ADDI SP, FP, 126
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T6, R0
@@ -5531,6 +5559,10 @@ L_q_div_74:
     ADDI T5, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t115 to Stack
+; Spill t106 to slot 95
+    ADD SC, FP, R0
+    ADDI SC, SC, 126
+    STORE S2, SB, SC
     ADDI S2, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t116 to Stack
@@ -5538,10 +5570,6 @@ L_q_div_74:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(115), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f18_op128_t117 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t106 to slot 95
-    ADD SC, FP, R0
-    ADDI SC, SC, 126
-    STORE S2, SB, SC
 ; Spill t108 to slot 96
     ADD SC, FP, R0
     ADDI SC, SC, 127
@@ -5625,17 +5653,17 @@ L_q_eq_77:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f20_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_18edea0c_use_global
+    BEQ S2, T3, L_bc_ade49a23_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_18edea0c_use_stack
+    BEQ S2, T2, L_bc_ade49a23_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_18edea0c_done
-L_bc_18edea0c_use_global:
+    BEQ R0, R0, L_bc_ade49a23_done
+L_bc_ade49a23_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_18edea0c_done
-L_bc_18edea0c_use_stack:
+    BEQ R0, R0, L_bc_ade49a23_done
+L_bc_ade49a23_use_stack:
     ADD T4, SB, R0
-L_bc_18edea0c_done:
+L_bc_ade49a23_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -5657,21 +5685,21 @@ L_bc_18edea0c_done:
     ADDI SC, SC, 13
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_718563fe_use_global
+    BEQ S2, S1, L_bc_fee268ee_use_global
 ; Spill param_bank_f20_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 14
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_718563fe_use_stack
+    BEQ S2, S0, L_bc_fee268ee_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_718563fe_done
-L_bc_718563fe_use_global:
+    BEQ R0, R0, L_bc_fee268ee_done
+L_bc_fee268ee_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_718563fe_done
-L_bc_718563fe_use_stack:
+    BEQ R0, R0, L_bc_fee268ee_done
+L_bc_fee268ee_use_stack:
     ADD T2, SB, R0
-L_bc_718563fe_done:
+L_bc_fee268ee_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -5701,23 +5729,23 @@ L_bc_718563fe_done:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f20_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f20_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 19
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f20_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 20
@@ -5727,7 +5755,7 @@ L_bc_718563fe_done:
     ADDI SC, SC, 21
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_d5b4dcf1_use_global
+    BEQ T4, T7, L_bc_a8a2fa38_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 22
@@ -5737,31 +5765,31 @@ L_bc_718563fe_done:
     ADDI SC, SC, 23
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_d5b4dcf1_use_stack
+    BEQ T4, T0, L_bc_a8a2fa38_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_d5b4dcf1_done
-L_bc_d5b4dcf1_use_global:
+    BEQ R0, R0, L_bc_a8a2fa38_done
+L_bc_a8a2fa38_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_d5b4dcf1_done
-L_bc_d5b4dcf1_use_stack:
+    BEQ R0, R0, L_bc_a8a2fa38_done
+L_bc_a8a2fa38_use_stack:
     ADD S3, SB, R0
-L_bc_d5b4dcf1_done:
+L_bc_a8a2fa38_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f20_op7_1")
+; Spill param_bank_f20_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 24
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f20_op7_1")
-; Spill param_bank_f20_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    STORE S2, SB, SC
 ; Spill load_f20_op13_t8_resolved_bank_20_f20_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 25
@@ -5771,33 +5799,26 @@ L_bc_d5b4dcf1_done:
     ADDI SC, SC, 26
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_d7e46d31_use_global
+    BEQ T4, S1, L_bc_c1996bb5_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_d7e46d31_use_stack
+    BEQ T4, T3, L_bc_c1996bb5_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_d7e46d31_done
-L_bc_d7e46d31_use_global:
+    BEQ R0, R0, L_bc_c1996bb5_done
+L_bc_c1996bb5_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_d7e46d31_done
-L_bc_d7e46d31_use_stack:
+    BEQ R0, R0, L_bc_c1996bb5_done
+L_bc_c1996bb5_use_stack:
     ADD T2, SB, R0
-L_bc_d7e46d31_done:
+L_bc_c1996bb5_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
 ; Recompute alloca t2 at FP+0
     ADD T3, FP, R0
-    ADD T1, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t16 to Stack
-; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(16), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Stack })
-; LOAD: Pointer load_src_ptr_f20_op28_t17 has bank info: Stack
-; LOAD: Using bank register Sb for load
 ; Spill t10 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 28
@@ -5806,11 +5827,22 @@ L_bc_d7e46d31_done:
     ADD SC, FP, R0
     ADDI SC, SC, 29
     STORE T4, SB, SC
+    ADD T1, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t16 to Stack
+; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(16), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Stack })
+; LOAD: Pointer load_src_ptr_f20_op28_t17 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill load_f20_op18_t12_resolved_bank_20_f20_op19 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 30
     STORE S3, SB, SC
     LOAD S3, SB, T1
+; Spill t12 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 31
+    STORE T7, SB, SC
     ADD T7, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -5818,10 +5850,6 @@ L_bc_d7e46d31_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f20_op30_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t12 to slot 19
-    ADD SC, FP, R0
-    ADDI SC, SC, 31
-    STORE T7, SB, SC
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 32
@@ -5955,17 +5983,17 @@ L_q_lt_78:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f22_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_dd5595a0_use_global
+    BEQ S2, T3, L_bc_8958a798_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_dd5595a0_use_stack
+    BEQ S2, T2, L_bc_8958a798_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_dd5595a0_done
-L_bc_dd5595a0_use_global:
+    BEQ R0, R0, L_bc_8958a798_done
+L_bc_8958a798_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_dd5595a0_done
-L_bc_dd5595a0_use_stack:
+    BEQ R0, R0, L_bc_8958a798_done
+L_bc_8958a798_use_stack:
     ADD T4, SB, R0
-L_bc_dd5595a0_done:
+L_bc_8958a798_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -5987,21 +6015,21 @@ L_bc_dd5595a0_done:
     ADDI SC, SC, 13
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_471048f3_use_global
+    BEQ S2, S1, L_bc_d396b4bb_use_global
 ; Spill param_bank_f22_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 14
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_471048f3_use_stack
+    BEQ S2, S0, L_bc_d396b4bb_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_471048f3_done
-L_bc_471048f3_use_global:
+    BEQ R0, R0, L_bc_d396b4bb_done
+L_bc_d396b4bb_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_471048f3_done
-L_bc_471048f3_use_stack:
+    BEQ R0, R0, L_bc_d396b4bb_done
+L_bc_d396b4bb_use_stack:
     ADD T2, SB, R0
-L_bc_471048f3_done:
+L_bc_d396b4bb_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -6031,23 +6059,23 @@ L_bc_471048f3_done:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f22_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f22_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 19
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f22_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 20
@@ -6057,7 +6085,7 @@ L_bc_471048f3_done:
     ADDI SC, SC, 21
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_79a4d285_use_global
+    BEQ T4, T7, L_bc_dc11313b_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 22
@@ -6067,31 +6095,31 @@ L_bc_471048f3_done:
     ADDI SC, SC, 23
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_79a4d285_use_stack
+    BEQ T4, T0, L_bc_dc11313b_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_79a4d285_done
-L_bc_79a4d285_use_global:
+    BEQ R0, R0, L_bc_dc11313b_done
+L_bc_dc11313b_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_79a4d285_done
-L_bc_79a4d285_use_stack:
+    BEQ R0, R0, L_bc_dc11313b_done
+L_bc_dc11313b_use_stack:
     ADD S3, SB, R0
-L_bc_79a4d285_done:
+L_bc_dc11313b_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f22_op7_1")
+; Spill param_bank_f22_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 24
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f22_op7_1")
-; Spill param_bank_f22_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    STORE S2, SB, SC
 ; Spill load_f22_op13_t8_resolved_bank_22_f22_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 25
@@ -6101,33 +6129,26 @@ L_bc_79a4d285_done:
     ADDI SC, SC, 26
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_ec1fce76_use_global
+    BEQ T4, S1, L_bc_48770af2_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_ec1fce76_use_stack
+    BEQ T4, T3, L_bc_48770af2_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_ec1fce76_done
-L_bc_ec1fce76_use_global:
+    BEQ R0, R0, L_bc_48770af2_done
+L_bc_48770af2_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_ec1fce76_done
-L_bc_ec1fce76_use_stack:
+    BEQ R0, R0, L_bc_48770af2_done
+L_bc_48770af2_use_stack:
     ADD T2, SB, R0
-L_bc_ec1fce76_done:
+L_bc_48770af2_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
 ; Recompute alloca t2 at FP+0
     ADD T3, FP, R0
-    ADD T1, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t16 to Stack
-; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(16), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Stack })
-; LOAD: Pointer load_src_ptr_f22_op28_t17 has bank info: Stack
-; LOAD: Using bank register Sb for load
 ; Spill t10 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 28
@@ -6136,11 +6157,22 @@ L_bc_ec1fce76_done:
     ADD SC, FP, R0
     ADDI SC, SC, 29
     STORE T4, SB, SC
+    ADD T1, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t16 to Stack
+; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(16), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Stack })
+; LOAD: Pointer load_src_ptr_f22_op28_t17 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill load_f22_op18_t12_resolved_bank_22_f22_op19 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 30
     STORE S3, SB, SC
     LOAD S3, SB, T1
+; Spill t12 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 31
+    STORE T7, SB, SC
     ADD T7, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -6148,10 +6180,6 @@ L_bc_ec1fce76_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f22_op30_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t12 to slot 19
-    ADD SC, FP, R0
-    ADDI SC, SC, 31
-    STORE T7, SB, SC
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 32
@@ -6183,13 +6211,6 @@ L_q_lt_81:
 ; Recompute alloca t9 at FP+2
     ADD S0, FP, R0
     ADDI S0, S0, 2
-    ADD T6, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t23 to Stack
-; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(23), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(23), bank: Stack })
-; LOAD: Pointer load_src_ptr_f22_op34_t24 has bank info: Stack
-; LOAD: Using bank register Sb for load
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 12
@@ -6198,6 +6219,13 @@ L_q_lt_81:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     STORE T4, SB, SC
+    ADD T6, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t23 to Stack
+; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(23), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(23), bank: Stack })
+; LOAD: Pointer load_src_ptr_f22_op34_t24 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill t13 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 33
@@ -6233,6 +6261,10 @@ L_q_lt_84:
 ; Recompute alloca t9 at FP+2
     ADD S0, FP, R0
     ADDI S0, S0, 2
+; Spill param_bank_f22_op7_1 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE T4, SB, SC
     ADDI T4, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -6240,10 +6272,6 @@ L_q_lt_84:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(28), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f22_op38_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill param_bank_f22_op7_1 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T4, SB, SC
 ; Spill load_f22_op23_t15_resolved_bank_22_f22_op24 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 35
@@ -6319,17 +6347,17 @@ L_q_le_85:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f24_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_156c549e_use_global
+    BEQ S2, T3, L_bc_0313ce76_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_156c549e_use_stack
+    BEQ S2, T2, L_bc_0313ce76_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_156c549e_done
-L_bc_156c549e_use_global:
+    BEQ R0, R0, L_bc_0313ce76_done
+L_bc_0313ce76_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_156c549e_done
-L_bc_156c549e_use_stack:
+    BEQ R0, R0, L_bc_0313ce76_done
+L_bc_0313ce76_use_stack:
     ADD T4, SB, R0
-L_bc_156c549e_done:
+L_bc_0313ce76_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -6351,21 +6379,21 @@ L_bc_156c549e_done:
     ADDI SC, SC, 21
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_8e7dfe81_use_global
+    BEQ S2, S1, L_bc_a23c15df_use_global
 ; Spill param_bank_f24_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_8e7dfe81_use_stack
+    BEQ S2, S0, L_bc_a23c15df_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_8e7dfe81_done
-L_bc_8e7dfe81_use_global:
+    BEQ R0, R0, L_bc_a23c15df_done
+L_bc_a23c15df_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_8e7dfe81_done
-L_bc_8e7dfe81_use_stack:
+    BEQ R0, R0, L_bc_a23c15df_done
+L_bc_a23c15df_use_stack:
     ADD T2, SB, R0
-L_bc_8e7dfe81_done:
+L_bc_a23c15df_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -6395,23 +6423,23 @@ L_bc_8e7dfe81_done:
     ADD SC, FP, R0
     ADDI SC, SC, 21
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f24_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 26
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f24_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 27
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f24_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 27
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 28
@@ -6421,7 +6449,7 @@ L_bc_8e7dfe81_done:
     ADDI SC, SC, 29
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_c0ebcfdd_use_global
+    BEQ T4, T7, L_bc_5c46f48a_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 30
@@ -6431,31 +6459,31 @@ L_bc_8e7dfe81_done:
     ADDI SC, SC, 31
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_c0ebcfdd_use_stack
+    BEQ T4, T0, L_bc_5c46f48a_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_c0ebcfdd_done
-L_bc_c0ebcfdd_use_global:
+    BEQ R0, R0, L_bc_5c46f48a_done
+L_bc_5c46f48a_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_c0ebcfdd_done
-L_bc_c0ebcfdd_use_stack:
+    BEQ R0, R0, L_bc_5c46f48a_done
+L_bc_5c46f48a_use_stack:
     ADD S3, SB, R0
-L_bc_c0ebcfdd_done:
+L_bc_5c46f48a_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f24_op7_1")
+; Spill param_bank_f24_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 32
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f24_op7_1")
-; Spill param_bank_f24_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 32
-    STORE S2, SB, SC
 ; Spill load_f24_op13_t8_resolved_bank_24_f24_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 33
@@ -6465,21 +6493,21 @@ L_bc_c0ebcfdd_done:
     ADDI SC, SC, 34
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_bfab2567_use_global
+    BEQ T4, S1, L_bc_68b7c60f_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 35
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_bfab2567_use_stack
+    BEQ T4, T3, L_bc_68b7c60f_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_bfab2567_done
-L_bc_bfab2567_use_global:
+    BEQ R0, R0, L_bc_68b7c60f_done
+L_bc_68b7c60f_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_bfab2567_done
-L_bc_bfab2567_use_stack:
+    BEQ R0, R0, L_bc_68b7c60f_done
+L_bc_68b7c60f_use_stack:
     ADD T2, SB, R0
-L_bc_bfab2567_done:
+L_bc_68b7c60f_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -6495,13 +6523,17 @@ L_bc_bfab2567_done:
     STORE T4, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD T1, FP, R0
-    ADD S3, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t17 to Stack
 ; Spill load_f24_op18_t12_resolved_bank_24_f24_op19 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE S3, SB, SC
+    ADD S3, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t17 to Stack
+; Spill t12 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 39
+    STORE T7, SB, SC
     ADD T7, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -6509,19 +6541,12 @@ L_bc_bfab2567_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f24_op28_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t12 to slot 19
-    ADD SC, FP, R0
-    ADDI SC, SC, 39
-    STORE T7, SB, SC
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE T5, SB, SC
     LOAD T5, SB, S3
     STORE T5, SB, T7
-    ADDI T6, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 20
@@ -6530,6 +6555,9 @@ L_bc_bfab2567_done:
     ADD SC, FP, R0
     ADDI SC, SC, 21
     STORE T4, SB, SC
+    ADDI T6, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t20 to Stack
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t21 to Stack
@@ -6560,13 +6588,17 @@ L_bc_bfab2567_done:
 ; Recompute alloca t9 at FP+2
     ADD T2, FP, R0
     ADDI T2, T2, 2
-    ADD S1, T2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t24 to Stack
 ; Spill t15 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 44
     STORE S1, SB, SC
+    ADD S1, T2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t24 to Stack
+; Spill t14 to slot 25
+    ADD SC, FP, R0
+    ADDI SC, SC, 45
+    STORE S2, SB, SC
     ADD S2, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t25 to Stack
@@ -6574,23 +6606,23 @@ L_bc_bfab2567_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(24), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f24_op34_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t14 to slot 25
-    ADD SC, FP, R0
-    ADDI SC, SC, 45
-    STORE S2, SB, SC
 ; Spill t17 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 46
     STORE S3, SB, SC
     LOAD S3, SB, S1
     STORE S3, SB, S2
-    ADDI T5, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t27 to Stack
 ; Spill t19 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 47
     STORE T5, SB, SC
+    ADDI T5, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t27 to Stack
+; Spill t18 to slot 28
+    ADD SC, FP, R0
+    ADDI SC, SC, 48
+    STORE T7, SB, SC
     ADDI T7, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -6598,10 +6630,6 @@ L_bc_bfab2567_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(27), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f24_op37_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t18 to slot 28
-    ADD SC, FP, R0
-    ADDI SC, SC, 48
-    STORE T7, SB, SC
     LOAD T1, SB, T5
     STORE T1, SB, T7
 ; Spill t20 to slot 29
@@ -6651,6 +6679,8 @@ L_bc_bfab2567_done:
     ADD SC, FP, R0
     ADDI SC, SC, 59
     STORE T0, SB, SC
+; Set SP = FP+60 so callee frame is above spills
+    ADDI SP, FP, 60
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -6714,13 +6744,17 @@ L_bc_bfab2567_done:
     STORE RV0, SB, SC
     LOAD RV0, SB, S3
     STORE RV0, SB, S0
-    ADDI T5, S1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t43 to Stack
 ; Spill t33 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 61
     STORE T5, SB, SC
+    ADDI T5, S1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t43 to Stack
+; Spill t35 to slot 42
+    ADD SC, FP, R0
+    ADDI SC, SC, 62
+    STORE T7, SB, SC
     ADDI T7, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t44 to Stack
@@ -6728,10 +6762,6 @@ L_bc_bfab2567_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(43), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f24_op53_t45 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t35 to slot 42
-    ADD SC, FP, R0
-    ADDI SC, SC, 62
-    STORE T7, SB, SC
 ; Spill t34 to slot 43
     ADD SC, FP, R0
     ADDI SC, SC, 63
@@ -6785,6 +6815,8 @@ L_bc_bfab2567_done:
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T3, SB, SC
+; Set SP = FP+75 so callee frame is above spills
+    ADDI SP, FP, 75
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S2, R0
@@ -6873,17 +6905,17 @@ L_q_gt_86:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f26_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_8a448349_use_global
+    BEQ S2, T3, L_bc_1ae44cf9_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_8a448349_use_stack
+    BEQ S2, T2, L_bc_1ae44cf9_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_8a448349_done
-L_bc_8a448349_use_global:
+    BEQ R0, R0, L_bc_1ae44cf9_done
+L_bc_1ae44cf9_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_8a448349_done
-L_bc_8a448349_use_stack:
+    BEQ R0, R0, L_bc_1ae44cf9_done
+L_bc_1ae44cf9_use_stack:
     ADD T4, SB, R0
-L_bc_8a448349_done:
+L_bc_1ae44cf9_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -6905,21 +6937,21 @@ L_bc_8a448349_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_86d380e1_use_global
+    BEQ S2, S1, L_bc_db54e8d7_use_global
 ; Spill param_bank_f26_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_86d380e1_use_stack
+    BEQ S2, S0, L_bc_db54e8d7_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_86d380e1_done
-L_bc_86d380e1_use_global:
+    BEQ R0, R0, L_bc_db54e8d7_done
+L_bc_db54e8d7_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_86d380e1_done
-L_bc_86d380e1_use_stack:
+    BEQ R0, R0, L_bc_db54e8d7_done
+L_bc_db54e8d7_use_stack:
     ADD T2, SB, R0
-L_bc_86d380e1_done:
+L_bc_db54e8d7_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -6949,23 +6981,23 @@ L_bc_86d380e1_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f26_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f26_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f26_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -6975,7 +7007,7 @@ L_bc_86d380e1_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_96e310fa_use_global
+    BEQ T4, T7, L_bc_8ddcb300_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -6985,31 +7017,31 @@ L_bc_86d380e1_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_96e310fa_use_stack
+    BEQ T4, T0, L_bc_8ddcb300_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_96e310fa_done
-L_bc_96e310fa_use_global:
+    BEQ R0, R0, L_bc_8ddcb300_done
+L_bc_8ddcb300_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_96e310fa_done
-L_bc_96e310fa_use_stack:
+    BEQ R0, R0, L_bc_8ddcb300_done
+L_bc_8ddcb300_use_stack:
     ADD S3, SB, R0
-L_bc_96e310fa_done:
+L_bc_8ddcb300_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f26_op7_1")
+; Spill param_bank_f26_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 28
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f26_op7_1")
-; Spill param_bank_f26_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 28
-    STORE S2, SB, SC
 ; Spill load_f26_op13_t8_resolved_bank_26_f26_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 29
@@ -7019,29 +7051,26 @@ L_bc_96e310fa_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_c9b9e991_use_global
+    BEQ T4, S1, L_bc_74756906_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_c9b9e991_use_stack
+    BEQ T4, T3, L_bc_74756906_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_c9b9e991_done
-L_bc_c9b9e991_use_global:
+    BEQ R0, R0, L_bc_74756906_done
+L_bc_74756906_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_c9b9e991_done
-L_bc_c9b9e991_use_stack:
+    BEQ R0, R0, L_bc_74756906_done
+L_bc_74756906_use_stack:
     ADD T2, SB, R0
-L_bc_c9b9e991_done:
+L_bc_74756906_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
     ADD T3, FP, R0
     ADDI T3, T3, 4
-    ADD T1, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t17 to Stack
 ; Spill t10 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 32
@@ -7050,6 +7079,13 @@ L_bc_c9b9e991_done:
     ADD SC, FP, R0
     ADDI SC, SC, 33
     STORE T4, SB, SC
+    ADD T1, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t17 to Stack
+; Spill load_f26_op18_t12_resolved_bank_26_f26_op19 to slot 18
+    ADD SC, FP, R0
+    ADDI SC, SC, 34
+    STORE S3, SB, SC
     ADD S3, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -7057,30 +7093,19 @@ L_bc_c9b9e991_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f26_op28_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f26_op18_t12_resolved_bank_26_f26_op19 to slot 18
-    ADD SC, FP, R0
-    ADDI SC, SC, 34
-    STORE S3, SB, SC
 ; Spill t12 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 35
     STORE T7, SB, SC
     LOAD T7, SB, T1
     STORE T7, SB, S3
-    ADDI T5, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T5, SB, SC
-    ADDI T6, T3, 1
+    ADDI T5, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t21 to Stack
-; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(20), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(20), bank: Stack })
-; LOAD: Pointer load_src_ptr_f26_op31_t22 has bank info: Stack
-; LOAD: Using bank register Sb for load
+; GEP: Setting bank info for t20 to Stack
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 16
@@ -7089,6 +7114,13 @@ L_bc_c9b9e991_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     STORE T4, SB, SC
+    ADDI T6, T3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t21 to Stack
+; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(20), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(20), bank: Stack })
+; LOAD: Pointer load_src_ptr_f26_op31_t22 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill t13 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 37
@@ -7111,13 +7143,17 @@ L_bc_c9b9e991_done:
     STORE T2, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD T2, FP, R0
-    ADD S1, T2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t24 to Stack
 ; Spill t15 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
+    ADD S1, T2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t24 to Stack
+; Spill t14 to slot 25
+    ADD SC, FP, R0
+    ADDI SC, SC, 41
+    STORE S2, SB, SC
     ADD S2, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t25 to Stack
@@ -7125,23 +7161,23 @@ L_bc_c9b9e991_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(24), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f26_op34_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t14 to slot 25
-    ADD SC, FP, R0
-    ADDI SC, SC, 41
-    STORE S2, SB, SC
 ; Spill t17 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE T1, SB, SC
     LOAD T1, SB, S1
     STORE T1, SB, S2
-    ADDI T7, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t27 to Stack
 ; Spill t19 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T7, SB, SC
+    ADDI T7, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t27 to Stack
+; Spill t18 to slot 28
+    ADD SC, FP, R0
+    ADDI SC, SC, 44
+    STORE S3, SB, SC
     ADDI S3, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -7149,10 +7185,6 @@ L_bc_c9b9e991_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(27), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f26_op37_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t18 to slot 28
-    ADD SC, FP, R0
-    ADDI SC, SC, 44
-    STORE S3, SB, SC
     LOAD S0, SB, T7
     STORE S0, SB, S3
 ; Spill t20 to slot 29
@@ -7202,6 +7234,8 @@ L_bc_c9b9e991_done:
     ADD SC, FP, R0
     ADDI SC, SC, 55
     STORE T0, SB, SC
+; Set SP = FP+56 so callee frame is above spills
+    ADDI SP, FP, 56
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -7280,17 +7314,17 @@ L_q_ge_87:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f28_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_2933921b_use_global
+    BEQ S2, T3, L_bc_b8f326a5_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_2933921b_use_stack
+    BEQ S2, T2, L_bc_b8f326a5_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_2933921b_done
-L_bc_2933921b_use_global:
+    BEQ R0, R0, L_bc_b8f326a5_done
+L_bc_b8f326a5_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_2933921b_done
-L_bc_2933921b_use_stack:
+    BEQ R0, R0, L_bc_b8f326a5_done
+L_bc_b8f326a5_use_stack:
     ADD T4, SB, R0
-L_bc_2933921b_done:
+L_bc_b8f326a5_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -7312,21 +7346,21 @@ L_bc_2933921b_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_68dc46e0_use_global
+    BEQ S2, S1, L_bc_929cf895_use_global
 ; Spill param_bank_f28_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_68dc46e0_use_stack
+    BEQ S2, S0, L_bc_929cf895_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_68dc46e0_done
-L_bc_68dc46e0_use_global:
+    BEQ R0, R0, L_bc_929cf895_done
+L_bc_929cf895_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_68dc46e0_done
-L_bc_68dc46e0_use_stack:
+    BEQ R0, R0, L_bc_929cf895_done
+L_bc_929cf895_use_stack:
     ADD T2, SB, R0
-L_bc_68dc46e0_done:
+L_bc_929cf895_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -7356,23 +7390,23 @@ L_bc_68dc46e0_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f28_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f28_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f28_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -7382,7 +7416,7 @@ L_bc_68dc46e0_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_6aa73fbc_use_global
+    BEQ T4, T7, L_bc_b2cb7775_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -7392,31 +7426,31 @@ L_bc_68dc46e0_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_6aa73fbc_use_stack
+    BEQ T4, T0, L_bc_b2cb7775_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_6aa73fbc_done
-L_bc_6aa73fbc_use_global:
+    BEQ R0, R0, L_bc_b2cb7775_done
+L_bc_b2cb7775_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_6aa73fbc_done
-L_bc_6aa73fbc_use_stack:
+    BEQ R0, R0, L_bc_b2cb7775_done
+L_bc_b2cb7775_use_stack:
     ADD S3, SB, R0
-L_bc_6aa73fbc_done:
+L_bc_b2cb7775_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f28_op7_1")
+; Spill param_bank_f28_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 28
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f28_op7_1")
-; Spill param_bank_f28_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 28
-    STORE S2, SB, SC
 ; Spill load_f28_op13_t8_resolved_bank_28_f28_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 29
@@ -7426,21 +7460,21 @@ L_bc_6aa73fbc_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_bcfa63c3_use_global
+    BEQ T4, S1, L_bc_d2808488_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_bcfa63c3_use_stack
+    BEQ T4, T3, L_bc_d2808488_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_bcfa63c3_done
-L_bc_bcfa63c3_use_global:
+    BEQ R0, R0, L_bc_d2808488_done
+L_bc_d2808488_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_bcfa63c3_done
-L_bc_bcfa63c3_use_stack:
+    BEQ R0, R0, L_bc_d2808488_done
+L_bc_d2808488_use_stack:
     ADD T2, SB, R0
-L_bc_bcfa63c3_done:
+L_bc_d2808488_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -7456,13 +7490,17 @@ L_bc_bcfa63c3_done:
     STORE T4, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD T1, FP, R0
-    ADD S3, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t17 to Stack
 ; Spill load_f28_op18_t12_resolved_bank_28_f28_op19 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE S3, SB, SC
+    ADD S3, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t17 to Stack
+; Spill t12 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 35
+    STORE T7, SB, SC
     ADD T7, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -7470,19 +7508,12 @@ L_bc_bcfa63c3_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f28_op28_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t12 to slot 19
-    ADD SC, FP, R0
-    ADDI SC, SC, 35
-    STORE T7, SB, SC
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T5, SB, SC
     LOAD T5, SB, S3
     STORE T5, SB, T7
-    ADDI T6, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 16
@@ -7491,6 +7522,9 @@ L_bc_bcfa63c3_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     STORE T4, SB, SC
+    ADDI T6, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t20 to Stack
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t21 to Stack
@@ -7521,13 +7555,17 @@ L_bc_bcfa63c3_done:
 ; Recompute alloca t9 at FP+2
     ADD T2, FP, R0
     ADDI T2, T2, 2
-    ADD S1, T2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t24 to Stack
 ; Spill t15 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
+    ADD S1, T2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t24 to Stack
+; Spill t14 to slot 25
+    ADD SC, FP, R0
+    ADDI SC, SC, 41
+    STORE S2, SB, SC
     ADD S2, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t25 to Stack
@@ -7535,23 +7573,23 @@ L_bc_bcfa63c3_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(24), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f28_op34_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t14 to slot 25
-    ADD SC, FP, R0
-    ADDI SC, SC, 41
-    STORE S2, SB, SC
 ; Spill t17 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE S3, SB, SC
     LOAD S3, SB, S1
     STORE S3, SB, S2
-    ADDI T5, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t27 to Stack
 ; Spill t19 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T5, SB, SC
+    ADDI T5, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t27 to Stack
+; Spill t18 to slot 28
+    ADD SC, FP, R0
+    ADDI SC, SC, 44
+    STORE T7, SB, SC
     ADDI T7, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -7559,10 +7597,6 @@ L_bc_bcfa63c3_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(27), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f28_op37_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t18 to slot 28
-    ADD SC, FP, R0
-    ADDI SC, SC, 44
-    STORE T7, SB, SC
     LOAD T1, SB, T5
     STORE T1, SB, T7
 ; Spill t20 to slot 29
@@ -7612,6 +7646,8 @@ L_bc_bcfa63c3_done:
     ADD SC, FP, R0
     ADDI SC, SC, 55
     STORE T0, SB, SC
+; Set SP = FP+56 so callee frame is above spills
+    ADDI SP, FP, 56
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -7761,17 +7797,17 @@ L_q_to_int_89:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f32_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_5501c3d9_use_global
+    BEQ S2, T5, L_bc_54fad6f4_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_5501c3d9_use_stack
+    BEQ S2, T4, L_bc_54fad6f4_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_5501c3d9_done
-L_bc_5501c3d9_use_global:
+    BEQ R0, R0, L_bc_54fad6f4_done
+L_bc_54fad6f4_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_5501c3d9_done
-L_bc_5501c3d9_use_stack:
+    BEQ R0, R0, L_bc_54fad6f4_done
+L_bc_54fad6f4_use_stack:
     ADD T6, SB, R0
-L_bc_5501c3d9_done:
+L_bc_54fad6f4_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -7785,17 +7821,17 @@ L_bc_5501c3d9_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f32_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_0b0abfda_use_global
+    BEQ S2, T5, L_bc_b0285061_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_0b0abfda_use_stack
+    BEQ S2, T4, L_bc_b0285061_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_0b0abfda_done
-L_bc_0b0abfda_use_global:
+    BEQ R0, R0, L_bc_b0285061_done
+L_bc_b0285061_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_0b0abfda_done
-L_bc_0b0abfda_use_stack:
+    BEQ R0, R0, L_bc_b0285061_done
+L_bc_b0285061_use_stack:
     ADD T0, SB, R0
-L_bc_0b0abfda_done:
+L_bc_b0285061_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -7880,17 +7916,17 @@ L_q_to_int_round_90:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f34_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_1364ab6b_use_global
+    BEQ S2, T5, L_bc_1f930bb3_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_1364ab6b_use_stack
+    BEQ S2, T4, L_bc_1f930bb3_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_1364ab6b_done
-L_bc_1364ab6b_use_global:
+    BEQ R0, R0, L_bc_1f930bb3_done
+L_bc_1f930bb3_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_1364ab6b_done
-L_bc_1364ab6b_use_stack:
+    BEQ R0, R0, L_bc_1f930bb3_done
+L_bc_1f930bb3_use_stack:
     ADD T6, SB, R0
-L_bc_1364ab6b_done:
+L_bc_1f930bb3_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -7904,17 +7940,17 @@ L_bc_1364ab6b_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f34_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_89dbebc3_use_global
+    BEQ S2, T5, L_bc_8a4f944d_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_89dbebc3_use_stack
+    BEQ S2, T4, L_bc_8a4f944d_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_89dbebc3_done
-L_bc_89dbebc3_use_global:
+    BEQ R0, R0, L_bc_8a4f944d_done
+L_bc_8a4f944d_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_89dbebc3_done
-L_bc_89dbebc3_use_stack:
+    BEQ R0, R0, L_bc_8a4f944d_done
+L_bc_8a4f944d_use_stack:
     ADD T0, SB, R0
-L_bc_89dbebc3_done:
+L_bc_8a4f944d_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -8050,17 +8086,17 @@ L_q_sqrt_94:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f36_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_210a4a65_use_global
+    BEQ S2, T5, L_bc_eb9571df_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_210a4a65_use_stack
+    BEQ S2, T4, L_bc_eb9571df_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_210a4a65_done
-L_bc_210a4a65_use_global:
+    BEQ R0, R0, L_bc_eb9571df_done
+L_bc_eb9571df_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_210a4a65_done
-L_bc_210a4a65_use_stack:
+    BEQ R0, R0, L_bc_eb9571df_done
+L_bc_eb9571df_use_stack:
     ADD T6, SB, R0
-L_bc_210a4a65_done:
+L_bc_eb9571df_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -8074,17 +8110,17 @@ L_bc_210a4a65_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f36_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_d080efd4_use_global
+    BEQ S2, T5, L_bc_41571798_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_d080efd4_use_stack
+    BEQ S2, T4, L_bc_41571798_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_d080efd4_done
-L_bc_d080efd4_use_global:
+    BEQ R0, R0, L_bc_41571798_done
+L_bc_41571798_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_d080efd4_done
-L_bc_d080efd4_use_stack:
+    BEQ R0, R0, L_bc_41571798_done
+L_bc_41571798_use_stack:
     ADD T0, SB, R0
-L_bc_d080efd4_done:
+L_bc_41571798_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -8289,6 +8325,10 @@ L_q_sqrt_101:
     ADDI T3, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t34 to Stack
+; Spill t13 to slot 15
+    ADD SC, FP, R0
+    ADDI SC, SC, 56
+    STORE S1, SB, SC
     ADDI S1, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t35 to Stack
@@ -8296,10 +8336,6 @@ L_q_sqrt_101:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(35), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op43_t36 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t13 to slot 15
-    ADD SC, FP, R0
-    ADDI SC, SC, 56
-    STORE S1, SB, SC
 ; Spill t14 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 57
@@ -8394,6 +8430,10 @@ L_q_sqrt_102:
 ; Recompute alloca t26 at FP+6
     ADD S0, FP, R0
     ADDI S0, S0, 6
+; Spill t35 to slot 24
+    ADD SC, FP, R0
+    ADDI SC, SC, 65
+    STORE S1, SB, SC
     ADD S1, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t49 to Stack
@@ -8401,23 +8441,23 @@ L_q_sqrt_102:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(48), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op55_t50 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t35 to slot 24
-    ADD SC, FP, R0
-    ADDI SC, SC, 65
-    STORE S1, SB, SC
 ; Spill t37 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 66
     STORE T6, SB, SC
     LOAD T6, SB, T0
     STORE T6, SB, S1
-    ADDI T3, T7, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t51 to Stack
 ; Spill t34 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 67
     STORE T3, SB, SC
+    ADDI T3, T7, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t51 to Stack
+; Spill t38 to slot 27
+    ADD SC, FP, R0
+    ADDI SC, SC, 68
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t52 to Stack
@@ -8425,10 +8465,6 @@ L_q_sqrt_102:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(51), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op58_t53 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t38 to slot 27
-    ADD SC, FP, R0
-    ADDI SC, SC, 68
-    STORE S2, SB, SC
 ; Spill t42 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 69
@@ -8473,13 +8509,17 @@ L_q_sqrt_108:
     ADDI T7, T7, 13
 ; Recompute alloca t1 at FP+0
     ADD S0, FP, R0
-    ADD T2, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t59 to Stack
 ; Spill t41 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 71
     STORE T2, SB, SC
+    ADD T2, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t59 to Stack
+; Spill t46 to slot 31
+    ADD SC, FP, R0
+    ADDI SC, SC, 72
+    STORE S3, SB, SC
     ADD S3, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t60 to Stack
@@ -8487,23 +8527,23 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(59), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op65_t61 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t46 to slot 31
-    ADD SC, FP, R0
-    ADDI SC, SC, 72
-    STORE S3, SB, SC
 ; Spill t47 to slot 32
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE T5, SB, SC
     LOAD T5, SB, T2
     STORE T5, SB, S3
-    ADDI T0, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t62 to Stack
 ; Spill t48 to slot 33
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T0, SB, SC
+    ADDI T0, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t62 to Stack
+; Spill t50 to slot 34
+    ADD SC, FP, R0
+    ADDI SC, SC, 75
+    STORE T6, SB, SC
     ADDI T6, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t63 to Stack
@@ -8511,10 +8551,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(62), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op68_t64 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t50 to slot 34
-    ADD SC, FP, R0
-    ADDI SC, SC, 75
-    STORE T6, SB, SC
 ; Spill t49 to slot 35
     ADD SC, FP, R0
     ADDI SC, SC, 76
@@ -8534,13 +8570,13 @@ L_q_sqrt_108:
 ; Recompute alloca t26 at FP+6
     ADD T1, FP, R0
     ADDI T1, T1, 6
-    ADD S2, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t66 to Stack
 ; Spill t52 to slot 38
     ADD SC, FP, R0
     ADDI SC, SC, 79
     STORE S2, SB, SC
+    ADD S2, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t66 to Stack
     ADD T4, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t67 to Stack
@@ -8554,13 +8590,17 @@ L_q_sqrt_108:
     STORE T2, SB, SC
     LOAD T2, SB, S2
     STORE T2, SB, T4
-    ADDI T5, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t69 to Stack
 ; Spill t61 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 81
     STORE T5, SB, SC
+    ADDI T5, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t69 to Stack
+; Spill t60 to slot 41
+    ADD SC, FP, R0
+    ADDI SC, SC, 82
+    STORE S3, SB, SC
     ADDI S3, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t70 to Stack
@@ -8568,10 +8608,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(69), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op74_t71 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t60 to slot 41
-    ADD SC, FP, R0
-    ADDI SC, SC, 82
-    STORE S3, SB, SC
     LOAD S0, SB, T5
     STORE S0, SB, S3
 ; Spill t62 to slot 42
@@ -8621,6 +8657,8 @@ L_q_sqrt_108:
     ADD SC, FP, R0
     ADDI SC, SC, 93
     STORE S1, SB, SC
+; Set SP = FP+94 so callee frame is above spills
+    ADDI SP, FP, 94
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T7, R0
@@ -8675,6 +8713,10 @@ L_q_sqrt_108:
     ADDI S1, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t83 to Stack
+; Spill t74 to slot 53
+    ADD SC, FP, R0
+    ADDI SC, SC, 94
+    STORE S2, SB, SC
     ADDI S2, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t84 to Stack
@@ -8682,10 +8724,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(83), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op88_t85 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t74 to slot 53
-    ADD SC, FP, R0
-    ADDI SC, SC, 94
-    STORE S2, SB, SC
 ; Spill t76 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 95
@@ -8711,13 +8749,17 @@ L_q_sqrt_108:
 ; Recompute alloca t26 at FP+6
     ADD T1, FP, R0
     ADDI T1, T1, 6
-    ADD S0, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t88 to Stack
 ; Spill t79 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 99
     STORE S0, SB, SC
+    ADD S0, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t88 to Stack
+; Spill t78 to slot 59
+    ADD SC, FP, R0
+    ADDI SC, SC, 100
+    STORE T5, SB, SC
     ADD T5, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t89 to Stack
@@ -8725,23 +8767,23 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(88), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op91_t90 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t78 to slot 59
-    ADD SC, FP, R0
-    ADDI SC, SC, 100
-    STORE T5, SB, SC
 ; Spill t80 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 101
     STORE S3, SB, SC
     LOAD S3, SB, S0
     STORE S3, SB, T5
-    ADDI T3, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t91 to Stack
 ; Spill t82 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 102
     STORE T3, SB, SC
+    ADDI T3, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t91 to Stack
+; Spill t81 to slot 62
+    ADD SC, FP, R0
+    ADDI SC, SC, 103
+    STORE T0, SB, SC
     ADDI T0, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t92 to Stack
@@ -8749,10 +8791,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(91), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op94_t93 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t81 to slot 62
-    ADD SC, FP, R0
-    ADDI SC, SC, 103
-    STORE T0, SB, SC
     LOAD T6, SB, T3
     STORE T6, SB, T0
     ADD T7, FP, R0
@@ -8764,13 +8802,17 @@ L_q_sqrt_108:
 ; Recompute alloca t57 at FP+11
     ADD S1, FP, R0
     ADDI S1, S1, 11
-    ADD T4, S1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t95 to Stack
 ; Spill t85 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 105
     STORE T4, SB, SC
+    ADD T4, S1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t95 to Stack
+; Spill t84 to slot 65
+    ADD SC, FP, R0
+    ADDI SC, SC, 106
+    STORE S2, SB, SC
     ADD S2, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t96 to Stack
@@ -8778,19 +8820,19 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(95), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op97_t97 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t84 to slot 65
-    ADD SC, FP, R0
-    ADDI SC, SC, 106
-    STORE S2, SB, SC
     LOAD T2, SB, T4
     STORE T2, SB, S2
-    ADDI S0, S1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t98 to Stack
 ; Spill t88 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 107
     STORE S0, SB, SC
+    ADDI S0, S1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t98 to Stack
+; Spill t90 to slot 67
+    ADD SC, FP, R0
+    ADDI SC, SC, 108
+    STORE S3, SB, SC
     ADDI S3, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t99 to Stack
@@ -8798,10 +8840,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(98), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op100_t100 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t90 to slot 67
-    ADD SC, FP, R0
-    ADDI SC, SC, 108
-    STORE S3, SB, SC
 ; Spill t89 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 109
@@ -8855,6 +8893,8 @@ L_q_sqrt_108:
     ADD SC, FP, R0
     ADDI SC, SC, 120
     STORE T3, SB, SC
+; Set SP = FP+121 so callee frame is above spills
+    ADDI SP, FP, 121
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -8909,6 +8949,10 @@ L_q_sqrt_108:
     ADDI T3, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t112 to Stack
+; Spill t103 to slot 80
+    ADD SC, FP, R0
+    ADDI SC, SC, 121
+    STORE T0, SB, SC
     ADDI T0, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t113 to Stack
@@ -8916,10 +8960,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(112), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op114_t114 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t103 to slot 80
-    ADD SC, FP, R0
-    ADDI SC, SC, 121
-    STORE T0, SB, SC
 ; Spill t105 to slot 81
     ADD SC, FP, R0
     ADDI SC, SC, 122
@@ -8932,13 +8972,17 @@ L_q_sqrt_108:
     STORE T4, SB, SC
     ADD T4, FP, R0
     ADDI T4, T4, 27
-    ADD RV0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t116 to Stack
 ; Spill t101 to slot 83
     ADD SC, FP, R0
     ADDI SC, SC, 124
     STORE RV0, SB, SC
+    ADD RV0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t116 to Stack
+; Spill t106 to slot 84
+    ADD SC, FP, R0
+    ADDI SC, SC, 125
+    STORE S2, SB, SC
     ADD S2, S3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t117 to Stack
@@ -8946,10 +8990,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(117), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op117_t118 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t106 to slot 84
-    ADD SC, FP, R0
-    ADDI SC, SC, 125
-    STORE S2, SB, SC
 ; Spill t108 to slot 85
     ADD SC, FP, R0
     ADDI SC, SC, 126
@@ -8965,6 +9005,10 @@ L_q_sqrt_108:
     ADDI S1, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t120 to Stack
+; Spill t109 to slot 87
+    ADD SC, FP, R0
+    ADDI SC, SC, 128
+    STORE T5, SB, SC
     ADDI T5, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t121 to Stack
@@ -8972,10 +9016,6 @@ L_q_sqrt_108:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(121), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op120_t122 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t109 to slot 87
-    ADD SC, FP, R0
-    ADDI SC, SC, 128
-    STORE T5, SB, SC
 ; Spill t111 to slot 88
     ADD SC, FP, R0
     ADDI SC, SC, 129
@@ -9038,13 +9078,17 @@ L_q_sqrt_113:
 ; Recompute alloca t115 at FP+27
     ADD T3, FP, R0
     ADDI T3, T3, 27
-    ADD T0, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t132 to Stack
 ; Spill t113 to slot 92
     ADD SC, FP, R0
     ADDI SC, SC, 133
     STORE T0, SB, SC
+    ADD T0, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t132 to Stack
+; Spill t117 to slot 93
+    ADD SC, FP, R0
+    ADDI SC, SC, 134
+    STORE S2, SB, SC
     ADD S2, T2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t133 to Stack
@@ -9052,23 +9096,23 @@ L_q_sqrt_113:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(132), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op128_t134 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t117 to slot 93
-    ADD SC, FP, R0
-    ADDI SC, SC, 134
-    STORE S2, SB, SC
 ; Spill t119 to slot 94
     ADD SC, FP, R0
     ADDI SC, SC, 135
     STORE S0, SB, SC
     LOAD S0, SB, T0
     STORE S0, SB, S2
-    ADDI RV0, T3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t135 to Stack
 ; Spill t116 to slot 95
     ADD SC, FP, R0
     ADDI SC, SC, 136
     STORE RV0, SB, SC
+    ADDI RV0, T3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t135 to Stack
+; Spill t121 to slot 96
+    ADD SC, FP, R0
+    ADDI SC, SC, 137
+    STORE T5, SB, SC
     ADDI T5, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t136 to Stack
@@ -9076,10 +9120,6 @@ L_q_sqrt_113:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(135), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op131_t137 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t121 to slot 96
-    ADD SC, FP, R0
-    ADDI SC, SC, 137
-    STORE T5, SB, SC
 ; Spill t123 to slot 97
     ADD SC, FP, R0
     ADDI SC, SC, 138
@@ -9099,13 +9139,17 @@ L_q_sqrt_113:
 ; Recompute alloca t26 at FP+6
     ADD T1, FP, R0
     ADDI T1, T1, 6
-    ADD T4, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t139 to Stack
 ; Spill t128 to slot 100
     ADD SC, FP, R0
     ADDI SC, SC, 141
     STORE T4, SB, SC
+    ADD T4, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t139 to Stack
+; Spill t130 to slot 101
+    ADD SC, FP, R0
+    ADDI SC, SC, 142
+    STORE S3, SB, SC
     ADD S3, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t140 to Stack
@@ -9113,23 +9157,23 @@ L_q_sqrt_113:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(139), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op134_t141 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t130 to slot 101
-    ADD SC, FP, R0
-    ADDI SC, SC, 142
-    STORE S3, SB, SC
 ; Spill t127 to slot 102
     ADD SC, FP, R0
     ADDI SC, SC, 143
     STORE T6, SB, SC
     LOAD T6, SB, T4
     STORE T6, SB, S3
-    ADDI T0, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t142 to Stack
 ; Spill t132 to slot 103
     ADD SC, FP, R0
     ADDI SC, SC, 144
     STORE T0, SB, SC
+    ADDI T0, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t142 to Stack
+; Spill t134 to slot 104
+    ADD SC, FP, R0
+    ADDI SC, SC, 145
+    STORE S0, SB, SC
     ADDI S0, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t143 to Stack
@@ -9137,10 +9181,6 @@ L_q_sqrt_113:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(142), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op137_t144 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t134 to slot 104
-    ADD SC, FP, R0
-    ADDI SC, SC, 145
-    STORE S0, SB, SC
 ; Spill t133 to slot 105
     ADD SC, FP, R0
     ADDI SC, SC, 146
@@ -9194,6 +9234,8 @@ L_q_sqrt_113:
     ADD SC, FP, R0
     ADDI SC, SC, 157
     STORE RV0, SB, SC
+; Set SP = FP+158 so callee frame is above spills
+    ADDI SP, FP, 158
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T2, R0
@@ -9339,17 +9381,17 @@ L_q_reciprocal_117:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f38_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_7a3d3075_use_global
+    BEQ S2, T5, L_bc_ffa6b313_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_7a3d3075_use_stack
+    BEQ S2, T4, L_bc_ffa6b313_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_7a3d3075_done
-L_bc_7a3d3075_use_global:
+    BEQ R0, R0, L_bc_ffa6b313_done
+L_bc_ffa6b313_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_7a3d3075_done
-L_bc_7a3d3075_use_stack:
+    BEQ R0, R0, L_bc_ffa6b313_done
+L_bc_ffa6b313_use_stack:
     ADD T6, SB, R0
-L_bc_7a3d3075_done:
+L_bc_ffa6b313_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -9363,17 +9405,17 @@ L_bc_7a3d3075_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f38_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_a093ca97_use_global
+    BEQ S2, T5, L_bc_e06018d2_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_a093ca97_use_stack
+    BEQ S2, T4, L_bc_e06018d2_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_a093ca97_done
-L_bc_a093ca97_use_global:
+    BEQ R0, R0, L_bc_e06018d2_done
+L_bc_e06018d2_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_a093ca97_done
-L_bc_a093ca97_use_stack:
+    BEQ R0, R0, L_bc_e06018d2_done
+L_bc_e06018d2_use_stack:
     ADD T0, SB, R0
-L_bc_a093ca97_done:
+L_bc_e06018d2_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -9481,6 +9523,10 @@ L_q_reciprocal_120:
     ADD T2, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t22 to Stack
+; Spill param_bank_f38_op3_0 to slot 9
+    ADD SC, FP, R0
+    ADDI SC, SC, 66
+    STORE S2, SB, SC
     ADD S2, S3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t23 to Stack
@@ -9488,23 +9534,23 @@ L_q_reciprocal_120:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(22), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op30_t24 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill param_bank_f38_op3_0 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 66
-    STORE S2, SB, SC
 ; Spill load_f38_op9_t7_resolved_bank_38_f38_op10 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 67
     STORE T0, SB, SC
     LOAD T0, SB, T2
     STORE T0, SB, S2
-    ADDI T5, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t25 to Stack
 ; Spill t7 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 68
     STORE T5, SB, SC
+    ADDI T5, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t25 to Stack
+; Spill t6 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 69
+    STORE T1, SB, SC
     ADDI T1, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t26 to Stack
@@ -9512,10 +9558,6 @@ L_q_reciprocal_120:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(25), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op33_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t6 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 69
-    STORE T1, SB, SC
 ; Spill t8 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 70
@@ -9564,6 +9606,8 @@ L_q_reciprocal_120:
     ADD SC, FP, R0
     ADDI SC, SC, 80
     STORE T7, SB, SC
+; Set SP = FP+81 so callee frame is above spills
+    ADDI SP, FP, 81
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S3, R0
@@ -9615,6 +9659,10 @@ L_q_reciprocal_120:
     ADDI T7, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t39 to Stack
+; Spill t30 to slot 24
+    ADD SC, FP, R0
+    ADDI SC, SC, 81
+    STORE T6, SB, SC
     ADDI T6, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t40 to Stack
@@ -9622,10 +9670,6 @@ L_q_reciprocal_120:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(39), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op46_t41 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t30 to slot 24
-    ADD SC, FP, R0
-    ADDI SC, SC, 81
-    STORE T6, SB, SC
 ; Spill t32 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 82
@@ -9638,6 +9682,10 @@ L_q_reciprocal_120:
     STORE S1, SB, SC
     ADD S1, FP, R0
     ADDI S1, S1, 10
+; Spill t28 to slot 27
+    ADD SC, FP, R0
+    ADDI SC, SC, 84
+    STORE RV0, SB, SC
     ADD RV0, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t43 to Stack
@@ -9645,10 +9693,6 @@ L_q_reciprocal_120:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(43), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op49_t44 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t28 to slot 27
-    ADD SC, FP, R0
-    ADDI SC, SC, 84
-    STORE RV0, SB, SC
 ; Spill t33 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 85
@@ -9703,13 +9747,17 @@ L_q_reciprocal_121:
 ; LOAD: Using bank register Sb for load
     LOAD T3, SB, T4
     STORE T3, SB, S0
-    ADDI S3, S2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t52 to Stack
 ; Spill t38 to slot 32
     ADD SC, FP, R0
     ADDI SC, SC, 89
     STORE S3, SB, SC
+    ADDI S3, S2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t52 to Stack
+; Spill t37 to slot 33
+    ADD SC, FP, R0
+    ADDI SC, SC, 90
+    STORE T1, SB, SC
     ADDI T1, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t53 to Stack
@@ -9717,10 +9765,6 @@ L_q_reciprocal_121:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(52), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op60_t54 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t37 to slot 33
-    ADD SC, FP, R0
-    ADDI SC, SC, 90
-    STORE T1, SB, SC
 ; Spill t39 to slot 34
     ADD SC, FP, R0
     ADDI SC, SC, 91
@@ -9786,6 +9830,10 @@ L_q_reciprocal_124:
 ; Recompute alloca t42 at FP+10
     ADD S1, FP, R0
     ADDI S1, S1, 10
+; Spill t48 to slot 39
+    ADD SC, FP, R0
+    ADDI SC, SC, 96
+    STORE T0, SB, SC
     ADD T0, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t62 to Stack
@@ -9793,23 +9841,23 @@ L_q_reciprocal_124:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(61), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op71_t63 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t48 to slot 39
-    ADD SC, FP, R0
-    ADDI SC, SC, 96
-    STORE T0, SB, SC
 ; Spill t49 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 97
     STORE T4, SB, SC
     LOAD T4, SB, T6
     STORE T4, SB, T0
-    ADDI T3, RV0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t64 to Stack
 ; Spill t51 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 98
     STORE T3, SB, SC
+    ADDI T3, RV0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t64 to Stack
+; Spill t50 to slot 42
+    ADD SC, FP, R0
+    ADDI SC, SC, 99
+    STORE S0, SB, SC
     ADDI S0, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t65 to Stack
@@ -9817,10 +9865,6 @@ L_q_reciprocal_124:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(64), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op74_t66 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t50 to slot 42
-    ADD SC, FP, R0
-    ADDI SC, SC, 99
-    STORE S0, SB, SC
 ; Spill t52 to slot 43
     ADD SC, FP, R0
     ADDI SC, SC, 100
@@ -9861,6 +9905,10 @@ L_q_reciprocal_125:
 ; Recompute alloca t42 at FP+10
     ADD S2, FP, R0
     ADDI S2, S2, 10
+; Spill t59 to slot 47
+    ADD SC, FP, R0
+    ADDI SC, SC, 104
+    STORE T5, SB, SC
     ADD T5, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t71 to Stack
@@ -9868,23 +9916,23 @@ L_q_reciprocal_125:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(70), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op81_t72 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t59 to slot 47
-    ADD SC, FP, R0
-    ADDI SC, SC, 104
-    STORE T5, SB, SC
 ; Spill t60 to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 105
     STORE T2, SB, SC
     LOAD T2, SB, T1
     STORE T2, SB, T5
-    ADDI T6, RV0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t73 to Stack
 ; Spill t61 to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 106
     STORE T6, SB, SC
+    ADDI T6, RV0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t73 to Stack
+; Spill t63 to slot 50
+    ADD SC, FP, R0
+    ADDI SC, SC, 107
+    STORE T4, SB, SC
     ADDI T4, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t74 to Stack
@@ -9892,10 +9940,6 @@ L_q_reciprocal_125:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(73), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op84_t75 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t63 to slot 50
-    ADD SC, FP, R0
-    ADDI SC, SC, 107
-    STORE T4, SB, SC
 ; Spill t62 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 108
@@ -9963,13 +10007,17 @@ L_q_reciprocal_128:
     ADDI RV0, RV0, 23
 ; Recompute alloca t1 at FP+0
     ADD S0, FP, R0
-    ADD S1, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t84 to Stack
 ; Spill t68 to slot 55
     ADD SC, FP, R0
     ADDI SC, SC, 112
     STORE S1, SB, SC
+    ADD S1, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t84 to Stack
+; Spill t69 to slot 56
+    ADD SC, FP, R0
+    ADDI SC, SC, 113
+    STORE T7, SB, SC
     ADD T7, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t85 to Stack
@@ -9977,23 +10025,23 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(84), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op95_t86 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t69 to slot 56
-    ADD SC, FP, R0
-    ADDI SC, SC, 113
-    STORE T7, SB, SC
 ; Spill t70 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 114
     STORE T1, SB, SC
     LOAD T1, SB, S1
     STORE T1, SB, T7
-    ADDI T2, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t87 to Stack
 ; Spill t72 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 115
     STORE T2, SB, SC
+    ADDI T2, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t87 to Stack
+; Spill t71 to slot 59
+    ADD SC, FP, R0
+    ADDI SC, SC, 116
+    STORE T5, SB, SC
     ADDI T5, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t88 to Stack
@@ -10001,10 +10049,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(87), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op98_t89 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t71 to slot 59
-    ADD SC, FP, R0
-    ADDI SC, SC, 116
-    STORE T5, SB, SC
 ; Spill t73 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 117
@@ -10024,13 +10068,17 @@ L_q_reciprocal_128:
 ; Recompute alloca t42 at FP+10
     ADD T4, FP, R0
     ADDI T4, T4, 10
-    ADD S2, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t91 to Stack
 ; Spill t77 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 120
     STORE S2, SB, SC
+    ADD S2, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t91 to Stack
+; Spill t78 to slot 64
+    ADD SC, FP, R0
+    ADDI SC, SC, 121
+    STORE T3, SB, SC
     ADD T3, T0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t92 to Stack
@@ -10038,19 +10086,19 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(91), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op101_t93 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t78 to slot 64
-    ADD SC, FP, R0
-    ADDI SC, SC, 121
-    STORE T3, SB, SC
     LOAD S3, SB, S2
     STORE S3, SB, T3
-    ADDI S1, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t94 to Stack
 ; Spill t84 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 122
     STORE S1, SB, SC
+    ADDI S1, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t94 to Stack
+; Spill t86 to slot 66
+    ADD SC, FP, R0
+    ADDI SC, SC, 123
+    STORE T1, SB, SC
     ADDI T1, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t95 to Stack
@@ -10058,10 +10106,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(94), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op104_t96 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t86 to slot 66
-    ADD SC, FP, R0
-    ADDI SC, SC, 123
-    STORE T1, SB, SC
 ; Spill t85 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 124
@@ -10115,6 +10159,8 @@ L_q_reciprocal_128:
     ADD SC, FP, R0
     ADDI SC, SC, 135
     STORE T2, SB, SC
+; Set SP = FP+136 so callee frame is above spills
+    ADDI SP, FP, 136
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -10169,6 +10215,10 @@ L_q_reciprocal_128:
     ADDI T2, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t108 to Stack
+; Spill t99 to slot 79
+    ADD SC, FP, R0
+    ADDI SC, SC, 136
+    STORE T5, SB, SC
     ADDI T5, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t109 to Stack
@@ -10176,10 +10226,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(108), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op118_t110 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t99 to slot 79
-    ADD SC, FP, R0
-    ADDI SC, SC, 136
-    STORE T5, SB, SC
 ; Spill t101 to slot 80
     ADD SC, FP, R0
     ADDI SC, SC, 137
@@ -10205,13 +10251,17 @@ L_q_reciprocal_128:
 ; Recompute alloca t76 at FP+18
     ADD T3, FP, R0
     ADDI T3, T3, 18
-    ADD S1, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t113 to Stack
 ; Spill t104 to slot 84
     ADD SC, FP, R0
     ADDI SC, SC, 141
     STORE S1, SB, SC
+    ADD S1, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t113 to Stack
+; Spill t103 to slot 85
+    ADD SC, FP, R0
+    ADDI SC, SC, 142
+    STORE T4, SB, SC
     ADD T4, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t114 to Stack
@@ -10219,23 +10269,23 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(113), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op121_t115 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t103 to slot 85
-    ADD SC, FP, R0
-    ADDI SC, SC, 142
-    STORE T4, SB, SC
 ; Spill t105 to slot 86
     ADD SC, FP, R0
     ADDI SC, SC, 143
     STORE T7, SB, SC
     LOAD T7, SB, S1
     STORE T7, SB, T4
-    ADDI T0, T3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t116 to Stack
 ; Spill t107 to slot 87
     ADD SC, FP, R0
     ADDI SC, SC, 144
     STORE T0, SB, SC
+    ADDI T0, T3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t116 to Stack
+; Spill t106 to slot 88
+    ADD SC, FP, R0
+    ADDI SC, SC, 145
+    STORE S0, SB, SC
     ADDI S0, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t117 to Stack
@@ -10243,10 +10293,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(116), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op124_t118 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t106 to slot 88
-    ADD SC, FP, R0
-    ADDI SC, SC, 145
-    STORE S0, SB, SC
     LOAD T6, SB, T0
     STORE T6, SB, S0
     ADD T1, FP, R0
@@ -10258,13 +10304,17 @@ L_q_reciprocal_128:
 ; Recompute alloca t82 at FP+21
     ADD T2, FP, R0
     ADDI T2, T2, 21
-    ADD S3, T2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t120 to Stack
 ; Spill t110 to slot 90
     ADD SC, FP, R0
     ADDI SC, SC, 147
     STORE S3, SB, SC
+    ADD S3, T2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t120 to Stack
+; Spill t109 to slot 91
+    ADD SC, FP, R0
+    ADDI SC, SC, 148
+    STORE T5, SB, SC
     ADD T5, T1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t121 to Stack
@@ -10272,19 +10322,19 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(120), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op127_t122 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t109 to slot 91
-    ADD SC, FP, R0
-    ADDI SC, SC, 148
-    STORE T5, SB, SC
     LOAD S2, SB, S3
     STORE S2, SB, T5
-    ADDI S1, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t123 to Stack
 ; Spill t113 to slot 92
     ADD SC, FP, R0
     ADDI SC, SC, 149
     STORE S1, SB, SC
+    ADDI S1, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t123 to Stack
+; Spill t115 to slot 93
+    ADD SC, FP, R0
+    ADDI SC, SC, 150
+    STORE T7, SB, SC
     ADDI T7, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t124 to Stack
@@ -10292,10 +10342,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(123), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op130_t125 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t115 to slot 93
-    ADD SC, FP, R0
-    ADDI SC, SC, 150
-    STORE T7, SB, SC
 ; Spill t114 to slot 94
     ADD SC, FP, R0
     ADDI SC, SC, 151
@@ -10349,6 +10395,8 @@ L_q_reciprocal_128:
     ADD SC, FP, R0
     ADDI SC, SC, 162
     STORE T0, SB, SC
+; Set SP = FP+163 so callee frame is above spills
+    ADDI SP, FP, 163
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -10403,6 +10451,10 @@ L_q_reciprocal_128:
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t137 to Stack
+; Spill t128 to slot 106
+    ADD SC, FP, R0
+    ADDI SC, SC, 163
+    STORE S0, SB, SC
     ADDI S0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t138 to Stack
@@ -10410,10 +10462,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(137), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op144_t139 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t128 to slot 106
-    ADD SC, FP, R0
-    ADDI SC, SC, 163
-    STORE S0, SB, SC
 ; Spill t130 to slot 107
     ADD SC, FP, R0
     ADDI SC, SC, 164
@@ -10439,13 +10487,17 @@ L_q_reciprocal_128:
 ; Recompute alloca t42 at FP+10
     ADD T5, FP, R0
     ADDI T5, T5, 10
-    ADD S1, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t142 to Stack
 ; Spill t133 to slot 111
     ADD SC, FP, R0
     ADDI SC, SC, 168
     STORE S1, SB, SC
+    ADD S1, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t142 to Stack
+; Spill t132 to slot 112
+    ADD SC, FP, R0
+    ADDI SC, SC, 169
+    STORE T2, SB, SC
     ADD T2, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t143 to Stack
@@ -10453,23 +10505,23 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(142), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op147_t144 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t132 to slot 112
-    ADD SC, FP, R0
-    ADDI SC, SC, 169
-    STORE T2, SB, SC
 ; Spill t134 to slot 113
     ADD SC, FP, R0
     ADDI SC, SC, 170
     STORE T4, SB, SC
     LOAD T4, SB, S1
     STORE T4, SB, T2
-    ADDI T1, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t145 to Stack
 ; Spill t136 to slot 114
     ADD SC, FP, R0
     ADDI SC, SC, 171
     STORE T1, SB, SC
+    ADDI T1, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t145 to Stack
+; Spill t135 to slot 115
+    ADD SC, FP, R0
+    ADDI SC, SC, 172
+    STORE T3, SB, SC
     ADDI T3, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t146 to Stack
@@ -10477,10 +10529,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(145), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op150_t147 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t135 to slot 115
-    ADD SC, FP, R0
-    ADDI SC, SC, 172
-    STORE T3, SB, SC
     LOAD T6, SB, T1
     STORE T6, SB, T3
     ADD T7, FP, R0
@@ -10492,13 +10540,17 @@ L_q_reciprocal_128:
 ; Recompute alloca t111 at FP+29
     ADD T0, FP, R0
     ADDI T0, T0, 29
-    ADD S2, T0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t149 to Stack
 ; Spill t139 to slot 117
     ADD SC, FP, R0
     ADDI SC, SC, 174
     STORE S2, SB, SC
+    ADD S2, T0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t149 to Stack
+; Spill t138 to slot 118
+    ADD SC, FP, R0
+    ADDI SC, SC, 175
+    STORE S0, SB, SC
     ADD S0, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t150 to Stack
@@ -10506,19 +10558,19 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(149), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op153_t151 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t138 to slot 118
-    ADD SC, FP, R0
-    ADDI SC, SC, 175
-    STORE S0, SB, SC
     LOAD S3, SB, S2
     STORE S3, SB, S0
-    ADDI S1, T0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t152 to Stack
 ; Spill t142 to slot 119
     ADD SC, FP, R0
     ADDI SC, SC, 176
     STORE S1, SB, SC
+    ADDI S1, T0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t152 to Stack
+; Spill t144 to slot 120
+    ADD SC, FP, R0
+    ADDI SC, SC, 177
+    STORE T4, SB, SC
     ADDI T4, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t153 to Stack
@@ -10526,10 +10578,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(152), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op156_t154 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t144 to slot 120
-    ADD SC, FP, R0
-    ADDI SC, SC, 177
-    STORE T4, SB, SC
 ; Spill t143 to slot 121
     ADD SC, FP, R0
     ADDI SC, SC, 178
@@ -10583,6 +10631,8 @@ L_q_reciprocal_128:
     ADD SC, FP, R0
     ADDI SC, SC, 189
     STORE T1, SB, SC
+; Set SP = FP+190 so callee frame is above spills
+    ADDI SP, FP, 190
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -10637,6 +10687,10 @@ L_q_reciprocal_128:
     ADDI T1, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t166 to Stack
+; Spill t157 to slot 133
+    ADD SC, FP, R0
+    ADDI SC, SC, 190
+    STORE T3, SB, SC
     ADDI T3, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t167 to Stack
@@ -10644,10 +10698,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(166), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op170_t168 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t157 to slot 133
-    ADD SC, FP, R0
-    ADDI SC, SC, 190
-    STORE T3, SB, SC
 ; Spill t159 to slot 134
     ADD SC, FP, R0
     ADDI SC, SC, 191
@@ -10660,13 +10710,17 @@ L_q_reciprocal_128:
     STORE S2, SB, SC
     ADD S2, FP, R0
     ADDI S2, S2, 45
-    ADD RV0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t170 to Stack
 ; Spill t155 to slot 136
     ADD SC, FP, R0
     ADDI SC, SC, 193
     STORE RV0, SB, SC
+    ADD RV0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t170 to Stack
+; Spill t160 to slot 137
+    ADD SC, FP, R0
+    ADDI SC, SC, 194
+    STORE S0, SB, SC
     ADD S0, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t171 to Stack
@@ -10674,23 +10728,23 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(170), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op173_t172 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t160 to slot 137
-    ADD SC, FP, R0
-    ADDI SC, SC, 194
-    STORE S0, SB, SC
 ; Spill t162 to slot 138
     ADD SC, FP, R0
     ADDI SC, SC, 195
     STORE S1, SB, SC
     LOAD S1, SB, RV0
     STORE S1, SB, S0
-    ADDI T0, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t173 to Stack
 ; Spill t161 to slot 139
     ADD SC, FP, R0
     ADDI SC, SC, 196
     STORE T0, SB, SC
+    ADDI T0, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t173 to Stack
+; Spill t163 to slot 140
+    ADD SC, FP, R0
+    ADDI SC, SC, 197
+    STORE T2, SB, SC
     ADDI T2, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t174 to Stack
@@ -10698,10 +10752,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(173), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op176_t175 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t163 to slot 140
-    ADD SC, FP, R0
-    ADDI SC, SC, 197
-    STORE T2, SB, SC
 ; Spill t165 to slot 141
     ADD SC, FP, R0
     ADDI SC, SC, 198
@@ -10717,13 +10767,17 @@ L_q_reciprocal_128:
 ; Recompute alloca t42 at FP+10
     ADD T6, FP, R0
     ADDI T6, T6, 10
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t177 to Stack
 ; Spill t166 to slot 143
     ADD SC, FP, R0
     ADDI SC, SC, 200
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t177 to Stack
+; Spill t168 to slot 144
+    ADD SC, FP, R0
+    ADDI SC, SC, 201
+    STORE S3, SB, SC
     ADD S3, T5, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t178 to Stack
@@ -10731,23 +10785,23 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(177), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op179_t179 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t168 to slot 144
-    ADD SC, FP, R0
-    ADDI SC, SC, 201
-    STORE S3, SB, SC
 ; Spill t167 to slot 145
     ADD SC, FP, R0
     ADDI SC, SC, 202
     STORE T3, SB, SC
     LOAD T3, SB, T1
     STORE T3, SB, S3
-    ADDI RV0, T6, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t180 to Stack
 ; Spill t170 to slot 146
     ADD SC, FP, R0
     ADDI SC, SC, 203
     STORE RV0, SB, SC
+    ADDI RV0, T6, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t180 to Stack
+; Spill t172 to slot 147
+    ADD SC, FP, R0
+    ADDI SC, SC, 204
+    STORE S1, SB, SC
     ADDI S1, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t181 to Stack
@@ -10755,10 +10809,6 @@ L_q_reciprocal_128:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(180), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op182_t182 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t172 to slot 147
-    ADD SC, FP, R0
-    ADDI SC, SC, 204
-    STORE S1, SB, SC
 ; Spill t171 to slot 148
     ADD SC, FP, R0
     ADDI SC, SC, 205
@@ -10812,6 +10862,8 @@ L_q_reciprocal_128:
     ADD SC, FP, R0
     ADDI SC, SC, 216
     STORE T0, SB, SC
+; Set SP = FP+217 so callee frame is above spills
+    ADDI SP, FP, 217
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S2, R0
@@ -10957,17 +11009,17 @@ L_q_floor_134:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f40_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_bf72d5a9_use_global
+    BEQ S2, T5, L_bc_69e85cc0_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_bf72d5a9_use_stack
+    BEQ S2, T4, L_bc_69e85cc0_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_bf72d5a9_done
-L_bc_bf72d5a9_use_global:
+    BEQ R0, R0, L_bc_69e85cc0_done
+L_bc_69e85cc0_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_bf72d5a9_done
-L_bc_bf72d5a9_use_stack:
+    BEQ R0, R0, L_bc_69e85cc0_done
+L_bc_69e85cc0_use_stack:
     ADD T6, SB, R0
-L_bc_bf72d5a9_done:
+L_bc_69e85cc0_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -10981,25 +11033,22 @@ L_bc_bf72d5a9_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f40_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_f6c8fac7_use_global
+    BEQ S2, T5, L_bc_2fee2ddc_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_f6c8fac7_use_stack
+    BEQ S2, T4, L_bc_2fee2ddc_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_f6c8fac7_done
-L_bc_f6c8fac7_use_global:
+    BEQ R0, R0, L_bc_2fee2ddc_done
+L_bc_2fee2ddc_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_f6c8fac7_done
-L_bc_f6c8fac7_use_stack:
+    BEQ R0, R0, L_bc_2fee2ddc_done
+L_bc_2fee2ddc_use_stack:
     ADD T0, SB, R0
-L_bc_f6c8fac7_done:
+L_bc_2fee2ddc_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADD S0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t9 to Stack
 ; Spill t2 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 12
@@ -11008,6 +11057,13 @@ L_bc_f6c8fac7_done:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     STORE S2, SB, SC
+    ADD S0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t9 to Stack
+; Spill load_f40_op4_t4_resolved_bank_40_f40_op5 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE T6, SB, SC
     ADD T6, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t10 to Stack
@@ -11015,23 +11071,19 @@ L_bc_f6c8fac7_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f40_op14_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f40_op4_t4_resolved_bank_40_f40_op5 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T6, SB, SC
 ; Spill t4 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T3, SB, SC
     LOAD T3, SB, T6
     STORE T3, SB, S0
-    ADDI T7, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t12 to Stack
 ; Spill t3 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 16
     STORE T7, SB, SC
+    ADDI T7, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t12 to Stack
 ; Spill t0 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -11199,17 +11251,17 @@ L_q_ceil_138:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f42_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_0c1cee1a_use_global
+    BEQ S2, T5, L_bc_16b973a2_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_0c1cee1a_use_stack
+    BEQ S2, T4, L_bc_16b973a2_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_0c1cee1a_done
-L_bc_0c1cee1a_use_global:
+    BEQ R0, R0, L_bc_16b973a2_done
+L_bc_16b973a2_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_0c1cee1a_done
-L_bc_0c1cee1a_use_stack:
+    BEQ R0, R0, L_bc_16b973a2_done
+L_bc_16b973a2_use_stack:
     ADD T6, SB, R0
-L_bc_0c1cee1a_done:
+L_bc_16b973a2_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -11223,25 +11275,22 @@ L_bc_0c1cee1a_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f42_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_3ed63148_use_global
+    BEQ S2, T5, L_bc_4b872230_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_3ed63148_use_stack
+    BEQ S2, T4, L_bc_4b872230_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_3ed63148_done
-L_bc_3ed63148_use_global:
+    BEQ R0, R0, L_bc_4b872230_done
+L_bc_4b872230_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_3ed63148_done
-L_bc_3ed63148_use_stack:
+    BEQ R0, R0, L_bc_4b872230_done
+L_bc_4b872230_use_stack:
     ADD T0, SB, R0
-L_bc_3ed63148_done:
+L_bc_4b872230_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADD S0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t9 to Stack
 ; Spill t2 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 12
@@ -11250,6 +11299,13 @@ L_bc_3ed63148_done:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     STORE S2, SB, SC
+    ADD S0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t9 to Stack
+; Spill load_f42_op4_t4_resolved_bank_42_f42_op5 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE T6, SB, SC
     ADD T6, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t10 to Stack
@@ -11257,23 +11313,19 @@ L_bc_3ed63148_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f42_op14_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f42_op4_t4_resolved_bank_42_f42_op5 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T6, SB, SC
 ; Spill t4 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T3, SB, SC
     LOAD T3, SB, T6
     STORE T3, SB, S0
-    ADDI T7, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t12 to Stack
 ; Spill t3 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 16
     STORE T7, SB, SC
+    ADDI T7, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t12 to Stack
 ; Spill t0 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -11410,17 +11462,17 @@ L_q_round_142:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f44_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_19055df4_use_global
+    BEQ S2, T5, L_bc_623bed1e_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_19055df4_use_stack
+    BEQ S2, T4, L_bc_623bed1e_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_19055df4_done
-L_bc_19055df4_use_global:
+    BEQ R0, R0, L_bc_623bed1e_done
+L_bc_623bed1e_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_19055df4_done
-L_bc_19055df4_use_stack:
+    BEQ R0, R0, L_bc_623bed1e_done
+L_bc_623bed1e_use_stack:
     ADD T6, SB, R0
-L_bc_19055df4_done:
+L_bc_623bed1e_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -11434,25 +11486,22 @@ L_bc_19055df4_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f44_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_548c7895_use_global
+    BEQ S2, T5, L_bc_3b546646_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_548c7895_use_stack
+    BEQ S2, T4, L_bc_3b546646_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_548c7895_done
-L_bc_548c7895_use_global:
+    BEQ R0, R0, L_bc_3b546646_done
+L_bc_3b546646_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_548c7895_done
-L_bc_548c7895_use_stack:
+    BEQ R0, R0, L_bc_3b546646_done
+L_bc_3b546646_use_stack:
     ADD T0, SB, R0
-L_bc_548c7895_done:
+L_bc_3b546646_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADD S0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t9 to Stack
 ; Spill t2 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 12
@@ -11461,6 +11510,13 @@ L_bc_548c7895_done:
     ADD SC, FP, R0
     ADDI SC, SC, 13
     STORE S2, SB, SC
+    ADD S0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t9 to Stack
+; Spill load_f44_op4_t4_resolved_bank_44_f44_op5 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE T6, SB, SC
     ADD T6, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t10 to Stack
@@ -11468,23 +11524,19 @@ L_bc_548c7895_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f44_op14_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f44_op4_t4_resolved_bank_44_f44_op5 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T6, SB, SC
 ; Spill t4 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T3, SB, SC
     LOAD T3, SB, T6
     STORE T3, SB, S0
-    ADDI T7, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t12 to Stack
 ; Spill t3 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 16
     STORE T7, SB, SC
+    ADDI T7, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t12 to Stack
 ; Spill t0 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -11631,17 +11683,17 @@ L_q_min_146:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f46_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_4301c9ca_use_global
+    BEQ S2, T3, L_bc_78520d53_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_4301c9ca_use_stack
+    BEQ S2, T2, L_bc_78520d53_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_4301c9ca_done
-L_bc_4301c9ca_use_global:
+    BEQ R0, R0, L_bc_78520d53_done
+L_bc_78520d53_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_4301c9ca_done
-L_bc_4301c9ca_use_stack:
+    BEQ R0, R0, L_bc_78520d53_done
+L_bc_78520d53_use_stack:
     ADD T4, SB, R0
-L_bc_4301c9ca_done:
+L_bc_78520d53_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -11663,21 +11715,21 @@ L_bc_4301c9ca_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_c0b6687c_use_global
+    BEQ S2, S1, L_bc_6b38f70c_use_global
 ; Spill param_bank_f46_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_c0b6687c_use_stack
+    BEQ S2, S0, L_bc_6b38f70c_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_c0b6687c_done
-L_bc_c0b6687c_use_global:
+    BEQ R0, R0, L_bc_6b38f70c_done
+L_bc_6b38f70c_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_c0b6687c_done
-L_bc_c0b6687c_use_stack:
+    BEQ R0, R0, L_bc_6b38f70c_done
+L_bc_6b38f70c_use_stack:
     ADD T2, SB, R0
-L_bc_c0b6687c_done:
+L_bc_6b38f70c_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -11707,23 +11759,23 @@ L_bc_c0b6687c_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f46_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f46_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f46_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -11733,7 +11785,7 @@ L_bc_c0b6687c_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_05255a23_use_global
+    BEQ T4, T7, L_bc_ea2fa25b_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -11743,31 +11795,31 @@ L_bc_c0b6687c_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_05255a23_use_stack
+    BEQ T4, T0, L_bc_ea2fa25b_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_05255a23_done
-L_bc_05255a23_use_global:
+    BEQ R0, R0, L_bc_ea2fa25b_done
+L_bc_ea2fa25b_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_05255a23_done
-L_bc_05255a23_use_stack:
+    BEQ R0, R0, L_bc_ea2fa25b_done
+L_bc_ea2fa25b_use_stack:
     ADD S3, SB, R0
-L_bc_05255a23_done:
+L_bc_ea2fa25b_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f46_op7_1")
+; Spill param_bank_f46_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 28
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f46_op7_1")
-; Spill param_bank_f46_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 28
-    STORE S2, SB, SC
 ; Spill load_f46_op13_t8_resolved_bank_46_f46_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 29
@@ -11777,21 +11829,21 @@ L_bc_05255a23_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_f2e82d54_use_global
+    BEQ T4, S1, L_bc_c807803e_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_f2e82d54_use_stack
+    BEQ T4, T3, L_bc_c807803e_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_f2e82d54_done
-L_bc_f2e82d54_use_global:
+    BEQ R0, R0, L_bc_c807803e_done
+L_bc_c807803e_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_f2e82d54_done
-L_bc_f2e82d54_use_stack:
+    BEQ R0, R0, L_bc_c807803e_done
+L_bc_c807803e_use_stack:
     ADD T2, SB, R0
-L_bc_f2e82d54_done:
+L_bc_c807803e_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -11807,13 +11859,17 @@ L_bc_f2e82d54_done:
     STORE T4, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD T1, FP, R0
-    ADD S3, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t17 to Stack
 ; Spill load_f46_op18_t12_resolved_bank_46_f46_op19 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE S3, SB, SC
+    ADD S3, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t17 to Stack
+; Spill t12 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 35
+    STORE T7, SB, SC
     ADD T7, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -11821,19 +11877,12 @@ L_bc_f2e82d54_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f46_op28_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t12 to slot 19
-    ADD SC, FP, R0
-    ADDI SC, SC, 35
-    STORE T7, SB, SC
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T5, SB, SC
     LOAD T5, SB, S3
     STORE T5, SB, T7
-    ADDI T6, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 16
@@ -11842,6 +11891,9 @@ L_bc_f2e82d54_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     STORE T4, SB, SC
+    ADDI T6, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t20 to Stack
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t21 to Stack
@@ -11872,13 +11924,17 @@ L_bc_f2e82d54_done:
 ; Recompute alloca t9 at FP+2
     ADD T2, FP, R0
     ADDI T2, T2, 2
-    ADD S1, T2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t24 to Stack
 ; Spill t15 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
+    ADD S1, T2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t24 to Stack
+; Spill t14 to slot 25
+    ADD SC, FP, R0
+    ADDI SC, SC, 41
+    STORE S2, SB, SC
     ADD S2, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t25 to Stack
@@ -11886,23 +11942,23 @@ L_bc_f2e82d54_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(24), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f46_op34_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t14 to slot 25
-    ADD SC, FP, R0
-    ADDI SC, SC, 41
-    STORE S2, SB, SC
 ; Spill t17 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE S3, SB, SC
     LOAD S3, SB, S1
     STORE S3, SB, S2
-    ADDI T5, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t27 to Stack
 ; Spill t19 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T5, SB, SC
+    ADDI T5, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t27 to Stack
+; Spill t18 to slot 28
+    ADD SC, FP, R0
+    ADDI SC, SC, 44
+    STORE T7, SB, SC
     ADDI T7, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -11910,10 +11966,6 @@ L_bc_f2e82d54_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(27), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f46_op37_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t18 to slot 28
-    ADD SC, FP, R0
-    ADDI SC, SC, 44
-    STORE T7, SB, SC
     LOAD T1, SB, T5
     STORE T1, SB, T7
 ; Spill t20 to slot 29
@@ -11963,6 +12015,8 @@ L_bc_f2e82d54_done:
     ADD SC, FP, R0
     ADDI SC, SC, 55
     STORE T0, SB, SC
+; Set SP = FP+56 so callee frame is above spills
+    ADDI SP, FP, 56
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -12061,17 +12115,17 @@ L_q_max_150:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f48_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_42e6bc87_use_global
+    BEQ S2, T3, L_bc_585054eb_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_42e6bc87_use_stack
+    BEQ S2, T2, L_bc_585054eb_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_42e6bc87_done
-L_bc_42e6bc87_use_global:
+    BEQ R0, R0, L_bc_585054eb_done
+L_bc_585054eb_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_42e6bc87_done
-L_bc_42e6bc87_use_stack:
+    BEQ R0, R0, L_bc_585054eb_done
+L_bc_585054eb_use_stack:
     ADD T4, SB, R0
-L_bc_42e6bc87_done:
+L_bc_585054eb_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -12093,21 +12147,21 @@ L_bc_42e6bc87_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_3c2bb15e_use_global
+    BEQ S2, S1, L_bc_b52d47ac_use_global
 ; Spill param_bank_f48_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_3c2bb15e_use_stack
+    BEQ S2, S0, L_bc_b52d47ac_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_3c2bb15e_done
-L_bc_3c2bb15e_use_global:
+    BEQ R0, R0, L_bc_b52d47ac_done
+L_bc_b52d47ac_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_3c2bb15e_done
-L_bc_3c2bb15e_use_stack:
+    BEQ R0, R0, L_bc_b52d47ac_done
+L_bc_b52d47ac_use_stack:
     ADD T2, SB, R0
-L_bc_3c2bb15e_done:
+L_bc_b52d47ac_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -12137,23 +12191,23 @@ L_bc_3c2bb15e_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     LOAD T4, SB, SC
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t10 to Dynamic("param_bank_f48_op7_1")
 ; Spill t5 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t10 to Dynamic("param_bank_f48_op7_1")
+; Spill t4 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE T5, SB, SC
     ADD T5, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t11 to Stack
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("param_bank_f48_op7_1")
-; Spill t4 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T5, SB, SC
 ; Spill t0 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -12163,7 +12217,7 @@ L_bc_3c2bb15e_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_2f45731d_use_global
+    BEQ T4, T7, L_bc_b14930be_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -12173,31 +12227,31 @@ L_bc_3c2bb15e_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_2f45731d_use_stack
+    BEQ T4, T0, L_bc_b14930be_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_2f45731d_done
-L_bc_2f45731d_use_global:
+    BEQ R0, R0, L_bc_b14930be_done
+L_bc_b14930be_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_2f45731d_done
-L_bc_2f45731d_use_stack:
+    BEQ R0, R0, L_bc_b14930be_done
+L_bc_b14930be_use_stack:
     ADD S3, SB, R0
-L_bc_2f45731d_done:
+L_bc_b14930be_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
     ADDI T0, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t13 to Dynamic("param_bank_f48_op7_1")
+; Spill param_bank_f48_op3_0 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 28
+    STORE S2, SB, SC
     ADDI S2, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Stack
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("param_bank_f48_op7_1")
-; Spill param_bank_f48_op3_0 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 28
-    STORE S2, SB, SC
 ; Spill load_f48_op13_t8_resolved_bank_48_f48_op14 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 29
@@ -12207,21 +12261,21 @@ L_bc_2f45731d_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_a63d3397_use_global
+    BEQ T4, S1, L_bc_16dc1654_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_a63d3397_use_stack
+    BEQ T4, T3, L_bc_16dc1654_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_a63d3397_done
-L_bc_a63d3397_use_global:
+    BEQ R0, R0, L_bc_16dc1654_done
+L_bc_16dc1654_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_a63d3397_done
-L_bc_a63d3397_use_stack:
+    BEQ R0, R0, L_bc_16dc1654_done
+L_bc_16dc1654_use_stack:
     ADD T2, SB, R0
-L_bc_a63d3397_done:
+L_bc_16dc1654_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -12237,13 +12291,17 @@ L_bc_a63d3397_done:
     STORE T4, SB, SC
 ; Recompute alloca t2 at FP+0
     ADD T1, FP, R0
-    ADD S3, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t17 to Stack
 ; Spill load_f48_op18_t12_resolved_bank_48_f48_op19 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE S3, SB, SC
+    ADD S3, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t17 to Stack
+; Spill t12 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 35
+    STORE T7, SB, SC
     ADD T7, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t18 to Stack
@@ -12251,19 +12309,12 @@ L_bc_a63d3397_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f48_op28_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t12 to slot 19
-    ADD SC, FP, R0
-    ADDI SC, SC, 35
-    STORE T7, SB, SC
 ; Spill t11 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T5, SB, SC
     LOAD T5, SB, S3
     STORE T5, SB, T7
-    ADDI T6, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 16
@@ -12272,6 +12323,9 @@ L_bc_a63d3397_done:
     ADD SC, FP, R0
     ADDI SC, SC, 17
     STORE T4, SB, SC
+    ADDI T6, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t20 to Stack
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t21 to Stack
@@ -12302,13 +12356,17 @@ L_bc_a63d3397_done:
 ; Recompute alloca t9 at FP+2
     ADD T2, FP, R0
     ADDI T2, T2, 2
-    ADD S1, T2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t24 to Stack
 ; Spill t15 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
+    ADD S1, T2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t24 to Stack
+; Spill t14 to slot 25
+    ADD SC, FP, R0
+    ADDI SC, SC, 41
+    STORE S2, SB, SC
     ADD S2, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t25 to Stack
@@ -12316,23 +12374,23 @@ L_bc_a63d3397_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(24), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f48_op34_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t14 to slot 25
-    ADD SC, FP, R0
-    ADDI SC, SC, 41
-    STORE S2, SB, SC
 ; Spill t17 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE S3, SB, SC
     LOAD S3, SB, S1
     STORE S3, SB, S2
-    ADDI T5, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t27 to Stack
 ; Spill t19 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T5, SB, SC
+    ADDI T5, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t27 to Stack
+; Spill t18 to slot 28
+    ADD SC, FP, R0
+    ADDI SC, SC, 44
+    STORE T7, SB, SC
     ADDI T7, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -12340,10 +12398,6 @@ L_bc_a63d3397_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(27), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f48_op37_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t18 to slot 28
-    ADD SC, FP, R0
-    ADDI SC, SC, 44
-    STORE T7, SB, SC
     LOAD T1, SB, T5
     STORE T1, SB, T7
 ; Spill t20 to slot 29
@@ -12393,6 +12447,8 @@ L_bc_a63d3397_done:
     ADD SC, FP, R0
     ADDI SC, SC, 55
     STORE T0, SB, SC
+; Set SP = FP+56 so callee frame is above spills
+    ADDI SP, FP, 56
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -12497,29 +12553,23 @@ L_q_clamp_154:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Mixed })
 ; LOAD: Pointer t4 has bank info: Dynamic("param_bank_f50_op3_0")
     LI T1, -1
-    BEQ S2, T1, L_bc_65c24700_use_global
+    BEQ S2, T1, L_bc_2be255c2_use_global
     LI T0, -2
-    BEQ S2, T0, L_bc_65c24700_use_stack
+    BEQ S2, T0, L_bc_2be255c2_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_65c24700_done
-L_bc_65c24700_use_global:
+    BEQ R0, R0, L_bc_2be255c2_done
+L_bc_2be255c2_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_65c24700_done
-L_bc_65c24700_use_stack:
+    BEQ R0, R0, L_bc_2be255c2_done
+L_bc_2be255c2_use_stack:
     ADD T2, SB, R0
-L_bc_65c24700_done:
+L_bc_2be255c2_done:
 ; LOAD: Using bank register T2 for load
     LOAD T1, T2, T4
     STORE T1, SB, T3
     ADDI T0, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t7 to Dynamic("param_bank_f50_op3_0")
-    ADDI S1, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t8 to Stack
-; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
-; LOAD: Pointer t7 has bank info: Dynamic("param_bank_f50_op3_0")
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 22
@@ -12528,6 +12578,12 @@ L_bc_65c24700_done:
     ADD SC, FP, R0
     ADDI SC, SC, 23
     STORE S0, SB, SC
+    ADDI S1, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t8 to Stack
+; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
+; LOAD: Pointer t7 has bank info: Dynamic("param_bank_f50_op3_0")
 ; Spill param_bank_f50_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -12541,21 +12597,21 @@ L_bc_65c24700_done:
     ADDI SC, SC, 26
     STORE T6, SB, SC
     LI T7, -1
-    BEQ S2, T7, L_bc_e8c64c33_use_global
+    BEQ S2, T7, L_bc_55e11b77_use_global
 ; Spill param_bank_f50_op11_2 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T6, SB, SC
     LI T6, -2
-    BEQ S2, T6, L_bc_e8c64c33_use_stack
+    BEQ S2, T6, L_bc_55e11b77_use_stack
     ADD S0, S2, R0
-    BEQ R0, R0, L_bc_e8c64c33_done
-L_bc_e8c64c33_use_global:
+    BEQ R0, R0, L_bc_55e11b77_done
+L_bc_55e11b77_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_e8c64c33_done
-L_bc_e8c64c33_use_stack:
+    BEQ R0, R0, L_bc_55e11b77_done
+L_bc_55e11b77_use_stack:
     ADD S0, SB, R0
-L_bc_e8c64c33_done:
+L_bc_55e11b77_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S1
@@ -12585,23 +12641,23 @@ L_bc_e8c64c33_done:
     ADD SC, FP, R0
     ADDI SC, SC, 23
     LOAD T2, SB, SC
-    ADD T1, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t11 to Dynamic("param_bank_f50_op7_1")
 ; Spill t6 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T1, SB, SC
+    ADD T1, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t11 to Dynamic("param_bank_f50_op7_1")
+; Spill t5 to slot 10
+    ADD SC, FP, R0
+    ADDI SC, SC, 32
+    STORE T3, SB, SC
     ADD T3, T6, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t12 to Stack
 ; Load instruction: t13 = load FatPtr(FatPointer { addr: Temp(11), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(11), bank: Mixed })
 ; LOAD: Pointer t11 has bank info: Dynamic("param_bank_f50_op7_1")
-; Spill t5 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 32
-    STORE T3, SB, SC
 ; Spill t0 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 33
@@ -12611,7 +12667,7 @@ L_bc_e8c64c33_done:
     ADDI SC, SC, 34
     STORE S2, SB, SC
     LI T5, -1
-    BEQ T2, T5, L_bc_00e0f955_use_global
+    BEQ T2, T5, L_bc_4aa4117c_use_global
 ; Spill t7 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 35
@@ -12621,31 +12677,31 @@ L_bc_e8c64c33_done:
     ADDI SC, SC, 36
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T2, T0, L_bc_00e0f955_use_stack
+    BEQ T2, T0, L_bc_4aa4117c_use_stack
     ADD S3, T2, R0
-    BEQ R0, R0, L_bc_00e0f955_done
-L_bc_00e0f955_use_global:
+    BEQ R0, R0, L_bc_4aa4117c_done
+L_bc_4aa4117c_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_00e0f955_done
-L_bc_00e0f955_use_stack:
+    BEQ R0, R0, L_bc_4aa4117c_done
+L_bc_4aa4117c_use_stack:
     ADD S3, SB, R0
-L_bc_00e0f955_done:
+L_bc_4aa4117c_done:
 ; LOAD: Using bank register S3 for load
     LOAD T5, S3, T1
     STORE T5, SB, T3
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Dynamic("param_bank_f50_op7_1")
+; Spill param_bank_f50_op3_0 to slot 15
+    ADD SC, FP, R0
+    ADDI SC, SC, 37
+    STORE S2, SB, SC
     ADDI S2, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t15 to Stack
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; LOAD: Pointer t14 has bank info: Dynamic("param_bank_f50_op7_1")
-; Spill param_bank_f50_op3_0 to slot 15
-    ADD SC, FP, R0
-    ADDI SC, SC, 37
-    STORE S2, SB, SC
 ; Spill load_f50_op17_t9_resolved_bank_50_f50_op18 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 38
@@ -12655,21 +12711,21 @@ L_bc_00e0f955_done:
     ADDI SC, SC, 39
     STORE T7, SB, SC
     LI T7, -1
-    BEQ T2, T7, L_bc_7c3da03e_use_global
+    BEQ T2, T7, L_bc_1387b47c_use_global
 ; Spill t8 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
     LI S1, -2
-    BEQ T2, S1, L_bc_7c3da03e_use_stack
+    BEQ T2, S1, L_bc_1387b47c_use_stack
     ADD S0, T2, R0
-    BEQ R0, R0, L_bc_7c3da03e_done
-L_bc_7c3da03e_use_global:
+    BEQ R0, R0, L_bc_1387b47c_done
+L_bc_1387b47c_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_7c3da03e_done
-L_bc_7c3da03e_use_stack:
+    BEQ R0, R0, L_bc_1387b47c_done
+L_bc_1387b47c_use_stack:
     ADD S0, SB, R0
-L_bc_7c3da03e_done:
+L_bc_1387b47c_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S2
@@ -12699,23 +12755,23 @@ L_bc_7c3da03e_done:
     ADD SC, FP, R0
     ADDI SC, SC, 26
     LOAD S3, SB, SC
-    ADD T5, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t18 to Dynamic("param_bank_f50_op11_2")
 ; Spill t13 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 44
     STORE T5, SB, SC
+    ADD T5, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t18 to Dynamic("param_bank_f50_op11_2")
+; Spill t12 to slot 23
+    ADD SC, FP, R0
+    ADDI SC, SC, 45
+    STORE T3, SB, SC
     ADD T3, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t19 to Stack
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; LOAD: Pointer t18 has bank info: Dynamic("param_bank_f50_op11_2")
-; Spill t12 to slot 23
-    ADD SC, FP, R0
-    ADDI SC, SC, 45
-    STORE T3, SB, SC
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 22
@@ -12725,7 +12781,7 @@ L_bc_7c3da03e_done:
     ADDI SC, SC, 23
     STORE T2, SB, SC
     LI T6, -1
-    BEQ S3, T6, L_bc_eb3a838a_use_global
+    BEQ S3, T6, L_bc_0b2241fb_use_global
 ; Spill t14 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 46
@@ -12735,31 +12791,31 @@ L_bc_7c3da03e_done:
     ADDI SC, SC, 47
     STORE T2, SB, SC
     LI T0, -2
-    BEQ S3, T0, L_bc_eb3a838a_use_stack
+    BEQ S3, T0, L_bc_0b2241fb_use_stack
     ADD T4, S3, R0
-    BEQ R0, R0, L_bc_eb3a838a_done
-L_bc_eb3a838a_use_global:
+    BEQ R0, R0, L_bc_0b2241fb_done
+L_bc_0b2241fb_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_eb3a838a_done
-L_bc_eb3a838a_use_stack:
+    BEQ R0, R0, L_bc_0b2241fb_done
+L_bc_0b2241fb_use_stack:
     ADD T4, SB, R0
-L_bc_eb3a838a_done:
+L_bc_0b2241fb_done:
 ; LOAD: Using bank register T4 for load
     LOAD T6, T4, T5
     STORE T6, SB, T3
     ADDI T0, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t21 to Dynamic("param_bank_f50_op11_2")
+; Spill param_bank_f50_op7_1 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 24
+    STORE T2, SB, SC
     ADDI T2, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t22 to Stack
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(21), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(21), bank: Mixed })
 ; LOAD: Pointer t21 has bank info: Dynamic("param_bank_f50_op11_2")
-; Spill param_bank_f50_op7_1 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    STORE T2, SB, SC
 ; Spill load_f50_op27_t16_resolved_bank_50_f50_op28 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 48
@@ -12769,21 +12825,21 @@ L_bc_eb3a838a_done:
     ADDI SC, SC, 49
     STORE T7, SB, SC
     LI T7, -1
-    BEQ S3, T7, L_bc_e0698915_use_global
+    BEQ S3, T7, L_bc_b24381c8_use_global
 ; Spill t15 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 50
     STORE S2, SB, SC
     LI S2, -2
-    BEQ S3, S2, L_bc_e0698915_use_stack
+    BEQ S3, S2, L_bc_b24381c8_use_stack
     ADD S0, S3, R0
-    BEQ R0, R0, L_bc_e0698915_done
-L_bc_e0698915_use_global:
+    BEQ R0, R0, L_bc_b24381c8_done
+L_bc_b24381c8_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_e0698915_done
-L_bc_e0698915_use_stack:
+    BEQ R0, R0, L_bc_b24381c8_done
+L_bc_b24381c8_use_stack:
     ADD S0, SB, R0
-L_bc_e0698915_done:
+L_bc_b24381c8_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, T2
@@ -12799,13 +12855,17 @@ L_bc_e0698915_done:
     STORE S3, SB, SC
 ; Recompute alloca t3 at FP+0
     ADD T5, FP, R0
-    ADD T4, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t25 to Stack
 ; Spill load_f50_op32_t20_resolved_bank_50_f50_op33 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 53
     STORE T4, SB, SC
+    ADD T4, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t25 to Stack
+; Spill t20 to slot 32
+    ADD SC, FP, R0
+    ADDI SC, SC, 54
+    STORE T6, SB, SC
     ADD T6, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t26 to Stack
@@ -12813,19 +12873,12 @@ L_bc_e0698915_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(25), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f50_op42_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t20 to slot 32
-    ADD SC, FP, R0
-    ADDI SC, SC, 54
-    STORE T6, SB, SC
 ; Spill t19 to slot 33
     ADD SC, FP, R0
     ADDI SC, SC, 55
     STORE T3, SB, SC
     LOAD T3, SB, T4
     STORE T3, SB, T6
-    ADDI T1, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t28 to Stack
 ; Spill t2 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 25
@@ -12834,6 +12887,9 @@ L_bc_e0698915_done:
     ADD SC, FP, R0
     ADDI SC, SC, 26
     STORE S3, SB, SC
+    ADDI T1, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t28 to Stack
     ADDI S1, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t29 to Stack
@@ -12864,13 +12920,17 @@ L_bc_e0698915_done:
 ; Recompute alloca t10 at FP+2
     ADD S0, FP, R0
     ADDI S0, S0, 2
-    ADD T7, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t32 to Stack
 ; Spill t23 to slot 37
     ADD SC, FP, R0
     ADDI SC, SC, 59
     STORE T7, SB, SC
+    ADD T7, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t32 to Stack
+; Spill t22 to slot 38
+    ADD SC, FP, R0
+    ADDI SC, SC, 60
+    STORE T2, SB, SC
     ADD T2, S3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t33 to Stack
@@ -12878,23 +12938,23 @@ L_bc_e0698915_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(32), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f50_op48_t34 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t22 to slot 38
-    ADD SC, FP, R0
-    ADDI SC, SC, 60
-    STORE T2, SB, SC
 ; Spill t25 to slot 39
     ADD SC, FP, R0
     ADDI SC, SC, 61
     STORE T4, SB, SC
     LOAD T4, SB, T7
     STORE T4, SB, T2
-    ADDI T3, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t35 to Stack
 ; Spill t27 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 62
     STORE T3, SB, SC
+    ADDI T3, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t35 to Stack
+; Spill t26 to slot 41
+    ADD SC, FP, R0
+    ADDI SC, SC, 63
+    STORE T6, SB, SC
     ADDI T6, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t36 to Stack
@@ -12902,10 +12962,6 @@ L_bc_e0698915_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(35), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f50_op51_t37 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t26 to slot 41
-    ADD SC, FP, R0
-    ADDI SC, SC, 63
-    STORE T6, SB, SC
     LOAD T5, SB, T3
     STORE T5, SB, T6
 ; Spill t28 to slot 42
@@ -12955,6 +13011,8 @@ L_bc_e0698915_done:
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T0, SB, SC
+; Set SP = FP+75 so callee frame is above spills
+    ADDI SP, FP, 75
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S2, R0
@@ -13026,13 +13084,17 @@ L_q_clamp_157:
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, T0
     STORE S1, SB, RV0
-    ADDI T2, S3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t50 to Stack
 ; Spill t40 to slot 53
     ADD SC, FP, R0
     ADDI SC, SC, 75
     STORE T2, SB, SC
+    ADDI T2, S3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t50 to Stack
+; Spill t42 to slot 54
+    ADD SC, FP, R0
+    ADDI SC, SC, 76
+    STORE T3, SB, SC
     ADDI T3, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t51 to Stack
@@ -13040,10 +13102,6 @@ L_q_clamp_157:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(50), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f50_op65_t52 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t42 to slot 54
-    ADD SC, FP, R0
-    ADDI SC, SC, 76
-    STORE T3, SB, SC
 ; Spill t41 to slot 55
     ADD SC, FP, R0
     ADDI SC, SC, 77
@@ -13097,6 +13155,8 @@ L_q_clamp_157:
     ADD SC, FP, R0
     ADDI SC, SC, 88
     STORE T5, SB, SC
+; Set SP = FP+89 so callee frame is above spills
+    ADDI SP, FP, 89
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T7, R0
@@ -13201,29 +13261,23 @@ L_q_lerp_161:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Mixed })
 ; LOAD: Pointer t4 has bank info: Dynamic("param_bank_f52_op3_0")
     LI T1, -1
-    BEQ S2, T1, L_bc_182d2b2a_use_global
+    BEQ S2, T1, L_bc_67c68b07_use_global
     LI T0, -2
-    BEQ S2, T0, L_bc_182d2b2a_use_stack
+    BEQ S2, T0, L_bc_67c68b07_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_182d2b2a_done
-L_bc_182d2b2a_use_global:
+    BEQ R0, R0, L_bc_67c68b07_done
+L_bc_67c68b07_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_182d2b2a_done
-L_bc_182d2b2a_use_stack:
+    BEQ R0, R0, L_bc_67c68b07_done
+L_bc_67c68b07_use_stack:
     ADD T2, SB, R0
-L_bc_182d2b2a_done:
+L_bc_67c68b07_done:
 ; LOAD: Using bank register T2 for load
     LOAD T1, T2, T4
     STORE T1, SB, T3
     ADDI T0, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t7 to Dynamic("param_bank_f52_op3_0")
-    ADDI S1, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t8 to Stack
-; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
-; LOAD: Pointer t7 has bank info: Dynamic("param_bank_f52_op3_0")
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 36
@@ -13232,6 +13286,12 @@ L_bc_182d2b2a_done:
     ADD SC, FP, R0
     ADDI SC, SC, 37
     STORE S0, SB, SC
+    ADDI S1, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t8 to Stack
+; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
+; LOAD: Pointer t7 has bank info: Dynamic("param_bank_f52_op3_0")
 ; Spill param_bank_f52_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 38
@@ -13245,21 +13305,21 @@ L_bc_182d2b2a_done:
     ADDI SC, SC, 40
     STORE T6, SB, SC
     LI T7, -1
-    BEQ S2, T7, L_bc_56f64109_use_global
+    BEQ S2, T7, L_bc_84c1ca59_use_global
 ; Spill param_bank_f52_op11_2 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE T6, SB, SC
     LI T6, -2
-    BEQ S2, T6, L_bc_56f64109_use_stack
+    BEQ S2, T6, L_bc_84c1ca59_use_stack
     ADD S0, S2, R0
-    BEQ R0, R0, L_bc_56f64109_done
-L_bc_56f64109_use_global:
+    BEQ R0, R0, L_bc_84c1ca59_done
+L_bc_84c1ca59_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_56f64109_done
-L_bc_56f64109_use_stack:
+    BEQ R0, R0, L_bc_84c1ca59_done
+L_bc_84c1ca59_use_stack:
     ADD S0, SB, R0
-L_bc_56f64109_done:
+L_bc_84c1ca59_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S1
@@ -13289,23 +13349,23 @@ L_bc_56f64109_done:
     ADD SC, FP, R0
     ADDI SC, SC, 37
     LOAD T2, SB, SC
-    ADD T1, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t11 to Dynamic("param_bank_f52_op7_1")
 ; Spill t6 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 45
     STORE T1, SB, SC
+    ADD T1, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t11 to Dynamic("param_bank_f52_op7_1")
+; Spill t5 to slot 10
+    ADD SC, FP, R0
+    ADDI SC, SC, 46
+    STORE T3, SB, SC
     ADD T3, T6, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t12 to Stack
 ; Load instruction: t13 = load FatPtr(FatPointer { addr: Temp(11), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(11), bank: Mixed })
 ; LOAD: Pointer t11 has bank info: Dynamic("param_bank_f52_op7_1")
-; Spill t5 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 46
-    STORE T3, SB, SC
 ; Spill t0 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 47
@@ -13315,7 +13375,7 @@ L_bc_56f64109_done:
     ADDI SC, SC, 48
     STORE S2, SB, SC
     LI T5, -1
-    BEQ T2, T5, L_bc_345d72d5_use_global
+    BEQ T2, T5, L_bc_ccc10e65_use_global
 ; Spill t7 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 49
@@ -13325,31 +13385,31 @@ L_bc_56f64109_done:
     ADDI SC, SC, 50
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T2, T0, L_bc_345d72d5_use_stack
+    BEQ T2, T0, L_bc_ccc10e65_use_stack
     ADD S3, T2, R0
-    BEQ R0, R0, L_bc_345d72d5_done
-L_bc_345d72d5_use_global:
+    BEQ R0, R0, L_bc_ccc10e65_done
+L_bc_ccc10e65_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_345d72d5_done
-L_bc_345d72d5_use_stack:
+    BEQ R0, R0, L_bc_ccc10e65_done
+L_bc_ccc10e65_use_stack:
     ADD S3, SB, R0
-L_bc_345d72d5_done:
+L_bc_ccc10e65_done:
 ; LOAD: Using bank register S3 for load
     LOAD T5, S3, T1
     STORE T5, SB, T3
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t14 to Dynamic("param_bank_f52_op7_1")
+; Spill param_bank_f52_op3_0 to slot 15
+    ADD SC, FP, R0
+    ADDI SC, SC, 51
+    STORE S2, SB, SC
     ADDI S2, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t15 to Stack
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; LOAD: Pointer t14 has bank info: Dynamic("param_bank_f52_op7_1")
-; Spill param_bank_f52_op3_0 to slot 15
-    ADD SC, FP, R0
-    ADDI SC, SC, 51
-    STORE S2, SB, SC
 ; Spill load_f52_op17_t9_resolved_bank_52_f52_op18 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 52
@@ -13359,21 +13419,21 @@ L_bc_345d72d5_done:
     ADDI SC, SC, 53
     STORE T7, SB, SC
     LI T7, -1
-    BEQ T2, T7, L_bc_a508d8df_use_global
+    BEQ T2, T7, L_bc_e1acd42a_use_global
 ; Spill t8 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 54
     STORE S1, SB, SC
     LI S1, -2
-    BEQ T2, S1, L_bc_a508d8df_use_stack
+    BEQ T2, S1, L_bc_e1acd42a_use_stack
     ADD S0, T2, R0
-    BEQ R0, R0, L_bc_a508d8df_done
-L_bc_a508d8df_use_global:
+    BEQ R0, R0, L_bc_e1acd42a_done
+L_bc_e1acd42a_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_a508d8df_done
-L_bc_a508d8df_use_stack:
+    BEQ R0, R0, L_bc_e1acd42a_done
+L_bc_e1acd42a_use_stack:
     ADD S0, SB, R0
-L_bc_a508d8df_done:
+L_bc_e1acd42a_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S2
@@ -13403,23 +13463,23 @@ L_bc_a508d8df_done:
     ADD SC, FP, R0
     ADDI SC, SC, 40
     LOAD S3, SB, SC
-    ADD T5, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t18 to Dynamic("param_bank_f52_op11_2")
 ; Spill t13 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 58
     STORE T5, SB, SC
+    ADD T5, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t18 to Dynamic("param_bank_f52_op11_2")
+; Spill t12 to slot 23
+    ADD SC, FP, R0
+    ADDI SC, SC, 59
+    STORE T3, SB, SC
     ADD T3, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t19 to Stack
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; LOAD: Pointer t18 has bank info: Dynamic("param_bank_f52_op11_2")
-; Spill t12 to slot 23
-    ADD SC, FP, R0
-    ADDI SC, SC, 59
-    STORE T3, SB, SC
 ; Spill t1 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 36
@@ -13429,7 +13489,7 @@ L_bc_a508d8df_done:
     ADDI SC, SC, 37
     STORE T2, SB, SC
     LI T6, -1
-    BEQ S3, T6, L_bc_a6ca0a82_use_global
+    BEQ S3, T6, L_bc_7491b017_use_global
 ; Spill t14 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 60
@@ -13439,31 +13499,31 @@ L_bc_a508d8df_done:
     ADDI SC, SC, 61
     STORE T2, SB, SC
     LI T0, -2
-    BEQ S3, T0, L_bc_a6ca0a82_use_stack
+    BEQ S3, T0, L_bc_7491b017_use_stack
     ADD T4, S3, R0
-    BEQ R0, R0, L_bc_a6ca0a82_done
-L_bc_a6ca0a82_use_global:
+    BEQ R0, R0, L_bc_7491b017_done
+L_bc_7491b017_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_a6ca0a82_done
-L_bc_a6ca0a82_use_stack:
+    BEQ R0, R0, L_bc_7491b017_done
+L_bc_7491b017_use_stack:
     ADD T4, SB, R0
-L_bc_a6ca0a82_done:
+L_bc_7491b017_done:
 ; LOAD: Using bank register T4 for load
     LOAD T6, T4, T5
     STORE T6, SB, T3
     ADDI T0, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t21 to Dynamic("param_bank_f52_op11_2")
+; Spill param_bank_f52_op7_1 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 38
+    STORE T2, SB, SC
     ADDI T2, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t22 to Stack
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(21), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(21), bank: Mixed })
 ; LOAD: Pointer t21 has bank info: Dynamic("param_bank_f52_op11_2")
-; Spill param_bank_f52_op7_1 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 38
-    STORE T2, SB, SC
 ; Spill load_f52_op27_t16_resolved_bank_52_f52_op28 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 62
@@ -13473,21 +13533,21 @@ L_bc_a6ca0a82_done:
     ADDI SC, SC, 63
     STORE T7, SB, SC
     LI T7, -1
-    BEQ S3, T7, L_bc_8e2b1b43_use_global
+    BEQ S3, T7, L_bc_797b37a0_use_global
 ; Spill t15 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 64
     STORE S2, SB, SC
     LI S2, -2
-    BEQ S3, S2, L_bc_8e2b1b43_use_stack
+    BEQ S3, S2, L_bc_797b37a0_use_stack
     ADD S0, S3, R0
-    BEQ R0, R0, L_bc_8e2b1b43_done
-L_bc_8e2b1b43_use_global:
+    BEQ R0, R0, L_bc_797b37a0_done
+L_bc_797b37a0_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_8e2b1b43_done
-L_bc_8e2b1b43_use_stack:
+    BEQ R0, R0, L_bc_797b37a0_done
+L_bc_797b37a0_use_stack:
     ADD S0, SB, R0
-L_bc_8e2b1b43_done:
+L_bc_797b37a0_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, T2
@@ -13510,13 +13570,17 @@ L_bc_8e2b1b43_done:
 ; Recompute alloca t10 at FP+2
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADD T6, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t26 to Stack
 ; Spill t20 to slot 32
     ADD SC, FP, R0
     ADDI SC, SC, 68
     STORE T6, SB, SC
+    ADD T6, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t26 to Stack
+; Spill t19 to slot 33
+    ADD SC, FP, R0
+    ADDI SC, SC, 69
+    STORE T3, SB, SC
     ADD T3, T5, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t27 to Stack
@@ -13524,10 +13588,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(26), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op42_t28 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t19 to slot 33
-    ADD SC, FP, R0
-    ADDI SC, SC, 69
-    STORE T3, SB, SC
 ; Spill t2 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 39
@@ -13541,13 +13601,6 @@ L_bc_8e2b1b43_done:
     ADDI S1, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t29 to Stack
-    ADDI T0, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t30 to Stack
-; Load instruction: t31 = load FatPtr(FatPointer { addr: Temp(29), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(29), bank: Stack })
-; LOAD: Pointer load_src_ptr_f52_op45_t31 has bank info: Stack
-; LOAD: Using bank register Sb for load
 ; Spill t21 to slot 34
     ADD SC, FP, R0
     ADDI SC, SC, 70
@@ -13556,6 +13609,13 @@ L_bc_8e2b1b43_done:
     ADD SC, FP, R0
     ADDI SC, SC, 71
     STORE S3, SB, SC
+    ADDI T0, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t30 to Stack
+; Load instruction: t31 = load FatPtr(FatPointer { addr: Temp(29), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(29), bank: Stack })
+; LOAD: Pointer load_src_ptr_f52_op45_t31 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill param_bank_f52_op11_2 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 41
@@ -13574,13 +13634,13 @@ L_bc_8e2b1b43_done:
     STORE T7, SB, SC
 ; Recompute alloca t3 at FP+0
     ADD T7, FP, R0
-    ADD T2, T7, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t33 to Stack
 ; Spill t22 to slot 38
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T2, SB, SC
+    ADD T2, T7, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t33 to Stack
     ADD S2, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t34 to Stack
@@ -13594,13 +13654,17 @@ L_bc_8e2b1b43_done:
     STORE T6, SB, SC
     LOAD T6, SB, T2
     STORE T6, SB, S2
-    ADDI T1, T7, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t36 to Stack
 ; Spill t28 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 76
     STORE T1, SB, SC
+    ADDI T1, T7, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t36 to Stack
+; Spill t27 to slot 41
+    ADD SC, FP, R0
+    ADDI SC, SC, 77
+    STORE T3, SB, SC
     ADDI T3, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t37 to Stack
@@ -13608,10 +13672,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(36), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op51_t38 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t27 to slot 41
-    ADD SC, FP, R0
-    ADDI SC, SC, 77
-    STORE T3, SB, SC
     LOAD T4, SB, T1
     STORE T4, SB, T3
 ; Spill t29 to slot 42
@@ -13661,6 +13721,8 @@ L_bc_8e2b1b43_done:
     ADD SC, FP, R0
     ADDI SC, SC, 88
     STORE S3, SB, SC
+; Set SP = FP+89 so callee frame is above spills
+    ADDI SP, FP, 89
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T5, R0
@@ -13715,6 +13777,10 @@ L_bc_8e2b1b43_done:
     ADDI S3, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t50 to Stack
+; Spill t41 to slot 53
+    ADD SC, FP, R0
+    ADDI SC, SC, 89
+    STORE T2, SB, SC
     ADDI T2, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t51 to Stack
@@ -13722,10 +13788,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(50), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op65_t52 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t41 to slot 53
-    ADD SC, FP, R0
-    ADDI SC, SC, 89
-    STORE T2, SB, SC
 ; Spill t43 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 90
@@ -13744,13 +13806,17 @@ L_bc_8e2b1b43_done:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 16
-    ADD T7, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t55 to Stack
 ; Spill t44 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 93
     STORE T7, SB, SC
+    ADD T7, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t55 to Stack
+; Spill t46 to slot 58
+    ADD SC, FP, R0
+    ADDI SC, SC, 94
+    STORE T4, SB, SC
     ADD T4, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t56 to Stack
@@ -13758,23 +13824,23 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(55), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op68_t57 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t46 to slot 58
-    ADD SC, FP, R0
-    ADDI SC, SC, 94
-    STORE T4, SB, SC
 ; Spill t45 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 95
     STORE T1, SB, SC
     LOAD T1, SB, T7
     STORE T1, SB, T4
-    ADDI T3, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t58 to Stack
 ; Spill t47 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 96
     STORE T3, SB, SC
+    ADDI T3, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t58 to Stack
+; Spill t49 to slot 61
+    ADD SC, FP, R0
+    ADDI SC, SC, 97
+    STORE S0, SB, SC
     ADDI S0, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t59 to Stack
@@ -13782,10 +13848,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(58), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op71_t60 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t49 to slot 61
-    ADD SC, FP, R0
-    ADDI SC, SC, 97
-    STORE S0, SB, SC
 ; Spill t48 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 98
@@ -13801,13 +13863,17 @@ L_bc_8e2b1b43_done:
 ; Recompute alloca t17 at FP+4
     ADD S3, FP, R0
     ADDI S3, S3, 4
-    ADD S2, S3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t62 to Stack
 ; Spill t52 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 100
     STORE S2, SB, SC
+    ADD S2, S3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t62 to Stack
+; Spill t51 to slot 65
+    ADD SC, FP, R0
+    ADDI SC, SC, 101
+    STORE T2, SB, SC
     ADD T2, T0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t63 to Stack
@@ -13815,19 +13881,19 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(62), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op74_t64 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t51 to slot 65
-    ADD SC, FP, R0
-    ADDI SC, SC, 101
-    STORE T2, SB, SC
     LOAD T6, SB, S2
     STORE T6, SB, T2
-    ADDI T7, S3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t65 to Stack
 ; Spill t55 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 102
     STORE T7, SB, SC
+    ADDI T7, S3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t65 to Stack
+; Spill t57 to slot 67
+    ADD SC, FP, R0
+    ADDI SC, SC, 103
+    STORE T1, SB, SC
     ADDI T1, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t66 to Stack
@@ -13835,10 +13901,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(65), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op77_t67 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t57 to slot 67
-    ADD SC, FP, R0
-    ADDI SC, SC, 103
-    STORE T1, SB, SC
 ; Spill t56 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 104
@@ -13892,6 +13954,8 @@ L_bc_8e2b1b43_done:
     ADD SC, FP, R0
     ADDI SC, SC, 115
     STORE T3, SB, SC
+; Set SP = FP+116 so callee frame is above spills
+    ADDI SP, FP, 116
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -13946,6 +14010,10 @@ L_bc_8e2b1b43_done:
     ADDI T3, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t79 to Stack
+; Spill t70 to slot 80
+    ADD SC, FP, R0
+    ADDI SC, SC, 116
+    STORE S0, SB, SC
     ADDI S0, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t80 to Stack
@@ -13953,10 +14021,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(79), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op91_t81 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t70 to slot 80
-    ADD SC, FP, R0
-    ADDI SC, SC, 116
-    STORE S0, SB, SC
 ; Spill t72 to slot 81
     ADD SC, FP, R0
     ADDI SC, SC, 117
@@ -13975,13 +14039,17 @@ L_bc_8e2b1b43_done:
     STORE RV0, SB, SC
 ; Recompute alloca t3 at FP+0
     ADD RV0, FP, R0
-    ADD T2, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t83 to Stack
 ; Spill t73 to slot 84
     ADD SC, FP, R0
     ADDI SC, SC, 120
     STORE T2, SB, SC
+    ADD T2, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t83 to Stack
+; Spill t75 to slot 85
+    ADD SC, FP, R0
+    ADDI SC, SC, 121
+    STORE T7, SB, SC
     ADD T7, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t84 to Stack
@@ -13989,23 +14057,23 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(83), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op94_t85 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t75 to slot 85
-    ADD SC, FP, R0
-    ADDI SC, SC, 121
-    STORE T7, SB, SC
 ; Spill t74 to slot 86
     ADD SC, FP, R0
     ADDI SC, SC, 122
     STORE S3, SB, SC
     LOAD S3, SB, T2
     STORE S3, SB, T7
-    ADDI T4, RV0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t86 to Stack
 ; Spill t76 to slot 87
     ADD SC, FP, R0
     ADDI SC, SC, 123
     STORE T4, SB, SC
+    ADDI T4, RV0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t86 to Stack
+; Spill t78 to slot 88
+    ADD SC, FP, R0
+    ADDI SC, SC, 124
+    STORE T0, SB, SC
     ADDI T0, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t87 to Stack
@@ -14013,10 +14081,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(86), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op97_t88 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t78 to slot 88
-    ADD SC, FP, R0
-    ADDI SC, SC, 124
-    STORE T0, SB, SC
 ; Spill t77 to slot 89
     ADD SC, FP, R0
     ADDI SC, SC, 125
@@ -14025,13 +14089,17 @@ L_bc_8e2b1b43_done:
     STORE T5, SB, T0
     ADD S1, FP, R0
     ADDI S1, S1, 24
-    ADD T3, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t90 to Stack
 ; Spill t79 to slot 90
     ADD SC, FP, R0
     ADDI SC, SC, 126
     STORE T3, SB, SC
+    ADD T3, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t90 to Stack
+; Spill t81 to slot 91
+    ADD SC, FP, R0
+    ADDI SC, SC, 127
+    STORE T6, SB, SC
     ADD T6, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t91 to Stack
@@ -14039,23 +14107,23 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(90), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op100_t92 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t81 to slot 91
-    ADD SC, FP, R0
-    ADDI SC, SC, 127
-    STORE T6, SB, SC
 ; Spill t80 to slot 92
     ADD SC, FP, R0
     ADDI SC, SC, 128
     STORE S0, SB, SC
     LOAD S0, SB, T3
     STORE S0, SB, T6
-    ADDI T2, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t93 to Stack
 ; Spill t83 to slot 93
     ADD SC, FP, R0
     ADDI SC, SC, 129
     STORE T2, SB, SC
+    ADDI T2, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t93 to Stack
+; Spill t85 to slot 94
+    ADD SC, FP, R0
+    ADDI SC, SC, 130
+    STORE S3, SB, SC
     ADDI S3, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t94 to Stack
@@ -14063,10 +14131,6 @@ L_bc_8e2b1b43_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(93), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f52_op103_t95 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t85 to slot 94
-    ADD SC, FP, R0
-    ADDI SC, SC, 130
-    STORE S3, SB, SC
 ; Spill t84 to slot 95
     ADD SC, FP, R0
     ADDI SC, SC, 131
@@ -14120,6 +14184,8 @@ L_bc_8e2b1b43_done:
     ADD SC, FP, R0
     ADDI SC, SC, 142
     STORE T4, SB, SC
+; Set SP = FP+143 so callee frame is above spills
+    ADDI SP, FP, 143
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S2, R0
@@ -14222,17 +14288,17 @@ L_q_sin_162:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f54_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_be66fa6f_use_global
+    BEQ S2, T5, L_bc_82d33a60_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_be66fa6f_use_stack
+    BEQ S2, T4, L_bc_82d33a60_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_be66fa6f_done
-L_bc_be66fa6f_use_global:
+    BEQ R0, R0, L_bc_82d33a60_done
+L_bc_82d33a60_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_be66fa6f_done
-L_bc_be66fa6f_use_stack:
+    BEQ R0, R0, L_bc_82d33a60_done
+L_bc_82d33a60_use_stack:
     ADD T6, SB, R0
-L_bc_be66fa6f_done:
+L_bc_82d33a60_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -14246,25 +14312,22 @@ L_bc_be66fa6f_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f54_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_26d9cc56_use_global
+    BEQ S2, T5, L_bc_db485223_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_26d9cc56_use_stack
+    BEQ S2, T4, L_bc_db485223_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_26d9cc56_done
-L_bc_26d9cc56_use_global:
+    BEQ R0, R0, L_bc_db485223_done
+L_bc_db485223_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_26d9cc56_done
-L_bc_26d9cc56_use_stack:
+    BEQ R0, R0, L_bc_db485223_done
+L_bc_db485223_use_stack:
     ADD T0, SB, R0
-L_bc_26d9cc56_done:
+L_bc_db485223_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADD S0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t9 to Stack
 ; Spill t2 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 155
@@ -14273,6 +14336,9 @@ L_bc_26d9cc56_done:
     ADD SC, FP, R0
     ADDI SC, SC, 156
     STORE S2, SB, SC
+    ADD S0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t9 to Stack
 ; Spill load_f54_op4_t4_resolved_bank_54_f54_op5 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 157
@@ -14324,9 +14390,6 @@ L_q_sin_163:
     STORE S2, SB, SC
     LOAD S3, SB, T4
     STORE S3, SB, S1
-    ADDI T2, T3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t16 to Stack
 ; Spill t5 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 162
@@ -14335,6 +14398,13 @@ L_q_sin_163:
     ADD SC, FP, R0
     ADDI SC, SC, 163
     STORE S2, SB, SC
+    ADDI T2, T3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t16 to Stack
+; Spill param_bank_f54_op3_0 to slot 9
+    ADD SC, FP, R0
+    ADDI SC, SC, 164
+    STORE S2, SB, SC
     ADDI S2, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t17 to Stack
@@ -14342,10 +14412,6 @@ L_q_sin_163:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op23_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill param_bank_f54_op3_0 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 164
-    STORE S2, SB, SC
 ; Spill load_f54_op9_t7_resolved_bank_54_f54_op10 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 165
@@ -14358,13 +14424,13 @@ L_q_sin_163:
     STORE T5, SB, SC
     ADD T5, FP, R0
     ADDI T5, T5, 7
-    ADD T1, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
 ; Spill t6 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 167
     STORE T1, SB, SC
+    ADD T1, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t20 to Stack
 ; Spill t9 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 168
@@ -14382,13 +14448,17 @@ L_q_sin_163:
     STORE T6, SB, S0
     ADD T6, FP, R0
     ADDI T6, T6, 9
-    ADD T4, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t23 to Stack
 ; Spill t13 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 170
     STORE T4, SB, SC
+    ADD T4, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t23 to Stack
+; Spill t15 to slot 16
+    ADD SC, FP, R0
+    ADDI SC, SC, 171
+    STORE S3, SB, SC
     ADD S3, T6, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t24 to Stack
@@ -14396,10 +14466,6 @@ L_q_sin_163:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(23), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op30_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t15 to slot 16
-    ADD SC, FP, R0
-    ADDI SC, SC, 171
-    STORE S3, SB, SC
 ; Spill t14 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 172
@@ -14476,6 +14542,8 @@ L_q_sin_163:
     ADD SC, FP, R0
     ADDI SC, SC, 185
     STORE T1, SB, SC
+; Set SP = FP+186 so callee frame is above spills
+    ADDI SP, FP, 186
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T0, R0
@@ -14556,13 +14624,17 @@ L_q_sin_164:
 ; LOAD: Using bank register Sb for load
     LOAD S3, SB, T5
     STORE S3, SB, RV0
-    ADDI T1, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t46 to Stack
 ; Spill t36 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 186
     STORE T1, SB, SC
+    ADDI T1, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t46 to Stack
+; Spill t38 to slot 32
+    ADD SC, FP, R0
+    ADDI SC, SC, 187
+    STORE S1, SB, SC
     ADDI S1, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t47 to Stack
@@ -14570,10 +14642,6 @@ L_q_sin_164:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(46), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op53_t48 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t38 to slot 32
-    ADD SC, FP, R0
-    ADDI SC, SC, 187
-    STORE S1, SB, SC
 ; Spill t37 to slot 33
     ADD SC, FP, R0
     ADDI SC, SC, 188
@@ -14627,6 +14695,8 @@ L_q_sin_164:
     ADD SC, FP, R0
     ADDI SC, SC, 199
     STORE S0, SB, SC
+; Set SP = FP+200 so callee frame is above spills
+    ADDI SP, FP, 200
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S2, R0
@@ -14680,6 +14750,10 @@ L_q_sin_164:
     ADDI S0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t60 to Stack
+; Spill t51 to slot 45
+    ADD SC, FP, R0
+    ADDI SC, SC, 200
+    STORE T3, SB, SC
     ADDI T3, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t61 to Stack
@@ -14687,10 +14761,6 @@ L_q_sin_164:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(60), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op67_t62 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t51 to slot 45
-    ADD SC, FP, R0
-    ADDI SC, SC, 200
-    STORE T3, SB, SC
 ; Spill t53 to slot 46
     ADD SC, FP, R0
     ADDI SC, SC, 201
@@ -14764,13 +14834,17 @@ L_q_sin_166:
     STORE T1, SB, SC
     LOAD T1, SB, T4
     STORE T1, SB, T5
-    ADDI S1, S2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t71 to Stack
 ; Spill t57 to slot 52
     ADD SC, FP, R0
     ADDI SC, SC, 207
     STORE S1, SB, SC
+    ADDI S1, S2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t71 to Stack
+; Spill t59 to slot 53
+    ADD SC, FP, R0
+    ADDI SC, SC, 208
+    STORE T0, SB, SC
     ADDI T0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t72 to Stack
@@ -14778,10 +14852,6 @@ L_q_sin_166:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(71), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op80_t73 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t59 to slot 53
-    ADD SC, FP, R0
-    ADDI SC, SC, 208
-    STORE T0, SB, SC
 ; Spill t58 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 209
@@ -14794,13 +14864,13 @@ L_q_sin_166:
     STORE S0, SB, SC
     ADD S0, FP, R0
     ADDI S0, S0, 19
-    ADD S3, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t75 to Stack
 ; Spill t62 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 211
     STORE S3, SB, SC
+    ADD S3, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t75 to Stack
 ; Spill t61 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 212
@@ -14818,13 +14888,17 @@ L_q_sin_166:
     STORE RV0, SB, T3
     ADD RV0, FP, R0
     ADDI RV0, RV0, 21
-    ADD T2, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t78 to Stack
 ; Spill t66 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 214
     STORE T2, SB, SC
+    ADD T2, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t78 to Stack
+; Spill t68 to slot 60
+    ADD SC, FP, R0
+    ADDI SC, SC, 215
+    STORE T4, SB, SC
     ADD T4, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t79 to Stack
@@ -14832,23 +14906,19 @@ L_q_sin_166:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(78), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op87_t80 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t68 to slot 60
-    ADD SC, FP, R0
-    ADDI SC, SC, 215
-    STORE T4, SB, SC
 ; Spill t70 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 216
     STORE T1, SB, SC
     LOAD T1, SB, T2
     STORE T1, SB, T4
-    ADDI T5, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t81 to Stack
 ; Spill t69 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 217
     STORE T5, SB, SC
+    ADDI T5, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t81 to Stack
     ADDI S2, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t82 to Stack
@@ -14908,6 +14978,8 @@ L_q_sin_166:
     ADD SC, FP, R0
     ADDI SC, SC, 229
     STORE S1, SB, SC
+; Set SP = FP+230 so callee frame is above spills
+    ADDI SP, FP, 230
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -14958,6 +15030,10 @@ L_q_sin_166:
     ADDI S1, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t96 to Stack
+; Spill t86 to slot 75
+    ADD SC, FP, R0
+    ADDI SC, SC, 230
+    STORE T0, SB, SC
     ADDI T0, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t97 to Stack
@@ -14965,10 +15041,6 @@ L_q_sin_166:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(96), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op103_t98 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t86 to slot 75
-    ADD SC, FP, R0
-    ADDI SC, SC, 230
-    STORE T0, SB, SC
 ; Spill t88 to slot 76
     ADD SC, FP, R0
     ADDI SC, SC, 231
@@ -15033,6 +15105,8 @@ L_q_sin_166:
     ADD SC, FP, R0
     ADDI SC, SC, 244
     STORE T2, SB, SC
+; Set SP = FP+245 so callee frame is above spills
+    ADDI SP, FP, 245
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S3, R0
@@ -15113,13 +15187,17 @@ L_q_sin_167:
 ; LOAD: Using bank register Sb for load
     LOAD S2, SB, T7
     STORE S2, SB, RV0
-    ADDI T2, S1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t116 to Stack
 ; Spill t106 to slot 90
     ADD SC, FP, R0
     ADDI SC, SC, 245
     STORE T2, SB, SC
+    ADDI T2, S1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t116 to Stack
+; Spill t108 to slot 91
+    ADD SC, FP, R0
+    ADDI SC, SC, 246
+    STORE T5, SB, SC
     ADDI T5, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t117 to Stack
@@ -15127,10 +15205,6 @@ L_q_sin_167:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(116), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op123_t118 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t108 to slot 91
-    ADD SC, FP, R0
-    ADDI SC, SC, 246
-    STORE T5, SB, SC
 ; Spill t107 to slot 92
     ADD SC, FP, R0
     ADDI SC, SC, 247
@@ -15184,6 +15258,8 @@ L_q_sin_167:
     ADD SC, FP, R0
     ADDI SC, SC, 258
     STORE T4, SB, SC
+; Set SP = FP+259 so callee frame is above spills
+    ADDI SP, FP, 259
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S3, R0
@@ -15237,6 +15313,10 @@ L_q_sin_167:
     ADDI T4, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t130 to Stack
+; Spill t121 to slot 104
+    ADD SC, FP, R0
+    ADDI SC, SC, 259
+    STORE T6, SB, SC
     ADDI T6, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t131 to Stack
@@ -15244,10 +15324,6 @@ L_q_sin_167:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(130), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op137_t132 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t121 to slot 104
-    ADD SC, FP, R0
-    ADDI SC, SC, 259
-    STORE T6, SB, SC
 ; Spill t123 to slot 105
     ADD SC, FP, R0
     ADDI SC, SC, 260
@@ -15301,6 +15377,10 @@ L_q_sin_168:
     ADD S3, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t139 to Stack
+; Spill t125 to slot 110
+    ADD SC, FP, R0
+    ADDI SC, SC, 265
+    STORE T2, SB, SC
     ADD T2, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t140 to Stack
@@ -15308,23 +15388,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(139), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op145_t141 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t125 to slot 110
-    ADD SC, FP, R0
-    ADDI SC, SC, 265
-    STORE T2, SB, SC
 ; Spill t127 to slot 111
     ADD SC, FP, R0
     ADDI SC, SC, 266
     STORE T5, SB, SC
     LOAD T5, SB, S3
     STORE T5, SB, T2
-    ADDI T0, T7, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t142 to Stack
 ; Spill t129 to slot 112
     ADD SC, FP, R0
     ADDI SC, SC, 267
     STORE T0, SB, SC
+    ADDI T0, T7, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t142 to Stack
+; Spill t128 to slot 113
+    ADD SC, FP, R0
+    ADDI SC, SC, 268
+    STORE S0, SB, SC
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t143 to Stack
@@ -15332,10 +15412,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(142), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op148_t144 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t128 to slot 113
-    ADD SC, FP, R0
-    ADDI SC, SC, 268
-    STORE S0, SB, SC
 ; Spill t130 to slot 114
     ADD SC, FP, R0
     ADDI SC, SC, 269
@@ -15348,13 +15424,17 @@ L_q_sin_168:
     STORE S2, SB, SC
     ADD S2, FP, R0
     ADDI S2, S2, 37
-    ADD T6, T7, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t146 to Stack
 ; Spill t131 to slot 116
     ADD SC, FP, R0
     ADDI SC, SC, 271
     STORE T6, SB, SC
+    ADD T6, T7, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t146 to Stack
+; Spill t134 to slot 117
+    ADD SC, FP, R0
+    ADDI SC, SC, 272
+    STORE RV0, SB, SC
     ADD RV0, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t147 to Stack
@@ -15362,10 +15442,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(146), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op151_t148 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t134 to slot 117
-    ADD SC, FP, R0
-    ADDI SC, SC, 272
-    STORE RV0, SB, SC
 ; Spill t136 to slot 118
     ADD SC, FP, R0
     ADDI SC, SC, 273
@@ -15375,6 +15451,10 @@ L_q_sin_168:
     ADDI T1, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t149 to Stack
+; Spill t139 to slot 119
+    ADD SC, FP, R0
+    ADDI SC, SC, 274
+    STORE S3, SB, SC
     ADDI S3, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t150 to Stack
@@ -15382,10 +15462,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(149), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op154_t151 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t139 to slot 119
-    ADD SC, FP, R0
-    ADDI SC, SC, 274
-    STORE S3, SB, SC
 ; Spill t141 to slot 120
     ADD SC, FP, R0
     ADDI SC, SC, 275
@@ -15443,6 +15519,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 287
     STORE T0, SB, SC
+; Set SP = FP+288 so callee frame is above spills
+    ADDI SP, FP, 288
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -15497,6 +15575,10 @@ L_q_sin_168:
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t163 to Stack
+; Spill t154 to slot 133
+    ADD SC, FP, R0
+    ADDI SC, SC, 288
+    STORE S0, SB, SC
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t164 to Stack
@@ -15504,10 +15586,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(163), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op168_t165 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t154 to slot 133
-    ADD SC, FP, R0
-    ADDI SC, SC, 288
-    STORE S0, SB, SC
 ; Spill t156 to slot 134
     ADD SC, FP, R0
     ADDI SC, SC, 289
@@ -15526,13 +15604,17 @@ L_q_sin_168:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 43
-    ADD T7, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t168 to Stack
 ; Spill t157 to slot 137
     ADD SC, FP, R0
     ADDI SC, SC, 292
     STORE T7, SB, SC
+    ADD T7, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t168 to Stack
+; Spill t159 to slot 138
+    ADD SC, FP, R0
+    ADDI SC, SC, 293
+    STORE T5, SB, SC
     ADD T5, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t169 to Stack
@@ -15540,23 +15622,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(168), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op171_t170 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t159 to slot 138
-    ADD SC, FP, R0
-    ADDI SC, SC, 293
-    STORE T5, SB, SC
 ; Spill t158 to slot 139
     ADD SC, FP, R0
     ADDI SC, SC, 294
     STORE T1, SB, SC
     LOAD T1, SB, T7
     STORE T1, SB, T5
-    ADDI S3, T3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t171 to Stack
 ; Spill t160 to slot 140
     ADD SC, FP, R0
     ADDI SC, SC, 295
     STORE S3, SB, SC
+    ADDI S3, T3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t171 to Stack
+; Spill t162 to slot 141
+    ADD SC, FP, R0
+    ADDI SC, SC, 296
+    STORE S2, SB, SC
     ADDI S2, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t172 to Stack
@@ -15564,10 +15646,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(171), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op174_t173 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t162 to slot 141
-    ADD SC, FP, R0
-    ADDI SC, SC, 296
-    STORE S2, SB, SC
 ; Spill t161 to slot 142
     ADD SC, FP, R0
     ADDI SC, SC, 297
@@ -15582,13 +15660,17 @@ L_q_sin_168:
     STORE T0, SB, SC
 ; Recompute alloca t1 at FP+0
     ADD T0, FP, R0
-    ADD S1, T0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t175 to Stack
 ; Spill t165 to slot 144
     ADD SC, FP, R0
     ADDI SC, SC, 299
     STORE S1, SB, SC
+    ADD S1, T0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t175 to Stack
+; Spill t164 to slot 145
+    ADD SC, FP, R0
+    ADDI SC, SC, 300
+    STORE S0, SB, SC
     ADD S0, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t176 to Stack
@@ -15596,19 +15678,19 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(175), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op177_t177 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t164 to slot 145
-    ADD SC, FP, R0
-    ADDI SC, SC, 300
-    STORE S0, SB, SC
     LOAD T6, SB, S1
     STORE T6, SB, S0
-    ADDI T7, T0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t178 to Stack
 ; Spill t168 to slot 146
     ADD SC, FP, R0
     ADDI SC, SC, 301
     STORE T7, SB, SC
+    ADDI T7, T0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t178 to Stack
+; Spill t170 to slot 147
+    ADD SC, FP, R0
+    ADDI SC, SC, 302
+    STORE T1, SB, SC
     ADDI T1, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t179 to Stack
@@ -15616,10 +15698,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(178), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op180_t180 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t170 to slot 147
-    ADD SC, FP, R0
-    ADDI SC, SC, 302
-    STORE T1, SB, SC
 ; Spill t169 to slot 148
     ADD SC, FP, R0
     ADDI SC, SC, 303
@@ -15673,6 +15751,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 314
     STORE S3, SB, SC
+; Set SP = FP+315 so callee frame is above spills
+    ADDI SP, FP, 315
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -15727,6 +15807,10 @@ L_q_sin_168:
     ADDI S3, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t192 to Stack
+; Spill t183 to slot 160
+    ADD SC, FP, R0
+    ADDI SC, SC, 315
+    STORE S2, SB, SC
     ADDI S2, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t193 to Stack
@@ -15734,10 +15818,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(192), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op194_t194 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t183 to slot 160
-    ADD SC, FP, R0
-    ADDI SC, SC, 315
-    STORE S2, SB, SC
 ; Spill t185 to slot 161
     ADD SC, FP, R0
     ADDI SC, SC, 316
@@ -15756,13 +15836,17 @@ L_q_sin_168:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 51
-    ADD S0, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t197 to Stack
 ; Spill t186 to slot 164
     ADD SC, FP, R0
     ADDI SC, SC, 319
     STORE S0, SB, SC
+    ADD S0, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t197 to Stack
+; Spill t188 to slot 165
+    ADD SC, FP, R0
+    ADDI SC, SC, 320
+    STORE T7, SB, SC
     ADD T7, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t198 to Stack
@@ -15770,23 +15854,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(197), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op197_t199 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t188 to slot 165
-    ADD SC, FP, R0
-    ADDI SC, SC, 320
-    STORE T7, SB, SC
 ; Spill t187 to slot 166
     ADD SC, FP, R0
     ADDI SC, SC, 321
     STORE T0, SB, SC
     LOAD T0, SB, S0
     STORE T0, SB, T7
-    ADDI T5, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t200 to Stack
 ; Spill t189 to slot 167
     ADD SC, FP, R0
     ADDI SC, SC, 322
     STORE T5, SB, SC
+    ADDI T5, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t200 to Stack
+; Spill t191 to slot 168
+    ADD SC, FP, R0
+    ADDI SC, SC, 323
+    STORE T4, SB, SC
     ADDI T4, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t201 to Stack
@@ -15794,10 +15878,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(200), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op200_t202 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t191 to slot 168
-    ADD SC, FP, R0
-    ADDI SC, SC, 323
-    STORE T4, SB, SC
 ; Spill t190 to slot 169
     ADD SC, FP, R0
     ADDI SC, SC, 324
@@ -15813,13 +15893,17 @@ L_q_sin_168:
 ; Recompute alloca t137 at FP+33
     ADD S3, FP, R0
     ADDI S3, S3, 33
-    ADD T6, S3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t204 to Stack
 ; Spill t194 to slot 171
     ADD SC, FP, R0
     ADDI SC, SC, 326
     STORE T6, SB, SC
+    ADD T6, S3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t204 to Stack
+; Spill t193 to slot 172
+    ADD SC, FP, R0
+    ADDI SC, SC, 327
+    STORE S2, SB, SC
     ADD S2, T2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t205 to Stack
@@ -15827,19 +15911,19 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(204), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op203_t206 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t193 to slot 172
-    ADD SC, FP, R0
-    ADDI SC, SC, 327
-    STORE S2, SB, SC
     LOAD S1, SB, T6
     STORE S1, SB, S2
-    ADDI S0, S3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t207 to Stack
 ; Spill t197 to slot 173
     ADD SC, FP, R0
     ADDI SC, SC, 328
     STORE S0, SB, SC
+    ADDI S0, S3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t207 to Stack
+; Spill t199 to slot 174
+    ADD SC, FP, R0
+    ADDI SC, SC, 329
+    STORE T0, SB, SC
     ADDI T0, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t208 to Stack
@@ -15847,10 +15931,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(207), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op206_t209 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t199 to slot 174
-    ADD SC, FP, R0
-    ADDI SC, SC, 329
-    STORE T0, SB, SC
 ; Spill t198 to slot 175
     ADD SC, FP, R0
     ADDI SC, SC, 330
@@ -15904,6 +15984,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 341
     STORE T5, SB, SC
+; Set SP = FP+342 so callee frame is above spills
+    ADDI SP, FP, 342
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -15958,6 +16040,10 @@ L_q_sin_168:
     ADDI T5, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t221 to Stack
+; Spill t212 to slot 187
+    ADD SC, FP, R0
+    ADDI SC, SC, 342
+    STORE T4, SB, SC
     ADDI T4, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t222 to Stack
@@ -15965,10 +16051,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(221), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op220_t223 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t212 to slot 187
-    ADD SC, FP, R0
-    ADDI SC, SC, 342
-    STORE T4, SB, SC
 ; Spill t214 to slot 188
     ADD SC, FP, R0
     ADDI SC, SC, 343
@@ -15987,13 +16069,17 @@ L_q_sin_168:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 59
-    ADD S2, T0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t226 to Stack
 ; Spill t215 to slot 191
     ADD SC, FP, R0
     ADDI SC, SC, 346
     STORE S2, SB, SC
+    ADD S2, T0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t226 to Stack
+; Spill t217 to slot 192
+    ADD SC, FP, R0
+    ADDI SC, SC, 347
+    STORE S0, SB, SC
     ADD S0, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t227 to Stack
@@ -16001,23 +16087,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(226), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op223_t228 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t217 to slot 192
-    ADD SC, FP, R0
-    ADDI SC, SC, 347
-    STORE S0, SB, SC
 ; Spill t216 to slot 193
     ADD SC, FP, R0
     ADDI SC, SC, 348
     STORE S3, SB, SC
     LOAD S3, SB, S2
     STORE S3, SB, S0
-    ADDI T7, T0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t229 to Stack
 ; Spill t218 to slot 194
     ADD SC, FP, R0
     ADDI SC, SC, 349
     STORE T7, SB, SC
+    ADDI T7, T0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t229 to Stack
+; Spill t220 to slot 195
+    ADD SC, FP, R0
+    ADDI SC, SC, 350
+    STORE T2, SB, SC
     ADDI T2, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t230 to Stack
@@ -16025,10 +16111,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(229), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op226_t231 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t220 to slot 195
-    ADD SC, FP, R0
-    ADDI SC, SC, 350
-    STORE T2, SB, SC
 ; Spill t219 to slot 196
     ADD SC, FP, R0
     ADDI SC, SC, 351
@@ -16044,13 +16126,17 @@ L_q_sin_168:
 ; Recompute alloca t137 at FP+33
     ADD T5, FP, R0
     ADDI T5, T5, 33
-    ADD S1, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t233 to Stack
 ; Spill t223 to slot 198
     ADD SC, FP, R0
     ADDI SC, SC, 353
     STORE S1, SB, SC
+    ADD S1, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t233 to Stack
+; Spill t222 to slot 199
+    ADD SC, FP, R0
+    ADDI SC, SC, 354
+    STORE T4, SB, SC
     ADD T4, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t234 to Stack
@@ -16058,19 +16144,19 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(233), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op229_t235 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t222 to slot 199
-    ADD SC, FP, R0
-    ADDI SC, SC, 354
-    STORE T4, SB, SC
     LOAD T6, SB, S1
     STORE T6, SB, T4
-    ADDI S2, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t236 to Stack
 ; Spill t226 to slot 200
     ADD SC, FP, R0
     ADDI SC, SC, 355
     STORE S2, SB, SC
+    ADDI S2, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t236 to Stack
+; Spill t228 to slot 201
+    ADD SC, FP, R0
+    ADDI SC, SC, 356
+    STORE S3, SB, SC
     ADDI S3, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t237 to Stack
@@ -16078,10 +16164,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(236), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op232_t238 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t228 to slot 201
-    ADD SC, FP, R0
-    ADDI SC, SC, 356
-    STORE S3, SB, SC
 ; Spill t227 to slot 202
     ADD SC, FP, R0
     ADDI SC, SC, 357
@@ -16135,6 +16217,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 368
     STORE T7, SB, SC
+; Set SP = FP+369 so callee frame is above spills
+    ADDI SP, FP, 369
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -16189,6 +16273,10 @@ L_q_sin_168:
     ADDI T7, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t250 to Stack
+; Spill t241 to slot 214
+    ADD SC, FP, R0
+    ADDI SC, SC, 369
+    STORE T2, SB, SC
     ADDI T2, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t251 to Stack
@@ -16196,10 +16284,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(250), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op246_t252 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t241 to slot 214
-    ADD SC, FP, R0
-    ADDI SC, SC, 369
-    STORE T2, SB, SC
 ; Spill t243 to slot 215
     ADD SC, FP, R0
     ADDI SC, SC, 370
@@ -16218,13 +16302,13 @@ L_q_sin_168:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 67
-    ADD T4, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t255 to Stack
 ; Spill t244 to slot 218
     ADD SC, FP, R0
     ADDI SC, SC, 373
     STORE T4, SB, SC
+    ADD T4, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t255 to Stack
 ; Spill t246 to slot 219
     ADD SC, FP, R0
     ADDI SC, SC, 374
@@ -16242,13 +16326,17 @@ L_q_sin_168:
     STORE T5, SB, S2
     ADD T5, FP, R0
     ADDI T5, T5, 69
-    ADD S0, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t258 to Stack
 ; Spill t247 to slot 221
     ADD SC, FP, R0
     ADDI SC, SC, 376
     STORE S0, SB, SC
+    ADD S0, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t258 to Stack
+; Spill t249 to slot 222
+    ADD SC, FP, R0
+    ADDI SC, SC, 377
+    STORE T3, SB, SC
     ADD T3, T5, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t259 to Stack
@@ -16256,10 +16344,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(258), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op253_t260 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t249 to slot 222
-    ADD SC, FP, R0
-    ADDI SC, SC, 377
-    STORE T3, SB, SC
 ; Spill t248 to slot 223
     ADD SC, FP, R0
     ADDI SC, SC, 378
@@ -16328,6 +16412,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 390
     STORE T6, SB, SC
+; Set SP = FP+391 so callee frame is above spills
+    ADDI SP, FP, 391
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T6, R0
@@ -16377,6 +16463,10 @@ L_q_sin_168:
     ADDI T6, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t276 to Stack
+; Spill t266 to slot 236
+    ADD SC, FP, R0
+    ADDI SC, SC, 391
+    STORE S1, SB, SC
     ADDI S1, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t277 to Stack
@@ -16384,10 +16474,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(276), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op269_t278 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t266 to slot 236
-    ADD SC, FP, R0
-    ADDI SC, SC, 391
-    STORE S1, SB, SC
 ; Spill t268 to slot 237
     ADD SC, FP, R0
     ADDI SC, SC, 392
@@ -16452,6 +16538,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 405
     STORE S0, SB, SC
+; Set SP = FP+406 so callee frame is above spills
+    ADDI SP, FP, 406
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T4, R0
@@ -16506,6 +16594,10 @@ L_q_sin_168:
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t290 to Stack
+; Spill t281 to slot 251
+    ADD SC, FP, R0
+    ADDI SC, SC, 406
+    STORE T0, SB, SC
     ADDI T0, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t291 to Stack
@@ -16513,10 +16605,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(290), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op283_t292 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t281 to slot 251
-    ADD SC, FP, R0
-    ADDI SC, SC, 406
-    STORE T0, SB, SC
 ; Spill t283 to slot 252
     ADD SC, FP, R0
     ADDI SC, SC, 407
@@ -16535,13 +16623,13 @@ L_q_sin_168:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 79
-    ADD T7, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t295 to Stack
 ; Spill t284 to slot 255
     ADD SC, FP, R0
     ADDI SC, SC, 410
     STORE T7, SB, SC
+    ADD T7, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t295 to Stack
 ; Spill t286 to slot 256
     ADD SC, FP, R0
     ADDI SC, SC, 411
@@ -16559,13 +16647,17 @@ L_q_sin_168:
     STORE T2, SB, T6
     ADD T2, FP, R0
     ADDI T2, T2, 81
-    ADD S2, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t298 to Stack
 ; Spill t287 to slot 258
     ADD SC, FP, R0
     ADDI SC, SC, 413
     STORE S2, SB, SC
+    ADD S2, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t298 to Stack
+; Spill t289 to slot 259
+    ADD SC, FP, R0
+    ADDI SC, SC, 414
+    STORE T5, SB, SC
     ADD T5, T2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t299 to Stack
@@ -16573,10 +16665,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(298), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op290_t300 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t289 to slot 259
-    ADD SC, FP, R0
-    ADDI SC, SC, 414
-    STORE T5, SB, SC
 ; Spill t288 to slot 260
     ADD SC, FP, R0
     ADDI SC, SC, 415
@@ -16645,6 +16733,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 427
     STORE S3, SB, SC
+; Set SP = FP+428 so callee frame is above spills
+    ADDI SP, FP, 428
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S3, R0
@@ -16694,6 +16784,10 @@ L_q_sin_168:
     ADDI S3, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t316 to Stack
+; Spill t306 to slot 273
+    ADD SC, FP, R0
+    ADDI SC, SC, 428
+    STORE T1, SB, SC
     ADDI T1, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t317 to Stack
@@ -16701,10 +16795,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(316), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op306_t318 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t306 to slot 273
-    ADD SC, FP, R0
-    ADDI SC, SC, 428
-    STORE T1, SB, SC
 ; Spill t308 to slot 274
     ADD SC, FP, R0
     ADDI SC, SC, 429
@@ -16769,6 +16859,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 442
     STORE S2, SB, SC
+; Set SP = FP+443 so callee frame is above spills
+    ADDI SP, FP, 443
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T7, R0
@@ -16823,6 +16915,10 @@ L_q_sin_168:
     ADDI S2, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t330 to Stack
+; Spill t321 to slot 288
+    ADD SC, FP, R0
+    ADDI SC, SC, 443
+    STORE T4, SB, SC
     ADDI T4, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t331 to Stack
@@ -16830,10 +16926,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(330), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op320_t332 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t321 to slot 288
-    ADD SC, FP, R0
-    ADDI SC, SC, 443
-    STORE T4, SB, SC
 ; Spill t323 to slot 289
     ADD SC, FP, R0
     ADDI SC, SC, 444
@@ -16852,13 +16944,13 @@ L_q_sin_168:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 91
-    ADD S0, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t335 to Stack
 ; Spill t324 to slot 292
     ADD SC, FP, R0
     ADDI SC, SC, 447
     STORE S0, SB, SC
+    ADD S0, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t335 to Stack
 ; Spill t326 to slot 293
     ADD SC, FP, R0
     ADDI SC, SC, 448
@@ -16876,13 +16968,17 @@ L_q_sin_168:
     STORE T0, SB, S3
     ADD T0, FP, R0
     ADDI T0, T0, 93
-    ADD T6, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t338 to Stack
 ; Spill t327 to slot 295
     ADD SC, FP, R0
     ADDI SC, SC, 450
     STORE T6, SB, SC
+    ADD T6, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t338 to Stack
+; Spill t329 to slot 296
+    ADD SC, FP, R0
+    ADDI SC, SC, 451
+    STORE T2, SB, SC
     ADD T2, T0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t339 to Stack
@@ -16890,10 +16986,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(338), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op327_t340 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t329 to slot 296
-    ADD SC, FP, R0
-    ADDI SC, SC, 451
-    STORE T2, SB, SC
 ; Spill t328 to slot 297
     ADD SC, FP, R0
     ADDI SC, SC, 452
@@ -16962,6 +17054,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 464
     STORE S1, SB, SC
+; Set SP = FP+465 so callee frame is above spills
+    ADDI SP, FP, 465
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S1, R0
@@ -17011,6 +17105,10 @@ L_q_sin_168:
     ADDI S1, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t356 to Stack
+; Spill t346 to slot 310
+    ADD SC, FP, R0
+    ADDI SC, SC, 465
+    STORE T3, SB, SC
     ADDI T3, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t357 to Stack
@@ -17018,10 +17116,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(356), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op343_t358 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t346 to slot 310
-    ADD SC, FP, R0
-    ADDI SC, SC, 465
-    STORE T3, SB, SC
 ; Spill t348 to slot 311
     ADD SC, FP, R0
     ADDI SC, SC, 466
@@ -17086,6 +17180,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 479
     STORE T6, SB, SC
+; Set SP = FP+480 so callee frame is above spills
+    ADDI SP, FP, 480
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S0, R0
@@ -17140,6 +17236,10 @@ L_q_sin_168:
     ADDI T6, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t370 to Stack
+; Spill t361 to slot 325
+    ADD SC, FP, R0
+    ADDI SC, SC, 480
+    STORE T7, SB, SC
     ADDI T7, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t371 to Stack
@@ -17147,10 +17247,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(370), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op357_t372 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t361 to slot 325
-    ADD SC, FP, R0
-    ADDI SC, SC, 480
-    STORE T7, SB, SC
 ; Spill t363 to slot 326
     ADD SC, FP, R0
     ADDI SC, SC, 481
@@ -17169,13 +17265,17 @@ L_q_sin_168:
     STORE RV0, SB, SC
 ; Recompute alloca t1 at FP+0
     ADD RV0, FP, R0
-    ADD S2, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t374 to Stack
 ; Spill t364 to slot 329
     ADD SC, FP, R0
     ADDI SC, SC, 484
     STORE S2, SB, SC
+    ADD S2, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t374 to Stack
+; Spill t366 to slot 330
+    ADD SC, FP, R0
+    ADDI SC, SC, 485
+    STORE S1, SB, SC
     ADD S1, T5, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t375 to Stack
@@ -17183,23 +17283,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(374), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op360_t376 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t366 to slot 330
-    ADD SC, FP, R0
-    ADDI SC, SC, 485
-    STORE S1, SB, SC
 ; Spill t365 to slot 331
     ADD SC, FP, R0
     ADDI SC, SC, 486
     STORE T4, SB, SC
     LOAD T4, SB, S2
     STORE T4, SB, S1
-    ADDI S3, RV0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t377 to Stack
 ; Spill t367 to slot 332
     ADD SC, FP, R0
     ADDI SC, SC, 487
     STORE S3, SB, SC
+    ADDI S3, RV0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t377 to Stack
+; Spill t369 to slot 333
+    ADD SC, FP, R0
+    ADDI SC, SC, 488
+    STORE T0, SB, SC
     ADDI T0, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t378 to Stack
@@ -17207,10 +17307,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(377), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op363_t379 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t369 to slot 333
-    ADD SC, FP, R0
-    ADDI SC, SC, 488
-    STORE T0, SB, SC
 ; Spill t368 to slot 334
     ADD SC, FP, R0
     ADDI SC, SC, 489
@@ -17228,13 +17324,17 @@ L_q_sin_168:
 ; Recompute alloca t166 at FP+41
     ADD T6, FP, R0
     ADDI T6, T6, 41
-    ADD T1, T6, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t382 to Stack
 ; Spill t372 to slot 336
     ADD SC, FP, R0
     ADDI SC, SC, 491
     STORE T1, SB, SC
+    ADD T1, T6, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t382 to Stack
+; Spill t371 to slot 337
+    ADD SC, FP, R0
+    ADDI SC, SC, 492
+    STORE T7, SB, SC
     ADD T7, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t383 to Stack
@@ -17242,23 +17342,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(382), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op366_t384 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t371 to slot 337
-    ADD SC, FP, R0
-    ADDI SC, SC, 492
-    STORE T7, SB, SC
 ; Spill t374 to slot 338
     ADD SC, FP, R0
     ADDI SC, SC, 493
     STORE S2, SB, SC
     LOAD S2, SB, T1
     STORE S2, SB, T7
-    ADDI T4, T6, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t385 to Stack
 ; Spill t376 to slot 339
     ADD SC, FP, R0
     ADDI SC, SC, 494
     STORE T4, SB, SC
+    ADDI T4, T6, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t385 to Stack
+; Spill t375 to slot 340
+    ADD SC, FP, R0
+    ADDI SC, SC, 495
+    STORE S1, SB, SC
     ADDI S1, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t386 to Stack
@@ -17266,10 +17366,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(385), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op369_t387 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t375 to slot 340
-    ADD SC, FP, R0
-    ADDI SC, SC, 495
-    STORE S1, SB, SC
     LOAD RV0, SB, T4
     STORE RV0, SB, S1
     ADD T5, FP, R0
@@ -17281,13 +17377,17 @@ L_q_sin_168:
 ; Recompute alloca t253 at FP+65
     ADD S3, FP, R0
     ADDI S3, S3, 65
-    ADD S0, S3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t389 to Stack
 ; Spill t379 to slot 342
     ADD SC, FP, R0
     ADDI SC, SC, 497
     STORE S0, SB, SC
+    ADD S0, S3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t389 to Stack
+; Spill t378 to slot 343
+    ADD SC, FP, R0
+    ADDI SC, SC, 498
+    STORE T0, SB, SC
     ADD T0, T5, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t390 to Stack
@@ -17295,19 +17395,19 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(389), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op372_t391 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t378 to slot 343
-    ADD SC, FP, R0
-    ADDI SC, SC, 498
-    STORE T0, SB, SC
     LOAD T2, SB, S0
     STORE T2, SB, T0
-    ADDI T1, S3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t392 to Stack
 ; Spill t382 to slot 344
     ADD SC, FP, R0
     ADDI SC, SC, 499
     STORE T1, SB, SC
+    ADDI T1, S3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t392 to Stack
+; Spill t384 to slot 345
+    ADD SC, FP, R0
+    ADDI SC, SC, 500
+    STORE S2, SB, SC
     ADDI S2, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t393 to Stack
@@ -17315,10 +17415,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(392), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op375_t394 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t384 to slot 345
-    ADD SC, FP, R0
-    ADDI SC, SC, 500
-    STORE S2, SB, SC
 ; Spill t383 to slot 346
     ADD SC, FP, R0
     ADDI SC, SC, 501
@@ -17372,6 +17468,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 512
     STORE T4, SB, SC
+; Set SP = FP+513 so callee frame is above spills
+    ADDI SP, FP, 513
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -17426,6 +17524,10 @@ L_q_sin_168:
     ADDI T4, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t406 to Stack
+; Spill t397 to slot 358
+    ADD SC, FP, R0
+    ADDI SC, SC, 513
+    STORE S0, SB, SC
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t407 to Stack
@@ -17433,10 +17535,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(406), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op389_t408 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t397 to slot 358
-    ADD SC, FP, R0
-    ADDI SC, SC, 513
-    STORE S0, SB, SC
 ; Spill t399 to slot 359
     ADD SC, FP, R0
     ADDI SC, SC, 514
@@ -17462,13 +17560,17 @@ L_q_sin_168:
 ; Recompute alloca t195 at FP+49
     ADD S3, FP, R0
     ADDI S3, S3, 49
-    ADD T7, S3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t411 to Stack
 ; Spill t402 to slot 363
     ADD SC, FP, R0
     ADDI SC, SC, 518
     STORE T7, SB, SC
+    ADD T7, S3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t411 to Stack
+; Spill t401 to slot 364
+    ADD SC, FP, R0
+    ADDI SC, SC, 519
+    STORE T1, SB, SC
     ADD T1, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t412 to Stack
@@ -17476,23 +17578,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(411), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op392_t413 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t401 to slot 364
-    ADD SC, FP, R0
-    ADDI SC, SC, 519
-    STORE T1, SB, SC
 ; Spill t403 to slot 365
     ADD SC, FP, R0
     ADDI SC, SC, 520
     STORE S2, SB, SC
     LOAD S2, SB, T7
     STORE S2, SB, T1
-    ADDI T5, S3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t414 to Stack
 ; Spill t405 to slot 366
     ADD SC, FP, R0
     ADDI SC, SC, 521
     STORE T5, SB, SC
+    ADDI T5, S3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t414 to Stack
+; Spill t404 to slot 367
+    ADD SC, FP, R0
+    ADDI SC, SC, 522
+    STORE T6, SB, SC
     ADDI T6, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t415 to Stack
@@ -17500,10 +17602,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(414), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op395_t416 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t404 to slot 367
-    ADD SC, FP, R0
-    ADDI SC, SC, 522
-    STORE T6, SB, SC
     LOAD S1, SB, T5
     STORE S1, SB, T6
     ADD T3, FP, R0
@@ -17515,13 +17613,17 @@ L_q_sin_168:
 ; Recompute alloca t293 at FP+77
     ADD T4, FP, R0
     ADDI T4, T4, 77
-    ADD T0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t418 to Stack
 ; Spill t408 to slot 369
     ADD SC, FP, R0
     ADDI SC, SC, 524
     STORE T0, SB, SC
+    ADD T0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t418 to Stack
+; Spill t407 to slot 370
+    ADD SC, FP, R0
+    ADDI SC, SC, 525
+    STORE S0, SB, SC
     ADD S0, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t419 to Stack
@@ -17529,19 +17631,19 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(418), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op398_t420 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t407 to slot 370
-    ADD SC, FP, R0
-    ADDI SC, SC, 525
-    STORE S0, SB, SC
     LOAD T2, SB, T0
     STORE T2, SB, S0
-    ADDI T7, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t421 to Stack
 ; Spill t411 to slot 371
     ADD SC, FP, R0
     ADDI SC, SC, 526
     STORE T7, SB, SC
+    ADDI T7, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t421 to Stack
+; Spill t413 to slot 372
+    ADD SC, FP, R0
+    ADDI SC, SC, 527
+    STORE S2, SB, SC
     ADDI S2, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t422 to Stack
@@ -17549,10 +17651,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(421), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op401_t423 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t413 to slot 372
-    ADD SC, FP, R0
-    ADDI SC, SC, 527
-    STORE S2, SB, SC
 ; Spill t412 to slot 373
     ADD SC, FP, R0
     ADDI SC, SC, 528
@@ -17606,6 +17704,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 539
     STORE T5, SB, SC
+; Set SP = FP+540 so callee frame is above spills
+    ADDI SP, FP, 540
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -17660,6 +17760,10 @@ L_q_sin_168:
     ADDI T5, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t435 to Stack
+; Spill t426 to slot 385
+    ADD SC, FP, R0
+    ADDI SC, SC, 540
+    STORE T6, SB, SC
     ADDI T6, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t436 to Stack
@@ -17667,10 +17771,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(435), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op415_t437 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t426 to slot 385
-    ADD SC, FP, R0
-    ADDI SC, SC, 540
-    STORE T6, SB, SC
 ; Spill t428 to slot 386
     ADD SC, FP, R0
     ADDI SC, SC, 541
@@ -17696,13 +17796,17 @@ L_q_sin_168:
 ; Recompute alloca t224 at FP+57
     ADD S0, FP, R0
     ADDI S0, S0, 57
-    ADD T7, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t440 to Stack
 ; Spill t431 to slot 390
     ADD SC, FP, R0
     ADDI SC, SC, 545
     STORE T7, SB, SC
+    ADD T7, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t440 to Stack
+; Spill t430 to slot 391
+    ADD SC, FP, R0
+    ADDI SC, SC, 546
+    STORE T4, SB, SC
     ADD T4, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t441 to Stack
@@ -17710,23 +17814,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(440), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op418_t442 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t430 to slot 391
-    ADD SC, FP, R0
-    ADDI SC, SC, 546
-    STORE T4, SB, SC
 ; Spill t432 to slot 392
     ADD SC, FP, R0
     ADDI SC, SC, 547
     STORE T1, SB, SC
     LOAD T1, SB, T7
     STORE T1, SB, T4
-    ADDI T3, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t443 to Stack
 ; Spill t434 to slot 393
     ADD SC, FP, R0
     ADDI SC, SC, 548
     STORE T3, SB, SC
+    ADDI T3, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t443 to Stack
+; Spill t433 to slot 394
+    ADD SC, FP, R0
+    ADDI SC, SC, 549
+    STORE S3, SB, SC
     ADDI S3, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t444 to Stack
@@ -17734,10 +17838,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(443), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op421_t445 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t433 to slot 394
-    ADD SC, FP, R0
-    ADDI SC, SC, 549
-    STORE S3, SB, SC
     LOAD S1, SB, T3
     STORE S1, SB, S3
     ADD S2, FP, R0
@@ -17749,13 +17849,17 @@ L_q_sin_168:
 ; Recompute alloca t333 at FP+89
     ADD T5, FP, R0
     ADDI T5, T5, 89
-    ADD T2, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t447 to Stack
 ; Spill t437 to slot 396
     ADD SC, FP, R0
     ADDI SC, SC, 551
     STORE T2, SB, SC
+    ADD T2, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t447 to Stack
+; Spill t436 to slot 397
+    ADD SC, FP, R0
+    ADDI SC, SC, 552
+    STORE T6, SB, SC
     ADD T6, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t448 to Stack
@@ -17763,19 +17867,19 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(447), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op424_t449 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t436 to slot 397
-    ADD SC, FP, R0
-    ADDI SC, SC, 552
-    STORE T6, SB, SC
     LOAD T0, SB, T2
     STORE T0, SB, T6
-    ADDI T7, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t450 to Stack
 ; Spill t440 to slot 398
     ADD SC, FP, R0
     ADDI SC, SC, 553
     STORE T7, SB, SC
+    ADDI T7, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t450 to Stack
+; Spill t442 to slot 399
+    ADD SC, FP, R0
+    ADDI SC, SC, 554
+    STORE T1, SB, SC
     ADDI T1, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t451 to Stack
@@ -17783,10 +17887,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(450), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op427_t452 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t442 to slot 399
-    ADD SC, FP, R0
-    ADDI SC, SC, 554
-    STORE T1, SB, SC
 ; Spill t441 to slot 400
     ADD SC, FP, R0
     ADDI SC, SC, 555
@@ -17840,6 +17940,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 566
     STORE T3, SB, SC
+; Set SP = FP+567 so callee frame is above spills
+    ADDI SP, FP, 567
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -17894,6 +17996,10 @@ L_q_sin_168:
     ADDI T3, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t464 to Stack
+; Spill t455 to slot 412
+    ADD SC, FP, R0
+    ADDI SC, SC, 567
+    STORE S3, SB, SC
     ADDI S3, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t465 to Stack
@@ -17901,10 +18007,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(464), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op441_t466 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t455 to slot 412
-    ADD SC, FP, R0
-    ADDI SC, SC, 567
-    STORE S3, SB, SC
 ; Spill t457 to slot 413
     ADD SC, FP, R0
     ADDI SC, SC, 568
@@ -17924,13 +18026,17 @@ L_q_sin_168:
 ; Recompute alloca t373 at FP+101
     ADD RV0, FP, R0
     ADDI RV0, RV0, 101
-    ADD T6, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t468 to Stack
 ; Spill t458 to slot 416
     ADD SC, FP, R0
     ADDI SC, SC, 571
     STORE T6, SB, SC
+    ADD T6, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t468 to Stack
+; Spill t460 to slot 417
+    ADD SC, FP, R0
+    ADDI SC, SC, 572
+    STORE T7, SB, SC
     ADD T7, T2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t469 to Stack
@@ -17938,23 +18044,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(468), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op444_t470 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t460 to slot 417
-    ADD SC, FP, R0
-    ADDI SC, SC, 572
-    STORE T7, SB, SC
 ; Spill t459 to slot 418
     ADD SC, FP, R0
     ADDI SC, SC, 573
     STORE T5, SB, SC
     LOAD T5, SB, T6
     STORE T5, SB, T7
-    ADDI T4, RV0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t471 to Stack
 ; Spill t461 to slot 419
     ADD SC, FP, R0
     ADDI SC, SC, 574
     STORE T4, SB, SC
+    ADDI T4, RV0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t471 to Stack
+; Spill t463 to slot 420
+    ADD SC, FP, R0
+    ADDI SC, SC, 575
+    STORE S2, SB, SC
     ADDI S2, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t472 to Stack
@@ -17962,10 +18068,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(471), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op447_t473 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t463 to slot 420
-    ADD SC, FP, R0
-    ADDI SC, SC, 575
-    STORE S2, SB, SC
 ; Spill t462 to slot 421
     ADD SC, FP, R0
     ADDI SC, SC, 576
@@ -17977,6 +18079,10 @@ L_q_sin_168:
     ADD T1, T2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t475 to Stack
+; Spill t464 to slot 422
+    ADD SC, FP, R0
+    ADDI SC, SC, 577
+    STORE T3, SB, SC
     ADD T3, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t476 to Stack
@@ -17984,23 +18090,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(475), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op450_t477 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t464 to slot 422
-    ADD SC, FP, R0
-    ADDI SC, SC, 577
-    STORE T3, SB, SC
 ; Spill t466 to slot 423
     ADD SC, FP, R0
     ADDI SC, SC, 578
     STORE T0, SB, SC
     LOAD T0, SB, T1
     STORE T0, SB, T3
-    ADDI S3, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t478 to Stack
 ; Spill t465 to slot 424
     ADD SC, FP, R0
     ADDI SC, SC, 579
     STORE S3, SB, SC
+    ADDI S3, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t478 to Stack
+; Spill t468 to slot 425
+    ADD SC, FP, R0
+    ADDI SC, SC, 580
+    STORE T6, SB, SC
     ADDI T6, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t479 to Stack
@@ -18008,10 +18114,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(478), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op453_t480 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t468 to slot 425
-    ADD SC, FP, R0
-    ADDI SC, SC, 580
-    STORE T6, SB, SC
 ; Spill t470 to slot 426
     ADD SC, FP, R0
     ADDI SC, SC, 581
@@ -18027,13 +18129,17 @@ L_q_sin_168:
 ; Recompute alloca t380 at FP+103
     ADD RV0, FP, R0
     ADDI RV0, RV0, 103
-    ADD T4, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t482 to Stack
 ; Spill t471 to slot 428
     ADD SC, FP, R0
     ADDI SC, SC, 583
     STORE T4, SB, SC
+    ADD T4, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t482 to Stack
+; Spill t473 to slot 429
+    ADD SC, FP, R0
+    ADDI SC, SC, 584
+    STORE S0, SB, SC
     ADD S0, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t483 to Stack
@@ -18041,23 +18147,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(482), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op456_t484 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t473 to slot 429
-    ADD SC, FP, R0
-    ADDI SC, SC, 584
-    STORE S0, SB, SC
 ; Spill t472 to slot 430
     ADD SC, FP, R0
     ADDI SC, SC, 585
     STORE S2, SB, SC
     LOAD S2, SB, T4
     STORE S2, SB, S0
-    ADDI T1, RV0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t485 to Stack
 ; Spill t475 to slot 431
     ADD SC, FP, R0
     ADDI SC, SC, 586
     STORE T1, SB, SC
+    ADDI T1, RV0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t485 to Stack
+; Spill t477 to slot 432
+    ADD SC, FP, R0
+    ADDI SC, SC, 587
+    STORE T0, SB, SC
     ADDI T0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t486 to Stack
@@ -18065,10 +18171,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(485), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op459_t487 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t477 to slot 432
-    ADD SC, FP, R0
-    ADDI SC, SC, 587
-    STORE T0, SB, SC
 ; Spill t476 to slot 433
     ADD SC, FP, R0
     ADDI SC, SC, 588
@@ -18122,6 +18224,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 599
     STORE S3, SB, SC
+; Set SP = FP+600 so callee frame is above spills
+    ADDI SP, FP, 600
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S1, R0
@@ -18176,6 +18280,10 @@ L_q_sin_168:
     ADDI S3, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t499 to Stack
+; Spill t490 to slot 445
+    ADD SC, FP, R0
+    ADDI SC, SC, 600
+    STORE T6, SB, SC
     ADDI T6, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t500 to Stack
@@ -18183,10 +18291,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(499), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op473_t501 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t490 to slot 445
-    ADD SC, FP, R0
-    ADDI SC, SC, 600
-    STORE T6, SB, SC
 ; Spill t492 to slot 446
     ADD SC, FP, R0
     ADDI SC, SC, 601
@@ -18199,13 +18303,17 @@ L_q_sin_168:
     STORE T4, SB, SC
     ADD T4, FP, R0
     ADDI T4, T4, 135
-    ADD RV0, S1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t503 to Stack
 ; Spill t488 to slot 448
     ADD SC, FP, R0
     ADDI SC, SC, 603
     STORE RV0, SB, SC
+    ADD RV0, S1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t503 to Stack
+; Spill t493 to slot 449
+    ADD SC, FP, R0
+    ADDI SC, SC, 604
+    STORE S0, SB, SC
     ADD S0, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t504 to Stack
@@ -18213,23 +18321,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(503), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op476_t505 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t493 to slot 449
-    ADD SC, FP, R0
-    ADDI SC, SC, 604
-    STORE S0, SB, SC
 ; Spill t495 to slot 450
     ADD SC, FP, R0
     ADDI SC, SC, 605
     STORE T3, SB, SC
     LOAD T3, SB, RV0
     STORE T3, SB, S0
-    ADDI T1, S1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t506 to Stack
 ; Spill t494 to slot 451
     ADD SC, FP, R0
     ADDI SC, SC, 606
     STORE T1, SB, SC
+    ADDI T1, S1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t506 to Stack
+; Spill t496 to slot 452
+    ADD SC, FP, R0
+    ADDI SC, SC, 607
+    STORE T0, SB, SC
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t507 to Stack
@@ -18237,10 +18345,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(506), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op479_t508 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t496 to slot 452
-    ADD SC, FP, R0
-    ADDI SC, SC, 607
-    STORE T0, SB, SC
 ; Spill t498 to slot 453
     ADD SC, FP, R0
     ADDI SC, SC, 608
@@ -18256,13 +18360,17 @@ L_q_sin_168:
 ; Recompute alloca t409 at FP+111
     ADD T5, FP, R0
     ADDI T5, T5, 111
-    ADD S3, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t510 to Stack
 ; Spill t499 to slot 455
     ADD SC, FP, R0
     ADDI SC, SC, 610
     STORE S3, SB, SC
+    ADD S3, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t510 to Stack
+; Spill t501 to slot 456
+    ADD SC, FP, R0
+    ADDI SC, SC, 611
+    STORE S2, SB, SC
     ADD S2, T2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t511 to Stack
@@ -18270,23 +18378,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(510), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op482_t512 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t501 to slot 456
-    ADD SC, FP, R0
-    ADDI SC, SC, 611
-    STORE S2, SB, SC
 ; Spill t500 to slot 457
     ADD SC, FP, R0
     ADDI SC, SC, 612
     STORE T6, SB, SC
     LOAD T6, SB, S3
     STORE T6, SB, S2
-    ADDI RV0, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t513 to Stack
 ; Spill t503 to slot 458
     ADD SC, FP, R0
     ADDI SC, SC, 613
     STORE RV0, SB, SC
+    ADDI RV0, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t513 to Stack
+; Spill t505 to slot 459
+    ADD SC, FP, R0
+    ADDI SC, SC, 614
+    STORE T3, SB, SC
     ADDI T3, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t514 to Stack
@@ -18294,10 +18402,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(513), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op485_t515 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t505 to slot 459
-    ADD SC, FP, R0
-    ADDI SC, SC, 614
-    STORE T3, SB, SC
 ; Spill t504 to slot 460
     ADD SC, FP, R0
     ADDI SC, SC, 615
@@ -18351,6 +18455,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 626
     STORE T1, SB, SC
+; Set SP = FP+627 so callee frame is above spills
+    ADDI SP, FP, 627
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T4, R0
@@ -18405,6 +18511,10 @@ L_q_sin_168:
     ADDI T1, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t527 to Stack
+; Spill t518 to slot 472
+    ADD SC, FP, R0
+    ADDI SC, SC, 627
+    STORE T0, SB, SC
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t528 to Stack
@@ -18412,10 +18522,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(527), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op499_t529 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t518 to slot 472
-    ADD SC, FP, R0
-    ADDI SC, SC, 627
-    STORE T0, SB, SC
 ; Spill t520 to slot 473
     ADD SC, FP, R0
     ADDI SC, SC, 628
@@ -18428,13 +18534,17 @@ L_q_sin_168:
     STORE S3, SB, SC
     ADD S3, FP, R0
     ADDI S3, S3, 141
-    ADD RV0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t531 to Stack
 ; Spill t516 to slot 475
     ADD SC, FP, R0
     ADDI SC, SC, 630
     STORE RV0, SB, SC
+    ADD RV0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t531 to Stack
+; Spill t521 to slot 476
+    ADD SC, FP, R0
+    ADDI SC, SC, 631
+    STORE S2, SB, SC
     ADD S2, S3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t532 to Stack
@@ -18442,23 +18552,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(531), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op502_t533 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t521 to slot 476
-    ADD SC, FP, R0
-    ADDI SC, SC, 631
-    STORE S2, SB, SC
 ; Spill t523 to slot 477
     ADD SC, FP, R0
     ADDI SC, SC, 632
     STORE S0, SB, SC
     LOAD S0, SB, RV0
     STORE S0, SB, S2
-    ADDI T5, T4, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t534 to Stack
 ; Spill t522 to slot 478
     ADD SC, FP, R0
     ADDI SC, SC, 633
     STORE T5, SB, SC
+    ADDI T5, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t534 to Stack
+; Spill t524 to slot 479
+    ADD SC, FP, R0
+    ADDI SC, SC, 634
+    STORE T3, SB, SC
     ADDI T3, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t535 to Stack
@@ -18466,10 +18576,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(534), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op505_t536 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t524 to slot 479
-    ADD SC, FP, R0
-    ADDI SC, SC, 634
-    STORE T3, SB, SC
 ; Spill t526 to slot 480
     ADD SC, FP, R0
     ADDI SC, SC, 635
@@ -18485,13 +18591,17 @@ L_q_sin_168:
 ; Recompute alloca t438 at FP+119
     ADD T7, FP, R0
     ADDI T7, T7, 119
-    ADD T1, T7, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t538 to Stack
 ; Spill t527 to slot 482
     ADD SC, FP, R0
     ADDI SC, SC, 637
     STORE T1, SB, SC
+    ADD T1, T7, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t538 to Stack
+; Spill t529 to slot 483
+    ADD SC, FP, R0
+    ADDI SC, SC, 638
+    STORE T6, SB, SC
     ADD T6, S1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t539 to Stack
@@ -18499,23 +18609,23 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(538), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op508_t540 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t529 to slot 483
-    ADD SC, FP, R0
-    ADDI SC, SC, 638
-    STORE T6, SB, SC
 ; Spill t528 to slot 484
     ADD SC, FP, R0
     ADDI SC, SC, 639
     STORE T0, SB, SC
     LOAD T0, SB, T1
     STORE T0, SB, T6
-    ADDI RV0, T7, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t541 to Stack
 ; Spill t531 to slot 485
     ADD SC, FP, R0
     ADDI SC, SC, 640
     STORE RV0, SB, SC
+    ADDI RV0, T7, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t541 to Stack
+; Spill t533 to slot 486
+    ADD SC, FP, R0
+    ADDI SC, SC, 641
+    STORE S0, SB, SC
     ADDI S0, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t542 to Stack
@@ -18523,10 +18633,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(541), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op511_t543 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t533 to slot 486
-    ADD SC, FP, R0
-    ADDI SC, SC, 641
-    STORE S0, SB, SC
 ; Spill t532 to slot 487
     ADD SC, FP, R0
     ADDI SC, SC, 642
@@ -18580,6 +18686,8 @@ L_q_sin_168:
     ADD SC, FP, R0
     ADDI SC, SC, 653
     STORE T5, SB, SC
+; Set SP = FP+654 so callee frame is above spills
+    ADDI SP, FP, 654
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S3, R0
@@ -18634,6 +18742,10 @@ L_q_sin_168:
     ADDI T5, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t555 to Stack
+; Spill t546 to slot 499
+    ADD SC, FP, R0
+    ADDI SC, SC, 654
+    STORE T3, SB, SC
     ADDI T3, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t556 to Stack
@@ -18641,10 +18753,6 @@ L_q_sin_168:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(555), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f54_op525_t557 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t546 to slot 499
-    ADD SC, FP, R0
-    ADDI SC, SC, 654
-    STORE T3, SB, SC
 ; Spill t548 to slot 500
     ADD SC, FP, R0
     ADDI SC, SC, 655
@@ -18717,17 +18825,17 @@ L_q_cos_169:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f56_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_44707e14_use_global
+    BEQ S2, T5, L_bc_f7d24605_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_44707e14_use_stack
+    BEQ S2, T4, L_bc_f7d24605_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_44707e14_done
-L_bc_44707e14_use_global:
+    BEQ R0, R0, L_bc_f7d24605_done
+L_bc_f7d24605_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_44707e14_done
-L_bc_44707e14_use_stack:
+    BEQ R0, R0, L_bc_f7d24605_done
+L_bc_f7d24605_use_stack:
     ADD T6, SB, R0
-L_bc_44707e14_done:
+L_bc_f7d24605_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -18741,25 +18849,22 @@ L_bc_44707e14_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f56_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_67a99ef9_use_global
+    BEQ S2, T5, L_bc_bbaaffeb_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_67a99ef9_use_stack
+    BEQ S2, T4, L_bc_bbaaffeb_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_67a99ef9_done
-L_bc_67a99ef9_use_global:
+    BEQ R0, R0, L_bc_bbaaffeb_done
+L_bc_bbaaffeb_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_67a99ef9_done
-L_bc_67a99ef9_use_stack:
+    BEQ R0, R0, L_bc_bbaaffeb_done
+L_bc_bbaaffeb_use_stack:
     ADD T0, SB, R0
-L_bc_67a99ef9_done:
+L_bc_bbaaffeb_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADD S0, T4, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t9 to Stack
 ; Spill t2 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 139
@@ -18768,6 +18873,9 @@ L_bc_67a99ef9_done:
     ADD SC, FP, R0
     ADDI SC, SC, 140
     STORE S2, SB, SC
+    ADD S0, T4, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t9 to Stack
 ; Spill load_f56_op4_t4_resolved_bank_56_f56_op5 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 141
@@ -18819,9 +18927,6 @@ L_q_cos_170:
     STORE S2, SB, SC
     LOAD S3, SB, T4
     STORE S3, SB, S1
-    ADDI T2, T3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t16 to Stack
 ; Spill t5 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 146
@@ -18830,6 +18935,13 @@ L_q_cos_170:
     ADD SC, FP, R0
     ADDI SC, SC, 147
     STORE S2, SB, SC
+    ADDI T2, T3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t16 to Stack
+; Spill param_bank_f56_op3_0 to slot 9
+    ADD SC, FP, R0
+    ADDI SC, SC, 148
+    STORE S2, SB, SC
     ADDI S2, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t17 to Stack
@@ -18837,10 +18949,6 @@ L_q_cos_170:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op23_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill param_bank_f56_op3_0 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 148
-    STORE S2, SB, SC
 ; Spill load_f56_op9_t7_resolved_bank_56_f56_op10 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 149
@@ -18853,13 +18961,13 @@ L_q_cos_170:
     STORE T5, SB, SC
     ADD T5, FP, R0
     ADDI T5, T5, 7
-    ADD T1, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t20 to Stack
 ; Spill t6 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 151
     STORE T1, SB, SC
+    ADD T1, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t20 to Stack
 ; Spill t9 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 152
@@ -18877,13 +18985,17 @@ L_q_cos_170:
     STORE T6, SB, S0
     ADD T6, FP, R0
     ADDI T6, T6, 9
-    ADD T4, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t23 to Stack
 ; Spill t13 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 154
     STORE T4, SB, SC
+    ADD T4, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t23 to Stack
+; Spill t15 to slot 16
+    ADD SC, FP, R0
+    ADDI SC, SC, 155
+    STORE S3, SB, SC
     ADD S3, T6, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t24 to Stack
@@ -18891,10 +19003,6 @@ L_q_cos_170:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(23), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op30_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t15 to slot 16
-    ADD SC, FP, R0
-    ADDI SC, SC, 155
-    STORE S3, SB, SC
 ; Spill t14 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 156
@@ -18971,6 +19079,8 @@ L_q_cos_170:
     ADD SC, FP, R0
     ADDI SC, SC, 169
     STORE T1, SB, SC
+; Set SP = FP+170 so callee frame is above spills
+    ADDI SP, FP, 170
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T0, R0
@@ -19051,13 +19161,17 @@ L_q_cos_171:
 ; LOAD: Using bank register Sb for load
     LOAD S3, SB, T5
     STORE S3, SB, RV0
-    ADDI T1, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t46 to Stack
 ; Spill t36 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 170
     STORE T1, SB, SC
+    ADDI T1, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t46 to Stack
+; Spill t38 to slot 32
+    ADD SC, FP, R0
+    ADDI SC, SC, 171
+    STORE S1, SB, SC
     ADDI S1, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t47 to Stack
@@ -19065,10 +19179,6 @@ L_q_cos_171:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(46), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op53_t48 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t38 to slot 32
-    ADD SC, FP, R0
-    ADDI SC, SC, 171
-    STORE S1, SB, SC
 ; Spill t37 to slot 33
     ADD SC, FP, R0
     ADDI SC, SC, 172
@@ -19122,6 +19232,8 @@ L_q_cos_171:
     ADD SC, FP, R0
     ADDI SC, SC, 183
     STORE S0, SB, SC
+; Set SP = FP+184 so callee frame is above spills
+    ADDI SP, FP, 184
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S2, R0
@@ -19175,6 +19287,10 @@ L_q_cos_171:
     ADDI S0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t60 to Stack
+; Spill t51 to slot 45
+    ADD SC, FP, R0
+    ADDI SC, SC, 184
+    STORE T3, SB, SC
     ADDI T3, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t61 to Stack
@@ -19182,10 +19298,6 @@ L_q_cos_171:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(60), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op67_t62 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t51 to slot 45
-    ADD SC, FP, R0
-    ADDI SC, SC, 184
-    STORE T3, SB, SC
 ; Spill t53 to slot 46
     ADD SC, FP, R0
     ADDI SC, SC, 185
@@ -19259,13 +19371,17 @@ L_q_cos_173:
     STORE T1, SB, SC
     LOAD T1, SB, T4
     STORE T1, SB, T5
-    ADDI S1, S2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t71 to Stack
 ; Spill t57 to slot 52
     ADD SC, FP, R0
     ADDI SC, SC, 191
     STORE S1, SB, SC
+    ADDI S1, S2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t71 to Stack
+; Spill t59 to slot 53
+    ADD SC, FP, R0
+    ADDI SC, SC, 192
+    STORE T0, SB, SC
     ADDI T0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t72 to Stack
@@ -19273,10 +19389,6 @@ L_q_cos_173:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(71), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op80_t73 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t59 to slot 53
-    ADD SC, FP, R0
-    ADDI SC, SC, 192
-    STORE T0, SB, SC
 ; Spill t58 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 193
@@ -19289,13 +19401,13 @@ L_q_cos_173:
     STORE S0, SB, SC
     ADD S0, FP, R0
     ADDI S0, S0, 19
-    ADD S3, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t75 to Stack
 ; Spill t62 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 195
     STORE S3, SB, SC
+    ADD S3, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t75 to Stack
 ; Spill t61 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 196
@@ -19313,13 +19425,17 @@ L_q_cos_173:
     STORE RV0, SB, T3
     ADD RV0, FP, R0
     ADDI RV0, RV0, 21
-    ADD T2, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t78 to Stack
 ; Spill t66 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 198
     STORE T2, SB, SC
+    ADD T2, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t78 to Stack
+; Spill t68 to slot 60
+    ADD SC, FP, R0
+    ADDI SC, SC, 199
+    STORE T4, SB, SC
     ADD T4, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t79 to Stack
@@ -19327,23 +19443,19 @@ L_q_cos_173:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(78), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op87_t80 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t68 to slot 60
-    ADD SC, FP, R0
-    ADDI SC, SC, 199
-    STORE T4, SB, SC
 ; Spill t70 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 200
     STORE T1, SB, SC
     LOAD T1, SB, T2
     STORE T1, SB, T4
-    ADDI T5, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t81 to Stack
 ; Spill t69 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 201
     STORE T5, SB, SC
+    ADDI T5, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t81 to Stack
     ADDI S2, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t82 to Stack
@@ -19403,6 +19515,8 @@ L_q_cos_173:
     ADD SC, FP, R0
     ADDI SC, SC, 213
     STORE S1, SB, SC
+; Set SP = FP+214 so callee frame is above spills
+    ADDI SP, FP, 214
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -19453,6 +19567,10 @@ L_q_cos_173:
     ADDI S1, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t96 to Stack
+; Spill t86 to slot 75
+    ADD SC, FP, R0
+    ADDI SC, SC, 214
+    STORE T0, SB, SC
     ADDI T0, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t97 to Stack
@@ -19460,10 +19578,6 @@ L_q_cos_173:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(96), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op103_t98 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t86 to slot 75
-    ADD SC, FP, R0
-    ADDI SC, SC, 214
-    STORE T0, SB, SC
 ; Spill t88 to slot 76
     ADD SC, FP, R0
     ADDI SC, SC, 215
@@ -19528,6 +19642,8 @@ L_q_cos_173:
     ADD SC, FP, R0
     ADDI SC, SC, 228
     STORE T2, SB, SC
+; Set SP = FP+229 so callee frame is above spills
+    ADDI SP, FP, 229
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S3, R0
@@ -19608,13 +19724,17 @@ L_q_cos_174:
 ; LOAD: Using bank register Sb for load
     LOAD S2, SB, T7
     STORE S2, SB, RV0
-    ADDI T2, S1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t116 to Stack
 ; Spill t106 to slot 90
     ADD SC, FP, R0
     ADDI SC, SC, 229
     STORE T2, SB, SC
+    ADDI T2, S1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t116 to Stack
+; Spill t108 to slot 91
+    ADD SC, FP, R0
+    ADDI SC, SC, 230
+    STORE T5, SB, SC
     ADDI T5, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t117 to Stack
@@ -19622,10 +19742,6 @@ L_q_cos_174:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(116), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op123_t118 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t108 to slot 91
-    ADD SC, FP, R0
-    ADDI SC, SC, 230
-    STORE T5, SB, SC
 ; Spill t107 to slot 92
     ADD SC, FP, R0
     ADDI SC, SC, 231
@@ -19679,6 +19795,8 @@ L_q_cos_174:
     ADD SC, FP, R0
     ADDI SC, SC, 242
     STORE T4, SB, SC
+; Set SP = FP+243 so callee frame is above spills
+    ADDI SP, FP, 243
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S3, R0
@@ -19732,6 +19850,10 @@ L_q_cos_174:
     ADDI T4, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t130 to Stack
+; Spill t121 to slot 104
+    ADD SC, FP, R0
+    ADDI SC, SC, 243
+    STORE T6, SB, SC
     ADDI T6, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t131 to Stack
@@ -19739,10 +19861,6 @@ L_q_cos_174:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(130), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op137_t132 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t121 to slot 104
-    ADD SC, FP, R0
-    ADDI SC, SC, 243
-    STORE T6, SB, SC
 ; Spill t123 to slot 105
     ADD SC, FP, R0
     ADDI SC, SC, 244
@@ -19796,6 +19914,10 @@ L_q_cos_175:
     ADD S3, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t139 to Stack
+; Spill t125 to slot 110
+    ADD SC, FP, R0
+    ADDI SC, SC, 249
+    STORE T2, SB, SC
     ADD T2, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t140 to Stack
@@ -19803,23 +19925,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(139), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op145_t141 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t125 to slot 110
-    ADD SC, FP, R0
-    ADDI SC, SC, 249
-    STORE T2, SB, SC
 ; Spill t127 to slot 111
     ADD SC, FP, R0
     ADDI SC, SC, 250
     STORE T5, SB, SC
     LOAD T5, SB, S3
     STORE T5, SB, T2
-    ADDI T0, T7, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t142 to Stack
 ; Spill t129 to slot 112
     ADD SC, FP, R0
     ADDI SC, SC, 251
     STORE T0, SB, SC
+    ADDI T0, T7, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t142 to Stack
+; Spill t128 to slot 113
+    ADD SC, FP, R0
+    ADDI SC, SC, 252
+    STORE S0, SB, SC
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t143 to Stack
@@ -19827,10 +19949,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(142), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op148_t144 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t128 to slot 113
-    ADD SC, FP, R0
-    ADDI SC, SC, 252
-    STORE S0, SB, SC
 ; Spill t130 to slot 114
     ADD SC, FP, R0
     ADDI SC, SC, 253
@@ -19843,13 +19961,17 @@ L_q_cos_175:
     STORE S2, SB, SC
     ADD S2, FP, R0
     ADDI S2, S2, 37
-    ADD T6, T7, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t146 to Stack
 ; Spill t131 to slot 116
     ADD SC, FP, R0
     ADDI SC, SC, 255
     STORE T6, SB, SC
+    ADD T6, T7, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t146 to Stack
+; Spill t134 to slot 117
+    ADD SC, FP, R0
+    ADDI SC, SC, 256
+    STORE RV0, SB, SC
     ADD RV0, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t147 to Stack
@@ -19857,10 +19979,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(146), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op151_t148 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t134 to slot 117
-    ADD SC, FP, R0
-    ADDI SC, SC, 256
-    STORE RV0, SB, SC
 ; Spill t136 to slot 118
     ADD SC, FP, R0
     ADDI SC, SC, 257
@@ -19870,6 +19988,10 @@ L_q_cos_175:
     ADDI T1, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t149 to Stack
+; Spill t139 to slot 119
+    ADD SC, FP, R0
+    ADDI SC, SC, 258
+    STORE S3, SB, SC
     ADDI S3, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t150 to Stack
@@ -19877,10 +19999,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(149), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op154_t151 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t139 to slot 119
-    ADD SC, FP, R0
-    ADDI SC, SC, 258
-    STORE S3, SB, SC
 ; Spill t141 to slot 120
     ADD SC, FP, R0
     ADDI SC, SC, 259
@@ -19938,6 +20056,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 271
     STORE T0, SB, SC
+; Set SP = FP+272 so callee frame is above spills
+    ADDI SP, FP, 272
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -19992,6 +20112,10 @@ L_q_cos_175:
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t163 to Stack
+; Spill t154 to slot 133
+    ADD SC, FP, R0
+    ADDI SC, SC, 272
+    STORE S0, SB, SC
     ADDI S0, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t164 to Stack
@@ -19999,10 +20123,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(163), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op168_t165 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t154 to slot 133
-    ADD SC, FP, R0
-    ADDI SC, SC, 272
-    STORE S0, SB, SC
 ; Spill t156 to slot 134
     ADD SC, FP, R0
     ADDI SC, SC, 273
@@ -20021,13 +20141,17 @@ L_q_cos_175:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 43
-    ADD T7, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t168 to Stack
 ; Spill t157 to slot 137
     ADD SC, FP, R0
     ADDI SC, SC, 276
     STORE T7, SB, SC
+    ADD T7, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t168 to Stack
+; Spill t159 to slot 138
+    ADD SC, FP, R0
+    ADDI SC, SC, 277
+    STORE T5, SB, SC
     ADD T5, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t169 to Stack
@@ -20035,23 +20159,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(168), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op171_t170 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t159 to slot 138
-    ADD SC, FP, R0
-    ADDI SC, SC, 277
-    STORE T5, SB, SC
 ; Spill t158 to slot 139
     ADD SC, FP, R0
     ADDI SC, SC, 278
     STORE T1, SB, SC
     LOAD T1, SB, T7
     STORE T1, SB, T5
-    ADDI S3, T3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t171 to Stack
 ; Spill t160 to slot 140
     ADD SC, FP, R0
     ADDI SC, SC, 279
     STORE S3, SB, SC
+    ADDI S3, T3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t171 to Stack
+; Spill t162 to slot 141
+    ADD SC, FP, R0
+    ADDI SC, SC, 280
+    STORE S2, SB, SC
     ADDI S2, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t172 to Stack
@@ -20059,10 +20183,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(171), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op174_t173 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t162 to slot 141
-    ADD SC, FP, R0
-    ADDI SC, SC, 280
-    STORE S2, SB, SC
 ; Spill t161 to slot 142
     ADD SC, FP, R0
     ADDI SC, SC, 281
@@ -20071,13 +20191,17 @@ L_q_cos_175:
     STORE T2, SB, S2
     ADD T4, FP, R0
     ADDI T4, T4, 45
-    ADD T0, T3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t175 to Stack
 ; Spill t163 to slot 143
     ADD SC, FP, R0
     ADDI SC, SC, 282
     STORE T0, SB, SC
+    ADD T0, T3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t175 to Stack
+; Spill t165 to slot 144
+    ADD SC, FP, R0
+    ADDI SC, SC, 283
+    STORE S1, SB, SC
     ADD S1, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t176 to Stack
@@ -20085,10 +20209,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(175), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op177_t177 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t165 to slot 144
-    ADD SC, FP, R0
-    ADDI SC, SC, 283
-    STORE S1, SB, SC
 ; Spill t164 to slot 145
     ADD SC, FP, R0
     ADDI SC, SC, 284
@@ -20098,6 +20218,10 @@ L_q_cos_175:
     ADDI T6, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t178 to Stack
+; Spill t168 to slot 146
+    ADD SC, FP, R0
+    ADDI SC, SC, 285
+    STORE T7, SB, SC
     ADDI T7, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t179 to Stack
@@ -20105,10 +20229,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(178), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op180_t180 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t168 to slot 146
-    ADD SC, FP, R0
-    ADDI SC, SC, 285
-    STORE T7, SB, SC
 ; Spill t170 to slot 147
     ADD SC, FP, R0
     ADDI SC, SC, 286
@@ -20166,6 +20286,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 298
     STORE S3, SB, SC
+; Set SP = FP+299 so callee frame is above spills
+    ADDI SP, FP, 299
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -20220,6 +20342,10 @@ L_q_cos_175:
     ADDI S3, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t192 to Stack
+; Spill t183 to slot 160
+    ADD SC, FP, R0
+    ADDI SC, SC, 299
+    STORE S2, SB, SC
     ADDI S2, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t193 to Stack
@@ -20227,10 +20353,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(192), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op194_t194 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t183 to slot 160
-    ADD SC, FP, R0
-    ADDI SC, SC, 299
-    STORE S2, SB, SC
 ; Spill t185 to slot 161
     ADD SC, FP, R0
     ADDI SC, SC, 300
@@ -20249,13 +20371,17 @@ L_q_cos_175:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 51
-    ADD S1, T7, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t197 to Stack
 ; Spill t186 to slot 164
     ADD SC, FP, R0
     ADDI SC, SC, 303
     STORE S1, SB, SC
+    ADD S1, T7, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t197 to Stack
+; Spill t188 to slot 165
+    ADD SC, FP, R0
+    ADDI SC, SC, 304
+    STORE T6, SB, SC
     ADD T6, RV0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t198 to Stack
@@ -20263,23 +20389,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(197), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op197_t199 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t188 to slot 165
-    ADD SC, FP, R0
-    ADDI SC, SC, 304
-    STORE T6, SB, SC
 ; Spill t187 to slot 166
     ADD SC, FP, R0
     ADDI SC, SC, 305
     STORE T3, SB, SC
     LOAD T3, SB, S1
     STORE T3, SB, T6
-    ADDI T1, T7, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t200 to Stack
 ; Spill t189 to slot 167
     ADD SC, FP, R0
     ADDI SC, SC, 306
     STORE T1, SB, SC
+    ADDI T1, T7, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t200 to Stack
+; Spill t191 to slot 168
+    ADD SC, FP, R0
+    ADDI SC, SC, 307
+    STORE T4, SB, SC
     ADDI T4, RV0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t201 to Stack
@@ -20287,10 +20413,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(200), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op200_t202 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t191 to slot 168
-    ADD SC, FP, R0
-    ADDI SC, SC, 307
-    STORE T4, SB, SC
 ; Spill t190 to slot 169
     ADD SC, FP, R0
     ADDI SC, SC, 308
@@ -20306,13 +20428,17 @@ L_q_cos_175:
 ; Recompute alloca t137 at FP+33
     ADD S3, FP, R0
     ADDI S3, S3, 33
-    ADD S0, S3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t204 to Stack
 ; Spill t194 to slot 171
     ADD SC, FP, R0
     ADDI SC, SC, 310
     STORE S0, SB, SC
+    ADD S0, S3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t204 to Stack
+; Spill t193 to slot 172
+    ADD SC, FP, R0
+    ADDI SC, SC, 311
+    STORE S2, SB, SC
     ADD S2, T2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t205 to Stack
@@ -20320,19 +20446,19 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(204), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op203_t206 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t193 to slot 172
-    ADD SC, FP, R0
-    ADDI SC, SC, 311
-    STORE S2, SB, SC
     LOAD T0, SB, S0
     STORE T0, SB, S2
-    ADDI S1, S3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t207 to Stack
 ; Spill t197 to slot 173
     ADD SC, FP, R0
     ADDI SC, SC, 312
     STORE S1, SB, SC
+    ADDI S1, S3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t207 to Stack
+; Spill t199 to slot 174
+    ADD SC, FP, R0
+    ADDI SC, SC, 313
+    STORE T3, SB, SC
     ADDI T3, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t208 to Stack
@@ -20340,10 +20466,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(207), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op206_t209 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t199 to slot 174
-    ADD SC, FP, R0
-    ADDI SC, SC, 313
-    STORE T3, SB, SC
 ; Spill t198 to slot 175
     ADD SC, FP, R0
     ADDI SC, SC, 314
@@ -20397,6 +20519,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 325
     STORE T1, SB, SC
+; Set SP = FP+326 so callee frame is above spills
+    ADDI SP, FP, 326
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, RV0, R0
@@ -20451,6 +20575,10 @@ L_q_cos_175:
     ADDI T1, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t221 to Stack
+; Spill t212 to slot 187
+    ADD SC, FP, R0
+    ADDI SC, SC, 326
+    STORE T4, SB, SC
     ADDI T4, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t222 to Stack
@@ -20458,10 +20586,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(221), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op220_t223 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t212 to slot 187
-    ADD SC, FP, R0
-    ADDI SC, SC, 326
-    STORE T4, SB, SC
 ; Spill t214 to slot 188
     ADD SC, FP, R0
     ADDI SC, SC, 327
@@ -20480,13 +20604,13 @@ L_q_cos_175:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 59
-    ADD S2, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t226 to Stack
 ; Spill t215 to slot 191
     ADD SC, FP, R0
     ADDI SC, SC, 330
     STORE S2, SB, SC
+    ADD S2, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t226 to Stack
 ; Spill t217 to slot 192
     ADD SC, FP, R0
     ADDI SC, SC, 331
@@ -20504,13 +20628,17 @@ L_q_cos_175:
     STORE S3, SB, S1
     ADD S3, FP, R0
     ADDI S3, S3, 61
-    ADD T6, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t229 to Stack
 ; Spill t218 to slot 194
     ADD SC, FP, R0
     ADDI SC, SC, 333
     STORE T6, SB, SC
+    ADD T6, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t229 to Stack
+; Spill t220 to slot 195
+    ADD SC, FP, R0
+    ADDI SC, SC, 334
+    STORE T2, SB, SC
     ADD T2, S3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t230 to Stack
@@ -20518,10 +20646,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(229), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op227_t231 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t220 to slot 195
-    ADD SC, FP, R0
-    ADDI SC, SC, 334
-    STORE T2, SB, SC
 ; Spill t219 to slot 196
     ADD SC, FP, R0
     ADDI SC, SC, 335
@@ -20590,6 +20714,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 347
     STORE T0, SB, SC
+; Set SP = FP+348 so callee frame is above spills
+    ADDI SP, FP, 348
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T0, R0
@@ -20639,6 +20765,10 @@ L_q_cos_175:
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t247 to Stack
+; Spill t237 to slot 209
+    ADD SC, FP, R0
+    ADDI SC, SC, 348
+    STORE S0, SB, SC
     ADDI S0, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t248 to Stack
@@ -20646,10 +20776,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(247), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op243_t249 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t237 to slot 209
-    ADD SC, FP, R0
-    ADDI SC, SC, 348
-    STORE S0, SB, SC
 ; Spill t239 to slot 210
     ADD SC, FP, R0
     ADDI SC, SC, 349
@@ -20714,6 +20840,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 362
     STORE T6, SB, SC
+; Set SP = FP+363 so callee frame is above spills
+    ADDI SP, FP, 363
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S2, R0
@@ -20768,6 +20896,10 @@ L_q_cos_175:
     ADDI T6, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t261 to Stack
+; Spill t252 to slot 224
+    ADD SC, FP, R0
+    ADDI SC, SC, 363
+    STORE T7, SB, SC
     ADDI T7, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t262 to Stack
@@ -20775,10 +20907,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(261), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op257_t263 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t252 to slot 224
-    ADD SC, FP, R0
-    ADDI SC, SC, 363
-    STORE T7, SB, SC
 ; Spill t254 to slot 225
     ADD SC, FP, R0
     ADDI SC, SC, 364
@@ -20797,13 +20925,13 @@ L_q_cos_175:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 71
-    ADD T1, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t266 to Stack
 ; Spill t255 to slot 228
     ADD SC, FP, R0
     ADDI SC, SC, 367
     STORE T1, SB, SC
+    ADD T1, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t266 to Stack
 ; Spill t257 to slot 229
     ADD SC, FP, R0
     ADDI SC, SC, 368
@@ -20821,13 +20949,17 @@ L_q_cos_175:
     STORE T4, SB, T0
     ADD T4, FP, R0
     ADDI T4, T4, 73
-    ADD S1, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t269 to Stack
 ; Spill t258 to slot 231
     ADD SC, FP, R0
     ADDI SC, SC, 370
     STORE S1, SB, SC
+    ADD S1, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t269 to Stack
+; Spill t260 to slot 232
+    ADD SC, FP, R0
+    ADDI SC, SC, 371
+    STORE S3, SB, SC
     ADD S3, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t270 to Stack
@@ -20835,10 +20967,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(269), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op264_t271 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t260 to slot 232
-    ADD SC, FP, R0
-    ADDI SC, SC, 371
-    STORE S3, SB, SC
 ; Spill t259 to slot 233
     ADD SC, FP, R0
     ADDI SC, SC, 372
@@ -20907,6 +21035,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 384
     STORE T3, SB, SC
+; Set SP = FP+385 so callee frame is above spills
+    ADDI SP, FP, 385
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T3, R0
@@ -20956,6 +21086,10 @@ L_q_cos_175:
     ADDI T3, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t287 to Stack
+; Spill t277 to slot 246
+    ADD SC, FP, R0
+    ADDI SC, SC, 385
+    STORE T5, SB, SC
     ADDI T5, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t288 to Stack
@@ -20963,10 +21097,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(287), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op280_t289 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t277 to slot 246
-    ADD SC, FP, R0
-    ADDI SC, SC, 385
-    STORE T5, SB, SC
 ; Spill t279 to slot 247
     ADD SC, FP, R0
     ADDI SC, SC, 386
@@ -21031,6 +21161,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 399
     STORE S1, SB, SC
+; Set SP = FP+400 so callee frame is above spills
+    ADDI SP, FP, 400
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T1, R0
@@ -21085,6 +21217,10 @@ L_q_cos_175:
     ADDI S1, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t301 to Stack
+; Spill t292 to slot 261
+    ADD SC, FP, R0
+    ADDI SC, SC, 400
+    STORE S2, SB, SC
     ADDI S2, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t302 to Stack
@@ -21092,10 +21228,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(301), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op294_t303 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t292 to slot 261
-    ADD SC, FP, R0
-    ADDI SC, SC, 400
-    STORE S2, SB, SC
 ; Spill t294 to slot 262
     ADD SC, FP, R0
     ADDI SC, SC, 401
@@ -21114,13 +21246,13 @@ L_q_cos_175:
     STORE RV0, SB, SC
     ADD RV0, FP, R0
     ADDI RV0, RV0, 83
-    ADD T6, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t306 to Stack
 ; Spill t295 to slot 265
     ADD SC, FP, R0
     ADDI SC, SC, 404
     STORE T6, SB, SC
+    ADD T6, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t306 to Stack
 ; Spill t297 to slot 266
     ADD SC, FP, R0
     ADDI SC, SC, 405
@@ -21138,13 +21270,17 @@ L_q_cos_175:
     STORE T7, SB, T3
     ADD T7, FP, R0
     ADDI T7, T7, 85
-    ADD T0, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t309 to Stack
 ; Spill t298 to slot 268
     ADD SC, FP, R0
     ADDI SC, SC, 407
     STORE T0, SB, SC
+    ADD T0, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t309 to Stack
+; Spill t300 to slot 269
+    ADD SC, FP, R0
+    ADDI SC, SC, 408
+    STORE T4, SB, SC
     ADD T4, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t310 to Stack
@@ -21152,10 +21288,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(309), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op301_t311 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t300 to slot 269
-    ADD SC, FP, R0
-    ADDI SC, SC, 408
-    STORE T4, SB, SC
 ; Spill t299 to slot 270
     ADD SC, FP, R0
     ADDI SC, SC, 409
@@ -21224,6 +21356,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 421
     STORE S0, SB, SC
+; Set SP = FP+422 so callee frame is above spills
+    ADDI SP, FP, 422
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, S0, R0
@@ -21273,6 +21407,10 @@ L_q_cos_175:
     ADDI S0, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t327 to Stack
+; Spill t317 to slot 283
+    ADD SC, FP, R0
+    ADDI SC, SC, 422
+    STORE T2, SB, SC
     ADDI T2, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t328 to Stack
@@ -21280,10 +21418,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(327), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op317_t329 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t317 to slot 283
-    ADD SC, FP, R0
-    ADDI SC, SC, 422
-    STORE T2, SB, SC
 ; Spill t319 to slot 284
     ADD SC, FP, R0
     ADDI SC, SC, 423
@@ -21348,6 +21482,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 436
     STORE T0, SB, SC
+; Set SP = FP+437 so callee frame is above spills
+    ADDI SP, FP, 437
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T6, R0
@@ -21402,6 +21538,10 @@ L_q_cos_175:
     ADDI T0, T4, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t341 to Stack
+; Spill t332 to slot 298
+    ADD SC, FP, R0
+    ADDI SC, SC, 437
+    STORE T1, SB, SC
     ADDI T1, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t342 to Stack
@@ -21409,10 +21549,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(341), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op331_t343 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t332 to slot 298
-    ADD SC, FP, R0
-    ADDI SC, SC, 437
-    STORE T1, SB, SC
 ; Spill t334 to slot 299
     ADD SC, FP, R0
     ADDI SC, SC, 438
@@ -21425,13 +21561,13 @@ L_q_cos_175:
     STORE S3, SB, SC
     ADD S3, FP, R0
     ADDI S3, S3, 93
-    ADD RV0, S3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t345 to Stack
 ; Spill t330 to slot 301
     ADD SC, FP, R0
     ADDI SC, SC, 440
     STORE RV0, SB, SC
+    ADD RV0, S3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t345 to Stack
 ; Spill t335 to slot 302
     ADD SC, FP, R0
     ADDI SC, SC, 441
@@ -21449,13 +21585,17 @@ L_q_cos_175:
     STORE S0, SB, S1
     ADD S0, FP, R0
     ADDI S0, S0, 95
-    ADD S2, S3, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t348 to Stack
 ; Spill t336 to slot 304
     ADD SC, FP, R0
     ADDI SC, SC, 443
     STORE S2, SB, SC
+    ADD S2, S3, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t348 to Stack
+; Spill t338 to slot 305
+    ADD SC, FP, R0
+    ADDI SC, SC, 444
+    STORE T3, SB, SC
     ADD T3, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t349 to Stack
@@ -21463,23 +21603,19 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(348), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op338_t350 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t338 to slot 305
-    ADD SC, FP, R0
-    ADDI SC, SC, 444
-    STORE T3, SB, SC
 ; Spill t340 to slot 306
     ADD SC, FP, R0
     ADDI SC, SC, 445
     STORE T7, SB, SC
     LOAD T7, SB, S2
     STORE T7, SB, T3
-    ADDI T6, S3, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t351 to Stack
 ; Spill t339 to slot 307
     ADD SC, FP, R0
     ADDI SC, SC, 446
     STORE T6, SB, SC
+    ADDI T6, S3, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t351 to Stack
     ADDI T4, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t352 to Stack
@@ -21502,13 +21638,17 @@ L_q_cos_175:
 ; Recompute alloca t137 at FP+33
     ADD T5, FP, R0
     ADDI T5, T5, 33
-    ADD T1, T5, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t355 to Stack
 ; Spill t342 to slot 310
     ADD SC, FP, R0
     ADDI SC, SC, 449
     STORE T1, SB, SC
+    ADD T1, T5, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t355 to Stack
+; Spill t345 to slot 311
+    ADD SC, FP, R0
+    ADDI SC, SC, 450
+    STORE RV0, SB, SC
     ADD RV0, T0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t356 to Stack
@@ -21516,23 +21656,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(355), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op344_t357 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t345 to slot 311
-    ADD SC, FP, R0
-    ADDI SC, SC, 450
-    STORE RV0, SB, SC
 ; Spill t346 to slot 312
     ADD SC, FP, R0
     ADDI SC, SC, 451
     STORE S1, SB, SC
     LOAD S1, SB, T1
     STORE S1, SB, RV0
-    ADDI S2, T5, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t358 to Stack
 ; Spill t348 to slot 313
     ADD SC, FP, R0
     ADDI SC, SC, 452
     STORE S2, SB, SC
+    ADDI S2, T5, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t358 to Stack
+; Spill t350 to slot 314
+    ADD SC, FP, R0
+    ADDI SC, SC, 453
+    STORE T7, SB, SC
     ADDI T7, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t359 to Stack
@@ -21540,10 +21680,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(358), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op347_t360 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t350 to slot 314
-    ADD SC, FP, R0
-    ADDI SC, SC, 453
-    STORE T7, SB, SC
 ; Spill t349 to slot 315
     ADD SC, FP, R0
     ADDI SC, SC, 454
@@ -21555,13 +21691,17 @@ L_q_cos_175:
 ; Recompute alloca t224 at FP+57
     ADD S0, FP, R0
     ADDI S0, S0, 57
-    ADD T6, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t362 to Stack
 ; Spill t351 to slot 316
     ADD SC, FP, R0
     ADDI SC, SC, 455
     STORE T6, SB, SC
+    ADD T6, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t362 to Stack
+; Spill t353 to slot 317
+    ADD SC, FP, R0
+    ADDI SC, SC, 456
+    STORE T2, SB, SC
     ADD T2, S3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t363 to Stack
@@ -21569,23 +21709,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(362), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op350_t364 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t353 to slot 317
-    ADD SC, FP, R0
-    ADDI SC, SC, 456
-    STORE T2, SB, SC
 ; Spill t352 to slot 318
     ADD SC, FP, R0
     ADDI SC, SC, 457
     STORE T4, SB, SC
     LOAD T4, SB, T6
     STORE T4, SB, T2
-    ADDI T1, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t365 to Stack
 ; Spill t355 to slot 319
     ADD SC, FP, R0
     ADDI SC, SC, 458
     STORE T1, SB, SC
+    ADDI T1, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t365 to Stack
+; Spill t357 to slot 320
+    ADD SC, FP, R0
+    ADDI SC, SC, 459
+    STORE S1, SB, SC
     ADDI S1, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t366 to Stack
@@ -21593,10 +21733,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(365), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op353_t367 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t357 to slot 320
-    ADD SC, FP, R0
-    ADDI SC, SC, 459
-    STORE S1, SB, SC
 ; Spill t356 to slot 321
     ADD SC, FP, R0
     ADDI SC, SC, 460
@@ -21650,6 +21786,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 471
     STORE S2, SB, SC
+; Set SP = FP+472 so callee frame is above spills
+    ADDI SP, FP, 472
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T0, R0
@@ -21703,6 +21841,10 @@ L_q_cos_175:
     ADDI S2, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t380 to Stack
+; Spill t370 to slot 333
+    ADD SC, FP, R0
+    ADDI SC, SC, 472
+    STORE T7, SB, SC
     ADDI T7, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t381 to Stack
@@ -21710,10 +21852,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(380), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op367_t382 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t370 to slot 333
-    ADD SC, FP, R0
-    ADDI SC, SC, 472
-    STORE T7, SB, SC
 ; Spill t372 to slot 334
     ADD SC, FP, R0
     ADDI SC, SC, 473
@@ -21778,6 +21916,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 486
     STORE T2, SB, SC
+; Set SP = FP+487 so callee frame is above spills
+    ADDI SP, FP, 487
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T6, R0
@@ -21832,6 +21972,10 @@ L_q_cos_175:
     ADDI T2, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t394 to Stack
+; Spill t385 to slot 348
+    ADD SC, FP, R0
+    ADDI SC, SC, 487
+    STORE S0, SB, SC
     ADDI S0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t395 to Stack
@@ -21839,10 +21983,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(394), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op381_t396 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t385 to slot 348
-    ADD SC, FP, R0
-    ADDI SC, SC, 487
-    STORE S0, SB, SC
 ; Spill t387 to slot 349
     ADD SC, FP, R0
     ADDI SC, SC, 488
@@ -21855,13 +21995,17 @@ L_q_cos_175:
     STORE T0, SB, SC
     ADD T0, FP, R0
     ADDI T0, T0, 107
-    ADD RV0, T7, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t398 to Stack
 ; Spill t383 to slot 351
     ADD SC, FP, R0
     ADDI SC, SC, 490
     STORE RV0, SB, SC
+    ADD RV0, T7, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t398 to Stack
+; Spill t388 to slot 352
+    ADD SC, FP, R0
+    ADDI SC, SC, 491
+    STORE T5, SB, SC
     ADD T5, T0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t399 to Stack
@@ -21869,23 +22013,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(398), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op384_t400 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t388 to slot 352
-    ADD SC, FP, R0
-    ADDI SC, SC, 491
-    STORE T5, SB, SC
 ; Spill t390 to slot 353
     ADD SC, FP, R0
     ADDI SC, SC, 492
     STORE S2, SB, SC
     LOAD S2, SB, RV0
     STORE S2, SB, T5
-    ADDI T3, T7, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t401 to Stack
 ; Spill t389 to slot 354
     ADD SC, FP, R0
     ADDI SC, SC, 493
     STORE T3, SB, SC
+    ADDI T3, T7, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t401 to Stack
+; Spill t391 to slot 355
+    ADD SC, FP, R0
+    ADDI SC, SC, 494
+    STORE T4, SB, SC
     ADDI T4, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t402 to Stack
@@ -21893,10 +22037,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(401), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op387_t403 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t391 to slot 355
-    ADD SC, FP, R0
-    ADDI SC, SC, 494
-    STORE T4, SB, SC
 ; Spill t393 to slot 356
     ADD SC, FP, R0
     ADDI SC, SC, 495
@@ -21912,13 +22052,17 @@ L_q_cos_175:
 ; Recompute alloca t166 at FP+41
     ADD T1, FP, R0
     ADDI T1, T1, 41
-    ADD T2, T1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t405 to Stack
 ; Spill t394 to slot 358
     ADD SC, FP, R0
     ADDI SC, SC, 497
     STORE T2, SB, SC
+    ADD T2, T1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t405 to Stack
+; Spill t396 to slot 359
+    ADD SC, FP, R0
+    ADDI SC, SC, 498
+    STORE S3, SB, SC
     ADD S3, T6, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t406 to Stack
@@ -21926,23 +22070,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(405), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op390_t407 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t396 to slot 359
-    ADD SC, FP, R0
-    ADDI SC, SC, 498
-    STORE S3, SB, SC
 ; Spill t395 to slot 360
     ADD SC, FP, R0
     ADDI SC, SC, 499
     STORE S0, SB, SC
     LOAD S0, SB, T2
     STORE S0, SB, S3
-    ADDI RV0, T1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t408 to Stack
 ; Spill t398 to slot 361
     ADD SC, FP, R0
     ADDI SC, SC, 500
     STORE RV0, SB, SC
+    ADDI RV0, T1, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t408 to Stack
+; Spill t400 to slot 362
+    ADD SC, FP, R0
+    ADDI SC, SC, 501
+    STORE S2, SB, SC
     ADDI S2, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t409 to Stack
@@ -21950,10 +22094,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(408), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op393_t410 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t400 to slot 362
-    ADD SC, FP, R0
-    ADDI SC, SC, 501
-    STORE S2, SB, SC
 ; Spill t399 to slot 363
     ADD SC, FP, R0
     ADDI SC, SC, 502
@@ -21965,13 +22105,17 @@ L_q_cos_175:
 ; Recompute alloca t264 at FP+69
     ADD T0, FP, R0
     ADDI T0, T0, 69
-    ADD T3, T0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t412 to Stack
 ; Spill t401 to slot 364
     ADD SC, FP, R0
     ADDI SC, SC, 503
     STORE T3, SB, SC
+    ADD T3, T0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t412 to Stack
+; Spill t403 to slot 365
+    ADD SC, FP, R0
+    ADDI SC, SC, 504
+    STORE S1, SB, SC
     ADD S1, T7, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t413 to Stack
@@ -21979,23 +22123,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(412), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op396_t414 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t403 to slot 365
-    ADD SC, FP, R0
-    ADDI SC, SC, 504
-    STORE S1, SB, SC
 ; Spill t402 to slot 366
     ADD SC, FP, R0
     ADDI SC, SC, 505
     STORE T4, SB, SC
     LOAD T4, SB, T3
     STORE T4, SB, S1
-    ADDI T2, T0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t415 to Stack
 ; Spill t405 to slot 367
     ADD SC, FP, R0
     ADDI SC, SC, 506
     STORE T2, SB, SC
+    ADDI T2, T0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t415 to Stack
+; Spill t407 to slot 368
+    ADD SC, FP, R0
+    ADDI SC, SC, 507
+    STORE S0, SB, SC
     ADDI S0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t416 to Stack
@@ -22003,10 +22147,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(415), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op399_t417 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t407 to slot 368
-    ADD SC, FP, R0
-    ADDI SC, SC, 507
-    STORE S0, SB, SC
 ; Spill t406 to slot 369
     ADD SC, FP, R0
     ADDI SC, SC, 508
@@ -22060,6 +22200,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 519
     STORE RV0, SB, SC
+; Set SP = FP+520 so callee frame is above spills
+    ADDI SP, FP, 520
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T6, R0
@@ -22113,6 +22255,10 @@ L_q_cos_175:
     ADDI T7, T5, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t430 to Stack
+; Spill t420 to slot 381
+    ADD SC, FP, R0
+    ADDI SC, SC, 520
+    STORE S2, SB, SC
     ADDI S2, S3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t431 to Stack
@@ -22120,10 +22266,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(430), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op413_t432 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t420 to slot 381
-    ADD SC, FP, R0
-    ADDI SC, SC, 520
-    STORE S2, SB, SC
 ; Spill t422 to slot 382
     ADD SC, FP, R0
     ADDI SC, SC, 521
@@ -22188,6 +22330,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 534
     STORE S1, SB, SC
+; Set SP = FP+535 so callee frame is above spills
+    ADDI SP, FP, 535
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -22242,6 +22386,10 @@ L_q_cos_175:
     ADDI S1, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t444 to Stack
+; Spill t435 to slot 396
+    ADD SC, FP, R0
+    ADDI SC, SC, 535
+    STORE T0, SB, SC
     ADDI T0, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t445 to Stack
@@ -22249,10 +22397,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(444), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op427_t446 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t435 to slot 396
-    ADD SC, FP, R0
-    ADDI SC, SC, 535
-    STORE T0, SB, SC
 ; Spill t437 to slot 397
     ADD SC, FP, R0
     ADDI SC, SC, 536
@@ -22265,13 +22409,17 @@ L_q_cos_175:
     STORE S0, SB, SC
     ADD S0, FP, R0
     ADDI S0, S0, 119
-    ADD RV0, S2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t448 to Stack
 ; Spill t433 to slot 399
     ADD SC, FP, R0
     ADDI SC, SC, 538
     STORE RV0, SB, SC
+    ADD RV0, S2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t448 to Stack
+; Spill t438 to slot 400
+    ADD SC, FP, R0
+    ADDI SC, SC, 539
+    STORE T6, SB, SC
     ADD T6, S0, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t449 to Stack
@@ -22279,23 +22427,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(448), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op430_t450 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t438 to slot 400
-    ADD SC, FP, R0
-    ADDI SC, SC, 539
-    STORE T6, SB, SC
 ; Spill t440 to slot 401
     ADD SC, FP, R0
     ADDI SC, SC, 540
     STORE T7, SB, SC
     LOAD T7, SB, RV0
     STORE T7, SB, T6
-    ADDI T5, S2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t451 to Stack
 ; Spill t439 to slot 402
     ADD SC, FP, R0
     ADDI SC, SC, 541
     STORE T5, SB, SC
+    ADDI T5, S2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t451 to Stack
+; Spill t441 to slot 403
+    ADD SC, FP, R0
+    ADDI SC, SC, 542
+    STORE T4, SB, SC
     ADDI T4, S0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t452 to Stack
@@ -22303,10 +22451,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(451), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op433_t453 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t441 to slot 403
-    ADD SC, FP, R0
-    ADDI SC, SC, 542
-    STORE T4, SB, SC
 ; Spill t443 to slot 404
     ADD SC, FP, R0
     ADDI SC, SC, 543
@@ -22322,13 +22466,17 @@ L_q_cos_175:
 ; Recompute alloca t195 at FP+49
     ADD T2, FP, R0
     ADDI T2, T2, 49
-    ADD S1, T2, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t455 to Stack
 ; Spill t444 to slot 406
     ADD SC, FP, R0
     ADDI SC, SC, 545
     STORE S1, SB, SC
+    ADD S1, T2, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t455 to Stack
+; Spill t446 to slot 407
+    ADD SC, FP, R0
+    ADDI SC, SC, 546
+    STORE T1, SB, SC
     ADD T1, T3, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t456 to Stack
@@ -22336,23 +22484,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(455), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op436_t457 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t446 to slot 407
-    ADD SC, FP, R0
-    ADDI SC, SC, 546
-    STORE T1, SB, SC
 ; Spill t445 to slot 408
     ADD SC, FP, R0
     ADDI SC, SC, 547
     STORE T0, SB, SC
     LOAD T0, SB, S1
     STORE T0, SB, T1
-    ADDI RV0, T2, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t458 to Stack
 ; Spill t448 to slot 409
     ADD SC, FP, R0
     ADDI SC, SC, 548
     STORE RV0, SB, SC
+    ADDI RV0, T2, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t458 to Stack
+; Spill t450 to slot 410
+    ADD SC, FP, R0
+    ADDI SC, SC, 549
+    STORE T7, SB, SC
     ADDI T7, T3, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t459 to Stack
@@ -22360,10 +22508,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(458), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op439_t460 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t450 to slot 410
-    ADD SC, FP, R0
-    ADDI SC, SC, 549
-    STORE T7, SB, SC
 ; Spill t449 to slot 411
     ADD SC, FP, R0
     ADDI SC, SC, 550
@@ -22375,13 +22519,17 @@ L_q_cos_175:
 ; Recompute alloca t304 at FP+81
     ADD S0, FP, R0
     ADDI S0, S0, 81
-    ADD T5, S0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t462 to Stack
 ; Spill t451 to slot 412
     ADD SC, FP, R0
     ADDI SC, SC, 551
     STORE T5, SB, SC
+    ADD T5, S0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t462 to Stack
+; Spill t453 to slot 413
+    ADD SC, FP, R0
+    ADDI SC, SC, 552
+    STORE S3, SB, SC
     ADD S3, S2, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t463 to Stack
@@ -22389,23 +22537,23 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(462), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op442_t464 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t453 to slot 413
-    ADD SC, FP, R0
-    ADDI SC, SC, 552
-    STORE S3, SB, SC
 ; Spill t452 to slot 414
     ADD SC, FP, R0
     ADDI SC, SC, 553
     STORE T4, SB, SC
     LOAD T4, SB, T5
     STORE T4, SB, S3
-    ADDI S1, S0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t465 to Stack
 ; Spill t455 to slot 415
     ADD SC, FP, R0
     ADDI SC, SC, 554
     STORE S1, SB, SC
+    ADDI S1, S0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t465 to Stack
+; Spill t457 to slot 416
+    ADD SC, FP, R0
+    ADDI SC, SC, 555
+    STORE T0, SB, SC
     ADDI T0, S2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t466 to Stack
@@ -22413,10 +22561,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(465), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op445_t467 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t457 to slot 416
-    ADD SC, FP, R0
-    ADDI SC, SC, 555
-    STORE T0, SB, SC
 ; Spill t456 to slot 417
     ADD SC, FP, R0
     ADDI SC, SC, 556
@@ -22470,6 +22614,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 567
     STORE RV0, SB, SC
+; Set SP = FP+568 so callee frame is above spills
+    ADDI SP, FP, 568
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T3, R0
@@ -22523,6 +22669,10 @@ L_q_cos_175:
     ADDI S2, T6, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t480 to Stack
+; Spill t470 to slot 429
+    ADD SC, FP, R0
+    ADDI SC, SC, 568
+    STORE T7, SB, SC
     ADDI T7, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t481 to Stack
@@ -22530,10 +22680,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(480), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op459_t482 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t470 to slot 429
-    ADD SC, FP, R0
-    ADDI SC, SC, 568
-    STORE T7, SB, SC
 ; Spill t472 to slot 430
     ADD SC, FP, R0
     ADDI SC, SC, 569
@@ -22598,6 +22744,8 @@ L_q_cos_175:
     ADD SC, FP, R0
     ADDI SC, SC, 582
     STORE S3, SB, SC
+; Set SP = FP+583 so callee frame is above spills
+    ADDI SP, FP, 583
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T5, R0
@@ -22652,6 +22800,10 @@ L_q_cos_175:
     ADDI S3, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t494 to Stack
+; Spill t485 to slot 444
+    ADD SC, FP, R0
+    ADDI SC, SC, 583
+    STORE S0, SB, SC
     ADDI S0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t495 to Stack
@@ -22659,10 +22811,6 @@ L_q_cos_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(494), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f56_op473_t496 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t485 to slot 444
-    ADD SC, FP, R0
-    ADDI SC, SC, 583
-    STORE S0, SB, SC
 ; Spill t487 to slot 445
     ADD SC, FP, R0
     ADDI SC, SC, 584
@@ -22735,17 +22883,17 @@ L_q_tan_176:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f58_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_a219279c_use_global
+    BEQ S2, T5, L_bc_66c58e69_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_a219279c_use_stack
+    BEQ S2, T4, L_bc_66c58e69_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_a219279c_done
-L_bc_a219279c_use_global:
+    BEQ R0, R0, L_bc_66c58e69_done
+L_bc_66c58e69_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_a219279c_done
-L_bc_a219279c_use_stack:
+    BEQ R0, R0, L_bc_66c58e69_done
+L_bc_66c58e69_use_stack:
     ADD T6, SB, R0
-L_bc_a219279c_done:
+L_bc_66c58e69_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -22759,25 +22907,22 @@ L_bc_a219279c_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f58_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_1dee3716_use_global
+    BEQ S2, T5, L_bc_ed8f1675_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_1dee3716_use_stack
+    BEQ S2, T4, L_bc_ed8f1675_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_1dee3716_done
-L_bc_1dee3716_use_global:
+    BEQ R0, R0, L_bc_ed8f1675_done
+L_bc_ed8f1675_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_1dee3716_done
-L_bc_1dee3716_use_stack:
+    BEQ R0, R0, L_bc_ed8f1675_done
+L_bc_ed8f1675_use_stack:
     ADD T0, SB, R0
-L_bc_1dee3716_done:
+L_bc_ed8f1675_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
     ADD T4, FP, R0
     ADDI T4, T4, 2
-    ADD S0, S1, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t9 to Stack
 ; Spill t2 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -22786,6 +22931,13 @@ L_bc_1dee3716_done:
     ADD SC, FP, R0
     ADDI SC, SC, 25
     STORE S2, SB, SC
+    ADD S0, S1, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t9 to Stack
+; Spill load_f58_op4_t4_resolved_bank_58_f58_op5 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 26
+    STORE T6, SB, SC
     ADD T6, T4, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t10 to Stack
@@ -22793,30 +22945,19 @@ L_bc_1dee3716_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f58_op14_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f58_op4_t4_resolved_bank_58_f58_op5 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 26
-    STORE T6, SB, SC
 ; Spill t4 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T3, SB, SC
     LOAD T3, SB, S0
     STORE T3, SB, T6
-    ADDI T7, S1, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t12 to Stack
 ; Spill t3 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 28
     STORE T7, SB, SC
-    ADDI S3, T4, 1
+    ADDI T7, S1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t13 to Stack
-; Load instruction: t14 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
-; LOAD: Pointer load_src_ptr_f58_op17_t14 has bank info: Stack
-; LOAD: Using bank register Sb for load
+; GEP: Setting bank info for t12 to Stack
 ; Spill t0 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 29
@@ -22825,6 +22966,13 @@ L_bc_1dee3716_done:
     ADD SC, FP, R0
     ADDI SC, SC, 30
     STORE S2, SB, SC
+    ADDI S3, T4, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t13 to Stack
+; Load instruction: t14 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
+; LOAD: Pointer load_src_ptr_f58_op17_t14 has bank info: Stack
+; LOAD: Using bank register Sb for load
 ; Spill t5 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 31
@@ -22881,6 +23029,8 @@ L_bc_1dee3716_done:
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE S2, SB, SC
+; Set SP = FP+44 so callee frame is above spills
+    ADDI SP, FP, 44
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T4, R0
@@ -22931,6 +23081,10 @@ L_bc_1dee3716_done:
     ADDI S2, T0, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t27 to Stack
+; Spill t17 to slot 20
+    ADD SC, FP, R0
+    ADDI SC, SC, 44
+    STORE T5, SB, SC
     ADDI T5, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t28 to Stack
@@ -22938,10 +23092,6 @@ L_bc_1dee3716_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(27), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f58_op30_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t17 to slot 20
-    ADD SC, FP, R0
-    ADDI SC, SC, 44
-    STORE T5, SB, SC
 ; Spill t19 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 45
@@ -22960,13 +23110,17 @@ L_bc_1dee3716_done:
     STORE RV0, SB, SC
 ; Recompute alloca t1 at FP+0
     ADD RV0, FP, R0
-    ADD T3, RV0, R0
-; WARNING: Static bank overflow - offset 0 crosses 0 banks
-; GEP: Setting bank info for t31 to Stack
 ; Spill t20 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 48
     STORE T3, SB, SC
+    ADD T3, RV0, R0
+; WARNING: Static bank overflow - offset 0 crosses 0 banks
+; GEP: Setting bank info for t31 to Stack
+; Spill t22 to slot 25
+    ADD SC, FP, R0
+    ADDI SC, SC, 49
+    STORE S1, SB, SC
     ADD S1, T1, R0
 ; WARNING: Static bank overflow - offset 0 crosses 0 banks
 ; GEP: Setting bank info for t32 to Stack
@@ -22974,23 +23128,23 @@ L_bc_1dee3716_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(31), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f58_op33_t33 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t22 to slot 25
-    ADD SC, FP, R0
-    ADDI SC, SC, 49
-    STORE S1, SB, SC
 ; Spill t21 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 50
     STORE T6, SB, SC
     LOAD T6, SB, T3
     STORE T6, SB, S1
-    ADDI T2, RV0, 1
-; WARNING: Static bank overflow - offset 1 crosses 0 banks
-; GEP: Setting bank info for t34 to Stack
 ; Spill t24 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 51
     STORE T2, SB, SC
+    ADDI T2, RV0, 1
+; WARNING: Static bank overflow - offset 1 crosses 0 banks
+; GEP: Setting bank info for t34 to Stack
+; Spill t26 to slot 28
+    ADD SC, FP, R0
+    ADDI SC, SC, 52
+    STORE T4, SB, SC
     ADDI T4, T1, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t35 to Stack
@@ -22998,10 +23152,6 @@ L_bc_1dee3716_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(34), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f58_op36_t36 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t26 to slot 28
-    ADD SC, FP, R0
-    ADDI SC, SC, 52
-    STORE T4, SB, SC
 ; Spill t25 to slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 53
@@ -23050,6 +23200,8 @@ L_bc_1dee3716_done:
     ADD SC, FP, R0
     ADDI SC, SC, 63
     STORE T0, SB, SC
+; Set SP = FP+64 so callee frame is above spills
+    ADDI SP, FP, 64
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, T1, R0
@@ -23100,6 +23252,10 @@ L_bc_1dee3716_done:
     ADDI T0, T7, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t49 to Stack
+; Spill t39 to slot 40
+    ADD SC, FP, R0
+    ADDI SC, SC, 64
+    STORE S2, SB, SC
     ADDI S2, T2, 1
 ; WARNING: Static bank overflow - offset 1 crosses 0 banks
 ; GEP: Setting bank info for t50 to Stack
@@ -23107,10 +23263,6 @@ L_bc_1dee3716_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(49), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f58_op49_t51 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t39 to slot 40
-    ADD SC, FP, R0
-    ADDI SC, SC, 64
-    STORE S2, SB, SC
 ; Spill t41 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 65
@@ -23175,6 +23327,8 @@ L_bc_1dee3716_done:
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE T3, SB, SC
+; Set SP = FP+79 so callee frame is above spills
+    ADDI SP, FP, 79
 ; Setting up 2 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S0, R0

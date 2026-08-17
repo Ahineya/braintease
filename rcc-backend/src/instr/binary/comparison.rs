@@ -21,33 +21,37 @@ pub(super) fn generate_comparison_instructions(
 ) -> Vec<AsmInst> {
     let mut insts = vec![];
     
+    mgr.pin_register(lhs_reg);
+    mgr.pin_register(rhs_reg);
+    mgr.pin_register(result_reg);
+
     match op {
         IrBinaryOp::Eq => {
             // a == b: !(a ^ b) = (a ^ b) == 0
             let xor_reg = mgr.get_register(naming.xor_temp(result_temp));
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(xor_reg);
             insts.push(AsmInst::Xor(xor_reg, lhs_reg, rhs_reg));
-            // result = (xor_result == 0) = !(xor_result != 0) = !slt(0, xor_result) & !slt(xor_result, 0)
-            // Simpler: result = (xor_result == 0) ? 1 : 0
-            // We'll use SLTU with 1 to check if value is 0
+            // result = (xor_result == 0) ? 1 : 0
             let one_reg = mgr.get_register(naming.const_one(result_temp));
             insts.extend(mgr.take_instructions());
             insts.push(AsmInst::Li(one_reg, 1));
             insts.push(AsmInst::Sltu(result_reg, xor_reg, one_reg)); // result = (xor < 1) = (xor == 0)
+            mgr.unpin_register(xor_reg);
             mgr.free_register(xor_reg);
             mgr.free_register(one_reg);
         }
         IrBinaryOp::Ne => {
-            // a != b: !!(a ^ b) = (a ^ b) != 0
+            // a != b: (a ^ b) != 0
             let xor_reg = mgr.get_register(naming.xor_temp(result_temp));
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(xor_reg);
             insts.push(AsmInst::Xor(xor_reg, lhs_reg, rhs_reg));
-            // result = (xor_result != 0) ? 1 : 0
-            // We can use SLTU(0, xor_result) or SLT(0, xor_result)
             let zero_reg = mgr.get_register(naming.const_zero(result_temp));
             insts.extend(mgr.take_instructions());
             insts.push(AsmInst::Li(zero_reg, 0));
             insts.push(AsmInst::Sltu(result_reg, zero_reg, xor_reg)); // result = (0 < xor) = (xor != 0)
+            mgr.unpin_register(xor_reg);
             mgr.free_register(xor_reg);
             mgr.free_register(zero_reg);
         }
@@ -59,12 +63,13 @@ pub(super) fn generate_comparison_instructions(
             // a <= b: !(b < a) = !slt(b, a)
             let temp_reg = mgr.get_register(naming.sle_temp(result_temp));
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(temp_reg);
             insts.push(AsmInst::Slt(temp_reg, rhs_reg, lhs_reg)); // temp = (b < a)
-            // result = !temp = 1 - temp (since temp is 0 or 1)
             let one_reg = mgr.get_register(naming.const_one(result_temp));
             insts.extend(mgr.take_instructions());
             insts.push(AsmInst::Li(one_reg, 1));
             insts.push(AsmInst::Sub(result_reg, one_reg, temp_reg));
+            mgr.unpin_register(temp_reg);
             mgr.free_register(temp_reg);
             mgr.free_register(one_reg);
         }
@@ -76,12 +81,13 @@ pub(super) fn generate_comparison_instructions(
             // a >= b: !(a < b) = !slt(a, b)
             let temp_reg = mgr.get_register(naming.sge_temp(result_temp));
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(temp_reg);
             insts.push(AsmInst::Slt(temp_reg, lhs_reg, rhs_reg)); // temp = (a < b)
-            // result = !temp = 1 - temp
             let one_reg = mgr.get_register(naming.const_one(result_temp));
             insts.extend(mgr.take_instructions());
             insts.push(AsmInst::Li(one_reg, 1));
             insts.push(AsmInst::Sub(result_reg, one_reg, temp_reg));
+            mgr.unpin_register(temp_reg);
             mgr.free_register(temp_reg);
             mgr.free_register(one_reg);
         }
@@ -93,12 +99,13 @@ pub(super) fn generate_comparison_instructions(
             // a <= b (unsigned): !(b < a) = !sltu(b, a)
             let temp_reg = mgr.get_register(naming.ule_temp(result_temp));
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(temp_reg);
             insts.push(AsmInst::Sltu(temp_reg, rhs_reg, lhs_reg)); // temp = (b < a)
-            // result = !temp = 1 - temp
             let one_reg = mgr.get_register(naming.const_one(result_temp));
             insts.extend(mgr.take_instructions());
             insts.push(AsmInst::Li(one_reg, 1));
             insts.push(AsmInst::Sub(result_reg, one_reg, temp_reg));
+            mgr.unpin_register(temp_reg);
             mgr.free_register(temp_reg);
             mgr.free_register(one_reg);
         }
@@ -110,17 +117,22 @@ pub(super) fn generate_comparison_instructions(
             // a >= b (unsigned): !(a < b) = !sltu(a, b)
             let temp_reg = mgr.get_register(naming.uge_temp(result_temp));
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(temp_reg);
             insts.push(AsmInst::Sltu(temp_reg, lhs_reg, rhs_reg)); // temp = (a < b)
-            // result = !temp = 1 - temp
             let one_reg = mgr.get_register(naming.const_one(result_temp));
             insts.extend(mgr.take_instructions());
             insts.push(AsmInst::Li(one_reg, 1));
             insts.push(AsmInst::Sub(result_reg, one_reg, temp_reg));
+            mgr.unpin_register(temp_reg);
             mgr.free_register(temp_reg);
             mgr.free_register(one_reg);
         }
         _ => panic!("Not a comparison operation: {op:?}"),
     }
+
+    mgr.unpin_register(lhs_reg);
+    mgr.unpin_register(rhs_reg);
+    mgr.unpin_register(result_reg);
     
     insts
 }

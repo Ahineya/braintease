@@ -36,7 +36,7 @@ pub fn generate_function_call(
     for arg in arguments {
         let val = gen.generate(arg)?;
         let arg_type = arg.get_type();
-        if matches!(arg_type, Type::Struct { .. } | Type::Union { .. }) {
+        if arg_type.is_aggregate() {
             // Materialize into a dedicated object. Passing a GEP into a larger
             // aggregate (e.g. q_add(p.x, p.vx)) hangs in the backend.
             let ir_type = convert_type_default(&arg_type)?;
@@ -66,7 +66,7 @@ pub fn generate_function_call(
                     addr: Box::new(Value::Temp(temp_id)),
                     bank: BankTag::Mixed,
                 }))
-            } else if matches!(return_type, Type::Struct { .. } | Type::Union { .. }) {
+            } else if return_type.is_aggregate() {
                 // Callee returns a pointer into its own frame. Copy into a
                 // caller-owned temporary before that frame is reused
                 // (nested calls like q_add(a, q_mul(b, c)) would otherwise

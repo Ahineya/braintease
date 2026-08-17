@@ -51,17 +51,17 @@ L_puts_1:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("load_f0_op8_t2_bank_val")
     LI T3, -1
-    BEQ T5, T3, L_bc_f541bc79_use_global
+    BEQ T5, T3, L_bc_d4e300cc_use_global
     LI T2, -2
-    BEQ T5, T2, L_bc_f541bc79_use_stack
+    BEQ T5, T2, L_bc_d4e300cc_use_stack
     ADD T4, T5, R0
-    BEQ R0, R0, L_bc_f541bc79_done
-L_bc_f541bc79_use_global:
+    BEQ R0, R0, L_bc_d4e300cc_done
+L_bc_d4e300cc_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_f541bc79_done
-L_bc_f541bc79_use_stack:
+    BEQ R0, R0, L_bc_d4e300cc_done
+L_bc_d4e300cc_use_stack:
     ADD T4, SB, R0
-L_bc_f541bc79_done:
+L_bc_d4e300cc_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T7
     BEQ T1, R0, L_puts_3
@@ -84,17 +84,17 @@ L_puts_2:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Mixed })
 ; LOAD: Pointer t4 has bank info: Dynamic("load_f0_op16_t4_bank_val")
     LI T1, -1
-    BEQ T3, T1, L_bc_38780b7b_use_global
+    BEQ T3, T1, L_bc_25464813_use_global
     LI S0, -2
-    BEQ T3, S0, L_bc_38780b7b_use_stack
+    BEQ T3, S0, L_bc_25464813_use_stack
     ADD T2, T3, R0
-    BEQ R0, R0, L_bc_38780b7b_done
-L_bc_38780b7b_use_global:
+    BEQ R0, R0, L_bc_25464813_done
+L_bc_25464813_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_38780b7b_done
-L_bc_38780b7b_use_stack:
+    BEQ R0, R0, L_bc_25464813_done
+L_bc_25464813_use_stack:
     ADD T2, SB, R0
-L_bc_38780b7b_done:
+L_bc_25464813_done:
 ; LOAD: Using bank register T2 for load
     LOAD T6, T2, S1
 ; Spill live registers before call
@@ -146,6 +146,8 @@ L_bc_38780b7b_done:
     ADD SC, FP, R0
     ADDI SC, SC, 21
     STORE T6, SB, SC
+; Set SP = FP+30 so callee frame is above spills
+    ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T6, R0
@@ -199,6 +201,8 @@ L_puts_3:
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T5, SB, SC
+; Set SP = FP+30 so callee frame is above spills
+    ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T5, R0

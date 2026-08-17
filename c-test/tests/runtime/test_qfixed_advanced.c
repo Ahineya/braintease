@@ -58,17 +58,9 @@ int main() {
     
     // Simulate 10 timesteps
     for (int i = 0; i < 10; i++) {
-        q16_16_t gdt = q_mul(gravity, dt);
-        q16_16_t vy = p.vy;
-        p.vy = q_add(vy, gdt);
-
-        q16_16_t vx = p.vx;
-        q16_16_t x = p.x;
-        p.x = q_add(x, q_mul(vx, dt));
-
-        vy = p.vy;
-        q16_16_t y = p.y;
-        p.y = q_add(y, q_mul(vy, dt));
+        p.vy = q_add(p.vy, q_mul(gravity, dt));
+        p.x = q_add(p.x, q_mul(p.vx, dt));
+        p.y = q_add(p.y, q_mul(p.vy, dt));
     }
     
     // Check if particle has moved right and fallen
@@ -90,8 +82,9 @@ int main() {
     
     vec2_t normalized = vec2_normalize(v);
     q16_16_t norm_mag = vec2_magnitude(normalized);  // Should be ~1
-    
-    if (norm_mag.integer == 1 && norm_mag.frac < 0x1000) {
+    q16_16_t norm_err = q_abs(q_sub(norm_mag, Q16_16_ONE));
+
+    if (norm_err.integer == 0 && norm_err.frac < 0x1000) {
         putchar('Y');  // Normalization works
     } else {
         putchar('N');

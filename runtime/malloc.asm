@@ -167,17 +167,17 @@ L_make_fat_ptr_4:
     LOAD S2, SB, S3
 ; Bank value in S2 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ S2, S1, L_bc_f956eff3_use_global
+    BEQ S2, S1, L_bc_97e87ab1_use_global
     LI T6, -2
-    BEQ S2, T6, L_bc_f956eff3_use_stack
+    BEQ S2, T6, L_bc_97e87ab1_use_stack
     ADD T7, S2, R0
-    BEQ R0, R0, L_bc_f956eff3_done
-L_bc_f956eff3_use_global:
+    BEQ R0, R0, L_bc_97e87ab1_done
+L_bc_97e87ab1_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_f956eff3_done
-L_bc_f956eff3_use_stack:
+    BEQ R0, R0, L_bc_97e87ab1_done
+L_bc_97e87ab1_use_stack:
     ADD T7, SB, R0
-L_bc_f956eff3_done:
+L_bc_97e87ab1_done:
     MOVE RV0, T0
     MOVE RV1, T7
 ; Jump to epilogue
@@ -238,6 +238,8 @@ L_malloc_5:
     ADD SC, FP, R0
     ADDI SC, SC, 11
     STORE S3, SB, SC
+; Set SP = FP+31 so callee frame is above spills
+    ADDI SP, FP, 31
 ; Call function init_heap
     CALL init_heap
 ; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
@@ -468,6 +470,8 @@ L_malloc_14:
     ADD SC, FP, R0
     ADDI SC, SC, 28
     STORE T1, SB, SC
+; Set SP = FP+31 so callee frame is above spills
+    ADDI SP, FP, 31
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T3, R0
@@ -696,6 +700,8 @@ L_calloc_22:
     ADD SC, FP, R0
     ADDI SC, SC, 20
     STORE T3, SB, SC
+; Set SP = FP+36 so callee frame is above spills
+    ADDI SP, FP, 36
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T3, R0
@@ -838,17 +844,17 @@ L_calloc_27:
 ; GEP: Setting bank info for t35 to Dynamic("gep_new_bank_f8_op60_t35")
     LI S3, 0
     LI S0, -1
-    BEQ T2, S0, L_bc_edb31902_use_global
+    BEQ T2, S0, L_bc_f18a6557_use_global
     LI T3, -2
-    BEQ T2, T3, L_bc_edb31902_use_stack
+    BEQ T2, T3, L_bc_f18a6557_use_stack
     ADD RV0, T2, R0
-    BEQ R0, R0, L_bc_edb31902_done
-L_bc_edb31902_use_global:
+    BEQ R0, R0, L_bc_f18a6557_done
+L_bc_f18a6557_use_global:
     ADD RV0, GP, R0
-    BEQ R0, R0, L_bc_edb31902_done
-L_bc_edb31902_use_stack:
+    BEQ R0, R0, L_bc_f18a6557_done
+L_bc_f18a6557_use_stack:
     ADD RV0, SB, R0
-L_bc_edb31902_done:
+L_bc_f18a6557_done:
     STORE S3, RV0, S1
     BEQ R0, R0, L_calloc_28
 ; Unconditional branch to L_calloc_28
@@ -899,7 +905,7 @@ L_calloc_25:
     ADDI SC, SC, 26
     STORE S2, SB, SC
     LI S2, -1
-    BEQ T4, S2, L_bc_71ff50ed_use_global
+    BEQ T4, S2, L_bc_30660efd_use_global
 ; Spill t33 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 27
@@ -909,15 +915,15 @@ L_calloc_25:
     ADDI SC, SC, 28
     STORE T0, SB, SC
     LI T6, -2
-    BEQ T4, T6, L_bc_71ff50ed_use_stack
+    BEQ T4, T6, L_bc_30660efd_use_stack
     ADD S0, T4, R0
-    BEQ R0, R0, L_bc_71ff50ed_done
-L_bc_71ff50ed_use_global:
+    BEQ R0, R0, L_bc_30660efd_done
+L_bc_30660efd_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_71ff50ed_done
-L_bc_71ff50ed_use_stack:
+    BEQ R0, R0, L_bc_30660efd_done
+L_bc_30660efd_use_stack:
     ADD S0, SB, R0
-L_bc_71ff50ed_done:
+L_bc_30660efd_done:
     MOVE RV0, T5
     MOVE RV1, S0
 ; Jump to epilogue
@@ -1035,6 +1041,8 @@ L_realloc_31:
     ADD SC, FP, R0
     ADDI SC, SC, 16
     STORE T5, SB, SC
+; Set SP = FP+31 so callee frame is above spills
+    ADDI SP, FP, 31
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T5, R0

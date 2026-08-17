@@ -145,6 +145,16 @@ impl CallingConvention {
             trace!("  Generated {} spill instructions", spill_insts.len());
             insts.extend(spill_insts);
         }
+
+        // Spills are FP-relative. Raise SP to at least the prologue frame
+        // (locals + reserved spill slots) and grow further if we used more
+        // spill slots, so the callee cannot overlap live spills.
+        let reserved = pressure_manager.local_count() + 20;
+        let frame_top = pressure_manager.frame_high_water().max(reserved);
+        insts.push(AsmInst::Comment(format!(
+            "Set SP = FP+{frame_top} so callee frame is above spills"
+        )));
+        insts.push(AsmInst::AddI(Reg::Sp, Reg::Fp, frame_top));
         
         // Use common logic to determine placement
         let (register_arg_slots, _first_stack_arg) = self.analyze_arg_placement(&args);

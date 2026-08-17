@@ -1,0 +1,6 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "Pass two nested struct fields from the same parent as by-value args",
+  "timeout_secs": 10
+}

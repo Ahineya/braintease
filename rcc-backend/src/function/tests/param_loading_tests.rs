@@ -219,12 +219,15 @@ fn test_single_fat_pointer() {
         (0, IrType::FatPtr(Box::new(IrType::I16))), // A0-A1
     ];
     
-    // Should use A0 for address and A1 for bank
+    // Address is copied from A0. Bank is copied *out of* A1 into an
+    // allocatable register so later allocation cannot clobber the tag.
     let (insts, _addr_reg, bank_reg) = cc.load_param(0, &param_types, &mut pm, &mut naming);
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(_, Reg::A0, Reg::R0))),
-            "Fat pointer address should be in A0");
+            "Fat pointer address should be copied from A0");
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(_, Reg::A1, Reg::R0))),
+            "Fat pointer bank should be copied from A1");
     assert!(bank_reg.is_some(), "Fat pointer should have a bank register");
-    assert_eq!(bank_reg, Some(Reg::A1), "Fat pointer bank should be in A1");
+    assert_ne!(bank_reg, Some(Reg::A1), "Fat pointer bank must not remain in A1");
 }
 
 #[test]

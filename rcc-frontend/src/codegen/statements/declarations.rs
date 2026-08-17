@@ -36,14 +36,17 @@ pub fn generate_declaration(
         }
     };
     
-    // Track the variable
-    // For arrays, the allocated type is a pointer to the element type
-    let tracked_type = match &ir_type {
-        IrType::Array { element_type, .. } => {
-            // Arrays decay to pointers to their element type
-            IrType::FatPtr(element_type.clone())
+    // Track the variable.
+    // C arrays decay to pointers. Unions also lower to IrType::Array (largest
+    // field, in words) but they are objects: loading them as i16* interprets
+    // the first stored word as an address (e.g. 'A' = 65).
+    let tracked_type = if matches!(completed_type, Type::Array { .. }) {
+        match &ir_type {
+            IrType::Array { element_type, .. } => IrType::FatPtr(element_type.clone()),
+            _ => ir_type.clone(),
         }
-        _ => ir_type.clone()
+    } else {
+        ir_type.clone()
     };
     
     let var_info = VarInfo {

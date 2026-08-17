@@ -85,7 +85,7 @@ pub fn store_initializer(
             }
             Ok(())
         }
-        (Type::Struct { .. }, _) => {
+        (ty, _) if ty.is_aggregate() => {
             let src = gen.generate(init)?;
             copy_struct(gen, src, dest, dest_type)
         }

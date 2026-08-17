@@ -56,6 +56,8 @@ srand:
     ADD SC, FP, R0
     ADDI SC, SC, 12
     STORE T6, SB, SC
+; Set SP = FP+30 so callee frame is above spills
+    ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T6, R0
@@ -137,6 +139,8 @@ L_rand_2:
     ADD SC, FP, R0
     ADDI SC, SC, 10
     STORE T6, SB, SC
+; Set SP = FP+29 so callee frame is above spills
+    ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
     ADD A0, T6, R0
@@ -147,6 +151,8 @@ L_rand_2:
 L_rand_4:
     ADD T5, FP, R0
 ; Spill live registers before call
+; Set SP = FP+29 so callee frame is above spills
+    ADDI SP, FP, 29
 ; Call function rng_get
     CALL rng_get
 ; Scalar return value for t3

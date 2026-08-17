@@ -1,7 +1,6 @@
 {
   "expected": "YYYYYYYY\n",
   "use_runtime": true,
-  "description": "Advanced Q16.16 tests with physics and vector operations. Skipped: nested struct field pointers as call arguments still miscompile or hang.",
-  "skipped": true,
+  "description": "Advanced Q16.16 tests with physics and vector operations",
   "timeout_secs": 30
 }

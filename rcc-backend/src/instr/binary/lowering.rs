@@ -62,31 +62,34 @@ pub fn lower_binary_op(
         trace!("  Swapping operands for better register usage (commutative op)");
     }
     
-    // Step 3: Get registers for operands
+    // Step 3: Get registers for operands. Pin the first so evaluating the
+    // second cannot spill and reuse it.
     let (lhs_reg, rhs_reg) = if should_swap {
-        // For commutative ops, evaluate higher-need operand first
         let rhs_reg = get_value_register(mgr, naming, rhs);
         insts.extend(mgr.take_instructions());
         trace!("  RHS operand in {rhs_reg:?} (evaluated first due to higher need)");
-        
+        mgr.pin_register(rhs_reg);
+
         let lhs_reg = get_value_register(mgr, naming, lhs);
         insts.extend(mgr.take_instructions());
         trace!("  LHS operand in {lhs_reg:?}");
-        
+        mgr.pin_register(lhs_reg);
+
         (lhs_reg, rhs_reg)
     } else {
-        // Standard order: evaluate left then right
         let lhs_reg = get_value_register(mgr, naming, lhs);
         insts.extend(mgr.take_instructions());
         trace!("  LHS operand in {lhs_reg:?}");
-        
+        mgr.pin_register(lhs_reg);
+
         let rhs_reg = get_value_register(mgr, naming, rhs);
         insts.extend(mgr.take_instructions());
         trace!("  RHS operand in {rhs_reg:?}");
-        
+        mgr.pin_register(rhs_reg);
+
         (lhs_reg, rhs_reg)
     };
-    
+
     // Step 4: Allocate result register
     // Optimization: Try to reuse first register if possible
     let result_reg = if can_reuse_register(op) && lhs_reg != rhs_reg {
@@ -98,6 +101,7 @@ pub fn lower_binary_op(
         trace!("  Allocated new register {reg:?} for result");
         reg
     };
+    mgr.pin_register(result_reg);
     
     // Step 5: Generate the appropriate instruction(s)
     if is_comparison(op) {
@@ -110,6 +114,10 @@ pub fn lower_binary_op(
         // Ensure the result is properly bound to the result temp
         // This is critical so future references to this temp get the right register
         mgr.bind_value_to_register(result_name.clone(), result_reg);
+
+        mgr.unpin_register(lhs_reg);
+        mgr.unpin_register(rhs_reg);
+        mgr.unpin_register(result_reg);
         
         // Free only the operand registers that aren't being used for the result
         if result_reg != lhs_reg {
@@ -135,6 +143,10 @@ pub fn lower_binary_op(
     
     // Ensure the result is properly bound to the result temp
     mgr.bind_value_to_register(result_name, result_reg);
+
+    mgr.unpin_register(lhs_reg);
+    mgr.unpin_register(rhs_reg);
+    mgr.unpin_register(result_reg);
     
     // Step 6: Free registers that are no longer needed
     if result_reg != lhs_reg {
@@ -172,6 +184,7 @@ pub fn lower_binary_op_immediate(
     // Get register for left operand
     let lhs_reg = get_value_register(mgr, naming, lhs);
     insts.extend(mgr.take_instructions());
+    mgr.pin_register(lhs_reg);
     
     // Allocate result register (can often reuse lhs)
     let result_reg = mgr.get_register(result_name);
@@ -262,6 +275,7 @@ pub fn lower_binary_op_immediate(
         IrBinaryOp::Slt | IrBinaryOp::Sle | IrBinaryOp::Sgt | IrBinaryOp::Sge |
         IrBinaryOp::Ult | IrBinaryOp::Ule | IrBinaryOp::Ugt | IrBinaryOp::Uge => {
             debug!("  Comparison with immediate - using general binary op handler");
+            mgr.unpin_register(lhs_reg);
             // Free the registers we've allocated since lower_binary_op will reallocate
             mgr.free_register(lhs_reg);
             mgr.free_register(result_reg);
@@ -270,6 +284,8 @@ pub fn lower_binary_op_immediate(
             return lower_binary_op(mgr, naming, op, lhs, &rhs_val, result_temp);
         }
     }
+
+    mgr.unpin_register(lhs_reg);
     
     // Free lhs register if not reused
     if result_reg != lhs_reg {

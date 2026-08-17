@@ -24,10 +24,9 @@ pub fn generate_unary_operation(
             // EXCEPT for arrays, which decay to pointers
             let ptr = gen.generate(operand)?;
             
-            // Check if the result type is an array
-            if matches!(result_type, Type::Array { .. }) {
-                // Arrays decay to pointers - just return the address
-                // The pointer value already points to the first element
+            // Arrays decay to pointers. Aggregates are used as pointers
+            // (assignment, member access, byval args) so do not load them.
+            if matches!(result_type, Type::Array { .. }) || result_type.is_aggregate() {
                 Ok(ptr)
             } else {
                 // Regular dereference - load the value

@@ -1,0 +1,6 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "Pass union by value and read a field",
+  "timeout_secs": 10
+}

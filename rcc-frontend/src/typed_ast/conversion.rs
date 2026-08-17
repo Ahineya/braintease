@@ -626,7 +626,7 @@ pub fn type_expression(
                 member: member.clone(),
                 offset,
                 is_pointer: *is_pointer,
-                expr_type: field_layout.field_type.clone(),
+                expr_type: type_env.type_analyzer.borrow().resolve_type(&field_layout.field_type),
             })
         }
         

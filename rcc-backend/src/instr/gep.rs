@@ -158,7 +158,14 @@ pub fn lower_gep(
     };
 
     // Step 4: Generate offset calculation and bank overflow handling
+    // Pin the base so allocating the result cannot reuse it, and flush any
+    // spill/reload from get_register *before* Add/AddI. Otherwise the GEP
+    // clobbers a live value (e.g. a later byval param) and the delayed spill
+    // stores the already-overwritten register.
+    mgr.pin_register(base_addr_reg);
     let result_addr_reg = mgr.get_register(result_name.clone());
+    insts.extend(mgr.take_instructions());
+    mgr.unpin_register(base_addr_reg);
     let mut result_bank_info = base_bank_info.clone();
 
     if let Some(offset) = static_offset {
@@ -223,7 +230,10 @@ pub fn lower_gep(
                     // Dynamic bank - need to add bank offset
                     if bank_crossing != 0 {
                         let temp_bank_name = naming.gep_bank_temp(result_temp);
+                        mgr.pin_register(bank_reg);
                         let new_bank_reg = mgr.get_register(temp_bank_name);
+                        insts.extend(mgr.take_instructions());
+                        mgr.unpin_register(bank_reg);
                         insts.push(AsmInst::AddI(new_bank_reg, bank_reg, bank_crossing));
                         result_bank_info = BankInfo::Register(new_bank_reg);
                         debug!("  Updated dynamic bank register by {bank_crossing}");
