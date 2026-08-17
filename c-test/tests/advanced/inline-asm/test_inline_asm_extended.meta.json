@@ -1,5 +1,5 @@
 {
-  "expected": "YYYY\n",
+  "use_runtime": true,
   "description": "Test extended inline assembly with operands",
-  "use_runtime": true
+  "expected": "YYYY\n"
 }

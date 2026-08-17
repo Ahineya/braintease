@@ -1,5 +1,5 @@
 {
-  "expected": "Testing ternary operator:\nBasic: \nYY\nNested: \nY\nSide effects: \nYY\nLvalue: \nY\nTypes: \nYY\nPointers: \nYY\nExpression: \nYYY\nShort circuit: \nY\nDone!\n",
+  "description": "Test ternary conditional operator (? :)",
   "use_runtime": true,
-  "description": "Test ternary conditional operator (? :)"
+  "expected": "Testing ternary operator:\nBasic: \nYY\nNested: \nY\nSide effects: \nYY\nLvalue: \nY\nTypes: \nYY\nPointers: \nYY\nExpression: \nYYY\nShort circuit: \nY\nDone!\n"
 }

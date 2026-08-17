@@ -1,4 +1,4 @@
 {
-  "use_runtime": true,
-  "expected": "a=5 x=10 y=20 pa=5 py=20\n"
+  "expected": "a=5 x=10 y=20 pa=5 py=20\n",
+  "use_runtime": true
 }

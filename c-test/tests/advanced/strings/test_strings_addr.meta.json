@@ -1,4 +1,4 @@
 {
-  "use_runtime": true,
-  "expected": "A"
+  "expected": "A",
+  "use_runtime": true
 }

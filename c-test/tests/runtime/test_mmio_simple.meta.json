@@ -1,5 +1,5 @@
 {
-  "description": "Simple test of new MMIO functionality using runtime headers",
   "expected": "Hi\nOK\nSEED:OK\n!\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "description": "Simple test of new MMIO functionality using runtime headers"
 }

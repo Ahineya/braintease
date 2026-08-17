@@ -1,5 +1,5 @@
 {
-  "description": "Compound literals with unions",
   "use_runtime": true,
-  "expected": "YYYY"
+  "expected": "YYYY",
+  "description": "Compound literals with unions"
 }

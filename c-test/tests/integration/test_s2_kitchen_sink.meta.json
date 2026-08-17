@@ -1,5 +1,5 @@
 {
   "expected": "=== S2 KITCHEN SINK TEST ===\nT1: Locals\nLOCAL\nT2: Globals\nG\nGLOBAL\n42\nT3: Evil ptrs\nP999\nT4: Arrays\nD\nT5: Shift\nXABC\nT6: Nested\n00 01 02 \n10 11 12 \nT7: Conds\nYYY\nT8: Math\n19\nT9: Recur\n120\nT10: Strings\nHELLO\nINIT\nT11: Complex\n3 123\nT12: For\n01234\nT13: Break\nB0B1B2\nT14: PtrPtr\n84\nT15: Mixed\nMIX\nT17: Unary\n1\nT18: Chars\nA\n\tTAB\nT19: DoWhile\nD0D1D2\nT20: IfElse\nTWO\n=== END KITCHEN SINK ===\n",
-  "description": "Added via command line",
-  "use_runtime": true
+  "use_runtime": true,
+  "description": "Added via command line"
 }

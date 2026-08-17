@@ -1,5 +1,5 @@
 {
-  "description": "Test BFM macro assembly",
   "test_type": "bfm",
+  "description": "Test BFM macro assembly",
   "expected": "A"
 }

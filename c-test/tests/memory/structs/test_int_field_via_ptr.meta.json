@@ -1,5 +1,5 @@
 {
-  "description": "Test accessing int field through pointer to struct",
+  "use_runtime": true,
   "expected": "Y\n",
-  "use_runtime": true
+  "description": "Test accessing int field through pointer to struct"
 }

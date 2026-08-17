@@ -1,4 +1,4 @@
 {
-  "use_runtime": true,
-  "expected": "XYZ\n"
+  "expected": "XYZ\n",
+  "use_runtime": true
 }

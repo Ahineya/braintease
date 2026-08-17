@@ -1,0 +1,5 @@
+{
+  "expected": "YYYY\n",
+  "use_runtime": true,
+  "description": "32-bit add writing through unsigned short* out-params"
+}

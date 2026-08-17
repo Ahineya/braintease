@@ -1,4 +1,4 @@
 {
-  "expected": "Y\nY\nY\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "Y\nY\nY\n"
 }

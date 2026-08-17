@@ -167,17 +167,17 @@ L_make_fat_ptr_4:
     LOAD S2, SB, S3
 ; Bank value in S2 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ S2, S1, L_bc_add21b15_use_global
+    BEQ S2, S1, L_bc_4348d350_use_global
     LI T6, -2
-    BEQ S2, T6, L_bc_add21b15_use_stack
+    BEQ S2, T6, L_bc_4348d350_use_stack
     ADD T7, S2, R0
-    BEQ R0, R0, L_bc_add21b15_done
-L_bc_add21b15_use_global:
+    BEQ R0, R0, L_bc_4348d350_done
+L_bc_4348d350_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_add21b15_done
-L_bc_add21b15_use_stack:
+    BEQ R0, R0, L_bc_4348d350_done
+L_bc_4348d350_use_stack:
     ADD T7, SB, R0
-L_bc_add21b15_done:
+L_bc_4348d350_done:
     MOVE RV0, T0
     MOVE RV1, T7
 ; Jump to epilogue
@@ -825,17 +825,17 @@ L_calloc_27:
 ; GEP: Setting bank info for t33 to Dynamic("gep_new_bank_f8_op58_t33")
     LI S2, 0
     LI S1, -1
-    BEQ T3, S1, L_bc_4fa4b757_use_global
+    BEQ T3, S1, L_bc_852f62f5_use_global
     LI T4, -2
-    BEQ T3, T4, L_bc_4fa4b757_use_stack
+    BEQ T3, T4, L_bc_852f62f5_use_stack
     ADD RV0, T3, R0
-    BEQ R0, R0, L_bc_4fa4b757_done
-L_bc_4fa4b757_use_global:
+    BEQ R0, R0, L_bc_852f62f5_done
+L_bc_852f62f5_use_global:
     ADD RV0, GP, R0
-    BEQ R0, R0, L_bc_4fa4b757_done
-L_bc_4fa4b757_use_stack:
+    BEQ R0, R0, L_bc_852f62f5_done
+L_bc_852f62f5_use_stack:
     ADD RV0, SB, R0
-L_bc_4fa4b757_done:
+L_bc_852f62f5_done:
     STORE S2, RV0, S3
     BEQ R0, R0, L_calloc_28
 ; Unconditional branch to L_calloc_28
@@ -886,7 +886,7 @@ L_calloc_25:
     ADDI SC, SC, 26
     STORE T6, SB, SC
     LI T6, -1
-    BEQ T7, T6, L_bc_6b7ba6bd_use_global
+    BEQ T7, T6, L_bc_f324c632_use_global
 ; Spill t31 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 27
@@ -896,15 +896,15 @@ L_calloc_25:
     ADDI SC, SC, 28
     STORE T1, SB, SC
     LI T5, -2
-    BEQ T7, T5, L_bc_6b7ba6bd_use_stack
+    BEQ T7, T5, L_bc_f324c632_use_stack
     ADD S1, T7, R0
-    BEQ R0, R0, L_bc_6b7ba6bd_done
-L_bc_6b7ba6bd_use_global:
+    BEQ R0, R0, L_bc_f324c632_done
+L_bc_f324c632_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_6b7ba6bd_done
-L_bc_6b7ba6bd_use_stack:
+    BEQ R0, R0, L_bc_f324c632_done
+L_bc_f324c632_use_stack:
     ADD S1, SB, R0
-L_bc_6b7ba6bd_done:
+L_bc_f324c632_done:
     MOVE RV0, T2
     MOVE RV1, S1
 ; Jump to epilogue

@@ -1,0 +1,5 @@
+{
+  "expected": "YYYY\n",
+  "use_runtime": true,
+  "description": "8-byte WAD lump name compare against string literals"
+}

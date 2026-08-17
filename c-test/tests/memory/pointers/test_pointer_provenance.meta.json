@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "description": "Test pointer provenance with fat pointers",
+  "use_runtime": true,
   "expected": "GSSS\n"
 }

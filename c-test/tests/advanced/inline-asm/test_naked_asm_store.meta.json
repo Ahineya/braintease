@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "use_runtime": true,
+  "description": "Naked STORE A2,A0,A1 after function prologue"
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Extended asm STORE/LOAD to a non-zero bank (TITLEPIC bank 3)",
+  "expected": "YYY\n",
+  "use_runtime": true
+}

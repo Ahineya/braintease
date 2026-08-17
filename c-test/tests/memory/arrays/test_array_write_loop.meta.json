@@ -1,5 +1,5 @@
 {
-  "expected": "C\nB\nC\nL3:B>3\nL2:B>2\nF:ABBB\n",
+  "use_runtime": true,
   "description": "Added via command line",
-  "use_runtime": true
+  "expected": "C\nB\nC\nL3:B>3\nL2:B>2\nF:ABBB\n"
 }

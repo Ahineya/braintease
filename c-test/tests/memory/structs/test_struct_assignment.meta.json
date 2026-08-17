@@ -1,5 +1,5 @@
 {
   "expected": "Y\n",
-  "use_runtime": true,
-  "description": "Struct assignment bug - copies incorrectly"
+  "description": "Struct assignment bug - copies incorrectly",
+  "use_runtime": true
 }

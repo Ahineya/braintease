@@ -1,5 +1,5 @@
 {
-  "description": "Test increment and decrement operators with value checking",
+  "expected": "YYYY\n",
   "use_runtime": true,
-  "expected": "YYYY\n"
+  "description": "Test increment and decrement operators with value checking"
 }

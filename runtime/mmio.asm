@@ -1149,17 +1149,17 @@ L_text40_puts_16:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Mixed })
 ; LOAD: Pointer t12 has bank info: Dynamic("gep_new_bank_f24_op24_t12")
     LI T0, -1
-    BEQ S1, T0, L_bc_850301ae_use_global
+    BEQ S1, T0, L_bc_a23f0bc5_use_global
     LI S3, -2
-    BEQ S1, S3, L_bc_850301ae_use_stack
+    BEQ S1, S3, L_bc_a23f0bc5_use_stack
     ADD S0, S1, R0
-    BEQ R0, R0, L_bc_850301ae_done
-L_bc_850301ae_use_global:
+    BEQ R0, R0, L_bc_a23f0bc5_done
+L_bc_a23f0bc5_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_850301ae_done
-L_bc_850301ae_use_stack:
+    BEQ R0, R0, L_bc_a23f0bc5_done
+L_bc_a23f0bc5_use_stack:
     ADD S0, SB, R0
-L_bc_850301ae_done:
+L_bc_a23f0bc5_done:
 ; LOAD: Using bank register S0 for load
     LOAD S2, S0, T7
 ; Recompute alloca t9 at FP+6
@@ -1905,17 +1905,17 @@ L_text40_puts_color_28:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Mixed })
 ; LOAD: Pointer t16 has bank info: Dynamic("gep_new_bank_f30_op28_t16")
     LI T2, -1
-    BEQ T7, T2, L_bc_f0b13e15_use_global
+    BEQ T7, T2, L_bc_2cd5d27f_use_global
     LI S1, -2
-    BEQ T7, S1, L_bc_f0b13e15_use_stack
+    BEQ T7, S1, L_bc_2cd5d27f_use_stack
     ADD S3, T7, R0
-    BEQ R0, R0, L_bc_f0b13e15_done
-L_bc_f0b13e15_use_global:
+    BEQ R0, R0, L_bc_2cd5d27f_done
+L_bc_2cd5d27f_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_f0b13e15_done
-L_bc_f0b13e15_use_stack:
+    BEQ R0, R0, L_bc_2cd5d27f_done
+L_bc_2cd5d27f_use_stack:
     ADD S3, SB, R0
-L_bc_f0b13e15_done:
+L_bc_2cd5d27f_done:
 ; LOAD: Using bank register S3 for load
     LOAD S0, S3, S2
 ; Recompute alloca t13 at FP+8
@@ -2227,17 +2227,17 @@ L_text40_puts_attr_32:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; LOAD: Pointer t14 has bank info: Dynamic("gep_new_bank_f32_op26_t14")
     LI S3, -1
-    BEQ S0, S3, L_bc_7c859fb9_use_global
+    BEQ S0, S3, L_bc_34a54e53_use_global
     LI S2, -2
-    BEQ S0, S2, L_bc_7c859fb9_use_stack
+    BEQ S0, S2, L_bc_34a54e53_use_stack
     ADD T3, S0, R0
-    BEQ R0, R0, L_bc_7c859fb9_done
-L_bc_7c859fb9_use_global:
+    BEQ R0, R0, L_bc_34a54e53_done
+L_bc_34a54e53_use_global:
     ADD T3, GP, R0
-    BEQ R0, R0, L_bc_7c859fb9_done
-L_bc_7c859fb9_use_stack:
+    BEQ R0, R0, L_bc_34a54e53_done
+L_bc_34a54e53_use_stack:
     ADD T3, SB, R0
-L_bc_7c859fb9_done:
+L_bc_34a54e53_done:
 ; LOAD: Using bank register T3 for load
     LOAD S1, T3, T7
 ; Recompute alloca t11 at FP+7
@@ -5022,17 +5022,17 @@ L_storage_write_buffer_78:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Mixed })
 ; LOAD: Pointer t16 has bank info: Dynamic("gep_new_bank_f82_op31_t16")
     LI T4, -1
-    BEQ S2, T4, L_bc_8babea5b_use_global
+    BEQ S2, T4, L_bc_080a530d_use_global
     LI T5, -2
-    BEQ S2, T5, L_bc_8babea5b_use_stack
+    BEQ S2, T5, L_bc_080a530d_use_stack
     ADD T7, S2, R0
-    BEQ R0, R0, L_bc_8babea5b_done
-L_bc_8babea5b_use_global:
+    BEQ R0, R0, L_bc_080a530d_done
+L_bc_080a530d_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_8babea5b_done
-L_bc_8babea5b_use_stack:
+    BEQ R0, R0, L_bc_080a530d_done
+L_bc_080a530d_use_stack:
     ADD T7, SB, R0
-L_bc_8babea5b_done:
+L_bc_080a530d_done:
 ; LOAD: Using bank register T7 for load
     LOAD T6, T7, S3
 ; Spill live registers before call
@@ -5322,17 +5322,17 @@ L_storage_read_buffer_83:
     ADDI SC, SC, 24
     LOAD T4, SB, SC
     LI T6, -1
-    BEQ T4, T6, L_bc_ebfb6fed_use_global
+    BEQ T4, T6, L_bc_a75337a8_use_global
     LI S1, -2
-    BEQ T4, S1, L_bc_ebfb6fed_use_stack
+    BEQ T4, S1, L_bc_a75337a8_use_stack
     ADD T5, T4, R0
-    BEQ R0, R0, L_bc_ebfb6fed_done
-L_bc_ebfb6fed_use_global:
+    BEQ R0, R0, L_bc_a75337a8_done
+L_bc_a75337a8_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_ebfb6fed_done
-L_bc_ebfb6fed_use_stack:
+    BEQ R0, R0, L_bc_a75337a8_done
+L_bc_a75337a8_use_stack:
     ADD T5, SB, R0
-L_bc_ebfb6fed_done:
+L_bc_a75337a8_done:
     STORE RV0, T5, T7
     BEQ R0, R0, L_storage_read_buffer_84
 ; Unconditional branch to L_storage_read_buffer_84

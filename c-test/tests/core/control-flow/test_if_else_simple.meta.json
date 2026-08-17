@@ -1,4 +1,4 @@
 {
-  "expected": "1:T\n2:F\n3:T\n4:F\n5:A\n6:2\n7:OK\n8:Y\n9:T\nA:T\nB:F\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "1:T\n2:F\n3:T\n4:F\n5:A\n6:2\n7:OK\n8:Y\n9:T\nA:T\nB:F\n"
 }
