@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "struct pair args, nested 6-arg call, struct return",
+  "expected": "YYYYYYYYYYYYYYYY\n"
+}

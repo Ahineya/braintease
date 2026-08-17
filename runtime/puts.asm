@@ -54,17 +54,17 @@ L_puts_1:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("load_f0_op8_t2_bank_val")
     LI T3, -1
-    BEQ T5, T3, L_bc_be4f100a_use_global
+    BEQ T5, T3, L_bc_4eaa5e9a_use_global
     LI T2, -2
-    BEQ T5, T2, L_bc_be4f100a_use_stack
+    BEQ T5, T2, L_bc_4eaa5e9a_use_stack
     ADD T4, T5, R0
-    BEQ R0, R0, L_bc_be4f100a_done
-L_bc_be4f100a_use_global:
+    BEQ R0, R0, L_bc_4eaa5e9a_done
+L_bc_4eaa5e9a_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_be4f100a_done
-L_bc_be4f100a_use_stack:
+    BEQ R0, R0, L_bc_4eaa5e9a_done
+L_bc_4eaa5e9a_use_stack:
     ADD T4, SB, R0
-L_bc_be4f100a_done:
+L_bc_4eaa5e9a_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T7
     LI T0, 0
@@ -91,19 +91,20 @@ L_puts_2:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("load_f0_op18_t5_bank_val")
     LI T1, -1
-    BEQ T6, T1, L_bc_d44e8a43_use_global
+    BEQ T6, T1, L_bc_0d947765_use_global
     LI S0, -2
-    BEQ T6, S0, L_bc_d44e8a43_use_stack
+    BEQ T6, S0, L_bc_0d947765_use_stack
     ADD T0, T6, R0
-    BEQ R0, R0, L_bc_d44e8a43_done
-L_bc_d44e8a43_use_global:
+    BEQ R0, R0, L_bc_0d947765_done
+L_bc_0d947765_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_d44e8a43_done
-L_bc_d44e8a43_use_stack:
+    BEQ R0, R0, L_bc_0d947765_done
+L_bc_0d947765_use_stack:
     ADD T0, SB, R0
-L_bc_d44e8a43_done:
+L_bc_0d947765_done:
 ; LOAD: Using bank register T0 for load
     LOAD S1, T0, T2
+    ADD A0, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -157,7 +158,6 @@ L_bc_d44e8a43_done:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Call function putchar
     CALL putchar
 ; Load instruction: t7 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
@@ -183,6 +183,7 @@ L_bc_d44e8a43_done:
 ; Invalidated 1 alloca bindings
 L_puts_3:
     LI T5, 10
+    ADD A0, T5, R0
 ; Spill live registers before call
 ; Spill t7 to slot 12
     ADD SC, FP, R0
@@ -212,7 +213,6 @@ L_puts_3:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T5, R0
 ; Call function putchar
     CALL putchar
     LI RV0, 0

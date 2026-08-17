@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYY\n",
+  "use_runtime": true,
+  "description": "runtime q_div integer and frac checked separately"
+}

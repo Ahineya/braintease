@@ -51,6 +51,7 @@ srand:
 ; LOAD: Pointer load_src_ptr_f0_op8_t5 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T2, SB, S1
+    ADD A0, T2, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -88,7 +89,6 @@ srand:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Call function rng_set_seed
     CALL rng_set_seed
     LI T1, 1
@@ -171,6 +171,7 @@ L_rand_1:
 ; Unconditional branch to L_rand_2 (condition was true)
 L_rand_2:
     LI T0, 1
+    ADD A0, T0, R0
 ; Spill live registers before call
 ; Spill load_f2_op0_t0_addr to slot 0
     ADD SC, FP, R0
@@ -184,7 +185,6 @@ L_rand_2:
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T0, R0
 ; Call function srand
     CALL srand
     BEQ R0, R0, L_rand_4

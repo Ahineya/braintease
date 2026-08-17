@@ -689,17 +689,48 @@ impl RegisterPressureManager {
         }
     }
     
-    /// Spill all registers (e.g., before a call)
+    /// Spill all unpinned registers (e.g., before a call).
+    /// Pinned regs hold live call arguments and must stay put until they are
+    /// copied to A0-A3 or stored to the outgoing argument area.
     pub fn spill_all(&mut self) {
-        debug!("Spilling all registers (e.g., for function call)");
+        debug!("Spilling all unpinned registers (e.g., for function call)");
         trace!("  Current LRU queue: {:?}", self.lru_queue);
         trace!("  Current contents: {:?}", self.reg_contents);
-        let regs_to_spill: Vec<Reg> = self.lru_queue.iter().copied().collect();
+        let regs_to_spill: Vec<Reg> = self.lru_queue.iter().copied()
+            .filter(|r| !self.pinned_registers.contains_key(r))
+            .collect();
         for reg in regs_to_spill {
             self.spill_register(reg);
             self.free_register(reg);
         }
-        debug!("All registers spilled, {} slots used", self.next_spill_slot);
+        debug!("Unpinned registers spilled, {} slots used, {} still pinned",
+               self.next_spill_slot, self.pinned_registers.len());
+    }
+
+    /// Drop tracking for registers that were used only to materialize stack
+    /// arguments. After those values are stored to the outgoing arg area,
+    /// the callee will clobber caller-saved T/S registers. If we keep the
+    /// bindings (they were pinned during `spill_all`), the caller loads from
+    /// a stale register instead of recomputing an alloca.
+    ///
+    /// Do not spill here: `SP` already points at the outgoing args, and a
+    /// new spill slot can overwrite them.
+    pub fn forget_registers(&mut self, regs: &[Reg]) {
+        for &reg in regs {
+            if !ALLOCATABLE_REGISTERS.contains(&reg) {
+                continue;
+            }
+            debug!("Forgetting stack-arg register {reg:?} after outgoing store");
+            if let Some(value) = self.reg_contents.remove(&reg) {
+                trace!("  dropped binding '{value}' in {reg:?}");
+            }
+            if let Some(pos) = self.lru_queue.iter().position(|&r| r == reg) {
+                self.lru_queue.remove(pos);
+            }
+            if !self.free_list.contains(&reg) {
+                self.free_list.push_back(reg);
+            }
+        }
     }
     
     /// FP-relative offset of a registered alloca, if any.

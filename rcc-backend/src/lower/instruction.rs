@@ -177,30 +177,61 @@ pub fn lower_instruction(
         Instruction::Call { result, function: func, args, result_type, stack_args_from } => {
             debug!("V2: Call: {:?} = call {}({})", result, func, args.len());
             
-            // Convert IR Values to CallArgs for the calling convention
+            // Convert IR Values to CallArgs for the calling convention.
+            // Register-file args are parked in A0-A3 immediately so later
+            // arguments cannot steal those T/S registers (an I64 + pointer
+            // call is 6+ words; 3 I64s + a pointer is 14).
+            let mut first_stack = args.len();
+            if let Some(from) = *stack_args_from {
+                first_stack = from;
+            }
+            let mut slots_used = 0usize;
+            for (i, arg) in args.iter().enumerate() {
+                if i >= first_stack {
+                    break;
+                }
+                let n = ir_arg_abi_slots(mgr, naming, arg);
+                if n == 0 {
+                    continue;
+                }
+                if slots_used + n <= 4 {
+                    slots_used += n;
+                } else {
+                    first_stack = i;
+                    break;
+                }
+            }
+
             let mut call_args = Vec::new();
-            for arg in args {
-                match arg {
+            let mut pinned_stack_regs: Vec<Reg> = Vec::new();
+            let mut reg_slot = 0usize;
+            for (idx, arg) in args.iter().enumerate() {
+                let this_arg = match arg {
                     Value::Temp(t) => {
                         let name = naming.temp_name(*t);
                         if let Some(words) = mgr.get_i64_words(&name) {
                             let w0 = mgr.get_register(name);
                             insts.extend(mgr.take_instructions());
+                            mgr.pin_register(w0);
                             let mut regs = [w0, Reg::R0, Reg::R0, Reg::R0];
                             for i in 0..3 {
                                 regs[i + 1] = mgr.get_register(words[i].clone());
                                 insts.extend(mgr.take_instructions());
+                                mgr.pin_register(regs[i + 1]);
                             }
-                            call_args.push(CallArg::I64 { words: regs });
+                            CallArg::I64 { words: regs }
                         } else if let Some(hi_name) = mgr.get_i32_high(&name) {
                             let lo_reg = mgr.get_register(name);
                             insts.extend(mgr.take_instructions());
+                            mgr.pin_register(lo_reg);
                             let hi_reg = mgr.get_register(hi_name);
                             insts.extend(mgr.take_instructions());
-                            call_args.push(CallArg::FatPointer { addr: lo_reg, bank: hi_reg });
+                            mgr.pin_register(hi_reg);
+                            CallArg::FatPointer { addr: lo_reg, bank: hi_reg }
                         } else if let Some(bank_info) = mgr.get_pointer_bank(&name) {
                             let addr_reg = mgr.get_register(name.clone());
                             insts.extend(mgr.take_instructions());
+                            mgr.pin_register(addr_reg);
                             
                             // Use the new function that preserves bank tags for arguments
                             use crate::instr::helpers::get_bank_value_for_argument;
@@ -211,13 +242,15 @@ pub fn lower_instruction(
                                 "call_arg"
                             );
                             insts.extend(check_insts);
+                            mgr.pin_register(bank_reg);
                             
-                            call_args.push(CallArg::FatPointer { addr: addr_reg, bank: bank_reg });
+                            CallArg::FatPointer { addr: addr_reg, bank: bank_reg }
                         } else {
                             // Scalar argument
                             let reg = mgr.get_register(name);
                             insts.extend(mgr.take_instructions());
-                            call_args.push(CallArg::Scalar(reg));
+                            mgr.pin_register(reg);
+                            CallArg::Scalar(reg)
                         }
                     }
                     Value::Constant(c) => {
@@ -227,7 +260,8 @@ pub fn lower_instruction(
                         let reg = mgr.get_register(temp_name);
                         insts.extend(mgr.take_instructions());
                         insts.push(AsmInst::Li(reg, *c as i16));
-                        call_args.push(CallArg::Scalar(reg));
+                        mgr.pin_register(reg);
+                        CallArg::Scalar(reg)
                     }
                     Value::FatPtr(fp) => {
                         // Handle fat pointer directly
@@ -261,6 +295,7 @@ pub fn lower_instruction(
                             _ => panic!("Unsupported fat pointer address type, {:?}", fp.addr),
                         };
                         insts.extend(mgr.take_instructions());
+                        mgr.pin_register(addr_reg);
                         
                         // Use the helper function to resolve bank tag to bank info
                         // This handles all bank types including Mixed properly
@@ -275,12 +310,28 @@ pub fn lower_instruction(
                             "call_arg_fp"
                         );
                         insts.extend(check_insts);
+                        mgr.pin_register(bank_reg);
                         
-                        call_args.push(CallArg::FatPointer { addr: addr_reg, bank: bank_reg });
+                        CallArg::FatPointer { addr: addr_reg, bank: bank_reg }
                     }
-                    _ => {
-                        warn!("V2: Unsupported argument type for call: {arg:?}");
+                    other => {
+                        warn!("V2: Unsupported argument type for call: {other:?}");
+                        continue;
                     }
+                };
+
+                let src_regs = call_arg_regs(&this_arg);
+                if idx < first_stack {
+                    let n = call_arg_slot_count(&this_arg);
+                    let parked = park_register_arg(&mut insts, this_arg, reg_slot);
+                    for r in src_regs {
+                        mgr.unpin_register(r);
+                    }
+                    reg_slot += n;
+                    call_args.push(parked);
+                } else {
+                    pinned_stack_regs.extend(src_regs);
+                    call_args.push(this_arg);
                 }
             }
             
@@ -308,6 +359,11 @@ pub fn lower_instruction(
             );
             
             insts.extend(call_insts);
+            for r in pinned_stack_regs {
+                mgr.unpin_register(r);
+            }
+            mgr.invalidate_alloca_bindings();
+            insts.extend(mgr.take_instructions());
             if let Some(name) = result_name {
                 if result_type.is_f32() {
                     mgr.set_fp32(name);
@@ -531,6 +587,75 @@ pub fn lower_instruction(
     }
     
     Ok(insts)
+}
+
+fn ir_arg_abi_slots(
+    mgr: &RegisterPressureManager,
+    naming: &NameGenerator,
+    arg: &Value,
+) -> usize {
+    match arg {
+        Value::Temp(t) => {
+            let name = naming.temp_name(*t);
+            if mgr.get_i64_words(&name).is_some() {
+                4
+            } else if mgr.get_i32_high(&name).is_some() || mgr.get_pointer_bank(&name).is_some() {
+                2
+            } else {
+                1
+            }
+        }
+        Value::FatPtr(_) => 2,
+        _ => 1,
+    }
+}
+
+fn call_arg_slot_count(arg: &CallArg) -> usize {
+    match arg {
+        CallArg::Scalar(_) => 1,
+        CallArg::FatPointer { .. } => 2,
+        CallArg::I64 { .. } => 4,
+    }
+}
+
+fn call_arg_regs(arg: &CallArg) -> Vec<Reg> {
+    match arg {
+        CallArg::Scalar(r) => vec![*r],
+        CallArg::FatPointer { addr, bank } => vec![*addr, *bank],
+        CallArg::I64 { words } => words.to_vec(),
+    }
+}
+
+fn park_register_arg(insts: &mut Vec<AsmInst>, arg: CallArg, slot: usize) -> CallArg {
+    let dests = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
+    match arg {
+        CallArg::Scalar(src) => {
+            let dest = dests[slot];
+            if src != dest {
+                insts.push(AsmInst::Add(dest, src, Reg::R0));
+            }
+            CallArg::Scalar(dest)
+        }
+        CallArg::FatPointer { addr, bank } => {
+            let da = dests[slot];
+            let db = dests[slot + 1];
+            if addr != da {
+                insts.push(AsmInst::Add(da, addr, Reg::R0));
+            }
+            if bank != db {
+                insts.push(AsmInst::Add(db, bank, Reg::R0));
+            }
+            CallArg::FatPointer { addr: da, bank: db }
+        }
+        CallArg::I64 { words } => {
+            for i in 0..4 {
+                if words[i] != dests[i] {
+                    insts.push(AsmInst::Add(dests[i], words[i], Reg::R0));
+                }
+            }
+            CallArg::I64 { words: dests }
+        }
+    }
 }
 
 fn lower_va_start(

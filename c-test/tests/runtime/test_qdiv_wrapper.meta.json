@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYY\n",
+  "use_runtime": true,
+  "description": "q_div-shaped wrapper calling 4-scalar+2-outptr divider"
+}

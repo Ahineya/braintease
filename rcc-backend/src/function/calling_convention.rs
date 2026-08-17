@@ -202,6 +202,7 @@ impl CallingConvention {
         }
         
         // First, push stack arguments in reverse order
+        let mut stack_src_regs: Vec<Reg> = Vec::new();
         if !stack_args.is_empty() {
             insts.push(AsmInst::Comment(format!("Pushing {} arguments to stack", stack_args.len())));
             debug!("  Pushing {} stack arguments in reverse order", stack_args.len());
@@ -213,6 +214,7 @@ impl CallingConvention {
                         insts.push(AsmInst::Store(src_reg, Reg::Sb, Reg::Sp));
                         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
                         stack_offset += 1;
+                        stack_src_regs.push(src_reg);
                     }
                     CallArg::FatPointer { addr, bank } => {
                         insts.push(AsmInst::Comment(format!("Push arg {idx} (fat ptr) to stack")));
@@ -221,6 +223,8 @@ impl CallingConvention {
                         insts.push(AsmInst::Store(addr, Reg::Sb, Reg::Sp));
                         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
                         stack_offset += 2;
+                        stack_src_regs.push(addr);
+                        stack_src_regs.push(bank);
                     }
                     CallArg::I64 { words } => {
                         insts.push(AsmInst::Comment(format!("Push arg {idx} (i64) to stack")));
@@ -229,6 +233,7 @@ impl CallingConvention {
                             insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
                         }
                         stack_offset += 4;
+                        stack_src_regs.extend(words);
                     }
                 }
             }
@@ -279,6 +284,18 @@ impl CallingConvention {
         if stack_offset > 0 {
             insts.push(AsmInst::Comment(format!("Pushed {stack_offset} words to stack")));
         }
+
+        // Stack-arg T/S registers were pinned so spill_all would not steal
+        // them before the stores above. Forget the bindings: the callee
+        // clobbers those caller-saved registers, and a later spill would
+        // overwrite the outgoing args we just pushed.
+        if !stack_src_regs.is_empty() {
+            insts.push(AsmInst::Comment(
+                "Forget stack-arg registers; callee will clobber T/S".to_string(),
+            ));
+            pressure_manager.forget_registers(&stack_src_regs);
+        }
+
         debug!("Call args setup complete: {} in registers, {} words on stack, {} total instructions", 
                register_arg_slots.len(), stack_offset, insts.len());
         

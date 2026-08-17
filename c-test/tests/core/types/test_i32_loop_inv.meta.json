@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYY\n",
+  "description": "I32 loop-invariant value and compare used by div128_64"
+}

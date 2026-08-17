@@ -232,6 +232,8 @@ L_tty_putchar_2:
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
     LI S0, 0
+    ADD A0, S0, R0
+    ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -249,9 +251,7 @@ L_tty_putchar_2:
     ADDI SP, FP, 29
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S1, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -308,6 +308,7 @@ rng_get:
     ADDI SP, SP, 20
 L_rng_get_3:
     LI S3, 4
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f6_op0_4 to slot 0
     ADD SC, FP, R0
@@ -317,7 +318,6 @@ L_rng_get_3:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
@@ -379,6 +379,7 @@ rng_get_seed:
     ADDI SP, SP, 20
 L_rng_get_seed_4:
     LI S3, 5
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f8_op0_5 to slot 0
     ADD SC, FP, R0
@@ -388,7 +389,6 @@ L_rng_get_seed_4:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
@@ -459,6 +459,8 @@ L_rng_set_seed_5:
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
     LI S0, 5
+    ADD A0, S0, R0
+    ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -476,9 +478,7 @@ L_rng_set_seed_5:
     ADDI SP, FP, 29
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S1, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -544,6 +544,8 @@ L_display_set_mode_6:
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
     LI S0, 6
+    ADD A0, S0, R0
+    ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -561,9 +563,7 @@ L_display_set_mode_6:
     ADDI SP, FP, 29
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S1, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -650,6 +650,8 @@ L_display_set_resolution_7:
 ; LOAD: Using bank register Sb for load
     LOAD T3, SB, T7
     LI T2, 16
+    ADD A0, T2, R0
+    ADD A1, T3, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -675,9 +677,7 @@ L_display_set_resolution_7:
     ADDI SP, FP, 31
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T3, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -737,6 +737,8 @@ L_display_enable_8:
     LI S2, 0
     SLL S3, S3, S2
     LI S1, 8
+    ADD A0, S1, R0
+    ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f16_op0_8 to slot 0
     ADD SC, FP, R0
@@ -750,9 +752,7 @@ L_display_enable_8:
     ADDI SP, FP, 28
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S3, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -816,6 +816,8 @@ L_display_clear_9:
     SLL S0, S1, S1
     OR S3, S3, S0
     LI T7, 8
+    ADD A0, T7, R0
+    ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f18_op0_8 to slot 0
     ADD SC, FP, R0
@@ -829,9 +831,7 @@ L_display_clear_9:
     ADDI SP, FP, 28
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T7, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S3, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -888,7 +888,9 @@ display_flush:
     ADDI SP, SP, 20
 L_display_flush_10:
     LI S3, 9
+    ADD A0, S3, R0
     LI S2, 1
+    ADD A1, S2, R0
 ; Spill live registers before call
 ; Spill const_f20_op0_9 to slot 0
     ADD SC, FP, R0
@@ -902,9 +904,7 @@ L_display_flush_10:
     ADDI SP, FP, 28
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S2, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -1205,6 +1205,8 @@ L_text40_putchar_21:
     ADDI SC, SC, 18
     STORE S1, SB, SC
     LOAD S1, SB, S0
+    ADD A0, S2, R0
+    ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t14 to slot 3
     ADD SC, FP, R0
@@ -1238,9 +1240,7 @@ L_text40_putchar_21:
     ADDI SP, FP, 36
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S1, R0
 ; Call function mmio_write
     CALL mmio_write
     BEQ R0, R0, L_text40_putchar_23
@@ -1399,17 +1399,17 @@ L_text40_puts_25:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("gep_new_bank_f24_op24_t13")
     LI S2, -1
-    BEQ T3, S2, L_bc_34803d59_use_global
+    BEQ T3, S2, L_bc_2817d29d_use_global
     LI S1, -2
-    BEQ T3, S1, L_bc_34803d59_use_stack
+    BEQ T3, S1, L_bc_2817d29d_use_stack
     ADD S3, T3, R0
-    BEQ R0, R0, L_bc_34803d59_done
-L_bc_34803d59_use_global:
+    BEQ R0, R0, L_bc_2817d29d_done
+L_bc_2817d29d_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_34803d59_done
-L_bc_34803d59_use_stack:
+    BEQ R0, R0, L_bc_2817d29d_done
+L_bc_2817d29d_use_stack:
     ADD S3, SB, R0
-L_bc_34803d59_done:
+L_bc_2817d29d_done:
 ; LOAD: Using bank register S3 for load
     LOAD S0, S3, T4
 ; Recompute alloca t9 at FP+6
@@ -1517,6 +1517,9 @@ L_text40_puts_26:
     STORE T7, SB, SC
     LI T7, 255
     AND T2, T2, T7
+    ADD A0, S2, R0
+    ADD A1, T0, R0
+    ADD A2, T2, R0
 ; Spill live registers before call
 ; Spill load_f24_op17_t11_bank_val to slot 9
     ADD SC, FP, R0
@@ -1558,11 +1561,8 @@ L_text40_puts_26:
     ADDI SP, FP, 36
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T2, R0
 ; Call function text40_putchar
     CALL text40_putchar
 ; Load instruction: t26 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
@@ -1956,6 +1956,8 @@ L_text40_putchar_color_41:
 ; LOAD: Pointer load_src_ptr_f26_op68_t52 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T6, SB, T5
+    ADD A0, T1, R0
+    ADD A1, T6, R0
 ; Spill live registers before call
 ; Spill t36 to slot 8
     ADD SC, FP, R0
@@ -1981,9 +1983,7 @@ L_text40_putchar_color_41:
     ADDI SP, FP, 39
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T6, R0
 ; Call function mmio_write
     CALL mmio_write
     BEQ R0, R0, L_text40_putchar_color_43
@@ -2313,6 +2313,8 @@ L_text40_putchar_attr_54:
 ; LOAD: Pointer load_src_ptr_f28_op61_t43 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S0, SB, T7
+    ADD A0, S3, R0
+    ADD A1, S0, R0
 ; Spill live registers before call
 ; Spill t21 to slot 5
     ADD SC, FP, R0
@@ -2342,9 +2344,7 @@ L_text40_putchar_attr_54:
     ADDI SP, FP, 37
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S0, R0
 ; Call function mmio_write
     CALL mmio_write
     BEQ R0, R0, L_text40_putchar_attr_56
@@ -2523,17 +2523,17 @@ L_text40_puts_color_58:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Mixed })
 ; LOAD: Pointer t17 has bank info: Dynamic("gep_new_bank_f30_op28_t17")
     LI S0, -1
-    BEQ S3, S0, L_bc_4abc2fa5_use_global
+    BEQ S3, S0, L_bc_1a8bcfb2_use_global
     LI T7, -2
-    BEQ S3, T7, L_bc_4abc2fa5_use_stack
+    BEQ S3, T7, L_bc_1a8bcfb2_use_stack
     ADD S1, S3, R0
-    BEQ R0, R0, L_bc_4abc2fa5_done
-L_bc_4abc2fa5_use_global:
+    BEQ R0, R0, L_bc_1a8bcfb2_done
+L_bc_1a8bcfb2_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_4abc2fa5_done
-L_bc_4abc2fa5_use_stack:
+    BEQ R0, R0, L_bc_1a8bcfb2_done
+L_bc_1a8bcfb2_use_stack:
     ADD S1, SB, R0
-L_bc_4abc2fa5_done:
+L_bc_1a8bcfb2_done:
 ; LOAD: Using bank register S1 for load
     LOAD T6, S1, T3
 ; Recompute alloca t13 at FP+8
@@ -2673,6 +2673,10 @@ L_text40_puts_color_59:
     ADDI SC, SC, 32
     STORE S3, SB, SC
     LOAD S3, SB, T3
+    ADD A0, S0, R0
+    ADD A1, T0, R0
+    ADD A2, T2, R0
+    ADD A3, T4, R0
 ; Spill live registers before call
 ; Spill load_f30_op29_t18_resolved_bank_30_f30_op30 to slot 15
     ADD SC, FP, R0
@@ -2698,26 +2702,19 @@ L_text40_puts_color_59:
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE T4, SB, SC
-; Spill t31 to slot 21
-    ADD SC, FP, R0
-    ADDI SC, SC, 39
-    STORE S3, SB, SC
-; Set SP = FP+40 so callee frame is above spills
-    ADDI SP, FP, 40
+; Set SP = FP+39 so callee frame is above spills
+    ADDI SP, FP, 39
 ; Pushing 1 arguments to stack
 ; Push arg 4 (scalar) to stack
     STORE S3, SB, SP
     ADDI SP, SP, 1
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T2, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T4, R0
 ; Pushed 1 words to stack
+; Forget stack-arg registers; callee will clobber T/S
 ; Call function text40_putchar_color
     CALL text40_putchar_color
 ; Clean up 1 words from stack
@@ -2911,17 +2908,17 @@ L_text40_puts_attr_65:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(15), bank: Mixed })
 ; LOAD: Pointer t15 has bank info: Dynamic("gep_new_bank_f32_op26_t15")
     LI S1, -1
-    BEQ T1, S1, L_bc_6564a826_use_global
+    BEQ T1, S1, L_bc_dc67e7c2_use_global
     LI S0, -2
-    BEQ T1, S0, L_bc_6564a826_use_stack
+    BEQ T1, S0, L_bc_dc67e7c2_use_stack
     ADD S2, T1, R0
-    BEQ R0, R0, L_bc_6564a826_done
-L_bc_6564a826_use_global:
+    BEQ R0, R0, L_bc_dc67e7c2_done
+L_bc_dc67e7c2_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_6564a826_done
-L_bc_6564a826_use_stack:
+    BEQ R0, R0, L_bc_dc67e7c2_done
+L_bc_dc67e7c2_use_stack:
     ADD S2, SB, R0
-L_bc_6564a826_done:
+L_bc_dc67e7c2_done:
 ; LOAD: Using bank register S2 for load
     LOAD T7, S2, T4
 ; Recompute alloca t11 at FP+7
@@ -3041,6 +3038,10 @@ L_text40_puts_attr_66:
     ADDI SC, SC, 27
     STORE T5, SB, SC
     LOAD T5, SB, S3
+    ADD A0, S1, R0
+    ADD A1, T0, R0
+    ADD A2, T3, R0
+    ADD A3, T5, R0
 ; Spill live registers before call
 ; Spill t15 to slot 11
     ADD SC, FP, R0
@@ -3082,13 +3083,9 @@ L_text40_puts_attr_66:
     ADDI SP, FP, 37
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T3, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T5, R0
 ; Call function text40_putchar_attr
     CALL text40_putchar_attr
 ; Load instruction: t29 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
@@ -3391,6 +3388,7 @@ L_text40_set_attr_81:
 ; LOAD: Pointer load_src_ptr_f34_op52_t34 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T3, SB, T6
+    ADD A0, T3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
@@ -3424,7 +3422,6 @@ L_text40_set_attr_81:
     ADDI SP, FP, 37
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t35
@@ -3470,6 +3467,8 @@ L_text40_set_attr_81:
 ; LOAD: Pointer load_src_ptr_f34_op62_t44 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T3, SB, S1
+    ADD A0, T6, R0
+    ADD A1, T3, R0
 ; Spill live registers before call
 ; Spill t35 to slot 8
     ADD SC, FP, R0
@@ -3491,9 +3490,7 @@ L_text40_set_attr_81:
     ADDI SP, FP, 37
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T6, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T3, R0
 ; Call function mmio_write
     CALL mmio_write
     BEQ R0, R0, L_text40_set_attr_83
@@ -3764,6 +3761,7 @@ L_text40_get_char_94:
 ; LOAD: Pointer load_src_ptr_f36_op50_t32 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T4, SB, T7
+    ADD A0, T4, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -3797,7 +3795,6 @@ L_text40_get_char_94:
     ADDI SP, FP, 35
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T4, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t33
@@ -4086,6 +4083,7 @@ L_text40_get_attr_107:
 ; LOAD: Pointer load_src_ptr_f38_op50_t32 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T4, SB, T7
+    ADD A0, T4, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -4119,7 +4117,6 @@ L_text40_get_attr_107:
     ADDI SP, FP, 35
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T4, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t33
@@ -4207,6 +4204,7 @@ L_key_pressed_110:
 ; LOAD: Pointer load_src_ptr_f40_op2_t2 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
+    ADD A0, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -4220,7 +4218,6 @@ L_key_pressed_110:
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t3
@@ -4290,6 +4287,7 @@ key_up_pressed:
     ADDI SP, SP, 20
 L_key_up_pressed_111:
     LI S3, 10
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f42_op0_10 to slot 0
     ADD SC, FP, R0
@@ -4299,7 +4297,6 @@ L_key_up_pressed_111:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
@@ -4361,6 +4358,7 @@ key_down_pressed:
     ADDI SP, SP, 20
 L_key_down_pressed_112:
     LI S3, 11
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f44_op0_11 to slot 0
     ADD SC, FP, R0
@@ -4370,7 +4368,6 @@ L_key_down_pressed_112:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
@@ -4432,6 +4429,7 @@ key_left_pressed:
     ADDI SP, SP, 20
 L_key_left_pressed_113:
     LI S3, 12
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f46_op0_12 to slot 0
     ADD SC, FP, R0
@@ -4441,7 +4439,6 @@ L_key_left_pressed_113:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
@@ -4503,6 +4500,7 @@ key_right_pressed:
     ADDI SP, SP, 20
 L_key_right_pressed_114:
     LI S3, 13
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f48_op0_13 to slot 0
     ADD SC, FP, R0
@@ -4512,7 +4510,6 @@ L_key_right_pressed_114:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
@@ -4574,6 +4571,7 @@ key_z_pressed:
     ADDI SP, SP, 20
 L_key_z_pressed_115:
     LI S3, 14
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f50_op0_14 to slot 0
     ADD SC, FP, R0
@@ -4583,7 +4581,6 @@ L_key_z_pressed_115:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
@@ -4645,6 +4642,7 @@ key_x_pressed:
     ADDI SP, SP, 20
 L_key_x_pressed_116:
     LI S3, 15
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f52_op0_15 to slot 0
     ADD SC, FP, R0
@@ -4654,7 +4652,6 @@ L_key_x_pressed_116:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
@@ -4934,6 +4931,8 @@ L_rgb565_set_pixel_118:
 ; LOAD: Pointer load_src_ptr_f56_op24_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T1, SB, T5
+    ADD A0, S2, R0
+    ADD A1, T1, R0
 ; Spill live registers before call
 ; Spill t2 to slot 2
     ADD SC, FP, R0
@@ -4963,9 +4962,7 @@ L_rgb565_set_pixel_118:
     ADDI SP, FP, 34
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T1, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -5187,6 +5184,10 @@ L_rgb565_fill_rect_125:
     ADDI SC, SC, 19
     STORE S0, SB, SC
     LOAD S0, SB, S1
+    ADD A0, T4, R0
+    ADD A1, T0, R0
+    ADD A2, S2, R0
+    ADD A3, S0, R0
 ; Spill live registers before call
 ; Spill t4 to slot 4
     ADD SC, FP, R0
@@ -5216,13 +5217,9 @@ L_rgb565_fill_rect_125:
     ADDI SP, FP, 36
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T4, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S2, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, S0, R0
 ; Call function rgb565_set_pixel
     CALL rgb565_set_pixel
     BEQ R0, R0, L_rgb565_fill_rect_126
@@ -5338,6 +5335,8 @@ L_storage_set_block_128:
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
     LI S0, 17
+    ADD A0, S0, R0
+    ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -5355,9 +5354,7 @@ L_storage_set_block_128:
     ADDI SP, FP, 29
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S1, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -5423,6 +5420,8 @@ L_storage_set_addr_129:
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
     LI S0, 18
+    ADD A0, S0, R0
+    ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -5440,9 +5439,7 @@ L_storage_set_addr_129:
     ADDI SP, FP, 29
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S1, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -5499,6 +5496,7 @@ storage_read:
     ADDI SP, SP, 20
 L_storage_read_130:
     LI S3, 19
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f64_op0_19 to slot 0
     ADD SC, FP, R0
@@ -5508,7 +5506,6 @@ L_storage_read_130:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
@@ -5579,6 +5576,8 @@ L_storage_write_131:
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
     LI S0, 19
+    ADD A0, S0, R0
+    ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -5596,9 +5595,7 @@ L_storage_write_131:
     ADDI SP, FP, 29
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S1, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -5655,6 +5652,7 @@ storage_get_status:
     ADDI SP, SP, 20
 L_storage_get_status_132:
     LI S3, 20
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f68_op0_20 to slot 0
     ADD SC, FP, R0
@@ -5664,7 +5662,6 @@ L_storage_get_status_132:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
@@ -5729,6 +5726,8 @@ L_storage_commit_133:
     LI S2, 2
     SLL S3, S3, S2
     LI S1, 20
+    ADD A0, S1, R0
+    ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f70_op0_20 to slot 0
     ADD SC, FP, R0
@@ -5742,9 +5741,7 @@ L_storage_commit_133:
     ADDI SP, FP, 28
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S3, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -5804,6 +5801,8 @@ L_storage_commit_all_134:
     LI S2, 3
     SLL S3, S3, S2
     LI S1, 20
+    ADD A0, S1, R0
+    ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f72_op0_20 to slot 0
     ADD SC, FP, R0
@@ -5817,9 +5816,7 @@ L_storage_commit_all_134:
     ADDI SP, FP, 28
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S3, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -6036,6 +6033,7 @@ L_storage_write_at_137:
 ; LOAD: Pointer load_src_ptr_f78_op6_t6 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T5, SB, S0
+    ADD A0, T5, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -6057,7 +6055,6 @@ L_storage_write_at_137:
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T5, R0
 ; Call function storage_set_block
     CALL storage_set_block
 ; Load instruction: t7 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -6068,6 +6065,7 @@ L_storage_write_at_137:
     ADD T4, FP, R0
     ADDI T4, T4, 1
     LOAD T3, SB, T4
+    ADD A0, T3, R0
 ; Spill live registers before call
 ; Spill t7 to slot 4
     ADD SC, FP, R0
@@ -6077,7 +6075,6 @@ L_storage_write_at_137:
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Call function storage_set_addr
     CALL storage_set_addr
 ; Load instruction: t8 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
@@ -6088,6 +6085,7 @@ L_storage_write_at_137:
     ADD T2, FP, R0
     ADDI T2, T2, 2
     LOAD T1, SB, T2
+    ADD A0, T1, R0
 ; Spill live registers before call
 ; Spill t8 to slot 5
     ADD SC, FP, R0
@@ -6097,7 +6095,6 @@ L_storage_write_at_137:
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T1, R0
 ; Call function storage_write
     CALL storage_write
 ; Jump to epilogue
@@ -6167,6 +6164,7 @@ L_storage_read_at_138:
 ; LOAD: Pointer load_src_ptr_f80_op4_t4 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T7, SB, S1
+    ADD A0, T7, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -6184,7 +6182,6 @@ L_storage_read_at_138:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T7, R0
 ; Call function storage_set_block
     CALL storage_set_block
 ; Load instruction: t5 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
@@ -6195,6 +6192,7 @@ L_storage_read_at_138:
     ADD T6, FP, R0
     ADDI T6, T6, 1
     LOAD T5, SB, T6
+    ADD A0, T5, R0
 ; Spill live registers before call
 ; Spill t5 to slot 3
     ADD SC, FP, R0
@@ -6204,7 +6202,6 @@ L_storage_read_at_138:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T5, R0
 ; Call function storage_set_addr
     CALL storage_set_addr
 ; Spill live registers before call
@@ -6301,6 +6298,7 @@ L_storage_write_buffer_139:
 ; LOAD: Pointer load_src_ptr_f82_op11_t8 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T2, SB, T6
+    ADD A0, T2, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -6334,7 +6332,6 @@ L_storage_write_buffer_139:
     ADDI SP, FP, 34
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Call function storage_set_block
     CALL storage_set_block
 ; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
@@ -6345,6 +6342,7 @@ L_storage_write_buffer_139:
     ADD T1, FP, R0
     ADDI T1, T1, 1
     LOAD T0, SB, T1
+    ADD A0, T0, R0
 ; Spill live registers before call
 ; Spill t9 to slot 7
     ADD SC, FP, R0
@@ -6354,7 +6352,6 @@ L_storage_write_buffer_139:
     ADDI SP, FP, 34
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T0, R0
 ; Call function storage_set_addr
     CALL storage_set_addr
     ADD S3, FP, R0
@@ -6428,19 +6425,20 @@ L_storage_write_buffer_141:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Mixed })
 ; LOAD: Pointer t17 has bank info: Dynamic("gep_new_bank_f82_op33_t17")
     LI T6, -1
-    BEQ S1, T6, L_bc_1045fb04_use_global
+    BEQ S1, T6, L_bc_6ecb1cf6_use_global
     LI T7, -2
-    BEQ S1, T7, L_bc_1045fb04_use_stack
+    BEQ S1, T7, L_bc_6ecb1cf6_use_stack
     ADD T0, S1, R0
-    BEQ R0, R0, L_bc_1045fb04_done
-L_bc_1045fb04_use_global:
+    BEQ R0, R0, L_bc_6ecb1cf6_done
+L_bc_6ecb1cf6_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_1045fb04_done
-L_bc_1045fb04_use_stack:
+    BEQ R0, R0, L_bc_6ecb1cf6_done
+L_bc_6ecb1cf6_use_stack:
     ADD T0, SB, R0
-L_bc_1045fb04_done:
+L_bc_6ecb1cf6_done:
 ; LOAD: Using bank register T0 for load
     LOAD T4, T0, T3
+    ADD A0, T4, R0
 ; Spill live registers before call
 ; Spill t15 to slot 8
     ADD SC, FP, R0
@@ -6482,7 +6480,6 @@ L_bc_1045fb04_done:
     ADDI SP, FP, 34
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T4, R0
 ; Call function storage_write
     CALL storage_write
     BEQ R0, R0, L_storage_write_buffer_142
@@ -6594,6 +6591,7 @@ L_storage_read_buffer_144:
 ; LOAD: Pointer load_src_ptr_f84_op11_t8 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T2, SB, T6
+    ADD A0, T2, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -6627,7 +6625,6 @@ L_storage_read_buffer_144:
     ADDI SP, FP, 34
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Call function storage_set_block
     CALL storage_set_block
 ; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
@@ -6638,6 +6635,7 @@ L_storage_read_buffer_144:
     ADD T1, FP, R0
     ADDI T1, T1, 1
     LOAD T0, SB, T1
+    ADD A0, T0, R0
 ; Spill live registers before call
 ; Spill t9 to slot 7
     ADD SC, FP, R0
@@ -6647,7 +6645,6 @@ L_storage_read_buffer_144:
     ADDI SP, FP, 34
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T0, R0
 ; Call function storage_set_addr
     CALL storage_set_addr
     ADD S3, FP, R0
@@ -6758,17 +6755,17 @@ L_storage_read_buffer_146:
     ADDI SC, SC, 26
     LOAD T7, SB, SC
     LI T5, -1
-    BEQ T7, T5, L_bc_50b53a16_use_global
+    BEQ T7, T5, L_bc_2eafcad9_use_global
     LI T2, -2
-    BEQ T7, T2, L_bc_50b53a16_use_stack
+    BEQ T7, T2, L_bc_2eafcad9_use_stack
     ADD T4, T7, R0
-    BEQ R0, R0, L_bc_50b53a16_done
-L_bc_50b53a16_use_global:
+    BEQ R0, R0, L_bc_2eafcad9_done
+L_bc_2eafcad9_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_50b53a16_done
-L_bc_50b53a16_use_stack:
+    BEQ R0, R0, L_bc_2eafcad9_done
+L_bc_2eafcad9_use_stack:
     ADD T4, SB, R0
-L_bc_50b53a16_done:
+L_bc_2eafcad9_done:
     STORE T0, T4, T6
     BEQ R0, R0, L_storage_read_buffer_147
 ; Unconditional branch to L_storage_read_buffer_147

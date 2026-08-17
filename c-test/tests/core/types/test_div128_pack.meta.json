@@ -1,0 +1,6 @@
+{
+  "use_runtime": true,
+  "timeout_secs": 15,
+  "expected": "YYYYYYY\n",
+  "description": "I32 packing, loop >>31, and q-shift used by div128_64"
+}

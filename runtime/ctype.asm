@@ -517,6 +517,7 @@ L_isalpha_16:
 ; LOAD: Pointer load_src_ptr_f8_op2_t3 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S0, SB, S2
+    ADD A0, S0, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -530,7 +531,6 @@ L_isalpha_16:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Call function islower
     CALL islower
 ; Scalar return value for t4
@@ -552,6 +552,7 @@ L_isalpha_17:
 ; Recompute alloca t1 at FP+0
     ADD T3, FP, R0
     LOAD T2, SB, T3
+    ADD A0, T2, R0
 ; Spill live registers before call
 ; Spill t6 to slot 2
     ADD SC, FP, R0
@@ -561,7 +562,6 @@ L_isalpha_17:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Call function isupper
     CALL isupper
 ; Scalar return value for t7
@@ -662,6 +662,7 @@ L_isalnum_20:
 ; LOAD: Pointer load_src_ptr_f10_op2_t3 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S0, SB, S2
+    ADD A0, S0, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -675,7 +676,6 @@ L_isalnum_20:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Call function isalpha
     CALL isalpha
 ; Scalar return value for t4
@@ -697,6 +697,7 @@ L_isalnum_21:
 ; Recompute alloca t1 at FP+0
     ADD T3, FP, R0
     LOAD T2, SB, T3
+    ADD A0, T2, R0
 ; Spill live registers before call
 ; Spill t6 to slot 2
     ADD SC, FP, R0
@@ -706,7 +707,6 @@ L_isalnum_21:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Call function isdigit
     CALL isdigit
 ; Scalar return value for t7
@@ -1253,6 +1253,7 @@ L_iscntrl_44:
 ; LOAD: Pointer load_src_ptr_f16_op2_t2 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
+    ADD A0, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -1266,7 +1267,6 @@ L_iscntrl_44:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Call function in_range
     CALL in_range
 ; Scalar return value for t3
@@ -1660,6 +1660,7 @@ L_ispunct_59:
 ; LOAD: Pointer load_src_ptr_f22_op2_t3 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S0, SB, S2
+    ADD A0, S0, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -1673,7 +1674,6 @@ L_ispunct_59:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Call function isgraph
     CALL isgraph
 ; Scalar return value for t4
@@ -1695,6 +1695,7 @@ L_ispunct_60:
 ; Recompute alloca t1 at FP+0
     ADD T3, FP, R0
     LOAD T2, SB, T3
+    ADD A0, T2, R0
 ; Spill live registers before call
 ; Spill t6 to slot 2
     ADD SC, FP, R0
@@ -1704,7 +1705,6 @@ L_ispunct_60:
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Call function isalnum
     CALL isalnum
 ; Scalar return value for t7
@@ -1815,6 +1815,7 @@ L_isxdigit_63:
 ; LOAD: Pointer load_src_ptr_f24_op2_t4 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T7, SB, S2
+    ADD A0, T7, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -1828,7 +1829,6 @@ L_isxdigit_63:
     ADDI SP, FP, 33
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T7, R0
 ; Call function isdigit
     CALL isdigit
 ; Scalar return value for t5
@@ -2101,6 +2101,7 @@ L_tolower_76:
 ; LOAD: Pointer load_src_ptr_f26_op2_t2 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
+    ADD A0, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -2114,7 +2115,6 @@ L_tolower_76:
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Call function isupper
     CALL isupper
 ; Scalar return value for t3
@@ -2216,6 +2216,7 @@ L_toupper_80:
 ; LOAD: Pointer load_src_ptr_f28_op2_t2 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
+    ADD A0, S1, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -2229,7 +2230,6 @@ L_toupper_80:
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Call function islower
     CALL islower
 ; Scalar return value for t3

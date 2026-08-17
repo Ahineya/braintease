@@ -1,0 +1,5 @@
+{
+  "description": "out-pointers to locals with scalar vs struct params",
+  "use_runtime": true,
+  "expected": "YYYYYYYY\n"
+}

@@ -1,0 +1,6 @@
+{
+  "description": "4 register args then 4-scalar+2-outptr call",
+  "expected": "YYYYYYYYYY\n",
+  "use_runtime": true,
+  "timeout_secs": 15
+}

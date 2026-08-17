@@ -1,0 +1,6 @@
+{
+  "use_runtime": true,
+  "timeout_secs": 15,
+  "expected": "YYYYYYYYYYYYYYYYYYYYY\n",
+  "description": "div128_64 limb loop, I32/I64 ops, and 3xI64+ptr ABI used by f64 div"
+}

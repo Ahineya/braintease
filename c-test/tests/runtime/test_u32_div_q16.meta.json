@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYYYYYYY\n",
+  "description": "u32_div_q16 restoring divider copied from qfixed"
+}

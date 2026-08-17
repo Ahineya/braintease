@@ -1,0 +1,6 @@
+{
+  "expected": "YNNNNYNNNN\n",
+  "use_runtime": true,
+  "timeout_secs": 15,
+  "description": "sentinel values after stack local out-pointer stores: hi=2, lo=0x8000"
+}

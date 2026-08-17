@@ -32,6 +32,7 @@ getchar:
 ; Invalidated 1 alloca bindings
 L_getchar_1:
     LI S2, 3
+    ADD A0, S2, R0
 ; Spill live registers before call
 ; Spill const_f0_op0_3 to slot 0
     ADD SC, FP, R0
@@ -41,7 +42,6 @@ L_getchar_1:
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S2, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t1
@@ -80,6 +80,7 @@ L_getchar_2:
 ; Invalidated 1 alloca bindings
 L_getchar_3:
     LI S0, 2
+    ADD A0, S0, R0
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
@@ -93,7 +94,6 @@ L_getchar_3:
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t7

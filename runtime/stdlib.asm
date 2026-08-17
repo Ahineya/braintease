@@ -141,12 +141,12 @@ L_labs_4:
     LI T6, 0
     LI T5, 0
     XOR T4, T7, T5
-    BNE T4, R0, L_i32_slt_hine_c3e07ffe_2_0
+    BNE T4, R0, L_i32_slt_hine_cdda8f0e_2_0
     SLTU T4, S0, T6
-    BEQ R0, R0, L_i32_slt_done_c3e07ffe_2_1
-L_i32_slt_hine_c3e07ffe_2_0:
+    BEQ R0, R0, L_i32_slt_done_cdda8f0e_2_1
+L_i32_slt_hine_cdda8f0e_2_0:
     SLT T4, T7, T5
-L_i32_slt_done_c3e07ffe_2_1:
+L_i32_slt_done_cdda8f0e_2_1:
     LI T3, 0
     XOR T2, T4, T3
     LI T1, 0
@@ -312,22 +312,22 @@ L_llabs_8:
     ADDI SC, SC, 16
     STORE T2, SB, SC
     XOR T2, T3, T7
-    BNE T2, R0, L_i64_slt_w3ne_e005943f_4_0
+    BNE T2, R0, L_i64_slt_w3ne_f8ec02b6_4_0
     XOR T2, T4, S0
-    BNE T2, R0, L_i64_slt_w2ne_e005943f_4_1
+    BNE T2, R0, L_i64_slt_w2ne_f8ec02b6_4_1
     XOR T2, T5, S1
-    BNE T2, R0, L_i64_slt_w1ne_e005943f_4_2
+    BNE T2, R0, L_i64_slt_w1ne_f8ec02b6_4_2
     SLTU T2, T6, S2
-    BEQ R0, R0, L_i64_slt_done_e005943f_4_3
-L_i64_slt_w3ne_e005943f_4_0:
+    BEQ R0, R0, L_i64_slt_done_f8ec02b6_4_3
+L_i64_slt_w3ne_f8ec02b6_4_0:
     SLT T2, T3, T7
-    BEQ R0, R0, L_i64_slt_done_e005943f_4_3
-L_i64_slt_w2ne_e005943f_4_1:
+    BEQ R0, R0, L_i64_slt_done_f8ec02b6_4_3
+L_i64_slt_w2ne_f8ec02b6_4_1:
     SLTU T2, T4, S0
-    BEQ R0, R0, L_i64_slt_done_e005943f_4_3
-L_i64_slt_w1ne_e005943f_4_2:
+    BEQ R0, R0, L_i64_slt_done_f8ec02b6_4_3
+L_i64_slt_w1ne_f8ec02b6_4_2:
     SLTU T2, T5, S1
-L_i64_slt_done_e005943f_4_3:
+L_i64_slt_done_f8ec02b6_4_3:
 ; Spill i64_c1_4_f4_op6 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -589,6 +589,7 @@ abort:
     ADDI SP, SP, 20
 L_abort_13:
     LI S3, 97
+    ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f8_op0_97 to slot 0
     ADD SC, FP, R0
@@ -598,10 +599,10 @@ L_abort_13:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Call function putchar
     CALL putchar
     LI S2, 98
+    ADD A0, S2, R0
 ; Spill live registers before call
 ; Spill const_f8_op1_98 to slot 1
     ADD SC, FP, R0
@@ -611,10 +612,10 @@ L_abort_13:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S2, R0
 ; Call function putchar
     CALL putchar
     LI S1, 111
+    ADD A0, S1, R0
 ; Spill live registers before call
 ; Spill const_f8_op2_111 to slot 2
     ADD SC, FP, R0
@@ -624,10 +625,10 @@ L_abort_13:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Call function putchar
     CALL putchar
     LI S0, 114
+    ADD A0, S0, R0
 ; Spill live registers before call
 ; Spill const_f8_op3_114 to slot 3
     ADD SC, FP, R0
@@ -637,10 +638,10 @@ L_abort_13:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Call function putchar
     CALL putchar
     LI T7, 116
+    ADD A0, T7, R0
 ; Spill live registers before call
 ; Spill const_f8_op4_116 to slot 4
     ADD SC, FP, R0
@@ -650,10 +651,10 @@ L_abort_13:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T7, R0
 ; Call function putchar
     CALL putchar
     LI T6, 10
+    ADD A0, T6, R0
 ; Spill live registers before call
 ; Spill const_f8_op5_10 to slot 5
     ADD SC, FP, R0
@@ -663,7 +664,6 @@ L_abort_13:
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T6, R0
 ; Call function putchar
     CALL putchar
     HALT

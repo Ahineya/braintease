@@ -170,6 +170,8 @@ L_graphics_init_1:
 ; LOAD: Using bank register Sb for load
     LOAD T6, SB, T3
     LI T4, 16
+    ADD A0, T4, R0
+    ADD A1, T6, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -203,13 +205,13 @@ L_graphics_init_1:
     ADDI SP, FP, 31
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T4, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T6, R0
 ; Call function mmio_write
     CALL mmio_write
     LI T1, 6
+    ADD A0, T1, R0
     LI T0, 3
+    ADD A1, T0, R0
 ; Spill live registers before call
 ; Spill const_f2_op20_6 to slot 7
     ADD SC, FP, R0
@@ -223,9 +225,7 @@ L_graphics_init_1:
     ADDI SP, FP, 31
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -483,6 +483,8 @@ L_set_pixel_8:
     ADDI SC, SC, 22
     STORE T0, SB, SC
     LOAD T0, SB, T6
+    ADD A0, T3, R0
+    ADD A1, T0, R0
 ; Spill live registers before call
 ; Spill t20 to slot 8
     ADD SC, FP, R0
@@ -512,9 +514,7 @@ L_set_pixel_8:
     ADDI SP, FP, 35
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -748,6 +748,7 @@ L_get_pixel_15:
 ; LOAD: Pointer load_src_ptr_f6_op49_t30 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T5, SB, S0
+    ADD A0, T5, R0
 ; Spill live registers before call
 ; Spill load_f6_op29_t16_addr to slot 5
     ADD SC, FP, R0
@@ -781,7 +782,6 @@ L_get_pixel_15:
     ADDI SP, FP, 34
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T5, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t31
@@ -935,6 +935,9 @@ L_clear_screen_22:
 ; Recompute alloca t1 at FP+0
     ADD T3, FP, R0
     LOAD T6, SB, T3
+    ADD A0, S0, R0
+    ADD A1, T2, R0
+    ADD A2, T6, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -964,11 +967,8 @@ L_clear_screen_22:
     ADDI SP, FP, 31
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T2, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T6, R0
 ; Call function set_pixel
     CALL set_pixel
     BEQ R0, R0, L_clear_screen_23
@@ -1075,7 +1075,9 @@ graphics_flush:
     ADDI SP, SP, 20
 L_graphics_flush_25:
     LI S3, 9
+    ADD A0, S3, R0
     LI S2, 1
+    ADD A1, S2, R0
 ; Spill live registers before call
 ; Spill const_f10_op0_9 to slot 0
     ADD SC, FP, R0
@@ -1089,9 +1091,7 @@ L_graphics_flush_25:
     ADDI SP, FP, 28
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S2, R0
 ; Call function mmio_write
     CALL mmio_write
 ; Jump to epilogue
@@ -1301,6 +1301,9 @@ L_draw_hline_28:
     ADDI SC, SC, 14
     STORE S3, SB, SC
     LOAD S3, SB, T4
+    ADD A0, T7, R0
+    ADD A1, T1, R0
+    ADD A2, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
@@ -1338,11 +1341,8 @@ L_draw_hline_28:
     ADDI SP, FP, 34
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T7, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T1, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S3, R0
 ; Call function set_pixel
     CALL set_pixel
     BEQ R0, R0, L_draw_hline_29
@@ -1578,6 +1578,9 @@ L_draw_vline_36:
     ADDI SC, SC, 14
     STORE S3, SB, SC
     LOAD S3, SB, T1
+    ADD A0, T7, R0
+    ADD A1, T4, R0
+    ADD A2, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
@@ -1615,11 +1618,8 @@ L_draw_vline_36:
     ADDI SP, FP, 34
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T7, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T4, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S3, R0
 ; Call function set_pixel
     CALL set_pixel
     BEQ R0, R0, L_draw_vline_37
@@ -2125,6 +2125,9 @@ L_draw_line_56:
     ADD T0, FP, R0
     ADDI T0, T0, 4
     LOAD T2, SB, T0
+    ADD A0, S2, R0
+    ADD A1, T6, R0
+    ADD A2, T2, R0
 ; Spill live registers before call
 ; Spill t35 to slot 10
     ADD SC, FP, R0
@@ -2166,11 +2169,8 @@ L_draw_line_56:
     ADDI SP, FP, 44
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T6, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T2, R0
 ; Call function set_pixel
     CALL set_pixel
     ADD T3, FP, R0
@@ -2604,6 +2604,10 @@ L_draw_rect_76:
     ADD T3, FP, R0
     ADDI T3, T3, 4
     LOAD T6, SB, T3
+    ADD A0, T0, R0
+    ADD A1, T2, R0
+    ADD A2, T4, R0
+    ADD A3, T6, R0
 ; Spill live registers before call
 ; Spill t2 to slot 2
     ADD SC, FP, R0
@@ -2641,13 +2645,9 @@ L_draw_rect_76:
     ADDI SP, FP, 34
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T0, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T2, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T4, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T6, R0
 ; Call function draw_hline
     CALL draw_hline
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
@@ -2712,6 +2712,10 @@ L_draw_rect_77:
     ADD S3, FP, R0
     ADDI S3, S3, 4
     LOAD S0, SB, S3
+    ADD A0, T3, R0
+    ADD A1, T2, R0
+    ADD A2, T1, R0
+    ADD A3, S0, R0
 ; Spill live registers before call
 ; Spill t26 to slot 10
     ADD SC, FP, R0
@@ -2733,13 +2737,9 @@ L_draw_rect_77:
     ADDI SP, FP, 34
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T2, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T1, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, S0, R0
 ; Call function draw_hline
     CALL draw_hline
     BEQ R0, R0, L_draw_rect_79
@@ -2800,6 +2800,10 @@ L_draw_rect_80:
     ADD T4, FP, R0
     ADDI T4, T4, 4
     LOAD T5, SB, T4
+    ADD A0, S3, R0
+    ADD A1, T2, R0
+    ADD A2, T7, R0
+    ADD A3, T5, R0
 ; Spill live registers before call
 ; Spill t36 to slot 14
     ADD SC, FP, R0
@@ -2821,13 +2825,9 @@ L_draw_rect_80:
     ADDI SP, FP, 34
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T2, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T7, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T5, R0
 ; Call function draw_vline
     CALL draw_vline
 ; Load instruction: t42 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -2896,6 +2896,10 @@ L_draw_rect_83:
     ADD T6, FP, R0
     ADDI T6, T6, 4
     LOAD T2, SB, T6
+    ADD A0, T4, R0
+    ADD A1, T1, R0
+    ADD A2, T0, R0
+    ADD A3, T2, R0
 ; Spill live registers before call
 ; Spill t48 to slot 18
     ADD SC, FP, R0
@@ -2917,13 +2921,9 @@ L_draw_rect_83:
     ADDI SP, FP, 36
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T4, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T1, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T0, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T2, R0
 ; Call function draw_vline
     CALL draw_vline
     BEQ R0, R0, L_draw_rect_85
@@ -3270,6 +3270,9 @@ L_fill_rect_95:
     ADDI SC, SC, 21
     STORE T7, SB, SC
     LOAD T7, SB, S0
+    ADD A0, T6, R0
+    ADD A1, T2, R0
+    ADD A2, T7, R0
 ; Spill live registers before call
 ; Spill load_f20_op22_t19_addr to slot 5
     ADD SC, FP, R0
@@ -3303,11 +3306,8 @@ L_fill_rect_95:
     ADDI SP, FP, 37
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T6, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T2, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T7, R0
 ; Call function set_pixel
     CALL set_pixel
     BEQ R0, R0, L_fill_rect_96
@@ -3526,6 +3526,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD S3, SB, T4
+    ADD A0, T3, R0
+    ADD A1, T0, R0
+    ADD A2, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
@@ -3559,11 +3562,8 @@ L_draw_circle_103:
     ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S3, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -3607,6 +3607,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD T3, SB, T4
+    ADD A0, S1, R0
+    ADD A1, T7, R0
+    ADD A2, T3, R0
 ; Spill live registers before call
 ; Spill t25 to slot 8
     ADD SC, FP, R0
@@ -3624,11 +3627,8 @@ L_draw_circle_103:
     ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T7, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T3, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t30 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -3672,6 +3672,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD S1, SB, T4
+    ADD A0, S3, R0
+    ADD A1, S0, R0
+    ADD A2, S1, R0
 ; Spill live registers before call
 ; Spill t32 to slot 11
     ADD SC, FP, R0
@@ -3689,11 +3692,8 @@ L_draw_circle_103:
     ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S0, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S1, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t37 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -3737,6 +3737,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD S3, SB, T4
+    ADD A0, T3, R0
+    ADD A1, T2, R0
+    ADD A2, S3, R0
 ; Spill live registers before call
 ; Spill t39 to slot 14
     ADD SC, FP, R0
@@ -3754,11 +3757,8 @@ L_draw_circle_103:
     ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T2, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S3, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t44 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -3802,6 +3802,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD T3, SB, T4
+    ADD A0, S1, R0
+    ADD A1, T1, R0
+    ADD A2, T3, R0
 ; Spill live registers before call
 ; Spill t46 to slot 17
     ADD SC, FP, R0
@@ -3819,11 +3822,8 @@ L_draw_circle_103:
     ADDI SP, FP, 35
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T1, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T3, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t51 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -3867,6 +3867,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD S1, SB, T4
+    ADD A0, S3, R0
+    ADD A1, T6, R0
+    ADD A2, S1, R0
 ; Spill live registers before call
 ; Spill t53 to slot 20
     ADD SC, FP, R0
@@ -3884,11 +3887,8 @@ L_draw_circle_103:
     ADDI SP, FP, 38
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T6, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S1, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t58 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -3932,6 +3932,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD S3, SB, T4
+    ADD A0, T3, R0
+    ADD A1, T5, R0
+    ADD A2, S3, R0
 ; Spill live registers before call
 ; Spill t60 to slot 23
     ADD SC, FP, R0
@@ -3949,11 +3952,8 @@ L_draw_circle_103:
     ADDI SP, FP, 41
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T5, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, S3, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t65 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -3997,6 +3997,9 @@ L_draw_circle_103:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD T3, SB, T4
+    ADD A0, S1, R0
+    ADD A1, S2, R0
+    ADD A2, T3, R0
 ; Spill live registers before call
 ; Spill t67 to slot 26
     ADD SC, FP, R0
@@ -4014,11 +4017,8 @@ L_draw_circle_103:
     ADDI SP, FP, 44
 ; Setting up 3 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S1, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, S2, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T3, R0
 ; Call function set_pixel
     CALL set_pixel
 ; Load instruction: t72 = load FatPtr(FatPointer { addr: Temp(11), bank: Stack })
@@ -4274,6 +4274,10 @@ L_fill_circle_113:
     ADD T1, FP, R0
     ADDI T1, T1, 3
     LOAD T2, SB, T1
+    ADD A0, T3, R0
+    ADD A1, T4, R0
+    ADD A2, T0, R0
+    ADD A3, T2, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -4311,13 +4315,9 @@ L_fill_circle_113:
     ADDI SP, FP, 33
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T4, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T0, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T2, R0
 ; Call function draw_circle
     CALL draw_circle
     BEQ R0, R0, L_fill_circle_114
@@ -4459,8 +4459,12 @@ L_draw_char_117:
     ADD T4, FP, R0
     ADDI T4, T4, 3
     LOAD T5, SB, T4
+    ADD A0, T2, R0
+    ADD A1, T3, R0
     LI T6, 3
+    ADD A2, T6, R0
     LI T7, 5
+    ADD A3, T7, R0
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -4494,10 +4498,6 @@ L_draw_char_117:
     ADD SC, FP, R0
     ADDI SC, SC, 19
     STORE T7, SB, SC
-; Spill t13 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
-    STORE T5, SB, SC
 ; Set SP = FP+32 so callee frame is above spills
     ADDI SP, FP, 32
 ; Pushing 1 arguments to stack
@@ -4506,14 +4506,11 @@ L_draw_char_117:
     ADDI SP, SP, 1
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T3, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T6, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T7, R0
 ; Pushed 1 words to stack
+; Forget stack-arg registers; callee will clobber T/S
 ; Call function fill_rect
     CALL fill_rect
 ; Clean up 1 words from stack
@@ -4627,17 +4624,17 @@ L_draw_string_121:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("load_f28_op17_t10_bank_val")
     LI T6, -1
-    BEQ T4, T6, L_bc_347c525b_use_global
+    BEQ T4, T6, L_bc_9e62afd6_use_global
     LI T3, -2
-    BEQ T4, T3, L_bc_347c525b_use_stack
+    BEQ T4, T3, L_bc_9e62afd6_use_stack
     ADD T5, T4, R0
-    BEQ R0, R0, L_bc_347c525b_done
-L_bc_347c525b_use_global:
+    BEQ R0, R0, L_bc_9e62afd6_done
+L_bc_9e62afd6_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_347c525b_done
-L_bc_347c525b_use_stack:
+    BEQ R0, R0, L_bc_9e62afd6_done
+L_bc_9e62afd6_use_stack:
     ADD T5, SB, R0
-L_bc_347c525b_done:
+L_bc_9e62afd6_done:
 ; LOAD: Using bank register T5 for load
     LOAD T6, T5, T2
     LI T3, 0
@@ -4709,7 +4706,7 @@ L_draw_string_122:
     ADDI SC, SC, 20
     STORE T1, SB, SC
     LI T1, -1
-    BEQ T7, T1, L_bc_a3afccda_use_global
+    BEQ T7, T1, L_bc_14c6701f_use_global
 ; Spill t10 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 21
@@ -4719,15 +4716,15 @@ L_draw_string_122:
     ADDI SC, SC, 22
     STORE T4, SB, SC
     LI T2, -2
-    BEQ T7, T2, L_bc_a3afccda_use_stack
+    BEQ T7, T2, L_bc_14c6701f_use_stack
     ADD S0, T7, R0
-    BEQ R0, R0, L_bc_a3afccda_done
-L_bc_a3afccda_use_global:
+    BEQ R0, R0, L_bc_14c6701f_done
+L_bc_14c6701f_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_a3afccda_done
-L_bc_a3afccda_use_stack:
+    BEQ R0, R0, L_bc_14c6701f_done
+L_bc_14c6701f_use_stack:
     ADD S0, SB, R0
-L_bc_a3afccda_done:
+L_bc_14c6701f_done:
 ; LOAD: Using bank register S0 for load
     LOAD T1, S0, S1
 ; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -4742,6 +4739,10 @@ L_bc_a3afccda_done:
     ADDI SC, SC, 23
     STORE T4, SB, SC
     LOAD T4, SB, T2
+    ADD A0, S2, R0
+    ADD A1, T6, R0
+    ADD A2, T1, R0
+    ADD A3, T4, R0
 ; Spill live registers before call
 ; Spill load_f28_op18_t11_resolved_bank_28_f28_op19 to slot 10
     ADD SC, FP, R0
@@ -4783,13 +4784,9 @@ L_bc_a3afccda_done:
     ADDI SP, FP, 34
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, S2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T6, R0
 ; Arg 2 (scalar) to A2
-    ADD A2, T1, R0
 ; Arg 3 (scalar) to A3
-    ADD A3, T4, R0
 ; Call function draw_char
     CALL draw_char
 ; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
@@ -5037,17 +5034,17 @@ L_fast_sin_126:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("gep_new_bank_f34_op9_t3")
     LI T0, -1
-    BEQ T2, T0, L_bc_afae663f_use_global
+    BEQ T2, T0, L_bc_98bc1eaa_use_global
     LI T6, -2
-    BEQ T2, T6, L_bc_afae663f_use_stack
+    BEQ T2, T6, L_bc_98bc1eaa_use_stack
     ADD T1, T2, R0
-    BEQ R0, R0, L_bc_afae663f_done
-L_bc_afae663f_use_global:
+    BEQ R0, R0, L_bc_98bc1eaa_done
+L_bc_98bc1eaa_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_afae663f_done
-L_bc_afae663f_use_stack:
+    BEQ R0, R0, L_bc_98bc1eaa_done
+L_bc_98bc1eaa_use_stack:
     ADD T1, SB, R0
-L_bc_afae663f_done:
+L_bc_98bc1eaa_done:
 ; LOAD: Using bank register T1 for load
     LOAD T5, T1, T7
     MOVE RV0, T5
