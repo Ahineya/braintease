@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYYYYYYYYYY\n",
+  "description": "32-bit long arithmetic, ABI, and limits.h",
+  "use_runtime": true
+}

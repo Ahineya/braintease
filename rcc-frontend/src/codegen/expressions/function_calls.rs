@@ -1,6 +1,7 @@
 //! Function call code generation
 
 use super::{TypedExpressionGenerator, convert_type_default};
+use super::conversions::convert_integer;
 use super::assignments::copy_struct;
 use crate::ir::{Value, FatPointer};
 use crate::typed_ast::TypedExpr;
@@ -34,7 +35,18 @@ pub fn generate_function_call(
     };
     
     let mut arg_vals = Vec::new();
-    for arg in arguments {
+    let param_types: Vec<Type> = {
+        let func_ty = function.get_type();
+        let callable = match func_ty {
+            Type::Pointer { target, .. } => target.as_ref(),
+            other => other,
+        };
+        match callable {
+            Type::Function { parameters, .. } => parameters.clone(),
+            _ => Vec::new(),
+        }
+    };
+    for (i, arg) in arguments.iter().enumerate() {
         let val = gen.generate(arg)?;
         let arg_type = arg.get_type();
         if arg_type.is_aggregate() {
@@ -48,6 +60,8 @@ pub fn generate_function_call(
                 })?;
             copy_struct(gen, val, dest.clone(), &arg_type)?;
             arg_vals.push(dest);
+        } else if i < param_types.len() && arg_type.is_integer() && param_types[i].is_integer() {
+            arg_vals.push(convert_integer(gen, val, arg_type, &param_types[i])?);
         } else {
             arg_vals.push(val);
         }

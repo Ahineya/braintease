@@ -14,32 +14,35 @@ use rcc_codegen::{AsmInst, Reg};
 
 #[test]
 fn test_all_scalars_in_registers() {
-    // Test that first 4 scalar parameters go to A0-A3
+    // I16/I8 take one slot; I32 takes two (like a fat pointer).
     let cc = CallingConvention::new();
     let mut pm = RegisterPressureManager::new(0);
     pm.init();
     let mut naming = new_function_naming();
-    
+
     let param_types = vec![
         (0, IrType::I16),
-        (1, IrType::I8), 
+        (1, IrType::I8),
         (2, IrType::I32),
         (3, IrType::I16),
     ];
-    
-    // All should be in registers
-    for i in 0..4 {
-        let (insts, _reg, _bank_reg) = cc.load_param(i, &param_types, &mut pm, &mut naming);
-        let expected_reg = match i {
-            0 => Reg::A0,
-            1 => Reg::A1,
-            2 => Reg::A2,
-            3 => Reg::A3,
-            _ => unreachable!(),
-        };
-        assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Add(_, r, Reg::R0) if *r == expected_reg)),
-                "Parameter {} should be in {:?}", i, expected_reg);
-    }
+
+    let (insts, _reg, _bank_reg) = cc.load_param(0, &param_types, &mut pm, &mut naming);
+    assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Add(_, Reg::A0, Reg::R0))),
+            "Parameter 0 should be in A0");
+
+    let (insts, _reg, _bank_reg) = cc.load_param(1, &param_types, &mut pm, &mut naming);
+    assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Add(_, Reg::A1, Reg::R0))),
+            "Parameter 1 should be in A1");
+
+    let (insts, _reg, _bank_reg) = cc.load_param(2, &param_types, &mut pm, &mut naming);
+    assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Add(_, Reg::A2, Reg::R0))),
+            "Parameter 2 (I32 low word) should be in A2");
+
+    // I32 occupied A2-A3, so parameter 3 is the first stack slot.
+    let (insts, _reg, _bank_reg) = cc.load_param(3, &param_types, &mut pm, &mut naming);
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -7))),
+            "Parameter 3 should be on stack at FP-7 after I32 filled A2-A3");
 }
 
 #[test]

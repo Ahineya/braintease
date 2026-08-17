@@ -93,7 +93,7 @@ fn stress_test_nested_calls() {
         
         // Handle return
         let result_name = Some(format!("result_{}", depth));
-        let (_insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, depth % 2 == 0, result_name);
+        let (_insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, depth % 2 == 0, false, result_name);
         let _ret_regs = ret_regs; // Just to use it
         
         // Cleanup

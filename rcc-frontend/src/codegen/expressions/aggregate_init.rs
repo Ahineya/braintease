@@ -98,12 +98,13 @@ pub fn store_initializer(
                         bank: BankTag::Null,
                     }),
                     dest,
+                    convert_type_default(dest_type)?,
                 )
                 .map_err(|e| intern_err(e))
         }
         (Type::Pointer { .. }, TypedExpr::CompoundLiteral { .. }) => {
             let val = gen.generate(init)?;
-            gen.builder.build_store(val, dest).map_err(|e| intern_err(e))
+            gen.builder.build_store(val, dest, convert_type_default(dest_type)?).map_err(|e| intern_err(e))
         }
         (_, TypedExpr::ArrayInitializer { elements, .. })
         | (_, TypedExpr::CompoundLiteral { initializer: elements, .. }) => {
@@ -127,10 +128,13 @@ pub fn store_initializer(
                     IrType::I16,
                 ).map_err(|e| intern_err(e))?;
                 Value::Temp(temp)
+            } else if dest_type.is_integer() && init.get_type().is_integer() {
+                super::conversions::convert_integer(gen, val, init.get_type(), dest_type)
+                    .map_err(|e| intern_err(format!("{e}")))?
             } else {
                 val
             };
-            gen.builder.build_store(stored, dest).map_err(|e| intern_err(e))
+            gen.builder.build_store(stored, dest, convert_type_default(dest_type)?).map_err(|e| intern_err(e))
         }
     }
 }

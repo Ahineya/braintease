@@ -324,7 +324,7 @@ pub fn type_expression(
     use crate::ast::ExpressionKind;
     
     match &expr.kind {
-        ExpressionKind::IntLiteral(value) => {
+        ExpressionKind::IntLiteral { value, .. } => {
             Ok(TypedExpr::IntLiteral {
                 value: *value,
                 expr_type: expr.expr_type.clone().unwrap_or(Type::Int),

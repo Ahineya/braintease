@@ -7,7 +7,7 @@ pub mod token;
 pub mod literals;
 pub mod operators;
 
-pub use token::{Token, TokenType};
+pub use token::{IntegerSuffix, Token, TokenType};
 
 use rcc_common::{SourceLocation, SourceSpan, CompilerError};
 use std::collections::HashMap;
@@ -444,22 +444,22 @@ mod tests {
         let tokens = lexer.tokenize().unwrap();
         
         assert_eq!(tokens.len(), 5); // 4 literals + EOF
-        assert_eq!(tokens[0].token_type, TokenType::IntLiteral(42));
+        assert_eq!(tokens[0].token_type, TokenType::IntLiteral { value: 42, suffix: IntegerSuffix::None, hex: false });
         assert_eq!(tokens[1].token_type, TokenType::CharLiteral(b'a'));
         assert_eq!(tokens[2].token_type, TokenType::StringLiteral("hello".to_string()));
-        assert_eq!(tokens[3].token_type, TokenType::IntLiteral(255));
+        assert_eq!(tokens[3].token_type, TokenType::IntLiteral { value: 255, suffix: IntegerSuffix::None, hex: true });
     }
 
     #[test]
     fn test_integer_suffixes() {
-        let mut lexer = Lexer::new("64000U 63996u 0xffUL 42L 100ull");
+        let mut lexer = Lexer::new("64000U 63996u 0xffUL 42L 100ul");
         let tokens = lexer.tokenize().unwrap();
 
-        assert_eq!(tokens[0].token_type, TokenType::IntLiteral(64000));
-        assert_eq!(tokens[1].token_type, TokenType::IntLiteral(63996));
-        assert_eq!(tokens[2].token_type, TokenType::IntLiteral(255));
-        assert_eq!(tokens[3].token_type, TokenType::IntLiteral(42));
-        assert_eq!(tokens[4].token_type, TokenType::IntLiteral(100));
+        assert_eq!(tokens[0].token_type, TokenType::IntLiteral { value: 64000, suffix: IntegerSuffix::Unsigned, hex: false });
+        assert_eq!(tokens[1].token_type, TokenType::IntLiteral { value: 63996, suffix: IntegerSuffix::Unsigned, hex: false });
+        assert_eq!(tokens[2].token_type, TokenType::IntLiteral { value: 255, suffix: IntegerSuffix::UnsignedLong, hex: true });
+        assert_eq!(tokens[3].token_type, TokenType::IntLiteral { value: 42, suffix: IntegerSuffix::Long, hex: false });
+        assert_eq!(tokens[4].token_type, TokenType::IntLiteral { value: 100, suffix: IntegerSuffix::UnsignedLong, hex: false });
         assert_eq!(tokens[5].token_type, TokenType::EndOfFile);
     }
 
@@ -528,7 +528,7 @@ int main() {
         assert_eq!(tokens[5].token_type, TokenType::LeftBrace);
         assert_eq!(tokens[6].token_type, TokenType::Newline);
         assert_eq!(tokens[7].token_type, TokenType::Return);
-        assert_eq!(tokens[8].token_type, TokenType::IntLiteral(42));
+        assert_eq!(tokens[8].token_type, TokenType::IntLiteral { value: 42, suffix: IntegerSuffix::None, hex: false });
         assert_eq!(tokens[9].token_type, TokenType::Semicolon);
         assert_eq!(tokens[10].token_type, TokenType::Newline);
         assert_eq!(tokens[11].token_type, TokenType::RightBrace);

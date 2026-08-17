@@ -25,7 +25,7 @@ fn copy_words(
         let src_addr = builder.build_pointer_offset(src_ptr.clone(), offset_val.clone(), IrType::I16)?;
         let dst_addr = builder.build_pointer_offset(dst_ptr.clone(), offset_val, IrType::I16)?;
         let word = builder.build_load(src_addr, IrType::I16)?;
-        builder.build_store(Value::Temp(word), dst_addr)?;
+        builder.build_store(Value::Temp(word), dst_addr, IrType::I16)?;
     }
     Ok(())
 }
@@ -119,7 +119,7 @@ pub fn generate_function(
         } else {
             // Store parameter value (parameters are passed as temporaries)
             let param_value = Value::Temp(i as rcc_common::TempId);
-            builder.build_store(param_value, param_addr.clone())?;
+            builder.build_store(param_value, param_addr.clone(), ir_type.clone())?;
         }
         
         // Track the parameter

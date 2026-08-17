@@ -35,37 +35,62 @@ srand:
 ; LOAD: Pointer load_src_ptr_f0_op2_t3 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S0, SB, S2
-    LI T7, -1
-    AND S0, S0, T7
-    STORE S0, SB, S1
+    LI T7, 0
+    LI T6, -1
+    LI T5, 0
+    AND T4, S0, T6
+    AND T3, T7, T5
+    STORE T4, SB, S1
+    ADDI SC, S1, 1
+    STORE T3, SB, SC
 ; Load instruction: t5 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f0_op5_t5 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f0_op8_t5 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T6, SB, S1
+    LOAD T2, SB, S1
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 10
     STORE S3, SB, SC
-; Spill t4 to slot 1
+; Spill t3 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 11
     STORE S0, SB, SC
-; Spill t5 to slot 2
+; Spill i32_zext_0_f0_op4 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 12
+    STORE T7, SB, SC
+; Spill const_f0_op5_65535 to slot 3
+    ADD SC, FP, R0
+    ADDI SC, SC, 13
     STORE T6, SB, SC
+; Spill i32_const_hi_0_f0_op6 to slot 4
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE T5, SB, SC
+; Spill t4 to slot 5
+    ADD SC, FP, R0
+    ADDI SC, SC, 15
+    STORE T4, SB, SC
+; Spill t4__hi to slot 6
+    ADD SC, FP, R0
+    ADDI SC, SC, 16
+    STORE T3, SB, SC
+; Spill t5 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 17
+    STORE T2, SB, SC
 ; Set SP = FP+30 so callee frame is above spills
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T6, R0
+    ADD A0, T2, R0
 ; Call function rng_set_seed
     CALL rng_set_seed
-    LI T5, 1
-    LI T4, 0
-    STORE T5, GP, T4
+    LI T1, 1
+    LI T0, 0
+    STORE T1, GP, T0
 ; Jump to epilogue
     BEQ R0, R0, L_srand_99999
 L_srand_99999:

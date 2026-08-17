@@ -11,7 +11,7 @@ pub struct ConstEvalError(pub String);
 
 pub fn eval_integer_constant(expr: &Expression) -> Result<i64, ConstEvalError> {
     match &expr.kind {
-        ExpressionKind::IntLiteral(v) => Ok(*v),
+        ExpressionKind::IntLiteral { value, .. } => Ok(*value),
         ExpressionKind::CharLiteral(v) => Ok(*v as i64),
         ExpressionKind::SizeofType(ty) => ty
             .size_in_bytes()
@@ -84,7 +84,11 @@ mod tests {
     fn lit(v: i64) -> Expression {
         Expression {
             node_id: 0,
-            kind: ExpressionKind::IntLiteral(v),
+            kind: ExpressionKind::IntLiteral {
+                value: v,
+                suffix: crate::lexer::IntegerSuffix::None,
+                hex: false,
+            },
             span: SourceSpan::new(
                 SourceLocation::new_simple(0, 0),
                 SourceLocation::new_simple(0, 0),

@@ -74,7 +74,7 @@ fn test_load_then_store_same_value() {
         bank: BankTag::Global,
     });
     
-    let store_insts = lower_store(&mut mgr, &mut naming, &store_value, &store_ptr);
+    let store_insts = lower_store(&mut mgr, &mut naming, &store_value, &store_ptr, &Type::I16);
     
     // Both operations should succeed
     assert!(!load_insts.is_empty());
@@ -107,7 +107,7 @@ fn test_load_store_fat_pointer_consistency() {
     let store_value = Value::Constant(42);
     let store_ptr = Value::Temp(70);
     
-    let store_insts = lower_store(&mut mgr, &mut naming, &store_value, &store_ptr);
+    let store_insts = lower_store(&mut mgr, &mut naming, &store_value, &store_ptr, &Type::I16);
     
     // Store should use the bank info from the load
     assert!(!load_insts.is_empty());
@@ -138,8 +138,8 @@ fn test_multiple_stores_no_conflicts() {
         bank: BankTag::Global,
     });
     
-    let insts1 = lower_store(&mut mgr, &mut naming, &value1, &ptr1);
-    let insts2 = lower_store(&mut mgr, &mut naming, &value2, &ptr2);
+    let insts1 = lower_store(&mut mgr, &mut naming, &value1, &ptr1, &Type::I16);
+    let insts2 = lower_store(&mut mgr, &mut naming, &value2, &ptr2, &Type::I16);
     
     // Both should generate valid instructions
     assert!(!insts1.is_empty());
@@ -176,7 +176,7 @@ fn test_load_modify_store_pattern() {
         bank: BankTag::Global,
     });
     
-    let store_insts = lower_store(&mut mgr, &mut naming, &store_value, &store_ptr);
+    let store_insts = lower_store(&mut mgr, &mut naming, &store_value, &store_ptr, &Type::I16);
     
     // Verify both operations succeeded
     assert!(!load_insts.is_empty());

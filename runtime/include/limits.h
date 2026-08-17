@@ -24,10 +24,10 @@
 #define INT_MAX 32767
 #define UINT_MAX 65535
 
-// Long limits (same as int for now)
-#define LONG_MIN INT_MIN
-#define LONG_MAX INT_MAX
-#define ULONG_MAX UINT_MAX
+// Long limits (32-bit)
+#define LONG_MIN (-2147483647L-1)
+#define LONG_MAX 2147483647L
+#define ULONG_MAX 4294967295UL
 
 // Long long limits (not supported yet, using long values)
 #define LLONG_MIN LONG_MIN

@@ -60,7 +60,7 @@ pub fn format_c_line(line: &str) -> Vec<Span<'static>> {
             }
             
             // Literals - different colors
-            TokenType::IntLiteral(_) => {
+            TokenType::IntLiteral { .. } => {
                 Span::styled(token_text, Style::default().fg(Color::Rgb(255, 140, 0))) // Orange
             }
             TokenType::CharLiteral(_) => {

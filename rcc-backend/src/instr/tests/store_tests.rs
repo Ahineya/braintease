@@ -1,6 +1,6 @@
 //! Tests for Store instruction lowering
 
-use rcc_frontend::ir::{Value, FatPointer, };
+use rcc_frontend::ir::{Value, FatPointer, IrType};
 use crate::regmgmt::{RegisterPressureManager, BankInfo};
 use crate::naming::new_function_naming;
 use crate::instr::lower_store;
@@ -20,7 +20,7 @@ fn test_store_scalar_to_stack() {
         bank: BankTag::Stack,
     });
     
-    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr);
+    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr, &IrType::I16);
     
     // Should load constant into register
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(_, 42))));
@@ -52,7 +52,7 @@ fn test_store_scalar_to_global() {
         bank: BankTag::Global,
     });
     
-    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr);
+    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr, &IrType::I16);
     
     // Should load destination address
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(_, 200))));
@@ -85,7 +85,7 @@ fn test_store_fat_pointer() {
         bank: BankTag::Stack,
     });
     
-    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr);
+    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr, &IrType::I16);
     
     // Should load pointer address
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(_, 100))));
@@ -115,7 +115,7 @@ fn test_store_to_temp_pointer() {
     let value = Value::Constant(99);
     let ptr = Value::Temp(ptr_temp);
     
-    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr);
+    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr, &IrType::I16);
     
     // Should load constant
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(_, 99))));
@@ -147,7 +147,7 @@ fn test_store_pointer_as_value() {
         bank: BankTag::Stack,
     });
     
-    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr);
+    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr, &IrType::I16);
     
     // Should store both address and bank components
     let store_count = insts.iter().filter(|i| matches!(i, AsmInst::Store(_, _, _))).count();
@@ -170,7 +170,7 @@ fn test_store_to_global_variable() {
         bank: BankTag::Global,
     });
     
-    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr);
+    let insts = lower_store(&mut mgr, &mut naming, &value, &ptr, &IrType::I16);
     
     // Should load the address and value
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(_, 3000)))); // Address

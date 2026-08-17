@@ -1,6 +1,7 @@
 //! Assignment operation code generation
 
 use super::TypedExpressionGenerator;
+use super::conversions::convert_integer;
 use super::unary_ops::generate_lvalue_address;
 use crate::ir::{Value, IrType, IrBinaryOp};
 use crate::typed_ast::TypedExpr;
@@ -64,7 +65,7 @@ pub fn copy_struct(
         let word = gen.builder.build_load(src_addr, IrType::I16)?;
         
         // Store to destination
-        gen.builder.build_store(Value::Temp(word), dst_addr)?;
+        gen.builder.build_store(Value::Temp(word), dst_addr, IrType::I16)?;
     }
     
     Ok(())
@@ -89,10 +90,13 @@ pub fn generate_assignment(
         let rhs_val = gen.generate(rhs)?;
         let stored = if matches!(lhs_type, Type::Bool) {
             to_bool_value(gen, rhs_val)?
+        } else if lhs_type.is_integer() && rhs_type.is_integer() {
+            convert_integer(gen, rhs_val, rhs_type, lhs_type)?
         } else {
             rhs_val
         };
-        gen.builder.build_store(stored.clone(), lhs_addr)?;
+        let ir_type = super::convert_type_default(lhs_type)?;
+        gen.builder.build_store(stored.clone(), lhs_addr, ir_type)?;
         Ok(stored)
     }
 }

@@ -42,7 +42,7 @@ fn test_gep_then_store() {
     let value_to_store = Value::Constant(42);
     let ptr_to_store = Value::Temp(gep_result_temp);
     
-    let store_insts = lower_store(&mut mgr, &mut naming, &value_to_store, &ptr_to_store);
+    let store_insts = lower_store(&mut mgr, &mut naming, &value_to_store, &ptr_to_store, &IrType::I16);
     insts.extend(store_insts);
     
     // Verify we have both GEP and store operations
@@ -130,7 +130,7 @@ fn test_gep_with_dynamic_index_then_store() {
     let value_to_store = Value::Temp(52);
     let ptr_to_store = Value::Temp(gep_result_temp);
     
-    let store_insts = lower_store(&mut mgr, &mut naming, &value_to_store, &ptr_to_store);
+    let store_insts = lower_store(&mut mgr, &mut naming, &value_to_store, &ptr_to_store, &IrType::I16);
     insts.extend(store_insts);
     
     // Should have runtime bank overflow handling
@@ -211,7 +211,7 @@ fn test_gep_in_loop_pattern() {
         // Store i to arr[i]
         let value = Value::Constant(i);
         let ptr = Value::Temp(gep_temp);
-        let store_insts = lower_store(&mut mgr, &mut naming, &value, &ptr);
+        let store_insts = lower_store(&mut mgr, &mut naming, &value, &ptr, &IrType::I16);
         all_insts.extend(store_insts);
     }
     
@@ -299,7 +299,7 @@ fn test_gep_load_store_pointer() {
     });
     let store_ptr = Value::Temp(gep_temp);
     
-    let store_insts = lower_store(&mut mgr, &mut naming, &ptr_value, &store_ptr);
+    let store_insts = lower_store(&mut mgr, &mut naming, &ptr_value, &store_ptr, &IrType::FatPtr(Box::new(IrType::I16)));
     insts.extend(store_insts);
     
     // Should store both components of fat pointer
@@ -360,7 +360,7 @@ fn test_gep_chain_with_stores_and_loads() {
         // Store value to matrix[2][j]
         let value = Value::Constant(20 + j); // Store 23 and 24
         let elem_ptr = Value::Temp(elem_gep_temp);
-        let store_insts = lower_store(&mut mgr, &mut naming, &value, &elem_ptr);
+        let store_insts = lower_store(&mut mgr, &mut naming, &value, &elem_ptr, &IrType::I16);
         all_insts.extend(store_insts);
     }
     
@@ -472,7 +472,7 @@ fn test_gep_with_dynamic_2d_access() {
     // Store a value
     let value = Value::Constant(999);
     let elem_ptr = Value::Temp(elem_gep_temp);
-    let store_insts = lower_store(&mut mgr, &mut naming, &value, &elem_ptr);
+    let store_insts = lower_store(&mut mgr, &mut naming, &value, &elem_ptr, &IrType::I16);
     insts.extend(store_insts);
     
     // Store should use dynamic bank register
@@ -513,7 +513,7 @@ fn test_gep_struct_field_simulation() {
     // Store to y field
     let y_value = Value::Constant(10);
     let y_ptr = Value::Temp(y_gep_temp);
-    let y_store_insts = lower_store(&mut mgr, &mut naming, &y_value, &y_ptr);
+    let y_store_insts = lower_store(&mut mgr, &mut naming, &y_value, &y_ptr, &IrType::I16);
     all_insts.extend(y_store_insts);
     
     // Access field next (offset 2, fat pointer field)
@@ -529,7 +529,7 @@ fn test_gep_struct_field_simulation() {
         bank: BankTag::Global,
     });
     let next_ptr = Value::Temp(next_gep_temp);
-    let next_store_insts = lower_store(&mut mgr, &mut naming, &next_value, &next_ptr);
+    let next_store_insts = lower_store(&mut mgr, &mut naming, &next_value, &next_ptr, &IrType::FatPtr(Box::new(IrType::I16)));
     all_insts.extend(next_store_insts);
     
     // Load the pointer back

@@ -1,6 +1,7 @@
 //! Binary operation code generation
 
 use super::{TypedExpressionGenerator, convert_type_default};
+use super::conversions::{convert_integer, usual_arithmetic_type};
 use crate::ast::BinaryOp;
 use crate::ir::{IrBinaryOp, IrType, Value};
 use crate::typed_ast::TypedExpr;
@@ -121,7 +122,7 @@ fn generate_logical_operation(
     intern_unit(gen.builder.create_block(rhs_label).map(|_| ()))?;
     let right_val = gen.generate(right)?;
     let right_bool = to_logical_i16(gen, right_val)?;
-    intern_unit(gen.builder.build_store(right_bool, result_ptr.clone()))?;
+        intern_unit(gen.builder.build_store(right_bool, result_ptr.clone(), IrType::I16))?;
     if !gen.builder.current_block_has_terminator() {
         intern_unit(gen.builder.build_branch(end_label))?;
     }
@@ -132,7 +133,7 @@ fn generate_logical_operation(
         BinaryOp::LogicalOr => Value::Constant(1),
         _ => unreachable!(),
     };
-    intern_unit(gen.builder.build_store(skip_value, result_ptr.clone()))?;
+    intern_unit(gen.builder.build_store(skip_value, result_ptr.clone(), IrType::I16))?;
     if !gen.builder.current_block_has_terminator() {
         intern_unit(gen.builder.build_branch(end_label))?;
     }
@@ -160,7 +161,32 @@ pub fn generate_binary_operation(
 
     let left_val = gen.generate(left)?;
     let right_val = gen.generate(right)?;
-    let ir_type = convert_type_default(result_type)?;
+    let is_cmp = matches!(
+        op,
+        BinaryOp::Less | BinaryOp::Greater | BinaryOp::LessEqual | BinaryOp::GreaterEqual
+            | BinaryOp::Equal | BinaryOp::NotEqual
+    );
+    let is_shift = matches!(op, BinaryOp::LeftShift | BinaryOp::RightShift);
+    let common = if is_cmp {
+        usual_arithmetic_type(left.get_type(), right.get_type())
+    } else if is_shift {
+        // C99 6.5.7: result type is the promoted left operand; the count is not
+        // converted to that type.
+        result_type.clone()
+    } else {
+        result_type.clone()
+    };
+    let left_val = convert_integer(gen, left_val, left.get_type(), &common)?;
+    let right_val = if is_shift {
+        right_val
+    } else {
+        convert_integer(gen, right_val, right.get_type(), &common)?
+    };
+    let ir_type = if is_cmp {
+        IrType::I16
+    } else {
+        convert_type_default(result_type)?
+    };
     
     let ir_op = select_ir_op(op, left, right)?;
     
@@ -185,6 +211,7 @@ pub fn generate_compound_assignment(
         Value::Temp(temp)
     };
     let rhs_val = gen.generate(rhs)?;
+    let rhs_val = convert_integer(gen, rhs_val, rhs.get_type(), lhs.get_type())?;
     
     let ir_type = convert_type_default(lhs.get_type())?;
     let unsigned = lhs.get_type().is_unsigned_integer() || rhs.get_type().is_unsigned_integer();
@@ -213,7 +240,7 @@ pub fn generate_compound_assignment(
     let result = gen
         .builder
         .build_binary(ir_op, lhs_val, rhs_val, ir_type.clone())?;
-    gen.builder.build_store(Value::Temp(result), lhs_addr)?;
+    gen.builder.build_store(Value::Temp(result), lhs_addr, ir_type)?;
     
     Ok(Value::Temp(result))
 }

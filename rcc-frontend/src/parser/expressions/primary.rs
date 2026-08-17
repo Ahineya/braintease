@@ -12,8 +12,8 @@ impl Parser {
         let start_location = self.current_location();
         
         let kind = match self.advance() {
-            Some(Token { token_type: TokenType::IntLiteral(value), .. }) => {
-                ExpressionKind::IntLiteral(value)
+            Some(Token { token_type: TokenType::IntLiteral { value, suffix, hex }, .. }) => {
+                ExpressionKind::IntLiteral { value, suffix, hex }
             }
             Some(Token { token_type: TokenType::CharLiteral(value), .. }) => {
                 ExpressionKind::CharLiteral(value)

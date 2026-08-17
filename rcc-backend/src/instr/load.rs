@@ -131,6 +131,21 @@ pub fn lower_load(
     let load_inst = AsmInst::Load(dest_reg, bank_reg, addr_reg);
     trace!("  Generated LOAD: {load_inst:?}");
     insts.push(load_inst);
+
+    // I32: also load the high word at addr+1
+    if result_type.is_wide() {
+        mgr.pin_register(dest_reg);
+        let hi_name = naming.i32_high_name(&result_name);
+        let hi_reg = mgr.get_register(hi_name.clone());
+        insts.extend(mgr.take_instructions());
+        insts.push(AsmInst::AddI(rcc_codegen::Reg::Sc, addr_reg, 1));
+        insts.push(AsmInst::Load(hi_reg, bank_reg, rcc_codegen::Reg::Sc));
+        mgr.bind_value_to_register(hi_name.clone(), hi_reg);
+        mgr.set_i32_high(result_name.clone(), hi_name);
+        mgr.unpin_register(dest_reg);
+        debug!("  I32 loaded: lo in {dest_reg:?}, hi in {hi_reg:?}");
+    }
+
     mgr.unpin_register(addr_reg);
     mgr.unpin_register(bank_reg);
     

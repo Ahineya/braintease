@@ -41,7 +41,7 @@ mod tests {
             ExpressionKind::Cast { target_type, operand } => {
                 assert_eq!(*target_type, Type::Int);
                 match &operand.kind {
-                    ExpressionKind::IntLiteral(val) => assert_eq!(*val, 42),
+                    ExpressionKind::IntLiteral { value: val, .. } => assert_eq!(*val, 42),
                     _ => panic!("Expected int literal operand"),
                 }
             }
@@ -68,7 +68,7 @@ mod tests {
                 assert!(matches!(target_type, Type::Pointer { target, .. } 
                     if **target == Type::Int));
                 match &operand.kind {
-                    ExpressionKind::IntLiteral(val) => assert_eq!(*val, 0),
+                    ExpressionKind::IntLiteral { value: val, .. } => assert_eq!(*val, 0),
                     _ => panic!("Expected int literal for NULL"),
                 }
             }

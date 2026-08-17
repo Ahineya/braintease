@@ -6,11 +6,27 @@ use rcc_common::{SourceLocation, SourceSpan};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// C99 integer-literal suffix (6.4.4.1). `ll`/`ull` are rejected — no `long long`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum IntegerSuffix {
+    #[default]
+    None,
+    Unsigned,
+    Long,
+    UnsignedLong,
+}
+
 /// C99 Token types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TokenType {
     // Literals
-    IntLiteral(i64),
+    IntLiteral {
+        value: i64,
+        suffix: IntegerSuffix,
+        /// True for `0x`/`0X` literals. C99 6.4.4.1 uses a different type
+        /// ladder for hex than for decimal (unsigned int before long).
+        hex: bool,
+    },
     CharLiteral(u8),
     StringLiteral(String),
     
@@ -91,7 +107,12 @@ pub enum TokenType {
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenType::IntLiteral(n) => write!(f, "{n}"),
+            TokenType::IntLiteral { value, suffix, .. } => match suffix {
+                IntegerSuffix::None => write!(f, "{value}"),
+                IntegerSuffix::Unsigned => write!(f, "{value}U"),
+                IntegerSuffix::Long => write!(f, "{value}L"),
+                IntegerSuffix::UnsignedLong => write!(f, "{value}UL"),
+            },
             TokenType::CharLiteral(c) => write!(f, "'{}'", *c as char),
             TokenType::StringLiteral(s) => write!(f, "\"{s}\""),
             TokenType::Identifier(s) => write!(f, "{s}"),

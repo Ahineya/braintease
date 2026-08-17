@@ -4,7 +4,7 @@
 
 int main() {
     // Try to allocate exactly 63000 words (should succeed with 64000 BANK_SIZE)
-    unsigned int* big_array = (unsigned int*)malloc(63000);
+    unsigned int* big_array = (unsigned int*)malloc(63000U);
     
     if (big_array == NULL) {
         putchar('N');  // Failed

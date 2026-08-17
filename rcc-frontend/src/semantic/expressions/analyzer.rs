@@ -10,6 +10,39 @@ use std::rc::Rc;
 use crate::semantic::expressions::initializers::InitializerAnalyzer;
 use super::binary::BinaryOperationAnalyzer;
 use super::unary::UnaryOperationAnalyzer;
+use crate::lexer::IntegerSuffix;
+
+fn literal_integer_type(value: i64, suffix: IntegerSuffix, hex: bool) -> Type {
+    match suffix {
+        IntegerSuffix::None => {
+            if value >= i16::MIN as i64 && value <= i16::MAX as i64 {
+                Type::Int
+            } else if hex && value >= 0 && value <= u16::MAX as i64 {
+                // C99 6.4.4.1: hex/octal try unsigned int before long.
+                Type::UnsignedInt
+            } else if value >= i32::MIN as i64 && value <= i32::MAX as i64 {
+                Type::Long
+            } else {
+                Type::UnsignedLong
+            }
+        }
+        IntegerSuffix::Unsigned => {
+            if value >= 0 && value <= u16::MAX as i64 {
+                Type::UnsignedInt
+            } else {
+                Type::UnsignedLong
+            }
+        }
+        IntegerSuffix::Long => {
+            if value >= i32::MIN as i64 && value <= i32::MAX as i64 {
+                Type::Long
+            } else {
+                Type::UnsignedLong
+            }
+        }
+        IntegerSuffix::UnsignedLong => Type::UnsignedLong,
+    }
+}
 
 pub struct ExpressionAnalyzer {
     pub type_analyzer: Rc<RefCell<TypeAnalyzer>>,
@@ -44,13 +77,20 @@ impl ExpressionAnalyzer {
             None
         };
         if let Some(val) = enum_val {
-            expr.kind = ExpressionKind::IntLiteral(val);
+            expr.kind = ExpressionKind::IntLiteral {
+                value: val,
+                suffix: crate::lexer::IntegerSuffix::None,
+                hex: false,
+            };
             expr.expr_type = Some(Type::Int);
             return Ok(());
         }
 
         let expr_type = match &mut expr.kind {
-            ExpressionKind::IntLiteral(_) => Type::Int,
+            ExpressionKind::IntLiteral { value: v, suffix, hex } => {
+                // C99 6.4.4.1 on this ILP16 / 32-bit long target.
+                literal_integer_type(*v, *suffix, *hex)
+            }
             ExpressionKind::CharLiteral(_) => Type::Char,
             ExpressionKind::StringLiteral(_) => Type::Array {
                 element_type: Box::new(Type::Char),
@@ -225,10 +265,10 @@ impl ExpressionAnalyzer {
 
             ExpressionKind::SizeofExpr(operand) => {
                 self.analyze(operand)?;
-                Type::UnsignedLong // sizeof returns size_t, which is unsigned long on Ripple
+                Type::Int // sizeof yields size_t; stddef.h currently typedefs that as int
             }
 
-            ExpressionKind::SizeofType(_) => Type::UnsignedLong,
+            ExpressionKind::SizeofType(_) => Type::Int,
 
             ExpressionKind::CompoundLiteral {
                 type_name,

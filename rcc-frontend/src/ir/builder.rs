@@ -6,7 +6,7 @@ use rcc_common::{TempId, LabelId};
 use crate::BankTag;
 use crate::ir::{
     Value, IrType, FatPointer,
-    IrBinaryOp, Instruction,
+    IrBinaryOp, IrUnaryOp, Instruction,
     BasicBlock, Function
 };
 
@@ -106,9 +106,21 @@ impl IrBuilder {
         Ok(result)
     }
     
-    pub fn build_store(&mut self, value: Value, ptr: Value) -> Result<(), String> {
-        let instr = Instruction::Store { value, ptr };
+    pub fn build_store(&mut self, value: Value, ptr: Value, value_type: IrType) -> Result<(), String> {
+        let instr = Instruction::Store { value, ptr, value_type };
         self.add_instruction(instr)
+    }
+
+    pub fn build_unary(&mut self, op: IrUnaryOp, operand: Value, result_type: IrType) -> Result<TempId, String> {
+        let result = self.new_temp();
+        let instr = Instruction::Unary { result, op, operand, result_type };
+        self.add_instruction(instr)?;
+        Ok(result)
+    }
+
+    /// IR return type of the function currently being built
+    pub fn current_return_type(&self) -> Option<&IrType> {
+        self.current_function.as_ref().map(|f| &f.return_type)
     }
     
     pub fn build_alloca(&mut self, alloc_type: IrType, count: Option<Value>) -> Result<Value, String> {

@@ -86,6 +86,16 @@ impl IrType {
     pub fn is_pointer(&self) -> bool {
         matches!(self, IrType::FatPtr(_))
     }
+
+    /// 32-bit integer: two 16-bit words (Ripple `long` / `unsigned long`)
+    pub fn is_wide(&self) -> bool {
+        matches!(self, IrType::I32)
+    }
+
+    /// Values that occupy two ABI slots / two memory words (fat pointers and I32)
+    pub fn takes_two_slots(&self) -> bool {
+        self.is_pointer() || self.is_wide()
+    }
     
     /// Get the element type for pointers and arrays
     pub fn element_type(&self) -> Option<&IrType> {

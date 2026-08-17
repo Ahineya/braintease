@@ -173,6 +173,6 @@ pub fn generate_pointer_compound_assignment(
         .builder
         .build_pointer_offset(lhs_val, final_offset, ir_type.clone())?;
     
-    gen.builder.build_store(result.clone(), lhs_addr)?;
+    gen.builder.build_store(result.clone(), lhs_addr, ir_type)?;
     Ok(result)
 }

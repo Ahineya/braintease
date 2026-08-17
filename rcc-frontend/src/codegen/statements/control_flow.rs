@@ -249,7 +249,7 @@ pub fn generate_switch(
     let mut expr_gen = gen.create_expression_generator();
     let switch_val = expr_gen.generate(expression)?;
     let switch_ptr = gen.builder.build_alloca(IrType::I16, None)?;
-    gen.builder.build_store(switch_val, switch_ptr.clone())?;
+    gen.builder.build_store(switch_val, switch_ptr.clone(), IrType::I16)?;
 
     let mut cases = HashMap::new();
     let mut default_label = None;

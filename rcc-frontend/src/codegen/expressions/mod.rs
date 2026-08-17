@@ -9,6 +9,7 @@ mod function_calls;
 mod assignments;
 mod misc_ops;
 mod aggregate_init;
+mod conversions;
 
 pub use literals::generate_string_literal;
 pub use identifiers::generate_identifier;
@@ -19,6 +20,7 @@ pub use function_calls::generate_function_call;
 pub use assignments::{generate_assignment, copy_struct};
 pub use misc_ops::{generate_sizeof_expr, generate_sizeof_type, generate_array_initializer};
 pub use aggregate_init::store_initializer;
+pub(crate) use conversions::convert_integer;
 
 use super::errors::CodegenError;
 use super::types::convert_type;
@@ -175,14 +177,7 @@ impl<'a> TypedExpressionGenerator<'a> {
 
                     // Integer to integer cast
                     (source, target) if is_integer_type(source) && is_integer_type(target) => {
-                        // For now, pass through the value since our VM uses 16-bit cells uniformly
-                        // In a full implementation, we would:
-                        // - Sign extend when casting signed to larger type
-                        // - Zero extend when casting unsigned to larger type  
-                        // - Truncate when casting to smaller type
-                        // Since Ripple VM uses 16-bit cells for most integer types,
-                        // many casts are no-ops at the IR level
-                        Ok(operand_val)
+                        conversions::convert_integer(self, operand_val, source, target)
                     }
                     
                     // Void cast (discarding value)
@@ -393,7 +388,12 @@ impl<'a> TypedExpressionGenerator<'a> {
                 if is_aggregate {
                     assignments::copy_struct(self, then_value, result_ptr.clone(), expr_type)?;
                 } else {
-                    self.builder.build_store(then_value, result_ptr.clone())
+                    let then_value = if value_type.is_integer() && then_expr.get_type().is_integer() {
+                        conversions::convert_integer(self, then_value, then_expr.get_type(), &value_type)?
+                    } else {
+                        then_value
+                    };
+                    self.builder.build_store(then_value, result_ptr.clone(), ir_type.clone())
                         .map_err(|e| CodegenError::InternalError {
                             message: format!("Failed to store then value: {e}"),
                             location: rcc_common::SourceLocation::new_simple(0, 0),
@@ -418,7 +418,12 @@ impl<'a> TypedExpressionGenerator<'a> {
                 if is_aggregate {
                     assignments::copy_struct(self, else_value, result_ptr.clone(), expr_type)?;
                 } else {
-                    self.builder.build_store(else_value, result_ptr.clone())
+                    let else_value = if value_type.is_integer() && else_expr.get_type().is_integer() {
+                        conversions::convert_integer(self, else_value, else_expr.get_type(), &value_type)?
+                    } else {
+                        else_value
+                    };
+                    self.builder.build_store(else_value, result_ptr.clone(), ir_type.clone())
                         .map_err(|e| CodegenError::InternalError {
                             message: format!("Failed to store else value: {e}"),
                             location: rcc_common::SourceLocation::new_simple(0, 0),

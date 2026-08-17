@@ -42,7 +42,7 @@ impl InitializerAnalyzer {
                     // Special case: Allow 0 to initialize pointers (NULL)
                     let is_null_init = matches!(resolved, Type::Pointer { .. })
                         && self.type_analyzer.borrow().is_integer(expr_type)
-                        && matches!(expr.kind, ExpressionKind::IntLiteral(0));
+                        && matches!(expr.kind, ExpressionKind::IntLiteral { value: 0, .. });
                     
                     // Use typedef-aware type compatibility checking
                     if !is_null_init && !self.type_analyzer.borrow().is_assignable(&resolved, expr_type) {

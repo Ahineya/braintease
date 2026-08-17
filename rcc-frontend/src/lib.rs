@@ -126,7 +126,7 @@ int main() {
         assert!(matches!(tokens[0].token_type, TokenType::Int));
         assert!(matches!(tokens[1].token_type, TokenType::Identifier(_)));
         assert!(matches!(tokens[2].token_type, TokenType::Equal));
-        assert!(matches!(tokens[3].token_type, TokenType::IntLiteral(42)));
+        assert!(matches!(tokens[3].token_type, TokenType::IntLiteral { value: 42, .. }));
         assert!(matches!(tokens[4].token_type, TokenType::Semicolon));
         assert!(matches!(tokens[5].token_type, TokenType::EndOfFile));
     }

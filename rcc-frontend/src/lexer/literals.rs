@@ -38,8 +38,8 @@ impl Lexer {
                     self.current_location(),
                 ))?;
             
-            self.skip_integer_suffix();
-            return Ok(TokenType::IntLiteral(value));
+            let suffix = self.parse_integer_suffix()?;
+            return Ok(TokenType::IntLiteral { value, suffix, hex: true });
         }
         
         // Handle decimal numbers
@@ -58,19 +58,50 @@ impl Lexer {
                 self.current_location(),
             ))?;
         
-        self.skip_integer_suffix();
-        Ok(TokenType::IntLiteral(value))
+        let suffix = self.parse_integer_suffix()?;
+        Ok(TokenType::IntLiteral { value, suffix, hex: false })
     }
 
-    /// Consume a C99 integer suffix: u/U, l/L, ll/LL, and combinations (ul, lu, ull, …).
-    fn skip_integer_suffix(&mut self) {
-        while let Some(ch) = self.current_char() {
-            if matches!(ch, 'u' | 'U' | 'l' | 'L') {
-                self.advance();
-            } else {
-                break;
+    /// Parse a C99 integer suffix: u/U, l/L, and combinations (ul, lu, …).
+    /// `ll`/`ull` are not supported (no `long long` on this target).
+    fn parse_integer_suffix(&mut self) -> Result<super::token::IntegerSuffix, CompilerError> {
+        use super::token::IntegerSuffix;
+        let mut seen_u = false;
+        let mut seen_l = false;
+        loop {
+            match self.current_char() {
+                Some('u') | Some('U') if !seen_u => {
+                    seen_u = true;
+                    self.advance();
+                }
+                Some('l') | Some('L') if !seen_l => {
+                    let first = self.current_char().unwrap();
+                    self.advance();
+                    if let Some(second) = self.current_char() {
+                        if second == first {
+                            return Err(CompilerError::lexer_error(
+                                "long long integer suffixes (ll/LL) are not supported".to_string(),
+                                self.current_location(),
+                            ));
+                        }
+                    }
+                    seen_l = true;
+                }
+                Some('u') | Some('U') | Some('l') | Some('L') => {
+                    return Err(CompilerError::lexer_error(
+                        "invalid integer suffix".to_string(),
+                        self.current_location(),
+                    ));
+                }
+                _ => break,
             }
         }
+        Ok(match (seen_u, seen_l) {
+            (false, false) => IntegerSuffix::None,
+            (true, false) => IntegerSuffix::Unsigned,
+            (false, true) => IntegerSuffix::Long,
+            (true, true) => IntegerSuffix::UnsignedLong,
+        })
     }
     
     /// Tokenize a character literal

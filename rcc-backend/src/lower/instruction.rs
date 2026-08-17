@@ -19,7 +19,7 @@ use crate::instr::{
     lower_load, lower_store, lower_gep,
     lower_binary_op, lower_unary_op,
     lower_inline_asm_extended,
-    helpers::{resolve_global_to_fatptr, canonicalize_value, get_value_register}
+    helpers::{resolve_global_to_fatptr, canonicalize_value}
 };
 
 /// Lower a single instruction using the existing infrastructure
@@ -36,15 +36,28 @@ pub fn lower_instruction(
     let mut insts = Vec::new();
     
     match instruction {
-        Instruction::Binary { result, op, lhs, rhs, .. } => {
+        Instruction::Binary { result, op, lhs, rhs, result_type } => {
             debug!("V2: Binary: t{result} = {lhs:?} {op:?} {rhs:?}");
-            let binary_insts = lower_binary_op(mgr, naming, *op, lhs, rhs, *result);
+            let use_i32 = result_type.is_wide()
+                || crate::instr::wide::value_is_i32(mgr, naming, lhs)
+                || crate::instr::wide::value_is_i32(mgr, naming, rhs);
+            let binary_insts = if use_i32 {
+                crate::instr::wide::lower_i32_binary(mgr, naming, *op, lhs, rhs, *result)
+            } else {
+                lower_binary_op(mgr, naming, *op, lhs, rhs, *result)
+            };
             insts.extend(binary_insts);
         }
         
         Instruction::Unary { result, op, operand, result_type } => {
             debug!("V2: Unary: t{result} = {op:?} {operand:?}");
-            let unary_insts = lower_unary_op(mgr, naming, *op, operand, result_type, *result);
+            let unary_insts = if result_type.is_wide()
+                && matches!(op, rcc_frontend::ir::IrUnaryOp::SExt | rcc_frontend::ir::IrUnaryOp::ZExt)
+            {
+                crate::instr::wide::lower_i32_extend(mgr, naming, *op, operand, *result)
+            } else {
+                lower_unary_op(mgr, naming, *op, operand, result_type, *result)
+            };
             insts.extend(unary_insts);
         }
         
@@ -71,7 +84,7 @@ pub fn lower_instruction(
             insts.extend(load_insts);
         }
         
-        Instruction::Store { value, ptr } => {
+        Instruction::Store { value, ptr, value_type } => {
             debug!("V2: Store: {value:?} -> {ptr:?}");
 
             // Canonicalize both value and pointer to resolve any global references
@@ -79,7 +92,7 @@ pub fn lower_instruction(
             let canon_ptr = canonicalize_value(ptr, global_manager)?;
 
             // Delegate to store lowering with canonicalized operands
-            let store_insts = lower_store(mgr, naming, &canon_value, &canon_ptr);
+            let store_insts = lower_store(mgr, naming, &canon_value, &canon_ptr, value_type);
             insts.extend(store_insts);
         }
         
@@ -152,8 +165,13 @@ pub fn lower_instruction(
                 match arg {
                     Value::Temp(t) => {
                         let name = naming.temp_name(*t);
-                        // Check if this is a fat pointer
-                        if let Some(bank_info) = mgr.get_pointer_bank(&name) {
+                        if let Some(hi_name) = mgr.get_i32_high(&name) {
+                            let lo_reg = mgr.get_register(name);
+                            insts.extend(mgr.take_instructions());
+                            let hi_reg = mgr.get_register(hi_name);
+                            insts.extend(mgr.take_instructions());
+                            call_args.push(CallArg::FatPointer { addr: lo_reg, bank: hi_reg });
+                        } else if let Some(bank_info) = mgr.get_pointer_bank(&name) {
                             let addr_reg = mgr.get_register(name.clone());
                             insts.extend(mgr.take_instructions());
                             
@@ -255,6 +273,7 @@ pub fn lower_instruction(
                 CallTarget::Label(func_name.clone()),
                 call_args,
                 result_type.is_pointer(),
+                result_type.is_wide(),
                 result_name,
                 *stack_args_from,
             );
@@ -287,9 +306,9 @@ pub fn lower_instruction(
             let true_label_name = naming.block_label(function_name, *true_label);
             let false_label_name = naming.block_label(function_name, *false_label);
             
-            // Get register for condition value
-            let cond_reg = get_value_register(mgr, naming, condition);
-            insts.extend(mgr.take_instructions());
+            // Get register for condition value (I32: OR both words)
+            let (cond_reg, cond_insts) = crate::instr::wide::i32_to_cond_reg(mgr, naming, condition);
+            insts.extend(cond_insts);
             
             // Branch if condition is zero (false) to false_label
             insts.push(AsmInst::Beq(cond_reg, Reg::R0, false_label_name.clone()));
@@ -400,13 +419,13 @@ pub fn lower_instruction(
             mgr.free_register(cond_reg);
         }
         
-        Instruction::Cast { result, value, target_type: _ } => {
-            debug!("V2: Cast: t{result} = cast {value:?}");
-            // Most casts are handled as moves or conversions
-            // This would be expanded based on the specific cast type
-            warn!("V2: Cast instruction simplified - may need type-specific handling");
-            
-            if let Value::Temp(t) = value {
+        Instruction::Cast { result, value, target_type } => {
+            debug!("V2: Cast: t{result} = cast {value:?} to {target_type:?}");
+            if target_type.is_wide() {
+                insts.extend(crate::instr::wide::lower_i32_extend(
+                    mgr, naming, rcc_frontend::ir::IrUnaryOp::SExt, value, *result,
+                ));
+            } else if let Value::Temp(t) = value {
                 let src_name = naming.temp_name(*t);
                 let dst_name = naming.temp_name(*result);
                 let src_reg = mgr.get_register(src_name);
@@ -414,6 +433,11 @@ pub fn lower_instruction(
                 insts.extend(mgr.take_instructions());
                 insts.push(AsmInst::Move(dst_reg, src_reg));
                 mgr.free_register(src_reg);
+            } else if let Value::Constant(c) = value {
+                let dst_name = naming.temp_name(*result);
+                let dst_reg = mgr.get_register(dst_name);
+                insts.extend(mgr.take_instructions());
+                insts.push(AsmInst::Li(dst_reg, *c as i16));
             }
         }
         
@@ -490,7 +514,7 @@ fn lower_va_start(
         addr: Box::new(Value::Temp(fake)),
         bank: BankTag::Stack,
     });
-    insts.extend(lower_store(mgr, naming, &value, ap_ptr));
+    insts.extend(lower_store(mgr, naming, &value, ap_ptr, &IrType::FatPtr(Box::new(IrType::I16))));
     insts
 }
 
@@ -556,6 +580,6 @@ fn lower_va_arg(
         addr: Box::new(Value::Temp(ap_temp)),
         bank: BankTag::Mixed,
     });
-    insts.extend(lower_store(mgr, naming, &updated, ap_ptr));
+    insts.extend(lower_store(mgr, naming, &updated, ap_ptr, &IrType::FatPtr(Box::new(IrType::I16))));
     insts
 }

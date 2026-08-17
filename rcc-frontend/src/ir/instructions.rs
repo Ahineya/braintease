@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use crate::ir::{Value, IrType, IrBinaryOp, IrUnaryOp};
 
+fn default_store_type() -> IrType {
+    IrType::I16
+}
+
 /// IR representation of an inline assembly operand
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AsmOperandIR {
@@ -46,6 +50,10 @@ pub enum Instruction {
     Store {
         value: Value,
         ptr: Value,
+        /// Type of the stored value. Needed so I32 stores write both words
+        /// even when the IR value is a small constant.
+        #[serde(default = "default_store_type")]
+        value_type: IrType,
     },
     
     /// Get element pointer: result = getelementptr ptr, index
@@ -158,9 +166,8 @@ impl fmt::Display for Instruction {
             Instruction::Load { result, ptr, result_type } => {
                 write!(f, "%{result} = load {result_type}, {result_type}* {ptr}")
             }
-            Instruction::Store { value, ptr } => {
-                // For stores, we print: store <value>, <type>* <ptr>
-                write!(f, "store {value}, i16* {ptr}")
+            Instruction::Store { value, ptr, value_type } => {
+                write!(f, "store {value_type} {value}, {value_type}* {ptr}")
             }
             Instruction::GetElementPtr { result, ptr, indices, result_type: _, source_element_type, is_struct_field } => {
                 write!(f, "%{result} = getelementptr {source_element_type}, {ptr}")?;

@@ -153,7 +153,7 @@ mod tests {
     fn test_parse_integer_literal() {
         let expr = parse_expression_from_str("42").unwrap();
         match expr.kind {
-            ExpressionKind::IntLiteral(value) => assert_eq!(value, 42),
+            ExpressionKind::IntLiteral { value, .. } => assert_eq!(value, 42),
             _ => panic!("Expected integer literal"),
         }
     }
@@ -174,7 +174,7 @@ mod tests {
             ExpressionKind::Binary { op, left, right } => {
                 assert_eq!(op, BinaryOp::Add);
                 match (&left.kind, &right.kind) {
-                    (ExpressionKind::IntLiteral(2), ExpressionKind::IntLiteral(3)) => {},
+                    (ExpressionKind::IntLiteral { value: 2, .. }, ExpressionKind::IntLiteral { value: 3, .. }) => {},
                     _ => panic!("Expected 2 + 3"),
                 }
             }
@@ -204,7 +204,7 @@ mod tests {
             ExpressionKind::Unary { op, operand } => {
                 assert_eq!(op, UnaryOp::Minus);
                 match &operand.kind {
-                    ExpressionKind::IntLiteral(42) => {},
+                    ExpressionKind::IntLiteral { value: 42, .. } => {},
                     _ => panic!("Expected -42"),
                 }
             }
@@ -270,7 +270,7 @@ mod tests {
                         match &statements[0].kind {
                             StatementKind::Return(Some(expr)) => {
                                 match &expr.kind {
-                                    ExpressionKind::IntLiteral(42) => {},
+                                    ExpressionKind::IntLiteral { value: 42, .. } => {},
                                     _ => panic!("Expected return 42"),
                                 }
                             }
@@ -292,7 +292,7 @@ mod tests {
         match expr.kind {
             ExpressionKind::Binary { op: BinaryOp::Add, left, right } => {
                 match (&left.kind, &right.kind) {
-                    (ExpressionKind::IntLiteral(2), ExpressionKind::Binary { op: BinaryOp::Mul, .. }) => {},
+                    (ExpressionKind::IntLiteral { value: 2, .. }, ExpressionKind::Binary { op: BinaryOp::Mul, .. }) => {},
                     _ => panic!("Expected 2 + (3 * 4) structure"),
                 }
             }
@@ -341,7 +341,7 @@ mod tests {
         match expr.kind {
             ExpressionKind::Binary { op: BinaryOp::Comma, left, right } => {
                 match right.kind {
-                    ExpressionKind::IntLiteral(3) => {}
+                    ExpressionKind::IntLiteral { value: 3, .. } => {}
                     _ => panic!("Expected comma result 3"),
                 }
                 match left.kind {

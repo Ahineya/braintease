@@ -36,10 +36,16 @@ pub fn generate_unary_operation(
             }
         }
         UnaryOp::LogicalNot => {
-            // Generate operand == 0
             let operand_val = gen.generate(operand)?;
+            let operand_ty = operand.get_type();
+            let operand_val = if operand_ty.is_integer() {
+                super::conversions::convert_integer(gen, operand_val, operand_ty, operand_ty)?
+            } else {
+                operand_val
+            };
+            let cmp_ty = convert_type_default(operand_ty).unwrap_or(IrType::I16);
             let zero = Value::Constant(0);
-            let temp = gen.builder.build_binary(IrBinaryOp::Eq, operand_val, zero, IrType::I1)?;
+            let temp = gen.builder.build_binary(IrBinaryOp::Eq, operand_val, zero, cmp_ty)?;
             Ok(Value::Temp(temp))
         }
         UnaryOp::PreIncrement | UnaryOp::PreDecrement => {
@@ -104,11 +110,11 @@ pub fn generate_unary_operation(
                 }
             } else {
                 // For non-pointers, just do regular arithmetic
-                Value::Temp(gen.builder.build_binary(binary_op, Value::Temp(current_val), amount, ir_type)?)
+                Value::Temp(gen.builder.build_binary(binary_op, Value::Temp(current_val), amount, ir_type.clone())?)
             };
             
             // 5. Store the new value back
-            gen.builder.build_store(new_value.clone(), addr)?;
+            gen.builder.build_store(new_value.clone(), addr, ir_type)?;
             
             // 6. Return the new value (for pre-increment/decrement)
             Ok(new_value)
@@ -191,7 +197,7 @@ pub fn generate_unary_operation(
                     )?)
                 };
                 
-                gen.builder.build_pointer_offset(current_ptr, offset, ir_type)?
+                gen.builder.build_pointer_offset(current_ptr, offset, ir_type.clone())?
             } else {
                 // For non-pointers, just do regular arithmetic
                 let binary_op = if matches!(op, UnaryOp::PostIncrement) {
@@ -199,11 +205,11 @@ pub fn generate_unary_operation(
                 } else {
                     IrBinaryOp::Sub
                 };
-                Value::Temp(gen.builder.build_binary(binary_op, Value::Temp(current), amount, ir_type)?)
+                Value::Temp(gen.builder.build_binary(binary_op, Value::Temp(current), amount, ir_type.clone())?)
             };
             
             // 7. Store the new value back to memory
-            gen.builder.build_store(new_value, addr)?;
+            gen.builder.build_store(new_value, addr, ir_type)?;
             
             // 8. Return the saved old value (this is what makes it post-increment)
             Ok(saved_old)

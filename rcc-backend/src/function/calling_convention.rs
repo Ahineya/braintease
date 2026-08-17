@@ -46,7 +46,7 @@ impl CallingConvention {
         
         for i in 0..count {
             if is_fat_ptr(i) {
-                // Fat pointer needs 2 slots
+                // Fat pointer or I32 needs 2 slots
                 if reg_slots_used + 1 < 4 {  // Can fit both parts in registers
                     register_items.push((i, reg_slots_used));
                     reg_slots_used += 2;
@@ -85,7 +85,7 @@ impl CallingConvention {
     /// Analyze parameter placement for load_param based on IrType
     fn analyze_param_placement(&self, param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)])
         -> (Vec<(usize, usize)>, usize) {
-        self.analyze_placement(param_types.len(), |i| param_types[i].1.is_pointer())
+        self.analyze_placement(param_types.len(), |i| param_types[i].1.takes_two_slots())
     }
     
     /// Calculate the stack offset for a parameter that's passed on the stack
@@ -113,8 +113,8 @@ impl CallingConvention {
             if i >= param_types.len() {
                 break;
             }
-            if param_types[i].1.is_pointer() {
-                offset -= 2; // Fat pointer takes 2 words
+            if param_types[i].1.takes_two_slots() {
+                offset -= 2; // Fat pointer / I32 takes 2 words
             } else {
                 offset -= 1; // Scalar takes 1 word
             }
@@ -308,8 +308,9 @@ impl CallingConvention {
     /// Binds the return value to the specified result name in the register manager
     pub(super) fn handle_return_value(&self, 
                               pressure_manager: &mut RegisterPressureManager,
-                              _naming: &mut NameGenerator,
+                              naming: &mut NameGenerator,
                               is_pointer: bool,
+                              is_wide: bool,
                               result_name: Option<String>) -> (Vec<AsmInst>, Option<(Reg, Option<Reg>)>) {
         let mut insts = Vec::new();
         
@@ -325,6 +326,14 @@ impl CallingConvention {
                 // Track that Rv1 has the bank
                 pressure_manager.set_pointer_bank(name, BankInfo::Register(Reg::Rv1));
                 
+                (insts, Some((Reg::Rv0, Some(Reg::Rv1))))
+            } else if is_wide {
+                debug!("Handling I32 return for '{name}'");
+                insts.push(AsmInst::Comment(format!("I32 return value for {name}")));
+                pressure_manager.bind_value_to_register(name.clone(), Reg::Rv0);
+                let hi_name = naming.i32_high_name(&name);
+                pressure_manager.bind_value_to_register(hi_name.clone(), Reg::Rv1);
+                pressure_manager.set_i32_high(name, hi_name);
                 (insts, Some((Reg::Rv0, Some(Reg::Rv1))))
             } else {
                 // Scalar return in Rv0
@@ -372,6 +381,7 @@ impl CallingConvention {
         target: CallTarget,
         args: Vec<CallArg>,
         returns_pointer: bool,
+        returns_wide: bool,
         result_name: Option<String>,
         stack_args_from: Option<usize>,
     ) -> (Vec<AsmInst>, Option<(Reg, Option<Reg>)>) {
@@ -427,6 +437,7 @@ impl CallingConvention {
             pressure_manager, 
             naming, 
             returns_pointer,
+            returns_wide,
             result_name
         );
         insts.extend(ret_insts);
@@ -488,17 +499,22 @@ impl CallingConvention {
             // If this is a fat pointer, copy the bank out of A1/A2/A3 into a
             // named register. Those argument registers are otherwise free for
             // the allocator and would clobber the bank tag.
-            let bank_reg = if index < param_types.len() && param_types[index].1.is_pointer() {
+            let bank_reg = if index < param_types.len() && param_types[index].1.takes_two_slots() {
                 let src_bank_reg = match arg_reg {
                     Reg::A0 => Reg::A1,
                     Reg::A1 => Reg::A2,
                     Reg::A2 => Reg::A3,
-                    _ => panic!("Invalid fat pointer register for param {index}"),
+                    _ => panic!("Invalid two-slot register for param {index}"),
                 };
-                debug!("  Copying fat pointer bank from {src_bank_reg:?}");
-                insts.push(AsmInst::Comment(format!("Copy param {index} bank from {src_bank_reg:?}")));
+                debug!("  Copying param {index} second word from {src_bank_reg:?}");
+                insts.push(AsmInst::Comment(format!("Copy param {index} high/bank from {src_bank_reg:?}")));
 
-                let bank_reg_name = naming.param_bank_name(index);
+                let bank_reg_name = if param_types[index].1.is_wide() {
+                    let pn = naming.param_name(index);
+                    naming.i32_high_name(&pn)
+                } else {
+                    naming.param_bank_name(index)
+                };
                 let bank_reg = pressure_manager.get_register(bank_reg_name.clone());
                 insts.extend(pressure_manager.take_instructions());
                 if bank_reg != src_bank_reg {
@@ -507,7 +523,11 @@ impl CallingConvention {
                 pressure_manager.bind_value_to_register(bank_reg_name.clone(), bank_reg);
 
                 let param_name = naming.param_name(index);
-                pressure_manager.set_pointer_bank(param_name, BankInfo::Dynamic(bank_reg_name));
+                if param_types[index].1.is_wide() {
+                    pressure_manager.set_i32_high(param_name, bank_reg_name);
+                } else {
+                    pressure_manager.set_pointer_bank(param_name, BankInfo::Dynamic(bank_reg_name));
+                }
 
                 Some(bank_reg)
             } else {
@@ -530,22 +550,29 @@ impl CallingConvention {
             insts.push(AsmInst::Load(dest, Reg::Sb, Reg::Sc));
 
             // If this is a fat pointer, also load the bank from the next stack slot
-            let bank_reg = if index < param_types.len() && param_types[index].1.is_pointer() {
-                debug!("  Loading fat pointer bank from FP{}", param_offset - 1);
-                insts.push(AsmInst::Comment(format!("Load param {index} bank from FP{}", param_offset - 1)));
+            let bank_reg = if index < param_types.len() && param_types[index].1.takes_two_slots() {
+                debug!("  Loading second word of param {index} from FP{}", param_offset - 1);
+                insts.push(AsmInst::Comment(format!("Load param {index} high/bank from FP{}", param_offset - 1)));
 
-                // Allocate a register for the bank
-                let bank_reg_name = naming.param_bank_name(index);
-                let bank_reg = pressure_manager.get_register(bank_reg_name);
+                let bank_reg_name = if param_types[index].1.is_wide() {
+                    let pn = naming.param_name(index);
+                    naming.i32_high_name(&pn)
+                } else {
+                    naming.param_bank_name(index)
+                };
+                let bank_reg = pressure_manager.get_register(bank_reg_name.clone());
                 insts.extend(pressure_manager.take_instructions());
 
-                // Load the bank from the next stack slot
                 insts.push(AsmInst::AddI(Reg::Sc, Reg::Fp, param_offset - 1));
                 insts.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
 
-                // Track the bank in the register manager
                 let param_name = naming.param_name(index);
-                pressure_manager.set_pointer_bank(param_name, BankInfo::Register(bank_reg));
+                if param_types[index].1.is_wide() {
+                    pressure_manager.bind_value_to_register(bank_reg_name.clone(), bank_reg);
+                    pressure_manager.set_i32_high(param_name, bank_reg_name);
+                } else {
+                    pressure_manager.set_pointer_bank(param_name, BankInfo::Register(bank_reg));
+                }
 
                 Some(bank_reg)
             } else {

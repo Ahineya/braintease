@@ -115,7 +115,7 @@ fn test_return_value_handling() {
     
     // Test scalar return
     let mut naming = new_function_naming();
-    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, false, Some("test_result".to_string()));
+    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, false, false, Some("test_result".to_string()));
     assert!(ret_regs.is_some());
     let (_ret_reg, bank_reg) = ret_regs.unwrap();
     assert!(bank_reg.is_none());
@@ -123,7 +123,7 @@ fn test_return_value_handling() {
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Comment(_))));
     
     // Test fat pointer return
-    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, true, Some("test_ptr_result".to_string()));
+    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, true, false, Some("test_ptr_result".to_string()));
     assert!(ret_regs.is_some());
     let (_addr_reg, bank_reg) = ret_regs.unwrap();
     assert!(bank_reg.is_some());

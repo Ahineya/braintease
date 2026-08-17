@@ -328,6 +328,7 @@ fn test_lifetime_analysis() {
             Instruction::Store {
                 value: Value::Temp(2),
                 ptr: Value::Temp(0),
+                value_type: IrType::I16,
             },
         ],
         predecessors: vec![],
@@ -747,6 +748,7 @@ fn test_complex_lifetime_patterns() {
             Instruction::Store {
                 value: Value::Temp(3),
                 ptr: Value::Temp(2), // Temp 2 used as pointer
+                value_type: IrType::I16,
             },
         ],
         predecessors: vec![],

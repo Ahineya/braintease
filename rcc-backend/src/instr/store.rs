@@ -3,7 +3,7 @@
 //! Handles storing values to memory with proper bank management.
 //! Supports both scalar stores and fat pointer stores (2-component).
 
-use rcc_frontend::ir::{Value};
+use rcc_frontend::ir::{Value, IrType};
 use crate::regmgmt::{RegisterPressureManager, BankInfo, BankTagValue};
 use crate::naming::NameGenerator;
 use rcc_codegen::{AsmInst, Reg};
@@ -26,6 +26,7 @@ pub fn lower_store(
     naming: &mut NameGenerator,
     value: &Value,
     ptr_value: &Value,
+    value_type: &IrType,
 ) -> Vec<AsmInst> {
     debug!("lower_store: value={value:?}, ptr={ptr_value:?}");
     
@@ -67,7 +68,12 @@ pub fn lower_store(
             let temp_reg_name = naming.store_const_value();
             let temp_reg = mgr.get_register(temp_reg_name);
             insts.extend(mgr.take_instructions());
-            insts.push(AsmInst::Li(temp_reg, *c as i16));
+            if value_type.is_wide() {
+                let (lo, _hi) = crate::instr::wide::split_const(*c);
+                insts.push(AsmInst::Li(temp_reg, lo));
+            } else {
+                insts.push(AsmInst::Li(temp_reg, *c as i16));
+            }
             (temp_reg, false, None)
         }
         Value::Global(name) => {
@@ -306,6 +312,54 @@ pub fn lower_store(
     let store_inst = AsmInst::Store(src_reg, dest_bank_reg, dest_addr_reg);
     trace!("  Generated STORE: {store_inst:?}");
     insts.push(store_inst);
+
+    // I32: store the high word at dest+1
+    let storing_i32 = value_type.is_wide()
+        || matches!(value, Value::Temp(t) if mgr.get_i32_high(&naming.temp_name(*t)).is_some());
+    if storing_i32 && !is_pointer {
+        let hi_reg = match value {
+            Value::Temp(t) => {
+                let lo_name = naming.temp_name(*t);
+                if let Some(hi_name) = mgr.get_i32_high(&lo_name) {
+                    let r = mgr.get_register(hi_name);
+                    insts.extend(mgr.take_instructions());
+                    r
+                } else {
+                    // Narrow temp stored as I32: sign-extend
+                    let (hi, ext) = {
+                        let sh = mgr.get_register(naming.temp_with_context("store", "sh15"));
+                        insts.extend(mgr.take_instructions());
+                        insts.push(AsmInst::Li(sh, 15));
+                        let hi = mgr.get_register(naming.temp_with_context("store", "hi"));
+                        insts.extend(mgr.take_instructions());
+                        insts.push(AsmInst::Srl(hi, src_reg, sh));
+                        insts.push(AsmInst::Sub(hi, Reg::R0, hi));
+                        mgr.free_register(sh);
+                        (hi, ())
+                    };
+                    let _ = ext;
+                    hi
+                }
+            }
+            Value::Constant(c) => {
+                let (_lo, hi) = crate::instr::wide::split_const(*c);
+                let name = naming.store_const_value();
+                let r = mgr.get_register(name);
+                insts.extend(mgr.take_instructions());
+                insts.push(AsmInst::Li(r, hi));
+                r
+            }
+            _ => panic!("I32 store of unsupported value {value:?}"),
+        };
+        mgr.pin_register(hi_reg);
+        insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, 1));
+        insts.push(AsmInst::Store(hi_reg, dest_bank_reg, Reg::Sc));
+        mgr.unpin_register(hi_reg);
+        if matches!(value, Value::Constant(_)) {
+            mgr.free_register(hi_reg);
+        }
+        debug!("  Stored I32 high word from {hi_reg:?}");
+    }
     
     // If storing a fat pointer, also store the bank component.
     // Use SC for dest+1 instead of allocating a new register: get_register()
@@ -387,7 +441,7 @@ mod tests {
         });
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
     }
     
     #[test]
@@ -401,7 +455,7 @@ mod tests {
         let ptr = Value::Global("test_global".to_string());
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
     }
     
     #[test]
@@ -421,7 +475,7 @@ mod tests {
         });
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
     }
     
     #[test]
@@ -438,7 +492,7 @@ mod tests {
         });
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
     }
     
     #[test]
@@ -455,7 +509,7 @@ mod tests {
         });
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &null_ptr);
+        lower_store(&mut mgr, &mut naming, &value, &null_ptr, &IrType::I16);
     }
     
     #[test]
@@ -476,7 +530,7 @@ mod tests {
         });
         
         // This should panic because of NULL destination
-        lower_store(&mut mgr, &mut naming, &null_value, &null_dest);
+        lower_store(&mut mgr, &mut naming, &null_value, &null_dest, &IrType::I16);
     }
     
     #[test]
@@ -495,7 +549,7 @@ mod tests {
         });
         
         // This should succeed - we can store NULL pointers, just not through them
-        let insts = lower_store(&mut mgr, &mut naming, &null_value, &valid_dest);
+        let insts = lower_store(&mut mgr, &mut naming, &null_value, &valid_dest, &IrType::I16);
         assert!(!insts.is_empty());
     }
 }

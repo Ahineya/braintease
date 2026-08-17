@@ -82,6 +82,9 @@ pub struct RegisterPressureManager {
     /// When we spill a fat pointer, we need to track both address and bank
     fat_ptr_bank_slots: BTreeMap<String, i16>,
 
+    /// Map from I32 low-word value names to their high-word companion names
+    i32_high: BTreeMap<String, String>,
+
     /// Registers that must not be chosen as spill victims (live across
     /// an in-progress instruction that still holds the Reg by value).
     pinned_registers: std::collections::BTreeSet<Reg>,
@@ -109,6 +112,7 @@ impl RegisterPressureManager {
             alloca_offsets: BTreeMap::new(),
             trace_spills: false,
             fat_ptr_bank_slots: BTreeMap::new(),
+            i32_high: BTreeMap::new(),
             pinned_registers: std::collections::BTreeSet::new(),
         }
     }
@@ -191,6 +195,17 @@ impl RegisterPressureManager {
     /// Get pointer bank information
     pub fn get_pointer_bank(&self, ptr_value: &str) -> Option<BankInfo> {
         self.allocator.pointer_banks.get(ptr_value).cloned()
+    }
+
+    /// Record that `lo_name`'s high 16 bits live in the named value `hi_name`
+    pub fn set_i32_high(&mut self, lo_name: String, hi_name: String) {
+        trace!("Setting I32 high for '{lo_name}': {hi_name}");
+        self.i32_high.insert(lo_name, hi_name);
+    }
+
+    /// Companion high-word name for a 32-bit value, if one was bound
+    pub fn get_i32_high(&self, lo_name: &str) -> Option<String> {
+        self.i32_high.get(lo_name).cloned()
     }
     
     /// Get bank register for a pointer (internal use)
@@ -749,7 +764,7 @@ impl RegisterPressureManager {
                     });
                     self.record_use(ptr, idx);
                 }
-                Instruction::Store { value, ptr } => {
+                Instruction::Store { value, ptr, .. } => {
                     self.record_use(value, idx);
                     self.record_use(ptr, idx);
                 }

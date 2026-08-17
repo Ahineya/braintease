@@ -102,7 +102,7 @@ pub fn lower_unary_op(
         
         IrUnaryOp::Trunc => {
             // Truncate - mask off higher bits if needed
-            // For 16-bit to smaller types, use AND with appropriate mask
+            // For I32 → I16, the low word is already in operand_reg
             match result_type {
                 IrType::I8 => {
                     // Truncate to 8 bits
@@ -123,7 +123,7 @@ pub fn lower_unary_op(
                     trace!("  Generated TRUNC to i1 using AND 0x1");
                 }
                 _ => {
-                    // For same-size or larger truncation, just move
+                    // For I32→I16, I16→I16, just keep the low word
                     if result_reg != operand_reg {
                         insts.push(AsmInst::Add(result_reg, operand_reg, Reg::R0)); // MOV
                     }
@@ -152,7 +152,12 @@ pub fn lower_unary_op(
             // Note: The bank component would be handled separately by the caller
         }
     }
-    
+
+    // Trunc/ZExt/SExt may reuse the operand register. The result temp is a
+    // different name; without this bind, later uses of the result allocate a
+    // fresh uninitialized register (seen when truncating long constants to int).
+    mgr.bind_value_to_register(result_name, result_reg);
+
     // Free operand register if not reused
     if result_reg != operand_reg {
         mgr.free_register(operand_reg);

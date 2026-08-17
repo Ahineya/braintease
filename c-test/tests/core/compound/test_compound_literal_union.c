@@ -17,8 +17,8 @@ typedef struct {
 
 int main() {
     // Test 1: Simple union compound literal
-    MultiType *m1 = &(MultiType){.i = 0x41424344};
-    if (m1->i == 0x41424344) {
+    MultiType *m1 = &(MultiType){.i = 0x4344};
+    if (m1->i == 0x4344) {
         putchar('Y');
     } else {
         putchar('N');

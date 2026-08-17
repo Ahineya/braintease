@@ -143,6 +143,25 @@ fn handle_return_instruction(
                     }
                     trace!("  Returning fat pointer in Rv0/Rv1");
                     Some((Reg::Rv0, Some(Reg::Rv1)))
+                } else if function.return_type.is_wide() {
+                    let temp_reg = mgr.get_register(temp_name.clone());
+                    builder.add_instructions(mgr.take_instructions());
+                    if temp_reg != Reg::Rv0 {
+                        builder.add_instruction(AsmInst::Move(Reg::Rv0, temp_reg));
+                    }
+                    if let Some(hi_name) = mgr.get_i32_high(&temp_name) {
+                        let hi_reg = mgr.get_register(hi_name);
+                        builder.add_instructions(mgr.take_instructions());
+                        if hi_reg != Reg::Rv1 {
+                            builder.add_instruction(AsmInst::Move(Reg::Rv1, hi_reg));
+                        }
+                    } else {
+                        builder.add_instruction(AsmInst::Li(Reg::Sc, 15));
+                        builder.add_instruction(AsmInst::Srl(Reg::Rv1, Reg::Rv0, Reg::Sc));
+                        builder.add_instruction(AsmInst::Sub(Reg::Rv1, Reg::R0, Reg::Rv1));
+                    }
+                    trace!("  Returning I32 in Rv0/Rv1");
+                    Some((Reg::Rv0, Some(Reg::Rv1)))
                 } else {
                     let temp_reg = mgr.get_register(temp_name);
                     builder.add_instructions(mgr.take_instructions());
@@ -156,10 +175,18 @@ fn handle_return_instruction(
                 }
             }
             Value::Constant(c) => {
-                // Load constant directly into return register
-                builder.add_instruction(AsmInst::Li(Reg::Rv0, *c as i16));
-                trace!("  Returning constant {c} in Rv0");
-                Some((Reg::Rv0, None))
+                if function.return_type.is_wide() {
+                    let (lo, hi) = crate::instr::wide::split_const(*c);
+                    builder.add_instruction(AsmInst::Li(Reg::Rv0, lo));
+                    builder.add_instruction(AsmInst::Li(Reg::Rv1, hi));
+                    trace!("  Returning I32 constant {c} in Rv0/Rv1");
+                    Some((Reg::Rv0, Some(Reg::Rv1)))
+                } else {
+                    // Load constant directly into return register
+                    builder.add_instruction(AsmInst::Li(Reg::Rv0, *c as i16));
+                    trace!("  Returning constant {c} in Rv0");
+                    Some((Reg::Rv0, None))
+                }
             }
             Value::FatPtr(fp) => {
                 // Handle fat pointer return

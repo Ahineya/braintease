@@ -69,6 +69,7 @@ impl FunctionBuilder {
         target: super::calling_convention::CallTarget,
         args: Vec<CallArg>,
         returns_pointer: bool,
+        returns_wide: bool,
         result_name: Option<String>,
         stack_args_from: Option<usize>,
     ) -> Vec<AsmInst> {
@@ -79,6 +80,7 @@ impl FunctionBuilder {
             target,
             args,
             returns_pointer,
+            returns_wide,
             result_name,
             stack_args_from,
         );
@@ -160,11 +162,18 @@ impl FunctionBuilder {
         
         // If this is a fat pointer, track the bank as a named value so it
         // survives register reuse of A1/A3.
-        if let Some(bank) = bank_reg {
-            debug!("  Parameter {index} is a fat pointer with bank in {bank:?}");
-            let bank_name = naming.param_bank_name(index);
-            mgr.bind_value_to_register(bank_name.clone(), bank);
-            mgr.set_pointer_bank(param_name, BankInfo::Dynamic(bank_name));
+        if let Some(second) = bank_reg {
+            if index < self.param_types.len() && self.param_types[index].1.is_wide() {
+                debug!("  Parameter {index} is I32 with high in {second:?}");
+                let hi_name = naming.i32_high_name(&param_name);
+                mgr.bind_value_to_register(hi_name.clone(), second);
+                mgr.set_i32_high(param_name, hi_name);
+            } else {
+                debug!("  Parameter {index} is a fat pointer with bank in {second:?}");
+                let bank_name = naming.param_bank_name(index);
+                mgr.bind_value_to_register(bank_name.clone(), second);
+                mgr.set_pointer_bank(param_name, BankInfo::Dynamic(bank_name));
+            }
         }
         
         trace!("  Parameter {index} bound to {addr_reg:?} (bank: {bank_reg:?})");
@@ -246,6 +255,7 @@ impl FunctionBuilder {
             super::calling_convention::CallTarget::Address { addr: func_addr, bank: func_bank },
             args,
             returns_pointer,
+            false,
             result_name,
             None,
         );

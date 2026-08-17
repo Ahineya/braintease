@@ -63,6 +63,18 @@ impl NameGenerator {
     pub fn temp_name(&self, temp_id: TempId) -> String {
         format!("t{temp_id}")
     }
+
+    /// Companion high-word name for a 32-bit value whose low word is `lo_name`.
+    /// Stable so later uses can find the high half after a load or binary op.
+    pub fn i32_high_name(&self, lo_name: &str) -> String {
+        format!("{lo_name}__hi")
+    }
+
+    /// Unique label for I32 helper sequences (shifts, division)
+    pub fn i32_label(&mut self, kind: &str) -> String {
+        let label_id = self.next_label_id();
+        format!("L_i32_{}_{}_{}", kind, self.function_id, label_id)
+    }
     
     // ===== Load operation naming =====
     

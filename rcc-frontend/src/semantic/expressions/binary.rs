@@ -48,11 +48,24 @@ impl BinaryOperationAnalyzer {
             }
 
             // Bitwise operations
-            BinaryOp::BitAnd
-            | BinaryOp::BitOr
-            | BinaryOp::BitXor
             | BinaryOp::LeftShift
             | BinaryOp::RightShift => {
+                // C99 6.5.7: the result type is that of the promoted left operand.
+                if self.type_analyzer.borrow().is_integer(left_type) && self.type_analyzer.borrow().is_integer(right_type) {
+                    Ok(left_type.clone())
+                } else {
+                    Err(SemanticError::InvalidOperation {
+                        operation: format!("{op}"),
+                        operand_type: left_type.clone(),
+                        location: left.span.start.clone(),
+                    }
+                    .into())
+                }
+            }
+
+            BinaryOp::BitAnd
+            | BinaryOp::BitOr
+            | BinaryOp::BitXor => {
                 if self.type_analyzer.borrow().is_integer(left_type) && self.type_analyzer.borrow().is_integer(right_type) {
                     Ok(self.type_analyzer.borrow().arithmetic_result_type(left_type, right_type))
                 } else {

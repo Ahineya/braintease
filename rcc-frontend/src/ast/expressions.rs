@@ -5,6 +5,7 @@
 use crate::types::Type;
 use super::ops::{BinaryOp, UnaryOp};
 use crate::ast::NodeId;
+use crate::lexer::IntegerSuffix;
 use rcc_common::{SourceSpan, SymbolId};
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +21,11 @@ pub struct Expression {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ExpressionKind {
     /// Integer literal
-    IntLiteral(i64),
+    IntLiteral {
+        value: i64,
+        suffix: IntegerSuffix,
+        hex: bool,
+    },
     
     /// Character literal
     CharLiteral(u8),
@@ -142,14 +147,18 @@ mod tests {
         
         let expr = Expression {
             node_id: 0,
-            kind: ExpressionKind::IntLiteral(42),
+            kind: ExpressionKind::IntLiteral {
+                value: 42,
+                suffix: IntegerSuffix::None,
+                hex: false,
+            },
             span: span.clone(),
             expr_type: Some(Type::Int),
         };
         
         assert_eq!(expr.node_id, 0);
         match expr.kind {
-            ExpressionKind::IntLiteral(value) => assert_eq!(value, 42),
+            ExpressionKind::IntLiteral { value, .. } => assert_eq!(value, 42),
             _ => panic!("Expected IntLiteral"),
         }
         assert_eq!(expr.expr_type, Some(Type::Int));

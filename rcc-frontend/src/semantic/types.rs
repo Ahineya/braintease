@@ -206,8 +206,9 @@ impl TypeAnalyzer {
     pub fn arithmetic_result_type(&self, left: &Type, right: &Type) -> Type {
         // Simplified type promotion rules
         match (left, right) {
-            (Type::Long, _) | (_, Type::Long) => Type::Long,
+            // Same rank: unsigned wins (C99 6.3.1.8)
             (Type::UnsignedLong, _) | (_, Type::UnsignedLong) => Type::UnsignedLong,
+            (Type::Long, _) | (_, Type::Long) => Type::Long,
             (Type::UnsignedInt, _) | (_, Type::UnsignedInt) => Type::UnsignedInt,
             _ => Type::Int,
         }

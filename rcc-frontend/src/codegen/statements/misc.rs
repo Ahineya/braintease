@@ -125,7 +125,8 @@ pub fn generate_inline_asm_extended(
     for (i, output) in ir_outputs.iter().enumerate() {
         gen.builder.build_store(
             output.value.clone(),
-            output_addresses[i].clone()
+            output_addresses[i].clone(),
+            output_types[i].clone(),
         )?;
     }
     
