@@ -41,8 +41,8 @@ fn test_all_scalars_in_registers() {
 
     // I32 occupied A2-A3, so parameter 3 is the first stack slot.
     let (insts, _reg, _bank_reg) = cc.load_param(3, &param_types, &mut pm, &mut naming);
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -7))),
-            "Parameter 3 should be on stack at FP-7 after I32 filled A2-A3");
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -8))),
+            "Parameter 3 should be on stack at FP-8 after I32 filled A2-A3");
 }
 
 #[test]
@@ -107,10 +107,10 @@ fn test_fatptr_scalar_scalar_with_overflow() {
         (3, IrType::I16),                           // Stack
     ];
     
-    // Parameter 3 should be on stack at FP-7
+    // Parameter 3 should be on stack at FP-8
     let (insts, _reg, _bank_reg) = cc.load_param(3, &param_types, &mut pm, &mut naming);
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -7))),
-            "Parameter 3 should be on stack at FP-7");
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -8))),
+            "Parameter 3 should be on stack at FP-8");
 }
 
 #[test]
@@ -147,20 +147,20 @@ fn test_all_stack_parameters() {
         (1, IrType::I16),                           // A1
         (2, IrType::I16),                           // A2
         (3, IrType::I16),                           // A3
-        (4, IrType::I16),                           // Stack -7
-        (5, IrType::FatPtr(Box::new(IrType::I16))), // Stack -8, -9
-        (6, IrType::I16),                           // Stack -10
+        (4, IrType::I16),                           // Stack -8
+        (5, IrType::FatPtr(Box::new(IrType::I16))), // Stack -9, -10
+        (6, IrType::I16),                           // Stack -11
     ];
     
-    // Parameter 4: first stack param at FP-7
+    // Parameter 4: first stack param at FP-8
     let (insts, _reg, _bank_reg) = cc.load_param(4, &param_types, &mut pm, &mut naming);
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -7))),
-            "Parameter 4 should be at FP-7");
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -8))),
+            "Parameter 4 should be at FP-8");
     
-    // Parameter 6: after fat pointer at FP-10
+    // Parameter 6: after fat pointer at FP-11
     let (insts, _reg, _bank_reg) = cc.load_param(6, &param_types, &mut pm, &mut naming);
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -10))),
-            "Parameter 6 should be at FP-10 (after fat pointer)");
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -11))),
+            "Parameter 6 should be at FP-11 (after fat pointer)");
 }
 
 #[test]
@@ -250,8 +250,8 @@ fn test_maximum_register_usage() {
     
     // Parameter 2 should be first on stack
     let (insts, _reg, _bank_reg) = cc.load_param(2, &param_types, &mut pm, &mut naming);
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -7))),
-            "Parameter 2 should be first stack parameter at FP-7");
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::AddI(Reg::Sc, Reg::Fp, -8))),
+            "Parameter 2 should be first stack parameter at FP-8");
 }
 
 #[test]
@@ -267,22 +267,22 @@ fn test_stack_offset_calculation_accuracy() {
         (1, IrType::I16),                           // A1
         (2, IrType::I16),                           // A2
         (3, IrType::I16),                           // A3
-        (4, IrType::I16),                           // Stack: FP-7
-        (5, IrType::I16),                           // Stack: FP-8
-        (6, IrType::FatPtr(Box::new(IrType::I16))), // Stack: FP-9, FP-10
-        (7, IrType::I16),                           // Stack: FP-11
-        (8, IrType::FatPtr(Box::new(IrType::I16))), // Stack: FP-12, FP-13
-        (9, IrType::I16),                           // Stack: FP-14
+        (4, IrType::I16),                           // Stack: FP-8
+        (5, IrType::I16),                           // Stack: FP-9
+        (6, IrType::FatPtr(Box::new(IrType::I16))), // Stack: FP-10, FP-11
+        (7, IrType::I16),                           // Stack: FP-12
+        (8, IrType::FatPtr(Box::new(IrType::I16))), // Stack: FP-13, FP-14
+        (9, IrType::I16),                           // Stack: FP-15
     ];
     
     // Verify each stack parameter has correct offset
     let expected_offsets = [
-        (4, -7),   // First stack param
-        (5, -8),   // Second stack param
-        (6, -9),   // Fat pointer address (bank at -10)
-        (7, -11),  // After fat pointer
-        (8, -12),  // Another fat pointer address (bank at -13)
-        (9, -14),  // Final scalar
+        (4, -8),   // First stack param
+        (5, -9),   // Second stack param
+        (6, -10),  // Fat pointer address (bank at -11)
+        (7, -12),  // After fat pointer
+        (8, -13),  // Another fat pointer address (bank at -14)
+        (9, -15),  // Final scalar
     ];
     
     for (param_idx, expected_offset) in expected_offsets {

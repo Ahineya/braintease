@@ -5,6 +5,9 @@ in_range:
 ; Save RA at SP
     STORE RA, SB, SP
     ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
     ADDI SP, SP, 1
@@ -108,6 +111,9 @@ L_in_range_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -117,6 +123,9 @@ isdigit:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -222,6 +231,9 @@ L_isdigit_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -231,6 +243,9 @@ islower:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -336,6 +351,9 @@ L_islower_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -345,6 +363,9 @@ isupper:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -450,6 +471,9 @@ L_isupper_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -459,6 +483,9 @@ isalpha:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -589,6 +616,9 @@ L_isalpha_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -598,6 +628,9 @@ isalnum:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -728,6 +761,9 @@ L_isalnum_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -737,6 +773,9 @@ isblank:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -842,6 +881,9 @@ L_isblank_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -851,6 +893,9 @@ isspace:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1164,6 +1209,9 @@ L_isspace_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1173,6 +1221,9 @@ iscntrl:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1323,6 +1374,9 @@ L_iscntrl_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1332,6 +1386,9 @@ isprint:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1437,6 +1494,9 @@ L_isprint_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1446,6 +1506,9 @@ isgraph:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1551,6 +1614,9 @@ L_isgraph_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1560,6 +1626,9 @@ ispunct:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1698,6 +1767,9 @@ L_ispunct_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1707,6 +1779,9 @@ isxdigit:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1982,6 +2057,9 @@ L_isxdigit_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1991,6 +2069,9 @@ tolower:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -2091,6 +2172,9 @@ L_tolower_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -2100,6 +2184,9 @@ toupper:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -2200,6 +2287,9 @@ L_toupper_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP

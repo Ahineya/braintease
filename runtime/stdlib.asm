@@ -5,6 +5,9 @@ abs:
 ; Save RA at SP
     STORE RA, SB, SP
     ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
     ADDI SP, SP, 1
@@ -85,6 +88,9 @@ L_abs_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -94,6 +100,9 @@ labs:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -132,12 +141,12 @@ L_labs_4:
     LI T6, 0
     LI T5, 0
     XOR T4, T7, T5
-    BNE T4, R0, L_i32_slt_hine_6ece74c4_2_0
+    BNE T4, R0, L_i32_slt_hine_c3e07ffe_2_0
     SLTU T4, S0, T6
-    BEQ R0, R0, L_i32_slt_done_6ece74c4_2_1
-L_i32_slt_hine_6ece74c4_2_0:
+    BEQ R0, R0, L_i32_slt_done_c3e07ffe_2_1
+L_i32_slt_hine_c3e07ffe_2_0:
     SLT T4, T7, T5
-L_i32_slt_done_6ece74c4_2_1:
+L_i32_slt_done_c3e07ffe_2_1:
     LI T3, 0
     XOR T2, T4, T3
     LI T1, 0
@@ -215,6 +224,9 @@ L_labs_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -224,6 +236,9 @@ llabs:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -297,22 +312,22 @@ L_llabs_8:
     ADDI SC, SC, 16
     STORE T2, SB, SC
     XOR T2, T3, T7
-    BNE T2, R0, L_i64_slt_w3ne_be7955d9_4_0
+    BNE T2, R0, L_i64_slt_w3ne_e005943f_4_0
     XOR T2, T4, S0
-    BNE T2, R0, L_i64_slt_w2ne_be7955d9_4_1
+    BNE T2, R0, L_i64_slt_w2ne_e005943f_4_1
     XOR T2, T5, S1
-    BNE T2, R0, L_i64_slt_w1ne_be7955d9_4_2
+    BNE T2, R0, L_i64_slt_w1ne_e005943f_4_2
     SLTU T2, T6, S2
-    BEQ R0, R0, L_i64_slt_done_be7955d9_4_3
-L_i64_slt_w3ne_be7955d9_4_0:
+    BEQ R0, R0, L_i64_slt_done_e005943f_4_3
+L_i64_slt_w3ne_e005943f_4_0:
     SLT T2, T3, T7
-    BEQ R0, R0, L_i64_slt_done_be7955d9_4_3
-L_i64_slt_w2ne_be7955d9_4_1:
+    BEQ R0, R0, L_i64_slt_done_e005943f_4_3
+L_i64_slt_w2ne_e005943f_4_1:
     SLTU T2, T4, S0
-    BEQ R0, R0, L_i64_slt_done_be7955d9_4_3
-L_i64_slt_w1ne_be7955d9_4_2:
+    BEQ R0, R0, L_i64_slt_done_e005943f_4_3
+L_i64_slt_w1ne_e005943f_4_2:
     SLTU T2, T5, S1
-L_i64_slt_done_be7955d9_4_3:
+L_i64_slt_done_e005943f_4_3:
 ; Spill i64_c1_4_f4_op6 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -371,6 +386,14 @@ L_llabs_9:
     ADDI SC, SC, 24
     STORE S2, SB, SC
     LI S2, 0
+    ADD RV0, T5, R0
+    ADD RV1, T4, R0
+    ADD X0, T3, R0
+    ADD X1, S2, R0
+    ADD A0, S3, R0
+    ADD A1, T1, R0
+    ADD A2, T2, R0
+    ADD A3, T6, R0
 ; Spill t3__w1 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 25
@@ -384,23 +407,23 @@ L_llabs_9:
     ADDI SC, SC, 27
     STORE T7, SB, SC
     LI SC, 0
-    SLTU X2, T5, S3
-    SUB X3, T5, S3
+    SLTU X2, RV0, A0
+    SUB X3, RV0, A0
     SUB S1, X3, SC
     SLTU X3, X3, SC
     OR SC, X2, X3
-    SLTU X2, T4, T1
-    SUB X3, T4, T1
+    SLTU X2, RV1, A1
+    SUB X3, RV1, A1
     SUB S0, X3, SC
     SLTU X3, X3, SC
     OR SC, X2, X3
-    SLTU X2, T3, T2
-    SUB X3, T3, T2
+    SLTU X2, X0, A2
+    SUB X3, X0, A2
     SUB T7, X3, SC
     SLTU X3, X3, SC
     OR SC, X2, X3
-    SLTU X2, S2, T6
-    SUB X3, S2, T6
+    SLTU X2, X1, A3
+    SUB X3, X1, A3
     SUB T0, X3, SC
     SLTU X3, X3, SC
     OR SC, X2, X3
@@ -467,6 +490,9 @@ L_llabs_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -476,6 +502,9 @@ exit:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -524,6 +553,9 @@ L_exit_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -533,6 +565,9 @@ abort:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -650,6 +685,9 @@ L_abort_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP

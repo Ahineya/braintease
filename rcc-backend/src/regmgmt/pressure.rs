@@ -94,7 +94,9 @@ pub struct RegisterPressureManager {
 
     /// Registers that must not be chosen as spill victims (live across
     /// an in-progress instruction that still holds the Reg by value).
-    pinned_registers: std::collections::BTreeSet<Reg>,
+    /// Nested pin/unpin is refcounted so overlapping I64 words (e.g. shift
+    /// amount in `a[0]`) stay pinned until every holder unpins.
+    pinned_registers: std::collections::BTreeMap<Reg, u32>,
 }
 
 impl RegisterPressureManager {
@@ -123,7 +125,7 @@ impl RegisterPressureManager {
             i64_words: BTreeMap::new(),
             fp32: std::collections::BTreeSet::new(),
             fp64: std::collections::BTreeSet::new(),
-            pinned_registers: std::collections::BTreeSet::new(),
+            pinned_registers: std::collections::BTreeMap::new(),
         }
     }
     
@@ -139,20 +141,32 @@ impl RegisterPressureManager {
 
     /// Prevent `reg` from being reused as a spill victim until `unpin_register`.
     pub fn pin_register(&mut self, reg: Reg) {
-        trace!("Pinning register {reg:?}");
-        self.pinned_registers.insert(reg);
+        let n = self.pinned_registers.entry(reg).or_insert(0);
+        *n += 1;
+        trace!("Pinning register {reg:?} (count {n})");
     }
 
-    /// Allow `reg` to be spilled again.
+    /// Allow `reg` to be spilled again (after matching pins).
     pub fn unpin_register(&mut self, reg: Reg) {
-        trace!("Unpinning register {reg:?}");
-        self.pinned_registers.remove(&reg);
+        match self.pinned_registers.get_mut(&reg) {
+            Some(n) if *n > 1 => {
+                *n -= 1;
+                trace!("Unpinning register {reg:?} (count {n})");
+            }
+            Some(_) => {
+                self.pinned_registers.remove(&reg);
+                trace!("Unpinning register {reg:?} (count 0)");
+            }
+            None => {
+                trace!("Unpinning register {reg:?} (was not pinned)");
+            }
+        }
     }
 
     /// Take the LRU unpinned register as a spill victim.
     fn take_spill_victim(&mut self) -> Reg {
         let pos = self.lru_queue.iter().position(|r| {
-            !self.pinned_registers.contains(r) && ALLOCATABLE_REGISTERS.contains(r)
+            !self.pinned_registers.contains_key(r) && ALLOCATABLE_REGISTERS.contains(r)
         })
             .expect("No spillable registers (all pinned)!");
         self.lru_queue.remove(pos).unwrap()

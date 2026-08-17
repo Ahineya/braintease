@@ -8,6 +8,9 @@ init_heap:
 ; Save RA at SP
     STORE RA, SB, SP
     ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
     ADDI SP, SP, 1
@@ -79,6 +82,9 @@ L_init_heap_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -88,6 +94,9 @@ make_fat_ptr:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -167,21 +176,21 @@ L_make_fat_ptr_4:
     LOAD T6, SB, S2
 ; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ T6, S1, L_bc_82d1d91d_use_global
+    BEQ T6, S1, L_bc_494dc2b2_use_global
 ; Spill t7 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T4, SB, SC
     LI T4, -2
-    BEQ T6, T4, L_bc_82d1d91d_use_stack
+    BEQ T6, T4, L_bc_494dc2b2_use_stack
     ADD S2, T6, R0
-    BEQ R0, R0, L_bc_82d1d91d_done
-L_bc_82d1d91d_use_global:
+    BEQ R0, R0, L_bc_494dc2b2_done
+L_bc_494dc2b2_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_82d1d91d_done
-L_bc_82d1d91d_use_stack:
+    BEQ R0, R0, L_bc_494dc2b2_done
+L_bc_494dc2b2_use_stack:
     ADD S2, SB, R0
-L_bc_82d1d91d_done:
+L_bc_494dc2b2_done:
     MOVE RV0, S3
     MOVE RV1, S2
 ; Jump to epilogue
@@ -203,6 +212,9 @@ L_make_fat_ptr_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -212,6 +224,9 @@ malloc:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -821,6 +836,9 @@ L_malloc_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -830,6 +848,9 @@ free:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -886,6 +907,9 @@ L_free_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -895,6 +919,9 @@ calloc:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1217,17 +1244,17 @@ L_calloc_40:
     LOAD T6, SB, T2
 ; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI T7, -1
-    BEQ T6, T7, L_bc_a69f10ae_use_global
+    BEQ T6, T7, L_bc_07e84274_use_global
     LI S2, -2
-    BEQ T6, S2, L_bc_a69f10ae_use_stack
+    BEQ T6, S2, L_bc_07e84274_use_stack
     ADD S3, T6, R0
-    BEQ R0, R0, L_bc_a69f10ae_done
-L_bc_a69f10ae_use_global:
+    BEQ R0, R0, L_bc_07e84274_done
+L_bc_07e84274_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_a69f10ae_done
-L_bc_a69f10ae_use_stack:
+    BEQ R0, R0, L_bc_07e84274_done
+L_bc_07e84274_use_stack:
     ADD S3, SB, R0
-L_bc_a69f10ae_done:
+L_bc_07e84274_done:
     MOVE RV0, T0
     MOVE RV1, S3
 ; Jump to epilogue
@@ -1249,6 +1276,9 @@ L_calloc_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1258,6 +1288,9 @@ realloc:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1447,6 +1480,9 @@ L_realloc_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP

@@ -130,8 +130,8 @@ fn test_all_scalars_end_to_end() {
             (3, Reg::A3),
         ],
         vec![
-            (4, -7),  // First stack param at FP-7
-            (5, -8),  // Second stack param at FP-8
+            (4, -8),  // First stack param at FP-8
+            (5, -9),  // Second stack param at FP-9
         ],
     );
 }
@@ -159,7 +159,7 @@ fn test_pure_fat_pointers_end_to_end() {
             (1, Reg::A2),  // Second fat ptr address in A2 (bank in A3)
         ],
         vec![
-            (2, -7),  // Third fat ptr address at FP-7 (bank at FP-8)
+            (2, -8),  // Third fat ptr address at FP-8 (bank at FP-9)
         ],
     );
 }
@@ -192,8 +192,8 @@ fn test_mixed_types_end_to_end() {
             (2, Reg::A3),
         ],
         vec![
-            (3, -7),   // First stack scalar
-            (4, -8),   // Fat ptr address (bank at -9)
+            (3, -8),   // First stack scalar
+            (4, -9),   // Fat ptr address (bank at -10)
         ],
     );
 }
@@ -233,8 +233,8 @@ fn test_partial_fat_pointer_in_registers() {
             (2, Reg::A2),
         ],
         vec![
-            (3, -7),  // Fat ptr address at FP-7 (bank at FP-8)
-            (4, -9),  // Last scalar at FP-9
+            (3, -8),  // Fat ptr address at FP-8 (bank at FP-9)
+            (4, -10), // Last scalar at FP-10
         ],
     );
 }
@@ -302,7 +302,7 @@ fn test_maximum_register_usage() {
             (1, Reg::A2),
         ],
         vec![
-            (2, -7),  // First stack param
+            (2, -8),  // First stack param
         ],
     );
 }
@@ -337,9 +337,9 @@ fn test_alternating_types() {
             (2, Reg::A3),
         ],
         vec![
-            (3, -7),   // Fat ptr address
-            (4, -9),   // Scalar (after fat ptr bank at -8)
-            (5, -10),  // Fat ptr address (bank at -11)
+            (3, -8),   // Fat ptr address
+            (4, -10),  // Scalar (after fat ptr bank at -9)
+            (5, -11),  // Fat ptr address (bank at -12)
         ],
     );
 }
@@ -379,10 +379,10 @@ fn test_stack_offset_correctness() {
         CallArg::Scalar(Reg::T0),                              // A0
         CallArg::Scalar(Reg::T1),                              // A1
         CallArg::FatPointer { addr: Reg::T2, bank: Reg::T3 },  // A2-A3
-        CallArg::Scalar(Reg::T4),                              // Stack -7
-        CallArg::FatPointer { addr: Reg::T5, bank: Reg::T6 },  // Stack -8, -9
-        CallArg::Scalar(Reg::T7),                              // Stack -10
-        CallArg::FatPointer { addr: Reg::S0, bank: Reg::S1 },  // Stack -11, -12
+        CallArg::Scalar(Reg::T4),                              // Stack -8
+        CallArg::FatPointer { addr: Reg::T5, bank: Reg::T6 },  // Stack -9, -10
+        CallArg::Scalar(Reg::T7),                              // Stack -11
+        CallArg::FatPointer { addr: Reg::S0, bank: Reg::S1 },  // Stack -12, -13
     ];
     
     let param_types = vec![
@@ -405,10 +405,10 @@ fn test_stack_offset_correctness() {
         (0, Some(Reg::A0), None),
         (1, Some(Reg::A1), None),
         (2, Some(Reg::A2), None),  // Fat ptr address (bank in A3)
-        (3, None, Some(-7)),        // First stack param
-        (4, None, Some(-8)),        // Fat ptr address (bank at -9)
-        (5, None, Some(-10)),       // Scalar after fat ptr
-        (6, None, Some(-11)),       // Fat ptr address (bank at -12)
+        (3, None, Some(-8)),        // First stack param
+        (4, None, Some(-9)),        // Fat ptr address (bank at -10)
+        (5, None, Some(-11)),       // Scalar after fat ptr
+        (6, None, Some(-12)),       // Fat ptr address (bank at -13)
     ];
     
     for (i, expected_reg, expected_offset) in expected_locations {

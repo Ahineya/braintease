@@ -8,6 +8,9 @@ rgb565:
 ; Save RA at SP
     STORE RA, SB, SP
     ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
     ADDI SP, SP, 1
@@ -87,6 +90,9 @@ L_rgb565_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -96,6 +102,9 @@ graphics_init:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -237,6 +246,9 @@ L_graphics_init_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -246,6 +258,9 @@ set_pixel:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -520,6 +535,9 @@ L_set_pixel_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -529,6 +547,9 @@ get_pixel:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -786,6 +807,9 @@ L_get_pixel_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -795,6 +819,9 @@ clear_screen:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1012,6 +1039,9 @@ L_clear_screen_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1021,6 +1051,9 @@ graphics_flush:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1079,6 +1112,9 @@ L_graphics_flush_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1088,6 +1124,9 @@ draw_hline:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1349,6 +1388,9 @@ L_draw_hline_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1358,6 +1400,9 @@ draw_vline:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1620,6 +1665,9 @@ L_draw_vline_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -1629,6 +1677,9 @@ draw_line:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -1656,8 +1707,8 @@ draw_line:
     ADD S1, A2, R0
 ; Load param 3 from A3
     ADD S0, A3, R0
-; Load param 4 from FP-7
-    ADDI SC, FP, -7
+; Load param 4 from FP-8
+    ADDI SC, FP, -8
     LOAD T7, SB, SC
 L_draw_line_42:
     ADD T6, FP, R0
@@ -2379,6 +2430,9 @@ L_draw_line_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -2388,6 +2442,9 @@ draw_rect:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -2415,8 +2472,8 @@ draw_rect:
     ADD S1, A2, R0
 ; Load param 3 from A3
     ADD S0, A3, R0
-; Load param 4 from FP-7
-    ADDI SC, FP, -7
+; Load param 4 from FP-8
+    ADDI SC, FP, -8
     LOAD T7, SB, SC
 L_draw_rect_70:
     ADD T6, FP, R0
@@ -2893,6 +2950,9 @@ L_draw_rect_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -2902,6 +2962,9 @@ fill_rect:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -2929,8 +2992,8 @@ fill_rect:
     ADD S1, A2, R0
 ; Load param 3 from A3
     ADD S0, A3, R0
-; Load param 4 from FP-7
-    ADDI SC, FP, -7
+; Load param 4 from FP-8
+    ADDI SC, FP, -8
     LOAD T7, SB, SC
 L_fill_rect_86:
     ADD T6, FP, R0
@@ -3315,6 +3378,9 @@ L_fill_rect_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -3324,6 +3390,9 @@ draw_circle:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -4083,6 +4152,9 @@ L_draw_circle_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -4092,6 +4164,9 @@ fill_circle:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -4288,6 +4363,9 @@ L_fill_circle_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -4297,6 +4375,9 @@ draw_char:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -4458,6 +4539,9 @@ L_draw_char_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -4467,6 +4551,9 @@ draw_string:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -4494,8 +4581,8 @@ draw_string:
     ADD S1, A2, R0
 ; Copy param 2 high/bank from A3
     ADD S0, A3, R0
-; Load param 3 from FP-7
-    ADDI SC, FP, -7
+; Load param 3 from FP-8
+    ADDI SC, FP, -8
     LOAD T7, SB, SC
 L_draw_string_120:
     ADD T6, FP, R0
@@ -4540,17 +4627,17 @@ L_draw_string_121:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("load_f28_op17_t10_bank_val")
     LI T6, -1
-    BEQ T4, T6, L_bc_33782756_use_global
+    BEQ T4, T6, L_bc_347c525b_use_global
     LI T3, -2
-    BEQ T4, T3, L_bc_33782756_use_stack
+    BEQ T4, T3, L_bc_347c525b_use_stack
     ADD T5, T4, R0
-    BEQ R0, R0, L_bc_33782756_done
-L_bc_33782756_use_global:
+    BEQ R0, R0, L_bc_347c525b_done
+L_bc_347c525b_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_33782756_done
-L_bc_33782756_use_stack:
+    BEQ R0, R0, L_bc_347c525b_done
+L_bc_347c525b_use_stack:
     ADD T5, SB, R0
-L_bc_33782756_done:
+L_bc_347c525b_done:
 ; LOAD: Using bank register T5 for load
     LOAD T6, T5, T2
     LI T3, 0
@@ -4622,7 +4709,7 @@ L_draw_string_122:
     ADDI SC, SC, 20
     STORE T1, SB, SC
     LI T1, -1
-    BEQ T7, T1, L_bc_45b05b4f_use_global
+    BEQ T7, T1, L_bc_a3afccda_use_global
 ; Spill t10 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 21
@@ -4632,15 +4719,15 @@ L_draw_string_122:
     ADDI SC, SC, 22
     STORE T4, SB, SC
     LI T2, -2
-    BEQ T7, T2, L_bc_45b05b4f_use_stack
+    BEQ T7, T2, L_bc_a3afccda_use_stack
     ADD S0, T7, R0
-    BEQ R0, R0, L_bc_45b05b4f_done
-L_bc_45b05b4f_use_global:
+    BEQ R0, R0, L_bc_a3afccda_done
+L_bc_a3afccda_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_45b05b4f_done
-L_bc_45b05b4f_use_stack:
+    BEQ R0, R0, L_bc_a3afccda_done
+L_bc_a3afccda_use_stack:
     ADD S0, SB, R0
-L_bc_45b05b4f_done:
+L_bc_a3afccda_done:
 ; LOAD: Using bank register S0 for load
     LOAD T1, S0, S1
 ; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -4766,6 +4853,9 @@ L_draw_string_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -4775,6 +4865,9 @@ graphics_width:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -4821,6 +4914,9 @@ L_graphics_width_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -4830,6 +4926,9 @@ graphics_height:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -4876,6 +4975,9 @@ L_graphics_height_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP
@@ -4885,6 +4987,9 @@ fast_sin:
 ; === Function Prologue ===
 ; Save RA at SP
     STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
     ADDI SP, SP, 1
 ; Save old FP
     STORE FP, SB, SP
@@ -4932,17 +5037,17 @@ L_fast_sin_126:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("gep_new_bank_f34_op9_t3")
     LI T0, -1
-    BEQ T2, T0, L_bc_d782c14c_use_global
+    BEQ T2, T0, L_bc_afae663f_use_global
     LI T6, -2
-    BEQ T2, T6, L_bc_d782c14c_use_stack
+    BEQ T2, T6, L_bc_afae663f_use_stack
     ADD T1, T2, R0
-    BEQ R0, R0, L_bc_d782c14c_done
-L_bc_d782c14c_use_global:
+    BEQ R0, R0, L_bc_afae663f_done
+L_bc_afae663f_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_d782c14c_done
-L_bc_d782c14c_use_stack:
+    BEQ R0, R0, L_bc_afae663f_done
+L_bc_afae663f_use_stack:
     ADD T1, SB, R0
-L_bc_d782c14c_done:
+L_bc_afae663f_done:
 ; LOAD: Using bank register T1 for load
     LOAD T5, T1, T7
     MOVE RV0, T5
@@ -4965,6 +5070,9 @@ L_fast_sin_99999:
 ; Restore old FP
     ADDI SP, SP, -5
     LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
 ; Restore RA
     ADDI SP, SP, -1
     LOAD RA, SB, SP

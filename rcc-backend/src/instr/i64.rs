@@ -214,6 +214,29 @@ pub fn get_i64_quad(
 const I64_CY: Reg = Reg::X2;
 const I64_TMP: Reg = Reg::X3;
 
+/// Park a 4-word I64 in non-allocatable ABI regs so T/S pins stay under 12.
+/// Same split as I64 udiv: quotient-side in Rv/X, divisor-side in A0–A3.
+const I64_PARK_A: [Reg; 4] = [Reg::Rv0, Reg::Rv1, Reg::X0, Reg::X1];
+const I64_PARK_B: [Reg; 4] = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
+
+fn park_quad(dst: [Reg; 4], src: [Reg; 4]) -> Vec<AsmInst> {
+    (0..4)
+        .filter_map(|i| {
+            if dst[i] != src[i] {
+                Some(AsmInst::Add(dst[i], src[i], Reg::R0))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn unpin_quad(mgr: &mut RegisterPressureManager, regs: [Reg; 4]) {
+    for r in regs {
+        mgr.unpin_register(r);
+    }
+}
+
 fn emit_i64_add(
     result: [Reg; 4],
     a: [Reg; 4],
@@ -477,119 +500,216 @@ fn shl1_quad(words: [Reg; 4], scratch: Reg) -> Vec<AsmInst> {
     ]
 }
 
-fn emit_i64_shl(
+/// Copy `src` into `result` shifted by `word` 16-bit limbs. `shl` selects direction.
+fn emit_i64_word_shuffle(
     result: [Reg; 4],
-    a: [Reg; 4],
-    amt: Reg,
-    mgr: &mut RegisterPressureManager,
-    naming: &mut NameGenerator,
+    src: [Reg; 4],
+    word: usize,
+    shl: bool,
 ) -> Vec<AsmInst> {
     let mut insts = Vec::new();
     for i in 0..4 {
-        insts.push(AsmInst::Add(result[i], a[i], Reg::R0));
+        let s = if shl {
+            i as i32 - word as i32
+        } else {
+            i as i32 + word as i32
+        };
+        if s < 0 || s >= 4 {
+            insts.push(AsmInst::Li(result[i], 0));
+        } else {
+            insts.push(AsmInst::Add(result[i], src[s as usize], Reg::R0));
+        }
     }
-    for r in a {
-        mgr.unpin_register(r);
-    }
-    let bits = alloc_pin(mgr, naming, &mut insts, "shl64", "bits");
-    insts.push(AsmInst::Add(bits, amt, Reg::R0));
-    insts.push(AsmInst::Li(I64_TMP, 63));
-    insts.push(AsmInst::And(bits, bits, I64_TMP));
-    let scr = alloc_pin(mgr, naming, &mut insts, "shl64", "scr");
-    let loop_l = naming.i64_label("shl_loop");
-    let done_l = naming.i64_label("shl_done");
-    insts.push(AsmInst::Label(loop_l.clone()));
-    insts.push(AsmInst::Beq(bits, Reg::R0, done_l.clone()));
-    insts.extend(shl1_quad(result, scr));
-    insts.push(AsmInst::AddI(bits, bits, -1));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, loop_l));
-    insts.push(AsmInst::Label(done_l));
-    mgr.unpin_register(bits);
-    mgr.unpin_register(scr);
     insts
 }
 
-fn emit_i64_lshr(
+/// In-place 1–15 bit shl. `overlap` must be distinct from `result` (X0 after park copy).
+fn emit_i64_bit_shl_inplace(
     result: [Reg; 4],
-    a: [Reg; 4],
-    amt: Reg,
-    mgr: &mut RegisterPressureManager,
-    naming: &mut NameGenerator,
+    bit: Reg,
+    sh_left: Reg,
+    overlap: Reg,
 ) -> Vec<AsmInst> {
-    emit_i64_shift_right(result, a, amt, false, mgr, naming)
+    let mut insts = Vec::new();
+    for i in (1..4).rev() {
+        insts.push(AsmInst::Srl(overlap, result[i - 1], sh_left));
+        insts.push(AsmInst::Sll(result[i], result[i], bit));
+        insts.push(AsmInst::Or(result[i], result[i], overlap));
+    }
+    insts.push(AsmInst::Sll(result[0], result[0], bit));
+    insts
 }
 
-fn emit_i64_ashr(
+/// In-place 1–15 bit logical shr.
+fn emit_i64_bit_shr_inplace(
     result: [Reg; 4],
-    a: [Reg; 4],
-    amt: Reg,
-    mgr: &mut RegisterPressureManager,
-    naming: &mut NameGenerator,
+    bit: Reg,
+    sh_left: Reg,
+    overlap: Reg,
 ) -> Vec<AsmInst> {
-    emit_i64_shift_right(result, a, amt, true, mgr, naming)
+    let mut insts = Vec::new();
+    for i in 0..3 {
+        insts.push(AsmInst::Sll(overlap, result[i + 1], sh_left));
+        insts.push(AsmInst::Srl(result[i], result[i], bit));
+        insts.push(AsmInst::Or(result[i], result[i], overlap));
+    }
+    insts.push(AsmInst::Srl(result[3], result[3], bit));
+    insts
 }
 
-fn emit_i64_shift_right(
+fn emit_i64_ashr_fill(
     result: [Reg; 4],
-    a: [Reg; 4],
-    amt: Reg,
+    word: usize,
+    bit: Reg,
+    sign: Reg,
+    naming: &mut NameGenerator,
+) -> Vec<AsmInst> {
+    let skip = naming.i64_label("ashr_pos");
+    let mut insts = vec![AsmInst::Beq(sign, Reg::R0, skip.clone())];
+    insts.push(AsmInst::Li(Reg::Rv0, -1));
+    for i in (4 - word)..4 {
+        insts.push(AsmInst::Add(result[i], Reg::Rv0, Reg::R0));
+    }
+    if word < 4 {
+        let nopart = naming.i64_label("ashr_nopart");
+        insts.push(AsmInst::Beq(bit, Reg::R0, nopart.clone()));
+        insts.push(AsmInst::Li(Reg::Sc, 16));
+        insts.push(AsmInst::Sub(Reg::Sc, Reg::Sc, bit));
+        insts.push(AsmInst::Sll(I64_CY, Reg::Rv0, Reg::Sc));
+        insts.push(AsmInst::Or(result[3 - word], result[3 - word], I64_CY));
+        insts.push(AsmInst::Label(nopart));
+    }
+    insts.push(AsmInst::Label(skip));
+    insts
+}
+
+/// Word-shuffle `src` into `result`, then a 0–15 bit shift. `bit` is 0–15.
+fn emit_i64_shift_parts(
+    result: [Reg; 4],
+    src: [Reg; 4],
+    word: usize,
+    bit: Reg,
+    shl: bool,
     arithmetic: bool,
-    mgr: &mut RegisterPressureManager,
+    sign: Option<Reg>,
+    naming: &mut NameGenerator,
+) -> Vec<AsmInst> {
+    let overlap = Reg::X0;
+    let mut insts = emit_i64_word_shuffle(result, src, word, shl);
+    let skip_bits = naming.i64_label("sh_nobit");
+    insts.push(AsmInst::Beq(bit, Reg::R0, skip_bits.clone()));
+    insts.push(AsmInst::Li(Reg::Sc, 16));
+    insts.push(AsmInst::Sub(Reg::Sc, Reg::Sc, bit));
+    if shl {
+        insts.extend(emit_i64_bit_shl_inplace(result, bit, Reg::Sc, overlap));
+    } else {
+        insts.extend(emit_i64_bit_shr_inplace(result, bit, Reg::Sc, overlap));
+    }
+    insts.push(AsmInst::Label(skip_bits));
+    if arithmetic {
+        if let Some(sign) = sign {
+            insts.extend(emit_i64_ashr_fill(result, word, bit, sign, naming));
+        }
+    }
+    insts
+}
+
+fn emit_i64_shift_const(
+    result: [Reg; 4],
+    src: [Reg; 4],
+    n: u32,
+    shl: bool,
+    arithmetic: bool,
+    naming: &mut NameGenerator,
+) -> Vec<AsmInst> {
+    let n = n & 63;
+    let word = (n / 16) as usize;
+    let bit = n % 16;
+    let mut insts = Vec::new();
+    let sign = if arithmetic {
+        insts.push(AsmInst::Slt(I64_PARK_B[3], src[3], Reg::R0));
+        Some(I64_PARK_B[3])
+    } else {
+        None
+    };
+    if bit == 0 {
+        insts.extend(emit_i64_word_shuffle(result, src, word, shl));
+        if arithmetic {
+            if let Some(sign) = sign {
+                insts.push(AsmInst::Li(I64_CY, 0));
+                insts.extend(emit_i64_ashr_fill(result, word, I64_CY, sign, naming));
+            }
+        }
+        return insts;
+    }
+    insts.push(AsmInst::Li(I64_TMP, bit as i16));
+    insts.extend(emit_i64_shift_parts(
+        result, src, word, I64_TMP, shl, arithmetic, sign, naming,
+    ));
+    insts
+}
+
+/// Variable I64 shift. `amt` is already in X2 and masked to 0–63. `src` is parked
+/// in Rv/X. Uses A0–A2 for 16/32/48; no extra T/S pins, no bit-by-bit loop.
+fn emit_i64_shift_var(
+    result: [Reg; 4],
+    src: [Reg; 4],
+    amt: Reg,
+    shl: bool,
+    arithmetic: bool,
     naming: &mut NameGenerator,
 ) -> Vec<AsmInst> {
     let mut insts = Vec::new();
-    for i in 0..4 {
-        insts.push(AsmInst::Add(result[i], a[i], Reg::R0));
-    }
-    for r in a {
-        mgr.unpin_register(r);
-    }
-    let bits = alloc_pin(mgr, naming, &mut insts, "shr64", "bits");
-    insts.push(AsmInst::Add(bits, amt, Reg::R0));
-    insts.push(AsmInst::Li(I64_TMP, 63));
-    insts.push(AsmInst::And(bits, bits, I64_TMP));
-    let one = alloc_pin(mgr, naming, &mut insts, "shr64", "one");
-    insts.push(AsmInst::Li(one, 1));
-    let sh15 = alloc_pin(mgr, naming, &mut insts, "shr64", "sh15");
-    insts.push(AsmInst::Li(sh15, 15));
-    let sign = alloc_pin(mgr, naming, &mut insts, "shr64", "sign");
-    insts.push(AsmInst::Slt(sign, result[3], Reg::R0));
-    let loop_l = naming.i64_label("shr_loop");
-    let done_l = naming.i64_label("shr_done");
-    insts.push(AsmInst::Label(loop_l.clone()));
-    insts.push(AsmInst::Beq(bits, Reg::R0, done_l.clone()));
+    let sign = if arithmetic {
+        insts.push(AsmInst::Slt(I64_PARK_B[3], src[3], Reg::R0));
+        Some(I64_PARK_B[3])
+    } else {
+        None
+    };
+    insts.push(AsmInst::Li(I64_PARK_B[0], 16));
+    insts.push(AsmInst::Li(I64_PARK_B[1], 32));
+    insts.push(AsmInst::Li(I64_PARK_B[2], 48));
 
-    insts.push(AsmInst::And(I64_TMP, result[1], one));
-    insts.push(AsmInst::Srl(result[0], result[0], one));
-    insts.push(AsmInst::Sll(I64_TMP, I64_TMP, sh15));
-    insts.push(AsmInst::Or(result[0], result[0], I64_TMP));
+    let ge32 = naming.i64_label("sh_ge32");
+    let ge48 = naming.i64_label("sh_ge48");
+    let ge16 = naming.i64_label("sh_ge16");
+    let lt16 = naming.i64_label("sh_lt16");
+    let done = naming.i64_label("sh_done");
 
-    insts.push(AsmInst::And(I64_TMP, result[2], one));
-    insts.push(AsmInst::Srl(result[1], result[1], one));
-    insts.push(AsmInst::Sll(I64_TMP, I64_TMP, sh15));
-    insts.push(AsmInst::Or(result[1], result[1], I64_TMP));
+    insts.push(AsmInst::Sltu(I64_TMP, amt, I64_PARK_B[1]));
+    insts.push(AsmInst::Beq(I64_TMP, Reg::R0, ge32.clone()));
+    insts.push(AsmInst::Sltu(I64_TMP, amt, I64_PARK_B[0]));
+    insts.push(AsmInst::Beq(I64_TMP, Reg::R0, ge16.clone()));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, lt16.clone()));
 
-    insts.push(AsmInst::And(I64_TMP, result[3], one));
-    insts.push(AsmInst::Srl(result[2], result[2], one));
-    insts.push(AsmInst::Sll(I64_TMP, I64_TMP, sh15));
-    insts.push(AsmInst::Or(result[2], result[2], I64_TMP));
+    insts.push(AsmInst::Label(ge32));
+    insts.push(AsmInst::Sltu(I64_TMP, amt, I64_PARK_B[2]));
+    insts.push(AsmInst::Beq(I64_TMP, Reg::R0, ge48.clone()));
+    insts.push(AsmInst::Sub(I64_TMP, amt, I64_PARK_B[1]));
+    insts.extend(emit_i64_shift_parts(
+        result, src, 2, I64_TMP, shl, arithmetic, sign, naming,
+    ));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
 
-    insts.push(AsmInst::Srl(result[3], result[3], one));
-    if arithmetic {
-        let skip = naming.i64_label("ashr_pos");
-        insts.push(AsmInst::Beq(sign, Reg::R0, skip.clone()));
-        insts.push(AsmInst::Li(I64_TMP, -32768));
-        insts.push(AsmInst::Or(result[3], result[3], I64_TMP));
-        insts.push(AsmInst::Label(skip));
-    }
+    insts.push(AsmInst::Label(ge48));
+    insts.push(AsmInst::Sub(I64_TMP, amt, I64_PARK_B[2]));
+    insts.extend(emit_i64_shift_parts(
+        result, src, 3, I64_TMP, shl, arithmetic, sign, naming,
+    ));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
 
-    insts.push(AsmInst::AddI(bits, bits, -1));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, loop_l));
-    insts.push(AsmInst::Label(done_l));
-    mgr.unpin_register(bits);
-    mgr.unpin_register(one);
-    mgr.unpin_register(sh15);
-    mgr.unpin_register(sign);
+    insts.push(AsmInst::Label(ge16));
+    insts.push(AsmInst::Sub(I64_TMP, amt, I64_PARK_B[0]));
+    insts.extend(emit_i64_shift_parts(
+        result, src, 1, I64_TMP, shl, arithmetic, sign, naming,
+    ));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
+
+    insts.push(AsmInst::Label(lt16));
+    insts.extend(emit_i64_shift_parts(
+        result, src, 0, amt, shl, arithmetic, sign, naming,
+    ));
+    insts.push(AsmInst::Label(done));
     insts
 }
 
@@ -619,22 +739,23 @@ fn emit_i64_udiv(
         mgr.pin_register(r);
     }
 
+    // Park divisor in A0–A3 first so copying the numerator cannot sit at 12 T/S pins.
+    let dv = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
+    for i in 0..4 {
+        insts.push(AsmInst::Add(dv[i], d[i], Reg::R0));
+    }
+    for r in d {
+        if !n.contains(&r) {
+            mgr.unpin_register(r);
+        }
+    }
+
     let mut wn = [Reg::R0; 4];
     for i in 0..4 {
         wn[i] = alloc_pin(mgr, naming, &mut insts, "div64", &format!("n{i}"));
         insts.push(AsmInst::Add(wn[i], n[i], Reg::R0));
     }
     for r in n {
-        if !d.contains(&r) {
-            mgr.unpin_register(r);
-        }
-    }
-
-    let dv = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
-    for i in 0..4 {
-        insts.push(AsmInst::Add(dv[i], d[i], Reg::R0));
-    }
-    for r in d {
         mgr.unpin_register(r);
     }
 
@@ -759,6 +880,8 @@ fn emit_i64_sdiv(
     insts.push(AsmInst::Label(dpos));
     mgr.unpin_register(dneg_r);
 
+    unpin_quad(mgr, an);
+    unpin_quad(mgr, ad);
     insts.extend(emit_i64_udiv(an, ad, want_rem, mgr, naming, out_names));
 
     let nneg_r = alloc_pin(mgr, naming, &mut insts, "sdiv64", "nneg_r");
@@ -858,6 +981,19 @@ pub fn lower_i64_binary(
         bq
     };
 
+    // Park add/sub/bitwise operands in ABI regs before allocating the 4-word
+    // result, so we never hold 4+4+4 T/S pins at once.
+    let parked = matches!(
+        op,
+        IrBinaryOp::Add | IrBinaryOp::Sub | IrBinaryOp::And | IrBinaryOp::Or | IrBinaryOp::Xor
+    );
+    if parked {
+        insts.extend(park_quad(I64_PARK_A, a));
+        insts.extend(park_quad(I64_PARK_B, b));
+        unpin_quad(mgr, a);
+        unpin_quad(mgr, b);
+    }
+
     let result_lo = mgr.get_register(result_name.clone());
     insts.extend(mgr.take_instructions());
     mgr.pin_register(result_lo);
@@ -936,14 +1072,14 @@ pub fn lower_i64_binary(
 
     match op {
         IrBinaryOp::Add => {
-            insts.extend(emit_i64_add(result, a, b));
+            insts.extend(emit_i64_add(result, I64_PARK_A, I64_PARK_B));
         }
         IrBinaryOp::Sub => {
-            insts.extend(emit_i64_sub(result, a, b));
+            insts.extend(emit_i64_sub(result, I64_PARK_A, I64_PARK_B));
         }
-        IrBinaryOp::And => insts.extend(emit_i64_bitwise(AsmInst::And, result, a, b)),
-        IrBinaryOp::Or => insts.extend(emit_i64_bitwise(AsmInst::Or, result, a, b)),
-        IrBinaryOp::Xor => insts.extend(emit_i64_bitwise(AsmInst::Xor, result, a, b)),
+        IrBinaryOp::And => insts.extend(emit_i64_bitwise(AsmInst::And, result, I64_PARK_A, I64_PARK_B)),
+        IrBinaryOp::Or => insts.extend(emit_i64_bitwise(AsmInst::Or, result, I64_PARK_A, I64_PARK_B)),
+        IrBinaryOp::Xor => insts.extend(emit_i64_bitwise(AsmInst::Xor, result, I64_PARK_A, I64_PARK_B)),
         IrBinaryOp::Mul => {
             for r in result {
                 mgr.unpin_register(r);
@@ -959,6 +1095,8 @@ pub fn lower_i64_binary(
             for r in result {
                 mgr.unpin_register(r);
             }
+            unpin_quad(mgr, a);
+            unpin_quad(mgr, b);
             let want_rem = matches!(op, IrBinaryOp::URem | IrBinaryOp::SRem);
             let signed = matches!(op, IrBinaryOp::SDiv | IrBinaryOp::SRem);
             if signed {
@@ -973,22 +1111,32 @@ pub fn lower_i64_binary(
             }
         }
         IrBinaryOp::Shl | IrBinaryOp::LShr | IrBinaryOp::AShr => {
-            let (amt, ai) = shift_amt_reg(mgr, naming, rhs);
-            insts.extend(ai);
-            mgr.pin_register(amt);
-            match op {
-                IrBinaryOp::Shl => {
-                    insts.extend(emit_i64_shl(result, a, amt, mgr, naming));
+            let shl = matches!(op, IrBinaryOp::Shl);
+            let arithmetic = matches!(op, IrBinaryOp::AShr);
+            match rhs {
+                Value::Constant(c) => {
+                    insts.extend(park_quad(I64_PARK_A, a));
+                    unpin_quad(mgr, a);
+                    let n = (*c as u64) & 63;
+                    insts.extend(emit_i64_shift_const(
+                        result, I64_PARK_A, n as u32, shl, arithmetic, naming,
+                    ));
                 }
-                IrBinaryOp::LShr => {
-                    insts.extend(emit_i64_lshr(result, a, amt, mgr, naming));
+                _ => {
+                    let (amt, ai) = shift_amt_reg(mgr, naming, rhs);
+                    insts.extend(ai);
+                    mgr.pin_register(amt);
+                    insts.push(AsmInst::Add(I64_CY, amt, Reg::R0));
+                    insts.push(AsmInst::Li(I64_TMP, 63));
+                    insts.push(AsmInst::And(I64_CY, I64_CY, I64_TMP));
+                    insts.extend(park_quad(I64_PARK_A, a));
+                    unpin_quad(mgr, a);
+                    mgr.unpin_register(amt);
+                    insts.extend(emit_i64_shift_var(
+                        result, I64_PARK_A, I64_CY, shl, arithmetic, naming,
+                    ));
                 }
-                IrBinaryOp::AShr => {
-                    insts.extend(emit_i64_ashr(result, a, amt, mgr, naming));
-                }
-                _ => unreachable!(),
             }
-            mgr.unpin_register(amt);
         }
         _ => panic!("unexpected I64 binary op {op:?}"),
     }
@@ -997,12 +1145,14 @@ pub fn lower_i64_binary(
     for r in result {
         mgr.unpin_register(r);
     }
-    for r in a {
-        mgr.unpin_register(r);
-    }
-    if !is_shift {
-        for r in b {
+    if !parked {
+        for r in a {
             mgr.unpin_register(r);
+        }
+        if !is_shift {
+            for r in b {
+                mgr.unpin_register(r);
+            }
         }
     }
     insts

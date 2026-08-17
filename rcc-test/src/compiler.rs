@@ -123,7 +123,7 @@ pub fn build_runtime(tools: &ToolPaths, bank_size: usize) -> Result<()> {
         bank_size
     );
     
-    let result = run_command_sync(&cmd, 30)?;
+    let result = run_command_sync(&cmd, 180)?;
     if result.exit_code != 0 {
         anyhow::bail!("Failed to build runtime: {}", result.stderr);
     }

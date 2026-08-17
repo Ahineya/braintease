@@ -9,8 +9,9 @@ fn test_prologue_initializes_r13() {
     // Should have LI R13, 1 near the beginning
     // Stack bank is initialized in crt0.asm, not in function prologue
     
-    // Should save RA and FP
+    // Should save RA, RAB, and FP
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Store(Reg::Ra, _, _))));
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Store(Reg::Rab, _, _))));
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Store(Reg::Fp, _, _))));
     
     // Should allocate space
@@ -23,8 +24,9 @@ fn test_epilogue_restores_state() {
     func.pressure_manager.init(); // Initialize pressure manager
     let insts = func.emit_epilogue();
     
-    // Should restore SP, FP, RA
+    // Should restore SP, FP, RAB, RA
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Load(Reg::Fp, _, _))));
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Load(Reg::Rab, _, _))));
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Load(Reg::Ra, _, _))));
     
     // Should return with JALR R0, RAB, RA (restores PCB from RAB)
@@ -81,8 +83,9 @@ fn test_prologue_with_no_locals() {
     // Should still initialize R13
     // Stack bank is initialized in crt0.asm, not in function prologue
     
-    // Should save RA and FP
+    // Should save RA, RAB, and FP
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Store(Reg::Ra, _, _))));
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Store(Reg::Rab, _, _))));
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Store(Reg::Fp, _, _))));
     
     // Should NOT allocate space

@@ -98,9 +98,9 @@ impl CallingConvention {
         param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)],
         first_stack_param: usize,
     ) -> i16 {
-        // Stack layout: ... param6, param5, param4, RA, FP, S0, S1, S2, S3, locals...
-        // Start at -6 for FP, RA, and S0-S3
-        let mut offset = -6i16;
+        // Stack layout: ... param6, param5, param4, RA, RAB, FP, S0, S1, S2, S3, locals...
+        // Start at -7 for RA, RAB, FP, and S0-S3
+        let mut offset = -7i16;
         
         // Count stack words before our parameter
         for i in first_stack_param..param_index {

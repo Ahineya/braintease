@@ -1,0 +1,6 @@
+{
+  "use_runtime": true,
+  "expected": "YYYYYYYYYYYYYY\n",
+  "description": "IEEE binary64 precision beyond f32",
+  "timeout_secs": 15
+}

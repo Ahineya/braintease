@@ -135,6 +135,14 @@ impl FunctionLowering {
         insts.push(AsmInst::Comment("Save RA at SP".to_string()));
         insts.push(AsmInst::Store(Reg::Ra, Reg::Sb, Reg::Sp));
         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
+
+        // Save RAB. Nested CALL/JAL overwrites RAB with the callee's PCB, so
+        // a function in bank N that calls anyone must restore the caller's
+        // bank before RET (JALR R0, RAB, RA).
+        trace!("  Saving RAB at SP");
+        insts.push(AsmInst::Comment("Save RAB at SP".to_string()));
+        insts.push(AsmInst::Store(Reg::Rab, Reg::Sb, Reg::Sp));
+        insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
         
         // Save old FP
         trace!("  Saving old FP");
@@ -192,8 +200,9 @@ impl FunctionLowering {
         insts.push(AsmInst::Add(Reg::Sp, Reg::Fp, Reg::R0));
         
         // Restore callee-saved registers (S3-S0 in reverse order)
-        // We saved RA, FP, S0, S1, S2, S3 in that order
-        // So FP-1 = S3, FP-2 = S2, FP-3 = S1, FP-4 = S0, FP-5 = old FP, FP-6 = RA
+        // Saved RA, RAB, FP, S0, S1, S2, S3 in that order.
+        // FP-1 = S3, FP-2 = S2, FP-3 = S1, FP-4 = S0, FP-5 = old FP,
+        // FP-6 = RAB, FP-7 = RA
         insts.push(AsmInst::Comment("Restore callee-saved registers S3-S0".to_string()));
         for (offset, reg) in [(-1, Reg::S3), (-2, Reg::S2), (-3, Reg::S1), (-4, Reg::S0)] {
             trace!("  Restoring {reg:?} from FP{offset}");
@@ -206,8 +215,14 @@ impl FunctionLowering {
         insts.push(AsmInst::Comment("Restore old FP".to_string()));
         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, -5));
         insts.push(AsmInst::Load(Reg::Fp, Reg::Sb, Reg::Sp));
+
+        // Restore RAB (at FP-6, which is now SP-1)
+        trace!("  Restoring RAB");
+        insts.push(AsmInst::Comment("Restore RAB".to_string()));
+        insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, -1));
+        insts.push(AsmInst::Load(Reg::Rab, Reg::Sb, Reg::Sp));
         
-        // Restore RA (at FP-6, which is now SP-1) 
+        // Restore RA (at FP-7, which is now SP-1)
         trace!("  Restoring RA");
         insts.push(AsmInst::Comment("Restore RA".to_string()));
         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, -1));

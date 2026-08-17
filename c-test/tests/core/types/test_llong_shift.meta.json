@@ -1,0 +1,5 @@
+{
+  "description": "I64 shifts: const word-shuffle and variable hardware shift",
+  "use_runtime": true,
+  "expected": "YYYYYYYYYYYY\n"
+}
