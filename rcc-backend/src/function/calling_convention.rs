@@ -526,7 +526,7 @@ impl CallingConvention {
                 insts.push(AsmInst::Add(dest, arg_reg, Reg::R0));
             }
 
-            if index < param_types.len() && param_types[index].1.is_i64() {
+            if index < param_types.len() && param_types[index].1.is_four_word_scalar() {
                 let srcs = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
                 let pn = naming.param_name(index);
                 let mut extra = [String::new(), String::new(), String::new()];
@@ -540,8 +540,11 @@ impl CallingConvention {
                     }
                     pressure_manager.bind_value_to_register(extra[i].clone(), extra_regs[i]);
                 }
-                pressure_manager.set_i64_words(pn, extra.clone());
+                pressure_manager.set_i64_words(pn.clone(), extra.clone());
                 pressure_manager.set_i64_words(format!("__param_{index}"), extra);
+                if param_types[index].1.is_f64() {
+                    pressure_manager.set_fp64(pn);
+                }
                 debug!("Parameter load complete (i64): generated {} instructions", insts.len());
                 return (insts, dest, Some(extra_regs[0]));
             }
@@ -559,7 +562,7 @@ impl CallingConvention {
                 debug!("  Copying param {index} second word from {src_bank_reg:?}");
                 insts.push(AsmInst::Comment(format!("Copy param {index} high/bank from {src_bank_reg:?}")));
 
-                let bank_reg_name = if param_types[index].1.is_wide() {
+                let bank_reg_name = if param_types[index].1.is_two_word_scalar() {
                     let pn = naming.param_name(index);
                     naming.i32_high_name(&pn)
                 } else {
@@ -573,8 +576,11 @@ impl CallingConvention {
                 pressure_manager.bind_value_to_register(bank_reg_name.clone(), bank_reg);
 
                 let param_name = naming.param_name(index);
-                if param_types[index].1.is_wide() {
-                    pressure_manager.set_i32_high(param_name, bank_reg_name);
+                if param_types[index].1.is_two_word_scalar() {
+                    pressure_manager.set_i32_high(param_name.clone(), bank_reg_name);
+                    if param_types[index].1.is_f32() {
+                        pressure_manager.set_fp32(param_name);
+                    }
                 } else {
                     pressure_manager.set_pointer_bank(param_name, BankInfo::Dynamic(bank_reg_name));
                 }
@@ -599,7 +605,7 @@ impl CallingConvention {
             trace!("  Loading from stack (bank SB) at computed address into {dest:?}");
             insts.push(AsmInst::Load(dest, Reg::Sb, Reg::Sc));
 
-            if index < param_types.len() && param_types[index].1.is_i64() {
+            if index < param_types.len() && param_types[index].1.is_four_word_scalar() {
                 let pn = naming.param_name(index);
                 let mut extra = [String::new(), String::new(), String::new()];
                 let mut extra_regs = [Reg::R0; 3];
@@ -611,8 +617,11 @@ impl CallingConvention {
                     insts.push(AsmInst::Load(extra_regs[i], Reg::Sb, Reg::Sc));
                     pressure_manager.bind_value_to_register(extra[i].clone(), extra_regs[i]);
                 }
-                pressure_manager.set_i64_words(pn, extra.clone());
+                pressure_manager.set_i64_words(pn.clone(), extra.clone());
                 pressure_manager.set_i64_words(format!("__param_{index}"), extra);
+                if param_types[index].1.is_f64() {
+                    pressure_manager.set_fp64(pn);
+                }
                 debug!("Parameter load complete (i64 stack): generated {} instructions", insts.len());
                 return (insts, dest, Some(extra_regs[0]));
             }
@@ -622,7 +631,7 @@ impl CallingConvention {
                 debug!("  Loading second word of param {index} from FP{}", param_offset - 1);
                 insts.push(AsmInst::Comment(format!("Load param {index} high/bank from FP{}", param_offset - 1)));
 
-                let bank_reg_name = if param_types[index].1.is_wide() {
+                let bank_reg_name = if param_types[index].1.is_two_word_scalar() {
                     let pn = naming.param_name(index);
                     naming.i32_high_name(&pn)
                 } else {
@@ -635,9 +644,12 @@ impl CallingConvention {
                 insts.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
 
                 let param_name = naming.param_name(index);
-                if param_types[index].1.is_wide() {
+                if param_types[index].1.is_two_word_scalar() {
                     pressure_manager.bind_value_to_register(bank_reg_name.clone(), bank_reg);
-                    pressure_manager.set_i32_high(param_name, bank_reg_name);
+                    pressure_manager.set_i32_high(param_name.clone(), bank_reg_name);
+                    if param_types[index].1.is_f32() {
+                        pressure_manager.set_fp32(param_name);
+                    }
                 } else {
                     pressure_manager.set_pointer_bank(param_name, BankInfo::Register(bank_reg));
                 }

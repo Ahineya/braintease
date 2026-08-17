@@ -44,6 +44,11 @@ pub fn lower_instruction(
             let use_i32 = result_type.is_wide()
                 || crate::instr::wide::value_is_i32(mgr, naming, lhs)
                 || crate::instr::wide::value_is_i32(mgr, naming, rhs);
+            if result_type.is_fp() {
+                return Err(format!(
+                    "COMPILER BUG: floating Binary {op:?} should have been lowered to a soft-float call"
+                ));
+            }
             let binary_insts = if use_i64 {
                 crate::instr::i64::lower_i64_binary(mgr, naming, *op, lhs, rhs, *result)
             } else if use_i32 {
@@ -296,13 +301,20 @@ pub fn lower_instruction(
                 CallTarget::Label(func_name.clone()),
                 call_args,
                 result_type.is_pointer(),
-                result_type.is_wide(),
-                result_type.is_i64(),
-                result_name,
+                result_type.is_wide() || result_type.is_f32(),
+                result_type.is_i64() || result_type.is_f64(),
+                result_name.clone(),
                 *stack_args_from,
             );
             
             insts.extend(call_insts);
+            if let Some(name) = result_name {
+                if result_type.is_f32() {
+                    mgr.set_fp32(name);
+                } else if result_type.is_f64() {
+                    mgr.set_fp64(name);
+                }
+            }
             
             // Return value binding is now handled inside make_complete_call_by_label!
             
@@ -572,7 +584,7 @@ fn lower_va_arg(
 
     let words = result_type.size_in_words().unwrap_or(1) as i16;
 
-    if result_type.is_i64() {
+    if result_type.is_i64() || result_type.is_f64() {
         let ap_name = naming.temp_name(ap_temp);
         let ap_reg = mgr.get_register(ap_name);
         insts.extend(mgr.take_instructions());
@@ -591,9 +603,12 @@ fn lower_va_arg(
             mgr.bind_value_to_register(extra[i].clone(), r);
         }
         mgr.set_i64_words(dest_name.clone(), extra);
+        if result_type.is_f64() {
+            mgr.set_fp64(dest_name.clone());
+        }
         mgr.bind_value_to_register(dest_name, dest_reg);
         mgr.unpin_register(ap_reg);
-    } else if result_type.is_pointer() || result_type.is_wide() {
+    } else if result_type.is_pointer() || result_type.is_two_word_scalar() {
         // Stack extras: low/addr word at ap, high/bank word at ap-1 (see load_param).
         let ap_name = naming.temp_name(ap_temp);
         let ap_reg = mgr.get_register(ap_name);
@@ -606,13 +621,16 @@ fn lower_va_arg(
         insts.push(AsmInst::Load(dest_reg, Reg::Sb, ap_reg));
 
         insts.push(AsmInst::AddI(Reg::Sc, ap_reg, -1));
-        if result_type.is_wide() {
+        if result_type.is_two_word_scalar() {
             let hi_name = naming.i32_high_name(&dest_name);
             let hi_reg = mgr.get_register(hi_name.clone());
             insts.extend(mgr.take_instructions());
             insts.push(AsmInst::Load(hi_reg, Reg::Sb, Reg::Sc));
             mgr.bind_value_to_register(hi_name.clone(), hi_reg);
             mgr.set_i32_high(dest_name.clone(), hi_name);
+            if result_type.is_f32() {
+                mgr.set_fp32(dest_name.clone());
+            }
         } else {
             let bank_name = naming.load_bank_value(dest);
             let bank_reg = mgr.get_register(bank_name.clone());

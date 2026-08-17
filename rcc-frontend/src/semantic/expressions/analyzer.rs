@@ -139,6 +139,10 @@ impl ExpressionAnalyzer {
                 // C99 6.4.4.1 on this ILP16 / 32-bit long / 64-bit long long target.
                 literal_integer_type(*v, *suffix, *hex)
             }
+            ExpressionKind::FloatLiteral { suffix, .. } => match suffix {
+                crate::lexer::FloatSuffix::Float => Type::Float,
+                crate::lexer::FloatSuffix::None | crate::lexer::FloatSuffix::LongDouble => Type::Double,
+            },
             ExpressionKind::CharLiteral(_) => Type::Char,
             ExpressionKind::StringLiteral(_) => Type::Array {
                 element_type: Box::new(Type::Char),

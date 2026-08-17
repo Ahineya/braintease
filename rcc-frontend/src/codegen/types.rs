@@ -49,8 +49,8 @@ pub fn convert_type(ast_type: &Type, location: SourceLocation) -> Result<IrType,
         Type::Int | Type::UnsignedInt => Ok(IrType::I16), // 16-bit int on Ripple
         Type::Long | Type::UnsignedLong => Ok(IrType::I32),
         Type::LongLong | Type::UnsignedLongLong => Ok(IrType::I64),
-        Type::Float => Ok(IrType::I32),
-        Type::Double => Ok(IrType::I64),
+        Type::Float => Ok(IrType::F32),
+        Type::Double => Ok(IrType::F64),
         Type::Pointer { target, .. } => {
             // Note: Bank information is tracked separately in codegen, not in IrType
             let target_type = convert_type(target, location)?;

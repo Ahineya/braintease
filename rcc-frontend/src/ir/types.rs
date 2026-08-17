@@ -25,7 +25,12 @@ pub enum IrType {
     I8,   // 8-bit integer (char)
     I16,  // 16-bit integer (short, int on Ripple)
     I32,  // 32-bit integer (long on Ripple)
-    I64,  // 64-bit integer (long long on Ripple; also double layout)
+    I64,  // 64-bit integer (long long on Ripple)
+    /// IEEE-754 binary32 (C `float`). Same 2-word layout as I32, distinct type
+    /// so integer lowering cannot silently operate on float bits.
+    F32,
+    /// IEEE-754 binary64 (C `double`). Same 4-word layout as I64, distinct type.
+    F64,
     
     /// Pointer type
     FatPtr(Box<IrType>),
@@ -59,8 +64,8 @@ impl IrType {
             IrType::I1 => Some(1), // Stored in full byte
             IrType::I8 => Some(1),
             IrType::I16 => Some(1),
-            IrType::I32 => Some(2),
-            IrType::I64 => Some(4),
+            IrType::I32 | IrType::F32 => Some(2),
+            IrType::I64 | IrType::F64 => Some(4),
             IrType::FatPtr(_) => Some(2), // Fat pointers: 2 words (address + bank tag)
             IrType::Array { size, element_type } => {
                 element_type.size_in_words().map(|elem_size| elem_size * size)
@@ -97,14 +102,36 @@ impl IrType {
         matches!(self, IrType::I64)
     }
 
-    /// Values that occupy two ABI slots / two memory words (fat pointers and I32)
+    pub fn is_f32(&self) -> bool {
+        matches!(self, IrType::F32)
+    }
+
+    pub fn is_f64(&self) -> bool {
+        matches!(self, IrType::F64)
+    }
+
+    pub fn is_fp(&self) -> bool {
+        self.is_f32() || self.is_f64()
+    }
+
+    /// Two-word scalar (I32 or F32). Not a fat pointer.
+    pub fn is_two_word_scalar(&self) -> bool {
+        self.is_wide() || self.is_f32()
+    }
+
+    /// Four-word scalar (I64 or F64)
+    pub fn is_four_word_scalar(&self) -> bool {
+        self.is_i64() || self.is_f64()
+    }
+
+    /// Values that occupy two ABI slots / two memory words (fat pointers and 32-bit scalars)
     pub fn takes_two_slots(&self) -> bool {
-        self.is_pointer() || self.is_wide()
+        self.is_pointer() || self.is_two_word_scalar()
     }
 
     /// Number of 16-bit ABI register/stack slots this type occupies.
     pub fn abi_slots(&self) -> usize {
-        if self.is_i64() {
+        if self.is_four_word_scalar() {
             4
         } else if self.takes_two_slots() {
             2
@@ -132,6 +159,8 @@ impl fmt::Display for IrType {
             IrType::I16 => write!(f, "i16"),
             IrType::I32 => write!(f, "i32"),
             IrType::I64 => write!(f, "i64"),
+            IrType::F32 => write!(f, "f32"),
+            IrType::F64 => write!(f, "f64"),
             IrType::FatPtr(target) => write!(f, "{target}*"),
             IrType::Array { size, element_type } => write!(f, "[{size} x {element_type}]"),
             IrType::Function { return_type, param_types, is_vararg } => {

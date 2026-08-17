@@ -88,6 +88,10 @@ pub struct RegisterPressureManager {
     /// Map from I64 low-word names to companion word names (w1, w2, w3)
     i64_words: BTreeMap<String, [String; 3]>,
 
+    /// Temps that hold IEEE float bit patterns (F32 uses i32_high pairing, F64 uses i64_words)
+    fp32: std::collections::BTreeSet<String>,
+    fp64: std::collections::BTreeSet<String>,
+
     /// Registers that must not be chosen as spill victims (live across
     /// an in-progress instruction that still holds the Reg by value).
     pinned_registers: std::collections::BTreeSet<Reg>,
@@ -117,6 +121,8 @@ impl RegisterPressureManager {
             fat_ptr_bank_slots: BTreeMap::new(),
             i32_high: BTreeMap::new(),
             i64_words: BTreeMap::new(),
+            fp32: std::collections::BTreeSet::new(),
+            fp64: std::collections::BTreeSet::new(),
             pinned_registers: std::collections::BTreeSet::new(),
         }
     }
@@ -223,6 +229,22 @@ impl RegisterPressureManager {
     /// Companion word names for a 64-bit value, if one was bound
     pub fn get_i64_words(&self, lo_name: &str) -> Option<[String; 3]> {
         self.i64_words.get(lo_name).cloned()
+    }
+
+    pub fn set_fp32(&mut self, lo_name: String) {
+        self.fp32.insert(lo_name);
+    }
+
+    pub fn is_fp32(&self, lo_name: &str) -> bool {
+        self.fp32.contains(lo_name)
+    }
+
+    pub fn set_fp64(&mut self, lo_name: String) {
+        self.fp64.insert(lo_name);
+    }
+
+    pub fn is_fp64(&self, lo_name: &str) -> bool {
+        self.fp64.contains(lo_name)
     }
     
     /// Get bank register for a pointer (internal use)

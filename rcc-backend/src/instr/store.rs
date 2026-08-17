@@ -68,10 +68,10 @@ pub fn lower_store(
             let temp_reg_name = naming.store_const_value();
             let temp_reg = mgr.get_register(temp_reg_name);
             insts.extend(mgr.take_instructions());
-            if value_type.is_i64() {
+            if value_type.is_four_word_scalar() {
                 let parts = crate::instr::i64::split_const64(*c);
                 insts.push(AsmInst::Li(temp_reg, parts[0]));
-            } else if value_type.is_wide() {
+            } else if value_type.is_two_word_scalar() {
                 let (lo, _hi) = crate::instr::wide::split_const(*c);
                 insts.push(AsmInst::Li(temp_reg, lo));
             } else {
@@ -192,6 +192,13 @@ pub fn lower_store(
     };
     
     insts.extend(mgr.take_instructions());
+
+    // I32/F32 and I64/F64 occupy the same register slots as fat-pointer
+    // (addr, bank) pairs, but they are scalars. A leftover pointer-bank
+    // binding must not shrink them to a 2-word store.
+    let is_pointer = is_pointer
+        && !value_type.is_four_word_scalar()
+        && !value_type.is_two_word_scalar();
 
     // Fast path: fat pointer -> stack alloca. Compute dest as FP+offset in SC
     // so we never allocate a register while `bank_reg` is still live.
@@ -317,7 +324,7 @@ pub fn lower_store(
     insts.push(store_inst);
 
     // I64: store words 1..3 at dest+1..+3
-    let storing_i64 = value_type.is_i64()
+    let storing_i64 = value_type.is_four_word_scalar()
         || matches!(value, Value::Temp(t) if mgr.get_i64_words(&naming.temp_name(*t)).is_some());
     if storing_i64 && !is_pointer {
         match value {
@@ -351,7 +358,7 @@ pub fn lower_store(
         debug!("  Stored I64 extra words");
     } else {
     // I32: store the high word at dest+1
-    let storing_i32 = value_type.is_wide()
+    let storing_i32 = value_type.is_two_word_scalar()
         || matches!(value, Value::Temp(t) if mgr.get_i32_high(&naming.temp_name(*t)).is_some());
     if storing_i32 && !is_pointer {
         let hi_reg = match value {

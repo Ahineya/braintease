@@ -15,6 +15,12 @@ pub enum TypedExpr {
         value: i64,
         expr_type: Type,
     },
+
+    /// Floating literal (IEEE bit pattern)
+    FloatLiteral {
+        bits: u64,
+        expr_type: Type,
+    },
     
     /// Character literal
     CharLiteral {
@@ -168,6 +174,7 @@ impl TypedExpr {
     pub fn get_type(&self) -> &Type {
         match self {
             TypedExpr::IntLiteral { expr_type, .. } |
+            TypedExpr::FloatLiteral { expr_type, .. } |
             TypedExpr::CharLiteral { expr_type, .. } |
             TypedExpr::StringLiteral { expr_type, .. } |
             TypedExpr::Variable { expr_type, .. } |

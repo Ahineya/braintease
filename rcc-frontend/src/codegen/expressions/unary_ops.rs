@@ -37,15 +37,8 @@ pub fn generate_unary_operation(
         }
         UnaryOp::LogicalNot => {
             let operand_val = gen.generate(operand)?;
-            let operand_ty = operand.get_type();
-            let operand_val = if operand_ty.is_integer() {
-                super::conversions::convert_integer(gen, operand_val, operand_ty, operand_ty)?
-            } else {
-                operand_val
-            };
-            let cmp_ty = convert_type_default(operand_ty).unwrap_or(IrType::I16);
-            let zero = Value::Constant(0);
-            let temp = gen.builder.build_binary(IrBinaryOp::Eq, operand_val, zero, cmp_ty)?;
+            let bool_val = super::conversions::convert_to_bool(gen, operand_val, operand.get_type())?;
+            let temp = gen.builder.build_binary(IrBinaryOp::Eq, bool_val, Value::Constant(0), IrType::I16)?;
             Ok(Value::Temp(temp))
         }
         UnaryOp::PreIncrement | UnaryOp::PreDecrement => {
@@ -59,11 +52,16 @@ pub fn generate_unary_operation(
             
             // Check if this is a pointer type
             let is_pointer = matches!(operand.get_type(), Type::Pointer { .. });
-            
+            let is_float = operand.get_type().is_floating();
+
             // 3. Calculate the increment/decrement amount
             // For GEP, the offset is in elements, not bytes/words
             // GEP will handle the scaling based on element size
-            let amount = Value::Constant(1);
+            let amount = if is_float {
+                super::conversions::one_as_float(operand.get_type())
+            } else {
+                Value::Constant(1)
+            };
             
             // 4. Perform the operation
             let binary_op = if matches!(op, UnaryOp::PreIncrement) {
@@ -108,6 +106,19 @@ pub fn generate_unary_operation(
                     log::debug!("Pre-increment pointer result: {:?}", result);
                     result
                 }
+            } else if is_float {
+                let fop = if matches!(op, UnaryOp::PreIncrement) {
+                    crate::ast::BinaryOp::Add
+                } else {
+                    crate::ast::BinaryOp::Sub
+                };
+                super::conversions::emit_float_binop(
+                    gen,
+                    fop,
+                    Value::Temp(current_val),
+                    amount,
+                    operand.get_type(),
+                )?
             } else {
                 // For non-pointers, just do regular arithmetic
                 Value::Temp(gen.builder.build_binary(binary_op, Value::Temp(current_val), amount, ir_type.clone())?)
@@ -130,6 +141,7 @@ pub fn generate_unary_operation(
             
             // Check if this is a pointer type
             let is_pointer = matches!(operand.get_type(), Type::Pointer { .. });
+            let is_float = operand.get_type().is_floating();
             
             // 3. Save the old value to return later
             let saved_old = if is_pointer {
@@ -148,6 +160,8 @@ pub fn generate_unary_operation(
                     addr: Box::new(Value::Temp(old_value)),
                     bank,  // Preserve the original bank
                 })
+            } else if is_float {
+                Value::Temp(old_value)
             } else {
                 // For non-pointers, make a copy (add 0 to copy it)
                 Value::Temp(gen.builder.build_binary(
@@ -161,7 +175,11 @@ pub fn generate_unary_operation(
             // 4. Calculate the increment/decrement amount
             // For GEP, the offset is in elements, not bytes/words
             // GEP will handle the scaling based on element size
-            let amount = Value::Constant(1);
+            let amount = if is_float {
+                super::conversions::one_as_float(operand.get_type())
+            } else {
+                Value::Constant(1)
+            };
             
             // 5. Load the value again for the increment operation
             let current = gen.builder.build_load(addr.clone(), ir_type.clone())?;
@@ -198,6 +216,19 @@ pub fn generate_unary_operation(
                 };
                 
                 gen.builder.build_pointer_offset(current_ptr, offset, ir_type.clone())?
+            } else if is_float {
+                let fop = if matches!(op, UnaryOp::PostIncrement) {
+                    crate::ast::BinaryOp::Add
+                } else {
+                    crate::ast::BinaryOp::Sub
+                };
+                super::conversions::emit_float_binop(
+                    gen,
+                    fop,
+                    Value::Temp(current),
+                    amount,
+                    operand.get_type(),
+                )?
             } else {
                 // For non-pointers, just do regular arithmetic
                 let binary_op = if matches!(op, UnaryOp::PostIncrement) {
@@ -220,6 +251,25 @@ pub fn generate_unary_operation(
             
             let ir_op = match op {
                 UnaryOp::Plus => return Ok(operand_val), // No-op
+                UnaryOp::Minus if operand.get_type().is_floating() => {
+                    let operand_val = super::conversions::materialize_wide(
+                        gen,
+                        operand_val,
+                        operand.get_type(),
+                    )?;
+                    let (xor_ty, sign) = if matches!(operand.get_type(), Type::Double) {
+                        (IrType::I64, i64::MIN)
+                    } else {
+                        (IrType::I32, 0x80000000u32 as i64)
+                    };
+                    let result = gen.builder.build_binary(
+                        IrBinaryOp::Xor,
+                        operand_val,
+                        Value::Constant(sign),
+                        xor_ty,
+                    )?;
+                    return Ok(Value::Temp(result));
+                }
                 UnaryOp::Minus => IrUnaryOp::Neg,
                 UnaryOp::BitNot => IrUnaryOp::Not,
                 _ => {

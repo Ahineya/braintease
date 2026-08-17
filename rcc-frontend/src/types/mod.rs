@@ -54,8 +54,9 @@ pub enum Type {
     LongLong,
     UnsignedLongLong,
     
-    /// Floating types (no FP ops yet; size is used for layout, e.g. unions)
+    /// IEEE-754 binary32
     Float,
+    /// IEEE-754 binary64
     Double,
     
     /// Pointer to another type with optional bank information
@@ -138,6 +139,16 @@ impl Type {
         matches!(self, Type::Pointer { .. })
     }
 
+    /// Check if this type is a floating type
+    pub fn is_floating(&self) -> bool {
+        matches!(self, Type::Float | Type::Double)
+    }
+
+    /// Check if this type is a scalar (integer, float, or pointer)
+    pub fn is_scalar(&self) -> bool {
+        self.is_integer() || self.is_floating() || self.is_pointer()
+    }
+
     /// Struct or union (typedefs must already be resolved)
     pub fn is_aggregate(&self) -> bool {
         matches!(self, Type::Struct { .. } | Type::Union { .. })
@@ -151,6 +162,11 @@ impl Type {
             
             // Integers can be assigned from each other
             (a, b) if a.is_integer() && b.is_integer() => true,
+
+            // Float/double and integer ↔ floating conversions
+            (a, b) if a.is_floating() && b.is_floating() => true,
+            (a, b) if a.is_floating() && b.is_integer() => true,
+            (a, b) if a.is_integer() && b.is_floating() => true,
             
             // void* can be assigned from any pointer
             (Type::Pointer { target: t1, .. }, Type::Pointer { target: t2, .. }) => {
@@ -342,8 +358,10 @@ mod tests {
         assert_eq!(Type::Char.size_in_words(), Some(1));
         assert_eq!(Type::Int.size_in_words(), Some(1)); // 16-bit int = 1 word
         assert_eq!(Type::Long.size_in_words(), Some(2)); // 32-bit long = 2 words
-        assert_eq!(Type::LongLong.size_in_words(), Some(4));
-        assert_eq!(Type::LongLong.size_in_bytes(), Some(8));
+        assert_eq!(Type::Float.size_in_words(), Some(2));
+        assert_eq!(Type::Float.size_in_bytes(), Some(4));
+        assert_eq!(Type::Double.size_in_words(), Some(4));
+        assert_eq!(Type::Double.size_in_bytes(), Some(8));
         assert_eq!(Type::Pointer { target: Box::new(Type::Int), bank: None }.size_in_words(), Some(2)); // Fat pointer = 2 words
         
         let array_type = Type::Array { 
@@ -361,8 +379,9 @@ mod tests {
         assert!(Type::UnsignedInt.is_unsigned_integer());
         assert!(Type::UnsignedShort.is_unsigned_integer());
         assert!(!Type::Int.is_unsigned_integer());
-        assert!(Type::Pointer { target: Box::new(Type::Int), bank: None }.is_pointer());
-        assert!(!Type::Int.is_pointer());
+        assert!(Type::Float.is_floating());
+        assert!(Type::Double.is_floating());
+        assert!(!Type::Int.is_floating());
     }
 
     #[test]

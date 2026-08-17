@@ -150,6 +150,10 @@ fn zero_expr(ty: &Type) -> TypedExpr {
             value: 0,
             expr_type: ty.clone(),
         },
+        Type::Float | Type::Double => TypedExpr::FloatLiteral {
+            bits: 0,
+            expr_type: ty.clone(),
+        },
         _ => TypedExpr::IntLiteral {
             value: 0,
             expr_type: Type::Int,
@@ -341,6 +345,13 @@ pub fn type_expression(
             Ok(TypedExpr::IntLiteral {
                 value: *value,
                 expr_type: expr.expr_type.clone().unwrap_or(Type::Int),
+            })
+        }
+
+        ExpressionKind::FloatLiteral { bits, .. } => {
+            Ok(TypedExpr::FloatLiteral {
+                bits: *bits,
+                expr_type: expr.expr_type.clone().unwrap_or(Type::Double),
             })
         }
         

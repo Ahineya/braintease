@@ -208,6 +208,8 @@ impl TypeAnalyzer {
         let left = self.resolve_type(left);
         let right = self.resolve_type(right);
         match (&left, &right) {
+            (Type::Double, _) | (_, Type::Double) => Type::Double,
+            (Type::Float, _) | (_, Type::Float) => Type::Float,
             (Type::UnsignedLongLong, _) | (_, Type::UnsignedLongLong) => Type::UnsignedLongLong,
             (Type::LongLong, _) | (_, Type::LongLong) => Type::LongLong,
             (Type::UnsignedLong, _) | (_, Type::UnsignedLong) => Type::UnsignedLong,
@@ -285,6 +287,17 @@ impl TypeAnalyzer {
         )
     }
     
+    /// Check if a type is floating (resolving typedefs)
+    pub fn is_floating(&self, ty: &Type) -> bool {
+        let resolved = self.resolve_type(ty);
+        matches!(resolved, Type::Float | Type::Double)
+    }
+
+    /// Check if a type is arithmetic (integer or floating)
+    pub fn is_arithmetic(&self, ty: &Type) -> bool {
+        self.is_integer(ty) || self.is_floating(ty)
+    }
+
     /// Check if a type is a pointer (resolving typedefs)
     pub fn is_pointer(&self, ty: &Type) -> bool {
         let resolved = self.resolve_type(ty);
@@ -333,6 +346,11 @@ impl TypeAnalyzer {
             
             // Integer conversions
             (a, b) if self.is_integer(a) && self.is_integer(b) => true,
+
+            // Floating conversions (C99 6.3.1.4 / 6.3.1.5)
+            (a, b) if self.is_floating(a) && self.is_floating(b) => true,
+            (a, b) if self.is_floating(a) && self.is_integer(b) => true,
+            (a, b) if self.is_integer(a) && self.is_floating(b) => true,
             
             // Pointer conversions
             (Type::Pointer { target: a, .. }, Type::Pointer { target: b, .. }) => {

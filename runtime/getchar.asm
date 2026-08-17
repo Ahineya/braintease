@@ -66,33 +66,37 @@ L_getchar_2:
     XOR T2, T6, T3
     LI T1, 1
     SLTU T6, T2, T1
+    LI T0, 0
+    XOR S3, T6, T0
+    LI S2, 0
+    SLTU T6, S2, S3
     BEQ T6, R0, L_getchar_3
 ; Branch to L_getchar_3 if condition is false
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1 (condition was true)
 ; Invalidated 1 alloca bindings
 L_getchar_3:
-    LI T0, 2
+    LI S0, 2
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 10
     STORE S1, SB, SC
-; Spill const_f0_op6_2 to slot 2
+; Spill const_f0_op8_2 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 11
-    STORE T0, SB, SC
+    STORE S0, SB, SC
 ; Set SP = FP+29 so callee frame is above spills
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T0, R0
+    ADD A0, S0, R0
 ; Call function mmio_read
     CALL mmio_read
-; Scalar return value for t6
-; Copy Rv0 to allocatable S3
-    ADD S3, RV0, R0
-    MOVE RV0, S3
+; Scalar return value for t7
+; Copy Rv0 to allocatable T4
+    ADD T4, RV0, R0
+    MOVE RV0, T4
 ; Jump to epilogue
     BEQ R0, R0, L_getchar_99999
 L_getchar_99999:

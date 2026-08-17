@@ -33,7 +33,22 @@ impl BinaryOperationAnalyzer {
                 self.analyze_additive_operation(op, left_type, right_type, &left.span.start)
             }
 
-            BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
+            BinaryOp::Mul | BinaryOp::Div => {
+                if self.type_analyzer.borrow().is_arithmetic(left_type)
+                    && self.type_analyzer.borrow().is_arithmetic(right_type)
+                {
+                    Ok(self.type_analyzer.borrow().arithmetic_result_type(left_type, right_type))
+                } else {
+                    Err(SemanticError::InvalidOperation {
+                        operation: format!("{op}"),
+                        operand_type: left_type.clone(),
+                        location: left.span.start.clone(),
+                    }
+                    .into())
+                }
+            }
+
+            BinaryOp::Mod => {
                 
                 if self.type_analyzer.borrow().is_integer(left_type) && self.type_analyzer.borrow().is_integer(right_type) {
                     Ok(self.type_analyzer.borrow().arithmetic_result_type(left_type, right_type))
@@ -135,7 +150,9 @@ impl BinaryOperationAnalyzer {
                 // For pointers, += and -= work like pointer arithmetic
                 if self.type_analyzer.borrow().is_pointer(left_type) && self.type_analyzer.borrow().is_integer(right_type) {
                     Ok(left_type.clone())
-                } else if self.type_analyzer.borrow().is_integer(left_type) && self.type_analyzer.borrow().is_integer(right_type) {
+                } else if self.type_analyzer.borrow().is_arithmetic(left_type)
+                    && self.type_analyzer.borrow().is_arithmetic(right_type)
+                {
                     Ok(left_type.clone())
                 } else {
                     Err(SemanticError::TypeMismatch {
@@ -148,8 +165,29 @@ impl BinaryOperationAnalyzer {
             }
 
             BinaryOp::MulAssign
-            | BinaryOp::DivAssign
-            | BinaryOp::ModAssign
+            | BinaryOp::DivAssign => {
+                if !TypeAnalyzer::is_lvalue(left) {
+                    return Err(SemanticError::InvalidLvalue {
+                        location: left.span.start.clone(),
+                    }
+                    .into());
+                }
+
+                if self.type_analyzer.borrow().is_arithmetic(left_type)
+                    && self.type_analyzer.borrow().is_arithmetic(right_type)
+                {
+                    Ok(left_type.clone())
+                } else {
+                    Err(SemanticError::TypeMismatch {
+                        expected: left_type.clone(),
+                        found: right_type.clone(),
+                        location: right.span.start.clone(),
+                    }
+                    .into())
+                }
+            }
+
+            BinaryOp::ModAssign
             | BinaryOp::BitAndAssign
             | BinaryOp::BitOrAssign
             | BinaryOp::BitXorAssign
@@ -237,8 +275,10 @@ impl BinaryOperationAnalyzer {
             right_type.clone()
         };
         
-        // Case 1: Integer + Integer
-        if self.type_analyzer.borrow().is_integer(&left_decayed) && self.type_analyzer.borrow().is_integer(&right_decayed) {
+        // Case 1: Integer + Integer / floating + arithmetic
+        if self.type_analyzer.borrow().is_arithmetic(&left_decayed)
+            && self.type_analyzer.borrow().is_arithmetic(&right_decayed)
+        {
             return Ok(self.type_analyzer.borrow().arithmetic_result_type(&left_decayed, &right_decayed));
         }
 

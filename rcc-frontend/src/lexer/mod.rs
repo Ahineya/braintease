@@ -7,7 +7,7 @@ pub mod token;
 pub mod literals;
 pub mod operators;
 
-pub use token::{IntegerSuffix, Token, TokenType};
+pub use token::{FloatSuffix, IntegerSuffix, Token, TokenType};
 
 use rcc_common::{SourceLocation, SourceSpan, CompilerError};
 use std::collections::HashMap;
@@ -179,7 +179,7 @@ impl Lexer {
             }
             
             Some(ch) if ch.is_ascii_digit() => {
-                self.tokenize_integer()?
+                self.tokenize_number()?
             }
             
             Some('\'') => {
@@ -365,6 +365,8 @@ impl Lexer {
                     self.advance();
                     self.advance();
                     TokenType::Ellipsis
+                } else if self.peek_char(1).map(|c| c.is_ascii_digit()).unwrap_or(false) {
+                    self.tokenize_float(String::new())?
                 } else {
                     self.advance();
                     TokenType::Dot
@@ -587,6 +589,61 @@ int main() {
         assert_eq!(tokens[7].token_type, TokenType::CharLiteral(10));
         assert_eq!(tokens[8].token_type, TokenType::StringLiteral("A\0B".to_string()));
         assert!(matches!(tokens[9].token_type, TokenType::EndOfFile));
+    }
+
+    #[test]
+    fn test_float_literals() {
+        let mut lexer = Lexer::new("3.14 3.14f 1e10 .5 2. 1.0L 6.02e-23f");
+        let tokens = lexer.tokenize().unwrap();
+        match &tokens[0].token_type {
+            TokenType::FloatLiteral { bits, suffix } => {
+                assert_eq!(*suffix, FloatSuffix::None);
+                assert_eq!(*bits, 3.14f64.to_bits());
+            }
+            other => panic!("expected float, got {other:?}"),
+        }
+        match &tokens[1].token_type {
+            TokenType::FloatLiteral { bits, suffix } => {
+                assert_eq!(*suffix, FloatSuffix::Float);
+                assert_eq!(*bits, 3.14f32.to_bits() as u64);
+            }
+            other => panic!("expected floatf, got {other:?}"),
+        }
+        match &tokens[2].token_type {
+            TokenType::FloatLiteral { bits, suffix } => {
+                assert_eq!(*suffix, FloatSuffix::None);
+                assert_eq!(*bits, 1e10f64.to_bits());
+            }
+            other => panic!("expected 1e10, got {other:?}"),
+        }
+        match &tokens[3].token_type {
+            TokenType::FloatLiteral { bits, suffix } => {
+                assert_eq!(*suffix, FloatSuffix::None);
+                assert_eq!(*bits, 0.5f64.to_bits());
+            }
+            other => panic!("expected .5, got {other:?}"),
+        }
+        match &tokens[4].token_type {
+            TokenType::FloatLiteral { bits, suffix } => {
+                assert_eq!(*suffix, FloatSuffix::None);
+                assert_eq!(*bits, 2.0f64.to_bits());
+            }
+            other => panic!("expected 2., got {other:?}"),
+        }
+        match &tokens[5].token_type {
+            TokenType::FloatLiteral { suffix, .. } => {
+                assert_eq!(*suffix, FloatSuffix::LongDouble);
+            }
+            other => panic!("expected 1.0L, got {other:?}"),
+        }
+        match &tokens[6].token_type {
+            TokenType::FloatLiteral { bits, suffix } => {
+                assert_eq!(*suffix, FloatSuffix::Float);
+                assert_eq!(*bits, 6.02e-23f32.to_bits() as u64);
+            }
+            other => panic!("expected sci float, got {other:?}"),
+        }
+        assert!(matches!(tokens[7].token_type, TokenType::EndOfFile));
     }
 
     #[test]

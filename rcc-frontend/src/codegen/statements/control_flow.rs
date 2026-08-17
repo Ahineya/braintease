@@ -13,14 +13,22 @@ pub struct SwitchContext {
     pub default: Option<LabelId>,
 }
 
+fn generate_condition(
+    gen: &mut TypedStatementGenerator,
+    condition: &TypedExpr,
+) -> Result<Value, CompilerError> {
+    let mut expr_gen = gen.create_expression_generator();
+    let cond_val = expr_gen.generate(condition)?;
+    crate::codegen::expressions::convert_to_bool(&mut expr_gen, cond_val, condition.get_type())
+}
+
 pub fn generate_if(
     gen: &mut TypedStatementGenerator,
     condition: &TypedExpr,
     then_stmt: &TypedStmt,
     else_stmt: Option<&TypedStmt>,
 ) -> Result<(), CompilerError> {
-    let mut expr_gen = gen.create_expression_generator();
-    let cond_val = expr_gen.generate(condition)?;
+    let cond_val = generate_condition(gen, condition)?;
     
     let then_label = gen.builder.new_label();
     let else_label = gen.builder.new_label();
@@ -73,8 +81,7 @@ pub fn generate_while(
     
     // Condition check - mark as loop condition block
     gen.builder.create_loop_condition_block(cond_label)?;
-    let mut expr_gen = gen.create_expression_generator();
-    let cond_val = expr_gen.generate(condition)?;
+    let cond_val = generate_condition(gen, condition)?;
     gen.builder.build_branch_cond(cond_val, body_label, end_label)?;
     
     // Body
@@ -115,8 +122,7 @@ pub fn generate_do_while(
     }
 
     gen.builder.create_loop_condition_block(cond_label)?;
-    let mut expr_gen = gen.create_expression_generator();
-    let cond_val = expr_gen.generate(condition)?;
+    let cond_val = generate_condition(gen, condition)?;
     gen.builder.build_branch_cond(cond_val, body_label, end_label)?;
 
     gen.builder.create_block(end_label)?;
@@ -156,6 +162,7 @@ pub fn generate_for(
     if let Some(cond_expr) = condition {
         let mut expr_gen = gen.create_expression_generator();
         let cond_val = expr_gen.generate(cond_expr)?;
+        let cond_val = crate::codegen::expressions::convert_to_bool(&mut expr_gen, cond_val, cond_expr.get_type())?;
         gen.builder.build_branch_cond(cond_val, body_label, end_label)?;
     } else {
         // No condition means always true

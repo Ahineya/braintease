@@ -147,53 +147,61 @@ L_rand_1:
     LOAD S2, GP, S3
     LI S1, 0
     XOR S0, S2, S1
-    LI T7, 1
-    SLTU S2, S0, T7
+    LI T7, 0
+    SLTU S2, T7, S0
+    LI T6, 0
+    XOR T5, S2, T6
+    LI T4, 1
+    SLTU S2, T5, T4
+    LI T3, 0
+    XOR T2, S2, T3
+    LI T1, 0
+    SLTU S2, T1, T2
     BEQ S2, R0, L_rand_4
 ; Branch to L_rand_4 if condition is false
     BEQ R0, R0, L_rand_2
 ; Unconditional branch to L_rand_2 (condition was true)
 L_rand_2:
-    LI T6, 1
+    LI T0, 1
 ; Spill live registers before call
 ; Spill load_f2_op0_t0_addr to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 9
     STORE S3, SB, SC
-; Spill const_f2_op5_1 to slot 1
+; Spill const_f2_op9_1 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 10
-    STORE T6, SB, SC
+    STORE T0, SB, SC
 ; Set SP = FP+29 so callee frame is above spills
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T6, R0
+    ADD A0, T0, R0
 ; Call function srand
     CALL srand
     BEQ R0, R0, L_rand_4
 ; Unconditional branch to L_rand_4
 L_rand_4:
-    ADD T5, FP, R0
+    ADD S0, FP, R0
 ; Spill live registers before call
 ; Set SP = FP+29 so callee frame is above spills
     ADDI SP, FP, 29
 ; Call function rng_get
     CALL rng_get
-; Scalar return value for t3
-; Copy Rv0 to allocatable T4
-    ADD T4, RV0, R0
-; Recompute alloca t2 at FP+0
-    ADD T3, FP, R0
-    STORE T4, SB, T3
-; Load instruction: t4 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f2_op7_t4 has bank info: Stack
+; Scalar return value for t5
+; Copy Rv0 to allocatable T7
+    ADD T7, RV0, R0
+; Recompute alloca t4 at FP+0
+    ADD S1, FP, R0
+    STORE T7, SB, S1
+; Load instruction: t6 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+; LOAD: Pointer load_src_ptr_f2_op11_t6 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T2, SB, T3
-    LI T1, 32767
-    AND T2, T2, T1
-    MOVE RV0, T2
+    LOAD T5, SB, S1
+    LI T4, 32767
+    AND T5, T5, T4
+    MOVE RV0, T5
 ; Jump to epilogue
     BEQ R0, R0, L_rand_99999
 L_rand_99999:

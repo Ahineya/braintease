@@ -20,7 +20,7 @@ pub use function_calls::generate_function_call;
 pub use assignments::{generate_assignment, copy_struct};
 pub use misc_ops::{generate_sizeof_expr, generate_sizeof_type, generate_array_initializer};
 pub use aggregate_init::store_initializer;
-pub(crate) use conversions::convert_integer;
+pub(crate) use conversions::{convert_integer, convert_to_bool};
 
 use super::errors::CodegenError;
 use super::types::convert_type;
@@ -62,6 +62,10 @@ impl<'a> TypedExpressionGenerator<'a> {
     pub fn generate(&mut self, expr: &TypedExpr) -> Result<Value, CompilerError> {
         match expr {
             TypedExpr::IntLiteral { value, .. } => Ok(Value::Constant(*value)),
+
+            TypedExpr::FloatLiteral { bits, expr_type } => {
+                conversions::materialize_wide(self, Value::Constant(*bits as i64), expr_type)
+            }
             
             TypedExpr::CharLiteral { value, .. } => Ok(Value::Constant(*value as i64)),
             
@@ -158,27 +162,19 @@ impl<'a> TypedExpressionGenerator<'a> {
                         }
                     }
                     
-                    // Integer / pointer to _Bool: nonzero becomes 1
-                    (source, Type::Bool) if is_integer_type(source) || matches!(source, Type::Pointer { .. }) => {
-                        let operand_val = match operand_val {
-                            Value::FatPtr(fp) => *fp.addr,
-                            other => other,
-                        };
-                        let temp = self.builder.build_binary(
-                            crate::ir::IrBinaryOp::Ne,
-                            operand_val,
-                            Value::Constant(0),
-                            crate::ir::IrType::I16,
-                        ).map_err(|e| CodegenError::InternalError {
-                            message: e,
-                            location: rcc_common::SourceLocation::new_simple(0, 0),
-                        })?;
-                        Ok(Value::Temp(temp))
+                    // Integer / pointer / float to _Bool: nonzero becomes 1
+                    (source, Type::Bool) if is_integer_type(source) || source.is_floating() || matches!(source, Type::Pointer { .. }) => {
+                        conversions::convert_to_bool(self, operand_val, source)
                     }
 
                     // Integer to integer cast
                     (source, target) if is_integer_type(source) && is_integer_type(target) => {
                         conversions::convert_integer(self, operand_val, source, target)
+                    }
+
+                    // Floating conversions and integer ↔ float
+                    (source, target) if source.is_floating() || target.is_floating() => {
+                        conversions::convert_value(self, operand_val, source, target)
                     }
                     
                     // Void cast (discarding value)
@@ -345,6 +341,7 @@ impl<'a> TypedExpressionGenerator<'a> {
             TypedExpr::Conditional { condition, then_expr, else_expr, expr_type } => {
                 // Evaluate condition
                 let cond_value = self.generate(condition)?;
+                let cond_value = conversions::convert_to_bool(self, cond_value, condition.get_type())?;
                 
                 // Arrays in a ternary decay to pointers (C99).
                 let is_aggregate = expr_type.is_aggregate();
@@ -389,8 +386,8 @@ impl<'a> TypedExpressionGenerator<'a> {
                 if is_aggregate {
                     assignments::copy_struct(self, then_value, result_ptr.clone(), expr_type)?;
                 } else {
-                    let then_value = if value_type.is_integer() && then_expr.get_type().is_integer() {
-                        conversions::convert_integer(self, then_value, then_expr.get_type(), &value_type)?
+                    let then_value = if then_expr.get_type() != &value_type {
+                        conversions::convert_value(self, then_value, then_expr.get_type(), &value_type)?
                     } else {
                         then_value
                     };
@@ -419,8 +416,8 @@ impl<'a> TypedExpressionGenerator<'a> {
                 if is_aggregate {
                     assignments::copy_struct(self, else_value, result_ptr.clone(), expr_type)?;
                 } else {
-                    let else_value = if value_type.is_integer() && else_expr.get_type().is_integer() {
-                        conversions::convert_integer(self, else_value, else_expr.get_type(), &value_type)?
+                    let else_value = if else_expr.get_type() != &value_type {
+                        conversions::convert_value(self, else_value, else_expr.get_type(), &value_type)?
                     } else {
                         else_value
                     };

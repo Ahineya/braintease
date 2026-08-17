@@ -6,13 +6,45 @@ use crate::lexer::{Lexer, TokenType};
 use rcc_common::CompilerError;
 
 impl Lexer {
+    /// Tokenize an integer or floating literal starting at a digit.
+    pub fn tokenize_number(&mut self) -> Result<TokenType, CompilerError> {
+        // Hex is always integer (hex floats are not supported yet).
+        if self.current_char() == Some('0')
+            && matches!(self.peek_char(1), Some('x') | Some('X'))
+        {
+            return self.tokenize_integer();
+        }
+
+        let mut number = String::new();
+        while let Some(ch) = self.current_char() {
+            if ch.is_ascii_digit() {
+                number.push(ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        let is_float = match self.current_char() {
+            Some('.') => self.peek_char(1) != Some('.'),
+            Some('e') | Some('E') => true,
+            _ => false,
+        };
+        if is_float {
+            return self.tokenize_float(number);
+        }
+
+        self.finish_integer(number)
+    }
+
     /// Tokenize an integer literal
     pub fn tokenize_integer(&mut self) -> Result<TokenType, CompilerError> {
         let mut number = String::new();
         
         // Handle hex prefix
-        if self.current_char() == Some('0') && self.peek_char(1) == Some('x') {
-            number.push_str("0x");
+        if self.current_char() == Some('0') && matches!(self.peek_char(1), Some('x') | Some('X')) {
+            number.push('0');
+            number.push('x');
             self.advance(); // '0'
             self.advance(); // 'x'
             
@@ -51,7 +83,11 @@ impl Lexer {
                 break;
             }
         }
-        
+
+        self.finish_integer(number)
+    }
+
+    fn finish_integer(&mut self, number: String) -> Result<TokenType, CompilerError> {
         let octal = number.starts_with('0') && number.len() > 1;
         if octal && number.chars().any(|c| c == '8' || c == '9') {
             return Err(CompilerError::lexer_error(
@@ -75,6 +111,77 @@ impl Lexer {
         let suffix = self.parse_integer_suffix()?;
         // Octal uses the same type ladder as hex (unsigned int before long).
         Ok(TokenType::IntLiteral { value, suffix, hex: octal })
+    }
+
+    /// Continue a floating literal after the integer part (which may be empty for `.5`).
+    pub fn tokenize_float(&mut self, mut number: String) -> Result<TokenType, CompilerError> {
+        if self.current_char() == Some('.') {
+            number.push('.');
+            self.advance();
+            while let Some(ch) = self.current_char() {
+                if ch.is_ascii_digit() {
+                    number.push(ch);
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if matches!(self.current_char(), Some('e') | Some('E')) {
+            number.push(self.current_char().unwrap());
+            self.advance();
+            if matches!(self.current_char(), Some('+') | Some('-')) {
+                number.push(self.current_char().unwrap());
+                self.advance();
+            }
+            let mut exp_digits = 0u32;
+            while let Some(ch) = self.current_char() {
+                if ch.is_ascii_digit() {
+                    number.push(ch);
+                    self.advance();
+                    exp_digits += 1;
+                } else {
+                    break;
+                }
+            }
+            if exp_digits == 0 {
+                return Err(CompilerError::lexer_error(
+                    format!("Invalid floating literal: {number}"),
+                    self.current_location(),
+                ));
+            }
+        }
+
+        let suffix = match self.current_char() {
+            Some('f') | Some('F') => {
+                self.advance();
+                super::token::FloatSuffix::Float
+            }
+            Some('l') | Some('L') => {
+                self.advance();
+                super::token::FloatSuffix::LongDouble
+            }
+            _ => super::token::FloatSuffix::None,
+        };
+
+        let bits = if suffix == super::token::FloatSuffix::Float {
+            number.parse::<f32>().map(|v| v.to_bits() as u64).map_err(|_| {
+                CompilerError::lexer_error(
+                    format!("Invalid floating literal: {number}"),
+                    self.current_location(),
+                )
+            })?
+        } else {
+            number.parse::<f64>().map(|v| v.to_bits()).map_err(|_| {
+                CompilerError::lexer_error(
+                    format!("Invalid floating literal: {number}"),
+                    self.current_location(),
+                )
+            })?
+        };
+
+        Ok(TokenType::FloatLiteral { bits, suffix })
     }
 
     /// Parse a C99 integer suffix: u/U, l/L, ll/LL, and combinations (ul, lu, ull, llu, …).

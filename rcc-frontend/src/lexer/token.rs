@@ -18,6 +18,15 @@ pub enum IntegerSuffix {
     UnsignedLongLong,
 }
 
+/// C99 floating-literal suffix (6.4.4.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum FloatSuffix {
+    #[default]
+    None,        // double
+    Float,       // f / F
+    LongDouble,  // l / L (treated as double on this target)
+}
+
 /// C99 Token types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TokenType {
@@ -28,6 +37,11 @@ pub enum TokenType {
         /// True for `0x`/`0X` literals. C99 6.4.4.1 uses a different type
         /// ladder for hex than for decimal (unsigned int before long).
         hex: bool,
+    },
+    FloatLiteral {
+        /// IEEE-754 bit pattern (f32 bits in the low 32 bits when suffix is Float).
+        bits: u64,
+        suffix: FloatSuffix,
     },
     CharLiteral(u8),
     StringLiteral(String),
@@ -119,6 +133,17 @@ impl fmt::Display for TokenType {
                 IntegerSuffix::UnsignedLongLong => write!(f, "{value}ULL"),
             },
             TokenType::CharLiteral(c) => write!(f, "'{}'", *c as char),
+            TokenType::FloatLiteral { bits, suffix } => {
+                let text = match suffix {
+                    FloatSuffix::Float => format!("{}", f32::from_bits(*bits as u32)),
+                    _ => format!("{}", f64::from_bits(*bits)),
+                };
+                match suffix {
+                    FloatSuffix::None => write!(f, "{text}"),
+                    FloatSuffix::Float => write!(f, "{text}f"),
+                    FloatSuffix::LongDouble => write!(f, "{text}l"),
+                }
+            }
             TokenType::StringLiteral(s) => write!(f, "\"{s}\""),
             TokenType::Identifier(s) => write!(f, "{s}"),
             

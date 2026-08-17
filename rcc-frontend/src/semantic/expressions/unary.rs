@@ -27,7 +27,7 @@ impl UnaryOperationAnalyzer {
 
         match op {
             UnaryOp::Plus | UnaryOp::Minus => {
-                if self.type_analyzer.borrow().is_integer(operand_type) {
+                if self.type_analyzer.borrow().is_arithmetic(operand_type) {
                     Ok(operand_type.clone())
                 } else {
                     Err(SemanticError::InvalidOperation {
@@ -98,7 +98,7 @@ impl UnaryOperationAnalyzer {
                     .into());
                 }
 
-                if self.type_analyzer.borrow().is_integer(operand_type) || self.type_analyzer.borrow().is_pointer(operand_type) {
+                if self.type_analyzer.borrow().is_arithmetic(operand_type) || self.type_analyzer.borrow().is_pointer(operand_type) {
                     Ok(operand_type.clone())
                 } else {
                     Err(SemanticError::InvalidOperation {

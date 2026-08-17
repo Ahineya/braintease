@@ -165,8 +165,8 @@ impl FunctionBuilder {
         // If this is a fat pointer, track the bank as a named value so it
         // survives register reuse of A1/A3.
         if let Some(second) = bank_reg {
-            if index < self.param_types.len() && self.param_types[index].1.is_i64() {
-                debug!("  Parameter {index} is I64");
+            if index < self.param_types.len() && self.param_types[index].1.is_four_word_scalar() {
+                debug!("  Parameter {index} is four-word scalar");
                 if let Some(src) = mgr.get_i64_words(&format!("__param_{index}")) {
                     let dest_words = [
                         naming.i64_word_name(&param_name, 1),
@@ -178,13 +178,19 @@ impl FunctionBuilder {
                         self.instructions.extend(mgr.take_instructions());
                         mgr.bind_value_to_register(dest_words[i].clone(), r);
                     }
-                    mgr.set_i64_words(param_name, dest_words);
+                    mgr.set_i64_words(param_name.clone(), dest_words);
+                    if self.param_types[index].1.is_f64() {
+                        mgr.set_fp64(param_name);
+                    }
                 }
-            } else if index < self.param_types.len() && self.param_types[index].1.is_wide() {
-                debug!("  Parameter {index} is I32 with high in {second:?}");
+            } else if index < self.param_types.len() && self.param_types[index].1.is_two_word_scalar() {
+                debug!("  Parameter {index} is two-word scalar with high in {second:?}");
                 let hi_name = naming.i32_high_name(&param_name);
                 mgr.bind_value_to_register(hi_name.clone(), second);
-                mgr.set_i32_high(param_name, hi_name);
+                mgr.set_i32_high(param_name.clone(), hi_name);
+                if self.param_types[index].1.is_f32() {
+                    mgr.set_fp32(param_name);
+                }
             } else {
                 debug!("  Parameter {index} is a fat pointer with bank in {second:?}");
                 let bank_name = naming.param_bank_name(index);

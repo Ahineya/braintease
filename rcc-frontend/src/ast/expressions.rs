@@ -5,7 +5,7 @@
 use crate::types::Type;
 use super::ops::{BinaryOp, UnaryOp};
 use crate::ast::NodeId;
-use crate::lexer::IntegerSuffix;
+use crate::lexer::{FloatSuffix, IntegerSuffix};
 use rcc_common::{SourceSpan, SymbolId};
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +25,12 @@ pub enum ExpressionKind {
         value: i64,
         suffix: IntegerSuffix,
         hex: bool,
+    },
+
+    /// Floating literal (IEEE bits; `is_float` is true for `f`/`F` suffix)
+    FloatLiteral {
+        bits: u64,
+        suffix: FloatSuffix,
     },
     
     /// Character literal

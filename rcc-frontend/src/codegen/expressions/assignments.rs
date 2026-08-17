@@ -1,30 +1,13 @@
 //! Assignment operation code generation
 
 use super::TypedExpressionGenerator;
-use super::conversions::convert_integer;
+use super::conversions::{convert_integer, convert_to_bool, convert_value};
 use super::unary_ops::generate_lvalue_address;
-use crate::ir::{Value, IrType, IrBinaryOp};
+use crate::ir::{Value, IrType};
 use crate::typed_ast::TypedExpr;
 use crate::types::Type;
 use crate::CompilerError;
 use crate::codegen::CodegenError;
-
-fn to_bool_value(
-    gen: &mut TypedExpressionGenerator,
-    val: Value,
-) -> Result<Value, CompilerError> {
-    let scalar = match val {
-        Value::FatPtr(fp) => *fp.addr,
-        other => other,
-    };
-    let temp = gen.builder.build_binary(
-        IrBinaryOp::Ne,
-        scalar,
-        Value::Constant(0),
-        IrType::I16,
-    )?;
-    Ok(Value::Temp(temp))
-}
 
 /// Copy struct contents from source pointer to destination pointer
 /// 
@@ -89,7 +72,9 @@ pub fn generate_assignment(
     } else {
         let rhs_val = gen.generate(rhs)?;
         let stored = if matches!(lhs_type, Type::Bool) {
-            to_bool_value(gen, rhs_val)?
+            convert_to_bool(gen, rhs_val, rhs_type)?
+        } else if lhs_type.is_floating() || rhs_type.is_floating() {
+            convert_value(gen, rhs_val, rhs_type, lhs_type)?
         } else if lhs_type.is_integer() && rhs_type.is_integer() {
             convert_integer(gen, rhs_val, rhs_type, lhs_type)?
         } else {

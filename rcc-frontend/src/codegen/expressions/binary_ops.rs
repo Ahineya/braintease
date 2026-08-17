@@ -1,7 +1,7 @@
 //! Binary operation code generation
 
 use super::{TypedExpressionGenerator, convert_type_default};
-use super::conversions::{convert_integer, usual_arithmetic_type};
+use super::conversions::{convert_integer, convert_value, emit_float_binop, usual_arithmetic_type};
 use crate::ast::BinaryOp;
 use crate::ir::{IrBinaryOp, IrType, Value};
 use crate::typed_ast::TypedExpr;
@@ -53,22 +53,8 @@ fn select_ir_op(op: BinaryOp, left: &TypedExpr, right: &TypedExpr) -> Result<IrB
 /// short-circuit: `&&` skips the RHS when the LHS is false, `||` skips
 /// the RHS when the LHS is true. Side effects on the skipped side must
 /// not run (C99 6.5.13 / 6.5.14).
-fn scalar_for_logical(val: Value) -> Value {
-    match val {
-        Value::FatPtr(fp) => *fp.addr,
-        other => other,
-    }
-}
-
-fn to_logical_i16(gen: &mut TypedExpressionGenerator, val: Value) -> Result<Value, CompilerError> {
-    let scalar = scalar_for_logical(val);
-    let temp = gen.builder.build_binary(
-        IrBinaryOp::Ne,
-        scalar,
-        Value::Constant(0),
-        IrType::I16,
-    )?;
-    Ok(Value::Temp(temp))
+fn to_logical_i16(gen: &mut TypedExpressionGenerator, val: Value, ty: &Type) -> Result<Value, CompilerError> {
+    super::conversions::convert_to_bool(gen, val, ty)
 }
 
 fn intern_ir(result: Result<Value, String>) -> Result<Value, CompilerError> {
@@ -101,7 +87,7 @@ fn generate_logical_operation(
     let result_ptr = intern_ir(gen.builder.build_alloca(IrType::I16, None))?;
 
     let left_val = gen.generate(left)?;
-    let left_bool = to_logical_i16(gen, left_val)?;
+    let left_bool = to_logical_i16(gen, left_val, left.get_type())?;
 
     let rhs_label = gen.builder.new_label();
     let skip_label = gen.builder.new_label();
@@ -121,7 +107,7 @@ fn generate_logical_operation(
 
     intern_unit(gen.builder.create_block(rhs_label).map(|_| ()))?;
     let right_val = gen.generate(right)?;
-    let right_bool = to_logical_i16(gen, right_val)?;
+    let right_bool = to_logical_i16(gen, right_val, right.get_type())?;
         intern_unit(gen.builder.build_store(right_bool, result_ptr.clone(), IrType::I16))?;
     if !gen.builder.current_block_has_terminator() {
         intern_unit(gen.builder.build_branch(end_label))?;
@@ -176,6 +162,13 @@ pub fn generate_binary_operation(
     } else {
         result_type.clone()
     };
+
+    if common.is_floating() {
+        let left_val = convert_value(gen, left_val, left.get_type(), &common)?;
+        let right_val = convert_value(gen, right_val, right.get_type(), &common)?;
+        return emit_float_binop(gen, op, left_val, right_val, &common);
+    }
+
     let left_val = convert_integer(gen, left_val, left.get_type(), &common)?;
     let right_val = if is_shift {
         right_val
@@ -207,6 +200,20 @@ pub fn generate_compound_assignment(
         Value::Temp(temp)
     };
     let rhs_val = gen.generate(rhs)?;
+    let lhs_ty = lhs.get_type();
+    let rhs_ty = rhs.get_type();
+
+    if lhs_ty.is_floating() {
+        let common = usual_arithmetic_type(lhs_ty, rhs_ty);
+        let rhs_val = convert_value(gen, rhs_val, rhs_ty, &common)?;
+        let lhs_for_op = convert_value(gen, lhs_val, lhs_ty, &common)?;
+        let result = emit_float_binop(gen, op, lhs_for_op, rhs_val, &common)?;
+        let result = convert_value(gen, result, &common, lhs_ty)?;
+        let ir_type = convert_type_default(lhs_ty)?;
+        gen.builder.build_store(result.clone(), lhs_addr, ir_type)?;
+        return Ok(result);
+    }
+
     let rhs_val = convert_integer(gen, rhs_val, rhs.get_type(), lhs.get_type())?;
     
     let ir_type = convert_type_default(lhs.get_type())?;

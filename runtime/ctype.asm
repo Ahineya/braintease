@@ -1231,8 +1231,16 @@ L_iscntrl_44:
     ADD S0, RV0, R0
     LI T7, 0
     XOR T6, S0, T7
-    LI T5, 1
-    SLTU S0, T6, T5
+    LI T5, 0
+    SLTU S0, T5, T6
+    LI T4, 0
+    XOR T3, S0, T4
+    LI T2, 1
+    SLTU S0, T3, T2
+    LI T1, 0
+    XOR T0, S0, T1
+    LI S3, 0
+    SLTU S0, S3, T0
     BEQ S0, R0, L_iscntrl_47
 ; Branch to L_iscntrl_47 if condition is false
     BEQ R0, R0, L_iscntrl_45
@@ -1242,68 +1250,68 @@ L_iscntrl_45:
 ; Jump to epilogue
     BEQ R0, R0, L_iscntrl_99999
 L_iscntrl_47:
-    ADD T4, FP, R0
-    ADDI T4, T4, 1
-; Load instruction: t6 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+    ADD S2, FP, R0
+    ADDI S2, S2, 1
+; Load instruction: t8 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f16_op6_t6 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f16_op10_t8 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T3, FP, R0
-    LOAD T2, SB, T3
-    LI T1, 32
-    SLT T2, T2, T1
-    LI T0, 0
-    XOR S3, T2, T0
-    LI S2, 0
-    SLTU T2, S2, S3
-    BEQ T2, R0, L_iscntrl_48
+    ADD S1, FP, R0
+    LOAD T6, SB, S1
+    LI T5, 32
+    SLT T6, T6, T5
+    LI T7, 0
+    XOR T3, T6, T7
+    LI T2, 0
+    SLTU T6, T2, T3
+    BEQ T6, R0, L_iscntrl_48
 ; Branch to L_iscntrl_48 if condition is false
     BEQ R0, R0, L_iscntrl_49
 ; Unconditional branch to L_iscntrl_49 (condition was true)
 ; Invalidated 2 alloca bindings
 L_iscntrl_48:
-; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Load instruction: t11 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f16_op10_t9 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f16_op14_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD S1, FP, R0
-    LOAD T6, SB, S1
-    LI T5, 127
-    XOR T7, T6, T5
+    ADD T4, FP, R0
+    LOAD T0, SB, T4
+    LI S3, 127
+    XOR T1, T0, S3
     LI S0, 1
-    SLTU T6, T7, S0
-    LI T1, 0
-    XOR S3, T6, T1
-    LI S2, 0
-    SLTU T6, S2, S3
-; Recompute alloca t5 at FP+1
-    ADD T0, FP, R0
-    ADDI T0, T0, 1
-    STORE T6, SB, T0
+    SLTU T0, T1, S0
+    LI T5, 0
+    XOR T3, T0, T5
+    LI T2, 0
+    SLTU T0, T2, T3
+; Recompute alloca t7 at FP+1
+    ADD T7, FP, R0
+    ADDI T7, T7, 1
+    STORE T0, SB, T7
     BEQ R0, R0, L_iscntrl_50
 ; Unconditional branch to L_iscntrl_50
 ; Invalidated 2 alloca bindings
 L_iscntrl_49:
-    LI T2, 1
-; Recompute alloca t5 at FP+1
-    ADD T3, FP, R0
-    ADDI T3, T3, 1
-    STORE T2, SB, T3
+    LI T6, 1
+; Recompute alloca t7 at FP+1
+    ADD S1, FP, R0
+    ADDI S1, S1, 1
+    STORE T6, SB, S1
     BEQ R0, R0, L_iscntrl_50
 ; Unconditional branch to L_iscntrl_50
 ; Invalidated 1 alloca bindings
 L_iscntrl_50:
-; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
-; LOAD: Pointer load_src_ptr_f16_op19_t12 has bank info: Stack
+; Load instruction: t14 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
+; LOAD: Pointer load_src_ptr_f16_op23_t14 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Recompute alloca t5 at FP+1
-    ADD T4, FP, R0
-    ADDI T4, T4, 1
-    LOAD T7, SB, T4
-    MOVE RV0, T7
+; Recompute alloca t7 at FP+1
+    ADD S2, FP, R0
+    ADDI S2, S2, 1
+    LOAD T1, SB, S2
+    MOVE RV0, T1
 ; Jump to epilogue
     BEQ R0, R0, L_iscntrl_99999
 L_iscntrl_99999:
@@ -1646,38 +1654,42 @@ L_ispunct_60:
     ADD T1, RV0, R0
     LI T0, 0
     XOR S3, T1, T0
-    LI S1, 1
-    SLTU T1, S3, S1
+    LI S1, 0
+    SLTU T1, S1, S3
     LI S2, 0
     XOR S0, T1, S2
-    LI T5, 0
-    SLTU T1, T5, S0
+    LI T5, 1
+    SLTU T1, S0, T5
+    LI T4, 0
+    XOR T6, T1, T4
+    LI T7, 0
+    SLTU T1, T7, T6
 ; Recompute alloca t2 at FP+1
-    ADD T4, FP, R0
-    ADDI T4, T4, 1
-    STORE T1, SB, T4
+    ADD T3, FP, R0
+    ADDI T3, T3, 1
+    STORE T1, SB, T3
     BEQ R0, R0, L_ispunct_62
 ; Unconditional branch to L_ispunct_62
 ; Invalidated 1 alloca bindings
 L_ispunct_61:
-    LI T6, 0
+    LI T2, 0
 ; Recompute alloca t2 at FP+1
-    ADD T7, FP, R0
-    ADDI T7, T7, 1
-    STORE T6, SB, T7
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    STORE T2, SB, S3
     BEQ R0, R0, L_ispunct_62
 ; Unconditional branch to L_ispunct_62
 ; Invalidated 1 alloca bindings
 L_ispunct_62:
-; Load instruction: t10 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Load instruction: t11 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f22_op15_t10 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f22_op17_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+1
-    ADD T3, FP, R0
-    ADDI T3, T3, 1
-    LOAD T2, SB, T3
-    MOVE RV0, T2
+    ADD S1, FP, R0
+    ADDI S1, S1, 1
+    LOAD T0, SB, S1
+    MOVE RV0, T0
 ; Jump to epilogue
     BEQ R0, R0, L_ispunct_99999
 L_ispunct_99999:
@@ -2040,35 +2052,39 @@ L_tolower_76:
 ; Scalar return value for t3
 ; Copy Rv0 to allocatable S0
     ADD S0, RV0, R0
+    LI T7, 0
+    XOR T6, S0, T7
+    LI T5, 0
+    SLTU S0, T5, T6
     BEQ S0, R0, L_tolower_79
 ; Branch to L_tolower_79 if condition is false
     BEQ R0, R0, L_tolower_77
 ; Unconditional branch to L_tolower_77 (condition was true)
 L_tolower_77:
-; Load instruction: t4 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Load instruction: t5 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f26_op4_t4 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f26_op6_t5 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T7, FP, R0
-    LOAD T6, SB, T7
-    LI T5, 65
-    SUB T6, T6, T5
-    LI T4, 97
-    ADD T6, T6, T4
-    MOVE RV0, T6
+    ADD T4, FP, R0
+    LOAD T3, SB, T4
+    LI T2, 65
+    SUB T3, T3, T2
+    LI T1, 97
+    ADD T3, T3, T1
+    MOVE RV0, T3
 ; Jump to epilogue
     BEQ R0, R0, L_tolower_99999
 ; Invalidated 1 alloca bindings
 L_tolower_79:
-; Load instruction: t7 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Load instruction: t8 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f26_op6_t7 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f26_op8_t8 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T3, FP, R0
-    LOAD T2, SB, T3
-    MOVE RV0, T2
+    ADD T0, FP, R0
+    LOAD S3, SB, T0
+    MOVE RV0, S3
 ; Jump to epilogue
     BEQ R0, R0, L_tolower_99999
 L_tolower_99999:
@@ -2146,35 +2162,39 @@ L_toupper_80:
 ; Scalar return value for t3
 ; Copy Rv0 to allocatable S0
     ADD S0, RV0, R0
+    LI T7, 0
+    XOR T6, S0, T7
+    LI T5, 0
+    SLTU S0, T5, T6
     BEQ S0, R0, L_toupper_83
 ; Branch to L_toupper_83 if condition is false
     BEQ R0, R0, L_toupper_81
 ; Unconditional branch to L_toupper_81 (condition was true)
 L_toupper_81:
-; Load instruction: t4 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Load instruction: t5 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f28_op4_t4 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f28_op6_t5 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T7, FP, R0
-    LOAD T6, SB, T7
-    LI T5, 97
-    SUB T6, T6, T5
-    LI T4, 65
-    ADD T6, T6, T4
-    MOVE RV0, T6
+    ADD T4, FP, R0
+    LOAD T3, SB, T4
+    LI T2, 97
+    SUB T3, T3, T2
+    LI T1, 65
+    ADD T3, T3, T1
+    MOVE RV0, T3
 ; Jump to epilogue
     BEQ R0, R0, L_toupper_99999
 ; Invalidated 1 alloca bindings
 L_toupper_83:
-; Load instruction: t7 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Load instruction: t8 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f28_op6_t7 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f28_op8_t8 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T3, FP, R0
-    LOAD T2, SB, T3
-    MOVE RV0, T2
+    ADD T0, FP, R0
+    LOAD S3, SB, T0
+    MOVE RV0, S3
 ; Jump to epilogue
     BEQ R0, R0, L_toupper_99999
 L_toupper_99999:

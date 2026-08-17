@@ -15,6 +15,9 @@ impl Parser {
             Some(Token { token_type: TokenType::IntLiteral { value, suffix, hex }, .. }) => {
                 ExpressionKind::IntLiteral { value, suffix, hex }
             }
+            Some(Token { token_type: TokenType::FloatLiteral { bits, suffix }, .. }) => {
+                ExpressionKind::FloatLiteral { bits, suffix }
+            }
             Some(Token { token_type: TokenType::CharLiteral(value), .. }) => {
                 ExpressionKind::CharLiteral(value)
             }

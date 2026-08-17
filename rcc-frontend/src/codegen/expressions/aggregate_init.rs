@@ -117,17 +117,11 @@ pub fn store_initializer(
         _ => {
             let val = gen.generate(init)?;
             let stored = if matches!(dest_type, Type::Bool) {
-                let scalar = match val {
-                    Value::FatPtr(fp) => *fp.addr,
-                    other => other,
-                };
-                let temp = gen.builder.build_binary(
-                    crate::ir::IrBinaryOp::Ne,
-                    scalar,
-                    Value::Constant(0),
-                    IrType::I16,
-                ).map_err(|e| intern_err(e))?;
-                Value::Temp(temp)
+                super::conversions::convert_to_bool(gen, val, init.get_type())
+                    .map_err(|e| intern_err(format!("{e}")))?
+            } else if dest_type.is_floating() || init.get_type().is_floating() {
+                super::conversions::convert_value(gen, val, init.get_type(), dest_type)
+                    .map_err(|e| intern_err(format!("{e}")))?
             } else if dest_type.is_integer() && init.get_type().is_integer() {
                 super::conversions::convert_integer(gen, val, init.get_type(), dest_type)
                     .map_err(|e| intern_err(format!("{e}")))?
@@ -151,6 +145,10 @@ fn zero_typed(ty: &Type) -> TypedExpr {
         },
         Type::Char | Type::SignedChar | Type::UnsignedChar => TypedExpr::CharLiteral {
             value: 0,
+            expr_type: ty.clone(),
+        },
+        Type::Float | Type::Double => TypedExpr::FloatLiteral {
+            bits: 0,
             expr_type: ty.clone(),
         },
         _ => TypedExpr::IntLiteral {

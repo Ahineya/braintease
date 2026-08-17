@@ -34,22 +34,30 @@ init_heap:
     LOAD S2, GP, S3
     LI S1, 0
     XOR S0, S2, S1
-    LI T7, 1
-    SLTU S2, S0, T7
+    LI T7, 0
+    SLTU S2, T7, S0
+    LI T6, 0
+    XOR T5, S2, T6
+    LI T4, 1
+    SLTU S2, T5, T4
+    LI T3, 0
+    XOR T2, S2, T3
+    LI T1, 0
+    SLTU S2, T1, T2
     BEQ S2, R0, L_init_heap_3
 ; Branch to L_init_heap_3 if condition is false
     BEQ R0, R0, L_init_heap_1
 ; Unconditional branch to L_init_heap_1 (condition was true)
 L_init_heap_1:
-    LI T6, 5
-    LI T5, 0
-    STORE T6, GP, T5
-    LI T4, 0
-    LI T3, 1
-    STORE T4, GP, T3
-    LI T2, 1
-    LI T1, 2
-    STORE T2, GP, T1
+    LI T0, 5
+    LI S0, 0
+    STORE T0, GP, S0
+    LI T7, 0
+    LI S1, 1
+    STORE T7, GP, S1
+    LI T5, 1
+    LI T4, 2
+    STORE T5, GP, T4
     BEQ R0, R0, L_init_heap_3
 ; Unconditional branch to L_init_heap_3
 L_init_heap_3:
@@ -160,21 +168,21 @@ L_make_fat_ptr_4:
     LOAD T6, SB, S2
 ; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ T6, S1, L_bc_8aa7e872_use_global
+    BEQ T6, S1, L_bc_d7361309_use_global
 ; Spill t7 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T4, SB, SC
     LI T4, -2
-    BEQ T6, T4, L_bc_8aa7e872_use_stack
+    BEQ T6, T4, L_bc_d7361309_use_stack
     ADD S2, T6, R0
-    BEQ R0, R0, L_bc_8aa7e872_done
-L_bc_8aa7e872_use_global:
+    BEQ R0, R0, L_bc_d7361309_done
+L_bc_d7361309_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_8aa7e872_done
-L_bc_8aa7e872_use_stack:
+    BEQ R0, R0, L_bc_d7361309_done
+L_bc_d7361309_use_stack:
     ADD S2, SB, R0
-L_bc_8aa7e872_done:
+L_bc_d7361309_done:
     MOVE RV0, S3
     MOVE RV1, S2
 ; Jump to epilogue
@@ -268,6 +276,10 @@ L_malloc_5:
     XOR S1, S3, S2
     LI S0, 1
     SLTU S3, S1, S0
+    LI T7, 0
+    XOR T6, S3, T7
+    LI T5, 0
+    SLTU S3, T5, T6
     BEQ S3, R0, L_malloc_8
 ; Branch to L_malloc_8 if condition is false
     BEQ R0, R0, L_malloc_6
@@ -275,324 +287,340 @@ L_malloc_5:
 ; Invalidated 1 alloca bindings
 L_malloc_6:
     LI RV0, 0
-    LI T7, 0
-    MOVE RV1, T7
+    LI T4, 0
+    MOVE RV1, T4
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
 L_malloc_8:
-    LI T6, -1536
+    LI T3, -1536
 ; Recompute alloca t10 at FP+9
-    ADD T5, FP, R0
-    ADDI T5, T5, 9
-    STORE T6, SB, T5
-; Load instruction: t14 = load Global("current_heap_bank")
+    ADD T2, FP, R0
+    ADDI T2, T2, 9
+    STORE T3, SB, T2
+; Load instruction: t15 = load Global("current_heap_bank")
 ; Canonicalizing global variable: current_heap_bank
-    LI T4, 0
-; LOAD: Pointer load_src_ptr_f4_op9_t14 has bank info: Global
+    LI T1, 0
+; LOAD: Pointer load_src_ptr_f4_op11_t15 has bank info: Global
 ; LOAD: Using bank register Gp for load
-    LOAD T3, GP, T4
-    LI T2, 255
-    SLTU T3, T2, T3
-    BEQ T3, R0, L_malloc_11
+    LOAD S1, GP, T1
+    LI S0, 255
+    SLTU S1, S0, S1
+    LI S2, 0
+    XOR T6, S1, S2
+    LI T5, 0
+    SLTU S1, T5, T6
+    BEQ S1, R0, L_malloc_11
 ; Branch to L_malloc_11 if condition is false
     BEQ R0, R0, L_malloc_9
 ; Unconditional branch to L_malloc_9 (condition was true)
 ; Invalidated 1 alloca bindings
 L_malloc_9:
     LI RV0, 0
-    LI T1, 0
-    MOVE RV1, T1
+    LI T7, 0
+    MOVE RV1, T7
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
 L_malloc_11:
-; Load instruction: t16 = load Global("current_heap_bank")
+; Load instruction: t18 = load Global("current_heap_bank")
 ; Canonicalizing global variable: current_heap_bank
-    LI S1, 0
-; LOAD: Pointer load_src_ptr_f4_op13_t16 has bank info: Global
-; LOAD: Using bank register Gp for load
-    LOAD S0, GP, S1
-; Recompute alloca t2 at FP+1
-    ADD S2, FP, R0
-    ADDI S2, S2, 1
-    STORE S0, SB, S2
-; Load instruction: t17 = load Global("current_heap_offset")
-; Canonicalizing global variable: current_heap_offset
-    LI S3, 1
-; LOAD: Pointer load_src_ptr_f4_op17_t17 has bank info: Global
+    LI S3, 0
+; LOAD: Pointer load_src_ptr_f4_op17_t18 has bank info: Global
 ; LOAD: Using bank register Gp for load
     LOAD T0, GP, S3
+; Recompute alloca t2 at FP+1
+    ADD S0, FP, R0
+    ADDI S0, S0, 1
+    STORE T0, SB, S0
+; Load instruction: t19 = load Global("current_heap_offset")
+; Canonicalizing global variable: current_heap_offset
+    LI T6, 1
+; LOAD: Pointer load_src_ptr_f4_op21_t19 has bank info: Global
+; LOAD: Using bank register Gp for load
+    LOAD T5, GP, T6
 ; Recompute alloca t3 at FP+2
-    ADD T2, FP, R0
-    ADDI T2, T2, 2
-    STORE T0, SB, T2
-; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+    ADD S2, FP, R0
+    ADDI S2, S2, 2
+    STORE T5, SB, S2
+; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op20_t18 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op24_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T2
-    LI T5, 0
-; Spill return_null_bank_4_f4_op6 to slot 1
+    LOAD S1, SB, S2
+    LI T2, 0
+; Spill return_null_bank_4_f4_op8 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 19
-    STORE T7, SB, SC
-    XOR T7, T3, T5
-; Spill t13 to slot 2
+    STORE T4, SB, SC
+    XOR T4, S1, T2
+; Spill t14 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 20
-    STORE T6, SB, SC
-    LI T6, 1
-    SLTU T3, T7, T6
-    BEQ T3, R0, L_malloc_14
+    STORE T3, SB, SC
+    LI T3, 1
+    SLTU S1, T4, T3
+    LI T4, 0
+    XOR T3, S1, T4
+    LI T2, 0
+    SLTU S1, T2, T3
+    BEQ S1, R0, L_malloc_14
 ; Branch to L_malloc_14 if condition is false
     BEQ R0, R0, L_malloc_12
 ; Unconditional branch to L_malloc_12 (condition was true)
 ; Invalidated 2 alloca bindings
 L_malloc_12:
-    LI T7, 1
+    LI T3, 1
 ; Recompute alloca t3 at FP+2
-    ADD T6, FP, R0
-    ADDI T6, T6, 2
-    STORE T7, SB, T6
+    ADD T2, FP, R0
+    ADDI T2, T2, 2
+    STORE T3, SB, T2
     BEQ R0, R0, L_malloc_14
 ; Unconditional branch to L_malloc_14
 ; Invalidated 1 alloca bindings
 L_malloc_14:
-; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
+; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op26_t20 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op32_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t10 at FP+9
-    ADD T5, FP, R0
-    ADDI T5, T5, 9
-    LOAD T3, SB, T5
-; Load instruction: t21 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+    ADD T4, FP, R0
+    ADDI T4, T4, 9
+    LOAD S1, SB, T4
+; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op28_t21 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op34_t24 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t3 at FP+2
-    ADD T2, FP, R0
-    ADDI T2, T2, 2
-    LOAD S2, SB, T2
-    SUB T3, T3, S2
+    ADD S0, FP, R0
+    ADDI S0, S0, 2
+    LOAD S2, SB, S0
+    SUB S1, S1, S2
 ; Recompute alloca t4 at FP+3
-    ADD T7, FP, R0
-    ADDI T7, T7, 3
-    STORE T3, SB, T7
-; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+    ADD T3, FP, R0
+    ADDI T3, T3, 3
+    STORE S1, SB, T3
+; Load instruction: t26 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op31_t23 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op37_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T6, FP, R0
-    LOAD S2, SB, T6
-; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+    ADD T2, FP, R0
+    LOAD S2, SB, T2
+; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op33_t24 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op39_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill load_f4_op8_t14_addr to slot 3
+; Spill load_f4_op10_t15_addr to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 21
-    STORE T4, SB, SC
-    LOAD T4, SB, T7
-    SLTU S2, S2, T4
+    STORE T1, SB, SC
+    LOAD T1, SB, T3
+    SLTU S2, S2, T1
+    LI T1, 0
+; Spill return_null_bank_4_f4_op15 to slot 4
+    ADD SC, FP, R0
+    ADDI SC, SC, 22
+    STORE T7, SB, SC
+    XOR T7, S2, T1
+; Spill load_f4_op16_t18_addr to slot 5
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE S3, SB, SC
+    LI S3, 0
+    SLTU S2, S3, T7
     BEQ S2, R0, L_malloc_16
 ; Branch to L_malloc_16 if condition is false
     BEQ R0, R0, L_malloc_15
 ; Unconditional branch to L_malloc_15 (condition was true)
 ; Invalidated 4 alloca bindings
 L_malloc_15:
-; Load instruction: t26 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Load instruction: t30 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op35_t26 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op43_t30 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+1
-    ADD T4, FP, R0
-    ADDI T4, T4, 1
-    LOAD S2, SB, T4
+    ADD T7, FP, R0
+    ADDI T7, T7, 1
+    LOAD S3, SB, T7
 ; Recompute alloca t7 at FP+6
-    ADD T2, FP, R0
-    ADDI T2, T2, 6
-    STORE S2, SB, T2
-; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+    ADD T1, FP, R0
+    ADDI T1, T1, 6
+    STORE S3, SB, T1
+; Load instruction: t31 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op38_t27 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op46_t31 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t3 at FP+2
-    ADD T5, FP, R0
-    ADDI T5, T5, 2
-    LOAD T6, SB, T5
-; Load instruction: t28 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+    ADD S2, FP, R0
+    ADDI S2, S2, 2
+    LOAD T2, SB, S2
+; Load instruction: t32 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op40_t28 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op48_t32 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T7, FP, R0
-; Spill return_null_bank_4_f4_op11 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
-    STORE T1, SB, SC
-    LOAD T1, SB, T7
-    ADD T6, T6, T1
+    ADD T3, FP, R0
+    LOAD T4, SB, T3
+    ADD T2, T2, T4
 ; Recompute alloca t8 at FP+7
-    ADD T1, FP, R0
-    ADDI T1, T1, 7
-    STORE T6, SB, T1
+    ADD S0, FP, R0
+    ADDI S0, S0, 7
+    STORE T2, SB, S0
     BEQ R0, R0, L_malloc_17
 ; Unconditional branch to L_malloc_17
 ; Invalidated 5 alloca bindings
 L_malloc_16:
-; Load instruction: t30 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Load instruction: t34 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op43_t30 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op51_t34 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T1, FP, R0
-    LOAD T2, SB, T1
-; Load instruction: t31 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+    ADD T4, FP, R0
+    LOAD T1, SB, T4
+; Load instruction: t35 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op45_t31 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op53_t35 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t4 at FP+3
-    ADD T4, FP, R0
-    ADDI T4, T4, 3
-    LOAD T5, SB, T4
-    XOR T7, T2, T5
-; Spill load_f4_op12_t16_addr to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE S1, SB, SC
-    LI S1, 1
-    SLTU T2, T7, S1
-    BEQ T2, R0, L_malloc_19
+    ADD T3, FP, R0
+    ADDI T3, T3, 3
+    LOAD T7, SB, T3
+    XOR S0, T1, T7
+    LI S2, 1
+    SLTU T1, S0, S2
+    LI S0, 0
+    XOR S2, T1, S0
+    LI T7, 0
+    SLTU T1, T7, S2
+    BEQ T1, R0, L_malloc_19
 ; Branch to L_malloc_19 if condition is false
     BEQ R0, R0, L_malloc_18
 ; Unconditional branch to L_malloc_18 (condition was true)
 ; Invalidated 2 alloca bindings
 L_malloc_18:
-; Load instruction: t33 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Load instruction: t38 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op49_t33 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op59_t38 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+1
-    ADD T7, FP, R0
-    ADDI T7, T7, 1
-    LOAD S1, SB, T7
-    LI T5, 1
-    ADD S1, S1, T5
+    ADD S2, FP, R0
+    ADDI S2, S2, 1
+    LOAD T7, SB, S2
+    LI S0, 1
+    ADD T7, T7, S0
 ; Recompute alloca t7 at FP+6
-    ADD T2, FP, R0
-    ADDI T2, T2, 6
-    STORE S1, SB, T2
-    LI T1, 0
+    ADD T1, FP, R0
+    ADDI T1, T1, 6
+    STORE T7, SB, T1
+    LI T3, 0
 ; Recompute alloca t8 at FP+7
     ADD T4, FP, R0
     ADDI T4, T4, 7
-    STORE T1, SB, T4
+    STORE T3, SB, T4
     BEQ R0, R0, L_malloc_20
 ; Unconditional branch to L_malloc_20
 ; Invalidated 3 alloca bindings
 L_malloc_19:
-; Load instruction: t35 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Load instruction: t40 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op54_t35 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op64_t40 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T5, FP, R0
-    LOAD T1, SB, T5
-; Load instruction: t36 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+    ADD S0, FP, R0
+    LOAD T3, SB, S0
+; Load instruction: t41 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op56_t36 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op66_t41 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t4 at FP+3
-    ADD T2, FP, R0
-    ADDI T2, T2, 3
-    LOAD T4, SB, T2
-    SUB T1, T1, T4
+    ADD T1, FP, R0
+    ADDI T1, T1, 3
+    LOAD T4, SB, T1
+    SUB T3, T3, T4
 ; Recompute alloca t5 at FP+4
-    ADD T7, FP, R0
-    ADDI T7, T7, 4
-    STORE T1, SB, T7
-; Load instruction: t38 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
+    ADD S2, FP, R0
+    ADDI S2, S2, 4
+    STORE T3, SB, S2
+; Load instruction: t43 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op59_t38 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op69_t43 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, T7
-; Load instruction: t39 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
+    LOAD T4, SB, S2
+; Load instruction: t44 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op61_t39 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op71_t44 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t16 to slot 6
+; Spill t18 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 24
-    STORE S0, SB, SC
+    STORE T0, SB, SC
 ; Recompute alloca t10 at FP+9
-    ADD S0, FP, R0
-    ADDI S0, S0, 9
-; Spill load_f4_op16_t17_addr to slot 7
+    ADD T0, FP, R0
+    ADDI T0, T0, 9
+; Spill load_f4_op20_t19_addr to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    STORE S3, SB, SC
-    LOAD S3, SB, S0
-    DIV T4, T4, S3
+    STORE T6, SB, SC
+    LOAD T6, SB, T0
+    DIV T4, T4, T6
 ; Recompute alloca t6 at FP+5
-    ADD S3, FP, R0
-    ADDI S3, S3, 5
-    STORE T4, SB, S3
-; Load instruction: t41 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
+    ADD T6, FP, R0
+    ADDI T6, T6, 5
+    STORE T4, SB, T6
+; Load instruction: t46 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op64_t41 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op74_t46 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t17 to slot 8
+; Spill t19 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 26
-    STORE T0, SB, SC
-    LOAD T0, SB, T7
-; Load instruction: t42 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
+    STORE T5, SB, SC
+    LOAD T5, SB, S2
+; Load instruction: t47 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op66_t42 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op76_t47 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t22 to slot 9
+; Spill t25 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 27
-    STORE T3, SB, SC
-    LOAD T3, SB, S0
-    MOD T0, T0, T3
+    STORE S1, SB, SC
+    LOAD S1, SB, T0
+    MOD T5, T5, S1
 ; Recompute alloca t8 at FP+7
-    ADD T3, FP, R0
-    ADDI T3, T3, 7
-    STORE T0, SB, T3
-; Load instruction: t44 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+    ADD S1, FP, R0
+    ADDI S1, S1, 7
+    STORE T5, SB, S1
+; Load instruction: t49 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op69_t44 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op79_t49 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t26 to slot 10
+; Spill t30 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 28
-    STORE S2, SB, SC
+    STORE S3, SB, SC
 ; Recompute alloca t2 at FP+1
-    ADD S2, FP, R0
-    ADDI S2, S2, 1
-; Spill t29 to slot 11
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+; Spill t33 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 29
-    STORE T6, SB, SC
-    LOAD T6, SB, S2
-; Spill t34 to slot 12
+    STORE T2, SB, SC
+    LOAD T2, SB, S3
+; Spill t39 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 30
-    STORE S1, SB, SC
-    LI S1, 1
-    ADD T6, T6, S1
-; Load instruction: t46 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
+    STORE T7, SB, SC
+    LI T7, 1
+    ADD T2, T2, T7
+; Load instruction: t51 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op71_t46 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op81_t51 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S1, SB, S3
-    ADD T6, T6, S1
+    LOAD T7, SB, T6
+    ADD T2, T2, T7
 ; Recompute alloca t7 at FP+6
-    ADD S1, FP, R0
-    ADDI S1, S1, 6
-    STORE T6, SB, S1
+    ADD T7, FP, R0
+    ADDI T7, T7, 6
+    STORE T2, SB, T7
     BEQ R0, R0, L_malloc_20
 ; Unconditional branch to L_malloc_20
 ; Invalidated 8 alloca bindings
@@ -600,174 +628,182 @@ L_malloc_20:
     BEQ R0, R0, L_malloc_17
 ; Unconditional branch to L_malloc_17
 L_malloc_17:
-; Load instruction: t48 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
+; Load instruction: t53 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op74_t48 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op84_t53 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t8 at FP+7
-    ADD T2, FP, R0
-    ADDI T2, T2, 7
-    LOAD T3, SB, T2
-    LI T5, 0
-    XOR T7, T3, T5
+    ADD T0, FP, R0
+    ADDI T0, T0, 7
+    LOAD T1, SB, T0
+    LI T6, 0
+    XOR T7, T1, T6
     LI S0, 1
-    SLTU T3, T7, S0
-    BEQ T3, R0, L_malloc_22
+    SLTU T1, T7, S0
+    LI S1, 0
+    XOR S2, T1, S1
+    LI S3, 0
+    SLTU T1, S3, S2
+    BEQ T1, R0, L_malloc_22
 ; Branch to L_malloc_22 if condition is false
     BEQ R0, R0, L_malloc_21
 ; Unconditional branch to L_malloc_21 (condition was true)
 ; Invalidated 1 alloca bindings
 L_malloc_21:
-; Load instruction: t50 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
+; Load instruction: t56 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op78_t50 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op90_t56 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t7 at FP+6
-    ADD S1, FP, R0
-    ADDI S1, S1, 6
-    LOAD S2, SB, S1
-    LI S3, 1
-    SUB S2, S2, S3
-; Recompute alloca t9 at FP+8
     ADD T7, FP, R0
-    ADDI T7, T7, 8
-    STORE S2, SB, T7
+    ADDI T7, T7, 6
+    LOAD S0, SB, T7
+    LI T6, 1
+    SUB S0, S0, T6
+; Recompute alloca t9 at FP+8
+    ADD S2, FP, R0
+    ADDI S2, S2, 8
+    STORE S0, SB, S2
     BEQ R0, R0, L_malloc_23
 ; Unconditional branch to L_malloc_23
 ; Invalidated 2 alloca bindings
 L_malloc_22:
-; Load instruction: t52 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
+; Load instruction: t58 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op81_t52 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op93_t58 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t7 at FP+6
-    ADD S0, FP, R0
-    ADDI S0, S0, 6
-    LOAD T5, SB, S0
+    ADD S3, FP, R0
+    ADDI S3, S3, 6
+    LOAD S1, SB, S3
 ; Recompute alloca t9 at FP+8
-    ADD T3, FP, R0
-    ADDI T3, T3, 8
-    STORE T5, SB, T3
+    ADD T1, FP, R0
+    ADDI T1, T1, 8
+    STORE S1, SB, T1
     BEQ R0, R0, L_malloc_23
 ; Unconditional branch to L_malloc_23
 ; Invalidated 2 alloca bindings
 L_malloc_23:
-; Load instruction: t53 = load FatPtr(FatPointer { addr: Temp(9), bank: Stack })
+; Load instruction: t59 = load FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(9), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op84_t53 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op96_t59 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t9 at FP+8
-    ADD T2, FP, R0
-    ADDI T2, T2, 8
-    LOAD S3, SB, T2
+    ADD T0, FP, R0
+    ADDI T0, T0, 8
+    LOAD T6, SB, T0
     LI T7, 255
-    SLTU S3, T7, S3
-    BEQ S3, R0, L_malloc_26
+    SLTU T6, T7, T6
+    LI S2, 0
+    XOR T1, T6, S2
+    LI S3, 0
+    SLTU T6, S3, T1
+    BEQ T6, R0, L_malloc_26
 ; Branch to L_malloc_26 if condition is false
     BEQ R0, R0, L_malloc_24
 ; Unconditional branch to L_malloc_24 (condition was true)
 ; Invalidated 1 alloca bindings
 L_malloc_24:
     LI RV0, 0
-    LI S1, 0
-    MOVE RV1, S1
+    LI T7, 0
+    MOVE RV1, T7
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
 L_malloc_26:
-; Load instruction: t55 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
+; Load instruction: t62 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op87_t55 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op101_t62 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t7 at FP+6
-    ADD T3, FP, R0
-    ADDI T3, T3, 6
-    LOAD S0, SB, T3
-    LI T7, 0
-    STORE S0, GP, T7
-; Load instruction: t56 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
+    ADD T1, FP, R0
+    ADDI T1, T1, 6
+    LOAD S3, SB, T1
+    LI S2, 0
+    STORE S3, GP, S2
+; Load instruction: t63 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op91_t56 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op105_t63 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t8 at FP+7
-    ADD S3, FP, R0
-    ADDI S3, S3, 7
-    LOAD T2, SB, S3
-    LI T7, 1
-    STORE T2, GP, T7
-; Load instruction: t57 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+    ADD T6, FP, R0
+    ADDI T6, T6, 7
+    LOAD T0, SB, T6
+    LI S2, 1
+    STORE T0, GP, S2
+; Load instruction: t64 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op95_t57 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op109_t64 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t3 at FP+2
-    ADD T7, FP, R0
-    ADDI T7, T7, 2
-; Spill t37 to slot 13
+    ADD S2, FP, R0
+    ADDI S2, S2, 2
+; Spill t42 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 31
-    STORE T1, SB, SC
-    LOAD T1, SB, T7
-; Load instruction: t58 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+    STORE T3, SB, SC
+    LOAD T3, SB, S2
+; Load instruction: t65 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op97_t58 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f4_op111_t65 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Spill t40 to slot 14
+; Spill t45 to slot 14
     ADD SC, FP, R0
     ADDI SC, SC, 32
     STORE T4, SB, SC
 ; Recompute alloca t2 at FP+1
     ADD T4, FP, R0
     ADDI T4, T4, 1
-; Spill t43 to slot 15
+; Spill t48 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 33
-    STORE T0, SB, SC
-    LOAD T0, SB, T4
+    STORE T5, SB, SC
+    LOAD T5, SB, T4
 ; Spill live registers before call
-; Spill t47 to slot 16
+; Spill t52 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 34
-    STORE T6, SB, SC
-; Spill t51 to slot 17
+    STORE T2, SB, SC
+; Spill t57 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 35
-    STORE S2, SB, SC
-; Spill t52 to slot 18
+    STORE S0, SB, SC
+; Spill t58 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    STORE T5, SB, SC
-; Spill return_null_bank_4_f4_op86 to slot 19
+    STORE S1, SB, SC
+; Spill return_null_bank_4_f4_op100 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    STORE S1, SB, SC
-; Spill t55 to slot 20
+    STORE T7, SB, SC
+; Spill t62 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 38
-    STORE S0, SB, SC
-; Spill t56 to slot 21
+    STORE S3, SB, SC
+; Spill t63 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    STORE T2, SB, SC
-; Spill t57 to slot 22
+    STORE T0, SB, SC
+; Spill t64 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    STORE T1, SB, SC
-; Spill t58 to slot 23
+    STORE T3, SB, SC
+; Spill t65 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 41
-    STORE T0, SB, SC
+    STORE T5, SB, SC
 ; Set SP = FP+42 so callee frame is above spills
     ADDI SP, FP, 42
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T1, R0
+    ADD A0, T3, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T0, R0
+    ADD A1, T5, R0
 ; Call function make_fat_ptr
     CALL make_fat_ptr
-; Fat pointer return value for t59
-; Copy Rv0 to allocatable T6
-    ADD T6, RV0, R0
-    MOVE RV0, T6
+; Fat pointer return value for t66
+; Copy Rv0 to allocatable T2
+    ADD T2, RV0, R0
+    MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
 L_malloc_99999:
@@ -958,6 +994,10 @@ L_calloc_31:
     ADD T4, FP, R0
     ADDI T4, T4, 5
     LOAD T1, SB, T4
+    LI T6, 0
+    XOR T7, T1, T6
+    LI T5, 0
+    SLTU T1, T5, T7
     BEQ T1, R0, L_calloc_34
 ; Branch to L_calloc_34 if condition is false
     BEQ R0, R0, L_calloc_32
@@ -965,70 +1005,74 @@ L_calloc_31:
 ; Invalidated 1 alloca bindings
 L_calloc_32:
     LI RV0, 0
-    LI T6, 0
-    MOVE RV1, T6
+    LI T3, 0
+    MOVE RV1, T3
 ; Jump to epilogue
     BEQ R0, R0, L_calloc_99999
 L_calloc_34:
-; Load instruction: t14 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op22_t14 has bank info: Stack
-; LOAD: Using bank register Sb for load
-; Recompute alloca t2 at FP+0
-    ADD T7, FP, R0
-    LOAD T5, SB, T7
-; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f8_op24_t15 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-; Recompute alloca t3 at FP+1
-    ADD T3, FP, R0
-    ADDI T3, T3, 1
-    LOAD S0, SB, T3
-    MUL T5, T5, S0
-; Recompute alloca t4 at FP+2
-    ADD S1, FP, R0
-    ADDI S1, S1, 2
-    STORE T5, SB, S1
-; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op27_t17 has bank info: Stack
+; Recompute alloca t2 at FP+0
+    ADD S0, FP, R0
+    LOAD S1, SB, S0
+; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; LOAD: Pointer load_src_ptr_f8_op26_t16 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T0, SB, S1
-; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Recompute alloca t3 at FP+1
+    ADD T0, FP, R0
+    ADDI T0, T0, 1
+    LOAD T7, SB, T0
+    MUL S1, S1, T7
+; Recompute alloca t4 at FP+2
+    ADD T5, FP, R0
+    ADDI T5, T5, 2
+    STORE S1, SB, T5
+; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f8_op29_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T1, SB, T7
-    DIV T0, T0, T1
-; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op31_t20 has bank info: Stack
+    LOAD T6, SB, T5
+; Load instruction: t19 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; LOAD: Pointer load_src_ptr_f8_op31_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, T3
-    XOR S0, T0, T4
+    LOAD T1, SB, S0
+    DIV T6, T6, T1
+; Load instruction: t21 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; LOAD: Pointer load_src_ptr_f8_op33_t21 has bank info: Stack
+; LOAD: Using bank register Sb for load
+    LOAD T4, SB, T0
+    XOR T7, T6, T4
     LI T1, 0
-    SLTU T0, T1, S0
-    BEQ T0, R0, L_calloc_37
+    SLTU T6, T1, T7
+    LI T7, 0
+    XOR T1, T6, T7
+    LI T4, 0
+    SLTU T6, T4, T1
+    BEQ T6, R0, L_calloc_37
 ; Branch to L_calloc_37 if condition is false
     BEQ R0, R0, L_calloc_35
 ; Unconditional branch to L_calloc_35 (condition was true)
 ; Invalidated 3 alloca bindings
 L_calloc_35:
     LI RV0, 0
-    LI S0, 0
-    MOVE RV1, S0
+    LI T1, 0
+    MOVE RV1, T1
 ; Jump to epilogue
     BEQ R0, R0, L_calloc_99999
 L_calloc_37:
-; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op36_t22 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f8_op40_t24 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t4 at FP+2
-    ADD T1, FP, R0
-    ADDI T1, T1, 2
-    LOAD T4, SB, T1
+    ADD T4, FP, R0
+    ADDI T4, T4, 2
+    LOAD T7, SB, T4
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -1042,149 +1086,153 @@ L_calloc_37:
     ADD SC, FP, R0
     ADDI SC, SC, 16
     STORE T2, SB, SC
-; Spill return_null_bank_8_f8_op21 to slot 3
+; Spill return_null_bank_8_f8_op23 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 17
-    STORE T6, SB, SC
-; Spill t16 to slot 4
+    STORE T3, SB, SC
+; Spill t17 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 18
-    STORE T5, SB, SC
-; Spill return_null_bank_8_f8_op35 to slot 5
+    STORE S1, SB, SC
+; Spill return_null_bank_8_f8_op39 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 19
-    STORE S0, SB, SC
-; Spill t22 to slot 6
+    STORE T1, SB, SC
+; Spill t24 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 20
-    STORE T4, SB, SC
+    STORE T7, SB, SC
 ; Set SP = FP+34 so callee frame is above spills
     ADDI SP, FP, 34
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T4, R0
+    ADD A0, T7, R0
 ; Call function malloc
     CALL malloc
-; Fat pointer return value for t23
-; Copy Rv0 to allocatable T0
-    ADD T0, RV0, R0
+; Fat pointer return value for t25
+; Copy Rv0 to allocatable T6
+    ADD T6, RV0, R0
 ; Store fat ptr to stack alloca t5 at FP+3
     ADDI SC, FP, 3
-    STORE T0, SB, SC
+    STORE T6, SB, SC
     ADDI SC, SC, 1
     STORE RV1, SB, SC
-; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
+; Load instruction: t26 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op38_t24 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f8_op42_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t5 at FP+3
-    ADD T3, FP, R0
-    ADDI T3, T3, 3
-    LOAD T7, SB, T3
-    ADDI S1, T3, 1
-    LOAD S3, SB, S1
+    ADD T0, FP, R0
+    ADDI T0, T0, 3
+    LOAD T5, SB, T0
+    ADDI S0, T0, 1
+    LOAD S3, SB, S0
 ; Bank value in S3 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S2, 0
-    XOR T2, T7, S2
-    LI T6, 0
-    SLTU T7, T6, T2
-    BEQ T7, R0, L_calloc_40
+    XOR T2, T5, S2
+    LI T3, 0
+    SLTU T5, T3, T2
+    LI S1, 0
+    XOR T1, T5, S1
+    LI T4, 0
+    SLTU T5, T4, T1
+    BEQ T5, R0, L_calloc_40
 ; Branch to L_calloc_40 if condition is false
     BEQ R0, R0, L_calloc_38
 ; Unconditional branch to L_calloc_38 (condition was true)
 ; Invalidated 1 alloca bindings
 L_calloc_38:
-; Load instruction: t26 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
+; Load instruction: t29 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op44_t26 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f8_op50_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t5 at FP+3
-    ADD T5, FP, R0
-    ADDI T5, T5, 3
-    LOAD S0, SB, T5
-    ADDI T1, T5, 1
-    LOAD T4, SB, T1
-; Bank value in T4 - tags: -1 = Global, -2 = Stack, positive = dynamic
-; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
+    ADD T7, FP, R0
+    ADDI T7, T7, 3
+    LOAD S0, SB, T7
+    ADDI T2, T7, 1
+    LOAD T3, SB, T2
+; Bank value in T3 - tags: -1 = Global, -2 = Stack, positive = dynamic
+; Load instruction: t30 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op48_t27 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f8_op54_t30 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t4 at FP+2
-    ADD S1, FP, R0
-    ADDI S1, S1, 2
-    LOAD T2, SB, S1
-    LI T6, 0
+    ADD S2, FP, R0
+    ADDI S2, S2, 2
+    LOAD T1, SB, S2
+    LI T4, 0
 ; Spill live registers before call
-; Spill t23 to slot 7
+; Spill t25 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 21
-    STORE T0, SB, SC
-; Spill load_f8_op41_t24_bank_val to slot 8
+    STORE T6, SB, SC
+; Spill load_f8_op45_t26_bank_val to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE S3, SB, SC
-; Spill t26 to slot 9
+; Spill t29 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 23
     STORE S0, SB, SC
-; Spill load_f8_op47_t26_bank_val to slot 10
+; Spill load_f8_op53_t29_bank_val to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 24
-    STORE T4, SB, SC
-; Spill load_f8_op47_t26_bank_val to slot 11
+    STORE T3, SB, SC
+; Spill load_f8_op53_t29_bank_val to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    STORE T4, SB, SC
-; Spill const_f8_op50_0 to slot 12
+    STORE T3, SB, SC
+; Spill const_f8_op56_0 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 26
-    STORE T6, SB, SC
-; Spill t27 to slot 13
+    STORE T4, SB, SC
+; Spill t30 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 27
-    STORE T2, SB, SC
+    STORE T1, SB, SC
 ; Set SP = FP+34 so callee frame is above spills
     ADDI SP, FP, 34
 ; Setting up 3 register arguments
 ; Arg 0 (fat ptr) to A0,A1
     ADD A0, S0, R0
-    ADD A1, T4, R0
+    ADD A1, T3, R0
 ; Arg 1 (scalar) to A2
-    ADD A2, T6, R0
+    ADD A2, T4, R0
 ; Arg 2 (scalar) to A3
-    ADD A3, T2, R0
+    ADD A3, T1, R0
 ; Call function memset
     CALL memset
-; Fat pointer return value for t28
-; Copy Rv0 to allocatable S2
-    ADD S2, RV0, R0
+; Fat pointer return value for t31
+; Copy Rv0 to allocatable S1
+    ADD S1, RV0, R0
     BEQ R0, R0, L_calloc_40
 ; Unconditional branch to L_calloc_40
 L_calloc_40:
-; Load instruction: t29 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
+; Load instruction: t32 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
-; LOAD: Pointer load_src_ptr_f8_op51_t29 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f8_op57_t32 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t5 at FP+3
-    ADD T7, FP, R0
-    ADDI T7, T7, 3
-    LOAD T3, SB, T7
-    ADDI T1, T7, 1
-    LOAD T0, SB, T1
-; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
-    LI T5, -1
-    BEQ T0, T5, L_bc_c2f8fa2c_use_global
-    LI S1, -2
-    BEQ T0, S1, L_bc_c2f8fa2c_use_stack
-    ADD S3, T0, R0
-    BEQ R0, R0, L_bc_c2f8fa2c_done
-L_bc_c2f8fa2c_use_global:
+    ADD T5, FP, R0
+    ADDI T5, T5, 3
+    LOAD T0, SB, T5
+    ADDI T2, T5, 1
+    LOAD T6, SB, T2
+; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
+    LI T7, -1
+    BEQ T6, T7, L_bc_6bf3cb51_use_global
+    LI S2, -2
+    BEQ T6, S2, L_bc_6bf3cb51_use_stack
+    ADD S3, T6, R0
+    BEQ R0, R0, L_bc_6bf3cb51_done
+L_bc_6bf3cb51_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_c2f8fa2c_done
-L_bc_c2f8fa2c_use_stack:
+    BEQ R0, R0, L_bc_6bf3cb51_done
+L_bc_6bf3cb51_use_stack:
     ADD S3, SB, R0
-L_bc_c2f8fa2c_done:
-    MOVE RV0, T3
+L_bc_6bf3cb51_done:
+    MOVE RV0, T0
     MOVE RV1, S3
 ; Jump to epilogue
     BEQ R0, R0, L_calloc_99999
@@ -1262,20 +1310,24 @@ L_realloc_41:
     XOR T2, T6, T3
     LI T1, 1
     SLTU T6, T2, T1
+    LI T0, 0
+    XOR T5, T6, T0
+    LI T2, 0
+    SLTU T6, T2, T5
     BEQ T6, R0, L_realloc_44
 ; Branch to L_realloc_44 if condition is false
     BEQ R0, R0, L_realloc_42
 ; Unconditional branch to L_realloc_42 (condition was true)
 ; Invalidated 2 alloca bindings
 L_realloc_42:
-; Load instruction: t6 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; Load instruction: t7 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; LOAD: Pointer load_src_ptr_f10_op13_t6 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f10_op15_t7 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t3 at FP+2
-    ADD T0, FP, R0
-    ADDI T0, T0, 2
-    LOAD T5, SB, T0
+    ADD T1, FP, R0
+    ADDI T1, T1, 2
+    LOAD T3, SB, T1
 ; Spill live registers before call
 ; Spill t0 to slot 0
     ADD SC, FP, R0
@@ -1297,86 +1349,90 @@ L_realloc_42:
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T4, SB, SC
-; Spill t6 to slot 5
+; Spill t7 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 16
-    STORE T5, SB, SC
+    STORE T3, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T5, R0
+    ADD A0, T3, R0
 ; Call function malloc
     CALL malloc
-; Fat pointer return value for t7
-; Copy Rv0 to allocatable T2
-    ADD T2, RV0, R0
-    MOVE RV0, T2
+; Fat pointer return value for t8
+; Copy Rv0 to allocatable T5
+    ADD T5, RV0, R0
+    MOVE RV0, T5
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
 L_realloc_44:
-; Load instruction: t8 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; Load instruction: t9 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
-; LOAD: Pointer load_src_ptr_f10_op15_t8 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f10_op17_t9 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t3 at FP+2
-    ADD T1, FP, R0
-    ADDI T1, T1, 2
-    LOAD T3, SB, T1
+    ADD T2, FP, R0
+    ADDI T2, T2, 2
+    LOAD T0, SB, T2
     LI T6, 0
-    XOR T7, T3, T6
+    XOR T7, T0, T6
     LI S0, 1
-    SLTU T3, T7, S0
-    BEQ T3, R0, L_realloc_47
+    SLTU T0, T7, S0
+    LI S3, 0
+    XOR S2, T0, S3
+    LI S1, 0
+    SLTU T0, S1, S2
+    BEQ T0, R0, L_realloc_47
 ; Branch to L_realloc_47 if condition is false
     BEQ R0, R0, L_realloc_45
 ; Unconditional branch to L_realloc_45 (condition was true)
 ; Invalidated 1 alloca bindings
 L_realloc_45:
-; Load instruction: t10 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
-; LOAD: Pointer load_src_ptr_f10_op19_t10 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f10_op23_t12 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+0
-    ADD S3, FP, R0
-    LOAD S2, SB, S3
-    ADDI S1, S3, 1
-    LOAD T4, SB, S1
-; Bank value in T4 - tags: -1 = Global, -2 = Stack, positive = dynamic
+    ADD T4, FP, R0
+    LOAD T1, SB, T4
+    ADDI T3, T4, 1
+    LOAD T7, SB, T3
+; Bank value in T7 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Spill live registers before call
-; Spill t7 to slot 6
+; Spill t8 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 17
-    STORE T2, SB, SC
-; Spill t10 to slot 7
+    STORE T5, SB, SC
+; Spill t12 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 18
-    STORE S2, SB, SC
-; Spill load_f10_op22_t10_bank_val to slot 8
+    STORE T1, SB, SC
+; Spill load_f10_op26_t12_bank_val to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 19
-    STORE T4, SB, SC
-; Spill load_f10_op22_t10_bank_val to slot 9
+    STORE T7, SB, SC
+; Spill load_f10_op26_t12_bank_val to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 20
-    STORE T4, SB, SC
+    STORE T7, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
-    ADD A0, S2, R0
-    ADD A1, T4, R0
+    ADD A0, T1, R0
+    ADD A1, T7, R0
 ; Call function free
     CALL free
     LI RV0, 0
-    LI T0, 0
-    MOVE RV1, T0
+    LI S0, 0
+    MOVE RV1, S0
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
 L_realloc_47:
     LI RV0, 0
-    LI T5, 0
-    MOVE RV1, T5
+    LI T6, 0
+    MOVE RV1, T6
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
 L_realloc_99999:

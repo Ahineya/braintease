@@ -143,7 +143,7 @@ fn handle_return_instruction(
                     }
                     trace!("  Returning fat pointer in Rv0/Rv1");
                     Some((Reg::Rv0, Some(Reg::Rv1)))
-                } else if function.return_type.is_i64() {
+                } else if function.return_type.is_i64() || function.return_type.is_f64() {
                     let temp_reg = mgr.get_register(temp_name.clone());
                     builder.add_instructions(mgr.take_instructions());
                     if temp_reg != Reg::Rv0 {
@@ -165,7 +165,7 @@ fn handle_return_instruction(
                     }
                     trace!("  Returning I64 in Rv0/Rv1/X0/X1");
                     Some((Reg::Rv0, Some(Reg::Rv1)))
-                } else if function.return_type.is_wide() {
+                } else if function.return_type.is_two_word_scalar() {
                     let temp_reg = mgr.get_register(temp_name.clone());
                     builder.add_instructions(mgr.take_instructions());
                     if temp_reg != Reg::Rv0 {
@@ -177,12 +177,14 @@ fn handle_return_instruction(
                         if hi_reg != Reg::Rv1 {
                             builder.add_instruction(AsmInst::Move(Reg::Rv1, hi_reg));
                         }
+                    } else if function.return_type.is_f32() {
+                        builder.add_instruction(AsmInst::Li(Reg::Rv1, 0));
                     } else {
                         builder.add_instruction(AsmInst::Li(Reg::Sc, 15));
                         builder.add_instruction(AsmInst::Srl(Reg::Rv1, Reg::Rv0, Reg::Sc));
                         builder.add_instruction(AsmInst::Sub(Reg::Rv1, Reg::R0, Reg::Rv1));
                     }
-                    trace!("  Returning I32 in Rv0/Rv1");
+                    trace!("  Returning two-word value in Rv0/Rv1");
                     Some((Reg::Rv0, Some(Reg::Rv1)))
                 } else {
                     let temp_reg = mgr.get_register(temp_name);
@@ -197,7 +199,7 @@ fn handle_return_instruction(
                 }
             }
             Value::Constant(c) => {
-                if function.return_type.is_i64() {
+                if function.return_type.is_i64() || function.return_type.is_f64() {
                     let parts = crate::instr::i64::split_const64(*c);
                     builder.add_instruction(AsmInst::Li(Reg::Rv0, parts[0]));
                     builder.add_instruction(AsmInst::Li(Reg::Rv1, parts[1]));
@@ -205,11 +207,11 @@ fn handle_return_instruction(
                     builder.add_instruction(AsmInst::Li(Reg::X1, parts[3]));
                     trace!("  Returning I64 constant {c} in Rv0/Rv1/X0/X1");
                     Some((Reg::Rv0, Some(Reg::Rv1)))
-                } else if function.return_type.is_wide() {
+                } else if function.return_type.is_two_word_scalar() {
                     let (lo, hi) = crate::instr::wide::split_const(*c);
                     builder.add_instruction(AsmInst::Li(Reg::Rv0, lo));
                     builder.add_instruction(AsmInst::Li(Reg::Rv1, hi));
-                    trace!("  Returning I32 constant {c} in Rv0/Rv1");
+                    trace!("  Returning two-word constant {c} in Rv0/Rv1");
                     Some((Reg::Rv0, Some(Reg::Rv1)))
                 } else {
                     // Load constant directly into return register

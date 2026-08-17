@@ -133,7 +133,7 @@ pub fn lower_load(
     insts.push(load_inst);
 
     // I32: also load the high word at addr+1
-    if result_type.is_wide() {
+    if result_type.is_wide() || result_type.is_f32() {
         mgr.pin_register(dest_reg);
         let hi_name = naming.i32_high_name(&result_name);
         let hi_reg = mgr.get_register(hi_name.clone());
@@ -142,11 +142,14 @@ pub fn lower_load(
         insts.push(AsmInst::Load(hi_reg, bank_reg, rcc_codegen::Reg::Sc));
         mgr.bind_value_to_register(hi_name.clone(), hi_reg);
         mgr.set_i32_high(result_name.clone(), hi_name);
+        if result_type.is_f32() {
+            mgr.set_fp32(result_name.clone());
+        }
         mgr.unpin_register(dest_reg);
-        debug!("  I32 loaded: lo in {dest_reg:?}, hi in {hi_reg:?}");
+        debug!("  two-word loaded: lo in {dest_reg:?}, hi in {hi_reg:?}");
     }
 
-    if result_type.is_i64() {
+    if result_type.is_i64() || result_type.is_f64() {
         mgr.pin_register(dest_reg);
         let mut extra = [String::new(), String::new(), String::new()];
         for i in 0..3 {
@@ -158,8 +161,11 @@ pub fn lower_load(
             mgr.bind_value_to_register(extra[i].clone(), r);
         }
         mgr.set_i64_words(result_name.clone(), extra);
+        if result_type.is_f64() {
+            mgr.set_fp64(result_name.clone());
+        }
         mgr.unpin_register(dest_reg);
-        debug!("  I64 loaded into {dest_reg:?} + extra words");
+        debug!("  four-word loaded into {dest_reg:?} + extra words");
     }
 
     mgr.unpin_register(addr_reg);

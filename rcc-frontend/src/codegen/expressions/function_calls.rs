@@ -1,7 +1,7 @@
 //! Function call code generation
 
 use super::{TypedExpressionGenerator, convert_type_default};
-use super::conversions::convert_integer;
+use super::conversions::{convert_value};
 use super::assignments::copy_struct;
 use crate::ir::{IrBinaryOp, Value, FatPointer};
 use crate::typed_ast::TypedExpr;
@@ -16,13 +16,19 @@ fn materialize_wide_int(
     val: Value,
     ty: &Type,
 ) -> Result<Value, CompilerError> {
-    if !matches!(ty, Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong) {
+    if !matches!(ty, Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong | Type::Float | Type::Double) {
         return Ok(val);
     }
     if matches!(val, Value::Temp(_)) {
         return Ok(val);
     }
-    let ir_type = convert_type_default(ty)?;
+    // Split constant bits with integer Add-0. Using F32/F64 here would hit the
+    // backend's "floating Binary should be a call" guard.
+    let ir_type = match ty {
+        Type::Float | Type::Long | Type::UnsignedLong => crate::ir::IrType::I32,
+        Type::Double | Type::LongLong | Type::UnsignedLongLong => crate::ir::IrType::I64,
+        _ => convert_type_default(ty)?,
+    };
     let temp = gen.builder.build_binary(IrBinaryOp::Add, val, Value::Constant(0), ir_type)
         .map_err(|e| CodegenError::InternalError {
             message: format!("Failed to materialize wide integer argument: {e}"),
@@ -82,13 +88,22 @@ pub fn generate_function_call(
                 })?;
             copy_struct(gen, val, dest.clone(), &arg_type)?;
             arg_vals.push(dest);
-        } else if i < param_types.len() && arg_type.is_integer() && param_types[i].is_integer() {
-            let converted = convert_integer(gen, val, arg_type, &param_types[i])?;
+        } else if i < param_types.len() && (arg_type.is_integer() || arg_type.is_floating()) && (param_types[i].is_integer() || param_types[i].is_floating()) {
+            let converted = convert_value(gen, val, arg_type, &param_types[i])?;
             arg_vals.push(materialize_wide_int(gen, converted, &param_types[i])?);
-        } else if arg_type.is_integer() {
+        } else if arg_type.is_integer() || arg_type.is_floating() {
             // Variadic extras keep their type; long / long long must occupy
             // their full ABI slots even when the constant fits in 16 bits.
-            arg_vals.push(materialize_wide_int(gen, val, arg_type)?);
+            // C99 6.5.2.2: float is promoted to double in the variable part.
+            let (val, ty) = if arg_type.is_floating()
+                && (i >= param_types.len() || stack_args_from.map(|s| i >= s).unwrap_or(false))
+                && matches!(arg_type, Type::Float)
+            {
+                (convert_value(gen, val, arg_type, &Type::Double)?, Type::Double)
+            } else {
+                (val, arg_type.clone())
+            };
+            arg_vals.push(materialize_wide_int(gen, val, &ty)?);
         } else {
             arg_vals.push(val);
         }
