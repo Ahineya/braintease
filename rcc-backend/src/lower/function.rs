@@ -143,6 +143,28 @@ fn handle_return_instruction(
                     }
                     trace!("  Returning fat pointer in Rv0/Rv1");
                     Some((Reg::Rv0, Some(Reg::Rv1)))
+                } else if function.return_type.is_i64() {
+                    let temp_reg = mgr.get_register(temp_name.clone());
+                    builder.add_instructions(mgr.take_instructions());
+                    if temp_reg != Reg::Rv0 {
+                        builder.add_instruction(AsmInst::Move(Reg::Rv0, temp_reg));
+                    }
+                    if let Some(words) = mgr.get_i64_words(&temp_name) {
+                        let dests = [Reg::Rv1, Reg::X0, Reg::X1];
+                        for i in 0..3 {
+                            let r = mgr.get_register(words[i].clone());
+                            builder.add_instructions(mgr.take_instructions());
+                            if r != dests[i] {
+                                builder.add_instruction(AsmInst::Move(dests[i], r));
+                            }
+                        }
+                    } else {
+                        builder.add_instruction(AsmInst::Li(Reg::Rv1, 0));
+                        builder.add_instruction(AsmInst::Li(Reg::X0, 0));
+                        builder.add_instruction(AsmInst::Li(Reg::X1, 0));
+                    }
+                    trace!("  Returning I64 in Rv0/Rv1/X0/X1");
+                    Some((Reg::Rv0, Some(Reg::Rv1)))
                 } else if function.return_type.is_wide() {
                     let temp_reg = mgr.get_register(temp_name.clone());
                     builder.add_instructions(mgr.take_instructions());
@@ -175,7 +197,15 @@ fn handle_return_instruction(
                 }
             }
             Value::Constant(c) => {
-                if function.return_type.is_wide() {
+                if function.return_type.is_i64() {
+                    let parts = crate::instr::i64::split_const64(*c);
+                    builder.add_instruction(AsmInst::Li(Reg::Rv0, parts[0]));
+                    builder.add_instruction(AsmInst::Li(Reg::Rv1, parts[1]));
+                    builder.add_instruction(AsmInst::Li(Reg::X0, parts[2]));
+                    builder.add_instruction(AsmInst::Li(Reg::X1, parts[3]));
+                    trace!("  Returning I64 constant {c} in Rv0/Rv1/X0/X1");
+                    Some((Reg::Rv0, Some(Reg::Rv1)))
+                } else if function.return_type.is_wide() {
                     let (lo, hi) = crate::instr::wide::split_const(*c);
                     builder.add_instruction(AsmInst::Li(Reg::Rv0, lo));
                     builder.add_instruction(AsmInst::Li(Reg::Rv1, hi));

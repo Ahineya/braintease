@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "printf %lld %llu %llx",
+  "expected": "4294967296\n18446744073709551615\nff\n-1\nFF\n"
+}

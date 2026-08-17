@@ -85,6 +85,9 @@ pub struct RegisterPressureManager {
     /// Map from I32 low-word value names to their high-word companion names
     i32_high: BTreeMap<String, String>,
 
+    /// Map from I64 low-word names to companion word names (w1, w2, w3)
+    i64_words: BTreeMap<String, [String; 3]>,
+
     /// Registers that must not be chosen as spill victims (live across
     /// an in-progress instruction that still holds the Reg by value).
     pinned_registers: std::collections::BTreeSet<Reg>,
@@ -113,6 +116,7 @@ impl RegisterPressureManager {
             trace_spills: false,
             fat_ptr_bank_slots: BTreeMap::new(),
             i32_high: BTreeMap::new(),
+            i64_words: BTreeMap::new(),
             pinned_registers: std::collections::BTreeSet::new(),
         }
     }
@@ -141,7 +145,9 @@ impl RegisterPressureManager {
 
     /// Take the LRU unpinned register as a spill victim.
     fn take_spill_victim(&mut self) -> Reg {
-        let pos = self.lru_queue.iter().position(|r| !self.pinned_registers.contains(r))
+        let pos = self.lru_queue.iter().position(|r| {
+            !self.pinned_registers.contains(r) && ALLOCATABLE_REGISTERS.contains(r)
+        })
             .expect("No spillable registers (all pinned)!");
         self.lru_queue.remove(pos).unwrap()
     }
@@ -206,6 +212,17 @@ impl RegisterPressureManager {
     /// Companion high-word name for a 32-bit value, if one was bound
     pub fn get_i32_high(&self, lo_name: &str) -> Option<String> {
         self.i32_high.get(lo_name).cloned()
+    }
+
+    /// Record that `lo_name`'s extra 64-bit words live in `words` (w1, w2, w3)
+    pub fn set_i64_words(&mut self, lo_name: String, words: [String; 3]) {
+        trace!("Setting I64 words for '{lo_name}': {words:?}");
+        self.i64_words.insert(lo_name, words);
+    }
+
+    /// Companion word names for a 64-bit value, if one was bound
+    pub fn get_i64_words(&self, lo_name: &str) -> Option<[String; 3]> {
+        self.i64_words.get(lo_name).cloned()
     }
     
     /// Get bank register for a pointer (internal use)
@@ -543,7 +560,7 @@ impl RegisterPressureManager {
             self.lru_queue.remove(pos);
         }
         self.reg_contents.remove(&reg);
-        if !self.free_list.contains(&reg) {
+        if ALLOCATABLE_REGISTERS.contains(&reg) && !self.free_list.contains(&reg) {
             self.free_list.push_back(reg);
             trace!("  Added {reg:?} back to free list");
         }
@@ -553,6 +570,27 @@ impl RegisterPressureManager {
     /// This is used when we know a value is in a specific register (like Rv0 after a call)
     pub fn bind_value_to_register(&mut self, value: String, reg: Reg) {
         debug!("Binding '{value}' to {reg:?}");
+
+        // ABI registers (Rv/A/X/…) must not enter the LRU. I64 div parks the
+        // quotient in Rv0/Rv1/X0/X1 because they are not allocatable; if a
+        // call return is bound to Rv0 and later spilled, get_register reuses
+        // Rv0 as a general register and those two uses collide.
+        if !ALLOCATABLE_REGISTERS.contains(&reg) {
+            if self.value_to_slot.remove(&value).is_some() {
+                debug!("  Cleared existing spill slot for '{value}' to prevent stale reload");
+            }
+            if self.reg_contents.get(&reg).map(|v| v == &value).unwrap_or(false) {
+                self.reg_contents.remove(&reg);
+            }
+            let dest = self.get_register(value);
+            if dest != reg {
+                self.instructions.push(AsmInst::Comment(format!(
+                    "Copy {reg:?} to allocatable {dest:?}"
+                )));
+                self.instructions.push(AsmInst::Add(dest, reg, Reg::R0));
+            }
+            return;
+        }
         
         // CRITICAL: Clear any existing spill slot for this value
         // This prevents reload of stale values when a value is recomputed
@@ -603,7 +641,7 @@ impl RegisterPressureManager {
             }
             
             // Add back to free list
-            if !self.free_list.contains(&reg) {
+            if ALLOCATABLE_REGISTERS.contains(&reg) && !self.free_list.contains(&reg) {
                 self.free_list.push_back(reg);
             }
         }
@@ -849,7 +887,7 @@ impl RegisterPressureManager {
                 self.lru_queue.remove(pos);
             }
             // Add back to free list if not already there
-            if !self.free_list.contains(&reg) {
+            if ALLOCATABLE_REGISTERS.contains(&reg) && !self.free_list.contains(&reg) {
                 self.free_list.push_back(reg);
             }
         }

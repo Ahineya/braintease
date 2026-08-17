@@ -51,6 +51,8 @@ pub enum Type {
     UnsignedInt,
     Long,
     UnsignedLong,
+    LongLong,
+    UnsignedLongLong,
     
     /// Floating types (no FP ops yet; size is used for layout, e.g. unions)
     Float,
@@ -106,14 +108,16 @@ impl Type {
         matches!(self, 
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
             Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
-            Type::Long | Type::UnsignedLong | Type::Enum { .. }
+            Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
+            Type::Enum { .. }
         )
     }
     
     /// Check if this type is a signed integer type
     pub fn is_signed_integer(&self) -> bool {
         matches!(self,
-            Type::Char | Type::SignedChar | Type::Short | Type::Int | Type::Long | Type::Enum { .. }
+            Type::Char | Type::SignedChar | Type::Short | Type::Int | Type::Long |
+            Type::LongLong | Type::Enum { .. }
         )
     }
     
@@ -124,7 +128,8 @@ impl Type {
     /// division involving these types must use unsigned operations.
     pub fn is_unsigned_integer(&self) -> bool {
         matches!(self,
-            Type::UnsignedChar | Type::UnsignedShort | Type::UnsignedInt | Type::UnsignedLong
+            Type::UnsignedChar | Type::UnsignedShort | Type::UnsignedInt | Type::UnsignedLong |
+            Type::UnsignedLongLong
         )
     }
     
@@ -169,6 +174,7 @@ impl Type {
             Type::Short | Type::UnsignedShort => Some(1),
             Type::Int | Type::UnsignedInt => Some(1), // 16-bit int on Ripple
             Type::Long | Type::UnsignedLong => Some(2),
+            Type::LongLong | Type::UnsignedLongLong => Some(4),
             Type::Float => Some(2),  // 32-bit float = 2 words
             Type::Double => Some(4), // 64-bit double = 4 words
             Type::Pointer { .. } => Some(2), // Fat pointers: 1 word address + 1 word bank
@@ -204,7 +210,7 @@ impl Type {
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => Some(1),
             Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt => Some(2),
             Type::Long | Type::UnsignedLong | Type::Float => Some(4),
-            Type::Double => Some(8),
+            Type::LongLong | Type::UnsignedLongLong | Type::Double => Some(8),
             Type::Pointer { .. } => Some(4),
             Type::Array {
                 element_type,
@@ -255,6 +261,8 @@ impl fmt::Display for Type {
             Type::UnsignedInt => write!(f, "unsigned int"),
             Type::Long => write!(f, "long"),
             Type::UnsignedLong => write!(f, "unsigned long"),
+            Type::LongLong => write!(f, "long long"),
+            Type::UnsignedLongLong => write!(f, "unsigned long long"),
             Type::Float => write!(f, "float"),
             Type::Double => write!(f, "double"),
             Type::Pointer { target, bank } => {
@@ -334,6 +342,8 @@ mod tests {
         assert_eq!(Type::Char.size_in_words(), Some(1));
         assert_eq!(Type::Int.size_in_words(), Some(1)); // 16-bit int = 1 word
         assert_eq!(Type::Long.size_in_words(), Some(2)); // 32-bit long = 2 words
+        assert_eq!(Type::LongLong.size_in_words(), Some(4));
+        assert_eq!(Type::LongLong.size_in_bytes(), Some(8));
         assert_eq!(Type::Pointer { target: Box::new(Type::Int), bank: None }.size_in_words(), Some(2)); // Fat pointer = 2 words
         
         let array_type = Type::Array { 

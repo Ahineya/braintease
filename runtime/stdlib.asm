@@ -129,12 +129,12 @@ L_labs_4:
     LI T6, 0
     LI T5, 0
     XOR T4, T7, T5
-    BNE T4, R0, L_i32_slt_hine_c3f46dc_2_0
+    BNE T4, R0, L_i32_slt_hine_a527df85_2_0
     SLTU T4, S0, T6
-    BEQ R0, R0, L_i32_slt_done_c3f46dc_2_1
-L_i32_slt_hine_c3f46dc_2_0:
+    BEQ R0, R0, L_i32_slt_done_a527df85_2_1
+L_i32_slt_hine_a527df85_2_0:
     SLT T4, T7, T5
-L_i32_slt_done_c3f46dc_2_1:
+L_i32_slt_done_a527df85_2_1:
     BEQ T4, R0, L_labs_7
 ; Branch to L_labs_7 if condition is false
     BEQ R0, R0, L_labs_5
@@ -214,6 +214,255 @@ L_labs_99999:
 ; Return to caller
     ADD PCB, RAB, R0
     JALR R0, R0, RA
+llabs:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 12 slots for locals
+    ADDI SP, SP, 12
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+; Load param 0 from A0
+    ADD S3, A0, R0
+    ADD S2, A1, R0
+    ADD S1, A2, R0
+    ADD S0, A3, R0
+L_llabs_8:
+    ADD T7, FP, R0
+    STORE S3, SB, T7
+    ADDI SC, T7, 1
+    STORE S2, SB, SC
+    ADDI SC, T7, 2
+    STORE S1, SB, SC
+    ADDI SC, T7, 3
+    STORE S0, SB, SC
+; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; LOAD: Pointer load_src_ptr_f4_op3_t2 has bank info: Stack
+; LOAD: Using bank register Sb for load
+    LOAD T6, SB, T7
+    ADDI SC, T7, 1
+    LOAD T5, SB, SC
+    ADDI SC, T7, 2
+    LOAD T4, SB, SC
+    ADDI SC, T7, 3
+    LOAD T3, SB, SC
+    LI T2, 0
+    LI T1, 0
+    LI T0, 0
+; Spill t0 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 12
+    STORE S3, SB, SC
+    LI S3, 0
+; Spill t0__w1 to slot 1
+    ADD SC, FP, R0
+    ADDI SC, SC, 13
+    STORE S2, SB, SC
+    ADD S2, T2, R0
+; Spill t0__w2 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE S1, SB, SC
+    ADD S1, T1, R0
+; Spill t0__w3 to slot 3
+    ADD SC, FP, R0
+    ADDI SC, SC, 15
+    STORE S0, SB, SC
+    ADD S0, T0, R0
+    ADD T7, S3, R0
+; Spill i64_c0_4_f4_op5 to slot 4
+    ADD SC, FP, R0
+    ADDI SC, SC, 16
+    STORE T2, SB, SC
+    XOR T2, T3, T7
+    BNE T2, R0, L_i64_slt_w3ne_b2dd76de_4_0
+    XOR T2, T4, S0
+    BNE T2, R0, L_i64_slt_w2ne_b2dd76de_4_1
+    XOR T2, T5, S1
+    BNE T2, R0, L_i64_slt_w1ne_b2dd76de_4_2
+    SLTU T2, T6, S2
+    BEQ R0, R0, L_i64_slt_done_b2dd76de_4_3
+L_i64_slt_w3ne_b2dd76de_4_0:
+    SLT T2, T3, T7
+    BEQ R0, R0, L_i64_slt_done_b2dd76de_4_3
+L_i64_slt_w2ne_b2dd76de_4_1:
+    SLTU T2, T4, S0
+    BEQ R0, R0, L_i64_slt_done_b2dd76de_4_3
+L_i64_slt_w1ne_b2dd76de_4_2:
+    SLTU T2, T5, S1
+L_i64_slt_done_b2dd76de_4_3:
+    BEQ T2, R0, L_llabs_11
+; Branch to L_llabs_11 if condition is false
+    BEQ R0, R0, L_llabs_9
+; Unconditional branch to L_llabs_9 (condition was true)
+L_llabs_9:
+; Load instruction: t5 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; LOAD: Pointer load_src_ptr_f4_op9_t5 has bank info: Stack
+; LOAD: Using bank register Sb for load
+; Recompute alloca t1 at FP+0
+    ADD T2, FP, R0
+; Spill i64_c1_4_f4_op6 to slot 5
+    ADD SC, FP, R0
+    ADDI SC, SC, 17
+    STORE T1, SB, SC
+    LOAD T1, SB, T2
+; Spill i64_c2_4_f4_op7 to slot 6
+    ADD SC, FP, R0
+    ADDI SC, SC, 18
+    STORE T0, SB, SC
+    ADDI SC, T2, 1
+    LOAD T0, SB, SC
+; Spill i64_c3_4_f4_op8 to slot 7
+    ADD SC, FP, R0
+    ADDI SC, SC, 19
+    STORE S3, SB, SC
+    ADDI SC, T2, 2
+    LOAD S3, SB, SC
+; Spill t2 to slot 8
+    ADD SC, FP, R0
+    ADDI SC, SC, 20
+    STORE T6, SB, SC
+    ADDI SC, T2, 3
+    LOAD T6, SB, SC
+; Spill t2__w1 to slot 9
+    ADD SC, FP, R0
+    ADDI SC, SC, 21
+    STORE T5, SB, SC
+    LI T5, 0
+; Spill t2__w2 to slot 10
+    ADD SC, FP, R0
+    ADDI SC, SC, 22
+    STORE T4, SB, SC
+    LI T4, 0
+; Spill t2__w3 to slot 11
+    ADD SC, FP, R0
+    ADDI SC, SC, 23
+    STORE T3, SB, SC
+    LI T3, 0
+; Spill t3 to slot 12
+    ADD SC, FP, R0
+    ADDI SC, SC, 24
+    STORE S2, SB, SC
+    LI S2, 0
+; Spill t3__w1 to slot 13
+    ADD SC, FP, R0
+    ADDI SC, SC, 25
+    STORE S1, SB, SC
+; Spill t3__w2 to slot 14
+    ADD SC, FP, R0
+    ADDI SC, SC, 26
+    STORE S0, SB, SC
+; Spill t3__w3 to slot 15
+    ADD SC, FP, R0
+    ADDI SC, SC, 27
+    STORE T7, SB, SC
+    LI SC, 0
+    SLTU X2, T5, T1
+    SUB X3, T5, T1
+    SUB S1, X3, SC
+    SLTU X3, X3, SC
+    OR SC, X2, X3
+    SLTU X2, T4, T0
+    SUB X3, T4, T0
+    SUB S0, X3, SC
+    SLTU X3, X3, SC
+    OR SC, X2, X3
+    SLTU X2, T3, S3
+    SUB X3, T3, S3
+    SUB T7, X3, SC
+    SLTU X3, X3, SC
+    OR SC, X2, X3
+    SLTU X2, S2, T6
+    SUB X3, S2, T6
+    SUB T2, X3, SC
+    SLTU X3, X3, SC
+    OR SC, X2, X3
+    MOVE RV0, S1
+    MOVE RV1, S0
+    MOVE X0, T7
+    MOVE X1, T2
+; Jump to epilogue
+    BEQ R0, R0, L_llabs_99999
+L_llabs_11:
+; Load instruction: t7 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; LOAD: Pointer load_src_ptr_f4_op15_t7 has bank info: Stack
+; LOAD: Using bank register Sb for load
+; Spill i64_c0_4_f4_op11 to slot 16
+    ADD SC, FP, R0
+    ADDI SC, SC, 28
+    STORE T5, SB, SC
+; Recompute alloca t1 at FP+0
+    ADD T5, FP, R0
+; Spill i64_c1_4_f4_op12 to slot 17
+    ADD SC, FP, R0
+    ADDI SC, SC, 29
+    STORE T4, SB, SC
+    LOAD T4, SB, T5
+; Spill i64_c2_4_f4_op13 to slot 18
+    ADD SC, FP, R0
+    ADDI SC, SC, 30
+    STORE T3, SB, SC
+    ADDI SC, T5, 1
+    LOAD T3, SB, SC
+; Spill i64_c3_4_f4_op14 to slot 19
+    ADD SC, FP, R0
+    ADDI SC, SC, 31
+    STORE S2, SB, SC
+    ADDI SC, T5, 2
+    LOAD S2, SB, SC
+; Spill t5 to slot 20
+    ADD SC, FP, R0
+    ADDI SC, SC, 32
+    STORE T1, SB, SC
+    ADDI SC, T5, 3
+    LOAD T1, SB, SC
+    MOVE RV0, T4
+    MOVE RV1, T3
+    MOVE X0, S2
+    MOVE X1, T1
+; Jump to epilogue
+    BEQ R0, R0, L_llabs_99999
+L_llabs_99999:
+; Return fat pointer
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    ADD PCB, RAB, R0
+    JALR R0, R0, RA
 exit:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -239,12 +488,12 @@ exit:
     ADDI SP, SP, 20
 ; Load param 0 from A0
     ADD S3, A0, R0
-L_exit_8:
+L_exit_12:
     ADD S2, FP, R0
     STORE S3, SB, S2
 ; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f4_op2_t2 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f6_op2_t2 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, S2
     HALT
@@ -295,10 +544,10 @@ abort:
     ADDI SP, SP, 8
 ; Reserve 20 spill slots above locals
     ADDI SP, SP, 20
-L_abort_9:
+L_abort_13:
     LI S3, 97
 ; Spill live registers before call
-; Spill const_f6_op0_97 to slot 0
+; Spill const_f8_op0_97 to slot 0
     ADD SC, FP, R0
     ADDI SC, SC, 8
     STORE S3, SB, SC
@@ -311,7 +560,7 @@ L_abort_9:
     CALL putchar
     LI S2, 98
 ; Spill live registers before call
-; Spill const_f6_op1_98 to slot 1
+; Spill const_f8_op1_98 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 9
     STORE S2, SB, SC
@@ -324,7 +573,7 @@ L_abort_9:
     CALL putchar
     LI S1, 111
 ; Spill live registers before call
-; Spill const_f6_op2_111 to slot 2
+; Spill const_f8_op2_111 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 10
     STORE S1, SB, SC
@@ -337,7 +586,7 @@ L_abort_9:
     CALL putchar
     LI S0, 114
 ; Spill live registers before call
-; Spill const_f6_op3_114 to slot 3
+; Spill const_f8_op3_114 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 11
     STORE S0, SB, SC
@@ -350,7 +599,7 @@ L_abort_9:
     CALL putchar
     LI T7, 116
 ; Spill live registers before call
-; Spill const_f6_op4_116 to slot 4
+; Spill const_f8_op4_116 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 12
     STORE T7, SB, SC
@@ -363,7 +612,7 @@ L_abort_9:
     CALL putchar
     LI T6, 10
 ; Spill live registers before call
-; Spill const_f6_op5_10 to slot 5
+; Spill const_f8_op5_10 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 13
     STORE T6, SB, SC

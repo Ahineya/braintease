@@ -38,10 +38,15 @@ pub fn lower_instruction(
     match instruction {
         Instruction::Binary { result, op, lhs, rhs, result_type } => {
             debug!("V2: Binary: t{result} = {lhs:?} {op:?} {rhs:?}");
+            let use_i64 = result_type.is_i64()
+                || crate::instr::i64::value_is_i64(mgr, naming, lhs)
+                || crate::instr::i64::value_is_i64(mgr, naming, rhs);
             let use_i32 = result_type.is_wide()
                 || crate::instr::wide::value_is_i32(mgr, naming, lhs)
                 || crate::instr::wide::value_is_i32(mgr, naming, rhs);
-            let binary_insts = if use_i32 {
+            let binary_insts = if use_i64 {
+                crate::instr::i64::lower_i64_binary(mgr, naming, *op, lhs, rhs, *result)
+            } else if use_i32 {
                 crate::instr::wide::lower_i32_binary(mgr, naming, *op, lhs, rhs, *result)
             } else {
                 lower_binary_op(mgr, naming, *op, lhs, rhs, *result)
@@ -51,10 +56,18 @@ pub fn lower_instruction(
         
         Instruction::Unary { result, op, operand, result_type } => {
             debug!("V2: Unary: t{result} = {op:?} {operand:?}");
-            let unary_insts = if result_type.is_wide()
+            let unary_insts = if result_type.is_i64()
+                && matches!(op, rcc_frontend::ir::IrUnaryOp::SExt | rcc_frontend::ir::IrUnaryOp::ZExt)
+            {
+                crate::instr::i64::lower_i64_extend(mgr, naming, *op, operand, *result)
+            } else if result_type.is_wide()
                 && matches!(op, rcc_frontend::ir::IrUnaryOp::SExt | rcc_frontend::ir::IrUnaryOp::ZExt)
             {
                 crate::instr::wide::lower_i32_extend(mgr, naming, *op, operand, *result)
+            } else if result_type.is_wide()
+                && matches!(op, rcc_frontend::ir::IrUnaryOp::Trunc)
+            {
+                crate::instr::i64::lower_trunc_i64_to_i32(mgr, naming, operand, *result)
             } else {
                 lower_unary_op(mgr, naming, *op, operand, result_type, *result)
             };
@@ -165,7 +178,16 @@ pub fn lower_instruction(
                 match arg {
                     Value::Temp(t) => {
                         let name = naming.temp_name(*t);
-                        if let Some(hi_name) = mgr.get_i32_high(&name) {
+                        if let Some(words) = mgr.get_i64_words(&name) {
+                            let w0 = mgr.get_register(name);
+                            insts.extend(mgr.take_instructions());
+                            let mut regs = [w0, Reg::R0, Reg::R0, Reg::R0];
+                            for i in 0..3 {
+                                regs[i + 1] = mgr.get_register(words[i].clone());
+                                insts.extend(mgr.take_instructions());
+                            }
+                            call_args.push(CallArg::I64 { words: regs });
+                        } else if let Some(hi_name) = mgr.get_i32_high(&name) {
                             let lo_reg = mgr.get_register(name);
                             insts.extend(mgr.take_instructions());
                             let hi_reg = mgr.get_register(hi_name);
@@ -275,6 +297,7 @@ pub fn lower_instruction(
                 call_args,
                 result_type.is_pointer(),
                 result_type.is_wide(),
+                result_type.is_i64(),
                 result_name,
                 *stack_args_from,
             );
@@ -422,7 +445,11 @@ pub fn lower_instruction(
         
         Instruction::Cast { result, value, target_type } => {
             debug!("V2: Cast: t{result} = cast {value:?} to {target_type:?}");
-            if target_type.is_wide() {
+            if target_type.is_i64() {
+                insts.extend(crate::instr::i64::lower_i64_extend(
+                    mgr, naming, rcc_frontend::ir::IrUnaryOp::SExt, value, *result,
+                ));
+            } else if target_type.is_wide() {
                 insts.extend(crate::instr::wide::lower_i32_extend(
                     mgr, naming, rcc_frontend::ir::IrUnaryOp::SExt, value, *result,
                 ));
@@ -545,7 +572,28 @@ fn lower_va_arg(
 
     let words = result_type.size_in_words().unwrap_or(1) as i16;
 
-    if result_type.is_pointer() || result_type.is_wide() {
+    if result_type.is_i64() {
+        let ap_name = naming.temp_name(ap_temp);
+        let ap_reg = mgr.get_register(ap_name);
+        insts.extend(mgr.take_instructions());
+        let dest_name = naming.temp_name(dest);
+        mgr.pin_register(ap_reg);
+        let dest_reg = mgr.get_register(dest_name.clone());
+        insts.extend(mgr.take_instructions());
+        insts.push(AsmInst::Load(dest_reg, Reg::Sb, ap_reg));
+        let mut extra = [String::new(), String::new(), String::new()];
+        for i in 0..3 {
+            extra[i] = naming.i64_word_name(&dest_name, (i + 1) as u8);
+            let r = mgr.get_register(extra[i].clone());
+            insts.extend(mgr.take_instructions());
+            insts.push(AsmInst::AddI(Reg::Sc, ap_reg, -1 - i as i16));
+            insts.push(AsmInst::Load(r, Reg::Sb, Reg::Sc));
+            mgr.bind_value_to_register(extra[i].clone(), r);
+        }
+        mgr.set_i64_words(dest_name.clone(), extra);
+        mgr.bind_value_to_register(dest_name, dest_reg);
+        mgr.unpin_register(ap_reg);
+    } else if result_type.is_pointer() || result_type.is_wide() {
         // Stack extras: low/addr word at ap, high/bank word at ap-1 (see load_param).
         let ap_name = naming.temp_name(ap_temp);
         let ap_reg = mgr.get_register(ap_name);

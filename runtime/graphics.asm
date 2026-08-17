@@ -759,6 +759,9 @@ L_get_pixel_15:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t30
+; Copy Rv0 to allocatable T1
+    ADD T1, RV0, R0
+    MOVE RV0, T1
 ; Jump to epilogue
     BEQ R0, R0, L_get_pixel_99999
 L_get_pixel_99999:
@@ -4451,17 +4454,17 @@ L_draw_string_121:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Mixed })
 ; LOAD: Pointer t10 has bank info: Dynamic("load_f28_op17_t10_bank_val")
     LI T6, -1
-    BEQ T4, T6, L_bc_66822e11_use_global
+    BEQ T4, T6, L_bc_d5bd71ea_use_global
     LI T3, -2
-    BEQ T4, T3, L_bc_66822e11_use_stack
+    BEQ T4, T3, L_bc_d5bd71ea_use_stack
     ADD T5, T4, R0
-    BEQ R0, R0, L_bc_66822e11_done
-L_bc_66822e11_use_global:
+    BEQ R0, R0, L_bc_d5bd71ea_done
+L_bc_d5bd71ea_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_66822e11_done
-L_bc_66822e11_use_stack:
+    BEQ R0, R0, L_bc_d5bd71ea_done
+L_bc_d5bd71ea_use_stack:
     ADD T5, SB, R0
-L_bc_66822e11_done:
+L_bc_d5bd71ea_done:
 ; LOAD: Using bank register T5 for load
     LOAD T6, T5, T2
     BEQ T6, R0, L_draw_string_123
@@ -4529,7 +4532,7 @@ L_draw_string_122:
     ADDI SC, SC, 20
     STORE T1, SB, SC
     LI T1, -1
-    BEQ T7, T1, L_bc_81e31907_use_global
+    BEQ T7, T1, L_bc_6a3ef5ed_use_global
 ; Spill t10 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 21
@@ -4539,15 +4542,15 @@ L_draw_string_122:
     ADDI SC, SC, 22
     STORE T4, SB, SC
     LI T2, -2
-    BEQ T7, T2, L_bc_81e31907_use_stack
+    BEQ T7, T2, L_bc_6a3ef5ed_use_stack
     ADD S0, T7, R0
-    BEQ R0, R0, L_bc_81e31907_done
-L_bc_81e31907_use_global:
+    BEQ R0, R0, L_bc_6a3ef5ed_done
+L_bc_6a3ef5ed_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_81e31907_done
-L_bc_81e31907_use_stack:
+    BEQ R0, R0, L_bc_6a3ef5ed_done
+L_bc_6a3ef5ed_use_stack:
     ADD S0, SB, R0
-L_bc_81e31907_done:
+L_bc_6a3ef5ed_done:
 ; LOAD: Using bank register S0 for load
     LOAD T1, S0, S1
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -4842,17 +4845,17 @@ L_fast_sin_126:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("gep_new_bank_f34_op9_t3")
     LI T0, -1
-    BEQ T2, T0, L_bc_645dd3bf_use_global
+    BEQ T2, T0, L_bc_4494817f_use_global
     LI T6, -2
-    BEQ T2, T6, L_bc_645dd3bf_use_stack
+    BEQ T2, T6, L_bc_4494817f_use_stack
     ADD T1, T2, R0
-    BEQ R0, R0, L_bc_645dd3bf_done
-L_bc_645dd3bf_use_global:
+    BEQ R0, R0, L_bc_4494817f_done
+L_bc_4494817f_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_645dd3bf_done
-L_bc_645dd3bf_use_stack:
+    BEQ R0, R0, L_bc_4494817f_done
+L_bc_4494817f_use_stack:
     ADD T1, SB, R0
-L_bc_645dd3bf_done:
+L_bc_4494817f_done:
 ; LOAD: Using bank register T1 for load
     LOAD T5, T1, T7
     MOVE RV0, T5

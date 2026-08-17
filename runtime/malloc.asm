@@ -160,21 +160,21 @@ L_make_fat_ptr_4:
     LOAD T6, SB, S2
 ; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ T6, S1, L_bc_93c07333_use_global
+    BEQ T6, S1, L_bc_8aa7e872_use_global
 ; Spill t7 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T4, SB, SC
     LI T4, -2
-    BEQ T6, T4, L_bc_93c07333_use_stack
+    BEQ T6, T4, L_bc_8aa7e872_use_stack
     ADD S2, T6, R0
-    BEQ R0, R0, L_bc_93c07333_done
-L_bc_93c07333_use_global:
+    BEQ R0, R0, L_bc_8aa7e872_done
+L_bc_8aa7e872_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_93c07333_done
-L_bc_93c07333_use_stack:
+    BEQ R0, R0, L_bc_8aa7e872_done
+L_bc_8aa7e872_use_stack:
     ADD S2, SB, R0
-L_bc_93c07333_done:
+L_bc_8aa7e872_done:
     MOVE RV0, S3
     MOVE RV1, S2
 ; Jump to epilogue
@@ -765,6 +765,9 @@ L_malloc_26:
 ; Call function make_fat_ptr
     CALL make_fat_ptr
 ; Fat pointer return value for t59
+; Copy Rv0 to allocatable T6
+    ADD T6, RV0, R0
+    MOVE RV0, T6
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
 L_malloc_99999:
@@ -1063,9 +1066,11 @@ L_calloc_37:
 ; Call function malloc
     CALL malloc
 ; Fat pointer return value for t23
+; Copy Rv0 to allocatable T0
+    ADD T0, RV0, R0
 ; Store fat ptr to stack alloca t5 at FP+3
     ADDI SC, FP, 3
-    STORE RV0, SB, SC
+    STORE T0, SB, SC
     ADDI SC, SC, 1
     STORE RV1, SB, SC
 ; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
@@ -1073,17 +1078,17 @@ L_calloc_37:
 ; LOAD: Pointer load_src_ptr_f8_op38_t24 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t5 at FP+3
-    ADD T0, FP, R0
-    ADDI T0, T0, 3
-    LOAD T3, SB, T0
-    ADDI T7, T0, 1
-    LOAD S1, SB, T7
-; Bank value in S1 - tags: -1 = Global, -2 = Stack, positive = dynamic
-    LI S3, 0
-    XOR S2, T3, S3
-    LI T2, 0
-    SLTU T3, T2, S2
-    BEQ T3, R0, L_calloc_40
+    ADD T3, FP, R0
+    ADDI T3, T3, 3
+    LOAD T7, SB, T3
+    ADDI S1, T3, 1
+    LOAD S3, SB, S1
+; Bank value in S3 - tags: -1 = Global, -2 = Stack, positive = dynamic
+    LI S2, 0
+    XOR T2, T7, S2
+    LI T6, 0
+    SLTU T7, T6, T2
+    BEQ T7, R0, L_calloc_40
 ; Branch to L_calloc_40 if condition is false
     BEQ R0, R0, L_calloc_38
 ; Unconditional branch to L_calloc_38 (condition was true)
@@ -1094,63 +1099,65 @@ L_calloc_38:
 ; LOAD: Pointer load_src_ptr_f8_op44_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t5 at FP+3
-    ADD T6, FP, R0
-    ADDI T6, T6, 3
-    LOAD T5, SB, T6
-    ADDI S0, T6, 1
-    LOAD T1, SB, S0
-; Bank value in T1 - tags: -1 = Global, -2 = Stack, positive = dynamic
+    ADD T5, FP, R0
+    ADDI T5, T5, 3
+    LOAD S0, SB, T5
+    ADDI T1, T5, 1
+    LOAD T4, SB, T1
+; Bank value in T4 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f8_op48_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t4 at FP+2
-    ADD T4, FP, R0
-    ADDI T4, T4, 2
-    LOAD T7, SB, T4
-    LI S2, 0
+    ADD S1, FP, R0
+    ADDI S1, S1, 2
+    LOAD T2, SB, S1
+    LI T6, 0
 ; Spill live registers before call
 ; Spill t23 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 21
-    STORE RV0, SB, SC
+    STORE T0, SB, SC
 ; Spill load_f8_op41_t24_bank_val to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 22
-    STORE S1, SB, SC
+    STORE S3, SB, SC
 ; Spill t26 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 23
-    STORE T5, SB, SC
+    STORE S0, SB, SC
 ; Spill load_f8_op47_t26_bank_val to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 24
-    STORE T1, SB, SC
+    STORE T4, SB, SC
 ; Spill load_f8_op47_t26_bank_val to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    STORE T1, SB, SC
+    STORE T4, SB, SC
 ; Spill const_f8_op50_0 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 26
-    STORE S2, SB, SC
+    STORE T6, SB, SC
 ; Spill t27 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 27
-    STORE T7, SB, SC
+    STORE T2, SB, SC
 ; Set SP = FP+34 so callee frame is above spills
     ADDI SP, FP, 34
 ; Setting up 3 register arguments
 ; Arg 0 (fat ptr) to A0,A1
-    ADD A0, T5, R0
-    ADD A1, T1, R0
+    ADD A0, S0, R0
+    ADD A1, T4, R0
 ; Arg 1 (scalar) to A2
-    ADD A2, S2, R0
+    ADD A2, T6, R0
 ; Arg 2 (scalar) to A3
-    ADD A3, T7, R0
+    ADD A3, T2, R0
 ; Call function memset
     CALL memset
 ; Fat pointer return value for t28
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
     BEQ R0, R0, L_calloc_40
 ; Unconditional branch to L_calloc_40
 L_calloc_40:
@@ -1159,26 +1166,26 @@ L_calloc_40:
 ; LOAD: Pointer load_src_ptr_f8_op51_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t5 at FP+3
-    ADD T2, FP, R0
-    ADDI T2, T2, 3
-    LOAD S3, SB, T2
-    ADDI T3, T2, 1
-    LOAD T0, SB, T3
+    ADD T7, FP, R0
+    ADDI T7, T7, 3
+    LOAD T3, SB, T7
+    ADDI T1, T7, 1
+    LOAD T0, SB, T1
 ; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
-    LI S1, -1
-    BEQ T0, S1, L_bc_7db1a4dd_use_global
-    LI T6, -2
-    BEQ T0, T6, L_bc_7db1a4dd_use_stack
-    ADD S0, T0, R0
-    BEQ R0, R0, L_bc_7db1a4dd_done
-L_bc_7db1a4dd_use_global:
-    ADD S0, GP, R0
-    BEQ R0, R0, L_bc_7db1a4dd_done
-L_bc_7db1a4dd_use_stack:
-    ADD S0, SB, R0
-L_bc_7db1a4dd_done:
-    MOVE RV0, S3
-    MOVE RV1, S0
+    LI T5, -1
+    BEQ T0, T5, L_bc_c2f8fa2c_use_global
+    LI S1, -2
+    BEQ T0, S1, L_bc_c2f8fa2c_use_stack
+    ADD S3, T0, R0
+    BEQ R0, R0, L_bc_c2f8fa2c_done
+L_bc_c2f8fa2c_use_global:
+    ADD S3, GP, R0
+    BEQ R0, R0, L_bc_c2f8fa2c_done
+L_bc_c2f8fa2c_use_stack:
+    ADD S3, SB, R0
+L_bc_c2f8fa2c_done:
+    MOVE RV0, T3
+    MOVE RV1, S3
 ; Jump to epilogue
     BEQ R0, R0, L_calloc_99999
 L_calloc_99999:
@@ -1302,6 +1309,9 @@ L_realloc_42:
 ; Call function malloc
     CALL malloc
 ; Fat pointer return value for t7
+; Copy Rv0 to allocatable T2
+    ADD T2, RV0, R0
+    MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
 L_realloc_44:
@@ -1310,14 +1320,14 @@ L_realloc_44:
 ; LOAD: Pointer load_src_ptr_f10_op15_t8 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t3 at FP+2
-    ADD T2, FP, R0
-    ADDI T2, T2, 2
-    LOAD T1, SB, T2
-    LI T3, 0
-    XOR T6, T1, T3
-    LI T7, 1
-    SLTU T1, T6, T7
-    BEQ T1, R0, L_realloc_47
+    ADD T1, FP, R0
+    ADDI T1, T1, 2
+    LOAD T3, SB, T1
+    LI T6, 0
+    XOR T7, T3, T6
+    LI S0, 1
+    SLTU T3, T7, S0
+    BEQ T3, R0, L_realloc_47
 ; Branch to L_realloc_47 if condition is false
     BEQ R0, R0, L_realloc_45
 ; Unconditional branch to L_realloc_45 (condition was true)
@@ -1328,45 +1338,45 @@ L_realloc_45:
 ; LOAD: Pointer load_src_ptr_f10_op19_t10 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+0
-    ADD S0, FP, R0
-    LOAD S3, SB, S0
-    ADDI S2, S0, 1
-    LOAD S1, SB, S2
-; Bank value in S1 - tags: -1 = Global, -2 = Stack, positive = dynamic
+    ADD S3, FP, R0
+    LOAD S2, SB, S3
+    ADDI S1, S3, 1
+    LOAD T4, SB, S1
+; Bank value in T4 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Spill live registers before call
 ; Spill t7 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 17
-    STORE RV0, SB, SC
+    STORE T2, SB, SC
 ; Spill t10 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 18
-    STORE S3, SB, SC
+    STORE S2, SB, SC
 ; Spill load_f10_op22_t10_bank_val to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 19
-    STORE S1, SB, SC
+    STORE T4, SB, SC
 ; Spill load_f10_op22_t10_bank_val to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 20
-    STORE S1, SB, SC
+    STORE T4, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
 ; Arg 0 (fat ptr) to A0,A1
-    ADD A0, S3, R0
-    ADD A1, S1, R0
+    ADD A0, S2, R0
+    ADD A1, T4, R0
 ; Call function free
     CALL free
     LI RV0, 0
-    LI T4, 0
-    MOVE RV1, T4
+    LI T0, 0
+    MOVE RV1, T0
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
 L_realloc_47:
     LI RV0, 0
-    LI T0, 0
-    MOVE RV1, T0
+    LI T5, 0
+    MOVE RV1, T5
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
 L_realloc_99999:

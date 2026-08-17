@@ -25,7 +25,7 @@ pub enum IrType {
     I8,   // 8-bit integer (char)
     I16,  // 16-bit integer (short, int on Ripple)
     I32,  // 32-bit integer (long on Ripple)
-    I64,  // 64-bit integer (not supported on Ripple in MVP)
+    I64,  // 64-bit integer (long long on Ripple; also double layout)
     
     /// Pointer type
     FatPtr(Box<IrType>),
@@ -92,9 +92,25 @@ impl IrType {
         matches!(self, IrType::I32)
     }
 
+    /// 64-bit integer: four 16-bit words (Ripple `long long`)
+    pub fn is_i64(&self) -> bool {
+        matches!(self, IrType::I64)
+    }
+
     /// Values that occupy two ABI slots / two memory words (fat pointers and I32)
     pub fn takes_two_slots(&self) -> bool {
         self.is_pointer() || self.is_wide()
+    }
+
+    /// Number of 16-bit ABI register/stack slots this type occupies.
+    pub fn abi_slots(&self) -> usize {
+        if self.is_i64() {
+            4
+        } else if self.takes_two_slots() {
+            2
+        } else {
+            1
+        }
     }
     
     /// Get the element type for pointers and arrays

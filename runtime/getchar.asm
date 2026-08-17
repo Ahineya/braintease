@@ -42,9 +42,11 @@ L_getchar_1:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t1
+; Copy Rv0 to allocatable S1
+    ADD S1, RV0, R0
 ; Recompute alloca t0 at FP+0
-    ADD S1, FP, R0
-    STORE RV0, SB, S1
+    ADD S0, FP, R0
+    STORE S1, SB, S0
     BEQ R0, R0, L_getchar_2
 ; Unconditional branch to L_getchar_2
 ; Invalidated 1 alloca bindings
@@ -54,40 +56,43 @@ L_getchar_2:
 ; LOAD: Pointer load_src_ptr_f0_op2_t2 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t0 at FP+0
-    ADD S0, FP, R0
-    LOAD T7, SB, S0
-    LI T6, 1
-    LI T5, 0
-    SLL T6, T6, T5
-    AND T7, T7, T6
+    ADD T7, FP, R0
+    LOAD T6, SB, T7
+    LI T5, 1
     LI T4, 0
-    XOR T3, T7, T4
-    LI T2, 1
-    SLTU T7, T3, T2
-    BEQ T7, R0, L_getchar_3
+    SLL T5, T5, T4
+    AND T6, T6, T5
+    LI T3, 0
+    XOR T2, T6, T3
+    LI T1, 1
+    SLTU T6, T2, T1
+    BEQ T6, R0, L_getchar_3
 ; Branch to L_getchar_3 if condition is false
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1 (condition was true)
 ; Invalidated 1 alloca bindings
 L_getchar_3:
-    LI T1, 2
+    LI T0, 2
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 10
-    STORE RV0, SB, SC
+    STORE S1, SB, SC
 ; Spill const_f0_op6_2 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 11
-    STORE T1, SB, SC
+    STORE T0, SB, SC
 ; Set SP = FP+29 so callee frame is above spills
     ADDI SP, FP, 29
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T1, R0
+    ADD A0, T0, R0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t6
+; Copy Rv0 to allocatable S3
+    ADD S3, RV0, R0
+    MOVE RV0, S3
 ; Jump to epilogue
     BEQ R0, R0, L_getchar_99999
 L_getchar_99999:

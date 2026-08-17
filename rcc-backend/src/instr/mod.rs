@@ -12,6 +12,7 @@ pub mod unary;
 pub mod branch;
 pub mod inline_asm;
 pub mod wide;
+pub mod i64;
 
 pub use helpers::get_value_register;
 pub use load::lower_load;

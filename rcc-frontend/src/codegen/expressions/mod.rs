@@ -36,7 +36,8 @@ fn is_integer_type(ty: &Type) -> bool {
     matches!(ty, 
         Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
         Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
-        Type::Long | Type::UnsignedLong | Type::Enum { .. }
+        Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
+        Type::Enum { .. }
     )
 }
 

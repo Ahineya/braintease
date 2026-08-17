@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "I64 while-loop division of 2^32",
+  "expected": "Y\n"
+}

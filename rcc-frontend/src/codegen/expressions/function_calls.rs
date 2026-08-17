@@ -16,7 +16,7 @@ fn materialize_wide_int(
     val: Value,
     ty: &Type,
 ) -> Result<Value, CompilerError> {
-    if !matches!(ty, Type::Long | Type::UnsignedLong) {
+    if !matches!(ty, Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong) {
         return Ok(val);
     }
     if matches!(val, Value::Temp(_)) {
@@ -25,7 +25,7 @@ fn materialize_wide_int(
     let ir_type = convert_type_default(ty)?;
     let temp = gen.builder.build_binary(IrBinaryOp::Add, val, Value::Constant(0), ir_type)
         .map_err(|e| CodegenError::InternalError {
-            message: format!("Failed to materialize 32-bit argument: {e}"),
+            message: format!("Failed to materialize wide integer argument: {e}"),
             location: rcc_common::SourceLocation::new_simple(0, 0),
         })?;
     Ok(Value::Temp(temp))
@@ -86,8 +86,8 @@ pub fn generate_function_call(
             let converted = convert_integer(gen, val, arg_type, &param_types[i])?;
             arg_vals.push(materialize_wide_int(gen, converted, &param_types[i])?);
         } else if arg_type.is_integer() {
-            // Variadic extras keep their type; long must occupy two ABI slots
-            // even when the constant fits in 16 bits (0L, 255UL, …).
+            // Variadic extras keep their type; long / long long must occupy
+            // their full ABI slots even when the constant fits in 16 bits.
             arg_vals.push(materialize_wide_int(gen, val, arg_type)?);
         } else {
             arg_vals.push(val);

@@ -18,6 +18,7 @@ void *realloc(void *ptr, size_t size);
 
 int abs(int j);
 long labs(long j);
+long long llabs(long long j);
 
 void exit(int status);
 void abort(void);

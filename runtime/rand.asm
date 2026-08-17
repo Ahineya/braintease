@@ -181,17 +181,19 @@ L_rand_4:
 ; Call function rng_get
     CALL rng_get
 ; Scalar return value for t3
+; Copy Rv0 to allocatable T4
+    ADD T4, RV0, R0
 ; Recompute alloca t2 at FP+0
-    ADD T4, FP, R0
-    STORE RV0, SB, T4
+    ADD T3, FP, R0
+    STORE T4, SB, T3
 ; Load instruction: t4 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f2_op7_t4 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T4
-    LI T2, 32767
-    AND T3, T3, T2
-    MOVE RV0, T3
+    LOAD T2, SB, T3
+    LI T1, 32767
+    AND T2, T2, T1
+    MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L_rand_99999
 L_rand_99999:

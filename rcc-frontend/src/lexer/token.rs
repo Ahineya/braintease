@@ -6,7 +6,7 @@ use rcc_common::{SourceLocation, SourceSpan};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// C99 integer-literal suffix (6.4.4.1). `ll`/`ull` are rejected — no `long long`.
+/// C99 integer-literal suffix (6.4.4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum IntegerSuffix {
     #[default]
@@ -14,6 +14,8 @@ pub enum IntegerSuffix {
     Unsigned,
     Long,
     UnsignedLong,
+    LongLong,
+    UnsignedLongLong,
 }
 
 /// C99 Token types
@@ -113,6 +115,8 @@ impl fmt::Display for TokenType {
                 IntegerSuffix::Unsigned => write!(f, "{value}U"),
                 IntegerSuffix::Long => write!(f, "{value}L"),
                 IntegerSuffix::UnsignedLong => write!(f, "{value}UL"),
+                IntegerSuffix::LongLong => write!(f, "{value}LL"),
+                IntegerSuffix::UnsignedLongLong => write!(f, "{value}ULL"),
             },
             TokenType::CharLiteral(c) => write!(f, "'{}'", *c as char),
             TokenType::StringLiteral(s) => write!(f, "\"{s}\""),

@@ -37,6 +37,10 @@ pub enum IntType {
     I32,
     /// unsigned long (32 bits)
     U32,
+    /// long long (64 bits) - stored in four 16-bit cells
+    I64,
+    /// unsigned long long (64 bits)
+    U64,
 }
 
 impl IntType {
@@ -45,12 +49,13 @@ impl IntType {
         match self {
             IntType::I8 | IntType::U8 | IntType::I16 | IntType::U16 | IntType::Int | IntType::UInt => 1,
             IntType::I32 | IntType::U32 => 2,
+            IntType::I64 | IntType::U64 => 4,
         }
     }
     
     /// Check if this type is signed
     pub fn is_signed(&self) -> bool {
-        matches!(self, IntType::I8 | IntType::I16 | IntType::Int | IntType::I32)
+        matches!(self, IntType::I8 | IntType::I16 | IntType::Int | IntType::I32 | IntType::I64)
     }
     
     /// Check if this type is unsigned
@@ -75,6 +80,8 @@ impl fmt::Display for IntType {
             IntType::UInt => write!(f, "unsigned int"),
             IntType::I32 => write!(f, "long"),
             IntType::U32 => write!(f, "unsigned long"),
+            IntType::I64 => write!(f, "long long"),
+            IntType::U64 => write!(f, "unsigned long long"),
         }
     }
 }

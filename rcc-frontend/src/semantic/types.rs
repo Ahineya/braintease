@@ -163,7 +163,8 @@ impl TypeAnalyzer {
             // Basic types that don't need resolution
             Type::Void | Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
             Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
-            Type::Long | Type::UnsignedLong | Type::Float | Type::Double | Type::Error => ty.clone(),
+            Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
+            Type::Float | Type::Double | Type::Error => ty.clone(),
             
             // Function types don't need resolution (parameters are already resolved)
             Type::Function { .. } => ty.clone(),
@@ -207,6 +208,8 @@ impl TypeAnalyzer {
         let left = self.resolve_type(left);
         let right = self.resolve_type(right);
         match (&left, &right) {
+            (Type::UnsignedLongLong, _) | (_, Type::UnsignedLongLong) => Type::UnsignedLongLong,
+            (Type::LongLong, _) | (_, Type::LongLong) => Type::LongLong,
             (Type::UnsignedLong, _) | (_, Type::UnsignedLong) => Type::UnsignedLong,
             (Type::Long, _) | (_, Type::Long) => Type::Long,
             (Type::UnsignedInt, _) | (_, Type::UnsignedInt) => Type::UnsignedInt,
@@ -277,7 +280,8 @@ impl TypeAnalyzer {
         matches!(resolved, 
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
             Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
-            Type::Long | Type::UnsignedLong | Type::Enum { .. }
+            Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
+            Type::Enum { .. }
         )
     }
     

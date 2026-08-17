@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYYYY\n",
+  "description": "long long div rem and shifts",
+  "use_runtime": true
+}

@@ -146,6 +146,22 @@ pub fn lower_load(
         debug!("  I32 loaded: lo in {dest_reg:?}, hi in {hi_reg:?}");
     }
 
+    if result_type.is_i64() {
+        mgr.pin_register(dest_reg);
+        let mut extra = [String::new(), String::new(), String::new()];
+        for i in 0..3 {
+            extra[i] = naming.i64_word_name(&result_name, (i + 1) as u8);
+            let r = mgr.get_register(extra[i].clone());
+            insts.extend(mgr.take_instructions());
+            insts.push(AsmInst::AddI(rcc_codegen::Reg::Sc, addr_reg, (i + 1) as i16));
+            insts.push(AsmInst::Load(r, bank_reg, rcc_codegen::Reg::Sc));
+            mgr.bind_value_to_register(extra[i].clone(), r);
+        }
+        mgr.set_i64_words(result_name.clone(), extra);
+        mgr.unpin_register(dest_reg);
+        debug!("  I64 loaded into {dest_reg:?} + extra words");
+    }
+
     mgr.unpin_register(addr_reg);
     mgr.unpin_register(bank_reg);
     

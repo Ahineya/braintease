@@ -35,6 +35,16 @@ int main() {
     if (UINT32_MAX == 4294967295UL) putchar('Y'); else putchar('N');
     if (INT32_C(1) + 65535 == 65536) putchar('Y'); else putchar('N');
 
+    int64_t g;
+    uint64_t h;
+    g = 4294967296LL;
+    if (g == 4294967296LL) putchar('Y'); else putchar('N');
+    h = 1ULL << 40;
+    if (h == 1099511627776ULL) putchar('Y'); else putchar('N');
+    if (sizeof(g) == 8) putchar('Y'); else putchar('N');
+    if (INT64_MAX == 9223372036854775807LL) putchar('Y'); else putchar('N');
+    if (INT64_C(1) << 32 == 4294967296LL) putchar('Y'); else putchar('N');
+
     if (SIZE_MAX == 65535U) putchar('Y'); else putchar('N');
 
     putchar('\n');

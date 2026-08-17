@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYYYYYYYYYY\n",
+  "use_runtime": true,
+  "description": "64-bit long long arithmetic, sizeof, ABI"
+}

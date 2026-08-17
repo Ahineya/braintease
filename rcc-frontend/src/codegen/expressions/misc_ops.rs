@@ -18,6 +18,7 @@ fn size_in_bytes(ty: &Type) -> u64 {
         Type::Short | Type::UnsignedShort => 2,
         Type::Int | Type::UnsignedInt => 2,  // 16-bit int
         Type::Long | Type::UnsignedLong => 4, // 32-bit long
+        Type::LongLong | Type::UnsignedLongLong => 8,
         Type::Float => 4,
         Type::Double => 8,
         Type::Pointer { .. } => 4, // Fat pointer: 2 words = 4 bytes

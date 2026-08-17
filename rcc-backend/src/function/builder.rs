@@ -70,6 +70,7 @@ impl FunctionBuilder {
         args: Vec<CallArg>,
         returns_pointer: bool,
         returns_wide: bool,
+        returns_i64: bool,
         result_name: Option<String>,
         stack_args_from: Option<usize>,
     ) -> Vec<AsmInst> {
@@ -81,6 +82,7 @@ impl FunctionBuilder {
             args,
             returns_pointer,
             returns_wide,
+            returns_i64,
             result_name,
             stack_args_from,
         );
@@ -163,7 +165,22 @@ impl FunctionBuilder {
         // If this is a fat pointer, track the bank as a named value so it
         // survives register reuse of A1/A3.
         if let Some(second) = bank_reg {
-            if index < self.param_types.len() && self.param_types[index].1.is_wide() {
+            if index < self.param_types.len() && self.param_types[index].1.is_i64() {
+                debug!("  Parameter {index} is I64");
+                if let Some(src) = mgr.get_i64_words(&format!("__param_{index}")) {
+                    let dest_words = [
+                        naming.i64_word_name(&param_name, 1),
+                        naming.i64_word_name(&param_name, 2),
+                        naming.i64_word_name(&param_name, 3),
+                    ];
+                    for i in 0..3 {
+                        let r = mgr.get_register(src[i].clone());
+                        self.instructions.extend(mgr.take_instructions());
+                        mgr.bind_value_to_register(dest_words[i].clone(), r);
+                    }
+                    mgr.set_i64_words(param_name, dest_words);
+                }
+            } else if index < self.param_types.len() && self.param_types[index].1.is_wide() {
                 debug!("  Parameter {index} is I32 with high in {second:?}");
                 let hi_name = naming.i32_high_name(&param_name);
                 mgr.bind_value_to_register(hi_name.clone(), second);
@@ -256,6 +273,7 @@ impl FunctionBuilder {
             args,
             returns_pointer,
             false,
+            false,
             result_name,
             None,
         );
@@ -291,6 +309,7 @@ impl FunctionBuilder {
         let stack_words = args.iter().map(|arg| match arg {
             CallArg::Scalar(_) => 1,
             CallArg::FatPointer { .. } => 2,
+            CallArg::I64 { .. } => 4,
         }).sum::<i16>();
         debug!("  Call will use {stack_words} stack words");
         
@@ -330,6 +349,7 @@ impl FunctionBuilder {
         let stack_words = args.iter().map(|arg| match arg {
             CallArg::Scalar(_) => 1,
             CallArg::FatPointer { .. } => 2,
+            CallArg::I64 { .. } => 4,
         }).sum::<i16>();
         
         trace!("  Pushing {stack_words} words to cleanup stack");

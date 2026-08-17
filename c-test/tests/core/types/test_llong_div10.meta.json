@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "minimal 20/10 long long signed and unsigned",
+  "expected": "YYYY\n"
+}

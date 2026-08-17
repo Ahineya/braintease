@@ -16,6 +16,13 @@ long labs(long j) {
     return j;
 }
 
+long long llabs(long long j) {
+    if (j < 0) {
+        return -j;
+    }
+    return j;
+}
+
 void exit(int status) {
     (void)status;
     __asm__("HALT");

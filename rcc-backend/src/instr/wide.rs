@@ -259,7 +259,7 @@ fn emit_i32_sub(
 }
 
 /// Unsigned 16×16 → 32 using 8-bit partial products (MUL is 16×16→16).
-fn emit_umul16x16(
+pub(crate) fn emit_umul16x16(
     dst_lo: Reg,
     dst_hi: Reg,
     a: Reg,
@@ -1056,7 +1056,27 @@ pub fn i32_to_cond_reg(
                 mgr.pin_register(hi);
                 let or_name = new_temp(mgr, naming, &mut insts, "cond", "or");
                 em3(mgr, &mut insts, Src::N(&or_name), Src::R(lo), Src::R(hi), AsmInst::Or);
+                if let Some(extra) = mgr.get_i64_words(&lo_name) {
+                    for w in extra {
+                        let wr = mgr.get_register(w);
+                        insts.extend(mgr.take_instructions());
+                        em3(mgr, &mut insts, Src::N(&or_name), Src::N(&or_name), Src::R(wr), AsmInst::Or);
+                    }
+                }
                 mgr.unpin_register(hi);
+                mgr.unpin_register(lo);
+                let or_reg = mgr.get_register(or_name);
+                insts.extend(mgr.take_instructions());
+                (or_reg, insts)
+            } else if let Some(extra) = mgr.get_i64_words(&lo_name) {
+                mgr.pin_register(lo);
+                let or_name = new_temp(mgr, naming, &mut insts, "cond", "or");
+                em3(mgr, &mut insts, Src::N(&or_name), Src::R(lo), Src::R(Reg::R0), AsmInst::Add);
+                for w in extra {
+                    let wr = mgr.get_register(w);
+                    insts.extend(mgr.take_instructions());
+                    em3(mgr, &mut insts, Src::N(&or_name), Src::N(&or_name), Src::R(wr), AsmInst::Or);
+                }
                 mgr.unpin_register(lo);
                 let or_reg = mgr.get_register(or_name);
                 insts.extend(mgr.take_instructions());

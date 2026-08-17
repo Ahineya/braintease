@@ -48,6 +48,7 @@ pub fn convert_type(ast_type: &Type, location: SourceLocation) -> Result<IrType,
         Type::Short | Type::UnsignedShort => Ok(IrType::I16),
         Type::Int | Type::UnsignedInt => Ok(IrType::I16), // 16-bit int on Ripple
         Type::Long | Type::UnsignedLong => Ok(IrType::I32),
+        Type::LongLong | Type::UnsignedLongLong => Ok(IrType::I64),
         Type::Float => Ok(IrType::I32),
         Type::Double => Ok(IrType::I64),
         Type::Pointer { target, .. } => {

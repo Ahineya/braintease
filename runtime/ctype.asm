@@ -511,11 +511,13 @@ L_isalpha_16:
 ; Call function islower
     CALL islower
 ; Scalar return value for t4
-    LI T7, 0
-    XOR T6, RV0, T7
-    LI T5, 0
-    SLTU RV0, T5, T6
-    BEQ RV0, R0, L_isalpha_17
+; Copy Rv0 to allocatable T7
+    ADD T7, RV0, R0
+    LI T6, 0
+    XOR T5, T7, T6
+    LI T4, 0
+    SLTU T7, T4, T5
+    BEQ T7, R0, L_isalpha_17
 ; Branch to L_isalpha_17 if condition is false
     BEQ R0, R0, L_isalpha_18
 ; Unconditional branch to L_isalpha_18 (condition was true)
@@ -525,38 +527,40 @@ L_isalpha_17:
 ; LOAD: Pointer load_src_ptr_f8_op6_t6 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T4, FP, R0
-    LOAD T3, SB, T4
+    ADD T3, FP, R0
+    LOAD T2, SB, T3
 ; Spill live registers before call
 ; Spill t6 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 12
-    STORE T3, SB, SC
+    STORE T2, SB, SC
 ; Set SP = FP+30 so callee frame is above spills
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
+    ADD A0, T2, R0
 ; Call function isupper
     CALL isupper
 ; Scalar return value for t7
-    LI T2, 0
-    XOR T1, RV0, T2
+; Copy Rv0 to allocatable T1
+    ADD T1, RV0, R0
     LI T0, 0
-    SLTU RV0, T0, T1
+    XOR S3, T1, T0
+    LI S1, 0
+    SLTU T1, S1, S3
 ; Recompute alloca t2 at FP+1
-    ADD S3, FP, R0
-    ADDI S3, S3, 1
-    STORE RV0, SB, S3
+    ADD S2, FP, R0
+    ADDI S2, S2, 1
+    STORE T1, SB, S2
     BEQ R0, R0, L_isalpha_19
 ; Unconditional branch to L_isalpha_19
 ; Invalidated 1 alloca bindings
 L_isalpha_18:
-    LI S1, 1
+    LI S0, 1
 ; Recompute alloca t2 at FP+1
-    ADD S2, FP, R0
-    ADDI S2, S2, 1
-    STORE S1, SB, S2
+    ADD T5, FP, R0
+    ADDI T5, T5, 1
+    STORE S0, SB, T5
     BEQ R0, R0, L_isalpha_19
 ; Unconditional branch to L_isalpha_19
 ; Invalidated 1 alloca bindings
@@ -566,9 +570,9 @@ L_isalpha_19:
 ; LOAD: Pointer load_src_ptr_f8_op13_t9 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+1
-    ADD S0, FP, R0
-    ADDI S0, S0, 1
-    LOAD T6, SB, S0
+    ADD T4, FP, R0
+    ADDI T4, T4, 1
+    LOAD T6, SB, T4
     MOVE RV0, T6
 ; Jump to epilogue
     BEQ R0, R0, L_isalpha_99999
@@ -647,11 +651,13 @@ L_isalnum_20:
 ; Call function isalpha
     CALL isalpha
 ; Scalar return value for t4
-    LI T7, 0
-    XOR T6, RV0, T7
-    LI T5, 0
-    SLTU RV0, T5, T6
-    BEQ RV0, R0, L_isalnum_21
+; Copy Rv0 to allocatable T7
+    ADD T7, RV0, R0
+    LI T6, 0
+    XOR T5, T7, T6
+    LI T4, 0
+    SLTU T7, T4, T5
+    BEQ T7, R0, L_isalnum_21
 ; Branch to L_isalnum_21 if condition is false
     BEQ R0, R0, L_isalnum_22
 ; Unconditional branch to L_isalnum_22 (condition was true)
@@ -661,38 +667,40 @@ L_isalnum_21:
 ; LOAD: Pointer load_src_ptr_f10_op6_t6 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T4, FP, R0
-    LOAD T3, SB, T4
+    ADD T3, FP, R0
+    LOAD T2, SB, T3
 ; Spill live registers before call
 ; Spill t6 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 12
-    STORE T3, SB, SC
+    STORE T2, SB, SC
 ; Set SP = FP+30 so callee frame is above spills
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
+    ADD A0, T2, R0
 ; Call function isdigit
     CALL isdigit
 ; Scalar return value for t7
-    LI T2, 0
-    XOR T1, RV0, T2
+; Copy Rv0 to allocatable T1
+    ADD T1, RV0, R0
     LI T0, 0
-    SLTU RV0, T0, T1
+    XOR S3, T1, T0
+    LI S1, 0
+    SLTU T1, S1, S3
 ; Recompute alloca t2 at FP+1
-    ADD S3, FP, R0
-    ADDI S3, S3, 1
-    STORE RV0, SB, S3
+    ADD S2, FP, R0
+    ADDI S2, S2, 1
+    STORE T1, SB, S2
     BEQ R0, R0, L_isalnum_23
 ; Unconditional branch to L_isalnum_23
 ; Invalidated 1 alloca bindings
 L_isalnum_22:
-    LI S1, 1
+    LI S0, 1
 ; Recompute alloca t2 at FP+1
-    ADD S2, FP, R0
-    ADDI S2, S2, 1
-    STORE S1, SB, S2
+    ADD T5, FP, R0
+    ADDI T5, T5, 1
+    STORE S0, SB, T5
     BEQ R0, R0, L_isalnum_23
 ; Unconditional branch to L_isalnum_23
 ; Invalidated 1 alloca bindings
@@ -702,9 +710,9 @@ L_isalnum_23:
 ; LOAD: Pointer load_src_ptr_f10_op13_t9 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+1
-    ADD S0, FP, R0
-    ADDI S0, S0, 1
-    LOAD T6, SB, S0
+    ADD T4, FP, R0
+    ADDI T4, T4, 1
+    LOAD T6, SB, T4
     MOVE RV0, T6
 ; Jump to epilogue
     BEQ R0, R0, L_isalnum_99999
@@ -1219,11 +1227,13 @@ L_iscntrl_44:
 ; Call function in_range
     CALL in_range
 ; Scalar return value for t3
-    LI S0, 0
-    XOR T7, RV0, S0
-    LI T6, 1
-    SLTU RV0, T7, T6
-    BEQ RV0, R0, L_iscntrl_47
+; Copy Rv0 to allocatable S0
+    ADD S0, RV0, R0
+    LI T7, 0
+    XOR T6, S0, T7
+    LI T5, 1
+    SLTU S0, T6, T5
+    BEQ S0, R0, L_iscntrl_47
 ; Branch to L_iscntrl_47 if condition is false
     BEQ R0, R0, L_iscntrl_45
 ; Unconditional branch to L_iscntrl_45 (condition was true)
@@ -1232,22 +1242,22 @@ L_iscntrl_45:
 ; Jump to epilogue
     BEQ R0, R0, L_iscntrl_99999
 L_iscntrl_47:
-    ADD T5, FP, R0
-    ADDI T5, T5, 1
+    ADD T4, FP, R0
+    ADDI T4, T4, 1
 ; Load instruction: t6 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f16_op6_t6 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T4, FP, R0
-    LOAD T3, SB, T4
-    LI T2, 32
-    SLT T3, T3, T2
-    LI T1, 0
-    XOR T0, T3, T1
-    LI S3, 0
-    SLTU T3, S3, T0
-    BEQ T3, R0, L_iscntrl_48
+    ADD T3, FP, R0
+    LOAD T2, SB, T3
+    LI T1, 32
+    SLT T2, T2, T1
+    LI T0, 0
+    XOR S3, T2, T0
+    LI S2, 0
+    SLTU T2, S2, S3
+    BEQ T2, R0, L_iscntrl_48
 ; Branch to L_iscntrl_48 if condition is false
     BEQ R0, R0, L_iscntrl_49
 ; Unconditional branch to L_iscntrl_49 (condition was true)
@@ -1258,29 +1268,29 @@ L_iscntrl_48:
 ; LOAD: Pointer load_src_ptr_f16_op10_t9 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD S2, FP, R0
-    LOAD S1, SB, S2
-    LI T7, 127
-    XOR T6, S1, T7
+    ADD S1, FP, R0
+    LOAD T6, SB, S1
+    LI T5, 127
+    XOR T7, T6, T5
     LI S0, 1
-    SLTU S1, T6, S0
-    LI RV0, 0
-    XOR T2, S1, RV0
-    LI T0, 0
-    SLTU S1, T0, T2
+    SLTU T6, T7, S0
+    LI T1, 0
+    XOR S3, T6, T1
+    LI S2, 0
+    SLTU T6, S2, S3
 ; Recompute alloca t5 at FP+1
-    ADD S3, FP, R0
-    ADDI S3, S3, 1
-    STORE S1, SB, S3
+    ADD T0, FP, R0
+    ADDI T0, T0, 1
+    STORE T6, SB, T0
     BEQ R0, R0, L_iscntrl_50
 ; Unconditional branch to L_iscntrl_50
 ; Invalidated 2 alloca bindings
 L_iscntrl_49:
-    LI T1, 1
+    LI T2, 1
 ; Recompute alloca t5 at FP+1
     ADD T3, FP, R0
     ADDI T3, T3, 1
-    STORE T1, SB, T3
+    STORE T2, SB, T3
     BEQ R0, R0, L_iscntrl_50
 ; Unconditional branch to L_iscntrl_50
 ; Invalidated 1 alloca bindings
@@ -1292,8 +1302,8 @@ L_iscntrl_50:
 ; Recompute alloca t5 at FP+1
     ADD T4, FP, R0
     ADDI T4, T4, 1
-    LOAD T5, SB, T4
-    MOVE RV0, T5
+    LOAD T7, SB, T4
+    MOVE RV0, T7
 ; Jump to epilogue
     BEQ R0, R0, L_iscntrl_99999
 L_iscntrl_99999:
@@ -1601,11 +1611,13 @@ L_ispunct_59:
 ; Call function isgraph
     CALL isgraph
 ; Scalar return value for t4
-    LI T7, 0
-    XOR T6, RV0, T7
-    LI T5, 0
-    SLTU RV0, T5, T6
-    BEQ RV0, R0, L_ispunct_61
+; Copy Rv0 to allocatable T7
+    ADD T7, RV0, R0
+    LI T6, 0
+    XOR T5, T7, T6
+    LI T4, 0
+    SLTU T7, T4, T5
+    BEQ T7, R0, L_ispunct_61
 ; Branch to L_ispunct_61 if condition is false
     BEQ R0, R0, L_ispunct_60
 ; Unconditional branch to L_ispunct_60 (condition was true)
@@ -1615,42 +1627,44 @@ L_ispunct_60:
 ; LOAD: Pointer load_src_ptr_f22_op6_t6 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T4, FP, R0
-    LOAD T3, SB, T4
+    ADD T3, FP, R0
+    LOAD T2, SB, T3
 ; Spill live registers before call
 ; Spill t6 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 12
-    STORE T3, SB, SC
+    STORE T2, SB, SC
 ; Set SP = FP+30 so callee frame is above spills
     ADDI SP, FP, 30
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T3, R0
+    ADD A0, T2, R0
 ; Call function isalnum
     CALL isalnum
 ; Scalar return value for t7
-    LI T2, 0
-    XOR T1, RV0, T2
-    LI T0, 1
-    SLTU RV0, T1, T0
-    LI S3, 0
-    XOR S1, RV0, S3
+; Copy Rv0 to allocatable T1
+    ADD T1, RV0, R0
+    LI T0, 0
+    XOR S3, T1, T0
+    LI S1, 1
+    SLTU T1, S3, S1
     LI S2, 0
-    SLTU RV0, S2, S1
+    XOR S0, T1, S2
+    LI T5, 0
+    SLTU T1, T5, S0
 ; Recompute alloca t2 at FP+1
-    ADD S0, FP, R0
-    ADDI S0, S0, 1
-    STORE RV0, SB, S0
+    ADD T4, FP, R0
+    ADDI T4, T4, 1
+    STORE T1, SB, T4
     BEQ R0, R0, L_ispunct_62
 ; Unconditional branch to L_ispunct_62
 ; Invalidated 1 alloca bindings
 L_ispunct_61:
     LI T6, 0
 ; Recompute alloca t2 at FP+1
-    ADD T5, FP, R0
-    ADDI T5, T5, 1
-    STORE T6, SB, T5
+    ADD T7, FP, R0
+    ADDI T7, T7, 1
+    STORE T6, SB, T7
     BEQ R0, R0, L_ispunct_62
 ; Unconditional branch to L_ispunct_62
 ; Invalidated 1 alloca bindings
@@ -1660,10 +1674,10 @@ L_ispunct_62:
 ; LOAD: Pointer load_src_ptr_f22_op15_t10 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+1
-    ADD T7, FP, R0
-    ADDI T7, T7, 1
-    LOAD T4, SB, T7
-    MOVE RV0, T4
+    ADD T3, FP, R0
+    ADDI T3, T3, 1
+    LOAD T2, SB, T3
+    MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L_ispunct_99999
 L_ispunct_99999:
@@ -1743,33 +1757,35 @@ L_isxdigit_63:
 ; Call function isdigit
     CALL isdigit
 ; Scalar return value for t5
-    LI T6, 0
-    XOR T5, RV0, T6
-    LI T4, 0
-    SLTU RV0, T4, T5
-    BEQ RV0, R0, L_isxdigit_64
+; Copy Rv0 to allocatable T6
+    ADD T6, RV0, R0
+    LI T5, 0
+    XOR T4, T6, T5
+    LI T3, 0
+    SLTU T6, T3, T4
+    BEQ T6, R0, L_isxdigit_64
 ; Branch to L_isxdigit_64 if condition is false
     BEQ R0, R0, L_isxdigit_65
 ; Unconditional branch to L_isxdigit_65 (condition was true)
 L_isxdigit_64:
-    ADD T3, FP, R0
-    ADDI T3, T3, 3
+    ADD T2, FP, R0
+    ADDI T2, T2, 3
 ; Load instruction: t8 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f24_op6_t8 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T2, FP, R0
-    LOAD T1, SB, T2
-    LI T0, 97
-    SLT S3, T1, T0
-    LI S1, 1
-    SUB T1, S1, S3
-    LI S0, 0
-    XOR S2, T1, S0
-    LI T7, 0
-    SLTU T1, T7, S2
-    BEQ T1, R0, L_isxdigit_68
+    ADD T1, FP, R0
+    LOAD T0, SB, T1
+    LI S3, 97
+    SLT S1, T0, S3
+    LI S0, 1
+    SUB T0, S0, S1
+    LI S2, 0
+    XOR T7, T0, S2
+    LI T4, 0
+    SLTU T0, T4, T7
+    BEQ T0, R0, L_isxdigit_68
 ; Branch to L_isxdigit_68 if condition is false
     BEQ R0, R0, L_isxdigit_67
 ; Unconditional branch to L_isxdigit_67 (condition was true)
@@ -1780,29 +1796,29 @@ L_isxdigit_67:
 ; LOAD: Pointer load_src_ptr_f24_op12_t11 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T5, FP, R0
-    LOAD T4, SB, T5
+    ADD T3, FP, R0
+    LOAD T5, SB, T3
     LI T6, 102
-    SLT RV0, T6, T4
-    LI S3, 1
-    SUB T4, S3, RV0
-    LI S1, 0
-    XOR T0, T4, S1
-    LI S2, 0
-    SLTU T4, S2, T0
+    SLT S1, T6, T5
+    LI S0, 1
+    SUB T5, S0, S1
+    LI S3, 0
+    XOR T7, T5, S3
+    LI T4, 0
+    SLTU T5, T4, T7
 ; Recompute alloca t7 at FP+3
-    ADD T7, FP, R0
-    ADDI T7, T7, 3
-    STORE T4, SB, T7
+    ADD S2, FP, R0
+    ADDI S2, S2, 3
+    STORE T5, SB, S2
     BEQ R0, R0, L_isxdigit_69
 ; Unconditional branch to L_isxdigit_69
 ; Invalidated 2 alloca bindings
 L_isxdigit_68:
-    LI S0, 0
+    LI T0, 0
 ; Recompute alloca t7 at FP+3
     ADD T1, FP, R0
     ADDI T1, T1, 3
-    STORE S0, SB, T1
+    STORE T0, SB, T1
     BEQ R0, R0, L_isxdigit_69
 ; Unconditional branch to L_isxdigit_69
 ; Invalidated 1 alloca bindings
@@ -1814,24 +1830,24 @@ L_isxdigit_69:
 ; Recompute alloca t7 at FP+3
     ADD T2, FP, R0
     ADDI T2, T2, 3
-    LOAD T3, SB, T2
-    LI RV0, 0
-    XOR S3, T3, RV0
-    LI T6, 0
-    SLTU T3, T6, S3
+    LOAD S1, SB, T2
+    LI S0, 0
+    XOR T6, S1, S0
+    LI T7, 0
+    SLTU S1, T7, T6
 ; Recompute alloca t3 at FP+2
-    ADD T0, FP, R0
-    ADDI T0, T0, 2
-    STORE T3, SB, T0
+    ADD T4, FP, R0
+    ADDI T4, T4, 2
+    STORE S1, SB, T4
     BEQ R0, R0, L_isxdigit_66
 ; Unconditional branch to L_isxdigit_66
 ; Invalidated 2 alloca bindings
 L_isxdigit_65:
-    LI S2, 1
+    LI S3, 1
 ; Recompute alloca t3 at FP+2
-    ADD S1, FP, R0
-    ADDI S1, S1, 2
-    STORE S2, SB, S1
+    ADD T3, FP, R0
+    ADDI T3, T3, 2
+    STORE S3, SB, T3
     BEQ R0, R0, L_isxdigit_66
 ; Unconditional branch to L_isxdigit_66
 ; Invalidated 1 alloca bindings
@@ -1841,37 +1857,37 @@ L_isxdigit_66:
 ; LOAD: Pointer load_src_ptr_f24_op28_t16 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t3 at FP+2
-    ADD T5, FP, R0
-    ADDI T5, T5, 2
-    LOAD T7, SB, T5
-    LI S0, 0
-    XOR T1, T7, S0
-    LI S3, 0
-    SLTU T7, S3, T1
-    BEQ T7, R0, L_isxdigit_70
+    ADD S2, FP, R0
+    ADDI S2, S2, 2
+    LOAD T0, SB, S2
+    LI T1, 0
+    XOR T6, T0, T1
+    LI T7, 0
+    SLTU T0, T7, T6
+    BEQ T0, R0, L_isxdigit_70
 ; Branch to L_isxdigit_70 if condition is false
     BEQ R0, R0, L_isxdigit_71
 ; Unconditional branch to L_isxdigit_71 (condition was true)
 ; Invalidated 1 alloca bindings
 L_isxdigit_70:
-    ADD T6, FP, R0
-    ADDI T6, T6, 4
+    ADD S0, FP, R0
+    ADDI S0, S0, 4
 ; Load instruction: t19 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f24_op32_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD RV0, FP, R0
-    LOAD T0, SB, RV0
-    LI T2, 65
-    SLT S2, T0, T2
-    LI S1, 1
-    SUB T0, S1, S2
-    LI T1, 0
-    XOR S3, T0, T1
-    LI S0, 0
-    SLTU T0, S0, S3
-    BEQ T0, R0, L_isxdigit_74
+    ADD T2, FP, R0
+    LOAD T4, SB, T2
+    LI S3, 65
+    SLT T3, T4, S3
+    LI T6, 1
+    SUB T4, T6, T3
+    LI T7, 0
+    XOR T1, T4, T7
+    LI T0, 0
+    SLTU T4, T0, T1
+    BEQ T4, R0, L_isxdigit_74
 ; Branch to L_isxdigit_74 if condition is false
     BEQ R0, R0, L_isxdigit_73
 ; Unconditional branch to L_isxdigit_73 (condition was true)
@@ -1882,29 +1898,29 @@ L_isxdigit_73:
 ; LOAD: Pointer load_src_ptr_f24_op38_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T7, FP, R0
-    LOAD T5, SB, T7
-    LI S2, 70
-    SLT S1, S2, T5
-    LI T2, 1
-    SUB T5, T2, S1
-    LI S3, 0
-    XOR S0, T5, S3
-    LI T1, 0
-    SLTU T5, T1, S0
+    ADD S2, FP, R0
+    LOAD T3, SB, S2
+    LI T6, 70
+    SLT S3, T6, T3
+    LI T1, 1
+    SUB T3, T1, S3
+    LI T0, 0
+    XOR T7, T3, T0
+    LI T4, 0
+    SLTU T3, T4, T7
 ; Recompute alloca t18 at FP+4
-    ADD T0, FP, R0
-    ADDI T0, T0, 4
-    STORE T5, SB, T0
+    ADD T2, FP, R0
+    ADDI T2, T2, 4
+    STORE T3, SB, T2
     BEQ R0, R0, L_isxdigit_75
 ; Unconditional branch to L_isxdigit_75
 ; Invalidated 2 alloca bindings
 L_isxdigit_74:
-    LI RV0, 0
+    LI S0, 0
 ; Recompute alloca t18 at FP+4
-    ADD T6, FP, R0
-    ADDI T6, T6, 4
-    STORE RV0, SB, T6
+    ADD S3, FP, R0
+    ADDI S3, S3, 4
+    STORE S0, SB, S3
     BEQ R0, R0, L_isxdigit_75
 ; Unconditional branch to L_isxdigit_75
 ; Invalidated 1 alloca bindings
@@ -1914,26 +1930,26 @@ L_isxdigit_75:
 ; LOAD: Pointer load_src_ptr_f24_op47_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t18 at FP+4
-    ADD S1, FP, R0
-    ADDI S1, S1, 4
-    LOAD T2, SB, S1
-    LI S2, 0
-    XOR S0, T2, S2
-    LI T1, 0
-    SLTU T2, T1, S0
+    ADD T1, FP, R0
+    ADDI T1, T1, 4
+    LOAD T6, SB, T1
+    LI T7, 0
+    XOR T4, T6, T7
+    LI T0, 0
+    SLTU T6, T0, T4
 ; Recompute alloca t2 at FP+1
-    ADD S3, FP, R0
-    ADDI S3, S3, 1
-    STORE T2, SB, S3
+    ADD T2, FP, R0
+    ADDI T2, T2, 1
+    STORE T6, SB, T2
     BEQ R0, R0, L_isxdigit_72
 ; Unconditional branch to L_isxdigit_72
 ; Invalidated 2 alloca bindings
 L_isxdigit_71:
-    LI T0, 1
+    LI S2, 1
 ; Recompute alloca t2 at FP+1
-    ADD T7, FP, R0
-    ADDI T7, T7, 1
-    STORE T0, SB, T7
+    ADD S0, FP, R0
+    ADDI S0, S0, 1
+    STORE S2, SB, S0
     BEQ R0, R0, L_isxdigit_72
 ; Unconditional branch to L_isxdigit_72
 ; Invalidated 1 alloca bindings
@@ -1943,10 +1959,10 @@ L_isxdigit_72:
 ; LOAD: Pointer load_src_ptr_f24_op54_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t2 at FP+1
-    ADD RV0, FP, R0
-    ADDI RV0, RV0, 1
-    LOAD T6, SB, RV0
-    MOVE RV0, T6
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    LOAD T4, SB, S3
+    MOVE RV0, T4
 ; Jump to epilogue
     BEQ R0, R0, L_isxdigit_99999
 L_isxdigit_99999:
@@ -2022,7 +2038,9 @@ L_tolower_76:
 ; Call function isupper
     CALL isupper
 ; Scalar return value for t3
-    BEQ RV0, R0, L_tolower_79
+; Copy Rv0 to allocatable S0
+    ADD S0, RV0, R0
+    BEQ S0, R0, L_tolower_79
 ; Branch to L_tolower_79 if condition is false
     BEQ R0, R0, L_tolower_77
 ; Unconditional branch to L_tolower_77 (condition was true)
@@ -2032,13 +2050,13 @@ L_tolower_77:
 ; LOAD: Pointer load_src_ptr_f26_op4_t4 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD S0, FP, R0
-    LOAD T7, SB, S0
-    LI T6, 65
-    SUB T7, T7, T6
-    LI T5, 97
-    ADD T7, T7, T5
-    MOVE RV0, T7
+    ADD T7, FP, R0
+    LOAD T6, SB, T7
+    LI T5, 65
+    SUB T6, T6, T5
+    LI T4, 97
+    ADD T6, T6, T4
+    MOVE RV0, T6
 ; Jump to epilogue
     BEQ R0, R0, L_tolower_99999
 ; Invalidated 1 alloca bindings
@@ -2048,9 +2066,9 @@ L_tolower_79:
 ; LOAD: Pointer load_src_ptr_f26_op6_t7 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T4, FP, R0
-    LOAD T3, SB, T4
-    MOVE RV0, T3
+    ADD T3, FP, R0
+    LOAD T2, SB, T3
+    MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L_tolower_99999
 L_tolower_99999:
@@ -2126,7 +2144,9 @@ L_toupper_80:
 ; Call function islower
     CALL islower
 ; Scalar return value for t3
-    BEQ RV0, R0, L_toupper_83
+; Copy Rv0 to allocatable S0
+    ADD S0, RV0, R0
+    BEQ S0, R0, L_toupper_83
 ; Branch to L_toupper_83 if condition is false
     BEQ R0, R0, L_toupper_81
 ; Unconditional branch to L_toupper_81 (condition was true)
@@ -2136,13 +2156,13 @@ L_toupper_81:
 ; LOAD: Pointer load_src_ptr_f28_op4_t4 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD S0, FP, R0
-    LOAD T7, SB, S0
-    LI T6, 97
-    SUB T7, T7, T6
-    LI T5, 65
-    ADD T7, T7, T5
-    MOVE RV0, T7
+    ADD T7, FP, R0
+    LOAD T6, SB, T7
+    LI T5, 97
+    SUB T6, T6, T5
+    LI T4, 65
+    ADD T6, T6, T4
+    MOVE RV0, T6
 ; Jump to epilogue
     BEQ R0, R0, L_toupper_99999
 ; Invalidated 1 alloca bindings
@@ -2152,9 +2172,9 @@ L_toupper_83:
 ; LOAD: Pointer load_src_ptr_f28_op6_t7 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t1 at FP+0
-    ADD T4, FP, R0
-    LOAD T3, SB, T4
-    MOVE RV0, T3
+    ADD T3, FP, R0
+    LOAD T2, SB, T3
+    MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L_toupper_99999
 L_toupper_99999:

@@ -46,6 +46,29 @@ impl Parser {
         }
     }
 
+    fn consume_optional_int(&mut self) {
+        if matches!(self.peek().map(|t| &t.token_type), Some(TokenType::Int)) {
+            self.advance();
+        }
+    }
+
+    /// After consuming `long`, parse `long`, `long int`, `long long`, `long long int`.
+    fn parse_long_type(&mut self, unsigned: bool) -> Result<Type, CompilerError> {
+        self.skip_ignored_specifiers();
+        let long_long = matches!(self.peek().map(|t| &t.token_type), Some(TokenType::Long));
+        if long_long {
+            self.advance();
+            self.skip_ignored_specifiers();
+        }
+        self.consume_optional_int();
+        Ok(match (unsigned, long_long) {
+            (false, false) => Type::Long,
+            (true, false) => Type::UnsignedLong,
+            (false, true) => Type::LongLong,
+            (true, true) => Type::UnsignedLongLong,
+        })
+    }
+
     pub(crate) fn intern_typedef(&mut self, name: String, ty: Type) {
         let resolved = self.resolve_known_typedefs(&ty);
         self.typedef_names.insert(name, resolved);
@@ -159,15 +182,24 @@ impl Parser {
             Some(TokenType::Char) => { self.advance(); Ok(Type::Char) }
             Some(TokenType::Short) => { self.advance(); Ok(Type::Short) }
             Some(TokenType::Int) => { self.advance(); Ok(Type::Int) }
-            Some(TokenType::Long) => { self.advance(); Ok(Type::Long) }
+            Some(TokenType::Long) => { self.advance(); Ok(self.parse_long_type(false)?) }
             Some(TokenType::Float) => { self.advance(); Ok(Type::Float) }
             Some(TokenType::Double) => { self.advance(); Ok(Type::Double) }
             Some(TokenType::Signed) => {
                 self.advance();
                 self.skip_ignored_specifiers();
-                // Handle "signed int", "signed char", etc.
+                // Handle "signed int", "signed char", "signed long", etc.
                 match self.peek().map(|t| &t.token_type) {
                     Some(TokenType::Char) => { self.advance(); Ok(Type::SignedChar) }
+                    Some(TokenType::Short) => {
+                        self.advance();
+                        self.consume_optional_int();
+                        Ok(Type::Short)
+                    }
+                    Some(TokenType::Long) => {
+                        self.advance();
+                        Ok(self.parse_long_type(false)?)
+                    }
                     Some(TokenType::Int) | None => Ok(Type::Int), // "signed" defaults to int
                     _ => Ok(Type::Int),
                 }
@@ -177,9 +209,16 @@ impl Parser {
                 self.skip_ignored_specifiers();
                 match self.peek().map(|t| &t.token_type) {
                     Some(TokenType::Char) => { self.advance(); Ok(Type::UnsignedChar) }
-                    Some(TokenType::Short) => { self.advance(); Ok(Type::UnsignedShort) }
+                    Some(TokenType::Short) => {
+                        self.advance();
+                        self.consume_optional_int();
+                        Ok(Type::UnsignedShort)
+                    }
                     Some(TokenType::Int) => { self.advance(); Ok(Type::UnsignedInt) }
-                    Some(TokenType::Long) => { self.advance(); Ok(Type::UnsignedLong) }
+                    Some(TokenType::Long) => {
+                        self.advance();
+                        Ok(self.parse_long_type(true)?)
+                    }
                     _ => Ok(Type::UnsignedInt), // "unsigned" defaults to unsigned int
                 }
             }

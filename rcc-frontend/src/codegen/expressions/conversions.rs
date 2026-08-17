@@ -13,9 +13,11 @@ fn intern_temp(result: Result<rcc_common::TempId, String>) -> Result<rcc_common:
     }.into())
 }
 
-/// C99 6.3.1.8 usual arithmetic conversions on this ILP16 / 32-bit-long target.
+/// C99 6.3.1.8 usual arithmetic conversions on this ILP16 / 32-bit-long / 64-bit-long-long target.
 pub fn usual_arithmetic_type(left: &Type, right: &Type) -> Type {
     match (left, right) {
+        (Type::UnsignedLongLong, _) | (_, Type::UnsignedLongLong) => Type::UnsignedLongLong,
+        (Type::LongLong, _) | (_, Type::LongLong) => Type::LongLong,
         (Type::UnsignedLong, _) | (_, Type::UnsignedLong) => Type::UnsignedLong,
         (Type::Long, _) | (_, Type::Long) => Type::Long,
         (Type::UnsignedInt, _) | (_, Type::UnsignedInt) => Type::UnsignedInt,

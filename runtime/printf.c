@@ -106,6 +106,44 @@ static int print_long(long n) {
     return print_ulong((unsigned long)n, 10, 0);
 }
 
+static int print_ulonglong(unsigned long long n, unsigned int base, int upper) {
+    char buf[64];
+    int i;
+    int count;
+    unsigned long long b;
+
+    b = (unsigned long long)base;
+    i = 0;
+    count = 0;
+
+    if (n == 0) {
+        return print_char('0');
+    }
+
+    while (n > 0) {
+        buf[i] = (char)digit_char((unsigned int)(n % b), upper);
+        i = i + 1;
+        n = n / b;
+    }
+    while (i) {
+        i = i - 1;
+        print_char(buf[i]);
+        count = count + 1;
+    }
+    return count;
+}
+
+static int print_longlong(long long n) {
+    unsigned long long mag;
+
+    if (n < 0) {
+        print_char('-');
+        mag = 0ULL - (unsigned long long)n;
+        return 1 + print_ulonglong(mag, 10, 0);
+    }
+    return print_ulonglong((unsigned long long)n, 10, 0);
+}
+
 int printf(char *fmt, ...) {
     va_list ap;
     char *p;
@@ -132,6 +170,16 @@ int printf(char *fmt, ...) {
                     count = count + print_char('l');
                     break;
                 }
+                if (*p == 'l') {
+                    long_mod = 2;
+                    p = p + 1;
+                    if (*p == 0) {
+                        count = count + print_char('%');
+                        count = count + print_char('l');
+                        count = count + print_char('l');
+                        break;
+                    }
+                }
             }
             switch (*p) {
             case 's':
@@ -142,28 +190,36 @@ int printf(char *fmt, ...) {
                 break;
             case 'd':
             case 'i':
-                if (long_mod) {
+                if (long_mod == 2) {
+                    count = count + print_longlong(va_arg(ap, long long));
+                } else if (long_mod) {
                     count = count + print_long(va_arg(ap, long));
                 } else {
                     count = count + print_int(va_arg(ap, int));
                 }
                 break;
             case 'u':
-                if (long_mod) {
+                if (long_mod == 2) {
+                    count = count + print_ulonglong(va_arg(ap, unsigned long long), 10, 0);
+                } else if (long_mod) {
                     count = count + print_ulong(va_arg(ap, unsigned long), 10, 0);
                 } else {
                     count = count + print_uint(va_arg(ap, unsigned int), 10, 0);
                 }
                 break;
             case 'X':
-                if (long_mod) {
+                if (long_mod == 2) {
+                    count = count + print_ulonglong(va_arg(ap, unsigned long long), 16, 1);
+                } else if (long_mod) {
                     count = count + print_ulong(va_arg(ap, unsigned long), 16, 1);
                 } else {
                     count = count + print_uint(va_arg(ap, unsigned int), 16, 1);
                 }
                 break;
             case 'x':
-                if (long_mod) {
+                if (long_mod == 2) {
+                    count = count + print_ulonglong(va_arg(ap, unsigned long long), 16, 0);
+                } else if (long_mod) {
                     count = count + print_ulong(va_arg(ap, unsigned long), 16, 0);
                 } else {
                     count = count + print_uint(va_arg(ap, unsigned int), 16, 0);
@@ -174,7 +230,10 @@ int printf(char *fmt, ...) {
                 break;
             default:
                 count = count + print_char('%');
-                if (long_mod) {
+                if (long_mod == 2) {
+                    count = count + print_char('l');
+                    count = count + print_char('l');
+                } else if (long_mod) {
                     count = count + print_char('l');
                 }
                 count = count + print_char(*p);

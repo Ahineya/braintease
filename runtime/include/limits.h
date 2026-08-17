@@ -29,9 +29,9 @@
 #define LONG_MAX 2147483647L
 #define ULONG_MAX 4294967295UL
 
-// Long long limits (not supported yet, using long values)
-#define LLONG_MIN LONG_MIN
-#define LLONG_MAX LONG_MAX
-#define ULLONG_MAX ULONG_MAX
+// Long long limits (64-bit)
+#define LLONG_MIN (-9223372036854775807LL-1)
+#define LLONG_MAX 9223372036854775807LL
+#define ULLONG_MAX 18446744073709551615ULL
 
 #endif // LIMITS_H

@@ -135,6 +135,14 @@ impl GlobalManager {
             Value::Constant(val) => {
                 // Handle different sizes
                 match &global.var_type {
+                    IrType::I64 => {
+                        let parts = crate::instr::i64::split_const64(*val);
+                        for i in 0..4 {
+                            insts.push(AsmInst::Li(Reg::T0, parts[i]));
+                            insts.push(AsmInst::Li(Reg::T1, (address + i as u16) as i16));
+                            insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                        }
+                    }
                     IrType::I32 => {
                         // 32-bit values need two stores
                         let low = (*val & 0xFFFF) as i16;

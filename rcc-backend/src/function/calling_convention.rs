@@ -36,35 +36,25 @@ impl CallingConvention {
     /// Core logic for analyzing parameter/argument placement
     /// Takes a closure that determines if an item is a fat pointer
     /// Returns (register_items_with_slots, first_stack_item_index)
-    fn analyze_placement<F>(&self, count: usize, is_fat_ptr: F) -> (Vec<(usize, usize)>, usize)
+    fn analyze_placement<F>(&self, count: usize, slots: F) -> (Vec<(usize, usize)>, usize)
     where
-        F: Fn(usize) -> bool,
+        F: Fn(usize) -> usize,
     {
         let mut register_items = Vec::new();
         let mut reg_slots_used = 0;
         let mut first_stack_item = count;
         
         for i in 0..count {
-            if is_fat_ptr(i) {
-                // Fat pointer or I32 needs 2 slots
-                if reg_slots_used + 1 < 4 {  // Can fit both parts in registers
-                    register_items.push((i, reg_slots_used));
-                    reg_slots_used += 2;
-                } else {
-                    // Fat pointer doesn't fit, it and all subsequent go to stack
-                    first_stack_item = i;
-                    break;
-                }
+            let n = slots(i);
+            if n == 0 {
+                continue;
+            }
+            if reg_slots_used + n <= 4 {
+                register_items.push((i, reg_slots_used));
+                reg_slots_used += n;
             } else {
-                // Scalar needs 1 slot
-                if reg_slots_used < 4 {
-                    register_items.push((i, reg_slots_used));
-                    reg_slots_used += 1;
-                } else {
-                    // No more register slots
-                    first_stack_item = i;
-                    break;
-                }
+                first_stack_item = i;
+                break;
             }
         }
         
@@ -74,7 +64,11 @@ impl CallingConvention {
     /// Analyze which arguments go in registers vs stack based on CallArg types
     fn analyze_arg_placement(&self, args: &[CallArg], stack_args_from: Option<usize>) -> (Vec<(usize, usize)>, usize) {
         let (mut register_items, mut first_stack_item) =
-            self.analyze_placement(args.len(), |i| matches!(args[i], CallArg::FatPointer { .. }));
+            self.analyze_placement(args.len(), |i| match args[i] {
+                CallArg::Scalar(_) => 1,
+                CallArg::FatPointer { .. } => 2,
+                CallArg::I64 { .. } => 4,
+            });
         if let Some(from) = stack_args_from {
             register_items.retain(|(i, _)| *i < from);
             first_stack_item = first_stack_item.min(from);
@@ -85,7 +79,7 @@ impl CallingConvention {
     /// Analyze parameter placement for load_param based on IrType
     fn analyze_param_placement(&self, param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)])
         -> (Vec<(usize, usize)>, usize) {
-        self.analyze_placement(param_types.len(), |i| param_types[i].1.takes_two_slots())
+        self.analyze_placement(param_types.len(), |i| param_types[i].1.abi_slots())
     }
     
     /// Calculate the stack offset for a parameter that's passed on the stack
@@ -113,11 +107,7 @@ impl CallingConvention {
             if i >= param_types.len() {
                 break;
             }
-            if param_types[i].1.takes_two_slots() {
-                offset -= 2; // Fat pointer / I32 takes 2 words
-            } else {
-                offset -= 1; // Scalar takes 1 word
-            }
+            offset -= param_types[i].1.abi_slots() as i16;
         }
         
         // Account for this parameter itself
@@ -195,12 +185,17 @@ impl CallingConvention {
                                arg_regs[*reg_slot], arg_regs[*reg_slot + 1]);
                         reg_args.push((idx, arg_regs[*reg_slot], arg));
                     }
+                    CallArg::I64 { .. } => {
+                        trace!("  Arg {} (i64) goes in A0-A3", idx);
+                        reg_args.push((idx, arg_regs[*reg_slot], arg));
+                    }
                 }
             } else {
                 // This arg goes on stack
                 match &arg {
                     CallArg::Scalar(_) => trace!("  Arg {idx} (scalar) goes on stack"),
                     CallArg::FatPointer { .. } => trace!("  Arg {idx} (fat ptr) goes on stack"),
+                    CallArg::I64 { .. } => trace!("  Arg {idx} (i64) goes on stack"),
                 }
                 stack_args.push((idx, arg));
             }
@@ -221,13 +216,19 @@ impl CallingConvention {
                     }
                     CallArg::FatPointer { addr, bank } => {
                         insts.push(AsmInst::Comment(format!("Push arg {idx} (fat ptr) to stack")));
-                        // Push bank first (higher address)
                         insts.push(AsmInst::Store(bank, Reg::Sb, Reg::Sp));
                         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
-                        // Then push address
                         insts.push(AsmInst::Store(addr, Reg::Sb, Reg::Sp));
                         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
                         stack_offset += 2;
+                    }
+                    CallArg::I64 { words } => {
+                        insts.push(AsmInst::Comment(format!("Push arg {idx} (i64) to stack")));
+                        for w in words.iter().rev() {
+                            insts.push(AsmInst::Store(*w, Reg::Sb, Reg::Sp));
+                            insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
+                        }
+                        stack_offset += 4;
                     }
                 }
             }
@@ -260,6 +261,15 @@ impl CallingConvention {
                         }
                         if bank != bank_reg {
                             insts.push(AsmInst::Add(bank_reg, bank, Reg::R0));
+                        }
+                    }
+                    CallArg::I64 { words } => {
+                        let dests = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
+                        insts.push(AsmInst::Comment(format!("Arg {idx} (i64) to A0-A3")));
+                        for i in 0..4 {
+                            if words[i] != dests[i] {
+                                insts.push(AsmInst::Add(dests[i], words[i], Reg::R0));
+                            }
                         }
                     }
                 }
@@ -311,6 +321,7 @@ impl CallingConvention {
                               naming: &mut NameGenerator,
                               is_pointer: bool,
                               is_wide: bool,
+                              is_i64: bool,
                               result_name: Option<String>) -> (Vec<AsmInst>, Option<(Reg, Option<Reg>)>) {
         let mut insts = Vec::new();
         
@@ -325,7 +336,21 @@ impl CallingConvention {
                 
                 // Track that Rv1 has the bank
                 pressure_manager.set_pointer_bank(name, BankInfo::Register(Reg::Rv1));
+                insts.extend(pressure_manager.take_instructions());
                 
+                (insts, Some((Reg::Rv0, Some(Reg::Rv1))))
+            } else if is_i64 {
+                debug!("Handling I64 return for '{name}'");
+                insts.push(AsmInst::Comment(format!("I64 return value for {name}")));
+                pressure_manager.bind_value_to_register(name.clone(), Reg::Rv0);
+                let w1 = naming.i64_word_name(&name, 1);
+                let w2 = naming.i64_word_name(&name, 2);
+                let w3 = naming.i64_word_name(&name, 3);
+                pressure_manager.bind_value_to_register(w1.clone(), Reg::Rv1);
+                pressure_manager.bind_value_to_register(w2.clone(), Reg::X0);
+                pressure_manager.bind_value_to_register(w3.clone(), Reg::X1);
+                pressure_manager.set_i64_words(name, [w1, w2, w3]);
+                insts.extend(pressure_manager.take_instructions());
                 (insts, Some((Reg::Rv0, Some(Reg::Rv1))))
             } else if is_wide {
                 debug!("Handling I32 return for '{name}'");
@@ -334,6 +359,7 @@ impl CallingConvention {
                 let hi_name = naming.i32_high_name(&name);
                 pressure_manager.bind_value_to_register(hi_name.clone(), Reg::Rv1);
                 pressure_manager.set_i32_high(name, hi_name);
+                insts.extend(pressure_manager.take_instructions());
                 (insts, Some((Reg::Rv0, Some(Reg::Rv1))))
             } else {
                 // Scalar return in Rv0
@@ -342,6 +368,7 @@ impl CallingConvention {
                 
                 // Bind Rv0 to the result name
                 pressure_manager.bind_value_to_register(name, Reg::Rv0);
+                insts.extend(pressure_manager.take_instructions());
                 
                 (insts, Some((Reg::Rv0, None)))
             }
@@ -382,6 +409,7 @@ impl CallingConvention {
         args: Vec<CallArg>,
         returns_pointer: bool,
         returns_wide: bool,
+        returns_i64: bool,
         result_name: Option<String>,
         stack_args_from: Option<usize>,
     ) -> (Vec<AsmInst>, Option<(Reg, Option<Reg>)>) {
@@ -410,6 +438,7 @@ impl CallingConvention {
             stack_words += match arg {
                 CallArg::Scalar(_) => 1,
                 CallArg::FatPointer { .. } => 2,
+                CallArg::I64 { .. } => 4,
             };
         }
         debug!("  Call will use {stack_words} stack words");
@@ -438,6 +467,7 @@ impl CallingConvention {
             naming, 
             returns_pointer,
             returns_wide,
+            returns_i64,
             result_name
         );
         insts.extend(ret_insts);
@@ -496,6 +526,26 @@ impl CallingConvention {
                 insts.push(AsmInst::Add(dest, arg_reg, Reg::R0));
             }
 
+            if index < param_types.len() && param_types[index].1.is_i64() {
+                let srcs = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
+                let pn = naming.param_name(index);
+                let mut extra = [String::new(), String::new(), String::new()];
+                let mut extra_regs = [Reg::R0; 3];
+                for i in 0..3 {
+                    extra[i] = naming.i64_word_name(&pn, (i + 1) as u8);
+                    extra_regs[i] = pressure_manager.get_register(extra[i].clone());
+                    insts.extend(pressure_manager.take_instructions());
+                    if extra_regs[i] != srcs[i + 1] {
+                        insts.push(AsmInst::Add(extra_regs[i], srcs[i + 1], Reg::R0));
+                    }
+                    pressure_manager.bind_value_to_register(extra[i].clone(), extra_regs[i]);
+                }
+                pressure_manager.set_i64_words(pn, extra.clone());
+                pressure_manager.set_i64_words(format!("__param_{index}"), extra);
+                debug!("Parameter load complete (i64): generated {} instructions", insts.len());
+                return (insts, dest, Some(extra_regs[0]));
+            }
+
             // If this is a fat pointer, copy the bank out of A1/A2/A3 into a
             // named register. Those argument registers are otherwise free for
             // the allocator and would clobber the bank tag.
@@ -549,6 +599,24 @@ impl CallingConvention {
             trace!("  Loading from stack (bank SB) at computed address into {dest:?}");
             insts.push(AsmInst::Load(dest, Reg::Sb, Reg::Sc));
 
+            if index < param_types.len() && param_types[index].1.is_i64() {
+                let pn = naming.param_name(index);
+                let mut extra = [String::new(), String::new(), String::new()];
+                let mut extra_regs = [Reg::R0; 3];
+                for i in 0..3 {
+                    extra[i] = naming.i64_word_name(&pn, (i + 1) as u8);
+                    extra_regs[i] = pressure_manager.get_register(extra[i].clone());
+                    insts.extend(pressure_manager.take_instructions());
+                    insts.push(AsmInst::AddI(Reg::Sc, Reg::Fp, param_offset - 1 - i as i16));
+                    insts.push(AsmInst::Load(extra_regs[i], Reg::Sb, Reg::Sc));
+                    pressure_manager.bind_value_to_register(extra[i].clone(), extra_regs[i]);
+                }
+                pressure_manager.set_i64_words(pn, extra.clone());
+                pressure_manager.set_i64_words(format!("__param_{index}"), extra);
+                debug!("Parameter load complete (i64 stack): generated {} instructions", insts.len());
+                return (insts, dest, Some(extra_regs[0]));
+            }
+
             // If this is a fat pointer, also load the bank from the next stack slot
             let bank_reg = if index < param_types.len() && param_types[index].1.takes_two_slots() {
                 debug!("  Loading second word of param {index} from FP{}", param_offset - 1);
@@ -591,6 +659,7 @@ impl CallingConvention {
 pub enum CallArg {  // This needs to stay pub for the re-export
     Scalar(Reg),
     FatPointer { addr: Reg, bank: Reg },
+    I64 { words: [Reg; 4] },
 }
 
 // Tests moved to tests/calling_convention_tests.rs

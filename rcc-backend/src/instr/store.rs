@@ -68,7 +68,10 @@ pub fn lower_store(
             let temp_reg_name = naming.store_const_value();
             let temp_reg = mgr.get_register(temp_reg_name);
             insts.extend(mgr.take_instructions());
-            if value_type.is_wide() {
+            if value_type.is_i64() {
+                let parts = crate::instr::i64::split_const64(*c);
+                insts.push(AsmInst::Li(temp_reg, parts[0]));
+            } else if value_type.is_wide() {
                 let (lo, _hi) = crate::instr::wide::split_const(*c);
                 insts.push(AsmInst::Li(temp_reg, lo));
             } else {
@@ -313,6 +316,40 @@ pub fn lower_store(
     trace!("  Generated STORE: {store_inst:?}");
     insts.push(store_inst);
 
+    // I64: store words 1..3 at dest+1..+3
+    let storing_i64 = value_type.is_i64()
+        || matches!(value, Value::Temp(t) if mgr.get_i64_words(&naming.temp_name(*t)).is_some());
+    if storing_i64 && !is_pointer {
+        match value {
+            Value::Temp(t) => {
+                let lo_name = naming.temp_name(*t);
+                if let Some(words) = mgr.get_i64_words(&lo_name) {
+                    for i in 0..3 {
+                        let r = mgr.get_register(words[i].clone());
+                        insts.extend(mgr.take_instructions());
+                        mgr.pin_register(r);
+                        insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, (i + 1) as i16));
+                        insts.push(AsmInst::Store(r, dest_bank_reg, Reg::Sc));
+                        mgr.unpin_register(r);
+                    }
+                }
+            }
+            Value::Constant(c) => {
+                let parts = crate::instr::i64::split_const64(*c);
+                for i in 1..4 {
+                    let name = naming.store_const_value();
+                    let r = mgr.get_register(name);
+                    insts.extend(mgr.take_instructions());
+                    insts.push(AsmInst::Li(r, parts[i]));
+                    insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, i as i16));
+                    insts.push(AsmInst::Store(r, dest_bank_reg, Reg::Sc));
+                    mgr.free_register(r);
+                }
+            }
+            _ => panic!("I64 store of unsupported value {value:?}"),
+        }
+        debug!("  Stored I64 extra words");
+    } else {
     // I32: store the high word at dest+1
     let storing_i32 = value_type.is_wide()
         || matches!(value, Value::Temp(t) if mgr.get_i32_high(&naming.temp_name(*t)).is_some());
@@ -360,8 +397,7 @@ pub fn lower_store(
         }
         debug!("  Stored I32 high word from {hi_reg:?}");
     }
-    
-    // If storing a fat pointer, also store the bank component.
+    }
     // Use SC for dest+1 instead of allocating a new register: get_register()
     // can spill `bank_reg` and reuse it, then STORE would write the clobbered
     // register (seen with stack-passed unsigned short* out-params).

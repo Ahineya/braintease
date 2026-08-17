@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "4294967296\n4294967296\n",
+  "description": "I64 digit loop plus va_arg"
+}

@@ -34,7 +34,7 @@ pub fn generate_return(
 ) -> Result<(), CompilerError> {
     if let Some(ret_expr) = expr {
         let ret_type = ret_expr.get_type();
-        let fn_ret_wide = matches!(gen.builder.current_return_type(), Some(crate::ir::IrType::I32));
+        let fn_ret = gen.builder.current_return_type().cloned();
         let mut expr_gen = gen.create_expression_generator();
         
         // Aggregates generate as pointers; the calling convention copies them.
@@ -43,10 +43,18 @@ pub fn generate_return(
             gen.builder.build_return(Some(struct_ptr))?;
         } else {
             let ret_val = expr_gen.generate(ret_expr)?;
-            let ret_val = if ret_type.is_integer() && fn_ret_wide {
-                let dest_ty = crate::types::Type::Long;
-                if dest_ty.size_in_words() != ret_type.size_in_words() {
-                    convert_integer(&mut expr_gen, ret_val, ret_type, &dest_ty)?
+            let dest_ty = match fn_ret {
+                Some(crate::ir::IrType::I64) => Some(crate::types::Type::LongLong),
+                Some(crate::ir::IrType::I32) => Some(crate::types::Type::Long),
+                _ => None,
+            };
+            let ret_val = if ret_type.is_integer() {
+                if let Some(dest_ty) = dest_ty {
+                    if dest_ty.size_in_words() != ret_type.size_in_words() {
+                        convert_integer(&mut expr_gen, ret_val, ret_type, &dest_ty)?
+                    } else {
+                        ret_val
+                    }
                 } else {
                     ret_val
                 }

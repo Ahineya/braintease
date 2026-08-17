@@ -32,11 +32,11 @@ impl Lexer {
                 ));
             }
             
-            let value = i64::from_str_radix(&number[2..], 16)
+            let value = u64::from_str_radix(&number[2..], 16)
                 .map_err(|_| CompilerError::lexer_error(
                     format!("Invalid hex literal: {number}"),
                     self.current_location(),
-                ))?;
+                ))? as i64;
             
             let suffix = self.parse_integer_suffix()?;
             return Ok(TokenType::IntLiteral { value, suffix, hex: true });
@@ -61,15 +61,15 @@ impl Lexer {
         }
 
         let value = if octal {
-            i64::from_str_radix(&number, 8).map_err(|_| CompilerError::lexer_error(
+            u64::from_str_radix(&number, 8).map_err(|_| CompilerError::lexer_error(
                 format!("Invalid octal literal: {number}"),
                 self.current_location(),
-            ))?
+            ))? as i64
         } else {
-            number.parse::<i64>().map_err(|_| CompilerError::lexer_error(
+            number.parse::<u64>().map_err(|_| CompilerError::lexer_error(
                 format!("Invalid integer literal: {number}"),
                 self.current_location(),
-            ))?
+            ))? as i64
         };
         
         let suffix = self.parse_integer_suffix()?;
@@ -77,12 +77,12 @@ impl Lexer {
         Ok(TokenType::IntLiteral { value, suffix, hex: octal })
     }
 
-    /// Parse a C99 integer suffix: u/U, l/L, and combinations (ul, lu, …).
-    /// `ll`/`ull` are not supported (no `long long` on this target).
+    /// Parse a C99 integer suffix: u/U, l/L, ll/LL, and combinations (ul, lu, ull, llu, …).
     fn parse_integer_suffix(&mut self) -> Result<super::token::IntegerSuffix, CompilerError> {
         use super::token::IntegerSuffix;
         let mut seen_u = false;
         let mut seen_l = false;
+        let mut seen_ll = false;
         loop {
             match self.current_char() {
                 Some('u') | Some('U') if !seen_u => {
@@ -94,10 +94,8 @@ impl Lexer {
                     self.advance();
                     if let Some(second) = self.current_char() {
                         if second == first {
-                            return Err(CompilerError::lexer_error(
-                                "long long integer suffixes (ll/LL) are not supported".to_string(),
-                                self.current_location(),
-                            ));
+                            self.advance();
+                            seen_ll = true;
                         }
                     }
                     seen_l = true;
@@ -111,11 +109,14 @@ impl Lexer {
                 _ => break,
             }
         }
-        Ok(match (seen_u, seen_l) {
-            (false, false) => IntegerSuffix::None,
-            (true, false) => IntegerSuffix::Unsigned,
-            (false, true) => IntegerSuffix::Long,
-            (true, true) => IntegerSuffix::UnsignedLong,
+        Ok(match (seen_u, seen_l, seen_ll) {
+            (false, false, false) => IntegerSuffix::None,
+            (true, false, false) => IntegerSuffix::Unsigned,
+            (false, true, false) => IntegerSuffix::Long,
+            (true, true, false) => IntegerSuffix::UnsignedLong,
+            (false, true, true) => IntegerSuffix::LongLong,
+            (true, true, true) => IntegerSuffix::UnsignedLongLong,
+            (_, false, true) => unreachable!("ll implies l"),
         })
     }
     

@@ -74,10 +74,23 @@ impl NameGenerator {
         format!("{lo_name}__hi")
     }
 
+    /// Companion word `i` (1, 2, or 3) for a 64-bit value whose low word is `lo_name`.
+    pub fn i64_word_name(&self, lo_name: &str, word: u8) -> String {
+        format!("{lo_name}__w{word}")
+    }
+
     pub fn i32_label(&mut self, kind: &str) -> String {
         let label_id = self.next_label_id();
         format!(
             "L_i32_{}_{:x}_{}_{}",
+            kind, self.unit_tag, self.function_id, label_id
+        )
+    }
+
+    pub fn i64_label(&mut self, kind: &str) -> String {
+        let label_id = self.next_label_id();
+        format!(
+            "L_i64_{}_{:x}_{}_{}",
             kind, self.unit_tag, self.function_id, label_id
         )
     }

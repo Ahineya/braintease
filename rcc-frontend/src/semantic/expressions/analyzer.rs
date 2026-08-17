@@ -12,35 +12,83 @@ use super::binary::BinaryOperationAnalyzer;
 use super::unary::UnaryOperationAnalyzer;
 use crate::lexer::IntegerSuffix;
 
+fn bits(value: i64) -> u64 {
+    value as u64
+}
+
+fn fits_i16(value: i64) -> bool {
+    bits(value) <= i16::MAX as u64
+}
+
+fn fits_u16(value: i64) -> bool {
+    bits(value) <= u16::MAX as u64
+}
+
+fn fits_i32(value: i64) -> bool {
+    bits(value) <= i32::MAX as u64
+}
+
+fn fits_u32(value: i64) -> bool {
+    bits(value) <= u32::MAX as u64
+}
+
+fn fits_i64(value: i64) -> bool {
+    bits(value) <= i64::MAX as u64
+}
+
 fn literal_integer_type(value: i64, suffix: IntegerSuffix, hex: bool) -> Type {
     match suffix {
         IntegerSuffix::None => {
-            if value >= i16::MIN as i64 && value <= i16::MAX as i64 {
+            if fits_i16(value) {
                 Type::Int
-            } else if hex && value >= 0 && value <= u16::MAX as i64 {
+            } else if hex && fits_u16(value) {
                 // C99 6.4.4.1: hex/octal try unsigned int before long.
                 Type::UnsignedInt
-            } else if value >= i32::MIN as i64 && value <= i32::MAX as i64 {
+            } else if fits_i32(value) {
                 Type::Long
-            } else {
+            } else if hex && fits_u32(value) {
                 Type::UnsignedLong
+            } else if fits_i64(value) {
+                Type::LongLong
+            } else {
+                Type::UnsignedLongLong
             }
         }
         IntegerSuffix::Unsigned => {
-            if value >= 0 && value <= u16::MAX as i64 {
+            if fits_u16(value) {
                 Type::UnsignedInt
-            } else {
+            } else if fits_u32(value) {
                 Type::UnsignedLong
+            } else {
+                Type::UnsignedLongLong
             }
         }
         IntegerSuffix::Long => {
-            if value >= i32::MIN as i64 && value <= i32::MAX as i64 {
+            if fits_i32(value) {
                 Type::Long
-            } else {
+            } else if hex && fits_u32(value) {
                 Type::UnsignedLong
+            } else if fits_i64(value) {
+                Type::LongLong
+            } else {
+                Type::UnsignedLongLong
             }
         }
-        IntegerSuffix::UnsignedLong => Type::UnsignedLong,
+        IntegerSuffix::UnsignedLong => {
+            if fits_u32(value) {
+                Type::UnsignedLong
+            } else {
+                Type::UnsignedLongLong
+            }
+        }
+        IntegerSuffix::LongLong => {
+            if fits_i64(value) {
+                Type::LongLong
+            } else {
+                Type::UnsignedLongLong
+            }
+        }
+        IntegerSuffix::UnsignedLongLong => Type::UnsignedLongLong,
     }
 }
 
@@ -88,7 +136,7 @@ impl ExpressionAnalyzer {
 
         let expr_type = match &mut expr.kind {
             ExpressionKind::IntLiteral { value: v, suffix, hex } => {
-                // C99 6.4.4.1 on this ILP16 / 32-bit long target.
+                // C99 6.4.4.1 on this ILP16 / 32-bit long / 64-bit long long target.
                 literal_integer_type(*v, *suffix, *hex)
             }
             ExpressionKind::CharLiteral(_) => Type::Char,

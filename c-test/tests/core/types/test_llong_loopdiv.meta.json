@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "use_runtime": true,
+  "description": "I64 rem+div in a while loop"
+}

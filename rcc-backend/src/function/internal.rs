@@ -81,6 +81,7 @@ impl FunctionLowering {
             &mut self.naming, 
             is_pointer,
             false,
+            false,
             None  // No specific result name - builder handles this
         );
         trace!("  Return handling generated {} instructions", insts.len());

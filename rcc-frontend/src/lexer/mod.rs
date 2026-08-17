@@ -466,6 +466,18 @@ mod tests {
     }
 
     #[test]
+    fn test_long_long_suffixes() {
+        let mut lexer = Lexer::new("1LL 2ll 3ULL 4ull 5LLu 6uLL");
+        let tokens = lexer.tokenize().unwrap();
+        assert_eq!(tokens[0].token_type, TokenType::IntLiteral { value: 1, suffix: IntegerSuffix::LongLong, hex: false });
+        assert_eq!(tokens[1].token_type, TokenType::IntLiteral { value: 2, suffix: IntegerSuffix::LongLong, hex: false });
+        assert_eq!(tokens[2].token_type, TokenType::IntLiteral { value: 3, suffix: IntegerSuffix::UnsignedLongLong, hex: false });
+        assert_eq!(tokens[3].token_type, TokenType::IntLiteral { value: 4, suffix: IntegerSuffix::UnsignedLongLong, hex: false });
+        assert_eq!(tokens[4].token_type, TokenType::IntLiteral { value: 5, suffix: IntegerSuffix::UnsignedLongLong, hex: false });
+        assert_eq!(tokens[5].token_type, TokenType::IntLiteral { value: 6, suffix: IntegerSuffix::UnsignedLongLong, hex: false });
+    }
+
+    #[test]
     fn test_identifiers() {
         let mut lexer = Lexer::new("variable _private var123 __special");
         let tokens = lexer.tokenize().unwrap();

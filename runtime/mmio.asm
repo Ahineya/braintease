@@ -303,6 +303,9 @@ L_rng_get_3:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_rng_get_99999
 L_rng_get_99999:
@@ -366,6 +369,9 @@ L_rng_get_seed_4:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_rng_get_seed_99999
 L_rng_get_seed_99999:
@@ -1326,17 +1332,17 @@ L_text40_puts_25:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("gep_new_bank_f24_op24_t13")
     LI S2, -1
-    BEQ T3, S2, L_bc_c5069b67_use_global
+    BEQ T3, S2, L_bc_263cfa3f_use_global
     LI S1, -2
-    BEQ T3, S1, L_bc_c5069b67_use_stack
+    BEQ T3, S1, L_bc_263cfa3f_use_stack
     ADD S3, T3, R0
-    BEQ R0, R0, L_bc_c5069b67_done
-L_bc_c5069b67_use_global:
+    BEQ R0, R0, L_bc_263cfa3f_done
+L_bc_263cfa3f_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_c5069b67_done
-L_bc_c5069b67_use_stack:
+    BEQ R0, R0, L_bc_263cfa3f_done
+L_bc_263cfa3f_use_stack:
     ADD S3, SB, R0
-L_bc_c5069b67_done:
+L_bc_263cfa3f_done:
 ; LOAD: Using bank register S3 for load
     LOAD S0, S3, T4
 ; Recompute alloca t9 at FP+6
@@ -2423,17 +2429,17 @@ L_text40_puts_color_58:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Mixed })
 ; LOAD: Pointer t17 has bank info: Dynamic("gep_new_bank_f30_op28_t17")
     LI S0, -1
-    BEQ S3, S0, L_bc_18e7be51_use_global
+    BEQ S3, S0, L_bc_cb986a6d_use_global
     LI T7, -2
-    BEQ S3, T7, L_bc_18e7be51_use_stack
+    BEQ S3, T7, L_bc_cb986a6d_use_stack
     ADD S1, S3, R0
-    BEQ R0, R0, L_bc_18e7be51_done
-L_bc_18e7be51_use_global:
+    BEQ R0, R0, L_bc_cb986a6d_done
+L_bc_cb986a6d_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_18e7be51_done
-L_bc_18e7be51_use_stack:
+    BEQ R0, R0, L_bc_cb986a6d_done
+L_bc_cb986a6d_use_stack:
     ADD S1, SB, R0
-L_bc_18e7be51_done:
+L_bc_cb986a6d_done:
 ; LOAD: Using bank register S1 for load
     LOAD T6, S1, T3
 ; Recompute alloca t13 at FP+8
@@ -2802,17 +2808,17 @@ L_text40_puts_attr_65:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(15), bank: Mixed })
 ; LOAD: Pointer t15 has bank info: Dynamic("gep_new_bank_f32_op26_t15")
     LI S1, -1
-    BEQ T1, S1, L_bc_bd08b6ea_use_global
+    BEQ T1, S1, L_bc_a63547df_use_global
     LI S0, -2
-    BEQ T1, S0, L_bc_bd08b6ea_use_stack
+    BEQ T1, S0, L_bc_a63547df_use_stack
     ADD S2, T1, R0
-    BEQ R0, R0, L_bc_bd08b6ea_done
-L_bc_bd08b6ea_use_global:
+    BEQ R0, R0, L_bc_a63547df_done
+L_bc_a63547df_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_bd08b6ea_done
-L_bc_bd08b6ea_use_stack:
+    BEQ R0, R0, L_bc_a63547df_done
+L_bc_a63547df_use_stack:
     ADD S2, SB, R0
-L_bc_bd08b6ea_done:
+L_bc_a63547df_done:
 ; LOAD: Using bank register S2 for load
     LOAD T7, S2, T4
 ; Recompute alloca t11 at FP+7
@@ -3306,70 +3312,72 @@ L_text40_set_attr_81:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t34
+; Copy Rv0 to allocatable T5
+    ADD T5, RV0, R0
 ; Recompute alloca t32 at FP+7
-    ADD T5, FP, R0
-    ADDI T5, T5, 7
-    STORE RV0, SB, T5
     ADD S2, FP, R0
-    ADDI S2, S2, 8
+    ADDI S2, S2, 7
+    STORE T5, SB, S2
+    ADD S1, FP, R0
+    ADDI S1, S1, 8
 ; Load instruction: t36 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f34_op53_t36 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t5 at FP+2
-    ADD S1, FP, R0
-    ADDI S1, S1, 2
-    LOAD T1, SB, S1
-    LI S3, 255
-    AND T1, T1, S3
-    LI T7, 8
-    SLL T1, T1, T7
+    ADD T1, FP, R0
+    ADDI T1, T1, 2
+    LOAD S3, SB, T1
+    LI T7, 255
+    AND S3, S3, T7
+    LI T3, 8
+    SLL S3, S3, T3
 ; Load instruction: t39 = load FatPtr(FatPointer { addr: Temp(32), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(32), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f34_op55_t39 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T5
-    LI T0, 255
-    AND T3, T3, T0
-    OR T1, T1, T3
-    STORE T1, SB, S2
+    LOAD T0, SB, S2
+    LI T4, 255
+    AND T0, T0, T4
+    OR S3, S3, T0
+    STORE S3, SB, S1
 ; Load instruction: t42 = load FatPtr(FatPointer { addr: Temp(26), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(26), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f34_op58_t42 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t26 at FP+6
-    ADD T4, FP, R0
-    ADDI T4, T4, 6
-    LOAD T6, SB, T4
+    ADD T6, FP, R0
+    ADDI T6, T6, 6
+    LOAD T2, SB, T6
 ; Load instruction: t43 = load FatPtr(FatPointer { addr: Temp(35), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(35), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f34_op60_t43 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T2, SB, S2
+    LOAD S0, SB, S1
 ; Spill live registers before call
 ; Spill t34 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    STORE RV0, SB, SC
+    STORE T5, SB, SC
 ; Spill t41 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 26
-    STORE T1, SB, SC
+    STORE S3, SB, SC
 ; Spill t42 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 27
-    STORE T6, SB, SC
+    STORE T2, SB, SC
 ; Spill t43 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 28
-    STORE T2, SB, SC
+    STORE S0, SB, SC
 ; Set SP = FP+37 so callee frame is above spills
     ADDI SP, FP, 37
 ; Setting up 2 register arguments
 ; Arg 0 (scalar) to A0
-    ADD A0, T6, R0
+    ADD A0, T2, R0
 ; Arg 1 (scalar) to A1
-    ADD A1, T2, R0
+    ADD A1, S0, R0
 ; Call function mmio_write
     CALL mmio_write
     BEQ R0, R0, L_text40_set_attr_83
@@ -3668,18 +3676,20 @@ L_text40_get_char_94:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t32
+; Copy Rv0 to allocatable T3
+    ADD T3, RV0, R0
 ; Recompute alloca t30 at FP+6
-    ADD T3, FP, R0
-    ADDI T3, T3, 6
-    STORE RV0, SB, T3
+    ADD S3, FP, R0
+    ADDI S3, S3, 6
+    STORE T3, SB, S3
 ; Load instruction: t33 = load FatPtr(FatPointer { addr: Temp(30), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(30), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f36_op51_t33 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S3, SB, T3
-    LI S2, 255
-    AND S3, S3, S2
-    MOVE RV0, S3
+    LOAD S2, SB, S3
+    LI T2, 255
+    AND S2, S2, T2
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_text40_get_char_99999
 ; Invalidated 1 alloca bindings
@@ -3979,20 +3989,22 @@ L_text40_get_attr_107:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t32
+; Copy Rv0 to allocatable T3
+    ADD T3, RV0, R0
 ; Recompute alloca t30 at FP+6
-    ADD T3, FP, R0
-    ADDI T3, T3, 6
-    STORE RV0, SB, T3
+    ADD S3, FP, R0
+    ADDI S3, S3, 6
+    STORE T3, SB, S3
 ; Load instruction: t33 = load FatPtr(FatPointer { addr: Temp(30), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(30), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f38_op51_t33 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S3, SB, T3
-    LI S2, 8
-    SRL S3, S3, S2
-    LI T2, 255
-    AND S3, S3, T2
-    MOVE RV0, S3
+    LOAD S2, SB, S3
+    LI T2, 8
+    SRL S2, S2, T2
+    LI T6, 255
+    AND S2, S2, T6
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_text40_get_attr_99999
 ; Invalidated 1 alloca bindings
@@ -4073,14 +4085,17 @@ L_key_pressed_110:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t3
-    LI S0, 1
-    LI T7, 0
-    SLL S0, S0, T7
-    AND RV0, RV0, S0
+; Copy Rv0 to allocatable S0
+    ADD S0, RV0, R0
+    LI T7, 1
     LI T6, 0
-    XOR T5, RV0, T6
-    LI T4, 0
-    SLTU RV0, T4, T5
+    SLL T7, T7, T6
+    AND S0, S0, T7
+    LI T5, 0
+    XOR T4, S0, T5
+    LI T3, 0
+    SLTU S0, T3, T4
+    MOVE RV0, S0
 ; Jump to epilogue
     BEQ R0, R0, L_key_pressed_99999
 L_key_pressed_99999:
@@ -4144,6 +4159,9 @@ L_key_up_pressed_111:
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_key_up_pressed_99999
 L_key_up_pressed_99999:
@@ -4207,6 +4225,9 @@ L_key_down_pressed_112:
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_key_down_pressed_99999
 L_key_down_pressed_99999:
@@ -4270,6 +4291,9 @@ L_key_left_pressed_113:
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_key_left_pressed_99999
 L_key_left_pressed_99999:
@@ -4333,6 +4357,9 @@ L_key_right_pressed_114:
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_key_right_pressed_99999
 L_key_right_pressed_99999:
@@ -4396,6 +4423,9 @@ L_key_z_pressed_115:
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_key_z_pressed_99999
 L_key_z_pressed_99999:
@@ -4459,6 +4489,9 @@ L_key_x_pressed_116:
 ; Call function key_pressed
     CALL key_pressed
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_key_x_pressed_99999
 L_key_x_pressed_99999:
@@ -5272,6 +5305,9 @@ L_storage_read_130:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_storage_read_99999
 L_storage_read_99999:
@@ -5415,6 +5451,9 @@ L_storage_get_status_132:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_storage_get_status_99999
 L_storage_get_status_99999:
@@ -5610,14 +5649,17 @@ L_storage_is_busy_135:
 ; Call function storage_get_status
     CALL storage_get_status
 ; Scalar return value for t0
-    LI S3, 1
-    LI S2, 0
-    SLL S3, S3, S2
-    AND RV0, RV0, S3
+; Copy Rv0 to allocatable S3
+    ADD S3, RV0, R0
+    LI S2, 1
     LI S1, 0
-    XOR S0, RV0, S1
-    LI T7, 0
-    SLTU RV0, T7, S0
+    SLL S2, S2, S1
+    AND S3, S3, S2
+    LI S0, 0
+    XOR T7, S3, S0
+    LI T6, 0
+    SLTU S3, T6, T7
+    MOVE RV0, S3
 ; Jump to epilogue
     BEQ R0, R0, L_storage_is_busy_99999
 L_storage_is_busy_99999:
@@ -5673,14 +5715,17 @@ L_storage_is_dirty_136:
 ; Call function storage_get_status
     CALL storage_get_status
 ; Scalar return value for t0
-    LI S3, 1
-    LI S3, 1
-    SLL S2, S3, S3
-    AND RV0, RV0, S2
-    LI S1, 0
-    XOR S0, RV0, S1
-    LI T7, 0
-    SLTU RV0, T7, S0
+; Copy Rv0 to allocatable S3
+    ADD S3, RV0, R0
+    LI S2, 1
+    LI S2, 1
+    SLL S1, S2, S2
+    AND S3, S3, S1
+    LI S0, 0
+    XOR T7, S3, S0
+    LI T6, 0
+    SLTU S3, T6, T7
+    MOVE RV0, S3
 ; Jump to epilogue
     BEQ R0, R0, L_storage_is_dirty_99999
 L_storage_is_dirty_99999:
@@ -5921,6 +5966,9 @@ L_storage_read_at_138:
 ; Call function storage_read
     CALL storage_read
 ; Scalar return value for t6
+; Copy Rv0 to allocatable T4
+    ADD T4, RV0, R0
+    MOVE RV0, T4
 ; Jump to epilogue
     BEQ R0, R0, L_storage_read_at_99999
 L_storage_read_at_99999:
@@ -6124,17 +6172,17 @@ L_storage_write_buffer_141:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Mixed })
 ; LOAD: Pointer t16 has bank info: Dynamic("gep_new_bank_f82_op31_t16")
     LI S3, -1
-    BEQ S1, S3, L_bc_6e530589_use_global
+    BEQ S1, S3, L_bc_6123d9b8_use_global
     LI S0, -2
-    BEQ S1, S0, L_bc_6e530589_use_stack
+    BEQ S1, S0, L_bc_6123d9b8_use_stack
     ADD T6, S1, R0
-    BEQ R0, R0, L_bc_6e530589_done
-L_bc_6e530589_use_global:
+    BEQ R0, R0, L_bc_6123d9b8_done
+L_bc_6123d9b8_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_6e530589_done
-L_bc_6e530589_use_stack:
+    BEQ R0, R0, L_bc_6123d9b8_done
+L_bc_6123d9b8_use_stack:
     ADD T6, SB, R0
-L_bc_6e530589_done:
+L_bc_6123d9b8_done:
 ; LOAD: Using bank register T6 for load
     LOAD T4, T6, S2
 ; Spill live registers before call
@@ -6434,27 +6482,29 @@ L_storage_read_buffer_146:
 ; Call function storage_read
     CALL storage_read
 ; Scalar return value for t17
+; Copy Rv0 to allocatable T6
+    ADD T6, RV0, R0
 ; Reload t16 from slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 27
-    LOAD T6, SB, SC
+    LOAD S3, SB, SC
 ; Reload gep_new_bank_f84_op31_t16 from slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 26
-    LOAD S3, SB, SC
-    LI T4, -1
-    BEQ S3, T4, L_bc_a4731b34_use_global
-    LI T5, -2
-    BEQ S3, T5, L_bc_a4731b34_use_stack
-    ADD S0, S3, R0
-    BEQ R0, R0, L_bc_a4731b34_done
-L_bc_a4731b34_use_global:
-    ADD S0, GP, R0
-    BEQ R0, R0, L_bc_a4731b34_done
-L_bc_a4731b34_use_stack:
-    ADD S0, SB, R0
-L_bc_a4731b34_done:
-    STORE RV0, S0, T6
+    LOAD S0, SB, SC
+    LI T5, -1
+    BEQ S0, T5, L_bc_af8e1fc4_use_global
+    LI T7, -2
+    BEQ S0, T7, L_bc_af8e1fc4_use_stack
+    ADD T4, S0, R0
+    BEQ R0, R0, L_bc_af8e1fc4_done
+L_bc_af8e1fc4_use_global:
+    ADD T4, GP, R0
+    BEQ R0, R0, L_bc_af8e1fc4_done
+L_bc_af8e1fc4_use_stack:
+    ADD T4, SB, R0
+L_bc_af8e1fc4_done:
+    STORE T6, T4, S3
     BEQ R0, R0, L_storage_read_buffer_147
 ; Unconditional branch to L_storage_read_buffer_147
 L_storage_read_buffer_147:
@@ -6463,19 +6513,19 @@ L_storage_read_buffer_147:
 ; LOAD: Pointer load_src_ptr_f84_op36_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
 ; Recompute alloca t10 at FP+5
-    ADD T7, FP, R0
-    ADDI T7, T7, 5
-    LOAD T1, SB, T7
-    LI T3, 0
-    ADD T1, T1, T3
+    ADD T1, FP, R0
+    ADDI T1, T1, 5
+    LOAD T3, SB, T1
+    LI T0, 0
+    ADD T3, T3, T0
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f84_op38_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T0, SB, T7
-    LI T2, 1
-    ADD T0, T0, T2
-    STORE T0, SB, T7
+    LOAD T2, SB, T1
+    LI S1, 1
+    ADD T2, T2, S1
+    STORE T2, SB, T1
     BEQ R0, R0, L_storage_read_buffer_145
 ; Unconditional branch to L_storage_read_buffer_145
 ; Invalidated 1 alloca bindings
