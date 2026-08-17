@@ -153,6 +153,11 @@ pub fn generate_binary_operation(
         return generate_logical_operation(gen, op, left, right);
     }
 
+    if op == BinaryOp::Comma {
+        gen.generate(left)?;
+        return gen.generate(right);
+    }
+
     let left_val = gen.generate(left)?;
     let right_val = gen.generate(right)?;
     let ir_type = convert_type_default(result_type)?;

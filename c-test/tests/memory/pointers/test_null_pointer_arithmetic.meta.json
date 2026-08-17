@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "description": "NULL pointer arithmetic tests",
+  "use_runtime": true,
   "expected": "12345\n"
 }

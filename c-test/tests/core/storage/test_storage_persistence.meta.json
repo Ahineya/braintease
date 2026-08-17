@@ -1,5 +1,5 @@
 {
   "expected": "YYYYY\n",
-  "description": "Test storage persistence and auto-increment",
-  "use_runtime": true
+  "use_runtime": true,
+  "description": "Test storage persistence and auto-increment"
 }

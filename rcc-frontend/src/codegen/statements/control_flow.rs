@@ -88,6 +88,39 @@ pub fn generate_while(
     Ok(())
 }
 
+pub fn generate_do_while(
+    gen: &mut TypedStatementGenerator,
+    condition: &TypedExpr,
+    body: &TypedStmt,
+) -> Result<(), CompilerError> {
+    let body_label = gen.builder.new_label();
+    let cond_label = gen.builder.new_label();
+    let end_label = gen.builder.new_label();
+
+    gen.break_labels.push(end_label);
+    gen.continue_labels.push(cond_label);
+
+    gen.builder.build_branch(body_label)?;
+
+    gen.builder.create_block(body_label)?;
+    gen.generate(body)?;
+    if !gen.builder.current_block_has_terminator() {
+        gen.builder.build_branch(cond_label)?;
+    }
+
+    gen.builder.create_loop_condition_block(cond_label)?;
+    let mut expr_gen = gen.create_expression_generator();
+    let cond_val = expr_gen.generate(condition)?;
+    gen.builder.build_branch_cond(cond_val, body_label, end_label)?;
+
+    gen.builder.create_block(end_label)?;
+
+    gen.break_labels.pop();
+    gen.continue_labels.pop();
+
+    Ok(())
+}
+
 pub fn generate_for(
     gen: &mut TypedStatementGenerator,
     init: Option<&TypedStmt>,
@@ -190,7 +223,7 @@ fn collect_switch_labels(
             }
             Ok(())
         }
-        TypedStmt::While { body, .. } | TypedStmt::For { body, .. } => {
+        TypedStmt::While { body, .. } | TypedStmt::For { body, .. } | TypedStmt::DoWhile { body, .. } => {
             collect_switch_labels(body, cases, default, builder)
         }
         _ => Ok(()),

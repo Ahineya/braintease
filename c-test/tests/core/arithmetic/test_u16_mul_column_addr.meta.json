@@ -1,5 +1,5 @@
 {
+  "expected": "YYYY\n",
   "use_runtime": true,
-  "description": "Column-major address x*200+y including signed-16 overflow range",
-  "expected": "YYYY\n"
+  "description": "Column-major address x*200+y including signed-16 overflow range"
 }

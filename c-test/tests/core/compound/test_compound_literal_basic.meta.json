@@ -1,5 +1,5 @@
 {
-  "expected": "YYYY\n",
   "use_runtime": true,
-  "description": "Basic compound literal tests for arrays"
+  "description": "Basic compound literal tests for arrays",
+  "expected": "YYYY\n"
 }

@@ -117,10 +117,10 @@ char* strrchr(char* str, int c) {
 }
 
 // Memory copy
-void* memcpy(void* dst, void* src, int n) {
+void* memcpy(void* dst, void* src, unsigned int n) {
     char* d = (char*)dst;
     char* s = (char*)src;
-    int i;
+    unsigned int i;
     for (i = 0; i < n; i++) {
         d[i] = s[i];
     }
@@ -128,10 +128,10 @@ void* memcpy(void* dst, void* src, int n) {
 }
 
 // Memory move (handles overlapping regions)
-void* memmove(void* dst, void* src, int n) {
+void* memmove(void* dst, void* src, unsigned int n) {
     char* d = (char*)dst;
     char* s = (char*)src;
-    int i;
+    unsigned int i;
     
     if (d < s || d >= s + n) {
         // No overlap or dst before src - copy forward
@@ -140,7 +140,9 @@ void* memmove(void* dst, void* src, int n) {
         }
     } else {
         // Overlap with dst after src - copy backward
-        for (i = n - 1; i >= 0; i--) {
+        i = n;
+        while (i) {
+            i = i - 1;
             d[i] = s[i];
         }
     }
@@ -148,9 +150,9 @@ void* memmove(void* dst, void* src, int n) {
 }
 
 // Memory set
-void* memset(void* dst, int c, int n) {
+void* memset(void* dst, int c, unsigned int n) {
     char* d = (char*)dst;
-    int i;
+    unsigned int i;
     for (i = 0; i < n; i++) {
         d[i] = (char)c;
     }
@@ -158,10 +160,10 @@ void* memset(void* dst, int c, int n) {
 }
 
 // Memory compare
-int memcmp(void* s1, void* s2, int n) {
+int memcmp(void* s1, void* s2, unsigned int n) {
     char* p1 = (char*)s1;
     char* p2 = (char*)s2;
-    int i;
+    unsigned int i;
     for (i = 0; i < n; i++) {
         if (p1[i] != p2[i]) {
             return p1[i] - p2[i];

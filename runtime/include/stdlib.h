@@ -17,10 +17,10 @@ int rand(void);
 void srand(unsigned int seed);
 
 // Memory allocation functions
-void *malloc(int size);
+void *malloc(unsigned int size);
 void free(void *ptr);
-void *calloc(int nmemb, int size);
-void *realloc(void *ptr, int size);
+void *calloc(unsigned int nmemb, unsigned int size);
+void *realloc(void *ptr, unsigned int size);
 
 // TODO: Future additions
 // void exit(int status);

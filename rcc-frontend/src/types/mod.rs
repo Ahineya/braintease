@@ -196,6 +196,37 @@ impl Type {
         }
     }
     
+    /// C `sizeof` in bytes (not VM words). `char` is 1 byte; `int` is 2.
+    pub fn size_in_bytes(&self) -> Option<u64> {
+        match self {
+            Type::Void => None,
+            Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => Some(1),
+            Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt => Some(2),
+            Type::Long | Type::UnsignedLong | Type::Float => Some(4),
+            Type::Double => Some(8),
+            Type::Pointer { .. } => Some(4),
+            Type::Array {
+                element_type,
+                size: Some(count),
+            } => element_type.size_in_bytes().map(|elem| elem * count),
+            Type::Array { size: None, .. } => None,
+            Type::Function { .. } => None,
+            Type::Struct { fields, .. } => {
+                let mut total = 0u64;
+                for field in fields {
+                    total += field.field_type.size_in_bytes()?;
+                }
+                Some(total)
+            }
+            Type::Union { fields, .. } => fields
+                .iter()
+                .filter_map(|f| f.field_type.size_in_bytes())
+                .max(),
+            Type::Enum { .. } => Some(2),
+            Type::Typedef(_) | Type::Error => None,
+        }
+    }
+
     /// Get pointer target type
     pub fn pointer_target(&self) -> Option<&Type> {
         match self {

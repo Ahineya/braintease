@@ -1,4 +1,4 @@
 {
-  "expected": "ABC\nAXBC\nABC\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "ABC\nAXBC\nABC\n"
 }

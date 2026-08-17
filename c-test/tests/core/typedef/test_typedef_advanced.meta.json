@@ -1,5 +1,5 @@
 {
+  "description": "Test advanced typedef scenarios including nested typedefs, multiple declarators, arrays, and function pointers",
   "expected": "1234\n",
-  "use_runtime": true,
-  "description": "Test advanced typedef scenarios including nested typedefs, multiple declarators, arrays, and function pointers"
+  "use_runtime": true
 }

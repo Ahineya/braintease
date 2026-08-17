@@ -6,7 +6,7 @@ mod jumps;
 mod misc;
 
 pub use declarations::generate_declaration;
-pub use control_flow::{generate_if, generate_while, generate_for, generate_switch, generate_case, generate_default, SwitchContext};
+pub use control_flow::{generate_if, generate_while, generate_for, generate_do_while, generate_switch, generate_case, generate_default, SwitchContext};
 pub use jumps::{generate_break, generate_continue, generate_return};
 pub use misc::{generate_expression_stmt, generate_compound, generate_inline_asm};
 
@@ -54,6 +54,10 @@ impl<'a> TypedStatementGenerator<'a> {
             
             TypedStmt::While { condition, body } => {
                 control_flow::generate_while(self, condition, body)
+            }
+
+            TypedStmt::DoWhile { condition, body } => {
+                control_flow::generate_do_while(self, condition, body)
             }
             
             TypedStmt::For { init, condition, update, body } => {

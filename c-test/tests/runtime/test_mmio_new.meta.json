@@ -1,5 +1,5 @@
 {
-  "expected": "TTY:OK\nRNG:OK\nDISP:OK\nMMIO:OK\n",
+  "use_runtime": true,
   "description": "Test new MMIO layout with TTY, RNG, and TEXT40 display using runtime headers",
-  "use_runtime": true
+  "expected": "TTY:OK\nRNG:OK\nDISP:OK\nMMIO:OK\n"
 }

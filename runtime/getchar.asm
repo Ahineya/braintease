@@ -24,6 +24,10 @@ getchar:
 ; Reserve 20 spill slots above locals
     ADDI SP, SP, 20
     ADD S3, FP, R0
+    BEQ R0, R0, L_getchar_1
+; Unconditional branch to L_getchar_1
+; Invalidated 1 alloca bindings
+L_getchar_1:
     LI S2, 3
 ; Spill live registers before call
 ; Spill const_f0_op0_3 to slot 0
@@ -41,10 +45,10 @@ getchar:
 ; Recompute alloca t0 at FP+0
     ADD S1, FP, R0
     STORE RV0, SB, S1
-    BEQ R0, R0, L_getchar_1
-; Unconditional branch to L_getchar_1
+    BEQ R0, R0, L_getchar_2
+; Unconditional branch to L_getchar_2
 ; Invalidated 1 alloca bindings
-L_getchar_1:
+L_getchar_2:
 ; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(0), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(0), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f0_op2_t2 has bank info: Stack
@@ -62,17 +66,17 @@ L_getchar_1:
     SLTU T7, T3, T2
     BEQ T7, R0, L_getchar_3
 ; Branch to L_getchar_3 if condition is false
-    BEQ R0, R0, L_getchar_2
-; Unconditional branch to L_getchar_2 (condition was true)
+    BEQ R0, R0, L_getchar_1
+; Unconditional branch to L_getchar_1 (condition was true)
 ; Invalidated 1 alloca bindings
-L_getchar_2:
-    LI T1, 3
+L_getchar_3:
+    LI T1, 2
 ; Spill live registers before call
 ; Spill t1 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 10
     STORE RV0, SB, SC
-; Spill const_f0_op6_3 to slot 2
+; Spill const_f0_op6_2 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 11
     STORE T1, SB, SC
@@ -84,31 +88,6 @@ L_getchar_2:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t6
-; Recompute alloca t0 at FP+0
-    ADD T0, FP, R0
-    STORE RV0, SB, T0
-    BEQ R0, R0, L_getchar_1
-; Unconditional branch to L_getchar_1
-; Invalidated 1 alloca bindings
-L_getchar_3:
-    LI S3, 2
-; Spill live registers before call
-; Spill t6 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    STORE RV0, SB, SC
-; Spill const_f0_op8_2 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE S3, SB, SC
-; Set SP = FP+29 so callee frame is above spills
-    ADDI SP, FP, 29
-; Setting up 1 register arguments
-; Arg 0 (scalar) to A0
-    ADD A0, S3, R0
-; Call function mmio_read
-    CALL mmio_read
-; Scalar return value for t7
 ; Jump to epilogue
     BEQ R0, R0, L_getchar_99999
 L_getchar_99999:

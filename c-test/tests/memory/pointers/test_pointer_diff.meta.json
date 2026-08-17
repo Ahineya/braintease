@@ -1,5 +1,5 @@
 {
-  "description": "Added via command line",
   "expected": "Y\n",
+  "description": "Added via command line",
   "use_runtime": true
 }

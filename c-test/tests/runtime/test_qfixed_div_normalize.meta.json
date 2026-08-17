@@ -1,6 +1,6 @@
 {
   "expected": "ABC\n",
-  "use_runtime": true,
   "description": "q_div 3/5 and 4/5, then magnitude of the unit vector",
-  "timeout_secs": 15
+  "timeout_secs": 15,
+  "use_runtime": true
 }

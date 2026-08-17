@@ -8,7 +8,7 @@ use super::statements::TypedStmt;
 use super::translation_unit::{TypedFunction, TypedTopLevelItem, TypedTranslationUnit};
 use super::errors::TypeError;
 use crate::types::{Type, BankTag};
-use crate::ast::{Initializer, InitializerKind, BinaryOp, Designator, ExpressionKind};
+use crate::ast::{Initializer, InitializerKind, BinaryOp, Designator};
 use rcc_common::SymbolId;
 use std::rc::Rc;
 use crate::semantic::types::TypeAnalyzer;
@@ -95,12 +95,15 @@ fn type_initializer(
 }
 
 fn const_designator_index(expr: &crate::ast::Expression) -> Result<u64, TypeError> {
-    match &expr.kind {
-        ExpressionKind::IntLiteral(v) if *v >= 0 => Ok(*v as u64),
-        _ => Err(TypeError::TypeMismatch(
+    let v = crate::ast::const_eval::eval_integer_constant(expr).map_err(|e| {
+        TypeError::TypeMismatch(e.0)
+    })?;
+    if v < 0 {
+        return Err(TypeError::TypeMismatch(
             "Array designator index must be a non-negative integer constant".to_string(),
-        )),
+        ));
     }
+    Ok(v as u64)
 }
 
 fn infer_array_len(initializers: &[Initializer]) -> Result<u64, TypeError> {
@@ -696,41 +699,7 @@ pub fn type_expression(
 
 /// Fold a case-label expression to an integer constant (C99 constant-expression).
 fn eval_integer_constant(expr: &crate::ast::Expression) -> Result<i64, TypeError> {
-    use crate::ast::{ExpressionKind, UnaryOp};
-    match &expr.kind {
-        ExpressionKind::IntLiteral(v) => Ok(*v),
-        ExpressionKind::CharLiteral(v) => Ok(*v as i64),
-        ExpressionKind::Unary { op: UnaryOp::Plus, operand } => eval_integer_constant(operand),
-        ExpressionKind::Unary { op: UnaryOp::Minus, operand } => {
-            Ok(-eval_integer_constant(operand)?)
-        }
-        ExpressionKind::Unary { op: UnaryOp::BitNot, operand } => {
-            Ok(!eval_integer_constant(operand)?)
-        }
-        ExpressionKind::Cast { operand, .. } => eval_integer_constant(operand),
-        ExpressionKind::Binary { op, left, right } => {
-            let l = eval_integer_constant(left)?;
-            let r = eval_integer_constant(right)?;
-            match op {
-                BinaryOp::Add => Ok(l.wrapping_add(r)),
-                BinaryOp::Sub => Ok(l.wrapping_sub(r)),
-                BinaryOp::Mul => Ok(l.wrapping_mul(r)),
-                BinaryOp::Div if r != 0 => Ok(l / r),
-                BinaryOp::Mod if r != 0 => Ok(l % r),
-                BinaryOp::BitAnd => Ok(l & r),
-                BinaryOp::BitOr => Ok(l | r),
-                BinaryOp::BitXor => Ok(l ^ r),
-                BinaryOp::LeftShift => Ok(l.wrapping_shl(r as u32)),
-                BinaryOp::RightShift => Ok(l.wrapping_shr(r as u32)),
-                _ => Err(TypeError::TypeMismatch(
-                    "Case label is not an integer constant expression".to_string(),
-                )),
-            }
-        }
-        _ => Err(TypeError::TypeMismatch(
-            "Case label is not an integer constant expression".to_string(),
-        )),
-    }
+    crate::ast::const_eval::eval_integer_constant(expr).map_err(|e| TypeError::TypeMismatch(e.0))
 }
 
 /// Convert an untyped statement to a typed statement
@@ -861,22 +830,12 @@ pub fn type_statement(
         StatementKind::Empty => Ok(TypedStmt::Empty),
         
         StatementKind::DoWhile { body, condition } => {
-            // Transform do-while into: { body; while (condition) { body } }
-            // This ensures the body executes at least once
             let typed_body = type_statement(body, type_env)?;
             let typed_condition = type_expression(condition, type_env)?;
-            
-            // Create the equivalent structure
-            let while_loop = TypedStmt::While {
-                condition: typed_condition.clone(),
-                body: Box::new(typed_body.clone()),
-            };
-            
-            // Wrap in compound statement: body followed by while loop
-            Ok(TypedStmt::Compound(vec![
-                typed_body,
-                while_loop,
-            ]))
+            Ok(TypedStmt::DoWhile {
+                condition: typed_condition,
+                body: Box::new(typed_body),
+            })
         }
         
         StatementKind::Switch { expression, body } => {

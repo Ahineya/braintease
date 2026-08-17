@@ -1,5 +1,5 @@
 {
-  "description": "Test compound literal support for structs and arrays",
   "expected": "YYY\n",
+  "description": "Test compound literal support for structs and arrays",
   "use_runtime": true
 }

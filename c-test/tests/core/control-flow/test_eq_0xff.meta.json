@@ -1,5 +1,5 @@
 {
-  "description": "unsigned short compared to 0xFF end-of-column marker",
   "expected": "YYY\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "description": "unsigned short compared to 0xFF end-of-column marker"
 }

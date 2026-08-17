@@ -115,7 +115,22 @@ pub fn store_initializer(
         }
         _ => {
             let val = gen.generate(init)?;
-            gen.builder.build_store(val, dest).map_err(|e| intern_err(e))
+            let stored = if matches!(dest_type, Type::Bool) {
+                let scalar = match val {
+                    Value::FatPtr(fp) => *fp.addr,
+                    other => other,
+                };
+                let temp = gen.builder.build_binary(
+                    crate::ir::IrBinaryOp::Ne,
+                    scalar,
+                    Value::Constant(0),
+                    IrType::I16,
+                ).map_err(|e| intern_err(e))?;
+                Value::Temp(temp)
+            } else {
+                val
+            };
+            gen.builder.build_store(stored, dest).map_err(|e| intern_err(e))
         }
     }
 }

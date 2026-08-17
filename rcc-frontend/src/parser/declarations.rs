@@ -48,13 +48,13 @@ impl Parser {
                     });
                 }
             }
-            Type::Enum { name: Some(name), .. } => {
-                // This is an enum definition with a name
+            Type::Enum { name, variants } if !variants.is_empty() => {
+                // Named or anonymous enum: `enum E { ... };` / `enum { ... };`
                 if self.check(&TokenType::Semicolon) {
                     let end_loc = self.current_location();
                     self.advance(); // Consume the semicolon
                     return Ok(TopLevelItem::TypeDefinition {
-                        name: name.clone(),
+                        name: name.clone().unwrap_or_default(),
                         type_def: base_type,
                         span: SourceSpan::new(start_loc, end_loc),
                     });

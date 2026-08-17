@@ -1,5 +1,5 @@
 {
-  "expected": "=== S3 KITCHEN SINK TEST ===\nT1: Locals\nLOCAL\nT2: Globals\nG\nGLOBAL\n42\nT3: Evil ptrs\nP999\nT4: Arrays\nD\nT5: Shift\nXABC\nT6: Structs\nY\nT7: Nested\nYTEST\nT8: StructArr\nY\nT9: Casts\nAY\nT10: PtrCast\nYBA\nT11: NULL\nYYY\nT12: PtrArith\nYY5\nT13: PtrCmp\nYYY\nT14: Conds\nYYY\nT15: Math\n119\nT16: Recur\n120\nT17: Strings\nHELLO\nINIT\nT18: For\n01234\nT19: Break\nB0B1B2\nT20: Unary\n1\nT21: DoWhile\nD0D1D2\nT22: Typedef\nOK\nT23: AddrOf\nYY\nT24: StructAsg\nY\nT25: Mixed\nYYY\n=== END S3 KITCHEN SINK ===\n",
+  "use_runtime": true,
   "description": "Added via command line",
-  "use_runtime": true
+  "expected": "=== S3 KITCHEN SINK TEST ===\nT1: Locals\nLOCAL\nT2: Globals\nG\nGLOBAL\n42\nT3: Evil ptrs\nP999\nT4: Arrays\nD\nT5: Shift\nXABC\nT6: Structs\nY\nT7: Nested\nYTEST\nT8: StructArr\nY\nT9: Casts\nAY\nT10: PtrCast\nYBA\nT11: NULL\nYYY\nT12: PtrArith\nYY5\nT13: PtrCmp\nYYY\nT14: Conds\nYYY\nT15: Math\n119\nT16: Recur\n120\nT17: Strings\nHELLO\nINIT\nT18: For\n01234\nT19: Break\nB0B1B2\nT20: Unary\n1\nT21: DoWhile\nD0D1D2\nT22: Typedef\nOK\nT23: AddrOf\nYY\nT24: StructAsg\nY\nT25: Mixed\nYYY\n=== END S3 KITCHEN SINK ===\n"
 }

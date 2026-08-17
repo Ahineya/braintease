@@ -1,0 +1,5 @@
+{
+  "description": "malloc allocation spanning a bank boundary",
+  "expected": "Y\nY\n",
+  "use_runtime": true
+}

@@ -1,4 +1,4 @@
 {
-  "expected": "Seed: 0x1234\nR1: AF68\nR2: A99A\nNew seed: 0x5678\nR3: C971\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "Seed: 0x1234\nR1: AF68\nR2: A99A\nNew seed: 0x5678\nR3: C971\n"
 }

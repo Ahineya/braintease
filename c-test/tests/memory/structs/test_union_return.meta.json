@@ -1,6 +1,6 @@
 {
+  "timeout_secs": 10,
   "expected": "Y\n",
   "use_runtime": true,
-  "description": "Return union by value and read char fields",
-  "timeout_secs": 10
+  "description": "Return union by value and read char fields"
 }

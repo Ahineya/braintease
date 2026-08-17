@@ -1,6 +1,6 @@
 {
-  "expected": "YY\n",
   "use_runtime": true,
+  "expected": "YY\n",
   "description": "4-word struct return and by-value add",
   "timeout_secs": 10
 }

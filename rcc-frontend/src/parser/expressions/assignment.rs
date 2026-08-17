@@ -39,6 +39,11 @@ impl Parser {
             Some(TokenType::StarEqual) => { self.advance(); Some(BinaryOp::MulAssign) }
             Some(TokenType::SlashEqual) => { self.advance(); Some(BinaryOp::DivAssign) }
             Some(TokenType::PercentEqual) => { self.advance(); Some(BinaryOp::ModAssign) }
+            Some(TokenType::AmpersandEqual) => { self.advance(); Some(BinaryOp::BitAndAssign) }
+            Some(TokenType::PipeEqual) => { self.advance(); Some(BinaryOp::BitOrAssign) }
+            Some(TokenType::CaretEqual) => { self.advance(); Some(BinaryOp::BitXorAssign) }
+            Some(TokenType::LeftShiftEqual) => { self.advance(); Some(BinaryOp::LeftShiftAssign) }
+            Some(TokenType::RightShiftEqual) => { self.advance(); Some(BinaryOp::RightShiftAssign) }
             _ => None,
         }
     }

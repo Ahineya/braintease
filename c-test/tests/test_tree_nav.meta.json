@@ -1,5 +1,5 @@
 {
-  "expected": "Y\n",
+  "use_runtime": true,
   "description": "Test for tree navigation demo",
-  "use_runtime": true
+  "expected": "Y\n"
 }

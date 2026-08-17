@@ -1,6 +1,6 @@
 {
   "expected": "Y\n",
   "use_runtime": true,
-  "description": "Assign a call result back onto a nested field used as an argument",
-  "timeout_secs": 10
+  "timeout_secs": 10,
+  "description": "Assign a call result back onto a nested field used as an argument"
 }

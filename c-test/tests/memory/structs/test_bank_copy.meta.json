@@ -1,5 +1,5 @@
 {
-  "description": "Test that struct assignment preserves fat pointer bank info",
+  "expected": "Y\n",
   "use_runtime": true,
-  "expected": "Y\n"
+  "description": "Test that struct assignment preserves fat pointer bank info"
 }

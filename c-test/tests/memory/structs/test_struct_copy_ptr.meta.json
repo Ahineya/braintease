@@ -1,5 +1,5 @@
 {
-  "description": "Test struct assignment with just pointer field",
+  "use_runtime": true,
   "expected": "Y\n",
-  "use_runtime": true
+  "description": "Test struct assignment with just pointer field"
 }

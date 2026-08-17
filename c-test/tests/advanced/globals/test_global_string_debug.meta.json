@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "expected": "Testing global strings:\nT1: global_str1:\nHELLO\nT2: global_str2:\nWORLD\nT3: global_ptr:\nPOINTER\nT4: Char by char:\nHELLO\nT5: Check null:\nYES - null terminated\n",
-  "description": "Added via command line"
+  "description": "Added via command line",
+  "use_runtime": true
 }

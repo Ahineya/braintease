@@ -1,5 +1,5 @@
 {
+  "expected": "YYYY\n",
   "description": "Compound literals with designated initializers",
-  "use_runtime": true,
-  "expected": "YYYY\n"
+  "use_runtime": true
 }

@@ -1,0 +1,5 @@
+{
+  "description": "Integer constant expressions for enum values",
+  "use_runtime": true,
+  "expected": "YYY\n"
+}

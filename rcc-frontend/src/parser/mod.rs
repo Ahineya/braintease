@@ -334,4 +334,75 @@ mod tests {
             _ => panic!("Expected function definition"),
         }
     }
+
+    #[test]
+    fn test_parse_comma_expression() {
+        let expr = parse_expression_from_str("1, 2, 3").unwrap();
+        match expr.kind {
+            ExpressionKind::Binary { op: BinaryOp::Comma, left, right } => {
+                match right.kind {
+                    ExpressionKind::IntLiteral(3) => {}
+                    _ => panic!("Expected comma result 3"),
+                }
+                match left.kind {
+                    ExpressionKind::Binary { op: BinaryOp::Comma, .. } => {}
+                    _ => panic!("Expected nested comma"),
+                }
+            }
+            _ => panic!("Expected comma expression"),
+        }
+    }
+
+    #[test]
+    fn test_parse_compound_bit_assigns() {
+        let expr = parse_expression_from_str("x &= 1").unwrap();
+        match expr.kind {
+            ExpressionKind::Binary { op: BinaryOp::BitAndAssign, .. } => {}
+            _ => panic!("Expected &="),
+        }
+        let expr = parse_expression_from_str("x <<= 2").unwrap();
+        match expr.kind {
+            ExpressionKind::Binary { op: BinaryOp::LeftShiftAssign, .. } => {}
+            _ => panic!("Expected <<="),
+        }
+    }
+
+    #[test]
+    fn test_parse_bool_type() {
+        let input = "_Bool flag; int main() { return 0; }";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        match &tu.items[0] {
+            TopLevelItem::Declarations(decls) => {
+                assert_eq!(decls[0].decl_type, Type::Bool);
+            }
+            _ => panic!("Expected _Bool declaration"),
+        }
+    }
+
+    #[test]
+    fn test_parse_array_size_ice() {
+        let input = "int main() { int a[1+2]; return 0; }";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        match &tu.items[0] {
+            TopLevelItem::Function(func) => match &func.body.kind {
+                StatementKind::Compound(stmts) => match &stmts[0].kind {
+                    StatementKind::Declaration { declarations } => {
+                        match &declarations[0].decl_type {
+                            Type::Array { size: Some(3), .. } => {}
+                            other => panic!("Expected int[3], got {other:?}"),
+                        }
+                    }
+                    _ => panic!("Expected declaration"),
+                },
+                _ => panic!("Expected compound"),
+            },
+            _ => panic!("Expected function"),
+        }
+    }
 }

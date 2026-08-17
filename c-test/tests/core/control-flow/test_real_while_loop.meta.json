@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "expected": "I3\nI2\nAXBC\n",
+  "use_runtime": true,
   "description": "Added via command line"
 }

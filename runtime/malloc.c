@@ -1,20 +1,21 @@
-// malloc.c - Simple bump allocator for heap memory
-// Each bank is treated as a separate allocation pool
-// Allocations never span banks - if it doesn't fit, we move to the next bank
+// malloc.c - Bump allocator for heap memory
+// Allocations may span bank boundaries; GEP handles indexing across banks.
+// BANK_SIZE is the VM bank size in words, injected at compile time (-D BANK_SIZE=...).
 
 #include <stddef.h>
+#include <string.h>
 
-// Heap configuration
-#define HEAP_START_BANK 5      // Heap starts at bank 3 (after code, globals, stack)
-#define HEAP_END_BANK 255      // Maximum bank we can use for heap
-#define BANK_SIZE 32767         // Size of each bank in words (16-bit) - maximum possible
+#ifndef BANK_SIZE
+#define BANK_SIZE 64000
+#endif
 
-// Heap state - stored in globals
+#define HEAP_START_BANK 5
+#define HEAP_END_BANK 255
+
 static unsigned int current_heap_bank = HEAP_START_BANK;
 static unsigned int current_heap_offset = 0;
 static unsigned char heap_initialized = 0;
 
-// Initialize heap if not already done
 static void init_heap(void) {
     if (!heap_initialized) {
         current_heap_bank = HEAP_START_BANK;
@@ -23,106 +24,112 @@ static void init_heap(void) {
     }
 }
 
-// Helper function to construct a fat pointer from address and bank
-// Uses inline assembly to properly set both components
-static void* make_fat_ptr(unsigned int addr, unsigned int bank) {
-    void* result;
-    // Use inline assembly to properly return a fat pointer
-    // RV0 = address, RV1 = bank for fat pointer returns
-    __asm__(
-        "move rv0, %1\n"     // Move address to RV0
-        "move rv1, %2\n"     // Move bank to RV1
-        : "=r"(result)       // Output (dummy, real result is in RV0/RV1)
-        : "r"(addr), "r"(bank)
-        : "rv0", "rv1"
-    );
-    return result;
+/* A fat pointer is two words (addr, bank). Inline asm `=r` only captures
+ * one register and then the compiler overwrites RV0/RV1 from an
+ * uninitialized local, so every malloc after the first can return garbage.
+ * Write both words through a union so `return` loads a real fat pointer. */
+union heap_fat_ptr {
+    void *p;
+    unsigned int w[2];
+};
+
+static void *make_fat_ptr(unsigned int addr, unsigned int bank) {
+    union heap_fat_ptr fp;
+    fp.w[0] = addr;
+    fp.w[1] = bank;
+    return fp.p;
 }
 
-// Simple bump allocator
-void* malloc(int size) {
+void *malloc(unsigned int size) {
+    unsigned int start_bank;
+    unsigned int start_off;
+    unsigned int remaining;
+    unsigned int extra;
+    unsigned int extra_banks;
+    unsigned int end_bank;
+    unsigned int end_off;
+    unsigned int last_used;
+    unsigned int bank_words;
+
     init_heap();
-    
-    // Validate size
-    if (size <= 0) {
+
+    if (size == 0) {
         return NULL;
     }
-    
-    // Check if allocation would exceed bank size
-    if (size > BANK_SIZE) {
-        // Allocation too large for a single bank - error
+
+    bank_words = BANK_SIZE;
+
+    if (current_heap_bank > (unsigned int)HEAP_END_BANK) {
         return NULL;
     }
-    
-    // Check if allocation fits in current bank
-    // Use subtraction to avoid overflow when BANK_SIZE is at maximum (65535)
-    if (size > BANK_SIZE - current_heap_offset) {
-        // Doesn't fit - move to next bank
-        current_heap_bank++;
-        current_heap_offset = 0;
-        
-        // Check if we've exhausted heap banks
-        if (current_heap_bank > HEAP_END_BANK) {
-            // Out of memory
-            return NULL;
-        }
+
+    start_bank = current_heap_bank;
+    start_off = current_heap_offset;
+    /* Compiler null checks only the address word, so offset 0 is NULL. */
+    if (start_off == 0) {
+        start_off = 1;
     }
-    
-    // Save the allocation position
-    unsigned int alloc_offset = current_heap_offset;
-    unsigned int alloc_bank = current_heap_bank;
-    
-    // Bump the allocation pointer
-    current_heap_offset += size;
-    
-    // Return the fat pointer with address and bank
-    return make_fat_ptr(alloc_offset, alloc_bank);
+    remaining = bank_words - start_off;
+
+    if (size < remaining) {
+        end_bank = start_bank;
+        end_off = start_off + size;
+    } else if (size == remaining) {
+        end_bank = start_bank + 1;
+        end_off = 0;
+    } else {
+        extra = size - remaining;
+        extra_banks = extra / bank_words;
+        end_off = extra % bank_words;
+        end_bank = start_bank + 1 + extra_banks;
+    }
+
+    if (end_off == 0) {
+        last_used = end_bank - 1;
+    } else {
+        last_used = end_bank;
+    }
+
+    if (last_used > (unsigned int)HEAP_END_BANK) {
+        return NULL;
+    }
+
+    current_heap_bank = end_bank;
+    current_heap_offset = end_off;
+    return make_fat_ptr(start_off, start_bank);
 }
 
-// Free is a no-op for bump allocator
-// We keep the function for API compatibility
-void free(void* ptr) {
-    // Bump allocator doesn't support freeing individual allocations
-    // In a real implementation, we might track allocations for debugging
-    (void)ptr; // Suppress unused parameter warning
+void free(void *ptr) {
+    (void)ptr;
 }
 
-// Calloc - allocate and zero memory
-void* calloc(int nmemb, int size) {
-    // Calculate total size, checking for overflow
-    int total = nmemb * size;
-    if (nmemb != 0 && total / nmemb != size) {
-        // Overflow detected
+void *calloc(unsigned int nmemb, unsigned int size) {
+    unsigned int total;
+    void *ptr;
+
+    if (nmemb == 0 || size == 0) {
         return NULL;
     }
-    
-    void* ptr = malloc(total);
+
+    total = nmemb * size;
+    if (total / nmemb != size) {
+        return NULL;
+    }
+
+    ptr = malloc(total);
     if (ptr != NULL) {
-        // Zero the allocated memory
-        // We'll need memset for this
-        unsigned int bank = ((unsigned int)ptr) >> 16;
-        unsigned int offset = ((unsigned int)ptr) & 0xFFFF;
-        
-        // Manual zeroing since we don't have memset yet
-        // This will be replaced with memset once available
-        for (int i = 0; i < total; i++) {
-            // Store zero at each location
-            // This will need proper assembly implementation
-            *((char*)ptr + i) = 0;
-        }
+        memset(ptr, 0, total);
     }
-    
     return ptr;
 }
 
-// Realloc - not supported in bump allocator
-void* realloc(void* ptr, int size) {
-    // For bump allocator, we can't resize existing allocations
-    // We could allocate new space and copy, but that's inefficient
+void *realloc(void *ptr, unsigned int size) {
     if (ptr == NULL) {
         return malloc(size);
     }
-    
-    // Can't resize existing allocation in bump allocator
+    if (size == 0) {
+        free(ptr);
+        return NULL;
+    }
     return NULL;
 }

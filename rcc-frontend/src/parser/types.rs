@@ -17,6 +17,22 @@ enum DeclSuffix {
 }
 
 impl Parser {
+    fn fold_positive_ice(expr: &Expression, what: &str) -> Result<u64, CompilerError> {
+        match crate::ast::const_eval::eval_integer_constant(expr) {
+            Ok(n) if n >= 0 => Ok(n as u64),
+            Ok(_) => Err(ParseError::InvalidExpression {
+                message: format!("{what} must be non-negative"),
+                location: expr.span.start.clone(),
+            }
+            .into()),
+            Err(_) => Err(ParseError::InvalidExpression {
+                message: format!("{what} must be a constant expression"),
+                location: expr.span.start.clone(),
+            }
+            .into()),
+        }
+    }
+
     /// Parse storage class specifier
     pub fn parse_storage_class(&mut self) -> StorageClass {
         match self.peek().map(|t| &t.token_type) {
@@ -46,6 +62,7 @@ impl Parser {
         
         match self.peek().map(|t| &t.token_type) {
             Some(TokenType::Void) => { self.advance(); Ok(Type::Void) }
+            Some(TokenType::Bool) => { self.advance(); Ok(Type::Bool) }
             Some(TokenType::Char) => { self.advance(); Ok(Type::Char) }
             Some(TokenType::Short) => { self.advance(); Ok(Type::Short) }
             Some(TokenType::Int) => { self.advance(); Ok(Type::Int) }
@@ -264,16 +281,18 @@ impl Parser {
                 };
                 
                 let value = if self.match_token(&TokenType::Equal) {
-                    // Parse constant expression for enum value
-                    let expr = self.parse_primary_expression()?;
-                    if let ExpressionKind::IntLiteral(val) = expr.kind {
-                        current_value = val;
-                        val
-                    } else {
-                        return Err(ParseError::InvalidExpression {
-                            message: "Enum values must be integer constants".to_string(),
-                            location: expr.span.start,
-                        }.into());
+                    let expr = self.parse_conditional_expression()?;
+                    match crate::ast::const_eval::eval_integer_constant(&expr) {
+                        Ok(val) => {
+                            current_value = val;
+                            val
+                        }
+                        Err(_) => {
+                            return Err(ParseError::InvalidExpression {
+                                message: "Enum values must be integer constant expressions".to_string(),
+                                location: expr.span.start,
+                            }.into());
+                        }
                     }
                 } else {
                     current_value
@@ -345,21 +364,7 @@ impl Parser {
                             None
                         } else {
                             let size_expr = self.parse_assignment_expression()?;
-                            if let ExpressionKind::IntLiteral(size) = size_expr.kind {
-                                if size >= 0 {
-                                    Some(size as u64)
-                                } else {
-                                    return Err(ParseError::InvalidExpression {
-                                        message: "Array size must be non-negative".to_string(),
-                                        location: size_expr.span.start,
-                                    }.into());
-                                }
-                            } else {
-                                return Err(ParseError::InvalidExpression {
-                                    message: "Array size must be a constant expression".to_string(),
-                                    location: size_expr.span.start,
-                                }.into());
-                            }
+                            Some(Self::fold_positive_ice(&size_expr, "Array size")?)
                         };
                         
                         self.expect(TokenType::RightBracket, "array declarator")?;
@@ -443,21 +448,7 @@ impl Parser {
                     None // Incomplete array type
                 } else {
                     let size_expr = self.parse_assignment_expression()?;
-                    if let ExpressionKind::IntLiteral(size) = size_expr.kind {
-                        if size >= 0 {
-                            Some(size as u64)
-                        } else {
-                            return Err(ParseError::InvalidExpression {
-                                message: "Array size must be non-negative".to_string(),
-                                location: size_expr.span.start,
-                            }.into());
-                        }
-                    } else {
-                        return Err(ParseError::InvalidExpression {
-                            message: "Array size must be a constant expression".to_string(),
-                            location: size_expr.span.start,
-                        }.into());
-                    }
+                    Some(Self::fold_positive_ice(&size_expr, "Array size")?)
                 };
                 
                 self.expect(TokenType::RightBracket, "array declarator")?;
@@ -514,7 +505,7 @@ impl Parser {
         if matches!(self.peek().map(|t| &t.token_type), Some(
             TokenType::Auto | TokenType::Static | TokenType::Extern | TokenType::Register |
             TokenType::Typedef |
-            TokenType::Void | TokenType::Char | TokenType::Short | TokenType::Int | 
+            TokenType::Void | TokenType::Bool | TokenType::Char | TokenType::Short | TokenType::Int | 
             TokenType::Long | TokenType::Float | TokenType::Double |
             TokenType::Signed | TokenType::Unsigned |
             TokenType::Struct | TokenType::Union | TokenType::Enum
@@ -534,7 +525,7 @@ impl Parser {
     pub fn is_type_start(&self) -> bool {
         // Check for type keywords
         if matches!(self.peek().map(|t| &t.token_type), Some(
-            TokenType::Void | TokenType::Char | TokenType::Short | TokenType::Int | 
+            TokenType::Void | TokenType::Bool | TokenType::Char | TokenType::Short | TokenType::Int | 
             TokenType::Long | TokenType::Float | TokenType::Double |
             TokenType::Signed | TokenType::Unsigned |
             TokenType::Struct | TokenType::Union | TokenType::Enum
@@ -581,21 +572,7 @@ impl Parser {
                     None
                 } else {
                     let size_expr = self.parse_assignment_expression()?;
-                    if let ExpressionKind::IntLiteral(size) = size_expr.kind {
-                        if size >= 0 {
-                            Some(size as u64)
-                        } else {
-                            return Err(ParseError::InvalidExpression {
-                                message: "Array size must be non-negative".to_string(),
-                                location: size_expr.span.start,
-                            }.into());
-                        }
-                    } else {
-                        return Err(ParseError::InvalidExpression {
-                            message: "Array size must be a constant expression".to_string(),
-                            location: size_expr.span.start,
-                        }.into());
-                    }
+                    Some(Self::fold_positive_ice(&size_expr, "Array size")?)
                 };
                 
                 self.expect(TokenType::RightBracket, "array declarator")?;

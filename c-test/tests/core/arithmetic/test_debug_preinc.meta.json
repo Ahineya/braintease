@@ -1,4 +1,4 @@
 {
-  "expected": "P:20 Q:20\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "P:20 Q:20\n"
 }

@@ -55,7 +55,7 @@ pub fn format_c_line(line: &str) -> Vec<Span<'static>> {
             TokenType::Short | TokenType::Signed | TokenType::Sizeof | TokenType::Static |
             TokenType::Struct | TokenType::Switch | TokenType::Typedef | TokenType::Union |
             TokenType::Unsigned | TokenType::Void | TokenType::Volatile | TokenType::While |
-            TokenType::Asm => {
+            TokenType::Bool | TokenType::Asm => {
                 Span::styled(token_text, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
             }
             

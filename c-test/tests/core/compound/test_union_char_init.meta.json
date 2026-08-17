@@ -1,6 +1,6 @@
 {
-  "expected": "ABCDY\n",
   "use_runtime": true,
+  "expected": "ABCDY\n",
   "description": "Union compound literal char-array initialization",
   "timeout_secs": 10
 }

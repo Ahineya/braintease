@@ -1,71 +1,118 @@
-// printf for Ripple VM without varargs/const
-// args[] is a pointer to ints
+#include <stdarg.h>
+
 void putchar(int c);
 
-void print_char(char c) {
+static int print_char(char c) {
     putchar((int)c);
+    return 1;
 }
 
-void print_str(char *s) {
-    while (*s) {
-        putchar((int)*s++);
+static int print_str(char *s) {
+    int n;
+
+    n = 0;
+    if (!s) {
+        return 0;
     }
+    while (*s) {
+        putchar((int)*s);
+        s = s + 1;
+        n = n + 1;
+    }
+    return n;
 }
 
-void print_uint(unsigned int n, unsigned int base) {
+static int digit_char(unsigned int d) {
+    if (d < 10) {
+        return (int)'0' + (int)d;
+    }
+    return (int)'a' + (int)(d - 10);
+}
+
+static int print_uint(unsigned int n, unsigned int base) {
     char buf[16];
-    int i = 0;
-    char *digits = "0123456789abcdef";
+    int i;
+    int count;
+
+    i = 0;
+    count = 0;
 
     if (n == 0) {
-        print_char('0');
-        return;
+        return print_char('0');
     }
 
     while (n > 0) {
-        buf[i++] = digits[n % base];
-        n /= base;
+        buf[i] = (char)digit_char(n % base);
+        i = i + 1;
+        n = n / base;
     }
-    while (i--) {
+    while (i) {
+        i = i - 1;
         print_char(buf[i]);
+        count = count + 1;
     }
+    return count;
 }
 
-void print_int(int n) {
+static int print_int(int n) {
+    int count;
+    unsigned int mag;
+
     if (n < 0) {
         print_char('-');
-        print_uint((unsigned int)(-n), 10);
-    } else {
-        print_uint((unsigned int)n, 10);
+        mag = (unsigned int)0 - (unsigned int)n;
+        return 1 + print_uint(mag, 10);
     }
+    count = print_uint((unsigned int)n, 10);
+    return count;
 }
 
-// fmt: format string
-// args: pointer to an array of ints
-void printf(char *fmt, int *args) {
-    char *p = fmt;
-    int argi = 0;
+int printf(char *fmt, ...) {
+    va_list ap;
+    char *p;
+    int count;
+
+    va_start(ap, fmt);
+    p = fmt;
+    count = 0;
 
     while (*p) {
         if (*p == '%') {
-            p++;
-            if (*p == 's') {
-                print_str((char *)args[argi++]);
-            } else if (*p == 'c') {
-                print_char((char)args[argi++]);
-            } else if (*p == 'd') {
-                print_int(args[argi++]);
-            } else if (*p == 'x') {
-                print_uint((unsigned int)args[argi++], 16);
-            } else if (*p == '%') {
-                print_char('%');
-            } else {
-                print_char('%');
-                print_char(*p);
+            p = p + 1;
+            if (*p == 0) {
+                count = count + print_char('%');
+                break;
+            }
+            switch (*p) {
+            case 's':
+                count = count + print_str(va_arg(ap, char *));
+                break;
+            case 'c':
+                count = count + print_char((char)va_arg(ap, int));
+                break;
+            case 'd':
+                count = count + print_int(va_arg(ap, int));
+                break;
+            case 'u':
+                count = count + print_uint(va_arg(ap, unsigned int), 10);
+                break;
+            case 'x':
+                count = count + print_uint(va_arg(ap, unsigned int), 16);
+                break;
+            case '%':
+                count = count + print_char('%');
+                break;
+            default:
+                count = count + print_char('%');
+                count = count + print_char(*p);
+                break;
             }
         } else {
-            print_char(*p);
+            count = count + print_char(*p);
         }
-        p++;
+        p = p + 1;
     }
+
+    va_end(ap);
+    return count;
 }

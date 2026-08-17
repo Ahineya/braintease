@@ -155,6 +155,24 @@ impl<'a> TypedExpressionGenerator<'a> {
                         }
                     }
                     
+                    // Integer / pointer to _Bool: nonzero becomes 1
+                    (source, Type::Bool) if is_integer_type(source) || matches!(source, Type::Pointer { .. }) => {
+                        let operand_val = match operand_val {
+                            Value::FatPtr(fp) => *fp.addr,
+                            other => other,
+                        };
+                        let temp = self.builder.build_binary(
+                            crate::ir::IrBinaryOp::Ne,
+                            operand_val,
+                            Value::Constant(0),
+                            crate::ir::IrType::I16,
+                        ).map_err(|e| CodegenError::InternalError {
+                            message: e,
+                            location: rcc_common::SourceLocation::new_simple(0, 0),
+                        })?;
+                        Ok(Value::Temp(temp))
+                    }
+
                     // Integer to integer cast
                     (source, target) if is_integer_type(source) && is_integer_type(target) => {
                         // For now, pass through the value since our VM uses 16-bit cells uniformly

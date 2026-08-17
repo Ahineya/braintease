@@ -1,0 +1,5 @@
+{
+  "description": "&= |= ^= <<= >>=",
+  "use_runtime": true,
+  "expected": "YYYYY\n"
+}

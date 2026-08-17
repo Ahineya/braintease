@@ -6,6 +6,7 @@
 pub mod ops;
 pub mod expressions;
 pub mod statements;
+pub mod const_eval;
 
 // Re-export commonly used types at module level
 pub use ops::{BinaryOp, UnaryOp};

@@ -81,6 +81,11 @@ impl BinaryOperationAnalyzer {
                 Ok(Type::Int) // Logical operations return int
             }
 
+            BinaryOp::Comma => {
+                // Comma operator: evaluate left, result is the right operand
+                Ok(right_type.clone())
+            }
+
             // Assignment operations
             BinaryOp::Assign => {
                 // Check if left is an lvalue

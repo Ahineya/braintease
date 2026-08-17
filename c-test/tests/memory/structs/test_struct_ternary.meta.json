@@ -1,5 +1,5 @@
 {
+  "expected": "YY\n",
   "use_runtime": true,
-  "description": "Ternary operator with struct values",
-  "expected": "YY\n"
+  "description": "Ternary operator with struct values"
 }

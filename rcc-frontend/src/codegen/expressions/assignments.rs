@@ -2,11 +2,28 @@
 
 use super::TypedExpressionGenerator;
 use super::unary_ops::generate_lvalue_address;
-use crate::ir::{Value, IrType};
+use crate::ir::{Value, IrType, IrBinaryOp};
 use crate::typed_ast::TypedExpr;
 use crate::types::Type;
 use crate::CompilerError;
 use crate::codegen::CodegenError;
+
+fn to_bool_value(
+    gen: &mut TypedExpressionGenerator,
+    val: Value,
+) -> Result<Value, CompilerError> {
+    let scalar = match val {
+        Value::FatPtr(fp) => *fp.addr,
+        other => other,
+    };
+    let temp = gen.builder.build_binary(
+        IrBinaryOp::Ne,
+        scalar,
+        Value::Constant(0),
+        IrType::I16,
+    )?;
+    Ok(Value::Temp(temp))
+}
 
 /// Copy struct contents from source pointer to destination pointer
 /// 
@@ -70,7 +87,12 @@ pub fn generate_assignment(
         Ok(rhs_val)
     } else {
         let rhs_val = gen.generate(rhs)?;
-        gen.builder.build_store(rhs_val.clone(), lhs_addr)?;
-        Ok(rhs_val)
+        let stored = if matches!(lhs_type, Type::Bool) {
+            to_bool_value(gen, rhs_val)?
+        } else {
+            rhs_val
+        };
+        gen.builder.build_store(stored.clone(), lhs_addr)?;
+        Ok(stored)
     }
 }

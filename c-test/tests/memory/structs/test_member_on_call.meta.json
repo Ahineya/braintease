@@ -1,5 +1,5 @@
 {
-  "expected": "YY\n",
   "description": "Member access on struct-returning function call",
+  "expected": "YY\n",
   "use_runtime": true
 }

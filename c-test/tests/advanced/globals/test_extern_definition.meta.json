@@ -1,5 +1,5 @@
 {
-  "description": "extern declaration plus definition in the same translation unit",
   "expected": "Y\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "description": "extern declaration plus definition in the same translation unit"
 }

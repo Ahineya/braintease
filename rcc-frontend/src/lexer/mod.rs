@@ -71,6 +71,7 @@ impl Lexer {
             ("void", TokenType::Void),
             ("volatile", TokenType::Volatile),
             ("while", TokenType::While),
+            ("_Bool", TokenType::Bool),
             ("asm", TokenType::Asm),
             ("__asm__", TokenType::Asm),  // GCC-style inline assembly
         ];

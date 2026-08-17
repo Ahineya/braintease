@@ -1,6 +1,6 @@
 {
-  "expected": "Y\n",
-  "use_runtime": true,
   "description": "Nested Q16.16 calls q_add(a, q_mul(a, b))",
-  "timeout_secs": 10
+  "timeout_secs": 10,
+  "expected": "Y\n",
+  "use_runtime": true
 }

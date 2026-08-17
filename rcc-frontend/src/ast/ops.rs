@@ -27,6 +27,9 @@ pub enum BinaryOp {
     
     // Array/pointer access
     Index,
+
+    // Sequence
+    Comma,
 }
 
 impl fmt::Display for BinaryOp {
@@ -62,6 +65,7 @@ impl fmt::Display for BinaryOp {
             BinaryOp::LeftShiftAssign => "<<=",
             BinaryOp::RightShiftAssign => ">>=",
             BinaryOp::Index => "[]",
+            BinaryOp::Comma => ",",
         };
         write!(f, "{op_str}")
     }

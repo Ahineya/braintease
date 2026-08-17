@@ -1,6 +1,6 @@
 {
-  "expected": "Y\n",
   "use_runtime": true,
-  "description": "Three struct-by-value arguments (third goes on the stack)",
-  "timeout_secs": 10
+  "expected": "Y\n",
+  "timeout_secs": 10,
+  "description": "Three struct-by-value arguments (third goes on the stack)"
 }

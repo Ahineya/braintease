@@ -250,12 +250,14 @@ pub fn compile_c_to_binary(
 
     // Step 2: Compile preprocessed C to assembly (with --no-preprocess since we already preprocessed)
     // Also enable --trace to save all compilation stages as JSON files in build directory
+    // --bank-size must match assembler/linker/runtime so GEP wraps at the same bank size as malloc.
     let cmd = format!(
-        "{} compile {} -o {} --save-ir --ir-output {} --no-preprocess --trace",
+        "{} compile {} -o {} --save-ir --ir-output {} --no-preprocess --trace --bank-size {}",
         tools.rcc.display(),
         preprocessed_file.display(),
         asm_file.display(),
-        ir_file.display()
+        ir_file.display(),
+        bank_size
     );
 
     let result = run_command_sync(&cmd, timeout_secs)?;
@@ -436,12 +438,14 @@ pub fn compile_c_file(
 
     // Step 2: Compile preprocessed C to assembly (with --no-preprocess since we already preprocessed)
     // Also enable --trace to save all compilation stages as JSON files in build directory
+    // --bank-size must match assembler/linker/runtime so GEP wraps at the same bank size as malloc.
     let cmd = format!(
-        "{} compile {} -o {} --save-ir --ir-output {} --no-preprocess --trace",
+        "{} compile {} -o {} --save-ir --ir-output {} --no-preprocess --trace --bank-size {}",
         tools.rcc.display(),
         preprocessed_file.display(),
         asm_file.display(),
-        ir_file.display()
+        ir_file.display(),
+        config.bank_size
     );
 
     let result = run_command_sync(&cmd, config.timeout_secs)?;

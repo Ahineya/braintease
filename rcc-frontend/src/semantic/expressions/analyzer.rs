@@ -38,6 +38,17 @@ impl ExpressionAnalyzer {
         &self,
         expr: &mut Expression,
     ) -> Result<(), CompilerError> {
+        let enum_val = if let ExpressionKind::Identifier { name, .. } = &expr.kind {
+            self.type_analyzer.borrow().lookup_enum_constant(name)
+        } else {
+            None
+        };
+        if let Some(val) = enum_val {
+            expr.kind = ExpressionKind::IntLiteral(val);
+            expr.expr_type = Some(Type::Int);
+            return Ok(());
+        }
+
         let expr_type = match &mut expr.kind {
             ExpressionKind::IntLiteral(_) => Type::Int,
             ExpressionKind::CharLiteral(_) => Type::Char,

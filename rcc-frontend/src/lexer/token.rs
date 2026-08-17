@@ -22,6 +22,7 @@ pub enum TokenType {
     Double, Else, Enum, Extern, Float, For, Goto, If,
     Int, Long, Register, Return, Short, Signed, Sizeof, Static,
     Struct, Switch, Typedef, Union, Unsigned, Void, Volatile, While,
+    Bool,
     Asm,  // For inline assembly
     
     // Operators
@@ -128,6 +129,7 @@ impl fmt::Display for TokenType {
             TokenType::Void => write!(f, "void"),
             TokenType::Volatile => write!(f, "volatile"),
             TokenType::While => write!(f, "while"),
+            TokenType::Bool => write!(f, "_Bool"),
             TokenType::Asm => write!(f, "asm"),
             
             // Operators - show the symbol

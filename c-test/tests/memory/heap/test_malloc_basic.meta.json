@@ -1,5 +1,5 @@
 {
+  "description": "Test basic malloc allocation and usage",
   "use_runtime": true,
-  "expected": "Y\nY\n",
-  "description": "Test basic malloc allocation and usage"
+  "expected": "Y\nY\n"
 }

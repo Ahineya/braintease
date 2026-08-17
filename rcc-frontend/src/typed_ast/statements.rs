@@ -58,6 +58,12 @@ pub enum TypedStmt {
         body: Box<TypedStmt>,
     },
 
+    /// Do-while loop
+    DoWhile {
+        condition: TypedExpr,
+        body: Box<TypedStmt>,
+    },
+
     /// Case label (value is a folded integer constant)
     Case {
         value: i64,

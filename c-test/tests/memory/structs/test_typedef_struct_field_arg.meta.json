@@ -1,6 +1,6 @@
 {
   "expected": "Y\n",
-  "use_runtime": true,
   "description": "Pass typedef struct nested fields by value, assign result back",
+  "use_runtime": true,
   "timeout_secs": 10
 }

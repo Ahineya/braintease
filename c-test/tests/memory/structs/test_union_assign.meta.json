@@ -1,6 +1,6 @@
 {
   "expected": "ABCD\n",
   "use_runtime": true,
-  "description": "Union assignment copies all words",
-  "timeout_secs": 10
+  "timeout_secs": 10,
+  "description": "Union assignment copies all words"
 }

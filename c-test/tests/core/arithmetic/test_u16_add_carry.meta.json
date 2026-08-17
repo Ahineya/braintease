@@ -1,5 +1,5 @@
 {
-  "description": "Unsigned 16-bit add with wrap carry for 32-bit WAD offsets",
   "use_runtime": true,
+  "description": "Unsigned 16-bit add with wrap carry for 32-bit WAD offsets",
   "expected": "YYYY\n"
 }

@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
+  "description": "WAD (hi,lo) cursor updated through pointers including wrap",
   "expected": "YYYY\n",
-  "description": "WAD (hi,lo) cursor updated through pointers including wrap"
+  "use_runtime": true
 }

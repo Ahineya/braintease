@@ -10,7 +10,7 @@ BANK_SIZE ?= 64000  # Default: 16KB (doubled from 8192 to handle larger programs
 MAX_IMMEDIATE = 65535
 
 # Source files
-C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c rand.c graphics.c string.c malloc.c
+C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c rand.c graphics.c string.c malloc.c printf.c
 ASM_SOURCES = crt0.asm
 
 # qfixed lives in src/ and is compiled via the qfixed.asm rule below
@@ -28,12 +28,12 @@ all: $(RUNTIME_LIB)
 # Compile C files to assembly
 %.asm: %.c
 	@echo "Compiling $< to assembly..."
-	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE)
+	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
 
 # Compile qfixed source
 qfixed.asm: src/qfixed.c
 	@echo "Compiling qfixed.c to assembly..."
-	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE)
+	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
 
 # Assemble C-generated assembly to object files
 $(C_OBJ_FILES): %.pobj: %.asm

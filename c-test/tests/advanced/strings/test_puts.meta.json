@@ -1,4 +1,4 @@
 {
-  "expected": "Hello\nWorld\nTest!\n\nX\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "Hello\nWorld\nTest!\n\nX\n"
 }

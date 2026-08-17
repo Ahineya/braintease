@@ -245,7 +245,19 @@ impl TypeAnalyzer {
             _ => false,
         }
     }
-    
+
+    /// Look up an enum constant by enumerator name.
+    pub fn lookup_enum_constant(&self, name: &str) -> Option<i64> {
+        for ty in self.type_definitions.borrow().values() {
+            if let Type::Enum { variants, .. } = ty {
+                if let Some(v) = variants.iter().find(|v| v.name == name) {
+                    return Some(v.value);
+                }
+            }
+        }
+        None
+    }
+
     /// Check if an expression is a valid lvalue
     pub fn is_lvalue(expr: &Expression) -> bool {
         match &expr.kind {
@@ -639,10 +651,16 @@ impl TypeAnalyzer {
 
     /// Register a type definition (struct, union, enum)
     pub fn register_type_definition(&mut self, name: String, mut type_def: Type) -> Result<(), CompilerError> {
+        let key = if name.is_empty() {
+            format!("<anonymous-{}>", self.type_definitions.borrow().len())
+        } else {
+            name
+        };
+
         // Check if type already exists
-        if self.type_definitions.borrow().contains_key(&name) {
+        if self.type_definitions.borrow().contains_key(&key) {
             return Err(SemanticError::RedefinedType {
-                name: name.clone(),
+                name: key.clone(),
             }.into());
         }
 
@@ -662,7 +680,7 @@ impl TypeAnalyzer {
         }
 
         // Store the type definition with resolved field types
-        self.type_definitions.borrow_mut().insert(name, type_def);
+        self.type_definitions.borrow_mut().insert(key, type_def);
 
         Ok(())
     }

@@ -1,5 +1,5 @@
 {
+  "description": "Simple Q16.16 test to verify basic functionality",
   "expected": "YYYYY\n",
-  "use_runtime": true,
-  "description": "Simple Q16.16 test to verify basic functionality"
+  "use_runtime": true
 }

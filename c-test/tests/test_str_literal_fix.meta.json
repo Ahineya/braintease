@@ -1,5 +1,5 @@
 {
-  "expected": "Hello\nWorld\n",
   "use_runtime": true,
-  "description": "Test string literal pointer passing"
+  "description": "Test string literal pointer passing",
+  "expected": "Hello\nWorld\n"
 }

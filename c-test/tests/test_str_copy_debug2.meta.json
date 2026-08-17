@@ -1,4 +1,4 @@
 {
-  "expected": "S\nF0:A\nL0:A\nN1:B\nL1:B\nN2:C\nL2:C\nE3\nABC\nABC\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "S\nF0:A\nL0:A\nN1:B\nL1:B\nN2:C\nL2:C\nE3\nABC\nABC\n"
 }

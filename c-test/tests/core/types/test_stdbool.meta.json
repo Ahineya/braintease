@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYYYY\n",
+  "description": "_Bool keyword and stdbool.h"
+}

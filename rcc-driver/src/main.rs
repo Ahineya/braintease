@@ -104,8 +104,8 @@ enum Commands {
         #[arg(short, long, default_value = "0")]
         debug: u8,
         
-        /// Bank size in cells (default: 4096)
-        #[arg(long, default_value = "4096")]
+        /// Bank size in cells (default: 64000, matching runtime and rct)
+        #[arg(long, default_value = "64000")]
         bank_size: u16,
         
         /// Enable spill/reload tracing for debugging register allocation

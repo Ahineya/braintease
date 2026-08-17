@@ -13,9 +13,9 @@ char* strchr(char* str, int c);
 char* strrchr(char* str, int c);
 
 // Memory functions (often in string.h)
-void* memcpy(void* dst, void* src, int n);
-void* memmove(void* dst, void* src, int n);
-void* memset(void* dst, int c, int n);
-int memcmp(void* s1, void* s2, int n);
+void* memcpy(void* dst, void* src, unsigned int n);
+void* memmove(void* dst, void* src, unsigned int n);
+void* memset(void* dst, int c, unsigned int n);
+int memcmp(void* s1, void* s2, unsigned int n);
 
 #endif // STRING_H

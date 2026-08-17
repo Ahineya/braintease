@@ -1,4 +1,4 @@
 {
-  "expected": "M3: OK!\nABC\nGood!\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "M3: OK!\nABC\nGood!\n"
 }
