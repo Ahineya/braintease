@@ -17,7 +17,9 @@ impl Parser {
         
         // Parse declaration specifiers (storage class, type)
         let storage_class = self.parse_storage_class();
+        self.skip_ignored_specifiers();
         let base_type = self.parse_type_specifier()?;
+        self.skip_ignored_specifiers();
         
         // Remember the start location for span tracking
         let start_loc = self.current_location();
@@ -78,7 +80,7 @@ impl Parser {
         // Otherwise it's a declaration (possibly with multiple declarators)
         // If this is a typedef declaration, register the name
         if storage_class == StorageClass::Typedef {
-            self.typedef_names.insert(name.clone());
+            self.intern_typedef(name.clone(), full_type.clone());
         }
         
         // Parse optional initializer
@@ -107,7 +109,7 @@ impl Parser {
                 
                 // If this is a typedef, register the name
                 if storage_class == StorageClass::Typedef {
-                    self.typedef_names.insert(name.clone());
+                    self.intern_typedef(name.clone(), full_type.clone());
                 }
                 
                 let initializer = if self.match_token(&TokenType::Equal) {
@@ -199,7 +201,7 @@ impl Parser {
         
         // If this is a typedef declaration, register the name
         if storage_class == StorageClass::Typedef {
-            self.typedef_names.insert(name.clone());
+            self.intern_typedef(name.clone(), decl_type.clone());
         }
         
         // Parse optional initializer
@@ -227,7 +229,9 @@ impl Parser {
     /// Parse declaration statement
     pub fn parse_declaration_statement(&mut self) -> Result<StatementKind, CompilerError> {
         let storage_class = self.parse_storage_class();
+        self.skip_ignored_specifiers();
         let base_type = self.parse_type_specifier()?;
+        self.skip_ignored_specifiers();
         
         let mut declarations = Vec::new();
         
@@ -236,7 +240,7 @@ impl Parser {
         
         // If this is a typedef, register the name
         if storage_class == StorageClass::Typedef {
-            self.typedef_names.insert(name.clone());
+            self.intern_typedef(name.clone(), full_type.clone());
         }
         
         let initializer = if self.match_token(&TokenType::Equal) {
@@ -261,7 +265,7 @@ impl Parser {
             
             // If this is a typedef, register the name
             if storage_class == StorageClass::Typedef {
-                self.typedef_names.insert(name.clone());
+                self.intern_typedef(name.clone(), full_type.clone());
             }
             
             let initializer = if self.match_token(&TokenType::Equal) {

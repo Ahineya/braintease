@@ -39,6 +39,7 @@ pub enum TokenType {
     Int, Long, Register, Return, Short, Signed, Sizeof, Static,
     Struct, Switch, Typedef, Union, Unsigned, Void, Volatile, While,
     Bool,
+    Inline, Restrict, // C99; treated as no-ops
     Asm,  // For inline assembly
     
     // Operators
@@ -151,6 +152,8 @@ impl fmt::Display for TokenType {
             TokenType::Volatile => write!(f, "volatile"),
             TokenType::While => write!(f, "while"),
             TokenType::Bool => write!(f, "_Bool"),
+            TokenType::Inline => write!(f, "inline"),
+            TokenType::Restrict => write!(f, "restrict"),
             TokenType::Asm => write!(f, "asm"),
             
             // Operators - show the symbol

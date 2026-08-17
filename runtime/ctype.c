@@ -29,7 +29,7 @@ int isblank(int c) {
 }
 
 int isspace(int c) {
-    return c == ' ' || c == 12 || c == '\n' || c == '\r' || c == '\t' || c == 11;
+    return c == ' ' || c == '\f' || c == '\n' || c == '\r' || c == '\t' || c == '\v';
 }
 
 int iscntrl(int c) {

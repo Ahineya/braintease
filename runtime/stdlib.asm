@@ -129,12 +129,12 @@ L_labs_4:
     LI T6, 0
     LI T5, 0
     XOR T4, T7, T5
-    BNE T4, R0, L_i32_slt_hine_3841d4e4_2_0
+    BNE T4, R0, L_i32_slt_hine_c3f46dc_2_0
     SLTU T4, S0, T6
-    BEQ R0, R0, L_i32_slt_done_3841d4e4_2_1
-L_i32_slt_hine_3841d4e4_2_0:
+    BEQ R0, R0, L_i32_slt_done_c3f46dc_2_1
+L_i32_slt_hine_c3f46dc_2_0:
     SLT T4, T7, T5
-L_i32_slt_done_3841d4e4_2_1:
+L_i32_slt_done_c3f46dc_2_1:
     BEQ T4, R0, L_labs_7
 ; Branch to L_labs_7 if condition is false
     BEQ R0, R0, L_labs_5

@@ -7,7 +7,7 @@ use crate::ast::*;
 use crate::lexer::{Token, TokenType};
 use crate::parser::errors::ParseError;
 use crate::parser::Parser;
-use rcc_common::{CompilerError, SourceSpan};
+use rcc_common::{CompilerError, SourceLocation, SourceSpan};
 use crate::{EnumVariant, StorageClass, StructField, Type};
 
 /// Declarator suffix (arrays, functions)
@@ -33,8 +33,110 @@ impl Parser {
         }
     }
 
+    /// Skip C99 specifiers we do not model: const, volatile, restrict, inline.
+    pub fn skip_ignored_specifiers(&mut self) {
+        while let Some(token) = self.peek() {
+            match &token.token_type {
+                TokenType::Const | TokenType::Volatile | TokenType::Restrict | TokenType::Inline => {
+                    warn!("Ignoring specifier: {:?}", token.token_type);
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+    }
+
+    pub(crate) fn intern_typedef(&mut self, name: String, ty: Type) {
+        let resolved = self.resolve_known_typedefs(&ty);
+        self.typedef_names.insert(name, resolved);
+    }
+
+    pub(crate) fn resolve_known_typedefs(&self, ty: &Type) -> Type {
+        match ty {
+            Type::Typedef(name) => self
+                .typedef_names
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| ty.clone()),
+            Type::Pointer { target, bank } => Type::Pointer {
+                target: Box::new(self.resolve_known_typedefs(target)),
+                bank: *bank,
+            },
+            Type::Array { element_type, size } => Type::Array {
+                element_type: Box::new(self.resolve_known_typedefs(element_type)),
+                size: *size,
+            },
+            _ => ty.clone(),
+        }
+    }
+
+    fn is_incomplete_array(ty: &Type) -> bool {
+        matches!(ty, Type::Array { size: None, .. })
+    }
+
+    fn type_has_flexible_array_member(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Struct { fields, .. } => fields
+                .last()
+                .is_some_and(|f| Self::is_incomplete_array(&f.field_type)),
+            Type::Array { element_type, .. } => self.type_has_flexible_array_member(element_type),
+            Type::Typedef(name) => self
+                .typedef_names
+                .get(name)
+                .is_some_and(|inner| self.type_has_flexible_array_member(inner)),
+            _ => false,
+        }
+    }
+
+    fn validate_struct_or_union_fields(
+        &self,
+        fields: &[StructField],
+        is_union: bool,
+        location: SourceLocation,
+    ) -> Result<(), CompilerError> {
+        for (i, field) in fields.iter().enumerate() {
+            if self.type_has_flexible_array_member(&field.field_type) {
+                return Err(ParseError::InvalidType {
+                    message: format!(
+                        "field '{}' has a type with a flexible array member",
+                        field.name
+                    ),
+                    location,
+                }
+                .into());
+            }
+            if Self::is_incomplete_array(&field.field_type) {
+                if is_union {
+                    return Err(ParseError::InvalidType {
+                        message: "flexible array members are not allowed in unions".to_string(),
+                        location,
+                    }
+                    .into());
+                }
+                if i + 1 != fields.len() {
+                    return Err(ParseError::InvalidType {
+                        message: "flexible array member must be the last member of the struct"
+                            .to_string(),
+                        location,
+                    }
+                    .into());
+                }
+                if fields.len() < 2 {
+                    return Err(ParseError::InvalidType {
+                        message: "struct with a flexible array member must have at least one named member before it"
+                            .to_string(),
+                        location,
+                    }
+                    .into());
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Parse storage class specifier
     pub fn parse_storage_class(&mut self) -> StorageClass {
+        self.skip_ignored_specifiers();
         match self.peek().map(|t| &t.token_type) {
             Some(TokenType::Auto) => { self.advance(); StorageClass::Auto }
             Some(TokenType::Static) => { self.advance(); StorageClass::Static }
@@ -49,16 +151,7 @@ impl Parser {
     pub fn parse_type_specifier(&mut self) -> Result<Type, CompilerError> {
         let location = self.current_location();
         
-        // Skip type qualifiers (const, volatile) - we ignore them for now
-        while let Some(token) = self.peek() {
-            match &token.token_type {
-                TokenType::Const | TokenType::Volatile => {
-                    warn!("Ignoring type qualifier: {:?}", token.token_type);
-                    self.advance();
-                }
-                _ => break,
-            }
-        }
+        self.skip_ignored_specifiers();
         
         match self.peek().map(|t| &t.token_type) {
             Some(TokenType::Void) => { self.advance(); Ok(Type::Void) }
@@ -71,6 +164,7 @@ impl Parser {
             Some(TokenType::Double) => { self.advance(); Ok(Type::Double) }
             Some(TokenType::Signed) => {
                 self.advance();
+                self.skip_ignored_specifiers();
                 // Handle "signed int", "signed char", etc.
                 match self.peek().map(|t| &t.token_type) {
                     Some(TokenType::Char) => { self.advance(); Ok(Type::SignedChar) }
@@ -80,6 +174,7 @@ impl Parser {
             }
             Some(TokenType::Unsigned) => {
                 self.advance();
+                self.skip_ignored_specifiers();
                 match self.peek().map(|t| &t.token_type) {
                     Some(TokenType::Char) => { self.advance(); Ok(Type::UnsignedChar) }
                     Some(TokenType::Short) => { self.advance(); Ok(Type::UnsignedShort) }
@@ -100,7 +195,7 @@ impl Parser {
                 self.advance();
                 self.parse_enum_type()
             }
-            Some(TokenType::Identifier(name)) if self.typedef_names.contains(name) => {
+            Some(TokenType::Identifier(name)) if self.typedef_names.contains_key(name) => {
                 // This is a typedef name being used as a type specifier
                 let name = name.clone();
                 self.advance();
@@ -144,6 +239,7 @@ impl Parser {
 
                 let param_start = self.current_location();
                 let param_type = self.parse_type_specifier()?;
+                self.skip_ignored_specifiers();
 
                 let (param_name, full_param_type) = if matches!(self.peek().map(|t| &t.token_type),
                     Some(TokenType::Star) | Some(TokenType::Identifier(_))) {
@@ -209,6 +305,7 @@ impl Parser {
             }
             
             self.expect(TokenType::RightBrace, "struct definition")?;
+            self.validate_struct_or_union_fields(&fields, false, self.current_location())?;
             fields
         } else {
             Vec::new() // Forward declaration
@@ -248,6 +345,7 @@ impl Parser {
             }
             
             self.expect(TokenType::RightBrace, "union definition")?;
+            self.validate_struct_or_union_fields(&fields, true, self.current_location())?;
             fields
         } else {
             Vec::new()
@@ -321,9 +419,11 @@ impl Parser {
     
     /// Parse declarator (handles pointers, arrays, function parameters)
     pub fn parse_declarator(&mut self, base_type: Type) -> Result<(String, Type), CompilerError> {
+        self.skip_ignored_specifiers();
         // Parse pointer prefix
         let mut current_type = base_type;
         while self.match_token(&TokenType::Star) {
+            self.skip_ignored_specifiers();
             current_type = Type::Pointer { target: Box::new(current_type), bank: None };
         }
         
@@ -504,7 +604,8 @@ impl Parser {
         // Check for storage class or type keywords
         if matches!(self.peek().map(|t| &t.token_type), Some(
             TokenType::Auto | TokenType::Static | TokenType::Extern | TokenType::Register |
-            TokenType::Typedef |
+            TokenType::Typedef | TokenType::Inline |
+            TokenType::Const | TokenType::Volatile | TokenType::Restrict |
             TokenType::Void | TokenType::Bool | TokenType::Char | TokenType::Short | TokenType::Int | 
             TokenType::Long | TokenType::Float | TokenType::Double |
             TokenType::Signed | TokenType::Unsigned |
@@ -515,7 +616,7 @@ impl Parser {
         
         // Check if it's a typedef name
         if let Some(TokenType::Identifier(name)) = self.peek().map(|t| &t.token_type) {
-            return self.typedef_names.contains(name);
+            return self.typedef_names.contains_key(name);
         }
         
         false
@@ -525,6 +626,7 @@ impl Parser {
     pub fn is_type_start(&self) -> bool {
         // Check for type keywords
         if matches!(self.peek().map(|t| &t.token_type), Some(
+            TokenType::Const | TokenType::Volatile | TokenType::Restrict |
             TokenType::Void | TokenType::Bool | TokenType::Char | TokenType::Short | TokenType::Int | 
             TokenType::Long | TokenType::Float | TokenType::Double |
             TokenType::Signed | TokenType::Unsigned |
@@ -535,7 +637,7 @@ impl Parser {
         
         // Check if it's a typedef name
         if let Some(TokenType::Identifier(name)) = self.peek().map(|t| &t.token_type) {
-            return self.typedef_names.contains(name);
+            return self.typedef_names.contains_key(name);
         }
         
         false
@@ -550,9 +652,11 @@ impl Parser {
     
     /// Parse an abstract declarator (pointer/array/function types without identifier)
     pub fn parse_abstract_declarator(&mut self, base_type: Type) -> Result<Type, CompilerError> {
+        self.skip_ignored_specifiers();
         // Parse pointer prefix
         let mut current_type = base_type;
         while self.match_token(&TokenType::Star) {
+            self.skip_ignored_specifiers();
             current_type = Type::Pointer { target: Box::new(current_type), bank: None };
         }
         

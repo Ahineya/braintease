@@ -1,0 +1,5 @@
+{
+  "description": "octal literals and remaining C99 escapes",
+  "expected": "YYYYYYYYYYYYYY\n",
+  "use_runtime": true
+}

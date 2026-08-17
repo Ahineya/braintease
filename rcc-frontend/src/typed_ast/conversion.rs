@@ -221,7 +221,15 @@ fn expand_list_initializer(
             })
         }
         Type::Struct { fields, .. } => {
-            let mut slots: Vec<Option<TypedExpr>> = vec![None; fields.len()];
+            let n = fields.len();
+            let init_count = if n > 0
+                && matches!(fields[n - 1].field_type, Type::Array { size: None, .. })
+            {
+                n - 1
+            } else {
+                n
+            };
+            let mut slots: Vec<Option<TypedExpr>> = vec![None; init_count];
             let mut current = 0usize;
             for init in initializers {
                 match &init.kind {
@@ -233,6 +241,11 @@ fn expand_list_initializer(
                             }
                         })?;
                         current = idx;
+                        if current >= init_count {
+                            return Err(TypeError::TypeMismatch(
+                                "Flexible array members cannot be initialized".to_string(),
+                            ));
+                        }
                         slots[current] = Some(type_initializer(initializer, &fields[current].field_type, type_env)?);
                         current += 1;
                     }
@@ -242,7 +255,7 @@ fn expand_list_initializer(
                         ));
                     }
                     _ => {
-                        if current >= fields.len() {
+                        if current >= init_count {
                             return Err(TypeError::TypeMismatch(
                                 "Too many initializers for struct".to_string(),
                             ));

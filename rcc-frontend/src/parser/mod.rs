@@ -12,7 +12,7 @@ pub mod expressions;
 use crate::ast::*;
 use crate::lexer::{Token, TokenType};
 use rcc_common::{CompilerError, SourceLocation, SourceSpan};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 pub use errors::ParseError;
 use crate::Type;
@@ -22,7 +22,7 @@ pub struct Parser {
     pub(crate) tokens: VecDeque<Token>,
     pub(crate) node_id_gen: NodeIdGenerator,
     pub(crate) last_function_params: Option<Vec<(Option<String>, Type, SourceSpan)>>, // Temporary storage for function parameters
-    pub(crate) typedef_names: std::collections::HashSet<String>, // Track typedef names for parsing
+    pub(crate) typedef_names: HashMap<String, Type>, // Typedef name -> type, for parsing and sizeof
 }
 
 impl Parser {
@@ -42,7 +42,7 @@ impl Parser {
             tokens: filtered_tokens.into(),
             node_id_gen: NodeIdGenerator::new(),
             last_function_params: None,
-            typedef_names: std::collections::HashSet::new(),
+            typedef_names: HashMap::new(),
         }
     }
     
@@ -433,6 +433,66 @@ mod tests {
                 }
             }
             _ => panic!("Expected labeled statement"),
+        }
+    }
+
+    #[test]
+    fn test_sizeof_typedef_name() {
+        let input = "typedef int T; int main() { return sizeof(T); }";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        match &tu.items[1] {
+            TopLevelItem::Function(func) => match &func.body.kind {
+                StatementKind::Compound(stmts) => match &stmts[0].kind {
+                    StatementKind::Return(Some(expr)) => match &expr.kind {
+                        ExpressionKind::SizeofType(Type::Int) => {}
+                        other => panic!("Expected sizeof(int) after resolving T, got {other:?}"),
+                    },
+                    _ => panic!("Expected return"),
+                },
+                _ => panic!("Expected compound"),
+            },
+            _ => panic!("Expected function"),
+        }
+    }
+
+    #[test]
+    fn test_parse_inline_restrict() {
+        let input = "inline int add(int *restrict p) { return *p; }";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        match &tu.items[0] {
+            TopLevelItem::Function(func) => {
+                assert_eq!(func.name, "add");
+                assert_eq!(func.return_type, Type::Int);
+            }
+            _ => panic!("Expected function"),
+        }
+    }
+
+    #[test]
+    fn test_parse_flexible_array_member() {
+        let input = "struct S { int n; char data[]; };";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        match &tu.items[0] {
+            TopLevelItem::TypeDefinition { type_def, .. } => match type_def {
+                Type::Struct { fields, .. } => {
+                    assert_eq!(fields.len(), 2);
+                    match &fields[1].field_type {
+                        Type::Array { size: None, .. } => {}
+                        other => panic!("Expected incomplete array FAM, got {other:?}"),
+                    }
+                }
+                _ => panic!("Expected struct"),
+            },
+            _ => panic!("Expected type definition"),
         }
     }
 }

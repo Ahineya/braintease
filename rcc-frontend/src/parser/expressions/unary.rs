@@ -3,7 +3,6 @@
 use crate::ast::*;
 use crate::lexer::TokenType;
 use crate::parser::Parser;
-use crate::Type;
 use rcc_common::{CompilerError, SourceSpan};
 
 impl Parser {
@@ -16,43 +15,26 @@ impl Parser {
             
             // Check if next token is '(' to determine if it's sizeof(type) or sizeof expr
             if self.peek().map(|t| &t.token_type) == Some(&TokenType::LeftParen) {
-                // Could be sizeof(type) or sizeof(expr)
-                // Save state for potential backtracking
                 let saved_tokens = self.tokens.clone();
                 self.advance(); // consume '('
-                
-                // Try to parse as type - check for type keywords
-                let is_type = match self.peek().map(|t| &t.token_type) {
-                    Some(TokenType::Void) | Some(TokenType::Char) | Some(TokenType::Short) |
-                    Some(TokenType::Int) | Some(TokenType::Long) | Some(TokenType::Float) |
-                    Some(TokenType::Double) | Some(TokenType::Signed) | Some(TokenType::Unsigned) |
-                    Some(TokenType::Struct) | Some(TokenType::Union) | Some(TokenType::Enum) => true,
-                    _ => false,
-                };
-                
-                if is_type {
-                    // Parse as type
-                    if let Ok(mut type_spec) = self.parse_type_specifier() {
-                        // Handle pointer types
-                        while self.peek().map(|t| &t.token_type) == Some(&TokenType::Star) {
-                            self.advance();
-                            type_spec = Type::Pointer { target: Box::new(type_spec), bank: None };
-                        }
-                        
+
+                if self.is_type_start() {
+                    if let Ok(type_spec) = self.parse_type_name() {
                         if self.peek().map(|t| &t.token_type) == Some(&TokenType::RightParen) {
                             self.advance(); // consume ')'
                             let end = self.current_location();
-                            
+                            let resolved = self.resolve_known_typedefs(&type_spec);
+
                             return Ok(Expression {
                                 node_id: self.node_id_gen.next(),
-                                kind: ExpressionKind::SizeofType(type_spec),
+                                kind: ExpressionKind::SizeofType(resolved),
                                 span: SourceSpan::new(start, end),
                                 expr_type: None,
                             });
                         }
                     }
                 }
-                
+
                 // Not a type, restore and parse as expression
                 self.tokens = saved_tokens;
                 self.advance(); // re-consume '('

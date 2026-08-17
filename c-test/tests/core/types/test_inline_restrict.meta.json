@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "use_runtime": true,
+  "description": "inline and restrict as no-op keywords"
+}

@@ -245,10 +245,15 @@ impl<'a> Lexer<'a> {
                 'n' => b'\n' as i64,
                 't' => b'\t' as i64,
                 'r' => b'\r' as i64,
+                'a' => 7,
+                'b' => 8,
+                'f' => 12,
+                'v' => 11,
                 '0' => 0,
                 '\\' => b'\\' as i64,
                 '\'' => b'\'' as i64,
                 '"' => b'"' as i64,
+                '?' => b'?' as i64,
                 other => other as i64,
             }
         } else {

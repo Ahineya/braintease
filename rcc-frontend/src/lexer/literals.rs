@@ -42,7 +42,7 @@ impl Lexer {
             return Ok(TokenType::IntLiteral { value, suffix, hex: true });
         }
         
-        // Handle decimal numbers
+        // Decimal, or octal if it starts with 0 (C99 6.4.4.1).
         while let Some(ch) = self.current_char() {
             if ch.is_ascii_digit() {
                 number.push(ch);
@@ -52,14 +52,29 @@ impl Lexer {
             }
         }
         
-        let value = number.parse::<i64>()
-            .map_err(|_| CompilerError::lexer_error(
+        let octal = number.starts_with('0') && number.len() > 1;
+        if octal && number.chars().any(|c| c == '8' || c == '9') {
+            return Err(CompilerError::lexer_error(
+                format!("Invalid octal literal: {number}"),
+                self.current_location(),
+            ));
+        }
+
+        let value = if octal {
+            i64::from_str_radix(&number, 8).map_err(|_| CompilerError::lexer_error(
+                format!("Invalid octal literal: {number}"),
+                self.current_location(),
+            ))?
+        } else {
+            number.parse::<i64>().map_err(|_| CompilerError::lexer_error(
                 format!("Invalid integer literal: {number}"),
                 self.current_location(),
-            ))?;
+            ))?
+        };
         
         let suffix = self.parse_integer_suffix()?;
-        Ok(TokenType::IntLiteral { value, suffix, hex: false })
+        // Octal uses the same type ladder as hex (unsigned int before long).
+        Ok(TokenType::IntLiteral { value, suffix, hex: octal })
     }
 
     /// Parse a C99 integer suffix: u/U, l/L, and combinations (ul, lu, …).
@@ -104,6 +119,80 @@ impl Lexer {
         })
     }
     
+    /// Parse a C99 simple / octal / hex escape after a consumed backslash.
+    fn parse_escape_byte(&mut self) -> Result<u8, CompilerError> {
+        match self.current_char() {
+            Some('n') => { self.advance(); Ok(b'\n') }
+            Some('t') => { self.advance(); Ok(b'\t') }
+            Some('r') => { self.advance(); Ok(b'\r') }
+            Some('a') => { self.advance(); Ok(7) }
+            Some('b') => { self.advance(); Ok(8) }
+            Some('f') => { self.advance(); Ok(12) }
+            Some('v') => { self.advance(); Ok(11) }
+            Some('\\') => { self.advance(); Ok(b'\\') }
+            Some('\'') => { self.advance(); Ok(b'\'') }
+            Some('"') => { self.advance(); Ok(b'"') }
+            Some('?') => { self.advance(); Ok(b'?') }
+            Some('x') => {
+                self.advance();
+                let mut value = 0u32;
+                let mut digits = 0u32;
+                while let Some(ch) = self.current_char() {
+                    let digit = match ch {
+                        '0'..='9' => ch as u32 - '0' as u32,
+                        'a'..='f' => ch as u32 - 'a' as u32 + 10,
+                        'A'..='F' => ch as u32 - 'A' as u32 + 10,
+                        _ => break,
+                    };
+                    self.advance();
+                    digits += 1;
+                    value = value * 16 + digit;
+                    if value > 255 {
+                        return Err(CompilerError::lexer_error(
+                            "Hex escape sequence out of range".to_string(),
+                            self.current_location(),
+                        ));
+                    }
+                }
+                if digits == 0 {
+                    return Err(CompilerError::lexer_error(
+                        "Invalid hex escape sequence".to_string(),
+                        self.current_location(),
+                    ));
+                }
+                Ok(value as u8)
+            }
+            Some(ch) if ('0'..='7').contains(&ch) => {
+                let mut value = 0u32;
+                let mut digits = 0u32;
+                while digits < 3 {
+                    let Some(ch) = self.current_char() else { break };
+                    if !('0'..='7').contains(&ch) {
+                        break;
+                    }
+                    self.advance();
+                    digits += 1;
+                    value = value * 8 + (ch as u32 - '0' as u32);
+                    if value > 255 {
+                        return Err(CompilerError::lexer_error(
+                            "Octal escape sequence out of range".to_string(),
+                            self.current_location(),
+                        ));
+                    }
+                }
+                Ok(value as u8)
+            }
+            Some(c) => Err(CompilerError::lexer_error(
+                format!("Invalid escape sequence: \\{c}"),
+                self.current_location(),
+            )),
+            None => Err(CompilerError::lexer_error(
+                "Unterminated escape sequence".to_string(),
+                self.current_location(),
+            )),
+        }
+    }
+
     /// Tokenize a character literal
     pub fn tokenize_char_literal(&mut self) -> Result<TokenType, CompilerError> {
         self.advance(); // Skip opening quote
@@ -111,26 +200,7 @@ impl Lexer {
         let ch = match self.current_char() {
             Some('\\') => {
                 self.advance(); // Skip backslash
-                match self.current_char() {
-                    Some('n') => { self.advance(); b'\n' },
-                    Some('t') => { self.advance(); b'\t' },
-                    Some('r') => { self.advance(); b'\r' },
-                    Some('\\') => { self.advance(); b'\\' },
-                    Some('\'') => { self.advance(); b'\'' },
-                    Some('0') => { self.advance(); 0 },
-                    Some(c) => {
-                        return Err(CompilerError::lexer_error(
-                            format!("Invalid escape sequence: \\{c}"),
-                            self.current_location(),
-                        ));
-                    }
-                    None => {
-                        return Err(CompilerError::lexer_error(
-                            "Unterminated character literal".to_string(),
-                            self.current_location(),
-                        ));
-                    }
-                }
+                self.parse_escape_byte()?
             }
             Some(ch) if ch != '\'' => {
                 self.advance();
@@ -168,26 +238,8 @@ impl Lexer {
                 }
                 '\\' => {
                     self.advance(); // Skip backslash
-                    match self.current_char() {
-                        Some('n') => { string.push('\n'); self.advance(); },
-                        Some('t') => { string.push('\t'); self.advance(); },
-                        Some('r') => { string.push('\r'); self.advance(); },
-                        Some('\\') => { string.push('\\'); self.advance(); },
-                        Some('"') => { string.push('"'); self.advance(); },
-                        Some('0') => { string.push('\0'); self.advance(); },
-                        Some(c) => {
-                            return Err(CompilerError::lexer_error(
-                                format!("Invalid escape sequence: \\{c}"),
-                                self.current_location(),
-                            ));
-                        }
-                        None => {
-                            return Err(CompilerError::lexer_error(
-                                "Unterminated string literal".to_string(),
-                                self.current_location(),
-                            ));
-                        }
-                    }
+                    let byte = self.parse_escape_byte()?;
+                    string.push(byte as char);
                 }
                 _ => {
                     string.push(ch);

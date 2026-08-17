@@ -178,10 +178,11 @@ impl Type {
             Type::Array { size: None, .. } => None, // Incomplete type
             Type::Function { .. } => None, // Functions don't have size
             Type::Struct { fields, .. } => {
-                // By the time we call size_in_words, all struct fields should be fully resolved
-                // by the semantic analyzer
                 let mut total = 0;
                 for field in fields {
+                    if matches!(field.field_type, Type::Array { size: None, .. }) {
+                        continue; // Flexible array member: not included in sizeof
+                    }
                     total += field.field_type.size_in_words()?;
                 }
                 Some(total)
@@ -214,6 +215,9 @@ impl Type {
             Type::Struct { fields, .. } => {
                 let mut total = 0u64;
                 for field in fields {
+                    if matches!(field.field_type, Type::Array { size: None, .. }) {
+                        continue;
+                    }
                     total += field.field_type.size_in_bytes()?;
                 }
                 Some(total)
@@ -378,5 +382,29 @@ mod tests {
             element_type: Box::new(Type::Int), 
             size: Some(10) 
         }), "int[10]");
+    }
+
+    #[test]
+    fn test_flexible_array_member_size() {
+        let fam = Type::Struct {
+            name: Some("S".to_string()),
+            fields: vec![
+                StructField {
+                    name: "n".to_string(),
+                    field_type: Type::Int,
+                    offset: None,
+                },
+                StructField {
+                    name: "data".to_string(),
+                    field_type: Type::Array {
+                        element_type: Box::new(Type::Char),
+                        size: None,
+                    },
+                    offset: None,
+                },
+            ],
+        };
+        assert_eq!(fam.size_in_words(), Some(1));
+        assert_eq!(fam.size_in_bytes(), Some(2));
     }
 }

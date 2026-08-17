@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "C99 flexible array members",
+  "expected": "YYYYY\n"
+}

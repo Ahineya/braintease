@@ -84,6 +84,10 @@ impl Parser {
                 self.advance();
                 self.parse_goto_statement()?
             }
+            Some(TokenType::Inline) => {
+                // Function specifier at statement scope still starts a declaration.
+                self.parse_declaration_statement()?
+            }
             Some(TokenType::Asm) => {
                 self.advance();
                 self.parse_inline_asm_statement()?

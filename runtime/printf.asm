@@ -151,17 +151,17 @@ L_print_str_5:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("load_f2_op16_t5_bank_val")
     LI T3, -1
-    BEQ T2, T3, L_bc_79ab2c9a_use_global
+    BEQ T2, T3, L_bc_c41c76d3_use_global
     LI T6, -2
-    BEQ T2, T6, L_bc_79ab2c9a_use_stack
+    BEQ T2, T6, L_bc_c41c76d3_use_stack
     ADD T1, T2, R0
-    BEQ R0, R0, L_bc_79ab2c9a_done
-L_bc_79ab2c9a_use_global:
+    BEQ R0, R0, L_bc_c41c76d3_done
+L_bc_c41c76d3_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_79ab2c9a_done
-L_bc_79ab2c9a_use_stack:
+    BEQ R0, R0, L_bc_c41c76d3_done
+L_bc_c41c76d3_use_stack:
     ADD T1, SB, R0
-L_bc_79ab2c9a_done:
+L_bc_c41c76d3_done:
 ; LOAD: Using bank register T1 for load
     LOAD S0, T1, T7
     BEQ S0, R0, L_print_str_7
@@ -184,17 +184,17 @@ L_print_str_6:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
 ; LOAD: Pointer t7 has bank info: Dynamic("load_f2_op24_t7_bank_val")
     LI T0, -1
-    BEQ T6, T0, L_bc_ba36e024_use_global
+    BEQ T6, T0, L_bc_9cff93a8_use_global
     LI T3, -2
-    BEQ T6, T3, L_bc_ba36e024_use_stack
+    BEQ T6, T3, L_bc_9cff93a8_use_stack
     ADD S0, T6, R0
-    BEQ R0, R0, L_bc_ba36e024_done
-L_bc_ba36e024_use_global:
+    BEQ R0, R0, L_bc_9cff93a8_done
+L_bc_9cff93a8_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_ba36e024_done
-L_bc_ba36e024_use_stack:
+    BEQ R0, R0, L_bc_9cff93a8_done
+L_bc_9cff93a8_use_stack:
     ADD S0, SB, R0
-L_bc_ba36e024_done:
+L_bc_9cff93a8_done:
 ; LOAD: Using bank register S0 for load
     LOAD T0, S0, T5
 ; Spill live registers before call
@@ -653,17 +653,17 @@ L_print_uint_20:
     ADDI SC, SC, 35
     LOAD T7, SB, SC
     LI T5, -1
-    BEQ T7, T5, L_bc_dee1f779_use_global
+    BEQ T7, T5, L_bc_eba8a9ad_use_global
     LI T4, -2
-    BEQ T7, T4, L_bc_dee1f779_use_stack
+    BEQ T7, T4, L_bc_eba8a9ad_use_stack
     ADD T3, T7, R0
-    BEQ R0, R0, L_bc_dee1f779_done
-L_bc_dee1f779_use_global:
+    BEQ R0, R0, L_bc_eba8a9ad_done
+L_bc_eba8a9ad_use_global:
     ADD T3, GP, R0
-    BEQ R0, R0, L_bc_dee1f779_done
-L_bc_dee1f779_use_stack:
+    BEQ R0, R0, L_bc_eba8a9ad_done
+L_bc_eba8a9ad_use_stack:
     ADD T3, SB, R0
-L_bc_dee1f779_done:
+L_bc_eba8a9ad_done:
     STORE RV0, T3, S1
 ; Load instruction: t21 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -766,17 +766,17 @@ L_print_uint_23:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(30), bank: Mixed })
 ; LOAD: Pointer t30 has bank info: Dynamic("gep_new_bank_f6_op53_t30")
     LI T1, -1
-    BEQ T7, T1, L_bc_8712247b_use_global
+    BEQ T7, T1, L_bc_725ea7e8_use_global
     LI RV0, -2
-    BEQ T7, RV0, L_bc_8712247b_use_stack
+    BEQ T7, RV0, L_bc_725ea7e8_use_stack
     ADD T5, T7, R0
-    BEQ R0, R0, L_bc_8712247b_done
-L_bc_8712247b_use_global:
+    BEQ R0, R0, L_bc_725ea7e8_done
+L_bc_725ea7e8_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_8712247b_done
-L_bc_8712247b_use_stack:
+    BEQ R0, R0, L_bc_725ea7e8_done
+L_bc_725ea7e8_use_stack:
     ADD T5, SB, R0
-L_bc_8712247b_done:
+L_bc_725ea7e8_done:
 ; LOAD: Using bank register T5 for load
     LOAD S1, T5, T4
 ; Spill live registers before call
@@ -1239,12 +1239,12 @@ L_print_ulong_33:
     LI S2, 0
     LI S0, 0
     XOR T5, S0, S1
-    BNE T5, R0, L_i32_ult_hine_8c4efa9a_10_0
+    BNE T5, R0, L_i32_ult_hine_c0fca6ee_10_0
     SLTU T5, S2, T3
-    BEQ R0, R0, L_i32_ult_done_8c4efa9a_10_1
-L_i32_ult_hine_8c4efa9a_10_0:
+    BEQ R0, R0, L_i32_ult_done_c0fca6ee_10_1
+L_i32_ult_hine_c0fca6ee_10_0:
     SLTU T5, S0, S1
-L_i32_ult_done_8c4efa9a_10_1:
+L_i32_ult_done_c0fca6ee_10_1:
     BEQ T5, R0, L_print_ulong_35
 ; Branch to L_print_ulong_35 if condition is false
     BEQ R0, R0, L_print_ulong_34
@@ -1339,7 +1339,7 @@ L_print_ulong_34:
     ADD SC, FP, R0
     ADDI SC, SC, 72
     STORE T0, SB, SC
-L_i32_udiv_loop_8c4efa9a_10_2:
+L_i32_udiv_loop_c0fca6ee_10_2:
     SLT T2, T7, R0
     SLT T0, T6, R0
     ADD T6, T6, T6
@@ -1355,25 +1355,25 @@ L_i32_udiv_loop_8c4efa9a_10_2:
     ADD S0, S0, S0
     OR S0, S0, T0
     XOR T2, RV0, S1
-    BNE T2, R0, L_i32_ult_hine_8c4efa9a_10_6
+    BNE T2, R0, L_i32_ult_hine_c0fca6ee_10_6
     SLTU T2, T6, T3
-    BEQ R0, R0, L_i32_ult_done_8c4efa9a_10_7
-L_i32_ult_hine_8c4efa9a_10_6:
+    BEQ R0, R0, L_i32_ult_done_c0fca6ee_10_7
+L_i32_ult_hine_c0fca6ee_10_6:
     SLTU T2, RV0, S1
-L_i32_ult_done_8c4efa9a_10_7:
-    BNE T2, R0, L_i32_udiv_next_8c4efa9a_10_4
-    BEQ R0, R0, L_i32_udiv_ge_8c4efa9a_10_3
-L_i32_udiv_ge_8c4efa9a_10_3:
+L_i32_ult_done_c0fca6ee_10_7:
+    BNE T2, R0, L_i32_udiv_next_c0fca6ee_10_4
+    BEQ R0, R0, L_i32_udiv_ge_c0fca6ee_10_3
+L_i32_udiv_ge_c0fca6ee_10_3:
     SLTU T2, T6, T3
     SUB T6, T6, T3
     SUB RV0, RV0, S1
     SUB RV0, RV0, T2
     OR S2, S2, T1
-L_i32_udiv_next_8c4efa9a_10_4:
+L_i32_udiv_next_c0fca6ee_10_4:
     SUB S3, S3, T1
-    BEQ S3, R0, L_i32_udiv_done_8c4efa9a_10_5
-    BEQ R0, R0, L_i32_udiv_loop_8c4efa9a_10_2
-L_i32_udiv_done_8c4efa9a_10_5:
+    BEQ S3, R0, L_i32_udiv_done_c0fca6ee_10_5
+    BEQ R0, R0, L_i32_udiv_loop_c0fca6ee_10_2
+L_i32_udiv_done_c0fca6ee_10_5:
     ADD S2, T6, R0
     ADD S0, RV0, R0
 ; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
@@ -1460,17 +1460,17 @@ L_i32_udiv_done_8c4efa9a_10_5:
     ADDI SC, SC, 70
     LOAD T4, SB, SC
     LI T6, -1
-    BEQ T4, T6, L_bc_88c29fdf_use_global
+    BEQ T4, T6, L_bc_4b02855e_use_global
     LI S3, -2
-    BEQ T4, S3, L_bc_88c29fdf_use_stack
+    BEQ T4, S3, L_bc_4b02855e_use_stack
     ADD T7, T4, R0
-    BEQ R0, R0, L_bc_88c29fdf_done
-L_bc_88c29fdf_use_global:
+    BEQ R0, R0, L_bc_4b02855e_done
+L_bc_4b02855e_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_88c29fdf_done
-L_bc_88c29fdf_use_stack:
+    BEQ R0, R0, L_bc_4b02855e_done
+L_bc_4b02855e_use_stack:
     ADD T7, SB, R0
-L_bc_88c29fdf_done:
+L_bc_4b02855e_done:
     STORE RV0, T7, S1
 ; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -1539,7 +1539,7 @@ L_bc_88c29fdf_done:
     ADD SC, FP, R0
     ADDI SC, SC, 91
     STORE T5, SB, SC
-L_i32_udiv_loop_8c4efa9a_10_8:
+L_i32_udiv_loop_c0fca6ee_10_8:
     SLT T3, T4, R0
     SLT T5, T7, R0
     ADD T7, T7, T7
@@ -1555,25 +1555,25 @@ L_i32_udiv_loop_8c4efa9a_10_8:
     ADD RV0, RV0, RV0
     OR RV0, RV0, T5
     XOR T3, T2, S3
-    BNE T3, R0, L_i32_ult_hine_8c4efa9a_10_12
+    BNE T3, R0, L_i32_ult_hine_c0fca6ee_10_12
     SLTU T3, T7, T6
-    BEQ R0, R0, L_i32_ult_done_8c4efa9a_10_13
-L_i32_ult_hine_8c4efa9a_10_12:
+    BEQ R0, R0, L_i32_ult_done_c0fca6ee_10_13
+L_i32_ult_hine_c0fca6ee_10_12:
     SLTU T3, T2, S3
-L_i32_ult_done_8c4efa9a_10_13:
-    BNE T3, R0, L_i32_udiv_next_8c4efa9a_10_10
-    BEQ R0, R0, L_i32_udiv_ge_8c4efa9a_10_9
-L_i32_udiv_ge_8c4efa9a_10_9:
+L_i32_ult_done_c0fca6ee_10_13:
+    BNE T3, R0, L_i32_udiv_next_c0fca6ee_10_10
+    BEQ R0, R0, L_i32_udiv_ge_c0fca6ee_10_9
+L_i32_udiv_ge_c0fca6ee_10_9:
     SLTU T3, T7, T6
     SUB T7, T7, T6
     SUB T2, T2, S3
     SUB T2, T2, T3
     OR T0, T0, S0
-L_i32_udiv_next_8c4efa9a_10_10:
+L_i32_udiv_next_c0fca6ee_10_10:
     SUB T1, T1, S0
-    BEQ T1, R0, L_i32_udiv_done_8c4efa9a_10_11
-    BEQ R0, R0, L_i32_udiv_loop_8c4efa9a_10_8
-L_i32_udiv_done_8c4efa9a_10_11:
+    BEQ T1, R0, L_i32_udiv_done_c0fca6ee_10_11
+    BEQ R0, R0, L_i32_udiv_loop_c0fca6ee_10_8
+L_i32_udiv_done_c0fca6ee_10_11:
 ; Spill t29__hi to slot 44
     ADD SC, FP, R0
     ADDI SC, SC, 92
@@ -1676,17 +1676,17 @@ L_print_ulong_37:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(36), bank: Mixed })
 ; LOAD: Pointer t36 has bank info: Dynamic("gep_new_bank_f10_op76_t36")
     LI T2, -1
-    BEQ T3, T2, L_bc_7690cfdd_use_global
+    BEQ T3, T2, L_bc_f16eaaf5_use_global
     LI T1, -2
-    BEQ T3, T1, L_bc_7690cfdd_use_stack
+    BEQ T3, T1, L_bc_f16eaaf5_use_stack
     ADD T7, T3, R0
-    BEQ R0, R0, L_bc_7690cfdd_done
-L_bc_7690cfdd_use_global:
+    BEQ R0, R0, L_bc_f16eaaf5_done
+L_bc_f16eaaf5_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_7690cfdd_done
-L_bc_7690cfdd_use_stack:
+    BEQ R0, R0, L_bc_f16eaaf5_done
+L_bc_f16eaaf5_use_stack:
     ADD T7, SB, R0
-L_bc_7690cfdd_done:
+L_bc_f16eaaf5_done:
 ; LOAD: Using bank register T7 for load
     LOAD S0, T7, T4
 ; Spill live registers before call
@@ -1831,12 +1831,12 @@ L_print_long_39:
     LI T5, 0
     LI T4, 0
     XOR T3, T6, T4
-    BNE T3, R0, L_i32_slt_hine_e9303ee6_12_0
+    BNE T3, R0, L_i32_slt_hine_ebd46bf1_12_0
     SLTU T3, T7, T5
-    BEQ R0, R0, L_i32_slt_done_e9303ee6_12_1
-L_i32_slt_hine_e9303ee6_12_0:
+    BEQ R0, R0, L_i32_slt_done_ebd46bf1_12_1
+L_i32_slt_hine_ebd46bf1_12_0:
     SLT T3, T6, T4
-L_i32_slt_done_e9303ee6_12_1:
+L_i32_slt_done_ebd46bf1_12_1:
     BEQ T3, R0, L_print_long_42
 ; Branch to L_print_long_42 if condition is false
     BEQ R0, R0, L_print_long_40
@@ -2133,17 +2133,17 @@ L_printf_44:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Mixed })
 ; LOAD: Pointer t7 has bank info: Dynamic("load_f14_op16_t7_bank_val")
     LI S0, -1
-    BEQ T6, S0, L_bc_b7f9f76d_use_global
+    BEQ T6, S0, L_bc_19a409d9_use_global
     LI S1, -2
-    BEQ T6, S1, L_bc_b7f9f76d_use_stack
+    BEQ T6, S1, L_bc_19a409d9_use_stack
     ADD T7, T6, R0
-    BEQ R0, R0, L_bc_b7f9f76d_done
-L_bc_b7f9f76d_use_global:
+    BEQ R0, R0, L_bc_19a409d9_done
+L_bc_19a409d9_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_b7f9f76d_done
-L_bc_b7f9f76d_use_stack:
+    BEQ R0, R0, L_bc_19a409d9_done
+L_bc_19a409d9_use_stack:
     ADD T7, SB, R0
-L_bc_b7f9f76d_done:
+L_bc_19a409d9_done:
 ; LOAD: Using bank register T7 for load
     LOAD T5, T7, T3
     BEQ T5, R0, L_printf_46
@@ -2175,21 +2175,21 @@ L_printf_45:
     ADDI SC, SC, 18
     STORE S2, SB, SC
     LI S3, -1
-    BEQ T1, S3, L_bc_c5f25c6f_use_global
+    BEQ T1, S3, L_bc_3ad9a96e_use_global
 ; Spill param_bank_f14_op3_0 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 19
     STORE S2, SB, SC
     LI S2, -2
-    BEQ T1, S2, L_bc_c5f25c6f_use_stack
+    BEQ T1, S2, L_bc_3ad9a96e_use_stack
     ADD T5, T1, R0
-    BEQ R0, R0, L_bc_c5f25c6f_done
-L_bc_c5f25c6f_use_global:
+    BEQ R0, R0, L_bc_3ad9a96e_done
+L_bc_3ad9a96e_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_c5f25c6f_done
-L_bc_c5f25c6f_use_stack:
+    BEQ R0, R0, L_bc_3ad9a96e_done
+L_bc_3ad9a96e_use_stack:
     ADD T5, SB, R0
-L_bc_c5f25c6f_done:
+L_bc_3ad9a96e_done:
 ; LOAD: Using bank register T5 for load
     LOAD S3, T5, S1
     LI S2, 37
@@ -2261,21 +2261,21 @@ L_printf_47:
     ADDI SC, SC, 26
     STORE T6, SB, SC
     LI T6, -1
-    BEQ T3, T6, L_bc_9b9bbe0d_use_global
+    BEQ T3, T6, L_bc_3e161a05_use_global
 ; Spill load_f14_op17_t8_resolved_bank_14_f14_op18 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T7, SB, SC
     LI T7, -2
-    BEQ T3, T7, L_bc_9b9bbe0d_use_stack
+    BEQ T3, T7, L_bc_3e161a05_use_stack
     ADD T0, T3, R0
-    BEQ R0, R0, L_bc_9b9bbe0d_done
-L_bc_9b9bbe0d_use_global:
+    BEQ R0, R0, L_bc_3e161a05_done
+L_bc_3e161a05_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_9b9bbe0d_done
-L_bc_9b9bbe0d_use_stack:
+    BEQ R0, R0, L_bc_3e161a05_done
+L_bc_3e161a05_use_stack:
     ADD T0, SB, R0
-L_bc_9b9bbe0d_done:
+L_bc_3e161a05_done:
 ; LOAD: Using bank register T0 for load
     LOAD T6, T0, S2
     LI T7, 0
@@ -2399,17 +2399,17 @@ L_printf_52:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(20), bank: Mixed })
 ; LOAD: Pointer t20 has bank info: Dynamic("load_f14_op54_t20_bank_val")
     LI S1, -1
-    BEQ T3, S1, L_bc_12c4a322_use_global
+    BEQ T3, S1, L_bc_d92061ca_use_global
     LI T1, -2
-    BEQ T3, T1, L_bc_12c4a322_use_stack
+    BEQ T3, T1, L_bc_d92061ca_use_stack
     ADD T0, T3, R0
-    BEQ R0, R0, L_bc_12c4a322_done
-L_bc_12c4a322_use_global:
+    BEQ R0, R0, L_bc_d92061ca_done
+L_bc_d92061ca_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_12c4a322_done
-L_bc_12c4a322_use_stack:
+    BEQ R0, R0, L_bc_d92061ca_done
+L_bc_d92061ca_use_stack:
     ADD T0, SB, R0
-L_bc_12c4a322_done:
+L_bc_d92061ca_done:
 ; LOAD: Using bank register T0 for load
     LOAD T7, T0, S3
     LI RV0, 108
@@ -2458,21 +2458,21 @@ L_printf_53:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(25), bank: Mixed })
 ; LOAD: Pointer t25 has bank info: Dynamic("load_f14_op70_t25_bank_val")
     LI S0, -1
-    BEQ S2, S0, L_bc_fe1078e4_use_global
+    BEQ S2, S0, L_bc_043aa372_use_global
 ; Spill t19 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T6, SB, SC
     LI T6, -2
-    BEQ S2, T6, L_bc_fe1078e4_use_stack
+    BEQ S2, T6, L_bc_043aa372_use_stack
     ADD T5, S2, R0
-    BEQ R0, R0, L_bc_fe1078e4_done
-L_bc_fe1078e4_use_global:
+    BEQ R0, R0, L_bc_043aa372_done
+L_bc_043aa372_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_fe1078e4_done
-L_bc_fe1078e4_use_stack:
+    BEQ R0, R0, L_bc_043aa372_done
+L_bc_043aa372_use_stack:
     ADD T5, SB, R0
-L_bc_fe1078e4_done:
+L_bc_043aa372_done:
 ; LOAD: Using bank register T5 for load
     LOAD S0, T5, T2
     LI T6, 0
@@ -2630,17 +2630,17 @@ L_printf_55:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(34), bank: Mixed })
 ; LOAD: Pointer t34 has bank info: Dynamic("load_f14_op88_t34_bank_val")
     LI T6, -1
-    BEQ S3, T6, L_bc_6f965323_use_global
+    BEQ S3, T6, L_bc_7e531745_use_global
     LI S0, -2
-    BEQ S3, S0, L_bc_6f965323_use_stack
+    BEQ S3, S0, L_bc_7e531745_use_stack
     ADD T3, S3, R0
-    BEQ R0, R0, L_bc_6f965323_done
-L_bc_6f965323_use_global:
+    BEQ R0, R0, L_bc_7e531745_done
+L_bc_7e531745_use_global:
     ADD T3, GP, R0
-    BEQ R0, R0, L_bc_6f965323_done
-L_bc_6f965323_use_stack:
+    BEQ R0, R0, L_bc_7e531745_done
+L_bc_7e531745_use_stack:
     ADD T3, SB, R0
-L_bc_6f965323_done:
+L_bc_7e531745_done:
 ; LOAD: Using bank register T3 for load
     LOAD T1, T3, S2
     ADD S1, FP, R0
@@ -2915,17 +2915,17 @@ L_printf_60:
 ; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; LOAD: Pointer t2097289 has bank info: Dynamic("load_f14_op141_t2097289_bank_val")
     LI T6, -1
-    BEQ T0, T6, L_bc_69467634_use_global
+    BEQ T0, T6, L_bc_fc23d131_use_global
     LI S0, -2
-    BEQ T0, S0, L_bc_69467634_use_stack
+    BEQ T0, S0, L_bc_fc23d131_use_stack
     ADD T5, T0, R0
-    BEQ R0, R0, L_bc_69467634_done
-L_bc_69467634_use_global:
+    BEQ R0, R0, L_bc_fc23d131_done
+L_bc_fc23d131_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_69467634_done
-L_bc_69467634_use_stack:
+    BEQ R0, R0, L_bc_fc23d131_done
+L_bc_fc23d131_use_stack:
     ADD T5, SB, R0
-L_bc_69467634_done:
+L_bc_fc23d131_done:
 ; LOAD: Using bank register T5 for load
     LOAD T7, T5, S1
     ADDI S1, S1, -1
@@ -3099,17 +3099,17 @@ L_printf_79:
 ; Bank value in T3 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; LOAD: Pointer t2097311 has bank info: Dynamic("load_f14_op163_t2097311_bank_val")
     LI S1, -1
-    BEQ T3, S1, L_bc_924ea7a9_use_global
+    BEQ T3, S1, L_bc_eedca56c_use_global
     LI T0, -2
-    BEQ T3, T0, L_bc_924ea7a9_use_stack
+    BEQ T3, T0, L_bc_eedca56c_use_stack
     ADD T1, T3, R0
-    BEQ R0, R0, L_bc_924ea7a9_done
-L_bc_924ea7a9_use_global:
+    BEQ R0, R0, L_bc_eedca56c_done
+L_bc_eedca56c_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_924ea7a9_done
-L_bc_924ea7a9_use_stack:
+    BEQ R0, R0, L_bc_eedca56c_done
+L_bc_eedca56c_use_stack:
     ADD T1, SB, R0
-L_bc_924ea7a9_done:
+L_bc_eedca56c_done:
 ; LOAD: Using bank register T1 for load
     LOAD T7, T1, T4
     ADDI T4, T4, -1
@@ -3297,17 +3297,17 @@ L_printf_82:
 ; Bank value in S2 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; LOAD: Pointer t2097335 has bank info: Dynamic("load_f14_op187_t2097335_bank_val")
     LI T3, -1
-    BEQ S2, T3, L_bc_830af6cb_use_global
+    BEQ S2, T3, L_bc_32fba75e_use_global
     LI T7, -2
-    BEQ S2, T7, L_bc_830af6cb_use_stack
+    BEQ S2, T7, L_bc_32fba75e_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_830af6cb_done
-L_bc_830af6cb_use_global:
+    BEQ R0, R0, L_bc_32fba75e_done
+L_bc_32fba75e_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_830af6cb_done
-L_bc_830af6cb_use_stack:
+    BEQ R0, R0, L_bc_32fba75e_done
+L_bc_32fba75e_use_stack:
     ADD T4, SB, R0
-L_bc_830af6cb_done:
+L_bc_32fba75e_done:
 ; LOAD: Using bank register T4 for load
     LOAD S3, T4, T6
     ADDI T6, T6, -1
@@ -3509,17 +3509,17 @@ L_printf_85:
 ; Bank value in T4 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; LOAD: Pointer t2097361 has bank info: Dynamic("load_f14_op213_t2097361_bank_val")
     LI S3, -1
-    BEQ T4, S3, L_bc_92b1033c_use_global
+    BEQ T4, S3, L_bc_de34053b_use_global
     LI S1, -2
-    BEQ T4, S1, L_bc_92b1033c_use_stack
+    BEQ T4, S1, L_bc_de34053b_use_stack
     ADD S2, T4, R0
-    BEQ R0, R0, L_bc_92b1033c_done
-L_bc_92b1033c_use_global:
+    BEQ R0, R0, L_bc_de34053b_done
+L_bc_de34053b_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_92b1033c_done
-L_bc_92b1033c_use_stack:
+    BEQ R0, R0, L_bc_de34053b_done
+L_bc_de34053b_use_stack:
     ADD S2, SB, R0
-L_bc_92b1033c_done:
+L_bc_de34053b_done:
 ; LOAD: Using bank register S2 for load
     LOAD T3, S2, S0
     ADDI S0, S0, -1
@@ -3721,17 +3721,17 @@ L_printf_88:
 ; Bank value in S2 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; LOAD: Pointer t2097387 has bank info: Dynamic("load_f14_op239_t2097387_bank_val")
     LI T3, -1
-    BEQ S2, T3, L_bc_2734edc0_use_global
+    BEQ S2, T3, L_bc_be7fa65a_use_global
     LI T7, -2
-    BEQ S2, T7, L_bc_2734edc0_use_stack
+    BEQ S2, T7, L_bc_be7fa65a_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_2734edc0_done
-L_bc_2734edc0_use_global:
+    BEQ R0, R0, L_bc_be7fa65a_done
+L_bc_be7fa65a_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_2734edc0_done
-L_bc_2734edc0_use_stack:
+    BEQ R0, R0, L_bc_be7fa65a_done
+L_bc_be7fa65a_use_stack:
     ADD T4, SB, R0
-L_bc_2734edc0_done:
+L_bc_be7fa65a_done:
 ; LOAD: Using bank register T4 for load
     LOAD S3, T4, T5
     ADDI T5, T5, -1
@@ -3969,17 +3969,17 @@ L_printf_92:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(108), bank: Mixed })
 ; LOAD: Pointer t108 has bank info: Dynamic("load_f14_op266_t108_bank_val")
     LI T7, -1
-    BEQ S1, T7, L_bc_e53cd8ad_use_global
+    BEQ S1, T7, L_bc_07ed9589_use_global
     LI T0, -2
-    BEQ S1, T0, L_bc_e53cd8ad_use_stack
+    BEQ S1, T0, L_bc_07ed9589_use_stack
     ADD S3, S1, R0
-    BEQ R0, R0, L_bc_e53cd8ad_done
-L_bc_e53cd8ad_use_global:
+    BEQ R0, R0, L_bc_07ed9589_done
+L_bc_07ed9589_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_e53cd8ad_done
-L_bc_e53cd8ad_use_stack:
+    BEQ R0, R0, L_bc_07ed9589_done
+L_bc_07ed9589_use_stack:
     ADD S3, SB, R0
-L_bc_e53cd8ad_done:
+L_bc_07ed9589_done:
 ; LOAD: Using bank register S3 for load
     LOAD S0, S3, T1
 ; Spill live registers before call
@@ -4058,17 +4058,17 @@ L_printf_48:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(113), bank: Mixed })
 ; LOAD: Pointer t113 has bank info: Dynamic("load_f14_op277_t113_bank_val")
     LI S1, -1
-    BEQ S2, S1, L_bc_83f873e2_use_global
+    BEQ S2, S1, L_bc_3b49b4e9_use_global
     LI S3, -2
-    BEQ S2, S3, L_bc_83f873e2_use_stack
+    BEQ S2, S3, L_bc_3b49b4e9_use_stack
     ADD T1, S2, R0
-    BEQ R0, R0, L_bc_83f873e2_done
-L_bc_83f873e2_use_global:
+    BEQ R0, R0, L_bc_3b49b4e9_done
+L_bc_3b49b4e9_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_83f873e2_done
-L_bc_83f873e2_use_stack:
+    BEQ R0, R0, L_bc_3b49b4e9_done
+L_bc_3b49b4e9_use_stack:
     ADD T1, SB, R0
-L_bc_83f873e2_done:
+L_bc_3b49b4e9_done:
 ; LOAD: Using bank register T1 for load
     LOAD S0, T1, T4
 ; Spill live registers before call

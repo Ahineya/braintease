@@ -1,0 +1,5 @@
+{
+  "description": "sizeof(typedef_name) including size_t",
+  "use_runtime": true,
+  "expected": "YYYYYY\n"
+}

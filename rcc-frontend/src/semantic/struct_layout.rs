@@ -51,7 +51,27 @@ pub fn calculate_struct_layout_with_defs(
     let mut layout_fields = Vec::new();
     let mut current_offset = 0u64;
     
-    for field in fields {
+    for (i, field) in fields.iter().enumerate() {
+        let is_last = i + 1 == fields.len();
+        let is_fam = matches!(field.field_type, Type::Array { size: None, .. });
+
+        if is_fam {
+            if !is_last {
+                return Err(crate::semantic::SemanticError::IncompleteType {
+                    type_name: format!("field '{}' has incomplete type {:?}",
+                                     field.name, field.field_type),
+                    location: location.clone(),
+                }.into());
+            }
+            layout_fields.push(FieldLayout {
+                name: field.name.clone(),
+                field_type: field.field_type.clone(),
+                offset: current_offset,
+                size: 0,
+            });
+            continue;
+        }
+
         // Get the size of this field
         let field_size = match get_type_size(&field.field_type, type_definitions) {
             Some(size) => size,
@@ -98,6 +118,9 @@ fn get_type_size(ty: &Type, type_definitions: Option<&HashMap<String, Type>>) ->
                     // Calculate size of the resolved struct
                     let mut total = 0u64;
                     for field in actual_fields {
+                        if matches!(field.field_type, Type::Array { size: None, .. }) {
+                            continue;
+                        }
                         total += get_type_size(&field.field_type, type_definitions)?;
                     }
                     return Some(total);

@@ -72,6 +72,8 @@ impl Lexer {
             ("volatile", TokenType::Volatile),
             ("while", TokenType::While),
             ("_Bool", TokenType::Bool),
+            ("inline", TokenType::Inline),
+            ("restrict", TokenType::Restrict),
             ("asm", TokenType::Asm),
             ("__asm__", TokenType::Asm),  // GCC-style inline assembly
         ];
@@ -556,5 +558,31 @@ int main() {
         assert_eq!(tokens[2].token_type, TokenType::CharLiteral(0));
         assert_eq!(tokens[3].token_type, TokenType::CharLiteral(b'\''));
         assert_eq!(tokens[4].token_type, TokenType::CharLiteral(b'\\'));
+    }
+
+    #[test]
+    fn test_octal_literals_and_remaining_escapes() {
+        let mut lexer = Lexer::new(r#"010 0 '\a' '\b' '\f' '\v' '\x41' '\012' "A\0B""#);
+        let tokens = lexer.tokenize().unwrap();
+
+        assert_eq!(tokens[0].token_type, TokenType::IntLiteral { value: 8, suffix: IntegerSuffix::None, hex: true });
+        assert_eq!(tokens[1].token_type, TokenType::IntLiteral { value: 0, suffix: IntegerSuffix::None, hex: false });
+        assert_eq!(tokens[2].token_type, TokenType::CharLiteral(7));
+        assert_eq!(tokens[3].token_type, TokenType::CharLiteral(8));
+        assert_eq!(tokens[4].token_type, TokenType::CharLiteral(12));
+        assert_eq!(tokens[5].token_type, TokenType::CharLiteral(11));
+        assert_eq!(tokens[6].token_type, TokenType::CharLiteral(b'A'));
+        assert_eq!(tokens[7].token_type, TokenType::CharLiteral(10));
+        assert_eq!(tokens[8].token_type, TokenType::StringLiteral("A\0B".to_string()));
+        assert!(matches!(tokens[9].token_type, TokenType::EndOfFile));
+    }
+
+    #[test]
+    fn test_inline_restrict_keywords() {
+        let mut lexer = Lexer::new("inline restrict int");
+        let tokens = lexer.tokenize().unwrap();
+        assert!(matches!(tokens[0].token_type, TokenType::Inline));
+        assert!(matches!(tokens[1].token_type, TokenType::Restrict));
+        assert!(matches!(tokens[2].token_type, TokenType::Int));
     }
 }
