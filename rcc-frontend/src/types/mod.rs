@@ -52,6 +52,10 @@ pub enum Type {
     Long,
     UnsignedLong,
     
+    /// Floating types (no FP ops yet; size is used for layout, e.g. unions)
+    Float,
+    Double,
+    
     /// Pointer to another type with optional bank information
     Pointer {
         target: Box<Type>,
@@ -160,6 +164,8 @@ impl Type {
             Type::Short | Type::UnsignedShort => Some(1),
             Type::Int | Type::UnsignedInt => Some(1), // 16-bit int on Ripple
             Type::Long | Type::UnsignedLong => Some(2),
+            Type::Float => Some(2),  // 32-bit float = 2 words
+            Type::Double => Some(4), // 64-bit double = 4 words
             Type::Pointer { .. } => Some(2), // Fat pointers: 1 word address + 1 word bank
             Type::Array { element_type, size: Some(count) } => {
                 element_type.size_in_words().map(|elem_size| elem_size * count)
@@ -209,6 +215,8 @@ impl fmt::Display for Type {
             Type::UnsignedInt => write!(f, "unsigned int"),
             Type::Long => write!(f, "long"),
             Type::UnsignedLong => write!(f, "unsigned long"),
+            Type::Float => write!(f, "float"),
+            Type::Double => write!(f, "double"),
             Type::Pointer { target, bank } => {
                 write!(f, "{target}*")?;
                 if let Some(bank) = bank {

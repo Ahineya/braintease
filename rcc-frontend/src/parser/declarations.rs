@@ -295,51 +295,10 @@ impl Parser {
             
             if !self.check(&TokenType::RightBrace) {
                 loop {
-                    // Check for designator (.field or [index])
+                    // Check for designator (.field or [index]), including nested
+                    // chains such as `.data.ival = 100`.
                     if self.check(&TokenType::Dot) || self.check(&TokenType::LeftBracket) {
-                        // Parse designated initializer
-                        let designator = if self.match_token(&TokenType::Dot) {
-                            // Field designator
-                            let ident = if let Some(Token { token_type: TokenType::Identifier(name), .. }) = self.peek() {
-                                let name = name.clone();
-                                self.advance(); // consume identifier
-                                name
-                            } else {
-                                return Err(CompilerError::parse_error(
-                                    "Expected field name after '.'".to_string(),
-                                    self.current_location(),
-                                ));
-                            };
-                            crate::ast::Designator::Member(ident)
-                        } else if self.match_token(&TokenType::LeftBracket) {
-                            // Array index designator
-                            let index_expr = self.parse_expression()?;
-                            self.expect(TokenType::RightBracket, "array designator")?;
-                            crate::ast::Designator::Index(index_expr)
-                        } else {
-                            return Err(CompilerError::parse_error(
-                                "Expected '.' or '[' for designator".to_string(),
-                                self.current_location(),
-                            ));
-                        };
-                        
-                        // Expect '=' after designator
-                        self.expect(TokenType::Equal, "designated initializer")?;
-                        
-                        // Parse the initializer for this designator
-                        let init = self.parse_initializer()?;
-                        
-                        // Create a designated initializer
-                        let designated_init = Initializer {
-                            node_id: self.node_id_gen.next(),
-                            kind: InitializerKind::Designated {
-                                designator,
-                                initializer: Box::new(init),
-                            },
-                            span: SourceSpan::new(start_location.clone(), self.current_location()),
-                        };
-                        
-                        initializers.push(designated_init);
+                        initializers.push(self.parse_designated_initializer()?);
                     } else {
                         // Regular initializer (no designator)
                         initializers.push(self.parse_initializer()?);
@@ -371,5 +330,52 @@ impl Parser {
             kind,
             span: SourceSpan::new(start_location, end_location),
         })
+    }
+
+    /// Parse a (possibly nested) designated initializer: `.field`, `[index]`, or `.a.b = value`.
+    fn parse_designated_initializer(&mut self) -> Result<Initializer, CompilerError> {
+        let start_location = self.current_location();
+        let designator = self.parse_designator()?;
+
+        let inner = if self.check(&TokenType::Dot) || self.check(&TokenType::LeftBracket) {
+            self.parse_designated_initializer()?
+        } else {
+            self.expect(TokenType::Equal, "designated initializer")?;
+            self.parse_initializer()?
+        };
+
+        Ok(Initializer {
+            node_id: self.node_id_gen.next(),
+            kind: InitializerKind::Designated {
+                designator,
+                initializer: Box::new(inner),
+            },
+            span: SourceSpan::new(start_location, self.current_location()),
+        })
+    }
+
+    fn parse_designator(&mut self) -> Result<crate::ast::Designator, CompilerError> {
+        if self.match_token(&TokenType::Dot) {
+            let ident = if let Some(Token { token_type: TokenType::Identifier(name), .. }) = self.peek() {
+                let name = name.clone();
+                self.advance();
+                name
+            } else {
+                return Err(CompilerError::parse_error(
+                    "Expected field name after '.'".to_string(),
+                    self.current_location(),
+                ));
+            };
+            Ok(crate::ast::Designator::Member(ident))
+        } else if self.match_token(&TokenType::LeftBracket) {
+            let index_expr = self.parse_expression()?;
+            self.expect(TokenType::RightBracket, "array designator")?;
+            Ok(crate::ast::Designator::Index(index_expr))
+        } else {
+            Err(CompilerError::parse_error(
+                "Expected '.' or '[' for designator".to_string(),
+                self.current_location(),
+            ))
+        }
     }
 }

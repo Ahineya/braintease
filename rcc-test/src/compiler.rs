@@ -545,11 +545,12 @@ fn compile_and_run_rvm_standalone(
         rvm_args.push(freq.clone());
     }
     
-    // Add disk path if provided
-    if let Some(ref disk) = config.disk_path {
-        rvm_args.push("--disk".to_string());
-        rvm_args.push(disk.display().to_string());
-    }
+    // Isolate storage/MMIO tests: each test gets its own disk image so parallel
+    // rvm processes do not share ~/.RippleVM/test.img.
+    let test_disk = tools.build_dir.join(format!("{basename}.disk.img"));
+    let _ = std::fs::remove_file(&test_disk);
+    rvm_args.push("--disk".to_string());
+    rvm_args.push(test_disk.display().to_string());
     
     // Add debug flag if needed
     if config.debug_mode {
@@ -643,11 +644,12 @@ fn compile_and_run_rvm(
         rvm_args.push(freq.clone());
     }
     
-    // Add disk path if provided
-    if let Some(ref disk) = config.disk_path {
-        rvm_args.push("--disk".to_string());
-        rvm_args.push(disk.display().to_string());
-    }
+    // Isolate storage/MMIO tests: each test gets its own disk image so parallel
+    // rvm processes do not share ~/.RippleVM/test.img.
+    let test_disk = tools.build_dir.join(format!("{basename}.disk.img"));
+    let _ = std::fs::remove_file(&test_disk);
+    rvm_args.push("--disk".to_string());
+    rvm_args.push(test_disk.display().to_string());
     
     // Add debug flag if needed
     if config.debug_mode {

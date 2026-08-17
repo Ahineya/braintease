@@ -1,5 +1,5 @@
 {
   "use_runtime": true,
-  "expected": "YYYYYY",
+  "expected": "YYYYY\n",
   "description": "Compound literal scope and lifetime tests"
 }

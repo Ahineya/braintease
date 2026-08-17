@@ -111,40 +111,40 @@ impl TypeAnalyzer {
                 // Only resolve if it's a named struct with no fields (a reference)
                 if let Some(name) = name {
                     if fields.is_empty() {
-                        // This is a reference to a named struct type
                         if let Some(actual_type) = self.type_definitions.borrow().get(name) {
-                            return actual_type.clone();
+                            return self.resolve_type(&actual_type.clone());
                         } else {
-                            // Unresolved struct reference - incomplete type
-                            // Return as-is to preserve the name for error reporting
-                            // The caller should check for incomplete types
-                            
-                            // Todo: Investigate this shit
-                            
                             return ty.clone();
                         }
                     }
                 }
-                // Otherwise return as-is (already complete or anonymous)
-                ty.clone()
+                Type::Struct {
+                    name: name.clone(),
+                    fields: fields.iter().map(|f| crate::types::StructField {
+                        name: f.name.clone(),
+                        field_type: self.unwrap_typedefs_shallow(&f.field_type),
+                        offset: f.offset,
+                    }).collect(),
+                }
             }
             Type::Union { name, fields } => {
-                // Only resolve if it's a named union with no fields (a reference)
                 if let Some(name) = name {
                     if fields.is_empty() {
-                        // This is a reference to a named union type
                         if let Some(actual_type) = self.type_definitions.borrow().get(name) {
-                            return actual_type.clone();
+                            return self.resolve_type(&actual_type.clone());
                         } else {
-                            // Unresolved union reference - incomplete type
-                            // Return as-is to preserve the name for error reporting
-                            // The caller should check for incomplete types
                             return ty.clone();
                         }
                     }
                 }
-                // Otherwise return as-is (already complete or anonymous)
-                ty.clone()
+                Type::Union {
+                    name: name.clone(),
+                    fields: fields.iter().map(|f| crate::types::StructField {
+                        name: f.name.clone(),
+                        field_type: self.unwrap_typedefs_shallow(&f.field_type),
+                        offset: f.offset,
+                    }).collect(),
+                }
             }
             Type::Pointer { target, bank } => {
                 // Recursively resolve pointed-to type
@@ -163,13 +163,42 @@ impl TypeAnalyzer {
             // Basic types that don't need resolution
             Type::Void | Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
             Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
-            Type::Long | Type::UnsignedLong | Type::Error => ty.clone(),
+            Type::Long | Type::UnsignedLong | Type::Float | Type::Double | Type::Error => ty.clone(),
             
             // Function types don't need resolution (parameters are already resolved)
             Type::Function { .. } => ty.clone(),
             
             // Enum types don't need resolution
             Type::Enum { .. } => ty.clone(),
+        }
+    }
+
+    /// Unwrap typedefs and named struct/union references without expanding
+    /// complete aggregate fields (avoids infinite recursion on self-referential pointers).
+    fn unwrap_typedefs_shallow(&self, ty: &Type) -> Type {
+        match ty {
+            Type::Typedef(name) => {
+                if let Some(actual_type) = self.type_definitions.borrow().get(name) {
+                    self.unwrap_typedefs_shallow(&actual_type.clone())
+                } else {
+                    ty.clone()
+                }
+            }
+            Type::Pointer { target, bank } => Type::Pointer {
+                target: Box::new(self.unwrap_typedefs_shallow(target)),
+                bank: *bank,
+            },
+            Type::Array { element_type, size } => Type::Array {
+                element_type: Box::new(self.unwrap_typedefs_shallow(element_type)),
+                size: *size,
+            },
+            Type::Struct { name: Some(name), fields } if fields.is_empty() => {
+                self.type_definitions.borrow().get(name).cloned().unwrap_or_else(|| ty.clone())
+            }
+            Type::Union { name: Some(name), fields } if fields.is_empty() => {
+                self.type_definitions.borrow().get(name).cloned().unwrap_or_else(|| ty.clone())
+            }
+            _ => ty.clone(),
         }
     }
     

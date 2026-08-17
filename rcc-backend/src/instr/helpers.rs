@@ -417,8 +417,8 @@ pub fn get_bank_register_with_runtime_check_safe(
     context: &str
 ) -> (Reg, Vec<AsmInst>) {
     match bank_info {
-        BankInfo::Dynamic(_) => {
-            // Dynamic banks need runtime checking
+        BankInfo::Dynamic(_) | BankInfo::Heap(_) => {
+            // Dynamic banks need runtime tag checking; heap banks need LI of the bank number
             get_bank_register_with_runtime_check(bank_info, mgr, naming, context)
         }
         _ => {

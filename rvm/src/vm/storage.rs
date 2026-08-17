@@ -203,80 +203,46 @@ impl Storage {
         self.current_addr
     }
     
-    /// Read a byte at the current (block, addr)
-    pub fn read_byte(&mut self) -> u16 {
-        // Ensure the block is loaded
+    /// Read a word at the current (block, addr)
+    pub fn read_word(&mut self) -> u16 {
         if let Err(e) = self.load_block(self.current_block) {
             log::error!("Storage: Failed to load block {:#06x}: {:?}", self.current_block, e);
-            return 0;  // Return 0 on error
+            return 0;
         }
-        
+
         let value = self.blocks
             .get(&self.current_block)
             .map(|block| {
-                // Convert byte address to word index and byte offset
-                let word_idx = (self.current_addr / 2) as usize;
-                let byte_offset = self.current_addr % 2;
-                
+                let word_idx = self.current_addr as usize;
                 if word_idx < block.data.len() {
-                    let word = block.data[word_idx];
-                    let byte_val = if byte_offset == 0 {
-                        (word & 0xFF) as u16  // Low byte
-                    } else {
-                        (word >> 8) as u16     // High byte
-                    };
-                    
-                    // Debug: Show reads from high addresses
-                    if self.current_addr >= 0xb7b0 && self.current_addr <= 0xb7c0 {
-                        log::trace!("Storage: Block {:#06x}, byte addr {:#06x}: word[{}] = {:#06x}, byte = {:#04x}", 
-                                    self.current_block, self.current_addr, word_idx, word, byte_val);
-                    }
-                    byte_val
+                    block.data[word_idx]
                 } else {
                     0
                 }
             })
-            .unwrap_or_else(|| {
-                log::error!("Storage: Block {:#06x} not found in cache!", self.current_block);
-                0
-            });
-        
-        // Auto-increment byte address
+            .unwrap_or(0);
+
         self.current_addr = self.current_addr.wrapping_add(1);
-        
         value
     }
-    
-    /// Write a byte at the current (block, addr)
-    pub fn write_byte(&mut self, value: u16) {
-        // Ensure the block is loaded
+
+    /// Write a word at the current (block, addr)
+    pub fn write_word(&mut self, value: u16) {
         if self.load_block(self.current_block).is_err() {
-            return;  // Silently fail on error
+            return;
         }
-        
+
         if let Some(block) = self.blocks.get_mut(&self.current_block) {
-            // Convert byte address to word index and byte offset
-            let word_idx = (self.current_addr / 2) as usize;
-            let byte_offset = self.current_addr % 2;
-            
+            let word_idx = self.current_addr as usize;
             if word_idx < block.data.len() {
-                let byte_val = (value & 0xFF) as u8;  // Only use low 8 bits
-                
-                if byte_offset == 0 {
-                    // Write to low byte, preserve high byte
-                    block.data[word_idx] = (block.data[word_idx] & 0xFF00) | (byte_val as u16);
-                } else {
-                    // Write to high byte, preserve low byte
-                    block.data[word_idx] = (block.data[word_idx] & 0x00FF) | ((byte_val as u16) << 8);
-                }
+                block.data[word_idx] = value;
                 block.dirty = true;
             }
         }
-        
-        // Auto-increment byte address
+
         self.current_addr = self.current_addr.wrapping_add(1);
     }
-    
+
     /// Get the control register value
     pub fn get_control(&self) -> u16 {
         let mut control = 0u16;

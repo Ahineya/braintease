@@ -8,7 +8,7 @@ use super::statements::TypedStmt;
 use super::translation_unit::{TypedFunction, TypedTopLevelItem, TypedTranslationUnit};
 use super::errors::TypeError;
 use crate::types::{Type, BankTag};
-use crate::ast::{Initializer, InitializerKind, BinaryOp};
+use crate::ast::{Initializer, InitializerKind, BinaryOp, Designator, ExpressionKind};
 use rcc_common::SymbolId;
 use std::rc::Rc;
 use crate::semantic::types::TypeAnalyzer;
@@ -52,12 +52,13 @@ fn type_initializer(
     expected_type: &Type,
     type_env: &TypeEnvironment,
 ) -> Result<TypedExpr, TypeError> {
+    let resolved = type_env.type_analyzer.borrow().resolve_type(expected_type);
     match &init.kind {
         InitializerKind::Expression(expr) => {
             // Single expression initializer
             // Special case: string literal initializing a char array
             if let crate::ast::ExpressionKind::StringLiteral(s) = &expr.kind {
-                if let Type::Array { element_type, .. } = expected_type {
+                if let Type::Array { element_type, .. } = &resolved {
                     if matches!(**element_type, Type::Char) {
                         // Convert string to array of character literals
                         let mut chars = Vec::new();
@@ -75,7 +76,7 @@ fn type_initializer(
                         
                         return Ok(TypedExpr::ArrayInitializer {
                             elements: chars,
-                            expr_type: expected_type.clone(),
+                            expr_type: resolved,
                         });
                     }
                 }
@@ -85,41 +86,228 @@ fn type_initializer(
             type_expression(expr, type_env)
         }
         InitializerKind::List(initializers) => {
-            // List initializer - for arrays
-            match expected_type {
-                Type::Array { element_type, size } => {
-                    // Check we don't have too many initializers if size is known
-                    if let Some(array_size) = size {
-                        if initializers.len() as u64 > *array_size {
-                            return Err(TypeError::TypeMismatch(format!(
-                                "Too many initializers for array of size {array_size}"
-                            )));
-                        }
-                    }
-                    
-                    // Type each element
-                    let mut typed_elements = Vec::new();
-                    for init in initializers {
-                        let typed_elem = type_initializer(init, element_type, type_env)?;
-                        typed_elements.push(typed_elem);
-                    }
-                    
-                    Ok(TypedExpr::ArrayInitializer {
-                        elements: typed_elements,
-                        expr_type: expected_type.clone(),
-                    })
-                }
-                _ => {
-                    Err(TypeError::TypeMismatch(format!(
-                        "List initializer not supported for type {expected_type:?}"
-                    )))
-                }
-            }
+            expand_list_initializer(initializers, &resolved, type_env)
         }
         InitializerKind::Designated { .. } => {
-            Err(TypeError::UnsupportedConstruct(
-                "Designated initializers not yet supported".to_string()
-            ))
+            expand_list_initializer(std::slice::from_ref(init), &resolved, type_env)
+        }
+    }
+}
+
+fn const_designator_index(expr: &crate::ast::Expression) -> Result<u64, TypeError> {
+    match &expr.kind {
+        ExpressionKind::IntLiteral(v) if *v >= 0 => Ok(*v as u64),
+        _ => Err(TypeError::TypeMismatch(
+            "Array designator index must be a non-negative integer constant".to_string(),
+        )),
+    }
+}
+
+fn infer_array_len(initializers: &[Initializer]) -> Result<u64, TypeError> {
+    let mut current = 0u64;
+    let mut max_len = 0u64;
+    for init in initializers {
+        if let InitializerKind::Designated { designator: Designator::Index(expr), .. } = &init.kind {
+            current = const_designator_index(expr)?;
+        }
+        max_len = max_len.max(current + 1);
+        current += 1;
+    }
+    Ok(max_len)
+}
+
+fn zero_expr(ty: &Type) -> TypedExpr {
+    match ty {
+        Type::Array { element_type, size: Some(n) } => TypedExpr::ArrayInitializer {
+            elements: (0..*n).map(|_| zero_expr(element_type)).collect(),
+            expr_type: ty.clone(),
+        },
+        Type::Array { element_type, size: None } => TypedExpr::ArrayInitializer {
+            elements: Vec::new(),
+            expr_type: Type::Array {
+                element_type: element_type.clone(),
+                size: Some(0),
+            },
+        },
+        Type::Struct { fields, .. } => TypedExpr::ArrayInitializer {
+            elements: fields.iter().map(|f| zero_expr(&f.field_type)).collect(),
+            expr_type: ty.clone(),
+        },
+        Type::Union { fields, .. } => {
+            if let Some(first) = fields.first() {
+                TypedExpr::ArrayInitializer {
+                    elements: vec![zero_expr(&first.field_type)],
+                    expr_type: ty.clone(),
+                }
+            } else {
+                TypedExpr::IntLiteral { value: 0, expr_type: Type::Int }
+            }
+        }
+        Type::Char | Type::SignedChar | Type::UnsignedChar => TypedExpr::CharLiteral {
+            value: 0,
+            expr_type: ty.clone(),
+        },
+        _ => TypedExpr::IntLiteral {
+            value: 0,
+            expr_type: Type::Int,
+        },
+    }
+}
+
+fn expand_list_initializer(
+    initializers: &[Initializer],
+    expected_type: &Type,
+    type_env: &TypeEnvironment,
+) -> Result<TypedExpr, TypeError> {
+    match expected_type {
+        Type::Array { element_type, size } => {
+            let n = if let Some(array_size) = size {
+                *array_size
+            } else {
+                infer_array_len(initializers)?
+            };
+            if n == 0 && initializers.is_empty() {
+                return Ok(TypedExpr::ArrayInitializer {
+                    elements: Vec::new(),
+                    expr_type: Type::Array {
+                        element_type: element_type.clone(),
+                        size: Some(0),
+                    },
+                });
+            }
+            let mut slots: Vec<Option<TypedExpr>> = vec![None; n as usize];
+            let mut current = 0u64;
+            for init in initializers {
+                match &init.kind {
+                    InitializerKind::Designated { designator: Designator::Index(expr), initializer } => {
+                        current = const_designator_index(expr)?;
+                        if current >= n {
+                            return Err(TypeError::TypeMismatch(format!(
+                                "Array designator index {current} out of bounds for array of size {n}"
+                            )));
+                        }
+                        slots[current as usize] = Some(type_initializer(initializer, element_type, type_env)?);
+                        current += 1;
+                    }
+                    InitializerKind::Designated { designator: Designator::Member(name), .. } => {
+                        return Err(TypeError::TypeMismatch(format!(
+                            "Member designator '.{name}' is not valid for array type"
+                        )));
+                    }
+                    _ => {
+                        if current >= n {
+                            return Err(TypeError::TypeMismatch(format!(
+                                "Too many initializers for array of size {n}"
+                            )));
+                        }
+                        slots[current as usize] = Some(type_initializer(init, element_type, type_env)?);
+                        current += 1;
+                    }
+                }
+            }
+            let elements: Vec<TypedExpr> = slots
+                .into_iter()
+                .map(|s| s.unwrap_or_else(|| zero_expr(element_type)))
+                .collect();
+            Ok(TypedExpr::ArrayInitializer {
+                elements,
+                expr_type: Type::Array {
+                    element_type: element_type.clone(),
+                    size: Some(n),
+                },
+            })
+        }
+        Type::Struct { fields, .. } => {
+            let mut slots: Vec<Option<TypedExpr>> = vec![None; fields.len()];
+            let mut current = 0usize;
+            for init in initializers {
+                match &init.kind {
+                    InitializerKind::Designated { designator: Designator::Member(name), initializer } => {
+                        let idx = fields.iter().position(|f| f.name == *name).ok_or_else(|| {
+                            TypeError::UndefinedMember {
+                                struct_name: format!("{expected_type}"),
+                                member_name: name.clone(),
+                            }
+                        })?;
+                        current = idx;
+                        slots[current] = Some(type_initializer(initializer, &fields[current].field_type, type_env)?);
+                        current += 1;
+                    }
+                    InitializerKind::Designated { designator: Designator::Index(_), .. } => {
+                        return Err(TypeError::TypeMismatch(
+                            "Index designator is not valid for struct type".to_string(),
+                        ));
+                    }
+                    _ => {
+                        if current >= fields.len() {
+                            return Err(TypeError::TypeMismatch(
+                                "Too many initializers for struct".to_string(),
+                            ));
+                        }
+                        slots[current] = Some(type_initializer(init, &fields[current].field_type, type_env)?);
+                        current += 1;
+                    }
+                }
+            }
+            let elements: Vec<TypedExpr> = slots
+                .into_iter()
+                .enumerate()
+                .map(|(i, s)| s.unwrap_or_else(|| zero_expr(&fields[i].field_type)))
+                .collect();
+            Ok(TypedExpr::ArrayInitializer {
+                elements,
+                expr_type: expected_type.clone(),
+            })
+        }
+        Type::Union { fields, .. } => {
+            if fields.is_empty() {
+                return Err(TypeError::TypeMismatch("Cannot initialize empty union".to_string()));
+            }
+            // Last designated member wins; otherwise the first positional initializer
+            // initializes the first member (C99).
+            let mut chosen: Option<(usize, TypedExpr)> = None;
+            let mut current = 0usize;
+            for init in initializers {
+                match &init.kind {
+                    InitializerKind::Designated { designator: Designator::Member(name), initializer } => {
+                        let idx = fields.iter().position(|f| f.name == *name).ok_or_else(|| {
+                            TypeError::UndefinedMember {
+                                struct_name: format!("{expected_type}"),
+                                member_name: name.clone(),
+                            }
+                        })?;
+                        current = idx;
+                        let typed = type_initializer(initializer, &fields[current].field_type, type_env)?;
+                        chosen = Some((current, typed));
+                        current += 1;
+                    }
+                    InitializerKind::Designated { designator: Designator::Index(_), .. } => {
+                        return Err(TypeError::TypeMismatch(
+                            "Index designator is not valid for union type".to_string(),
+                        ));
+                    }
+                    _ => {
+                        if current >= fields.len() {
+                            return Err(TypeError::TypeMismatch(
+                                "Too many initializers for union".to_string(),
+                            ));
+                        }
+                        let typed = type_initializer(init, &fields[current].field_type, type_env)?;
+                        chosen = Some((current, typed));
+                        current += 1;
+                    }
+                }
+            }
+            let (_idx, value) = chosen.unwrap_or_else(|| (0, zero_expr(&fields[0].field_type)));
+            Ok(TypedExpr::ArrayInitializer {
+                elements: vec![value],
+                expr_type: expected_type.clone(),
+            })
+        }
+        _ => {
+            Err(TypeError::TypeMismatch(format!(
+                "List initializer not supported for type {expected_type:?}"
+            )))
         }
     }
 }
@@ -163,10 +351,15 @@ pub fn type_expression(
                 type_env.lookup_type(*id)
                     .or_else(|| expr.expr_type.clone())
                     .ok_or_else(|| TypeError::UndefinedVariable(name.clone()))?
-            } else {
-                // Fallback to expr_type if no symbol_id (shouldn't happen after semantic analysis)
-                expr.expr_type.clone()
+            } else if let Some(ty) = expr.expr_type.clone() {
+                ty
+            } else if let Some(id) = type_env.type_analyzer.borrow().symbol_table.borrow().lookup(name) {
+                // Compound-literal (and similar) subexpressions may not have been
+                // through semantic analysis; fall back to a symbol-table lookup.
+                type_env.lookup_type(id)
                     .ok_or_else(|| TypeError::UndefinedVariable(name.clone()))?
+            } else {
+                return Err(TypeError::UndefinedVariable(name.clone()));
             };
             
             Ok(TypedExpr::Variable {
@@ -400,13 +593,15 @@ pub fn type_expression(
             let resolved_struct_type = type_env.type_analyzer.borrow().resolve_type(struct_type);
             
             let fields = match &resolved_struct_type {
-                Type::Struct { fields, .. } => {
+                Type::Struct { fields, .. } | Type::Union { fields, .. } => {
                     fields.clone()
                 }
                 _ => return Err(TypeError::TypeMismatch(
-                    format!("Member access requires struct type, got {resolved_struct_type:?}")
+                    format!("Member access requires struct or union type, got {resolved_struct_type:?}")
                 ))
             };
+            
+            let is_union = matches!(resolved_struct_type, Type::Union { .. });
             
             // Calculate struct layout to get field offset
             // Pass type_definitions to resolve nested struct sizes
@@ -423,10 +618,12 @@ pub fn type_expression(
                     member_name: member.clone(),
                 })?;
             
+            let offset = if is_union { 0 } else { field_layout.offset };
+            
             Ok(TypedExpr::MemberAccess {
                 object: Box::new(object_typed),
                 member: member.clone(),
-                offset: field_layout.offset,
+                offset,
                 is_pointer: *is_pointer,
                 expr_type: field_layout.field_type.clone(),
             })
@@ -450,45 +647,16 @@ pub fn type_expression(
         
         ExpressionKind::CompoundLiteral { type_name, initializer } => {
             // Compound literal creates a temporary object of the specified type
-            // initialized with the given initializer
-            
-            // Process the initializer to get typed expressions
-            let typed_elements = match &initializer.kind {
-                crate::ast::InitializerKind::Expression(expr) => {
-                    // Single expression initializer
-                    vec![type_expression(expr, type_env)?]
-                }
-                crate::ast::InitializerKind::List(init_list) => {
-                    // List initializer - convert each element
-                    let mut elements = Vec::new();
-                    for init in init_list {
-                        match &init.kind {
-                            crate::ast::InitializerKind::Expression(expr) => {
-                                elements.push(type_expression(expr, type_env)?);
-                            }
-                            _ => {
-                                // Designated initializers in compound literals not yet supported
-                                return Err(TypeError::UnsupportedConstruct(
-                                    "Designated initializers in compound literals not yet implemented".to_string()
-                                ));
-                            }
-                        }
-                    }
-                    elements
-                }
-                crate::ast::InitializerKind::Designated { .. } => {
-                    return Err(TypeError::UnsupportedConstruct(
-                        "Designated initializers in compound literals not yet implemented".to_string()
-                    ));
-                }
-            };
-            
-            // Resolve typedef in type name
             let resolved_type = type_env.type_analyzer.borrow().resolve_type(type_name);
-            // Return the typed compound literal
+            let typed_init = type_initializer(initializer, &resolved_type, type_env)?;
+            let completed_type = typed_init.get_type().clone();
+            let elements = match typed_init {
+                TypedExpr::ArrayInitializer { elements, .. } => elements,
+                other => vec![other],
+            };
             Ok(TypedExpr::CompoundLiteral {
-                initializer: typed_elements,
-                expr_type: resolved_type,
+                initializer: elements,
+                expr_type: completed_type,
             })
         }
     }

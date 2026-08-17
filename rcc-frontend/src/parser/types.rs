@@ -50,6 +50,8 @@ impl Parser {
             Some(TokenType::Short) => { self.advance(); Ok(Type::Short) }
             Some(TokenType::Int) => { self.advance(); Ok(Type::Int) }
             Some(TokenType::Long) => { self.advance(); Ok(Type::Long) }
+            Some(TokenType::Float) => { self.advance(); Ok(Type::Float) }
+            Some(TokenType::Double) => { self.advance(); Ok(Type::Double) }
             Some(TokenType::Signed) => {
                 self.advance();
                 // Handle "signed int", "signed char", etc.
@@ -518,7 +520,8 @@ impl Parser {
             TokenType::Auto | TokenType::Static | TokenType::Extern | TokenType::Register |
             TokenType::Typedef |
             TokenType::Void | TokenType::Char | TokenType::Short | TokenType::Int | 
-            TokenType::Long | TokenType::Signed | TokenType::Unsigned |
+            TokenType::Long | TokenType::Float | TokenType::Double |
+            TokenType::Signed | TokenType::Unsigned |
             TokenType::Struct | TokenType::Union | TokenType::Enum
         )) {
             return true;
@@ -537,7 +540,8 @@ impl Parser {
         // Check for type keywords
         if matches!(self.peek().map(|t| &t.token_type), Some(
             TokenType::Void | TokenType::Char | TokenType::Short | TokenType::Int | 
-            TokenType::Long | TokenType::Signed | TokenType::Unsigned |
+            TokenType::Long | TokenType::Float | TokenType::Double |
+            TokenType::Signed | TokenType::Unsigned |
             TokenType::Struct | TokenType::Union | TokenType::Enum
         )) {
             return true;
@@ -572,20 +576,14 @@ impl Parser {
     
     /// Parse direct abstract declarator
     pub fn parse_direct_abstract_declarator(&mut self, base_type: Type) -> Result<Type, CompilerError> {
-        let mut current_type = base_type;
+        // Collect array suffixes left-to-right, then apply right-to-left
+        // so `int[][2]` is array-of-unknown of `int[2]`, not `int[2]` of incomplete arrays.
+        let mut suffixes = Vec::new();
         
-        // Handle parenthesized abstract declarator
-        if self.peek().map(|t| &t.token_type) == Some(&TokenType::LeftParen) {
-            // Look ahead to see if this is a function declarator or parenthesized declarator
-            // For now, we'll skip complex abstract declarators and just handle simple cases
-        }
-        
-        // Parse suffix (arrays, function parameters)
         loop {
             if self.match_token(&TokenType::LeftBracket) {
-                // Array declarator
                 let size = if self.check(&TokenType::RightBracket) {
-                    None // Incomplete array type
+                    None
                 } else {
                     let size_expr = self.parse_assignment_expression()?;
                     if let ExpressionKind::IntLiteral(size) = size_expr.kind {
@@ -606,14 +604,28 @@ impl Parser {
                 };
                 
                 self.expect(TokenType::RightBracket, "array declarator")?;
-                
-                current_type = Type::Array {
-                    element_type: Box::new(current_type),
-                    size,
-                };
+                suffixes.push(DeclSuffix::Array(size));
             } else {
-                // No more suffixes
                 break;
+            }
+        }
+        
+        let mut current_type = base_type;
+        for suffix in suffixes.into_iter().rev() {
+            match suffix {
+                DeclSuffix::Array(size) => {
+                    current_type = Type::Array {
+                        element_type: Box::new(current_type),
+                        size,
+                    };
+                }
+                DeclSuffix::Function { parameters, is_variadic } => {
+                    current_type = Type::Function {
+                        return_type: Box::new(current_type),
+                        parameters,
+                        is_variadic,
+                    };
+                }
             }
         }
         

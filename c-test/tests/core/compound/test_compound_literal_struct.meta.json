@@ -1,5 +1,5 @@
 {
   "description": "Compound literals with structs",
-  "expected": "YYYY",
+  "expected": "YYYY\n",
   "use_runtime": true
 }

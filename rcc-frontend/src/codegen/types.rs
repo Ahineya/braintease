@@ -21,7 +21,8 @@ pub fn complete_type_from_initializer(
 ) -> Type {
     match (incomplete_type, initializer) {
         // Incomplete array with array initializer - infer size from elements
-        (Type::Array { element_type, size: None }, Some(TypedExpr::ArrayInitializer { elements, .. })) => {
+        (Type::Array { element_type, size: None }, Some(TypedExpr::ArrayInitializer { elements, .. }))
+        | (Type::Array { element_type, size: None }, Some(TypedExpr::CompoundLiteral { initializer: elements, .. })) => {
             Type::Array {
                 element_type: element_type.clone(),
                 size: Some(elements.len() as u64),
@@ -47,6 +48,8 @@ pub fn convert_type(ast_type: &Type, location: SourceLocation) -> Result<IrType,
         Type::Short | Type::UnsignedShort => Ok(IrType::I16),
         Type::Int | Type::UnsignedInt => Ok(IrType::I16), // 16-bit int on Ripple
         Type::Long | Type::UnsignedLong => Ok(IrType::I32),
+        Type::Float => Ok(IrType::I32),
+        Type::Double => Ok(IrType::I64),
         Type::Pointer { target, .. } => {
             // Note: Bank information is tracked separately in codegen, not in IrType
             let target_type = convert_type(target, location)?;

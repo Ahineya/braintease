@@ -8,6 +8,7 @@ mod pointer_ops;
 mod function_calls;
 mod assignments;
 mod misc_ops;
+mod aggregate_init;
 
 pub use literals::generate_string_literal;
 pub use identifiers::generate_identifier;
@@ -17,6 +18,7 @@ pub use pointer_ops::{generate_pointer_arithmetic, generate_pointer_difference, 
 pub use function_calls::generate_function_call;
 pub use assignments::{generate_assignment, copy_struct};
 pub use misc_ops::{generate_sizeof_expr, generate_sizeof_type, generate_array_initializer};
+pub use aggregate_init::store_initializer;
 
 use super::errors::CodegenError;
 use super::types::convert_type;
@@ -130,7 +132,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                         // Check if this is a NULL pointer (literal 0)
                         let bank_tag = match &operand_val {
                             Value::Constant(0) => BankTag::Null,  // NULL pointer
-                            _ => BankTag::Global,  // Other integer-to-pointer casts use Global
+                            _ => BankTag::Heap(0),  // Integer-to-pointer (MMIO, etc.) uses bank 0
                         };
                         Ok(Value::FatPtr(FatPointer {
                             addr: Box::new(operand_val),
@@ -213,122 +215,41 @@ impl<'a> TypedExpressionGenerator<'a> {
             
             TypedExpr::CompoundLiteral { initializer, expr_type } => {
                 // Compound literals create anonymous temporary objects with automatic storage duration
-                // They should:
-                // 1. Allocate temporary space
-                // 2. Initialize that space
-                // 3. Return a pointer to the allocated space
-                
-                match expr_type {
+                let alloc_type = match expr_type {
                     Type::Array { element_type, size } => {
-                        // Allocate space for the array
                         let array_size = size.unwrap_or(initializer.len() as u64);
                         let elem_ir_type = convert_type_default(element_type)?;
-                        let array_ir_type = crate::ir::IrType::Array {
+                        crate::ir::IrType::Array {
                             size: array_size,
-                            element_type: Box::new(elem_ir_type.clone()),
-                        };
-                        
-                        // Allocate temporary space for the array
-                        let array_ptr = self.builder.build_alloca(array_ir_type, None)
-                            .map_err(|e| CodegenError::InternalError {
-                                message: format!("Failed to allocate space for compound literal: {e}"),
-                                location: rcc_common::SourceLocation::new_simple(0, 0),
-                            })?;
-                        
-                        // Initialize each element
-                        for (i, elem) in initializer.iter().enumerate() {
-                            let elem_value = self.generate(elem)?;
-                            
-                            // Calculate pointer to element i
-                            let offset = Value::Constant(i as i64);
-                            let elem_ptr = self.builder.build_pointer_offset(
-                                array_ptr.clone(),
-                                offset,
-                                elem_ir_type.clone()
-                            )?;
-                            
-                            // Store the element value
-                            self.builder.build_store(elem_value, elem_ptr)
-                                .map_err(|e| CodegenError::InternalError {
-                                    message: format!("Failed to store array element: {e}"),
-                                    location: rcc_common::SourceLocation::new_simple(0, 0),
-                                })?;
+                            element_type: Box::new(elem_ir_type),
                         }
-                        
-                        // Return pointer to the array
-                        // array_ptr is already a proper pointer value from build_alloca
-                        Ok(array_ptr)
                     }
-                    Type::Struct { fields, .. } => {
-                        // For structs, allocate space and initialize fields
-                        // Calculate total size
+                    Type::Struct { .. } | Type::Union { .. } => {
                         let struct_size = expr_type.size_in_words()
                             .ok_or_else(|| CodegenError::InternalError {
-                                message: "Cannot determine struct size".to_string(),
+                                message: "Cannot determine aggregate size for compound literal".to_string(),
                                 location: rcc_common::SourceLocation::new_simple(0, 0),
                             })?;
-                        
-                        let struct_ir_type = crate::ir::IrType::Array {
+                        crate::ir::IrType::Array {
                             size: struct_size,
                             element_type: Box::new(crate::ir::IrType::I16),
-                        };
-                        
-                        // Allocate temporary space
-                        let struct_ptr = self.builder.build_alloca(struct_ir_type, None)
-                            .map_err(|e| CodegenError::InternalError {
-                                message: format!("Failed to allocate space for struct compound literal: {e}"),
-                                location: rcc_common::SourceLocation::new_simple(0, 0),
-                            })?;
-                        
-                        // Initialize fields (assuming initializer elements correspond to fields in order)
-                        let mut offset = 0;
-                        for (i, field) in fields.iter().enumerate() {
-                            if i < initializer.len() {
-                                let field_value = self.generate(&initializer[i])?;
-                                let field_offset = Value::Constant(offset as i64);
-                                let field_ptr = self.builder.build_pointer_offset(
-                                    struct_ptr.clone(),
-                                    field_offset,
-                                    convert_type_default(&field.field_type)?
-                                )?;
-                                
-                                self.builder.build_store(field_value, field_ptr)
-                                    .map_err(|e| CodegenError::InternalError {
-                                        message: format!("Failed to store struct field: {e}"),
-                                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                                    })?;
-                            }
-                            offset += field.field_type.size_in_words().unwrap_or(1);
                         }
-                        
-                        // Return pointer to the struct
-                        // struct_ptr is already a proper pointer value from build_alloca
-                        Ok(struct_ptr)
                     }
-                    _ => {
-                        // For scalar types, allocate space and store the value
-                        let scalar_ir_type = convert_type_default(expr_type)?;
-                        let scalar_ptr = self.builder.build_alloca(scalar_ir_type.clone(), None)
-                            .map_err(|e| CodegenError::InternalError {
-                                message: format!("Failed to allocate space for scalar compound literal: {e}"),
-                                location: rcc_common::SourceLocation::new_simple(0, 0),
-                            })?;
-                        
-                        // Store the value
-                        if let Some(first) = initializer.first() {
-                            let value = self.generate(first)?;
-                            self.builder.build_store(value, scalar_ptr.clone())
-                                .map_err(|e| CodegenError::InternalError {
-                                    message: format!("Failed to store scalar value: {e}"),
-                                    location: rcc_common::SourceLocation::new_simple(0, 0),
-                                })?;
-                        }
-                        
-                        // Return pointer to the scalar
-                        // scalar_ptr is already a proper pointer value from build_alloca
-                        Ok(scalar_ptr)
-                    }
-                }
+                    _ => convert_type_default(expr_type)?,
+                };
+
+                let object_ptr = self.builder.build_alloca(alloc_type, None)
+                    .map_err(|e| CodegenError::InternalError {
+                        message: format!("Failed to allocate space for compound literal: {e}"),
+                        location: rcc_common::SourceLocation::new_simple(0, 0),
+                    })?;
+
+                let init_expr = TypedExpr::ArrayInitializer {
+                    elements: initializer.clone(),
+                    expr_type: expr_type.clone(),
+                };
+                aggregate_init::store_initializer(self, object_ptr.clone(), expr_type, &init_expr)?;
+                Ok(object_ptr)
             }
             
             TypedExpr::MemberAccess { 
@@ -386,15 +307,8 @@ impl<'a> TypedExpressionGenerator<'a> {
                 // Arrays and structs should decay to pointers when accessed (not loaded)
                 // Pointers should be returned as FatPtr for further operations
                 match expr_type {
-                    Type::Array { .. } => {
-                        // For array fields, return the pointer to the first element
-                        // This allows array indexing to work: buf.data[i]
-                        Ok(field_ptr)
-                    }
-                    Type::Struct { .. } => {
-                        // For struct fields, return the pointer to the struct
-                        // This allows struct assignment to work properly: dest.field = src
-                        // The assignment operator will handle the actual copying
+                    Type::Array { .. } | Type::Struct { .. } | Type::Union { .. } => {
+                        // Aggregates decay to pointers when accessed as values
                         Ok(field_ptr)
                     }
                     Type::Pointer { target, .. } => {
@@ -430,8 +344,15 @@ impl<'a> TypedExpressionGenerator<'a> {
                 // Evaluate condition
                 let cond_value = self.generate(condition)?;
                 
-                // Convert type to IR type
-                let ir_type = convert_type_default(expr_type)?;
+                // Arrays in a ternary decay to pointers (C99).
+                let value_type = match expr_type {
+                    Type::Array { element_type, .. } => Type::Pointer {
+                        target: element_type.clone(),
+                        bank: None,
+                    },
+                    other => other.clone(),
+                };
+                let ir_type = convert_type_default(&value_type)?;
                 
                 // We need to transform the ternary into if-else with a temporary variable
                 // This is done by creating a temporary variable to hold the result

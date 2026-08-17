@@ -211,18 +211,32 @@ impl ExpressionAnalyzer {
 
             ExpressionKind::CompoundLiteral {
                 type_name,
-                initializer: _,
+                initializer,
             } => {
-                // Compound literals need to be analyzed through the initializer analyzer
-                // We can't directly call it from here due to the Rc<RefCell> structure
-                // For now, just return the type - the actual analysis should be done
-                // in a separate pass or by restructuring the analyzer
+                // Analyze initializer expressions so identifiers get symbol IDs
+                // while their declarations are still in scope (e.g. for-loop `i`).
+                self.analyze_initializer_exprs(initializer)?;
                 type_name.clone()
             }
         };
 
         expr.expr_type = Some(expr_type);
         Ok(())
+    }
+
+    fn analyze_initializer_exprs(&self, init: &mut Initializer) -> Result<(), CompilerError> {
+        match &mut init.kind {
+            InitializerKind::Expression(expr) => self.analyze(expr),
+            InitializerKind::List(items) => {
+                for item in items {
+                    self.analyze_initializer_exprs(item)?;
+                }
+                Ok(())
+            }
+            InitializerKind::Designated { initializer, .. } => {
+                self.analyze_initializer_exprs(initializer)
+            }
+        }
     }
 
     /// Check if expression is used in boolean context and can be converted
@@ -254,7 +268,7 @@ impl ExpressionAnalyzer {
         let resolved_type = self.type_analyzer.borrow().resolve_type(struct_type);
         
         match &resolved_type {
-            Type::Struct { fields, name, .. } => {
+            Type::Struct { fields, name, .. } | Type::Union { fields, name, .. } => {
                 // Find the field by name
                 if let Some(field) = fields.iter().find(|f| f.name == member) {
                     // Resolve the field type in case it's a struct reference
@@ -286,7 +300,7 @@ impl ExpressionAnalyzer {
                 }
 
                 match &resolved_type {
-                    Type::Struct { fields, .. } => {
+                    Type::Struct { fields, .. } | Type::Union { fields, .. } => {
                         if let Some(field) = fields.iter().find(|f| f.name == member) {
                             // Resolve the field type in case it's a struct reference
                             Ok(self.type_analyzer.borrow().resolve_type(&field.field_type))
@@ -300,7 +314,7 @@ impl ExpressionAnalyzer {
                         }
                     }
                     _ => Err(SemanticError::InvalidOperation {
-                        operation: "member access on non-struct".to_string(),
+                        operation: "member access on non-struct/union".to_string(),
                         operand_type: resolved_type,
                         location: location.clone(),
                     }
@@ -308,7 +322,7 @@ impl ExpressionAnalyzer {
                 }
             }
             _ => Err(SemanticError::InvalidOperation {
-                operation: "member access on non-struct".to_string(),
+                operation: "member access on non-struct/union".to_string(),
                 operand_type: struct_type.clone(),
                 location: location.clone(),
             }

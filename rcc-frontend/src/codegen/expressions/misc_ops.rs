@@ -18,6 +18,8 @@ fn size_in_bytes(ty: &Type) -> u64 {
         Type::Short | Type::UnsignedShort => 2,
         Type::Int | Type::UnsignedInt => 2,  // 16-bit int
         Type::Long | Type::UnsignedLong => 4, // 32-bit long
+        Type::Float => 4,
+        Type::Double => 8,
         Type::Pointer { .. } => 4, // Fat pointer: 2 words = 4 bytes
         Type::Array { element_type, size } => {
             size.map(|s| s * size_in_bytes(element_type)).unwrap_or(0)
@@ -52,21 +54,36 @@ pub fn generate_array_initializer(
     gen: &mut TypedExpressionGenerator,
     elements: &[TypedExpr],
 ) -> Result<Value, CompilerError> {
-    // For array initializers, we need to evaluate each element
-    // and collect them into a ConstantArray value
-    // This only works for constant expressions
     let mut values = Vec::new();
     for elem in elements {
-        match gen.generate(elem)? {
-            Value::Constant(val) => values.push(val),
-            _ => {
-                return Err(CodegenError::UnsupportedConstruct {
-                    construct: "non-constant array initializer".to_string(),
-                    location: rcc_common::SourceLocation::new_simple(0, 0),
-                }
-                .into())
-            }
-        }
+        values.extend(flatten_constant_initializer(gen, elem)?);
     }
     Ok(Value::ConstantArray(values))
+}
+
+fn flatten_constant_initializer(
+    gen: &mut TypedExpressionGenerator,
+    expr: &TypedExpr,
+) -> Result<Vec<i64>, CompilerError> {
+    match expr {
+        TypedExpr::IntLiteral { value, .. } => Ok(vec![*value]),
+        TypedExpr::CharLiteral { value, .. } => Ok(vec![*value as i64]),
+        TypedExpr::ArrayInitializer { elements, .. }
+        | TypedExpr::CompoundLiteral { initializer: elements, .. } => {
+            let mut values = Vec::new();
+            for elem in elements {
+                values.extend(flatten_constant_initializer(gen, elem)?);
+            }
+            Ok(values)
+        }
+        _ => match gen.generate(expr)? {
+            Value::Constant(val) => Ok(vec![val]),
+            Value::ConstantArray(vals) => Ok(vals),
+            _ => Err(CodegenError::UnsupportedConstruct {
+                construct: "non-constant array initializer".to_string(),
+                location: rcc_common::SourceLocation::new_simple(0, 0),
+            }
+            .into()),
+        },
+    }
 }
