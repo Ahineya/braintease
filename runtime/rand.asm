@@ -113,8 +113,7 @@ L_srand_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 rand:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -225,5 +224,4 @@ L_rand_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA

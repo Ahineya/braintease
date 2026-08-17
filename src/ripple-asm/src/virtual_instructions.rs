@@ -165,7 +165,7 @@ impl VirtualInstruction for RetInstruction {
         Ok(vec![ParsedLine {
             label: None,
             mnemonic: Some("JALR".to_string()),
-            operands: vec!["R0".to_string(), "R0".to_string(), "RA".to_string()],
+            operands: vec!["R0".to_string(), "RAB".to_string(), "RA".to_string()],
             directive: None,
             directive_args: Vec::new(),
             line_number: 0,
@@ -370,5 +370,15 @@ mod tests {
         assert_eq!(expanded.len(), 1);
         assert_eq!(expanded[0].mnemonic.as_ref().unwrap(), "ADDI");
         assert_eq!(expanded[0].operands, vec!["R5", "R5", "1"]);
+    }
+
+    #[test]
+    fn test_ret_expansion() {
+        let ret = RetInstruction;
+        let expanded = ret.expand(&[]).unwrap();
+
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0].mnemonic.as_ref().unwrap(), "JALR");
+        assert_eq!(expanded[0].operands, vec!["R0", "RAB", "RA"]);
     }
 }

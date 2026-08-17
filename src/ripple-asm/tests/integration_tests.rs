@@ -14,15 +14,15 @@ fn test_basic_instructions() {
     let result = assembler.assemble("ADD R3, R4, R5").unwrap();
     assert_eq!(result.instructions.len(), 1);
     assert_eq!(result.instructions[0].opcode, Opcode::Add as u8);
-    assert_eq!(result.instructions[0].word1, Register::R3 as u16);
-    assert_eq!(result.instructions[0].word2, Register::R4 as u16);
-    assert_eq!(result.instructions[0].word3, Register::R5 as u16);
+    assert_eq!(result.instructions[0].word1, Register::Ra as u16);
+    assert_eq!(result.instructions[0].word2, Register::Rab as u16);
+    assert_eq!(result.instructions[0].word3, Register::Rv0 as u16);
     
     // Test LI
     let result = assembler.assemble("LI R3, 42").unwrap();
     assert_eq!(result.instructions.len(), 1);
     assert_eq!(result.instructions[0].opcode, Opcode::Li as u8);
-    assert_eq!(result.instructions[0].word1, Register::R3 as u16);
+    assert_eq!(result.instructions[0].word1, Register::Ra as u16);
     assert_eq!(result.instructions[0].word2, 42);
     
     // Test HALT
@@ -119,6 +119,14 @@ fn test_virtual_instructions() {
     // Test POP (expands to 2 instructions)
     let result = assembler.assemble("POP R3").unwrap();
     assert_eq!(result.instructions.len(), 2);
+
+    // RET restores PCB from RAB: JALR R0, RAB, RA
+    let result = assembler.assemble("RET").unwrap();
+    assert_eq!(result.instructions.len(), 1);
+    assert_eq!(result.instructions[0].opcode, Opcode::Jalr as u8);
+    assert_eq!(result.instructions[0].word1, Register::R0 as u16);
+    assert_eq!(result.instructions[0].word2, Register::Rab as u16);
+    assert_eq!(result.instructions[0].word3, Register::Ra as u16);
 }
 
 #[test]
@@ -144,9 +152,9 @@ fn test_case_insensitive() {
     let result = assembler.assemble(source).unwrap();
     
     assert_eq!(result.instructions[0].opcode, Opcode::Add as u8);
-    assert_eq!(result.instructions[0].word1, Register::R3 as u16);
-    assert_eq!(result.instructions[0].word2, Register::R4 as u16);
-    assert_eq!(result.instructions[0].word3, Register::R5 as u16);
+    assert_eq!(result.instructions[0].word1, Register::Ra as u16);
+    assert_eq!(result.instructions[0].word2, Register::Rab as u16);
+    assert_eq!(result.instructions[0].word3, Register::Rv0 as u16);
 }
 
 #[test]
@@ -296,10 +304,7 @@ print_loop:
     // Assemble the code
     let obj = assembler.assemble(source).unwrap();
     
-    // Check that we have unresolved references
-    assert!(obj.unresolved_references.len() > 0, "Expected unresolved references for JAL");
-    
-    // Link the object file
+    // Link the object file (local JAL targets are remapped to bank+offset)
     let linked = linker.link(vec![obj]).unwrap();
     
     // Verify the JAL instruction (at index 1) has been resolved correctly
@@ -307,8 +312,8 @@ print_loop:
     let jal_instruction = &linked.instructions[1];
     assert_eq!(jal_instruction.opcode, Opcode::Jal as u8);
     assert_eq!(jal_instruction.word1, 0); // R0
-    assert_eq!(jal_instruction.word2, 0); // High part of address (0 for small programs)
-    assert_eq!(jal_instruction.word3, 3); // Low part of address - should be instruction index 3
+    assert_eq!(jal_instruction.word2, 0); // bank
+    assert_eq!(jal_instruction.word3, 3); // in-bank instruction offset
     
     // Also check the BNE instruction (at index 4) has been resolved correctly
     // It should branch back to print_loop (relative offset)
@@ -347,10 +352,6 @@ continue:
     // Assemble
     let obj = assembler.assemble(source).unwrap();
     
-    // Check for unresolved references
-    let unresolved_count = obj.unresolved_references.len();
-    assert!(unresolved_count > 0, "Expected unresolved references, got none");
-    
     // Link
     let linked = linker.link(vec![obj]).unwrap();
     
@@ -365,6 +366,38 @@ continue:
     let bne_instruction = &linked.instructions[3];
     assert_eq!(bne_instruction.opcode, Opcode::Bne as u8);
     assert_eq!(bne_instruction.word3, 2); // Should branch forward 2 instructions to 'continue'
+}
+
+#[test]
+fn test_link_packs_objects_into_banks() {
+    let assembler = RippleAssembler::new(AssemblerOptions::default());
+    let linker = Linker::new(8);
+
+    let mut src1 = String::from("start:\n");
+    for _ in 0..6 {
+        src1.push_str("    NOP\n");
+    }
+    src1.push_str("    CALL func\n    HALT\n");
+    let obj1 = assembler.assemble(&src1).unwrap();
+    assert_eq!(obj1.instructions.len(), 8);
+
+    let src2 = "func:\n    LI R3, 42\n    RET\n";
+    let obj2 = assembler.assemble(src2).unwrap();
+    assert_eq!(obj2.instructions.len(), 2);
+
+    // obj1 fills bank 0 exactly; obj2 starts at bank 1 offset 0 (no pad needed).
+    let linked = linker.link(vec![obj1, obj2]).unwrap();
+    assert_eq!(linked.code_bank_count(), 2);
+    assert_eq!(linked.instructions.len(), 10);
+
+    let jal = &linked.instructions[6];
+    assert_eq!(jal.opcode, Opcode::Jal as u8);
+    assert_eq!(jal.word2, 1);
+    assert_eq!(jal.word3, 0);
+
+    let func = linked.labels.get("func").unwrap();
+    assert_eq!(func.bank, 1);
+    assert_eq!(func.offset, 0);
 }
 
 #[test]

@@ -241,31 +241,38 @@ impl VM {
             },
             
             // Control flow
-            0x13 => { // JAL
-                // JAL format: rd, offset_high, offset_low
-                // The actual jump address is in word3 (after linking)
+            0x13 => { // JAL rd, bank, addr
+                // Save return (bank, offset) first, then jump. Matches BF ins_jal:
+                // RA ← PC+1, RAB ← PCB, then PCB ← bank, PC ← addr.
                 let rd = instr.word1 as usize;
-                let addr = instr.word3;
-                
-                // Save return address in rd (typically RA)
-                if rd < 32 {
-                    self.registers[rd] = self.registers[Register::Pc as usize].wrapping_add(1);
+                let target_bank = instr.word2;
+                let target_addr = instr.word3;
+                let ret_pc = self.registers[Register::Pc as usize].wrapping_add(1);
+                let ret_pcb = self.registers[Register::Pcb as usize];
+                if rd < 32 && rd != Register::R0 as usize {
+                    self.registers[rd] = ret_pc;
                 }
-                self.registers[Register::Rab as usize] = self.registers[Register::Pcb as usize];
-                
-                // Jump to address
-                self.registers[Register::Pc as usize] = addr;
+                self.registers[Register::Rab as usize] = ret_pcb;
+                self.registers[Register::Pcb as usize] = target_bank;
+                self.registers[Register::Pc as usize] = target_addr;
                 self.skip_pc_increment = true;
             },
-            0x14 => { // JALR
+            0x14 => { // JALR rd, bank_reg, addr_reg
+                // Snapshot targets before any write (bank_reg may be RAB).
                 let rd = instr.word1 as usize;
-                let rs = instr.word3 as usize; // Note: rs is in word3 for JALR
-                if rd < 32 && rs < 32 {
-                    // Save return address
-                    self.registers[rd] = self.registers[Register::Pc as usize].wrapping_add(1);
-                    self.registers[Register::Rab as usize] = self.registers[Register::Pcb as usize];
-                    // Jump
-                    self.registers[Register::Pc as usize] = self.registers[rs];
+                let bank_reg = instr.word2 as usize;
+                let addr_reg = instr.word3 as usize;
+                if rd < 32 && bank_reg < 32 && addr_reg < 32 {
+                    let new_pc = self.registers[addr_reg];
+                    let new_pcb = self.registers[bank_reg];
+                    let ret_pc = self.registers[Register::Pc as usize].wrapping_add(1);
+                    let ret_pcb = self.registers[Register::Pcb as usize];
+                    if rd != Register::R0 as usize {
+                        self.registers[rd] = ret_pc;
+                        self.registers[Register::Rab as usize] = ret_pcb;
+                    }
+                    self.registers[Register::Pcb as usize] = new_pcb;
+                    self.registers[Register::Pc as usize] = new_pc;
                     self.skip_pc_increment = true;
                 }
             },
@@ -529,8 +536,8 @@ impl VM {
                         0
                     });
             },
-            0x13 => eprintln!("JAL R{}, {}", instr.word1, instr.word3),
-            0x14 => eprintln!("JALR R{}, R{}", instr.word1, instr.word3),
+            0x13 => eprintln!("JAL R{}, bank {}, addr {}", instr.word1, instr.word2, instr.word3),
+            0x14 => eprintln!("JALR R{}, R{} (bank), R{} (addr)", instr.word1, instr.word2, instr.word3),
             0x15 => eprintln!("BEQ R{}, R{}, {} ; if R{}==R{} goto PC+{}", 
                 instr.word1, instr.word2, instr.word3 as i16,
                 instr.word1, instr.word2, instr.word3 as i16),

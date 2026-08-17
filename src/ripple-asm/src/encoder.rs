@@ -190,9 +190,9 @@ mod tests {
         let inst = encoder.encode(Opcode::Add, &["R3".to_string(), "R4".to_string(), "R5".to_string()]).unwrap();
         
         assert_eq!(inst.opcode, Opcode::Add as u8);
-        assert_eq!(inst.word1, Register::R3 as u16);
-        assert_eq!(inst.word2, Register::R4 as u16);
-        assert_eq!(inst.word3, Register::R5 as u16);
+        assert_eq!(inst.word1, Register::Ra as u16);
+        assert_eq!(inst.word2, Register::Rab as u16);
+        assert_eq!(inst.word3, Register::Rv0 as u16);
     }
 
     #[test]
@@ -201,7 +201,7 @@ mod tests {
         let inst = encoder.encode(Opcode::Li, &["R3".to_string(), "42".to_string()]).unwrap();
         
         assert_eq!(inst.opcode, Opcode::Li as u8);
-        assert_eq!(inst.word1, Register::R3 as u16);
+        assert_eq!(inst.word1, Register::Ra as u16);
         assert_eq!(inst.word2, 42);
         assert_eq!(inst.word3, 0);
     }

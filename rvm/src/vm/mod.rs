@@ -183,85 +183,8 @@ impl VM {
         ]) as usize;
         pos += 4;
         
-        // ☠️💀🔥 CATASTROPHIC CHECK: PROGRAM MUST FIT IN ONE BLOCK 🔥💀☠️
-        if instruction_count > self.bank_size as usize {
-            eprintln!("\n");
-            eprintln!("💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩");
-            eprintln!("🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨");
-            eprintln!("╔══════════════════════════════════════════════════════════════════╗");
-            eprintln!("║              💀💀💀 SUPER DUPER ERROR!!! 💀💀💀                 ║");
-            eprintln!("║                  🎪 ABSOLUTELY BONKERS! 🎪                      ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("║     🔥🔥 PROGRAM TOO THICC FOR SINGLE BLOCK! 🔥🔥              ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("║     🍔 Program size: {} instructions (CHONKY!)                  ", instruction_count);
-            eprintln!("║     🥗 Block size:   {} instructions (smol bean)                ", self.bank_size);
-            eprintln!("║     💩 Overflow:     {} instructions (POOPY OVERFLOW) 💩        ", instruction_count - self.bank_size as usize);
-            eprintln!("║                                                                  ║");
-            eprintln!("║                    💩💩💩 OH CRAP! 💩💩💩                      ║");
-            eprintln!("║              Your code has pooped the bed!                      ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("║     🌌 THE UNIVERSE SAID: \"NOPE!\" 🌌                          ║");
-            eprintln!("║     🦖 DINOSAURS ARE COMING BACK 🦖                             ║");
-            eprintln!("║     🍕 PIZZA IS GETTING COLD 🍕                                 ║");
-            eprintln!("║     🐧 PENGUINS ARE MIGRATING TO MARS 🐧                        ║");
-            eprintln!("║     🌮 TACOS ARE RAINING FROM THE SKY 🌮                        ║");
-            eprintln!("║     🦄 UNICORNS ARE REAL NOW 🦄                                 ║");
-            eprintln!("║     💩 EVERYTHING IS POO NOW 💩                                 ║");
-            eprintln!("║     🎭 REALITY.EXE HAS STOPPED WORKING 🎭                       ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("║          HERE'S A REALLY BAD ASCII DRAGON:                      ║");
-            eprintln!("║                   ,     \\    /      ,                           ║");
-            eprintln!("║                  / \\    )\\__/(     / \\                          ║");
-            eprintln!("║                 /   \\  (_\\  /_)   /   \\                         ║");
-            eprintln!("║            ____/_____\\__\\@  @/___/_____\\____                    ║");
-            eprintln!("║           |             |\\../|              |                   ║");
-            eprintln!("║           |              \\VV/               |                   ║");
-            eprintln!("║           |         OH NO ITS BROKEN        |                   ║");
-            eprintln!("║           |_________________________________|                   ║");
-            eprintln!("║            |    /\\ /      \\\\       \\ /\\    |                    ║");
-            eprintln!("║            |  /   V        ))       V   \\  |                    ║");
-            eprintln!("║            |/     `       //        '     \\|                    ║");
-            eprintln!("║            `              V                '                    ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("║     ⚡ INITIATING EMERGENCY POO PROTOCOL ⚡                      ║");
-            eprintln!("║     🚁 HELICOPTER NOISES: SOI SOI SOI SOI 🚁                    ║");
-            eprintln!("║     🎵 PLAYING SAD TROMBONE: WOMP WOMP 🎵                       ║");
-            eprintln!("║     🤖 ROBOTS ARE CRYING OIL TEARS 🤖                           ║");
-            eprintln!("║     🌈 RAINBOW MACHINE BROKE (AND POOPED) 🌈                    ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("║     📢 ATTENTION ALL EPIC GAMERS 📢                             ║");
-            eprintln!("║     Your code is in great danger and needs YOUR help           ║");
-            eprintln!("║     to fit in the block! All it needs is your credit           ║");
-            eprintln!("║     card number... (just kidding, refactor your code)          ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("║     🛸 ALIENS ARE LAUGHING AT YOUR POOPY CODE 🛸               ║");
-            eprintln!("║     🔮 CRYSTAL BALL SAYS: \"BIG OOF\" 🔮                        ║");
-            eprintln!("║     🎰 YOU ROLLED NAT 1 ON COMPILATION 🎰                       ║");
-            eprintln!("║     💩 POO COUNTER: {} MEGA-POOS 💩                             ", (instruction_count - self.bank_size as usize) / 100 + 1);
-            eprintln!("║     💣 YEET SEQUENCE: 5...4...3...2...1... 💣                   ║");
-            eprintln!("║                                                                  ║");
-            eprintln!("╚══════════════════════════════════════════════════════════════════╝");
-            eprintln!("🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨");
-            eprintln!("💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩");
-            eprintln!("\n");
-            eprintln!("        HERE'S A TERRIBLE ASCII EXPLOSION:");
-            eprintln!("                    💩");
-            eprintln!("              💩    💩    💩");
-            eprintln!("         💩   \\  💀💀💀  /   💩");
-            eprintln!("       💩  ___--  RIP  --___  💩");
-            eprintln!("         💩   /  YOUR  \\   💩");
-            eprintln!("              💩  CODE  💩");
-            eprintln!("                    💩");
-            eprintln!("");
-            eprintln!("💥💥💥 KABOOM! KAPOW! BAZINGA! POO-SPLOSION! 💥💥💥");
-            eprintln!("              GAME OVER, INSERT COIN\n");
-            
-            return Err(format!(
-                "💩🔥💀🎪 SUPER DUPER MEGA ULTRA POO ERROR: Program ({} instructions) is too THICC for block ({} instructions). UNIVERSE.EXE HAS CRASHED AND POOPED ITSELF! SEND HELP AND TOILET PAPER! 🎪💀🔥💩",
-                instruction_count, self.bank_size
-            ));
-        }
+        // Code may span multiple banks. Fetch is PCB * bank_size + PC.
+        // rlink NOP-pads so bank N starts at index N * bank_size.
         
         // Read instructions
         self.instructions.clear();
@@ -514,6 +437,86 @@ impl VM {
         self.memory.fill(0);
         
         // Note: We keep the loaded instructions, data, debug symbols, and storage intact
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::constants::MAGIC_RLINK;
+    use ripple_asm::Register;
+
+    fn instr(opcode: u8, word1: u16, word2: u16, word3: u16) -> Instr {
+        Instr {
+            opcode,
+            word0: opcode,
+            word1,
+            word2,
+            word3,
+        }
+    }
+
+    fn nop() -> Instr {
+        instr(0x00, 1, 0, 0)
+    }
+
+    fn halt() -> Instr {
+        instr(0x00, 0, 0, 0)
+    }
+
+    #[test]
+    fn jal_saves_return_bank_then_jumps() {
+        let mut vm = VM::with_memory_size(8, 256);
+        let mut instructions = vec![
+            instr(0x13, Register::Ra as u16, 1, 0), // JAL RA, bank 1, addr 0
+            halt(),
+        ];
+        while instructions.len() < 8 {
+            instructions.push(nop());
+        }
+        instructions.push(instr(0x0E, Register::Rv0 as u16, 42, 0)); // LI RV0, 42
+        instructions.push(instr(0x14, 0, Register::Rab as u16, Register::Ra as u16)); // RET
+        vm.instructions = instructions;
+        vm.state = VMState::Running;
+
+        vm.step().unwrap();
+        assert_eq!(vm.registers[Register::Pcb as usize], 1);
+        assert_eq!(vm.registers[Register::Pc as usize], 0);
+        assert_eq!(vm.registers[Register::Ra as usize], 1);
+        assert_eq!(vm.registers[Register::Rab as usize], 0);
+
+        vm.step().unwrap();
+        assert_eq!(vm.registers[Register::Rv0 as usize], 42);
+
+        vm.step().unwrap();
+        assert_eq!(vm.registers[Register::Pcb as usize], 0);
+        assert_eq!(vm.registers[Register::Pc as usize], 1);
+
+        vm.step().unwrap();
+        assert!(matches!(vm.state, VMState::Halted));
+    }
+
+    #[test]
+    fn load_binary_accepts_multi_bank_image() {
+        let mut binary = Vec::new();
+        binary.extend_from_slice(MAGIC_RLINK);
+        binary.extend_from_slice(&8u16.to_le_bytes()); // bank size
+        binary.extend_from_slice(&0u32.to_le_bytes()); // entry point
+        binary.extend_from_slice(&10u32.to_le_bytes()); // 10 instructions > bank size 8
+        for i in 0..10 {
+            let inst = if i == 0 { halt() } else { nop() };
+            binary.push(inst.opcode);
+            binary.push(inst.word0);
+            binary.extend_from_slice(&inst.word1.to_le_bytes());
+            binary.extend_from_slice(&inst.word2.to_le_bytes());
+            binary.extend_from_slice(&inst.word3.to_le_bytes());
+        }
+        binary.extend_from_slice(&0u32.to_le_bytes()); // data size
+
+        let mut vm = VM::with_memory_size(8, 256);
+        vm.load_binary(&binary).expect("multi-bank image should load");
+        assert_eq!(vm.instructions.len(), 10);
+        assert_eq!(vm.bank_size, 8);
     }
 }
 

@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn test_format_add() {
         let formatter = MacroFormatter::new();
-        let inst = Instruction::new(Opcode::Add, Register::R3 as u16, Register::R4 as u16, Register::R5 as u16);
+        let inst = Instruction::new(Opcode::Add, Register::Rv0 as u16, Register::Rv1 as u16, Register::A0 as u16);
         let formatted = formatter.format_instruction(&inst, false);
         
         assert!(formatted.contains("@OP_ADD"));
@@ -375,7 +375,7 @@ mod tests {
     fn test_format_full_program() {
         let formatter = MacroFormatter::new();
         let instructions = vec![
-            Instruction::new(Opcode::Li, Register::R3 as u16, 42, 0),
+            Instruction::new(Opcode::Li, Register::Ra as u16, 42, 0),
             Instruction::new(Opcode::Nop, 0, 0, 0),
         ];
         let data = b"Test";

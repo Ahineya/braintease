@@ -106,7 +106,7 @@ impl fmt::Display for AsmInst {
             AsmInst::Li(rd, imm) => write!(f, "LI {rd}, {imm}"),
             
             // Control Flow
-            AsmInst::Jal(bank, addr) => write!(f, "JAL {bank}, {addr}"),
+            AsmInst::Jal(bank, addr) => write!(f, "JAL RA, {bank}, {addr}"),
             AsmInst::Jalr(bank, addr, link) => write!(f, "JALR {bank}, {addr}, {link}"),
             AsmInst::Beq(rs, rt, label) => write!(f, "BEQ {rs}, {rt}, {label}"),
             AsmInst::Bne(rs, rt, label) => write!(f, "BNE {rs}, {rt}, {label}"),
@@ -151,6 +151,7 @@ mod tests {
         assert_eq!(format!("{}", AsmInst::Li(Reg::T0, 42)), "LI T0, 42");
         assert_eq!(format!("{}", AsmInst::Add(Reg::T0, Reg::T1, Reg::T2)), "ADD T0, T1, T2");
         assert_eq!(format!("{}", AsmInst::Store(Reg::T0, Reg::R0, Reg::R0)), "STORE T0, R0, R0");
+        assert_eq!(format!("{}", AsmInst::Jal(1, 42)), "JAL RA, 1, 42");
         assert_eq!(format!("{}", AsmInst::Label("main".to_string())), "main:");
         assert_eq!(format!("{}", AsmInst::Comment("Hello world".to_string())), "; Hello world");
     }

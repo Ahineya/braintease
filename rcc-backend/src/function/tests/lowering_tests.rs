@@ -27,11 +27,9 @@ fn test_epilogue_restores_state() {
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Load(Reg::Fp, _, _))));
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Load(Reg::Ra, _, _))));
     
-    // Should restore PCB from RAB
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::Pcb, Reg::Rab, Reg::R0))));
-    
-    // Should return with JALR
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::Jalr(_, _, Reg::Ra))));
+    // Should return with JALR R0, RAB, RA (restores PCB from RAB)
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Jalr(Reg::R0, Reg::Rab, Reg::Ra))));
+    assert!(!insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::Pcb, Reg::Rab, Reg::R0))));
 }
 
 #[test]

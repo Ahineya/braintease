@@ -213,22 +213,11 @@ impl FunctionLowering {
         insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, -1));
         insts.push(AsmInst::Load(Reg::Ra, Reg::Sb, Reg::Sp));
         
-        // Return to caller
-        // Need to restore PCB from RAB for cross-bank returns
-        // Then JALR to RA
+        // Return to caller: JALR R0, RAB, RA restores PCB from RAB and PC from RA
         debug!("  Setting up return to caller");
         insts.push(AsmInst::Comment("Return to caller".to_string()));
-        
-        // Restore the caller's bank (RAB was saved by JAL)
-        // Note: RAB is automatically saved by JAL instruction
-        // but we need to explicitly restore PCB before jumping back
-        trace!("  Restoring PCB from RAB");
-        insts.push(AsmInst::Add(Reg::Pcb, Reg::Rab, Reg::R0));
-        
-        // JALR rd, 0, rs format: rd←PC+1 (unused), PC←rs
-        // This jumps to the address in RA within the bank we just restored
-        trace!("  JALR to RA");
-        insts.push(AsmInst::Jalr(Reg::R0, Reg::R0, Reg::Ra));
+        trace!("  JALR R0, RAB, RA");
+        insts.push(AsmInst::Jalr(Reg::R0, Reg::Rab, Reg::Ra));
         
         debug!("Epilogue complete: generated {} instructions", insts.len());
         insts

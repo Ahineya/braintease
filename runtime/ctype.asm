@@ -112,8 +112,7 @@ L_in_range_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isdigit:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -227,8 +226,7 @@ L_isdigit_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 islower:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -342,8 +340,7 @@ L_islower_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isupper:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -457,8 +454,7 @@ L_isupper_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isalpha:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -597,8 +593,7 @@ L_isalpha_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isalnum:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -737,8 +732,7 @@ L_isalnum_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isblank:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -852,8 +846,7 @@ L_isblank_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isspace:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1175,8 +1168,7 @@ L_isspace_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 iscntrl:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1335,8 +1327,7 @@ L_iscntrl_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isprint:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1450,8 +1441,7 @@ L_isprint_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isgraph:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1565,8 +1555,7 @@ L_isgraph_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 ispunct:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1713,8 +1702,7 @@ L_ispunct_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 isxdigit:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1998,8 +1986,7 @@ L_isxdigit_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 tolower:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -2108,8 +2095,7 @@ L_tolower_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 toupper:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -2218,5 +2204,4 @@ L_toupper_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA

@@ -463,9 +463,9 @@ mod tests {
         
         assert_eq!(result.instructions.len(), 1);
         assert_eq!(result.instructions[0].opcode, Opcode::Add as u8);
-        assert_eq!(result.instructions[0].word1, Register::R3 as u16);
-        assert_eq!(result.instructions[0].word2, Register::R4 as u16);
-        assert_eq!(result.instructions[0].word3, Register::R5 as u16);
+        assert_eq!(result.instructions[0].word1, Register::Ra as u16);
+        assert_eq!(result.instructions[0].word2, Register::Rab as u16);
+        assert_eq!(result.instructions[0].word3, Register::Rv0 as u16);
     }
 
     #[test]

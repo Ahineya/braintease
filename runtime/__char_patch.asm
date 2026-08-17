@@ -64,8 +64,7 @@ L___ld8_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __st8:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -142,5 +141,4 @@ L___st8_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA

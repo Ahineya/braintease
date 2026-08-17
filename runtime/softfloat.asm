@@ -192,23 +192,23 @@ L_clz32_4:
     ADDI SC, SC, 29
     STORE T1, SB, SC
     SLTU T1, T4, T3
-    BEQ T1, R0, L_i32_shl_ge32_a5a2f086_0_0
+    BEQ T1, R0, L_i32_shl_ge32_f58c10b9_0_0
     SLTU T1, T4, T7
-    BEQ T1, R0, L_i32_shl_ge16_a5a2f086_0_1
-    BEQ R0, R0, L_i32_shl_lt16_a5a2f086_0_2
-L_i32_shl_ge32_a5a2f086_0_0:
+    BEQ T1, R0, L_i32_shl_ge16_f58c10b9_0_1
+    BEQ R0, R0, L_i32_shl_lt16_f58c10b9_0_2
+L_i32_shl_ge32_f58c10b9_0_0:
     LI T6, 0
     LI T5, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_3
-L_i32_shl_ge16_a5a2f086_0_1:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_3
+L_i32_shl_ge16_f58c10b9_0_1:
     SUB T1, T4, T7
     SLL T5, S0, T1
     LI T6, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_3
-L_i32_shl_lt16_a5a2f086_0_2:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_3
+L_i32_shl_lt16_f58c10b9_0_2:
     ADD T6, S0, R0
     ADD T5, S1, R0
-    BEQ T4, R0, L_i32_shl_done_a5a2f086_0_3
+    BEQ T4, R0, L_i32_shl_done_f58c10b9_0_3
     SLL T6, S0, T4
     SLL T5, S1, T4
     SUB T1, T7, T4
@@ -218,7 +218,7 @@ L_i32_shl_lt16_a5a2f086_0_2:
     STORE S2, SB, SC
     SRL S2, S0, T1
     OR T5, T5, S2
-L_i32_shl_done_a5a2f086_0_3:
+L_i32_shl_done_f58c10b9_0_3:
     STORE T6, SB, T0
     ADDI SC, T0, 1
     STORE T5, SB, SC
@@ -359,23 +359,23 @@ L_clz32_7:
     ADDI SC, SC, 50
     STORE T6, SB, SC
     SLTU T6, T7, T1
-    BEQ T6, R0, L_i32_shl_ge32_a5a2f086_0_4
+    BEQ T6, R0, L_i32_shl_ge32_f58c10b9_0_4
     SLTU T6, T7, T5
-    BEQ T6, R0, L_i32_shl_ge16_a5a2f086_0_5
-    BEQ R0, R0, L_i32_shl_lt16_a5a2f086_0_6
-L_i32_shl_ge32_a5a2f086_0_4:
+    BEQ T6, R0, L_i32_shl_ge16_f58c10b9_0_5
+    BEQ R0, R0, L_i32_shl_lt16_f58c10b9_0_6
+L_i32_shl_ge32_f58c10b9_0_4:
     LI T4, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_7
-L_i32_shl_ge16_a5a2f086_0_5:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_7
+L_i32_shl_ge16_f58c10b9_0_5:
     SUB T6, T7, T5
     SLL T3, S3, T6
     LI T4, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_7
-L_i32_shl_lt16_a5a2f086_0_6:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_7
+L_i32_shl_lt16_f58c10b9_0_6:
     ADD T4, S3, R0
     ADD T3, S1, R0
-    BEQ T7, R0, L_i32_shl_done_a5a2f086_0_7
+    BEQ T7, R0, L_i32_shl_done_f58c10b9_0_7
     SLL T4, S3, T7
     SLL T3, S1, T7
     SUB T6, T5, T7
@@ -385,7 +385,7 @@ L_i32_shl_lt16_a5a2f086_0_6:
     STORE T0, SB, SC
     SRL T0, S3, T6
     OR T3, T3, T0
-L_i32_shl_done_a5a2f086_0_7:
+L_i32_shl_done_f58c10b9_0_7:
     STORE T4, SB, S2
     ADDI SC, S2, 1
     STORE T3, SB, SC
@@ -526,23 +526,23 @@ L_clz32_10:
     ADDI SC, SC, 71
     STORE T4, SB, SC
     SLTU T4, T5, T6
-    BEQ T4, R0, L_i32_shl_ge32_a5a2f086_0_8
+    BEQ T4, R0, L_i32_shl_ge32_f58c10b9_0_8
     SLTU T4, T5, T3
-    BEQ T4, R0, L_i32_shl_ge16_a5a2f086_0_9
-    BEQ R0, R0, L_i32_shl_lt16_a5a2f086_0_10
-L_i32_shl_ge32_a5a2f086_0_8:
+    BEQ T4, R0, L_i32_shl_ge16_f58c10b9_0_9
+    BEQ R0, R0, L_i32_shl_lt16_f58c10b9_0_10
+L_i32_shl_ge32_f58c10b9_0_8:
     LI T7, 0
     LI T1, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_11
-L_i32_shl_ge16_a5a2f086_0_9:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_11
+L_i32_shl_ge16_f58c10b9_0_9:
     SUB T4, T5, T3
     SLL T1, S2, T4
     LI T7, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_11
-L_i32_shl_lt16_a5a2f086_0_10:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_11
+L_i32_shl_lt16_f58c10b9_0_10:
     ADD T7, S2, R0
     ADD T1, S1, R0
-    BEQ T5, R0, L_i32_shl_done_a5a2f086_0_11
+    BEQ T5, R0, L_i32_shl_done_f58c10b9_0_11
     SLL T7, S2, T5
     SLL T1, S1, T5
     SUB T4, T3, T5
@@ -552,7 +552,7 @@ L_i32_shl_lt16_a5a2f086_0_10:
     STORE T2, SB, SC
     SRL T2, S2, T4
     OR T1, T1, T2
-L_i32_shl_done_a5a2f086_0_11:
+L_i32_shl_done_f58c10b9_0_11:
     STORE T7, SB, T0
     ADDI SC, T0, 1
     STORE T1, SB, SC
@@ -693,23 +693,23 @@ L_clz32_13:
     ADDI SC, SC, 92
     STORE T7, SB, SC
     SLTU T7, T3, T4
-    BEQ T7, R0, L_i32_shl_ge32_a5a2f086_0_12
+    BEQ T7, R0, L_i32_shl_ge32_f58c10b9_0_12
     SLTU T7, T3, T1
-    BEQ T7, R0, L_i32_shl_ge16_a5a2f086_0_13
-    BEQ R0, R0, L_i32_shl_lt16_a5a2f086_0_14
-L_i32_shl_ge32_a5a2f086_0_12:
+    BEQ T7, R0, L_i32_shl_ge16_f58c10b9_0_13
+    BEQ R0, R0, L_i32_shl_lt16_f58c10b9_0_14
+L_i32_shl_ge32_f58c10b9_0_12:
     LI T5, 0
     LI T6, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_15
-L_i32_shl_ge16_a5a2f086_0_13:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_15
+L_i32_shl_ge16_f58c10b9_0_13:
     SUB T7, T3, T1
     SLL T6, S0, T7
     LI T5, 0
-    BEQ R0, R0, L_i32_shl_done_a5a2f086_0_15
-L_i32_shl_lt16_a5a2f086_0_14:
+    BEQ R0, R0, L_i32_shl_done_f58c10b9_0_15
+L_i32_shl_lt16_f58c10b9_0_14:
     ADD T5, S0, R0
     ADD T6, S1, R0
-    BEQ T3, R0, L_i32_shl_done_a5a2f086_0_15
+    BEQ T3, R0, L_i32_shl_done_f58c10b9_0_15
     SLL T5, S0, T3
     SLL T6, S1, T3
     SUB T7, T1, T3
@@ -719,7 +719,7 @@ L_i32_shl_lt16_a5a2f086_0_14:
     STORE T0, SB, SC
     SRL T0, S0, T7
     OR T6, T6, T0
-L_i32_shl_done_a5a2f086_0_15:
+L_i32_shl_done_f58c10b9_0_15:
     STORE T5, SB, T2
     ADDI SC, T2, 1
     STORE T6, SB, SC
@@ -855,8 +855,7 @@ L_clz32_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 clz64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -940,8 +939,8 @@ L_clz64_19:
     ADDI SC, SC, 20
     STORE T4, SB, SC
     SLT T4, S1, R0
-L_i64_shr_loop_26fc718f_2_0:
-    BEQ T6, R0, L_i64_shr_done_26fc718f_2_1
+L_i64_shr_loop_9658d034_2_0:
+    BEQ T6, R0, L_i64_shr_done_9658d034_2_1
     AND X3, S3, T5
     SRL T0, T0, T5
     SLL X3, X3, T7
@@ -956,8 +955,8 @@ L_i64_shr_loop_26fc718f_2_0:
     OR S2, S2, X3
     SRL S1, S1, T5
     ADDI T6, T6, -1
-    BEQ R0, R0, L_i64_shr_loop_26fc718f_2_0
-L_i64_shr_done_26fc718f_2_1:
+    BEQ R0, R0, L_i64_shr_loop_9658d034_2_0
+L_i64_shr_done_9658d034_2_1:
 ; Spill t4__w1 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 21
@@ -1208,8 +1207,7 @@ L_clz64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f32_isnan:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1403,8 +1401,7 @@ L_f32_isnan_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f32_isinf:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1603,8 +1600,7 @@ L_f32_isinf_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f32_iszero:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1707,8 +1703,7 @@ L_f32_iszero_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f32_pack:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -1939,23 +1934,23 @@ L_f32_pack_41:
     ADDI SC, SC, 28
     STORE S0, SB, SC
     SLTU S0, T5, T6
-    BEQ S0, R0, L_i32_lshr_ge32_882f5cb5_10_0
+    BEQ S0, R0, L_i32_lshr_ge32_90ced588_10_0
     SLTU S0, T5, S2
-    BEQ S0, R0, L_i32_lshr_ge16_882f5cb5_10_1
-    BEQ R0, R0, L_i32_lshr_lt16_882f5cb5_10_2
-L_i32_lshr_ge32_882f5cb5_10_0:
+    BEQ S0, R0, L_i32_lshr_ge16_90ced588_10_1
+    BEQ R0, R0, L_i32_lshr_lt16_90ced588_10_2
+L_i32_lshr_ge32_90ced588_10_0:
     LI T4, 0
     LI S1, 0
-    BEQ R0, R0, L_i32_lshr_done_882f5cb5_10_3
-L_i32_lshr_ge16_882f5cb5_10_1:
+    BEQ R0, R0, L_i32_lshr_done_90ced588_10_3
+L_i32_lshr_ge16_90ced588_10_1:
     SUB S0, T5, S2
     SRL T4, T2, S0
     LI S1, 0
-    BEQ R0, R0, L_i32_lshr_done_882f5cb5_10_3
-L_i32_lshr_lt16_882f5cb5_10_2:
+    BEQ R0, R0, L_i32_lshr_done_90ced588_10_3
+L_i32_lshr_lt16_90ced588_10_2:
     ADD T4, T0, R0
     ADD S1, T2, R0
-    BEQ T5, R0, L_i32_lshr_done_882f5cb5_10_3
+    BEQ T5, R0, L_i32_lshr_done_90ced588_10_3
     SRL T4, T0, T5
     SRL S1, T2, T5
     SUB S0, S2, T5
@@ -1965,7 +1960,7 @@ L_i32_lshr_lt16_882f5cb5_10_2:
     STORE S3, SB, SC
     SLL S3, T2, S0
     OR T4, T4, S3
-L_i32_lshr_done_882f5cb5_10_3:
+L_i32_lshr_done_90ced588_10_3:
 ; Spill const_f10_op34_8388608 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 30
@@ -2138,23 +2133,23 @@ L_f32_pack_38:
     ADDI SC, SC, 55
     STORE T6, SB, SC
     SLTU T6, T4, T0
-    BEQ T6, R0, L_i32_shl_ge32_882f5cb5_10_4
+    BEQ T6, R0, L_i32_shl_ge32_90ced588_10_4
     SLTU T6, T4, T5
-    BEQ T6, R0, L_i32_shl_ge16_882f5cb5_10_5
-    BEQ R0, R0, L_i32_shl_lt16_882f5cb5_10_6
-L_i32_shl_ge32_882f5cb5_10_4:
+    BEQ T6, R0, L_i32_shl_ge16_90ced588_10_5
+    BEQ R0, R0, L_i32_shl_lt16_90ced588_10_6
+L_i32_shl_ge32_90ced588_10_4:
     LI T2, 0
     LI S3, 0
-    BEQ R0, R0, L_i32_shl_done_882f5cb5_10_7
-L_i32_shl_ge16_882f5cb5_10_5:
+    BEQ R0, R0, L_i32_shl_done_90ced588_10_7
+L_i32_shl_ge16_90ced588_10_5:
     SUB T6, T4, T5
     SLL S3, T1, T6
     LI T2, 0
-    BEQ R0, R0, L_i32_shl_done_882f5cb5_10_7
-L_i32_shl_lt16_882f5cb5_10_6:
+    BEQ R0, R0, L_i32_shl_done_90ced588_10_7
+L_i32_shl_lt16_90ced588_10_6:
     ADD T2, T1, R0
     ADD S3, T3, R0
-    BEQ T4, R0, L_i32_shl_done_882f5cb5_10_7
+    BEQ T4, R0, L_i32_shl_done_90ced588_10_7
     SLL T2, T1, T4
     SLL S3, T3, T4
     SUB T6, T5, T4
@@ -2164,7 +2159,7 @@ L_i32_shl_lt16_882f5cb5_10_6:
     STORE S2, SB, SC
     SRL S2, T1, T6
     OR S3, S3, S2
-L_i32_shl_done_882f5cb5_10_7:
+L_i32_shl_done_90ced588_10_7:
 ; Recompute alloca t6 at FP+5
     ADD T7, FP, R0
     ADDI T7, T7, 5
@@ -2286,8 +2281,7 @@ L_f32_pack_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_add:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -3131,23 +3125,23 @@ L___rcc_f32_add_72:
     STORE T2, SB, SC
     LI T2, 16
     SLTU S3, T1, S1
-    BEQ S3, R0, L_i32_lshr_ge32_5d61623a_12_0
+    BEQ S3, R0, L_i32_lshr_ge32_608b1bd4_12_0
     SLTU S3, T1, T2
-    BEQ S3, R0, L_i32_lshr_ge16_5d61623a_12_1
-    BEQ R0, R0, L_i32_lshr_lt16_5d61623a_12_2
-L_i32_lshr_ge32_5d61623a_12_0:
+    BEQ S3, R0, L_i32_lshr_ge16_608b1bd4_12_1
+    BEQ R0, R0, L_i32_lshr_lt16_608b1bd4_12_2
+L_i32_lshr_ge32_608b1bd4_12_0:
     LI T7, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_5d61623a_12_3
-L_i32_lshr_ge16_5d61623a_12_1:
+    BEQ R0, R0, L_i32_lshr_done_608b1bd4_12_3
+L_i32_lshr_ge16_608b1bd4_12_1:
     SUB S3, T1, T2
     SRL T7, S0, S3
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_5d61623a_12_3
-L_i32_lshr_lt16_5d61623a_12_2:
+    BEQ R0, R0, L_i32_lshr_done_608b1bd4_12_3
+L_i32_lshr_lt16_608b1bd4_12_2:
     ADD T7, T5, R0
     ADD T3, S0, R0
-    BEQ T1, R0, L_i32_lshr_done_5d61623a_12_3
+    BEQ T1, R0, L_i32_lshr_done_608b1bd4_12_3
     SRL T7, T5, T1
     SRL T3, S0, T1
     SUB S3, T2, T1
@@ -3157,7 +3151,7 @@ L_i32_lshr_lt16_5d61623a_12_2:
     STORE T0, SB, SC
     SLL T0, S0, S3
     OR T7, T7, T0
-L_i32_lshr_done_5d61623a_12_3:
+L_i32_lshr_done_608b1bd4_12_3:
 ; Spill t63__hi to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 105
@@ -3228,23 +3222,23 @@ L_i32_lshr_done_5d61623a_12_3:
     LI T7, 32
     LI T6, 16
     SLTU T4, T3, T7
-    BEQ T4, R0, L_i32_lshr_ge32_5d61623a_12_4
+    BEQ T4, R0, L_i32_lshr_ge32_608b1bd4_12_4
     SLTU T4, T3, T6
-    BEQ T4, R0, L_i32_lshr_ge16_5d61623a_12_5
-    BEQ R0, R0, L_i32_lshr_lt16_5d61623a_12_6
-L_i32_lshr_ge32_5d61623a_12_4:
+    BEQ T4, R0, L_i32_lshr_ge16_608b1bd4_12_5
+    BEQ R0, R0, L_i32_lshr_lt16_608b1bd4_12_6
+L_i32_lshr_ge32_608b1bd4_12_4:
     LI S3, 0
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_5d61623a_12_7
-L_i32_lshr_ge16_5d61623a_12_5:
+    BEQ R0, R0, L_i32_lshr_done_608b1bd4_12_7
+L_i32_lshr_ge16_608b1bd4_12_5:
     SUB T4, T3, T6
     SRL S3, T2, T4
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_5d61623a_12_7
-L_i32_lshr_lt16_5d61623a_12_6:
+    BEQ R0, R0, L_i32_lshr_done_608b1bd4_12_7
+L_i32_lshr_lt16_608b1bd4_12_6:
     ADD S3, S1, R0
     ADD T0, T2, R0
-    BEQ T3, R0, L_i32_lshr_done_5d61623a_12_7
+    BEQ T3, R0, L_i32_lshr_done_608b1bd4_12_7
     SRL S3, S1, T3
     SRL T0, T2, T3
     SUB T4, T6, T3
@@ -3254,7 +3248,7 @@ L_i32_lshr_lt16_5d61623a_12_6:
     STORE S2, SB, SC
     SLL S2, T2, T4
     OR S3, S3, S2
-L_i32_lshr_done_5d61623a_12_7:
+L_i32_lshr_done_608b1bd4_12_7:
 ; Spill t67__hi to slot 79
     ADD SC, FP, R0
     ADDI SC, SC, 118
@@ -3582,8 +3576,8 @@ L___rcc_f32_add_78:
     ADD SC, FP, R0
     ADDI SC, SC, 156
     STORE S2, SB, SC
-L_i64_shl_loop_5d61623a_12_8:
-    BEQ T3, R0, L_i64_shl_done_5d61623a_12_9
+L_i64_shl_loop_608b1bd4_12_8:
+    BEQ T3, R0, L_i64_shl_done_608b1bd4_12_9
     SLT S2, T7, R0
     ADD S0, S0, S0
     OR S0, S0, S2
@@ -3595,8 +3589,8 @@ L_i64_shl_loop_5d61623a_12_8:
     OR S1, S1, S2
     ADD T5, T5, T5
     ADDI T3, T3, -1
-    BEQ R0, R0, L_i64_shl_loop_5d61623a_12_8
-L_i64_shl_done_5d61623a_12_9:
+    BEQ R0, R0, L_i64_shl_loop_608b1bd4_12_8
+L_i64_shl_done_608b1bd4_12_9:
 ; Spill i64_from32_w3_12_f12_op144 to slot 118
     ADD SC, FP, R0
     ADDI SC, SC, 157
@@ -3691,8 +3685,8 @@ L_i64_shl_done_5d61623a_12_9:
     ADD SC, FP, R0
     ADDI SC, SC, 171
     STORE T1, SB, SC
-L_i64_shl_loop_5d61623a_12_10:
-    BEQ T6, R0, L_i64_shl_done_5d61623a_12_11
+L_i64_shl_loop_608b1bd4_12_10:
+    BEQ T6, R0, L_i64_shl_done_608b1bd4_12_11
     SLT T1, S0, R0
     ADD T0, T0, T0
     OR T0, T0, T1
@@ -3704,8 +3698,8 @@ L_i64_shl_loop_5d61623a_12_10:
     OR T7, T7, T1
     ADD S1, S1, S1
     ADDI T6, T6, -1
-    BEQ R0, R0, L_i64_shl_loop_5d61623a_12_10
-L_i64_shl_done_5d61623a_12_11:
+    BEQ R0, R0, L_i64_shl_loop_608b1bd4_12_10
+L_i64_shl_done_608b1bd4_12_11:
 ; Spill i64_from32_w3_12_f12_op152 to slot 133
     ADD SC, FP, R0
     ADDI SC, SC, 172
@@ -3923,8 +3917,8 @@ L___rcc_f32_add_83:
     ADDI SC, SC, 193
     STORE S0, SB, SC
     SLT S0, S3, R0
-L_i64_shr_loop_5d61623a_12_12:
-    BEQ S1, R0, L_i64_shr_done_5d61623a_12_13
+L_i64_shr_loop_608b1bd4_12_12:
+    BEQ S1, R0, L_i64_shr_done_608b1bd4_12_13
     AND X3, T2, T7
     SRL T3, T3, T7
     SLL X3, X3, T1
@@ -3939,8 +3933,8 @@ L_i64_shr_loop_5d61623a_12_12:
     OR T4, T4, X3
     SRL S3, S3, T7
     ADDI S1, S1, -1
-    BEQ R0, R0, L_i64_shr_loop_5d61623a_12_12
-L_i64_shr_done_5d61623a_12_13:
+    BEQ R0, R0, L_i64_shr_loop_608b1bd4_12_12
+L_i64_shr_done_608b1bd4_12_13:
 ; Spill t102__w1 to slot 155
     ADD SC, FP, R0
     ADDI SC, SC, 194
@@ -4182,8 +4176,8 @@ L___rcc_f32_add_89:
     ADDI SC, SC, 216
     STORE S3, SB, SC
     SLT S3, S1, R0
-L_i64_shr_loop_5d61623a_12_14:
-    BEQ T2, R0, L_i64_shr_done_5d61623a_12_15
+L_i64_shr_loop_608b1bd4_12_14:
+    BEQ T2, R0, L_i64_shr_done_608b1bd4_12_15
     AND X3, T0, T4
     SRL S2, S2, T4
     SLL X3, X3, T3
@@ -4198,8 +4192,8 @@ L_i64_shr_loop_5d61623a_12_14:
     OR T7, T7, X3
     SRL S1, S1, T4
     ADDI T2, T2, -1
-    BEQ R0, R0, L_i64_shr_loop_5d61623a_12_14
-L_i64_shr_done_5d61623a_12_15:
+    BEQ R0, R0, L_i64_shr_loop_608b1bd4_12_14
+L_i64_shr_done_608b1bd4_12_15:
 ; Spill t117__w1 to slot 178
     ADD SC, FP, R0
     ADDI SC, SC, 217
@@ -4513,8 +4507,8 @@ L___rcc_f32_add_91:
     ADD SC, FP, R0
     ADDI SC, SC, 253
     STORE S2, SB, SC
-L_i64_shl_loop_5d61623a_12_16:
-    BEQ S3, R0, L_i64_shl_done_5d61623a_12_17
+L_i64_shl_loop_608b1bd4_12_16:
+    BEQ S3, R0, L_i64_shl_done_608b1bd4_12_17
     SLT S2, S1, R0
     ADD T2, T2, T2
     OR T2, T2, S2
@@ -4526,8 +4520,8 @@ L_i64_shl_loop_5d61623a_12_16:
     OR T3, T3, S2
     ADD T1, T1, T1
     ADDI S3, S3, -1
-    BEQ R0, R0, L_i64_shl_loop_5d61623a_12_16
-L_i64_shl_done_5d61623a_12_17:
+    BEQ R0, R0, L_i64_shl_loop_608b1bd4_12_16
+L_i64_shl_done_608b1bd4_12_17:
 ; Spill t129__w3 to slot 215
     ADD SC, FP, R0
     ADDI SC, SC, 254
@@ -4706,8 +4700,8 @@ L___rcc_f32_add_94:
     ADDI SC, SC, 278
     STORE T0, SB, SC
     SLT T0, T5, R0
-L_i64_shr_loop_5d61623a_12_18:
-    BEQ S1, R0, L_i64_shr_done_5d61623a_12_19
+L_i64_shr_loop_608b1bd4_12_18:
+    BEQ S1, R0, L_i64_shr_done_608b1bd4_12_19
     AND X3, T6, T3
     SRL T7, T7, T3
     SLL X3, X3, T1
@@ -4722,8 +4716,8 @@ L_i64_shr_loop_5d61623a_12_18:
     OR S0, S0, X3
     SRL T5, T5, T3
     ADDI S1, S1, -1
-    BEQ R0, R0, L_i64_shr_loop_5d61623a_12_18
-L_i64_shr_done_5d61623a_12_19:
+    BEQ R0, R0, L_i64_shr_loop_608b1bd4_12_18
+L_i64_shr_done_608b1bd4_12_19:
 ; Spill t133__w1 to slot 240
     ADD SC, FP, R0
     ADDI SC, SC, 279
@@ -4860,8 +4854,8 @@ L___rcc_f32_add_96:
     ADDI SC, SC, 295
     STORE T0, SB, SC
     SLT T0, T4, R0
-L_i64_shr_loop_5d61623a_12_20:
-    BEQ S1, R0, L_i64_shr_done_5d61623a_12_21
+L_i64_shr_loop_608b1bd4_12_20:
+    BEQ S1, R0, L_i64_shr_done_608b1bd4_12_21
     AND X3, S2, T3
     SRL T5, T5, T3
     SLL X3, X3, T1
@@ -4876,8 +4870,8 @@ L_i64_shr_loop_5d61623a_12_20:
     OR T2, T2, X3
     SRL T4, T4, T3
     ADDI S1, S1, -1
-    BEQ R0, R0, L_i64_shr_loop_5d61623a_12_20
-L_i64_shr_done_5d61623a_12_21:
+    BEQ R0, R0, L_i64_shr_loop_608b1bd4_12_20
+L_i64_shr_done_608b1bd4_12_21:
 ; Spill t139__w1 to slot 257
     ADD SC, FP, R0
     ADDI SC, SC, 296
@@ -5023,22 +5017,22 @@ L___rcc_f32_add_93:
     ADDI SC, SC, 310
     STORE T3, SB, SC
     XOR T3, T4, T6
-    BNE T3, R0, L_i64_ult_w3ne_5d61623a_12_22
+    BNE T3, R0, L_i64_ult_w3ne_608b1bd4_12_22
     XOR T3, T2, T7
-    BNE T3, R0, L_i64_ult_w2ne_5d61623a_12_23
+    BNE T3, R0, L_i64_ult_w2ne_608b1bd4_12_23
     XOR T3, S2, S1
-    BNE T3, R0, L_i64_ult_w1ne_5d61623a_12_24
+    BNE T3, R0, L_i64_ult_w1ne_608b1bd4_12_24
     SLTU T3, T5, S3
-    BEQ R0, R0, L_i64_ult_done_5d61623a_12_25
-L_i64_ult_w3ne_5d61623a_12_22:
+    BEQ R0, R0, L_i64_ult_done_608b1bd4_12_25
+L_i64_ult_w3ne_608b1bd4_12_22:
     SLTU T3, T4, T6
-    BEQ R0, R0, L_i64_ult_done_5d61623a_12_25
-L_i64_ult_w2ne_5d61623a_12_23:
+    BEQ R0, R0, L_i64_ult_done_608b1bd4_12_25
+L_i64_ult_w2ne_608b1bd4_12_23:
     SLTU T3, T2, T7
-    BEQ R0, R0, L_i64_ult_done_5d61623a_12_25
-L_i64_ult_w1ne_5d61623a_12_24:
+    BEQ R0, R0, L_i64_ult_done_608b1bd4_12_25
+L_i64_ult_w1ne_608b1bd4_12_24:
     SLTU T3, S2, S1
-L_i64_ult_done_5d61623a_12_25:
+L_i64_ult_done_608b1bd4_12_25:
 ; Spill t142__hi to slot 272
     ADD SC, FP, R0
     ADDI SC, SC, 311
@@ -5524,8 +5518,8 @@ L___rcc_f32_add_103:
     ADD SC, FP, R0
     ADDI SC, SC, 370
     STORE S3, SB, SC
-L_i64_shl_loop_5d61623a_12_26:
-    BEQ S2, R0, L_i64_shl_done_5d61623a_12_27
+L_i64_shl_loop_608b1bd4_12_26:
+    BEQ S2, R0, L_i64_shl_done_608b1bd4_12_27
     SLT S3, T3, R0
     ADD S0, S0, S0
     OR S0, S0, S3
@@ -5537,8 +5531,8 @@ L_i64_shl_loop_5d61623a_12_26:
     OR T5, T5, S3
     ADD S1, S1, S1
     ADDI S2, S2, -1
-    BEQ R0, R0, L_i64_shl_loop_5d61623a_12_26
-L_i64_shl_done_5d61623a_12_27:
+    BEQ R0, R0, L_i64_shl_loop_608b1bd4_12_26
+L_i64_shl_done_608b1bd4_12_27:
 ; Spill t160__w3 to slot 332
     ADD SC, FP, R0
     ADDI SC, SC, 371
@@ -5739,8 +5733,8 @@ L___rcc_f32_add_104:
     ADD SC, FP, R0
     ADDI SC, SC, 399
     STORE T4, SB, SC
-L_i64_shl_loop_5d61623a_12_28:
-    BEQ T0, R0, L_i64_shl_done_5d61623a_12_29
+L_i64_shl_loop_608b1bd4_12_28:
+    BEQ T0, R0, L_i64_shl_done_608b1bd4_12_29
     SLT T4, T3, R0
     ADD S0, S0, S0
     OR S0, S0, T4
@@ -5752,8 +5746,8 @@ L_i64_shl_loop_5d61623a_12_28:
     OR T5, T5, T4
     ADD S1, S1, S1
     ADDI T0, T0, -1
-    BEQ R0, R0, L_i64_shl_loop_5d61623a_12_28
-L_i64_shl_done_5d61623a_12_29:
+    BEQ R0, R0, L_i64_shl_loop_608b1bd4_12_28
+L_i64_shl_done_608b1bd4_12_29:
     STORE S1, SB, T7
     ADDI SC, T7, 1
     STORE T5, SB, SC
@@ -5925,8 +5919,8 @@ L___rcc_f32_add_105:
     ADDI SC, SC, 417
     STORE T5, SB, SC
     SLT T5, T7, R0
-L_i64_shr_loop_5d61623a_12_30:
-    BEQ T0, R0, L_i64_shr_done_5d61623a_12_31
+L_i64_shr_loop_608b1bd4_12_30:
+    BEQ T0, R0, L_i64_shr_done_608b1bd4_12_31
     AND X3, T1, T4
     SRL S3, S3, T4
     SLL X3, X3, S1
@@ -5941,8 +5935,8 @@ L_i64_shr_loop_5d61623a_12_30:
     OR T6, T6, X3
     SRL T7, T7, T4
     ADDI T0, T0, -1
-    BEQ R0, R0, L_i64_shr_loop_5d61623a_12_30
-L_i64_shr_done_5d61623a_12_31:
+    BEQ R0, R0, L_i64_shr_loop_608b1bd4_12_30
+L_i64_shr_done_608b1bd4_12_31:
 ; Spill t176__w1 to slot 379
     ADD SC, FP, R0
     ADDI SC, SC, 418
@@ -6075,8 +6069,7 @@ L___rcc_f32_add_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_sub:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -6226,8 +6219,7 @@ L___rcc_f32_sub_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_mul:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -7060,23 +7052,23 @@ L___rcc_f32_mul_140:
     STORE S2, SB, SC
     LI S2, 16
     SLTU T2, T3, T6
-    BEQ T2, R0, L_i32_lshr_ge32_b8082628_16_0
+    BEQ T2, R0, L_i32_lshr_ge32_b5bfab30_16_0
     SLTU T2, T3, S2
-    BEQ T2, R0, L_i32_lshr_ge16_b8082628_16_1
-    BEQ R0, R0, L_i32_lshr_lt16_b8082628_16_2
-L_i32_lshr_ge32_b8082628_16_0:
+    BEQ T2, R0, L_i32_lshr_ge16_b5bfab30_16_1
+    BEQ R0, R0, L_i32_lshr_lt16_b5bfab30_16_2
+L_i32_lshr_ge32_b5bfab30_16_0:
     LI T7, 0
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_b8082628_16_3
-L_i32_lshr_ge16_b8082628_16_1:
+    BEQ R0, R0, L_i32_lshr_done_b5bfab30_16_3
+L_i32_lshr_ge16_b5bfab30_16_1:
     SUB T2, T3, S2
     SRL T7, T1, T2
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_b8082628_16_3
-L_i32_lshr_lt16_b8082628_16_2:
+    BEQ R0, R0, L_i32_lshr_done_b5bfab30_16_3
+L_i32_lshr_lt16_b5bfab30_16_2:
     ADD T7, S1, R0
     ADD T4, T1, R0
-    BEQ T3, R0, L_i32_lshr_done_b8082628_16_3
+    BEQ T3, R0, L_i32_lshr_done_b5bfab30_16_3
     SRL T7, S1, T3
     SRL T4, T1, T3
     SUB T2, S2, T3
@@ -7086,7 +7078,7 @@ L_i32_lshr_lt16_b8082628_16_2:
     STORE S0, SB, SC
     SLL S0, T1, T2
     OR T7, T7, S0
-L_i32_lshr_done_b8082628_16_3:
+L_i32_lshr_done_b5bfab30_16_3:
 ; Spill t66__hi to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 80
@@ -7157,23 +7149,23 @@ L_i32_lshr_done_b8082628_16_3:
     LI T7, 32
     LI T5, 16
     SLTU T0, T4, T7
-    BEQ T0, R0, L_i32_lshr_ge32_b8082628_16_4
+    BEQ T0, R0, L_i32_lshr_ge32_b5bfab30_16_4
     SLTU T0, T4, T5
-    BEQ T0, R0, L_i32_lshr_ge16_b8082628_16_5
-    BEQ R0, R0, L_i32_lshr_lt16_b8082628_16_6
-L_i32_lshr_ge32_b8082628_16_4:
+    BEQ T0, R0, L_i32_lshr_ge16_b5bfab30_16_5
+    BEQ R0, R0, L_i32_lshr_lt16_b5bfab30_16_6
+L_i32_lshr_ge32_b5bfab30_16_4:
     LI T2, 0
     LI S0, 0
-    BEQ R0, R0, L_i32_lshr_done_b8082628_16_7
-L_i32_lshr_ge16_b8082628_16_5:
+    BEQ R0, R0, L_i32_lshr_done_b5bfab30_16_7
+L_i32_lshr_ge16_b5bfab30_16_5:
     SUB T0, T4, T5
     SRL T2, S2, T0
     LI S0, 0
-    BEQ R0, R0, L_i32_lshr_done_b8082628_16_7
-L_i32_lshr_lt16_b8082628_16_6:
+    BEQ R0, R0, L_i32_lshr_done_b5bfab30_16_7
+L_i32_lshr_lt16_b5bfab30_16_6:
     ADD T2, T6, R0
     ADD S0, S2, R0
-    BEQ T4, R0, L_i32_lshr_done_b8082628_16_7
+    BEQ T4, R0, L_i32_lshr_done_b5bfab30_16_7
     SRL T2, T6, T4
     SRL S0, S2, T4
     SUB T0, T5, T4
@@ -7183,7 +7175,7 @@ L_i32_lshr_lt16_b8082628_16_6:
     STORE S3, SB, SC
     SLL S3, S2, T0
     OR T2, T2, S3
-L_i32_lshr_done_b8082628_16_7:
+L_i32_lshr_done_b5bfab30_16_7:
 ; Spill t70__hi to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 93
@@ -9569,8 +9561,8 @@ L___rcc_f32_mul_146:
     ADD SC, FP, R0
     ADDI SC, SC, 364
     STORE T1, SB, SC
-L_i64_shl_loop_b8082628_16_8:
-    BEQ T0, R0, L_i64_shl_done_b8082628_16_9
+L_i64_shl_loop_b5bfab30_16_8:
+    BEQ T0, R0, L_i64_shl_done_b5bfab30_16_9
     SLT T1, S3, R0
     ADD T5, T5, T5
     OR T5, T5, T1
@@ -9582,8 +9574,8 @@ L_i64_shl_loop_b8082628_16_8:
     OR T7, T7, T1
     ADD S1, S1, S1
     ADDI T0, T0, -1
-    BEQ R0, R0, L_i64_shl_loop_b8082628_16_8
-L_i64_shl_done_b8082628_16_9:
+    BEQ R0, R0, L_i64_shl_loop_b5bfab30_16_8
+L_i64_shl_done_b5bfab30_16_9:
 ; Spill t97__w3 to slot 334
     ADD SC, FP, R0
     ADDI SC, SC, 365
@@ -9762,8 +9754,8 @@ L___rcc_f32_mul_147:
     ADDI SC, SC, 389
     STORE S2, SB, SC
     SLT S2, S0, R0
-L_i64_shr_loop_b8082628_16_10:
-    BEQ S3, R0, L_i64_shr_done_b8082628_16_11
+L_i64_shr_loop_b5bfab30_16_10:
+    BEQ S3, R0, L_i64_shr_done_b5bfab30_16_11
     AND X3, T6, T7
     SRL T3, T3, T7
     SLL X3, X3, S1
@@ -9778,8 +9770,8 @@ L_i64_shr_loop_b8082628_16_10:
     OR T4, T4, X3
     SRL S0, S0, T7
     ADDI S3, S3, -1
-    BEQ R0, R0, L_i64_shr_loop_b8082628_16_10
-L_i64_shr_done_b8082628_16_11:
+    BEQ R0, R0, L_i64_shr_loop_b5bfab30_16_10
+L_i64_shr_done_b5bfab30_16_11:
 ; Spill t101__w1 to slot 359
     ADD SC, FP, R0
     ADDI SC, SC, 390
@@ -9886,8 +9878,8 @@ L___rcc_f32_mul_148:
     ADDI SC, SC, 403
     STORE T0, SB, SC
     SLT T0, T6, R0
-L_i64_shr_loop_b8082628_16_12:
-    BEQ S0, R0, L_i64_shr_done_b8082628_16_13
+L_i64_shr_loop_b5bfab30_16_12:
+    BEQ S0, R0, L_i64_shr_done_b5bfab30_16_13
     AND X3, S2, T1
     SRL S1, S1, T1
     SLL X3, X3, T5
@@ -9902,8 +9894,8 @@ L_i64_shr_loop_b8082628_16_12:
     OR T3, T3, X3
     SRL T6, T6, T1
     ADDI S0, S0, -1
-    BEQ R0, R0, L_i64_shr_loop_b8082628_16_12
-L_i64_shr_done_b8082628_16_13:
+    BEQ R0, R0, L_i64_shr_loop_b5bfab30_16_12
+L_i64_shr_done_b5bfab30_16_13:
 ; Spill t105__w1 to slot 373
     ADD SC, FP, R0
     ADDI SC, SC, 404
@@ -10086,8 +10078,7 @@ L___rcc_f32_mul_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_div:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -10899,23 +10890,23 @@ L___rcc_f32_div_180:
     STORE S2, SB, SC
     LI S2, 16
     SLTU S0, T3, T2
-    BEQ S0, R0, L_i32_lshr_ge32_82dfad62_18_0
+    BEQ S0, R0, L_i32_lshr_ge32_1138618c_18_0
     SLTU S0, T3, S2
-    BEQ S0, R0, L_i32_lshr_ge16_82dfad62_18_1
-    BEQ R0, R0, L_i32_lshr_lt16_82dfad62_18_2
-L_i32_lshr_ge32_82dfad62_18_0:
+    BEQ S0, R0, L_i32_lshr_ge16_1138618c_18_1
+    BEQ R0, R0, L_i32_lshr_lt16_1138618c_18_2
+L_i32_lshr_ge32_1138618c_18_0:
     LI T4, 0
     LI T7, 0
-    BEQ R0, R0, L_i32_lshr_done_82dfad62_18_3
-L_i32_lshr_ge16_82dfad62_18_1:
+    BEQ R0, R0, L_i32_lshr_done_1138618c_18_3
+L_i32_lshr_ge16_1138618c_18_1:
     SUB S0, T3, S2
     SRL T4, T0, S0
     LI T7, 0
-    BEQ R0, R0, L_i32_lshr_done_82dfad62_18_3
-L_i32_lshr_lt16_82dfad62_18_2:
+    BEQ R0, R0, L_i32_lshr_done_1138618c_18_3
+L_i32_lshr_lt16_1138618c_18_2:
     ADD T4, T5, R0
     ADD T7, T0, R0
-    BEQ T3, R0, L_i32_lshr_done_82dfad62_18_3
+    BEQ T3, R0, L_i32_lshr_done_1138618c_18_3
     SRL T4, T5, T3
     SRL T7, T0, T3
     SUB S0, S2, T3
@@ -10925,7 +10916,7 @@ L_i32_lshr_lt16_82dfad62_18_2:
     STORE T6, SB, SC
     SLL T6, T0, S0
     OR T4, T4, T6
-L_i32_lshr_done_82dfad62_18_3:
+L_i32_lshr_done_1138618c_18_3:
 ; Spill t65__hi to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 86
@@ -10996,23 +10987,23 @@ L_i32_lshr_done_82dfad62_18_3:
     LI T4, 32
     LI S1, 16
     SLTU S3, T7, T4
-    BEQ S3, R0, L_i32_lshr_ge32_82dfad62_18_4
+    BEQ S3, R0, L_i32_lshr_ge32_1138618c_18_4
     SLTU S3, T7, S1
-    BEQ S3, R0, L_i32_lshr_ge16_82dfad62_18_5
-    BEQ R0, R0, L_i32_lshr_lt16_82dfad62_18_6
-L_i32_lshr_ge32_82dfad62_18_4:
+    BEQ S3, R0, L_i32_lshr_ge16_1138618c_18_5
+    BEQ R0, R0, L_i32_lshr_lt16_1138618c_18_6
+L_i32_lshr_ge32_1138618c_18_4:
     LI S0, 0
     LI T6, 0
-    BEQ R0, R0, L_i32_lshr_done_82dfad62_18_7
-L_i32_lshr_ge16_82dfad62_18_5:
+    BEQ R0, R0, L_i32_lshr_done_1138618c_18_7
+L_i32_lshr_ge16_1138618c_18_5:
     SUB S3, T7, S1
     SRL S0, S2, S3
     LI T6, 0
-    BEQ R0, R0, L_i32_lshr_done_82dfad62_18_7
-L_i32_lshr_lt16_82dfad62_18_6:
+    BEQ R0, R0, L_i32_lshr_done_1138618c_18_7
+L_i32_lshr_lt16_1138618c_18_6:
     ADD S0, T2, R0
     ADD T6, S2, R0
-    BEQ T7, R0, L_i32_lshr_done_82dfad62_18_7
+    BEQ T7, R0, L_i32_lshr_done_1138618c_18_7
     SRL S0, T2, T7
     SRL T6, S2, T7
     SUB S3, S1, T7
@@ -11022,7 +11013,7 @@ L_i32_lshr_lt16_82dfad62_18_6:
     STORE T1, SB, SC
     SLL T1, S2, S3
     OR S0, S0, T1
-L_i32_lshr_done_82dfad62_18_7:
+L_i32_lshr_done_1138618c_18_7:
 ; Spill t69__hi to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 99
@@ -11377,8 +11368,8 @@ L___rcc_f32_div_186:
     ADD SC, FP, R0
     ADDI SC, SC, 138
     STORE S1, SB, SC
-L_i64_shl_loop_82dfad62_18_8:
-    BEQ S0, R0, L_i64_shl_done_82dfad62_18_9
+L_i64_shl_loop_1138618c_18_8:
+    BEQ S0, R0, L_i64_shl_done_1138618c_18_9
     SLT S1, T1, R0
     ADD S3, S3, S3
     OR S3, S3, S1
@@ -11390,8 +11381,8 @@ L_i64_shl_loop_82dfad62_18_8:
     OR T7, T7, S1
     ADD S2, S2, S2
     ADDI S0, S0, -1
-    BEQ R0, R0, L_i64_shl_loop_82dfad62_18_8
-L_i64_shl_done_82dfad62_18_9:
+    BEQ R0, R0, L_i64_shl_loop_1138618c_18_8
+L_i64_shl_done_1138618c_18_9:
 ; Spill i64_from32_w3_18_f18_op160 to slot 101
     ADD SC, FP, R0
     ADDI SC, SC, 139
@@ -11591,7 +11582,7 @@ L_i64_shl_done_82dfad62_18_9:
     LI X0, 0
     LI X1, 0
     LI T0, 64
-L_i64_udiv_loop_82dfad62_18_10:
+L_i64_udiv_loop_1138618c_18_10:
     SLT T6, T2, R0
     ADD T4, T4, T4
     OR T4, T4, T6
@@ -11625,25 +11616,25 @@ L_i64_udiv_loop_82dfad62_18_10:
     OR RV1, RV1, T6
     ADD RV0, RV0, RV0
     XOR T6, T4, A3
-    BNE T6, R0, L_i64_ult_w3ne_82dfad62_18_14
+    BNE T6, R0, L_i64_ult_w3ne_1138618c_18_14
     XOR T6, T2, A2
-    BNE T6, R0, L_i64_ult_w2ne_82dfad62_18_15
+    BNE T6, R0, L_i64_ult_w2ne_1138618c_18_15
     XOR T6, T5, A1
-    BNE T6, R0, L_i64_ult_w1ne_82dfad62_18_16
+    BNE T6, R0, L_i64_ult_w1ne_1138618c_18_16
     SLTU T6, S3, A0
-    BEQ R0, R0, L_i64_ult_done_82dfad62_18_17
-L_i64_ult_w3ne_82dfad62_18_14:
+    BEQ R0, R0, L_i64_ult_done_1138618c_18_17
+L_i64_ult_w3ne_1138618c_18_14:
     SLTU T6, T4, A3
-    BEQ R0, R0, L_i64_ult_done_82dfad62_18_17
-L_i64_ult_w2ne_82dfad62_18_15:
+    BEQ R0, R0, L_i64_ult_done_1138618c_18_17
+L_i64_ult_w2ne_1138618c_18_15:
     SLTU T6, T2, A2
-    BEQ R0, R0, L_i64_ult_done_82dfad62_18_17
-L_i64_ult_w1ne_82dfad62_18_16:
+    BEQ R0, R0, L_i64_ult_done_1138618c_18_17
+L_i64_ult_w1ne_1138618c_18_16:
     SLTU T6, T5, A1
-L_i64_ult_done_82dfad62_18_17:
-    BNE T6, R0, L_i64_udiv_next_82dfad62_18_12
-    BEQ R0, R0, L_i64_udiv_ge_82dfad62_18_11
-L_i64_udiv_ge_82dfad62_18_11:
+L_i64_ult_done_1138618c_18_17:
+    BNE T6, R0, L_i64_udiv_next_1138618c_18_12
+    BEQ R0, R0, L_i64_udiv_ge_1138618c_18_11
+L_i64_udiv_ge_1138618c_18_11:
     LI SC, 0
     SLTU X2, S3, A0
     SUB X3, S3, A0
@@ -11667,11 +11658,11 @@ L_i64_udiv_ge_82dfad62_18_11:
     OR SC, X2, X3
     LI T6, 1
     OR RV0, RV0, T6
-L_i64_udiv_next_82dfad62_18_12:
+L_i64_udiv_next_1138618c_18_12:
     ADDI T0, T0, -1
-    BEQ T0, R0, L_i64_udiv_done_82dfad62_18_13
-    BEQ R0, R0, L_i64_udiv_loop_82dfad62_18_10
-L_i64_udiv_done_82dfad62_18_13:
+    BEQ T0, R0, L_i64_udiv_done_1138618c_18_13
+    BEQ R0, R0, L_i64_udiv_loop_1138618c_18_10
+L_i64_udiv_done_1138618c_18_13:
 ; Spill t97__w2 to slot 131
     ADD SC, FP, R0
     ADDI SC, SC, 169
@@ -11953,8 +11944,8 @@ L___rcc_f32_div_187:
     ADD SC, FP, R0
     ADDI SC, SC, 213
     STORE T2, SB, SC
-L_i64_shl_loop_82dfad62_18_18:
-    BEQ S3, R0, L_i64_shl_done_82dfad62_18_19
+L_i64_shl_loop_1138618c_18_18:
+    BEQ S3, R0, L_i64_shl_done_1138618c_18_19
     SLT T2, T3, R0
     ADD T1, T1, T1
     OR T1, T1, T2
@@ -11966,8 +11957,8 @@ L_i64_shl_loop_82dfad62_18_18:
     OR S2, S2, T2
     ADD S1, S1, S1
     ADDI S3, S3, -1
-    BEQ R0, R0, L_i64_shl_loop_82dfad62_18_18
-L_i64_shl_done_82dfad62_18_19:
+    BEQ R0, R0, L_i64_shl_loop_1138618c_18_18
+L_i64_shl_done_1138618c_18_19:
     STORE S1, SB, T0
     ADDI SC, T0, 1
     STORE S2, SB, SC
@@ -12158,8 +12149,7 @@ L___rcc_f32_div_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_eq:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -12493,8 +12483,7 @@ L___rcc_f32_eq_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_ne:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -12629,8 +12618,7 @@ L___rcc_f32_ne_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_lt:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -13158,12 +13146,12 @@ L___rcc_f32_lt_220:
     ADDI SC, SC, 57
     STORE T0, SB, SC
     XOR T0, S3, T1
-    BNE T0, R0, L_i32_ult_hine_2b8abf3d_24_0
+    BNE T0, R0, L_i32_ult_hine_ce40fb33_24_0
     SLTU T0, S0, T3
-    BEQ R0, R0, L_i32_ult_done_2b8abf3d_24_1
-L_i32_ult_hine_2b8abf3d_24_0:
+    BEQ R0, R0, L_i32_ult_done_ce40fb33_24_1
+L_i32_ult_hine_ce40fb33_24_0:
     SLTU T0, S3, T1
-L_i32_ult_done_2b8abf3d_24_1:
+L_i32_ult_done_ce40fb33_24_1:
     MOVE RV0, T0
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f32_lt_99999
@@ -13209,12 +13197,12 @@ L___rcc_f32_lt_222:
     ADDI SC, SC, 62
     STORE T2, SB, SC
     XOR T2, T6, S2
-    BNE T2, R0, L_i32_ult_hine_2b8abf3d_24_2
+    BNE T2, R0, L_i32_ult_hine_ce40fb33_24_2
     SLTU T2, T7, S1
-    BEQ R0, R0, L_i32_ult_done_2b8abf3d_24_3
-L_i32_ult_hine_2b8abf3d_24_2:
+    BEQ R0, R0, L_i32_ult_done_ce40fb33_24_3
+L_i32_ult_hine_ce40fb33_24_2:
     SLTU T2, T6, S2
-L_i32_ult_done_2b8abf3d_24_3:
+L_i32_ult_done_ce40fb33_24_3:
     MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f32_lt_99999
@@ -13239,8 +13227,7 @@ L___rcc_f32_lt_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_le:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -13457,8 +13444,7 @@ L___rcc_f32_le_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_gt:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -13585,8 +13571,7 @@ L___rcc_f32_gt_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_ge:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -13713,8 +13698,7 @@ L___rcc_f32_ge_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_from_si:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -13843,12 +13827,12 @@ L___rcc_f32_from_si_232:
     ADDI SC, SC, 23
     STORE S3, SB, SC
     XOR S3, T2, S2
-    BNE S3, R0, L_i32_slt_hine_eea97beb_32_0
+    BNE S3, R0, L_i32_slt_hine_c110bc6a_32_0
     SLTU S3, T3, T1
-    BEQ R0, R0, L_i32_slt_done_eea97beb_32_1
-L_i32_slt_hine_eea97beb_32_0:
+    BEQ R0, R0, L_i32_slt_done_c110bc6a_32_1
+L_i32_slt_hine_c110bc6a_32_0:
     SLT S3, T2, S2
-L_i32_slt_done_eea97beb_32_1:
+L_i32_slt_done_c110bc6a_32_1:
 ; Spill eq_one_32_f32_op8 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -14061,23 +14045,23 @@ L___rcc_f32_from_si_236:
     LI T3, 32
     LI T6, 16
     SLTU S2, T1, T3
-    BEQ S2, R0, L_i32_shl_ge32_eea97beb_32_2
+    BEQ S2, R0, L_i32_shl_ge32_c110bc6a_32_2
     SLTU S2, T1, T6
-    BEQ S2, R0, L_i32_shl_ge16_eea97beb_32_3
-    BEQ R0, R0, L_i32_shl_lt16_eea97beb_32_4
-L_i32_shl_ge32_eea97beb_32_2:
+    BEQ S2, R0, L_i32_shl_ge16_c110bc6a_32_3
+    BEQ R0, R0, L_i32_shl_lt16_c110bc6a_32_4
+L_i32_shl_ge32_c110bc6a_32_2:
     LI T2, 0
     LI T0, 0
-    BEQ R0, R0, L_i32_shl_done_eea97beb_32_5
-L_i32_shl_ge16_eea97beb_32_3:
+    BEQ R0, R0, L_i32_shl_done_c110bc6a_32_5
+L_i32_shl_ge16_c110bc6a_32_3:
     SUB S2, T1, T6
     SLL T0, T5, S2
     LI T2, 0
-    BEQ R0, R0, L_i32_shl_done_eea97beb_32_5
-L_i32_shl_lt16_eea97beb_32_4:
+    BEQ R0, R0, L_i32_shl_done_c110bc6a_32_5
+L_i32_shl_lt16_c110bc6a_32_4:
     ADD T2, T5, R0
     ADD T0, S3, R0
-    BEQ T1, R0, L_i32_shl_done_eea97beb_32_5
+    BEQ T1, R0, L_i32_shl_done_c110bc6a_32_5
     SLL T2, T5, T1
     SLL T0, S3, T1
     SUB S2, T6, T1
@@ -14087,7 +14071,7 @@ L_i32_shl_lt16_eea97beb_32_4:
     STORE S0, SB, SC
     SRL S0, T5, S2
     OR T0, T0, S0
-L_i32_shl_done_eea97beb_32_5:
+L_i32_shl_done_c110bc6a_32_5:
     STORE T2, SB, T4
     ADDI SC, T4, 1
     STORE T0, SB, SC
@@ -14150,23 +14134,23 @@ L___rcc_f32_from_si_237:
     ADDI SC, SC, 52
     STORE S0, SB, SC
     SLTU S0, T1, T6
-    BEQ S0, R0, L_i32_lshr_ge32_eea97beb_32_6
+    BEQ S0, R0, L_i32_lshr_ge32_c110bc6a_32_6
     SLTU S0, T1, S2
-    BEQ S0, R0, L_i32_lshr_ge16_eea97beb_32_7
-    BEQ R0, R0, L_i32_lshr_lt16_eea97beb_32_8
-L_i32_lshr_ge32_eea97beb_32_6:
+    BEQ S0, R0, L_i32_lshr_ge16_c110bc6a_32_7
+    BEQ R0, R0, L_i32_lshr_lt16_c110bc6a_32_8
+L_i32_lshr_ge32_c110bc6a_32_6:
     LI S3, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_eea97beb_32_9
-L_i32_lshr_ge16_eea97beb_32_7:
+    BEQ R0, R0, L_i32_lshr_done_c110bc6a_32_9
+L_i32_lshr_ge16_c110bc6a_32_7:
     SUB S0, T1, S2
     SRL S3, T7, S0
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_eea97beb_32_9
-L_i32_lshr_lt16_eea97beb_32_8:
+    BEQ R0, R0, L_i32_lshr_done_c110bc6a_32_9
+L_i32_lshr_lt16_c110bc6a_32_8:
     ADD S3, S1, R0
     ADD T3, T7, R0
-    BEQ T1, R0, L_i32_lshr_done_eea97beb_32_9
+    BEQ T1, R0, L_i32_lshr_done_c110bc6a_32_9
     SRL S3, S1, T1
     SRL T3, T7, T1
     SUB S0, S2, T1
@@ -14176,7 +14160,7 @@ L_i32_lshr_lt16_eea97beb_32_8:
     STORE T2, SB, SC
     SLL T2, T7, S0
     OR S3, S3, T2
-L_i32_lshr_done_eea97beb_32_9:
+L_i32_lshr_done_c110bc6a_32_9:
     STORE S3, SB, T4
     ADDI SC, T4, 1
     STORE T3, SB, SC
@@ -14322,8 +14306,7 @@ L___rcc_f32_from_si_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_from_ui:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -14520,23 +14503,23 @@ L___rcc_f32_from_ui_243:
     LI T0, 32
     LI T5, 16
     SLTU S1, T2, T0
-    BEQ S1, R0, L_i32_shl_ge32_fc8a848_34_0
+    BEQ S1, R0, L_i32_shl_ge32_bcceb1d4_34_0
     SLTU S1, T2, T5
-    BEQ S1, R0, L_i32_shl_ge16_fc8a848_34_1
-    BEQ R0, R0, L_i32_shl_lt16_fc8a848_34_2
-L_i32_shl_ge32_fc8a848_34_0:
+    BEQ S1, R0, L_i32_shl_ge16_bcceb1d4_34_1
+    BEQ R0, R0, L_i32_shl_lt16_bcceb1d4_34_2
+L_i32_shl_ge32_bcceb1d4_34_0:
     LI S2, 0
     LI T1, 0
-    BEQ R0, R0, L_i32_shl_done_fc8a848_34_3
-L_i32_shl_ge16_fc8a848_34_1:
+    BEQ R0, R0, L_i32_shl_done_bcceb1d4_34_3
+L_i32_shl_ge16_bcceb1d4_34_1:
     SUB S1, T2, T5
     SLL T1, S0, S1
     LI S2, 0
-    BEQ R0, R0, L_i32_shl_done_fc8a848_34_3
-L_i32_shl_lt16_fc8a848_34_2:
+    BEQ R0, R0, L_i32_shl_done_bcceb1d4_34_3
+L_i32_shl_lt16_bcceb1d4_34_2:
     ADD S2, S0, R0
     ADD T1, T7, R0
-    BEQ T2, R0, L_i32_shl_done_fc8a848_34_3
+    BEQ T2, R0, L_i32_shl_done_bcceb1d4_34_3
     SLL S2, S0, T2
     SLL T1, T7, T2
     SUB S1, T5, T2
@@ -14546,7 +14529,7 @@ L_i32_shl_lt16_fc8a848_34_2:
     STORE T6, SB, SC
     SRL T6, S0, S1
     OR T1, T1, T6
-L_i32_shl_done_fc8a848_34_3:
+L_i32_shl_done_bcceb1d4_34_3:
     STORE S2, SB, T4
     ADDI SC, T4, 1
     STORE T1, SB, SC
@@ -14608,23 +14591,23 @@ L___rcc_f32_from_ui_244:
     ADDI SC, SC, 33
     STORE T6, SB, SC
     SLTU T6, T2, T5
-    BEQ T6, R0, L_i32_lshr_ge32_fc8a848_34_4
+    BEQ T6, R0, L_i32_lshr_ge32_bcceb1d4_34_4
     SLTU T6, T2, S1
-    BEQ T6, R0, L_i32_lshr_ge16_fc8a848_34_5
-    BEQ R0, R0, L_i32_lshr_lt16_fc8a848_34_6
-L_i32_lshr_ge32_fc8a848_34_4:
+    BEQ T6, R0, L_i32_lshr_ge16_bcceb1d4_34_5
+    BEQ R0, R0, L_i32_lshr_lt16_bcceb1d4_34_6
+L_i32_lshr_ge32_bcceb1d4_34_4:
     LI T7, 0
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_fc8a848_34_7
-L_i32_lshr_ge16_fc8a848_34_5:
+    BEQ R0, R0, L_i32_lshr_done_bcceb1d4_34_7
+L_i32_lshr_ge16_bcceb1d4_34_5:
     SUB T6, T2, S1
     SRL T7, T3, T6
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_fc8a848_34_7
-L_i32_lshr_lt16_fc8a848_34_6:
+    BEQ R0, R0, L_i32_lshr_done_bcceb1d4_34_7
+L_i32_lshr_lt16_bcceb1d4_34_6:
     ADD T7, S3, R0
     ADD T0, T3, R0
-    BEQ T2, R0, L_i32_lshr_done_fc8a848_34_7
+    BEQ T2, R0, L_i32_lshr_done_bcceb1d4_34_7
     SRL T7, S3, T2
     SRL T0, T3, T2
     SUB T6, S1, T2
@@ -14634,7 +14617,7 @@ L_i32_lshr_lt16_fc8a848_34_6:
     STORE S2, SB, SC
     SLL S2, T3, T6
     OR T7, T7, S2
-L_i32_lshr_done_fc8a848_34_7:
+L_i32_lshr_done_bcceb1d4_34_7:
     STORE T7, SB, T4
     ADDI SC, T4, 1
     STORE T0, SB, SC
@@ -14771,8 +14754,7 @@ L___rcc_f32_from_ui_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_from_i64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -14982,22 +14964,22 @@ L___rcc_f32_from_i64_249:
     ADDI SC, SC, 45
     STORE T2, SB, SC
     XOR T2, T3, T1
-    BNE T2, R0, L_i64_slt_w3ne_cb4a1d10_36_0
+    BNE T2, R0, L_i64_slt_w3ne_b5688173_36_0
     XOR T2, T4, S3
-    BNE T2, R0, L_i64_slt_w2ne_cb4a1d10_36_1
+    BNE T2, R0, L_i64_slt_w2ne_b5688173_36_1
     XOR T2, S2, T0
-    BNE T2, R0, L_i64_slt_w1ne_cb4a1d10_36_2
+    BNE T2, R0, L_i64_slt_w1ne_b5688173_36_2
     SLTU T2, S1, T5
-    BEQ R0, R0, L_i64_slt_done_cb4a1d10_36_3
-L_i64_slt_w3ne_cb4a1d10_36_0:
+    BEQ R0, R0, L_i64_slt_done_b5688173_36_3
+L_i64_slt_w3ne_b5688173_36_0:
     SLT T2, T3, T1
-    BEQ R0, R0, L_i64_slt_done_cb4a1d10_36_3
-L_i64_slt_w2ne_cb4a1d10_36_1:
+    BEQ R0, R0, L_i64_slt_done_b5688173_36_3
+L_i64_slt_w2ne_b5688173_36_1:
     SLTU T2, T4, S3
-    BEQ R0, R0, L_i64_slt_done_cb4a1d10_36_3
-L_i64_slt_w1ne_cb4a1d10_36_2:
+    BEQ R0, R0, L_i64_slt_done_b5688173_36_3
+L_i64_slt_w1ne_b5688173_36_2:
     SLTU T2, S2, T0
-L_i64_slt_done_cb4a1d10_36_3:
+L_i64_slt_done_b5688173_36_3:
 ; Spill i64_c1_36_f36_op19 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 46
@@ -15362,8 +15344,8 @@ L___rcc_f32_from_i64_253:
     ADDI SC, SC, 85
     STORE T2, SB, SC
     SLT T2, T0, R0
-L_i64_shr_loop_cb4a1d10_36_4:
-    BEQ T7, R0, L_i64_shr_done_cb4a1d10_36_5
+L_i64_shr_loop_b5688173_36_4:
+    BEQ T7, R0, L_i64_shr_done_b5688173_36_5
     AND X3, S3, T1
     SRL T6, T6, T1
     SLL X3, X3, T5
@@ -15378,8 +15360,8 @@ L_i64_shr_loop_cb4a1d10_36_4:
     OR S0, S0, X3
     SRL T0, T0, T1
     ADDI T7, T7, -1
-    BEQ R0, R0, L_i64_shr_loop_cb4a1d10_36_4
-L_i64_shr_done_cb4a1d10_36_5:
+    BEQ R0, R0, L_i64_shr_loop_b5688173_36_4
+L_i64_shr_done_b5688173_36_5:
 ; Spill t28__w1 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 86
@@ -15473,8 +15455,8 @@ L___rcc_f32_from_i64_254:
     ADD T0, T5, R0
     LI X3, 63
     AND T0, T0, X3
-L_i64_shl_loop_cb4a1d10_36_6:
-    BEQ T0, R0, L_i64_shl_done_cb4a1d10_36_7
+L_i64_shl_loop_b5688173_36_6:
+    BEQ T0, R0, L_i64_shl_done_b5688173_36_7
     SLT T4, S3, R0
     ADD S0, S0, S0
     OR S0, S0, T4
@@ -15486,8 +15468,8 @@ L_i64_shl_loop_cb4a1d10_36_6:
     OR T6, T6, T4
     ADD T2, T2, T2
     ADDI T0, T0, -1
-    BEQ R0, R0, L_i64_shl_loop_cb4a1d10_36_6
-L_i64_shl_done_cb4a1d10_36_7:
+    BEQ R0, R0, L_i64_shl_loop_b5688173_36_6
+L_i64_shl_done_b5688173_36_7:
 ; Recompute alloca t3 at FP+6
     ADD T1, FP, R0
     ADDI T1, T1, 6
@@ -15687,8 +15669,7 @@ L___rcc_f32_from_i64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_from_u64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -15990,8 +15971,8 @@ L___rcc_f32_from_u64_260:
     ADDI SC, SC, 45
     STORE T3, SB, SC
     SLT T3, T4, R0
-L_i64_shr_loop_646ffbf_38_0:
-    BEQ S2, R0, L_i64_shr_done_646ffbf_38_1
+L_i64_shr_loop_3cacba9a_38_0:
+    BEQ S2, R0, L_i64_shr_done_3cacba9a_38_1
     AND X3, S0, S1
     SRL T7, T7, S1
     SLL X3, X3, T5
@@ -16006,8 +15987,8 @@ L_i64_shr_loop_646ffbf_38_0:
     OR T0, T0, X3
     SRL T4, T4, S1
     ADDI S2, S2, -1
-    BEQ R0, R0, L_i64_shr_loop_646ffbf_38_0
-L_i64_shr_done_646ffbf_38_1:
+    BEQ R0, R0, L_i64_shr_loop_3cacba9a_38_0
+L_i64_shr_done_3cacba9a_38_1:
 ; Spill t17__w1 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 46
@@ -16099,8 +16080,8 @@ L___rcc_f32_from_u64_261:
     ADD T4, T5, R0
     LI X3, 63
     AND T4, T4, X3
-L_i64_shl_loop_646ffbf_38_2:
-    BEQ T4, R0, L_i64_shl_done_646ffbf_38_3
+L_i64_shl_loop_3cacba9a_38_2:
+    BEQ T4, R0, L_i64_shl_done_3cacba9a_38_3
     SLT S3, S0, R0
     ADD T0, T0, T0
     OR T0, T0, S3
@@ -16112,8 +16093,8 @@ L_i64_shl_loop_646ffbf_38_2:
     OR T7, T7, S3
     ADD T3, T3, T3
     ADDI T4, T4, -1
-    BEQ R0, R0, L_i64_shl_loop_646ffbf_38_2
-L_i64_shl_done_646ffbf_38_3:
+    BEQ R0, R0, L_i64_shl_loop_3cacba9a_38_2
+L_i64_shl_done_3cacba9a_38_3:
 ; Recompute alloca t1 at FP+0
     ADD S1, FP, R0
     STORE T3, SB, S1
@@ -16303,8 +16284,7 @@ L___rcc_f32_from_u64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_to_si:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -16466,23 +16446,23 @@ L___rcc_f32_to_si_266:
     STORE S2, SB, SC
     LI S2, 16
     SLTU T5, T1, S0
-    BEQ T5, R0, L_i32_lshr_ge32_a535e695_40_0
+    BEQ T5, R0, L_i32_lshr_ge32_80e6717c_40_0
     SLTU T5, T1, S2
-    BEQ T5, R0, L_i32_lshr_ge16_a535e695_40_1
-    BEQ R0, R0, L_i32_lshr_lt16_a535e695_40_2
-L_i32_lshr_ge32_a535e695_40_0:
+    BEQ T5, R0, L_i32_lshr_ge16_80e6717c_40_1
+    BEQ R0, R0, L_i32_lshr_lt16_80e6717c_40_2
+L_i32_lshr_ge32_80e6717c_40_0:
     LI S1, 0
     LI T2, 0
-    BEQ R0, R0, L_i32_lshr_done_a535e695_40_3
-L_i32_lshr_ge16_a535e695_40_1:
+    BEQ R0, R0, L_i32_lshr_done_80e6717c_40_3
+L_i32_lshr_ge16_80e6717c_40_1:
     SUB T5, T1, S2
     SRL S1, T3, T5
     LI T2, 0
-    BEQ R0, R0, L_i32_lshr_done_a535e695_40_3
-L_i32_lshr_lt16_a535e695_40_2:
+    BEQ R0, R0, L_i32_lshr_done_80e6717c_40_3
+L_i32_lshr_lt16_80e6717c_40_2:
     ADD S1, T4, R0
     ADD T2, T3, R0
-    BEQ T1, R0, L_i32_lshr_done_a535e695_40_3
+    BEQ T1, R0, L_i32_lshr_done_80e6717c_40_3
     SRL S1, T4, T1
     SRL T2, T3, T1
     SUB T5, S2, T1
@@ -16492,7 +16472,7 @@ L_i32_lshr_lt16_a535e695_40_2:
     STORE S3, SB, SC
     SLL S3, T3, T5
     OR S1, S1, S3
-L_i32_lshr_done_a535e695_40_3:
+L_i32_lshr_done_80e6717c_40_3:
 ; Spill t14__hi to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 33
@@ -16869,23 +16849,23 @@ L___rcc_f32_to_si_282:
     ADDI SC, SC, 69
     STORE T4, SB, SC
     SLTU T4, T5, T6
-    BEQ T4, R0, L_i32_shl_ge32_a535e695_40_4
+    BEQ T4, R0, L_i32_shl_ge32_80e6717c_40_4
     SLTU T4, T5, T1
-    BEQ T4, R0, L_i32_shl_ge16_a535e695_40_5
-    BEQ R0, R0, L_i32_shl_lt16_a535e695_40_6
-L_i32_shl_ge32_a535e695_40_4:
+    BEQ T4, R0, L_i32_shl_ge16_80e6717c_40_5
+    BEQ R0, R0, L_i32_shl_lt16_80e6717c_40_6
+L_i32_shl_ge32_80e6717c_40_4:
     LI S3, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_shl_done_a535e695_40_7
-L_i32_shl_ge16_a535e695_40_5:
+    BEQ R0, R0, L_i32_shl_done_80e6717c_40_7
+L_i32_shl_ge16_80e6717c_40_5:
     SUB T4, T5, T1
     SLL T3, T7, T4
     LI S3, 0
-    BEQ R0, R0, L_i32_shl_done_a535e695_40_7
-L_i32_shl_lt16_a535e695_40_6:
+    BEQ R0, R0, L_i32_shl_done_80e6717c_40_7
+L_i32_shl_lt16_80e6717c_40_6:
     ADD S3, T7, R0
     ADD T3, T2, R0
-    BEQ T5, R0, L_i32_shl_done_a535e695_40_7
+    BEQ T5, R0, L_i32_shl_done_80e6717c_40_7
     SLL S3, T7, T5
     SLL T3, T2, T5
     SUB T4, T1, T5
@@ -16895,7 +16875,7 @@ L_i32_shl_lt16_a535e695_40_6:
     STORE S2, SB, SC
     SRL S2, T7, T4
     OR T3, T3, S2
-L_i32_shl_done_a535e695_40_7:
+L_i32_shl_done_80e6717c_40_7:
 ; Spill ne_xlo_40_f40_op64 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 71
@@ -17000,23 +16980,23 @@ L___rcc_f32_to_si_287:
     ADDI SC, SC, 80
     STORE T3, SB, SC
     SLTU T3, T1, S2
-    BEQ T3, R0, L_i32_lshr_ge32_a535e695_40_8
+    BEQ T3, R0, L_i32_lshr_ge32_80e6717c_40_8
     SLTU T3, T1, S3
-    BEQ T3, R0, L_i32_lshr_ge16_a535e695_40_9
-    BEQ R0, R0, L_i32_lshr_lt16_a535e695_40_10
-L_i32_lshr_ge32_a535e695_40_8:
+    BEQ T3, R0, L_i32_lshr_ge16_80e6717c_40_9
+    BEQ R0, R0, L_i32_lshr_lt16_80e6717c_40_10
+L_i32_lshr_ge32_80e6717c_40_8:
     LI T6, 0
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_a535e695_40_11
-L_i32_lshr_ge16_a535e695_40_9:
+    BEQ R0, R0, L_i32_lshr_done_80e6717c_40_11
+L_i32_lshr_ge16_80e6717c_40_9:
     SUB T3, T1, S3
     SRL T6, T0, T3
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_a535e695_40_11
-L_i32_lshr_lt16_a535e695_40_10:
+    BEQ R0, R0, L_i32_lshr_done_80e6717c_40_11
+L_i32_lshr_lt16_80e6717c_40_10:
     ADD T6, S0, R0
     ADD T4, T0, R0
-    BEQ T1, R0, L_i32_lshr_done_a535e695_40_11
+    BEQ T1, R0, L_i32_lshr_done_80e6717c_40_11
     SRL T6, S0, T1
     SRL T4, T0, T1
     SUB T3, S3, T1
@@ -17026,7 +17006,7 @@ L_i32_lshr_lt16_a535e695_40_10:
     STORE T2, SB, SC
     SLL T2, T0, T3
     OR T6, T6, T2
-L_i32_lshr_done_a535e695_40_11:
+L_i32_lshr_done_80e6717c_40_11:
 ; Spill t48__hi to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 82
@@ -17193,8 +17173,7 @@ L___rcc_f32_to_si_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_to_ui:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -17282,12 +17261,12 @@ L___rcc_f32_to_ui_291:
     LI T0, 0
     LI S3, 0
     XOR S2, T1, S3
-    BNE S2, R0, L_i32_slt_hine_e62993e5_42_0
+    BNE S2, R0, L_i32_slt_hine_b31c5cd6_42_0
     SLTU S2, T2, T0
-    BEQ R0, R0, L_i32_slt_done_e62993e5_42_1
-L_i32_slt_hine_e62993e5_42_0:
+    BEQ R0, R0, L_i32_slt_done_b31c5cd6_42_1
+L_i32_slt_hine_b31c5cd6_42_0:
     SLT S2, T1, S3
-L_i32_slt_done_e62993e5_42_1:
+L_i32_slt_done_b31c5cd6_42_1:
     LI S0, 0
     XOR S1, S2, S0
     LI T7, 0
@@ -17340,8 +17319,7 @@ L___rcc_f32_to_ui_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_to_i64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -17446,8 +17424,7 @@ L___rcc_f32_to_i64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_to_u64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -17550,8 +17527,7 @@ L___rcc_f32_to_u64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f64_isnan:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -17886,8 +17862,7 @@ L_f64_isnan_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f64_isinf:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -18227,8 +18202,7 @@ L_f64_isinf_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f64_iszero:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -18470,8 +18444,7 @@ L_f64_iszero_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 f64_pack:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -18762,8 +18735,8 @@ L_f64_pack_312:
     ADD SC, FP, R0
     ADDI SC, SC, 48
     STORE T6, SB, SC
-L_i64_shl_loop_648f6812_54_0:
-    BEQ T7, R0, L_i64_shl_done_648f6812_54_1
+L_i64_shl_loop_3d0b22c_54_0:
+    BEQ T7, R0, L_i64_shl_done_3d0b22c_54_1
     SLT T6, S2, R0
     ADD T1, T1, T1
     OR T1, T1, T6
@@ -18775,8 +18748,8 @@ L_i64_shl_loop_648f6812_54_0:
     OR S1, S1, T6
     ADD T0, T0, T0
     ADDI T7, T7, -1
-    BEQ R0, R0, L_i64_shl_loop_648f6812_54_0
-L_i64_shl_done_648f6812_54_1:
+    BEQ R0, R0, L_i64_shl_loop_3d0b22c_54_0
+L_i64_shl_done_3d0b22c_54_1:
 ; Spill i64_from16_w3_54_f54_op33 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 49
@@ -19012,8 +18985,7 @@ L_f64_pack_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_from_f32:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -19160,8 +19132,8 @@ L___rcc_f64_from_f32_316:
     ADD SC, FP, R0
     ADDI SC, SC, 32
     STORE T3, SB, SC
-L_i64_shl_loop_6d1bdab0_56_0:
-    BEQ T4, R0, L_i64_shl_done_6d1bdab0_56_1
+L_i64_shl_loop_827a087d_56_0:
+    BEQ T4, R0, L_i64_shl_done_827a087d_56_1
     SLT T3, T6, R0
     ADD T5, T5, T5
     OR T5, T5, T3
@@ -19173,8 +19145,8 @@ L_i64_shl_loop_6d1bdab0_56_0:
     OR T7, T7, T3
     ADD S0, S0, S0
     ADDI T4, T4, -1
-    BEQ R0, R0, L_i64_shl_loop_6d1bdab0_56_0
-L_i64_shl_done_6d1bdab0_56_1:
+    BEQ R0, R0, L_i64_shl_loop_827a087d_56_0
+L_i64_shl_done_827a087d_56_1:
 ; Spill i64_from32_w3_56_f56_op13 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 33
@@ -19256,23 +19228,23 @@ L_i64_shl_done_6d1bdab0_56_1:
     STORE S3, SB, SC
     LI S3, 16
     SLTU T2, T0, T1
-    BEQ T2, R0, L_i32_lshr_ge32_6d1bdab0_56_2
+    BEQ T2, R0, L_i32_lshr_ge32_827a087d_56_2
     SLTU T2, T0, S3
-    BEQ T2, R0, L_i32_lshr_ge16_6d1bdab0_56_3
-    BEQ R0, R0, L_i32_lshr_lt16_6d1bdab0_56_4
-L_i32_lshr_ge32_6d1bdab0_56_2:
+    BEQ T2, R0, L_i32_lshr_ge16_827a087d_56_3
+    BEQ R0, R0, L_i32_lshr_lt16_827a087d_56_4
+L_i32_lshr_ge32_827a087d_56_2:
     LI T6, 0
     LI T5, 0
-    BEQ R0, R0, L_i32_lshr_done_6d1bdab0_56_5
-L_i32_lshr_ge16_6d1bdab0_56_3:
+    BEQ R0, R0, L_i32_lshr_done_827a087d_56_5
+L_i32_lshr_ge16_827a087d_56_3:
     SUB T2, T0, S3
     SRL T6, T7, T2
     LI T5, 0
-    BEQ R0, R0, L_i32_lshr_done_6d1bdab0_56_5
-L_i32_lshr_lt16_6d1bdab0_56_4:
+    BEQ R0, R0, L_i32_lshr_done_827a087d_56_5
+L_i32_lshr_lt16_827a087d_56_4:
     ADD T6, S0, R0
     ADD T5, T7, R0
-    BEQ T0, R0, L_i32_lshr_done_6d1bdab0_56_5
+    BEQ T0, R0, L_i32_lshr_done_827a087d_56_5
     SRL T6, S0, T0
     SRL T5, T7, T0
     SUB T2, S3, T0
@@ -19282,7 +19254,7 @@ L_i32_lshr_lt16_6d1bdab0_56_4:
     STORE S2, SB, SC
     SLL S2, T7, T2
     OR T6, T6, S2
-L_i32_lshr_done_6d1bdab0_56_5:
+L_i32_lshr_done_827a087d_56_5:
 ; Spill t14__hi to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 48
@@ -19704,29 +19676,29 @@ L___rcc_f64_from_f32_325:
     LI S2, 32
     LI S0, 16
     SLTU T2, T0, S2
-    BEQ T2, R0, L_i32_shl_ge32_6d1bdab0_56_6
+    BEQ T2, R0, L_i32_shl_ge32_827a087d_56_6
     SLTU T2, T0, S0
-    BEQ T2, R0, L_i32_shl_ge16_6d1bdab0_56_7
-    BEQ R0, R0, L_i32_shl_lt16_6d1bdab0_56_8
-L_i32_shl_ge32_6d1bdab0_56_6:
+    BEQ T2, R0, L_i32_shl_ge16_827a087d_56_7
+    BEQ R0, R0, L_i32_shl_lt16_827a087d_56_8
+L_i32_shl_ge32_827a087d_56_6:
     LI T6, 0
     LI T5, 0
-    BEQ R0, R0, L_i32_shl_done_6d1bdab0_56_9
-L_i32_shl_ge16_6d1bdab0_56_7:
+    BEQ R0, R0, L_i32_shl_done_827a087d_56_9
+L_i32_shl_ge16_827a087d_56_7:
     SUB T2, T0, S0
     SLL T5, T1, T2
     LI T6, 0
-    BEQ R0, R0, L_i32_shl_done_6d1bdab0_56_9
-L_i32_shl_lt16_6d1bdab0_56_8:
+    BEQ R0, R0, L_i32_shl_done_827a087d_56_9
+L_i32_shl_lt16_827a087d_56_8:
     ADD T6, T1, R0
     ADD T5, S3, R0
-    BEQ T0, R0, L_i32_shl_done_6d1bdab0_56_9
+    BEQ T0, R0, L_i32_shl_done_827a087d_56_9
     SLL T6, T1, T0
     SLL T5, S3, T0
     SUB T2, S0, T0
     SRL T7, T1, T2
     OR T5, T5, T7
-L_i32_shl_done_6d1bdab0_56_9:
+L_i32_shl_done_827a087d_56_9:
     STORE T6, SB, S1
     ADDI SC, S1, 1
     STORE T5, SB, SC
@@ -19883,8 +19855,8 @@ L___rcc_f64_from_f32_322:
     ADD SC, FP, R0
     ADDI SC, SC, 121
     STORE T1, SB, SC
-L_i64_shl_loop_6d1bdab0_56_10:
-    BEQ T5, R0, L_i64_shl_done_6d1bdab0_56_11
+L_i64_shl_loop_827a087d_56_10:
+    BEQ T5, R0, L_i64_shl_done_827a087d_56_11
     SLT T1, T3, R0
     ADD S1, S1, S1
     OR S1, S1, T1
@@ -19896,8 +19868,8 @@ L_i64_shl_loop_6d1bdab0_56_10:
     OR T4, T4, T1
     ADD T7, T7, T7
     ADDI T5, T5, -1
-    BEQ R0, R0, L_i64_shl_loop_6d1bdab0_56_10
-L_i64_shl_done_6d1bdab0_56_11:
+    BEQ R0, R0, L_i64_shl_loop_827a087d_56_10
+L_i64_shl_done_827a087d_56_11:
 ; Spill i64_from32_w3_56_f56_op93 to slot 100
     ADD SC, FP, R0
     ADDI SC, SC, 122
@@ -20109,8 +20081,7 @@ L___rcc_f64_from_f32_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f32_from_f64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -20295,8 +20266,8 @@ L___rcc_f32_from_f64_329:
     ADDI SC, SC, 37
     STORE T6, SB, SC
     SLT T6, T2, R0
-L_i64_shr_loop_9060d1ac_58_0:
-    BEQ T0, R0, L_i64_shr_done_9060d1ac_58_1
+L_i64_shr_loop_b5d70d6f_58_0:
+    BEQ T0, R0, L_i64_shr_done_b5d70d6f_58_1
     AND X3, T3, S3
     SRL T4, T4, S3
     SLL X3, X3, S0
@@ -20311,8 +20282,8 @@ L_i64_shr_loop_9060d1ac_58_0:
     OR T7, T7, X3
     SRL T2, T2, S3
     ADDI T0, T0, -1
-    BEQ R0, R0, L_i64_shr_loop_9060d1ac_58_0
-L_i64_shr_done_9060d1ac_58_1:
+    BEQ R0, R0, L_i64_shr_loop_b5d70d6f_58_0
+L_i64_shr_done_b5d70d6f_58_1:
 ; Spill t10__w1 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 38
@@ -20465,8 +20436,8 @@ L_i64_shr_done_9060d1ac_58_1:
     ADDI SC, SC, 64
     STORE T0, SB, SC
     SLT T0, T2, R0
-L_i64_shr_loop_9060d1ac_58_2:
-    BEQ S2, R0, L_i64_shr_done_9060d1ac_58_3
+L_i64_shr_loop_b5d70d6f_58_2:
+    BEQ S2, R0, L_i64_shr_done_b5d70d6f_58_3
     AND X3, T3, T5
     SRL T4, T4, T5
     SLL X3, X3, T1
@@ -20481,8 +20452,8 @@ L_i64_shr_loop_9060d1ac_58_2:
     OR T7, T7, X3
     SRL T2, T2, T5
     ADDI S2, S2, -1
-    BEQ R0, R0, L_i64_shr_loop_9060d1ac_58_2
-L_i64_shr_done_9060d1ac_58_3:
+    BEQ R0, R0, L_i64_shr_loop_b5d70d6f_58_2
+L_i64_shr_done_b5d70d6f_58_3:
 ; Spill t15__w1 to slot 44
     ADD SC, FP, R0
     ADDI SC, SC, 65
@@ -20772,8 +20743,8 @@ L___rcc_f32_from_f64_335:
     ADDI SC, SC, 98
     STORE S0, SB, SC
     SLT S0, T2, R0
-L_i64_shr_loop_9060d1ac_58_4:
-    BEQ T0, R0, L_i64_shr_done_9060d1ac_58_5
+L_i64_shr_loop_b5d70d6f_58_4:
+    BEQ T0, R0, L_i64_shr_done_b5d70d6f_58_5
     AND X3, S1, T7
     SRL T6, T6, T7
     SLL X3, X3, S3
@@ -20788,8 +20759,8 @@ L_i64_shr_loop_9060d1ac_58_4:
     OR T3, T3, X3
     SRL T2, T2, T7
     ADDI T0, T0, -1
-    BEQ R0, R0, L_i64_shr_loop_9060d1ac_58_4
-L_i64_shr_done_9060d1ac_58_5:
+    BEQ R0, R0, L_i64_shr_loop_b5d70d6f_58_4
+L_i64_shr_done_b5d70d6f_58_5:
 ; Spill t32__w1 to slot 78
     ADD SC, FP, R0
     ADDI SC, SC, 99
@@ -20949,8 +20920,7 @@ L___rcc_f32_from_f64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_add:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -21229,8 +21199,7 @@ L___rcc_f64_add_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_sub:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -21509,8 +21478,7 @@ L___rcc_f64_sub_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_mul:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -21789,8 +21757,7 @@ L___rcc_f64_mul_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_div:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -22069,8 +22036,7 @@ L___rcc_f64_div_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_eq:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -22514,8 +22480,7 @@ L___rcc_f64_eq_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_ne:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -22716,8 +22681,7 @@ L___rcc_f64_ne_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_lt:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -23551,22 +23515,22 @@ L___rcc_f64_lt_370:
     ADDI SC, SC, 115
     STORE S1, SB, SC
     XOR S1, S0, T0
-    BNE S1, R0, L_i64_ult_w3ne_f31f299_72_0
+    BNE S1, R0, L_i64_ult_w3ne_7941106f_72_0
     XOR S1, T4, T7
-    BNE S1, R0, L_i64_ult_w2ne_f31f299_72_1
+    BNE S1, R0, L_i64_ult_w2ne_7941106f_72_1
     XOR S1, T5, T2
-    BNE S1, R0, L_i64_ult_w1ne_f31f299_72_2
+    BNE S1, R0, L_i64_ult_w1ne_7941106f_72_2
     SLTU S1, T6, T3
-    BEQ R0, R0, L_i64_ult_done_f31f299_72_3
-L_i64_ult_w3ne_f31f299_72_0:
+    BEQ R0, R0, L_i64_ult_done_7941106f_72_3
+L_i64_ult_w3ne_7941106f_72_0:
     SLTU S1, S0, T0
-    BEQ R0, R0, L_i64_ult_done_f31f299_72_3
-L_i64_ult_w2ne_f31f299_72_1:
+    BEQ R0, R0, L_i64_ult_done_7941106f_72_3
+L_i64_ult_w2ne_7941106f_72_1:
     SLTU S1, T4, T7
-    BEQ R0, R0, L_i64_ult_done_f31f299_72_3
-L_i64_ult_w1ne_f31f299_72_2:
+    BEQ R0, R0, L_i64_ult_done_7941106f_72_3
+L_i64_ult_w1ne_7941106f_72_2:
     SLTU S1, T5, T2
-L_i64_ult_done_f31f299_72_3:
+L_i64_ult_done_7941106f_72_3:
     MOVE RV0, S1
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f64_lt_99999
@@ -23636,22 +23600,22 @@ L___rcc_f64_lt_372:
     ADDI SC, SC, 124
     STORE S0, SB, SC
     XOR S0, T2, T4
-    BNE S0, R0, L_i64_ult_w3ne_f31f299_72_4
+    BNE S0, R0, L_i64_ult_w3ne_7941106f_72_4
     XOR S0, T3, T5
-    BNE S0, R0, L_i64_ult_w2ne_f31f299_72_5
+    BNE S0, R0, L_i64_ult_w2ne_7941106f_72_5
     XOR S0, S3, T6
-    BNE S0, R0, L_i64_ult_w1ne_f31f299_72_6
+    BNE S0, R0, L_i64_ult_w1ne_7941106f_72_6
     SLTU S0, S2, T0
-    BEQ R0, R0, L_i64_ult_done_f31f299_72_7
-L_i64_ult_w3ne_f31f299_72_4:
+    BEQ R0, R0, L_i64_ult_done_7941106f_72_7
+L_i64_ult_w3ne_7941106f_72_4:
     SLTU S0, T2, T4
-    BEQ R0, R0, L_i64_ult_done_f31f299_72_7
-L_i64_ult_w2ne_f31f299_72_5:
+    BEQ R0, R0, L_i64_ult_done_7941106f_72_7
+L_i64_ult_w2ne_7941106f_72_5:
     SLTU S0, T3, T5
-    BEQ R0, R0, L_i64_ult_done_f31f299_72_7
-L_i64_ult_w1ne_f31f299_72_6:
+    BEQ R0, R0, L_i64_ult_done_7941106f_72_7
+L_i64_ult_w1ne_7941106f_72_6:
     SLTU S0, S3, T6
-L_i64_ult_done_f31f299_72_7:
+L_i64_ult_done_7941106f_72_7:
     MOVE RV0, S0
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f64_lt_99999
@@ -23676,8 +23640,7 @@ L___rcc_f64_lt_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_le:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -23996,8 +23959,7 @@ L___rcc_f64_le_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_gt:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -24192,8 +24154,7 @@ L___rcc_f64_gt_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_ge:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -24388,8 +24349,7 @@ L___rcc_f64_ge_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_from_si:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -24512,8 +24472,7 @@ L___rcc_f64_from_si_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_from_ui:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -24636,8 +24595,7 @@ L___rcc_f64_from_ui_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_from_i64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -24787,8 +24745,7 @@ L___rcc_f64_from_i64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_from_u64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -24938,8 +24895,7 @@ L___rcc_f64_from_u64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_to_i64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -25089,8 +25045,7 @@ L___rcc_f64_to_i64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_to_si:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -25234,8 +25189,7 @@ L___rcc_f64_to_si_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_to_ui:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -25379,8 +25333,7 @@ L___rcc_f64_to_ui_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA
 __rcc_f64_to_u64:
 ; === Function Prologue ===
 ; Save RA at SP
@@ -25530,5 +25483,4 @@ L___rcc_f64_to_u64_99999:
     ADDI SP, SP, -1
     LOAD RA, SB, SP
 ; Return to caller
-    ADD PCB, RAB, R0
-    JALR R0, R0, RA
+    JALR R0, RAB, RA

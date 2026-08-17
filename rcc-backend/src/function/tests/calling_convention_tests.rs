@@ -115,7 +115,7 @@ fn test_return_value_handling() {
     
     // Test scalar return
     let mut naming = new_function_naming();
-    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, false, false, Some("test_result".to_string()));
+    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, false, false, false, Some("test_result".to_string()));
     assert!(ret_regs.is_some());
     let (_ret_reg, bank_reg) = ret_regs.unwrap();
     assert!(bank_reg.is_none());
@@ -123,7 +123,7 @@ fn test_return_value_handling() {
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Comment(_))));
     
     // Test fat pointer return
-    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, true, false, Some("test_ptr_result".to_string()));
+    let (insts, ret_regs) = cc.handle_return_value(&mut pm, &mut naming, true, false, false, Some("test_ptr_result".to_string()));
     assert!(ret_regs.is_some());
     let (_addr_reg, bank_reg) = ret_regs.unwrap();
     assert!(bank_reg.is_some());
@@ -135,19 +135,15 @@ fn test_return_value_handling() {
 fn test_cross_bank_call() {
     let cc = CallingConvention::new();
     
-    // Test in-bank call (bank 0)
+    // Test in-bank call (bank 0): JAL encodes the bank immediate, never LI PCB
     let insts = cc.emit_call(100, 0);
-    // Should NOT set PCB for bank 0
     assert!(!insts.iter().any(|i| matches!(i, AsmInst::Li(Reg::Pcb, _))));
-    // Should have JAL
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::Jal(_, 100))));
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Jal(0, 100))));
     
-    // Test cross-bank call (bank 3)
+    // Test cross-bank call (bank 3): bank goes in JAL word2, not LI PCB
     let insts = cc.emit_call(200, 3);
-    // Should set PCB to 3
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(Reg::Pcb, 3))));
-    // Should have JAL to address 200
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::Jal(_, 200))));
+    assert!(!insts.iter().any(|i| matches!(i, AsmInst::Li(Reg::Pcb, _))));
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Jal(3, 200))));
 }
 
 #[test]

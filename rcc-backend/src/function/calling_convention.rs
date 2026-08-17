@@ -285,30 +285,15 @@ impl CallingConvention {
         insts
     }
     
-    /// Generate call instruction
-    /// For cross-bank calls, sets PCB first then uses JAL
+    /// Generate call instruction.
+    /// JAL saves RA/RAB first, then sets PCB from the bank immediate and PC from addr.
     pub(super) fn emit_call(&self, func_addr: u16, func_bank: u16) -> Vec<AsmInst> {
         info!("Emitting call to function at bank:{func_bank}, addr:{func_addr}");
         let mut insts = Vec::new();
         
         insts.push(AsmInst::Comment(format!("Call function at bank:{func_bank}, addr:{func_addr}")));
-        
-        // JAL only jumps within current bank, saving RA/RAB
-        // For cross-bank calls, we need to set PCB first
-        if func_bank != 0 {
-            debug!("  Cross-bank call: setting PCB to {func_bank}");
-            insts.push(AsmInst::Comment("Set PCB for cross-bank call".to_string()));
-            insts.push(AsmInst::Li(Reg::Pcb, func_bank as i16));
-        } else {
-            trace!("  In-bank call (bank 0)");
-        }
-        
-        // JAL addr - sets RA←PC+1, RAB←PCB, PC←addr
-        // The actual instruction is: JAL RA, R0, addr (RA is implicit)
-        // Our AsmInst::Jal(bank, addr) abstraction will be lowered to proper format
-        // First param is traditionally bank but for in-bank jumps it's 0
-        trace!("  JAL instruction: saves RA←PC+1, RAB←PCB, jumps to addr {func_addr}");
-        insts.push(AsmInst::Jal(0, func_addr as i16));
+        trace!("  JAL RA, {func_bank}, {func_addr}: saves RA←PC+1, RAB←PCB, then PCB←bank, PC←addr");
+        insts.push(AsmInst::Jal(func_bank as i16, func_addr as i16));
         
         debug!("Call emission complete: generated {} instructions", insts.len());
         insts

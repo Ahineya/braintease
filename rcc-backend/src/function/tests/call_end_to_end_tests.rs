@@ -50,6 +50,14 @@ fn simulate_call_and_verify(
                     reg_slots_used = 4;
                 }
             }
+            CallArg::I64 { .. } => {
+                if reg_slots_used + 4 <= 4 {
+                    reg_slots_used += 4;
+                } else {
+                    stack_words += 4;
+                    reg_slots_used = 4;
+                }
+            }
         }
     }
     
