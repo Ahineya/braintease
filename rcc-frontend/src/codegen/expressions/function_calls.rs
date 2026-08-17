@@ -13,6 +13,7 @@ pub fn generate_function_call(
     function: &TypedExpr,
     arguments: &[TypedExpr],
     return_type: &Type,
+    stack_args_from: Option<usize>,
 ) -> Result<Value, CompilerError> {
     // For function calls, we need the function name directly, not its loaded value
     let func_val = match function {
@@ -54,7 +55,7 @@ pub fn generate_function_call(
     
     // Get the proper return type
     let ir_return_type = convert_type_default(return_type)?;
-    let result = gen.builder.build_call(func_val, arg_vals, ir_return_type.clone())?;
+    let result = gen.builder.build_call_ex(func_val, arg_vals, ir_return_type.clone(), stack_args_from)?;
     
     // Handle the return value based on type
     match result {

@@ -3,7 +3,8 @@
 //! This module is responsible for lowering individual IR instructions to assembly,
 //! delegating to specialized modules for each instruction type.
 
-use rcc_frontend::ir::{Instruction, Value};
+use rcc_frontend::ir::{Instruction, Value, IrType, FatPointer};
+use rcc_frontend::BankTag;
 use rcc_codegen::{AsmInst, Reg};
 use std::collections::HashMap;
 use log::{debug, warn};
@@ -11,6 +12,7 @@ use log::{debug, warn};
 use crate::naming::NameGenerator;
 use crate::globals::GlobalManager;
 use crate::function::{FunctionBuilder, CallArg, CallTarget};
+use crate::regmgmt::{BankInfo, RegisterPressureManager};
 
 // Import all the existing lowering functions
 use crate::instr::{
@@ -19,7 +21,6 @@ use crate::instr::{
     lower_inline_asm_extended,
     helpers::{resolve_global_to_fatptr, canonicalize_value, get_value_register}
 };
-use crate::regmgmt::{BankInfo, RegisterPressureManager};
 
 /// Lower a single instruction using the existing infrastructure
 pub fn lower_instruction(
@@ -30,6 +31,7 @@ pub fn lower_instruction(
     alloca_offsets: &HashMap<rcc_common::TempId, i16>,
     global_manager: &GlobalManager,
     bank_size: u16,
+    vararg_fp_offset: Option<i16>,
 ) -> Result<Vec<AsmInst>, String> {
     let mut insts = Vec::new();
     
@@ -141,7 +143,7 @@ pub fn lower_instruction(
             debug!("V2: Alloca FP+{offset}");
         }
         
-        Instruction::Call { result, function: func, args, result_type } => {
+        Instruction::Call { result, function: func, args, result_type, stack_args_from } => {
             debug!("V2: Call: {:?} = call {}({})", result, func, args.len());
             
             // Convert IR Values to CallArgs for the calling convention
@@ -254,6 +256,7 @@ pub fn lower_instruction(
                 call_args,
                 result_type.is_pointer(),
                 result_name,
+                *stack_args_from,
             );
             
             insts.extend(call_insts);
@@ -414,8 +417,30 @@ pub fn lower_instruction(
             }
         }
         
-        Instruction::Intrinsic { .. } => {
-            warn!("V2: Intrinsic instructions not yet implemented");
+        Instruction::Intrinsic { result, intrinsic, args, result_type } => {
+            match intrinsic.as_str() {
+                "va_start" => {
+                    let offset = vararg_fp_offset.ok_or_else(|| {
+                        "va_start used in a non-variadic function".to_string()
+                    })?;
+                    if args.is_empty() {
+                        return Err("va_start requires the address of the va_list".to_string());
+                    }
+                    let ap_ptr = canonicalize_value(&args[0], global_manager)?;
+                    insts.extend(lower_va_start(mgr, naming, &ap_ptr, offset));
+                }
+                "va_arg" => {
+                    if args.is_empty() {
+                        return Err("va_arg requires the address of the va_list".to_string());
+                    }
+                    let ap_ptr = canonicalize_value(&args[0], global_manager)?;
+                    let dest = result.ok_or_else(|| "va_arg must produce a result".to_string())?;
+                    insts.extend(lower_va_arg(mgr, naming, &ap_ptr, result_type, dest));
+                }
+                other => {
+                    return Err(format!("Unknown intrinsic '{other}'"));
+                }
+            }
         }
         
         Instruction::DebugLoc { .. } => {
@@ -442,4 +467,95 @@ pub fn lower_instruction(
     }
     
     Ok(insts)
+}
+
+fn lower_va_start(
+    mgr: &mut RegisterPressureManager,
+    naming: &mut NameGenerator,
+    ap_ptr: &Value,
+    offset: i16,
+) -> Vec<AsmInst> {
+    let mut insts = Vec::new();
+    insts.push(AsmInst::Comment(format!("va_start: first extra at FP{offset}")));
+
+    let fake: rcc_common::TempId = 0x100000 + naming.next_operation_id();
+    let fake_name = naming.temp_name(fake);
+    let addr_reg = mgr.get_register(fake_name.clone());
+    insts.extend(mgr.take_instructions());
+    insts.push(AsmInst::AddI(addr_reg, Reg::Fp, offset));
+    mgr.bind_value_to_register(fake_name.clone(), addr_reg);
+    mgr.set_pointer_bank(fake_name, BankInfo::Stack);
+
+    let value = Value::FatPtr(FatPointer {
+        addr: Box::new(Value::Temp(fake)),
+        bank: BankTag::Stack,
+    });
+    insts.extend(lower_store(mgr, naming, &value, ap_ptr));
+    insts
+}
+
+fn lower_va_arg(
+    mgr: &mut RegisterPressureManager,
+    naming: &mut NameGenerator,
+    ap_ptr: &Value,
+    result_type: &IrType,
+    dest: rcc_common::TempId,
+) -> Vec<AsmInst> {
+    let mut insts = Vec::new();
+    insts.push(AsmInst::Comment(format!("va_arg {result_type}")));
+
+    // Load current va_list (fat pointer to the next extra argument).
+    let ap_temp: rcc_common::TempId = 0x200000 + naming.next_operation_id();
+    insts.extend(lower_load(
+        mgr,
+        naming,
+        ap_ptr,
+        &IrType::FatPtr(Box::new(IrType::I16)),
+        ap_temp,
+    ));
+    let ap_val = Value::FatPtr(FatPointer {
+        addr: Box::new(Value::Temp(ap_temp)),
+        bank: BankTag::Mixed,
+    });
+
+    let words = result_type.size_in_words().unwrap_or(1) as i16;
+
+    if result_type.is_pointer() {
+        // Stack extras: address word at ap, bank word at ap-1 (see load_param).
+        let ap_name = naming.temp_name(ap_temp);
+        let ap_reg = mgr.get_register(ap_name);
+        insts.extend(mgr.take_instructions());
+
+        let dest_name = naming.temp_name(dest);
+        mgr.pin_register(ap_reg);
+        let dest_reg = mgr.get_register(dest_name.clone());
+        insts.extend(mgr.take_instructions());
+        insts.push(AsmInst::Load(dest_reg, Reg::Sb, ap_reg));
+
+        insts.push(AsmInst::AddI(Reg::Sc, ap_reg, -1));
+        let bank_name = naming.load_bank_value(dest);
+        let bank_reg = mgr.get_register(bank_name.clone());
+        insts.extend(mgr.take_instructions());
+        insts.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
+        mgr.bind_value_to_register(bank_name.clone(), bank_reg);
+        mgr.set_pointer_bank(dest_name, BankInfo::Dynamic(bank_name));
+        mgr.bind_value_to_register(naming.temp_name(dest), dest_reg);
+        mgr.unpin_register(ap_reg);
+    } else {
+        insts.extend(lower_load(mgr, naming, &ap_val, result_type, dest));
+    }
+
+    // Walk downward: first extra is closest to FP (highest address among extras).
+    let ap_name = naming.temp_name(ap_temp);
+    let ap_reg = mgr.get_register(ap_name.clone());
+    insts.extend(mgr.take_instructions());
+    insts.push(AsmInst::AddI(ap_reg, ap_reg, -words));
+    mgr.bind_value_to_register(ap_name, ap_reg);
+
+    let updated = Value::FatPtr(FatPointer {
+        addr: Box::new(Value::Temp(ap_temp)),
+        bank: BankTag::Mixed,
+    });
+    insts.extend(lower_store(mgr, naming, &updated, ap_ptr));
+    insts
 }

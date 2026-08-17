@@ -13,6 +13,7 @@ pub struct TypedFunction {
     pub name: String,
     pub return_type: Type,
     pub parameters: Vec<(String, Type)>,
+    pub is_variadic: bool,
     pub body: TypedStmt,
 }
 

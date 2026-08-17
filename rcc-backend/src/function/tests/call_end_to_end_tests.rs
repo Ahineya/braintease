@@ -25,7 +25,7 @@ fn simulate_call_and_verify(
     let mut caller_naming = new_function_naming();
     
     // Setup arguments
-    let setup_insts = cc.setup_call_args(&mut caller_pm, &mut caller_naming, args.clone());
+    let setup_insts = cc.setup_call_args(&mut caller_pm, &mut caller_naming, args.clone(), None);
     
     // Count how many args go to stack
     // This needs to match the logic in setup_call_args

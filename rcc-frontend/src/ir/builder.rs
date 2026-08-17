@@ -47,6 +47,12 @@ impl IrBuilder {
         self.next_temp_id = 0;
         self.current_function.as_mut().unwrap()
     }
+
+    pub fn set_vararg(&mut self, is_vararg: bool) {
+        if let Some(ref mut function) = self.current_function {
+            function.is_vararg = is_vararg;
+        }
+    }
     
     pub fn add_parameter(&mut self, param_id: TempId, param_type: IrType) {
         if let Some(ref mut function) = self.current_function {
@@ -119,14 +125,45 @@ impl IrBuilder {
     }
     
     pub fn build_call(&mut self, function: Value, args: Vec<Value>, result_type: IrType) -> Result<Option<TempId>, String> {
+        self.build_call_ex(function, args, result_type, None)
+    }
+
+    pub fn build_call_ex(
+        &mut self,
+        function: Value,
+        args: Vec<Value>,
+        result_type: IrType,
+        stack_args_from: Option<usize>,
+    ) -> Result<Option<TempId>, String> {
         let result = if matches!(result_type, IrType::Void) {
             None
         } else {
             Some(self.new_temp())
         };
         
-        let instr = Instruction::Call { result, function, args, result_type };
+        let instr = Instruction::Call { result, function, args, result_type, stack_args_from };
         
+        self.add_instruction(instr)?;
+        Ok(result)
+    }
+
+    pub fn build_intrinsic(
+        &mut self,
+        intrinsic: &str,
+        args: Vec<Value>,
+        result_type: IrType,
+    ) -> Result<Option<TempId>, String> {
+        let result = if matches!(result_type, IrType::Void) {
+            None
+        } else {
+            Some(self.new_temp())
+        };
+        let instr = Instruction::Intrinsic {
+            result,
+            intrinsic: intrinsic.to_string(),
+            args,
+            result_type,
+        };
         self.add_instruction(instr)?;
         Ok(result)
     }

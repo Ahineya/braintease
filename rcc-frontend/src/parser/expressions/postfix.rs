@@ -33,33 +33,67 @@ impl Parser {
                     };
                 }
                 Some(TokenType::LeftParen) => {
-                    // Function call
-                    self.advance();
-                    let mut arguments = Vec::new();
-                    
-                    if !self.check(&TokenType::RightParen) {
-                        loop {
-                            arguments.push(self.parse_assignment_expression()?);
-                            
-                            if !self.match_token(&TokenType::Comma) {
-                                break;
+                    // Function call, or a va_arg/va_start builtin (type argument)
+                    let builtin = match &expr.kind {
+                        ExpressionKind::Identifier { name, .. } => Some(name.as_str()),
+                        _ => None,
+                    };
+
+                    if builtin == Some("__builtin_va_start") {
+                        self.advance();
+                        let ap = Box::new(self.parse_assignment_expression()?);
+                        self.expect(TokenType::Comma, "__builtin_va_start")?;
+                        let last = Box::new(self.parse_assignment_expression()?);
+                        self.expect(TokenType::RightParen, "__builtin_va_start")?;
+                        let span = SourceSpan::new(expr.span.start.clone(), self.current_location());
+                        expr = Expression {
+                            node_id: self.node_id_gen.next(),
+                            kind: ExpressionKind::VaStart { ap, last },
+                            span,
+                            expr_type: None,
+                        };
+                    } else if builtin == Some("__builtin_va_arg") {
+                        self.advance();
+                        let ap = Box::new(self.parse_assignment_expression()?);
+                        self.expect(TokenType::Comma, "__builtin_va_arg")?;
+                        let arg_type = self.parse_type_name()?;
+                        self.expect(TokenType::RightParen, "__builtin_va_arg")?;
+                        let span = SourceSpan::new(expr.span.start.clone(), self.current_location());
+                        expr = Expression {
+                            node_id: self.node_id_gen.next(),
+                            kind: ExpressionKind::VaArg { ap, arg_type },
+                            span,
+                            expr_type: None,
+                        };
+                    } else {
+                        // Function call
+                        self.advance();
+                        let mut arguments = Vec::new();
+                        
+                        if !self.check(&TokenType::RightParen) {
+                            loop {
+                                arguments.push(self.parse_assignment_expression()?);
+                                
+                                if !self.match_token(&TokenType::Comma) {
+                                    break;
+                                }
                             }
                         }
+                        
+                        self.expect(TokenType::RightParen, "function call")?;
+                        
+                        let span = SourceSpan::new(expr.span.start.clone(), self.current_location());
+                        
+                        expr = Expression {
+                            node_id: self.node_id_gen.next(),
+                            kind: ExpressionKind::Call {
+                                function: Box::new(expr),
+                                arguments,
+                            },
+                            span,
+                            expr_type: None,
+                        };
                     }
-                    
-                    self.expect(TokenType::RightParen, "function call")?;
-                    
-                    let span = SourceSpan::new(expr.span.start.clone(), self.current_location());
-                    
-                    expr = Expression {
-                        node_id: self.node_id_gen.next(),
-                        kind: ExpressionKind::Call {
-                            function: Box::new(expr),
-                            arguments,
-                        },
-                        span,
-                        expr_type: None,
-                    };
                 }
                 Some(TokenType::Dot) => {
                     // Member access

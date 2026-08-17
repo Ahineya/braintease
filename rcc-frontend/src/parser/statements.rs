@@ -54,6 +54,18 @@ impl Parser {
                 self.advance();
                 self.parse_do_while_statement()?
             }
+            Some(TokenType::Switch) => {
+                self.advance();
+                self.parse_switch_statement()?
+            }
+            Some(TokenType::Case) => {
+                self.advance();
+                self.parse_case_statement()?
+            }
+            Some(TokenType::Default) => {
+                self.advance();
+                self.parse_default_statement()?
+            }
             Some(TokenType::Return) => {
                 self.advance();
                 self.parse_return_statement()?
@@ -179,6 +191,30 @@ impl Parser {
         Ok(StatementKind::For { init, condition, update, body })
     }
     
+    /// Parse switch statement: `switch (expr) statement`
+    pub fn parse_switch_statement(&mut self) -> Result<StatementKind, CompilerError> {
+        self.expect(TokenType::LeftParen, "switch statement")?;
+        let expression = self.parse_expression()?;
+        self.expect(TokenType::RightParen, "switch statement")?;
+        let body = Box::new(self.parse_statement()?);
+        Ok(StatementKind::Switch { expression, body })
+    }
+
+    /// Parse case label: `case constant-expression : statement`
+    pub fn parse_case_statement(&mut self) -> Result<StatementKind, CompilerError> {
+        let value = self.parse_expression()?;
+        self.expect(TokenType::Colon, "case label")?;
+        let statement = Box::new(self.parse_statement()?);
+        Ok(StatementKind::Case { value, statement })
+    }
+
+    /// Parse default label: `default : statement`
+    pub fn parse_default_statement(&mut self) -> Result<StatementKind, CompilerError> {
+        self.expect(TokenType::Colon, "default label")?;
+        let statement = Box::new(self.parse_statement()?);
+        Ok(StatementKind::Default { statement })
+    }
+
     /// Parse do-while statement
     pub fn parse_do_while_statement(&mut self) -> Result<StatementKind, CompilerError> {
         let body = Box::new(self.parse_statement()?);

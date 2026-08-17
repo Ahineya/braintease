@@ -51,6 +51,23 @@ pub enum TypedStmt {
         update: Option<TypedExpr>,
         body: Box<TypedStmt>,
     },
+
+    /// Switch statement
+    Switch {
+        expression: TypedExpr,
+        body: Box<TypedStmt>,
+    },
+
+    /// Case label (value is a folded integer constant)
+    Case {
+        value: i64,
+        statement: Box<TypedStmt>,
+    },
+
+    /// Default label
+    Default {
+        statement: Box<TypedStmt>,
+    },
     
     /// Return statement
     Return(Option<TypedExpr>),

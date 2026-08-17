@@ -362,6 +362,7 @@ fn test_call_crossing_detection() {
                 function: Value::Function("test".to_string()),
                 args: vec![],
                 result_type: IrType::I16,
+                stack_args_from: None,
             },
             Instruction::Binary {
                 result: 3,

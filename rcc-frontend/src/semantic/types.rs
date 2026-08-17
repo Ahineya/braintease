@@ -428,7 +428,7 @@ impl TypeAnalyzer {
         let func_type = Type::Function {
             return_type: Box::new(resolved_return_type),
             parameters: resolved_parameters,
-            is_variadic: false, // TODO: Handle variadic functions
+            is_variadic: func.is_variadic,
         };
 
         // Check if symbol already exists - borrow once and reuse

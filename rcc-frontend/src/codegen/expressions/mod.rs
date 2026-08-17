@@ -105,8 +105,8 @@ impl<'a> TypedExpressionGenerator<'a> {
                 function,
                 arguments,
                 expr_type,
-                ..
-            } => function_calls::generate_function_call(self, function, arguments, expr_type),
+                stack_args_from,
+            } => function_calls::generate_function_call(self, function, arguments, expr_type, *stack_args_from),
             
             TypedExpr::Cast {
                 operand,
@@ -432,6 +432,39 @@ impl<'a> TypedExpressionGenerator<'a> {
                             location: rcc_common::SourceLocation::new_simple(0, 0),
                         })?;
                     Ok(Value::Temp(result))
+                }
+            }
+
+            TypedExpr::VaStart { ap, .. } => {
+                let ap_addr = unary_ops::generate_lvalue_address(self, ap)?;
+                self.builder.build_intrinsic("va_start", vec![ap_addr], crate::ir::IrType::Void)
+                    .map_err(|e| CodegenError::InternalError {
+                        message: format!("Failed to emit va_start: {e}"),
+                        location: rcc_common::SourceLocation::new_simple(0, 0),
+                    })?;
+                Ok(Value::Constant(0))
+            }
+
+            TypedExpr::VaArg { ap, arg_type, expr_type } => {
+                let ap_addr = unary_ops::generate_lvalue_address(self, ap)?;
+                let ir_type = convert_type_default(arg_type)?;
+                let result = self.builder.build_intrinsic("va_arg", vec![ap_addr], ir_type.clone())
+                    .map_err(|e| CodegenError::InternalError {
+                        message: format!("Failed to emit va_arg: {e}"),
+                        location: rcc_common::SourceLocation::new_simple(0, 0),
+                    })?;
+                match result {
+                    Some(temp_id) => {
+                        if matches!(expr_type, Type::Pointer { .. }) {
+                            Ok(Value::FatPtr(FatPointer {
+                                addr: Box::new(Value::Temp(temp_id)),
+                                bank: BankTag::Mixed,
+                            }))
+                        } else {
+                            Ok(Value::Temp(temp_id))
+                        }
+                    }
+                    None => Ok(Value::Constant(0)),
                 }
             }
         }

@@ -356,7 +356,17 @@ impl Lexer {
             Some(']') => { self.advance(); TokenType::RightBracket }
             Some(';') => { self.advance(); TokenType::Semicolon }
             Some(',') => { self.advance(); TokenType::Comma }
-            Some('.') => { self.advance(); TokenType::Dot }
+            Some('.') => {
+                if self.peek_char(1) == Some('.') && self.peek_char(2) == Some('.') {
+                    self.advance();
+                    self.advance();
+                    self.advance();
+                    TokenType::Ellipsis
+                } else {
+                    self.advance();
+                    TokenType::Dot
+                }
+            }
             
             Some(ch) => {
                 return Err(CompilerError::lexer_error(
@@ -410,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_operators() {
-        let mut lexer = Lexer::new("+ - * / % == != <= >= && || ++ --");
+        let mut lexer = Lexer::new("+ - * / % == != <= >= && || ++ -- ...");
         let tokens = lexer.tokenize().unwrap();
         
         let expected = vec![
@@ -418,6 +428,7 @@ mod tests {
             TokenType::Percent, TokenType::EqualEqual, TokenType::BangEqual,
             TokenType::LessEqual, TokenType::GreaterEqual, TokenType::AmpersandAmpersand,
             TokenType::PipePipe, TokenType::PlusPlus, TokenType::MinusMinus,
+            TokenType::Ellipsis,
             TokenType::EndOfFile,
         ];
         

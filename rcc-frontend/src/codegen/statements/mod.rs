@@ -6,7 +6,7 @@ mod jumps;
 mod misc;
 
 pub use declarations::generate_declaration;
-pub use control_flow::{generate_if, generate_while, generate_for};
+pub use control_flow::{generate_if, generate_while, generate_for, generate_switch, generate_case, generate_default, SwitchContext};
 pub use jumps::{generate_break, generate_continue, generate_return};
 pub use misc::{generate_expression_stmt, generate_compound, generate_inline_asm};
 
@@ -29,6 +29,7 @@ pub struct TypedStatementGenerator<'a> {
     pub next_string_id: &'a mut u32,
     pub break_labels: &'a mut Vec<Label>,
     pub continue_labels: &'a mut Vec<Label>,
+    pub switch_contexts: &'a mut Vec<SwitchContext>,
 }
 
 impl<'a> TypedStatementGenerator<'a> {
@@ -63,6 +64,18 @@ impl<'a> TypedStatementGenerator<'a> {
                     update.as_ref(),
                     body,
                 )
+            }
+
+            TypedStmt::Switch { expression, body } => {
+                control_flow::generate_switch(self, expression, body)
+            }
+
+            TypedStmt::Case { value, statement } => {
+                control_flow::generate_case(self, *value, statement)
+            }
+
+            TypedStmt::Default { statement } => {
+                control_flow::generate_default(self, statement)
             }
             
             TypedStmt::Return(expr) => {

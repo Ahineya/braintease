@@ -149,8 +149,8 @@ impl Parser {
         let start_location = self.current_location();
         
         // Extract function type information
-        let (return_type, _param_types) = match func_type {
-            Type::Function { return_type, parameters, .. } => (*return_type, parameters),
+        let (return_type, _param_types, is_variadic) = match func_type {
+            Type::Function { return_type, parameters, is_variadic } => (*return_type, parameters, is_variadic),
             _ => return Err(ParseError::InvalidType {
                 message: "Expected function type".to_string(),
                 location: start_location,
@@ -182,6 +182,7 @@ impl Parser {
             parameters,
             body,
             storage_class,
+            is_variadic,
             span: SourceSpan::new(start_location, end_location),
             symbol_id: None,
         })

@@ -91,7 +91,8 @@ pub fn format_c_line(line: &str) -> Vec<Span<'static>> {
             TokenType::PipePipe | TokenType::PlusEqual | TokenType::MinusEqual |
             TokenType::StarEqual | TokenType::SlashEqual | TokenType::PercentEqual |
             TokenType::AmpersandEqual | TokenType::PipeEqual | TokenType::CaretEqual |
-            TokenType::LeftShiftEqual | TokenType::RightShiftEqual | TokenType::Arrow => {
+            TokenType::LeftShiftEqual | TokenType::RightShiftEqual | TokenType::Arrow |
+            TokenType::Ellipsis => {
                 Span::styled(token_text, Style::default().fg(Color::Blue))
             }
             

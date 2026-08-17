@@ -534,10 +534,23 @@ pub fn type_expression(
             let result_type = expr.expr_type.clone()
                 .ok_or_else(|| TypeError::TypeMismatch("Call expression has no type".to_string()))?;
             let result_type = type_env.type_analyzer.borrow().resolve_type(&result_type);
+
+            let stack_args_from = {
+                let func_ty = func_typed.get_type();
+                let callable = match func_ty {
+                    Type::Pointer { target, .. } => target.as_ref(),
+                    other => other,
+                };
+                match callable {
+                    Type::Function { parameters, is_variadic: true, .. } => Some(parameters.len()),
+                    _ => None,
+                }
+            };
             
             Ok(TypedExpr::Call {
                 function: Box::new(func_typed),
                 arguments: args_typed?,
+                stack_args_from,
                 expr_type: result_type,
             })
         }
@@ -660,6 +673,63 @@ pub fn type_expression(
                 expr_type: completed_type,
             })
         }
+
+        ExpressionKind::VaStart { ap, last: _ } => {
+            let ap_typed = type_expression(ap, type_env)?;
+            Ok(TypedExpr::VaStart {
+                ap: Box::new(ap_typed),
+                expr_type: Type::Void,
+            })
+        }
+
+        ExpressionKind::VaArg { ap, arg_type } => {
+            let ap_typed = type_expression(ap, type_env)?;
+            let resolved = type_env.type_analyzer.borrow().resolve_type(arg_type);
+            Ok(TypedExpr::VaArg {
+                ap: Box::new(ap_typed),
+                arg_type: resolved.clone(),
+                expr_type: resolved,
+            })
+        }
+    }
+}
+
+/// Fold a case-label expression to an integer constant (C99 constant-expression).
+fn eval_integer_constant(expr: &crate::ast::Expression) -> Result<i64, TypeError> {
+    use crate::ast::{ExpressionKind, UnaryOp};
+    match &expr.kind {
+        ExpressionKind::IntLiteral(v) => Ok(*v),
+        ExpressionKind::CharLiteral(v) => Ok(*v as i64),
+        ExpressionKind::Unary { op: UnaryOp::Plus, operand } => eval_integer_constant(operand),
+        ExpressionKind::Unary { op: UnaryOp::Minus, operand } => {
+            Ok(-eval_integer_constant(operand)?)
+        }
+        ExpressionKind::Unary { op: UnaryOp::BitNot, operand } => {
+            Ok(!eval_integer_constant(operand)?)
+        }
+        ExpressionKind::Cast { operand, .. } => eval_integer_constant(operand),
+        ExpressionKind::Binary { op, left, right } => {
+            let l = eval_integer_constant(left)?;
+            let r = eval_integer_constant(right)?;
+            match op {
+                BinaryOp::Add => Ok(l.wrapping_add(r)),
+                BinaryOp::Sub => Ok(l.wrapping_sub(r)),
+                BinaryOp::Mul => Ok(l.wrapping_mul(r)),
+                BinaryOp::Div if r != 0 => Ok(l / r),
+                BinaryOp::Mod if r != 0 => Ok(l % r),
+                BinaryOp::BitAnd => Ok(l & r),
+                BinaryOp::BitOr => Ok(l | r),
+                BinaryOp::BitXor => Ok(l ^ r),
+                BinaryOp::LeftShift => Ok(l.wrapping_shl(r as u32)),
+                BinaryOp::RightShift => Ok(l.wrapping_shr(r as u32)),
+                _ => Err(TypeError::TypeMismatch(
+                    "Case label is not an integer constant expression".to_string(),
+                )),
+            }
+        }
+        _ => Err(TypeError::TypeMismatch(
+            "Case label is not an integer constant expression".to_string(),
+        )),
     }
 }
 
@@ -809,22 +879,35 @@ pub fn type_statement(
             ]))
         }
         
-        StatementKind::Switch { .. } => {
-            Err(TypeError::UnsupportedConstruct(
-                "Switch statements not yet implemented".to_string()
-            ))
+        StatementKind::Switch { expression, body } => {
+            let typed_expr = type_expression(expression, type_env)?;
+            if !typed_expr.get_type().is_integer() {
+                return Err(TypeError::TypeMismatch(format!(
+                    "Switch expression must have integer type, got {}",
+                    typed_expr.get_type()
+                )));
+            }
+            let typed_body = type_statement(body, type_env)?;
+            Ok(TypedStmt::Switch {
+                expression: typed_expr,
+                body: Box::new(typed_body),
+            })
         }
-        
-        StatementKind::Case { .. } => {
-            Err(TypeError::UnsupportedConstruct(
-                "Case labels not yet implemented".to_string()
-            ))
+
+        StatementKind::Case { value, statement } => {
+            let folded = eval_integer_constant(value)?;
+            let typed_stmt = type_statement(statement, type_env)?;
+            Ok(TypedStmt::Case {
+                value: folded,
+                statement: Box::new(typed_stmt),
+            })
         }
-        
-        StatementKind::Default { .. } => {
-            Err(TypeError::UnsupportedConstruct(
-                "Default labels not yet implemented".to_string()
-            ))
+
+        StatementKind::Default { statement } => {
+            let typed_stmt = type_statement(statement, type_env)?;
+            Ok(TypedStmt::Default {
+                statement: Box::new(typed_stmt),
+            })
         }
         
         StatementKind::Goto(_) => {
@@ -932,6 +1015,7 @@ pub fn type_translation_unit(
                     name: func.name.clone(),
                     return_type: resolved_return_type,
                     parameters: resolved_parameters,
+                    is_variadic: func.is_variadic,
                     body: typed_body,
                 };
                 

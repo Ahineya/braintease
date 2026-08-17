@@ -77,6 +77,9 @@ pub fn generate_function(
     
     // Create the function
     builder.create_function(func.name.clone(), ret_type);
+    if func.is_variadic {
+        builder.set_vararg(true);
+    }
     
     // Create entry block
     let entry_label = builder.new_label();
@@ -130,6 +133,7 @@ pub fn generate_function(
     }
     
     // Generate function body
+    let mut switch_contexts = Vec::new();
     let mut stmt_gen = TypedStatementGenerator {
         builder,
         module,
@@ -140,6 +144,7 @@ pub fn generate_function(
         next_string_id,
         break_labels,
         continue_labels,
+        switch_contexts: &mut switch_contexts,
     };
     
     stmt_gen.generate(&func.body)?;

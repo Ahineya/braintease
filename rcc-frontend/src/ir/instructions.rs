@@ -79,6 +79,10 @@ pub enum Instruction {
         function: Value,
         args: Vec<Value>,
         result_type: IrType,
+        /// If set, arguments at this index and beyond are always passed on the
+        /// stack (variadic extras). Named arguments still follow the normal ABI.
+        #[serde(default)]
+        stack_args_from: Option<usize>,
     },
     
     /// Return: ret value or ret void

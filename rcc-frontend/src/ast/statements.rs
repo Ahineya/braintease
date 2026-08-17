@@ -131,6 +131,7 @@ pub struct FunctionDefinition {
     pub parameters: Vec<Parameter>,
     pub body: Statement,
     pub storage_class: StorageClass,
+    pub is_variadic: bool,
     pub span: SourceSpan,
     pub symbol_id: Option<SymbolId>, // Filled during semantic analysis
 }

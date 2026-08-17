@@ -72,6 +72,19 @@ pub enum SemanticError {
         feature: String,
         location: SourceLocation,
     },
+    CaseOutsideSwitch {
+        location: SourceLocation,
+    },
+    DefaultOutsideSwitch {
+        location: SourceLocation,
+    },
+    DuplicateCaseValue {
+        value: i64,
+        location: SourceLocation,
+    },
+    DuplicateDefault {
+        location: SourceLocation,
+    },
 }
 
 impl From<SemanticError> for CompilerError {
@@ -164,6 +177,30 @@ impl From<SemanticError> for CompilerError {
             SemanticError::NotImplemented { feature, location } => {
                 CompilerError::semantic_error(
                     format!("Feature not implemented: {feature}"),
+                    location,
+                )
+            }
+            SemanticError::CaseOutsideSwitch { location } => {
+                CompilerError::semantic_error(
+                    "Case label not within a switch statement".to_string(),
+                    location,
+                )
+            }
+            SemanticError::DefaultOutsideSwitch { location } => {
+                CompilerError::semantic_error(
+                    "Default label not within a switch statement".to_string(),
+                    location,
+                )
+            }
+            SemanticError::DuplicateCaseValue { value, location } => {
+                CompilerError::semantic_error(
+                    format!("Duplicate case value {value}"),
+                    location,
+                )
+            }
+            SemanticError::DuplicateDefault { location } => {
+                CompilerError::semantic_error(
+                    "Multiple default labels in switch".to_string(),
                     location,
                 )
             }

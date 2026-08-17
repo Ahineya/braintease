@@ -75,6 +75,7 @@ pub enum TokenType {
     Semicolon,      // ;
     Comma,          // ,
     Dot,            // .
+    Ellipsis,       // ...
     Arrow,          // ->
     
     // Special
@@ -177,6 +178,7 @@ impl fmt::Display for TokenType {
             TokenType::Semicolon => write!(f, ";"),
             TokenType::Comma => write!(f, ","),
             TokenType::Dot => write!(f, "."),
+            TokenType::Ellipsis => write!(f, "..."),
             TokenType::Arrow => write!(f, "->"),
             
             TokenType::Newline => write!(f, "\\n"),

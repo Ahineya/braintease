@@ -48,9 +48,10 @@ fn select_ir_op(op: BinaryOp, left: &TypedExpr, right: &TypedExpr) -> Result<IrB
 /// C logical && / || yield 0 or 1. Bitwise AND/OR of the raw operands is
 /// wrong: `src[i] && i < 31` with src[i]=='B' (66) becomes `66 & 1 == 0`.
 ///
-/// Convert each operand to a boolean (`!= 0`) first, then AND/OR those 0/1
-/// values. Both sides are still evaluated (no extra blocks) so loop-condition
-/// bank bindings stay in one block.
+/// Convert each operand to a boolean (`!= 0`) first. Evaluation is
+/// short-circuit: `&&` skips the RHS when the LHS is false, `||` skips
+/// the RHS when the LHS is true. Side effects on the skipped side must
+/// not run (C99 6.5.13 / 6.5.14).
 fn scalar_for_logical(val: Value) -> Value {
     match val {
         Value::FatPtr(fp) => *fp.addr,
@@ -69,22 +70,75 @@ fn to_logical_i16(gen: &mut TypedExpressionGenerator, val: Value) -> Result<Valu
     Ok(Value::Temp(temp))
 }
 
+fn intern_ir(result: Result<Value, String>) -> Result<Value, CompilerError> {
+    result.map_err(|e| CodegenError::InternalError {
+        message: e,
+        location: rcc_common::SourceLocation::new_simple(0, 0),
+    }.into())
+}
+
+fn intern_unit(result: Result<(), String>) -> Result<(), CompilerError> {
+    result.map_err(|e| CodegenError::InternalError {
+        message: e,
+        location: rcc_common::SourceLocation::new_simple(0, 0),
+    }.into())
+}
+
+fn intern_temp(result: Result<rcc_common::TempId, String>) -> Result<rcc_common::TempId, CompilerError> {
+    result.map_err(|e| CodegenError::InternalError {
+        message: e,
+        location: rcc_common::SourceLocation::new_simple(0, 0),
+    }.into())
+}
+
 fn generate_logical_operation(
     gen: &mut TypedExpressionGenerator,
     op: BinaryOp,
     left: &TypedExpr,
     right: &TypedExpr,
 ) -> Result<Value, CompilerError> {
+    let result_ptr = intern_ir(gen.builder.build_alloca(IrType::I16, None))?;
+
     let left_val = gen.generate(left)?;
     let left_bool = to_logical_i16(gen, left_val)?;
+
+    let rhs_label = gen.builder.new_label();
+    let skip_label = gen.builder.new_label();
+    let end_label = gen.builder.new_label();
+
+    match op {
+        BinaryOp::LogicalAnd => {
+            // If LHS is false, result is 0 and RHS is not evaluated.
+            intern_unit(gen.builder.build_branch_cond(left_bool, rhs_label, skip_label))?;
+        }
+        BinaryOp::LogicalOr => {
+            // If LHS is true, result is 1 and RHS is not evaluated.
+            intern_unit(gen.builder.build_branch_cond(left_bool, skip_label, rhs_label))?;
+        }
+        _ => unreachable!("generate_logical_operation only handles && / ||"),
+    }
+
+    intern_unit(gen.builder.create_block(rhs_label).map(|_| ()))?;
     let right_val = gen.generate(right)?;
     let right_bool = to_logical_i16(gen, right_val)?;
-    let ir_op = match op {
-        BinaryOp::LogicalAnd => IrBinaryOp::And,
-        BinaryOp::LogicalOr => IrBinaryOp::Or,
-        _ => unreachable!("generate_logical_operation only handles && / ||"),
+    intern_unit(gen.builder.build_store(right_bool, result_ptr.clone()))?;
+    if !gen.builder.current_block_has_terminator() {
+        intern_unit(gen.builder.build_branch(end_label))?;
+    }
+
+    intern_unit(gen.builder.create_block(skip_label).map(|_| ()))?;
+    let skip_value = match op {
+        BinaryOp::LogicalAnd => Value::Constant(0),
+        BinaryOp::LogicalOr => Value::Constant(1),
+        _ => unreachable!(),
     };
-    let result = gen.builder.build_binary(ir_op, left_bool, right_bool, IrType::I16)?;
+    intern_unit(gen.builder.build_store(skip_value, result_ptr.clone()))?;
+    if !gen.builder.current_block_has_terminator() {
+        intern_unit(gen.builder.build_branch(end_label))?;
+    }
+
+    intern_unit(gen.builder.create_block(end_label).map(|_| ()))?;
+    let result = intern_temp(gen.builder.build_load(result_ptr, IrType::I16))?;
     Ok(Value::Temp(result))
 }
 

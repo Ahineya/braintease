@@ -98,10 +98,20 @@ impl ExpressionAnalyzer {
                         Type::Function {
                             return_type,
                             parameters,
-                            ..
+                            is_variadic,
                         } => {
-                            // Check argument count
-                            if arguments.len() != parameters.len() {
+                            // Named parameters must be present; extras are allowed only
+                            // for variadic functions.
+                            if *is_variadic {
+                                if arguments.len() < parameters.len() {
+                                    return Err(SemanticError::ArgumentCountMismatch {
+                                        expected: parameters.len(),
+                                        found: arguments.len(),
+                                        location: expr.span.start.clone(),
+                                    }
+                                    .into());
+                                }
+                            } else if arguments.len() != parameters.len() {
                                 return Err(SemanticError::ArgumentCountMismatch {
                                     expected: parameters.len(),
                                     found: arguments.len(),
@@ -110,7 +120,7 @@ impl ExpressionAnalyzer {
                                 .into());
                             }
 
-                            // Check argument types with typedef awareness
+                            // Check argument types with typedef awareness (named params only)
                             for (arg, param_type) in arguments.iter().zip(parameters.iter()) {
                                 if let Some(arg_type) = &arg.expr_type {
                                     
@@ -217,6 +227,17 @@ impl ExpressionAnalyzer {
                 // while their declarations are still in scope (e.g. for-loop `i`).
                 self.analyze_initializer_exprs(initializer)?;
                 type_name.clone()
+            }
+
+            ExpressionKind::VaStart { ap, last } => {
+                self.analyze(ap)?;
+                self.analyze(last)?;
+                Type::Void
+            }
+
+            ExpressionKind::VaArg { ap, arg_type } => {
+                self.analyze(ap)?;
+                arg_type.clone()
             }
         };
 

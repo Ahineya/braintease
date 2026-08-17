@@ -15,7 +15,7 @@ fn test_register_based_scalar_args() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // First 2 args should go to A0 and A1, not stack
     let store_count = insts.iter().filter(|i| matches!(i, AsmInst::Store(_, Reg::Sb, Reg::Sp))).count();
@@ -39,7 +39,7 @@ fn test_register_based_fat_pointer_arg() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // Fat pointer should use A0 and A1, not stack
     let store_count = insts.iter().filter(|i| matches!(i, AsmInst::Store(_, Reg::Sb, Reg::Sp))).count();
@@ -167,7 +167,7 @@ fn test_multiple_args_with_overflow_to_stack() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // Should only push last 2 args to stack
     let store_count = insts.iter().filter(|i| matches!(i, AsmInst::Store(_, Reg::Sb, Reg::Sp))).count();
@@ -195,7 +195,7 @@ fn test_mixed_args() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // All should fit in registers, no stack usage
     let store_count = insts.iter().filter(|i| matches!(i, AsmInst::Store(_, Reg::Sb, Reg::Sp))).count();
@@ -226,7 +226,7 @@ fn test_fat_pointer_overflow_to_stack() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // Third fat pointer (2 values) should go to stack
     let store_count = insts.iter().filter(|i| matches!(i, AsmInst::Store(_, Reg::Sb, Reg::Sp))).count();
@@ -302,7 +302,7 @@ fn test_callee_saved_registers_as_arguments() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // Should move S0-S3 to A0-A3
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::A0, Reg::S0, Reg::R0))),
@@ -333,7 +333,7 @@ fn test_mixed_callee_saved_and_temp_registers() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // Check register moves
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::A0, Reg::T0, Reg::R0))),
@@ -359,7 +359,7 @@ fn test_callee_saved_fat_pointers() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // First fat pointer should use A0-A1
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::A0, Reg::S0, Reg::R0))),
@@ -391,7 +391,7 @@ fn test_callee_saved_with_stack_overflow() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // First 4 should go to registers
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::A0, Reg::T0, Reg::R0))));
@@ -423,7 +423,7 @@ fn test_callee_saved_partial_fat_pointer() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // First 3 scalars in registers
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::A0, Reg::T0, Reg::R0))));
@@ -455,7 +455,7 @@ fn test_all_register_types_mixed() {
     ];
     
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // Check moves - note that A0 needs special handling since it's both source and dest
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::A0, Reg::T0, Reg::R0))),

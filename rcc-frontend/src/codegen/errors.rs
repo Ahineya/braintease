@@ -101,7 +101,7 @@ impl From<CodegenError> for CompilerError {
             }
             CodegenError::InvalidBreak { location } => {
                 CompilerError::codegen_error(
-                    "Break statement outside of loop".to_string(),
+                    "Break statement outside of loop or switch".to_string(),
                     location,
                 )
             }

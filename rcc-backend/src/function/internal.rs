@@ -65,7 +65,7 @@ impl FunctionLowering {
     pub(super) fn setup_call(&mut self, args: Vec<super::calling_convention::CallArg>) -> Vec<AsmInst> {
         debug!("Setting up {} call arguments", args.len());
         let cc = super::calling_convention::CallingConvention::new();
-        let insts = cc.setup_call_args(&mut self.pressure_manager, &mut self.naming, args);
+        let insts = cc.setup_call_args(&mut self.pressure_manager, &mut self.naming, args, None);
         trace!("  Call setup generated {} instructions", insts.len());
         insts
     }

@@ -72,8 +72,14 @@ impl CallingConvention {
     }
     
     /// Analyze which arguments go in registers vs stack based on CallArg types
-    fn analyze_arg_placement(&self, args: &[CallArg]) -> (Vec<(usize, usize)>, usize) {
-        self.analyze_placement(args.len(), |i| matches!(args[i], CallArg::FatPointer { .. }))
+    fn analyze_arg_placement(&self, args: &[CallArg], stack_args_from: Option<usize>) -> (Vec<(usize, usize)>, usize) {
+        let (mut register_items, mut first_stack_item) =
+            self.analyze_placement(args.len(), |i| matches!(args[i], CallArg::FatPointer { .. }));
+        if let Some(from) = stack_args_from {
+            register_items.retain(|(i, _)| *i < from);
+            first_stack_item = first_stack_item.min(from);
+        }
+        (register_items, first_stack_item)
     }
     
     /// Analyze parameter placement for load_param based on IrType
@@ -119,6 +125,18 @@ impl CallingConvention {
         
         offset
     }
+
+    /// FP-relative offset of the first unnamed (variadic) argument.
+    /// Extra args are always on the stack, after any named stack parameters.
+    pub(super) fn first_vararg_offset(
+        &self,
+        named_params: &[(rcc_common::TempId, rcc_frontend::ir::IrType)],
+    ) -> i16 {
+        let (_, first_stack_param) = self.analyze_param_placement(named_params);
+        let mut dummy = named_params.to_vec();
+        dummy.push((u32::MAX, rcc_frontend::ir::IrType::I16));
+        self.calculate_stack_param_offset(named_params.len(), &dummy, first_stack_param)
+    }
     
     /// Setup parameters for a function call
     /// First 4 scalar arguments or 2 fat pointers go in A0-A3
@@ -129,7 +147,8 @@ impl CallingConvention {
     pub(super) fn setup_call_args(&self, 
                            pressure_manager: &mut RegisterPressureManager,
                            _naming: &mut NameGenerator,
-                           args: Vec<CallArg>) -> Vec<AsmInst> {
+                           args: Vec<CallArg>,
+                           stack_args_from: Option<usize>) -> Vec<AsmInst> {
         info!("Setting up {} call arguments", args.len());
         let mut insts = Vec::new();
         let mut stack_offset = 0i16;
@@ -157,7 +176,7 @@ impl CallingConvention {
         insts.push(AsmInst::AddI(Reg::Sp, Reg::Fp, frame_top));
         
         // Use common logic to determine placement
-        let (register_arg_slots, _first_stack_arg) = self.analyze_arg_placement(&args);
+        let (register_arg_slots, _first_stack_arg) = self.analyze_arg_placement(&args, stack_args_from);
         
         // Separate args into register args and stack args
         let mut reg_args = Vec::new();
@@ -354,6 +373,7 @@ impl CallingConvention {
         args: Vec<CallArg>,
         returns_pointer: bool,
         result_name: Option<String>,
+        stack_args_from: Option<usize>,
     ) -> (Vec<AsmInst>, Option<(Reg, Option<Reg>)>) {
         match &target {
             CallTarget::Address { addr, bank } => {
@@ -369,7 +389,7 @@ impl CallingConvention {
         
         // Calculate stack words needed for cleanup
         // Only count arguments that will be pushed to stack, not register arguments
-        let (register_arg_slots, _) = self.analyze_arg_placement(&args);
+        let (register_arg_slots, _) = self.analyze_arg_placement(&args, stack_args_from);
         let mut stack_words = 0i16;
         for (idx, arg) in args.iter().enumerate() {
             // Skip arguments that go in registers
@@ -386,7 +406,7 @@ impl CallingConvention {
         
         // 1. Setup arguments
         trace!("  Setting up call arguments");
-        let setup = self.setup_call_args(pressure_manager, naming, args);
+        let setup = self.setup_call_args(pressure_manager, naming, args, stack_args_from);
         insts.extend(setup);
         
         // 2. Emit call instruction

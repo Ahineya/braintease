@@ -299,4 +299,39 @@ mod tests {
             _ => panic!("Expected binary addition"),
         }
     }
+
+    #[test]
+    fn test_parse_switch_statement() {
+        let stmt = parse_statement_from_str("switch (x) { case 1: return 1; default: return 0; }").unwrap();
+        match stmt.kind {
+            StatementKind::Switch { body, .. } => {
+                match &body.kind {
+                    StatementKind::Compound(statements) => {
+                        assert_eq!(statements.len(), 2);
+                        assert!(matches!(statements[0].kind, StatementKind::Case { .. }));
+                        assert!(matches!(statements[1].kind, StatementKind::Default { .. }));
+                    }
+                    _ => panic!("Expected compound switch body"),
+                }
+            }
+            _ => panic!("Expected switch statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_variadic_function() {
+        let input = "int sum(int n, ...) { return n; }";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let translation_unit = parser.parse_translation_unit().unwrap();
+        match &translation_unit.items[0] {
+            TopLevelItem::Function(func) => {
+                assert_eq!(func.name, "sum");
+                assert!(func.is_variadic);
+                assert_eq!(func.parameters.len(), 1);
+            }
+            _ => panic!("Expected function definition"),
+        }
+    }
 }

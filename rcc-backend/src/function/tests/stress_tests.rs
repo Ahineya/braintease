@@ -53,7 +53,7 @@ fn stress_test_massive_argument_list() {
         }
     }
     let mut naming = new_function_naming();
-    let insts = cc.setup_call_args(&mut pm, &mut naming, args);
+    let insts = cc.setup_call_args(&mut pm, &mut naming, args, None);
     
     // Count stores to verify all args pushed
     let store_count = insts.iter()
@@ -86,7 +86,7 @@ fn stress_test_nested_calls() {
         let mut pm = RegisterPressureManager::new(0);
         pm.init();
         let mut naming = new_function_naming();
-        let setup = cc.setup_call_args(&mut pm, &mut naming, args);
+        let setup = cc.setup_call_args(&mut pm, &mut naming, args, None);
         
         // Make the call
         let call = cc.emit_call(100 + depth as u16, depth as u16 % 4);

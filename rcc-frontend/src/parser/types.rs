@@ -98,6 +98,70 @@ impl Parser {
         }
     }
     
+    /// Parse the contents of `( parameter-type-list )` after the opening paren
+    /// has been consumed. Does not consume the closing paren.
+    fn parse_parameter_list_contents(
+        &mut self,
+    ) -> Result<(Vec<Type>, Vec<(Option<String>, Type, SourceSpan)>, bool), CompilerError> {
+        let mut parameter_types = Vec::new();
+        let mut parameter_info = Vec::new();
+        let mut is_variadic = false;
+
+        if self.check(&TokenType::Ellipsis) {
+            return Err(ParseError::InvalidType {
+                message: "ISO C99 requires a named parameter before '...'".to_string(),
+                location: self.current_location(),
+            }.into());
+        }
+
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                if parameter_types.is_empty() && self.check(&TokenType::Void) {
+                    if let Some(next_token) = self.tokens.get(1) {
+                        if matches!(next_token.token_type, TokenType::RightParen) {
+                            self.advance(); // consume void
+                            break;
+                        }
+                    }
+                }
+
+                let param_start = self.current_location();
+                let param_type = self.parse_type_specifier()?;
+
+                let (param_name, full_param_type) = if matches!(self.peek().map(|t| &t.token_type),
+                    Some(TokenType::Star) | Some(TokenType::Identifier(_))) {
+                    let (name, full_type) = self.parse_declarator(param_type)?;
+                    (Some(name), full_type)
+                } else {
+                    (None, param_type)
+                };
+
+                let param_end = self.current_location();
+
+                parameter_types.push(full_param_type.clone());
+                parameter_info.push((param_name, full_param_type, SourceSpan::new(param_start, param_end)));
+
+                if !self.match_token(&TokenType::Comma) {
+                    break;
+                }
+
+                if self.check(&TokenType::Ellipsis) {
+                    if parameter_types.is_empty() {
+                        return Err(ParseError::InvalidType {
+                            message: "ISO C99 requires a named parameter before '...'".to_string(),
+                            location: self.current_location(),
+                        }.into());
+                    }
+                    self.advance();
+                    is_variadic = true;
+                    break;
+                }
+            }
+        }
+
+        Ok((parameter_types, parameter_info, is_variadic))
+    }
+    
     /// Parse struct type (simplified for MVP - no bitfields)
     pub fn parse_struct_type(&mut self) -> Result<Type, CompilerError> {
         let name = if let Some(Token { token_type: TokenType::Identifier(name), .. }) = self.peek() {
@@ -303,48 +367,15 @@ impl Parser {
                         suffixes.push(DeclSuffix::Array(size));
                     } else if self.match_token(&TokenType::LeftParen) {
                         // Function suffix
-                        let mut parameter_types = Vec::new();
-                        let mut parameter_info = Vec::new();
-                        
-                        if !self.check(&TokenType::RightParen) {
-                            loop {
-                                if parameter_types.is_empty() && self.check(&TokenType::Void) {
-                                    if let Some(next_token) = self.tokens.get(1) {
-                                        if matches!(next_token.token_type, TokenType::RightParen) {
-                                            self.advance(); // consume void
-                                            break;
-                                        }
-                                    }
-                                }
-                                
-                                let param_start = self.current_location();
-                                let param_type = self.parse_type_specifier()?;
-                                
-                                let (param_name, full_param_type) = if matches!(self.peek().map(|t| &t.token_type), 
-                                    Some(TokenType::Star) | Some(TokenType::Identifier(_))) {
-                                    let (name, full_type) = self.parse_declarator(param_type)?;
-                                    (Some(name), full_type)
-                                } else {
-                                    (None, param_type)
-                                };
-                                
-                                let param_end = self.current_location();
-                                
-                                parameter_types.push(full_param_type.clone());
-                                parameter_info.push((param_name, full_param_type, SourceSpan::new(param_start, param_end)));
-                                
-                                if !self.match_token(&TokenType::Comma) {
-                                    break;
-                                }
-                            }
-                        }
+                        let (parameter_types, parameter_info, is_variadic) =
+                            self.parse_parameter_list_contents()?;
                         
                         self.expect(TokenType::RightParen, "function declarator")?;
                         self.last_function_params = Some(parameter_info);
                         
                         suffixes.push(DeclSuffix::Function {
                             parameters: parameter_types,
-                            is_variadic: false,
+                            is_variadic,
                         });
                     } else {
                         break;
@@ -435,58 +466,16 @@ impl Parser {
                 
             } else if self.match_token(&TokenType::LeftParen) {
                 // Function declarator
-                let mut parameter_types = Vec::new();
-                let mut parameter_info = Vec::new(); // Store both names and types
-                
-                if !self.check(&TokenType::RightParen) {
-                    loop {
-                        // Check for void parameter list (func(void) means no parameters)
-                        // But void* is a valid parameter type, so we need to look ahead
-                        if parameter_types.is_empty() && self.check(&TokenType::Void) {
-                            // Peek at the next token after void
-                            if let Some(next_token) = self.tokens.get(1) {
-                                // Only treat bare "void)" as empty parameter list
-                                if matches!(next_token.token_type, TokenType::RightParen) {
-                                    self.advance(); // consume void
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        let param_start = self.current_location();
-                        let param_type = self.parse_type_specifier()?;
-                        
-                        // Parse declarator for the parameter (handles pointers, arrays, etc.)
-                        // Check if we have a declarator (could be *, identifier, or just type)
-                        let (param_name, full_param_type) = if matches!(self.peek().map(|t| &t.token_type), 
-                            Some(TokenType::Star) | Some(TokenType::Identifier(_))) {
-                            let (name, full_type) = self.parse_declarator(param_type)?;
-                            (Some(name), full_type)
-                        } else {
-                            // No declarator, just the type (e.g., in function prototypes like void func(int))
-                            (None, param_type)
-                        };
-                        
-                        let param_end = self.current_location();
-                        
-                        parameter_types.push(full_param_type.clone());
-                        parameter_info.push((param_name, full_param_type, SourceSpan::new(param_start, param_end)));
-                        
-                        if !self.match_token(&TokenType::Comma) {
-                            break;
-                        }
-                    }
-                }
+                let (parameter_types, parameter_info, is_variadic) =
+                    self.parse_parameter_list_contents()?;
                 
                 self.expect(TokenType::RightParen, "function declarator")?;
                 
-                // Store parameter info in function type (we'll extract it later)
-                // For now, we store it in a thread-local for the parser
                 self.last_function_params = Some(parameter_info);
                 
                 suffixes.push(DeclSuffix::Function { 
                     parameters: parameter_types, 
-                    is_variadic: false // TODO: Handle variadic functions
+                    is_variadic,
                 });
                 
             } else {

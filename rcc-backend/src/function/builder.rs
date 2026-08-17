@@ -70,6 +70,7 @@ impl FunctionBuilder {
         args: Vec<CallArg>,
         returns_pointer: bool,
         result_name: Option<String>,
+        stack_args_from: Option<usize>,
     ) -> Vec<AsmInst> {
         let cc = CallingConvention::new();
         let (call_insts, _return_regs) = cc.make_complete_call(
@@ -79,8 +80,16 @@ impl FunctionBuilder {
             args,
             returns_pointer,
             result_name,
+            stack_args_from,
         );
         call_insts
+    }
+
+    /// FP-relative offset of the first unnamed argument in a variadic callee.
+    pub fn first_vararg_fp_offset(
+        param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)],
+    ) -> i16 {
+        CallingConvention::new().first_vararg_offset(param_types)
     }
     
     /// Create a new function builder
@@ -237,7 +246,8 @@ impl FunctionBuilder {
             super::calling_convention::CallTarget::Address { addr: func_addr, bank: func_bank },
             args,
             returns_pointer,
-            result_name
+            result_name,
+            None,
         );
         
         self.instructions.extend(call_insts);

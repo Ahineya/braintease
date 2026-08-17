@@ -84,6 +84,18 @@ pub enum ExpressionKind {
         type_name: Type,
         initializer: Box<Initializer>,
     },
+
+    /// `__builtin_va_start(ap, last)` — assigns the first unnamed argument address to `ap`.
+    VaStart {
+        ap: Box<Expression>,
+        last: Box<Expression>,
+    },
+
+    /// `__builtin_va_arg(ap, type)` — yields the next unnamed argument and advances `ap`.
+    VaArg {
+        ap: Box<Expression>,
+        arg_type: Type,
+    },
 }
 
 /// Initializer for variables, arrays, structs

@@ -15,7 +15,8 @@ use crate::Type;
 pub struct StatementAnalyzer {
     pub current_function: Option<Type>,
     pub expression_analyzer: Rc<RefCell<ExpressionAnalyzer>>,
-    pub initializer_analyzer: Rc<RefCell<InitializerAnalyzer>>
+    pub initializer_analyzer: Rc<RefCell<InitializerAnalyzer>>,
+    switch_depth: RefCell<u32>,
 }
 
 impl StatementAnalyzer {
@@ -29,6 +30,7 @@ impl StatementAnalyzer {
             current_function,
             expression_analyzer,
             initializer_analyzer,
+            switch_depth: RefCell::new(0),
         }
     }
     
@@ -109,6 +111,35 @@ impl StatementAnalyzer {
                 let analyzer = self.expression_analyzer.borrow();
                 analyzer.analyze(condition)?;
                 analyzer.check_boolean_context(condition)?;
+            }
+
+            StatementKind::Switch { expression, body } => {
+                let analyzer = self.expression_analyzer.borrow();
+                analyzer.analyze(expression)?;
+                drop(analyzer);
+                *self.switch_depth.borrow_mut() += 1;
+                let result = self.analyze_statement(body);
+                *self.switch_depth.borrow_mut() -= 1;
+                result?;
+            }
+
+            StatementKind::Case { value, statement } => {
+                if *self.switch_depth.borrow() == 0 {
+                    return Err(SemanticError::CaseOutsideSwitch {
+                        location: stmt.span.start.clone(),
+                    }.into());
+                }
+                self.expression_analyzer.borrow().analyze(value)?;
+                self.analyze_statement(statement)?;
+            }
+
+            StatementKind::Default { statement } => {
+                if *self.switch_depth.borrow() == 0 {
+                    return Err(SemanticError::DefaultOutsideSwitch {
+                        location: stmt.span.start.clone(),
+                    }.into());
+                }
+                self.analyze_statement(statement)?;
             }
             
             StatementKind::Return(expr_opt) => {

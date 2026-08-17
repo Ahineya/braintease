@@ -88,6 +88,9 @@ pub enum TypedExpr {
     Call {
         function: Box<TypedExpr>,
         arguments: Vec<TypedExpr>,
+        /// If this call is to a variadic function, arguments at this index
+        /// and beyond are unnamed extras and must be passed on the stack.
+        stack_args_from: Option<usize>,
         expr_type: Type,
     },
     
@@ -145,6 +148,19 @@ pub enum TypedExpr {
         initializer: Vec<TypedExpr>,  // Initialize elements
         expr_type: Type,  // The literal's type
     },
+
+    /// `__builtin_va_start(ap, last)`
+    VaStart {
+        ap: Box<TypedExpr>,
+        expr_type: Type,
+    },
+
+    /// `__builtin_va_arg(ap, type)`
+    VaArg {
+        ap: Box<TypedExpr>,
+        arg_type: Type,
+        expr_type: Type,
+    },
 }
 
 impl TypedExpr {
@@ -169,7 +185,9 @@ impl TypedExpr {
             TypedExpr::SizeofExpr { expr_type, .. } |
             TypedExpr::SizeofType { expr_type, .. } |
             TypedExpr::ArrayInitializer { expr_type, .. } |
-            TypedExpr::CompoundLiteral { expr_type, .. } => expr_type,
+            TypedExpr::CompoundLiteral { expr_type, .. } |
+            TypedExpr::VaStart { expr_type, .. } |
+            TypedExpr::VaArg { expr_type, .. } => expr_type,
         }
     }
 }

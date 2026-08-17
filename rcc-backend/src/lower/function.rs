@@ -263,6 +263,7 @@ fn lower_basic_block(
     global_manager: &GlobalManager,
     epilogue_label: &str,
     bank_size: u16,
+    vararg_fp_offset: Option<i16>,
 ) -> Result<Vec<(Option<(Reg, Option<Reg>)>, usize)>, String> {
     debug!("Lowering block {} (index {}) [loop_condition={}]", block.id, block_idx, block.is_loop_condition);
     
@@ -321,7 +322,7 @@ fn lower_basic_block(
             
             _ => {
                 // Use the existing lower_instruction for other instructions
-                let insts = lower_instruction(mgr, naming, instruction, &function.name, alloca_offsets, global_manager, bank_size)?;
+                let insts = lower_instruction(mgr, naming, instruction, &function.name, alloca_offsets, global_manager, bank_size, vararg_fp_offset)?;
                 builder.add_instructions(insts);
             }
         }
@@ -392,6 +393,12 @@ pub fn lower_function_v2(
     let mut has_any_return = false;
     let mut all_return_values = Vec::new();
     
+    let vararg_fp_offset = if function.is_vararg {
+        Some(FunctionBuilder::first_vararg_fp_offset(&function.parameters))
+    } else {
+        None
+    };
+    
     // Lower each basic block
     for (block_idx, block) in function.blocks.iter().enumerate() {
         let return_values = lower_basic_block(
@@ -406,6 +413,7 @@ pub fn lower_function_v2(
             global_manager,
             &epilogue_label,
             bank_size,
+            vararg_fp_offset,
         )?;
         
         if !return_values.is_empty() {
