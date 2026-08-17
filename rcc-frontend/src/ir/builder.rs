@@ -320,6 +320,17 @@ impl IrBuilder {
         }
         false
     }
+
+    pub fn current_block_is_empty(&self) -> bool {
+        if let Some(ref function) = self.current_function {
+            if let Some(block_id) = self.current_block {
+                if let Some(block) = function.get_block(block_id) {
+                    return block.is_empty();
+                }
+            }
+        }
+        true
+    }
     
     pub fn finish_function(&mut self) -> Option<Function> {
         self.current_function.take()

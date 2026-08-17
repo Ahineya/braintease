@@ -362,6 +362,33 @@ impl TypeAnalyzer {
         }
     }
 
+    /// Compatible file-scope object redeclaration (extern / tentative / definition).
+    /// Pointer bank tags are ignored; incomplete vs complete arrays of the same
+    /// element type are compatible.
+    pub fn types_compatible_for_object_redeclaration(&self, a: &Type, b: &Type) -> bool {
+        fn same_type_ignoring_banks(a: &Type, b: &Type) -> bool {
+            match (a, b) {
+                (Type::Pointer { target: t1, .. }, Type::Pointer { target: t2, .. }) => {
+                    same_type_ignoring_banks(t1, t2)
+                }
+                (
+                    Type::Array { element_type: e1, size: s1 },
+                    Type::Array { element_type: e2, size: s2 },
+                ) => {
+                    match (s1, s2) {
+                        (Some(n1), Some(n2)) if n1 != n2 => false,
+                        _ => same_type_ignoring_banks(e1, e2),
+                    }
+                }
+                _ => a == b,
+            }
+        }
+
+        let resolved_a = self.resolve_type(a);
+        let resolved_b = self.resolve_type(b);
+        same_type_ignoring_banks(&resolved_a, &resolved_b)
+    }
+
     pub fn declare_function(&mut self, func: &FunctionDefinition) -> Result<(), CompilerError> {
         // Resolve typedefs in return type and parameters
         let resolved_return_type = self.resolve_type(&func.return_type);
@@ -499,6 +526,7 @@ impl TypeAnalyzer {
                         if self.is_compatible_function(&existing_type, &decl.decl_type) {
                             // Compatible function redeclaration - skip adding to symbol table
                             // but still return Ok to indicate this is valid
+                            decl.symbol_id = Some(existing_symbol_id);
                             return Ok(());
                         } else {
                             // Incompatible function redeclaration
@@ -511,6 +539,32 @@ impl TypeAnalyzer {
                             ));
                         }
                     }
+                }
+            }
+
+            // C file-scope objects may be declared more than once:
+            //   extern T x;   // declaration
+            //   T x;          // tentative definition
+            //   T x = ...;    // definition
+            // as long as the types are compatible. Two initialized definitions
+            // of the same object are rejected later in codegen.
+            if let Some(existing_symbol_id) = existing_symbol_id {
+                let existing_type = self.symbol_types.borrow().get(&existing_symbol_id).cloned();
+                if let Some(existing_type) = existing_type {
+                    if self.types_compatible_for_object_redeclaration(&existing_type, &decl.decl_type) {
+                        decl.symbol_id = Some(existing_symbol_id);
+                        if decl.storage_class == StorageClass::Auto {
+                            decl.storage_class = StorageClass::Extern;
+                        }
+                        return Ok(());
+                    }
+                    return Err(CompilerError::semantic_error(
+                        format!(
+                            "Incompatible redeclaration of '{}': previous type was '{}', new type is '{}'",
+                            decl.name, existing_type, decl.decl_type
+                        ),
+                        decl.span.start.clone(),
+                    ));
                 }
             }
 
@@ -531,6 +585,7 @@ impl TypeAnalyzer {
         }
 
         let symbol_id = self.symbol_table.borrow_mut().add_symbol(decl.name.clone());
+        decl.symbol_id = Some(symbol_id);
         self.symbol_locations.borrow_mut().insert(symbol_id, decl.span.start.clone());
         // Store the global variable type (keeping typedef if present)
         self.symbol_types.borrow_mut().insert(symbol_id, decl.decl_type.clone());

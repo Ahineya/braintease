@@ -89,8 +89,9 @@ fn test_store_fat_pointer() {
     
     // Should load pointer address
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(_, 100))));
-    // Should copy GP register for the bank component (not load 0)
-    assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(_, Reg::Gp, Reg::R0))));
+    // Store the Global bank tag (-1), not a copy of GP
+    assert!(insts.iter().any(|i| matches!(i, AsmInst::Li(_, -1))),
+            "Should materialize global bank tag -1");
     
     // Should have two STORE instructions (address and bank)
     let store_count = insts.iter().filter(|i| matches!(i, AsmInst::Store(_, _, _))).count();

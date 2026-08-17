@@ -162,4 +162,122 @@ mod tests {
             assert_eq!(*size, 14); // "Hello\nWorld\t!" + null = 13 + 1
         }
     }
+
+    #[test]
+    fn test_unsigned_short_less_emits_ult() {
+        let source = r#"
+            int cmp(unsigned short a, unsigned short b) {
+                return a < b;
+            }
+        "#;
+
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = crate::semantic::SemanticAnalyzer::new();
+        analyzer.analyze(&mut ast).unwrap();
+        let type_analyzer = analyzer.into_type_info();
+        let typed_ast = type_translation_unit(&ast, type_analyzer).unwrap();
+
+        let codegen = TypedCodeGenerator::new("test".to_string());
+        let module = codegen.generate(&typed_ast).unwrap();
+
+        let has_ult = module.functions.iter().any(|f| {
+            f.blocks.iter().any(|b| {
+                b.instructions.iter().any(|inst| {
+                    matches!(inst, crate::ir::Instruction::Binary { op: crate::ir::IrBinaryOp::Ult, .. })
+                })
+            })
+        });
+        let has_slt = module.functions.iter().any(|f| {
+            f.blocks.iter().any(|b| {
+                b.instructions.iter().any(|inst| {
+                    matches!(inst, crate::ir::Instruction::Binary { op: crate::ir::IrBinaryOp::Slt, .. })
+                })
+            })
+        });
+        assert!(has_ult, "unsigned short < should lower to ult");
+        assert!(!has_slt, "unsigned short < must not lower to slt");
+    }
+
+    #[test]
+    fn test_extern_then_definition_is_one_global() {
+        let source = r#"
+            extern unsigned short cur_hi;
+            unsigned short cur_hi;
+
+            int main() {
+                return cur_hi;
+            }
+        "#;
+
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = crate::semantic::SemanticAnalyzer::new();
+        analyzer.analyze(&mut ast).unwrap();
+        let type_analyzer = analyzer.into_type_info();
+        let typed_ast = type_translation_unit(&ast, type_analyzer).unwrap();
+
+        let codegen = TypedCodeGenerator::new("test".to_string());
+        let module = codegen.generate(&typed_ast).unwrap();
+
+        let named: Vec<_> = module.globals.iter().filter(|g| g.name == "cur_hi").collect();
+        assert_eq!(named.len(), 1, "extern + definition must emit a single global");
+    }
+
+    #[test]
+    fn test_logical_and_converts_operands_to_bool() {
+        let source = r#"
+            int f(char c, int i) {
+                return c && i < 31;
+            }
+        "#;
+
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = crate::semantic::SemanticAnalyzer::new();
+        analyzer.analyze(&mut ast).unwrap();
+        let type_analyzer = analyzer.into_type_info();
+        let typed_ast = type_translation_unit(&ast, type_analyzer).unwrap();
+
+        let codegen = TypedCodeGenerator::new("test".to_string());
+        let module = codegen.generate(&typed_ast).unwrap();
+
+        let mut ne_count = 0;
+        let mut and_count = 0;
+        for f in &module.functions {
+            for b in &f.blocks {
+                for inst in &b.instructions {
+                    if let crate::ir::Instruction::Binary { op, .. } = inst {
+                        match op {
+                            crate::ir::IrBinaryOp::Ne => ne_count += 1,
+                            crate::ir::IrBinaryOp::And => and_count += 1,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        assert!(ne_count >= 2, "&& must compare each operand against 0, got {ne_count} ne");
+        assert_eq!(and_count, 1, "&& should AND the two boolean results");
+    }
+
+    #[test]
+    fn test_missing_return_in_non_void_is_error() {
+        let source = r#"
+            unsigned short peek(unsigned short bank, unsigned short addr) {
+                asm("LOAD Rv0, A0, A1");
+            }
+        "#;
+
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = crate::semantic::SemanticAnalyzer::new();
+        analyzer.analyze(&mut ast).unwrap();
+        let type_analyzer = analyzer.into_type_info();
+        let typed_ast = type_translation_unit(&ast, type_analyzer).unwrap();
+
+        let codegen = TypedCodeGenerator::new("test".to_string());
+        let err = codegen.generate(&typed_ast).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("falls off the end") || msg.contains("Missing return") || msg.contains("peek"),
+            "expected missing-return error, got: {msg}"
+        );
+    }
 }

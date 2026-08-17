@@ -289,4 +289,34 @@ int main() {
             _ => panic!("Expected function definition"),
         }
     }
+
+    #[test]
+    fn test_extern_then_tentative_definition_allowed() {
+        let source = r#"
+extern unsigned short cur_hi;
+unsigned short cur_hi;
+
+int main() {
+    return 0;
+}
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_ok());
+    }
+
+    #[test]
+    fn test_incompatible_global_redeclaration_rejected() {
+        let source = r#"
+extern int x;
+char x;
+
+int main() {
+    return 0;
+}
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_err());
+    }
 }

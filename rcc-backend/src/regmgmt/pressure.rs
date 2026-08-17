@@ -81,6 +81,10 @@ pub struct RegisterPressureManager {
     /// Map from fat pointer values to their bank spill slots
     /// When we spill a fat pointer, we need to track both address and bank
     fat_ptr_bank_slots: BTreeMap<String, i16>,
+
+    /// Registers that must not be chosen as spill victims (live across
+    /// an in-progress instruction that still holds the Reg by value).
+    pinned_registers: std::collections::BTreeSet<Reg>,
 }
 
 impl RegisterPressureManager {
@@ -105,6 +109,7 @@ impl RegisterPressureManager {
             alloca_offsets: BTreeMap::new(),
             trace_spills: false,
             fat_ptr_bank_slots: BTreeMap::new(),
+            pinned_registers: std::collections::BTreeSet::new(),
         }
     }
     
@@ -116,6 +121,25 @@ impl RegisterPressureManager {
         // Take any initialization instructions from the allocator
         self.instructions.extend(self.allocator.take_instructions());
         trace!("  R13 initialized, spill base set to FP+{}", self.local_count);
+    }
+
+    /// Prevent `reg` from being reused as a spill victim until `unpin_register`.
+    pub fn pin_register(&mut self, reg: Reg) {
+        trace!("Pinning register {reg:?}");
+        self.pinned_registers.insert(reg);
+    }
+
+    /// Allow `reg` to be spilled again.
+    pub fn unpin_register(&mut self, reg: Reg) {
+        trace!("Unpinning register {reg:?}");
+        self.pinned_registers.remove(&reg);
+    }
+
+    /// Take the LRU unpinned register as a spill victim.
+    fn take_spill_victim(&mut self) -> Reg {
+        let pos = self.lru_queue.iter().position(|r| !self.pinned_registers.contains(r))
+            .expect("No spillable registers (all pinned)!");
+        self.lru_queue.remove(pos).unwrap()
     }
     
     /// Enable or disable spill tracing
@@ -275,7 +299,7 @@ impl RegisterPressureManager {
                 free_reg
             } else {
                 // Need to spill to make room
-                let victim = self.lru_queue.pop_front().expect("No registers to spill!");
+                let victim = self.take_spill_victim();
                 debug!("  Spilling {victim:?} to make room for alloca recomputation");
                 self.spill_register(victim);
                 victim
@@ -305,7 +329,7 @@ impl RegisterPressureManager {
                 free_reg
             } else {
                 // Need to spill to make room
-                let victim = self.lru_queue.pop_front().expect("No registers to spill!");
+                let victim = self.take_spill_victim();
                 debug!("  Spilling {victim:?} to make room for reload");
                 self.spill_register(victim);
                 victim
@@ -357,10 +381,9 @@ impl RegisterPressureManager {
             return reg;
         }
         
-        // Need to spill - pick LRU victim
+        // Need to spill - pick LRU unpinned victim
         debug!("No free registers, need to spill for '{for_value}'");
-        let victim = self.lru_queue.pop_front()
-            .expect("No registers to spill!");
+        let victim = self.take_spill_victim();
         
         debug!("Spilling LRU victim {victim:?} to make room");
         self.spill_register(victim);
@@ -439,6 +462,22 @@ impl RegisterPressureManager {
             }
             
             debug!("Spilled '{}' from {:?} to slot {} (FP+{})", value, reg, slot, self.local_count + slot);
+
+            // BankInfo::Register(this_reg) is now stale. The spilled contents live
+            // under `value`; retarget those pointers so the bank can be reloaded.
+            let stale: Vec<String> = self.allocator.pointer_banks.iter()
+                .filter_map(|(ptr, info)| {
+                    if matches!(info, BankInfo::Register(r) if *r == reg) {
+                        Some(ptr.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for ptr in stale {
+                debug!("  Updating bank of '{ptr}' from Register({reg:?}) to Dynamic('{value}')");
+                self.allocator.pointer_banks.insert(ptr, BankInfo::Dynamic(value.clone()));
+            }
         } else {
             trace!("spill_register({reg:?}) - register was empty");
         }
@@ -574,6 +613,11 @@ impl RegisterPressureManager {
         debug!("All registers spilled, {} slots used", self.next_spill_slot);
     }
     
+    /// FP-relative offset of a registered alloca, if any.
+    pub fn alloca_fp_offset(&self, name: &str) -> Option<i16> {
+        self.alloca_offsets.get(name).copied()
+    }
+
     /// Register an alloca temp with its FP offset
     pub fn register_alloca(&mut self, temp_name: String, fp_offset: i16) {
         debug!("Registering alloca '{temp_name}' at FP+{fp_offset}");

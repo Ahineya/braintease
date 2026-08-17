@@ -38,6 +38,7 @@ impl Lexer {
                     self.current_location(),
                 ))?;
             
+            self.skip_integer_suffix();
             return Ok(TokenType::IntLiteral(value));
         }
         
@@ -57,7 +58,19 @@ impl Lexer {
                 self.current_location(),
             ))?;
         
+        self.skip_integer_suffix();
         Ok(TokenType::IntLiteral(value))
+    }
+
+    /// Consume a C99 integer suffix: u/U, l/L, ll/LL, and combinations (ul, lu, ull, …).
+    fn skip_integer_suffix(&mut self) {
+        while let Some(ch) = self.current_char() {
+            if matches!(ch, 'u' | 'U' | 'l' | 'L') {
+                self.advance();
+            } else {
+                break;
+            }
+        }
     }
     
     /// Tokenize a character literal

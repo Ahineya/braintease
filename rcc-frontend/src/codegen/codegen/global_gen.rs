@@ -70,6 +70,31 @@ pub fn generate_global_variable(
     let completed_type = complete_type_from_initializer(var_type, initializer);
     let ir_type = convert_type_default(&completed_type)?;
     
+    // `extern T x;` plus a later tentative definition or definition in the same
+    // TU must not emit two globals. Merge into the existing one.
+    if let Some(existing) = module.globals.iter_mut().find(|g| g.name == name) {
+        if let Some(init) = init_value {
+            if existing.initializer.is_some() {
+                return Err(CodegenError::InternalError {
+                    message: format!("Redefinition of global variable '{name}'"),
+                    location: rcc_common::SourceLocation::new_simple(0, 0),
+                }.into());
+            }
+            existing.initializer = Some(init);
+        }
+        if !variables.contains_key(name) {
+            variables.insert(name.to_string(), VarInfo {
+                value: Value::Global(name.to_string()),
+                ir_type,
+                bank: Some(BankTag::Global),
+            });
+        }
+        if matches!(var_type, Type::Array { .. }) {
+            array_variables.insert(name.to_string());
+        }
+        return Ok(());
+    }
+    
     let global = GlobalVariable {
         name: name.to_string(),
         var_type: ir_type.clone(),

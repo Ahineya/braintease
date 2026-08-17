@@ -9,7 +9,7 @@ use crate::naming::NameGenerator;
 use rcc_codegen::{AsmInst, Reg};
 use log::{debug, trace, warn};
 use rcc_frontend::BankTag;
-use super::helpers::{resolve_mixed_bank, resolve_bank_tag_to_info, get_bank_register_with_runtime_check_safe, materialize_bank_to_register};
+use super::helpers::{resolve_mixed_bank, resolve_bank_tag_to_info, get_bank_register_with_runtime_check_safe, get_bank_value_for_argument, materialize_bank_to_register};
 
 /// Lower a Store instruction to assembly
 /// 
@@ -41,9 +41,11 @@ pub fn lower_store(
 
             let bank_src: Option<(Reg, bool)> = mgr.get_pointer_bank(&name)
                 .map(|info| {
-                    // Use safe runtime checking for all bank types
+                    // Preserve bank tags (-1 global, -2 stack). Runtime resolution
+                    // would turn a stack tag into SB, which is wrong to store.
+                    // Dynamic banks are reloaded if the original register was spilled.
                     let context = naming.store_bank_check_context();
-                    let (resolved_reg, check_insts) = get_bank_register_with_runtime_check_safe(
+                    let (resolved_reg, check_insts) = get_bank_value_for_argument(
                         &info,
                         mgr,
                         naming,
@@ -51,7 +53,8 @@ pub fn lower_store(
                     );
                     let generated_code = !check_insts.is_empty();
                     insts.extend(check_insts);
-                    (resolved_reg, generated_code) // owned=true if we generated code
+                    insts.extend(mgr.take_instructions());
+                    (resolved_reg, generated_code)
                 });
 
             (reg, bank_src.is_some(), bank_src)
@@ -180,6 +183,49 @@ pub fn lower_store(
     };
     
     insts.extend(mgr.take_instructions());
+
+    // Fast path: fat pointer -> stack alloca. Compute dest as FP+offset in SC
+    // so we never allocate a register while `bank_reg` is still live.
+    if is_pointer {
+        if let Some((bank_reg, bank_owned)) = ptr_bank_reg {
+            if let Value::FatPtr(fp) = ptr_value {
+                if matches!(fp.bank, BankTag::Stack) {
+                    if let Value::Temp(t) = fp.addr.as_ref() {
+                        let alloca_name = naming.temp_name(*t);
+                        if let Some(offset) = mgr.alloca_fp_offset(&alloca_name) {
+                            insts.push(AsmInst::Comment(format!(
+                                "Store fat ptr to stack alloca {alloca_name} at FP+{offset}"
+                            )));
+                            insts.push(AsmInst::AddI(Reg::Sc, Reg::Fp, offset));
+                            insts.push(AsmInst::Store(src_reg, Reg::Sb, Reg::Sc));
+                            insts.push(AsmInst::AddI(Reg::Sc, Reg::Sc, 1));
+                            insts.push(AsmInst::Store(bank_reg, Reg::Sb, Reg::Sc));
+                            if bank_owned {
+                                mgr.free_register(bank_reg);
+                            }
+                            match value {
+                                Value::Constant(_) => mgr.free_register(src_reg),
+                                Value::FatPtr(vfp) if matches!(vfp.addr.as_ref(), Value::Constant(_)) => {
+                                    mgr.free_register(src_reg);
+                                }
+                                _ => {}
+                            }
+                            debug!("lower_store complete (stack-alloca fat ptr): generated {} instructions", insts.len());
+                            return insts;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Source registers are held by value below. Pin them so allocating the
+    // destination cannot spill and reuse them (fat-pointer bank was being
+    // clobbered when storing stack-passed pointer parameters).
+    mgr.pin_register(src_reg);
+    if let Some((bank_reg, _)) = ptr_bank_reg {
+        mgr.pin_register(bank_reg);
+    }
     
     // Step 2: Get the destination pointer address and bank
     let (dest_addr_reg, dest_ptr_name) = match ptr_value {
@@ -250,6 +296,9 @@ pub fn lower_store(
     );
     insts.extend(check_insts);
     insts.extend(mgr.take_instructions());
+
+    mgr.pin_register(dest_addr_reg);
+    mgr.pin_register(dest_bank_reg);
     
     // Step 4: Generate STORE instruction(s)
     
@@ -258,27 +307,30 @@ pub fn lower_store(
     trace!("  Generated STORE: {store_inst:?}");
     insts.push(store_inst);
     
-    // If storing a fat pointer, also store the bank component
+    // If storing a fat pointer, also store the bank component.
+    // Use SC for dest+1 instead of allocating a new register: get_register()
+    // can spill `bank_reg` and reuse it, then STORE would write the clobbered
+    // register (seen with stack-passed unsigned short* out-params).
     if is_pointer {
-        if let Some((bank_reg, bank_owned)) = ptr_bank_reg {
+        if let Some((bank_reg, _)) = ptr_bank_reg {
             debug!("  Storing fat pointer bank component");
-            // Calculate address for bank component (addr + 1)
-            let bank_addr_name = naming.store_bank_addr();
-            let bank_addr_reg = mgr.get_register(bank_addr_name);
-            insts.extend(mgr.take_instructions());
-            insts.push(AsmInst::AddI(bank_addr_reg, dest_addr_reg, 1));
-            trace!("  Bank component at address {dest_addr_reg:?} + 1");
-            // Store the bank value
-            let bank_store = AsmInst::Store(bank_reg, dest_bank_reg, bank_addr_reg);
+            insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, 1));
+            trace!("  Bank component at address {dest_addr_reg:?} + 1 (via SC)");
+            let bank_store = AsmInst::Store(bank_reg, dest_bank_reg, Reg::Sc);
             trace!("  Generated bank STORE: {bank_store:?}");
             insts.push(bank_store);
-            // Free temporary registers we allocated in this function
-            mgr.free_register(bank_addr_reg);
-            if bank_owned {
-                mgr.free_register(bank_reg);
-            }
         }
     }
+
+    mgr.unpin_register(src_reg);
+    if let Some((bank_reg, bank_owned)) = ptr_bank_reg {
+        mgr.unpin_register(bank_reg);
+        if bank_owned {
+            mgr.free_register(bank_reg);
+        }
+    }
+    mgr.unpin_register(dest_addr_reg);
+    mgr.unpin_register(dest_bank_reg);
     
     // Free temporary registers if we allocated them for constants
     match value {

@@ -7,6 +7,7 @@ use crate::types::{Type, BankTag};
 use crate::CompilerError;
 use super::super::{VarInfo, statements::TypedStatementGenerator};
 use super::utils::convert_type_default;
+use crate::codegen::CodegenError;
 
 /// Generate IR for a function
 pub fn generate_function(
@@ -113,9 +114,20 @@ pub fn generate_function(
     if !builder.current_block_has_terminator() {
         if func.return_type == Type::Void {
             builder.build_return(None)?;
-        } else {
-            // For non-void functions, add return 0
+        } else if func.name == "main" {
+            // C99: reaching the end of main is equivalent to return 0
             builder.build_return(Some(Value::Constant(0)))?;
+        } else if builder.current_block_is_empty() {
+            // Merge block after if/else where every branch already returned.
+            builder.build_return(Some(Value::Constant(0)))?;
+        } else {
+            // A real fall-through (e.g. naked `asm("LOAD Rv0, ...")` with no
+            // return) used to get a silent `return 0` that clobbered Rv0.
+            return Err(CodegenError::MissingReturn {
+                name: func.name.clone(),
+                location: rcc_common::SourceLocation::new_simple(0, 0),
+            }
+            .into());
         }
     }
     

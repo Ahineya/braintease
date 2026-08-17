@@ -439,6 +439,19 @@ mod tests {
     }
 
     #[test]
+    fn test_integer_suffixes() {
+        let mut lexer = Lexer::new("64000U 63996u 0xffUL 42L 100ull");
+        let tokens = lexer.tokenize().unwrap();
+
+        assert_eq!(tokens[0].token_type, TokenType::IntLiteral(64000));
+        assert_eq!(tokens[1].token_type, TokenType::IntLiteral(63996));
+        assert_eq!(tokens[2].token_type, TokenType::IntLiteral(255));
+        assert_eq!(tokens[3].token_type, TokenType::IntLiteral(42));
+        assert_eq!(tokens[4].token_type, TokenType::IntLiteral(100));
+        assert_eq!(tokens[5].token_type, TokenType::EndOfFile);
+    }
+
+    #[test]
     fn test_identifiers() {
         let mut lexer = Lexer::new("variable _private var123 __special");
         let tokens = lexer.tokenize().unwrap();

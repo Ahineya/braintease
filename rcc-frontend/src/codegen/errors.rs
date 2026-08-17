@@ -50,6 +50,12 @@ pub enum CodegenError {
         class: String,
         location: SourceLocation,
     },
+
+    #[error("Missing return in non-void function '{name}' at {location}")]
+    MissingReturn {
+        name: String,
+        location: SourceLocation,
+    },
 }
 
 use rcc_common::CompilerError;
@@ -108,6 +114,12 @@ impl From<CodegenError> for CompilerError {
             CodegenError::UnsupportedStorageClass { class, location } => {
                 CompilerError::codegen_error(
                     format!("Unsupported storage class: {class}"),
+                    location,
+                )
+            }
+            CodegenError::MissingReturn { name, location } => {
+                CompilerError::codegen_error(
+                    format!("Non-void function '{name}' falls off the end without returning a value"),
                     location,
                 )
             }

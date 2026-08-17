@@ -113,6 +113,17 @@ impl Type {
         )
     }
     
+    /// Check if this type is an unsigned integer type
+    ///
+    /// On Ripple, `int` is 16-bit, so `unsigned short`/`unsigned char` cannot be
+    /// promoted to signed `int` (their range does not fit). Comparisons and
+    /// division involving these types must use unsigned operations.
+    pub fn is_unsigned_integer(&self) -> bool {
+        matches!(self,
+            Type::UnsignedChar | Type::UnsignedShort | Type::UnsignedInt | Type::UnsignedLong
+        )
+    }
+    
     /// Check if this type is a pointer type
     pub fn is_pointer(&self) -> bool {
         matches!(self, Type::Pointer { .. })
@@ -289,6 +300,9 @@ mod tests {
         assert!(Type::Int.is_integer());
         assert!(Type::Int.is_signed_integer());
         assert!(!Type::UnsignedInt.is_signed_integer());
+        assert!(Type::UnsignedInt.is_unsigned_integer());
+        assert!(Type::UnsignedShort.is_unsigned_integer());
+        assert!(!Type::Int.is_unsigned_integer());
         assert!(Type::Pointer { target: Box::new(Type::Int), bank: None }.is_pointer());
         assert!(!Type::Int.is_pointer());
     }
