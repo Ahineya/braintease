@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YY\n",
+  "description": "builtin __STDC__ and __STDC_VERSION__"
+}

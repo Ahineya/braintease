@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_elif() {
-        let _input = indoc! {"
+        let input = indoc! {"
             #define VERSION 2
             #if VERSION == 1
             int v1 = 1;
@@ -141,8 +141,10 @@ mod tests {
             int v3 = 3;
             #endif
         "};
-        // Note: Simple #if evaluation might not work fully yet
-        // This test may need adjustment based on implementation
+        let output = preprocess(input).unwrap();
+        assert!(output.contains("int v2 = 2;"));
+        assert!(!output.contains("int v1 = 1;"));
+        assert!(!output.contains("int v3 = 3;"));
     }
 
     #[test]
@@ -191,22 +193,69 @@ mod tests {
 
     #[test]
     fn test_token_pasting() {
-        // Token pasting with ## is complex and may not be fully implemented
-        let _input = indoc! {"
+        let input = indoc! {"
             #define CONCAT(a, b) a##b
             int CONCAT(var, 123) = 5;
         "};
-        // This might produce "int var123 = 5;" when fully implemented
+        let output = preprocess(input).unwrap();
+        assert!(output.contains("int var123 = 5;"));
     }
 
     #[test]
     fn test_stringification() {
-        // Stringification with # is complex and may not be fully implemented
-        let _input = indoc! {"
+        let input = indoc! {"
             #define STR(x) #x
             char* s = STR(hello);
         "};
-        // This might produce "char* s = \"hello\";" when fully implemented
+        let output = preprocess(input).unwrap();
+        assert!(output.contains("char* s = \"hello\";"));
+    }
+
+    #[test]
+    fn test_error_directive() {
+        let result = preprocess("#error boom\nint x;\n");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("#error boom"));
+    }
+
+    #[test]
+    fn test_error_skipped_in_false_if() {
+        let input = indoc! {"
+            #if 0
+            #error should not fire
+            #endif
+            int ok = 1;
+        "};
+        let output = preprocess(input).unwrap();
+        assert!(output.contains("int ok = 1;"));
+    }
+
+    #[test]
+    fn test_if_arithmetic() {
+        let input = indoc! {"
+            #if 1+1 == 2
+            int sum = 1;
+            #endif
+            #if 1 && 0
+            int both = 1;
+            #endif
+            #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+            int c99 = 1;
+            #endif
+        "};
+        let output = preprocess(input).unwrap();
+        assert!(output.contains("int sum = 1;"));
+        assert!(!output.contains("int both = 1;"));
+        assert!(output.contains("int c99 = 1;"));
+    }
+
+    #[test]
+    fn test_file_line_builtins() {
+        let input = "const char *f = __FILE__; int line = __LINE__;";
+        let output = preprocess(input).unwrap();
+        assert!(output.contains("\"test.c\""));
+        assert!(output.contains("int line = "));
+        assert!(!output.contains("__LINE__"));
     }
 
     #[test]

@@ -36,13 +36,17 @@ pub fn generate_if(
     // Then block
     gen.builder.create_block(then_label)?;
     gen.generate(then_stmt)?;
-    gen.builder.build_branch(end_label)?;
+    if !gen.builder.current_block_has_terminator() {
+        gen.builder.build_branch(end_label)?;
+    }
     
     // Else block (if present)
     if let Some(else_stmt) = else_stmt {
         gen.builder.create_block(else_label)?;
         gen.generate(else_stmt)?;
-        gen.builder.build_branch(end_label)?;
+        if !gen.builder.current_block_has_terminator() {
+            gen.builder.build_branch(end_label)?;
+        }
     }
     
     // End label
@@ -76,7 +80,9 @@ pub fn generate_while(
     // Body
     gen.builder.create_block(body_label)?;
     gen.generate(body)?;
-    gen.builder.build_branch(cond_label)?;
+    if !gen.builder.current_block_has_terminator() {
+        gen.builder.build_branch(cond_label)?;
+    }
     
     // End
     gen.builder.create_block(end_label)?;
@@ -159,7 +165,9 @@ pub fn generate_for(
     // Body
     gen.builder.create_block(body_label)?;
     gen.generate(body)?;
-    gen.builder.build_branch(update_label)?;
+    if !gen.builder.current_block_has_terminator() {
+        gen.builder.build_branch(update_label)?;
+    }
     
     // Update
     gen.builder.create_block(update_label)?;
@@ -225,6 +233,9 @@ fn collect_switch_labels(
         }
         TypedStmt::While { body, .. } | TypedStmt::For { body, .. } | TypedStmt::DoWhile { body, .. } => {
             collect_switch_labels(body, cases, default, builder)
+        }
+        TypedStmt::Label { statement, .. } => {
+            collect_switch_labels(statement, cases, default, builder)
         }
         _ => Ok(()),
     }

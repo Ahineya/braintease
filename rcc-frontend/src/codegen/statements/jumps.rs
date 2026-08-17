@@ -1,4 +1,4 @@
-//! Jump statement code generation (break, continue, return)
+//! Jump statement code generation (break, continue, return, goto, labels)
 
 use super::TypedStatementGenerator;
 use crate::typed_ast::TypedExpr;
@@ -47,4 +47,35 @@ pub fn generate_return(
         gen.builder.build_return(None)?;
     }
     Ok(())
+}
+
+pub fn generate_goto(
+    gen: &mut TypedStatementGenerator,
+    name: &str,
+) -> Result<(), CompilerError> {
+    let label = gen.get_or_create_goto_label(name);
+    if !gen.builder.current_block_has_terminator() {
+        gen.builder.build_branch(label)?;
+    }
+    Ok(())
+}
+
+pub fn generate_label(
+    gen: &mut TypedStatementGenerator,
+    name: &str,
+    statement: &crate::typed_ast::TypedStmt,
+) -> Result<(), CompilerError> {
+    if !gen.defined_goto_labels.insert(name.to_string()) {
+        return Err(CodegenError::DuplicateLabel {
+            name: name.to_string(),
+            location: rcc_common::SourceLocation::new_simple(0, 0),
+        }
+        .into());
+    }
+    let label = gen.get_or_create_goto_label(name);
+    if !gen.builder.current_block_has_terminator() {
+        gen.builder.build_branch(label)?;
+    }
+    gen.builder.create_block(label)?;
+    gen.generate(statement)
 }

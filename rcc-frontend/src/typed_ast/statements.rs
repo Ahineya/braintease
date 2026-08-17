@@ -83,6 +83,17 @@ pub enum TypedStmt {
     
     /// Continue statement
     Continue,
+
+    /// Goto statement
+    Goto {
+        name: String,
+    },
+
+    /// Label statement
+    Label {
+        name: String,
+        statement: Box<TypedStmt>,
+    },
     
     /// Inline assembly
     InlineAsm {

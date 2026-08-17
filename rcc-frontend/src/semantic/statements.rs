@@ -177,6 +177,14 @@ impl StatementAnalyzer {
             StatementKind::Break | StatementKind::Continue | StatementKind::Empty => {
                 // No semantic analysis needed
             }
+
+            StatementKind::Goto(_) => {
+                // Label existence is checked during codegen (function scope).
+            }
+
+            StatementKind::Label { statement, .. } => {
+                self.analyze_statement(statement)?;
+            }
             
             StatementKind::InlineAsm { assembly: _, outputs, inputs, clobbers: _ } => {
                 // Analyze inline assembly operands
@@ -215,11 +223,6 @@ impl StatementAnalyzer {
                 for op in inputs {
                     self.expression_analyzer.borrow().analyze(&mut op.expr)?;
                 }
-            }
-            
-            // TODO: Handle other statement types
-            _ => {
-                panic!("Unhandled statement kind: {:?}", stmt.kind);
             }
         }
         

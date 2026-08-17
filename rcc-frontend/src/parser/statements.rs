@@ -80,6 +80,10 @@ impl Parser {
                 self.expect(TokenType::Semicolon, "continue statement")?;
                 StatementKind::Continue
             }
+            Some(TokenType::Goto) => {
+                self.advance();
+                self.parse_goto_statement()?
+            }
             Some(TokenType::Asm) => {
                 self.advance();
                 self.parse_inline_asm_statement()?
@@ -88,10 +92,11 @@ impl Parser {
                 self.advance();
                 StatementKind::Empty
             }
-            // Check for declaration vs expression statement
+            // Check for labeled statement, declaration, or expression statement
             _ => {
-                // This is a simplified check - a full parser would need more lookahead
-                if self.is_declaration_start() {
+                if self.is_labeled_statement_start() {
+                    self.parse_labeled_statement()?
+                } else if self.is_declaration_start() {
                     self.parse_declaration_statement()?
                 } else {
                     self.parse_expression_statement()?
@@ -228,6 +233,51 @@ impl Parser {
         Ok(StatementKind::DoWhile { body, condition })
     }
     
+    /// `identifier :` starts a labeled statement (labels are a separate namespace from typedefs).
+    fn is_labeled_statement_start(&self) -> bool {
+        matches!(self.peek().map(|t| &t.token_type), Some(TokenType::Identifier(_)))
+            && matches!(self.tokens.get(1).map(|t| &t.token_type), Some(TokenType::Colon))
+    }
+
+    /// Parse goto statement: `goto identifier ;`
+    pub fn parse_goto_statement(&mut self) -> Result<StatementKind, CompilerError> {
+        let name = match self.peek().map(|t| &t.token_type) {
+            Some(TokenType::Identifier(name)) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            _ => {
+                return Err(CompilerError::parse_error(
+                    "Expected identifier after goto".to_string(),
+                    self.current_location(),
+                ));
+            }
+        };
+        self.expect(TokenType::Semicolon, "goto statement")?;
+        Ok(StatementKind::Goto(name))
+    }
+
+    /// Parse labeled statement: `identifier : statement`
+    pub fn parse_labeled_statement(&mut self) -> Result<StatementKind, CompilerError> {
+        let name = match self.peek().map(|t| &t.token_type) {
+            Some(TokenType::Identifier(name)) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            _ => {
+                return Err(CompilerError::parse_error(
+                    "Expected identifier for label".to_string(),
+                    self.current_location(),
+                ));
+            }
+        };
+        self.expect(TokenType::Colon, "label")?;
+        let statement = Box::new(self.parse_statement()?);
+        Ok(StatementKind::Label { name, statement })
+    }
+
     /// Parse return statement
     pub fn parse_return_statement(&mut self) -> Result<StatementKind, CompilerError> {
         let value = if self.check(&TokenType::Semicolon) {

@@ -1,6 +1,7 @@
 pub mod lexer;
 pub mod parser;
 pub mod directives;
+pub mod cond_eval;
 pub mod tests;
 
 use anyhow::Result;
@@ -30,6 +31,8 @@ pub struct Preprocessor {
     keep_comments: bool,
     /// Keep line directives
     keep_line_directives: bool,
+    /// Approximate source line for `__LINE__` expansion
+    current_line: usize,
 }
 
 /// Maximum include depth (standard is usually 200-1024)
@@ -63,7 +66,7 @@ struct LineMapping {
 impl Preprocessor {
     /// Create a new preprocessor
     pub fn new() -> Self {
-        Self {
+        let mut pp = Self {
             macros: HashMap::new(),
             include_dirs: vec![],
             conditional_stack: vec![],
@@ -73,7 +76,13 @@ impl Preprocessor {
             _line_map: vec![],
             keep_comments: false,
             keep_line_directives: false,
-        }
+            current_line: 1,
+        };
+        // C99 freestanding builtins. __FILE__ / __LINE__ are expanded specially.
+        pp.define("__STDC__".to_string(), Some("1".to_string()));
+        pp.define("__STDC_VERSION__".to_string(), Some("199901L".to_string()));
+        pp.define("__STDC_HOSTED__".to_string(), Some("0".to_string()));
+        pp
     }
 
     /// Add an include directory
@@ -113,6 +122,7 @@ impl Preprocessor {
     /// Process a source file
     pub fn process(&mut self, input: &str, source_file: PathBuf) -> Result<String> {
         self.current_file = Some(source_file);
+        self.current_line = 1;
         
         // Tokenize the input
         let tokens = lexer::tokenize(input)?;
@@ -135,25 +145,32 @@ impl Preprocessor {
                 Directive::Include { .. } => {
                     let included = self.handle_include(directive)?;
                     output.push_str(&included);
+                    self.current_line += 1;
                 }
                 Directive::Define { .. } => {
                     self.handle_define(directive)?;
+                    self.current_line += 1;
                 }
                 Directive::Undef { .. } => {
                     self.handle_undef(directive)?;
+                    self.current_line += 1;
                 }
                 Directive::If { .. } | Directive::Ifdef { .. } | Directive::Ifndef { .. } => {
                     self.handle_conditional_start(directive)?;
+                    self.current_line += 1;
                 }
                 Directive::Elif { .. } | Directive::Else => {
                     self.handle_conditional_else(directive)?;
+                    self.current_line += 1;
                 }
                 Directive::Endif => {
                     self.handle_conditional_end()?;
+                    self.current_line += 1;
                 }
-                Directive::Line { .. } => {
+                Directive::Line { number, file } => {
+                    self.current_line = number;
                     if self.keep_line_directives {
-                        output.push_str(&self.handle_line(directive)?);
+                        output.push_str(&self.handle_line(Directive::Line { number, file })?);
                     }
                 }
                 Directive::Pragma { content } => {
@@ -163,8 +180,7 @@ impl Preprocessor {
                             self.pragma_once_files.insert(file.clone());
                         }
                     }
-                    // Don't output pragmas - the C compiler doesn't need them
-                    // output.push_str(&format!("#pragma {}\n", content));
+                    self.current_line += 1;
                 }
                 Directive::Text(text) => {
                     if self.should_output() {
@@ -176,8 +192,27 @@ impl Preprocessor {
                         };
                         output.push_str(&self.expand_macros(&processed_text)?);
                     }
+                    let newlines = text.bytes().filter(|&b| b == b'\n').count();
+                    self.current_line += newlines;
                 }
-                _ => {}
+                Directive::Error { message } => {
+                    if self.should_output() {
+                        let msg = if message.is_empty() {
+                            "#error".to_string()
+                        } else {
+                            format!("#error {message}")
+                        };
+                        return Err(anyhow::anyhow!("{msg}"));
+                    }
+                    self.current_line += 1;
+                }
+                Directive::Warning { message } => {
+                    if self.should_output() {
+                        log::warn!("#warning {message}");
+                        eprintln!("warning: {message}");
+                    }
+                    self.current_line += 1;
+                }
             }
         }
         

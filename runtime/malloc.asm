@@ -160,21 +160,21 @@ L_make_fat_ptr_4:
     LOAD T6, SB, S2
 ; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ T6, S1, L_bc_2bc954f9_use_global
+    BEQ T6, S1, L_bc_10199408_use_global
 ; Spill t7 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T4, SB, SC
     LI T4, -2
-    BEQ T6, T4, L_bc_2bc954f9_use_stack
+    BEQ T6, T4, L_bc_10199408_use_stack
     ADD S2, T6, R0
-    BEQ R0, R0, L_bc_2bc954f9_done
-L_bc_2bc954f9_use_global:
+    BEQ R0, R0, L_bc_10199408_done
+L_bc_10199408_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_2bc954f9_done
-L_bc_2bc954f9_use_stack:
+    BEQ R0, R0, L_bc_10199408_done
+L_bc_10199408_use_stack:
     ADD S2, SB, R0
-L_bc_2bc954f9_done:
+L_bc_10199408_done:
     MOVE RV0, S3
     MOVE RV1, S2
 ; Jump to epilogue
@@ -279,8 +279,6 @@ L_malloc_6:
     MOVE RV1, T7
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
-    BEQ R0, R0, L_malloc_8
-; Unconditional branch to L_malloc_8
 L_malloc_8:
     LI T6, -1536
 ; Recompute alloca t10 at FP+9
@@ -306,8 +304,6 @@ L_malloc_9:
     MOVE RV1, T1
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
-    BEQ R0, R0, L_malloc_11
-; Unconditional branch to L_malloc_11
 L_malloc_11:
 ; Load instruction: t15 = load Global("current_heap_bank")
 ; Canonicalizing global variable: current_heap_bank
@@ -673,8 +669,6 @@ L_malloc_24:
     MOVE RV1, S1
 ; Jump to epilogue
     BEQ R0, R0, L_malloc_99999
-    BEQ R0, R0, L_malloc_26
-; Unconditional branch to L_malloc_26
 L_malloc_26:
 ; Load instruction: t54 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
@@ -968,8 +962,6 @@ L_calloc_32:
     MOVE RV1, T6
 ; Jump to epilogue
     BEQ R0, R0, L_calloc_99999
-    BEQ R0, R0, L_calloc_34
-; Unconditional branch to L_calloc_34
 L_calloc_34:
 ; Load instruction: t14 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
@@ -1021,8 +1013,6 @@ L_calloc_35:
     MOVE RV1, S0
 ; Jump to epilogue
     BEQ R0, R0, L_calloc_99999
-    BEQ R0, R0, L_calloc_37
-; Unconditional branch to L_calloc_37
 L_calloc_37:
 ; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -1172,17 +1162,17 @@ L_calloc_40:
     LOAD T0, SB, T3
 ; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ T0, S1, L_bc_ce886a7b_use_global
+    BEQ T0, S1, L_bc_e5340294_use_global
     LI T6, -2
-    BEQ T0, T6, L_bc_ce886a7b_use_stack
+    BEQ T0, T6, L_bc_e5340294_use_stack
     ADD S0, T0, R0
-    BEQ R0, R0, L_bc_ce886a7b_done
-L_bc_ce886a7b_use_global:
+    BEQ R0, R0, L_bc_e5340294_done
+L_bc_e5340294_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_ce886a7b_done
-L_bc_ce886a7b_use_stack:
+    BEQ R0, R0, L_bc_e5340294_done
+L_bc_e5340294_use_stack:
     ADD S0, SB, R0
-L_bc_ce886a7b_done:
+L_bc_e5340294_done:
     MOVE RV0, S3
     MOVE RV1, S0
 ; Jump to epilogue
@@ -1310,8 +1300,6 @@ L_realloc_42:
 ; Fat pointer return value for t7
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
-    BEQ R0, R0, L_realloc_44
-; Unconditional branch to L_realloc_44
 L_realloc_44:
 ; Load instruction: t8 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
@@ -1371,8 +1359,6 @@ L_realloc_45:
     MOVE RV1, T4
 ; Jump to epilogue
     BEQ R0, R0, L_realloc_99999
-    BEQ R0, R0, L_realloc_47
-; Unconditional branch to L_realloc_47
 L_realloc_47:
     LI RV0, 0
     LI T0, 0

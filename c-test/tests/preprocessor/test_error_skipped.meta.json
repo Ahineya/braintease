@@ -1,0 +1,5 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "#error is ignored in a false #if"
+}

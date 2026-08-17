@@ -7,7 +7,7 @@ mod misc;
 
 pub use declarations::generate_declaration;
 pub use control_flow::{generate_if, generate_while, generate_for, generate_do_while, generate_switch, generate_case, generate_default, SwitchContext};
-pub use jumps::{generate_break, generate_continue, generate_return};
+pub use jumps::{generate_break, generate_continue, generate_return, generate_goto, generate_label};
 pub use misc::{generate_expression_stmt, generate_compound, generate_inline_asm};
 
 use std::collections::{HashMap, HashSet};
@@ -17,6 +17,7 @@ use crate::CompilerError;
 use rcc_common::LabelId as Label;
 use super::VarInfo;
 use super::expressions::TypedExpressionGenerator;
+use crate::codegen::CodegenError;
 
 /// Typed statement generator context
 pub struct TypedStatementGenerator<'a> {
@@ -30,6 +31,10 @@ pub struct TypedStatementGenerator<'a> {
     pub break_labels: &'a mut Vec<Label>,
     pub continue_labels: &'a mut Vec<Label>,
     pub switch_contexts: &'a mut Vec<SwitchContext>,
+    /// Function-scoped user labels for `goto` (`name -> IR label`).
+    pub goto_labels: HashMap<String, Label>,
+    /// Labels that have a definition (as opposed to only a `goto` reference).
+    pub defined_goto_labels: HashSet<String>,
 }
 
 impl<'a> TypedStatementGenerator<'a> {
@@ -93,6 +98,14 @@ impl<'a> TypedStatementGenerator<'a> {
             TypedStmt::Continue => {
                 jumps::generate_continue(self)
             }
+
+            TypedStmt::Goto { name } => {
+                jumps::generate_goto(self, name)
+            }
+
+            TypedStmt::Label { name, statement } => {
+                jumps::generate_label(self, name, statement)
+            }
             
             TypedStmt::InlineAsm { assembly, outputs, inputs, clobbers } => {
                 // Generate extended inline assembly with operands and clobbers
@@ -112,6 +125,30 @@ impl<'a> TypedStatementGenerator<'a> {
             parameter_variables: self.parameter_variables,
             string_literals: self.string_literals,
             next_string_id: self.next_string_id,
+        }
+    }
+
+    /// Error if any `goto` targeted a label that was never defined in this function.
+    pub fn check_undefined_labels(&self) -> Result<(), CompilerError> {
+        for name in self.goto_labels.keys() {
+            if !self.defined_goto_labels.contains(name) {
+                return Err(CodegenError::UndefinedLabel {
+                    name: name.clone(),
+                    location: rcc_common::SourceLocation::new_simple(0, 0),
+                }
+                .into());
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn get_or_create_goto_label(&mut self, name: &str) -> Label {
+        if let Some(&id) = self.goto_labels.get(name) {
+            id
+        } else {
+            let id = self.builder.new_label();
+            self.goto_labels.insert(name.to_string(), id);
+            id
         }
     }
 }

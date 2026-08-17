@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "function-like macro stringize #",
+  "expected": "Y\n"
+}

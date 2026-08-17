@@ -56,6 +56,18 @@ pub enum CodegenError {
         name: String,
         location: SourceLocation,
     },
+
+    #[error("Undefined label '{name}' at {location}")]
+    UndefinedLabel {
+        name: String,
+        location: SourceLocation,
+    },
+
+    #[error("Duplicate label '{name}' at {location}")]
+    DuplicateLabel {
+        name: String,
+        location: SourceLocation,
+    },
 }
 
 use rcc_common::CompilerError;
@@ -120,6 +132,18 @@ impl From<CodegenError> for CompilerError {
             CodegenError::MissingReturn { name, location } => {
                 CompilerError::codegen_error(
                     format!("Non-void function '{name}' falls off the end without returning a value"),
+                    location,
+                )
+            }
+            CodegenError::UndefinedLabel { name, location } => {
+                CompilerError::codegen_error(
+                    format!("Undefined label '{name}'"),
+                    location,
+                )
+            }
+            CodegenError::DuplicateLabel { name, location } => {
+                CompilerError::codegen_error(
+                    format!("Duplicate label '{name}'"),
                     location,
                 )
             }

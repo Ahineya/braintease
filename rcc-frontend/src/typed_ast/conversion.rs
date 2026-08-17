@@ -869,16 +869,18 @@ pub fn type_statement(
             })
         }
         
-        StatementKind::Goto(_) => {
-            Err(TypeError::UnsupportedConstruct(
-                "Goto statements not yet implemented".to_string()
-            ))
+        StatementKind::Goto(name) => {
+            Ok(TypedStmt::Goto {
+                name: name.clone(),
+            })
         }
-        
-        StatementKind::Label { .. } => {
-            Err(TypeError::UnsupportedConstruct(
-                "Label statements not yet implemented".to_string()
-            ))
+
+        StatementKind::Label { name, statement } => {
+            let typed_stmt = type_statement(statement, type_env)?;
+            Ok(TypedStmt::Label {
+                name: name.clone(),
+                statement: Box::new(typed_stmt),
+            })
         }
         
         StatementKind::InlineAsm { assembly, outputs, inputs, clobbers } => {

@@ -405,4 +405,34 @@ mod tests {
             _ => panic!("Expected function"),
         }
     }
+
+    #[test]
+    fn test_parse_goto_and_label() {
+        let stmt = parse_statement_from_str("goto done;").unwrap();
+        match stmt.kind {
+            StatementKind::Goto(name) => assert_eq!(name, "done"),
+            _ => panic!("Expected goto"),
+        }
+
+        let stmt = parse_statement_from_str("done: return 1;").unwrap();
+        match stmt.kind {
+            StatementKind::Label { name, statement } => {
+                assert_eq!(name, "done");
+                assert!(matches!(statement.kind, StatementKind::Return(_)));
+            }
+            _ => panic!("Expected labeled statement"),
+        }
+
+        let stmt = parse_statement_from_str("foo: bar: return 0;").unwrap();
+        match stmt.kind {
+            StatementKind::Label { name, statement } => {
+                assert_eq!(name, "foo");
+                match statement.kind {
+                    StatementKind::Label { name, .. } => assert_eq!(name, "bar"),
+                    _ => panic!("Expected nested label"),
+                }
+            }
+            _ => panic!("Expected labeled statement"),
+        }
+    }
 }

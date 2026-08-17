@@ -145,9 +145,12 @@ pub fn generate_function(
         break_labels,
         continue_labels,
         switch_contexts: &mut switch_contexts,
+        goto_labels: HashMap::new(),
+        defined_goto_labels: HashSet::new(),
     };
     
     stmt_gen.generate(&func.body)?;
+    stmt_gen.check_undefined_labels()?;
     
     // Add implicit return if needed
     if !builder.current_block_has_terminator() {

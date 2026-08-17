@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "use_runtime": true,
+  "description": "#if arithmetic, elif, and logical ops"
+}
