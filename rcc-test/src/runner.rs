@@ -143,6 +143,7 @@ impl TestRunner {
                             description: Some("Ad-hoc test".to_string()),
                             skipped: false,
                             test_type,
+                            timeout_secs: None,
                         });
                         found = true;
                         break;
@@ -254,17 +255,25 @@ impl TestRunner {
             };
         }
 
+        // Per-test timeout from metadata overrides the suite default.
+        let mut config = self.config.clone();
+        if let Some(timeout_secs) = test.timeout_secs {
+            if timeout_secs > config.timeout_secs {
+                config.timeout_secs = timeout_secs;
+            }
+        }
+
         // Compile and run based on test type
         let result = match test.test_type {
             TestType::Bfm => compile_bfm_file(
                 &test_path,
                 &self.tools,
-                &self.config,
+                &config,
             ),
             TestType::C => compile_c_file(
                 &test_path,
                 &self.tools,
-                &self.config,
+                &config,
                 test.use_runtime,
             ),
         };

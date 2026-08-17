@@ -356,6 +356,14 @@ fn add_test(
         use_runtime
     };
     
+    let description_for_save = description.clone();
+    let test_type = if file.extension() == Some(std::ffi::OsStr::new("bfm")) {
+        config::TestType::Bfm
+    } else {
+        config::TestType::C
+    };
+    let save_as_known_failure = is_known_failure || expected.is_none();
+
     // Add to appropriate section
     let is_new = if is_known_failure || expected.is_none() {
         // Add to known failures
@@ -387,8 +395,18 @@ fn add_test(
         )
     };
     
-    // Save the config
-    config::save_tests(&config, tests_file)?;
+    // Write only this test's metadata. Rewriting the whole suite reorders
+    // every .meta.json and drops fields the in-memory config did not round-trip.
+    config::save_test_metadata(
+        &file,
+        &expected,
+        use_runtime,
+        &description_for_save,
+        save_as_known_failure,
+        false,
+        test_type,
+        None,
+    )?;
     
     if is_new {
         println!("Added new test: {}", file.display());
@@ -675,6 +693,7 @@ fn rename_test(tests_file: &Path, old_name: &str, new_name: &str) -> Result<()> 
                         description: failure.description.clone(),
                         skipped: false,
                         test_type,
+                        timeout_secs: None,
                     });
                     found_index = Some(idx);
                     is_known_failure = true;

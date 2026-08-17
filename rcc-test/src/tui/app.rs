@@ -95,6 +95,7 @@ impl CategoryView {
                     description: failure.description.clone(),
                     skipped: false,
                     test_type,
+                    timeout_secs: None,
                 });
             }
             categories.insert("Known Failures".to_string(), failure_tests);
@@ -1044,6 +1045,7 @@ impl TuiApp {
                     category: None,
                     skipped: false,
                     test_type,
+                    timeout_secs: None,
                 }
             };
             
@@ -1079,6 +1081,7 @@ impl TuiApp {
                     description: metadata.description,
                     skipped: metadata.skipped,
                     test_type,
+                    timeout_secs: metadata.timeout_secs,
                 });
                 
                 // Rebuild categories
@@ -1542,6 +1545,7 @@ impl TuiApp {
             category: None,
             skipped: false,
             test_type,
+            timeout_secs: None,
         };
         
         let meta_content = serde_json::to_string_pretty(&metadata)?;
@@ -1570,6 +1574,7 @@ impl TuiApp {
             description: metadata.description,
             skipped: metadata.skipped,
             test_type: metadata.test_type,
+            timeout_secs: None,
         };
         
         // Find the correct position to insert (alphabetically by file path)
@@ -1595,6 +1600,7 @@ impl TuiApp {
             description: Some(self.new_test_description.clone()),
             skipped: false,
             test_type: metadata.test_type,
+            timeout_secs: None,
         };
         self.jump_to_test(&new_test);
         
@@ -1929,6 +1935,7 @@ impl TuiApp {
                 category: None,
                 skipped: false,
                 test_type,
+                timeout_secs: None,
             };
 
             // Save the metadata file
@@ -1960,6 +1967,7 @@ impl TuiApp {
                         description: metadata.description,
                         skipped: metadata.skipped,
                         test_type: metadata.test_type,
+                        timeout_secs: metadata.timeout_secs,
                     });
                 }
                 

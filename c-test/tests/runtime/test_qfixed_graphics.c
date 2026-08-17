@@ -9,41 +9,6 @@ typedef struct {
     q16_16_t x, y;
 } point_t;
 
-// Line drawing using Bresenham-like algorithm with Q16.16
-void draw_line(point_t p1, point_t p2) {
-    q16_16_t dx = q_abs(q_sub(p2.x, p1.x));
-    q16_16_t dy = q_abs(q_sub(p2.y, p1.y));
-    
-    q16_16_t step_x = q_lt(p1.x, p2.x) ? Q16_16_ONE : q_neg(Q16_16_ONE);
-    q16_16_t step_y = q_lt(p1.y, p2.y) ? Q16_16_ONE : q_neg(Q16_16_ONE);
-    
-    q16_16_t error = q_sub(dx, dy);
-    
-    point_t current = p1;
-    
-    // Simplified line drawing for testing
-    int steps = 0;
-    while (!q_eq(current.x, p2.x) || !q_eq(current.y, p2.y)) {
-        // Would plot pixel at (current.x, current.y)
-        steps++;
-        
-        q16_16_t e2 = q_add(error, error);
-        
-        if (q_gt(e2, q_neg(dy))) {
-            error = q_sub(error, dy);
-            current.x = q_add(current.x, step_x);
-        }
-        
-        if (q_lt(e2, dx)) {
-            error = q_add(error, dx);
-            current.y = q_add(current.y, step_y);
-        }
-        
-        // Prevent infinite loop in test
-        if (steps > 100) break;
-    }
-}
-
 // Rotation matrix using Q16.16
 typedef struct {
     q16_16_t m00, m01;
@@ -186,9 +151,11 @@ int main() {
     q16_16_t tiny = (q16_16_t){0, 0x0001};  // Smallest representable value
     q16_16_t accumulated = Q16_16_ZERO;
     
-    // Add tiny value 65536 times
-    for (int i = 0; i < 65536; i++) {
-        accumulated = q_add(accumulated, tiny);
+    // Add tiny value 65536 times. Nested loops: 65536 does not fit in 16-bit int.
+    for (int hi = 0; hi < 256; hi++) {
+        for (int lo = 0; lo < 256; lo++) {
+            accumulated = q_add(accumulated, tiny);
+        }
     }
     
     // Should equal 1.0

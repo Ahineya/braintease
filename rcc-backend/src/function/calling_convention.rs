@@ -455,20 +455,29 @@ impl CallingConvention {
                 insts.push(AsmInst::Add(dest, arg_reg, Reg::R0));
             }
 
-            // If this is a fat pointer, also load the bank from the next register
+            // If this is a fat pointer, copy the bank out of A1/A2/A3 into a
+            // named register. Those argument registers are otherwise free for
+            // the allocator and would clobber the bank tag.
             let bank_reg = if index < param_types.len() && param_types[index].1.is_pointer() {
-                let bank_reg = match arg_reg {
+                let src_bank_reg = match arg_reg {
                     Reg::A0 => Reg::A1,
                     Reg::A1 => Reg::A2,
                     Reg::A2 => Reg::A3,
                     _ => panic!("Invalid fat pointer register for param {index}"),
                 };
-                debug!("  Loading fat pointer bank from {bank_reg:?}");
-                insts.push(AsmInst::Comment(format!("Load param {index} bank from {bank_reg:?}")));
+                debug!("  Copying fat pointer bank from {src_bank_reg:?}");
+                insts.push(AsmInst::Comment(format!("Copy param {index} bank from {src_bank_reg:?}")));
 
-                // Track the bank in the register manager
+                let bank_reg_name = naming.param_bank_name(index);
+                let bank_reg = pressure_manager.get_register(bank_reg_name.clone());
+                insts.extend(pressure_manager.take_instructions());
+                if bank_reg != src_bank_reg {
+                    insts.push(AsmInst::Add(bank_reg, src_bank_reg, Reg::R0));
+                }
+                pressure_manager.bind_value_to_register(bank_reg_name.clone(), bank_reg);
+
                 let param_name = naming.param_name(index);
-                pressure_manager.set_pointer_bank(param_name, BankInfo::Register(bank_reg));
+                pressure_manager.set_pointer_bank(param_name, BankInfo::Dynamic(bank_reg_name));
 
                 Some(bank_reg)
             } else {

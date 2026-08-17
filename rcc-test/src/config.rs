@@ -18,6 +18,8 @@ pub struct TestMetadata {
     pub skipped: bool,
     #[serde(default)]
     pub test_type: TestType,
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }
 
 /// Type of test file
@@ -55,6 +57,8 @@ pub struct TestCase {
     pub skipped: bool,
     #[serde(default)]
     pub test_type: TestType,
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }
 
 /// A known failure test case
@@ -258,6 +262,7 @@ fn scan_directory_for_tests(
                         description: metadata.description,
                         skipped: metadata.skipped,
                         test_type: metadata.test_type,
+                        timeout_secs: metadata.timeout_secs,
                     });
                 }
             }
@@ -316,6 +321,7 @@ fn scan_directory_for_orphans(
                     description: Some("[ORPHAN] Test without metadata".to_string()),
                     skipped: false, // Default to not skipped
                     test_type,
+                    timeout_secs: None,
                 });
             }
         }
@@ -328,7 +334,7 @@ fn scan_directory_for_orphans(
 pub fn save_tests(config: &TestConfig, _path: &Path) -> Result<()> {
     // Save regular tests
     for test in &config.tests {
-        save_test_metadata(&test.file, &test.expected, test.use_runtime, &test.description, false, test.skipped, test.test_type)?;
+        save_test_metadata(&test.file, &test.expected, test.use_runtime, &test.description, false, test.skipped, test.test_type, test.timeout_secs)?;
     }
     
     // Save known failures
@@ -339,14 +345,14 @@ pub fn save_tests(config: &TestConfig, _path: &Path) -> Result<()> {
         } else {
             TestType::C
         };
-        save_test_metadata(&failure.file, &None, test_type == TestType::C, &failure.description, true, false, test_type)?;
+        save_test_metadata(&failure.file, &None, test_type == TestType::C, &failure.description, true, false, test_type, None)?;
     }
     
     Ok(())
 }
 
 /// Save metadata for a single test
-fn save_test_metadata(
+pub fn save_test_metadata(
     file: &Path,
     expected: &Option<String>,
     use_runtime: bool,
@@ -354,6 +360,7 @@ fn save_test_metadata(
     known_failure: bool,
     skipped: bool,
     test_type: TestType,
+    timeout_secs: Option<u64>,
 ) -> Result<()> {
     // Construct the full path
     let full_path = if file.is_relative() && !file.starts_with("c-test") {
@@ -391,6 +398,10 @@ fn save_test_metadata(
     // Add skipped field if true
     if skipped {
         metadata.insert("skipped", serde_json::Value::Bool(true));
+    }
+
+    if let Some(timeout) = timeout_secs {
+        metadata.insert("timeout_secs", serde_json::Value::Number(timeout.into()));
     }
     
     // Write the metadata file
@@ -452,6 +463,7 @@ pub fn add_test(
         description,
         skipped: false, // Default to not skipped when adding new tests
         test_type,
+        timeout_secs: None,
     });
     true // Added new
 }

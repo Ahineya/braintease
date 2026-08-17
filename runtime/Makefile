@@ -11,16 +11,11 @@ MAX_IMMEDIATE = 65535
 
 # Source files
 C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c rand.c graphics.c string.c malloc.c
-#QFIXED_SOURCES = src/qfixed.c
 ASM_SOURCES = crt0.asm
 
-# Generated files
-#ASM_FILES = $(C_SOURCES:.c=.asm) $(QFIXED_SOURCES:src/%.c=%.asm)
-#C_OBJ_FILES = $(C_SOURCES:.c=.pobj) $(QFIXED_SOURCES:src/%.c=%.pobj)
-
-#temporarily exclude qfixed
-ASM_FILES = $(C_SOURCES:.c=.asm)
-C_OBJ_FILES = $(C_SOURCES:.c=.pobj)
+# qfixed lives in src/ and is compiled via the qfixed.asm rule below
+ASM_FILES = $(C_SOURCES:.c=.asm) qfixed.asm
+C_OBJ_FILES = $(C_SOURCES:.c=.pobj) qfixed.pobj
 
 # Don't include crt0 in the runtime library - it should be linked separately
 RUNTIME_OBJ_FILES = $(C_OBJ_FILES)

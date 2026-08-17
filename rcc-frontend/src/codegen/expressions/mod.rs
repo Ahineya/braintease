@@ -277,18 +277,10 @@ impl<'a> TypedExpressionGenerator<'a> {
                 // Convert struct type to IR type
                 let struct_ir_type = convert_type_default(struct_type)?;
                 
-                // Get pointer to the struct
-                let struct_ptr = if *is_pointer {
-                    // Object is already a pointer (-> operator)
-                    // Generate code for the object to get the pointer value
-                    self.generate(object)?
-                } else {
-                    // Object is a struct value (. operator)
-                    // Need to get its address
-                    // IMPORTANT: For nested member access, this will recursively
-                    // compute the address without loading intermediate values
-                    unary_ops::generate_lvalue_address(self, object)?
-                };
+                // Pointers (`->`) and struct values (`.`) both generate as fat
+                // pointers: variables, call results, compound literals, nested
+                // aggregate members, and struct-typed ternaries.
+                let struct_ptr = self.generate(object)?;
                 
                 // Field offset is a compile-time constant (in words)
                 // Convert field type to IR type
@@ -345,6 +337,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                 let cond_value = self.generate(condition)?;
                 
                 // Arrays in a ternary decay to pointers (C99).
+                let is_aggregate = matches!(expr_type, Type::Struct { .. } | Type::Union { .. });
                 let value_type = match expr_type {
                     Type::Array { element_type, .. } => Type::Pointer {
                         target: element_type.clone(),
@@ -383,11 +376,15 @@ impl<'a> TypedExpressionGenerator<'a> {
                         location: rcc_common::SourceLocation::new_simple(0, 0),
                     })?;
                 let then_value = self.generate(then_expr)?;
-                self.builder.build_store(then_value, result_ptr.clone())
-                    .map_err(|e| CodegenError::InternalError {
-                        message: format!("Failed to store then value: {e}"),
-                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                    })?;
+                if is_aggregate {
+                    assignments::copy_struct(self, then_value, result_ptr.clone(), expr_type)?;
+                } else {
+                    self.builder.build_store(then_value, result_ptr.clone())
+                        .map_err(|e| CodegenError::InternalError {
+                            message: format!("Failed to store then value: {e}"),
+                            location: rcc_common::SourceLocation::new_simple(0, 0),
+                        })?;
+                }
                 // Only create branch if block doesn't already have a terminator
                 if !self.builder.current_block_has_terminator() {
                     self.builder.build_branch(end_label)
@@ -404,11 +401,15 @@ impl<'a> TypedExpressionGenerator<'a> {
                         location: rcc_common::SourceLocation::new_simple(0, 0),
                     })?;
                 let else_value = self.generate(else_expr)?;
-                self.builder.build_store(else_value, result_ptr.clone())
-                    .map_err(|e| CodegenError::InternalError {
-                        message: format!("Failed to store else value: {e}"),
-                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                    })?;
+                if is_aggregate {
+                    assignments::copy_struct(self, else_value, result_ptr.clone(), expr_type)?;
+                } else {
+                    self.builder.build_store(else_value, result_ptr.clone())
+                        .map_err(|e| CodegenError::InternalError {
+                            message: format!("Failed to store else value: {e}"),
+                            location: rcc_common::SourceLocation::new_simple(0, 0),
+                        })?;
+                }
                 // Only create branch if block doesn't already have a terminator
                 if !self.builder.current_block_has_terminator() {
                     self.builder.build_branch(end_label)
@@ -425,14 +426,17 @@ impl<'a> TypedExpressionGenerator<'a> {
                         location: rcc_common::SourceLocation::new_simple(0, 0),
                     })?;
                 
-                // Load the value from the temporary
-                let result = self.builder.build_load(result_ptr, ir_type)
-                    .map_err(|e| CodegenError::InternalError {
-                        message: format!("Failed to load result: {e}"),
-                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                    })?;
-                
-                Ok(Value::Temp(result))
+                if is_aggregate {
+                    // Aggregates are used as pointers (assignment, member access, byval args)
+                    Ok(result_ptr)
+                } else {
+                    let result = self.builder.build_load(result_ptr, ir_type)
+                        .map_err(|e| CodegenError::InternalError {
+                            message: format!("Failed to load result: {e}"),
+                            location: rcc_common::SourceLocation::new_simple(0, 0),
+                        })?;
+                    Ok(Value::Temp(result))
+                }
             }
         }
     }

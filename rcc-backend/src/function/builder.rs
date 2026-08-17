@@ -149,10 +149,13 @@ impl FunctionBuilder {
         let param_name = naming.temp_name(param_id);
         mgr.bind_value_to_register(param_name.clone(), addr_reg);
         
-        // If this is a fat pointer, track the bank
+        // If this is a fat pointer, track the bank as a named value so it
+        // survives register reuse of A1/A3.
         if let Some(bank) = bank_reg {
             debug!("  Parameter {index} is a fat pointer with bank in {bank:?}");
-            mgr.set_pointer_bank(param_name, BankInfo::Register(bank));
+            let bank_name = naming.param_bank_name(index);
+            mgr.bind_value_to_register(bank_name.clone(), bank);
+            mgr.set_pointer_bank(param_name, BankInfo::Dynamic(bank_name));
         }
         
         trace!("  Parameter {index} bound to {addr_reg:?} (bank: {bank_reg:?})");

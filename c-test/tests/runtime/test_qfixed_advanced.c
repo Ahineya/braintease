@@ -58,12 +58,17 @@ int main() {
     
     // Simulate 10 timesteps
     for (int i = 0; i < 10; i++) {
-        // Update velocity
-        p.vy = q_add(p.vy, q_mul(gravity, dt));
-        
-        // Update position
-        p.x = q_add(p.x, q_mul(p.vx, dt));
-        p.y = q_add(p.y, q_mul(p.vy, dt));
+        q16_16_t gdt = q_mul(gravity, dt);
+        q16_16_t vy = p.vy;
+        p.vy = q_add(vy, gdt);
+
+        q16_16_t vx = p.vx;
+        q16_16_t x = p.x;
+        p.x = q_add(x, q_mul(vx, dt));
+
+        vy = p.vy;
+        q16_16_t y = p.y;
+        p.y = q_add(y, q_mul(vy, dt));
     }
     
     // Check if particle has moved right and fallen

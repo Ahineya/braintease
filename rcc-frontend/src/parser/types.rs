@@ -113,14 +113,17 @@ impl Parser {
             
             while !self.check(&TokenType::RightBrace) && !self.check(&TokenType::EndOfFile) {
                 let field_type = self.parse_type_specifier()?;
-                let (field_name, full_field_type) = self.parse_declarator(field_type)?;
-                
-                fields.push(StructField {
-                    name: field_name,
-                    field_type: full_field_type,
-                    offset: None, // Computed during semantic analysis
-                });
-                
+                loop {
+                    let (field_name, full_field_type) = self.parse_declarator(field_type.clone())?;
+                    fields.push(StructField {
+                        name: field_name,
+                        field_type: full_field_type,
+                        offset: None, // Computed during semantic analysis
+                    });
+                    if !self.match_token(&TokenType::Comma) {
+                        break;
+                    }
+                }
                 self.expect(TokenType::Semicolon, "struct field")?;
             }
             
@@ -149,14 +152,17 @@ impl Parser {
             
             while !self.check(&TokenType::RightBrace) && !self.check(&TokenType::EndOfFile) {
                 let field_type = self.parse_type_specifier()?;
-                let (field_name, full_field_type) = self.parse_declarator(field_type)?;
-                
-                fields.push(StructField {
-                    name: field_name,
-                    field_type: full_field_type,
-                    offset: None,
-                });
-                
+                loop {
+                    let (field_name, full_field_type) = self.parse_declarator(field_type.clone())?;
+                    fields.push(StructField {
+                        name: field_name,
+                        field_type: full_field_type,
+                        offset: None,
+                    });
+                    if !self.match_token(&TokenType::Comma) {
+                        break;
+                    }
+                }
                 self.expect(TokenType::Semicolon, "union field")?;
             }
             

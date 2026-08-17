@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Ternary operator with struct values",
+  "expected": "YY\n"
+}

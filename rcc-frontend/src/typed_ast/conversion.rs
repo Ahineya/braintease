@@ -533,6 +533,7 @@ pub fn type_expression(
             
             let result_type = expr.expr_type.clone()
                 .ok_or_else(|| TypeError::TypeMismatch("Call expression has no type".to_string()))?;
+            let result_type = type_env.type_analyzer.borrow().resolve_type(&result_type);
             
             Ok(TypedExpr::Call {
                 function: Box::new(func_typed),

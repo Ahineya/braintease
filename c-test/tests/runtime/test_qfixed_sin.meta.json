@@ -1,0 +1,6 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "q_sin(0) should be near 0",
+  "timeout_secs": 15
+}
