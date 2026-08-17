@@ -1,0 +1,8 @@
+{
+  "description": "TEXT40 keyboard state visualizer (arrows, Z/X)",
+  "use_runtime": true,
+  "visual": false,
+  "display": "text40",
+  "disk": false,
+  "runner": "c"
+}

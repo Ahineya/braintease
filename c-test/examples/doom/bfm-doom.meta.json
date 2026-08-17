@@ -1,0 +1,12 @@
+{
+  "description": "BFM Doom TITLEPIC demo - standalone, RGB565 window, needs an IWAD",
+  "use_runtime": false,
+  "visual": true,
+  "display": "rgb565",
+  "disk": true,
+  "runner": "bfm-doom",
+  "test_type": "bfm",
+  "aliases": [
+    "doom-bfm"
+  ]
+}

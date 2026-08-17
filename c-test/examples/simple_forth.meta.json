@@ -1,0 +1,8 @@
+{
+  "description": "Stack calculator with TTY input",
+  "use_runtime": true,
+  "visual": false,
+  "display": "tty",
+  "disk": false,
+  "runner": "c"
+}

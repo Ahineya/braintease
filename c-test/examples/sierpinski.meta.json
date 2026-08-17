@@ -1,0 +1,8 @@
+{
+  "description": "ASCII Sierpinski triangle on stdout",
+  "use_runtime": true,
+  "visual": false,
+  "display": "console",
+  "disk": false,
+  "runner": "c"
+}

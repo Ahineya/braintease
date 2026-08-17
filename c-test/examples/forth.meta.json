@@ -1,0 +1,8 @@
+{
+  "description": "Minimal Forth interpreter (interactive TTY input)",
+  "use_runtime": true,
+  "visual": false,
+  "display": "tty",
+  "disk": false,
+  "runner": "c"
+}

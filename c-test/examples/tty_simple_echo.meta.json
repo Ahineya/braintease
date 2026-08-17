@@ -1,5 +1,9 @@
 {
+  "description": "Simple TTY line echo (no display mode change)",
   "use_runtime": true,
-  "expected": "manual",
-  "description": "Simple TTY echo test"
+  "visual": false,
+  "display": "tty",
+  "disk": false,
+  "runner": "c",
+  "expected": "manual"
 }

@@ -1,0 +1,8 @@
+{
+  "description": "Array indexing with computed indices",
+  "use_runtime": true,
+  "visual": false,
+  "display": "console",
+  "disk": false,
+  "runner": "c"
+}

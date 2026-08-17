@@ -1,0 +1,12 @@
+{
+  "description": "C Doom TITLEPIC demo - RGB565 window, needs an IWAD as --disk",
+  "use_runtime": true,
+  "visual": true,
+  "display": "rgb565",
+  "disk": true,
+  "runner": "doom-c",
+  "aliases": [
+    "doom",
+    "doom-c"
+  ]
+}

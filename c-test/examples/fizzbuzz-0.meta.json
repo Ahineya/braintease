@@ -1,0 +1,8 @@
+{
+  "description": "FizzBuzz on stdout",
+  "use_runtime": true,
+  "visual": false,
+  "display": "console",
+  "disk": false,
+  "runner": "c"
+}

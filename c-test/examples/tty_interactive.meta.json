@@ -1,5 +1,9 @@
 {
-  "expected": "manual",
+  "description": "Interactive TTY echo using display_set_mode(TTY)",
   "use_runtime": true,
-  "description": "Interactive TTY input test"
+  "visual": false,
+  "display": "tty",
+  "disk": false,
+  "runner": "c",
+  "expected": "manual"
 }

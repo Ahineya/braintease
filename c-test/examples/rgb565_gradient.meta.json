@@ -1,0 +1,8 @@
+{
+  "description": "RGB565 color gradient (needs a graphics window)",
+  "use_runtime": true,
+  "visual": true,
+  "display": "rgb565",
+  "disk": false,
+  "runner": "c"
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Move a square with arrow keys on RGB565",
+  "use_runtime": true,
+  "visual": true,
+  "display": "rgb565",
+  "disk": false,
+  "runner": "c"
+}

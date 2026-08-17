@@ -1,0 +1,8 @@
+{
+  "description": "Minimal Forth using parallel arrays (interactive)",
+  "use_runtime": true,
+  "visual": false,
+  "display": "tty",
+  "disk": false,
+  "runner": "c"
+}

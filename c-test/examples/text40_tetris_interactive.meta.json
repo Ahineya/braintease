@@ -1,0 +1,8 @@
+{
+  "description": "Interactive Tetris on TEXT40 (arrows, Z/X)",
+  "use_runtime": true,
+  "visual": false,
+  "display": "text40",
+  "disk": false,
+  "runner": "c"
+}

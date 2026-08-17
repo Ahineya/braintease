@@ -1,9 +1,9 @@
 {
-  "description": "TTY input echo test program - type and press q to quit",
+  "description": "getchar() with a pre-populated input buffer",
   "use_runtime": true,
   "visual": false,
   "display": "tty",
   "disk": false,
   "runner": "c",
-  "expected": "manual"
+  "input": "ABCDE"
 }

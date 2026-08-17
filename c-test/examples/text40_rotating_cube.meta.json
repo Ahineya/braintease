@@ -1,0 +1,8 @@
+{
+  "description": "Wireframe rotating cube (qfixed) on TEXT40",
+  "use_runtime": true,
+  "visual": false,
+  "display": "text40",
+  "disk": false,
+  "runner": "c"
+}

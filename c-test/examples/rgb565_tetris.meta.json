@@ -1,0 +1,8 @@
+{
+  "description": "Interactive Tetris on a 64x64 RGB565 window",
+  "use_runtime": true,
+  "visual": true,
+  "display": "rgb565",
+  "disk": false,
+  "runner": "c"
+}
