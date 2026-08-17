@@ -3,11 +3,33 @@
 use super::{TypedExpressionGenerator, convert_type_default};
 use super::conversions::convert_integer;
 use super::assignments::copy_struct;
-use crate::ir::{Value, FatPointer};
+use crate::ir::{IrBinaryOp, Value, FatPointer};
 use crate::typed_ast::TypedExpr;
 use crate::types::{Type, BankTag};
 use crate::codegen::CodegenError;
 use crate::CompilerError;
+
+/// Constants that fit in 16 bits are `Value::Constant` with no I32 high word.
+/// Force a typed I32 temp so the ABI passes two slots (0L, 255UL, …).
+fn materialize_wide_int(
+    gen: &mut TypedExpressionGenerator,
+    val: Value,
+    ty: &Type,
+) -> Result<Value, CompilerError> {
+    if !matches!(ty, Type::Long | Type::UnsignedLong) {
+        return Ok(val);
+    }
+    if matches!(val, Value::Temp(_)) {
+        return Ok(val);
+    }
+    let ir_type = convert_type_default(ty)?;
+    let temp = gen.builder.build_binary(IrBinaryOp::Add, val, Value::Constant(0), ir_type)
+        .map_err(|e| CodegenError::InternalError {
+            message: format!("Failed to materialize 32-bit argument: {e}"),
+            location: rcc_common::SourceLocation::new_simple(0, 0),
+        })?;
+    Ok(Value::Temp(temp))
+}
 
 pub fn generate_function_call(
     gen: &mut TypedExpressionGenerator,
@@ -61,7 +83,12 @@ pub fn generate_function_call(
             copy_struct(gen, val, dest.clone(), &arg_type)?;
             arg_vals.push(dest);
         } else if i < param_types.len() && arg_type.is_integer() && param_types[i].is_integer() {
-            arg_vals.push(convert_integer(gen, val, arg_type, &param_types[i])?);
+            let converted = convert_integer(gen, val, arg_type, &param_types[i])?;
+            arg_vals.push(materialize_wide_int(gen, converted, &param_types[i])?);
+        } else if arg_type.is_integer() {
+            // Variadic extras keep their type; long must occupy two ABI slots
+            // even when the constant fits in 16 bits (0L, 255UL, …).
+            arg_vals.push(materialize_wide_int(gen, val, arg_type)?);
         } else {
             arg_vals.push(val);
         }

@@ -182,11 +182,7 @@ pub fn generate_binary_operation(
     } else {
         convert_integer(gen, right_val, right.get_type(), &common)?
     };
-    let ir_type = if is_cmp {
-        IrType::I16
-    } else {
-        convert_type_default(result_type)?
-    };
+    let ir_type = convert_type_default(&common)?;
     
     let ir_op = select_ir_op(op, left, right)?;
     

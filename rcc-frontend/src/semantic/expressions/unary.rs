@@ -111,7 +111,7 @@ impl UnaryOperationAnalyzer {
             }
 
             UnaryOp::Sizeof => {
-                Ok(Type::Int) // sizeof yields size_t (int on this target)
+                Ok(Type::UnsignedInt) // sizeof yields size_t (unsigned int)
             }
         }
     }

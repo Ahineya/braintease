@@ -8,8 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <ctype.h>
 #include <assert.h>
 
 // Ripple-specific extensions

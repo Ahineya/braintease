@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYYYYYYYYYYY\n",
+  "use_runtime": true,
+  "description": "ctype.h classification and case conversion"
+}

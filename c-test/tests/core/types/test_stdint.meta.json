@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYYYYYYY\n",
+  "description": "stdint.h exact-width types and limits",
+  "use_runtime": true
+}

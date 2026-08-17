@@ -204,9 +204,9 @@ impl TypeAnalyzer {
     
     /// Get the common type for two operands (for arithmetic operations)
     pub fn arithmetic_result_type(&self, left: &Type, right: &Type) -> Type {
-        // Simplified type promotion rules
-        match (left, right) {
-            // Same rank: unsigned wins (C99 6.3.1.8)
+        let left = self.resolve_type(left);
+        let right = self.resolve_type(right);
+        match (&left, &right) {
             (Type::UnsignedLong, _) | (_, Type::UnsignedLong) => Type::UnsignedLong,
             (Type::Long, _) | (_, Type::Long) => Type::Long,
             (Type::UnsignedInt, _) | (_, Type::UnsignedInt) => Type::UnsignedInt,

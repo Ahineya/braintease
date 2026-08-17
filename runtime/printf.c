@@ -22,14 +22,17 @@ static int print_str(char *s) {
     return n;
 }
 
-static int digit_char(unsigned int d) {
+static int digit_char(unsigned int d, int upper) {
     if (d < 10) {
         return (int)'0' + (int)d;
+    }
+    if (upper) {
+        return (int)'A' + (int)(d - 10);
     }
     return (int)'a' + (int)(d - 10);
 }
 
-static int print_uint(unsigned int n, unsigned int base) {
+static int print_uint(unsigned int n, unsigned int base, int upper) {
     char buf[16];
     int i;
     int count;
@@ -42,7 +45,7 @@ static int print_uint(unsigned int n, unsigned int base) {
     }
 
     while (n > 0) {
-        buf[i] = (char)digit_char(n % base);
+        buf[i] = (char)digit_char(n % base, upper);
         i = i + 1;
         n = n / base;
     }
@@ -55,22 +58,59 @@ static int print_uint(unsigned int n, unsigned int base) {
 }
 
 static int print_int(int n) {
-    int count;
     unsigned int mag;
 
     if (n < 0) {
         print_char('-');
         mag = (unsigned int)0 - (unsigned int)n;
-        return 1 + print_uint(mag, 10);
+        return 1 + print_uint(mag, 10, 0);
     }
-    count = print_uint((unsigned int)n, 10);
+    return print_uint((unsigned int)n, 10, 0);
+}
+
+static int print_ulong(unsigned long n, unsigned int base, int upper) {
+    char buf[32];
+    int i;
+    int count;
+    unsigned long b;
+
+    b = (unsigned long)base;
+    i = 0;
+    count = 0;
+
+    if (n == 0) {
+        return print_char('0');
+    }
+
+    while (n > 0) {
+        buf[i] = (char)digit_char((unsigned int)(n % b), upper);
+        i = i + 1;
+        n = n / b;
+    }
+    while (i) {
+        i = i - 1;
+        print_char(buf[i]);
+        count = count + 1;
+    }
     return count;
+}
+
+static int print_long(long n) {
+    unsigned long mag;
+
+    if (n < 0) {
+        print_char('-');
+        mag = 0UL - (unsigned long)n;
+        return 1 + print_ulong(mag, 10, 0);
+    }
+    return print_ulong((unsigned long)n, 10, 0);
 }
 
 int printf(char *fmt, ...) {
     va_list ap;
     char *p;
     int count;
+    int long_mod;
 
     va_start(ap, fmt);
     p = fmt;
@@ -83,6 +123,16 @@ int printf(char *fmt, ...) {
                 count = count + print_char('%');
                 break;
             }
+            long_mod = 0;
+            if (*p == 'l') {
+                long_mod = 1;
+                p = p + 1;
+                if (*p == 0) {
+                    count = count + print_char('%');
+                    count = count + print_char('l');
+                    break;
+                }
+            }
             switch (*p) {
             case 's':
                 count = count + print_str(va_arg(ap, char *));
@@ -91,19 +141,42 @@ int printf(char *fmt, ...) {
                 count = count + print_char((char)va_arg(ap, int));
                 break;
             case 'd':
-                count = count + print_int(va_arg(ap, int));
+            case 'i':
+                if (long_mod) {
+                    count = count + print_long(va_arg(ap, long));
+                } else {
+                    count = count + print_int(va_arg(ap, int));
+                }
                 break;
             case 'u':
-                count = count + print_uint(va_arg(ap, unsigned int), 10);
+                if (long_mod) {
+                    count = count + print_ulong(va_arg(ap, unsigned long), 10, 0);
+                } else {
+                    count = count + print_uint(va_arg(ap, unsigned int), 10, 0);
+                }
+                break;
+            case 'X':
+                if (long_mod) {
+                    count = count + print_ulong(va_arg(ap, unsigned long), 16, 1);
+                } else {
+                    count = count + print_uint(va_arg(ap, unsigned int), 16, 1);
+                }
                 break;
             case 'x':
-                count = count + print_uint(va_arg(ap, unsigned int), 16);
+                if (long_mod) {
+                    count = count + print_ulong(va_arg(ap, unsigned long), 16, 0);
+                } else {
+                    count = count + print_uint(va_arg(ap, unsigned int), 16, 0);
+                }
                 break;
             case '%':
                 count = count + print_char('%');
                 break;
             default:
                 count = count + print_char('%');
+                if (long_mod) {
+                    count = count + print_char('l');
+                }
                 count = count + print_char(*p);
                 break;
             }

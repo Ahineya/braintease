@@ -1,0 +1,5 @@
+{
+  "description": "exit() HALTs after output",
+  "expected": "Y",
+  "use_runtime": true
+}

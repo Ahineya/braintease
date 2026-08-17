@@ -1,29 +1,25 @@
 #ifndef STDLIB_H
 #define STDLIB_H
 
-// Standard library functions
+#include <stddef.h>
 
-// Common macros
-#define NULL ((void *)0)
-
-// Exit codes
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
-// Random number generation
-#define RAND_MAX 0x7FFF  // Maximum value returned by rand() (32767)
+#define RAND_MAX 0x7FFF
 
 int rand(void);
 void srand(unsigned int seed);
 
-// Memory allocation functions
-void *malloc(unsigned int size);
+void *malloc(size_t size);
 void free(void *ptr);
-void *calloc(unsigned int nmemb, unsigned int size);
-void *realloc(void *ptr, unsigned int size);
+void *calloc(size_t nmemb, size_t size);
+void *realloc(void *ptr, size_t size);
 
-// TODO: Future additions
-// void exit(int status);
-// int abs(int j);
+int abs(int j);
+long labs(long j);
 
-#endif // STDLIB_H
+void exit(int status);
+void abort(void);
+
+#endif /* STDLIB_H */

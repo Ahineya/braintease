@@ -194,7 +194,8 @@ pub fn lower_instruction(
                         }
                     }
                     Value::Constant(c) => {
-                        // Load constant into a register
+                        // Load constant into a register. Truncate to 16 bits;
+                        // I32 arguments are materialized as temps in the frontend.
                         let temp_name = naming.const_value(*c);
                         let reg = mgr.get_register(temp_name);
                         insts.extend(mgr.take_instructions());
@@ -544,8 +545,8 @@ fn lower_va_arg(
 
     let words = result_type.size_in_words().unwrap_or(1) as i16;
 
-    if result_type.is_pointer() {
-        // Stack extras: address word at ap, bank word at ap-1 (see load_param).
+    if result_type.is_pointer() || result_type.is_wide() {
+        // Stack extras: low/addr word at ap, high/bank word at ap-1 (see load_param).
         let ap_name = naming.temp_name(ap_temp);
         let ap_reg = mgr.get_register(ap_name);
         insts.extend(mgr.take_instructions());
@@ -557,12 +558,21 @@ fn lower_va_arg(
         insts.push(AsmInst::Load(dest_reg, Reg::Sb, ap_reg));
 
         insts.push(AsmInst::AddI(Reg::Sc, ap_reg, -1));
-        let bank_name = naming.load_bank_value(dest);
-        let bank_reg = mgr.get_register(bank_name.clone());
-        insts.extend(mgr.take_instructions());
-        insts.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
-        mgr.bind_value_to_register(bank_name.clone(), bank_reg);
-        mgr.set_pointer_bank(dest_name, BankInfo::Dynamic(bank_name));
+        if result_type.is_wide() {
+            let hi_name = naming.i32_high_name(&dest_name);
+            let hi_reg = mgr.get_register(hi_name.clone());
+            insts.extend(mgr.take_instructions());
+            insts.push(AsmInst::Load(hi_reg, Reg::Sb, Reg::Sc));
+            mgr.bind_value_to_register(hi_name.clone(), hi_reg);
+            mgr.set_i32_high(dest_name.clone(), hi_name);
+        } else {
+            let bank_name = naming.load_bank_value(dest);
+            let bank_reg = mgr.get_register(bank_name.clone());
+            insts.extend(mgr.take_instructions());
+            insts.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
+            mgr.bind_value_to_register(bank_name.clone(), bank_reg);
+            mgr.set_pointer_bank(dest_name, BankInfo::Dynamic(bank_name));
+        }
         mgr.bind_value_to_register(naming.temp_name(dest), dest_reg);
         mgr.unpin_register(ap_reg);
     } else {

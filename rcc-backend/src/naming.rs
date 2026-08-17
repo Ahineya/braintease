@@ -26,6 +26,9 @@ pub struct NameGenerator {
     
     /// Counter for unique labels within the current function
     next_label_id: u32,
+
+    /// Per-instance tag so I32 labels do not collide across object files.
+    unit_tag: u32,
 }
 
 impl NameGenerator {
@@ -35,6 +38,7 @@ impl NameGenerator {
             function_id,
             next_op_id: 0,
             next_label_id: 0,
+            unit_tag: Uuid::new_v4().as_u128() as u32,
         }
     }
     
@@ -70,10 +74,12 @@ impl NameGenerator {
         format!("{lo_name}__hi")
     }
 
-    /// Unique label for I32 helper sequences (shifts, division)
     pub fn i32_label(&mut self, kind: &str) -> String {
         let label_id = self.next_label_id();
-        format!("L_i32_{}_{}_{}", kind, self.function_id, label_id)
+        format!(
+            "L_i32_{}_{:x}_{}_{}",
+            kind, self.unit_tag, self.function_id, label_id
+        )
     }
     
     // ===== Load operation naming =====

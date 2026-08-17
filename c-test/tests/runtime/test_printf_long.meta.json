@@ -1,0 +1,5 @@
+{
+  "expected": "65536\n80000\nff\n-1\nFF\n42\n",
+  "use_runtime": true,
+  "description": "printf %ld %lu %lx %lX %i"
+}

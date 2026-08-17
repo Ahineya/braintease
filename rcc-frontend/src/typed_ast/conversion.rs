@@ -575,7 +575,7 @@ pub fn type_expression(
             
             Ok(TypedExpr::SizeofExpr {
                 operand: Box::new(operand_typed),
-                expr_type: Type::Int,  // sizeof returns size_t, which we treat as int
+                expr_type: Type::UnsignedInt,
             })
         }
         
@@ -584,7 +584,7 @@ pub fn type_expression(
             let resolved_target = type_env.type_analyzer.borrow().resolve_type(target_type);
             Ok(TypedExpr::SizeofType {
                 target_type: resolved_target,
-                expr_type: Type::Int,
+                expr_type: Type::UnsignedInt,
             })
         }
         

@@ -1,0 +1,5 @@
+{
+  "expected": "Yabort\n",
+  "use_runtime": true,
+  "description": "abort() prints abort and HALTs"
+}

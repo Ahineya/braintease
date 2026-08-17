@@ -464,17 +464,17 @@ L_umul16_6:
     ADDI SC, SC, 52
     STORE S0, SB, SC
     LI S3, -1
-    BEQ T2, S3, L_bc_251066fd_use_global
+    BEQ T2, S3, L_bc_b8cec98d_use_global
     LI T0, -2
-    BEQ T2, T0, L_bc_251066fd_use_stack
+    BEQ T2, T0, L_bc_b8cec98d_use_stack
     ADD S0, T2, R0
-    BEQ R0, R0, L_bc_251066fd_done
-L_bc_251066fd_use_global:
+    BEQ R0, R0, L_bc_b8cec98d_done
+L_bc_b8cec98d_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_251066fd_done
-L_bc_251066fd_use_stack:
+    BEQ R0, R0, L_bc_b8cec98d_done
+L_bc_b8cec98d_use_stack:
     ADD S0, SB, R0
-L_bc_251066fd_done:
+L_bc_b8cec98d_done:
     STORE T6, S0, T5
 ; Load instruction: t77 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
@@ -497,17 +497,17 @@ L_bc_251066fd_done:
     ADDI SC, SC, 53
     STORE T7, SB, SC
     LI T1, -1
-    BEQ S1, T1, L_bc_6365735e_use_global
+    BEQ S1, T1, L_bc_55ca4251_use_global
     LI T3, -2
-    BEQ S1, T3, L_bc_6365735e_use_stack
+    BEQ S1, T3, L_bc_55ca4251_use_stack
     ADD T7, S1, R0
-    BEQ R0, R0, L_bc_6365735e_done
-L_bc_6365735e_use_global:
+    BEQ R0, R0, L_bc_55ca4251_done
+L_bc_55ca4251_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_6365735e_done
-L_bc_6365735e_use_stack:
+    BEQ R0, R0, L_bc_55ca4251_done
+L_bc_55ca4251_use_stack:
     ADD T7, SB, R0
-L_bc_6365735e_done:
+L_bc_55ca4251_done:
     STORE T4, T7, T0
 ; Jump to epilogue
     BEQ R0, R0, L_umul16_99999
@@ -885,21 +885,21 @@ L_u32_sub_17:
     ADDI SC, SC, 18
     STORE T6, SB, SC
     LI T6, -1
-    BEQ T1, T6, L_bc_3a0e18e1_use_global
+    BEQ T1, T6, L_bc_84fb702d_use_global
 ; Spill t5 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 21
     STORE T4, SB, SC
     LI T4, -2
-    BEQ T1, T4, L_bc_3a0e18e1_use_stack
+    BEQ T1, T4, L_bc_84fb702d_use_stack
     ADD S0, T1, R0
-    BEQ R0, R0, L_bc_3a0e18e1_done
-L_bc_3a0e18e1_use_global:
+    BEQ R0, R0, L_bc_84fb702d_done
+L_bc_84fb702d_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_3a0e18e1_done
-L_bc_3a0e18e1_use_stack:
+    BEQ R0, R0, L_bc_84fb702d_done
+L_bc_84fb702d_use_stack:
     ADD S0, SB, R0
-L_bc_3a0e18e1_done:
+L_bc_84fb702d_done:
     STORE T0, S0, T3
 ; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
@@ -946,7 +946,7 @@ L_bc_3a0e18e1_done:
     ADDI SC, SC, 29
     STORE T0, SB, SC
     LI T0, -1
-    BEQ T7, T0, L_bc_77d5ad22_use_global
+    BEQ T7, T0, L_bc_a7bb1cae_use_global
 ; Spill t18 to slot 12
     ADD SC, FP, R0
     ADDI SC, SC, 30
@@ -956,15 +956,15 @@ L_bc_3a0e18e1_done:
     ADDI SC, SC, 31
     STORE T1, SB, SC
     LI T3, -2
-    BEQ T7, T3, L_bc_77d5ad22_use_stack
+    BEQ T7, T3, L_bc_a7bb1cae_use_stack
     ADD S1, T7, R0
-    BEQ R0, R0, L_bc_77d5ad22_done
-L_bc_77d5ad22_use_global:
+    BEQ R0, R0, L_bc_a7bb1cae_done
+L_bc_a7bb1cae_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_77d5ad22_done
-L_bc_77d5ad22_use_stack:
+    BEQ R0, R0, L_bc_a7bb1cae_done
+L_bc_a7bb1cae_use_stack:
     ADD S1, SB, R0
-L_bc_77d5ad22_done:
+L_bc_a7bb1cae_done:
     STORE S2, S1, T4
 ; Jump to epilogue
     BEQ R0, R0, L_u32_sub_99999
@@ -1641,17 +1641,17 @@ L_u32_div_q16_22:
     ADDI T4, T4, 10
     LOAD S2, SB, T4
     LI T5, -1
-    BEQ RV0, T5, L_bc_184d9125_use_global
+    BEQ RV0, T5, L_bc_3e4f3fe0_use_global
     LI T2, -2
-    BEQ RV0, T2, L_bc_184d9125_use_stack
+    BEQ RV0, T2, L_bc_3e4f3fe0_use_stack
     ADD T0, RV0, R0
-    BEQ R0, R0, L_bc_184d9125_done
-L_bc_184d9125_use_global:
+    BEQ R0, R0, L_bc_3e4f3fe0_done
+L_bc_3e4f3fe0_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_184d9125_done
-L_bc_184d9125_use_stack:
+    BEQ R0, R0, L_bc_3e4f3fe0_done
+L_bc_3e4f3fe0_use_stack:
     ADD T0, SB, R0
-L_bc_184d9125_done:
+L_bc_3e4f3fe0_done:
     STORE S2, T0, S3
 ; Load instruction: t77 = load FatPtr(FatPointer { addr: Temp(11), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(11), bank: Stack })
@@ -1689,17 +1689,17 @@ L_bc_184d9125_done:
     ADDI SC, SC, 54
     STORE S0, SB, SC
     LI S0, -1
-    BEQ S1, S0, L_bc_bdae29cf_use_global
+    BEQ S1, S0, L_bc_d1507850_use_global
     LI T6, -2
-    BEQ S1, T6, L_bc_bdae29cf_use_stack
+    BEQ S1, T6, L_bc_d1507850_use_stack
     ADD T3, S1, R0
-    BEQ R0, R0, L_bc_bdae29cf_done
-L_bc_bdae29cf_use_global:
+    BEQ R0, R0, L_bc_d1507850_done
+L_bc_d1507850_use_global:
     ADD T3, GP, R0
-    BEQ R0, R0, L_bc_bdae29cf_done
-L_bc_bdae29cf_use_stack:
+    BEQ R0, R0, L_bc_d1507850_done
+L_bc_d1507850_use_stack:
     ADD T3, SB, R0
-L_bc_bdae29cf_done:
+L_bc_d1507850_done:
     STORE T7, T3, T5
 ; Jump to epilogue
     BEQ R0, R0, L_u32_div_q16_99999
@@ -1768,17 +1768,17 @@ L_q_add_35:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f8_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_58dbea2f_use_global
+    BEQ S2, T3, L_bc_138da804_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_58dbea2f_use_stack
+    BEQ S2, T2, L_bc_138da804_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_58dbea2f_done
-L_bc_58dbea2f_use_global:
+    BEQ R0, R0, L_bc_138da804_done
+L_bc_138da804_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_58dbea2f_done
-L_bc_58dbea2f_use_stack:
+    BEQ R0, R0, L_bc_138da804_done
+L_bc_138da804_use_stack:
     ADD T4, SB, R0
-L_bc_58dbea2f_done:
+L_bc_138da804_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -1800,21 +1800,21 @@ L_bc_58dbea2f_done:
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_04311dc0_use_global
+    BEQ S2, S1, L_bc_5ee605ae_use_global
 ; Spill param_bank_f8_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 19
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_04311dc0_use_stack
+    BEQ S2, S0, L_bc_5ee605ae_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_04311dc0_done
-L_bc_04311dc0_use_global:
+    BEQ R0, R0, L_bc_5ee605ae_done
+L_bc_5ee605ae_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_04311dc0_done
-L_bc_04311dc0_use_stack:
+    BEQ R0, R0, L_bc_5ee605ae_done
+L_bc_5ee605ae_use_stack:
     ADD T2, SB, R0
-L_bc_04311dc0_done:
+L_bc_5ee605ae_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -1870,7 +1870,7 @@ L_bc_04311dc0_done:
     ADDI SC, SC, 26
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_cb4c7043_use_global
+    BEQ T4, T7, L_bc_7e53de12_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 27
@@ -1880,15 +1880,15 @@ L_bc_04311dc0_done:
     ADDI SC, SC, 28
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_cb4c7043_use_stack
+    BEQ T4, T0, L_bc_7e53de12_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_cb4c7043_done
-L_bc_cb4c7043_use_global:
+    BEQ R0, R0, L_bc_7e53de12_done
+L_bc_7e53de12_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_cb4c7043_done
-L_bc_cb4c7043_use_stack:
+    BEQ R0, R0, L_bc_7e53de12_done
+L_bc_7e53de12_use_stack:
     ADD S3, SB, R0
-L_bc_cb4c7043_done:
+L_bc_7e53de12_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -1914,21 +1914,21 @@ L_bc_cb4c7043_done:
     ADDI SC, SC, 31
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_5db7dec1_use_global
+    BEQ T4, S1, L_bc_d5cde6a9_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 32
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_5db7dec1_use_stack
+    BEQ T4, T3, L_bc_d5cde6a9_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_5db7dec1_done
-L_bc_5db7dec1_use_global:
+    BEQ R0, R0, L_bc_d5cde6a9_done
+L_bc_d5cde6a9_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_5db7dec1_done
-L_bc_5db7dec1_use_stack:
+    BEQ R0, R0, L_bc_d5cde6a9_done
+L_bc_d5cde6a9_use_stack:
     ADD T2, SB, R0
-L_bc_5db7dec1_done:
+L_bc_d5cde6a9_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -2196,17 +2196,17 @@ L_q_sub_39:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f10_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_294b623c_use_global
+    BEQ S2, T3, L_bc_45d70ff1_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_294b623c_use_stack
+    BEQ S2, T2, L_bc_45d70ff1_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_294b623c_done
-L_bc_294b623c_use_global:
+    BEQ R0, R0, L_bc_45d70ff1_done
+L_bc_45d70ff1_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_294b623c_done
-L_bc_294b623c_use_stack:
+    BEQ R0, R0, L_bc_45d70ff1_done
+L_bc_45d70ff1_use_stack:
     ADD T4, SB, R0
-L_bc_294b623c_done:
+L_bc_45d70ff1_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -2228,21 +2228,21 @@ L_bc_294b623c_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_90a7b774_use_global
+    BEQ S2, S1, L_bc_3a817678_use_global
 ; Spill param_bank_f10_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_90a7b774_use_stack
+    BEQ S2, S0, L_bc_3a817678_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_90a7b774_done
-L_bc_90a7b774_use_global:
+    BEQ R0, R0, L_bc_3a817678_done
+L_bc_3a817678_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_90a7b774_done
-L_bc_90a7b774_use_stack:
+    BEQ R0, R0, L_bc_3a817678_done
+L_bc_3a817678_use_stack:
     ADD T2, SB, R0
-L_bc_90a7b774_done:
+L_bc_3a817678_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -2298,7 +2298,7 @@ L_bc_90a7b774_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_e22000f8_use_global
+    BEQ T4, T7, L_bc_641ea29c_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -2308,15 +2308,15 @@ L_bc_90a7b774_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_e22000f8_use_stack
+    BEQ T4, T0, L_bc_641ea29c_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_e22000f8_done
-L_bc_e22000f8_use_global:
+    BEQ R0, R0, L_bc_641ea29c_done
+L_bc_641ea29c_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_e22000f8_done
-L_bc_e22000f8_use_stack:
+    BEQ R0, R0, L_bc_641ea29c_done
+L_bc_641ea29c_use_stack:
     ADD S3, SB, R0
-L_bc_e22000f8_done:
+L_bc_641ea29c_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -2342,21 +2342,21 @@ L_bc_e22000f8_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_941a3b2f_use_global
+    BEQ T4, S1, L_bc_86bb1144_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_941a3b2f_use_stack
+    BEQ T4, T3, L_bc_86bb1144_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_941a3b2f_done
-L_bc_941a3b2f_use_global:
+    BEQ R0, R0, L_bc_86bb1144_done
+L_bc_86bb1144_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_941a3b2f_done
-L_bc_941a3b2f_use_stack:
+    BEQ R0, R0, L_bc_86bb1144_done
+L_bc_86bb1144_use_stack:
     ADD T2, SB, R0
-L_bc_941a3b2f_done:
+L_bc_86bb1144_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -2614,17 +2614,17 @@ L_q_neg_43:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f12_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_12da8bca_use_global
+    BEQ S2, T5, L_bc_c8a1931b_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_12da8bca_use_stack
+    BEQ S2, T4, L_bc_c8a1931b_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_12da8bca_done
-L_bc_12da8bca_use_global:
+    BEQ R0, R0, L_bc_c8a1931b_done
+L_bc_c8a1931b_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_12da8bca_done
-L_bc_12da8bca_use_stack:
+    BEQ R0, R0, L_bc_c8a1931b_done
+L_bc_c8a1931b_use_stack:
     ADD T6, SB, R0
-L_bc_12da8bca_done:
+L_bc_c8a1931b_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -2638,17 +2638,17 @@ L_bc_12da8bca_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f12_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_ecbfe450_use_global
+    BEQ S2, T5, L_bc_7b5114dd_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_ecbfe450_use_stack
+    BEQ S2, T4, L_bc_7b5114dd_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_ecbfe450_done
-L_bc_ecbfe450_use_global:
+    BEQ R0, R0, L_bc_7b5114dd_done
+L_bc_7b5114dd_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_ecbfe450_done
-L_bc_ecbfe450_use_stack:
+    BEQ R0, R0, L_bc_7b5114dd_done
+L_bc_7b5114dd_use_stack:
     ADD T0, SB, R0
-L_bc_ecbfe450_done:
+L_bc_7b5114dd_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -2857,17 +2857,17 @@ L_q_abs_47:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f14_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_61e02060_use_global
+    BEQ S2, T5, L_bc_f4367129_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_61e02060_use_stack
+    BEQ S2, T4, L_bc_f4367129_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_61e02060_done
-L_bc_61e02060_use_global:
+    BEQ R0, R0, L_bc_f4367129_done
+L_bc_f4367129_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_61e02060_done
-L_bc_61e02060_use_stack:
+    BEQ R0, R0, L_bc_f4367129_done
+L_bc_f4367129_use_stack:
     ADD T6, SB, R0
-L_bc_61e02060_done:
+L_bc_f4367129_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -2881,17 +2881,17 @@ L_bc_61e02060_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f14_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_ab79da13_use_global
+    BEQ S2, T5, L_bc_1d75e509_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_ab79da13_use_stack
+    BEQ S2, T4, L_bc_1d75e509_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_ab79da13_done
-L_bc_ab79da13_use_global:
+    BEQ R0, R0, L_bc_1d75e509_done
+L_bc_1d75e509_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_ab79da13_done
-L_bc_ab79da13_use_stack:
+    BEQ R0, R0, L_bc_1d75e509_done
+L_bc_1d75e509_use_stack:
     ADD T0, SB, R0
-L_bc_ab79da13_done:
+L_bc_1d75e509_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -3138,17 +3138,17 @@ L_q_mul_51:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f16_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_5275da5e_use_global
+    BEQ S2, T3, L_bc_062717a5_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_5275da5e_use_stack
+    BEQ S2, T2, L_bc_062717a5_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_5275da5e_done
-L_bc_5275da5e_use_global:
+    BEQ R0, R0, L_bc_062717a5_done
+L_bc_062717a5_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_5275da5e_done
-L_bc_5275da5e_use_stack:
+    BEQ R0, R0, L_bc_062717a5_done
+L_bc_062717a5_use_stack:
     ADD T4, SB, R0
-L_bc_5275da5e_done:
+L_bc_062717a5_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -3170,21 +3170,21 @@ L_bc_5275da5e_done:
     ADDI SC, SC, 42
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_11d20269_use_global
+    BEQ S2, S1, L_bc_bad73324_use_global
 ; Spill param_bank_f16_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_11d20269_use_stack
+    BEQ S2, S0, L_bc_bad73324_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_11d20269_done
-L_bc_11d20269_use_global:
+    BEQ R0, R0, L_bc_bad73324_done
+L_bc_bad73324_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_11d20269_done
-L_bc_11d20269_use_stack:
+    BEQ R0, R0, L_bc_bad73324_done
+L_bc_bad73324_use_stack:
     ADD T2, SB, R0
-L_bc_11d20269_done:
+L_bc_bad73324_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -3240,7 +3240,7 @@ L_bc_11d20269_done:
     ADDI SC, SC, 50
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_b28a4e59_use_global
+    BEQ T4, T7, L_bc_3460c449_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 51
@@ -3250,15 +3250,15 @@ L_bc_11d20269_done:
     ADDI SC, SC, 52
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_b28a4e59_use_stack
+    BEQ T4, T0, L_bc_3460c449_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_b28a4e59_done
-L_bc_b28a4e59_use_global:
+    BEQ R0, R0, L_bc_3460c449_done
+L_bc_3460c449_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_b28a4e59_done
-L_bc_b28a4e59_use_stack:
+    BEQ R0, R0, L_bc_3460c449_done
+L_bc_3460c449_use_stack:
     ADD S3, SB, R0
-L_bc_b28a4e59_done:
+L_bc_3460c449_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -3284,21 +3284,21 @@ L_bc_b28a4e59_done:
     ADDI SC, SC, 55
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_3b0f9b7d_use_global
+    BEQ T4, S1, L_bc_8f323969_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 56
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_3b0f9b7d_use_stack
+    BEQ T4, T3, L_bc_8f323969_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_3b0f9b7d_done
-L_bc_3b0f9b7d_use_global:
+    BEQ R0, R0, L_bc_8f323969_done
+L_bc_8f323969_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_3b0f9b7d_done
-L_bc_3b0f9b7d_use_stack:
+    BEQ R0, R0, L_bc_8f323969_done
+L_bc_8f323969_use_stack:
     ADD T2, SB, R0
-L_bc_3b0f9b7d_done:
+L_bc_8f323969_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -4587,17 +4587,17 @@ L_q_div_67:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f18_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_31477bb1_use_global
+    BEQ S2, T3, L_bc_c583f57f_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_31477bb1_use_stack
+    BEQ S2, T2, L_bc_c583f57f_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_31477bb1_done
-L_bc_31477bb1_use_global:
+    BEQ R0, R0, L_bc_c583f57f_done
+L_bc_c583f57f_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_31477bb1_done
-L_bc_31477bb1_use_stack:
+    BEQ R0, R0, L_bc_c583f57f_done
+L_bc_c583f57f_use_stack:
     ADD T4, SB, R0
-L_bc_31477bb1_done:
+L_bc_c583f57f_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -4619,21 +4619,21 @@ L_bc_31477bb1_done:
     ADDI SC, SC, 33
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_6f93c83f_use_global
+    BEQ S2, S1, L_bc_b16eba65_use_global
 ; Spill param_bank_f18_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_6f93c83f_use_stack
+    BEQ S2, S0, L_bc_b16eba65_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_6f93c83f_done
-L_bc_6f93c83f_use_global:
+    BEQ R0, R0, L_bc_b16eba65_done
+L_bc_b16eba65_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_6f93c83f_done
-L_bc_6f93c83f_use_stack:
+    BEQ R0, R0, L_bc_b16eba65_done
+L_bc_b16eba65_use_stack:
     ADD T2, SB, R0
-L_bc_6f93c83f_done:
+L_bc_b16eba65_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -4689,7 +4689,7 @@ L_bc_6f93c83f_done:
     ADDI SC, SC, 41
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_9ec30d95_use_global
+    BEQ T4, T7, L_bc_202a3f0c_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 42
@@ -4699,15 +4699,15 @@ L_bc_6f93c83f_done:
     ADDI SC, SC, 43
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_9ec30d95_use_stack
+    BEQ T4, T0, L_bc_202a3f0c_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_9ec30d95_done
-L_bc_9ec30d95_use_global:
+    BEQ R0, R0, L_bc_202a3f0c_done
+L_bc_202a3f0c_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_9ec30d95_done
-L_bc_9ec30d95_use_stack:
+    BEQ R0, R0, L_bc_202a3f0c_done
+L_bc_202a3f0c_use_stack:
     ADD S3, SB, R0
-L_bc_9ec30d95_done:
+L_bc_202a3f0c_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -4733,21 +4733,21 @@ L_bc_9ec30d95_done:
     ADDI SC, SC, 46
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_c7cbcf37_use_global
+    BEQ T4, S1, L_bc_50939705_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 47
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_c7cbcf37_use_stack
+    BEQ T4, T3, L_bc_50939705_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_c7cbcf37_done
-L_bc_c7cbcf37_use_global:
+    BEQ R0, R0, L_bc_50939705_done
+L_bc_50939705_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_c7cbcf37_done
-L_bc_c7cbcf37_use_stack:
+    BEQ R0, R0, L_bc_50939705_done
+L_bc_50939705_use_stack:
     ADD T2, SB, R0
-L_bc_c7cbcf37_done:
+L_bc_50939705_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -5719,17 +5719,17 @@ L_q_eq_83:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f20_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_81d8eb91_use_global
+    BEQ S2, T3, L_bc_9c776618_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_81d8eb91_use_stack
+    BEQ S2, T2, L_bc_9c776618_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_81d8eb91_done
-L_bc_81d8eb91_use_global:
+    BEQ R0, R0, L_bc_9c776618_done
+L_bc_9c776618_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_81d8eb91_done
-L_bc_81d8eb91_use_stack:
+    BEQ R0, R0, L_bc_9c776618_done
+L_bc_9c776618_use_stack:
     ADD T4, SB, R0
-L_bc_81d8eb91_done:
+L_bc_9c776618_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -5751,21 +5751,21 @@ L_bc_81d8eb91_done:
     ADDI SC, SC, 14
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_e620c66c_use_global
+    BEQ S2, S1, L_bc_8fd1beb8_use_global
 ; Spill param_bank_f20_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_e620c66c_use_stack
+    BEQ S2, S0, L_bc_8fd1beb8_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_e620c66c_done
-L_bc_e620c66c_use_global:
+    BEQ R0, R0, L_bc_8fd1beb8_done
+L_bc_8fd1beb8_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_e620c66c_done
-L_bc_e620c66c_use_stack:
+    BEQ R0, R0, L_bc_8fd1beb8_done
+L_bc_8fd1beb8_use_stack:
     ADD T2, SB, R0
-L_bc_e620c66c_done:
+L_bc_8fd1beb8_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -5821,7 +5821,7 @@ L_bc_e620c66c_done:
     ADDI SC, SC, 22
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_a467c2bb_use_global
+    BEQ T4, T7, L_bc_ab28f106_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 23
@@ -5831,15 +5831,15 @@ L_bc_e620c66c_done:
     ADDI SC, SC, 24
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_a467c2bb_use_stack
+    BEQ T4, T0, L_bc_ab28f106_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_a467c2bb_done
-L_bc_a467c2bb_use_global:
+    BEQ R0, R0, L_bc_ab28f106_done
+L_bc_ab28f106_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_a467c2bb_done
-L_bc_a467c2bb_use_stack:
+    BEQ R0, R0, L_bc_ab28f106_done
+L_bc_ab28f106_use_stack:
     ADD S3, SB, R0
-L_bc_a467c2bb_done:
+L_bc_ab28f106_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -5865,21 +5865,21 @@ L_bc_a467c2bb_done:
     ADDI SC, SC, 27
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_a6adb44e_use_global
+    BEQ T4, S1, L_bc_d3ba9ab8_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 28
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_a6adb44e_use_stack
+    BEQ T4, T3, L_bc_d3ba9ab8_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_a6adb44e_done
-L_bc_a6adb44e_use_global:
+    BEQ R0, R0, L_bc_d3ba9ab8_done
+L_bc_d3ba9ab8_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_a6adb44e_done
-L_bc_a6adb44e_use_stack:
+    BEQ R0, R0, L_bc_d3ba9ab8_done
+L_bc_d3ba9ab8_use_stack:
     ADD T2, SB, R0
-L_bc_a6adb44e_done:
+L_bc_d3ba9ab8_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -6082,17 +6082,17 @@ L_q_lt_87:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f22_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_bce569c6_use_global
+    BEQ S2, T3, L_bc_e334d142_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_bce569c6_use_stack
+    BEQ S2, T2, L_bc_e334d142_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_bce569c6_done
-L_bc_bce569c6_use_global:
+    BEQ R0, R0, L_bc_e334d142_done
+L_bc_e334d142_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_bce569c6_done
-L_bc_bce569c6_use_stack:
+    BEQ R0, R0, L_bc_e334d142_done
+L_bc_e334d142_use_stack:
     ADD T4, SB, R0
-L_bc_bce569c6_done:
+L_bc_e334d142_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -6114,21 +6114,21 @@ L_bc_bce569c6_done:
     ADDI SC, SC, 13
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_eef8538c_use_global
+    BEQ S2, S1, L_bc_45bda156_use_global
 ; Spill param_bank_f22_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 14
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_eef8538c_use_stack
+    BEQ S2, S0, L_bc_45bda156_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_eef8538c_done
-L_bc_eef8538c_use_global:
+    BEQ R0, R0, L_bc_45bda156_done
+L_bc_45bda156_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_eef8538c_done
-L_bc_eef8538c_use_stack:
+    BEQ R0, R0, L_bc_45bda156_done
+L_bc_45bda156_use_stack:
     ADD T2, SB, R0
-L_bc_eef8538c_done:
+L_bc_45bda156_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -6184,7 +6184,7 @@ L_bc_eef8538c_done:
     ADDI SC, SC, 21
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_a3c21999_use_global
+    BEQ T4, T7, L_bc_96204897_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 22
@@ -6194,15 +6194,15 @@ L_bc_eef8538c_done:
     ADDI SC, SC, 23
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_a3c21999_use_stack
+    BEQ T4, T0, L_bc_96204897_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_a3c21999_done
-L_bc_a3c21999_use_global:
+    BEQ R0, R0, L_bc_96204897_done
+L_bc_96204897_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_a3c21999_done
-L_bc_a3c21999_use_stack:
+    BEQ R0, R0, L_bc_96204897_done
+L_bc_96204897_use_stack:
     ADD S3, SB, R0
-L_bc_a3c21999_done:
+L_bc_96204897_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -6228,21 +6228,21 @@ L_bc_a3c21999_done:
     ADDI SC, SC, 26
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_9f0702b3_use_global
+    BEQ T4, S1, L_bc_4c65488f_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_9f0702b3_use_stack
+    BEQ T4, T3, L_bc_4c65488f_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_9f0702b3_done
-L_bc_9f0702b3_use_global:
+    BEQ R0, R0, L_bc_4c65488f_done
+L_bc_4c65488f_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_9f0702b3_done
-L_bc_9f0702b3_use_stack:
+    BEQ R0, R0, L_bc_4c65488f_done
+L_bc_4c65488f_use_stack:
     ADD T2, SB, R0
-L_bc_9f0702b3_done:
+L_bc_4c65488f_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -6442,17 +6442,17 @@ L_q_le_94:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f24_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_9e1b68b9_use_global
+    BEQ S2, T3, L_bc_9ef8777f_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_9e1b68b9_use_stack
+    BEQ S2, T2, L_bc_9ef8777f_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_9e1b68b9_done
-L_bc_9e1b68b9_use_global:
+    BEQ R0, R0, L_bc_9ef8777f_done
+L_bc_9ef8777f_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_9e1b68b9_done
-L_bc_9e1b68b9_use_stack:
+    BEQ R0, R0, L_bc_9ef8777f_done
+L_bc_9ef8777f_use_stack:
     ADD T4, SB, R0
-L_bc_9e1b68b9_done:
+L_bc_9ef8777f_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -6474,21 +6474,21 @@ L_bc_9e1b68b9_done:
     ADDI SC, SC, 22
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_be5b4e07_use_global
+    BEQ S2, S1, L_bc_b04972d9_use_global
 ; Spill param_bank_f24_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 23
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_be5b4e07_use_stack
+    BEQ S2, S0, L_bc_b04972d9_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_be5b4e07_done
-L_bc_be5b4e07_use_global:
+    BEQ R0, R0, L_bc_b04972d9_done
+L_bc_b04972d9_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_be5b4e07_done
-L_bc_be5b4e07_use_stack:
+    BEQ R0, R0, L_bc_b04972d9_done
+L_bc_b04972d9_use_stack:
     ADD T2, SB, R0
-L_bc_be5b4e07_done:
+L_bc_b04972d9_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -6544,7 +6544,7 @@ L_bc_be5b4e07_done:
     ADDI SC, SC, 30
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_7dc84272_use_global
+    BEQ T4, T7, L_bc_6dc1e9db_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 31
@@ -6554,15 +6554,15 @@ L_bc_be5b4e07_done:
     ADDI SC, SC, 32
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_7dc84272_use_stack
+    BEQ T4, T0, L_bc_6dc1e9db_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_7dc84272_done
-L_bc_7dc84272_use_global:
+    BEQ R0, R0, L_bc_6dc1e9db_done
+L_bc_6dc1e9db_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_7dc84272_done
-L_bc_7dc84272_use_stack:
+    BEQ R0, R0, L_bc_6dc1e9db_done
+L_bc_6dc1e9db_use_stack:
     ADD S3, SB, R0
-L_bc_7dc84272_done:
+L_bc_6dc1e9db_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -6588,21 +6588,21 @@ L_bc_7dc84272_done:
     ADDI SC, SC, 35
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_3c0f52bf_use_global
+    BEQ T4, S1, L_bc_3d58c656_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_3c0f52bf_use_stack
+    BEQ T4, T3, L_bc_3d58c656_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_3c0f52bf_done
-L_bc_3c0f52bf_use_global:
+    BEQ R0, R0, L_bc_3d58c656_done
+L_bc_3d58c656_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_3c0f52bf_done
-L_bc_3c0f52bf_use_stack:
+    BEQ R0, R0, L_bc_3d58c656_done
+L_bc_3d58c656_use_stack:
     ADD T2, SB, R0
-L_bc_3c0f52bf_done:
+L_bc_3d58c656_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -7023,17 +7023,17 @@ L_q_gt_98:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f26_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_5cb7a47d_use_global
+    BEQ S2, T3, L_bc_24c59a09_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_5cb7a47d_use_stack
+    BEQ S2, T2, L_bc_24c59a09_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_5cb7a47d_done
-L_bc_5cb7a47d_use_global:
+    BEQ R0, R0, L_bc_24c59a09_done
+L_bc_24c59a09_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_5cb7a47d_done
-L_bc_5cb7a47d_use_stack:
+    BEQ R0, R0, L_bc_24c59a09_done
+L_bc_24c59a09_use_stack:
     ADD T4, SB, R0
-L_bc_5cb7a47d_done:
+L_bc_24c59a09_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -7055,21 +7055,21 @@ L_bc_5cb7a47d_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_951b5999_use_global
+    BEQ S2, S1, L_bc_ab352b2c_use_global
 ; Spill param_bank_f26_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_951b5999_use_stack
+    BEQ S2, S0, L_bc_ab352b2c_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_951b5999_done
-L_bc_951b5999_use_global:
+    BEQ R0, R0, L_bc_ab352b2c_done
+L_bc_ab352b2c_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_951b5999_done
-L_bc_951b5999_use_stack:
+    BEQ R0, R0, L_bc_ab352b2c_done
+L_bc_ab352b2c_use_stack:
     ADD T2, SB, R0
-L_bc_951b5999_done:
+L_bc_ab352b2c_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -7125,7 +7125,7 @@ L_bc_951b5999_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_83d549e0_use_global
+    BEQ T4, T7, L_bc_2f6e780d_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -7135,15 +7135,15 @@ L_bc_951b5999_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_83d549e0_use_stack
+    BEQ T4, T0, L_bc_2f6e780d_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_83d549e0_done
-L_bc_83d549e0_use_global:
+    BEQ R0, R0, L_bc_2f6e780d_done
+L_bc_2f6e780d_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_83d549e0_done
-L_bc_83d549e0_use_stack:
+    BEQ R0, R0, L_bc_2f6e780d_done
+L_bc_2f6e780d_use_stack:
     ADD S3, SB, R0
-L_bc_83d549e0_done:
+L_bc_2f6e780d_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -7169,21 +7169,21 @@ L_bc_83d549e0_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_d2b4c8fc_use_global
+    BEQ T4, S1, L_bc_b0458395_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_d2b4c8fc_use_stack
+    BEQ T4, T3, L_bc_b0458395_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_d2b4c8fc_done
-L_bc_d2b4c8fc_use_global:
+    BEQ R0, R0, L_bc_b0458395_done
+L_bc_b0458395_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_d2b4c8fc_done
-L_bc_d2b4c8fc_use_stack:
+    BEQ R0, R0, L_bc_b0458395_done
+L_bc_b0458395_use_stack:
     ADD T2, SB, R0
-L_bc_d2b4c8fc_done:
+L_bc_b0458395_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -7432,17 +7432,17 @@ L_q_ge_99:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f28_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_0eb575b6_use_global
+    BEQ S2, T3, L_bc_2ea1affa_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_0eb575b6_use_stack
+    BEQ S2, T2, L_bc_2ea1affa_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_0eb575b6_done
-L_bc_0eb575b6_use_global:
+    BEQ R0, R0, L_bc_2ea1affa_done
+L_bc_2ea1affa_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_0eb575b6_done
-L_bc_0eb575b6_use_stack:
+    BEQ R0, R0, L_bc_2ea1affa_done
+L_bc_2ea1affa_use_stack:
     ADD T4, SB, R0
-L_bc_0eb575b6_done:
+L_bc_2ea1affa_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -7464,21 +7464,21 @@ L_bc_0eb575b6_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_d05f028e_use_global
+    BEQ S2, S1, L_bc_ae2cd6c0_use_global
 ; Spill param_bank_f28_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_d05f028e_use_stack
+    BEQ S2, S0, L_bc_ae2cd6c0_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_d05f028e_done
-L_bc_d05f028e_use_global:
+    BEQ R0, R0, L_bc_ae2cd6c0_done
+L_bc_ae2cd6c0_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_d05f028e_done
-L_bc_d05f028e_use_stack:
+    BEQ R0, R0, L_bc_ae2cd6c0_done
+L_bc_ae2cd6c0_use_stack:
     ADD T2, SB, R0
-L_bc_d05f028e_done:
+L_bc_ae2cd6c0_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -7534,7 +7534,7 @@ L_bc_d05f028e_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_5e396a5e_use_global
+    BEQ T4, T7, L_bc_88c079dd_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -7544,15 +7544,15 @@ L_bc_d05f028e_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_5e396a5e_use_stack
+    BEQ T4, T0, L_bc_88c079dd_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_5e396a5e_done
-L_bc_5e396a5e_use_global:
+    BEQ R0, R0, L_bc_88c079dd_done
+L_bc_88c079dd_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_5e396a5e_done
-L_bc_5e396a5e_use_stack:
+    BEQ R0, R0, L_bc_88c079dd_done
+L_bc_88c079dd_use_stack:
     ADD S3, SB, R0
-L_bc_5e396a5e_done:
+L_bc_88c079dd_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -7578,21 +7578,21 @@ L_bc_5e396a5e_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_0657f59b_use_global
+    BEQ T4, S1, L_bc_501dde49_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_0657f59b_use_stack
+    BEQ T4, T3, L_bc_501dde49_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_0657f59b_done
-L_bc_0657f59b_use_global:
+    BEQ R0, R0, L_bc_501dde49_done
+L_bc_501dde49_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_0657f59b_done
-L_bc_0657f59b_use_stack:
+    BEQ R0, R0, L_bc_501dde49_done
+L_bc_501dde49_use_stack:
     ADD T2, SB, R0
-L_bc_0657f59b_done:
+L_bc_501dde49_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -7915,17 +7915,17 @@ L_q_to_int_101:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f32_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_fdac0258_use_global
+    BEQ S2, T5, L_bc_37ada48d_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_fdac0258_use_stack
+    BEQ S2, T4, L_bc_37ada48d_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_fdac0258_done
-L_bc_fdac0258_use_global:
+    BEQ R0, R0, L_bc_37ada48d_done
+L_bc_37ada48d_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_fdac0258_done
-L_bc_fdac0258_use_stack:
+    BEQ R0, R0, L_bc_37ada48d_done
+L_bc_37ada48d_use_stack:
     ADD T6, SB, R0
-L_bc_fdac0258_done:
+L_bc_37ada48d_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -7939,17 +7939,17 @@ L_bc_fdac0258_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f32_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_5bd5077b_use_global
+    BEQ S2, T5, L_bc_84ec03da_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_5bd5077b_use_stack
+    BEQ S2, T4, L_bc_84ec03da_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_5bd5077b_done
-L_bc_5bd5077b_use_global:
+    BEQ R0, R0, L_bc_84ec03da_done
+L_bc_84ec03da_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_5bd5077b_done
-L_bc_5bd5077b_use_stack:
+    BEQ R0, R0, L_bc_84ec03da_done
+L_bc_84ec03da_use_stack:
     ADD T0, SB, R0
-L_bc_5bd5077b_done:
+L_bc_84ec03da_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -8034,17 +8034,17 @@ L_q_to_int_round_102:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f34_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_551a43ff_use_global
+    BEQ S2, T5, L_bc_6f1efbab_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_551a43ff_use_stack
+    BEQ S2, T4, L_bc_6f1efbab_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_551a43ff_done
-L_bc_551a43ff_use_global:
+    BEQ R0, R0, L_bc_6f1efbab_done
+L_bc_6f1efbab_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_551a43ff_done
-L_bc_551a43ff_use_stack:
+    BEQ R0, R0, L_bc_6f1efbab_done
+L_bc_6f1efbab_use_stack:
     ADD T6, SB, R0
-L_bc_551a43ff_done:
+L_bc_6f1efbab_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -8058,17 +8058,17 @@ L_bc_551a43ff_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f34_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_31a5deb0_use_global
+    BEQ S2, T5, L_bc_f7eae396_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_31a5deb0_use_stack
+    BEQ S2, T4, L_bc_f7eae396_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_31a5deb0_done
-L_bc_31a5deb0_use_global:
+    BEQ R0, R0, L_bc_f7eae396_done
+L_bc_f7eae396_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_31a5deb0_done
-L_bc_31a5deb0_use_stack:
+    BEQ R0, R0, L_bc_f7eae396_done
+L_bc_f7eae396_use_stack:
     ADD T0, SB, R0
-L_bc_31a5deb0_done:
+L_bc_f7eae396_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -8112,12 +8112,12 @@ L_bc_31a5deb0_done:
     ADDI SC, SC, 16
     STORE S2, SB, SC
     XOR S3, T6, T7
-    BNE S3, R0, L_i32_ult_hine_34_0
+    BNE S3, R0, L_i32_ult_hine_32004e24_34_0
     SLTU S3, S0, T3
-    BEQ R0, R0, L_i32_ult_done_34_1
-L_i32_ult_hine_34_0:
+    BEQ R0, R0, L_i32_ult_done_32004e24_34_1
+L_i32_ult_hine_32004e24_34_0:
     SLTU S3, T6, T7
-L_i32_ult_done_34_1:
+L_i32_ult_done_32004e24_34_1:
 ; Spill t5 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -8238,17 +8238,17 @@ L_q_sqrt_106:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f36_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_a553fef2_use_global
+    BEQ S2, T5, L_bc_e62bf93d_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_a553fef2_use_stack
+    BEQ S2, T4, L_bc_e62bf93d_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_a553fef2_done
-L_bc_a553fef2_use_global:
+    BEQ R0, R0, L_bc_e62bf93d_done
+L_bc_e62bf93d_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_a553fef2_done
-L_bc_a553fef2_use_stack:
+    BEQ R0, R0, L_bc_e62bf93d_done
+L_bc_e62bf93d_use_stack:
     ADD T6, SB, R0
-L_bc_a553fef2_done:
+L_bc_e62bf93d_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -8262,17 +8262,17 @@ L_bc_a553fef2_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f36_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_1c5aeee7_use_global
+    BEQ S2, T5, L_bc_10f6a476_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_1c5aeee7_use_stack
+    BEQ S2, T4, L_bc_10f6a476_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_1c5aeee7_done
-L_bc_1c5aeee7_use_global:
+    BEQ R0, R0, L_bc_10f6a476_done
+L_bc_10f6a476_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_1c5aeee7_done
-L_bc_1c5aeee7_use_stack:
+    BEQ R0, R0, L_bc_10f6a476_done
+L_bc_10f6a476_use_stack:
     ADD T0, SB, R0
-L_bc_1c5aeee7_done:
+L_bc_10f6a476_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -9615,17 +9615,17 @@ L_q_reciprocal_132:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f38_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_40a80f04_use_global
+    BEQ S2, T5, L_bc_66c61104_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_40a80f04_use_stack
+    BEQ S2, T4, L_bc_66c61104_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_40a80f04_done
-L_bc_40a80f04_use_global:
+    BEQ R0, R0, L_bc_66c61104_done
+L_bc_66c61104_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_40a80f04_done
-L_bc_40a80f04_use_stack:
+    BEQ R0, R0, L_bc_66c61104_done
+L_bc_66c61104_use_stack:
     ADD T6, SB, R0
-L_bc_40a80f04_done:
+L_bc_66c61104_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -9639,17 +9639,17 @@ L_bc_40a80f04_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f38_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_e1189a47_use_global
+    BEQ S2, T5, L_bc_37846ae4_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_e1189a47_use_stack
+    BEQ S2, T4, L_bc_37846ae4_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_e1189a47_done
-L_bc_e1189a47_use_global:
+    BEQ R0, R0, L_bc_37846ae4_done
+L_bc_37846ae4_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_e1189a47_done
-L_bc_e1189a47_use_stack:
+    BEQ R0, R0, L_bc_37846ae4_done
+L_bc_37846ae4_use_stack:
     ADD T0, SB, R0
-L_bc_e1189a47_done:
+L_bc_37846ae4_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -11277,17 +11277,17 @@ L_q_floor_152:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f40_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_6fec44a8_use_global
+    BEQ S2, T5, L_bc_50404030_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_6fec44a8_use_stack
+    BEQ S2, T4, L_bc_50404030_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_6fec44a8_done
-L_bc_6fec44a8_use_global:
+    BEQ R0, R0, L_bc_50404030_done
+L_bc_50404030_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_6fec44a8_done
-L_bc_6fec44a8_use_stack:
+    BEQ R0, R0, L_bc_50404030_done
+L_bc_50404030_use_stack:
     ADD T6, SB, R0
-L_bc_6fec44a8_done:
+L_bc_50404030_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -11301,17 +11301,17 @@ L_bc_6fec44a8_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f40_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_90340db4_use_global
+    BEQ S2, T5, L_bc_79dd1af4_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_90340db4_use_stack
+    BEQ S2, T4, L_bc_79dd1af4_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_90340db4_done
-L_bc_90340db4_use_global:
+    BEQ R0, R0, L_bc_79dd1af4_done
+L_bc_79dd1af4_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_90340db4_done
-L_bc_90340db4_use_stack:
+    BEQ R0, R0, L_bc_79dd1af4_done
+L_bc_79dd1af4_use_stack:
     ADD T0, SB, R0
-L_bc_90340db4_done:
+L_bc_79dd1af4_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -11549,17 +11549,17 @@ L_q_ceil_159:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f42_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_53d46073_use_global
+    BEQ S2, T5, L_bc_5c03d947_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_53d46073_use_stack
+    BEQ S2, T4, L_bc_5c03d947_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_53d46073_done
-L_bc_53d46073_use_global:
+    BEQ R0, R0, L_bc_5c03d947_done
+L_bc_5c03d947_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_53d46073_done
-L_bc_53d46073_use_stack:
+    BEQ R0, R0, L_bc_5c03d947_done
+L_bc_5c03d947_use_stack:
     ADD T6, SB, R0
-L_bc_53d46073_done:
+L_bc_5c03d947_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -11573,17 +11573,17 @@ L_bc_53d46073_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f42_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_e333891c_use_global
+    BEQ S2, T5, L_bc_5b67c873_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_e333891c_use_stack
+    BEQ S2, T4, L_bc_5b67c873_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_e333891c_done
-L_bc_e333891c_use_global:
+    BEQ R0, R0, L_bc_5b67c873_done
+L_bc_5b67c873_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_e333891c_done
-L_bc_e333891c_use_stack:
+    BEQ R0, R0, L_bc_5b67c873_done
+L_bc_5b67c873_use_stack:
     ADD T0, SB, R0
-L_bc_e333891c_done:
+L_bc_5b67c873_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -11760,17 +11760,17 @@ L_q_round_163:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f44_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_5ddeb292_use_global
+    BEQ S2, T5, L_bc_d4899285_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_5ddeb292_use_stack
+    BEQ S2, T4, L_bc_d4899285_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_5ddeb292_done
-L_bc_5ddeb292_use_global:
+    BEQ R0, R0, L_bc_d4899285_done
+L_bc_d4899285_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_5ddeb292_done
-L_bc_5ddeb292_use_stack:
+    BEQ R0, R0, L_bc_d4899285_done
+L_bc_d4899285_use_stack:
     ADD T6, SB, R0
-L_bc_5ddeb292_done:
+L_bc_d4899285_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -11784,17 +11784,17 @@ L_bc_5ddeb292_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f44_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_3e32fd94_use_global
+    BEQ S2, T5, L_bc_91b34475_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_3e32fd94_use_stack
+    BEQ S2, T4, L_bc_91b34475_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_3e32fd94_done
-L_bc_3e32fd94_use_global:
+    BEQ R0, R0, L_bc_91b34475_done
+L_bc_91b34475_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_3e32fd94_done
-L_bc_3e32fd94_use_stack:
+    BEQ R0, R0, L_bc_91b34475_done
+L_bc_91b34475_use_stack:
     ADD T0, SB, R0
-L_bc_3e32fd94_done:
+L_bc_91b34475_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -11881,12 +11881,12 @@ L_bc_3e32fd94_done:
     ADDI SC, SC, 24
     STORE T1, SB, SC
     XOR T1, S2, T5
-    BNE T1, R0, L_i32_ult_hine_44_0
+    BNE T1, R0, L_i32_ult_hine_76d9718c_44_0
     SLTU T1, T2, T0
-    BEQ R0, R0, L_i32_ult_done_44_1
-L_i32_ult_hine_44_0:
+    BEQ R0, R0, L_i32_ult_done_76d9718c_44_1
+L_i32_ult_hine_76d9718c_44_0:
     SLTU T1, S2, T5
-L_i32_ult_done_44_1:
+L_i32_ult_done_76d9718c_44_1:
 ; Spill t10 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 25
@@ -12005,17 +12005,17 @@ L_q_min_167:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f46_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_ba4844ce_use_global
+    BEQ S2, T3, L_bc_83ceda6b_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_ba4844ce_use_stack
+    BEQ S2, T2, L_bc_83ceda6b_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_ba4844ce_done
-L_bc_ba4844ce_use_global:
+    BEQ R0, R0, L_bc_83ceda6b_done
+L_bc_83ceda6b_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_ba4844ce_done
-L_bc_ba4844ce_use_stack:
+    BEQ R0, R0, L_bc_83ceda6b_done
+L_bc_83ceda6b_use_stack:
     ADD T4, SB, R0
-L_bc_ba4844ce_done:
+L_bc_83ceda6b_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -12037,21 +12037,21 @@ L_bc_ba4844ce_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_5582b38c_use_global
+    BEQ S2, S1, L_bc_91bda478_use_global
 ; Spill param_bank_f46_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_5582b38c_use_stack
+    BEQ S2, S0, L_bc_91bda478_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_5582b38c_done
-L_bc_5582b38c_use_global:
+    BEQ R0, R0, L_bc_91bda478_done
+L_bc_91bda478_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_5582b38c_done
-L_bc_5582b38c_use_stack:
+    BEQ R0, R0, L_bc_91bda478_done
+L_bc_91bda478_use_stack:
     ADD T2, SB, R0
-L_bc_5582b38c_done:
+L_bc_91bda478_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -12107,7 +12107,7 @@ L_bc_5582b38c_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_7de8df2e_use_global
+    BEQ T4, T7, L_bc_042900fe_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -12117,15 +12117,15 @@ L_bc_5582b38c_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_7de8df2e_use_stack
+    BEQ T4, T0, L_bc_042900fe_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_7de8df2e_done
-L_bc_7de8df2e_use_global:
+    BEQ R0, R0, L_bc_042900fe_done
+L_bc_042900fe_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_7de8df2e_done
-L_bc_7de8df2e_use_stack:
+    BEQ R0, R0, L_bc_042900fe_done
+L_bc_042900fe_use_stack:
     ADD S3, SB, R0
-L_bc_7de8df2e_done:
+L_bc_042900fe_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -12151,21 +12151,21 @@ L_bc_7de8df2e_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_88f8dc84_use_global
+    BEQ T4, S1, L_bc_11c6b15f_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_88f8dc84_use_stack
+    BEQ T4, T3, L_bc_11c6b15f_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_88f8dc84_done
-L_bc_88f8dc84_use_global:
+    BEQ R0, R0, L_bc_11c6b15f_done
+L_bc_11c6b15f_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_88f8dc84_done
-L_bc_88f8dc84_use_stack:
+    BEQ R0, R0, L_bc_11c6b15f_done
+L_bc_11c6b15f_use_stack:
     ADD T2, SB, R0
-L_bc_88f8dc84_done:
+L_bc_11c6b15f_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -12435,17 +12435,17 @@ L_q_max_171:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
 ; LOAD: Pointer t3 has bank info: Dynamic("param_bank_f48_op3_0")
     LI T3, -1
-    BEQ S2, T3, L_bc_28e66133_use_global
+    BEQ S2, T3, L_bc_f061f909_use_global
     LI T2, -2
-    BEQ S2, T2, L_bc_28e66133_use_stack
+    BEQ S2, T2, L_bc_f061f909_use_stack
     ADD T4, S2, R0
-    BEQ R0, R0, L_bc_28e66133_done
-L_bc_28e66133_use_global:
+    BEQ R0, R0, L_bc_f061f909_done
+L_bc_f061f909_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_28e66133_done
-L_bc_28e66133_use_stack:
+    BEQ R0, R0, L_bc_f061f909_done
+L_bc_f061f909_use_stack:
     ADD T4, SB, R0
-L_bc_28e66133_done:
+L_bc_f061f909_done:
 ; LOAD: Using bank register T4 for load
     LOAD T1, T4, T6
     STORE T1, SB, T5
@@ -12467,21 +12467,21 @@ L_bc_28e66133_done:
     ADDI SC, SC, 17
     STORE S0, SB, SC
     LI S1, -1
-    BEQ S2, S1, L_bc_f5698ec2_use_global
+    BEQ S2, S1, L_bc_dfe822bd_use_global
 ; Spill param_bank_f48_op7_1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 18
     STORE S0, SB, SC
     LI S0, -2
-    BEQ S2, S0, L_bc_f5698ec2_use_stack
+    BEQ S2, S0, L_bc_dfe822bd_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_f5698ec2_done
-L_bc_f5698ec2_use_global:
+    BEQ R0, R0, L_bc_dfe822bd_done
+L_bc_dfe822bd_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_f5698ec2_done
-L_bc_f5698ec2_use_stack:
+    BEQ R0, R0, L_bc_dfe822bd_done
+L_bc_dfe822bd_use_stack:
     ADD T2, SB, R0
-L_bc_f5698ec2_done:
+L_bc_dfe822bd_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, T3
@@ -12537,7 +12537,7 @@ L_bc_f5698ec2_done:
     ADDI SC, SC, 25
     STORE S2, SB, SC
     LI T7, -1
-    BEQ T4, T7, L_bc_696378fb_use_global
+    BEQ T4, T7, L_bc_f2e5fe96_use_global
 ; Spill t6 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -12547,15 +12547,15 @@ L_bc_f5698ec2_done:
     ADDI SC, SC, 27
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T4, T0, L_bc_696378fb_use_stack
+    BEQ T4, T0, L_bc_f2e5fe96_use_stack
     ADD S3, T4, R0
-    BEQ R0, R0, L_bc_696378fb_done
-L_bc_696378fb_use_global:
+    BEQ R0, R0, L_bc_f2e5fe96_done
+L_bc_f2e5fe96_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_696378fb_done
-L_bc_696378fb_use_stack:
+    BEQ R0, R0, L_bc_f2e5fe96_done
+L_bc_f2e5fe96_use_stack:
     ADD S3, SB, R0
-L_bc_696378fb_done:
+L_bc_f2e5fe96_done:
 ; LOAD: Using bank register S3 for load
     LOAD T7, S3, T1
     STORE T7, SB, T5
@@ -12581,21 +12581,21 @@ L_bc_696378fb_done:
     ADDI SC, SC, 30
     STORE S1, SB, SC
     LI S1, -1
-    BEQ T4, S1, L_bc_8ade9c6d_use_global
+    BEQ T4, S1, L_bc_93deea15_use_global
 ; Spill t7 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
     STORE T3, SB, SC
     LI T3, -2
-    BEQ T4, T3, L_bc_8ade9c6d_use_stack
+    BEQ T4, T3, L_bc_93deea15_use_stack
     ADD T2, T4, R0
-    BEQ R0, R0, L_bc_8ade9c6d_done
-L_bc_8ade9c6d_use_global:
+    BEQ R0, R0, L_bc_93deea15_done
+L_bc_93deea15_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_8ade9c6d_done
-L_bc_8ade9c6d_use_stack:
+    BEQ R0, R0, L_bc_93deea15_done
+L_bc_93deea15_use_stack:
     ADD T2, SB, R0
-L_bc_8ade9c6d_done:
+L_bc_93deea15_done:
 ; LOAD: Using bank register T2 for load
     LOAD S1, T2, T0
     STORE S1, SB, S2
@@ -12871,17 +12871,17 @@ L_q_clamp_175:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Mixed })
 ; LOAD: Pointer t4 has bank info: Dynamic("param_bank_f50_op3_0")
     LI T1, -1
-    BEQ S2, T1, L_bc_406638ed_use_global
+    BEQ S2, T1, L_bc_a05882a1_use_global
     LI T0, -2
-    BEQ S2, T0, L_bc_406638ed_use_stack
+    BEQ S2, T0, L_bc_a05882a1_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_406638ed_done
-L_bc_406638ed_use_global:
+    BEQ R0, R0, L_bc_a05882a1_done
+L_bc_a05882a1_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_406638ed_done
-L_bc_406638ed_use_stack:
+    BEQ R0, R0, L_bc_a05882a1_done
+L_bc_a05882a1_use_stack:
     ADD T2, SB, R0
-L_bc_406638ed_done:
+L_bc_a05882a1_done:
 ; LOAD: Using bank register T2 for load
     LOAD T1, T2, T4
     STORE T1, SB, T3
@@ -12915,21 +12915,21 @@ L_bc_406638ed_done:
     ADDI SC, SC, 26
     STORE T6, SB, SC
     LI T7, -1
-    BEQ S2, T7, L_bc_2df9f970_use_global
+    BEQ S2, T7, L_bc_53eb94f3_use_global
 ; Spill param_bank_f50_op11_2 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 27
     STORE T6, SB, SC
     LI T6, -2
-    BEQ S2, T6, L_bc_2df9f970_use_stack
+    BEQ S2, T6, L_bc_53eb94f3_use_stack
     ADD S0, S2, R0
-    BEQ R0, R0, L_bc_2df9f970_done
-L_bc_2df9f970_use_global:
+    BEQ R0, R0, L_bc_53eb94f3_done
+L_bc_53eb94f3_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_2df9f970_done
-L_bc_2df9f970_use_stack:
+    BEQ R0, R0, L_bc_53eb94f3_done
+L_bc_53eb94f3_use_stack:
     ADD S0, SB, R0
-L_bc_2df9f970_done:
+L_bc_53eb94f3_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S1
@@ -12985,7 +12985,7 @@ L_bc_2df9f970_done:
     ADDI SC, SC, 34
     STORE S2, SB, SC
     LI T5, -1
-    BEQ T2, T5, L_bc_1c969afb_use_global
+    BEQ T2, T5, L_bc_557f12a1_use_global
 ; Spill t7 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 35
@@ -12995,15 +12995,15 @@ L_bc_2df9f970_done:
     ADDI SC, SC, 36
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T2, T0, L_bc_1c969afb_use_stack
+    BEQ T2, T0, L_bc_557f12a1_use_stack
     ADD S3, T2, R0
-    BEQ R0, R0, L_bc_1c969afb_done
-L_bc_1c969afb_use_global:
+    BEQ R0, R0, L_bc_557f12a1_done
+L_bc_557f12a1_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_1c969afb_done
-L_bc_1c969afb_use_stack:
+    BEQ R0, R0, L_bc_557f12a1_done
+L_bc_557f12a1_use_stack:
     ADD S3, SB, R0
-L_bc_1c969afb_done:
+L_bc_557f12a1_done:
 ; LOAD: Using bank register S3 for load
     LOAD T5, S3, T1
     STORE T5, SB, T3
@@ -13029,21 +13029,21 @@ L_bc_1c969afb_done:
     ADDI SC, SC, 39
     STORE T7, SB, SC
     LI T7, -1
-    BEQ T2, T7, L_bc_79142805_use_global
+    BEQ T2, T7, L_bc_f361275c_use_global
 ; Spill t8 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
     LI S1, -2
-    BEQ T2, S1, L_bc_79142805_use_stack
+    BEQ T2, S1, L_bc_f361275c_use_stack
     ADD S0, T2, R0
-    BEQ R0, R0, L_bc_79142805_done
-L_bc_79142805_use_global:
+    BEQ R0, R0, L_bc_f361275c_done
+L_bc_f361275c_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_79142805_done
-L_bc_79142805_use_stack:
+    BEQ R0, R0, L_bc_f361275c_done
+L_bc_f361275c_use_stack:
     ADD S0, SB, R0
-L_bc_79142805_done:
+L_bc_f361275c_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S2
@@ -13099,7 +13099,7 @@ L_bc_79142805_done:
     ADDI SC, SC, 23
     STORE T2, SB, SC
     LI T6, -1
-    BEQ S3, T6, L_bc_bfe379bd_use_global
+    BEQ S3, T6, L_bc_5be96409_use_global
 ; Spill t14 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 46
@@ -13109,15 +13109,15 @@ L_bc_79142805_done:
     ADDI SC, SC, 47
     STORE T2, SB, SC
     LI T0, -2
-    BEQ S3, T0, L_bc_bfe379bd_use_stack
+    BEQ S3, T0, L_bc_5be96409_use_stack
     ADD T4, S3, R0
-    BEQ R0, R0, L_bc_bfe379bd_done
-L_bc_bfe379bd_use_global:
+    BEQ R0, R0, L_bc_5be96409_done
+L_bc_5be96409_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_bfe379bd_done
-L_bc_bfe379bd_use_stack:
+    BEQ R0, R0, L_bc_5be96409_done
+L_bc_5be96409_use_stack:
     ADD T4, SB, R0
-L_bc_bfe379bd_done:
+L_bc_5be96409_done:
 ; LOAD: Using bank register T4 for load
     LOAD T6, T4, T5
     STORE T6, SB, T3
@@ -13143,21 +13143,21 @@ L_bc_bfe379bd_done:
     ADDI SC, SC, 49
     STORE T7, SB, SC
     LI T7, -1
-    BEQ S3, T7, L_bc_c363c5b1_use_global
+    BEQ S3, T7, L_bc_850552c7_use_global
 ; Spill t15 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 50
     STORE S2, SB, SC
     LI S2, -2
-    BEQ S3, S2, L_bc_c363c5b1_use_stack
+    BEQ S3, S2, L_bc_850552c7_use_stack
     ADD S0, S3, R0
-    BEQ R0, R0, L_bc_c363c5b1_done
-L_bc_c363c5b1_use_global:
+    BEQ R0, R0, L_bc_850552c7_done
+L_bc_850552c7_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_c363c5b1_done
-L_bc_c363c5b1_use_stack:
+    BEQ R0, R0, L_bc_850552c7_done
+L_bc_850552c7_use_stack:
     ADD S0, SB, R0
-L_bc_c363c5b1_done:
+L_bc_850552c7_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, T2
@@ -13575,17 +13575,17 @@ L_q_lerp_182:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Mixed })
 ; LOAD: Pointer t4 has bank info: Dynamic("param_bank_f52_op3_0")
     LI T1, -1
-    BEQ S2, T1, L_bc_2129920b_use_global
+    BEQ S2, T1, L_bc_b1478f02_use_global
     LI T0, -2
-    BEQ S2, T0, L_bc_2129920b_use_stack
+    BEQ S2, T0, L_bc_b1478f02_use_stack
     ADD T2, S2, R0
-    BEQ R0, R0, L_bc_2129920b_done
-L_bc_2129920b_use_global:
+    BEQ R0, R0, L_bc_b1478f02_done
+L_bc_b1478f02_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_2129920b_done
-L_bc_2129920b_use_stack:
+    BEQ R0, R0, L_bc_b1478f02_done
+L_bc_b1478f02_use_stack:
     ADD T2, SB, R0
-L_bc_2129920b_done:
+L_bc_b1478f02_done:
 ; LOAD: Using bank register T2 for load
     LOAD T1, T2, T4
     STORE T1, SB, T3
@@ -13619,21 +13619,21 @@ L_bc_2129920b_done:
     ADDI SC, SC, 40
     STORE T6, SB, SC
     LI T7, -1
-    BEQ S2, T7, L_bc_fb115f7a_use_global
+    BEQ S2, T7, L_bc_165d1b52_use_global
 ; Spill param_bank_f52_op11_2 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE T6, SB, SC
     LI T6, -2
-    BEQ S2, T6, L_bc_fb115f7a_use_stack
+    BEQ S2, T6, L_bc_165d1b52_use_stack
     ADD S0, S2, R0
-    BEQ R0, R0, L_bc_fb115f7a_done
-L_bc_fb115f7a_use_global:
+    BEQ R0, R0, L_bc_165d1b52_done
+L_bc_165d1b52_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_fb115f7a_done
-L_bc_fb115f7a_use_stack:
+    BEQ R0, R0, L_bc_165d1b52_done
+L_bc_165d1b52_use_stack:
     ADD S0, SB, R0
-L_bc_fb115f7a_done:
+L_bc_165d1b52_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S1
@@ -13689,7 +13689,7 @@ L_bc_fb115f7a_done:
     ADDI SC, SC, 48
     STORE S2, SB, SC
     LI T5, -1
-    BEQ T2, T5, L_bc_ed2d2c51_use_global
+    BEQ T2, T5, L_bc_70189c4e_use_global
 ; Spill t7 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 49
@@ -13699,15 +13699,15 @@ L_bc_fb115f7a_done:
     ADDI SC, SC, 50
     STORE S2, SB, SC
     LI T0, -2
-    BEQ T2, T0, L_bc_ed2d2c51_use_stack
+    BEQ T2, T0, L_bc_70189c4e_use_stack
     ADD S3, T2, R0
-    BEQ R0, R0, L_bc_ed2d2c51_done
-L_bc_ed2d2c51_use_global:
+    BEQ R0, R0, L_bc_70189c4e_done
+L_bc_70189c4e_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_ed2d2c51_done
-L_bc_ed2d2c51_use_stack:
+    BEQ R0, R0, L_bc_70189c4e_done
+L_bc_70189c4e_use_stack:
     ADD S3, SB, R0
-L_bc_ed2d2c51_done:
+L_bc_70189c4e_done:
 ; LOAD: Using bank register S3 for load
     LOAD T5, S3, T1
     STORE T5, SB, T3
@@ -13733,21 +13733,21 @@ L_bc_ed2d2c51_done:
     ADDI SC, SC, 53
     STORE T7, SB, SC
     LI T7, -1
-    BEQ T2, T7, L_bc_62727b8a_use_global
+    BEQ T2, T7, L_bc_a01d1ac5_use_global
 ; Spill t8 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 54
     STORE S1, SB, SC
     LI S1, -2
-    BEQ T2, S1, L_bc_62727b8a_use_stack
+    BEQ T2, S1, L_bc_a01d1ac5_use_stack
     ADD S0, T2, R0
-    BEQ R0, R0, L_bc_62727b8a_done
-L_bc_62727b8a_use_global:
+    BEQ R0, R0, L_bc_a01d1ac5_done
+L_bc_a01d1ac5_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_62727b8a_done
-L_bc_62727b8a_use_stack:
+    BEQ R0, R0, L_bc_a01d1ac5_done
+L_bc_a01d1ac5_use_stack:
     ADD S0, SB, R0
-L_bc_62727b8a_done:
+L_bc_a01d1ac5_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, S2
@@ -13803,7 +13803,7 @@ L_bc_62727b8a_done:
     ADDI SC, SC, 37
     STORE T2, SB, SC
     LI T6, -1
-    BEQ S3, T6, L_bc_3087beef_use_global
+    BEQ S3, T6, L_bc_c4bc11ae_use_global
 ; Spill t14 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 60
@@ -13813,15 +13813,15 @@ L_bc_62727b8a_done:
     ADDI SC, SC, 61
     STORE T2, SB, SC
     LI T0, -2
-    BEQ S3, T0, L_bc_3087beef_use_stack
+    BEQ S3, T0, L_bc_c4bc11ae_use_stack
     ADD T4, S3, R0
-    BEQ R0, R0, L_bc_3087beef_done
-L_bc_3087beef_use_global:
+    BEQ R0, R0, L_bc_c4bc11ae_done
+L_bc_c4bc11ae_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_3087beef_done
-L_bc_3087beef_use_stack:
+    BEQ R0, R0, L_bc_c4bc11ae_done
+L_bc_c4bc11ae_use_stack:
     ADD T4, SB, R0
-L_bc_3087beef_done:
+L_bc_c4bc11ae_done:
 ; LOAD: Using bank register T4 for load
     LOAD T6, T4, T5
     STORE T6, SB, T3
@@ -13847,21 +13847,21 @@ L_bc_3087beef_done:
     ADDI SC, SC, 63
     STORE T7, SB, SC
     LI T7, -1
-    BEQ S3, T7, L_bc_ec0d5ec3_use_global
+    BEQ S3, T7, L_bc_be10a9bf_use_global
 ; Spill t15 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 64
     STORE S2, SB, SC
     LI S2, -2
-    BEQ S3, S2, L_bc_ec0d5ec3_use_stack
+    BEQ S3, S2, L_bc_be10a9bf_use_stack
     ADD S0, S3, R0
-    BEQ R0, R0, L_bc_ec0d5ec3_done
-L_bc_ec0d5ec3_use_global:
+    BEQ R0, R0, L_bc_be10a9bf_done
+L_bc_be10a9bf_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_ec0d5ec3_done
-L_bc_ec0d5ec3_use_stack:
+    BEQ R0, R0, L_bc_be10a9bf_done
+L_bc_be10a9bf_use_stack:
     ADD S0, SB, R0
-L_bc_ec0d5ec3_done:
+L_bc_be10a9bf_done:
 ; LOAD: Using bank register S0 for load
     LOAD T7, S0, T0
     STORE T7, SB, T2
@@ -14602,17 +14602,17 @@ L_q_sin_183:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f54_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_fbdd9db5_use_global
+    BEQ S2, T5, L_bc_e1eabada_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_fbdd9db5_use_stack
+    BEQ S2, T4, L_bc_e1eabada_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_fbdd9db5_done
-L_bc_fbdd9db5_use_global:
+    BEQ R0, R0, L_bc_e1eabada_done
+L_bc_e1eabada_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_fbdd9db5_done
-L_bc_fbdd9db5_use_stack:
+    BEQ R0, R0, L_bc_e1eabada_done
+L_bc_e1eabada_use_stack:
     ADD T6, SB, R0
-L_bc_fbdd9db5_done:
+L_bc_e1eabada_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -14626,17 +14626,17 @@ L_bc_fbdd9db5_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f54_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_eef83490_use_global
+    BEQ S2, T5, L_bc_6696e3a4_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_eef83490_use_stack
+    BEQ S2, T4, L_bc_6696e3a4_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_eef83490_done
-L_bc_eef83490_use_global:
+    BEQ R0, R0, L_bc_6696e3a4_done
+L_bc_6696e3a4_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_eef83490_done
-L_bc_eef83490_use_stack:
+    BEQ R0, R0, L_bc_6696e3a4_done
+L_bc_6696e3a4_use_stack:
     ADD T0, SB, R0
-L_bc_eef83490_done:
+L_bc_6696e3a4_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -19209,17 +19209,17 @@ L_q_cos_196:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f56_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_dcbb76d6_use_global
+    BEQ S2, T5, L_bc_5298adc5_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_dcbb76d6_use_stack
+    BEQ S2, T4, L_bc_5298adc5_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_dcbb76d6_done
-L_bc_dcbb76d6_use_global:
+    BEQ R0, R0, L_bc_5298adc5_done
+L_bc_5298adc5_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_dcbb76d6_done
-L_bc_dcbb76d6_use_stack:
+    BEQ R0, R0, L_bc_5298adc5_done
+L_bc_5298adc5_use_stack:
     ADD T6, SB, R0
-L_bc_dcbb76d6_done:
+L_bc_5298adc5_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -19233,17 +19233,17 @@ L_bc_dcbb76d6_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f56_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_4b041d1f_use_global
+    BEQ S2, T5, L_bc_096c4194_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_4b041d1f_use_stack
+    BEQ S2, T4, L_bc_096c4194_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_4b041d1f_done
-L_bc_4b041d1f_use_global:
+    BEQ R0, R0, L_bc_096c4194_done
+L_bc_096c4194_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_4b041d1f_done
-L_bc_4b041d1f_use_stack:
+    BEQ R0, R0, L_bc_096c4194_done
+L_bc_096c4194_use_stack:
     ADD T0, SB, R0
-L_bc_4b041d1f_done:
+L_bc_096c4194_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1
@@ -23337,17 +23337,17 @@ L_q_tan_209:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Mixed })
 ; LOAD: Pointer t2 has bank info: Dynamic("param_bank_f58_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_a36d882a_use_global
+    BEQ S2, T5, L_bc_69206ad6_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_a36d882a_use_stack
+    BEQ S2, T4, L_bc_69206ad6_use_stack
     ADD T6, S2, R0
-    BEQ R0, R0, L_bc_a36d882a_done
-L_bc_a36d882a_use_global:
+    BEQ R0, R0, L_bc_69206ad6_done
+L_bc_69206ad6_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_a36d882a_done
-L_bc_a36d882a_use_stack:
+    BEQ R0, R0, L_bc_69206ad6_done
+L_bc_69206ad6_use_stack:
     ADD T6, SB, R0
-L_bc_a36d882a_done:
+L_bc_69206ad6_done:
 ; LOAD: Using bank register T6 for load
     LOAD T3, T6, S0
     STORE T3, SB, T7
@@ -23361,17 +23361,17 @@ L_bc_a36d882a_done:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Mixed })
 ; LOAD: Pointer t5 has bank info: Dynamic("param_bank_f58_op3_0")
     LI T5, -1
-    BEQ S2, T5, L_bc_ade6c7bd_use_global
+    BEQ S2, T5, L_bc_0b96baed_use_global
     LI T4, -2
-    BEQ S2, T4, L_bc_ade6c7bd_use_stack
+    BEQ S2, T4, L_bc_0b96baed_use_stack
     ADD T0, S2, R0
-    BEQ R0, R0, L_bc_ade6c7bd_done
-L_bc_ade6c7bd_use_global:
+    BEQ R0, R0, L_bc_0b96baed_done
+L_bc_0b96baed_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_ade6c7bd_done
-L_bc_ade6c7bd_use_stack:
+    BEQ R0, R0, L_bc_0b96baed_done
+L_bc_0b96baed_use_stack:
     ADD T0, SB, R0
-L_bc_ade6c7bd_done:
+L_bc_0b96baed_done:
 ; LOAD: Using bank register T0 for load
     LOAD T5, T0, T2
     STORE T5, SB, T1

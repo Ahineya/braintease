@@ -40,7 +40,7 @@ static void *make_fat_ptr(unsigned int addr, unsigned int bank) {
     return fp.p;
 }
 
-void *malloc(unsigned int size) {
+void *malloc(size_t size) {
     unsigned int start_bank;
     unsigned int start_off;
     unsigned int remaining;
@@ -103,8 +103,8 @@ void free(void *ptr) {
     (void)ptr;
 }
 
-void *calloc(unsigned int nmemb, unsigned int size) {
-    unsigned int total;
+void *calloc(size_t nmemb, size_t size) {
+    size_t total;
     void *ptr;
 
     if (nmemb == 0 || size == 0) {
@@ -123,7 +123,7 @@ void *calloc(unsigned int nmemb, unsigned int size) {
     return ptr;
 }
 
-void *realloc(void *ptr, unsigned int size) {
+void *realloc(void *ptr, size_t size) {
     if (ptr == NULL) {
         return malloc(size);
     }

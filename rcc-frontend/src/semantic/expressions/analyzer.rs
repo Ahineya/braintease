@@ -265,10 +265,10 @@ impl ExpressionAnalyzer {
 
             ExpressionKind::SizeofExpr(operand) => {
                 self.analyze(operand)?;
-                Type::Int // sizeof yields size_t; stddef.h currently typedefs that as int
+                Type::UnsignedInt // sizeof yields size_t (unsigned int)
             }
 
-            ExpressionKind::SizeofType(_) => Type::Int,
+            ExpressionKind::SizeofType(_) => Type::UnsignedInt,
 
             ExpressionKind::CompoundLiteral {
                 type_name,
