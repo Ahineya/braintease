@@ -1,101 +1,73 @@
 // C Doom TITLEPIC demo — parity with bfm-doom.bfm.
 //
-// wad.c / mem.c / picture.c are #included and compiled as one translation unit.
-// Storage is 64KB blocks: file offset 0xHHHHhhhh = block 0xHHHH, byte 0xhhhh.
-// Each storage word holds two little-endian file bytes; wad.c unpacks them.
-// int is 16-bit, so 32-bit WAD offsets are (hi, lo) pairs.
+// wad.c, mem.c, picture.c, and this file are compiled as separate
+// translation units and linked with the C runtime.
 // TITLEPIC pixels live in bank 3, PLAYPAL RGB565 in bank 4 (heap is bank 5+).
 
 #include <stdio.h>
+#include <stdint.h>
 #include <graphics.h>
 #include "wad.h"
 #include "mem.h"
 #include "picture.h"
 
-#include "wad.c"
-#include "mem.c"
-#include "picture.c"
-
 int main() {
-    unsigned short i;
-    unsigned short lump_count;
-    unsigned short lump_count_hi;
-    unsigned short dir_hi;
-    unsigned short dir_lo;
-    unsigned short found_pic;
-    unsigned short found_pal;
-    unsigned short file_hi;
-    unsigned short file_lo;
-    unsigned short size_hi;
-    unsigned short size_lo;
-    unsigned short pic_hi;
-    unsigned short pic_lo;
-    unsigned short pic_size_hi;
-    unsigned short pic_size_lo;
-    unsigned short pal_hi;
-    unsigned short pal_lo;
-    unsigned short width;
-    unsigned short height;
-    unsigned short col0;
+    uint32_t i;
+    uint32_t lump_count;
+    uint32_t dir;
+    uint32_t filepos;
+    uint32_t size;
+    uint32_t pic;
+    uint32_t pic_size;
+    uint32_t pal;
+    uint16_t found_pic;
+    uint16_t found_pal;
+    uint16_t width;
+    uint16_t height;
+    uint16_t col0;
     char name[8];
     int k;
 
-    seek_to(0, 0);
-    name[0] = read8();
-    name[1] = read8();
-    name[2] = read8();
-    name[3] = read8();
+    wad_seek(0);
+    for (k = 0; k < 4; k++) {
+        name[k] = (char)wad_read8();
+    }
     printf("%c%c%c%c\n", name[0], name[1], name[2], name[3]);
 
-    seek_to(0, 4);
-    lump_count = read16();
-    lump_count_hi = read16();
-    printf("Lump count: %u\n", lump_count);
+    wad_seek(4);
+    lump_count = wad_read32();
+    printf("Lump count: %lu\n", lump_count);
 
-    seek_to(0, 8);
-    dir_lo = read16();
-    dir_hi = read16();
-    printf("Directory offset: %x%x\n", dir_hi, dir_lo);
+    wad_seek(8);
+    dir = wad_read32();
+    printf("Directory offset: 0x%lx\n", dir);
 
     found_pic = 0;
     found_pal = 0;
-    pic_hi = 0;
-    pic_lo = 0;
-    pic_size_hi = 0;
-    pic_size_lo = 0;
-    pal_hi = 0;
-    pal_lo = 0;
+    pic = 0;
+    pic_size = 0;
+    pal = 0;
 
     for (i = 0; i < lump_count; i++) {
-        seek_to(dir_hi, dir_lo);
-        skip(i * 16);
+        wad_seek(dir + i * 16UL);
+        filepos = wad_read32();
+        size = wad_read32();
+        wad_read_name(name);
 
-        file_lo = read16();
-        file_hi = read16();
-        size_lo = read16();
-        size_hi = read16();
-
-        for (k = 0; k < 8; k++) {
-            name[k] = read8();
-        }
-
-        if (names_equal(name, "TITLEPIC")) {
+        if (wad_name_eq(name, "TITLEPIC")) {
             found_pic = 1;
-            pic_lo = file_lo;
-            pic_hi = file_hi;
-            pic_size_lo = size_lo;
-            pic_size_hi = size_hi;
+            pic = filepos;
+            pic_size = size;
             printf("Found TITLEPIC\n");
-            printf("TITLEPIC address: %x%x\n", pic_hi, pic_lo);
-            printf("TITLEPIC size: %x%x\n", pic_size_hi, pic_size_lo);
+            printf("TITLEPIC address: 0x%lx\n", pic);
+            printf("TITLEPIC size: %lu\n", pic_size);
         }
 
-        if (names_equal(name, "PLAYPAL")) {
+        if (wad_name_eq(name, "PLAYPAL")) {
             found_pal = 1;
-            pal_lo = file_lo;
-            pal_hi = file_hi;
+            pal = filepos;
             printf("Found PLAYPAL\n");
-            printf("%x%x\n", pal_hi, pal_lo);
+            printf("0x%lx\n", pal);
         }
 
         if (found_pic && found_pal) {
@@ -112,18 +84,16 @@ int main() {
         return 1;
     }
 
-    seek_to(pic_hi, pic_lo);
-    width = read16();
-    height = read16();
+    wad_seek(pic);
+    width = wad_read16();
+    height = wad_read16();
     printf("TITLEPIC dimensions: %ux%u\n", width, height);
 
-    seek_to(pic_hi, pic_lo);
-    skip(8);
-    col0 = read16();
+    wad_seek(pic + 8);
+    col0 = wad_read16();
     printf("First column offset: %u\n", col0);
 
-    if (lump_count_hi == 0 && lump_count == 1264 &&
-        dir_hi == 0x003f && dir_lo == 0xb7b4 &&
+    if (lump_count == 1264UL && dir == 0x003fb7b4UL &&
         width == 320 && height == 200 && col0 == 1288) {
         printf("Y\n");
     } else {
@@ -131,10 +101,10 @@ int main() {
     }
 
     printf("Loading TITLEPIC\n");
-    load_titlepic(pic_hi, pic_lo, width);
+    load_titlepic(pic, width);
     printf("pix0: %x\n", peek_word(TITLEPIC_BANK, 0));
     printf("Loading PLAYPAL\n");
-    load_playpal(pal_hi, pal_lo);
+    load_playpal(pal);
     printf("pal0: %x\n", peek_word(PALETTE_BANK, 0));
     printf("Resolving colors\n");
     resolve_titlepic_colors();

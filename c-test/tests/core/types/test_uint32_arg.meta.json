@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYY\n",
+  "description": "uint32_t prototype args occupy two ABI slots"
+}

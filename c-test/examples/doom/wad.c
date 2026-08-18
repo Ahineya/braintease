@@ -1,46 +1,55 @@
 #include "wad.h"
 #include <mmio.h>
 
-unsigned short cur_hi;
-unsigned short cur_lo;
+static uint32_t cur;
 
-void seek_to(unsigned short hi, unsigned short lo) {
-    cur_hi = hi;
-    cur_lo = lo;
+void wad_seek(uint32_t offset) {
+    cur = offset;
 }
 
-void skip(unsigned short n) {
-    unsigned short old = cur_lo;
-    unsigned short next = old + n;
-    cur_lo = next;
-    if (next < old) {
-        cur_hi = cur_hi + 1;
-    }
+void wad_skip(uint32_t n) {
+    cur = cur + n;
 }
 
-unsigned short read8(void) {
-    // STORE_ADDR is a word index: file bytes 2n,2n+1 live in word n (LE).
-    unsigned short word = storage_read_at(cur_hi, cur_lo >> 1);
-    unsigned short b;
-    if (cur_lo & 1) {
+uint16_t wad_read8(void) {
+    uint16_t block = (uint16_t)(cur >> 16);
+    uint16_t byte_addr = (uint16_t)cur;
+    uint16_t word = storage_read_at(block, byte_addr >> 1);
+    uint16_t b;
+
+    if (byte_addr & 1) {
         b = (word >> 8) & 0xFF;
     } else {
         b = word & 0xFF;
     }
-    skip(1);
+
+    cur = cur + 1;
     return b;
 }
 
-unsigned short read16(void) {
-    unsigned short lo_b = read8();
-    unsigned short hi_b = read8();
-    return lo_b | (hi_b << 8);
+uint16_t wad_read16(void) {
+    uint16_t lo = wad_read8();
+    uint16_t hi = wad_read8();
+    return lo | (uint16_t)(hi << 8);
 }
 
-int names_equal(char *a, char *b) {
+uint32_t wad_read32(void) {
+    uint32_t lo = wad_read16();
+    uint32_t hi = wad_read16();
+    return lo | (hi << 16);
+}
+
+void wad_read_name(char *name) {
     int i;
     for (i = 0; i < 8; i++) {
-        if (a[i] != b[i]) {
+        name[i] = (char)wad_read8();
+    }
+}
+
+int wad_name_eq(char *name, char *want) {
+    int i;
+    for (i = 0; i < 8; i++) {
+        if (name[i] != want[i]) {
             return 0;
         }
     }

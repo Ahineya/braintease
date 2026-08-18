@@ -1,8 +1,7 @@
 # C Doom TITLEPIC demo
 #
-# wad.c / mem.c / picture.c are included from doom-fixed.c and compiled as
-# one translation unit. Cross-object C globals now get concatenated GP
-# ranges, but Doom still uses a single TU for include-path convenience.
+# wad.c, mem.c, picture.c, and doom-fixed.c are compiled as separate
+# translation units. The linker concatenates each object's GP range.
 #
 # Usage:
 #   make
@@ -15,7 +14,6 @@ SRC       := $(abspath .)
 RUNTIME   := $(ROOT)/runtime
 
 RCC       := $(ROOT)/target/release/rcc
-RCPP      := $(ROOT)/target/release/rcpp
 RASM      := $(ROOT)/src/ripple-asm/target/release/rasm
 RLINK     := $(ROOT)/src/ripple-asm/target/release/rlink
 RVM       := $(ROOT)/target/release/rvm
@@ -24,17 +22,16 @@ BANK_SIZE ?= 64000
 MAX_IMM   := 65535
 INCLUDES  := -I $(RUNTIME)/include -I $(SRC)
 
-C_SOURCES := doom-fixed.c wad.c mem.c picture.c
-PP        := $(BUILD)/doom-c.pp.c
-ASM       := $(BUILD)/doom-c.asm
-POBJ      := $(BUILD)/doom-c.pobj
+C_SOURCES := wad.c mem.c picture.c doom-fixed.c
+ASMS      := $(addprefix $(BUILD)/,$(C_SOURCES:.c=.asm))
+OBJS      := $(addprefix $(BUILD)/,$(C_SOURCES:.c=.pobj))
 BIN       := $(BUILD)/doom-c.bin
 
 WAD       ?= $(SRC)/doom1.wad
 FREQUENCY ?=
 
 .PHONY: all runtime clean run
-.PRECIOUS: $(PP) $(ASM) $(POBJ)
+.PRECIOUS: $(ASMS) $(OBJS)
 
 all: $(BIN)
 
@@ -44,21 +41,17 @@ runtime:
 $(BUILD):
 	mkdir -p $(BUILD)
 
-$(PP): $(C_SOURCES) wad.h mem.h picture.h | $(BUILD)
-	@echo "Preprocessing doom-fixed.c"
-	$(RCPP) $(SRC)/doom-fixed.c -o $@ $(INCLUDES)
-
-$(ASM): $(PP)
+$(BUILD)/%.asm: $(SRC)/%.c wad.h mem.h picture.h | $(BUILD)
 	@echo "Compiling $<"
-	$(RCC) compile $< -o $@ --no-preprocess --bank-size $(BANK_SIZE)
+	$(RCC) compile $< -o $@ --bank-size $(BANK_SIZE) $(INCLUDES)
 
-$(POBJ): $(ASM)
+$(BUILD)/%.pobj: $(BUILD)/%.asm
 	@echo "Assembling $<"
 	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
 
-$(BIN): runtime $(POBJ)
+$(BIN): runtime $(OBJS)
 	@echo "Linking $@"
-	$(RLINK) $(RUNTIME)/crt0.pobj $(RUNTIME)/libruntime.par $(POBJ) \
+	$(RLINK) $(RUNTIME)/crt0.pobj $(RUNTIME)/libruntime.par $(OBJS) \
 		-f binary --bank-size $(BANK_SIZE) -o $@
 	@echo "Built $@"
 
@@ -72,5 +65,5 @@ run: $(BIN)
 	$(RVM) $(BIN) --visual --disk "$(WAD)" $(if $(FREQUENCY),--frequency $(FREQUENCY),)
 
 clean:
-	rm -f $(PP) $(ASM) $(POBJ) $(BIN)
-	rm -f $(BUILD)/doom-c-*.pp.c $(BUILD)/doom-c-*.asm $(BUILD)/doom-c-*.pobj
+	rm -f $(ASMS) $(OBJS) $(BIN)
+	rm -f $(BUILD)/doom-c.pp.c $(BUILD)/doom-c.asm $(BUILD)/doom-c.pobj

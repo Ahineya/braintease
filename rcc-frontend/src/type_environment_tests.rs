@@ -357,6 +357,40 @@ mod tests {
     }
     
     #[test]
+    fn test_typedef_function_parameter_resolution() {
+        // Declaration only — definitions already resolved parameter typedefs.
+        let source = r#"
+            typedef unsigned long uint32_t;
+            void take32(uint32_t x);
+            int main() {
+                take32(4);
+                return 0;
+            }
+        "#;
+
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&mut ast).unwrap();
+        let ta = analyzer.into_type_info();
+
+        let mut found = false;
+        for ty in ta.borrow().symbol_types.borrow().values() {
+            if let Type::Function { parameters, .. } = ty {
+                if parameters.len() == 1 {
+                    let resolved = ta.borrow().resolve_type(ty);
+                    if let Type::Function { parameters, .. } = resolved {
+                        if parameters[0] == Type::UnsignedLong {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(found, "uint32_t prototype parameter should resolve to unsigned long");
+    }
+
+    #[test]
     fn test_void_function_type() {
         let source = r#"
             void do_nothing() {

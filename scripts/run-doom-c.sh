@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build and run the C Doom TITLEPIC demo (c-test/examples/doom).
 #
-# Multi-file C: wad.c, mem.c, picture.c, doom-fixed.c.
-# Linked with the C runtime (crt0 + libruntime), unlike the BFM demo.
+# Multi-file C: wad.c, mem.c, picture.c, doom-fixed.c compiled separately
+# and linked with the C runtime (crt0 + libruntime), unlike the BFM demo.
 #
 # Usage:
 #   scripts/run-doom-c.sh /path/to/DOOM1.WAD

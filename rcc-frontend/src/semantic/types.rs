@@ -166,8 +166,14 @@ impl TypeAnalyzer {
             Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
             Type::Float | Type::Double | Type::Error => ty.clone(),
             
-            // Function types don't need resolution (parameters are already resolved)
-            Type::Function { .. } => ty.clone(),
+            // Prototypes keep typedef names (`void f(uint32_t)`). Call codegen
+            // uses is_integer() on these parameter types to widen 16-bit
+            // constants into two ABI slots; skip that and A1 is leftover junk.
+            Type::Function { return_type, parameters, is_variadic } => Type::Function {
+                return_type: Box::new(self.resolve_type(return_type)),
+                parameters: parameters.iter().map(|p| self.resolve_type(p)).collect(),
+                is_variadic: *is_variadic,
+            },
             
             // Enum types don't need resolution
             Type::Enum { .. } => ty.clone(),
