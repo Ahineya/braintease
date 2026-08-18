@@ -495,4 +495,65 @@ mod tests {
             _ => panic!("Expected type definition"),
         }
     }
+
+    #[test]
+    fn test_parse_unnamed_pointer_parameter() {
+        let input = "int ident(char *); int ident(char *p) { return *p; }";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        match &tu.items[0] {
+            TopLevelItem::Declarations(decls) => match &decls[0].decl_type {
+                Type::Function { parameters, .. } => {
+                    assert!(matches!(parameters[0], Type::Pointer { .. }));
+                }
+                other => panic!("Expected function type, got {other:?}"),
+            },
+            _ => panic!("Expected declaration"),
+        }
+    }
+
+    #[test]
+    fn test_parse_anonymous_struct_union_members() {
+        let input = "struct S { int a; union { int b1; int b2; }; struct { int c; }; };";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        match &tu.items[0] {
+            TopLevelItem::TypeDefinition { type_def, .. } => match type_def {
+                Type::Struct { fields, .. } => {
+                    assert_eq!(fields.len(), 3);
+                    assert_eq!(fields[0].name, "a");
+                    assert!(fields[1].name.is_empty());
+                    assert!(matches!(fields[1].field_type, Type::Union { .. }));
+                    assert!(fields[2].name.is_empty());
+                    assert!(matches!(fields[2].field_type, Type::Struct { .. }));
+                }
+                _ => panic!("Expected struct"),
+            },
+            _ => panic!("Expected type definition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_forward_declaration() {
+        let input = "struct T; struct T { int x; };";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = Parser::new(tokens);
+        let tu = parser.parse_translation_unit().unwrap();
+        assert_eq!(tu.items.len(), 2);
+        match &tu.items[0] {
+            TopLevelItem::TypeDefinition { name, type_def, .. } => {
+                assert_eq!(name, "T");
+                match type_def {
+                    Type::Struct { fields, .. } => assert!(fields.is_empty()),
+                    _ => panic!("Expected incomplete struct"),
+                }
+            }
+            _ => panic!("Expected type definition"),
+        }
+    }
 }

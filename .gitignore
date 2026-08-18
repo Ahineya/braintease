@@ -34,4 +34,4 @@ __pycache__
 electron-dist
 public/downloads
 
-c-test/vendor
+c-test/vendor/result.txt

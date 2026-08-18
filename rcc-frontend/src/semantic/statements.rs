@@ -246,6 +246,23 @@ impl StatementAnalyzer {
             self.expression_analyzer.borrow().type_analyzer.borrow().type_definitions.borrow_mut().insert(decl.name.clone(), decl.decl_type.clone());
             return Ok(());
         }
+
+        // Tag-only declaration: `struct T { int x; };` / `struct T;`
+        if decl.name.is_empty() {
+            match &decl.decl_type {
+                Type::Struct { name: Some(name), .. }
+                | Type::Union { name: Some(name), .. }
+                | Type::Enum { name: Some(name), .. } => {
+                    self.expression_analyzer
+                        .borrow()
+                        .type_analyzer
+                        .borrow_mut()
+                        .register_type_definition(name.clone(), decl.decl_type.clone())?;
+                }
+                _ => {}
+            }
+            return Ok(());
+        }
         
         // Check for redefinition in current scope
         if self.expression_analyzer.borrow().type_analyzer.borrow().symbol_table.borrow_mut().exists_in_current_scope(&decl.name) {

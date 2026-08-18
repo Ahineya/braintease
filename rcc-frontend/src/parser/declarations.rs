@@ -24,49 +24,26 @@ impl Parser {
         // Remember the start location for span tracking
         let start_loc = self.current_location();
         
-        // Check if this is a standalone struct/union/enum definition
-        match &base_type {
-            Type::Struct { name: Some(name), fields, .. } if !fields.is_empty() => {
-                // This is a struct definition with a name and fields
-                if self.check(&TokenType::Semicolon) {
+        // Standalone struct/union/enum definition or forward declaration:
+        // `struct T { int x; };`, `struct T;`, `enum efoo;`
+        if self.check(&TokenType::Semicolon) {
+            match &base_type {
+                Type::Struct { name, .. } | Type::Union { name, .. } | Type::Enum { name, .. } => {
                     let end_loc = self.current_location();
-                    self.advance(); // Consume the semicolon
-                    return Ok(TopLevelItem::TypeDefinition {
-                        name: name.clone(),
-                        type_def: base_type,
-                        span: SourceSpan::new(start_loc, end_loc),
-                    });
-                }
-            }
-            Type::Union { name: Some(name), fields, .. } if !fields.is_empty() => {
-                // This is a union definition with a name and fields
-                if self.check(&TokenType::Semicolon) {
-                    let end_loc = self.current_location();
-                    self.advance(); // Consume the semicolon
-                    return Ok(TopLevelItem::TypeDefinition {
-                        name: name.clone(),
-                        type_def: base_type,
-                        span: SourceSpan::new(start_loc, end_loc),
-                    });
-                }
-            }
-            Type::Enum { name, variants } if !variants.is_empty() => {
-                // Named or anonymous enum: `enum E { ... };` / `enum { ... };`
-                if self.check(&TokenType::Semicolon) {
-                    let end_loc = self.current_location();
-                    self.advance(); // Consume the semicolon
+                    self.advance();
                     return Ok(TopLevelItem::TypeDefinition {
                         name: name.clone().unwrap_or_default(),
                         type_def: base_type,
                         span: SourceSpan::new(start_loc, end_loc),
                     });
                 }
+                _ => {}
             }
-            _ => {}
         }
         
         // Parse first declarator (name and type modifications like pointers, arrays, functions)
         let (name, full_type) = self.parse_declarator(base_type.clone())?;
+        self.require_named_declarator(&name)?;
         
         // Check if this is a function definition (has a body)
         if let Type::Function { .. } = full_type {
@@ -106,6 +83,7 @@ impl Parser {
             
             loop {
                 let (name, full_type) = self.parse_declarator(base_type.clone())?;
+                self.require_named_declarator(&name)?;
                 
                 // If this is a typedef, register the name
                 if storage_class == StorageClass::Typedef {
@@ -234,9 +212,30 @@ impl Parser {
         self.skip_ignored_specifiers();
         
         let mut declarations = Vec::new();
+
+        // Block-scope tag definition / forward declaration: `struct T { int x; };`
+        if self.check(&TokenType::Semicolon) {
+            match &base_type {
+                Type::Struct { .. } | Type::Union { .. } | Type::Enum { .. } => {
+                    declarations.push(Declaration {
+                        node_id: self.node_id_gen.next(),
+                        name: String::new(),
+                        decl_type: base_type,
+                        storage_class,
+                        initializer: None,
+                        span: SourceSpan::new(self.current_location(), self.current_location()),
+                        symbol_id: None,
+                    });
+                    self.advance();
+                    return Ok(StatementKind::Declaration { declarations });
+                }
+                _ => {}
+            }
+        }
         
         // Parse first declarator
         let (name, full_type) = self.parse_declarator(base_type.clone())?;
+        self.require_named_declarator(&name)?;
         
         // If this is a typedef, register the name
         if storage_class == StorageClass::Typedef {
@@ -262,6 +261,7 @@ impl Parser {
         // Parse additional declarators (comma-separated)
         while self.match_token(&TokenType::Comma) {
             let (name, full_type) = self.parse_declarator(base_type.clone())?;
+            self.require_named_declarator(&name)?;
             
             // If this is a typedef, register the name
             if storage_class == StorageClass::Typedef {

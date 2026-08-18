@@ -1,0 +1,2919 @@
+Test summary:
+
+pass 162
+fail 55
+skip 3
+---------
+total 220
+
+not ok ./tests/single-exec/00049.c
+  int x = 10;
+  
+  struct S {int a; int *p;};
+  struct S s = { .p = &x, .a = 1};
+  
+  int
+  main()
+  {
+  	if(s.a != 1)
+  		return 1;
+  	if(*s.p != 10)
+  		return 2;
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00049.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00049.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00049/00049.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00049.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 4 top-level items
+    Global variable: x : int
+    Type definition: S
+    Global variable: s : struct S
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Code generation error at <input>:0:0: Unsupported construct: non-constant array initializer
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Code generation error at <input>:0:0: Unsupported construct: non-constant array initializer
+not ok ./tests/single-exec/00072.c
+  int
+  main()
+  {
+  	int arr[2];
+  	int *p;
+  	
+  	p = &arr[0];
+  	p += 1;
+  	*p = 123;
+  	
+  	if(arr[1] != 123)
+  		return 1;
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00072.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00072.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00072/00072.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00072.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 1 top-level items
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Internal compiler error: Pointer must be a fat pointer in function 'main', got: Temp(3)
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Internal compiler error: Pointer must be a fat pointer in function 'main', got: Temp(3)
+not ok ./tests/single-exec/00073.c
+  int
+  main()
+  {
+  	int arr[2];
+  	int *p;
+  	
+  	p = &arr[1];
+  	p -= 1;
+  	*p = 123;
+  	
+  	if(arr[0] != 123)
+  		return 1;
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00073.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00073.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00073/00073.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00073.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 1 top-level items
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Internal compiler error: Pointer must be a fat pointer in function 'main', got: Temp(3)
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Internal compiler error: Pointer must be a fat pointer in function 'main', got: Temp(3)
+not ok ./tests/single-exec/00077.c
+  int
+  foo(int x[100])
+  {
+  	int y[100];
+  	int *p;
+  	
+  	y[0] = 2000;
+  	
+  	if(x[0] != 1000)
+  	{
+  		return 1;
+  	}
+  	
+  	p = x;
+  	
+  	if(p[0] != 1000)
+  	{
+  		return 2;
+  	}
+  	
+  	p = y;
+  	
+  	if(p[0] != 2000)
+  	{
+  		return 3;
+  	}
+  	
+  	if(sizeof(x) != sizeof(void*))
+  	{
+  		return 4;
+  	}
+  	
+  	if(sizeof(y) <= sizeof(x))
+  	{
+  		return 5;
+  	}
+  	
+  	return 0;
+  }
+  
+  int
+  main()
+  {
+  	int x[100];
+  	x[0] = 1000;
+  	
+  	return foo(x);
+  }
+  ++ dirname ./tests/single-exec/00077.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00077.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00077/00077.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00077/00077.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00077/00077.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00077/00077.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00077/00077.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00077/00077.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00077/00077.disk.img
+  + set +x
+  rvm exited nonzero
+not ok ./tests/single-exec/00078.c
+  int
+  f1(char *p)
+  {
+  	return *p+1;
+  }
+  
+  int
+  main()
+  {
+  	char s = 1;
+  	int v[1000];
+  	int f1(char *);
+  
+  	if (f1(&s) != 2)
+  		return 1;
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00078.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00078.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00078/00078.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00078.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 2 top-level items
+    Function: f1 -> int
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  💫 Successfully generated IR
+  🦄 Module contains 2 functions
+  Error: Failed to lower IR to assembly: V2: Invalid function value for call: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: V2: Invalid function value for call: FatPtr(FatPointer { addr: Temp(3), bank: Mixed })
+not ok ./tests/single-exec/00087.c
+  struct S
+  {
+  	int	(*fptr)();
+  };
+  
+  int
+  foo()
+  {
+  	return 0;
+  }
+  
+  int
+  main()
+  {
+  	struct S v;
+  	
+  	v.fptr = foo;
+  	return v.fptr();
+  }
+  
+  ++ dirname ./tests/single-exec/00087.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00087.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00087/00087.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00087.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 3 top-level items
+    Type definition: S
+    Function: foo -> int
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  💫 Successfully generated IR
+  🦄 Module contains 2 functions
+  Error: Failed to lower IR to assembly: Function pointers not yet implemented. Cannot use function 'foo' as a value
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Function pointers not yet implemented. Cannot use function 'foo' as a value
+not ok ./tests/single-exec/00089.c
+  int
+  zero()
+  {
+  	return 0;
+  }
+  
+  struct S
+  {
+  	int (*zerofunc)();
+  } s = { &zero };
+  
+  struct S *
+  anon()
+  {
+  	return &s;
+  }
+  
+  typedef struct S * (*fty)();
+  
+  fty
+  go()
+  {
+  	return &anon;
+  }
+  
+  int
+  main()
+  {
+  	return go()()->zerofunc();
+  }
+  ++ dirname ./tests/single-exec/00089.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00089.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00089/00089.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00089.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 6 top-level items
+    Function: zero -> int
+    Global variable: s : struct S
+    Function: anon -> struct S*
+    Typedef: fty = struct S* ()*
+    Function: go -> fty
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Code generation error at <input>:0:0: Unsupported construct: non-constant array initializer
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Code generation error at <input>:0:0: Unsupported construct: non-constant array initializer
+not ok ./tests/single-exec/00092.c
+  int a[] = {5, [2] = 2, 3};
+  
+  int
+  main()
+  {
+  	if (sizeof(a) != 4*sizeof(int))
+  		return 1;
+  		
+  	if (a[0] != 5)
+  		return 2;
+  	if (a[1] != 0)
+  		return 3;
+  	if (a[2] != 2)
+  		return 4;
+  	if (a[3] != 3)
+  		return 5;
+  	
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00092.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00092.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00092/00092.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00092/00092.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00092/00092.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00092/00092.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00092/00092.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00092/00092.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00092/00092.disk.img
+  + set +x
+  rvm exited nonzero
+not ok ./tests/single-exec/00093.c
+  int a[] = {1, 2, 3, 4};
+  
+  int
+  main()
+  {
+  	if (sizeof(a) != 4*sizeof(int))
+  		return 1;
+  	
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00093.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00093.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00093/00093.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00093/00093.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00093/00093.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00093/00093.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00093/00093.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00093/00093.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00093/00093.disk.img
+  + set +x
+  rvm exited nonzero
+not ok ./tests/single-exec/00095.c
+  int x;
+  int x = 3;
+  int x;
+  
+  int main();
+  
+  void *
+  foo()
+  {
+  	return &main;
+  }
+  
+  int
+  main()
+  {
+  	if (x != 3)
+  		return 0;
+  
+  	x = 0;
+  	return x;
+  }
+  
+  ++ dirname ./tests/single-exec/00095.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00095.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00095/00095.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00095.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 6 top-level items
+    Global variable: x : int
+    Global variable: x : int
+    Global variable: x : int
+    Global variable: main : int ()
+    Function: foo -> void*
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  💫 Successfully generated IR
+  🦄 Module contains 2 functions
+  
+  thread 'main' (7111126) panicked at rcc-backend/src/lower/function.rs:240:26:
+  Unexpected value type in FatPtr address: Global("main")
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+not ok ./tests/single-exec/00098.c
+  int
+  main()
+  {
+  	return L'\0';
+  }
+  ++ dirname ./tests/single-exec/00098.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00098.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00098/00098.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00098.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:4:10: Expected ; in return statement, found ' '
+  Error compiling C99 file: Parse error at <input>:4:10: Expected ; in return statement, found ' '
+not ok ./tests/single-exec/00112.c
+  int
+  main()
+  {
+  	return "abc" == (void *)0;
+  }
+  ++ dirname ./tests/single-exec/00112.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00112.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00112/00112.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00112.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 1 top-level items
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  💫 Successfully generated IR
+  🦄 Module contains 1 functions
+  
+  thread 'main' (7117331) panicked at rcc-backend/src/instr/helpers.rs:48:13:
+  Unexpected Value::Global('__str_0') - should have been resolved to FatPtr in lower.rs
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+not ok ./tests/single-exec/00119.c
+  double x = 100;
+  
+  int
+  main()
+  {
+  	return x < 1;
+  }
+  ++ dirname ./tests/single-exec/00119.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00119.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00119/00119.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00119/00119.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00119/00119.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00119/00119.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00119/00119.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00119/00119.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00119/00119.disk.img
+  + set +x
+  rvm exited nonzero
+not ok ./tests/single-exec/00120.c
+  struct {
+  	enum { X } x;
+  } s;
+  
+  
+  int
+  main()
+  {
+  	return X;
+  }
+  ++ dirname ./tests/single-exec/00120.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00120.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00120/00120.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00120.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 2 top-level items
+    Global variable: s : struct <anonymous>
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:9:9: Undefined variable: X
+not ok ./tests/single-exec/00123.c
+  double x = 100.0;
+  
+  int
+  main()
+  {
+  	return x < 1;
+  }
+  ++ dirname ./tests/single-exec/00123.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00123.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00123/00123.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00123.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 2 top-level items
+    Global variable: x : double
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Code generation error at <input>:0:0: Internal error: No current function
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Code generation error at <input>:0:0: Internal error: No current function
+not ok ./tests/single-exec/00124.c
+  int
+  f2(int c, int b)
+  {
+  	return c - b;
+  }
+  
+  int (*
+  f1(int a, int b))(int c, int b)
+  {
+  	if (a != b)
+  		return f2;
+  	return 0;
+  }
+  
+  int
+  main()
+  {
+  	int (* (*p)(int a, int b))(int c, int d) = f1;
+  
+  
+  	return (*(*p)(0, 2))(2, 2);
+  }
+  ++ dirname ./tests/single-exec/00124.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00124.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00124/00124.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00124.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 3 top-level items
+    Function: f2 -> int
+    Function: f1 -> int
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:10:6: Undefined variable: a
+not ok ./tests/single-exec/00129.c
+  typedef struct s s;
+  
+  struct s {
+  	struct s1 {
+  		int s;
+  		struct s2 {
+  			int s;
+  		} s1;
+  	} s;
+  } s2;
+  
+  #define s s
+  
+  int
+  main(void)
+  {
+  #undef s
+  	goto s;
+  	struct s s;
+  		{
+  			int s;
+  			return s;
+  		}
+  	return s.s.s + s.s.s1.s;
+  	s:
+  		{
+  			return 0;
+  		}
+  	return 1;
+  }
+  ++ dirname ./tests/single-exec/00129.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00129.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00129/00129.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00129.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 3 top-level items
+    Typedef: s = struct s
+    Global variable: s2 : struct s
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Internal compiler error: Struct pointer must be a fat pointer, got: Temp(3)
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Internal compiler error: Struct pointer must be a fat pointer, got: Temp(3)
+not ok ./tests/single-exec/00141.c
+  #define CAT(x,y) x ## y
+  #define XCAT(x,y) CAT(x,y)
+  #define FOO foo
+  #define BAR bar
+  
+  int
+  main(void)
+  {
+  	int foo, bar, foobar;
+  
+  	CAT(foo,bar) = foo + bar;
+  	XCAT(FOO,BAR) = foo + bar;
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00141.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00141.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00141/00141.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00141.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 1 top-level items
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:12:2: Undefined variable: CAT
+not ok ./tests/single-exec/00144.c
+  int
+  main(void)
+  {
+  	int i, *q;
+  	void *p;
+  
+  	i = i ? 0 : 0l;
+  	p = i ? (void *) 0 : 0;
+  	p = i ? 0 : (void *) 0;
+  	p = i ? 0 : (const void *) 0;
+  	q = i ? 0 : p;
+  	q = i ? p : 0;
+  	q = i ? q : 0;
+  	q = i ? 0 : q;
+  
+  	return (int) q;
+  }
+  ++ dirname ./tests/single-exec/00144.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00144.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00144/00144.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00144.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 1 top-level items
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:8:6: Type mismatch: expected void*, found int
+not ok ./tests/single-exec/00145.c
+  #if 0 != (0 && (0/0))
+     #error 0 != (0 && (0/0))
+  #endif
+  
+  #if 1 != (-1 || (0/0))
+     #error 1 != (-1 || (0/0))
+  #endif
+  
+  #if 3 != (-1 ? 3 : (0/0))
+     #error 3 != (-1 ? 3 : (0/0))
+  #endif
+  
+  int
+  main()
+  {
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00145.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00145.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00145/00145.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00145.c (bank_size: 64000)
+  Error compiling C99 file: Division by zero in #if expression
+not ok ./tests/single-exec/00149.c
+  struct S { int a; int b; };
+  struct S *s = &(struct S) { 1, 2 };
+  
+  int
+  main()
+  {
+  	if(s->a != 1)
+  		return 1;
+  	if(s->b != 2)
+  		return 2;
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00149.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00149.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00149/00149.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00149.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 3 top-level items
+    Type definition: S
+    Global variable: s : struct S*
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Code generation error at <input>:0:0: Internal error: Failed to allocate space for compound literal: No current function
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Code generation error at <input>:0:0: Internal error: Failed to allocate space for compound literal: No current function
+not ok ./tests/single-exec/00150.c
+  struct S1 {
+  	int a;
+  	int b;
+  };
+  struct S2 {
+  	struct S1 s1;
+  	struct S1 *ps1;
+  	int arr[2];
+  };
+  struct S1 gs1 = { .a = 1, 2 };
+  struct S2 *s = &(struct S2) {
+  	{.b = 2, .a = 1},
+  	&gs1,
+  	{[0] = 1,  1+1}
+  };
+  
+  int
+  main()
+  {
+  	if(s->s1.a != 1)
+  		return 1;
+  	if(s->s1.b != 2)
+  		return 2;
+  	if(s->ps1->a != 1)
+  		return 3;
+  	if(s->ps1->b != 2)
+  		return 4;
+  	if(s->arr[0] != 1)
+  		return 5;
+  	if(s->arr[1] != 2)
+  		return 6;
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00150.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00150.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00150/00150.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00150.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 5 top-level items
+    Type definition: S1
+    Type definition: S2
+    Global variable: gs1 : struct S1
+    Global variable: s : struct S2*
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Code generation error at <input>:0:0: Internal error: Failed to allocate space for compound literal: No current function
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Code generation error at <input>:0:0: Internal error: Failed to allocate space for compound literal: No current function
+not ok ./tests/single-exec/00152.c
+  #undef  line
+  #define line 1000
+  
+  #line line
+  #if 1000 != __LINE__
+  	#error "  # line line" not work as expected
+  #endif
+  
+  int
+  main()
+  {
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00152.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00152.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00152/00152.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00152.c (bank_size: 64000)
+  Error compiling C99 file: Expected line number in line directive
+not ok ./tests/single-exec/00159.c
+  #include <stdio.h>
+  
+  int myfunc(int x)
+  {
+     return x * x;
+  }
+  
+  void vfunc(int a)
+  {
+     printf("a=%d\n", a);
+  }
+  
+  void qfunc()
+  {
+     printf("qfunc()\n");
+  }
+  
+  void zfunc()
+  {
+     ((void (*)(void))0) ();
+  }
+  
+  int main()
+  {
+     printf("%d\n", myfunc(3));
+     printf("%d\n", myfunc(4));
+  
+     vfunc(1234);
+  
+     qfunc();
+  
+     return 0;
+  }
+  
+  // vim: set expandtab ts=4 sw=3 sts=3 tw=80 :
+  ++ dirname ./tests/single-exec/00159.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00159.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00159/00159.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00159.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:28:6: Expected primary expression, found void
+  Error compiling C99 file: Parse error at <input>:28:6: Expected primary expression, found void
+not ok ./tests/single-exec/00162.c
+  void foo(int [5]);
+  void fooc(int x[const 5]);
+  void foos(int x[static 5]);
+  void foov(int x[volatile 5]);
+  void foor(int x[restrict 5]);
+  void fooc(int [const 5]);
+  void foos(int [static 5]);
+  void foov(int [volatile 5]);
+  void foor(int [restrict 5]);
+  void fooc(int (* const x));
+  void foos(int *x);
+  void foov(int * volatile x);
+  void foor(int * restrict x);
+  void fooc(int x[volatile 5])
+  {
+    x[3] = 42;
+  #ifdef INVALID
+    x = 0;
+  #endif
+  }
+  void foovm(int x[const *]);
+  void foovm(int * const x);
+  #ifdef INVALID
+  void wrongc(int x[3][const 4]);
+  void wrongvm(int x[static *]);
+  void foovm(int x[const *])
+  {
+    x[2] = 1;
+  }
+  #endif
+  int main()
+  {
+    return 0;
+  }
+  ++ dirname ./tests/single-exec/00162.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00162.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00162/00162.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00162.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:2:17: Expected primary expression, found const
+  Error compiling C99 file: Parse error at <input>:2:17: Expected primary expression, found const
+not ok ./tests/single-exec/00166.c
+  #include <stdio.h>
+  
+  int main()
+  {
+     int a = 24680;
+     int b = 01234567;
+     int c = 0x2468ac;
+     int d = 0x2468AC;
+  
+     printf("%d\n", a);
+     printf("%d\n", b);
+     printf("%d\n", c);
+     printf("%d\n", d);
+  
+     return 0;
+  }
+  
+  // vim: set expandtab ts=4 sw=3 sts=3 tw=80 :
+  ++ dirname ./tests/single-exec/00166.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00166.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.disk.img
+  + diff -u ./tests/single-exec/00166.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.output
+  --- ./tests/single-exec/00166.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00166/00166.output	2026-08-18 03:59:38
+  @@ -1,4 +1,4 @@
+   24680
+  -342391
+  -2386092
+  -2386092
+  +14711
+  +26796
+  +26796
+  + exit 1
+not ok ./tests/single-exec/00168.c
+  #include <stdio.h>
+  
+  int factorial(int i) 
+  {
+     if (i < 2)
+        return i;
+     else
+        return i * factorial(i - 1);
+  }
+  
+  int main()
+  {
+     int Count;
+  
+     for (Count = 1; Count <= 10; Count++)
+        printf("%d\n", factorial(Count));
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00168.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00168.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.disk.img
+  + diff -u ./tests/single-exec/00168.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.output
+  --- ./tests/single-exec/00168.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00168/00168.output	2026-08-18 03:59:39
+  @@ -5,6 +5,6 @@
+   120
+   720
+   5040
+  -40320
+  -362880
+  -3628800
+  +-25216
+  +-30336
+  +24320
+  + exit 1
+not ok ./tests/single-exec/00170.c
+  #include <stdio.h>
+  
+  enum fred
+  {
+     a,
+     b,
+     c,
+     d,
+     e = 54,
+     f = 73,
+     g,
+     h
+  };
+  
+  /* All following uses of enum efoo should compile
+     without warning.  While forward enums aren't ISO C,
+     it's accepted by GCC also in strict mode, and only warned
+     about with -pedantic.  This happens in the real world.  */
+  /* Strict ISO C doesn't allow this kind of forward declaration of
+     enums, but GCC accepts it (and gives only pedantic warning), and
+     it occurs in the wild.  */
+  enum efoo;
+  struct Sforward_use {
+      int (*fmember) (enum efoo x);
+  };
+  
+  extern enum efoo it_real_fn(void);
+  enum efoo {
+    ONE,
+    TWO,
+  };
+  struct S2 {
+    enum efoo (*f2) (void);
+  };
+  void should_compile(struct S2 *s)
+  {
+    s->f2 = it_real_fn;
+  }
+  
+  enum efoo it_real_fn(void)
+  {
+    return TWO;
+  }
+  
+  static unsigned int deref_uintptr(unsigned int *p)
+  {
+    return *p;
+  }
+  
+  enum Epositive {
+      epos_one, epos_two
+  };
+  
+  int main()
+  {
+     enum fred frod;
+     enum Epositive epos = epos_two;
+  
+     printf("%d %d %d %d %d %d %d %d\n", a, b, c, d, e, f, g, h);
+     /* printf("%d\n", frod); */
+     frod = 12;
+     printf("%d\n", frod);
+     frod = e;
+     printf("%d\n", frod);
+  
+     /* Following should compile without warning.  */
+     printf ("enum to int: %u\n", deref_uintptr(&epos));
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00170.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00170.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00170/00170.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00170.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 15 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Type definition: fred
+    Type definition: efoo
+    Type definition: Sforward_use
+    Global variable: it_real_fn : enum efoo ()
+    Type definition: efoo
+    Type definition: S2
+    Function: should_compile -> void
+    Function: it_real_fn -> enum efoo
+    Function: deref_uintptr -> unsigned int
+    Type definition: Epositive
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  💫 Successfully generated IR
+  🦄 Module contains 4 functions
+  Error: Failed to lower IR to assembly: Unknown global variable: it_real_fn
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Unknown global variable: it_real_fn
+not ok ./tests/single-exec/00171.c
+  #include <stdio.h>
+  
+  int main()
+  {
+     int a;
+     int *b;
+     int *c;
+  
+     a = 42;
+     b = &a;
+     c = NULL;
+  
+     printf("%d\n", *b);
+  
+     if (b == NULL)
+        printf("b is NULL\n");
+     else
+        printf("b is not NULL\n");
+  
+     if (c == NULL)
+        printf("c is NULL\n");
+     else
+        printf("c is not NULL\n");
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00171.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00171.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00171/00171.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00171.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 5 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:19:8: Undefined variable: NULL
+not ok ./tests/single-exec/00173.c
+  #include <stdio.h>
+  
+  int main()
+  {
+     int x = 'a';
+     char y = x;
+  
+     char *a = "hello";
+  
+     printf("%s\n", a);
+  
+     int c;
+     c = *a;
+  
+     char *b;
+     for (b = a; *b != 0; b++)
+        printf("%c: %d\n", *b, *b);
+  
+     char destarray[10];
+     char *dest = &destarray[0];
+     char *src = a;
+  
+     while (*src != 0)
+        *dest++ = *src++;
+  
+     *dest = 0;
+  
+     printf("copied string is %s\n", destarray);
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00173.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00173.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.disk.img
+  + diff -u ./tests/single-exec/00173.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.output
+  --- ./tests/single-exec/00173.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00173/00173.output	2026-08-18 03:59:40
+  @@ -1,7 +1,3 @@
+   hello
+   h: 104
+  -e: 101
+  -l: 108
+  -l: 108
+  -o: 111
+  -copied string is hello
+  +copied string is 
+  + exit 1
+not ok ./tests/single-exec/00175.c
+  #include <stdio.h>
+  
+  void charfunc(char a)
+  {
+     printf("char: %c\n", a);
+  }
+  
+  void intfunc(int a)
+  {
+     printf("int: %d\n", a);
+  }
+  
+  void floatfunc(float a)
+  {
+     printf("float: %f\n", a);
+  }
+  
+  int main()
+  {
+     charfunc('a');
+     charfunc(98);
+     charfunc(99.0);
+  
+     intfunc('a');
+     intfunc(98);
+     intfunc(99.0);
+  
+     floatfunc('a');
+     floatfunc(98);
+     floatfunc(99.0);
+  
+     /* printf("%c %d %f\n", 'a', 'b', 'c'); */
+     /* printf("%c %d %f\n", 97, 98, 99); */
+     /* printf("%c %d %f\n", 97.0, 98.0, 99.0); */
+  
+     char b = 97;
+     char c = 97.0;
+  
+     printf("%d %d\n", b, c);
+  
+     int d = 'a';
+     int e = 97.0;
+  
+     printf("%d %d\n", d, e);
+  
+     float f = 'a';
+     float g = 97;
+  
+     printf("%f %f\n", f, g);
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00175.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00175.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.disk.img
+  + diff -u ./tests/single-exec/00175.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.output
+  --- ./tests/single-exec/00175.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00175/00175.output	2026-08-18 03:59:41
+  @@ -4,9 +4,9 @@
+   int: 97
+   int: 98
+   int: 99
+  -float: 97.000000
+  -float: 98.000000
+  -float: 99.000000
+  +float: %f
+  +float: %f
+  +float: %f
+   97 97
+   97 97
+  -97.000000 97.000000
+  +%f %f
+  + exit 1
+not ok ./tests/single-exec/00178.c
+  #include <stdio.h>
+  
+  int main()
+  {
+     char a;
+     int b;
+     double c;
+  
+     printf("%d\n", sizeof(a));
+     printf("%d\n", sizeof(b));
+     printf("%d\n", sizeof(c));
+  
+     printf("%d\n", sizeof(!a));
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00178.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00178.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.disk.img
+  + diff -u ./tests/single-exec/00178.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.output
+  --- ./tests/single-exec/00178.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00178/00178.output	2026-08-18 03:59:41
+  @@ -1,4 +1,4 @@
+   1
+  -4
+  +2
+   8
+  -4
+  +2
+  + exit 1
+not ok ./tests/single-exec/00179.c
+  #include <stdio.h>
+  #include <string.h>
+  
+  int main()
+  {
+     char a[10];
+  
+     strcpy(a, "hello");
+     printf("%s\n", a);
+  
+     strncpy(a, "gosh", 2);
+     printf("%s\n", a);
+  
+     printf("%d\n", strcmp(a, "apple") > 0);
+     printf("%d\n", strcmp(a, "goere") > 0);
+     printf("%d\n", strcmp(a, "zebra") < 0);
+  
+     printf("%d\n", strlen(a));
+  
+     strcat(a, "!");
+     printf("%s\n", a);
+  
+     printf("%d\n", strncmp(a, "apple", 2) > 0);
+     printf("%d\n", strncmp(a, "goere", 2) == 0);
+     printf("%d\n", strncmp(a, "goerg", 2) == 0);
+     printf("%d\n", strncmp(a, "zebra", 2) < 0);
+  
+     printf("%s\n", strchr(a, 'o'));
+     printf("%s\n", strrchr(a, 'l'));
+     printf("%d\n", strrchr(a, 'x') == NULL);
+  
+     memset(&a[1], 'r', 4);
+     printf("%s\n", a);
+  
+     memcpy(&a[2], a, 2);
+     printf("%s\n", a);
+  
+     printf("%d\n", memcmp(a, "apple", 4) > 0);
+     printf("%d\n", memcmp(a, "grgr", 4) == 0);
+     printf("%d\n", memcmp(a, "zebra", 4) < 0);
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00179.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00179.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00179/00179.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00179.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 20 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Typedef: size_t = unsigned int
+    Typedef: ptrdiff_t = int
+    Global variable: strcpy : char* (char*, char*)
+    Global variable: strncpy : char* (char*, char*, size_t)
+    Global variable: strlen : size_t (char*)
+    Global variable: strcmp : int (char*, char*)
+    Global variable: strncmp : int (char*, char*, size_t)
+    Global variable: strcat : char* (char*, char*)
+    Global variable: strncat : char* (char*, char*, size_t)
+    Global variable: strchr : char* (char*, int)
+    Global variable: strrchr : char* (char*, int)
+    Global variable: memcpy : void* (void*, void*, size_t)
+    Global variable: memmove : void* (void*, void*, size_t)
+    Global variable: memset : void* (void*, int, size_t)
+    Global variable: memcmp : int (void*, void*, size_t)
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:73:18: Type mismatch: expected void*, found char[10]
+not ok ./tests/single-exec/00182.c
+  /* example from http://barnyard.syr.edu/quickies/led.c */
+  
+  /* led.c: print out number as if on 7 line led display. I.e., write integer
+     given on command line like this:  
+        _   _       _  
+     |  _|  _| |_| |_  
+     | |_   _|   |  _| etc.
+  
+     We assume the terminal behaves like a classical teletype. So the top
+     lines of all digits have to be printed first, then the middle lines of
+     all digits, etc.
+  
+     By Terry R. McConnell
+  
+  compile: cc -o led led.c
+  
+  If you just want to link in the subroutine print_led that does all the
+  work, compile with -DNO_MAIN, and declare the following in any source file
+  that uses the call:
+  
+  extern void print_led(unsigned long x, char *buf);
+  
+  Bug: you cannot call repeatedly to print more than one number to a line.
+  That would require curses or some other terminal API that allows moving the
+  cursor to a previous line.
+  
+  */
+  
+  
+  
+  #include <stdlib.h>
+  #include <stdio.h>
+  
+  #define MAX_DIGITS 32
+  #define NO_MAIN
+  
+  
+  /* Print the top line of the digit d into buffer. 
+     Does not null terminate buffer. */
+  
+  void topline(int d, char *p){
+  
+     *p++ = ' ';
+     switch(d){
+  
+        /* all these have _ on top line */
+  
+        case 0:
+        case 2:
+        case 3:
+        case 5:
+        case 7:
+        case 8:
+        case 9:
+           *p++ = '_';
+           break;
+        default:
+           *p++=' ';
+  
+     }
+     *p++=' ';
+  }
+  
+  /* Print the middle line of the digit d into the buffer. 
+     Does not null terminate. */
+  
+  void midline(int d, char *p){
+  
+     switch(d){
+  
+        /* those that have leading | on middle line */
+  
+        case 0:
+        case 4:
+        case 5:
+        case 6:
+        case 8:
+        case 9:
+           *p++='|';
+           break;
+        default:
+           *p++=' ';	
+     }
+     switch(d){
+  
+        /* those that have _ on middle line */
+  
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+        case 8:
+        case 9:
+           *p++='_';
+           break;
+        default:
+           *p++=' ';
+  
+     }
+     switch(d){
+  
+        /* those that have closing | on middle line */
+  
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 7:
+        case 8:
+        case 9:
+           *p++='|';
+           break;
+        default:
+           *p++=' ';
+  
+     }
+  }
+  
+  /* Print the bottom line of the digit d. Does not null terminate. */
+  
+  void botline(int d, char *p){
+  
+  
+     switch(d){
+  
+        /* those that have leading | on bottom line */
+  
+        case 0:
+        case 2:
+        case 6:
+        case 8:
+           *p++='|';
+           break;
+        default:
+           *p++=' ';	
+     }
+     switch(d){
+  
+        /* those that have _ on bottom line */
+  
+        case 0:
+        case 2:
+        case 3:
+        case 5:
+        case 6:
+        case 8:
+           *p++='_';
+           break;
+        default:
+           *p++=' ';
+  
+     }
+     switch(d){
+  
+        /* those that have closing | on bottom line */
+  
+        case 0:
+        case 1:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+           *p++='|';
+           break;
+        default:
+           *p++=' ';
+  
+     }
+  }
+  
+  /* Write the led representation of integer to string buffer. */
+  
+  void print_led(unsigned long x, char *buf)
+  {
+  
+     int i=0,n;
+     static int d[MAX_DIGITS];
+  
+  
+     /* extract digits from x */
+  
+     n = ( x == 0L ? 1 : 0 );  /* 0 is a digit, hence a special case */
+  
+     while(x){
+        d[n++] = (int)(x%10L);
+        if(n >= MAX_DIGITS)break;
+        x = x/10L;
+     }
+  
+     /* print top lines of all digits */
+  
+     for(i=n-1;i>=0;i--){
+        topline(d[i],buf);
+        buf += 3;
+        *buf++=' ';
+     }
+     *buf++='\n'; /* move teletype to next line */
+  
+     /* print middle lines of all digits */
+  
+     for(i=n-1;i>=0;i--){
+        midline(d[i],buf);
+        buf += 3;
+        *buf++=' ';
+     }
+     *buf++='\n';
+  
+     /* print bottom lines of all digits */
+  
+     for(i=n-1;i>=0;i--){
+        botline(d[i],buf);
+        buf += 3;
+        *buf++=' ';
+     }
+     *buf++='\n';
+     *buf='\0';
+  }
+  
+  int main()
+  {
+     char buf[5*MAX_DIGITS];
+     print_led(1234567, buf);
+     printf("%s\n",buf);
+  
+     return 0;
+  }
+  
+  #ifndef NO_MAIN
+  int main(int argc, char **argv)
+  {
+  
+     int i=0,n;
+     long x;
+     static int d[MAX_DIGITS];
+     char buf[5*MAX_DIGITS];
+  
+     if(argc != 2){
+        fprintf(stderr,"led: usage: led integer\n");
+        return 1;
+     }
+  
+     /* fetch argument from command line */
+  
+     x = atol(argv[1]);
+  
+     /* sanity check */
+  
+     if(x<0){
+        fprintf(stderr,"led: %d must be non-negative\n",x);
+        return 1;
+     }
+  
+     print_led(x,buf);
+     printf("%s\n",buf);
+  
+     return 0;
+  
+  }
+  #endif
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00182.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00182.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00182/00182.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00182.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 22 top-level items
+    Typedef: size_t = unsigned int
+    Typedef: ptrdiff_t = int
+    Global variable: rand : int ()
+    Global variable: srand : void (unsigned int)
+    Global variable: malloc : void* (size_t)
+    Global variable: free : void (void*)
+    Global variable: calloc : void* (size_t, size_t)
+    Global variable: realloc : void* (void*, size_t)
+    Global variable: abs : int (int)
+    Global variable: labs : long (long)
+    Global variable: llabs : long long (long long)
+    Global variable: exit : void (int)
+    Global variable: abort : void ()
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Function: topline -> void
+    Function: midline -> void
+    Function: botline -> void
+    Function: print_led -> void
+    Function: main -> int
+  
+  💀 Attempting full compilation pipeline
+  Error: Failed to generate IR: Internal compiler error: Pointer must be a fat pointer in function 'print_led', got: Temp(36)
+  Note: Code generation is still under development for complex features
+  Error compiling C99 file: Internal compiler error: Pointer must be a fat pointer in function 'print_led', got: Temp(36)
+not ok ./tests/single-exec/00186.c
+  #include <stdio.h>
+  
+  int main()
+  {
+     char Buf[100];
+     int Count;
+  
+     for (Count = 1; Count <= 20; Count++)
+     {
+        sprintf(Buf, "->%02d<-\n", Count);
+        printf("%s", Buf);
+     }
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00186.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00186.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00186/00186.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00186.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 5 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:18:7: Undefined variable: sprintf
+not ok ./tests/single-exec/00187.c
+  #include <stdio.h>
+  
+  int main()
+  {
+     FILE *f = fopen("fred.txt", "w");
+     fwrite("hello\nhello\n", 1, 12, f);
+     fclose(f);
+  
+     char freddy[7];
+     f = fopen("fred.txt", "r");
+     if (fread(freddy, 1, 6, f) != 6)
+        printf("couldn't read fred.txt\n");
+  
+     freddy[6] = '\0';
+     fclose(f);
+  
+     printf("%s", freddy);
+  
+     int InChar;
+     char ShowChar;
+     f = fopen("fred.txt", "r");
+     while ( (InChar = fgetc(f)) != EOF)
+     {
+        ShowChar = InChar;
+        if (ShowChar < ' ')
+           ShowChar = '.';
+  
+        printf("ch: %d '%c'\n", InChar, ShowChar);
+     }
+     fclose(f);
+  
+     f = fopen("fred.txt", "r");
+     while ( (InChar = getc(f)) != EOF)
+     {
+        ShowChar = InChar;
+        if (ShowChar < ' ')
+           ShowChar = '.';
+  
+        printf("ch: %d '%c'\n", InChar, ShowChar);
+     }
+     fclose(f);
+  
+     f = fopen("fred.txt", "r");
+     while (fgets(freddy, sizeof(freddy), f) != NULL)
+        printf("x: %s", freddy);
+  
+     fclose(f);
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00187.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00187.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00187/00187.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00187.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 5 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:13:4: Undefined variable: FILE
+not ok ./tests/single-exec/00189.c
+  #include <stdio.h>
+  
+  int fred(int p)
+  {
+     printf("yo %d\n", p);
+     return 42;
+  }
+  
+  int (*f)(int) = &fred;
+  
+  /* To test what this is supposed to test the destination function
+     (fprint here) must not be called directly anywhere in the test.  */
+  int (*fprintfptr)(FILE *, const char *, ...) = &fprintf;
+  
+  int main()
+  {
+     fprintfptr(stdout, "%d\n", (*f)(24));
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00189.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00189.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00189/00189.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00189.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:21:19: Expected type specifier
+  Error compiling C99 file: Parse error at <input>:21:19: Expected type specifier
+not ok ./tests/single-exec/00195.c
+  #include <stdio.h>
+  
+  struct point
+  {
+     double x;
+     double y;
+  };
+  
+  struct point point_array[100];
+  
+  int main()
+  {
+     int my_point = 10;
+  
+     point_array[my_point].x = 12.34;
+     point_array[my_point].y = 56.78;
+  
+     printf("%f, %f\n", point_array[my_point].x, point_array[my_point].y);
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00195.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00195.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.disk.img
+  + diff -u ./tests/single-exec/00195.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.output
+  --- ./tests/single-exec/00195.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00195/00195.output	2026-08-18 03:59:46
+  @@ -1 +1 @@
+  -12.340000, 56.780000
+  +%f, %f
+  + exit 1
+not ok ./tests/single-exec/00197.c
+  #include <stdio.h>
+  
+  static int fred = 1234;
+  static int joe;
+  
+  void henry()
+  {
+     static int fred = 4567;
+  
+     printf("%d\n", fred);
+     fred++;
+  }
+  
+  int main()
+  {
+     printf("%d\n", fred);
+     henry();
+     henry();
+     henry();
+     henry();
+     printf("%d\n", fred);
+     fred = 8901;
+     joe = 2345;
+     printf("%d\n", fred);
+     printf("%d\n", joe);
+  
+     return 0;
+  }
+  
+  /* vim: set expandtab ts=4 sw=3 sts=3 tw=80 :*/
+  ++ dirname ./tests/single-exec/00197.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00197.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.disk.img
+  + diff -u ./tests/single-exec/00197.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.output
+  --- ./tests/single-exec/00197.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00197/00197.output	2026-08-18 03:59:46
+  @@ -1,8 +1,8 @@
+  -1234
+  +0
+   4567
+  -4568
+  -4569
+  -4570
+  -1234
+  -8901
+  +4567
+  +4567
+  +4567
+  +0
+  +0
+   2345
+  + exit 1
+not ok ./tests/single-exec/00200.c
+  /* $Id: lshift-type.c 53089 2012-07-06 11:18:26Z vinc17/ypig $
+  
+  Tests on left-shift type, written by Vincent Lefevre <vincent@vinc17.net>.
+  
+  ISO C99 TC3 says: [6.5.7#3] "The integer promotions are performed on
+  each of the operands. The type of the result is that of the promoted
+  left operand."
+  */
+  
+  #include <stdio.h>
+  
+  #define PTYPE(M) ((M) < 0 || -(M) < 0 ? -1 : 1) * (int) sizeof((M)+0)
+  #define CHECK(X,T) check(#X, PTYPE(X), PTYPE((X) << (T) 1))
+  #define TEST1(X,T) do { CHECK(X,T); CHECK(X,unsigned T); } while (0)
+  #define TEST2(X)                 \
+    do                             \
+      {                            \
+        TEST1((X),short);          \
+        TEST1((X),int);            \
+        TEST1((X),long);           \
+        TEST1((X),long long);      \
+      }                            \
+    while (0)
+  #define TEST3(X,T) do { TEST2((T)(X)); TEST2((unsigned T)(X)); } while (0)
+  #define TEST4(X)                 \
+    do                             \
+      {                            \
+        TEST3((X),short);          \
+        TEST3((X),int);            \
+        TEST3((X),long);           \
+        TEST3((X),long long);      \
+      }                            \
+   while (0)
+  
+  static int debug, nfailed = 0;
+  
+  static void check (const char *s, int arg1, int shift)
+  {
+    int failed = arg1 != shift;
+    if (debug || failed)
+      printf ("%s %d %d\n", s, arg1, shift);
+    nfailed += failed;
+  }
+  
+  int main (int argc, char **argv)
+  {
+    debug = argc > 1;
+    TEST4(1);
+    TEST4(-1);
+    printf ("%d test(s) failed\n", nfailed);
+    return nfailed != 0;
+  }
+  ++ dirname ./tests/single-exec/00200.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00200.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00200/00200.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00200.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 7 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Global variable: debug : int
+    Global variable: nfailed : int
+    Function: check -> void
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:40:181: Undefined variable: PTYPE
+not ok ./tests/single-exec/00201.c
+  #include <stdio.h>	// printf()
+  
+  #define CAT2(a,b) a##b
+  #define CAT(a,b) CAT2(a,b)
+  #define AB(x) CAT(x,y)
+  
+  int main(void)
+  {
+    int xy = 42;
+    printf("%d\n", CAT(A,B)(x));
+    return 0;
+  }
+  ++ dirname ./tests/single-exec/00201.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00201.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00201/00201.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00201.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 5 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:18:18: Undefined variable: AB
+not ok ./tests/single-exec/00202.c
+  #include <stdio.h>
+  
+  #define P(A,B) A ## B ; bob
+  #define Q(A,B) A ## B+
+  
+  int main(void)
+  {
+      int bob, jim = 21;
+      bob = P(jim,) *= 2;
+      printf("jim: %d, bob: %d\n", jim, bob);
+      jim = 60 Q(+,)3;
+      printf("jim: %d\n", jim);
+      return 0;
+  }
+  ++ dirname ./tests/single-exec/00202.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00202.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00202/00202.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00202.c (bank_size: 64000)
+  Error compiling C99 file: Macro 'Q' expects 2 arguments, got 1
+not ok ./tests/single-exec/00205.c
+  #include <stdio.h>
+  
+  /* This test is a snippet from the J interpreter */
+  
+  typedef long I;
+  typedef struct{I c[4];I b,e,k;} PT;
+  
+  PT cases[] = {
+   ((I)4194304L +(I)2097152L +(I)67108864L), (I)262144L, (((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), -1L, 1,2,1,
+   ((I)+4194304L +(I)2097152L +(I)67108864L)+( (I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), (I)262144L, (I)262144L, (((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), 2,3,2,
+   ((I)4194304L +(I)2097152L +(I)67108864L)+( (I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), (((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), (I)262144L, (((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), 1,3,2,
+   ((I)4194304L +(I)2097152L +(I)67108864L)+( (I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), (I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), (I)524288L, -1L, 1,2,1,
+   ((I)4194304L +(I)2097152L +(I)67108864L)+( (I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), (I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), (I)1048576L, (I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), 1,3,1,
+   ((I)4194304L +(I)2097152L +(I)67108864L)+( (I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), (I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), (I)262144L, (I)262144L, 1,3,1,
+   ((I)4194304L +(I)2097152L +(I)67108864L), ((I)1048576L +(I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), ((I)1048576L +(I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), -1L, 1,2,1,
+   (I)33554432L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L), (I)2097152L, ((I)1048576L +(I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), -1L, 0,2,1,
+   (I)67108864L, ((I)1048576L +(I)524288L +(I)262144L +(((I)1L +(I)256L +(I)4L +(I)8L +(I)16L +(I)64L +(I)128L +(I)268435456L +(I)536870912L +(I)1024L +(I)4096L +(I)8192L +(I)16384L)+((I)2L +(I)131072L +(I)2048L)+(I)32L +(I)32768L +(I)65536L)), (I)134217728L, -1L, 0,2,0,
+  };
+  
+  int main() {
+      int i, j;
+  
+      for(j=0; j < sizeof(cases)/sizeof(cases[0]); j++) {
+  	for(i=0; i < sizeof(cases->c)/sizeof(cases->c[0]); i++)
+  	    printf("cases[%d].c[%d]=%ld\n", j, i, cases[j].c[i]);
+  
+  	printf("cases[%d].b=%ld\n", j, cases[j].b);
+  	printf("cases[%d].e=%ld\n", j, cases[j].e);
+  	printf("cases[%d].k=%ld\n", j, cases[j].k);
+  	printf("\n");
+      }
+      return 0;
+  }
+  ++ dirname ./tests/single-exec/00205.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00205.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00205/00205.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00205.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 8 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Typedef: I = long
+    Typedef: PT = struct <anonymous>
+    Global variable: cases : PT[]
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:17:3: Type mismatch: expected struct <anonymous>, found long
+not ok ./tests/single-exec/00206.c
+  #include <stdio.h>
+  
+  int main()
+  {
+      /* must not affect how #pragma ppop_macro works */
+      #define pop_macro foobar1
+  
+      /* must not affect how #pragma push_macro works */
+      #define push_macro foobar2
+  
+      #undef abort
+      #define abort "111"
+      printf("abort = %s\n", abort);
+  
+      #pragma push_macro("abort")
+      #undef abort
+      #define abort "222"
+      printf("abort = %s\n", abort);
+  
+      #pragma push_macro("abort")
+      #undef abort
+      #define abort "333"
+      printf("abort = %s\n", abort);
+  
+      #pragma pop_macro("abort")
+      printf("abort = %s\n", abort);
+  
+      #pragma pop_macro("abort")
+      printf("abort = %s\n", abort);
+  }
+  ++ dirname ./tests/single-exec/00206.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00206.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00206/00206.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00206.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:20:14: Expected ) in function call, found 111
+  Error compiling C99 file: Parse error at <input>:20:14: Expected ) in function call, found 111
+not ok ./tests/single-exec/00207.c
+  #include <stdio.h>
+  
+  /* This test segfaults as of April 27, 2015. */
+  void f1(int argc)
+  {
+    char test[argc];
+    if(0)
+    label:
+      printf("boom!\n");
+    if(argc-- == 0)
+      return;
+    goto label;
+  }
+  
+  /* This segfaulted on 2015-11-19. */
+  void f2(void)
+  {
+      goto start;
+      {
+          int a[1 && 1]; /* not a variable-length array */
+          int b[1 || 1]; /* not a variable-length array */
+          int c[1 ? 1 : 1]; /* not a variable-length array */
+      start:
+          a[0] = 0;
+          b[0] = 0;
+          c[0] = 0;
+      }
+  }
+  
+  void f3(void)
+  {
+      printf("%d\n", 0 ? printf("x1\n") : 11);
+      printf("%d\n", 1 ? 12 : printf("x2\n"));
+      printf("%d\n", 0 && printf("x3\n"));
+      printf("%d\n", 1 || printf("x4\n"));
+  }
+  
+  int main()
+  {
+    f1(2);
+    f2();
+    f3();
+  
+    return 0;
+  }
+  ++ dirname ./tests/single-exec/00207.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00207.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00207/00207.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00207.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:14:13: Array size must be a constant expression
+  Error compiling C99 file: Parse error at <input>:14:13: Array size must be a constant expression
+not ok ./tests/single-exec/00208.c
+  #include <stdio.h>
+  struct wchar {
+      char *data; char mem[1];
+  };
+  struct wint {
+      char *data; int mem[1];
+  };
+  int f1char (void) {
+      char s[9]="nonono";
+      struct wchar q = {"bugs"};
+      return !s[0];
+  }
+  int f1int (void) {
+      char s[9]="nonono";
+      struct wint q = {"bugs"};
+      return !s[0];
+  }
+  int main (void) {
+     char s[9]="nonono";
+     static struct wchar q = {"bugs", {'c'}};
+     //printf ("tcc has %s %s\n", s, q.data);
+     if (f1char() || f1int())
+       printf ("bla\n");
+     return !s[0];
+  }
+  ++ dirname ./tests/single-exec/00208.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00208.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00208/00208.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00208.c (bank_size: 64000)
+  Successfully preprocessed source
+  Successfully parsed C99 source...
+  Found 9 top-level items
+    Global variable: putchar : void (int)
+    Global variable: puts : int (char*)
+    Global variable: getchar : int ()
+    Global variable: printf : int (char*, ...)
+    Type definition: wchar
+    Type definition: wint
+    Function: f1char -> int
+    Function: f1int -> int
+    Function: main -> int
+  Error compiling C99 file: Semantic error at <input>:17:15: Type mismatch: expected char[9], found char[]
+not ok ./tests/single-exec/00209.c
+  /* The following are all valid decls, even though some subtypes
+     are incomplete.  */
+  enum E *e;
+  const enum E *e1;
+  enum E const *e2;
+  struct S *s;
+  const struct S *s1;
+  struct S const *s2;
+  
+  /* Various strangely looking declarators, which are all valid
+     and have to map to the same numbered typedefs. */
+  typedef int (*fptr1)();
+  int f1 (int (), int);
+  typedef int (*fptr2)(int x);
+  int f2 (int (int x), int);
+  typedef int (*fptr3)(int);
+  int f3 (int (int), int);
+  typedef int (*fptr4[4])(int);
+  int f4 (int (*[4])(int), int);
+  typedef int (*fptr5)(fptr1);
+  int f5 (int (int()), fptr1);
+  int f1 (fptr1 fp, int i)
+  {
+    return (*fp)(i);
+  }
+  int f2 (fptr2 fp, int i)
+  {
+    return (*fp)(i);
+  }
+  int f3 (fptr3 fp, int i)
+  {
+    return (*fp)(i);
+  }
+  int f4 (fptr4 fp, int i)
+  {
+    return (*fp[i])(i);
+  }
+  int f5 (fptr5 fp, fptr1 i)
+  {
+    return fp(i);
+  }
+  int f8 (int ([4]), int);
+  int main () { return 0; }
+  ++ dirname ./tests/single-exec/00209.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00209.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00209/00209.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00209.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:42:14: Expected type specifier
+  Error compiling C99 file: Parse error at <input>:42:14: Expected type specifier
+not ok ./tests/single-exec/00210.c
+  typedef unsigned short uint16_t;
+  typedef unsigned char uint8_t;
+  
+  typedef union Unaligned16a {
+    uint16_t u;
+    uint8_t b[2];
+  } __attribute__((packed)) Unaligned16a;
+  
+  typedef union __attribute__((packed)) Unaligned16b {
+    uint16_t u;
+    uint8_t b[2];
+  } Unaligned16b;
+  
+  extern void foo (void) __attribute__((stdcall));
+  void __attribute__((stdcall)) foo (void)
+  {
+  }
+  
+  /* The actual attribute isn't important, must just be
+     parsable.  */
+  #define ATTR __attribute__((__noinline__))
+  int ATTR actual_function() {
+    return 42;
+  }
+  
+  extern int printf (const char *, ...);
+  int main()
+  {
+      void *function_pointer = &actual_function;
+  
+      int a = ((ATTR int(*) (void)) function_pointer)();
+      printf("%i\n", a);
+  
+      /* In the following we once misparsed 'ATTR *' is a btype
+         and hence the whole type was garbled.  */
+      int b = ( (int(ATTR *)(void))  function_pointer)();
+      printf("%i\n", b);
+  
+      return 0;
+  }
+  ++ dirname ./tests/single-exec/00210.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00210.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00210/00210.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00210.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:7:17: Expected type specifier
+  Error compiling C99 file: Parse error at <input>:7:17: Expected type specifier
+not ok ./tests/single-exec/00211.c
+  extern int printf(const char *format, ...);
+  
+  #define ACPI_TYPE_INVALID       0x1E
+  #define NUM_NS_TYPES            ACPI_TYPE_INVALID+1
+  int array[NUM_NS_TYPES];
+  
+  #define n 0xe
+  int main()
+  {
+      printf("n+1 = %d\n", n+1);
+  //    printf("n+1 = %d\n", 0xe+1);
+  }
+  ++ dirname ./tests/single-exec/00211.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00211.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.disk.img
+  + diff -u ./tests/single-exec/00211.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.output
+  --- ./tests/single-exec/00211.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00211/00211.output	2026-08-18 03:59:50
+  @@ -1 +1 @@
+  -n+1 = 15
+  +0xe+1 = 15
+  \ No newline at end of file
+  + exit 1
+not ok ./tests/single-exec/00212.c
+  #include <stdio.h>
+  
+  int
+  main()
+  {
+  #if defined(__LLP64__)
+  	if (sizeof(short) == 2
+  	    && sizeof(int) == 4
+  	    && sizeof(long int) == 4
+  	    && sizeof(long long int) == 8
+  	    && sizeof(void*) == 8) {
+  		(void)printf("Ok\n");
+  	} else {
+  		(void)printf("KO __LLP64__\n");
+  	}
+  #elif defined(__LP64__)
+  	if (sizeof(short) == 2
+  	    && sizeof(int) == 4
+  	    && sizeof(long int) == 8
+  	    && sizeof(long long int) == 8
+  	    && sizeof(void*) == 8) {
+  		(void)printf("Ok\n");
+  	} else {
+  		(void)printf("KO __LP64__\n");
+  	}
+  #elif defined(__ILP32__)
+  	if (sizeof(short) == 2
+  	    && sizeof(int) == 4
+  	    && sizeof(long int) == 4
+  	    && sizeof(void*) == 4) {
+  		(void)printf("Ok\n");
+  	} else {
+  		(void)printf("KO __ILP32__\n");
+  	}
+  #else
+  	(void)printf("KO no __*LP*__ defined.\n");
+  #endif
+  }
+  ++ dirname ./tests/single-exec/00212.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00212.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rasm assemble /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.asm -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.pobj --bank-size 64000 --max-immediate 65535
+  + /Users/ahineya/projects/braintease/src/ripple-asm/target/release/rlink /Users/ahineya/projects/braintease/runtime/crt0.pobj /Users/ahineya/projects/braintease/runtime/libruntime.par /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.pobj -f binary --bank-size 64000 -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.bin
+  + /Users/ahineya/projects/braintease/target/release/rvm /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.bin --bank-size 64000 --exit-code --disk /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.disk.img
+  + diff -u ./tests/single-exec/00212.c.expected /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.output
+  --- ./tests/single-exec/00212.c.expected	2020-03-08 03:45:04
+  +++ /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00212/00212.output	2026-08-18 03:59:50
+  @@ -1 +1 @@
+  -Ok
+  +KO no __*LP*__ defined.
+  + exit 1
+not ok ./tests/single-exec/00213.c
+  /* This checks various ways of dead code inside if statements
+     where there are non-obvious ways of how the code is actually
+     not dead due to reachable by labels.  */
+  extern int printf (const char *, ...);
+  static void kb_wait_1(void)
+  {
+    unsigned long timeout = 2;
+    do {
+        /* Here the else arm is a statement expression that's supposed
+           to be suppressed.  The label inside the while would unsuppress
+  	 code generation again if not handled correctly.  And that
+  	 would wreak havoc to the cond-expression because there's no
+  	 jump-around emitted, the whole statement expression really
+  	 needs to not generate code (perhaps except useless forward jumps).  */
+        (1 ? 
+         printf("timeout=%ld\n", timeout) :
+         ({
+  	int i = 1;
+  	while (1)
+  	  while (i--)
+  	    some_label:
+  	      printf("error\n");
+  	goto some_label;
+  	})
+        );
+        timeout--;
+    } while (timeout);
+  }
+  
+  static int global;
+  
+  static void foo(int i)
+  {
+    global+=i;
+    printf ("g=%d\n", global);
+  }
+  
+  static int check(void)
+  {
+    printf ("check %d\n", global);
+    return 1;
+  }
+  
+  static void dowhile(void)
+  {
+    do {
+        foo(1);
+        if (global == 1) {
+  	  continue;
+        } else if (global == 2) {
+  	  continue;
+        }
+        /* The following break shouldn't disable the check() call,
+           as it's reachable by the continues above.  */
+        break;
+    } while (check());
+  }
+  
+  int main (void)
+  {
+    int i = 1;
+    kb_wait_1();
+  
+    /* Simple test of dead code at first sight which isn't actually dead. */
+    if (0) {
+  yeah:
+        printf ("yeah\n");
+    } else {
+        printf ("boo\n");
+    }
+    if (i--)
+      goto yeah;
+  
+    /* Some more non-obvious uses where the problems are loops, so that even
+       the first loop statements aren't actually dead.  */
+    i = 1;
+    if (0) {
+        while (i--) {
+  	  printf ("once\n");
+  enterloop:
+  	  printf ("twice\n");
+        }
+    }
+    if (i >= 0)
+      goto enterloop;
+  
+    /* The same with statement expressions.  One might be tempted to
+       handle them specially by counting if inside statement exprs and
+       not unsuppressing code at loops at all then.
+       See kb_wait_1 for the other side of the medal where that wouldn't work.  */
+    i = ({
+        int j = 1;
+        if (0) {
+  	  while (j--) {
+  	      printf ("SEonce\n");
+      enterexprloop:
+  	      printf ("SEtwice\n");
+  	  }
+        }
+        if (j >= 0)
+  	goto enterexprloop;
+        j; });
+  
+    /* The other two loop forms: */
+    i = 1;
+    if (0) {
+        for (i = 1; i--;) {
+  	  printf ("once2\n");
+  enterloop2:
+  	  printf ("twice2\n");
+        }
+    }
+    if (i > 0)
+      goto enterloop2;
+  
+    i = 1;
+    if (0) {
+        do {
+  	  printf ("once3\n");
+  enterloop3:
+  	  printf ("twice3\n");
+        } while (i--);
+    }
+    if (i > 0)
+      goto enterloop3;
+  
+    /* And check that case and default labels have the same effect
+       of disabling code suppression.  */
+    i = 41;
+    switch (i) {
+        if (0) {
+  	  printf ("error\n");
+        case 42:
+  	  printf ("error2\n");
+        case 41:
+  	  printf ("caseok\n");
+        }
+    }
+  
+    i = 41;
+    switch (i) {
+        if (0) {
+  	  printf ("error3\n");
+        default:
+  	  printf ("caseok2\n");
+  	  break;
+        case 42:
+  	  printf ("error4\n");
+        }
+    }
+  
+    dowhile();
+  
+    return 0;
+  }
+  ++ dirname ./tests/single-exec/00213.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00213.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00213/00213.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00213.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:17:9: Expected primary expression, found {
+  Error compiling C99 file: Parse error at <input>:17:9: Expected primary expression, found {
+not ok ./tests/single-exec/00214.c
+  /* Check some way in where code suppression caused various
+     miscompilations.  */
+  extern int printf (const char *, ...);
+  typedef unsigned long size_t;
+  
+  size_t _brk_start, _brk_end;
+  void * extend_brk(size_t size, size_t align)
+  {
+      size_t mask = align - 1;
+      void *ret = 0;
+  
+       do {
+  	 if (__builtin_expect(!!(_brk_start == 0), 0))
+  	   do {
+  	       printf("wrong1\n");
+  	   } while (0);
+       } while (0);
+       _brk_end = (_brk_end + mask) & ~mask;
+       ret = (void *)_brk_end;
+       _brk_end += size;
+  
+       return ret;
+  }
+  
+  static void get_args (int a, int b)
+  {
+    if (a != 1)
+      printf("wrong2\n");
+    else
+      printf("okay\n");
+  }
+  
+  void bla(void)
+  {
+    int __ret = 42;
+    ({
+      if (__builtin_expect(!!(0), 0)) {
+        if (__builtin_expect(!!__ret, 0))
+          printf("wrong3\n");
+        int x = !!(__ret);
+      }
+      __ret;
+    });
+    get_args(!!__ret, sizeof(__ret));
+  }
+  
+  _Bool chk(unsigned long addr, unsigned long limit, unsigned long size)
+  {
+    _Bool ret;
+    /* This just needs to compile, no runtime test.  (And it doesn't compile
+       only with certain internal checking added that's not committed).  */
+    if (0)
+      ret = 0 != (!!(addr > limit - size));
+  }
+  
+  int main()
+  {
+    void *r;
+    _brk_start = 1024;
+    _brk_end = 1024;
+    r = extend_brk (4096, 16);
+    if (!r)
+      printf("wrong4\n");
+    else
+      printf("okay\n");
+    bla();
+    return 0;
+  }
+  ++ dirname ./tests/single-exec/00214.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00214.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00214/00214.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00214.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:36:4: Expected primary expression, found {
+  Error compiling C99 file: Parse error at <input>:36:4: Expected primary expression, found {
+not ok ./tests/single-exec/00216.c
+  typedef unsigned char u8;
+  typedef struct {} empty_s;
+  struct contains_empty {
+      u8 a;
+      empty_s empty;
+      u8 b;
+  };
+  struct contains_empty ce = { { (1) }, (empty_s){}, 022, };
+  /* The following decl of 'q' would demonstrate the TCC bug in init_putv when
+     handling copying compound literals.  (Compound literals
+     aren't acceptable constant initializers in isoc99, but
+     we accept them like gcc, except for this case)
+  //char *q = (char *){ "trara" }; */
+  struct SS {u8 a[3], b; };
+  struct SS sinit16[] = { { 1 }, 2 };
+  struct S
+  {
+    u8 a,b;
+    u8 c[2];
+  };
+  
+  struct T
+  {
+    u8 s[16];
+    u8 a;
+  };
+  
+  struct U
+  {
+    u8 a;
+    struct S s;
+    u8 b;
+    struct T t;
+  };
+  
+  struct V
+  {
+    struct S s;
+    struct T t;
+    u8 a;
+  };
+  
+  struct W
+  {
+    struct V t;
+    struct S s[];
+  };
+  
+  struct S gs = ((struct S){1, 2, 3, 4});
+  struct S gs2 = {1, 2, {3, 4}};
+  struct T gt = {"hello", 42};
+  struct U gu = {3, 5,6,7,8, 4, "huhu", 43};
+  struct U gu2 = {3, {5,6,7,8}, 4, {"huhu", 43}};
+  /* Optional braces around scalar initializers.  Accepted, but with
+     a warning.  */
+  struct U gu3 = { {3}, {5,6,7,8,}, 4, {"huhu", 43}};
+  /* Many superfluous braces and leaving out one initializer for U.s.c[1] */
+  struct U gu4 = { 3, {5,6,7,},  5, { "bla", {44}} };
+  /* Superfluous braces and useless parens around values */
+  struct S gs3 = { (1), {(2)}, {(((3))), {4}}};
+  /* Superfluous braces, and leaving out braces for V.t, plus cast */
+  struct V gv = {{{3},4,{5,6}}, "haha", (u8)45, 46};
+  /* Compound literal */
+  struct V gv2 = {(struct S){7,8,{9,10}}, {"hihi", 47}, 48};
+  /* Parens around compound literal */
+  struct V gv3 = {((struct S){7,8,{9,10}}), {"hoho", 49}, 50};
+  /* Initialization of a flex array member (warns in GCC) */
+  struct W gw = {{1,2,3,4}, {1,2,3,4,5}};
+  
+  union UU {
+      u8 a;
+      u8 b;
+  };
+  struct SU {
+      union UU u;
+      u8 c;
+  };
+  struct SU gsu = {5,6};
+  
+  /* Unnamed struct/union members aren't ISO C, but it's a widely accepted
+     extension.  See below for further extensions to that under -fms-extension.*/
+  union UV {
+      struct {u8 a,b;};
+      struct S s;
+  };
+  union UV guv = {{6,5}};
+  union UV guv2 = {{.b = 7, .a = 8}};
+  union UV guv3 = {.b = 8, .a = 7};
+  
+  /* Under -fms-extensions also the following is valid:
+  union UV2 {
+      struct Anon {u8 a,b;};    // unnamed member, but tagged struct, ...
+      struct S s;
+  };
+  struct Anon gan = { 10, 11 }; // ... which makes it available here.
+  union UV2 guv4 = {{4,3}};     // and the other inits from above as well
+  */
+  
+  struct in6_addr {
+      union {
+  	u8 u6_addr8[16];
+  	unsigned short u6_addr16[8];
+      } u;
+  };
+  struct flowi6 {
+      struct in6_addr saddr, daddr;
+  };
+  struct pkthdr {
+      struct in6_addr daddr, saddr;
+  };
+  struct pkthdr phdr = { { { 6,5,4,3 } }, { { 9,8,7,6 } } };
+  
+  struct Wrap {
+      void *func;
+  };
+  int global;
+  void inc_global (void)
+  {
+    global++;
+  }
+  
+  struct Wrap global_wrap[] = {
+      ((struct Wrap) {inc_global}),
+      inc_global,
+  };
+  
+  #include <stdio.h>
+  void print_ (const char *name, const u8 *p, long size)
+  {
+    printf ("%s:", name);
+    while (size--) {
+        printf (" %x", *p++);
+    }
+    printf ("\n");
+  }
+  #define print(x) print_(#x, (u8*)&x, sizeof (x))
+  #if 1
+  void foo (struct W *w, struct pkthdr *phdr_)
+  {
+    struct S ls = {1, 2, 3, 4};
+    struct S ls2 = {1, 2, {3, 4}};
+    struct T lt = {"hello", 42};
+    struct U lu = {3, 5,6,7,8, 4, "huhu", 43};
+    struct U lu1 = {3, ls, 4, {"huhu", 43}};
+    struct U lu2 = {3, (ls), 4, {"huhu", 43}};
+    const struct S *pls = &ls;
+    struct S ls21 = *pls;
+    struct U lu22 = {3, *pls, 4, {"huhu", 43}};
+    /* Incomplete bracing.  */
+    struct U lu21 = {3, ls, 4, "huhu", 43};
+    /* Optional braces around scalar initializers.  Accepted, but with
+       a warning.  */
+    struct U lu3 = { 3, {5,6,7,8,}, 4, {"huhu", 43}};
+    /* Many superfluous braces and leaving out one initializer for U.s.c[1] */
+    struct U lu4 = { 3, {5,6,7,},  5, { "bla", 44} };
+    /* Superfluous braces and useless parens around values */
+    struct S ls3 = { (1), (2), {(((3))), 4}};
+    /* Superfluous braces, and leaving out braces for V.t, plus cast */
+    struct V lv = {{3,4,{5,6}}, "haha", (u8)45, 46};
+    /* Compound literal */
+    struct V lv2 = {(struct S)w->t.s, {"hihi", 47}, 48};
+    /* Parens around compound literal */
+    struct V lv3 = {((struct S){7,8,{9,10}}), ((const struct W *)w)->t.t, 50};
+    const struct pkthdr *phdr = phdr_;
+    struct flowi6 flow = { .daddr = phdr->daddr, .saddr = phdr->saddr };
+    int elt = 0x42;
+    /* Range init, overlapping */
+    struct T lt2 = { { [1 ... 5] = 9, [6 ... 10] = elt, [4 ... 7] = elt+1 }, 1 };
+    print(ls);
+    print(ls2);
+    print(lt);
+    print(lu);
+    print(lu1);
+    print(lu2);
+    print(ls21);
+    print(lu21);
+    print(lu22);
+    print(lu3);
+    print(lu4);
+    print(ls3);
+    print(lv);
+    print(lv2);
+    print(lv3);
+    print(lt2);
+    print(flow);
+  }
+  #endif
+  
+  void test_compound_with_relocs (void)
+  {
+    struct Wrap local_wrap[] = {
+        ((struct Wrap) {inc_global}),
+        inc_global,
+    };
+    void (*p)(void);
+    p = global_wrap[0].func; p();
+    p = global_wrap[1].func; p();
+    p = local_wrap[0].func; p();
+    p = local_wrap[1].func; p();
+  }
+  
+  void sys_ni(void) { printf("ni\n"); }
+  void sys_one(void) { printf("one\n"); }
+  void sys_two(void) { printf("two\n"); }
+  void sys_three(void) { printf("three\n"); }
+  typedef void (*fptr)(void);
+  const fptr table[3] = {
+      [0 ... 2] = &sys_ni,
+      [0] = sys_one,
+      [1] = sys_two,
+      [2] = sys_three,
+  };
+  
+  void test_multi_relocs(void)
+  {
+    int i;
+    for (i = 0; i < sizeof(table)/sizeof(table[0]); i++)
+      table[i]();
+  }
+  
+  /* Following is from GCC gcc.c-torture/execute/20050613-1.c.  */
+  
+  struct SEA { int i; int j; int k; int l; };
+  struct SEB { struct SEA a; int r[1]; };
+  struct SEC { struct SEA a; int r[0]; };
+  struct SED { struct SEA a; int r[]; };
+  
+  static void
+  test_correct_filling (struct SEA *x)
+  {
+    static int i;
+    if (x->i != 0 || x->j != 5 || x->k != 0 || x->l != 0)
+      printf("sea_fill%d: wrong\n", i);
+    else
+      printf("sea_fill%d: okay\n", i);
+    i++;
+  }
+  
+  int
+  test_zero_init (void)
+  {
+    /* The peculiarity here is that only a.j is initialized.  That
+       means that all other members must be zero initialized.  TCC
+       once didn't do that for sub-level designators.  */
+    struct SEB b = { .a.j = 5 };
+    struct SEC c = { .a.j = 5 };
+    struct SED d = { .a.j = 5 };
+    test_correct_filling (&b.a);
+    test_correct_filling (&c.a);
+    test_correct_filling (&d.a);
+    return 0;
+  }
+  
+  int main()
+  {
+    print(ce);
+    print(gs);
+    print(gs2);
+    print(gt);
+    print(gu);
+    print(gu2);
+    print(gu3);
+    print(gu4);
+    print(gs3);
+    print(gv);
+    print(gv2);
+    print(gv3);
+    print(sinit16);
+    print(gw);
+    print(gsu);
+    print(guv);
+    print(guv.b);
+    print(guv2);
+    print(guv3);
+    print(phdr);
+    foo(&gw, &phdr);
+    //printf("q: %s\n", q);
+    test_compound_with_relocs();
+    test_multi_relocs();
+    test_zero_init();
+    return 0;
+  }
+  ++ dirname ./tests/single-exec/00216.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00216.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00216/00216.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00216.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:176:25: Expected ] in array designator, found ...
+  Error compiling C99 file: Parse error at <input>:176:25: Expected ] in array designator, found ...
+not ok ./tests/single-exec/00218.c
+  /* This checks if enums needing 8 bit but only having positive
+     values are correctly zero extended (instead of sign extended)
+     when stored into/loaded from a 8 bit bit-field of enum type (which
+     itself is implementation defined, so isn't necessarily supported by all
+     other compilers).  */
+  enum tree_code {
+    SOME_CODE = 148, /* has bit 7 set, and hence all further enum values as well */
+    LAST_AND_UNUSED_TREE_CODE
+  };
+  typedef union tree_node *tree;
+  struct tree_common
+  {
+    union tree_node *chain;
+    union tree_node *type;
+    enum tree_code code : 8;
+    unsigned side_effects_flag : 1;
+  };
+  union tree_node
+  {
+    struct tree_common common;
+   };
+  enum c_tree_code {
+    C_DUMMY_TREE_CODE = LAST_AND_UNUSED_TREE_CODE,
+    STMT_EXPR,
+    LAST_C_TREE_CODE
+  };
+  enum cplus_tree_code {
+    CP_DUMMY_TREE_CODE = LAST_C_TREE_CODE,
+    AMBIG_CONV,
+    LAST_CPLUS_TREE_CODE
+  };
+  
+  extern int printf(const char *, ...);
+  int blah(){return 0;}
+  
+  int convert_like_real (tree convs)
+  {
+    switch (((enum tree_code) (convs)->common.code))
+      {
+      case AMBIG_CONV: /* This has bit 7 set, which must not be the sign
+  			bit in tree_common.code, i.e. the bitfield must
+  			be somehow marked unsigned.  */
+        return blah();
+      default:
+        break;
+      };
+     printf("unsigned enum bit-fields broken\n");
+  }
+  
+  int main()
+  {
+    union tree_node convs;
+  
+    convs.common.code = AMBIG_CONV;
+    convert_like_real (&convs);
+    return 0;
+  }
+  ++ dirname ./tests/single-exec/00218.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00218.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00218/00218.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00218.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:15:23: Expected ; in struct field, found :
+  Error compiling C99 file: Parse error at <input>:15:23: Expected ; in struct field, found :
+not ok ./tests/single-exec/00219.c
+  #include <stdio.h>
+  
+  const int a = 0;
+  
+  struct a {
+  	int a;
+  };
+  
+  struct b {
+  	int a;
+  };
+  
+  int a_f()
+  {
+  	return 20;
+  }
+  
+  int b_f()
+  {
+  	return 10;
+  }
+  
+  typedef int (*fptr)(int);
+  int foo(int i)
+  {
+    return i;
+  }
+  
+  typedef int int_type1;
+  
+  #define gen_sw(a) _Generic(a, const char *: 1, default: 8, int: 123);
+  
+  int main()
+  {
+  	int i = 0;
+  	signed long int l = 2;
+  	struct b titi;
+  	const int * const ptr;
+  	const char *ti;
+  	int_type1 i2;
+  
+  	i = _Generic(a, int: a_f, const int: b_f)();
+  	printf("%d\n", i);
+  	i = _Generic(a, int: a_f() / 2, const int: b_f() / 2);
+  	printf("%d\n", i);
+  	i = _Generic(ptr, int *:1, int * const:2, default:20);
+  	printf("%d\n", i);
+  	i = gen_sw(a);
+  	printf("%d\n", i);
+  	i = _Generic(titi, struct a:1, struct b:2, default:20);
+  	printf("%d\n", i);
+  	i = _Generic(i2, char: 1, int : 0);
+  	printf("%d\n", i);
+  	i = _Generic(a, char:1, int[4]:2, default:5);
+  	printf("%d\n", i);
+  	i = _Generic(17, int :1, int **:2);
+  	printf("%d\n", i);
+  	i = _Generic(17L, int :1, long :2, long long : 3);
+  	printf("%d\n", i);
+  	i = _Generic("17, io", char *: 3, const char *: 1);
+  	printf("%d\n", i);
+  	i = _Generic(ti, const unsigned char *:1, const char *:4, char *:3,
+  		     const signed char *:2);
+  	printf("%d\n", i);
+  	printf("%s\n", _Generic(i + 2L, long: "long", int: "int",
+  				long long: "long long"));
+  	i = _Generic(l, long: 1, int: 2);
+  	printf("%d\n", i);
+  	i = _Generic(foo, fptr: 3, int: 4);
+  	printf("%d\n", i);
+  	return 0;
+  }
+  ++ dirname ./tests/single-exec/00219.c
+  + /Users/ahineya/projects/braintease/target/release/rcc compile ./tests/single-exec/00219.c -o /Users/ahineya/projects/braintease/c-test/build/c-testsuite/00219/00219.asm --bank-size 64000 -I /Users/ahineya/projects/braintease/runtime/include -I ./tests/single-exec
+  + set +x
+  Compiling C99 file: ./tests/single-exec/00219.c (bank_size: 64000)
+  Successfully preprocessed source
+  Parse error: Parse error at <input>:50:18: Expected primary expression, found int
+  Error compiling C99 file: Parse error at <input>:50:18: Expected primary expression, found int

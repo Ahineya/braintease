@@ -1,0 +1,116 @@
+#! /bin/sh
+#
+# c-testsuite runner for Ripple C (rcc) + rasm + rlink + rvm.
+#
+# Invoked from the c-testsuite root as:
+#   ./single-exec rcc
+#   ./runners/single-exec/rcc tests/single-exec/00001.c
+#
+# Override the braintease repo root with RCC_ROOT if the suite is not
+# at c-test/vendor/c-testsuite.
+
+set -e
+set -u
+
+t=$1
+
+suite_dir=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+
+if test -z "${RCC_ROOT:-}"
+then
+    RCC_ROOT=$(CDPATH= cd -- "$suite_dir/../../.." && pwd)
+fi
+
+BANK_SIZE=64000
+RCC="$RCC_ROOT/target/release/rcc"
+RASM="$RCC_ROOT/src/ripple-asm/target/release/rasm"
+RLINK="$RCC_ROOT/src/ripple-asm/target/release/rlink"
+RVM="$RCC_ROOT/target/release/rvm"
+RUNTIME="$RCC_ROOT/runtime"
+BUILD="$RCC_ROOT/c-test/build/c-testsuite"
+
+missing=""
+for tool in "$RCC" "$RASM" "$RLINK" "$RVM"
+do
+    if ! test -x "$tool"
+    then
+        missing="$missing $tool"
+    fi
+done
+if test -n "$missing"
+then
+    echo "rcc runner: missing tools:$missing" 1>&2
+    echo "Build from the repo root:" 1>&2
+    echo "  cargo build --release" 1>&2
+    echo "  (cd src/ripple-asm && cargo build --release)" 1>&2
+    exit 1
+fi
+
+if ! test -f "$RUNTIME/crt0.pobj" || ! test -f "$RUNTIME/libruntime.par"
+then
+    echo "rcc runner: building C runtime (BANK_SIZE=$BANK_SIZE)" 1>&2
+    make -C "$RUNTIME" all crt0.pobj "BANK_SIZE=$BANK_SIZE"
+fi
+
+stem=$(basename "$t" .c)
+workdir="$BUILD/$stem"
+mkdir -p "$workdir"
+
+asm="$workdir/$stem.asm"
+pobj="$workdir/$stem.pobj"
+bin="$workdir/$stem.bin"
+disk="$workdir/$stem.disk.img"
+output="$workdir/$stem.output"
+log="$workdir/$stem.log"
+
+rm -f "$asm" "$pobj" "$bin" "$disk" "$output" "$log"
+
+cat "$t"
+
+set -x
+
+if ! "$RCC" compile "$t" -o "$asm" \
+    --bank-size "$BANK_SIZE" \
+    -I "$RUNTIME/include" \
+    -I "$(dirname "$t")" \
+    > "$log" 2>&1
+then
+    set +x
+    cat "$log"
+    exit 1
+fi
+
+if ! "$RASM" assemble "$asm" -o "$pobj" \
+    --bank-size "$BANK_SIZE" \
+    --max-immediate 65535 \
+    >> "$log" 2>&1
+then
+    set +x
+    cat "$log"
+    exit 1
+fi
+
+if ! "$RLINK" "$RUNTIME/crt0.pobj" "$RUNTIME/libruntime.par" "$pobj" \
+    -f binary --bank-size "$BANK_SIZE" -o "$bin" \
+    >> "$log" 2>&1
+then
+    set +x
+    cat "$log"
+    exit 1
+fi
+
+# Program stdout+stderr only. --exit-code turns main()'s RV0 into the
+# process status so `return 1` fails like a native runner.
+if ! "$RVM" "$bin" --bank-size "$BANK_SIZE" --exit-code --disk "$disk" \
+    > "$output" 2>&1
+then
+    set +x
+    echo "rvm exited nonzero"
+    cat "$output"
+    exit 1
+fi
+
+if ! diff -u "$t.expected" "$output"
+then
+    exit 1
+fi

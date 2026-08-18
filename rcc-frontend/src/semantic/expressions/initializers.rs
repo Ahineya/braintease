@@ -39,13 +39,19 @@ impl InitializerAnalyzer {
         
                 // Check type compatibility with typedef awareness
                 if let Some(expr_type) = &expr.expr_type {
+                    let assign_to = match &resolved {
+                        Type::Union { fields, .. } => {
+                            fields.first().map(|f| &f.field_type).unwrap_or(&resolved)
+                        }
+                        other => other,
+                    };
                     // Special case: Allow 0 to initialize pointers (NULL)
-                    let is_null_init = matches!(resolved, Type::Pointer { .. })
+                    let is_null_init = matches!(assign_to, Type::Pointer { .. })
                         && self.type_analyzer.borrow().is_integer(expr_type)
                         && matches!(expr.kind, ExpressionKind::IntLiteral { value: 0, .. });
                     
                     // Use typedef-aware type compatibility checking
-                    if !is_null_init && !self.type_analyzer.borrow().is_assignable(&resolved, expr_type) {
+                    if !is_null_init && !self.type_analyzer.borrow().is_assignable(assign_to, expr_type) {
                         log::debug!("Type mismatch in initializer: expected={:?}, found={:?}", expected_type, expr_type);
                         return Err(SemanticError::TypeMismatch {
                             expected: expected_type.clone(),
@@ -128,8 +134,7 @@ impl InitializerAnalyzer {
                 let designator = designator.clone();
                 match (&resolved, &designator) {
                     (Type::Struct { fields, name, .. } | Type::Union { fields, name, .. }, Designator::Member(member)) => {
-                        if let Some(field) = fields.iter().find(|f| f.name == *member) {
-                            let field_type = field.field_type.clone();
+                        if let Some(field_type) = crate::semantic::struct_layout::find_member_type(fields, member) {
                             self.analyze(initializer, &field_type)
                         } else {
                             let struct_name = name.clone().unwrap_or_else(|| format!("{resolved}"));

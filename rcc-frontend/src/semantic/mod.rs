@@ -308,6 +308,90 @@ int main() {
     }
 
     #[test]
+    fn test_unnamed_pointer_param_and_local_prototype() {
+        let source = r#"
+int f1(char *p) { return *p+1; }
+int main() {
+    char s = 1;
+    int f1(char *);
+    return f1(&s) - 2;
+}
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_ok());
+    }
+
+    #[test]
+    fn test_anonymous_union_member_access() {
+        let source = r#"
+struct S {
+    int a;
+    union { int b1; int b2; };
+};
+int main() {
+    struct S v;
+    v.a = 1;
+    v.b1 = 2;
+    return v.b2 - 2;
+}
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_ok());
+    }
+
+    #[test]
+    fn test_local_struct_tag_only_declaration() {
+        let source = r#"
+int main() {
+    struct T { int x; };
+    {
+        struct T s;
+        s.x = 0;
+        return s.x;
+    }
+}
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_ok());
+    }
+
+    #[test]
+    fn test_struct_forward_then_complete() {
+        let source = r#"
+struct T;
+struct T { int x; };
+int main() {
+    struct T v;
+    { struct T { int z; }; }
+    v.x = 2;
+    return v.x - 2;
+}
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_ok());
+    }
+
+    #[test]
+    fn test_forward_enum_used_before_complete() {
+        let source = r#"
+enum efoo;
+struct S {
+    int (*f)(enum efoo x);
+};
+enum efoo { ONE, TWO };
+enum efoo it_real_fn(void) { return TWO; }
+int main() { return 0; }
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_ok());
+    }
+
+    #[test]
     fn test_extern_then_tentative_definition_allowed() {
         let source = r#"
 extern unsigned short cur_hi;

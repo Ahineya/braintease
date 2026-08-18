@@ -393,12 +393,9 @@ impl ExpressionAnalyzer {
         
         match &resolved_type {
             Type::Struct { fields, name, .. } | Type::Union { fields, name, .. } => {
-                // Find the field by name
-                if let Some(field) = fields.iter().find(|f| f.name == member) {
-                    // Resolve the field type in case it's a struct reference
-                    Ok(self.type_analyzer.borrow().resolve_type(&field.field_type))
+                if let Some(field_type) = crate::semantic::struct_layout::find_member_type(fields, member) {
+                    Ok(self.type_analyzer.borrow().resolve_type(&field_type))
                 } else {
-                    // Use the actual struct name if available, otherwise use a generic description
                     let struct_name = name
                         .clone()
                         .unwrap_or_else(|| format!("{struct_type}"));
@@ -425,9 +422,8 @@ impl ExpressionAnalyzer {
 
                 match &resolved_type {
                     Type::Struct { fields, .. } | Type::Union { fields, .. } => {
-                        if let Some(field) = fields.iter().find(|f| f.name == member) {
-                            // Resolve the field type in case it's a struct reference
-                            Ok(self.type_analyzer.borrow().resolve_type(&field.field_type))
+                        if let Some(field_type) = crate::semantic::struct_layout::find_member_type(fields, member) {
+                            Ok(self.type_analyzer.borrow().resolve_type(&field_type))
                         } else {
                             Err(SemanticError::UndefinedMember {
                                 struct_name: name.clone(),

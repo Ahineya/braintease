@@ -280,13 +280,9 @@ impl Parser {
                 let param_type = self.parse_type_specifier()?;
                 self.skip_ignored_specifiers();
 
-                let (param_name, full_param_type) = if matches!(self.peek().map(|t| &t.token_type),
-                    Some(TokenType::Star) | Some(TokenType::Identifier(_))) {
-                    let (name, full_type) = self.parse_declarator(param_type)?;
-                    (Some(name), full_type)
-                } else {
-                    (None, param_type)
-                };
+                // Parameters may use abstract declarators (`char *`, `int (*)(void)`).
+                let (name, full_param_type) = self.parse_declarator(param_type)?;
+                let param_name = if name.is_empty() { None } else { Some(name) };
 
                 let param_end = self.current_location();
 
@@ -331,6 +327,7 @@ impl Parser {
                 let field_type = self.parse_type_specifier()?;
                 loop {
                     let (field_name, full_field_type) = self.parse_declarator(field_type.clone())?;
+                    self.check_field_declarator(&field_name, &full_field_type)?;
                     fields.push(StructField {
                         name: field_name,
                         field_type: full_field_type,
@@ -371,6 +368,7 @@ impl Parser {
                 let field_type = self.parse_type_specifier()?;
                 loop {
                     let (field_name, full_field_type) = self.parse_declarator(field_type.clone())?;
+                    self.check_field_declarator(&field_name, &full_field_type)?;
                     fields.push(StructField {
                         name: field_name,
                         field_type: full_field_type,
@@ -455,7 +453,29 @@ impl Parser {
         
         Ok(Type::Enum { name, variants })
     }
-    
+
+    fn check_field_declarator(&self, name: &str, ty: &Type) -> Result<(), CompilerError> {
+        if name.is_empty() && !matches!(ty, Type::Struct { .. } | Type::Union { .. }) {
+            return Err(ParseError::InvalidType {
+                message: "Expected identifier in declarator".to_string(),
+                location: self.current_location(),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn require_named_declarator(&self, name: &str) -> Result<(), CompilerError> {
+        if name.is_empty() {
+            return Err(ParseError::InvalidType {
+                message: "Expected identifier in declarator".to_string(),
+                location: self.current_location(),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
     /// Parse declarator (handles pointers, arrays, function parameters)
     pub fn parse_declarator(&mut self, base_type: Type) -> Result<(String, Type), CompilerError> {
         self.skip_ignored_specifiers();
@@ -566,14 +586,15 @@ impl Parser {
             }
         }
         
-        // Not a parenthesized declarator - parse normally
-        let name = if let Some(Token { token_type: TokenType::Identifier(name), .. }) = self.advance() {
-            name
-        } else {
-            return Err(ParseError::InvalidType {
-                message: "Expected identifier in declarator".to_string(),
-                location: self.current_location(),
-            }.into());
+        // Not a parenthesized declarator. Abstract/unnamed declarators are
+        // allowed (`char *`, anonymous struct members, parameter names).
+        let name = match self.peek().map(|t| &t.token_type) {
+            Some(TokenType::Identifier(name)) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            _ => String::new(),
         };
         
         // Parse suffix (arrays, function parameters)

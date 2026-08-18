@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYYYYYYY\n",
+  "description": "Anonymous struct/union members"
+}

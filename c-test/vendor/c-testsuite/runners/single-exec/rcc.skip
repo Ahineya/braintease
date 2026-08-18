@@ -1,0 +1,15 @@
+#! /bin/sh
+
+# Tests that can never pass on Ripple: headers the runtime does not provide.
+# Paths must match the names `./single-exec` feeds to the runner.
+
+if ! test -f README.md
+then
+    echo "run from the base directory." >&2
+    exit 1
+fi
+
+echo "./tests/single-exec/00174.c"
+echo "./tests/single-exec/00220.c"
+# `long double` is not a distinct type on this target yet.
+echo "./tests/single-exec/00204.c"

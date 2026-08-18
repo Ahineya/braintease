@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y\n",
+  "description": "Block-scope tagged struct with no object"
+}

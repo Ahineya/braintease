@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "description": "Unnamed pointer parameter in a file-scope prototype",
+  "use_runtime": true
+}

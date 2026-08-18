@@ -49,13 +49,15 @@ impl TypeAnalyzer {
                         // This is a reference to a named struct type
                         if let Some(actual_type) = self.type_definitions.borrow().get(name) {
                             // Make sure we get a struct, not a typedef to a struct
-                            if let Type::Struct { .. } = actual_type {
-                                return actual_type.clone();
+                            if let Type::Struct { fields: actual_fields, .. } = actual_type {
+                                if !actual_fields.is_empty() {
+                                    return actual_type.clone();
+                                }
                             }
                         }
                     }
                 }
-                // Otherwise return as-is (already complete or anonymous)
+                // Otherwise return as-is (already complete, anonymous, or still incomplete)
                 ty.clone()
             }
             Type::Union { name, fields } => {
@@ -65,13 +67,15 @@ impl TypeAnalyzer {
                         // This is a reference to a named union type
                         if let Some(actual_type) = self.type_definitions.borrow().get(name) {
                             // Make sure we get a union, not a typedef to a union
-                            if let Type::Union { .. } = actual_type {
-                                return actual_type.clone();
+                            if let Type::Union { fields: actual_fields, .. } = actual_type {
+                                if !actual_fields.is_empty() {
+                                    return actual_type.clone();
+                                }
                             }
                         }
                     }
                 }
-                // Otherwise return as-is (already complete or anonymous)
+                // Otherwise return as-is (already complete, anonymous, or still incomplete)
                 ty.clone()
             }
             Type::Pointer { target, bank } => {
@@ -87,6 +91,20 @@ impl TypeAnalyzer {
                     element_type: Box::new(self.resolve_struct_references(element_type)),
                     size: *size,
                 }
+            }
+            Type::Enum { name, variants } => {
+                if let Some(name) = name {
+                    if variants.is_empty() {
+                        if let Some(actual_type) = self.type_definitions.borrow().get(name) {
+                            if let Type::Enum { variants: actual, .. } = actual_type {
+                                if !actual.is_empty() {
+                                    return actual_type.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+                ty.clone()
             }
             // Other types don't need resolution
             _ => ty.clone(),
@@ -112,6 +130,11 @@ impl TypeAnalyzer {
                 if let Some(name) = name {
                     if fields.is_empty() {
                         if let Some(actual_type) = self.type_definitions.borrow().get(name) {
+                            if let Type::Struct { fields: actual_fields, .. } = actual_type {
+                                if actual_fields.is_empty() {
+                                    return ty.clone();
+                                }
+                            }
                             return self.resolve_type(&actual_type.clone());
                         } else {
                             return ty.clone();
@@ -131,6 +154,11 @@ impl TypeAnalyzer {
                 if let Some(name) = name {
                     if fields.is_empty() {
                         if let Some(actual_type) = self.type_definitions.borrow().get(name) {
+                            if let Type::Union { fields: actual_fields, .. } = actual_type {
+                                if actual_fields.is_empty() {
+                                    return ty.clone();
+                                }
+                            }
                             return self.resolve_type(&actual_type.clone());
                         } else {
                             return ty.clone();
@@ -160,12 +188,21 @@ impl TypeAnalyzer {
                     size: *size,
                 }
             }
-            // Basic types that don't need resolution
-            Type::Void | Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
-            Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
-            Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
-            Type::Float | Type::Double | Type::Error => ty.clone(),
-            
+            Type::Enum { name, variants } => {
+                if let Some(name) = name {
+                    if variants.is_empty() {
+                        if let Some(actual_type) = self.type_definitions.borrow().get(name) {
+                            if let Type::Enum { variants: actual, .. } = actual_type {
+                                if actual.is_empty() {
+                                    return ty.clone();
+                                }
+                            }
+                            return self.resolve_type(&actual_type.clone());
+                        }
+                    }
+                }
+                ty.clone()
+            }
             // Prototypes keep typedef names (`void f(uint32_t)`). Call codegen
             // uses is_integer() on these parameter types to widen 16-bit
             // constants into two ABI slots; skip that and A1 is leftover junk.
@@ -174,9 +211,11 @@ impl TypeAnalyzer {
                 parameters: parameters.iter().map(|p| self.resolve_type(p)).collect(),
                 is_variadic: *is_variadic,
             },
-            
-            // Enum types don't need resolution
-            Type::Enum { .. } => ty.clone(),
+            // Basic types that don't need resolution
+            Type::Void | Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
+            Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
+            Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
+            Type::Float | Type::Double | Type::Error => ty.clone(),
         }
     }
 
@@ -746,11 +785,19 @@ impl TypeAnalyzer {
             name
         };
 
-        // Check if type already exists
-        if self.type_definitions.borrow().contains_key(&key) {
-            return Err(SemanticError::RedefinedType {
-                name: key.clone(),
-            }.into());
+        let existing_incomplete = self.type_definitions.borrow().get(&key)
+            .map(|existing| match existing {
+                Type::Struct { fields, .. } | Type::Union { fields, .. } => fields.is_empty(),
+                Type::Enum { variants, .. } => variants.is_empty(),
+                _ => false,
+            })
+            .unwrap_or(false);
+
+        if self.type_definitions.borrow().contains_key(&key) && !existing_incomplete {
+            // Keep the first complete definition. Inner-scope tag shadowing is
+            // not modelled (type_definitions is unscoped); unused inner tags
+            // such as c-testsuite 00044 are therefore ignored.
+            return Ok(());
         }
 
         // Resolve field types in struct/union definitions

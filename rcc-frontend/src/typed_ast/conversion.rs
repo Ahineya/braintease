@@ -82,6 +82,17 @@ fn type_initializer(
                 }
             }
             
+            // A scalar initializer for a union initializes the first member.
+            if let Type::Union { fields, .. } = &resolved {
+                if !fields.is_empty() {
+                    let inner = type_expression(expr, type_env)?;
+                    return Ok(TypedExpr::ArrayInitializer {
+                        elements: vec![inner],
+                        expr_type: resolved.clone(),
+                    });
+                }
+            }
+
             // Otherwise, process as normal expression
             type_expression(expr, type_env)
         }
@@ -645,12 +656,24 @@ pub fn type_expression(
             let is_union = matches!(resolved_struct_type, Type::Union { .. });
             
             // Calculate struct layout to get field offset
-            // Pass type_definitions to resolve nested struct sizes
-            let layout = crate::semantic::struct_layout::calculate_struct_layout_with_defs(
-                &fields,
-                rcc_common::SourceLocation::new_simple(0, 0), // TODO: Use actual location
-                Some(&type_env.type_analyzer.borrow().type_definitions.borrow())
-            ).map_err(|e| TypeError::TypeMismatch(format!("Failed to calculate struct layout: {e}")))?;
+            let loc = rcc_common::SourceLocation::new_simple(0, 0);
+            let layout = {
+                let ta = type_env.type_analyzer.borrow();
+                let defs = ta.type_definitions.borrow();
+                if is_union {
+                    crate::semantic::struct_layout::calculate_union_layout_with_defs(
+                        &fields,
+                        loc,
+                        Some(&defs),
+                    )
+                } else {
+                    crate::semantic::struct_layout::calculate_struct_layout_with_defs(
+                        &fields,
+                        loc,
+                        Some(&defs),
+                    )
+                }
+            }.map_err(|e| TypeError::TypeMismatch(format!("Failed to calculate struct layout: {e}")))?;
             
             // Find the field and get its offset
             let field_layout = crate::semantic::struct_layout::find_field(&layout, member)
@@ -659,7 +682,7 @@ pub fn type_expression(
                     member_name: member.clone(),
                 })?;
             
-            let offset = if is_union { 0 } else { field_layout.offset };
+            let offset = field_layout.offset;
             
             Ok(TypedExpr::MemberAccess {
                 object: Box::new(object_typed),

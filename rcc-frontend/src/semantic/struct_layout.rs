@@ -108,6 +108,62 @@ pub fn calculate_struct_layout_with_defs(
     })
 }
 
+/// Union layout: every member starts at offset 0; size is the largest member.
+pub fn calculate_union_layout_with_defs(
+    fields: &[StructField],
+    location: SourceLocation,
+    type_definitions: Option<&HashMap<String, Type>>,
+) -> Result<StructLayout, CompilerError> {
+    let mut layout_fields = Vec::new();
+    let mut total_size = 0u64;
+
+    for (i, field) in fields.iter().enumerate() {
+        let is_last = i + 1 == fields.len();
+        let is_fam = matches!(field.field_type, Type::Array { size: None, .. });
+
+        if is_fam {
+            if !is_last {
+                return Err(crate::semantic::SemanticError::IncompleteType {
+                    type_name: format!("field '{}' has incomplete type {:?}",
+                                     field.name, field.field_type),
+                    location: location.clone(),
+                }.into());
+            }
+            layout_fields.push(FieldLayout {
+                name: field.name.clone(),
+                field_type: field.field_type.clone(),
+                offset: 0,
+                size: 0,
+            });
+            continue;
+        }
+
+        let field_size = match get_type_size(&field.field_type, type_definitions) {
+            Some(size) => size,
+            None => {
+                return Err(crate::semantic::SemanticError::IncompleteType {
+                    type_name: format!("field '{}' has incomplete type {:?}",
+                                     field.name, field.field_type),
+                    location: location.clone(),
+                }.into());
+            }
+        };
+
+        layout_fields.push(FieldLayout {
+            name: field.name.clone(),
+            field_type: field.field_type.clone(),
+            offset: 0,
+            size: field_size,
+        });
+        total_size = total_size.max(field_size);
+    }
+
+    Ok(StructLayout {
+        fields: layout_fields,
+        total_size,
+    })
+}
+
 /// Get the size of a type, resolving named struct references if needed
 fn get_type_size(ty: &Type, type_definitions: Option<&HashMap<String, Type>>) -> Option<u64> {
     match ty {
@@ -134,12 +190,56 @@ fn get_type_size(ty: &Type, type_definitions: Option<&HashMap<String, Type>>) ->
     }
 }
 
-/// Find a field in a struct layout by name
-pub fn find_field<'a>(
-    layout: &'a StructLayout,
-    field_name: &str,
-) -> Option<&'a FieldLayout> {
-    layout.fields.iter().find(|f| f.name == field_name)
+/// Find a field in a struct layout by name, including anonymous struct/union members.
+pub fn find_field(layout: &StructLayout, field_name: &str) -> Option<FieldLayout> {
+    find_field_from(layout, field_name, 0)
+}
+
+fn find_field_from(layout: &StructLayout, field_name: &str, base_offset: u64) -> Option<FieldLayout> {
+    for field in &layout.fields {
+        if !field.name.is_empty() && field.name == field_name {
+            let mut found = field.clone();
+            found.offset = base_offset + field.offset;
+            return Some(found);
+        }
+        if field.name.is_empty() {
+            if let Some(inner) = anonymous_member_layout(&field.field_type) {
+                if let Some(found) = find_field_from(&inner, field_name, base_offset + field.offset) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn anonymous_member_layout(ty: &Type) -> Option<StructLayout> {
+    let loc = SourceLocation::new_simple(0, 0);
+    match ty {
+        Type::Struct { fields, .. } => calculate_struct_layout(fields, loc).ok(),
+        Type::Union { fields, .. } => calculate_union_layout_with_defs(fields, loc, None).ok(),
+        _ => None,
+    }
+}
+
+/// Look up a member type through anonymous struct/union members (C11).
+pub fn find_member_type(fields: &[StructField], member: &str) -> Option<Type> {
+    for field in fields {
+        if !field.name.is_empty() && field.name == member {
+            return Some(field.field_type.clone());
+        }
+        if field.name.is_empty() {
+            match &field.field_type {
+                Type::Struct { fields, .. } | Type::Union { fields, .. } => {
+                    if let Some(ty) = find_member_type(fields, member) {
+                        return Some(ty);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
 }
 
 /// Check if a type recursively contains itself
