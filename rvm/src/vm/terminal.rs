@@ -136,9 +136,6 @@ impl VM {
         // Enable raw mode to capture input immediately
         let _ = terminal::enable_raw_mode();
         self.terminal_raw_mode = true;
-        
-        // Clear input buffer when entering TTY mode
-        self.input_buffer.clear();
     }
     
     /// Exit TTY mode

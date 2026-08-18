@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "use_runtime": true,
+  "description": "Array parameters decay to pointers (writes write back)"
+}

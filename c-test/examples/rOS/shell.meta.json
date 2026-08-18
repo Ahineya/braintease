@@ -1,0 +1,9 @@
+{
+  "description": "rOS FAT16 explorer (TTY). Mounts disks/ripple_fat16.img and offers DIR/CD/TYPE.",
+  "use_runtime": true,
+  "visual": false,
+  "display": "tty",
+  "disk": true,
+  "runner": "c",
+  "expected": "manual"
+}

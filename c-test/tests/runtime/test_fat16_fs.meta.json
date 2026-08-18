@@ -1,0 +1,6 @@
+{
+  "expected": "YYYYYYYYY\n",
+  "use_runtime": true,
+  "description": "Minimal FAT16 mount, lookup, and read",
+  "timeout_secs": 15
+}

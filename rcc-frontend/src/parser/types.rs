@@ -17,6 +17,19 @@ enum DeclSuffix {
 }
 
 impl Parser {
+    /// C99 6.7.6.3p7: a parameter declared as an array of T is adjusted to a
+    /// pointer to T.  (`char a[11]` in a parameter list is `char *`.)
+    /// Pointer-to-array types such as `char (*p)[11]` are left alone.
+    fn adjust_parameter_type(ty: Type) -> Type {
+        match ty {
+            Type::Array { element_type, size: _ } => Type::Pointer {
+                target: element_type,
+                bank: None,
+            },
+            other => other,
+        }
+    }
+
     fn fold_positive_ice(expr: &Expression, what: &str) -> Result<u64, CompilerError> {
         match crate::ast::const_eval::eval_integer_constant(expr) {
             Ok(n) if n >= 0 => Ok(n as u64),
@@ -283,6 +296,7 @@ impl Parser {
                 // Parameters may use abstract declarators (`char *`, `int (*)(void)`).
                 let (name, full_param_type) = self.parse_declarator(param_type)?;
                 let param_name = if name.is_empty() { None } else { Some(name) };
+                let full_param_type = Self::adjust_parameter_type(full_param_type);
 
                 let param_end = self.current_location();
 

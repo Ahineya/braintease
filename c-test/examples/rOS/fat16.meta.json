@@ -1,0 +1,5 @@
+{
+  "skipped": true,
+  "use_runtime": true,
+  "description": "rOS FAT16 driver (not a standalone program)"
+}

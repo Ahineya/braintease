@@ -1,0 +1,5 @@
+{
+  "skipped": true,
+  "use_runtime": true,
+  "description": "rOS shell helpers (not a standalone program)"
+}

@@ -1,0 +1,5 @@
+{
+  "skipped": true,
+  "use_runtime": true,
+  "description": "rOS disk I/O library (not a standalone program)"
+}

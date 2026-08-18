@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "description": "Cast unsigned char array to char pointer",
+  "use_runtime": true
+}

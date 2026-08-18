@@ -1,0 +1,6 @@
+{
+  "expected": "YYYYYYYYY\n",
+  "use_runtime": true,
+  "description": "Byte-addressed disk I/O over storage MMIO",
+  "timeout_secs": 15
+}
