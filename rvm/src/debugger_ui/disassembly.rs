@@ -167,7 +167,8 @@ impl TuiDebugger {
             },
             Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or) | 
             Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt) | 
-            Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod) => {
+            Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod) |
+            Some(Opcode::Loadc) | Some(Opcode::Storc) => {
                 // R-type: op rd, rs, rt
                 spans.push(Span::styled(format!("{opcode_str:<6} "), opcode_style));
                 spans.push(Span::styled(Self::register_name(instr.word1 as u8), Style::default().fg(Color::Rgb(0, 200, 0)))); // Dark green
@@ -280,7 +281,8 @@ impl TuiDebugger {
             },
             Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or) | 
             Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt) | 
-            Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod) => {
+            Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod) |
+            Some(Opcode::Loadc) | Some(Opcode::Storc) => {
                 let rd = Self::register_name(instr.word1 as u8);
                 let rs = Self::register_name(instr.word2 as u8);
                 let rt = Self::register_name(instr.word3 as u8);
@@ -336,7 +338,7 @@ impl TuiDebugger {
                 // Jump and branch instructions
                 Style::default().fg(Color::Yellow)
             },
-            Some(Opcode::Load) | Some(Opcode::Store) => {
+            Some(Opcode::Load) | Some(Opcode::Store) | Some(Opcode::Loadc) | Some(Opcode::Storc) => {
                 // Memory operations
                 Style::default().fg(Color::Blue)
             },

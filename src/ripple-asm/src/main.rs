@@ -81,6 +81,7 @@ fn get_instruction_format(opcode: Opcode) -> &'static str {
         InstructionFormat::R => match opcode {
             Opcode::Nop => "",
             Opcode::Brk => "",
+            Opcode::Loadc | Opcode::Storc => "R0, bank, addr",
             _ => "rd, rs1, rs2",
         },
         InstructionFormat::I => match opcode {
@@ -131,6 +132,8 @@ fn get_instruction_description(opcode: Opcode) -> &'static str {
         Opcode::Li => "rd = imm",
         Opcode::Load => "rd = memory[bank][addr]",
         Opcode::Store => "memory[bank][addr] = rs",
+        Opcode::Loadc => "X0..X3 = IMEM[bank][addr] (4 instruction cells)",
+        Opcode::Storc => "IMEM[bank][addr] = X0..X3 (4 instruction cells)",
         
         // Control flow
         Opcode::Jal => "rd = PC + 1; PC = target",
@@ -158,7 +161,7 @@ fn get_instruction_category(opcode: Opcode) -> &'static str {
         
         Opcode::Slt | Opcode::Sltu => "COMPARISON",
         
-        Opcode::Li | Opcode::Load | Opcode::Store => "MEMORY",
+        Opcode::Li | Opcode::Load | Opcode::Store | Opcode::Loadc | Opcode::Storc => "MEMORY",
         
         Opcode::Jal | Opcode::Jalr | Opcode::Beq | Opcode::Bne | 
         Opcode::Blt | Opcode::Bge => "CONTROL FLOW",

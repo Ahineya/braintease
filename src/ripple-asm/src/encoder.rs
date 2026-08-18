@@ -231,4 +231,45 @@ mod tests {
         assert_eq!(encoder.parse_immediate("0b1010").unwrap(), 10);
         assert_eq!(encoder.parse_immediate("0b11111111").unwrap(), 255);
     }
+
+    #[test]
+    fn test_encode_loadc_registers_only() {
+        let encoder = InstructionEncoder::new(65535);
+        let inst = encoder.encode(
+            Opcode::Loadc,
+            &["R0".to_string(), "T0".to_string(), "T1".to_string()],
+        ).unwrap();
+
+        assert_eq!(inst.opcode, Opcode::Loadc as u8);
+        assert_eq!(inst.word1, Register::R0 as u16);
+        assert_eq!(inst.word2, Register::T0 as u16);
+        assert_eq!(inst.word3, Register::T1 as u16);
+    }
+
+    #[test]
+    fn test_encode_storc_registers_only() {
+        let encoder = InstructionEncoder::new(65535);
+        let inst = encoder.encode(
+            Opcode::Storc,
+            &["R0".to_string(), "R0".to_string(), "T0".to_string()],
+        ).unwrap();
+
+        assert_eq!(inst.opcode, Opcode::Storc as u8);
+        assert_eq!(inst.word1, Register::R0 as u16);
+        assert_eq!(inst.word2, Register::R0 as u16);
+        assert_eq!(inst.word3, Register::T0 as u16);
+    }
+
+    #[test]
+    fn test_encode_loadc_rejects_immediates() {
+        let encoder = InstructionEncoder::new(65535);
+        assert!(encoder.encode(
+            Opcode::Loadc,
+            &["R0".to_string(), "0".to_string(), "T1".to_string()],
+        ).is_err());
+        assert!(encoder.encode(
+            Opcode::Storc,
+            &["R0".to_string(), "T0".to_string(), "100".to_string()],
+        ).is_err());
+    }
 }

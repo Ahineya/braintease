@@ -46,8 +46,10 @@ MODI rd, rs, imm    ; rd = (rs % imm) & 0xFFFF           ; remainder (mod 65536)
 ; ----------------------------------------------------------
 ; Memory  (bank & addr are *registers*; use R0 for zero)
 ; ----------------------------------------------------------
-LOAD  rd, bank, addr    ; rd = MEM[bank][addr]
-STORE rs, bank, addr    ; MEM[bank][addr] = rs
+LOAD  rd, bank, addr    ; rd = MEM[bank][addr]          ; data memory
+STORE rs, bank, addr    ; MEM[bank][addr] = rs          ; data memory
+LOADC R0, bank, addr    ; X0..X3 = IMEM[bank][addr]     ; 4 instruction cells
+STORC R0, bank, addr    ; IMEM[bank][addr] = X0..X3     ; 4 instruction cells
 ; SPECIAL: STORE x, R0, R0 -> print byte x
 
 ; Common patterns:

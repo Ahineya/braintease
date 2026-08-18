@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "0Hello World!\n",
+  "description": "Brainfuck interpreter: pluses and hello world"
+}

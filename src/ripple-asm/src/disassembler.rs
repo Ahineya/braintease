@@ -311,41 +311,7 @@ impl Disassembler {
     }
 
     fn opcode_from_byte(&self, byte: u8) -> Option<Opcode> {
-        match byte {
-            0x00 => Some(Opcode::Nop),
-            0x01 => Some(Opcode::Add),
-            0x02 => Some(Opcode::Sub),
-            0x03 => Some(Opcode::And),
-            0x04 => Some(Opcode::Or),
-            0x05 => Some(Opcode::Xor),
-            0x06 => Some(Opcode::Sll),
-            0x07 => Some(Opcode::Srl),
-            0x08 => Some(Opcode::Slt),
-            0x09 => Some(Opcode::Sltu),
-            0x0A => Some(Opcode::Addi),
-            0x0B => Some(Opcode::Andi),
-            0x0C => Some(Opcode::Ori),
-            0x0D => Some(Opcode::Xori),
-            0x0E => Some(Opcode::Li),
-            0x0F => Some(Opcode::Slli),
-            0x10 => Some(Opcode::Srli),
-            0x11 => Some(Opcode::Load),
-            0x12 => Some(Opcode::Store),
-            0x13 => Some(Opcode::Jal),
-            0x14 => Some(Opcode::Jalr),
-            0x15 => Some(Opcode::Beq),
-            0x16 => Some(Opcode::Bne),
-            0x17 => Some(Opcode::Blt),
-            0x18 => Some(Opcode::Bge),
-            0x19 => Some(Opcode::Brk),
-            0x1A => Some(Opcode::Mul),
-            0x1B => Some(Opcode::Div),
-            0x1C => Some(Opcode::Mod),
-            0x1D => Some(Opcode::Muli),
-            0x1E => Some(Opcode::Divi),
-            0x1F => Some(Opcode::Modi),
-            _ => None,
-        }
+        Opcode::from_u8(byte)
     }
 
     fn format_data_section(&self, data: &[u8]) -> String {

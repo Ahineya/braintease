@@ -151,6 +151,7 @@ The test suite includes:
 - `test_division` - DIV, MOD and immediate versions
 - `test_jumps` - CALL/RET (JAL/JALR)
 - `test_memory` - LOAD/STORE operations
+- `test_loadc_storc` - LOADC/STORC instruction-memory copies
 
 ## Architecture
 
@@ -171,10 +172,11 @@ The VM implements the Ripple architecture as specified in `docs/ASSEMBLY_FORMAT.
   - 0x0001: Output ready flag
 
 ### Instruction Set
-All opcodes from 0x00 to 0x1F are implemented, including:
+All opcodes from 0x00 to 0x21 are implemented, including:
 - ALU operations (ADD, SUB, AND, OR, XOR, SLL, SRL, SLT, SLTU)
 - Immediate operations (ADDI, ANDI, ORI, XORI, LI, SLLI, SRLI)
-- Memory operations (LOAD, STORE)
+- Data memory operations (LOAD, STORE)
+- Instruction memory copies (LOADC, STORC) — X0..X3 ↔ 4 cells at IMEM[bank][addr]; bank and addr are registers
 - Control flow (JAL, JALR, BEQ, BNE, BLT, BGE)
 - Extended arithmetic (MUL, DIV, MOD and immediate versions)
 - Special (NOP, HALT, BRK)

@@ -45,6 +45,8 @@ impl MacroFormatter {
         opcode_to_macro.insert(Opcode::Muli as u8, "@OP_MULI");
         opcode_to_macro.insert(Opcode::Divi as u8, "@OP_DIVI");
         opcode_to_macro.insert(Opcode::Modi as u8, "@OP_MODI");
+        opcode_to_macro.insert(Opcode::Loadc as u8, "@OP_LOADC");
+        opcode_to_macro.insert(Opcode::Storc as u8, "@OP_STORC");
         
         Self { opcode_to_macro }
     }
@@ -100,7 +102,8 @@ impl MacroFormatter {
                  x == Opcode::Srl as u8 || x == Opcode::Slt as u8 || 
                  x == Opcode::Sltu as u8 || x == Opcode::Jalr as u8 ||
                  x == Opcode::Mul as u8 || x == Opcode::Div as u8 ||
-                 x == Opcode::Mod as u8
+                 x == Opcode::Mod as u8 || x == Opcode::Loadc as u8 ||
+                 x == Opcode::Storc as u8
         );
 
         let is_i_format = matches!(opcode,

@@ -586,4 +586,26 @@ start:
         // Placeholder immediate; the linker patches the concatenated offset.
         assert_eq!(result.instructions[0].word2, 0);
     }
+
+    #[test]
+    fn test_assemble_loadc_storc() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let result = assembler.assemble("LOADC R0, T0, T1\nSTORC R0, R0, T0").unwrap();
+
+        assert_eq!(result.instructions.len(), 2);
+        assert_eq!(result.instructions[0].opcode, Opcode::Loadc as u8);
+        assert_eq!(result.instructions[0].word1, Register::R0 as u16);
+        assert_eq!(result.instructions[0].word2, Register::T0 as u16);
+        assert_eq!(result.instructions[0].word3, Register::T1 as u16);
+        assert_eq!(result.instructions[1].opcode, Opcode::Storc as u8);
+        assert_eq!(result.instructions[1].word2, Register::R0 as u16);
+        assert_eq!(result.instructions[1].word3, Register::T0 as u16);
+    }
+
+    #[test]
+    fn test_assemble_loadc_rejects_immediates() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let err = assembler.assemble("LOADC R0, 0, T1").unwrap_err();
+        assert!(err.iter().any(|e| e.contains("Invalid register")));
+    }
 }

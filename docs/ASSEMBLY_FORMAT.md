@@ -84,6 +84,16 @@ hex	mnemonic	effect
 11	LOAD rd, bank, addr 	rd ← MEM[bank * BANK_SIZE + addr]
 12	STORE rd, bank, addr	MEM[bank * BANK_SIZE + addr] ← rd
 
+LOAD and STORE address data memory. Bank and addr may be registers or immediates; RVM treats both operands as register indices.
+
+5.3.1 Instruction-memory copies (R)
+
+hex	mnemonic	effect
+20	LOADC R0, bank, addr	X0..X3 ← IMEM[bank][addr] (4 instruction cells)
+21	STORC R0, bank, addr	IMEM[bank][addr] ← X0..X3 (4 instruction cells)
+
+LOADC and STORC address instruction memory using the same (bank, offset) scheme as PCB/PC. Both bank and addr are registers (no immediates). The first operand is unused and is conventionally R0. Destinations/sources are implicit: X0 (opcode cell), X1, X2, X3 (the three operand cells).
+
 5.4 Control flow
 
 hex	form	effect

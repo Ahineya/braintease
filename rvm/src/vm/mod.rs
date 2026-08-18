@@ -518,6 +518,57 @@ mod tests {
         assert_eq!(vm.instructions.len(), 10);
         assert_eq!(vm.bank_size, 8);
     }
+
+    #[test]
+    fn loadc_reads_instruction_memory_not_data() {
+        let mut vm = VM::with_memory_size(8, 256);
+        // idx 0: LOADC R0, R0, T0
+        // idx 1: HALT
+        // idx 2: ADDI T7, T6, 0x42  (payload)
+        vm.instructions = vec![
+            instr(0x20, Register::R0 as u16, Register::R0 as u16, Register::T0 as u16),
+            halt(),
+            instr(0x0A, Register::T7 as u16, Register::T6 as u16, 0x42),
+            nop(), nop(), nop(), nop(), nop(),
+        ];
+        vm.memory[2] = 0xDEAD;
+        vm.registers[Register::T0 as usize] = 2;
+        vm.state = VMState::Running;
+
+        vm.step().unwrap();
+        assert_eq!(vm.registers[Register::X0 as usize], 0x0A);
+        assert_eq!(vm.registers[Register::X1 as usize], Register::T7 as u16);
+        assert_eq!(vm.registers[Register::X2 as usize], Register::T6 as u16);
+        assert_eq!(vm.registers[Register::X3 as usize], 0x42);
+        assert_eq!(vm.memory[2], 0xDEAD);
+    }
+
+    #[test]
+    fn storc_writes_instruction_memory_not_data() {
+        let mut vm = VM::with_memory_size(8, 256);
+        vm.instructions = vec![
+            instr(0x21, Register::R0 as u16, Register::R0 as u16, Register::T0 as u16),
+            halt(),
+            nop(),
+            nop(), nop(), nop(), nop(), nop(),
+        ];
+        vm.memory[2] = 0xBEEF;
+        vm.registers[Register::T0 as usize] = 2;
+        vm.registers[Register::X0 as usize] = 0x0E;
+        vm.registers[Register::X1 as usize] = Register::A0 as u16;
+        vm.registers[Register::X2 as usize] = 65;
+        vm.registers[Register::X3 as usize] = 0;
+        vm.state = VMState::Running;
+
+        vm.step().unwrap();
+        let written = vm.instructions[2];
+        assert_eq!(written.opcode, 0x0E);
+        assert_eq!(written.word0, 0x0E);
+        assert_eq!(written.word1, Register::A0 as u16);
+        assert_eq!(written.word2, 65);
+        assert_eq!(written.word3, 0);
+        assert_eq!(vm.memory[2], 0xBEEF);
+    }
 }
 
 impl Drop for VM {

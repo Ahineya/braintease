@@ -32,8 +32,8 @@ impl Debugger {
                     "NOP".to_string()
                 }
             },
-            0x01..=0x09 | 0x1A..=0x1C => {
-                // R-format: ADD, SUB, AND, OR, XOR, SLL, SRL, SLT, SLTU, MUL, DIV, MOD
+            0x01..=0x09 | 0x1A..=0x1C | 0x20 | 0x21 => {
+                // R-format: ADD, SUB, AND, OR, XOR, SLL, SRL, SLT, SLTU, MUL, DIV, MOD, LOADC, STORC
                 let rd = Self::register_name(instr.word1 as u8);
                 let rs = Self::register_name(instr.word2 as u8);
                 let rt = Self::register_name(instr.word3 as u8);
@@ -238,6 +238,8 @@ impl Debugger {
             0x1D => "MULI",
             0x1E => "DIVI",
             0x1F => "MODI",
+            0x20 => "LOADC",
+            0x21 => "STORC",
             _ => "UNKNOWN",
         }
     }

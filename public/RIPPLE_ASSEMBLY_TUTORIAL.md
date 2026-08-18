@@ -23,7 +23,7 @@ The ISA is called "Perfectly Engineered Non-standard Instruction Set".
 - **32 general-purpose registers**: Including special-purpose registers
 - **4-word instructions**: Each instruction is 64 bits (4 × 16-bit words)
 - **Bank-based memory**: 65536 instructions per bank
-- **Load/Store architecture**: Only LOAD/STORE instructions access memory
+- **Load/Store architecture**: LOAD/STORE access data memory; LOADC/STORC copy instruction cells
 - **No flags register**: Comparisons set registers to 0 or 1
 
 ### Key Design Principles
@@ -128,10 +128,14 @@ Format I2: [opcode] [rd] [imm1] [imm2] - Jump and link
 
 ### Memory Operations
 
-| Opcode | Mnemonic | Operation            | Example            |
-|--------|----------|----------------------|--------------------|
-| 0x11   | LOAD     | rd = MEM[bank][addr] | `LOAD T0, GP, 100` |
-| 0x12   | STORE    | MEM[bank][addr] = rd | `STORE A0, SP, 0`  |
+| Opcode | Mnemonic | Operation | Example |
+|--------|----------|-----------|---------|
+| 0x11   | LOAD     | rd = MEM[bank][addr] | `LOAD T0, GP, T1` |
+| 0x12   | STORE    | MEM[bank][addr] = rd | `STORE A0, SP, T0` |
+| 0x20   | LOADC    | X0..X3 = IMEM[bank][addr] (4 instruction cells) | `LOADC R0, T0, T1` |
+| 0x21   | STORC    | IMEM[bank][addr] = X0..X3 (4 instruction cells) | `STORC R0, T0, T1` |
+
+`LOAD`/`STORE` use data memory. `LOADC`/`STORC` use instruction memory at the same (bank, offset) as PCB/PC. Bank and address are registers only; the first operand is unused (conventionally R0). X0 receives the opcode cell; X1–X3 receive the three operand cells.
 
 ### Control Flow
 

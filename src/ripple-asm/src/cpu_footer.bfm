@@ -136,6 +136,8 @@
 #define OP_MULI  0x1D
 #define OP_DIVI  0x1E
 #define OP_MODI  0x1F
+#define OP_LOADC 0x20
+#define OP_STORC 0x21
 
 // MARK: ----- Register Constants
 #define REG_ZONE_W  36

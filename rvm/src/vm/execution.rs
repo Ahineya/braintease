@@ -407,6 +407,48 @@ impl VM {
                     }
                 }
             },
+
+            0x20 => { // LOADC - X0..X3 ← 4 cells of IMEM[bank_reg][addr_reg]
+                let bank_reg = instr.word2 as usize;
+                let addr_reg = instr.word3 as usize;
+                if bank_reg < 32 && addr_reg < 32 {
+                    let bank_val = self.registers[bank_reg];
+                    let addr_val = self.registers[addr_reg];
+                    let idx = (bank_val as usize * self.bank_size as usize) + addr_val as usize;
+                    if idx >= self.instructions.len() {
+                        return Err(format!("LOADC: instruction address out of bounds: bank={bank_val}, addr={addr_val}, idx={idx}"));
+                    }
+                    let loaded = self.instructions[idx];
+                    self.registers[Register::X0 as usize] = loaded.opcode as u16;
+                    self.registers[Register::X1 as usize] = loaded.word1;
+                    self.registers[Register::X2 as usize] = loaded.word2;
+                    self.registers[Register::X3 as usize] = loaded.word3;
+                }
+            },
+            0x21 => { // STORC - IMEM[bank_reg][addr_reg] ← X0..X3 (4 instruction cells)
+                let bank_reg = instr.word2 as usize;
+                let addr_reg = instr.word3 as usize;
+                if bank_reg < 32 && addr_reg < 32 {
+                    let bank_val = self.registers[bank_reg];
+                    let addr_val = self.registers[addr_reg];
+                    let idx = (bank_val as usize * self.bank_size as usize) + addr_val as usize;
+                    if idx >= self.instructions.len() {
+                        return Err(format!("STORC: instruction address out of bounds: bank={bank_val}, addr={addr_val}, idx={idx}"));
+                    }
+                    let x0 = self.registers[Register::X0 as usize];
+                    let x1 = self.registers[Register::X1 as usize];
+                    let x2 = self.registers[Register::X2 as usize];
+                    let x3 = self.registers[Register::X3 as usize];
+                    let opcode = (x0 & 0xFF) as u8;
+                    self.instructions[idx] = Instr {
+                        opcode,
+                        word0: opcode,
+                        word1: x1,
+                        word2: x2,
+                        word3: x3,
+                    };
+                }
+            },
             
             _ => {
                 return Err(format!("Unknown opcode: 0x{:02X}", instr.opcode));
@@ -553,6 +595,8 @@ impl VM {
             0x1D => eprintln!("MULI R{}, R{}, {}", instr.word1, instr.word2, instr.word3),
             0x1E => eprintln!("DIVI R{}, R{}, {}", instr.word1, instr.word2, instr.word3),
             0x1F => eprintln!("MODI R{}, R{}, {}", instr.word1, instr.word2, instr.word3),
+            0x20 => eprintln!("LOADC R{}, R{} (bank), R{} (addr)", instr.word1, instr.word2, instr.word3),
+            0x21 => eprintln!("STORC R{}, R{} (bank), R{} (addr)", instr.word1, instr.word2, instr.word3),
             _ => eprintln!("UNKNOWN 0x{:02X}", instr.opcode),
         }
     }

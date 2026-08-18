@@ -1,0 +1,9 @@
+{
+  "description": "Interactive one-line Brainfuck interpreter (TTY)",
+  "use_runtime": true,
+  "visual": false,
+  "display": "tty",
+  "disk": false,
+  "runner": "c",
+  "expected": "manual"
+}

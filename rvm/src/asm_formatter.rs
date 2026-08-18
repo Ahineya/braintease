@@ -28,7 +28,8 @@ pub fn format_instruction_spans(
         },
         Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or) | 
         Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt) | 
-        Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod) => {
+        Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod) |
+        Some(Opcode::Loadc) | Some(Opcode::Storc) => {
             // R-type: op rd, rs, rt
             spans.push(Span::styled(format!("{opcode_str:<6} "), opcode_style));
             spans.push(Span::styled(register_name(instr.word1 as u8), Style::default().fg(Color::Rgb(0, 200, 0)))); // Dark green
@@ -142,7 +143,7 @@ pub fn get_instruction_style(instr: &Instr) -> Style {
             // Jump and branch instructions
             Style::default().fg(Color::Yellow)
         },
-        Some(Opcode::Load) | Some(Opcode::Store) => {
+        Some(Opcode::Load) | Some(Opcode::Store) | Some(Opcode::Loadc) | Some(Opcode::Storc) => {
             // Memory operations
             Style::default().fg(Color::Blue)
         },
@@ -195,7 +196,7 @@ pub fn format_asm_line(line: &str) -> Vec<Span<'static>> {
             Style::default().fg(Color::Yellow)
         },
         // Memory operations
-        "load" | "store" | "li" => {
+        "load" | "store" | "li" | "loadc" | "storc" => {
             Style::default().fg(Color::Blue)
         },
         // Arithmetic and logical

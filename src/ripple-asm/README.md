@@ -133,8 +133,10 @@ R13 and R14 are often used as stack and frame pointers by convention.
 
 #### Memory Instructions
 - `LI rd, imm` - Load immediate
-- `LOAD rd, bank, addr` - Load from memory
-- `STORE rs, bank, addr` - Store to memory
+- `LOAD rd, bank, addr` - Load from data memory
+- `STORE rs, bank, addr` - Store to data memory
+- `LOADC R0, bank, addr` - Load 4 instruction cells from IMEM[bank][addr] into X0..X3 (registers only)
+- `STORC R0, bank, addr` - Store X0..X3 to 4 instruction cells at IMEM[bank][addr] (registers only)
 
 #### Control Flow
 - `JAL rd, target` - Jump and link (absolute)

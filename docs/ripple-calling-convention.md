@@ -158,6 +158,13 @@ Where:
 - `bankReg`: Register containing bank ID (R13 for stack, R0 for globals, or dynamic)
 - `addrReg`: Register containing address
 
+### Instruction Memory Copies
+```asm
+LOADC R0, bankReg, addrReg
+STORC R0, bankReg, addrReg
+```
+Copies one instruction (4 cells) between IMEM[bank][addr] and X0–X3. Bank and address are registers; the first operand is unused.
+
 ### Pointer Arithmetic (GEP)
 - **CRITICAL**: Address arithmetic must respect bank boundaries
 - Bank register must be preserved through arithmetic
@@ -304,8 +311,10 @@ JAL   bankImm, addrImm  ; Direct tail call
 
 #### Memory Instructions
 - **LI** (0x0E): `rd = imm` - I1-format (load immediate)
-- **LOAD** (0x11): `rd = mem[bank][addr]` - I-format
-- **STORE** (0x12): `mem[bank][addr] = rs` - I-format
+- **LOAD** (0x11): `rd = mem[bank][addr]` - I-format (data memory)
+- **STORE** (0x12): `mem[bank][addr] = rs` - I-format (data memory)
+- **LOADC** (0x20): `X0..X3 = IMEM[bank][addr]` - R-format (instruction memory; registers only)
+- **STORC** (0x21): `IMEM[bank][addr] = X0..X3` - R-format (instruction memory; registers only)
 
 #### Control Flow Instructions
 - **JAL** (0x13): Jump and link (sets RA/RAB) - I-format

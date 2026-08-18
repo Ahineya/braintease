@@ -37,6 +37,8 @@ pub enum Opcode {
     Muli = 0x1D,
     Divi = 0x1E,
     Modi = 0x1F,
+    Loadc = 0x20,
+    Storc = 0x21,
 }
 
 impl Opcode {
@@ -74,6 +76,8 @@ impl Opcode {
             "MULI" => Some(Opcode::Muli),
             "DIVI" => Some(Opcode::Divi),
             "MODI" => Some(Opcode::Modi),
+            "LOADC" => Some(Opcode::Loadc),
+            "STORC" => Some(Opcode::Storc),
             _ => None,
         }
     }
@@ -112,6 +116,8 @@ impl Opcode {
             0x1D => Some(Opcode::Muli),
             0x1E => Some(Opcode::Divi),
             0x1F => Some(Opcode::Modi),
+            0x20 => Some(Opcode::Loadc),
+            0x21 => Some(Opcode::Storc),
             _ => None,
         }
     }
@@ -150,6 +156,8 @@ impl Opcode {
             Opcode::Muli => "MULI",
             Opcode::Divi => "DIVI",
             Opcode::Modi => "MODI",
+            Opcode::Loadc => "LOADC",
+            Opcode::Storc => "STORC",
         }
     }
 
@@ -158,7 +166,7 @@ impl Opcode {
             "NOP", "ADD", "SUB", "AND", "OR", "XOR", "SLL", "SRL", "SLT", "SLTU",
             "ADDI", "ANDI", "ORI", "XORI", "LI", "SLLI", "SRLI", "LOAD", "STORE",
             "JAL", "JALR", "BEQ", "BNE", "BLT", "BGE", "BRK", "MUL", "DIV", "MOD",
-            "MULI", "DIVI", "MODI"
+            "MULI", "DIVI", "MODI", "LOADC", "STORC"
         ]
     }
 
@@ -166,7 +174,8 @@ impl Opcode {
         match self {
             Opcode::Nop | Opcode::Add | Opcode::Sub | Opcode::And | Opcode::Or | 
             Opcode::Xor | Opcode::Sll | Opcode::Srl | Opcode::Slt | Opcode::Sltu | 
-            Opcode::Jalr | Opcode::Brk | Opcode::Mul | Opcode::Div | Opcode::Mod => InstructionFormat::R,
+            Opcode::Jalr | Opcode::Brk | Opcode::Mul | Opcode::Div | Opcode::Mod |
+            Opcode::Loadc | Opcode::Storc => InstructionFormat::R,
             
             Opcode::Addi | Opcode::Andi | Opcode::Ori | Opcode::Xori | 
             Opcode::Slli | Opcode::Srli | Opcode::Load | Opcode::Store | 
