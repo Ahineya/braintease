@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "use_runtime": true,
+  "description": "Local tagged struct defined with a variable, then used via struct S *"
+}

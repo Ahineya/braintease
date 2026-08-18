@@ -238,6 +238,7 @@ impl StatementAnalyzer {
     ) -> Result<(), CompilerError> {
         // Handle typedef specially - it defines a type alias, not a variable
         if decl.storage_class == StorageClass::Typedef {
+            self.expression_analyzer.borrow().type_analyzer.borrow().register_complete_type_from_decl(&decl.decl_type);
             // Resolve the type first
             
             decl.decl_type = self.expression_analyzer.borrow().type_analyzer.borrow().resolve_type(&decl.decl_type);
@@ -255,6 +256,9 @@ impl StatementAnalyzer {
             }.into());
         }
         
+        // `struct S { int x; } s;` defines tag S as well as the object.
+        self.expression_analyzer.borrow().type_analyzer.borrow().register_complete_type_from_decl(&decl.decl_type);
+
         // Don't resolve typedef types here - preserve them for proper type checking
         // Only resolve struct/union/enum references that need to be looked up
         decl.decl_type = self.expression_analyzer.borrow().type_analyzer.borrow().resolve_struct_references(&decl.decl_type);

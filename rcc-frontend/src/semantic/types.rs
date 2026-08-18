@@ -551,8 +551,66 @@ impl TypeAnalyzer {
         Ok(())
     }
 
+    /// Record a complete tagged struct/union/enum from a declaration.
+    ///
+    /// `struct S { int x; int y; } s;` defines the tag as a side effect of
+    /// declaring `s`. Later `struct S *p;` is parsed as an incomplete
+    /// reference and must find that definition. File-scope
+    /// `struct S { ... };` already goes through `register_type_definition`.
+    pub fn register_complete_type_from_decl(&self, ty: &Type) {
+        match ty {
+            Type::Struct { name: Some(name), fields } if !fields.is_empty() => {
+                {
+                    let mut defs = self.type_definitions.borrow_mut();
+                    let replace = match defs.get(name) {
+                        None => true,
+                        Some(Type::Struct { fields: existing, .. }) if existing.is_empty() => true,
+                        _ => false,
+                    };
+                    if replace {
+                        defs.insert(name.clone(), ty.clone());
+                    }
+                }
+                for field in fields {
+                    self.register_complete_type_from_decl(&field.field_type);
+                }
+            }
+            Type::Union { name: Some(name), fields } if !fields.is_empty() => {
+                {
+                    let mut defs = self.type_definitions.borrow_mut();
+                    let replace = match defs.get(name) {
+                        None => true,
+                        Some(Type::Union { fields: existing, .. }) if existing.is_empty() => true,
+                        _ => false,
+                    };
+                    if replace {
+                        defs.insert(name.clone(), ty.clone());
+                    }
+                }
+                for field in fields {
+                    self.register_complete_type_from_decl(&field.field_type);
+                }
+            }
+            Type::Enum { name: Some(name), variants } if !variants.is_empty() => {
+                let mut defs = self.type_definitions.borrow_mut();
+                let replace = match defs.get(name) {
+                    None => true,
+                    Some(Type::Enum { variants: existing, .. }) if existing.is_empty() => true,
+                    _ => false,
+                };
+                if replace {
+                    defs.insert(name.clone(), ty.clone());
+                }
+            }
+            Type::Pointer { target, .. } => self.register_complete_type_from_decl(target),
+            Type::Array { element_type, .. } => self.register_complete_type_from_decl(element_type),
+            _ => {}
+        }
+    }
+
     /// Register a typedef
     pub fn register_typedef(&mut self, decl: &mut Declaration) -> Result<(), CompilerError> {
+        self.register_complete_type_from_decl(&decl.decl_type);
         // Resolve the type first
         decl.decl_type = self.resolve_type(&decl.decl_type);
         // Register this as a type definition
@@ -574,6 +632,8 @@ impl TypeAnalyzer {
                 ));
             }
         }
+
+        self.register_complete_type_from_decl(&decl.decl_type);
 
         // Check if symbol already exists - borrow once and reuse
         let symbol_table_borrow = self.symbol_table.borrow();

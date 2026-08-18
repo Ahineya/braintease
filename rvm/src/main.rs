@@ -64,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tui_mode = cli.tui;
     let verbose = cli.verbose;
     let visual_mode = cli.visual;
+    let propagate_exit_code = cli.exit_code;
     let disk_path = cli.disk.clone();
     let file_path = cli.binary_file;
     
@@ -126,6 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     // Run the VM
+    let mut guest_exit: Option<i32> = None;
     let vm_moved_to_arc = if visual_mode {
         // Visual mode: run VM in background thread, display on main thread
         eprintln!("Starting in visual mode...");
@@ -258,6 +260,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Runtime error: {e}");
             process::exit(1);
         }
+        if propagate_exit_code {
+            let status = (vm.registers[ripple_asm::Register::Rv0 as usize] as i32) & 0xff;
+            if status != 0 {
+                guest_exit = Some(status);
+            }
+        }
         false // VM not moved to Arc
     };
     
@@ -267,13 +275,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Execution completed");
     }
     
-    // Explicitly ensure terminal is restored before exit
-    // This handles cases where Drop might not be called
-    let _ = terminal::disable_raw_mode();
-    let _ = io::stderr().execute(cursor::Show);
-    let _ = io::stderr().execute(terminal::LeaveAlternateScreen);
-    let _ = io::stderr().execute(ResetColor);
-    let _ = io::stderr().flush();
+    // Restore the host terminal only if we actually took it over.
+    // Unconditional LeaveAlternateScreen writes CSI sequences to stderr
+    // and pollutes captured test output.
+    if tui_mode || debug_mode || visual_mode {
+        let _ = terminal::disable_raw_mode();
+        let _ = io::stderr().execute(cursor::Show);
+        let _ = io::stderr().execute(terminal::LeaveAlternateScreen);
+        let _ = io::stderr().execute(ResetColor);
+        let _ = io::stderr().flush();
+    }
+
+    if let Some(status) = guest_exit {
+        process::exit(status);
+    }
     
     Ok(())
 }

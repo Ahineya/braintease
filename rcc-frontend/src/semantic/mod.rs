@@ -291,6 +291,23 @@ int main() {
     }
 
     #[test]
+    fn test_local_tagged_struct_visible_to_later_pointer() {
+        let source = r#"
+int main() {
+    struct S { int x; int y; } s;
+    struct S *p;
+    p = &s;
+    s.x = 1;
+    p->y = 2;
+    return p->y + p->x - 3;
+}
+"#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        assert!(analyzer.analyze(&mut ast).is_ok());
+    }
+
+    #[test]
     fn test_extern_then_tentative_definition_allowed() {
         let source = r#"
 extern unsigned short cur_hi;

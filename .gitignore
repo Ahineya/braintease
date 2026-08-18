@@ -33,3 +33,5 @@ __pycache__
 
 electron-dist
 public/downloads
+
+c-test/vendor

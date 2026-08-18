@@ -53,6 +53,11 @@ pub struct Cli {
     /// Path to disk image file for storage (default: ~/.RippleVM/disk.img)
     #[arg(long)]
     pub disk: Option<PathBuf>,
+
+    /// After HALT, exit with main()'s return value in RV0 (low 8 bits).
+    /// Used by the c-testsuite runner so `return 1` fails the test.
+    #[arg(long)]
+    pub exit_code: bool,
 }
 
 impl Cli {
