@@ -183,21 +183,21 @@ L_make_fat_ptr_4:
     LOAD T6, SB, S2
 ; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI S1, -1
-    BEQ T6, S1, L_bc_0ad8efa6_use_global
+    BEQ T6, S1, L_bc_0cc6e7a5_use_global
 ; Spill t7 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 15
     STORE T4, SB, SC
     LI T4, -2
-    BEQ T6, T4, L_bc_0ad8efa6_use_stack
+    BEQ T6, T4, L_bc_0cc6e7a5_use_stack
     ADD S2, T6, R0
-    BEQ R0, R0, L_bc_0ad8efa6_done
-L_bc_0ad8efa6_use_global:
+    BEQ R0, R0, L_bc_0cc6e7a5_done
+L_bc_0cc6e7a5_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_0ad8efa6_done
-L_bc_0ad8efa6_use_stack:
+    BEQ R0, R0, L_bc_0cc6e7a5_done
+L_bc_0cc6e7a5_use_stack:
     ADD S2, SB, R0
-L_bc_0ad8efa6_done:
+L_bc_0cc6e7a5_done:
     MOVE RV0, S3
     MOVE RV1, S2
 ; Jump to epilogue
@@ -1253,17 +1253,17 @@ L_calloc_40:
     LOAD T6, SB, T2
 ; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
     LI T7, -1
-    BEQ T6, T7, L_bc_5f315d7c_use_global
+    BEQ T6, T7, L_bc_85b86c08_use_global
     LI S2, -2
-    BEQ T6, S2, L_bc_5f315d7c_use_stack
+    BEQ T6, S2, L_bc_85b86c08_use_stack
     ADD S3, T6, R0
-    BEQ R0, R0, L_bc_5f315d7c_done
-L_bc_5f315d7c_use_global:
+    BEQ R0, R0, L_bc_85b86c08_done
+L_bc_85b86c08_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_5f315d7c_done
-L_bc_5f315d7c_use_stack:
+    BEQ R0, R0, L_bc_85b86c08_done
+L_bc_85b86c08_use_stack:
     ADD S3, SB, R0
-L_bc_5f315d7c_done:
+L_bc_85b86c08_done:
     MOVE RV0, T0
     MOVE RV1, S3
 ; Jump to epilogue

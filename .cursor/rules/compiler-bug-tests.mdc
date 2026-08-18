@@ -1,0 +1,17 @@
+---
+description: When a compiler bug blocks a task, write a red rct test immediately before continuing
+alwaysApply: true
+---
+
+# Compiler bugs: red test first
+
+If a compiler bug, miscompile, or wrong diagnostic **blocks the task** (you cannot implement the requested behavior the straightforward way, or you need a workaround in runtime/user code):
+
+1. **Stop and write a focused rct test** that states the *correct* C behavior (Y/N asserts, expected all-Y output).
+2. Put open defects in `c-test/tests/bugs/`. Add with `./rct add tests/bugs/test_name.c "Y\\n" -d "..."`.
+3. **Run it and confirm it is RED** (`FAILED` or `COMPILATION ERROR`). If it is green, the hypothesis is wrong — do not keep it in `bugs/`.
+4. Then continue the original task (workaround is fine). Do not only workaround and move on.
+
+Do **not** file these as known-failures. They must fail loudly until the compiler is fixed.
+
+Contrast: `c-test/tests/runtime/test_va_arg_ptr.c` is a tiny passing control. `c-test/tests/bugs/test_va_arg_int_ptr_const.c` is the same store in a larger function and is red.

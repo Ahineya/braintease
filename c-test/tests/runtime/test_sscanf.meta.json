@@ -1,0 +1,5 @@
+{
+  "description": "sscanf %c %d %s %x %i and EOF",
+  "expected": "YYYYYYYYYY\n",
+  "use_runtime": true
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Read a character with scanf and print its ASCII value (interactive TTY)",
+  "use_runtime": true,
+  "visual": false,
+  "display": "tty",
+  "disk": false,
+  "runner": "c",
+  "expected": "manual"
+}

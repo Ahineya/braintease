@@ -1,0 +1,5 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "va_arg(int*) store inside large callee after ulong work"
+}
