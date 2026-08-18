@@ -238,6 +238,126 @@ static void store_int_arg(int v) {
     *ip = v;
 }
 
+static void store_float_arg(float v) {
+    float *fp;
+    fp = va_arg(g_ap, float *);
+    *fp = v;
+}
+
+static void store_double_arg(double v) {
+    double *dp;
+    dp = va_arg(g_ap, double *);
+    *dp = v;
+}
+
+static double g_scan_dbl;
+
+static int scan_double(struct ScanSrc *src) {
+    int c;
+    int neg;
+    int saw;
+    int exp_neg;
+    int expv;
+    int i;
+    double val;
+    double place;
+
+    if (skip_ws(src) == EOF) {
+        return -1;
+    }
+
+    neg = 0;
+    c = src_getc(src);
+    if (c == EOF) {
+        return -1;
+    }
+    if (c == '-' || c == '+') {
+        if (c == '-') {
+            neg = 1;
+        }
+        c = src_getc(src);
+        if (c == EOF) {
+            return -1;
+        }
+    }
+
+    val = 0.0;
+    saw = 0;
+    while (c >= '0' && c <= '9') {
+        val = val * 10.0 + (double)(c - '0');
+        saw = 1;
+        c = src_getc(src);
+        if (c == EOF) {
+            c = EOF;
+            break;
+        }
+    }
+    if (c == '.') {
+        c = src_getc(src);
+        place = 0.1;
+        while (c >= '0' && c <= '9') {
+            val = val + (double)(c - '0') * place;
+            place = place * 0.1;
+            saw = 1;
+            c = src_getc(src);
+            if (c == EOF) {
+                c = EOF;
+                break;
+            }
+        }
+    }
+    if (c == 'e' || c == 'E') {
+        exp_neg = 0;
+        c = src_getc(src);
+        if (c == '-' || c == '+') {
+            if (c == '-') {
+                exp_neg = 1;
+            }
+            c = src_getc(src);
+        }
+        expv = 0;
+        i = 0;
+        while (c >= '0' && c <= '9') {
+            expv = expv * 10 + (c - '0');
+            i = 1;
+            c = src_getc(src);
+            if (c == EOF) {
+                c = EOF;
+                break;
+            }
+        }
+        if (i) {
+            if (expv > 38) {
+                expv = 38;
+            }
+            if (exp_neg) {
+                i = 0;
+                while (i < expv) {
+                    val = val / 10.0;
+                    i = i + 1;
+                }
+            } else {
+                i = 0;
+                while (i < expv) {
+                    val = val * 10.0;
+                    i = i + 1;
+                }
+            }
+        }
+    }
+    if (c != EOF) {
+        src_ungetc(src, c);
+    }
+    if (!saw) {
+        return 0;
+    }
+    if (neg) {
+        val = 0.0 - val;
+    }
+    g_scan_dbl = val;
+    return 1;
+}
+
 static int scan_fmt(struct ScanSrc *src, char *fmt) {
     int assigned;
     int long_mod;
@@ -366,6 +486,20 @@ static int scan_fmt(struct ScanSrc *src, char *fmt) {
                     iv = (int)g_scan_mag;
                 }
                 store_int_arg(iv);
+            }
+            assigned = assigned + 1;
+        } else if (*fmt == 'f' || *fmt == 'F' || *fmt == 'e' || *fmt == 'E' || *fmt == 'g' || *fmt == 'G') {
+            r = scan_double(src);
+            if (r < 0) {
+                return assigned == 0 ? EOF : assigned;
+            }
+            if (r == 0) {
+                return assigned;
+            }
+            if (long_mod == 1) {
+                store_double_arg(g_scan_dbl);
+            } else {
+                store_float_arg((float)g_scan_dbl);
             }
             assigned = assigned + 1;
         } else {

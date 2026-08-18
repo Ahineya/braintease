@@ -1,0 +1,5 @@
+{
+  "expected": "12.50\n3.75\n-3.00\n1.000000\n0.00\n",
+  "description": "printf %f and %.2f",
+  "use_runtime": true
+}

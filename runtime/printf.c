@@ -144,11 +144,81 @@ static int print_longlong(long long n) {
     return print_ulonglong((unsigned long long)n, 10, 0);
 }
 
+static int print_double(double x, int prec) {
+    long long ip;
+    double frac;
+    double scale;
+    int i;
+    int n;
+    int d;
+
+    if (x != x) {
+        return print_str("nan");
+    }
+    n = 0;
+    if (x < 0.0) {
+        n = n + print_char('-');
+        x = 0.0 - x;
+    }
+    if (x != 0.0 && x + x == x) {
+        return n + print_str("inf");
+    }
+    if (prec < 0) {
+        prec = 6;
+    }
+    if (prec > 12) {
+        prec = 12;
+    }
+
+    scale = 1.0;
+    i = 0;
+    while (i < prec) {
+        scale = scale * 10.0;
+        i = i + 1;
+    }
+    if (prec > 0) {
+        x = x + 0.5 / scale;
+    } else {
+        x = x + 0.5;
+    }
+
+    ip = (long long)x;
+    frac = x - (double)ip;
+    if (frac < 0.0) {
+        frac = 0.0;
+    }
+    if (frac >= 1.0) {
+        ip = ip + 1;
+        frac = frac - 1.0;
+    }
+
+    n = n + print_longlong(ip);
+    if (prec > 0) {
+        n = n + print_char('.');
+        i = 0;
+        while (i < prec) {
+            frac = frac * 10.0;
+            d = (int)frac;
+            if (d < 0) {
+                d = 0;
+            }
+            if (d > 9) {
+                d = 9;
+            }
+            n = n + print_char((char)('0' + d));
+            frac = frac - (double)d;
+            i = i + 1;
+        }
+    }
+    return n;
+}
+
 int printf(char *fmt, ...) {
     va_list ap;
     char *p;
     int count;
     int long_mod;
+    int prec;
 
     va_start(ap, fmt);
     p = fmt;
@@ -157,6 +227,38 @@ int printf(char *fmt, ...) {
     while (*p) {
         if (*p == '%') {
             p = p + 1;
+            if (*p == 0) {
+                count = count + print_char('%');
+                break;
+            }
+            while (*p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0') {
+                p = p + 1;
+                if (*p == 0) {
+                    break;
+                }
+            }
+            while (*p >= '0' && *p <= '9') {
+                p = p + 1;
+                if (*p == 0) {
+                    break;
+                }
+            }
+            prec = -1;
+            if (*p == '.') {
+                p = p + 1;
+                prec = 0;
+                if (*p == 0) {
+                    count = count + print_char('%');
+                    break;
+                }
+                while (*p >= '0' && *p <= '9') {
+                    prec = prec * 10 + (*p - '0');
+                    p = p + 1;
+                    if (*p == 0) {
+                        break;
+                    }
+                }
+            }
             if (*p == 0) {
                 count = count + print_char('%');
                 break;
@@ -227,6 +329,10 @@ int printf(char *fmt, ...) {
                 break;
             case '%':
                 count = count + print_char('%');
+                break;
+            case 'f':
+            case 'F':
+                count = count + print_double(va_arg(ap, double), prec);
                 break;
             default:
                 count = count + print_char('%');

@@ -1,0 +1,5 @@
+{
+  "description": "sscanf %lf %f and exponent",
+  "expected": "YYYYY\n",
+  "use_runtime": true
+}

@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "use_runtime": true,
+  "description": "va_arg double value and double*"
+}
