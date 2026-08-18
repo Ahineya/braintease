@@ -21,7 +21,10 @@ impl VM {
                 if !self.tty_input_enabled && !self.debug_mode && !self.verbose {
                     self.enable_tty_input();
                 }
-                
+                if !self.debug_mode && !self.verbose {
+                    self.poll_stdin();
+                }
+
                 // Pop a byte from input buffer
                 let value = if let Some(byte) = self.input_buffer.pop_front() {
                     byte as u16
@@ -37,7 +40,14 @@ impl VM {
                 if !self.tty_input_enabled && !self.debug_mode && !self.verbose {
                     self.enable_tty_input();
                 }
-                
+                if !self.debug_mode && !self.verbose {
+                    self.poll_stdin();
+                    if self.stdout_dirty {
+                        let _ = std::io::Write::flush(&mut std::io::stdout());
+                        self.stdout_dirty = false;
+                    }
+                }
+
                 let value = if !self.input_buffer.is_empty() { TTY_HAS_BYTE } else { 0 };
                 self.memory[HDR_TTY_IN_STATUS] = value;
                 Some(value)
@@ -177,22 +187,25 @@ impl VM {
                 // Output low byte to stdout
                 let byte = (value & 0xFF) as u8;
                 
-                // Print immediately to stdout for real-time effect
                 use std::io::{self, Write};
                 
                 // If we're in raw mode and outputting a newline, also output carriage return
                 if self.tty_input_enabled && byte == b'\n' {
-                    // Output \r\n for proper line ending in raw mode
                     let _ = io::stdout().write_all(b"\r\n");
                 } else {
                     let _ = io::stdout().write_all(&[byte]);
                 }
-                let _ = io::stdout().flush();
+                // Flush on line endings so listings appear promptly, without a
+                // kernel round-trip for every printf character.
+                if byte == b'\n' || byte == b'\r' {
+                    let _ = io::stdout().flush();
+                    self.stdout_dirty = false;
+                } else {
+                    self.stdout_dirty = true;
+                }
                 
-                // Also store in buffer for compatibility
                 self.output_buffer.push_back(byte);
                 self.output_ready = false;
-                // Simulate output delay (will be set ready in next cycle)
                 true
             },
             HDR_TTY_STATUS => true, // Read-only, ignore write

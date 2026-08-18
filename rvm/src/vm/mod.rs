@@ -47,6 +47,7 @@ pub struct VM {
     // Output buffer for I/O
     pub output_buffer: VecDeque<u8>,
     output_ready: bool,
+    stdout_dirty: bool,
     
     // Input buffer for TTY_IN
     pub input_buffer: VecDeque<u8>,
@@ -121,6 +122,7 @@ impl VM {
             skip_pc_increment: false,
             output_buffer: VecDeque::new(),
             output_ready: true,
+            stdout_dirty: false,
             input_buffer: VecDeque::new(),
             tty_input_enabled: false,
             rng_state: 0x12345678,  // Fixed seed for reproducibility
@@ -306,14 +308,9 @@ impl VM {
             VMState::Setup => return Err("VM not initialized".to_string()),
         }
         
-        // Poll stdin for TTY input (non-blocking) - always poll when not in debug/verbose mode
-        // This populates the input buffer for TTY_IN_POP/TTY_IN_STATUS
-        if !self.debug_mode && !self.verbose {
-            self.poll_stdin();
-        }
-        
-        // DON'T poll keyboard here - only poll when actually reading keyboard MMIO
-        
+        // Keyboard/TTY input is polled from MMIO reads (TTY_IN_STATUS / KEY_*),
+        // not every instruction — crossterm event::poll is a syscall.
+
         // Calculate instruction address
         let pc = self.registers[Register::Pc as usize];
         let pcb = self.registers[Register::Pcb as usize];
@@ -409,6 +406,7 @@ impl VM {
         self.output_buffer.clear();
         self.input_buffer.clear();
         self.output_ready = true;
+        self.stdout_dirty = false;
         
         // Disable TTY input if it was enabled
         if self.tty_input_enabled {
