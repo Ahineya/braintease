@@ -791,15 +791,7 @@
 
 // MARK: ---------- Instructions ---------
 
-#define _jump_to_bank_addr {
-  // START JTADDR, addr is word[-2] for BANK, word[-3] for ADDR
-
-  // Algo:
-  // REG_ZONE_W
-  // + PCB * BANK_SIZE * CMD_SIZE
-  // + PC  * CMD_SIZE
-
-  // 1. Copy fastlane to PTR. Now fastlane can be freely changed
+#define _copy_fastlane_to_ptr {
   @prevword
   @fl(
     [
@@ -812,6 +804,18 @@
 
   @nextword
   @goto_ptr_end
+}
+
+#define _jump_to_bank_addr {
+  // START JTADDR, addr is word[-2] for BANK, word[-3] for ADDR
+
+  // Algo:
+  // REG_ZONE_W
+  // + PCB * BANK_SIZE * CMD_SIZE
+  // + PC  * CMD_SIZE
+
+  // 1. Copy fastlane to PTR. Now fastlane can be freely changed
+  @_copy_fastlane_to_ptr
 
   // Clean the fastlane
   @prevword
