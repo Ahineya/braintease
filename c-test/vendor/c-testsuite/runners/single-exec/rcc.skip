@@ -1,7 +1,8 @@
 #! /bin/sh
 
-# Tests that can never pass on Ripple: headers the runtime does not provide.
-# Paths must match the names `./single-exec` feeds to the runner.
+# Tests that can never pass on Ripple. Paths must match the names
+# `./single-exec` feeds to the runner.
+# Categorized in docs/c-testsuite.md.
 
 if ! test -f README.md
 then
@@ -9,7 +10,13 @@ then
     exit 1
 fi
 
-echo "./tests/single-exec/00174.c"
-echo "./tests/single-exec/00220.c"
-# `long double` is not a distinct type on this target yet.
-echo "./tests/single-exec/00204.c"
+# Missing system headers
+echo "./tests/single-exec/00174.c"   # math.h
+echo "./tests/single-exec/00220.c"   # wchar.h
+
+# Data model / ABI: expected files assume 32-bit int or a host LP* ABI
+echo "./tests/single-exec/00204.c"   # long double (not a distinct type)
+echo "./tests/single-exec/00166.c"   # 32-bit int constants printed with %d
+echo "./tests/single-exec/00168.c"   # factorial(10) overflows 16-bit int
+echo "./tests/single-exec/00178.c"   # sizeof(int)==4, sizeof(!x)==4
+echo "./tests/single-exec/00212.c"   # only __ILP32__/__LP64__/__LLP64__
