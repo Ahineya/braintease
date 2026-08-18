@@ -41,10 +41,10 @@ __ld8:
     BNE  T0, R0, __ld8_hi
     ANDI Rv0, T1, 0x00FF
     BEQ  R0, R0, __ld8_done
-    __ld8_hi:
+__ld8_hi:
     SRLI Rv0, T1, 8
     ANDI Rv0, Rv0, 0x00FF
-    __ld8_done:
+__ld8_done:
 ; Jump to epilogue
     BEQ R0, R0, L___ld8_99999
 L___ld8_99999:
@@ -120,12 +120,12 @@ L___st8_1:
     ANDI T0, A2, 0x00FF
     OR   T1, T1, T0
     BEQ  R0, R0, __st8_store
-    __st8_hi:
+__st8_hi:
     ANDI T1, T1, 0x00FF
     ANDI T0, A2, 0x00FF
     SLLI T0, T0, 8
     OR   T1, T1, T0
-    __st8_store:
+__st8_store:
     SRLI T0, A1, 1
     STORE T1, A0, T0
 ; Jump to epilogue

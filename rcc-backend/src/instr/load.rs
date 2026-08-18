@@ -7,7 +7,7 @@ use rcc_frontend::ir::{Value, IrType as Type};
 use rcc_common::TempId;
 use crate::regmgmt::{RegisterPressureManager, BankInfo, BankTagValue};
 use crate::naming::NameGenerator;
-use rcc_codegen::AsmInst;
+use rcc_codegen::{AsmInst, emit_addr_constant};
 use log::{debug, trace, warn};
 use rcc_frontend::BankTag;
 use super::helpers::{resolve_bank_tag_to_info, get_bank_register_with_runtime_check_safe};
@@ -55,7 +55,12 @@ pub fn lower_load(
                     // Load constant address into register
                     let temp_reg_name = naming.load_const_addr(result_temp);
                     let temp_reg = mgr.get_register(temp_reg_name);
-                    insts.push(AsmInst::Li(temp_reg, *c as i16));
+                    insts.extend(emit_addr_constant(
+                        temp_reg,
+                        *c as i16,
+                        matches!(fp.bank, BankTag::Global),
+                        mgr.gp_base_label(),
+                    ));
                     trace!("  Loaded constant address {c} into {temp_reg:?}");
                     temp_reg
                 }

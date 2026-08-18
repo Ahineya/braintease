@@ -1,8 +1,8 @@
 # C Doom TITLEPIC demo
 #
 # wad.c / mem.c / picture.c are included from doom-fixed.c and compiled as
-# one translation unit. rcc assigns each separately compiled file's globals
-# from address 0, so linking multiple C objects would overlap in GP.
+# one translation unit. Cross-object C globals now get concatenated GP
+# ranges, but Doom still uses a single TU for include-path convenience.
 #
 # Usage:
 #   make

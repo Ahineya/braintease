@@ -17,9 +17,9 @@
     @addi(t0, t1, 8)
     @add(t0, t0, s1)
 
-    @let(x0, @call2(storage_read_at, @reg, s0, @reg, t0))
+    @let(x0, @call2(storage_read_byte, @reg, s0, @reg, t0))
     @inc(t0)
-    @let(x1, @call2(storage_read_at, @reg, s0, @reg, t0))
+    @let(x1, @call2(storage_read_byte, @reg, s0, @reg, t0))
 
     @xori(x0, x0, 'T') @a({:; if (x0 == 'T' && x1 == 'I') })
     @xori(x1, x1, 'I')
@@ -46,16 +46,16 @@
 )
 
 @proc(iwad,
-  @call2(storage_read_at, @imm, 0, @imm, 0)
+  @call2(storage_read_byte, @imm, 0, @imm, 0)
   @call1(putchar, @reg, rv0)
 
-  @call2(storage_read_at, @imm, 0, @imm, 1)
+  @call2(storage_read_byte, @imm, 0, @imm, 1)
   @call1(putchar, @reg, rv0)
 
-  @call2(storage_read_at, @imm, 0, @imm, 2)
+  @call2(storage_read_byte, @imm, 0, @imm, 2)
   @call1(putchar, @reg, rv0)
 
-  @call2(storage_read_at, @imm, 0, @imm, 3)
+  @call2(storage_read_byte, @imm, 0, @imm, 3)
   @call1(putchar, @reg, rv0)
 
   @lbrk

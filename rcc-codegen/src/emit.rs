@@ -33,8 +33,14 @@ pub fn emit_instructions(instructions: Vec<AsmInst>) -> Result<String, CodegenEr
                 output.push_str(&format!("{instruction}\n"));
             }
             AsmInst::Raw(ref asm) => {
-                // Raw assembly passes through with indentation
-                output.push_str(&format!("    {asm}\n"));
+                // Directives and data labels must not be indented; inline asm stays indented.
+                let trimmed = asm.trim_start();
+                if trimmed.starts_with('.') || trimmed.ends_with(':') {
+                    output.push_str(trimmed);
+                    output.push('\n');
+                } else {
+                    output.push_str(&format!("    {asm}\n"));
+                }
             }
             _ => {
                 // Regular instructions are indented

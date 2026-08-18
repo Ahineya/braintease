@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, VecDeque};
 use rcc_codegen::{AsmInst, Reg};
 use rcc_common::TempId;
 use rcc_frontend::ir::{BasicBlock, Instruction, Value, IrBinaryOp};
+use rcc_frontend::BankTag;
 use super::allocator::{RegAllocV2, ALLOCATABLE_REGISTERS};
 use super::bank::BankInfo;
 use log::{debug, trace};
@@ -97,6 +98,9 @@ pub struct RegisterPressureManager {
     /// Nested pin/unpin is refcounted so overlapping I64 words (e.g. shift
     /// amount in `a[0]`) stay pinned until every holder unpins.
     pinned_registers: std::collections::BTreeMap<Reg, u32>,
+
+    /// Linker-relocatable base of this TU's GP data (None if the TU has no globals).
+    gp_base_label: Option<String>,
 }
 
 impl RegisterPressureManager {
@@ -126,6 +130,7 @@ impl RegisterPressureManager {
             fp32: std::collections::BTreeSet::new(),
             fp64: std::collections::BTreeSet::new(),
             pinned_registers: std::collections::BTreeMap::new(),
+            gp_base_label: None,
         }
     }
     
@@ -180,6 +185,16 @@ impl RegisterPressureManager {
             eprintln!("Function initialized with {} local slots", self.local_count);
             eprintln!("Spill slots will start at FP+{}", self.local_count);
         }
+    }
+
+    /// Set the relocatable GP base label for this translation unit.
+    pub fn set_gp_base_label(&mut self, label: Option<String>) {
+        self.gp_base_label = label;
+    }
+
+    /// Relocatable GP base label, if this TU emitted a `.data` block.
+    pub fn gp_base_label(&self) -> Option<&str> {
+        self.gp_base_label.as_deref()
     }
     
     /// Get the number of local slots this manager was initialized with
@@ -763,9 +778,20 @@ impl RegisterPressureManager {
                 reg
             }
             Value::FatPtr(ptr) => {
-                // Handle fat pointer - needs special handling
-                
-                // Bank would need separate handling
+                if matches!(ptr.bank, BankTag::Global) {
+                    if let Value::Constant(c) = ptr.addr.as_ref() {
+                        let reg = self.get_register(format!("gpoff_{c}"));
+                        if let Some(label) = &self.gp_base_label {
+                            self.instructions.push(AsmInst::LiLabel(reg, label.clone()));
+                            if *c != 0 {
+                                self.instructions.push(AsmInst::AddI(reg, reg, *c as i16));
+                            }
+                        } else {
+                            self.instructions.push(AsmInst::Li(reg, *c as i16));
+                        }
+                        return reg;
+                    }
+                }
                 self.get_value_register(&ptr.addr)
             }
             _ => {

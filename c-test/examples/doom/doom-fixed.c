@@ -1,11 +1,8 @@
 // C Doom TITLEPIC demo — parity with bfm-doom.bfm.
 //
-// Sources are split (wad.c, mem.c, picture.c, this file) but compiled as
-// one translation unit: rcc assigns each .c file's globals from address 0,
-// so separately compiled objects would overlap in GP.
-//
+// wad.c / mem.c / picture.c are #included and compiled as one translation unit.
 // Storage is 64KB blocks: file offset 0xHHHHhhhh = block 0xHHHH, byte 0xhhhh.
-// storage_read_at() returns one byte in the low 8 bits.
+// Each storage word holds two little-endian file bytes; wad.c unpacks them.
 // int is 16-bit, so 32-bit WAD offsets are (hi, lo) pairs.
 // TITLEPIC pixels live in bank 3, PLAYPAL RGB565 in bank 4 (heap is bank 5+).
 
@@ -44,25 +41,21 @@ int main() {
     int k;
 
     seek_to(0, 0);
-    putchar(read8());
-    putchar(read8());
-    putchar(read8());
-    putchar(read8());
-    br();
+    name[0] = read8();
+    name[1] = read8();
+    name[2] = read8();
+    name[3] = read8();
+    printf("%c%c%c%c\n", name[0], name[1], name[2], name[3]);
 
     seek_to(0, 4);
     lump_count = read16();
     lump_count_hi = read16();
-    puts("Lump count:");
-    print_uint(lump_count);
-    br();
+    printf("Lump count: %u\n", lump_count);
 
     seek_to(0, 8);
     dir_lo = read16();
     dir_hi = read16();
-    puts("Directory offset:");
-    print_hex32(dir_hi, dir_lo);
-    br();
+    printf("Directory offset: %x%x\n", dir_hi, dir_lo);
 
     found_pic = 0;
     found_pal = 0;
@@ -92,22 +85,17 @@ int main() {
             pic_hi = file_hi;
             pic_size_lo = size_lo;
             pic_size_hi = size_hi;
-            puts("Found TITLEPIC");
-            puts("TITLEPIC address:");
-            print_hex32(pic_hi, pic_lo);
-            br();
-            puts("TITLEPIC size:");
-            print_hex32(pic_size_hi, pic_size_lo);
-            br();
+            printf("Found TITLEPIC\n");
+            printf("TITLEPIC address: %x%x\n", pic_hi, pic_lo);
+            printf("TITLEPIC size: %x%x\n", pic_size_hi, pic_size_lo);
         }
 
         if (names_equal(name, "PLAYPAL")) {
             found_pal = 1;
             pal_lo = file_lo;
             pal_hi = file_hi;
-            puts("Found PLAYPAL");
-            print_hex32(pal_hi, pal_lo);
-            br();
+            printf("Found PLAYPAL\n");
+            printf("%x%x\n", pal_hi, pal_lo);
         }
 
         if (found_pic && found_pal) {
@@ -116,55 +104,42 @@ int main() {
     }
 
     if (!found_pic) {
-        puts("TITLEPIC not found");
+        printf("TITLEPIC not found\n");
         return 1;
     }
     if (!found_pal) {
-        puts("PLAYPAL not found");
+        printf("PLAYPAL not found\n");
         return 1;
     }
 
     seek_to(pic_hi, pic_lo);
     width = read16();
     height = read16();
-    puts("TITLEPIC dimensions:");
-    print_uint(width);
-    putchar('x');
-    print_uint(height);
-    br();
+    printf("TITLEPIC dimensions: %ux%u\n", width, height);
 
     seek_to(pic_hi, pic_lo);
     skip(8);
     col0 = read16();
-    puts("First column offset:");
-    print_uint(col0);
-    br();
+    printf("First column offset: %u\n", col0);
 
     if (lump_count_hi == 0 && lump_count == 1264 &&
         dir_hi == 0x003f && dir_lo == 0xb7b4 &&
         width == 320 && height == 200 && col0 == 1288) {
-        putchar('Y');
+        printf("Y\n");
     } else {
-        putchar('N');
+        printf("N\n");
     }
-    br();
 
-    puts("Loading TITLEPIC");
+    printf("Loading TITLEPIC\n");
     load_titlepic(pic_hi, pic_lo, width);
-    puts("pix0:");
-    print_hex16(peek_word(TITLEPIC_BANK, 0));
-    br();
-    puts("Loading PLAYPAL");
+    printf("pix0: %x\n", peek_word(TITLEPIC_BANK, 0));
+    printf("Loading PLAYPAL\n");
     load_playpal(pal_hi, pal_lo);
-    puts("pal0:");
-    print_hex16(peek_word(PALETTE_BANK, 0));
-    br();
-    puts("Resolving colors");
+    printf("pal0: %x\n", peek_word(PALETTE_BANK, 0));
+    printf("Resolving colors\n");
     resolve_titlepic_colors();
-    puts("pix0r:");
-    print_hex16(peek_word(TITLEPIC_BANK, 0));
-    br();
-    puts("Drawing");
+    printf("pix0r: %x\n", peek_word(TITLEPIC_BANK, 0));
+    printf("Drawing\n");
 
     graphics_init(SCREEN_WIDTH, SCREEN_HEIGHT);
 

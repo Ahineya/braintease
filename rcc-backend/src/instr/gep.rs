@@ -8,9 +8,10 @@ use super::helpers::resolve_bank_tag_to_info;
 use crate::naming::NameGenerator;
 use crate::regmgmt::{BankInfo, RegisterPressureManager};
 use log::{debug, trace, warn};
-use rcc_codegen::{AsmInst, Reg};
+use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use rcc_common::TempId;
 use rcc_frontend::ir::Value;
+use rcc_frontend::BankTag;
 // Use the bank size constant from V2 module
 // TODO: This should eventually be passed as a parameter from rcc-driver
 
@@ -96,7 +97,12 @@ pub fn lower_gep(
                     // Load constant into register
                     let temp_name = naming.gep_offset_temp(result_temp);
                     let temp_reg = mgr.get_register(temp_name);
-                    insts.push(AsmInst::Li(temp_reg, *c as i16));
+                    insts.extend(emit_addr_constant(
+                        temp_reg,
+                        *c as i16,
+                        matches!(fp.bank, BankTag::Global),
+                        mgr.gp_base_label(),
+                    ));
                     trace!("  Loaded constant base address {c} into {temp_reg:?}");
                     temp_reg
                 }

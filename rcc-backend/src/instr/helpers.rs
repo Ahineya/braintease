@@ -8,7 +8,7 @@ use rcc_frontend::BankTag;
 use crate::regmgmt::{RegisterPressureManager, BankInfo, BankTagValue};
 use crate::naming::NameGenerator;
 use crate::globals::GlobalManager;
-use rcc_codegen::{Reg, AsmInst};
+use rcc_codegen::{Reg, AsmInst, emit_addr_constant};
 use rcc_common::TempId;
 use log::warn;
 
@@ -461,7 +461,12 @@ pub fn get_pointer_address_and_name(
                     let temp_name = naming.const_for_temp(result_temp);
                     let reg = mgr.get_register(temp_name);
                     insts.extend(mgr.take_instructions());
-                    insts.push(AsmInst::Li(reg, *c as i16));
+                    insts.extend(emit_addr_constant(
+                        reg,
+                        *c as i16,
+                        matches!(fp.bank, BankTag::Global),
+                        mgr.gp_base_label(),
+                    ));
                     reg
                 }
                 Value::Global(_) => {

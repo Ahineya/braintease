@@ -87,6 +87,24 @@
   @retval(rv0, r0)
 )
 
+// File byte at (block, byte_addr): word byte_addr/2, low byte if even.
+@proc(storage_read_byte,
+  @mov(s0, @arg1)
+  @mov(s1, @arg2)
+  @srli(s3, s1, 1)
+  @andi(s2, s1, 1)
+  @let(s3, @call2(storage_read_at, @reg, s0, @reg, s3))
+  @ifelse(s2,
+    @srli(rv0, s3, 8),
+    @andi(rv0, s3, 0x00FF)
+  )
+  @andi(rv0, rv0, 0x00FF)
+  @retval(rv0, r0)
+)
+
+#define read_byte(block, addr) @call2(storage_read_byte, @reg, block, @reg, addr)
+#define read_u16(block, addr) @call2(storage_read_u16_le, @reg, block, @reg, addr)
+
 @proc(storage_read_at_le_unpack,
   @call1(storage_set_block, @reg, @arg1)
   @call1(storage_set_addr, @reg, @arg2)
@@ -135,9 +153,6 @@
 
   @retval(s3, s2)
 )
-
-#define read_byte(block, addr) @call2(storage_read_at, @reg, s0, @reg, s1)
-#define read_u16(block, addr) @call2(storage_read_u16_le, @reg, block, @reg, addr)
 
 // Graphix
 

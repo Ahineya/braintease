@@ -66,7 +66,7 @@ void load_titlepic(unsigned short pic_hi, unsigned short pic_lo, unsigned short 
 
         x = x + 1;
     }
-    br();
+    printf("\n");
 }
 
 void load_playpal(unsigned short pal_hi, unsigned short pal_lo) {

@@ -6,7 +6,7 @@
 use rcc_frontend::ir::{Value, IrType};
 use crate::regmgmt::{RegisterPressureManager, BankInfo, BankTagValue};
 use crate::naming::NameGenerator;
-use rcc_codegen::{AsmInst, Reg};
+use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use log::{debug, trace, warn};
 use rcc_frontend::BankTag;
 use super::helpers::{resolve_mixed_bank, resolve_bank_tag_to_info, get_bank_register_with_runtime_check_safe, get_bank_value_for_argument, materialize_bank_to_register};
@@ -97,7 +97,12 @@ pub fn lower_store(
                     let temp_reg_name = naming.store_fatptr_addr();
                     let temp_reg = mgr.get_register(temp_reg_name);
                     insts.extend(mgr.take_instructions());
-                    insts.push(AsmInst::Li(temp_reg, *c as i16));
+                    insts.extend(emit_addr_constant(
+                        temp_reg,
+                        *c as i16,
+                        matches!(fp.bank, BankTag::Global),
+                        mgr.gp_base_label(),
+                    ));
                     temp_reg
                 }
                 Value::Global(name) => {
@@ -263,7 +268,12 @@ pub fn lower_store(
                     let temp_reg_name = naming.store_dest_addr();
                     let temp_reg = mgr.get_register(temp_reg_name);
                     insts.extend(mgr.take_instructions());
-                    insts.push(AsmInst::Li(temp_reg, *c as i16));
+                    insts.extend(emit_addr_constant(
+                        temp_reg,
+                        *c as i16,
+                        matches!(fp.bank, BankTag::Global),
+                        mgr.gp_base_label(),
+                    ));
                     trace!("  Loaded destination address {c} into {temp_reg:?}");
                     temp_reg
                 }

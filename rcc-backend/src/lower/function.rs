@@ -7,7 +7,7 @@
 
 use rcc_frontend::ir::{Function, Instruction, Value, IrType};
 use rcc_frontend::BankTag;
-use rcc_codegen::{AsmInst, Reg};
+use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use std::collections::HashMap;
 use log::{debug, info, trace};
 use crate::function::FunctionBuilder;
@@ -229,7 +229,12 @@ fn handle_return_instruction(
                         mgr.get_register(temp_name)
                     }
                     Value::Constant(c) => {
-                        builder.add_instruction(AsmInst::Li(Reg::Rv0, *c as i16));
+                        builder.add_instructions(emit_addr_constant(
+                            Reg::Rv0,
+                            *c as i16,
+                            matches!(fp.bank, BankTag::Global),
+                            mgr.gp_base_label(),
+                        ));
                         Reg::Rv0
                     }
                     _ => panic!("Unexpected value type in FatPtr address: {:?}", fp.addr),

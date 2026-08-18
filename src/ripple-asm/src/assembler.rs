@@ -386,18 +386,22 @@ impl RippleAssembler {
                 || operand.starts_with("0b") || operand.starts_with("0B");
             
             if !is_register && !is_number {
-                // Check if this is a local label that we already know about
+                // Local code labels are already patched in second_pass.
+                // Local data labels must stay unresolved so the linker can add
+                // this object's data-section base after concatenation.
                 let is_local_label = state.labels.contains_key(operand);
                 let is_local_data = state.data_labels.contains_key(operand);
-                
-                // Only mark as unresolved if it's not a local label
-                if !is_local_label && !is_local_data {
-                    // Determine reference type based on the opcode
-                    let ref_type = match opcode {
-                        Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge => ReferenceType::Branch,
-                        Opcode::Jal => ReferenceType::Absolute,
-                        Opcode::Load | Opcode::Store | Opcode::Li => ReferenceType::Data,
-                        _ => ReferenceType::Absolute,
+
+                if !is_local_label {
+                    let ref_type = if is_local_data {
+                        ReferenceType::Data
+                    } else {
+                        match opcode {
+                            Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge => ReferenceType::Branch,
+                            Opcode::Jal => ReferenceType::Absolute,
+                            Opcode::Load | Opcode::Store | Opcode::Li => ReferenceType::Data,
+                            _ => ReferenceType::Absolute,
+                        }
                     };
 
                     state.pending_references.insert(instruction_idx, PendingReference {
@@ -559,5 +563,27 @@ start:
         let result = assembler.assemble(source).unwrap();
         assert_eq!(result.data_labels.get("data1"), Some(&10));
         assert_eq!(result.data_labels.get("data2"), Some(&11));
+    }
+
+    #[test]
+    fn test_local_data_label_is_unresolved() {
+        let mut options = AssemblerOptions::default();
+        options.memory_offset = 0;
+        let assembler = RippleAssembler::new(options);
+        let source = r#"
+.data
+gbase:
+    .space 4
+.code
+start:
+    LI R3, gbase
+    HALT
+"#;
+        let result = assembler.assemble(source).unwrap();
+        assert_eq!(result.data.len(), 4);
+        assert_eq!(result.data_labels.get("gbase"), Some(&0));
+        assert!(result.unresolved_references.values().any(|r| r.label == "gbase" && r.ref_type == "data"));
+        // Placeholder immediate; the linker patches the concatenated offset.
+        assert_eq!(result.instructions[0].word2, 0);
     }
 }

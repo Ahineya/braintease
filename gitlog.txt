@@ -1,0 +1,427 @@
+5d6fbd4 2026-08-18 01:36:05 +0200 Examples runner
+32eecb2 2026-08-18 01:16:08 +0200 Fix a bunch of idiotic shit with register spilling
+bcf336e 2026-08-18 00:28:45 +0200 Fucking FLOAT
+5d1e545 2026-08-17 23:12:41 +0200 Multibank programs
+9e00ebf 2026-08-17 22:37:23 +0200 Floats
+3d30f00 2026-08-17 21:48:27 +0200 Long long. Basically, veeeery long hahahha
+e0b4567 2026-08-17 20:27:13 +0200 A bunch of simple features here and there like oct literals
+82cc7f7 2026-08-17 20:10:25 +0200 Update standalone and hosted libs
+6b3352d 2026-08-17 19:33:47 +0200 32-bit long
+7f2db06 2026-08-17 18:16:39 +0200 Better preprocessor, labels, goto
+79de5b6 2026-08-17 17:58:03 +0200 Even more compiler fixes and thingies
+7e1729c 2026-08-17 17:21:42 +0200 Switch, variadics, stdarg.h
+50d32c7 2026-08-17 16:48:14 +0200 Q16.16 green
+15e5a32 2026-08-17 16:12:41 +0200 Fix C compiler even harder
+0fe1dd5 2026-08-17 15:25:31 +0200 Fix C compiler harder
+e634c5a 2026-08-17 14:52:39 +0200 Fix C compiler
+6b376e1 2026-08-17 14:15:23 +0200 More tests and C doom progress
+890f2cd 2025-08-29 00:23:42 +0200 Fix in-ide assembler
+52d4ec9 2025-08-27 21:39:26 +0200 Fix readme
+4a42be3 2025-08-27 21:37:20 +0200 More cleaning up
+301cc7d 2025-08-27 18:07:20 +0200 Refactor learning content
+831a817 2025-08-27 18:02:54 +0200 Fixes of the tutorials
+7e91190 2025-08-27 17:54:20 +0200 Properly fix input
+bfed3c5 2025-08-27 17:50:41 +0200 Input in turbo mode
+8662db8 2025-08-27 17:35:19 +0200 Better
+d19174a 2025-08-27 17:23:10 +0200 Fix turbo mode
+bee1806 2025-08-27 16:18:35 +0200 Fix turbo 1
+90a57d9 2025-08-27 15:44:05 +0200 Input
+dd2b116 2025-08-27 15:04:18 +0200 input
+b69a389 2025-08-27 14:16:27 +0200 Input
+9c439ef 2025-08-27 14:12:09 +0200 Input
+d0c9074 2025-08-27 14:10:29 +0200 Input
+4d3f046 2025-08-27 13:52:52 +0200 Manage editor focus
+b907556 2025-08-27 03:18:41 +0200 Electron build works
+1cf92d1 2025-08-27 02:54:35 +0200 Electron
+919044d 2025-08-27 02:33:07 +0200 Things
+03a42f9 2025-08-27 02:23:39 +0200 Learning notice
+50f6f58 2025-08-27 02:12:57 +0200 More examples
+21280b0 2025-08-27 01:34:35 +0200 Layout fixes
+2f2d433 2025-08-27 01:07:11 +0200 Docs tutorials and shit
+98db9b7 2025-08-27 00:45:59 +0200 Better
+50b9ff2 2025-08-27 00:10:57 +0200 Tutorials
+3562c37 2025-08-26 22:10:33 +0200 Things
+8fac3b1 2025-08-26 21:42:59 +0200 More
+4a900b6 2025-08-26 20:24:32 +0200 About section
+44156ab 2025-08-26 20:03:57 +0200 Things
+d1696ca 2025-08-26 18:20:49 +0200 Improvements
+501285a 2025-08-26 17:54:30 +0200 Fixes
+bab560a 2025-08-26 16:54:16 +0200 Moo
+977ab09 2025-08-26 16:30:32 +0200 Upgrade bf rvm
+d9f5fa8 2025-08-26 14:47:25 +0200 moo
+3053c72 2025-08-26 02:25:54 +0200 Image read.
+fa36027 2025-08-26 01:47:56 +0200 More things
+b14364b 2025-08-25 23:03:18 +0200 Moo
+d99db88 2025-08-25 12:18:17 +0200 Things
+8ab842e 2025-08-24 14:08:42 +0200 bababa
+1f66761 2025-08-23 16:25:59 +0200 Meow
+99cb484 2025-08-23 16:03:10 +0200 Fix {label}
+f85e6dd 2025-08-23 15:53:51 +0200 More fancy stuff
+894d740 2025-08-23 13:34:39 +0200 Things
+21f9e57 2025-08-23 01:27:10 +0200 More macroasm shenanigans
+f6d7776 2025-08-23 00:01:59 +0200 More
+1c6d6ed 2025-08-22 23:11:43 +0200 pragmas and includes
+ac5205e 2025-08-22 22:46:14 +0200 macro
+e96c05f 2025-08-22 16:07:57 +0200 puts
+c720eea 2025-08-22 14:53:37 +0200 Bfm in RCT
+2a86290 2025-08-22 02:40:21 +0200 TextMate grammar
+4870fd9 2025-08-21 22:13:48 +0200 aksjaldj
+1e029dd 2025-08-21 21:56:53 +0200 betta
+25ac669 2025-08-21 21:45:10 +0200 Labels
+0a34c0e 2025-08-21 20:32:08 +0200 Features
+1bcdfd9 2025-08-21 20:13:30 +0200 Extending macro expander
+39dc070 2025-08-21 17:22:31 +0200 Pazaak
+2ee7178 2025-08-21 16:12:25 +0200 moloc
+3b2544e 2025-08-21 15:55:37 +0200 First working malloc
+ef89627 2025-08-21 15:27:45 +0200 Thingies
+6934f7f 2025-08-20 21:50:33 +0200 Good changes
+865e363 2025-08-20 16:50:14 +0200 MMIO storage
+f6e97c7 2025-08-20 15:53:33 +0200 Refactor VM
+0b3bcfa 2025-08-20 14:21:05 +0200 string.h
+75afea1 2025-08-20 14:15:40 +0200 string.h
+639e17b 2025-08-20 13:10:06 +0200 Things
+39cda55 2025-08-20 11:06:39 +0200 Things
+e56a36d 2025-08-20 10:55:43 +0200 Improvements
+8d6f600 2025-08-20 10:48:59 +0200 Tetris
+c56bddb 2025-08-20 09:03:54 +0200 display mode 3
+e0b514c 2025-08-20 07:55:16 +0200 Interactive tetris
+c6bc2f4 2025-08-20 07:49:26 +0200 MMIO keys
+7143c2b 2025-08-20 06:52:47 +0200 Test runner improvements
+f8ee759 2025-08-20 06:45:19 +0200 Improvements
+51438b2 2025-08-20 06:29:07 +0200 Fixes
+90c8295 2025-08-20 05:53:05 +0200 Unicorns
+38d606f 2025-08-20 05:24:26 +0200 Mosst of the tests fixed
+f9bd75f 2025-08-20 05:13:36 +0200 Fixes
+60cb159 2025-08-20 05:06:23 +0200 Much wow
+7e70bd1 2025-08-20 04:31:11 +0200 Better
+d56ec50 2025-08-20 03:10:23 +0200 Fixes
+d21c222 2025-08-20 03:05:49 +0200 Fix struct issues
+0e80122 2025-08-20 02:50:51 +0200 Skip qfixed tests
+e21a292 2025-08-18 21:53:05 +0200 Fixes
+d230299 2025-08-18 20:29:37 +0200 Tree nav
+cd980d4 2025-08-18 20:11:20 +0200 Improvements in test tui
+f1ea05e 2025-08-18 18:16:29 +0200 Savepoint
+ab4caf7 2025-08-18 17:03:23 +0200 More fixes
+a060fcf 2025-08-18 15:31:45 +0200 More things
+667d7f7 2025-08-18 15:09:32 +0200 refuck
+04a1879 2025-08-18 14:58:01 +0200 Skipped tests
+4c22fab 2025-08-18 14:54:15 +0200 Skipped tests
+9e1a9e4 2025-08-18 14:44:55 +0200 Skipping tests
+3108f92 2025-08-18 14:23:30 +0200 Warnings as errors
+9928547 2025-08-18 13:51:55 +0200 clippy fix
+35008bf 2025-08-18 13:51:26 +0200 Savepoint
+1e3e026 2025-08-18 13:48:04 +0200 typedef tests pass
+ed71688 2025-08-18 13:41:10 +0200 Things
+86d9e9c 2025-08-18 12:53:38 +0200 demos
+4929052 2025-08-17 20:40:50 +0200 Parsing designated initializers
+83ca0f9 2025-08-17 20:02:03 +0200 Compound literals core
+d049826 2025-08-17 19:51:49 +0200 The Refactoring
+7d65e7b 2025-08-17 14:38:52 +0200 Experiments
+6b8ac7f 2025-08-17 09:39:59 +0200 More visual demos
+ad0c4ea 2025-08-17 09:09:11 +0200 Thingies
+b276413 2025-08-17 08:24:13 +0200 Things
+4c1a632 2025-08-17 07:47:03 +0200 Here and there
+f83bc7d 2025-08-17 07:36:16 +0200 A LOT of stuff
+7874be9 2025-08-17 05:39:12 +0200 Things
+cdbb3ad 2025-08-17 03:12:41 +0200 Savepoint
+0dc2fb0 2025-08-17 00:39:03 +0200 Improvements
+6841418 2025-08-17 00:17:52 +0200 Savepoint
+ce7d2be 2025-08-16 22:51:16 +0200 Clippy fix
+22cba51 2025-08-16 22:48:06 +0200 Tests cleanup
+1d7f063 2025-08-16 20:56:15 +0200 Tests reloading
+fcc3cf2 2025-08-16 20:46:45 +0200 Integrate vim for editing tests
+0d7381d 2025-08-16 20:12:42 +0200 More improvements
+23582a1 2025-08-16 19:39:55 +0200 Wraparound
+8f1249c 2025-08-16 19:33:18 +0200 Test fzf
+96cdc84 2025-08-16 19:24:55 +0200 Improve runner
+2f9cfb5 2025-08-16 18:50:19 +0200 Improve tests
+d7a46e0 2025-08-16 17:52:51 +0200 c code highlighting in test runner
+cbf271f 2025-08-16 17:42:05 +0200 Improve test runner
+564f21e 2025-08-16 17:29:53 +0200 Improve runner
+eeeafc5 2025-08-16 17:19:10 +0200 Fixes
+cbe41c8 2025-08-16 16:50:30 +0200 Improvements
+ae655af 2025-08-16 16:47:18 +0200 Improve tui runner
+d6497d4 2025-08-16 16:19:08 +0200 test runner improvements
+ef7ac60 2025-08-16 15:11:17 +0200 Cleanup test structure
+5ef5df4 2025-08-16 14:26:18 +0200 Add rct
+df1a358 2025-08-15 20:30:47 +0200 *cries in Assembly*
+3c96b00 2025-08-15 11:05:05 +0200 Fixes
+8ef7eae 2025-08-15 09:30:15 +0200 Savepoint
+8919faa 2025-08-15 08:56:18 +0200 Fix
+abe92c4 2025-08-15 08:54:45 +0200 What a beautiful day
+5c6e719 2025-08-15 07:56:55 +0200 Add support of debug info to compiler and debugger
+c20b58b 2025-08-15 07:36:21 +0200 Improvements
+374186b 2025-08-15 06:31:58 +0200 More fixes
+a71ac6c 2025-08-15 05:20:19 +0200 Add proper null pointer
+ca03744 2025-08-15 04:25:12 +0200 Add spill tracing
+3acbd71 2025-08-15 02:41:56 +0200 Refactoring and structs
+dc9c686 2025-08-15 01:15:28 +0200 Improving structs
+b533922 2025-08-15 00:35:28 +0200 Improvements
+8898447 2025-08-15 00:14:03 +0200 Proper type system phase 2
+d160a12 2025-08-14 23:53:51 +0200 Add unary increments and decrements
+4020980 2025-08-14 22:33:05 +0200 Update pointer arithmetic doc
+346ec78 2025-08-14 21:16:08 +0200 It works. Finally.
+ffbfb47 2025-08-14 19:37:20 +0200 Array initializers
+4049b70 2025-08-14 19:23:43 +0200 Fix shit
+2d325b6 2025-08-14 18:52:52 +0200 Fixes
+aba3072 2025-08-14 18:40:29 +0200 Savepoint
+c10cab8 2025-08-14 17:00:11 +0200 Improvements
+92daba2 2025-08-14 06:35:00 +0200 Savepoint
+5a086ca 2025-08-14 05:40:07 +0200 Fix issues
+865b871 2025-08-14 05:03:01 +0200 Improvements in test runner and bugfixes
+e35ccc7 2025-08-14 04:47:16 +0200 Fix for alloca rematerializing
+0397a24 2025-08-14 04:37:08 +0200 things
+c394f70 2025-08-14 04:10:59 +0200 Refactor
+78eaeb0 2025-08-14 01:52:26 +0200 Struff
+463a90e 2025-08-14 01:10:39 +0200 HUGE progress with pointers.
+2be98ab 2025-08-13 22:13:49 +0200 Catastrophe is something related to cats
+7138328 2025-08-13 17:58:49 +0200 Refactoring
+397ae01 2025-08-13 17:13:08 +0200 Debugger improvements
+997ce6c 2025-08-13 17:04:05 +0200 Improvements
+cbe30c3 2025-08-13 15:43:21 +0200 Fix issues
+45cfc6a 2025-08-13 14:23:06 +0200 Make debugger better
+977a7f6 2025-08-13 03:02:20 +0200 Long and exur... cxroo... excrutianable debug
+4802e08 2025-08-12 23:30:33 +0200 CONNECTED! BACKEND V2 IS ALIVE
+52fa375 2025-08-12 21:11:25 +0200 Connecting...
+4e95ea0 2025-08-12 20:30:42 +0200 Branches
+52972f1 2025-08-12 19:56:12 +0200 Pointer arithmetic docs
+310363f 2025-08-12 19:41:24 +0200 Unary
+e6491dc 2025-08-12 19:10:33 +0200 Binary
+5436897 2025-08-12 18:23:38 +0200 GEP
+0f09301 2025-08-12 17:41:30 +0200 Calling convention may be stable, may be not
+480de52 2025-08-12 16:27:50 +0200 The Great Monkeys Migration Finished Successfully — All Hail the Code Monk
+985bf8b 2025-08-12 15:18:10 +0200 The Great Migration To 32 Registers
+723e8ed 2025-08-12 13:40:19 +0200 Things + Stuff + Hehehe
+b23765a 2025-08-12 12:07:03 +0200 Savepoint
+2ba45ce 2025-08-12 11:13:32 +0200 Docs
+89d29d6 2025-08-12 10:44:40 +0200 Encapsulate register manager
+0fd469e 2025-08-12 09:43:58 +0200 Clippy fix
+b8a0062 2025-08-12 09:40:28 +0200 Error fixes
+4f63544 2025-08-12 09:38:05 +0200 Backend v2
+750e9c8 2025-08-12 08:24:02 +0200 Unfuck frontend
+d1cb38e 2025-08-12 07:43:11 +0200 Docs
+1974422 2025-08-12 05:58:04 +0200 Fixes
+ab9b37a 2025-08-12 05:50:12 +0200 One more step. A steppie if you will
+11fcb83 2025-08-12 05:05:10 +0200 More tests
+4245ba8 2025-08-12 04:32:53 +0200 Fixed everything
+44ef229 2025-08-12 03:39:00 +0200 One more, one more step
+4312fd9 2025-08-12 03:20:31 +0200 One tiiiiny step forward
+e8db74d 2025-08-12 02:56:52 +0200 POINTERS GOT FUCKED
+9fd112a 2025-08-12 02:39:17 +0200 Progress progress, where are you, progress progress, I love you
+13eb34d 2025-08-12 02:19:39 +0200 One step forward, two steps back
+689210f 2025-08-12 01:53:10 +0200 More logging is good, more logging is transparency
+983ef96 2025-08-12 01:46:59 +0200 Cries in assembly
+fd480d1 2025-08-12 00:43:23 +0200 More nice things. Everything is so nice.
+69c0b6f 2025-08-11 23:28:36 +0200 Fix issues
+eb3f750 2025-08-11 22:58:52 +0200 So much good things have happened
+0f94baa 2025-08-11 22:16:47 +0200 Fix stuff
+f728441 2025-08-11 22:00:55 +0200 Fix issues
+ffe00e0 2025-08-11 20:50:24 +0200 Make debugger absolutely sexy
+3221f9f 2025-08-11 20:23:23 +0200 Better disassembly view
+ba9d1eb 2025-08-11 19:54:21 +0200 Improve breakpoints window
+d924ef3 2025-08-11 19:50:32 +0200 Breakpoints window
+3d090fe 2025-08-11 19:46:02 +0200 Better UI
+332ea68 2025-08-11 19:37:41 +0200 Make memory layout fixed in debugger
+08f4981 2025-08-11 19:35:53 +0200 Refactor tui debugger
+080b5ff 2025-08-11 19:05:00 +0200 Better layout
+83d4945 2025-08-11 18:54:41 +0200 Even more debugger improvements
+ea771e5 2025-08-11 18:46:36 +0200 break at address
+4c2d34a 2025-08-11 18:42:15 +0200 Debugger improvement
+a4a69a6 2025-08-11 17:57:08 +0200 TUI improvements
+38daedb 2025-08-11 17:34:43 +0200 Add tui debugger
+8453b11 2025-08-11 17:14:23 +0200 rvm debug improvements
+fbd9de0 2025-08-11 16:14:38 +0200 Tests for golden vm implementation
+c687bc6 2025-08-11 15:28:35 +0200 Rvm
+0f7bf02 2025-08-11 14:58:25 +0200 Start golden impl
+3b47253 2025-08-11 01:34:29 +0200 Cleanup, cleandown
+97fc023 2025-08-11 01:21:28 +0200 Split the fuck out of lowerer
+8bec2d1 2025-08-10 23:34:44 +0200 Fixes
+ba19762 2025-08-10 22:51:08 +0200 Even more fixes
+7c6cbc0 2025-08-10 22:20:13 +0200 GTFO
+b8616a0 2025-08-10 21:54:01 +0200 More fixes
+a1d871f 2025-08-10 20:00:08 +0200 Thingws
+3e4c454 2025-08-10 19:10:43 +0200 Fix issues, make new bugs, usual developer shit
+26c6621 2025-08-10 18:20:37 +0200 Progress progress set me free
+0d3586a 2025-08-10 17:14:07 +0200 Savepoint
+22ba183 2025-08-10 16:52:07 +0200 Things
+4d595eb 2025-08-10 16:41:43 +0200 Stuff
+57ab311 2025-08-10 16:27:53 +0200 Add timeout and verbose flags to test runner
+89504ac 2025-08-10 15:52:53 +0200 Update readmes
+b97f4f7 2025-08-10 15:46:38 +0200 Better tests structure
+135dc1f 2025-08-10 15:43:42 +0200 Compiler test runner improvements
+02ead20 2025-08-10 02:14:28 +0200 Updated linker to support .par archive
+aa970db 2025-08-10 01:55:53 +0200 Runtime
+0a7b1e1 2025-08-10 01:18:59 +0200 Inline assembly
+7502105 2025-08-10 00:46:08 +0200 More tests
+27ed9b7 2025-08-10 00:37:26 +0200 Pointer provenance
+2dca72a 2025-08-10 00:15:50 +0200 Much Progress, Such Wow
+7934e27 2025-08-09 23:39:47 +0200 Array initializers
+9e90891 2025-08-09 23:00:21 +0200 I killed myself today, For second life replay
+bcb01fa 2025-08-09 20:43:30 +0200 Fix A LOT OF ISSUES
+6ba785d 2025-08-09 18:36:23 +0200 Structs, ifs, arrays, and a lot of other shit without which even other shit won't work
+edcc3d7 2025-08-09 18:07:11 +0200 Just shit here and there
+e6a4a66 2025-08-09 17:57:28 +0200 Regression test suite for RCC
+f64d688 2025-08-09 16:47:36 +0200 Structs, ifs, arrays, and a lot of other shit without which even other shit won't work
+0ac4afb 2025-08-09 15:16:21 +0200 Pointers, array access, strings
+72efacc 2025-08-09 13:32:29 +0200 C M2
+db7dfe2 2025-08-09 10:02:18 +0200 Add rbt
+e76113c 2025-08-09 09:32:18 +0200 Fix bugs in assembler
+d24fee0 2025-08-09 07:49:18 +0200 asm -> obj -> bfm -> bf -> run peepeeline works
+ae061c0 2025-08-09 07:15:49 +0200 I have fingers and they are fun
+e824e45 2025-08-09 07:11:07 +0200 Macro expander wasm
+9712333 2025-08-09 07:09:15 +0200 Integrated wasm macro expander
+c226948 2025-08-09 07:01:03 +0200 savepoint
+5ed4c9f 2025-08-09 05:09:55 +0200 asm reference
+7136f85 2025-08-09 04:52:23 +0200 Assembler and linker fully work in UI
+becffc0 2025-08-09 03:39:08 +0200 Replace ts assembler with the rust one
+748b474 2025-08-09 03:19:26 +0200 Rust assembler and linker
+a13265e 2025-08-09 02:28:27 +0200 Improve wasm build scripts
+7838259 2025-08-09 02:10:03 +0200 Ainane ainanenane
+b10c3a1 2025-08-09 01:50:29 +0200 Fix live asm
+e211cb6 2025-08-09 01:46:45 +0200 Integrate WASM interpreter in UI
+262463e 2025-08-09 01:18:51 +0200 Add optimiz moo boo brain fart
+cd3e63a 2025-08-09 00:21:48 +0200 Rust interpreter
+f7edb48 2025-08-08 23:22:09 +0200 Assembly auto-compilation
+21cc739 2025-08-08 20:15:45 +0200 Watch cells
+d3df86b 2025-08-08 19:58:18 +0200 Something was improved
+e952c39 2025-08-08 19:09:54 +0200 Bedder right panel
+c725c2b 2025-08-08 18:51:41 +0200 Improve cpu debugger panel
+da3a9c9 2025-08-08 18:49:16 +0200 mbaaa
+6f6535d 2025-08-08 18:19:09 +0200 Improvements
+8b0fc8b 2025-08-08 17:24:43 +0200 Disassembly panel
+866f9b1 2025-08-08 17:13:54 +0200 disassembly
+1f42bd6 2025-08-08 02:32:15 +0200 Fix bugs
+903126f 2025-08-08 01:40:29 +0200 rnd + fix microcode jump pc calculation
+9cb34a3 2025-08-07 21:40:41 +0200 Add assembly editor
+f0c0774 2025-08-07 19:48:49 +0200 Throw away some garbage, bad code
+6dd62d3 2025-08-07 19:42:13 +0200 Improvements
+820933f 2025-08-07 19:24:14 +0200 Asm programs
+2348a8f 2025-08-07 19:18:29 +0200 Fucking ASM
+47fc391 2025-08-07 17:14:24 +0200 Once a loner had a boner
+bec484f 2025-08-07 15:59:03 +0200 Poo poo pee pee
+4f75337 2025-08-07 15:52:10 +0200 SAB is working somehow
+5f17bfc 2025-08-07 15:18:17 +0200 meh
+f592815 2025-08-07 15:05:39 +0200 Feature-chan works ^_^
+c265d75 2025-08-07 14:54:36 +0200 if you are persistent enough issues are not issues but opportunities
+96573cf 2025-08-07 14:44:52 +0200 Feature-chan is nearly done
+81abc25 2025-08-07 14:34:11 +0200 Fixed issues
+a927408 2025-08-07 14:28:34 +0200 Webworker interpreter
+4327bc1 2025-08-07 14:21:49 +0200 Move interpreter to webworker
+7ad7e21 2025-08-07 13:27:05 +0200 VM output
+76938b3 2025-08-07 12:55:59 +0200 Mooo
+14f6047 2025-08-07 12:19:52 +0200 Good fixes
+8d690a2 2025-08-07 12:01:27 +0200 More things
+1293ddd 2025-08-07 10:53:26 +0200 Hash macro invocation and friends
+06d5dc1 2025-08-07 10:29:02 +0200 Thingies
+8f7f921 2025-08-07 08:53:58 +0200 cpu achieves turing-completeness
+f617886 2025-08-07 03:13:45 +0200 Stuff and cpu
+57f7891 2025-08-06 20:38:47 +0200 thingies
+87ef070 2025-08-06 17:33:26 +0200 Much better
+9863270 2025-08-06 16:40:57 +0200 More thingies
+b2fbb12 2025-08-06 16:29:56 +0200 Rename refactor
+765bcf6 2025-08-06 16:16:35 +0200 Features mimi
+8db7b3b 2025-08-06 15:32:21 +0200 Jump to error
+f77f7b6 2025-08-06 01:46:32 +0200 ee
+a3fbce3 2025-08-06 01:29:18 +0200 Unfuck minimap
+bf583ad 2025-08-06 01:27:48 +0200 mimimi
+f9d0e0f 2025-08-06 01:19:44 +0200 Unfuck minimap
+d1b4adc 2025-08-06 01:09:42 +0200 Unfuck editor
+033747f 2025-08-06 00:11:42 +0200 Minimap attempt
+75d5be9 2025-08-05 23:42:59 +0200 Refactor editor
+a938ff3 2025-08-05 23:38:21 +0200 Refactor editor
+f2bf994 2025-08-05 23:29:17 +0200 cut line
+738b54c 2025-08-05 23:28:16 +0200 thingies
+09280a6 2025-08-05 23:21:29 +0200 Resizeable editors
+85f2843 2025-08-05 23:16:58 +0200 stuff
+bffadc5 2025-08-05 23:09:34 +0200 More improvements
+e4b59f3 2025-08-05 22:24:50 +0200 akhdfbgsdlifgb
+f7dac13 2025-08-05 22:20:53 +0200 remove dom debugger renderer
+9ab0070 2025-08-05 22:13:54 +0200 Much more improved canvas
+70dfbe6 2025-08-05 22:03:42 +0200 Better canvas
+cbb9cc6 2025-08-05 21:50:50 +0200 Tape view smooth as butter
+e990c14 2025-08-05 21:25:54 +0200 better
+fa107dd 2025-08-05 21:21:21 +0200 Better tape view
+210ff3c 2025-08-05 21:17:00 +0200 Crosshair highlight
+6a237d9 2025-08-05 21:13:31 +0200 Canvas tabe
+76d6b85 2025-08-05 20:39:02 +0200 Fixed large tapes
+870608b 2025-08-05 20:33:39 +0200 Custom virtual scroll
+9d49727 2025-08-05 19:05:09 +0200 UI
+0b6204c 2025-08-05 18:37:34 +0200 Macro expander v3
+66e2629 2025-08-04 23:05:52 +0200 Beautify
+9333f6b 2025-08-04 22:51:00 +0200 moved macro panel
+5a09424 2025-08-04 22:37:39 +0200 Somehow works
+37bc608 2025-08-04 19:22:44 +0200 sourcemaps prd
+fa43496 2025-08-04 18:57:29 +0200 upd
+d7b89bf 2025-08-04 18:26:36 +0200 Quicknav fixes
+d278417 2025-08-04 18:20:18 +0200 Quick nav
+2ef380f 2025-08-04 18:10:22 +0200 Quick nav
+b90dbdb 2025-08-04 17:47:17 +0200 Search fix
+9f82b43 2025-08-04 17:37:07 +0200 Search fix
+b80f933 2025-08-04 17:31:30 +0200 scroll to search result
+608b067 2025-08-04 17:27:24 +0200 search
+43bb5c3 2025-08-04 16:59:35 +0200 Virtualize editor lines
+93945d2 2025-08-04 16:23:23 +0200 Performance stuff
+e4f3caf 2025-08-04 03:17:05 +0200 cpu alu done
+4f9f580 2025-08-04 01:38:31 +0200 Improve tokenizer performance
+d51b38a 2025-08-04 01:26:51 +0200 SLT, SLTU
+25bf370 2025-08-03 18:18:40 +0200 SL opcode
+a27bcad 2025-08-03 17:03:35 +0200 Make marks view compact
+e66e64c 2025-08-03 17:01:50 +0200 Add marks tab
+971ddad 2025-08-03 16:57:37 +0200 Improve multiline macro highlighting
+bf65070 2025-08-03 16:51:21 +0200 Update cpu
+50b76d3 2025-08-03 16:34:16 +0200 Improve macro expansion
+25bf7af 2025-08-03 13:55:29 +0200 thingies
+a7a5a97 2025-08-03 02:14:10 +0200 Move macro expander to web worker
+e9f3a4d 2025-08-03 01:54:51 +0200 More stuff
+f33697b 2025-08-03 00:26:58 +0200 Add more builtins
+c4c3c02 2025-08-02 23:51:22 +0200 Fiiingeeeers
+55a9992 2025-08-02 23:47:29 +0200 Macro system v2
+e4f8d2e 2025-08-02 23:45:40 +0200 Macro system v2
+7ea5da8 2025-08-02 22:39:19 +0200 Fix macro expander issues
+c7c3d32 2025-08-02 03:01:23 +0200 Saving files
+13f75a7 2025-08-02 02:50:10 +0200 Add files tab
+693081b 2025-08-02 02:44:41 +0200 Fix paste
+8454e5c 2025-08-02 01:06:50 +0200 Fixes
+536db81 2025-08-01 23:11:17 +0200 Stuff
+ba15858 2025-07-26 22:54:44 +0200 Remove rust experiment. Add tape save/load, add run from cursor
+6807112 2025-07-26 22:21:02 +0200 multilane macro
+91676f5 2025-07-26 12:20:18 +0200 Add automatic macroexpand
+44b2f0b 2025-07-26 12:08:52 +0200 more architecture
+0dea8d1 2025-07-26 03:25:44 +0200 Tokenizer colors
+fb9fd18 2025-07-26 03:21:36 +0200 Fix macro tokenization
+15511dd 2025-07-26 03:02:05 +0200 command-click
+74ae7e6 2025-07-26 02:50:32 +0200 Colorize todo comments
+2f9b284 2025-07-26 02:48:35 +0200 More stuff
+acc2d98 2025-07-26 02:11:47 +0200 Stuff
+5b3472f 2025-07-26 01:57:01 +0200 Cleanup
+ef8f430 2025-07-26 01:54:45 +0200 Add debugger lane view
+077741c 2025-07-26 01:31:23 +0200 Debugger visuals
+c266cd6 2025-07-25 06:51:42 +0200 More stuff
+5bc49a4 2025-07-25 06:32:35 +0200 Fix breakpoints
+9c99559 2025-07-25 06:14:08 +0200 more opts
+b4312e3 2025-07-25 05:40:51 +0200 Optimizations
+d01780d 2025-07-25 05:19:42 +0200 Optimized rust interpreter
+3cc4238 2025-07-25 05:01:58 +0200 Batched turbo execution
+1e4472c 2025-07-25 04:57:58 +0200 Worker-based interpreter
+0853ba9 2025-07-25 04:34:28 +0200 Rust interpreter
+80e03c2 2025-07-25 04:06:13 +0200 Stuff
+b6f3f35 2025-07-25 01:40:28 +0200 Make max tape length 150k because reasons
+29acf91 2025-07-25 01:23:25 +0200 Remove tape size limit in UI
+995a943 2025-07-25 01:21:51 +0200 Make compact debugger view
+088a607 2025-07-25 01:13:53 +0200 Fix macro strip comments
+5100991 2025-07-25 00:56:50 +0200 Macro expander settings
+920ef39 2025-07-25 00:41:11 +0200 Add tooltips
+7522115 2025-07-25 00:26:34 +0200 Fix bugs
+3b435a3 2025-07-25 00:22:43 +0200 Autocomplete bugfix
+7ff4a11 2025-07-25 00:14:13 +0200 Macro autocomplete
+e8dae67 2025-07-25 00:00:00 +0200 Macro decorations
+5b4b6e0 2025-07-24 23:35:53 +0200 Macro expander
+ea67f18 2025-07-24 22:38:28 +0200 Multiple editors
+0f09437 2025-07-24 22:01:35 +0200 Lanes coloring
+50e64da 2025-07-24 21:42:15 +0200 bf experiments
+03fa812 2025-07-24 16:37:16 +0200 More stuff
+3216881 2025-07-24 06:28:56 +0200 Turbo speed
+706c0ed 2025-07-24 05:10:12 +0200 A lot of stuff
+268756f 2025-07-23 23:43:21 +0200 Interpreter works
+cf81ba0 2025-07-23 21:29:02 +0200 Editor works
+9506bc4 2025-07-23 19:25:44 +0200 basic stuff

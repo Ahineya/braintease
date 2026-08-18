@@ -46,6 +46,7 @@ pub enum AsmInst {
     Load(Reg, Reg, Reg),          // rd = memory[bank:addr]
     Store(Reg, Reg, Reg),         // memory[bank:addr] = rs
     Li(Reg, i16),                 // rd = immediate
+    LiLabel(Reg, String),         // rd = relocatable data/GP label (resolved by linker)
     
     // Control Flow Instructions
     Jal(i16, i16),                // Jump and link (bank_imm, addr_imm)
@@ -104,6 +105,7 @@ impl fmt::Display for AsmInst {
             AsmInst::Load(rd, bank, addr) => write!(f, "LOAD {rd}, {bank}, {addr}"),
             AsmInst::Store(rs, bank, addr) => write!(f, "STORE {rs}, {bank}, {addr}"),
             AsmInst::Li(rd, imm) => write!(f, "LI {rd}, {imm}"),
+            AsmInst::LiLabel(rd, label) => write!(f, "LI {rd}, {label}"),
             
             // Control Flow
             AsmInst::Jal(bank, addr) => write!(f, "JAL RA, {bank}, {addr}"),
@@ -134,6 +136,29 @@ impl fmt::Display for AsmInst {
     }
 }
 
+/// Emit `LI dest, imm` or a linker-relocatable GP address.
+///
+/// Global addresses are local to a translation unit. When `gp_base` is set the
+/// linker adds this object's data-section start; `local_offset` is the TU-local
+/// word offset from that base.
+pub fn emit_addr_constant(
+    dest: Reg,
+    local_offset: i16,
+    is_global_bank: bool,
+    gp_base: Option<&str>,
+) -> Vec<AsmInst> {
+    if is_global_bank {
+        if let Some(label) = gp_base {
+            let mut insts = vec![AsmInst::LiLabel(dest, label.to_string())];
+            if local_offset != 0 {
+                insts.push(AsmInst::AddI(dest, dest, local_offset));
+            }
+            return insts;
+        }
+    }
+    vec![AsmInst::Li(dest, local_offset)]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,6 +174,7 @@ mod tests {
     #[test]
     fn test_instruction_display() {
         assert_eq!(format!("{}", AsmInst::Li(Reg::T0, 42)), "LI T0, 42");
+        assert_eq!(format!("{}", AsmInst::LiLabel(Reg::T0, "__gp_mod".to_string())), "LI T0, __gp_mod");
         assert_eq!(format!("{}", AsmInst::Add(Reg::T0, Reg::T1, Reg::T2)), "ADD T0, T1, T2");
         assert_eq!(format!("{}", AsmInst::Store(Reg::T0, Reg::R0, Reg::R0)), "STORE T0, R0, R0");
         assert_eq!(format!("{}", AsmInst::Jal(1, 42)), "JAL RA, 1, 42");

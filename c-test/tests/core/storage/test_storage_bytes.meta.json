@@ -1,0 +1,5 @@
+{
+  "expected": "YYYY\n",
+  "description": "Unpack little-endian file bytes from storage words",
+  "use_runtime": true
+}

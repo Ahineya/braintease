@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "User BSS must not overlap libruntime statics",
+  "expected": "Y\n"
+}

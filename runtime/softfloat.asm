@@ -195,23 +195,23 @@ L_clz32_4:
     ADDI SC, SC, 29
     STORE T1, SB, SC
     SLTU T1, T4, T3
-    BEQ T1, R0, L_i32_shl_ge32_1d5304b0_0_0
+    BEQ T1, R0, L_i32_shl_ge32_d535669f_0_0
     SLTU T1, T4, T7
-    BEQ T1, R0, L_i32_shl_ge16_1d5304b0_0_1
-    BEQ R0, R0, L_i32_shl_lt16_1d5304b0_0_2
-L_i32_shl_ge32_1d5304b0_0_0:
+    BEQ T1, R0, L_i32_shl_ge16_d535669f_0_1
+    BEQ R0, R0, L_i32_shl_lt16_d535669f_0_2
+L_i32_shl_ge32_d535669f_0_0:
     LI T6, 0
     LI T5, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_3
-L_i32_shl_ge16_1d5304b0_0_1:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_3
+L_i32_shl_ge16_d535669f_0_1:
     SUB T1, T4, T7
     SLL T5, S0, T1
     LI T6, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_3
-L_i32_shl_lt16_1d5304b0_0_2:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_3
+L_i32_shl_lt16_d535669f_0_2:
     ADD T6, S0, R0
     ADD T5, S1, R0
-    BEQ T4, R0, L_i32_shl_done_1d5304b0_0_3
+    BEQ T4, R0, L_i32_shl_done_d535669f_0_3
     SLL T6, S0, T4
     SLL T5, S1, T4
     SUB T1, T7, T4
@@ -221,7 +221,7 @@ L_i32_shl_lt16_1d5304b0_0_2:
     STORE S2, SB, SC
     SRL S2, S0, T1
     OR T5, T5, S2
-L_i32_shl_done_1d5304b0_0_3:
+L_i32_shl_done_d535669f_0_3:
     STORE T6, SB, T0
     ADDI SC, T0, 1
     STORE T5, SB, SC
@@ -362,23 +362,23 @@ L_clz32_7:
     ADDI SC, SC, 50
     STORE T6, SB, SC
     SLTU T6, T7, T1
-    BEQ T6, R0, L_i32_shl_ge32_1d5304b0_0_4
+    BEQ T6, R0, L_i32_shl_ge32_d535669f_0_4
     SLTU T6, T7, T5
-    BEQ T6, R0, L_i32_shl_ge16_1d5304b0_0_5
-    BEQ R0, R0, L_i32_shl_lt16_1d5304b0_0_6
-L_i32_shl_ge32_1d5304b0_0_4:
+    BEQ T6, R0, L_i32_shl_ge16_d535669f_0_5
+    BEQ R0, R0, L_i32_shl_lt16_d535669f_0_6
+L_i32_shl_ge32_d535669f_0_4:
     LI T4, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_7
-L_i32_shl_ge16_1d5304b0_0_5:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_7
+L_i32_shl_ge16_d535669f_0_5:
     SUB T6, T7, T5
     SLL T3, S3, T6
     LI T4, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_7
-L_i32_shl_lt16_1d5304b0_0_6:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_7
+L_i32_shl_lt16_d535669f_0_6:
     ADD T4, S3, R0
     ADD T3, S1, R0
-    BEQ T7, R0, L_i32_shl_done_1d5304b0_0_7
+    BEQ T7, R0, L_i32_shl_done_d535669f_0_7
     SLL T4, S3, T7
     SLL T3, S1, T7
     SUB T6, T5, T7
@@ -388,7 +388,7 @@ L_i32_shl_lt16_1d5304b0_0_6:
     STORE T0, SB, SC
     SRL T0, S3, T6
     OR T3, T3, T0
-L_i32_shl_done_1d5304b0_0_7:
+L_i32_shl_done_d535669f_0_7:
     STORE T4, SB, S2
     ADDI SC, S2, 1
     STORE T3, SB, SC
@@ -529,23 +529,23 @@ L_clz32_10:
     ADDI SC, SC, 71
     STORE T4, SB, SC
     SLTU T4, T5, T6
-    BEQ T4, R0, L_i32_shl_ge32_1d5304b0_0_8
+    BEQ T4, R0, L_i32_shl_ge32_d535669f_0_8
     SLTU T4, T5, T3
-    BEQ T4, R0, L_i32_shl_ge16_1d5304b0_0_9
-    BEQ R0, R0, L_i32_shl_lt16_1d5304b0_0_10
-L_i32_shl_ge32_1d5304b0_0_8:
+    BEQ T4, R0, L_i32_shl_ge16_d535669f_0_9
+    BEQ R0, R0, L_i32_shl_lt16_d535669f_0_10
+L_i32_shl_ge32_d535669f_0_8:
     LI T7, 0
     LI T1, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_11
-L_i32_shl_ge16_1d5304b0_0_9:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_11
+L_i32_shl_ge16_d535669f_0_9:
     SUB T4, T5, T3
     SLL T1, S2, T4
     LI T7, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_11
-L_i32_shl_lt16_1d5304b0_0_10:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_11
+L_i32_shl_lt16_d535669f_0_10:
     ADD T7, S2, R0
     ADD T1, S1, R0
-    BEQ T5, R0, L_i32_shl_done_1d5304b0_0_11
+    BEQ T5, R0, L_i32_shl_done_d535669f_0_11
     SLL T7, S2, T5
     SLL T1, S1, T5
     SUB T4, T3, T5
@@ -555,7 +555,7 @@ L_i32_shl_lt16_1d5304b0_0_10:
     STORE T2, SB, SC
     SRL T2, S2, T4
     OR T1, T1, T2
-L_i32_shl_done_1d5304b0_0_11:
+L_i32_shl_done_d535669f_0_11:
     STORE T7, SB, T0
     ADDI SC, T0, 1
     STORE T1, SB, SC
@@ -696,23 +696,23 @@ L_clz32_13:
     ADDI SC, SC, 92
     STORE T7, SB, SC
     SLTU T7, T3, T4
-    BEQ T7, R0, L_i32_shl_ge32_1d5304b0_0_12
+    BEQ T7, R0, L_i32_shl_ge32_d535669f_0_12
     SLTU T7, T3, T1
-    BEQ T7, R0, L_i32_shl_ge16_1d5304b0_0_13
-    BEQ R0, R0, L_i32_shl_lt16_1d5304b0_0_14
-L_i32_shl_ge32_1d5304b0_0_12:
+    BEQ T7, R0, L_i32_shl_ge16_d535669f_0_13
+    BEQ R0, R0, L_i32_shl_lt16_d535669f_0_14
+L_i32_shl_ge32_d535669f_0_12:
     LI T5, 0
     LI T6, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_15
-L_i32_shl_ge16_1d5304b0_0_13:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_15
+L_i32_shl_ge16_d535669f_0_13:
     SUB T7, T3, T1
     SLL T6, S0, T7
     LI T5, 0
-    BEQ R0, R0, L_i32_shl_done_1d5304b0_0_15
-L_i32_shl_lt16_1d5304b0_0_14:
+    BEQ R0, R0, L_i32_shl_done_d535669f_0_15
+L_i32_shl_lt16_d535669f_0_14:
     ADD T5, S0, R0
     ADD T6, S1, R0
-    BEQ T3, R0, L_i32_shl_done_1d5304b0_0_15
+    BEQ T3, R0, L_i32_shl_done_d535669f_0_15
     SLL T5, S0, T3
     SLL T6, S1, T3
     SUB T7, T1, T3
@@ -722,7 +722,7 @@ L_i32_shl_lt16_1d5304b0_0_14:
     STORE T0, SB, SC
     SRL T0, S0, T7
     OR T6, T6, T0
-L_i32_shl_done_1d5304b0_0_15:
+L_i32_shl_done_d535669f_0_15:
     STORE T5, SB, T2
     ADDI SC, T2, 1
     STORE T6, SB, SC
@@ -1924,23 +1924,23 @@ L_f32_pack_41:
     ADDI SC, SC, 28
     STORE S0, SB, SC
     SLTU S0, T5, T6
-    BEQ S0, R0, L_i32_lshr_ge32_e426cb95_10_0
+    BEQ S0, R0, L_i32_lshr_ge32_66098cfb_10_0
     SLTU S0, T5, S2
-    BEQ S0, R0, L_i32_lshr_ge16_e426cb95_10_1
-    BEQ R0, R0, L_i32_lshr_lt16_e426cb95_10_2
-L_i32_lshr_ge32_e426cb95_10_0:
+    BEQ S0, R0, L_i32_lshr_ge16_66098cfb_10_1
+    BEQ R0, R0, L_i32_lshr_lt16_66098cfb_10_2
+L_i32_lshr_ge32_66098cfb_10_0:
     LI T4, 0
     LI S1, 0
-    BEQ R0, R0, L_i32_lshr_done_e426cb95_10_3
-L_i32_lshr_ge16_e426cb95_10_1:
+    BEQ R0, R0, L_i32_lshr_done_66098cfb_10_3
+L_i32_lshr_ge16_66098cfb_10_1:
     SUB S0, T5, S2
     SRL T4, T2, S0
     LI S1, 0
-    BEQ R0, R0, L_i32_lshr_done_e426cb95_10_3
-L_i32_lshr_lt16_e426cb95_10_2:
+    BEQ R0, R0, L_i32_lshr_done_66098cfb_10_3
+L_i32_lshr_lt16_66098cfb_10_2:
     ADD T4, T0, R0
     ADD S1, T2, R0
-    BEQ T5, R0, L_i32_lshr_done_e426cb95_10_3
+    BEQ T5, R0, L_i32_lshr_done_66098cfb_10_3
     SRL T4, T0, T5
     SRL S1, T2, T5
     SUB S0, S2, T5
@@ -1950,7 +1950,7 @@ L_i32_lshr_lt16_e426cb95_10_2:
     STORE S3, SB, SC
     SLL S3, T2, S0
     OR T4, T4, S3
-L_i32_lshr_done_e426cb95_10_3:
+L_i32_lshr_done_66098cfb_10_3:
 ; Spill const_f10_op34_8388608 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 30
@@ -2123,23 +2123,23 @@ L_f32_pack_38:
     ADDI SC, SC, 55
     STORE T6, SB, SC
     SLTU T6, T4, T0
-    BEQ T6, R0, L_i32_shl_ge32_e426cb95_10_4
+    BEQ T6, R0, L_i32_shl_ge32_66098cfb_10_4
     SLTU T6, T4, T5
-    BEQ T6, R0, L_i32_shl_ge16_e426cb95_10_5
-    BEQ R0, R0, L_i32_shl_lt16_e426cb95_10_6
-L_i32_shl_ge32_e426cb95_10_4:
+    BEQ T6, R0, L_i32_shl_ge16_66098cfb_10_5
+    BEQ R0, R0, L_i32_shl_lt16_66098cfb_10_6
+L_i32_shl_ge32_66098cfb_10_4:
     LI T2, 0
     LI S3, 0
-    BEQ R0, R0, L_i32_shl_done_e426cb95_10_7
-L_i32_shl_ge16_e426cb95_10_5:
+    BEQ R0, R0, L_i32_shl_done_66098cfb_10_7
+L_i32_shl_ge16_66098cfb_10_5:
     SUB T6, T4, T5
     SLL S3, T1, T6
     LI T2, 0
-    BEQ R0, R0, L_i32_shl_done_e426cb95_10_7
-L_i32_shl_lt16_e426cb95_10_6:
+    BEQ R0, R0, L_i32_shl_done_66098cfb_10_7
+L_i32_shl_lt16_66098cfb_10_6:
     ADD T2, T1, R0
     ADD S3, T3, R0
-    BEQ T4, R0, L_i32_shl_done_e426cb95_10_7
+    BEQ T4, R0, L_i32_shl_done_66098cfb_10_7
     SLL T2, T1, T4
     SLL S3, T3, T4
     SUB T6, T5, T4
@@ -2149,7 +2149,7 @@ L_i32_shl_lt16_e426cb95_10_6:
     STORE S2, SB, SC
     SRL S2, T1, T6
     OR S3, S3, S2
-L_i32_shl_done_e426cb95_10_7:
+L_i32_shl_done_66098cfb_10_7:
 ; Recompute alloca t6 at FP+5
     ADD T7, FP, R0
     ADDI T7, T7, 5
@@ -3121,23 +3121,23 @@ L___rcc_f32_add_72:
     STORE T2, SB, SC
     LI T2, 16
     SLTU S3, T1, S1
-    BEQ S3, R0, L_i32_lshr_ge32_1728dff2_12_0
+    BEQ S3, R0, L_i32_lshr_ge32_1436ead9_12_0
     SLTU S3, T1, T2
-    BEQ S3, R0, L_i32_lshr_ge16_1728dff2_12_1
-    BEQ R0, R0, L_i32_lshr_lt16_1728dff2_12_2
-L_i32_lshr_ge32_1728dff2_12_0:
+    BEQ S3, R0, L_i32_lshr_ge16_1436ead9_12_1
+    BEQ R0, R0, L_i32_lshr_lt16_1436ead9_12_2
+L_i32_lshr_ge32_1436ead9_12_0:
     LI T7, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_1728dff2_12_3
-L_i32_lshr_ge16_1728dff2_12_1:
+    BEQ R0, R0, L_i32_lshr_done_1436ead9_12_3
+L_i32_lshr_ge16_1436ead9_12_1:
     SUB S3, T1, T2
     SRL T7, S0, S3
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_1728dff2_12_3
-L_i32_lshr_lt16_1728dff2_12_2:
+    BEQ R0, R0, L_i32_lshr_done_1436ead9_12_3
+L_i32_lshr_lt16_1436ead9_12_2:
     ADD T7, T5, R0
     ADD T3, S0, R0
-    BEQ T1, R0, L_i32_lshr_done_1728dff2_12_3
+    BEQ T1, R0, L_i32_lshr_done_1436ead9_12_3
     SRL T7, T5, T1
     SRL T3, S0, T1
     SUB S3, T2, T1
@@ -3147,7 +3147,7 @@ L_i32_lshr_lt16_1728dff2_12_2:
     STORE T0, SB, SC
     SLL T0, S0, S3
     OR T7, T7, T0
-L_i32_lshr_done_1728dff2_12_3:
+L_i32_lshr_done_1436ead9_12_3:
 ; Spill t63__hi to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 105
@@ -3218,23 +3218,23 @@ L_i32_lshr_done_1728dff2_12_3:
     LI T7, 32
     LI T6, 16
     SLTU T4, T3, T7
-    BEQ T4, R0, L_i32_lshr_ge32_1728dff2_12_4
+    BEQ T4, R0, L_i32_lshr_ge32_1436ead9_12_4
     SLTU T4, T3, T6
-    BEQ T4, R0, L_i32_lshr_ge16_1728dff2_12_5
-    BEQ R0, R0, L_i32_lshr_lt16_1728dff2_12_6
-L_i32_lshr_ge32_1728dff2_12_4:
+    BEQ T4, R0, L_i32_lshr_ge16_1436ead9_12_5
+    BEQ R0, R0, L_i32_lshr_lt16_1436ead9_12_6
+L_i32_lshr_ge32_1436ead9_12_4:
     LI S3, 0
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_1728dff2_12_7
-L_i32_lshr_ge16_1728dff2_12_5:
+    BEQ R0, R0, L_i32_lshr_done_1436ead9_12_7
+L_i32_lshr_ge16_1436ead9_12_5:
     SUB T4, T3, T6
     SRL S3, T2, T4
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_1728dff2_12_7
-L_i32_lshr_lt16_1728dff2_12_6:
+    BEQ R0, R0, L_i32_lshr_done_1436ead9_12_7
+L_i32_lshr_lt16_1436ead9_12_6:
     ADD S3, S1, R0
     ADD T0, T2, R0
-    BEQ T3, R0, L_i32_lshr_done_1728dff2_12_7
+    BEQ T3, R0, L_i32_lshr_done_1436ead9_12_7
     SRL S3, S1, T3
     SRL T0, T2, T3
     SUB T4, T6, T3
@@ -3244,7 +3244,7 @@ L_i32_lshr_lt16_1728dff2_12_6:
     STORE S2, SB, SC
     SLL S2, T2, T4
     OR S3, S3, S2
-L_i32_lshr_done_1728dff2_12_7:
+L_i32_lshr_done_1436ead9_12_7:
 ; Spill t67__hi to slot 79
     ADD SC, FP, R0
     ADDI SC, SC, 118
@@ -3561,7 +3561,7 @@ L___rcc_f32_add_78:
     ADD S1, RV1, R0
     ADD T7, X0, R0
     ADD S0, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_8
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T7, SC
@@ -3574,7 +3574,7 @@ L___rcc_f32_add_78:
     SLL S1, S1, X3
     OR S1, S1, X0
     SLL T5, T5, X3
-L_i64_sh_nobit_1728dff2_12_8:
+L_i64_sh_nobit_1436ead9_12_8:
 ; Spill t85 to slot 115
     ADD SC, FP, R0
     ADDI SC, SC, 154
@@ -3658,7 +3658,7 @@ L_i64_sh_nobit_1728dff2_12_8:
     ADD T7, RV1, R0
     ADD S0, X0, R0
     ADD T3, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_9
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_9
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S0, SC
@@ -3671,7 +3671,7 @@ L_i64_sh_nobit_1728dff2_12_8:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_1728dff2_12_9:
+L_i64_sh_nobit_1436ead9_12_9:
 ; Spill t88 to slot 127
     ADD SC, FP, R0
     ADDI SC, SC, 166
@@ -3882,19 +3882,19 @@ L___rcc_f32_add_83:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_1728dff2_12_10
+    BEQ X3, R0, L_i64_sh_ge32_1436ead9_12_10
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_1728dff2_12_12
-    BEQ R0, R0, L_i64_sh_lt16_1728dff2_12_13
-L_i64_sh_ge32_1728dff2_12_10:
+    BEQ X3, R0, L_i64_sh_ge16_1436ead9_12_12
+    BEQ R0, R0, L_i64_sh_lt16_1436ead9_12_13
+L_i64_sh_ge32_1436ead9_12_10:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_1728dff2_12_11
+    BEQ X3, R0, L_i64_sh_ge48_1436ead9_12_11
     SUB X3, X2, A1
     ADD S2, X0, R0
     ADD T1, X1, R0
     LI T4, 0
     LI T6, 0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_15
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_15
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T1, SC
@@ -3907,15 +3907,15 @@ L_i64_sh_ge32_1728dff2_12_10:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T6, T6, X3
-L_i64_sh_nobit_1728dff2_12_15:
-    BEQ R0, R0, L_i64_sh_done_1728dff2_12_14
-L_i64_sh_ge48_1728dff2_12_11:
+L_i64_sh_nobit_1436ead9_12_15:
+    BEQ R0, R0, L_i64_sh_done_1436ead9_12_14
+L_i64_sh_ge48_1436ead9_12_11:
     SUB X3, X2, A2
     ADD S2, X1, R0
     LI T1, 0
     LI T4, 0
     LI T6, 0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_16
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_16
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T1, SC
@@ -3928,15 +3928,15 @@ L_i64_sh_ge48_1728dff2_12_11:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T6, T6, X3
-L_i64_sh_nobit_1728dff2_12_16:
-    BEQ R0, R0, L_i64_sh_done_1728dff2_12_14
-L_i64_sh_ge16_1728dff2_12_12:
+L_i64_sh_nobit_1436ead9_12_16:
+    BEQ R0, R0, L_i64_sh_done_1436ead9_12_14
+L_i64_sh_ge16_1436ead9_12_12:
     SUB X3, X2, A0
     ADD S2, RV1, R0
     ADD T1, X0, R0
     ADD T4, X1, R0
     LI T6, 0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_17
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_17
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T1, SC
@@ -3949,14 +3949,14 @@ L_i64_sh_ge16_1728dff2_12_12:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T6, T6, X3
-L_i64_sh_nobit_1728dff2_12_17:
-    BEQ R0, R0, L_i64_sh_done_1728dff2_12_14
-L_i64_sh_lt16_1728dff2_12_13:
+L_i64_sh_nobit_1436ead9_12_17:
+    BEQ R0, R0, L_i64_sh_done_1436ead9_12_14
+L_i64_sh_lt16_1436ead9_12_13:
     ADD S2, RV0, R0
     ADD T1, RV1, R0
     ADD T4, X0, R0
     ADD T6, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_1728dff2_12_18
+    BEQ X2, R0, L_i64_sh_nobit_1436ead9_12_18
     LI SC, 16
     SUB SC, SC, X2
     SLL X0, T1, SC
@@ -3969,8 +3969,8 @@ L_i64_sh_lt16_1728dff2_12_13:
     SRL T4, T4, X2
     OR T4, T4, X0
     SRL T6, T6, X2
-L_i64_sh_nobit_1728dff2_12_18:
-L_i64_sh_done_1728dff2_12_14:
+L_i64_sh_nobit_1436ead9_12_18:
+L_i64_sh_done_1436ead9_12_14:
     STORE S2, SB, T7
     ADDI SC, T7, 1
     STORE T1, SB, SC
@@ -4194,19 +4194,19 @@ L___rcc_f32_add_89:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_1728dff2_12_19
+    BEQ X3, R0, L_i64_sh_ge32_1436ead9_12_19
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_1728dff2_12_21
-    BEQ R0, R0, L_i64_sh_lt16_1728dff2_12_22
-L_i64_sh_ge32_1728dff2_12_19:
+    BEQ X3, R0, L_i64_sh_ge16_1436ead9_12_21
+    BEQ R0, R0, L_i64_sh_lt16_1436ead9_12_22
+L_i64_sh_ge32_1436ead9_12_19:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_1728dff2_12_20
+    BEQ X3, R0, L_i64_sh_ge48_1436ead9_12_20
     SUB X3, X2, A1
     ADD S0, X0, R0
     ADD T2, X1, R0
     LI T3, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_24
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_24
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -4219,15 +4219,15 @@ L_i64_sh_ge32_1728dff2_12_19:
     SRL T3, T3, X3
     OR T3, T3, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_1728dff2_12_24:
-    BEQ R0, R0, L_i64_sh_done_1728dff2_12_23
-L_i64_sh_ge48_1728dff2_12_20:
+L_i64_sh_nobit_1436ead9_12_24:
+    BEQ R0, R0, L_i64_sh_done_1436ead9_12_23
+L_i64_sh_ge48_1436ead9_12_20:
     SUB X3, X2, A2
     ADD S0, X1, R0
     LI T2, 0
     LI T3, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_25
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_25
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -4240,15 +4240,15 @@ L_i64_sh_ge48_1728dff2_12_20:
     SRL T3, T3, X3
     OR T3, T3, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_1728dff2_12_25:
-    BEQ R0, R0, L_i64_sh_done_1728dff2_12_23
-L_i64_sh_ge16_1728dff2_12_21:
+L_i64_sh_nobit_1436ead9_12_25:
+    BEQ R0, R0, L_i64_sh_done_1436ead9_12_23
+L_i64_sh_ge16_1436ead9_12_21:
     SUB X3, X2, A0
     ADD S0, RV1, R0
     ADD T2, X0, R0
     ADD T3, X1, R0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_26
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_26
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -4261,14 +4261,14 @@ L_i64_sh_ge16_1728dff2_12_21:
     SRL T3, T3, X3
     OR T3, T3, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_1728dff2_12_26:
-    BEQ R0, R0, L_i64_sh_done_1728dff2_12_23
-L_i64_sh_lt16_1728dff2_12_22:
+L_i64_sh_nobit_1436ead9_12_26:
+    BEQ R0, R0, L_i64_sh_done_1436ead9_12_23
+L_i64_sh_lt16_1436ead9_12_22:
     ADD S0, RV0, R0
     ADD T2, RV1, R0
     ADD T3, X0, R0
     ADD T5, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_1728dff2_12_27
+    BEQ X2, R0, L_i64_sh_nobit_1436ead9_12_27
     LI SC, 16
     SUB SC, SC, X2
     SLL X0, T2, SC
@@ -4281,8 +4281,8 @@ L_i64_sh_lt16_1728dff2_12_22:
     SRL T3, T3, X2
     OR T3, T3, X0
     SRL T5, T5, X2
-L_i64_sh_nobit_1728dff2_12_27:
-L_i64_sh_done_1728dff2_12_23:
+L_i64_sh_nobit_1436ead9_12_27:
+L_i64_sh_done_1436ead9_12_23:
     STORE S0, SB, T4
     ADDI SC, T4, 1
     STORE T2, SB, SC
@@ -4582,7 +4582,7 @@ L___rcc_f32_add_91:
     ADD T0, RV0, R0
     ADD T5, RV1, R0
     ADD T7, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_28
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_28
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T5, SC
@@ -4595,7 +4595,7 @@ L___rcc_f32_add_91:
     SLL T0, T0, X3
     OR T0, T0, X0
     SLL S2, S2, X3
-L_i64_sh_nobit_1728dff2_12_28:
+L_i64_sh_nobit_1436ead9_12_28:
     ADD RV0, S3, R0
     ADD RV1, S1, R0
     ADD X0, S0, R0
@@ -4732,7 +4732,7 @@ L___rcc_f32_add_94:
     ADD S1, RV1, R0
     ADD S0, X0, R0
     ADD T3, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_29
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_29
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S1, SC
@@ -4745,7 +4745,7 @@ L___rcc_f32_add_94:
     SRL S0, S0, X3
     OR S0, S0, X0
     SRL T3, T3, X3
-L_i64_sh_nobit_1728dff2_12_29:
+L_i64_sh_nobit_1436ead9_12_29:
     STORE S3, SB, S2
     ADDI SC, S2, 1
     STORE S1, SB, SC
@@ -4861,7 +4861,7 @@ L___rcc_f32_add_96:
     ADD T5, RV1, R0
     ADD T0, X0, R0
     ADD T7, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_30
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_30
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T5, SC
@@ -4874,7 +4874,7 @@ L___rcc_f32_add_96:
     SRL T0, T0, X3
     OR T0, T0, X0
     SRL T7, T7, X3
-L_i64_sh_nobit_1728dff2_12_30:
+L_i64_sh_nobit_1436ead9_12_30:
 ; Spill t137__hi to slot 232
     ADD SC, FP, R0
     ADDI SC, SC, 271
@@ -5005,22 +5005,22 @@ L___rcc_f32_add_93:
     ADDI SC, SC, 281
     STORE S3, SB, SC
     XOR S3, T7, T4
-    BNE S3, R0, L_i64_ult_w3ne_1728dff2_12_31
+    BNE S3, R0, L_i64_ult_w3ne_1436ead9_12_31
     XOR S3, T0, S2
-    BNE S3, R0, L_i64_ult_w2ne_1728dff2_12_32
+    BNE S3, R0, L_i64_ult_w2ne_1436ead9_12_32
     XOR S3, T5, T2
-    BNE S3, R0, L_i64_ult_w1ne_1728dff2_12_33
+    BNE S3, R0, L_i64_ult_w1ne_1436ead9_12_33
     SLTU S3, T3, T6
-    BEQ R0, R0, L_i64_ult_done_1728dff2_12_34
-L_i64_ult_w3ne_1728dff2_12_31:
+    BEQ R0, R0, L_i64_ult_done_1436ead9_12_34
+L_i64_ult_w3ne_1436ead9_12_31:
     SLTU S3, T7, T4
-    BEQ R0, R0, L_i64_ult_done_1728dff2_12_34
-L_i64_ult_w2ne_1728dff2_12_32:
+    BEQ R0, R0, L_i64_ult_done_1436ead9_12_34
+L_i64_ult_w2ne_1436ead9_12_32:
     SLTU S3, T0, S2
-    BEQ R0, R0, L_i64_ult_done_1728dff2_12_34
-L_i64_ult_w1ne_1728dff2_12_33:
+    BEQ R0, R0, L_i64_ult_done_1436ead9_12_34
+L_i64_ult_w1ne_1436ead9_12_33:
     SLTU S3, T5, T2
-L_i64_ult_done_1728dff2_12_34:
+L_i64_ult_done_1436ead9_12_34:
 ; Spill t142__hi to slot 243
     ADD SC, FP, R0
     ADDI SC, SC, 282
@@ -5511,7 +5511,7 @@ L___rcc_f32_add_103:
     ADD T3, RV0, R0
     ADD S3, RV1, R0
     ADD T1, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_35
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_35
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S3, SC
@@ -5524,7 +5524,7 @@ L___rcc_f32_add_103:
     SLL T3, T3, X3
     OR T3, T3, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_1728dff2_12_35:
+L_i64_sh_nobit_1436ead9_12_35:
     ADD RV0, S2, R0
     ADD RV1, T5, R0
     ADD X0, T6, R0
@@ -5690,7 +5690,7 @@ L___rcc_f32_add_104:
     ADD T3, RV1, R0
     ADD S3, X0, R0
     ADD T1, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_36
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_36
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S3, SC
@@ -5703,7 +5703,7 @@ L___rcc_f32_add_104:
     SLL T3, T3, X3
     OR T3, T3, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_1728dff2_12_36:
+L_i64_sh_nobit_1436ead9_12_36:
     STORE T2, SB, S1
     ADDI SC, S1, 1
     STORE T3, SB, SC
@@ -5861,7 +5861,7 @@ L___rcc_f32_add_105:
     ADD S0, RV1, R0
     ADD T4, X0, R0
     ADD T6, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_1728dff2_12_37
+    BEQ X3, R0, L_i64_sh_nobit_1436ead9_12_37
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S0, SC
@@ -5874,7 +5874,7 @@ L___rcc_f32_add_105:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T6, T6, X3
-L_i64_sh_nobit_1728dff2_12_37:
+L_i64_sh_nobit_1436ead9_12_37:
 ; Spill t174__hi to slot 341
     ADD SC, FP, R0
     ADDI SC, SC, 380
@@ -6987,23 +6987,23 @@ L___rcc_f32_mul_140:
     STORE S2, SB, SC
     LI S2, 16
     SLTU T2, T3, T6
-    BEQ T2, R0, L_i32_lshr_ge32_f51cf912_16_0
+    BEQ T2, R0, L_i32_lshr_ge32_e8bfea0_16_0
     SLTU T2, T3, S2
-    BEQ T2, R0, L_i32_lshr_ge16_f51cf912_16_1
-    BEQ R0, R0, L_i32_lshr_lt16_f51cf912_16_2
-L_i32_lshr_ge32_f51cf912_16_0:
+    BEQ T2, R0, L_i32_lshr_ge16_e8bfea0_16_1
+    BEQ R0, R0, L_i32_lshr_lt16_e8bfea0_16_2
+L_i32_lshr_ge32_e8bfea0_16_0:
     LI T7, 0
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_f51cf912_16_3
-L_i32_lshr_ge16_f51cf912_16_1:
+    BEQ R0, R0, L_i32_lshr_done_e8bfea0_16_3
+L_i32_lshr_ge16_e8bfea0_16_1:
     SUB T2, T3, S2
     SRL T7, T1, T2
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_f51cf912_16_3
-L_i32_lshr_lt16_f51cf912_16_2:
+    BEQ R0, R0, L_i32_lshr_done_e8bfea0_16_3
+L_i32_lshr_lt16_e8bfea0_16_2:
     ADD T7, S1, R0
     ADD T4, T1, R0
-    BEQ T3, R0, L_i32_lshr_done_f51cf912_16_3
+    BEQ T3, R0, L_i32_lshr_done_e8bfea0_16_3
     SRL T7, S1, T3
     SRL T4, T1, T3
     SUB T2, S2, T3
@@ -7013,7 +7013,7 @@ L_i32_lshr_lt16_f51cf912_16_2:
     STORE S0, SB, SC
     SLL S0, T1, T2
     OR T7, T7, S0
-L_i32_lshr_done_f51cf912_16_3:
+L_i32_lshr_done_e8bfea0_16_3:
 ; Spill t66__hi to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 80
@@ -7084,23 +7084,23 @@ L_i32_lshr_done_f51cf912_16_3:
     LI T7, 32
     LI T5, 16
     SLTU T0, T4, T7
-    BEQ T0, R0, L_i32_lshr_ge32_f51cf912_16_4
+    BEQ T0, R0, L_i32_lshr_ge32_e8bfea0_16_4
     SLTU T0, T4, T5
-    BEQ T0, R0, L_i32_lshr_ge16_f51cf912_16_5
-    BEQ R0, R0, L_i32_lshr_lt16_f51cf912_16_6
-L_i32_lshr_ge32_f51cf912_16_4:
+    BEQ T0, R0, L_i32_lshr_ge16_e8bfea0_16_5
+    BEQ R0, R0, L_i32_lshr_lt16_e8bfea0_16_6
+L_i32_lshr_ge32_e8bfea0_16_4:
     LI T2, 0
     LI S0, 0
-    BEQ R0, R0, L_i32_lshr_done_f51cf912_16_7
-L_i32_lshr_ge16_f51cf912_16_5:
+    BEQ R0, R0, L_i32_lshr_done_e8bfea0_16_7
+L_i32_lshr_ge16_e8bfea0_16_5:
     SUB T0, T4, T5
     SRL T2, S2, T0
     LI S0, 0
-    BEQ R0, R0, L_i32_lshr_done_f51cf912_16_7
-L_i32_lshr_lt16_f51cf912_16_6:
+    BEQ R0, R0, L_i32_lshr_done_e8bfea0_16_7
+L_i32_lshr_lt16_e8bfea0_16_6:
     ADD T2, T6, R0
     ADD S0, S2, R0
-    BEQ T4, R0, L_i32_lshr_done_f51cf912_16_7
+    BEQ T4, R0, L_i32_lshr_done_e8bfea0_16_7
     SRL T2, T6, T4
     SRL S0, S2, T4
     SUB T0, T5, T4
@@ -7110,7 +7110,7 @@ L_i32_lshr_lt16_f51cf912_16_6:
     STORE S3, SB, SC
     SLL S3, S2, T0
     OR T2, T2, S3
-L_i32_lshr_done_f51cf912_16_7:
+L_i32_lshr_done_e8bfea0_16_7:
 ; Spill t70__hi to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 93
@@ -9485,7 +9485,7 @@ L___rcc_f32_mul_146:
     LI T7, 0
     ADD S3, RV0, R0
     ADD T5, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_f51cf912_16_8
+    BEQ X3, R0, L_i64_sh_nobit_e8bfea0_16_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S3, SC
@@ -9498,7 +9498,7 @@ L___rcc_f32_mul_146:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_f51cf912_16_8:
+L_i64_sh_nobit_e8bfea0_16_8:
     ADD RV0, T2, R0
     ADD RV1, T0, R0
     ADD X0, T1, R0
@@ -9635,7 +9635,7 @@ L___rcc_f32_mul_147:
     ADD T0, X0, R0
     ADD T1, X1, R0
     LI T3, 0
-    BEQ X3, R0, L_i64_sh_nobit_f51cf912_16_9
+    BEQ X3, R0, L_i64_sh_nobit_e8bfea0_16_9
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T0, SC
@@ -9648,7 +9648,7 @@ L___rcc_f32_mul_147:
     SRL T1, T1, X3
     OR T1, T1, X0
     SRL T3, T3, X3
-L_i64_sh_nobit_f51cf912_16_9:
+L_i64_sh_nobit_e8bfea0_16_9:
     STORE T2, SB, S1
     ADDI SC, S1, 1
     STORE T0, SB, SC
@@ -9730,7 +9730,7 @@ L___rcc_f32_mul_148:
     ADD S2, X0, R0
     ADD T2, X1, R0
     LI T0, 0
-    BEQ X3, R0, L_i64_sh_nobit_f51cf912_16_10
+    BEQ X3, R0, L_i64_sh_nobit_e8bfea0_16_10
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S2, SC
@@ -9743,7 +9743,7 @@ L___rcc_f32_mul_148:
     SRL T2, T2, X3
     OR T2, T2, X0
     SRL T0, T0, X3
-L_i64_sh_nobit_f51cf912_16_10:
+L_i64_sh_nobit_e8bfea0_16_10:
     STORE S0, SB, T7
     ADDI SC, T7, 1
     STORE S2, SB, SC
@@ -10730,23 +10730,23 @@ L___rcc_f32_div_180:
     STORE S2, SB, SC
     LI S2, 16
     SLTU S0, T3, T2
-    BEQ S0, R0, L_i32_lshr_ge32_bca42933_18_0
+    BEQ S0, R0, L_i32_lshr_ge32_2f285ebb_18_0
     SLTU S0, T3, S2
-    BEQ S0, R0, L_i32_lshr_ge16_bca42933_18_1
-    BEQ R0, R0, L_i32_lshr_lt16_bca42933_18_2
-L_i32_lshr_ge32_bca42933_18_0:
+    BEQ S0, R0, L_i32_lshr_ge16_2f285ebb_18_1
+    BEQ R0, R0, L_i32_lshr_lt16_2f285ebb_18_2
+L_i32_lshr_ge32_2f285ebb_18_0:
     LI T4, 0
     LI T7, 0
-    BEQ R0, R0, L_i32_lshr_done_bca42933_18_3
-L_i32_lshr_ge16_bca42933_18_1:
+    BEQ R0, R0, L_i32_lshr_done_2f285ebb_18_3
+L_i32_lshr_ge16_2f285ebb_18_1:
     SUB S0, T3, S2
     SRL T4, T0, S0
     LI T7, 0
-    BEQ R0, R0, L_i32_lshr_done_bca42933_18_3
-L_i32_lshr_lt16_bca42933_18_2:
+    BEQ R0, R0, L_i32_lshr_done_2f285ebb_18_3
+L_i32_lshr_lt16_2f285ebb_18_2:
     ADD T4, T5, R0
     ADD T7, T0, R0
-    BEQ T3, R0, L_i32_lshr_done_bca42933_18_3
+    BEQ T3, R0, L_i32_lshr_done_2f285ebb_18_3
     SRL T4, T5, T3
     SRL T7, T0, T3
     SUB S0, S2, T3
@@ -10756,7 +10756,7 @@ L_i32_lshr_lt16_bca42933_18_2:
     STORE T6, SB, SC
     SLL T6, T0, S0
     OR T4, T4, T6
-L_i32_lshr_done_bca42933_18_3:
+L_i32_lshr_done_2f285ebb_18_3:
 ; Spill t65__hi to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 86
@@ -10827,23 +10827,23 @@ L_i32_lshr_done_bca42933_18_3:
     LI T4, 32
     LI S1, 16
     SLTU S3, T7, T4
-    BEQ S3, R0, L_i32_lshr_ge32_bca42933_18_4
+    BEQ S3, R0, L_i32_lshr_ge32_2f285ebb_18_4
     SLTU S3, T7, S1
-    BEQ S3, R0, L_i32_lshr_ge16_bca42933_18_5
-    BEQ R0, R0, L_i32_lshr_lt16_bca42933_18_6
-L_i32_lshr_ge32_bca42933_18_4:
+    BEQ S3, R0, L_i32_lshr_ge16_2f285ebb_18_5
+    BEQ R0, R0, L_i32_lshr_lt16_2f285ebb_18_6
+L_i32_lshr_ge32_2f285ebb_18_4:
     LI S0, 0
     LI T6, 0
-    BEQ R0, R0, L_i32_lshr_done_bca42933_18_7
-L_i32_lshr_ge16_bca42933_18_5:
+    BEQ R0, R0, L_i32_lshr_done_2f285ebb_18_7
+L_i32_lshr_ge16_2f285ebb_18_5:
     SUB S3, T7, S1
     SRL S0, S2, S3
     LI T6, 0
-    BEQ R0, R0, L_i32_lshr_done_bca42933_18_7
-L_i32_lshr_lt16_bca42933_18_6:
+    BEQ R0, R0, L_i32_lshr_done_2f285ebb_18_7
+L_i32_lshr_lt16_2f285ebb_18_6:
     ADD S0, T2, R0
     ADD T6, S2, R0
-    BEQ T7, R0, L_i32_lshr_done_bca42933_18_7
+    BEQ T7, R0, L_i32_lshr_done_2f285ebb_18_7
     SRL S0, T2, T7
     SRL T6, S2, T7
     SUB S3, S1, T7
@@ -10853,7 +10853,7 @@ L_i32_lshr_lt16_bca42933_18_6:
     STORE T1, SB, SC
     SLL T1, S2, S3
     OR S0, S0, T1
-L_i32_lshr_done_bca42933_18_7:
+L_i32_lshr_done_2f285ebb_18_7:
 ; Spill t69__hi to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 99
@@ -11197,7 +11197,7 @@ L___rcc_f32_div_186:
     ADD T7, RV0, R0
     ADD T1, RV1, R0
     ADD S3, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_bca42933_18_8
+    BEQ X3, R0, L_i64_sh_nobit_2f285ebb_18_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T1, SC
@@ -11210,7 +11210,7 @@ L___rcc_f32_div_186:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL S2, S2, X3
-L_i64_sh_nobit_bca42933_18_8:
+L_i64_sh_nobit_2f285ebb_18_8:
 ; Spill t91 to slot 98
     ADD SC, FP, R0
     ADDI SC, SC, 136
@@ -11410,7 +11410,7 @@ L_i64_sh_nobit_bca42933_18_8:
     LI X0, 0
     LI X1, 0
     LI S2, 64
-L_i64_udiv_loop_bca42933_18_9:
+L_i64_udiv_loop_2f285ebb_18_9:
     SLT T6, S1, R0
     ADD T3, T3, T3
     OR T3, T3, T6
@@ -11444,25 +11444,25 @@ L_i64_udiv_loop_bca42933_18_9:
     OR RV1, RV1, T6
     ADD RV0, RV0, RV0
     XOR T6, T3, A3
-    BNE T6, R0, L_i64_ult_w3ne_bca42933_18_13
+    BNE T6, R0, L_i64_ult_w3ne_2f285ebb_18_13
     XOR T6, S1, A2
-    BNE T6, R0, L_i64_ult_w2ne_bca42933_18_14
+    BNE T6, R0, L_i64_ult_w2ne_2f285ebb_18_14
     XOR T6, S0, A1
-    BNE T6, R0, L_i64_ult_w1ne_bca42933_18_15
+    BNE T6, R0, L_i64_ult_w1ne_2f285ebb_18_15
     SLTU T6, S3, A0
-    BEQ R0, R0, L_i64_ult_done_bca42933_18_16
-L_i64_ult_w3ne_bca42933_18_13:
+    BEQ R0, R0, L_i64_ult_done_2f285ebb_18_16
+L_i64_ult_w3ne_2f285ebb_18_13:
     SLTU T6, T3, A3
-    BEQ R0, R0, L_i64_ult_done_bca42933_18_16
-L_i64_ult_w2ne_bca42933_18_14:
+    BEQ R0, R0, L_i64_ult_done_2f285ebb_18_16
+L_i64_ult_w2ne_2f285ebb_18_14:
     SLTU T6, S1, A2
-    BEQ R0, R0, L_i64_ult_done_bca42933_18_16
-L_i64_ult_w1ne_bca42933_18_15:
+    BEQ R0, R0, L_i64_ult_done_2f285ebb_18_16
+L_i64_ult_w1ne_2f285ebb_18_15:
     SLTU T6, S0, A1
-L_i64_ult_done_bca42933_18_16:
-    BNE T6, R0, L_i64_udiv_next_bca42933_18_11
-    BEQ R0, R0, L_i64_udiv_ge_bca42933_18_10
-L_i64_udiv_ge_bca42933_18_10:
+L_i64_ult_done_2f285ebb_18_16:
+    BNE T6, R0, L_i64_udiv_next_2f285ebb_18_11
+    BEQ R0, R0, L_i64_udiv_ge_2f285ebb_18_10
+L_i64_udiv_ge_2f285ebb_18_10:
     LI SC, 0
     SLTU X2, S3, A0
     SUB X3, S3, A0
@@ -11486,11 +11486,11 @@ L_i64_udiv_ge_bca42933_18_10:
     OR SC, X2, X3
     LI T6, 1
     OR RV0, RV0, T6
-L_i64_udiv_next_bca42933_18_11:
+L_i64_udiv_next_2f285ebb_18_11:
     ADDI S2, S2, -1
-    BEQ S2, R0, L_i64_udiv_done_bca42933_18_12
-    BEQ R0, R0, L_i64_udiv_loop_bca42933_18_9
-L_i64_udiv_done_bca42933_18_12:
+    BEQ S2, R0, L_i64_udiv_done_2f285ebb_18_12
+    BEQ R0, R0, L_i64_udiv_loop_2f285ebb_18_9
+L_i64_udiv_done_2f285ebb_18_12:
 ; Spill t98__w2 to slot 128
     ADD SC, FP, R0
     ADDI SC, SC, 166
@@ -11769,7 +11769,7 @@ L___rcc_f32_div_187:
     ADD T5, RV1, R0
     ADD T2, X0, R0
     ADD T4, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_bca42933_18_17
+    BEQ X3, R0, L_i64_sh_nobit_2f285ebb_18_17
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T2, SC
@@ -11782,7 +11782,7 @@ L___rcc_f32_div_187:
     SLL T5, T5, X3
     OR T5, T5, X0
     SLL T7, T7, X3
-L_i64_sh_nobit_bca42933_18_17:
+L_i64_sh_nobit_2f285ebb_18_17:
     STORE T7, SB, S2
     ADDI SC, S2, 1
     STORE T5, SB, SC
@@ -12981,12 +12981,12 @@ L___rcc_f32_lt_220:
     ADDI SC, SC, 57
     STORE T0, SB, SC
     XOR T0, S3, T1
-    BNE T0, R0, L_i32_ult_hine_d46b6e30_24_0
+    BNE T0, R0, L_i32_ult_hine_a9834a1a_24_0
     SLTU T0, S0, T3
-    BEQ R0, R0, L_i32_ult_done_d46b6e30_24_1
-L_i32_ult_hine_d46b6e30_24_0:
+    BEQ R0, R0, L_i32_ult_done_a9834a1a_24_1
+L_i32_ult_hine_a9834a1a_24_0:
     SLTU T0, S3, T1
-L_i32_ult_done_d46b6e30_24_1:
+L_i32_ult_done_a9834a1a_24_1:
     MOVE RV0, T0
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f32_lt_99999
@@ -13032,12 +13032,12 @@ L___rcc_f32_lt_222:
     ADDI SC, SC, 62
     STORE T2, SB, SC
     XOR T2, T6, S2
-    BNE T2, R0, L_i32_ult_hine_d46b6e30_24_2
+    BNE T2, R0, L_i32_ult_hine_a9834a1a_24_2
     SLTU T2, T7, S1
-    BEQ R0, R0, L_i32_ult_done_d46b6e30_24_3
-L_i32_ult_hine_d46b6e30_24_2:
+    BEQ R0, R0, L_i32_ult_done_a9834a1a_24_3
+L_i32_ult_hine_a9834a1a_24_2:
     SLTU T2, T6, S2
-L_i32_ult_done_d46b6e30_24_3:
+L_i32_ult_done_a9834a1a_24_3:
     MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f32_lt_99999
@@ -13686,12 +13686,12 @@ L___rcc_f32_from_si_232:
     ADDI SC, SC, 23
     STORE S3, SB, SC
     XOR S3, T2, S2
-    BNE S3, R0, L_i32_slt_hine_631b4592_32_0
+    BNE S3, R0, L_i32_slt_hine_d663769b_32_0
     SLTU S3, T3, T1
-    BEQ R0, R0, L_i32_slt_done_631b4592_32_1
-L_i32_slt_hine_631b4592_32_0:
+    BEQ R0, R0, L_i32_slt_done_d663769b_32_1
+L_i32_slt_hine_d663769b_32_0:
     SLT S3, T2, S2
-L_i32_slt_done_631b4592_32_1:
+L_i32_slt_done_d663769b_32_1:
 ; Spill eq_one_32_f32_op8 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -13904,23 +13904,23 @@ L___rcc_f32_from_si_236:
     LI T3, 32
     LI T6, 16
     SLTU S2, T1, T3
-    BEQ S2, R0, L_i32_shl_ge32_631b4592_32_2
+    BEQ S2, R0, L_i32_shl_ge32_d663769b_32_2
     SLTU S2, T1, T6
-    BEQ S2, R0, L_i32_shl_ge16_631b4592_32_3
-    BEQ R0, R0, L_i32_shl_lt16_631b4592_32_4
-L_i32_shl_ge32_631b4592_32_2:
+    BEQ S2, R0, L_i32_shl_ge16_d663769b_32_3
+    BEQ R0, R0, L_i32_shl_lt16_d663769b_32_4
+L_i32_shl_ge32_d663769b_32_2:
     LI T2, 0
     LI T0, 0
-    BEQ R0, R0, L_i32_shl_done_631b4592_32_5
-L_i32_shl_ge16_631b4592_32_3:
+    BEQ R0, R0, L_i32_shl_done_d663769b_32_5
+L_i32_shl_ge16_d663769b_32_3:
     SUB S2, T1, T6
     SLL T0, T5, S2
     LI T2, 0
-    BEQ R0, R0, L_i32_shl_done_631b4592_32_5
-L_i32_shl_lt16_631b4592_32_4:
+    BEQ R0, R0, L_i32_shl_done_d663769b_32_5
+L_i32_shl_lt16_d663769b_32_4:
     ADD T2, T5, R0
     ADD T0, S3, R0
-    BEQ T1, R0, L_i32_shl_done_631b4592_32_5
+    BEQ T1, R0, L_i32_shl_done_d663769b_32_5
     SLL T2, T5, T1
     SLL T0, S3, T1
     SUB S2, T6, T1
@@ -13930,7 +13930,7 @@ L_i32_shl_lt16_631b4592_32_4:
     STORE S0, SB, SC
     SRL S0, T5, S2
     OR T0, T0, S0
-L_i32_shl_done_631b4592_32_5:
+L_i32_shl_done_d663769b_32_5:
     STORE T2, SB, T4
     ADDI SC, T4, 1
     STORE T0, SB, SC
@@ -13993,23 +13993,23 @@ L___rcc_f32_from_si_237:
     ADDI SC, SC, 52
     STORE S0, SB, SC
     SLTU S0, T1, T6
-    BEQ S0, R0, L_i32_lshr_ge32_631b4592_32_6
+    BEQ S0, R0, L_i32_lshr_ge32_d663769b_32_6
     SLTU S0, T1, S2
-    BEQ S0, R0, L_i32_lshr_ge16_631b4592_32_7
-    BEQ R0, R0, L_i32_lshr_lt16_631b4592_32_8
-L_i32_lshr_ge32_631b4592_32_6:
+    BEQ S0, R0, L_i32_lshr_ge16_d663769b_32_7
+    BEQ R0, R0, L_i32_lshr_lt16_d663769b_32_8
+L_i32_lshr_ge32_d663769b_32_6:
     LI S3, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_631b4592_32_9
-L_i32_lshr_ge16_631b4592_32_7:
+    BEQ R0, R0, L_i32_lshr_done_d663769b_32_9
+L_i32_lshr_ge16_d663769b_32_7:
     SUB S0, T1, S2
     SRL S3, T7, S0
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_631b4592_32_9
-L_i32_lshr_lt16_631b4592_32_8:
+    BEQ R0, R0, L_i32_lshr_done_d663769b_32_9
+L_i32_lshr_lt16_d663769b_32_8:
     ADD S3, S1, R0
     ADD T3, T7, R0
-    BEQ T1, R0, L_i32_lshr_done_631b4592_32_9
+    BEQ T1, R0, L_i32_lshr_done_d663769b_32_9
     SRL S3, S1, T1
     SRL T3, T7, T1
     SUB S0, S2, T1
@@ -14019,7 +14019,7 @@ L_i32_lshr_lt16_631b4592_32_8:
     STORE T2, SB, SC
     SLL T2, T7, S0
     OR S3, S3, T2
-L_i32_lshr_done_631b4592_32_9:
+L_i32_lshr_done_d663769b_32_9:
     STORE S3, SB, T4
     ADDI SC, T4, 1
     STORE T3, SB, SC
@@ -14361,23 +14361,23 @@ L___rcc_f32_from_ui_243:
     LI T0, 32
     LI T5, 16
     SLTU S1, T2, T0
-    BEQ S1, R0, L_i32_shl_ge32_83f84dce_34_0
+    BEQ S1, R0, L_i32_shl_ge32_9f3ca47e_34_0
     SLTU S1, T2, T5
-    BEQ S1, R0, L_i32_shl_ge16_83f84dce_34_1
-    BEQ R0, R0, L_i32_shl_lt16_83f84dce_34_2
-L_i32_shl_ge32_83f84dce_34_0:
+    BEQ S1, R0, L_i32_shl_ge16_9f3ca47e_34_1
+    BEQ R0, R0, L_i32_shl_lt16_9f3ca47e_34_2
+L_i32_shl_ge32_9f3ca47e_34_0:
     LI S2, 0
     LI T1, 0
-    BEQ R0, R0, L_i32_shl_done_83f84dce_34_3
-L_i32_shl_ge16_83f84dce_34_1:
+    BEQ R0, R0, L_i32_shl_done_9f3ca47e_34_3
+L_i32_shl_ge16_9f3ca47e_34_1:
     SUB S1, T2, T5
     SLL T1, S0, S1
     LI S2, 0
-    BEQ R0, R0, L_i32_shl_done_83f84dce_34_3
-L_i32_shl_lt16_83f84dce_34_2:
+    BEQ R0, R0, L_i32_shl_done_9f3ca47e_34_3
+L_i32_shl_lt16_9f3ca47e_34_2:
     ADD S2, S0, R0
     ADD T1, T7, R0
-    BEQ T2, R0, L_i32_shl_done_83f84dce_34_3
+    BEQ T2, R0, L_i32_shl_done_9f3ca47e_34_3
     SLL S2, S0, T2
     SLL T1, T7, T2
     SUB S1, T5, T2
@@ -14387,7 +14387,7 @@ L_i32_shl_lt16_83f84dce_34_2:
     STORE T6, SB, SC
     SRL T6, S0, S1
     OR T1, T1, T6
-L_i32_shl_done_83f84dce_34_3:
+L_i32_shl_done_9f3ca47e_34_3:
     STORE S2, SB, T4
     ADDI SC, T4, 1
     STORE T1, SB, SC
@@ -14449,23 +14449,23 @@ L___rcc_f32_from_ui_244:
     ADDI SC, SC, 33
     STORE T6, SB, SC
     SLTU T6, T2, T5
-    BEQ T6, R0, L_i32_lshr_ge32_83f84dce_34_4
+    BEQ T6, R0, L_i32_lshr_ge32_9f3ca47e_34_4
     SLTU T6, T2, S1
-    BEQ T6, R0, L_i32_lshr_ge16_83f84dce_34_5
-    BEQ R0, R0, L_i32_lshr_lt16_83f84dce_34_6
-L_i32_lshr_ge32_83f84dce_34_4:
+    BEQ T6, R0, L_i32_lshr_ge16_9f3ca47e_34_5
+    BEQ R0, R0, L_i32_lshr_lt16_9f3ca47e_34_6
+L_i32_lshr_ge32_9f3ca47e_34_4:
     LI T7, 0
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_83f84dce_34_7
-L_i32_lshr_ge16_83f84dce_34_5:
+    BEQ R0, R0, L_i32_lshr_done_9f3ca47e_34_7
+L_i32_lshr_ge16_9f3ca47e_34_5:
     SUB T6, T2, S1
     SRL T7, T3, T6
     LI T0, 0
-    BEQ R0, R0, L_i32_lshr_done_83f84dce_34_7
-L_i32_lshr_lt16_83f84dce_34_6:
+    BEQ R0, R0, L_i32_lshr_done_9f3ca47e_34_7
+L_i32_lshr_lt16_9f3ca47e_34_6:
     ADD T7, S3, R0
     ADD T0, T3, R0
-    BEQ T2, R0, L_i32_lshr_done_83f84dce_34_7
+    BEQ T2, R0, L_i32_lshr_done_9f3ca47e_34_7
     SRL T7, S3, T2
     SRL T0, T3, T2
     SUB T6, S1, T2
@@ -14475,7 +14475,7 @@ L_i32_lshr_lt16_83f84dce_34_6:
     STORE S2, SB, SC
     SLL S2, T3, T6
     OR T7, T7, S2
-L_i32_lshr_done_83f84dce_34_7:
+L_i32_lshr_done_9f3ca47e_34_7:
     STORE T7, SB, T4
     ADDI SC, T4, 1
     STORE T0, SB, SC
@@ -14821,22 +14821,22 @@ L___rcc_f32_from_i64_249:
     ADDI SC, SC, 45
     STORE T2, SB, SC
     XOR T2, T3, T1
-    BNE T2, R0, L_i64_slt_w3ne_7fa97ff0_36_0
+    BNE T2, R0, L_i64_slt_w3ne_d33f11f0_36_0
     XOR T2, T4, S3
-    BNE T2, R0, L_i64_slt_w2ne_7fa97ff0_36_1
+    BNE T2, R0, L_i64_slt_w2ne_d33f11f0_36_1
     XOR T2, S2, T0
-    BNE T2, R0, L_i64_slt_w1ne_7fa97ff0_36_2
+    BNE T2, R0, L_i64_slt_w1ne_d33f11f0_36_2
     SLTU T2, S1, T5
-    BEQ R0, R0, L_i64_slt_done_7fa97ff0_36_3
-L_i64_slt_w3ne_7fa97ff0_36_0:
+    BEQ R0, R0, L_i64_slt_done_d33f11f0_36_3
+L_i64_slt_w3ne_d33f11f0_36_0:
     SLT T2, T3, T1
-    BEQ R0, R0, L_i64_slt_done_7fa97ff0_36_3
-L_i64_slt_w2ne_7fa97ff0_36_1:
+    BEQ R0, R0, L_i64_slt_done_d33f11f0_36_3
+L_i64_slt_w2ne_d33f11f0_36_1:
     SLTU T2, T4, S3
-    BEQ R0, R0, L_i64_slt_done_7fa97ff0_36_3
-L_i64_slt_w1ne_7fa97ff0_36_2:
+    BEQ R0, R0, L_i64_slt_done_d33f11f0_36_3
+L_i64_slt_w1ne_d33f11f0_36_2:
     SLTU T2, S2, T0
-L_i64_slt_done_7fa97ff0_36_3:
+L_i64_slt_done_d33f11f0_36_3:
 ; Spill i64_c1_36_f36_op19 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 46
@@ -15202,19 +15202,19 @@ L___rcc_f32_from_i64_253:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_7fa97ff0_36_4
+    BEQ X3, R0, L_i64_sh_ge32_d33f11f0_36_4
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_7fa97ff0_36_6
-    BEQ R0, R0, L_i64_sh_lt16_7fa97ff0_36_7
-L_i64_sh_ge32_7fa97ff0_36_4:
+    BEQ X3, R0, L_i64_sh_ge16_d33f11f0_36_6
+    BEQ R0, R0, L_i64_sh_lt16_d33f11f0_36_7
+L_i64_sh_ge32_d33f11f0_36_4:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_7fa97ff0_36_5
+    BEQ X3, R0, L_i64_sh_ge48_d33f11f0_36_5
     SUB X3, X2, A1
     ADD T6, X0, R0
     ADD S3, X1, R0
     LI S0, 0
     LI T0, 0
-    BEQ X3, R0, L_i64_sh_nobit_7fa97ff0_36_9
+    BEQ X3, R0, L_i64_sh_nobit_d33f11f0_36_9
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S3, SC
@@ -15227,15 +15227,15 @@ L_i64_sh_ge32_7fa97ff0_36_4:
     SRL S0, S0, X3
     OR S0, S0, X0
     SRL T0, T0, X3
-L_i64_sh_nobit_7fa97ff0_36_9:
-    BEQ R0, R0, L_i64_sh_done_7fa97ff0_36_8
-L_i64_sh_ge48_7fa97ff0_36_5:
+L_i64_sh_nobit_d33f11f0_36_9:
+    BEQ R0, R0, L_i64_sh_done_d33f11f0_36_8
+L_i64_sh_ge48_d33f11f0_36_5:
     SUB X3, X2, A2
     ADD T6, X1, R0
     LI S3, 0
     LI S0, 0
     LI T0, 0
-    BEQ X3, R0, L_i64_sh_nobit_7fa97ff0_36_10
+    BEQ X3, R0, L_i64_sh_nobit_d33f11f0_36_10
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S3, SC
@@ -15248,15 +15248,15 @@ L_i64_sh_ge48_7fa97ff0_36_5:
     SRL S0, S0, X3
     OR S0, S0, X0
     SRL T0, T0, X3
-L_i64_sh_nobit_7fa97ff0_36_10:
-    BEQ R0, R0, L_i64_sh_done_7fa97ff0_36_8
-L_i64_sh_ge16_7fa97ff0_36_6:
+L_i64_sh_nobit_d33f11f0_36_10:
+    BEQ R0, R0, L_i64_sh_done_d33f11f0_36_8
+L_i64_sh_ge16_d33f11f0_36_6:
     SUB X3, X2, A0
     ADD T6, RV1, R0
     ADD S3, X0, R0
     ADD S0, X1, R0
     LI T0, 0
-    BEQ X3, R0, L_i64_sh_nobit_7fa97ff0_36_11
+    BEQ X3, R0, L_i64_sh_nobit_d33f11f0_36_11
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S3, SC
@@ -15269,14 +15269,14 @@ L_i64_sh_ge16_7fa97ff0_36_6:
     SRL S0, S0, X3
     OR S0, S0, X0
     SRL T0, T0, X3
-L_i64_sh_nobit_7fa97ff0_36_11:
-    BEQ R0, R0, L_i64_sh_done_7fa97ff0_36_8
-L_i64_sh_lt16_7fa97ff0_36_7:
+L_i64_sh_nobit_d33f11f0_36_11:
+    BEQ R0, R0, L_i64_sh_done_d33f11f0_36_8
+L_i64_sh_lt16_d33f11f0_36_7:
     ADD T6, RV0, R0
     ADD S3, RV1, R0
     ADD S0, X0, R0
     ADD T0, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_7fa97ff0_36_12
+    BEQ X2, R0, L_i64_sh_nobit_d33f11f0_36_12
     LI SC, 16
     SUB SC, SC, X2
     SLL X0, S3, SC
@@ -15289,8 +15289,8 @@ L_i64_sh_lt16_7fa97ff0_36_7:
     SRL S0, S0, X2
     OR S0, S0, X0
     SRL T0, T0, X2
-L_i64_sh_nobit_7fa97ff0_36_12:
-L_i64_sh_done_7fa97ff0_36_8:
+L_i64_sh_nobit_d33f11f0_36_12:
+L_i64_sh_done_d33f11f0_36_8:
     STORE T6, SB, T1
     ADDI SC, T1, 1
     STORE S3, SB, SC
@@ -15373,19 +15373,19 @@ L___rcc_f32_from_i64_254:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_7fa97ff0_36_13
+    BEQ X3, R0, L_i64_sh_ge32_d33f11f0_36_13
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_7fa97ff0_36_15
-    BEQ R0, R0, L_i64_sh_lt16_7fa97ff0_36_16
-L_i64_sh_ge32_7fa97ff0_36_13:
+    BEQ X3, R0, L_i64_sh_ge16_d33f11f0_36_15
+    BEQ R0, R0, L_i64_sh_lt16_d33f11f0_36_16
+L_i64_sh_ge32_d33f11f0_36_13:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_7fa97ff0_36_14
+    BEQ X3, R0, L_i64_sh_ge48_d33f11f0_36_14
     SUB X3, X2, A1
     LI S1, 0
     LI T6, 0
     ADD S3, RV0, R0
     ADD S0, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_7fa97ff0_36_18
+    BEQ X3, R0, L_i64_sh_nobit_d33f11f0_36_18
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S3, SC
@@ -15398,15 +15398,15 @@ L_i64_sh_ge32_7fa97ff0_36_13:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_7fa97ff0_36_18:
-    BEQ R0, R0, L_i64_sh_done_7fa97ff0_36_17
-L_i64_sh_ge48_7fa97ff0_36_14:
+L_i64_sh_nobit_d33f11f0_36_18:
+    BEQ R0, R0, L_i64_sh_done_d33f11f0_36_17
+L_i64_sh_ge48_d33f11f0_36_14:
     SUB X3, X2, A2
     LI S1, 0
     LI T6, 0
     LI S3, 0
     ADD S0, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_7fa97ff0_36_19
+    BEQ X3, R0, L_i64_sh_nobit_d33f11f0_36_19
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S3, SC
@@ -15419,15 +15419,15 @@ L_i64_sh_ge48_7fa97ff0_36_14:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_7fa97ff0_36_19:
-    BEQ R0, R0, L_i64_sh_done_7fa97ff0_36_17
-L_i64_sh_ge16_7fa97ff0_36_15:
+L_i64_sh_nobit_d33f11f0_36_19:
+    BEQ R0, R0, L_i64_sh_done_d33f11f0_36_17
+L_i64_sh_ge16_d33f11f0_36_15:
     SUB X3, X2, A0
     LI S1, 0
     ADD T6, RV0, R0
     ADD S3, RV1, R0
     ADD S0, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_7fa97ff0_36_20
+    BEQ X3, R0, L_i64_sh_nobit_d33f11f0_36_20
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S3, SC
@@ -15440,14 +15440,14 @@ L_i64_sh_ge16_7fa97ff0_36_15:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_7fa97ff0_36_20:
-    BEQ R0, R0, L_i64_sh_done_7fa97ff0_36_17
-L_i64_sh_lt16_7fa97ff0_36_16:
+L_i64_sh_nobit_d33f11f0_36_20:
+    BEQ R0, R0, L_i64_sh_done_d33f11f0_36_17
+L_i64_sh_lt16_d33f11f0_36_16:
     ADD S1, RV0, R0
     ADD T6, RV1, R0
     ADD S3, X0, R0
     ADD S0, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_7fa97ff0_36_21
+    BEQ X2, R0, L_i64_sh_nobit_d33f11f0_36_21
     LI SC, 16
     SUB SC, SC, X2
     SRL X0, S3, SC
@@ -15460,8 +15460,8 @@ L_i64_sh_lt16_7fa97ff0_36_16:
     SLL T6, T6, X2
     OR T6, T6, X0
     SLL S1, S1, X2
-L_i64_sh_nobit_7fa97ff0_36_21:
-L_i64_sh_done_7fa97ff0_36_17:
+L_i64_sh_nobit_d33f11f0_36_21:
+L_i64_sh_done_d33f11f0_36_17:
     STORE S1, SB, T1
     ADDI SC, T1, 1
     STORE T6, SB, SC
@@ -15948,19 +15948,19 @@ L___rcc_f32_from_u64_260:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_6bb1e513_38_0
+    BEQ X3, R0, L_i64_sh_ge32_8771e438_38_0
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_6bb1e513_38_2
-    BEQ R0, R0, L_i64_sh_lt16_6bb1e513_38_3
-L_i64_sh_ge32_6bb1e513_38_0:
+    BEQ X3, R0, L_i64_sh_ge16_8771e438_38_2
+    BEQ R0, R0, L_i64_sh_lt16_8771e438_38_3
+L_i64_sh_ge32_8771e438_38_0:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_6bb1e513_38_1
+    BEQ X3, R0, L_i64_sh_ge48_8771e438_38_1
     SUB X3, X2, A1
     ADD T7, X0, R0
     ADD S0, X1, R0
     LI T0, 0
     LI T4, 0
-    BEQ X3, R0, L_i64_sh_nobit_6bb1e513_38_5
+    BEQ X3, R0, L_i64_sh_nobit_8771e438_38_5
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S0, SC
@@ -15973,15 +15973,15 @@ L_i64_sh_ge32_6bb1e513_38_0:
     SRL T0, T0, X3
     OR T0, T0, X0
     SRL T4, T4, X3
-L_i64_sh_nobit_6bb1e513_38_5:
-    BEQ R0, R0, L_i64_sh_done_6bb1e513_38_4
-L_i64_sh_ge48_6bb1e513_38_1:
+L_i64_sh_nobit_8771e438_38_5:
+    BEQ R0, R0, L_i64_sh_done_8771e438_38_4
+L_i64_sh_ge48_8771e438_38_1:
     SUB X3, X2, A2
     ADD T7, X1, R0
     LI S0, 0
     LI T0, 0
     LI T4, 0
-    BEQ X3, R0, L_i64_sh_nobit_6bb1e513_38_6
+    BEQ X3, R0, L_i64_sh_nobit_8771e438_38_6
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S0, SC
@@ -15994,15 +15994,15 @@ L_i64_sh_ge48_6bb1e513_38_1:
     SRL T0, T0, X3
     OR T0, T0, X0
     SRL T4, T4, X3
-L_i64_sh_nobit_6bb1e513_38_6:
-    BEQ R0, R0, L_i64_sh_done_6bb1e513_38_4
-L_i64_sh_ge16_6bb1e513_38_2:
+L_i64_sh_nobit_8771e438_38_6:
+    BEQ R0, R0, L_i64_sh_done_8771e438_38_4
+L_i64_sh_ge16_8771e438_38_2:
     SUB X3, X2, A0
     ADD T7, RV1, R0
     ADD S0, X0, R0
     ADD T0, X1, R0
     LI T4, 0
-    BEQ X3, R0, L_i64_sh_nobit_6bb1e513_38_7
+    BEQ X3, R0, L_i64_sh_nobit_8771e438_38_7
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S0, SC
@@ -16015,14 +16015,14 @@ L_i64_sh_ge16_6bb1e513_38_2:
     SRL T0, T0, X3
     OR T0, T0, X0
     SRL T4, T4, X3
-L_i64_sh_nobit_6bb1e513_38_7:
-    BEQ R0, R0, L_i64_sh_done_6bb1e513_38_4
-L_i64_sh_lt16_6bb1e513_38_3:
+L_i64_sh_nobit_8771e438_38_7:
+    BEQ R0, R0, L_i64_sh_done_8771e438_38_4
+L_i64_sh_lt16_8771e438_38_3:
     ADD T7, RV0, R0
     ADD S0, RV1, R0
     ADD T0, X0, R0
     ADD T4, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_6bb1e513_38_8
+    BEQ X2, R0, L_i64_sh_nobit_8771e438_38_8
     LI SC, 16
     SUB SC, SC, X2
     SLL X0, S0, SC
@@ -16035,8 +16035,8 @@ L_i64_sh_lt16_6bb1e513_38_3:
     SRL T0, T0, X2
     OR T0, T0, X0
     SRL T4, T4, X2
-L_i64_sh_nobit_6bb1e513_38_8:
-L_i64_sh_done_6bb1e513_38_4:
+L_i64_sh_nobit_8771e438_38_8:
+L_i64_sh_done_8771e438_38_4:
     STORE T7, SB, S1
     ADDI SC, S1, 1
     STORE S0, SB, SC
@@ -16118,19 +16118,19 @@ L___rcc_f32_from_u64_261:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_6bb1e513_38_9
+    BEQ X3, R0, L_i64_sh_ge32_8771e438_38_9
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_6bb1e513_38_11
-    BEQ R0, R0, L_i64_sh_lt16_6bb1e513_38_12
-L_i64_sh_ge32_6bb1e513_38_9:
+    BEQ X3, R0, L_i64_sh_ge16_8771e438_38_11
+    BEQ R0, R0, L_i64_sh_lt16_8771e438_38_12
+L_i64_sh_ge32_8771e438_38_9:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_6bb1e513_38_10
+    BEQ X3, R0, L_i64_sh_ge48_8771e438_38_10
     SUB X3, X2, A1
     LI T2, 0
     LI T7, 0
     ADD S0, RV0, R0
     ADD T0, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_6bb1e513_38_14
+    BEQ X3, R0, L_i64_sh_nobit_8771e438_38_14
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S0, SC
@@ -16143,15 +16143,15 @@ L_i64_sh_ge32_6bb1e513_38_9:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_6bb1e513_38_14:
-    BEQ R0, R0, L_i64_sh_done_6bb1e513_38_13
-L_i64_sh_ge48_6bb1e513_38_10:
+L_i64_sh_nobit_8771e438_38_14:
+    BEQ R0, R0, L_i64_sh_done_8771e438_38_13
+L_i64_sh_ge48_8771e438_38_10:
     SUB X3, X2, A2
     LI T2, 0
     LI T7, 0
     LI S0, 0
     ADD T0, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_6bb1e513_38_15
+    BEQ X3, R0, L_i64_sh_nobit_8771e438_38_15
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S0, SC
@@ -16164,15 +16164,15 @@ L_i64_sh_ge48_6bb1e513_38_10:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_6bb1e513_38_15:
-    BEQ R0, R0, L_i64_sh_done_6bb1e513_38_13
-L_i64_sh_ge16_6bb1e513_38_11:
+L_i64_sh_nobit_8771e438_38_15:
+    BEQ R0, R0, L_i64_sh_done_8771e438_38_13
+L_i64_sh_ge16_8771e438_38_11:
     SUB X3, X2, A0
     LI T2, 0
     ADD T7, RV0, R0
     ADD S0, RV1, R0
     ADD T0, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_6bb1e513_38_16
+    BEQ X3, R0, L_i64_sh_nobit_8771e438_38_16
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S0, SC
@@ -16185,14 +16185,14 @@ L_i64_sh_ge16_6bb1e513_38_11:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_6bb1e513_38_16:
-    BEQ R0, R0, L_i64_sh_done_6bb1e513_38_13
-L_i64_sh_lt16_6bb1e513_38_12:
+L_i64_sh_nobit_8771e438_38_16:
+    BEQ R0, R0, L_i64_sh_done_8771e438_38_13
+L_i64_sh_lt16_8771e438_38_12:
     ADD T2, RV0, R0
     ADD T7, RV1, R0
     ADD S0, X0, R0
     ADD T0, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_6bb1e513_38_17
+    BEQ X2, R0, L_i64_sh_nobit_8771e438_38_17
     LI SC, 16
     SUB SC, SC, X2
     SRL X0, S0, SC
@@ -16205,8 +16205,8 @@ L_i64_sh_lt16_6bb1e513_38_12:
     SLL T7, T7, X2
     OR T7, T7, X0
     SLL T2, T2, X2
-L_i64_sh_nobit_6bb1e513_38_17:
-L_i64_sh_done_6bb1e513_38_13:
+L_i64_sh_nobit_8771e438_38_17:
+L_i64_sh_done_8771e438_38_13:
     STORE T2, SB, T5
     ADDI SC, T5, 1
     STORE T7, SB, SC
@@ -16551,23 +16551,23 @@ L___rcc_f32_to_si_266:
     STORE S2, SB, SC
     LI S2, 16
     SLTU T5, T1, S0
-    BEQ T5, R0, L_i32_lshr_ge32_104a743d_40_0
+    BEQ T5, R0, L_i32_lshr_ge32_eb4da1ac_40_0
     SLTU T5, T1, S2
-    BEQ T5, R0, L_i32_lshr_ge16_104a743d_40_1
-    BEQ R0, R0, L_i32_lshr_lt16_104a743d_40_2
-L_i32_lshr_ge32_104a743d_40_0:
+    BEQ T5, R0, L_i32_lshr_ge16_eb4da1ac_40_1
+    BEQ R0, R0, L_i32_lshr_lt16_eb4da1ac_40_2
+L_i32_lshr_ge32_eb4da1ac_40_0:
     LI S1, 0
     LI T2, 0
-    BEQ R0, R0, L_i32_lshr_done_104a743d_40_3
-L_i32_lshr_ge16_104a743d_40_1:
+    BEQ R0, R0, L_i32_lshr_done_eb4da1ac_40_3
+L_i32_lshr_ge16_eb4da1ac_40_1:
     SUB T5, T1, S2
     SRL S1, T3, T5
     LI T2, 0
-    BEQ R0, R0, L_i32_lshr_done_104a743d_40_3
-L_i32_lshr_lt16_104a743d_40_2:
+    BEQ R0, R0, L_i32_lshr_done_eb4da1ac_40_3
+L_i32_lshr_lt16_eb4da1ac_40_2:
     ADD S1, T4, R0
     ADD T2, T3, R0
-    BEQ T1, R0, L_i32_lshr_done_104a743d_40_3
+    BEQ T1, R0, L_i32_lshr_done_eb4da1ac_40_3
     SRL S1, T4, T1
     SRL T2, T3, T1
     SUB T5, S2, T1
@@ -16577,7 +16577,7 @@ L_i32_lshr_lt16_104a743d_40_2:
     STORE S3, SB, SC
     SLL S3, T3, T5
     OR S1, S1, S3
-L_i32_lshr_done_104a743d_40_3:
+L_i32_lshr_done_eb4da1ac_40_3:
 ; Spill t14__hi to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 33
@@ -16954,23 +16954,23 @@ L___rcc_f32_to_si_282:
     ADDI SC, SC, 69
     STORE T4, SB, SC
     SLTU T4, T5, T6
-    BEQ T4, R0, L_i32_shl_ge32_104a743d_40_4
+    BEQ T4, R0, L_i32_shl_ge32_eb4da1ac_40_4
     SLTU T4, T5, T1
-    BEQ T4, R0, L_i32_shl_ge16_104a743d_40_5
-    BEQ R0, R0, L_i32_shl_lt16_104a743d_40_6
-L_i32_shl_ge32_104a743d_40_4:
+    BEQ T4, R0, L_i32_shl_ge16_eb4da1ac_40_5
+    BEQ R0, R0, L_i32_shl_lt16_eb4da1ac_40_6
+L_i32_shl_ge32_eb4da1ac_40_4:
     LI S3, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_shl_done_104a743d_40_7
-L_i32_shl_ge16_104a743d_40_5:
+    BEQ R0, R0, L_i32_shl_done_eb4da1ac_40_7
+L_i32_shl_ge16_eb4da1ac_40_5:
     SUB T4, T5, T1
     SLL T3, T7, T4
     LI S3, 0
-    BEQ R0, R0, L_i32_shl_done_104a743d_40_7
-L_i32_shl_lt16_104a743d_40_6:
+    BEQ R0, R0, L_i32_shl_done_eb4da1ac_40_7
+L_i32_shl_lt16_eb4da1ac_40_6:
     ADD S3, T7, R0
     ADD T3, T2, R0
-    BEQ T5, R0, L_i32_shl_done_104a743d_40_7
+    BEQ T5, R0, L_i32_shl_done_eb4da1ac_40_7
     SLL S3, T7, T5
     SLL T3, T2, T5
     SUB T4, T1, T5
@@ -16980,7 +16980,7 @@ L_i32_shl_lt16_104a743d_40_6:
     STORE S2, SB, SC
     SRL S2, T7, T4
     OR T3, T3, S2
-L_i32_shl_done_104a743d_40_7:
+L_i32_shl_done_eb4da1ac_40_7:
 ; Spill ne_xlo_40_f40_op64 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 71
@@ -17085,23 +17085,23 @@ L___rcc_f32_to_si_287:
     ADDI SC, SC, 80
     STORE T3, SB, SC
     SLTU T3, T1, S2
-    BEQ T3, R0, L_i32_lshr_ge32_104a743d_40_8
+    BEQ T3, R0, L_i32_lshr_ge32_eb4da1ac_40_8
     SLTU T3, T1, S3
-    BEQ T3, R0, L_i32_lshr_ge16_104a743d_40_9
-    BEQ R0, R0, L_i32_lshr_lt16_104a743d_40_10
-L_i32_lshr_ge32_104a743d_40_8:
+    BEQ T3, R0, L_i32_lshr_ge16_eb4da1ac_40_9
+    BEQ R0, R0, L_i32_lshr_lt16_eb4da1ac_40_10
+L_i32_lshr_ge32_eb4da1ac_40_8:
     LI T6, 0
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_104a743d_40_11
-L_i32_lshr_ge16_104a743d_40_9:
+    BEQ R0, R0, L_i32_lshr_done_eb4da1ac_40_11
+L_i32_lshr_ge16_eb4da1ac_40_9:
     SUB T3, T1, S3
     SRL T6, T0, T3
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_104a743d_40_11
-L_i32_lshr_lt16_104a743d_40_10:
+    BEQ R0, R0, L_i32_lshr_done_eb4da1ac_40_11
+L_i32_lshr_lt16_eb4da1ac_40_10:
     ADD T6, S0, R0
     ADD T4, T0, R0
-    BEQ T1, R0, L_i32_lshr_done_104a743d_40_11
+    BEQ T1, R0, L_i32_lshr_done_eb4da1ac_40_11
     SRL T6, S0, T1
     SRL T4, T0, T1
     SUB T3, S3, T1
@@ -17111,7 +17111,7 @@ L_i32_lshr_lt16_104a743d_40_10:
     STORE T2, SB, SC
     SLL T2, T0, T3
     OR T6, T6, T2
-L_i32_lshr_done_104a743d_40_11:
+L_i32_lshr_done_eb4da1ac_40_11:
 ; Spill t48__hi to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 82
@@ -17372,12 +17372,12 @@ L___rcc_f32_to_ui_291:
     LI T0, 0
     LI S3, 0
     XOR S2, T1, S3
-    BNE S2, R0, L_i32_slt_hine_1eca4008_42_0
+    BNE S2, R0, L_i32_slt_hine_81ee240d_42_0
     SLTU S2, T2, T0
-    BEQ R0, R0, L_i32_slt_done_1eca4008_42_1
-L_i32_slt_hine_1eca4008_42_0:
+    BEQ R0, R0, L_i32_slt_done_81ee240d_42_1
+L_i32_slt_hine_81ee240d_42_0:
     SLT S2, T1, S3
-L_i32_slt_done_1eca4008_42_1:
+L_i32_slt_done_81ee240d_42_1:
     LI S0, 0
     XOR S1, S2, S0
     LI T7, 0
@@ -18897,21 +18897,21 @@ L_f64_shr_sticky_313:
     ADDI SC, SC, 36
     STORE S3, SB, SC
     LI S3, -1
-    BEQ T7, S3, L_bc_111f4921_use_global
+    BEQ T7, S3, L_bc_d1ab4893_use_global
 ; Spill t14__w1 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 37
     STORE T1, SB, SC
     LI T1, -2
-    BEQ T7, T1, L_bc_111f4921_use_stack
+    BEQ T7, T1, L_bc_d1ab4893_use_stack
     ADD T3, T7, R0
-    BEQ R0, R0, L_bc_111f4921_done
-L_bc_111f4921_use_global:
+    BEQ R0, R0, L_bc_d1ab4893_done
+L_bc_d1ab4893_use_global:
     ADD T3, GP, R0
-    BEQ R0, R0, L_bc_111f4921_done
-L_bc_111f4921_use_stack:
+    BEQ R0, R0, L_bc_d1ab4893_done
+L_bc_d1ab4893_use_stack:
     ADD T3, SB, R0
-L_bc_111f4921_done:
+L_bc_d1ab4893_done:
     STORE S2, T3, T4
     BEQ R0, R0, L_f64_shr_sticky_315
 ; Unconditional branch to L_f64_shr_sticky_315
@@ -19044,19 +19044,19 @@ L_f64_shr_sticky_312:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_ef285c48_54_0
+    BEQ X3, R0, L_i64_sh_ge32_ff31a0df_54_0
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_ef285c48_54_2
-    BEQ R0, R0, L_i64_sh_lt16_ef285c48_54_3
-L_i64_sh_ge32_ef285c48_54_0:
+    BEQ X3, R0, L_i64_sh_ge16_ff31a0df_54_2
+    BEQ R0, R0, L_i64_sh_lt16_ff31a0df_54_3
+L_i64_sh_ge32_ff31a0df_54_0:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_ef285c48_54_1
+    BEQ X3, R0, L_i64_sh_ge48_ff31a0df_54_1
     SUB X3, X2, A1
     LI T5, 0
     LI T6, 0
     ADD T4, RV0, R0
     ADD T7, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_ef285c48_54_5
+    BEQ X3, R0, L_i64_sh_nobit_ff31a0df_54_5
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -19069,15 +19069,15 @@ L_i64_sh_ge32_ef285c48_54_0:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL T5, T5, X3
-L_i64_sh_nobit_ef285c48_54_5:
-    BEQ R0, R0, L_i64_sh_done_ef285c48_54_4
-L_i64_sh_ge48_ef285c48_54_1:
+L_i64_sh_nobit_ff31a0df_54_5:
+    BEQ R0, R0, L_i64_sh_done_ff31a0df_54_4
+L_i64_sh_ge48_ff31a0df_54_1:
     SUB X3, X2, A2
     LI T5, 0
     LI T6, 0
     LI T4, 0
     ADD T7, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_ef285c48_54_6
+    BEQ X3, R0, L_i64_sh_nobit_ff31a0df_54_6
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -19090,15 +19090,15 @@ L_i64_sh_ge48_ef285c48_54_1:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL T5, T5, X3
-L_i64_sh_nobit_ef285c48_54_6:
-    BEQ R0, R0, L_i64_sh_done_ef285c48_54_4
-L_i64_sh_ge16_ef285c48_54_2:
+L_i64_sh_nobit_ff31a0df_54_6:
+    BEQ R0, R0, L_i64_sh_done_ff31a0df_54_4
+L_i64_sh_ge16_ff31a0df_54_2:
     SUB X3, X2, A0
     LI T5, 0
     ADD T6, RV0, R0
     ADD T4, RV1, R0
     ADD T7, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_ef285c48_54_7
+    BEQ X3, R0, L_i64_sh_nobit_ff31a0df_54_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -19111,14 +19111,14 @@ L_i64_sh_ge16_ef285c48_54_2:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL T5, T5, X3
-L_i64_sh_nobit_ef285c48_54_7:
-    BEQ R0, R0, L_i64_sh_done_ef285c48_54_4
-L_i64_sh_lt16_ef285c48_54_3:
+L_i64_sh_nobit_ff31a0df_54_7:
+    BEQ R0, R0, L_i64_sh_done_ff31a0df_54_4
+L_i64_sh_lt16_ff31a0df_54_3:
     ADD T5, RV0, R0
     ADD T6, RV1, R0
     ADD T4, X0, R0
     ADD T7, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_ef285c48_54_8
+    BEQ X2, R0, L_i64_sh_nobit_ff31a0df_54_8
     LI SC, 16
     SUB SC, SC, X2
     SRL X0, T4, SC
@@ -19131,8 +19131,8 @@ L_i64_sh_lt16_ef285c48_54_3:
     SLL T6, T6, X2
     OR T6, T6, X0
     SLL T5, T5, X2
-L_i64_sh_nobit_ef285c48_54_8:
-L_i64_sh_done_ef285c48_54_4:
+L_i64_sh_nobit_ff31a0df_54_8:
+L_i64_sh_done_ff31a0df_54_4:
 ; Spill t19__w2 to slot 42
     ADD SC, FP, R0
     ADDI SC, SC, 57
@@ -19364,21 +19364,21 @@ L_f64_shr_sticky_316:
     ADDI SC, SC, 85
     STORE T2, SB, SC
     LI T2, -1
-    BEQ T5, T2, L_bc_5be63118_use_global
+    BEQ T5, T2, L_bc_40607343_use_global
 ; Spill t24__w1 to slot 71
     ADD SC, FP, R0
     ADDI SC, SC, 86
     STORE S0, SB, SC
     LI S0, -2
-    BEQ T5, S0, L_bc_5be63118_use_stack
+    BEQ T5, S0, L_bc_40607343_use_stack
     ADD S1, T5, R0
-    BEQ R0, R0, L_bc_5be63118_done
-L_bc_5be63118_use_global:
+    BEQ R0, R0, L_bc_40607343_done
+L_bc_40607343_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_5be63118_done
-L_bc_5be63118_use_stack:
+    BEQ R0, R0, L_bc_40607343_done
+L_bc_40607343_use_stack:
     ADD S1, SB, R0
-L_bc_5be63118_done:
+L_bc_40607343_done:
     STORE T3, S1, T1
     BEQ R0, R0, L_f64_shr_sticky_318
 ; Unconditional branch to L_f64_shr_sticky_318
@@ -19448,19 +19448,19 @@ L_f64_shr_sticky_318:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_ef285c48_54_9
+    BEQ X3, R0, L_i64_sh_ge32_ff31a0df_54_9
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_ef285c48_54_11
-    BEQ R0, R0, L_i64_sh_lt16_ef285c48_54_12
-L_i64_sh_ge32_ef285c48_54_9:
+    BEQ X3, R0, L_i64_sh_ge16_ff31a0df_54_11
+    BEQ R0, R0, L_i64_sh_lt16_ff31a0df_54_12
+L_i64_sh_ge32_ff31a0df_54_9:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_ef285c48_54_10
+    BEQ X3, R0, L_i64_sh_ge48_ff31a0df_54_10
     SUB X3, X2, A1
     ADD T4, X0, R0
     ADD T6, X1, R0
     LI T1, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_ef285c48_54_14
+    BEQ X3, R0, L_i64_sh_nobit_ff31a0df_54_14
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T6, SC
@@ -19473,15 +19473,15 @@ L_i64_sh_ge32_ef285c48_54_9:
     SRL T1, T1, X3
     OR T1, T1, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_ef285c48_54_14:
-    BEQ R0, R0, L_i64_sh_done_ef285c48_54_13
-L_i64_sh_ge48_ef285c48_54_10:
+L_i64_sh_nobit_ff31a0df_54_14:
+    BEQ R0, R0, L_i64_sh_done_ff31a0df_54_13
+L_i64_sh_ge48_ff31a0df_54_10:
     SUB X3, X2, A2
     ADD T4, X1, R0
     LI T6, 0
     LI T1, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_ef285c48_54_15
+    BEQ X3, R0, L_i64_sh_nobit_ff31a0df_54_15
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T6, SC
@@ -19494,15 +19494,15 @@ L_i64_sh_ge48_ef285c48_54_10:
     SRL T1, T1, X3
     OR T1, T1, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_ef285c48_54_15:
-    BEQ R0, R0, L_i64_sh_done_ef285c48_54_13
-L_i64_sh_ge16_ef285c48_54_11:
+L_i64_sh_nobit_ff31a0df_54_15:
+    BEQ R0, R0, L_i64_sh_done_ff31a0df_54_13
+L_i64_sh_ge16_ff31a0df_54_11:
     SUB X3, X2, A0
     ADD T4, RV1, R0
     ADD T6, X0, R0
     ADD T1, X1, R0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_ef285c48_54_16
+    BEQ X3, R0, L_i64_sh_nobit_ff31a0df_54_16
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T6, SC
@@ -19515,14 +19515,14 @@ L_i64_sh_ge16_ef285c48_54_11:
     SRL T1, T1, X3
     OR T1, T1, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_ef285c48_54_16:
-    BEQ R0, R0, L_i64_sh_done_ef285c48_54_13
-L_i64_sh_lt16_ef285c48_54_12:
+L_i64_sh_nobit_ff31a0df_54_16:
+    BEQ R0, R0, L_i64_sh_done_ff31a0df_54_13
+L_i64_sh_lt16_ff31a0df_54_12:
     ADD T4, RV0, R0
     ADD T6, RV1, R0
     ADD T1, X0, R0
     ADD T5, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_ef285c48_54_17
+    BEQ X2, R0, L_i64_sh_nobit_ff31a0df_54_17
     LI SC, 16
     SUB SC, SC, X2
     SLL X0, T6, SC
@@ -19535,8 +19535,8 @@ L_i64_sh_lt16_ef285c48_54_12:
     SRL T1, T1, X2
     OR T1, T1, X0
     SRL T5, T5, X2
-L_i64_sh_nobit_ef285c48_54_17:
-L_i64_sh_done_ef285c48_54_13:
+L_i64_sh_nobit_ff31a0df_54_17:
+L_i64_sh_done_ff31a0df_54_13:
     MOVE RV0, T4
     MOVE RV1, T6
     MOVE X0, T1
@@ -19746,7 +19746,7 @@ L_f64_round_pack_319:
     LI S2, 0
     LI S1, 0
     ADD T6, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_0
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_0
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S1, SC
@@ -19759,7 +19759,7 @@ L_f64_round_pack_319:
     SLL S2, S2, X3
     OR S2, S2, X0
     SLL S3, S3, X3
-L_i64_sh_nobit_b991d76a_56_0:
+L_i64_sh_nobit_2c044983_56_0:
     ADD RV0, S0, R0
     ADD RV1, T7, R0
     ADD X0, T0, R0
@@ -19999,7 +19999,7 @@ L_f64_round_pack_320:
     ADD S1, RV1, R0
     ADD S3, X0, R0
     ADD T4, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_1
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_1
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S1, SC
@@ -20012,7 +20012,7 @@ L_f64_round_pack_320:
     SRL S3, S3, X3
     OR S3, S3, X0
     SRL T4, T4, X3
-L_i64_sh_nobit_b991d76a_56_1:
+L_i64_sh_nobit_2c044983_56_1:
     STORE T6, SB, T1
     ADDI SC, T1, 1
     STORE S1, SB, SC
@@ -20312,7 +20312,7 @@ L_f64_round_pack_325:
     ADD S3, RV1, R0
     ADD T4, X0, R0
     ADD S2, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_2
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_2
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S3, SC
@@ -20325,7 +20325,7 @@ L_f64_round_pack_325:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL S2, S2, X3
-L_i64_sh_nobit_b991d76a_56_2:
+L_i64_sh_nobit_2c044983_56_2:
 ; Spill t31__w1 to slot 73
     ADD SC, FP, R0
     ADDI SC, SC, 99
@@ -20443,22 +20443,22 @@ L_i64_sh_nobit_b991d76a_56_2:
     ADDI SC, SC, 117
     STORE S1, SB, SC
     XOR S1, T0, T1
-    BNE S1, R0, L_i64_ult_w3ne_b991d76a_56_3
+    BNE S1, R0, L_i64_ult_w3ne_2c044983_56_3
     XOR S1, T3, T7
-    BNE S1, R0, L_i64_ult_w2ne_b991d76a_56_4
+    BNE S1, R0, L_i64_ult_w2ne_2c044983_56_4
     XOR S1, T6, T2
-    BNE S1, R0, L_i64_ult_w1ne_b991d76a_56_5
+    BNE S1, R0, L_i64_ult_w1ne_2c044983_56_5
     SLTU S1, T5, S2
-    BEQ R0, R0, L_i64_ult_done_b991d76a_56_6
-L_i64_ult_w3ne_b991d76a_56_3:
+    BEQ R0, R0, L_i64_ult_done_2c044983_56_6
+L_i64_ult_w3ne_2c044983_56_3:
     SLTU S1, T0, T1
-    BEQ R0, R0, L_i64_ult_done_b991d76a_56_6
-L_i64_ult_w2ne_b991d76a_56_4:
+    BEQ R0, R0, L_i64_ult_done_2c044983_56_6
+L_i64_ult_w2ne_2c044983_56_4:
     SLTU S1, T3, T7
-    BEQ R0, R0, L_i64_ult_done_b991d76a_56_6
-L_i64_ult_w1ne_b991d76a_56_5:
+    BEQ R0, R0, L_i64_ult_done_2c044983_56_6
+L_i64_ult_w1ne_2c044983_56_5:
     SLTU S1, T6, T2
-L_i64_ult_done_b991d76a_56_6:
+L_i64_ult_done_2c044983_56_6:
     LI S0, 0
     XOR S3, S1, S0
     LI T4, 0
@@ -20856,7 +20856,7 @@ L_f64_round_pack_335:
     LI S0, 0
     LI S1, 0
     ADD T5, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_7
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S1, SC
@@ -20869,7 +20869,7 @@ L_f64_round_pack_335:
     SLL S0, S0, X3
     OR S0, S0, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_b991d76a_56_7:
+L_i64_sh_nobit_2c044983_56_7:
     ADD RV0, T1, R0
     ADD RV1, S2, R0
     ADD X0, T3, R0
@@ -21006,7 +21006,7 @@ L_f64_round_pack_338:
     ADD S2, RV1, R0
     ADD T3, X0, R0
     ADD T6, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_8
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_8
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S2, SC
@@ -21019,7 +21019,7 @@ L_f64_round_pack_338:
     SRL T3, T3, X3
     OR T3, T3, X0
     SRL T6, T6, X3
-L_i64_sh_nobit_b991d76a_56_8:
+L_i64_sh_nobit_2c044983_56_8:
     STORE T1, SB, T2
     ADDI SC, T2, 1
     STORE S2, SB, SC
@@ -21104,7 +21104,7 @@ L_f64_round_pack_337:
     ADD T7, RV1, R0
     ADD T1, X0, R0
     ADD S2, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_9
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_9
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T7, SC
@@ -21117,7 +21117,7 @@ L_f64_round_pack_337:
     SRL T1, T1, X3
     OR T1, T1, X0
     SRL S2, S2, X3
-L_i64_sh_nobit_b991d76a_56_9:
+L_i64_sh_nobit_2c044983_56_9:
     STORE T4, SB, S0
     ADDI SC, S0, 1
     STORE T7, SB, SC
@@ -21324,7 +21324,7 @@ L_f64_round_pack_344:
     LI S2, 0
     LI T5, 0
     ADD S0, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_10
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_10
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T5, SC
@@ -21337,7 +21337,7 @@ L_f64_round_pack_344:
     SLL S2, S2, X3
     OR S2, S2, X0
     SLL T1, T1, X3
-L_i64_sh_nobit_b991d76a_56_10:
+L_i64_sh_nobit_2c044983_56_10:
     ADD RV0, T6, R0
     ADD RV1, T3, R0
     ADD X0, T2, R0
@@ -21489,7 +21489,7 @@ L_f64_round_pack_347:
     LI T5, 0
     LI S2, 0
     ADD T1, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_11
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_11
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S2, SC
@@ -21502,7 +21502,7 @@ L_f64_round_pack_347:
     SLL T5, T5, X3
     OR T5, T5, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_b991d76a_56_11:
+L_i64_sh_nobit_2c044983_56_11:
     ADD RV0, S3, R0
     ADD RV1, T0, R0
     ADD X0, T4, R0
@@ -21787,7 +21787,7 @@ L_f64_round_pack_346:
     LI S3, 0
     LI T0, 0
     ADD S2, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_12
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_12
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T0, SC
@@ -21800,7 +21800,7 @@ L_f64_round_pack_346:
     SLL S3, S3, X3
     OR S3, S3, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_b991d76a_56_12:
+L_i64_sh_nobit_2c044983_56_12:
     ADD RV0, T1, R0
     ADD RV1, T6, R0
     ADD X0, T3, R0
@@ -21937,7 +21937,7 @@ L_f64_round_pack_350:
     ADD T6, RV1, R0
     ADD T3, X0, R0
     ADD T4, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_13
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_13
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T6, SC
@@ -21950,7 +21950,7 @@ L_f64_round_pack_350:
     SRL T3, T3, X3
     OR T3, T3, X0
     SRL T4, T4, X3
-L_i64_sh_nobit_b991d76a_56_13:
+L_i64_sh_nobit_2c044983_56_13:
     STORE T1, SB, S1
     ADDI SC, S1, 1
     STORE T6, SB, SC
@@ -22178,7 +22178,7 @@ L_f64_round_pack_352:
     LI S1, 0
     LI S2, 0
     ADD T2, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b991d76a_56_14
+    BEQ X3, R0, L_i64_sh_nobit_2c044983_56_14
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S2, SC
@@ -22191,7 +22191,7 @@ L_f64_round_pack_352:
     SLL S1, S1, X3
     OR S1, S1, X0
     SLL S3, S3, X3
-L_i64_sh_nobit_b991d76a_56_14:
+L_i64_sh_nobit_2c044983_56_14:
 ; Spill t100 to slot 290
     ADD SC, FP, R0
     ADDI SC, SC, 316
@@ -22711,7 +22711,7 @@ L_f64_pack_362:
     LI S1, 0
     LI S2, 0
     ADD T1, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_dc07f39e_58_0
+    BEQ X3, R0, L_i64_sh_nobit_538e1d5a_58_0
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S2, SC
@@ -22724,7 +22724,7 @@ L_f64_pack_362:
     SLL S1, S1, X3
     OR S1, S1, X0
     SLL T0, T0, X3
-L_i64_sh_nobit_dc07f39e_58_0:
+L_i64_sh_nobit_538e1d5a_58_0:
 ; Spill t16 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 46
@@ -32165,21 +32165,21 @@ L_mul_u64_363:
     ADDI SC, SC, 1076
     STORE T7, SB, SC
     LI T7, -1
-    BEQ T0, T7, L_bc_f75657b1_use_global
+    BEQ T0, T7, L_bc_5feb3e77_use_global
 ; Spill t59 to slot 1033
     ADD SC, FP, R0
     ADDI SC, SC, 1081
     STORE S0, SB, SC
     LI S0, -2
-    BEQ T0, S0, L_bc_f75657b1_use_stack
+    BEQ T0, S0, L_bc_5feb3e77_use_stack
     ADD T1, T0, R0
-    BEQ R0, R0, L_bc_f75657b1_done
-L_bc_f75657b1_use_global:
+    BEQ R0, R0, L_bc_5feb3e77_done
+L_bc_5feb3e77_use_global:
     ADD T1, GP, R0
-    BEQ R0, R0, L_bc_f75657b1_done
-L_bc_f75657b1_use_stack:
+    BEQ R0, R0, L_bc_5feb3e77_done
+L_bc_5feb3e77_use_stack:
     ADD T1, SB, R0
-L_bc_f75657b1_done:
+L_bc_5feb3e77_done:
     STORE T4, T1, T5
     ADDI SC, T5, 1
     STORE S3, T1, SC
@@ -32658,21 +32658,21 @@ L_bc_f75657b1_done:
     ADDI SC, SC, 1120
     STORE T2, SB, SC
     LI T2, -1
-    BEQ T1, T2, L_bc_545811e0_use_global
+    BEQ T1, T2, L_bc_6af9c5aa_use_global
 ; Spill t70 to slot 1077
     ADD SC, FP, R0
     ADDI SC, SC, 1125
     STORE S2, SB, SC
     LI S2, -2
-    BEQ T1, S2, L_bc_545811e0_use_stack
+    BEQ T1, S2, L_bc_6af9c5aa_use_stack
     ADD S0, T1, R0
-    BEQ R0, R0, L_bc_545811e0_done
-L_bc_545811e0_use_global:
+    BEQ R0, R0, L_bc_6af9c5aa_done
+L_bc_6af9c5aa_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_545811e0_done
-L_bc_545811e0_use_stack:
+    BEQ R0, R0, L_bc_6af9c5aa_done
+L_bc_6af9c5aa_use_stack:
     ADD S0, SB, R0
-L_bc_545811e0_done:
+L_bc_6af9c5aa_done:
     STORE S1, S0, T0
     ADDI SC, T0, 1
     STORE T7, S0, SC
@@ -33410,29 +33410,29 @@ L_div128_64_366:
     LI S0, 32
     LI T2, 16
     SLTU T5, T4, S0
-    BEQ T5, R0, L_i32_lshr_ge32_d110ce17_62_0
+    BEQ T5, R0, L_i32_lshr_ge32_ec91e73f_62_0
     SLTU T5, T4, T2
-    BEQ T5, R0, L_i32_lshr_ge16_d110ce17_62_1
-    BEQ R0, R0, L_i32_lshr_lt16_d110ce17_62_2
-L_i32_lshr_ge32_d110ce17_62_0:
+    BEQ T5, R0, L_i32_lshr_ge16_ec91e73f_62_1
+    BEQ R0, R0, L_i32_lshr_lt16_ec91e73f_62_2
+L_i32_lshr_ge32_ec91e73f_62_0:
     LI T6, 0
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_3
-L_i32_lshr_ge16_d110ce17_62_1:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_3
+L_i32_lshr_ge16_ec91e73f_62_1:
     SUB T5, T4, T2
     SRL T6, T7, T5
     LI T3, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_3
-L_i32_lshr_lt16_d110ce17_62_2:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_3
+L_i32_lshr_lt16_ec91e73f_62_2:
     ADD T6, S1, R0
     ADD T3, T7, R0
-    BEQ T4, R0, L_i32_lshr_done_d110ce17_62_3
+    BEQ T4, R0, L_i32_lshr_done_ec91e73f_62_3
     SRL T6, S1, T4
     SRL T3, T7, T4
     SUB T5, T2, T4
     SLL T0, T7, T5
     OR T6, T6, T0
-L_i32_lshr_done_d110ce17_62_3:
+L_i32_lshr_done_ec91e73f_62_3:
 ; Recompute alloca t37 at FP+31
     ADD T1, FP, R0
     ADDI T1, T1, 31
@@ -33481,23 +33481,23 @@ L_i32_lshr_done_d110ce17_62_3:
     ADDI SC, SC, 127
     STORE T0, SB, SC
     SLTU T0, S0, T2
-    BEQ T0, R0, L_i32_lshr_ge32_d110ce17_62_4
+    BEQ T0, R0, L_i32_lshr_ge32_ec91e73f_62_4
     SLTU T0, S0, T5
-    BEQ T0, R0, L_i32_lshr_ge16_d110ce17_62_5
-    BEQ R0, R0, L_i32_lshr_lt16_d110ce17_62_6
-L_i32_lshr_ge32_d110ce17_62_4:
+    BEQ T0, R0, L_i32_lshr_ge16_ec91e73f_62_5
+    BEQ R0, R0, L_i32_lshr_lt16_ec91e73f_62_6
+L_i32_lshr_ge32_ec91e73f_62_4:
     LI T7, 0
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_7
-L_i32_lshr_ge16_d110ce17_62_5:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_7
+L_i32_lshr_ge16_ec91e73f_62_5:
     SUB T0, S0, T5
     SRL T7, S1, T0
     LI T4, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_7
-L_i32_lshr_lt16_d110ce17_62_6:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_7
+L_i32_lshr_lt16_ec91e73f_62_6:
     ADD T7, S3, R0
     ADD T4, S1, R0
-    BEQ S0, R0, L_i32_lshr_done_d110ce17_62_7
+    BEQ S0, R0, L_i32_lshr_done_ec91e73f_62_7
     SRL T7, S3, S0
     SRL T4, S1, S0
     SUB T0, T5, S0
@@ -33507,7 +33507,7 @@ L_i32_lshr_lt16_d110ce17_62_6:
     STORE T6, SB, SC
     SLL T6, S1, T0
     OR T7, T7, T6
-L_i32_lshr_done_d110ce17_62_7:
+L_i32_lshr_done_ec91e73f_62_7:
 ; Recompute alloca t38 at FP+33
     ADD T1, FP, R0
     ADDI T1, T1, 33
@@ -33560,23 +33560,23 @@ L_i32_lshr_done_d110ce17_62_7:
     ADDI SC, SC, 136
     STORE T6, SB, SC
     SLTU T6, T2, T5
-    BEQ T6, R0, L_i32_lshr_ge32_d110ce17_62_8
+    BEQ T6, R0, L_i32_lshr_ge32_ec91e73f_62_8
     SLTU T6, T2, T0
-    BEQ T6, R0, L_i32_lshr_ge16_d110ce17_62_9
-    BEQ R0, R0, L_i32_lshr_lt16_d110ce17_62_10
-L_i32_lshr_ge32_d110ce17_62_8:
+    BEQ T6, R0, L_i32_lshr_ge16_ec91e73f_62_9
+    BEQ R0, R0, L_i32_lshr_lt16_ec91e73f_62_10
+L_i32_lshr_ge32_ec91e73f_62_8:
     LI S1, 0
     LI S0, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_11
-L_i32_lshr_ge16_d110ce17_62_9:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_11
+L_i32_lshr_ge16_ec91e73f_62_9:
     SUB T6, T2, T0
     SRL S1, S3, T6
     LI S0, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_11
-L_i32_lshr_lt16_d110ce17_62_10:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_11
+L_i32_lshr_lt16_ec91e73f_62_10:
     ADD S1, S2, R0
     ADD S0, S3, R0
-    BEQ T2, R0, L_i32_lshr_done_d110ce17_62_11
+    BEQ T2, R0, L_i32_lshr_done_ec91e73f_62_11
     SRL S1, S2, T2
     SRL S0, S3, T2
     SUB T6, T0, T2
@@ -33586,7 +33586,7 @@ L_i32_lshr_lt16_d110ce17_62_10:
     STORE T7, SB, SC
     SLL T7, S3, T6
     OR S1, S1, T7
-L_i32_lshr_done_d110ce17_62_11:
+L_i32_lshr_done_ec91e73f_62_11:
 ; Recompute alloca t39 at FP+35
     ADD T1, FP, R0
     ADDI T1, T1, 35
@@ -33771,23 +33771,23 @@ L_i32_lshr_done_d110ce17_62_11:
     ADDI SC, SC, 163
     STORE T3, SB, SC
     SLTU T3, S2, S3
-    BEQ T3, R0, L_i32_lshr_ge32_d110ce17_62_12
+    BEQ T3, R0, L_i32_lshr_ge32_ec91e73f_62_12
     SLTU T3, S2, T5
-    BEQ T3, R0, L_i32_lshr_ge16_d110ce17_62_13
-    BEQ R0, R0, L_i32_lshr_lt16_d110ce17_62_14
-L_i32_lshr_ge32_d110ce17_62_12:
+    BEQ T3, R0, L_i32_lshr_ge16_ec91e73f_62_13
+    BEQ R0, R0, L_i32_lshr_lt16_ec91e73f_62_14
+L_i32_lshr_ge32_ec91e73f_62_12:
     LI T2, 0
     LI T6, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_15
-L_i32_lshr_ge16_d110ce17_62_13:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_15
+L_i32_lshr_ge16_ec91e73f_62_13:
     SUB T3, S2, T5
     SRL T2, T4, T3
     LI T6, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_15
-L_i32_lshr_lt16_d110ce17_62_14:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_15
+L_i32_lshr_lt16_ec91e73f_62_14:
     ADD T2, S0, R0
     ADD T6, T4, R0
-    BEQ S2, R0, L_i32_lshr_done_d110ce17_62_15
+    BEQ S2, R0, L_i32_lshr_done_ec91e73f_62_15
     SRL T2, S0, S2
     SRL T6, T4, S2
     SUB T3, T5, S2
@@ -33797,7 +33797,7 @@ L_i32_lshr_lt16_d110ce17_62_14:
     STORE T0, SB, SC
     SLL T0, T4, T3
     OR T2, T2, T0
-L_i32_lshr_done_d110ce17_62_15:
+L_i32_lshr_done_ec91e73f_62_15:
 ; Recompute alloca t39 at FP+35
     ADD S1, FP, R0
     ADDI S1, S1, 35
@@ -34013,23 +34013,23 @@ L_i32_lshr_done_d110ce17_62_15:
     ADDI SC, SC, 194
     STORE T7, SB, SC
     SLTU T7, S3, T5
-    BEQ T7, R0, L_i32_lshr_ge32_d110ce17_62_16
+    BEQ T7, R0, L_i32_lshr_ge32_ec91e73f_62_16
     SLTU T7, S3, T6
-    BEQ T7, R0, L_i32_lshr_ge16_d110ce17_62_17
-    BEQ R0, R0, L_i32_lshr_lt16_d110ce17_62_18
-L_i32_lshr_ge32_d110ce17_62_16:
+    BEQ T7, R0, L_i32_lshr_ge16_ec91e73f_62_17
+    BEQ R0, R0, L_i32_lshr_lt16_ec91e73f_62_18
+L_i32_lshr_ge32_ec91e73f_62_16:
     LI T2, 0
     LI S1, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_19
-L_i32_lshr_ge16_d110ce17_62_17:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_19
+L_i32_lshr_ge16_ec91e73f_62_17:
     SUB T7, S3, T6
     SRL T2, T0, T7
     LI S1, 0
-    BEQ R0, R0, L_i32_lshr_done_d110ce17_62_19
-L_i32_lshr_lt16_d110ce17_62_18:
+    BEQ R0, R0, L_i32_lshr_done_ec91e73f_62_19
+L_i32_lshr_lt16_ec91e73f_62_18:
     ADD T2, T3, R0
     ADD S1, T0, R0
-    BEQ S3, R0, L_i32_lshr_done_d110ce17_62_19
+    BEQ S3, R0, L_i32_lshr_done_ec91e73f_62_19
     SRL T2, T3, S3
     SRL S1, T0, S3
     SUB T7, T6, S3
@@ -34039,7 +34039,7 @@ L_i32_lshr_lt16_d110ce17_62_18:
     STORE T1, SB, SC
     SLL T1, T0, T7
     OR T2, T2, T1
-L_i32_lshr_done_d110ce17_62_19:
+L_i32_lshr_done_ec91e73f_62_19:
 ; Recompute alloca t39 at FP+35
     ADD T4, FP, R0
     ADDI T4, T4, 35
@@ -34269,12 +34269,12 @@ L_div128_64_369:
     ADDI SC, SC, 224
     STORE S3, SB, SC
     XOR S3, T1, T4
-    BNE S3, R0, L_i32_ult_hine_d110ce17_62_20
+    BNE S3, R0, L_i32_ult_hine_ec91e73f_62_20
     SLTU S3, S1, T2
-    BEQ R0, R0, L_i32_ult_done_d110ce17_62_21
-L_i32_ult_hine_d110ce17_62_20:
+    BEQ R0, R0, L_i32_ult_done_ec91e73f_62_21
+L_i32_ult_hine_ec91e73f_62_20:
     SLTU S3, T1, T4
-L_i32_ult_done_d110ce17_62_21:
+L_i32_ult_done_ec91e73f_62_21:
 ; Spill t81__hi to slot 171
     ADD SC, FP, R0
     ADDI SC, SC, 225
@@ -34420,12 +34420,12 @@ L_div128_64_375:
     ADDI SC, SC, 236
     STORE T5, SB, SC
     XOR T5, S3, S0
-    BNE T5, R0, L_i32_ult_hine_d110ce17_62_22
+    BNE T5, R0, L_i32_ult_hine_ec91e73f_62_22
     SLTU T5, T7, T3
-    BEQ R0, R0, L_i32_ult_done_d110ce17_62_23
-L_i32_ult_hine_d110ce17_62_22:
+    BEQ R0, R0, L_i32_ult_done_ec91e73f_62_23
+L_i32_ult_hine_ec91e73f_62_22:
     SLTU T5, S3, S0
-L_i32_ult_done_d110ce17_62_23:
+L_i32_ult_done_ec91e73f_62_23:
 ; Spill t91 to slot 183
     ADD SC, FP, R0
     ADDI SC, SC, 237
@@ -34545,12 +34545,12 @@ L_div128_64_378:
     ADDI SC, SC, 243
     STORE S3, SB, SC
     XOR S3, S2, T7
-    BNE S3, R0, L_i32_ult_hine_d110ce17_62_24
+    BNE S3, R0, L_i32_ult_hine_ec91e73f_62_24
     SLTU S3, T1, T0
-    BEQ R0, R0, L_i32_ult_done_d110ce17_62_25
-L_i32_ult_hine_d110ce17_62_24:
+    BEQ R0, R0, L_i32_ult_done_ec91e73f_62_25
+L_i32_ult_hine_ec91e73f_62_24:
     SLTU S3, S2, T7
-L_i32_ult_done_d110ce17_62_25:
+L_i32_ult_done_ec91e73f_62_25:
 ; Spill t95 to slot 190
     ADD SC, FP, R0
     ADDI SC, SC, 244
@@ -35075,21 +35075,21 @@ L_div128_64_368:
     ADDI SC, SC, 302
     STORE T0, SB, SC
     LI T0, -1
-    BEQ S2, T0, L_bc_70cb3b14_use_global
+    BEQ S2, T0, L_bc_cb90ee71_use_global
 ; Spill t127 to slot 253
     ADD SC, FP, R0
     ADDI SC, SC, 307
     STORE T4, SB, SC
     LI T4, -2
-    BEQ S2, T4, L_bc_70cb3b14_use_stack
+    BEQ S2, T4, L_bc_cb90ee71_use_stack
     ADD T7, S2, R0
-    BEQ R0, R0, L_bc_70cb3b14_done
-L_bc_70cb3b14_use_global:
+    BEQ R0, R0, L_bc_cb90ee71_done
+L_bc_cb90ee71_use_global:
     ADD T7, GP, R0
-    BEQ R0, R0, L_bc_70cb3b14_done
-L_bc_70cb3b14_use_stack:
+    BEQ R0, R0, L_bc_cb90ee71_done
+L_bc_cb90ee71_use_stack:
     ADD T7, SB, R0
-L_bc_70cb3b14_done:
+L_bc_cb90ee71_done:
     STORE S0, T7, T2
     ADDI SC, T2, 1
     STORE S1, T7, SC
@@ -35626,7 +35626,7 @@ L_f64_normalize_round_385:
     LI T0, 0
     LI T7, 0
     ADD S1, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_6e19b511_64_0
+    BEQ X3, R0, L_i64_sh_nobit_784584e_64_0
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T7, SC
@@ -35639,7 +35639,7 @@ L_f64_normalize_round_385:
     SLL T0, T0, X3
     OR T0, T0, X0
     SLL S2, S2, X3
-L_i64_sh_nobit_6e19b511_64_0:
+L_i64_sh_nobit_784584e_64_0:
     ADD RV0, T2, R0
     ADD RV1, T1, R0
     ADD X0, S3, R0
@@ -35805,7 +35805,7 @@ L_f64_normalize_round_386:
     ADD T0, RV1, R0
     ADD T7, X0, R0
     ADD S1, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_6e19b511_64_1
+    BEQ X3, R0, L_i64_sh_nobit_784584e_64_1
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T7, SC
@@ -35818,7 +35818,7 @@ L_f64_normalize_round_386:
     SLL T0, T0, X3
     OR T0, T0, X0
     SLL S2, S2, X3
-L_i64_sh_nobit_6e19b511_64_1:
+L_i64_sh_nobit_784584e_64_1:
     STORE S2, SB, T5
     ADDI SC, T5, 1
     STORE T0, SB, SC
@@ -36290,23 +36290,23 @@ L___rcc_f64_from_f32_394:
     STORE T4, SB, SC
     LI T4, 16
     SLTU T0, S1, T3
-    BEQ T0, R0, L_i32_lshr_ge32_35aec404_66_0
+    BEQ T0, R0, L_i32_lshr_ge32_879ac74a_66_0
     SLTU T0, S1, T4
-    BEQ T0, R0, L_i32_lshr_ge16_35aec404_66_1
-    BEQ R0, R0, L_i32_lshr_lt16_35aec404_66_2
-L_i32_lshr_ge32_35aec404_66_0:
+    BEQ T0, R0, L_i32_lshr_ge16_879ac74a_66_1
+    BEQ R0, R0, L_i32_lshr_lt16_879ac74a_66_2
+L_i32_lshr_ge32_879ac74a_66_0:
     LI T6, 0
     LI T5, 0
-    BEQ R0, R0, L_i32_lshr_done_35aec404_66_3
-L_i32_lshr_ge16_35aec404_66_1:
+    BEQ R0, R0, L_i32_lshr_done_879ac74a_66_3
+L_i32_lshr_ge16_879ac74a_66_1:
     SUB T0, S1, T4
     SRL T6, T7, T0
     LI T5, 0
-    BEQ R0, R0, L_i32_lshr_done_35aec404_66_3
-L_i32_lshr_lt16_35aec404_66_2:
+    BEQ R0, R0, L_i32_lshr_done_879ac74a_66_3
+L_i32_lshr_lt16_879ac74a_66_2:
     ADD T6, S0, R0
     ADD T5, T7, R0
-    BEQ S1, R0, L_i32_lshr_done_35aec404_66_3
+    BEQ S1, R0, L_i32_lshr_done_879ac74a_66_3
     SRL T6, S0, S1
     SRL T5, T7, S1
     SUB T0, T4, S1
@@ -36316,7 +36316,7 @@ L_i32_lshr_lt16_35aec404_66_2:
     STORE S3, SB, SC
     SLL S3, T7, T0
     OR T6, T6, S3
-L_i32_lshr_done_35aec404_66_3:
+L_i32_lshr_done_879ac74a_66_3:
 ; Spill t14__hi to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 45
@@ -36746,29 +36746,29 @@ L___rcc_f64_from_f32_403:
     LI S3, 32
     LI S0, 16
     SLTU T0, S1, S3
-    BEQ T0, R0, L_i32_shl_ge32_35aec404_66_4
+    BEQ T0, R0, L_i32_shl_ge32_879ac74a_66_4
     SLTU T0, S1, S0
-    BEQ T0, R0, L_i32_shl_ge16_35aec404_66_5
-    BEQ R0, R0, L_i32_shl_lt16_35aec404_66_6
-L_i32_shl_ge32_35aec404_66_4:
+    BEQ T0, R0, L_i32_shl_ge16_879ac74a_66_5
+    BEQ R0, R0, L_i32_shl_lt16_879ac74a_66_6
+L_i32_shl_ge32_879ac74a_66_4:
     LI T6, 0
     LI T5, 0
-    BEQ R0, R0, L_i32_shl_done_35aec404_66_7
-L_i32_shl_ge16_35aec404_66_5:
+    BEQ R0, R0, L_i32_shl_done_879ac74a_66_7
+L_i32_shl_ge16_879ac74a_66_5:
     SUB T0, S1, S0
     SLL T5, T3, T0
     LI T6, 0
-    BEQ R0, R0, L_i32_shl_done_35aec404_66_7
-L_i32_shl_lt16_35aec404_66_6:
+    BEQ R0, R0, L_i32_shl_done_879ac74a_66_7
+L_i32_shl_lt16_879ac74a_66_6:
     ADD T6, T3, R0
     ADD T5, T4, R0
-    BEQ S1, R0, L_i32_shl_done_35aec404_66_7
+    BEQ S1, R0, L_i32_shl_done_879ac74a_66_7
     SLL T6, T3, S1
     SLL T5, T4, S1
     SUB T0, S0, S1
     SRL T7, T3, T0
     OR T5, T5, T7
-L_i32_shl_done_35aec404_66_7:
+L_i32_shl_done_879ac74a_66_7:
     STORE T6, SB, T1
     ADDI SC, T1, 1
     STORE T5, SB, SC
@@ -36914,7 +36914,7 @@ L___rcc_f64_from_f32_400:
     ADD T2, RV0, R0
     ADD T1, RV1, R0
     ADD S2, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_35aec404_66_8
+    BEQ X3, R0, L_i64_sh_nobit_879ac74a_66_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T1, SC
@@ -36927,7 +36927,7 @@ L___rcc_f64_from_f32_400:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL T7, T7, X3
-L_i64_sh_nobit_35aec404_66_8:
+L_i64_sh_nobit_879ac74a_66_8:
 ; Spill t51 to slot 94
     ADD SC, FP, R0
     ADDI SC, SC, 116
@@ -37440,7 +37440,7 @@ L___rcc_f32_from_f64_407:
     LI T0, 0
     LI T7, 0
     LI S3, 0
-    BEQ X3, R0, L_i64_sh_nobit_ca7fa6ef_68_0
+    BEQ X3, R0, L_i64_sh_nobit_565f9d09_68_0
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T0, SC
@@ -37453,7 +37453,7 @@ L___rcc_f32_from_f64_407:
     SRL T7, T7, X3
     OR T7, T7, X0
     SRL S3, S3, X3
-L_i64_sh_nobit_ca7fa6ef_68_0:
+L_i64_sh_nobit_565f9d09_68_0:
 ; Spill i64_c0_68_f68_op18 to slot 34
     ADD SC, FP, R0
     ADDI SC, SC, 64
@@ -37821,7 +37821,7 @@ L___rcc_f32_from_f64_413:
     ADD S3, X0, R0
     ADD T1, X1, R0
     LI S2, 0
-    BEQ X3, R0, L_i64_sh_nobit_ca7fa6ef_68_1
+    BEQ X3, R0, L_i64_sh_nobit_565f9d09_68_1
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S3, SC
@@ -37834,7 +37834,7 @@ L___rcc_f32_from_f64_413:
     SRL T1, T1, X3
     OR T1, T1, X0
     SRL S2, S2, X3
-L_i64_sh_nobit_ca7fa6ef_68_1:
+L_i64_sh_nobit_565f9d09_68_1:
 ; Spill t36__w1 to slot 76
     ADD SC, FP, R0
     ADDI SC, SC, 106
@@ -38108,22 +38108,22 @@ L_i64_sh_nobit_ca7fa6ef_68_1:
     ADDI SC, SC, 149
     STORE T1, SB, SC
     XOR T1, S2, T7
-    BNE T1, R0, L_i64_ult_w3ne_ca7fa6ef_68_2
+    BNE T1, R0, L_i64_ult_w3ne_565f9d09_68_2
     XOR T1, S3, S1
-    BNE T1, R0, L_i64_ult_w2ne_ca7fa6ef_68_3
+    BNE T1, R0, L_i64_ult_w2ne_565f9d09_68_3
     XOR T1, T0, T2
-    BNE T1, R0, L_i64_ult_w1ne_ca7fa6ef_68_4
+    BNE T1, R0, L_i64_ult_w1ne_565f9d09_68_4
     SLTU T1, T6, T5
-    BEQ R0, R0, L_i64_ult_done_ca7fa6ef_68_5
-L_i64_ult_w3ne_ca7fa6ef_68_2:
+    BEQ R0, R0, L_i64_ult_done_565f9d09_68_5
+L_i64_ult_w3ne_565f9d09_68_2:
     SLTU T1, S2, T7
-    BEQ R0, R0, L_i64_ult_done_ca7fa6ef_68_5
-L_i64_ult_w2ne_ca7fa6ef_68_3:
+    BEQ R0, R0, L_i64_ult_done_565f9d09_68_5
+L_i64_ult_w2ne_565f9d09_68_3:
     SLTU T1, S3, S1
-    BEQ R0, R0, L_i64_ult_done_ca7fa6ef_68_5
-L_i64_ult_w1ne_ca7fa6ef_68_4:
+    BEQ R0, R0, L_i64_ult_done_565f9d09_68_5
+L_i64_ult_w1ne_565f9d09_68_4:
     SLTU T1, T0, T2
-L_i64_ult_done_ca7fa6ef_68_5:
+L_i64_ult_done_565f9d09_68_5:
     LI S0, 0
     XOR T4, T1, S0
     LI T3, 0
@@ -39975,7 +39975,7 @@ L___rcc_f64_add_459:
     LI T7, 0
     LI S2, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_0
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_0
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T7, SC
@@ -39988,7 +39988,7 @@ L___rcc_f64_add_459:
     SRL S2, S2, X3
     OR S2, S2, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_b089a3f3_70_0:
+L_i64_sh_nobit_142a16c_70_0:
 ; Spill i64_c0_70_f70_op95 to slot 133
     ADD SC, FP, R0
     ADDI SC, SC, 187
@@ -40096,7 +40096,7 @@ L_i64_sh_nobit_b089a3f3_70_0:
     LI T1, 0
     LI T4, 0
     LI T6, 0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_1
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_1
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T1, SC
@@ -40109,7 +40109,7 @@ L_i64_sh_nobit_b089a3f3_70_0:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T6, T6, X3
-L_i64_sh_nobit_b089a3f3_70_1:
+L_i64_sh_nobit_142a16c_70_1:
 ; Spill i64_c0_70_f70_op102 to slot 149
     ADD SC, FP, R0
     ADDI SC, SC, 203
@@ -40384,7 +40384,7 @@ L___rcc_f64_add_460:
     ADD T7, RV1, R0
     ADD T2, X0, R0
     ADD S0, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_2
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_2
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T2, SC
@@ -40397,7 +40397,7 @@ L___rcc_f64_add_460:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL T6, T6, X3
-L_i64_sh_nobit_b089a3f3_70_2:
+L_i64_sh_nobit_142a16c_70_2:
 ; Spill t75__w2 to slot 183
     ADD SC, FP, R0
     ADDI SC, SC, 237
@@ -40479,7 +40479,7 @@ L___rcc_f64_add_461:
     LI T2, 0
     LI S0, 0
     ADD T1, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_3
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_3
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S0, SC
@@ -40492,7 +40492,7 @@ L___rcc_f64_add_461:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL T7, T7, X3
-L_i64_sh_nobit_b089a3f3_70_3:
+L_i64_sh_nobit_142a16c_70_3:
     ADD RV0, T4, R0
     ADD RV1, S3, R0
     ADD X0, S2, R0
@@ -40546,7 +40546,7 @@ L_i64_sh_nobit_b089a3f3_70_3:
     ADD S3, RV1, R0
     ADD S2, X0, R0
     ADD T3, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_4
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_4
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S2, SC
@@ -40559,7 +40559,7 @@ L_i64_sh_nobit_b089a3f3_70_3:
     SLL S3, S3, X3
     OR S3, S3, X0
     SLL T4, T4, X3
-L_i64_sh_nobit_b089a3f3_70_4:
+L_i64_sh_nobit_142a16c_70_4:
 ; Spill t82 to slot 201
     ADD SC, FP, R0
     ADDI SC, SC, 255
@@ -40664,7 +40664,7 @@ L___rcc_f64_add_463:
     ADD T6, RV1, R0
     ADD T4, X0, R0
     ADD S3, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_5
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_5
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -40677,7 +40677,7 @@ L___rcc_f64_add_463:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_b089a3f3_70_5:
+L_i64_sh_nobit_142a16c_70_5:
 ; Spill t84__w2 to slot 211
     ADD SC, FP, R0
     ADDI SC, SC, 265
@@ -40759,7 +40759,7 @@ L___rcc_f64_add_464:
     LI T4, 0
     LI S3, 0
     ADD T1, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_6
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_6
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S3, SC
@@ -40772,7 +40772,7 @@ L___rcc_f64_add_464:
     SLL T4, T4, X3
     OR T4, T4, X0
     SLL T6, T6, X3
-L_i64_sh_nobit_b089a3f3_70_6:
+L_i64_sh_nobit_142a16c_70_6:
     ADD RV0, S0, R0
     ADD RV1, S2, R0
     ADD X0, T3, R0
@@ -40826,7 +40826,7 @@ L_i64_sh_nobit_b089a3f3_70_6:
     ADD S2, RV1, R0
     ADD T3, X0, R0
     ADD T2, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_b089a3f3_70_7
+    BEQ X3, R0, L_i64_sh_nobit_142a16c_70_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T3, SC
@@ -40839,7 +40839,7 @@ L_i64_sh_nobit_b089a3f3_70_6:
     SLL S2, S2, X3
     OR S2, S2, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_b089a3f3_70_7:
+L_i64_sh_nobit_142a16c_70_7:
 ; Spill t91 to slot 229
     ADD SC, FP, R0
     ADDI SC, SC, 283
@@ -41675,22 +41675,22 @@ L___rcc_f64_add_474:
     ADDI SC, SC, 350
     STORE T7, SB, SC
     XOR T7, S0, T3
-    BNE T7, R0, L_i64_ult_w3ne_b089a3f3_70_8
+    BNE T7, R0, L_i64_ult_w3ne_142a16c_70_8
     XOR T7, T2, T4
-    BNE T7, R0, L_i64_ult_w2ne_b089a3f3_70_9
+    BNE T7, R0, L_i64_ult_w2ne_142a16c_70_9
     XOR T7, S3, T1
-    BNE T7, R0, L_i64_ult_w1ne_b089a3f3_70_10
+    BNE T7, R0, L_i64_ult_w1ne_142a16c_70_10
     SLTU T7, S2, S1
-    BEQ R0, R0, L_i64_ult_done_b089a3f3_70_11
-L_i64_ult_w3ne_b089a3f3_70_8:
+    BEQ R0, R0, L_i64_ult_done_142a16c_70_11
+L_i64_ult_w3ne_142a16c_70_8:
     SLTU T7, S0, T3
-    BEQ R0, R0, L_i64_ult_done_b089a3f3_70_11
-L_i64_ult_w2ne_b089a3f3_70_9:
+    BEQ R0, R0, L_i64_ult_done_142a16c_70_11
+L_i64_ult_w2ne_142a16c_70_9:
     SLTU T7, T2, T4
-    BEQ R0, R0, L_i64_ult_done_b089a3f3_70_11
-L_i64_ult_w1ne_b089a3f3_70_10:
+    BEQ R0, R0, L_i64_ult_done_142a16c_70_11
+L_i64_ult_w1ne_142a16c_70_10:
     SLTU T7, S3, T1
-L_i64_ult_done_b089a3f3_70_11:
+L_i64_ult_done_142a16c_70_11:
 ; Spill t128__w3 to slot 297
     ADD SC, FP, R0
     ADDI SC, SC, 351
@@ -41920,22 +41920,22 @@ L___rcc_f64_add_476:
     ADDI SC, SC, 374
     STORE T4, SB, SC
     XOR T4, S1, T0
-    BNE T4, R0, L_i64_ult_w3ne_b089a3f3_70_12
+    BNE T4, R0, L_i64_ult_w3ne_142a16c_70_12
     XOR T4, T7, T2
-    BNE T4, R0, L_i64_ult_w2ne_b089a3f3_70_13
+    BNE T4, R0, L_i64_ult_w2ne_142a16c_70_13
     XOR T4, T5, S3
-    BNE T4, R0, L_i64_ult_w1ne_b089a3f3_70_14
+    BNE T4, R0, L_i64_ult_w1ne_142a16c_70_14
     SLTU T4, T1, S2
-    BEQ R0, R0, L_i64_ult_done_b089a3f3_70_15
-L_i64_ult_w3ne_b089a3f3_70_12:
+    BEQ R0, R0, L_i64_ult_done_142a16c_70_15
+L_i64_ult_w3ne_142a16c_70_12:
     SLTU T4, S1, T0
-    BEQ R0, R0, L_i64_ult_done_b089a3f3_70_15
-L_i64_ult_w2ne_b089a3f3_70_13:
+    BEQ R0, R0, L_i64_ult_done_142a16c_70_15
+L_i64_ult_w2ne_142a16c_70_13:
     SLTU T4, T7, T2
-    BEQ R0, R0, L_i64_ult_done_b089a3f3_70_15
-L_i64_ult_w1ne_b089a3f3_70_14:
+    BEQ R0, R0, L_i64_ult_done_142a16c_70_15
+L_i64_ult_w1ne_142a16c_70_14:
     SLTU T4, T5, S3
-L_i64_ult_done_b089a3f3_70_15:
+L_i64_ult_done_142a16c_70_15:
 ; Spill t136__w3 to slot 321
     ADD SC, FP, R0
     ADDI SC, SC, 375
@@ -43816,7 +43816,7 @@ L___rcc_f64_mul_512:
     LI T3, 0
     LI T7, 0
     LI T6, 0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_0
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_0
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T3, SC
@@ -43829,7 +43829,7 @@ L___rcc_f64_mul_512:
     SRL T7, T7, X3
     OR T7, T7, X0
     SRL T6, T6, X3
-L_i64_sh_nobit_9d2da7d2_74_0:
+L_i64_sh_nobit_a038f30_74_0:
 ; Spill i64_c0_74_f74_op107 to slot 94
     ADD SC, FP, R0
     ADDI SC, SC, 152
@@ -43937,7 +43937,7 @@ L_i64_sh_nobit_9d2da7d2_74_0:
     LI S0, 0
     LI S2, 0
     LI T2, 0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_1
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_1
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S0, SC
@@ -43950,7 +43950,7 @@ L_i64_sh_nobit_9d2da7d2_74_0:
     SRL S2, S2, X3
     OR S2, S2, X0
     SRL T2, T2, X3
-L_i64_sh_nobit_9d2da7d2_74_1:
+L_i64_sh_nobit_a038f30_74_1:
 ; Spill i64_c0_74_f74_op114 to slot 110
     ADD SC, FP, R0
     ADDI SC, SC, 168
@@ -44276,7 +44276,7 @@ L___rcc_f64_mul_516:
     LI T5, 0
     LI T4, 0
     ADD T2, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_2
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_2
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -44289,7 +44289,7 @@ L___rcc_f64_mul_516:
     SLL T5, T5, X3
     OR T5, T5, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_9d2da7d2_74_2:
+L_i64_sh_nobit_a038f30_74_2:
     ADD RV0, T3, R0
     ADD RV1, T6, R0
     ADD X0, S2, R0
@@ -44455,7 +44455,7 @@ L___rcc_f64_mul_517:
     ADD T5, RV1, R0
     ADD T4, X0, R0
     ADD T2, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_3
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_3
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -44468,7 +44468,7 @@ L___rcc_f64_mul_517:
     SLL T5, T5, X3
     OR T5, T5, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_9d2da7d2_74_3:
+L_i64_sh_nobit_a038f30_74_3:
     STORE S0, SB, S1
     ADDI SC, S1, 1
     STORE T5, SB, SC
@@ -44569,7 +44569,7 @@ L___rcc_f64_mul_514:
     LI T2, 0
     LI T6, 0
     ADD S3, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_4
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_4
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T6, SC
@@ -44582,7 +44582,7 @@ L___rcc_f64_mul_514:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL T4, T4, X3
-L_i64_sh_nobit_9d2da7d2_74_4:
+L_i64_sh_nobit_a038f30_74_4:
     ADD RV0, S1, R0
     ADD RV1, S2, R0
     ADD X0, T7, R0
@@ -44771,7 +44771,7 @@ L___rcc_f64_mul_522:
     LI S2, 0
     LI S1, 0
     ADD T6, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_5
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_5
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S1, SC
@@ -44784,7 +44784,7 @@ L___rcc_f64_mul_522:
     SLL S2, S2, X3
     OR S2, S2, X0
     SLL T1, T1, X3
-L_i64_sh_nobit_9d2da7d2_74_5:
+L_i64_sh_nobit_a038f30_74_5:
     ADD RV0, T2, R0
     ADD RV1, T4, R0
     ADD X0, S3, R0
@@ -44950,7 +44950,7 @@ L___rcc_f64_mul_523:
     ADD S2, RV1, R0
     ADD S1, X0, R0
     ADD T6, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_6
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_6
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S1, SC
@@ -44963,7 +44963,7 @@ L___rcc_f64_mul_523:
     SLL S2, S2, X3
     OR S2, S2, X0
     SLL T1, T1, X3
-L_i64_sh_nobit_9d2da7d2_74_6:
+L_i64_sh_nobit_a038f30_74_6:
     STORE T1, SB, S0
     ADDI SC, S0, 1
     STORE S2, SB, SC
@@ -45064,7 +45064,7 @@ L___rcc_f64_mul_520:
     LI T6, 0
     LI T4, 0
     ADD T3, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_7
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -45077,7 +45077,7 @@ L___rcc_f64_mul_520:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_9d2da7d2_74_7:
+L_i64_sh_nobit_a038f30_74_7:
     ADD RV0, S0, R0
     ADD RV1, S3, R0
     ADD X0, T5, R0
@@ -45314,7 +45314,7 @@ L___rcc_f64_mul_521:
     LI T6, 0
     ADD T4, RV0, R0
     ADD T3, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_8
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -45327,7 +45327,7 @@ L___rcc_f64_mul_521:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL T5, T5, X3
-L_i64_sh_nobit_9d2da7d2_74_8:
+L_i64_sh_nobit_a038f30_74_8:
     ADD RV0, T2, R0
     ADD RV1, S1, R0
     ADD X0, T7, R0
@@ -45480,7 +45480,7 @@ L___rcc_f64_mul_525:
     LI T4, 0
     ADD T6, RV0, R0
     ADD T5, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_9
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_9
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T6, SC
@@ -45493,7 +45493,7 @@ L___rcc_f64_mul_525:
     SLL T4, T4, X3
     OR T4, T4, X0
     SLL T3, T3, X3
-L_i64_sh_nobit_9d2da7d2_74_9:
+L_i64_sh_nobit_a038f30_74_9:
 ; Spill t127 to slot 291
     ADD SC, FP, R0
     ADDI SC, SC, 349
@@ -45754,7 +45754,7 @@ L_i64_sh_nobit_9d2da7d2_74_9:
     ADD S3, RV0, R0
     ADD T5, RV1, R0
     ADD T6, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_10
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_10
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T5, SC
@@ -45767,7 +45767,7 @@ L_i64_sh_nobit_9d2da7d2_74_9:
     SLL S3, S3, X3
     OR S3, S3, X0
     SLL T7, T7, X3
-L_i64_sh_nobit_9d2da7d2_74_10:
+L_i64_sh_nobit_a038f30_74_10:
 ; Load instruction: t135 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f74_op263_t135 has bank info: Stack
@@ -45819,7 +45819,7 @@ L_i64_sh_nobit_9d2da7d2_74_10:
     ADD T2, X1, R0
     LI S1, 0
     LI T7, 0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_11
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_11
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -45832,7 +45832,7 @@ L_i64_sh_nobit_9d2da7d2_74_10:
     SRL S1, S1, X3
     OR S1, S1, X0
     SRL T7, T7, X3
-L_i64_sh_nobit_9d2da7d2_74_11:
+L_i64_sh_nobit_a038f30_74_11:
 ; Spill t134__w1 to slot 333
     ADD SC, FP, R0
     ADDI SC, SC, 391
@@ -45993,7 +45993,7 @@ L___rcc_f64_mul_526:
     LI S2, 0
     ADD T6, RV0, R0
     ADD T4, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_12
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_12
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T6, SC
@@ -46006,7 +46006,7 @@ L___rcc_f64_mul_526:
     SLL S2, S2, X3
     OR S2, S2, X0
     SLL T1, T1, X3
-L_i64_sh_nobit_9d2da7d2_74_12:
+L_i64_sh_nobit_a038f30_74_12:
 ; Spill t140 to slot 349
     ADD SC, FP, R0
     ADDI SC, SC, 407
@@ -46267,7 +46267,7 @@ L_i64_sh_nobit_9d2da7d2_74_12:
     ADD T0, RV0, R0
     ADD T4, RV1, R0
     ADD T6, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_13
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_13
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -46280,7 +46280,7 @@ L_i64_sh_nobit_9d2da7d2_74_12:
     SLL T0, T0, X3
     OR T0, T0, X0
     SLL T3, T3, X3
-L_i64_sh_nobit_9d2da7d2_74_13:
+L_i64_sh_nobit_a038f30_74_13:
 ; Load instruction: t148 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f74_op290_t148 has bank info: Stack
@@ -46332,7 +46332,7 @@ L_i64_sh_nobit_9d2da7d2_74_13:
     ADD S1, X1, R0
     LI T7, 0
     LI T3, 0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_14
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_14
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S1, SC
@@ -46345,7 +46345,7 @@ L_i64_sh_nobit_9d2da7d2_74_13:
     SRL T7, T7, X3
     OR T7, T7, X0
     SRL T3, T3, X3
-L_i64_sh_nobit_9d2da7d2_74_14:
+L_i64_sh_nobit_a038f30_74_14:
 ; Spill t147__w1 to slot 391
     ADD SC, FP, R0
     ADDI SC, SC, 449
@@ -46578,7 +46578,7 @@ L___rcc_f64_mul_527:
     ADD S3, RV1, R0
     ADD T0, X0, R0
     ADD T4, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_9d2da7d2_74_15
+    BEQ X3, R0, L_i64_sh_nobit_a038f30_74_15
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S3, SC
@@ -46591,7 +46591,7 @@ L___rcc_f64_mul_527:
     SRL T0, T0, X3
     OR T0, T0, X0
     SRL T4, T4, X3
-L_i64_sh_nobit_9d2da7d2_74_15:
+L_i64_sh_nobit_a038f30_74_15:
     STORE T5, SB, T2
     ADDI SC, T2, 1
     STORE S3, SB, SC
@@ -47961,7 +47961,7 @@ L___rcc_f64_div_558:
     LI S3, 0
     LI T0, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_0
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_0
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S3, SC
@@ -47974,7 +47974,7 @@ L___rcc_f64_div_558:
     SRL T0, T0, X3
     OR T0, T0, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_471c21db_76_0:
+L_i64_sh_nobit_f82a00da_76_0:
 ; Spill i64_c0_76_f76_op100 to slot 93
     ADD SC, FP, R0
     ADDI SC, SC, 150
@@ -48082,7 +48082,7 @@ L_i64_sh_nobit_471c21db_76_0:
     LI S0, 0
     LI T7, 0
     LI T1, 0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_1
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_1
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, S0, SC
@@ -48095,7 +48095,7 @@ L_i64_sh_nobit_471c21db_76_0:
     SRL T7, T7, X3
     OR T7, T7, X0
     SRL T1, T1, X3
-L_i64_sh_nobit_471c21db_76_1:
+L_i64_sh_nobit_f82a00da_76_1:
 ; Spill i64_c0_76_f76_op107 to slot 109
     ADD SC, FP, R0
     ADDI SC, SC, 166
@@ -48421,7 +48421,7 @@ L___rcc_f64_div_562:
     LI T3, 0
     LI T5, 0
     ADD T1, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_2
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_2
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T5, SC
@@ -48434,7 +48434,7 @@ L___rcc_f64_div_562:
     SLL T3, T3, X3
     OR T3, T3, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_471c21db_76_2:
+L_i64_sh_nobit_f82a00da_76_2:
     ADD RV0, T6, R0
     ADD RV1, T7, R0
     ADD X0, S3, R0
@@ -48600,7 +48600,7 @@ L___rcc_f64_div_563:
     ADD T3, RV1, R0
     ADD T5, X0, R0
     ADD T1, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_3
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_3
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T5, SC
@@ -48613,7 +48613,7 @@ L___rcc_f64_div_563:
     SLL T3, T3, X3
     OR T3, T3, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_471c21db_76_3:
+L_i64_sh_nobit_f82a00da_76_3:
     STORE S0, SB, S2
     ADDI SC, S2, 1
     STORE T3, SB, SC
@@ -48714,7 +48714,7 @@ L___rcc_f64_div_560:
     LI T1, 0
     LI T7, 0
     ADD T4, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_4
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_4
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T7, SC
@@ -48727,7 +48727,7 @@ L___rcc_f64_div_560:
     SLL T1, T1, X3
     OR T1, T1, X0
     SLL T5, T5, X3
-L_i64_sh_nobit_471c21db_76_4:
+L_i64_sh_nobit_f82a00da_76_4:
     ADD RV0, S2, R0
     ADD RV1, S3, R0
     ADD X0, T0, R0
@@ -48916,7 +48916,7 @@ L___rcc_f64_div_568:
     LI S3, 0
     LI S2, 0
     ADD T7, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_5
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_5
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S2, SC
@@ -48929,7 +48929,7 @@ L___rcc_f64_div_568:
     SLL S3, S3, X3
     OR S3, S3, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_471c21db_76_5:
+L_i64_sh_nobit_f82a00da_76_5:
     ADD RV0, T1, R0
     ADD RV1, T4, R0
     ADD X0, T5, R0
@@ -49095,7 +49095,7 @@ L___rcc_f64_div_569:
     ADD S3, RV1, R0
     ADD S2, X0, R0
     ADD T7, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_6
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_6
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S2, SC
@@ -49108,7 +49108,7 @@ L___rcc_f64_div_569:
     SLL S3, S3, X3
     OR S3, S3, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_471c21db_76_6:
+L_i64_sh_nobit_f82a00da_76_6:
     STORE T2, SB, S0
     ADDI SC, S0, 1
     STORE S3, SB, SC
@@ -49209,7 +49209,7 @@ L___rcc_f64_div_566:
     LI T7, 0
     LI T4, 0
     ADD T6, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_7
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -49222,7 +49222,7 @@ L___rcc_f64_div_566:
     SLL T7, T7, X3
     OR T7, T7, X0
     SLL S2, S2, X3
-L_i64_sh_nobit_471c21db_76_7:
+L_i64_sh_nobit_f82a00da_76_7:
     ADD RV0, T5, R0
     ADD RV1, S0, R0
     ADD X0, T3, R0
@@ -49359,7 +49359,7 @@ L___rcc_f64_div_567:
     ADD T2, RV1, R0
     ADD S3, X0, R0
     ADD T5, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_8
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_8
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -49372,7 +49372,7 @@ L___rcc_f64_div_567:
     SRL S3, S3, X3
     OR S3, S3, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_471c21db_76_8:
+L_i64_sh_nobit_f82a00da_76_8:
 ; Load instruction: t120 = load FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f76_op215_t120 has bank info: Stack
@@ -49417,7 +49417,7 @@ L_i64_sh_nobit_471c21db_76_8:
     LI T6, 0
     LI T1, 0
     ADD T0, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_9
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_9
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T1, SC
@@ -49430,7 +49430,7 @@ L_i64_sh_nobit_471c21db_76_8:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL T4, T4, X3
-L_i64_sh_nobit_471c21db_76_9:
+L_i64_sh_nobit_f82a00da_76_9:
 ; Load instruction: t122 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; LOAD: Pointer load_src_ptr_f76_op217_t122 has bank info: Stack
@@ -49744,7 +49744,7 @@ L_i64_sh_nobit_471c21db_76_9:
     LI T0, 0
     LI S2, 0
     ADD T3, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_10
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_10
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S2, SC
@@ -49757,28 +49757,28 @@ L_i64_sh_nobit_471c21db_76_9:
     SLL T0, T0, X3
     OR T0, T0, X0
     SLL T2, T2, X3
-L_i64_sh_nobit_471c21db_76_10:
+L_i64_sh_nobit_f82a00da_76_10:
 ; Spill i64_c0_76_f76_op234 to slot 299
     ADD SC, FP, R0
     ADDI SC, SC, 356
     STORE S1, SB, SC
     XOR S1, S0, T3
-    BNE S1, R0, L_i64_ult_w3ne_471c21db_76_11
+    BNE S1, R0, L_i64_ult_w3ne_f82a00da_76_11
     XOR S1, T4, S2
-    BNE S1, R0, L_i64_ult_w2ne_471c21db_76_12
+    BNE S1, R0, L_i64_ult_w2ne_f82a00da_76_12
     XOR S1, T1, T0
-    BNE S1, R0, L_i64_ult_w1ne_471c21db_76_13
+    BNE S1, R0, L_i64_ult_w1ne_f82a00da_76_13
     SLTU S1, T6, T2
-    BEQ R0, R0, L_i64_ult_done_471c21db_76_14
-L_i64_ult_w3ne_471c21db_76_11:
+    BEQ R0, R0, L_i64_ult_done_f82a00da_76_14
+L_i64_ult_w3ne_f82a00da_76_11:
     SLTU S1, S0, T3
-    BEQ R0, R0, L_i64_ult_done_471c21db_76_14
-L_i64_ult_w2ne_471c21db_76_12:
+    BEQ R0, R0, L_i64_ult_done_f82a00da_76_14
+L_i64_ult_w2ne_f82a00da_76_12:
     SLTU S1, T4, S2
-    BEQ R0, R0, L_i64_ult_done_471c21db_76_14
-L_i64_ult_w1ne_471c21db_76_13:
+    BEQ R0, R0, L_i64_ult_done_f82a00da_76_14
+L_i64_ult_w1ne_f82a00da_76_13:
     SLTU S1, T1, T0
-L_i64_ult_done_471c21db_76_14:
+L_i64_ult_done_f82a00da_76_14:
 ; Spill i64_c1_76_f76_op235 to slot 300
     ADD SC, FP, R0
     ADDI SC, SC, 357
@@ -49843,7 +49843,7 @@ L___rcc_f64_div_571:
     ADD T4, RV1, R0
     ADD S0, X0, R0
     ADD T2, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_15
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_15
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, S0, SC
@@ -49856,7 +49856,7 @@ L___rcc_f64_div_571:
     SLL T4, T4, X3
     OR T4, T4, X0
     SLL T1, T1, X3
-L_i64_sh_nobit_471c21db_76_15:
+L_i64_sh_nobit_f82a00da_76_15:
 ; Spill t128__w1 to slot 308
     ADD SC, FP, R0
     ADDI SC, SC, 365
@@ -49941,7 +49941,7 @@ L___rcc_f64_div_572:
     ADD T6, RV1, R0
     ADD T1, X0, R0
     ADD T4, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_471c21db_76_16
+    BEQ X3, R0, L_i64_sh_nobit_f82a00da_76_16
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T1, SC
@@ -49954,7 +49954,7 @@ L___rcc_f64_div_572:
     SLL T6, T6, X3
     OR T6, T6, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_471c21db_76_16:
+L_i64_sh_nobit_f82a00da_76_16:
 ; Spill t132__w2 to slot 317
     ADD SC, FP, R0
     ADDI SC, SC, 374
@@ -51670,22 +51670,22 @@ L___rcc_f64_lt_604:
     ADDI SC, SC, 115
     STORE S1, SB, SC
     XOR S1, S0, T0
-    BNE S1, R0, L_i64_ult_w3ne_882f00b6_82_0
+    BNE S1, R0, L_i64_ult_w3ne_3291442f_82_0
     XOR S1, T4, T7
-    BNE S1, R0, L_i64_ult_w2ne_882f00b6_82_1
+    BNE S1, R0, L_i64_ult_w2ne_3291442f_82_1
     XOR S1, T5, T2
-    BNE S1, R0, L_i64_ult_w1ne_882f00b6_82_2
+    BNE S1, R0, L_i64_ult_w1ne_3291442f_82_2
     SLTU S1, T6, T3
-    BEQ R0, R0, L_i64_ult_done_882f00b6_82_3
-L_i64_ult_w3ne_882f00b6_82_0:
+    BEQ R0, R0, L_i64_ult_done_3291442f_82_3
+L_i64_ult_w3ne_3291442f_82_0:
     SLTU S1, S0, T0
-    BEQ R0, R0, L_i64_ult_done_882f00b6_82_3
-L_i64_ult_w2ne_882f00b6_82_1:
+    BEQ R0, R0, L_i64_ult_done_3291442f_82_3
+L_i64_ult_w2ne_3291442f_82_1:
     SLTU S1, T4, T7
-    BEQ R0, R0, L_i64_ult_done_882f00b6_82_3
-L_i64_ult_w1ne_882f00b6_82_2:
+    BEQ R0, R0, L_i64_ult_done_3291442f_82_3
+L_i64_ult_w1ne_3291442f_82_2:
     SLTU S1, T5, T2
-L_i64_ult_done_882f00b6_82_3:
+L_i64_ult_done_3291442f_82_3:
     MOVE RV0, S1
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f64_lt_99999
@@ -51755,22 +51755,22 @@ L___rcc_f64_lt_606:
     ADDI SC, SC, 124
     STORE S0, SB, SC
     XOR S0, T2, T4
-    BNE S0, R0, L_i64_ult_w3ne_882f00b6_82_4
+    BNE S0, R0, L_i64_ult_w3ne_3291442f_82_4
     XOR S0, T3, T5
-    BNE S0, R0, L_i64_ult_w2ne_882f00b6_82_5
+    BNE S0, R0, L_i64_ult_w2ne_3291442f_82_5
     XOR S0, S3, T6
-    BNE S0, R0, L_i64_ult_w1ne_882f00b6_82_6
+    BNE S0, R0, L_i64_ult_w1ne_3291442f_82_6
     SLTU S0, S2, T0
-    BEQ R0, R0, L_i64_ult_done_882f00b6_82_7
-L_i64_ult_w3ne_882f00b6_82_4:
+    BEQ R0, R0, L_i64_ult_done_3291442f_82_7
+L_i64_ult_w3ne_3291442f_82_4:
     SLTU S0, T2, T4
-    BEQ R0, R0, L_i64_ult_done_882f00b6_82_7
-L_i64_ult_w2ne_882f00b6_82_5:
+    BEQ R0, R0, L_i64_ult_done_3291442f_82_7
+L_i64_ult_w2ne_3291442f_82_5:
     SLTU S0, T3, T5
-    BEQ R0, R0, L_i64_ult_done_882f00b6_82_7
-L_i64_ult_w1ne_882f00b6_82_6:
+    BEQ R0, R0, L_i64_ult_done_3291442f_82_7
+L_i64_ult_w1ne_3291442f_82_6:
     SLTU S0, S3, T6
-L_i64_ult_done_882f00b6_82_7:
+L_i64_ult_done_3291442f_82_7:
     MOVE RV0, S0
 ; Jump to epilogue
     BEQ R0, R0, L___rcc_f64_lt_99999
@@ -52869,7 +52869,7 @@ L___rcc_f64_from_u64_617:
     ADD T4, RV1, R0
     ADD T0, X0, R0
     ADD T5, X1, R0
-    BEQ X3, R0, L_i64_sh_nobit_4420d7d3_90_0
+    BEQ X3, R0, L_i64_sh_nobit_99bb979e_90_0
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T4, SC
@@ -52882,7 +52882,7 @@ L___rcc_f64_from_u64_617:
     SRL T0, T0, X3
     OR T0, T0, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_4420d7d3_90_0:
+L_i64_sh_nobit_99bb979e_90_0:
 ; Spill t20__w3 to slot 45
     ADD SC, FP, R0
     ADDI SC, SC, 64
@@ -52967,19 +52967,19 @@ L___rcc_f64_from_u64_618:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_4420d7d3_90_1
+    BEQ X3, R0, L_i64_sh_ge32_99bb979e_90_1
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_4420d7d3_90_3
-    BEQ R0, R0, L_i64_sh_lt16_4420d7d3_90_4
-L_i64_sh_ge32_4420d7d3_90_1:
+    BEQ X3, R0, L_i64_sh_ge16_99bb979e_90_3
+    BEQ R0, R0, L_i64_sh_lt16_99bb979e_90_4
+L_i64_sh_ge32_99bb979e_90_1:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_4420d7d3_90_2
+    BEQ X3, R0, L_i64_sh_ge48_99bb979e_90_2
     SUB X3, X2, A1
     LI S0, 0
     LI T2, 0
     ADD T4, RV0, R0
     ADD T0, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_4420d7d3_90_6
+    BEQ X3, R0, L_i64_sh_nobit_99bb979e_90_6
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -52992,15 +52992,15 @@ L_i64_sh_ge32_4420d7d3_90_1:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_4420d7d3_90_6:
-    BEQ R0, R0, L_i64_sh_done_4420d7d3_90_5
-L_i64_sh_ge48_4420d7d3_90_2:
+L_i64_sh_nobit_99bb979e_90_6:
+    BEQ R0, R0, L_i64_sh_done_99bb979e_90_5
+L_i64_sh_ge48_99bb979e_90_2:
     SUB X3, X2, A2
     LI S0, 0
     LI T2, 0
     LI T4, 0
     ADD T0, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_4420d7d3_90_7
+    BEQ X3, R0, L_i64_sh_nobit_99bb979e_90_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -53013,15 +53013,15 @@ L_i64_sh_ge48_4420d7d3_90_2:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_4420d7d3_90_7:
-    BEQ R0, R0, L_i64_sh_done_4420d7d3_90_5
-L_i64_sh_ge16_4420d7d3_90_3:
+L_i64_sh_nobit_99bb979e_90_7:
+    BEQ R0, R0, L_i64_sh_done_99bb979e_90_5
+L_i64_sh_ge16_99bb979e_90_3:
     SUB X3, X2, A0
     LI S0, 0
     ADD T2, RV0, R0
     ADD T4, RV1, R0
     ADD T0, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_4420d7d3_90_8
+    BEQ X3, R0, L_i64_sh_nobit_99bb979e_90_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T4, SC
@@ -53034,14 +53034,14 @@ L_i64_sh_ge16_4420d7d3_90_3:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL S0, S0, X3
-L_i64_sh_nobit_4420d7d3_90_8:
-    BEQ R0, R0, L_i64_sh_done_4420d7d3_90_5
-L_i64_sh_lt16_4420d7d3_90_4:
+L_i64_sh_nobit_99bb979e_90_8:
+    BEQ R0, R0, L_i64_sh_done_99bb979e_90_5
+L_i64_sh_lt16_99bb979e_90_4:
     ADD S0, RV0, R0
     ADD T2, RV1, R0
     ADD T4, X0, R0
     ADD T0, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_4420d7d3_90_9
+    BEQ X2, R0, L_i64_sh_nobit_99bb979e_90_9
     LI SC, 16
     SUB SC, SC, X2
     SRL X0, T4, SC
@@ -53054,8 +53054,8 @@ L_i64_sh_lt16_4420d7d3_90_4:
     SLL T2, T2, X2
     OR T2, T2, X0
     SLL S0, S0, X2
-L_i64_sh_nobit_4420d7d3_90_9:
-L_i64_sh_done_4420d7d3_90_5:
+L_i64_sh_nobit_99bb979e_90_9:
+L_i64_sh_done_99bb979e_90_5:
 ; Spill t23__w3 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 73
@@ -53521,22 +53521,22 @@ L___rcc_f64_from_i64_623:
     ADDI SC, SC, 49
     STORE T2, SB, SC
     XOR T2, T3, T7
-    BNE T2, R0, L_i64_slt_w3ne_bc2d14f3_92_0
+    BNE T2, R0, L_i64_slt_w3ne_f1ad2797_92_0
     XOR T2, S1, T5
-    BNE T2, R0, L_i64_slt_w2ne_bc2d14f3_92_1
+    BNE T2, R0, L_i64_slt_w2ne_f1ad2797_92_1
     XOR T2, S3, T6
-    BNE T2, R0, L_i64_slt_w1ne_bc2d14f3_92_2
+    BNE T2, R0, L_i64_slt_w1ne_f1ad2797_92_2
     SLTU T2, S2, S0
-    BEQ R0, R0, L_i64_slt_done_bc2d14f3_92_3
-L_i64_slt_w3ne_bc2d14f3_92_0:
+    BEQ R0, R0, L_i64_slt_done_f1ad2797_92_3
+L_i64_slt_w3ne_f1ad2797_92_0:
     SLT T2, T3, T7
-    BEQ R0, R0, L_i64_slt_done_bc2d14f3_92_3
-L_i64_slt_w2ne_bc2d14f3_92_1:
+    BEQ R0, R0, L_i64_slt_done_f1ad2797_92_3
+L_i64_slt_w2ne_f1ad2797_92_1:
     SLTU T2, S1, T5
-    BEQ R0, R0, L_i64_slt_done_bc2d14f3_92_3
-L_i64_slt_w1ne_bc2d14f3_92_2:
+    BEQ R0, R0, L_i64_slt_done_f1ad2797_92_3
+L_i64_slt_w1ne_f1ad2797_92_2:
     SLTU T2, S3, T6
-L_i64_slt_done_bc2d14f3_92_3:
+L_i64_slt_done_f1ad2797_92_3:
 ; Spill i64_c1_92_f92_op23 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 50
@@ -54526,7 +54526,7 @@ L___rcc_f64_to_i64_632:
     LI T5, 0
     LI T4, 0
     LI T3, 0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_0
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_0
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T5, SC
@@ -54539,7 +54539,7 @@ L___rcc_f64_to_i64_632:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T3, T3, X3
-L_i64_sh_nobit_d2cf9fd7_98_0:
+L_i64_sh_nobit_498b92c9_98_0:
 ; Spill i64_c0_98_f98_op20 to slot 32
     ADD SC, FP, R0
     ADDI SC, SC, 54
@@ -54890,7 +54890,7 @@ L___rcc_f64_to_i64_638:
     LI T4, 0
     LI T5, 0
     ADD T6, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_1
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_1
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T5, SC
@@ -54903,7 +54903,7 @@ L___rcc_f64_to_i64_638:
     SLL T4, T4, X3
     OR T4, T4, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_d2cf9fd7_98_1:
+L_i64_sh_nobit_498b92c9_98_1:
     ADD RV0, T7, R0
     ADD RV1, T2, R0
     ADD X0, S2, R0
@@ -55171,19 +55171,19 @@ L___rcc_f64_to_i64_648:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_d2cf9fd7_98_2
+    BEQ X3, R0, L_i64_sh_ge32_498b92c9_98_2
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_d2cf9fd7_98_4
-    BEQ R0, R0, L_i64_sh_lt16_d2cf9fd7_98_5
-L_i64_sh_ge32_d2cf9fd7_98_2:
+    BEQ X3, R0, L_i64_sh_ge16_498b92c9_98_4
+    BEQ R0, R0, L_i64_sh_lt16_498b92c9_98_5
+L_i64_sh_ge32_498b92c9_98_2:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_d2cf9fd7_98_3
+    BEQ X3, R0, L_i64_sh_ge48_498b92c9_98_3
     SUB X3, X2, A1
     LI S3, 0
     LI S0, 0
     ADD T6, RV0, R0
     ADD S2, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_7
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T6, SC
@@ -55196,15 +55196,15 @@ L_i64_sh_ge32_d2cf9fd7_98_2:
     SLL S0, S0, X3
     OR S0, S0, X0
     SLL S3, S3, X3
-L_i64_sh_nobit_d2cf9fd7_98_7:
-    BEQ R0, R0, L_i64_sh_done_d2cf9fd7_98_6
-L_i64_sh_ge48_d2cf9fd7_98_3:
+L_i64_sh_nobit_498b92c9_98_7:
+    BEQ R0, R0, L_i64_sh_done_498b92c9_98_6
+L_i64_sh_ge48_498b92c9_98_3:
     SUB X3, X2, A2
     LI S3, 0
     LI S0, 0
     LI T6, 0
     ADD S2, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_8
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T6, SC
@@ -55217,15 +55217,15 @@ L_i64_sh_ge48_d2cf9fd7_98_3:
     SLL S0, S0, X3
     OR S0, S0, X0
     SLL S3, S3, X3
-L_i64_sh_nobit_d2cf9fd7_98_8:
-    BEQ R0, R0, L_i64_sh_done_d2cf9fd7_98_6
-L_i64_sh_ge16_d2cf9fd7_98_4:
+L_i64_sh_nobit_498b92c9_98_8:
+    BEQ R0, R0, L_i64_sh_done_498b92c9_98_6
+L_i64_sh_ge16_498b92c9_98_4:
     SUB X3, X2, A0
     LI S3, 0
     ADD S0, RV0, R0
     ADD T6, RV1, R0
     ADD S2, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_9
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_9
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T6, SC
@@ -55238,14 +55238,14 @@ L_i64_sh_ge16_d2cf9fd7_98_4:
     SLL S0, S0, X3
     OR S0, S0, X0
     SLL S3, S3, X3
-L_i64_sh_nobit_d2cf9fd7_98_9:
-    BEQ R0, R0, L_i64_sh_done_d2cf9fd7_98_6
-L_i64_sh_lt16_d2cf9fd7_98_5:
+L_i64_sh_nobit_498b92c9_98_9:
+    BEQ R0, R0, L_i64_sh_done_498b92c9_98_6
+L_i64_sh_lt16_498b92c9_98_5:
     ADD S3, RV0, R0
     ADD S0, RV1, R0
     ADD T6, X0, R0
     ADD S2, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_d2cf9fd7_98_10
+    BEQ X2, R0, L_i64_sh_nobit_498b92c9_98_10
     LI SC, 16
     SUB SC, SC, X2
     SRL X0, T6, SC
@@ -55258,8 +55258,8 @@ L_i64_sh_lt16_d2cf9fd7_98_5:
     SLL S0, S0, X2
     OR S0, S0, X0
     SLL S3, S3, X2
-L_i64_sh_nobit_d2cf9fd7_98_10:
-L_i64_sh_done_d2cf9fd7_98_6:
+L_i64_sh_nobit_498b92c9_98_10:
+L_i64_sh_done_498b92c9_98_6:
     STORE S3, SB, T2
     ADDI SC, T2, 1
     STORE S0, SB, SC
@@ -55413,19 +55413,19 @@ L___rcc_f64_to_i64_653:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_d2cf9fd7_98_11
+    BEQ X3, R0, L_i64_sh_ge32_498b92c9_98_11
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_d2cf9fd7_98_13
-    BEQ R0, R0, L_i64_sh_lt16_d2cf9fd7_98_14
-L_i64_sh_ge32_d2cf9fd7_98_11:
+    BEQ X3, R0, L_i64_sh_ge16_498b92c9_98_13
+    BEQ R0, R0, L_i64_sh_lt16_498b92c9_98_14
+L_i64_sh_ge32_498b92c9_98_11:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_d2cf9fd7_98_12
+    BEQ X3, R0, L_i64_sh_ge48_498b92c9_98_12
     SUB X3, X2, A1
     ADD T5, X0, R0
     ADD T2, X1, R0
     LI T4, 0
     LI T0, 0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_16
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_16
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -55438,15 +55438,15 @@ L_i64_sh_ge32_d2cf9fd7_98_11:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T0, T0, X3
-L_i64_sh_nobit_d2cf9fd7_98_16:
-    BEQ R0, R0, L_i64_sh_done_d2cf9fd7_98_15
-L_i64_sh_ge48_d2cf9fd7_98_12:
+L_i64_sh_nobit_498b92c9_98_16:
+    BEQ R0, R0, L_i64_sh_done_498b92c9_98_15
+L_i64_sh_ge48_498b92c9_98_12:
     SUB X3, X2, A2
     ADD T5, X1, R0
     LI T2, 0
     LI T4, 0
     LI T0, 0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_17
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_17
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -55459,15 +55459,15 @@ L_i64_sh_ge48_d2cf9fd7_98_12:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T0, T0, X3
-L_i64_sh_nobit_d2cf9fd7_98_17:
-    BEQ R0, R0, L_i64_sh_done_d2cf9fd7_98_15
-L_i64_sh_ge16_d2cf9fd7_98_13:
+L_i64_sh_nobit_498b92c9_98_17:
+    BEQ R0, R0, L_i64_sh_done_498b92c9_98_15
+L_i64_sh_ge16_498b92c9_98_13:
     SUB X3, X2, A0
     ADD T5, RV1, R0
     ADD T2, X0, R0
     ADD T4, X1, R0
     LI T0, 0
-    BEQ X3, R0, L_i64_sh_nobit_d2cf9fd7_98_18
+    BEQ X3, R0, L_i64_sh_nobit_498b92c9_98_18
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T2, SC
@@ -55480,14 +55480,14 @@ L_i64_sh_ge16_d2cf9fd7_98_13:
     SRL T4, T4, X3
     OR T4, T4, X0
     SRL T0, T0, X3
-L_i64_sh_nobit_d2cf9fd7_98_18:
-    BEQ R0, R0, L_i64_sh_done_d2cf9fd7_98_15
-L_i64_sh_lt16_d2cf9fd7_98_14:
+L_i64_sh_nobit_498b92c9_98_18:
+    BEQ R0, R0, L_i64_sh_done_498b92c9_98_15
+L_i64_sh_lt16_498b92c9_98_14:
     ADD T5, RV0, R0
     ADD T2, RV1, R0
     ADD T4, X0, R0
     ADD T0, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_d2cf9fd7_98_19
+    BEQ X2, R0, L_i64_sh_nobit_498b92c9_98_19
     LI SC, 16
     SUB SC, SC, X2
     SLL X0, T2, SC
@@ -55500,8 +55500,8 @@ L_i64_sh_lt16_d2cf9fd7_98_14:
     SRL T4, T4, X2
     OR T4, T4, X0
     SRL T0, T0, X2
-L_i64_sh_nobit_d2cf9fd7_98_19:
-L_i64_sh_done_d2cf9fd7_98_15:
+L_i64_sh_nobit_498b92c9_98_19:
+L_i64_sh_done_498b92c9_98_15:
     STORE T5, SB, S3
     ADDI SC, S3, 1
     STORE T2, SB, SC
@@ -55890,22 +55890,22 @@ L___rcc_f64_to_si_657:
     ADDI SC, SC, 25
     STORE T0, SB, SC
     XOR T0, T1, T5
-    BNE T0, R0, L_i64_slt_w3ne_87ecacd8_100_0
+    BNE T0, R0, L_i64_slt_w3ne_ed0a318b_100_0
     XOR T0, T2, T7
-    BNE T0, R0, L_i64_slt_w2ne_87ecacd8_100_1
+    BNE T0, R0, L_i64_slt_w2ne_ed0a318b_100_1
     XOR T0, T3, T6
-    BNE T0, R0, L_i64_slt_w1ne_87ecacd8_100_2
+    BNE T0, R0, L_i64_slt_w1ne_ed0a318b_100_2
     SLTU T0, T4, S0
-    BEQ R0, R0, L_i64_slt_done_87ecacd8_100_3
-L_i64_slt_w3ne_87ecacd8_100_0:
+    BEQ R0, R0, L_i64_slt_done_ed0a318b_100_3
+L_i64_slt_w3ne_ed0a318b_100_0:
     SLT T0, T1, T5
-    BEQ R0, R0, L_i64_slt_done_87ecacd8_100_3
-L_i64_slt_w2ne_87ecacd8_100_1:
+    BEQ R0, R0, L_i64_slt_done_ed0a318b_100_3
+L_i64_slt_w2ne_ed0a318b_100_1:
     SLTU T0, T2, T7
-    BEQ R0, R0, L_i64_slt_done_87ecacd8_100_3
-L_i64_slt_w1ne_87ecacd8_100_2:
+    BEQ R0, R0, L_i64_slt_done_ed0a318b_100_3
+L_i64_slt_w1ne_ed0a318b_100_2:
     SLTU T0, T3, T6
-L_i64_slt_done_87ecacd8_100_3:
+L_i64_slt_done_ed0a318b_100_3:
 ; Spill t4__w2 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 26
@@ -56149,22 +56149,22 @@ L___rcc_f64_to_si_660:
     ADDI SC, SC, 56
     STORE T3, SB, SC
     XOR T3, S0, T4
-    BNE T3, R0, L_i64_slt_w3ne_87ecacd8_100_4
+    BNE T3, R0, L_i64_slt_w3ne_ed0a318b_100_4
     XOR T3, T0, T5
-    BNE T3, R0, L_i64_slt_w2ne_87ecacd8_100_5
+    BNE T3, R0, L_i64_slt_w2ne_ed0a318b_100_5
     XOR T3, S3, T7
-    BNE T3, R0, L_i64_slt_w1ne_87ecacd8_100_6
+    BNE T3, R0, L_i64_slt_w1ne_ed0a318b_100_6
     SLTU T3, S1, T6
-    BEQ R0, R0, L_i64_slt_done_87ecacd8_100_7
-L_i64_slt_w3ne_87ecacd8_100_4:
+    BEQ R0, R0, L_i64_slt_done_ed0a318b_100_7
+L_i64_slt_w3ne_ed0a318b_100_4:
     SLT T3, S0, T4
-    BEQ R0, R0, L_i64_slt_done_87ecacd8_100_7
-L_i64_slt_w2ne_87ecacd8_100_5:
+    BEQ R0, R0, L_i64_slt_done_ed0a318b_100_7
+L_i64_slt_w2ne_ed0a318b_100_5:
     SLTU T3, T0, T5
-    BEQ R0, R0, L_i64_slt_done_87ecacd8_100_7
-L_i64_slt_w1ne_87ecacd8_100_6:
+    BEQ R0, R0, L_i64_slt_done_ed0a318b_100_7
+L_i64_slt_w1ne_ed0a318b_100_6:
     SLTU T3, S3, T7
-L_i64_slt_done_87ecacd8_100_7:
+L_i64_slt_done_ed0a318b_100_7:
 ; Spill t10__w1 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 57
@@ -56403,22 +56403,22 @@ L___rcc_f64_to_ui_664:
     ADDI SC, SC, 28
     STORE T4, SB, SC
     XOR T4, T5, S1
-    BNE T4, R0, L_i64_slt_w3ne_f5a5b957_102_0
+    BNE T4, R0, L_i64_slt_w3ne_df2c242d_102_0
     XOR T4, T7, S2
-    BNE T4, R0, L_i64_slt_w2ne_f5a5b957_102_1
+    BNE T4, R0, L_i64_slt_w2ne_df2c242d_102_1
     XOR T4, T6, S3
-    BNE T4, R0, L_i64_slt_w1ne_f5a5b957_102_2
+    BNE T4, R0, L_i64_slt_w1ne_df2c242d_102_2
     SLTU T4, S0, T0
-    BEQ R0, R0, L_i64_slt_done_f5a5b957_102_3
-L_i64_slt_w3ne_f5a5b957_102_0:
+    BEQ R0, R0, L_i64_slt_done_df2c242d_102_3
+L_i64_slt_w3ne_df2c242d_102_0:
     SLT T4, T5, S1
-    BEQ R0, R0, L_i64_slt_done_f5a5b957_102_3
-L_i64_slt_w2ne_f5a5b957_102_1:
+    BEQ R0, R0, L_i64_slt_done_df2c242d_102_3
+L_i64_slt_w2ne_df2c242d_102_1:
     SLTU T4, T7, S2
-    BEQ R0, R0, L_i64_slt_done_f5a5b957_102_3
-L_i64_slt_w1ne_f5a5b957_102_2:
+    BEQ R0, R0, L_i64_slt_done_df2c242d_102_3
+L_i64_slt_w1ne_df2c242d_102_2:
     SLTU T4, T6, S3
-L_i64_slt_done_f5a5b957_102_3:
+L_i64_slt_done_df2c242d_102_3:
 ; Spill i64_c1_102_f102_op9 to slot 13
     ADD SC, FP, R0
     ADDI SC, SC, 29
@@ -56498,22 +56498,22 @@ L___rcc_f64_to_ui_667:
     ADDI SC, SC, 39
     STORE S1, SB, SC
     XOR S1, S2, T7
-    BNE S1, R0, L_i64_slt_w3ne_f5a5b957_102_4
+    BNE S1, R0, L_i64_slt_w3ne_df2c242d_102_4
     XOR S1, S3, T6
-    BNE S1, R0, L_i64_slt_w2ne_f5a5b957_102_5
+    BNE S1, R0, L_i64_slt_w2ne_df2c242d_102_5
     XOR S1, T0, S0
-    BNE S1, R0, L_i64_slt_w1ne_f5a5b957_102_6
+    BNE S1, R0, L_i64_slt_w1ne_df2c242d_102_6
     SLTU S1, T5, T4
-    BEQ R0, R0, L_i64_slt_done_f5a5b957_102_7
-L_i64_slt_w3ne_f5a5b957_102_4:
+    BEQ R0, R0, L_i64_slt_done_df2c242d_102_7
+L_i64_slt_w3ne_df2c242d_102_4:
     SLT S1, S2, T7
-    BEQ R0, R0, L_i64_slt_done_f5a5b957_102_7
-L_i64_slt_w2ne_f5a5b957_102_5:
+    BEQ R0, R0, L_i64_slt_done_df2c242d_102_7
+L_i64_slt_w2ne_df2c242d_102_5:
     SLTU S1, S3, T6
-    BEQ R0, R0, L_i64_slt_done_f5a5b957_102_7
-L_i64_slt_w1ne_f5a5b957_102_6:
+    BEQ R0, R0, L_i64_slt_done_df2c242d_102_7
+L_i64_slt_w1ne_df2c242d_102_6:
     SLTU S1, T0, S0
-L_i64_slt_done_f5a5b957_102_7:
+L_i64_slt_done_df2c242d_102_7:
 ; Spill t9 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
@@ -56968,7 +56968,7 @@ L___rcc_f64_to_u64_677:
     LI T0, 0
     LI T1, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_0
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_0
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T0, SC
@@ -56981,7 +56981,7 @@ L___rcc_f64_to_u64_677:
     SRL T1, T1, X3
     OR T1, T1, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_61b2f42_104_0:
+L_i64_sh_nobit_bcc40863_104_0:
 ; Spill i64_c0_104_f104_op34 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 60
@@ -57246,7 +57246,7 @@ L___rcc_f64_to_u64_683:
     LI T0, 0
     LI T1, 0
     ADD S0, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_1
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_1
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T1, SC
@@ -57259,7 +57259,7 @@ L___rcc_f64_to_u64_683:
     SLL T0, T0, X3
     OR T0, T0, X0
     SLL S1, S1, X3
-L_i64_sh_nobit_61b2f42_104_1:
+L_i64_sh_nobit_bcc40863_104_1:
     ADD RV0, T4, R0
     ADD RV1, S2, R0
     ADD X0, S3, R0
@@ -57441,19 +57441,19 @@ L___rcc_f64_to_u64_687:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_61b2f42_104_2
+    BEQ X3, R0, L_i64_sh_ge32_bcc40863_104_2
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_61b2f42_104_4
-    BEQ R0, R0, L_i64_sh_lt16_61b2f42_104_5
-L_i64_sh_ge32_61b2f42_104_2:
+    BEQ X3, R0, L_i64_sh_ge16_bcc40863_104_4
+    BEQ R0, R0, L_i64_sh_lt16_bcc40863_104_5
+L_i64_sh_ge32_bcc40863_104_2:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_61b2f42_104_3
+    BEQ X3, R0, L_i64_sh_ge48_bcc40863_104_3
     SUB X3, X2, A1
     LI T7, 0
     LI T2, 0
     ADD T3, RV0, R0
     ADD T6, RV1, R0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_7
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_7
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T3, SC
@@ -57466,15 +57466,15 @@ L_i64_sh_ge32_61b2f42_104_2:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL T7, T7, X3
-L_i64_sh_nobit_61b2f42_104_7:
-    BEQ R0, R0, L_i64_sh_done_61b2f42_104_6
-L_i64_sh_ge48_61b2f42_104_3:
+L_i64_sh_nobit_bcc40863_104_7:
+    BEQ R0, R0, L_i64_sh_done_bcc40863_104_6
+L_i64_sh_ge48_bcc40863_104_3:
     SUB X3, X2, A2
     LI T7, 0
     LI T2, 0
     LI T3, 0
     ADD T6, RV0, R0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_8
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_8
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T3, SC
@@ -57487,15 +57487,15 @@ L_i64_sh_ge48_61b2f42_104_3:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL T7, T7, X3
-L_i64_sh_nobit_61b2f42_104_8:
-    BEQ R0, R0, L_i64_sh_done_61b2f42_104_6
-L_i64_sh_ge16_61b2f42_104_4:
+L_i64_sh_nobit_bcc40863_104_8:
+    BEQ R0, R0, L_i64_sh_done_bcc40863_104_6
+L_i64_sh_ge16_bcc40863_104_4:
     SUB X3, X2, A0
     LI T7, 0
     ADD T2, RV0, R0
     ADD T3, RV1, R0
     ADD T6, X0, R0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_9
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_9
     LI SC, 16
     SUB SC, SC, X3
     SRL X0, T3, SC
@@ -57508,14 +57508,14 @@ L_i64_sh_ge16_61b2f42_104_4:
     SLL T2, T2, X3
     OR T2, T2, X0
     SLL T7, T7, X3
-L_i64_sh_nobit_61b2f42_104_9:
-    BEQ R0, R0, L_i64_sh_done_61b2f42_104_6
-L_i64_sh_lt16_61b2f42_104_5:
+L_i64_sh_nobit_bcc40863_104_9:
+    BEQ R0, R0, L_i64_sh_done_bcc40863_104_6
+L_i64_sh_lt16_bcc40863_104_5:
     ADD T7, RV0, R0
     ADD T2, RV1, R0
     ADD T3, X0, R0
     ADD T6, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_61b2f42_104_10
+    BEQ X2, R0, L_i64_sh_nobit_bcc40863_104_10
     LI SC, 16
     SUB SC, SC, X2
     SRL X0, T3, SC
@@ -57528,8 +57528,8 @@ L_i64_sh_lt16_61b2f42_104_5:
     SLL T2, T2, X2
     OR T2, T2, X0
     SLL T7, T7, X2
-L_i64_sh_nobit_61b2f42_104_10:
-L_i64_sh_done_61b2f42_104_6:
+L_i64_sh_nobit_bcc40863_104_10:
+L_i64_sh_done_bcc40863_104_6:
     STORE T7, SB, T4
     ADDI SC, T4, 1
     STORE T2, SB, SC
@@ -57683,19 +57683,19 @@ L___rcc_f64_to_u64_692:
     LI A1, 32
     LI A2, 48
     SLTU X3, X2, A1
-    BEQ X3, R0, L_i64_sh_ge32_61b2f42_104_11
+    BEQ X3, R0, L_i64_sh_ge32_bcc40863_104_11
     SLTU X3, X2, A0
-    BEQ X3, R0, L_i64_sh_ge16_61b2f42_104_13
-    BEQ R0, R0, L_i64_sh_lt16_61b2f42_104_14
-L_i64_sh_ge32_61b2f42_104_11:
+    BEQ X3, R0, L_i64_sh_ge16_bcc40863_104_13
+    BEQ R0, R0, L_i64_sh_lt16_bcc40863_104_14
+L_i64_sh_ge32_bcc40863_104_11:
     SLTU X3, X2, A2
-    BEQ X3, R0, L_i64_sh_ge48_61b2f42_104_12
+    BEQ X3, R0, L_i64_sh_ge48_bcc40863_104_12
     SUB X3, X2, A1
     ADD T1, X0, R0
     ADD T0, X1, R0
     LI S1, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_16
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_16
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T0, SC
@@ -57708,15 +57708,15 @@ L_i64_sh_ge32_61b2f42_104_11:
     SRL S1, S1, X3
     OR S1, S1, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_61b2f42_104_16:
-    BEQ R0, R0, L_i64_sh_done_61b2f42_104_15
-L_i64_sh_ge48_61b2f42_104_12:
+L_i64_sh_nobit_bcc40863_104_16:
+    BEQ R0, R0, L_i64_sh_done_bcc40863_104_15
+L_i64_sh_ge48_bcc40863_104_12:
     SUB X3, X2, A2
     ADD T1, X1, R0
     LI T0, 0
     LI S1, 0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_17
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_17
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T0, SC
@@ -57729,15 +57729,15 @@ L_i64_sh_ge48_61b2f42_104_12:
     SRL S1, S1, X3
     OR S1, S1, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_61b2f42_104_17:
-    BEQ R0, R0, L_i64_sh_done_61b2f42_104_15
-L_i64_sh_ge16_61b2f42_104_13:
+L_i64_sh_nobit_bcc40863_104_17:
+    BEQ R0, R0, L_i64_sh_done_bcc40863_104_15
+L_i64_sh_ge16_bcc40863_104_13:
     SUB X3, X2, A0
     ADD T1, RV1, R0
     ADD T0, X0, R0
     ADD S1, X1, R0
     LI T5, 0
-    BEQ X3, R0, L_i64_sh_nobit_61b2f42_104_18
+    BEQ X3, R0, L_i64_sh_nobit_bcc40863_104_18
     LI SC, 16
     SUB SC, SC, X3
     SLL X0, T0, SC
@@ -57750,14 +57750,14 @@ L_i64_sh_ge16_61b2f42_104_13:
     SRL S1, S1, X3
     OR S1, S1, X0
     SRL T5, T5, X3
-L_i64_sh_nobit_61b2f42_104_18:
-    BEQ R0, R0, L_i64_sh_done_61b2f42_104_15
-L_i64_sh_lt16_61b2f42_104_14:
+L_i64_sh_nobit_bcc40863_104_18:
+    BEQ R0, R0, L_i64_sh_done_bcc40863_104_15
+L_i64_sh_lt16_bcc40863_104_14:
     ADD T1, RV0, R0
     ADD T0, RV1, R0
     ADD S1, X0, R0
     ADD T5, X1, R0
-    BEQ X2, R0, L_i64_sh_nobit_61b2f42_104_19
+    BEQ X2, R0, L_i64_sh_nobit_bcc40863_104_19
     LI SC, 16
     SUB SC, SC, X2
     SLL X0, T0, SC
@@ -57770,8 +57770,8 @@ L_i64_sh_lt16_61b2f42_104_14:
     SRL S1, S1, X2
     OR S1, S1, X0
     SRL T5, T5, X2
-L_i64_sh_nobit_61b2f42_104_19:
-L_i64_sh_done_61b2f42_104_15:
+L_i64_sh_nobit_bcc40863_104_19:
+L_i64_sh_done_bcc40863_104_15:
     STORE T1, SB, T7
     ADDI SC, T7, 1
     STORE T0, SB, SC

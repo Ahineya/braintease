@@ -1,0 +1,9 @@
+{
+  "description": "DVUS — two-block falling puzzle on a 160x100 RGB565 window",
+  "use_runtime": true,
+  "visual": true,
+  "display": "rgb565",
+  "disk": false,
+  "runner": "c",
+  "aliases": ["dvus"]
+}

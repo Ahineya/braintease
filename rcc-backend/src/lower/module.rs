@@ -17,12 +17,16 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
     let mut all_instructions = Vec::new();
     
     // Create a global manager to handle global variable allocation
-    let mut global_manager = GlobalManager::new();
+    let mut global_manager = GlobalManager::with_module(&module.name);
     
     // First pass: allocate addresses for all globals
     for global in &module.globals {
         global_manager.allocate_global(global);
     }
+
+    // Reserve this TU's GP range in .data so the linker concatenates BSS
+    // across separately compiled objects instead of every object starting at 0.
+    all_instructions.extend(global_manager.emit_data_section());
     
     // Check if this module has a main function (indicating it's the main module)
     let has_main = module.functions.iter().any(|f| f.name == "main");
@@ -79,6 +83,7 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
         // The manager stores local_slots internally and lower_function_v2 will retrieve it
         let mut mgr = RegisterPressureManager::new(local_slots);
         mgr.set_trace_spills(trace_spills);
+        mgr.set_gp_base_label(global_manager.gp_base_label());
         let mut naming = new_function_naming();
         
         let function_asm = lower_function_v2(function, &mut mgr, &mut naming, &global_manager, bank_size)?;

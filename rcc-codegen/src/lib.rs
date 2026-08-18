@@ -12,7 +12,7 @@ pub mod asm;
 pub mod abi;
 pub mod emit;
 
-pub use asm::{Reg, AsmInst};
+pub use asm::{Reg, AsmInst, emit_addr_constant};
 pub use abi::{Frame, AbiError};
 pub use emit::{emit_instructions, CodegenError};
 

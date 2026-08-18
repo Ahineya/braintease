@@ -580,4 +580,48 @@ func:
         assert_eq!(linked.labels.get("bar").unwrap().bank, 1);
         assert_eq!(linked.labels.get("bar").unwrap().absolute_address, 8 * 4);
     }
+
+    #[test]
+    fn test_link_relocates_data_labels_across_objects() {
+        let mut options = AssemblerOptions::default();
+        options.memory_offset = 0;
+        let assembler = RippleAssembler::new(options);
+
+        let src1 = r#"
+.data
+base1:
+    .space 10
+.code
+start:
+    LI R3, base1
+    HALT
+"#;
+        let src2 = r#"
+.data
+base2:
+    .space 5
+.code
+func:
+    LI R4, base2
+    RET
+"#;
+        let obj1 = assembler.assemble(src1).unwrap();
+        let obj2 = assembler.assemble(src2).unwrap();
+        assert_eq!(obj1.data.len(), 10);
+        assert_eq!(obj2.data.len(), 5);
+
+        let linker = Linker::new(16);
+        let linked = linker.link(vec![obj1, obj2]).unwrap();
+
+        assert_eq!(linked.data.len(), 15);
+        assert_eq!(linked.data_labels.get("base1"), Some(&0));
+        assert_eq!(linked.data_labels.get("base2"), Some(&10));
+
+        // start: LI R3, base1
+        assert_eq!(linked.instructions[0].opcode, Opcode::Li as u8);
+        assert_eq!(linked.instructions[0].word2, 0);
+        // func: LI R4, base2 (after start + HALT)
+        assert_eq!(linked.instructions[2].opcode, Opcode::Li as u8);
+        assert_eq!(linked.instructions[2].word2, 10);
+    }
 }

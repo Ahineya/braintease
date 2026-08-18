@@ -5,7 +5,7 @@
 
 use rcc_frontend::ir::{Instruction, Value, IrType, FatPointer};
 use rcc_frontend::BankTag;
-use rcc_codegen::{AsmInst, Reg};
+use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use std::collections::HashMap;
 use log::{debug, warn};
 
@@ -273,17 +273,27 @@ pub fn lower_instruction(
                             Value::Constant(c) => {
                                 let temp_name = naming.const_value(*c);
                                 let reg = mgr.get_register(temp_name);
-                                insts.push(AsmInst::Li(reg, *c as i16));
+                                insts.extend(emit_addr_constant(
+                                    reg,
+                                    *c as i16,
+                                    matches!(fp.bank, BankTag::Global),
+                                    mgr.gp_base_label(),
+                                ));
                                 reg
                             }
                             Value::Global(name) => {
                                 // Resolve global and extract address
                                 let global_ptr = resolve_global_to_fatptr(name, global_manager)?;
-                                if let Value::FatPtr(fp) = global_ptr {
-                                    if let Value::Constant(addr) = *fp.addr {
+                                if let Value::FatPtr(resolved) = global_ptr {
+                                    if let Value::Constant(addr) = *resolved.addr {
                                         let temp_name = naming.const_value(addr);
                                         let reg = mgr.get_register(temp_name);
-                                        insts.push(AsmInst::Li(reg, addr as i16));
+                                        insts.extend(emit_addr_constant(
+                                            reg,
+                                            addr as i16,
+                                            true,
+                                            mgr.gp_base_label(),
+                                        ));
                                         reg
                                     } else {
                                         panic!("Resolved global should have constant address");
