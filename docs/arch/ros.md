@@ -29,7 +29,7 @@ Each SYS/COM file is a separate image. A layer can be tested with a stub for the
 | IMEM 0 | `bios.bin` (`load_binary`) |
 | IMEM 1 | `IO.SYS` (BIOS `STORC`) |
 | IMEM 2 | `KERNEL.SYS` (IO `STORC`) |
-| IMEM 3+ | `COMMAND.COM`, then apps (high banks, e.g. 32+) |
+| IMEM 3+ | `COMMAND.COM`, then apps (next free IMEM bank, currently 5) |
 | DMEM 0 | MMIO (unchanged) |
 | DMEM 1 | BIOS globals (`GP=1`), then unused |
 | DMEM 2 | Kernel-mode stack (`SB=2`), IO + KERNEL + INT21 |
@@ -128,9 +128,9 @@ App crt0 (`runtime/ros/crt0_ros.asm`) must not `HALT`. `main` return is INT21 ex
 Hardware: `IRQ_SW` at header 21–26 ([mmio.md](mmio.md)).
 
 1. KERNEL at boot: `IRQ_VECTOR_*` = INT21 handler, `IRQ_ENABLE = IRQ_SW`.
-2. App (via `libros`): args in `A0`–`A3`, write `IRQ_SW` to `IRQ_STATUS`.
-3. Next instruction is interrupted; RA/RAB saved; handler runs on the **user stack** (v1).
-4. Result in `RV0`/`RV1`; ACK `IRQ_BUSY`; `RET`.
+2. App (via `libros`): args in `A0`–`A3`. Save `RA`/`RAB` (the C return), then write `IRQ_SW` to `IRQ_STATUS`.
+3. The next instruction is interrupted; dispatch overwrites `RA`/`RAB` with that PC (the insn has not run). Handler runs on the **user stack** (v1).
+4. Result in `RV0`/`RV1`; ACK `IRQ_BUSY`; `RET` to the interrupted insn; wrapper restores the C return and `RET`s. Do not raise IRQ immediately before a `RET` — that `RET` would jump to itself.
 
 `AH` in `A0`:
 

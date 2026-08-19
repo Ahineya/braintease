@@ -10,11 +10,22 @@
 
 #define SYS1_HEADER_SIZE 24
 
+#define RXE1_MAGIC0 'R'
+#define RXE1_MAGIC1 'X'
+#define RXE1_MAGIC2 'E'
+#define RXE1_MAGIC3 '1'
+
+#define RXE1_HEADER_SIZE 24
+
+#define RELOC_JAL_ABS 0
+#define RELOC_LI_DATA 1
+#define RELOC_DATA_WORD 2
+
 #define ROS_IMEM_BIOS 0
 #define ROS_IMEM_IO 1
 #define ROS_IMEM_KERNEL 2
 #define ROS_IMEM_COMMAND 3
-#define ROS_IMEM_APP 32
+#define ROS_IMEM_APP 5
 
 #define ROS_GP_BIOS 1
 #define ROS_SB_KERNEL 2
@@ -22,6 +33,8 @@
 #define ROS_GP_KERNEL 4
 #define ROS_GP_COMMAND 6
 #define ROS_SB_COMMAND 7
+#define ROS_GP_APP 32
+#define ROS_SB_APP 33
 
 #define IO_SLOT_PUTCHAR 0
 #define IO_SLOT_GETCHAR 1
@@ -39,6 +52,7 @@
 #define K_SLOT_READ_AT 5
 #define K_SLOT_EXEC 6
 #define K_SLOT_EXIT 7
+#define K_SLOT_INT21 8
 
 #define INT21_GETCHAR 0x01
 #define INT21_PUTCHAR 0x02
@@ -59,5 +73,13 @@ typedef struct Sys1Header {
     uint32_t insn_count;
     uint32_t data_size;
 } Sys1Header;
+
+typedef struct RxeHeader {
+    uint16_t bank_size;
+    uint32_t entry;
+    uint32_t insn_count;
+    uint32_t data_size;
+    uint32_t reloc_count;
+} RxeHeader;
 
 #endif

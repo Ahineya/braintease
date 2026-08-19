@@ -127,17 +127,27 @@ $(STUB_COMMAND): runtime $(CRT0_SYS) $(BUILD)/stub_command.pobj
 		--code-bank-base 3 --gp-bank 6 --sb-bank 7 -o $@
 
 hello: runtime $(HELLO_RXE)
-$(HELLO_RXE): runtime $(RUNTIME)/ros/crt0_ros.pobj $(BUILD)/hello.pobj $(BUILD)/io_tty.pobj $(CMD_RT_OBJS)
-	$(MAKE) -C $(RUNTIME) ros/crt0_ros.pobj BANK_SIZE=$(BANK_SIZE) || \
-		$(RASM) assemble $(RUNTIME)/ros/crt0_ros.asm -o $(RUNTIME)/ros/crt0_ros.pobj --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
-	$(RLINK) $(RUNTIME)/ros/crt0_ros.pobj $(BUILD)/io_tty.pobj $(CMD_RT_OBJS) $(BUILD)/hello.pobj \
+$(RUNTIME)/ros/%.pobj: $(RUNTIME)/ros/%.asm
+	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
+
+$(BUILD)/ros_putchar.asm: $(RUNTIME)/ros/putchar.c | $(BUILD)
+	$(RCC) compile $< -o $@ --bank-size $(BANK_SIZE) -I $(RUNTIME)/include
+
+$(BUILD)/ros_putchar.pobj: $(BUILD)/ros_putchar.asm
+	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
+
+$(HELLO_RXE): runtime $(RUNTIME)/ros/crt0_ros.pobj $(RUNTIME)/ros/int21.pobj \
+		$(BUILD)/ros_putchar.pobj $(RUNTIME)/puts.pobj $(BUILD)/hello.pobj
+	$(RLINK) $(RUNTIME)/ros/crt0_ros.pobj $(RUNTIME)/ros/int21.pobj \
+		$(BUILD)/ros_putchar.pobj $(RUNTIME)/puts.pobj $(BUILD)/hello.pobj \
 		-f rxe --bank-size $(BANK_SIZE) -o $@
 
-disk: $(BIOS_BIN) $(IO_SYS) $(KERNEL_SYS) $(COMMAND_COM)
+disk: $(BIOS_BIN) $(IO_SYS) $(KERNEL_SYS) $(COMMAND_COM) $(HELLO_RXE)
 	python3 $(SRC)/mkfat16.py -o $(DISK) \
 		$(IO_SYS):IO.SYS \
 		$(KERNEL_SYS):KERNEL.SYS \
-		$(COMMAND_COM):COMMAND.COM
+		$(COMMAND_COM):COMMAND.COM \
+		$(HELLO_RXE):HELLO.RXE
 	@echo "Built $(DISK)"
 
 run: disk

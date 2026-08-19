@@ -398,6 +398,8 @@ static void run_line(char *line) {
     int r;
     char *cmd;
     char *arg = 0;
+    char name[16];
+    int nn;
 
     n = split_args(line, args);
     if (n == 0) {
@@ -469,6 +471,31 @@ static void run_line(char *line) {
 
     r = k_exec(cmd);
     if (r == FAT16_ERR_NOTFOUND) {
+        i = 0;
+        while (cmd[i] && cmd[i] != '.' && i < 8) {
+            i = i + 1;
+        }
+        if (cmd[i] != '.') {
+            nn = 0;
+            while (nn < i) {
+                name[nn] = cmd[nn];
+                nn = nn + 1;
+            }
+            name[nn] = '.';
+            name[nn + 1] = 'R';
+            name[nn + 2] = 'X';
+            name[nn + 3] = 'E';
+            name[nn + 4] = 0;
+            r = k_exec(name);
+            if (r == FAT16_ERR_NOTFOUND) {
+                name[nn + 1] = 'C';
+                name[nn + 2] = 'O';
+                name[nn + 3] = 'M';
+                r = k_exec(name);
+            }
+        }
+    }
+    if (r == FAT16_ERR_NOTFOUND || r == FAT16_ERR) {
         printf("Bad command or file name\n");
     }
 }

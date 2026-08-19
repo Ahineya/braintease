@@ -117,4 +117,101 @@ int sys1_load_and_enter(Fat16Fs *fs, Fat16DirEnt *ent) {
     return -1;
 }
 
+static int rxe_parse(unsigned char *raw, RxeHeader *hdr) {
+    if (raw[0] != RXE1_MAGIC0 || raw[1] != RXE1_MAGIC1 ||
+        raw[2] != RXE1_MAGIC2 || raw[3] != RXE1_MAGIC3) {
+        return -1;
+    }
+    hdr->bank_size = le16(raw + 4);
+    hdr->entry = le32(raw + 8);
+    hdr->insn_count = le32(raw + 12);
+    hdr->data_size = le32(raw + 16);
+    hdr->reloc_count = le32(raw + 20);
+    return 0;
+}
+
+static void insn_loc(unsigned base, uint16_t bs, uint32_t idx,
+                     unsigned *bank, unsigned *addr) {
+    unsigned b;
+    uint32_t off;
+    uint32_t bsu;
+
+    b = base;
+    off = idx;
+    bsu = bs;
+    while (off >= bsu) {
+        off = off - bsu;
+        b = b + 1;
+    }
+    *bank = b;
+    *addr = (unsigned)off;
+}
+
+int rxe_load_and_enter(Fat16Fs *fs, Fat16DirEnt *ent,
+                       unsigned code_bank, unsigned gp_bank, unsigned sb_bank) {
+    unsigned char raw[24];
+    unsigned char rec[8];
+    RxeHeader hdr;
+    uint32_t i;
+    uint32_t kind;
+    uint32_t idx;
+    unsigned bank;
+    unsigned addr;
+    int n;
+    uint16_t clus;
+    uint32_t pos;
+
+    n = fat16_read_at(fs, ent->cluster, ent->size, 0, raw, RXE1_HEADER_SIZE);
+    if (n != RXE1_HEADER_SIZE) {
+        puts("RXE header short");
+        return -1;
+    }
+    if (rxe_parse(raw, &hdr) != 0) {
+        puts("RXE magic");
+        return -1;
+    }
+    if (hdr.bank_size == 0) {
+        puts("RXE bank");
+        return -1;
+    }
+
+    clus = ent->cluster;
+    pos = RXE1_HEADER_SIZE;
+    while (pos >= fs->cluster_bytes) {
+        clus = fat16_fat_next(fs, clus);
+        pos = pos - fs->cluster_bytes;
+    }
+
+    load_code(fs, &clus, &pos, code_bank, hdr.bank_size, hdr.insn_count);
+
+    i = 0;
+    while (i < hdr.data_size) {
+        dmem_store(gp_bank, (unsigned)i, seq_get(fs, &clus, &pos));
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < hdr.reloc_count) {
+        rec[0] = seq_get(fs, &clus, &pos);
+        rec[1] = seq_get(fs, &clus, &pos);
+        rec[2] = seq_get(fs, &clus, &pos);
+        rec[3] = seq_get(fs, &clus, &pos);
+        rec[4] = seq_get(fs, &clus, &pos);
+        rec[5] = seq_get(fs, &clus, &pos);
+        rec[6] = seq_get(fs, &clus, &pos);
+        rec[7] = seq_get(fs, &clus, &pos);
+        kind = le16(rec);
+        idx = le32(rec + 4);
+        insn_loc(code_bank, hdr.bank_size, idx, &bank, &addr);
+        if (kind == RELOC_JAL_ABS) {
+            imem_add_word2(bank, addr, code_bank);
+        }
+        i = i + 1;
+    }
+
+    insn_loc(code_bank, hdr.bank_size, hdr.entry, &bank, &addr);
+    ros_save_and_enter(bank, addr, gp_bank, sb_bank);
+    return (int)ros_take_status();
+}
+
 #endif
