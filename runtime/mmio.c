@@ -286,3 +286,37 @@ void storage_read_buffer(unsigned short block, unsigned short addr, unsigned sho
         data[i] = storage_read();
     }
 }
+
+// Interrupt controller
+unsigned short irq_get_status(void) {
+    return mmio_read(MMIO_IRQ_STATUS);
+}
+
+void irq_raise(unsigned short bits) {
+    mmio_write(MMIO_IRQ_STATUS, bits);
+}
+
+unsigned short irq_get_enable(void) {
+    return mmio_read(MMIO_IRQ_ENABLE);
+}
+
+void irq_set_enable(unsigned short mask) {
+    mmio_write(MMIO_IRQ_ENABLE, mask);
+}
+
+int irq_is_busy(void) {
+    return mmio_read(MMIO_IRQ_BUSY) != 0;
+}
+
+void irq_ack(void) {
+    mmio_write(MMIO_IRQ_BUSY, 1);
+}
+
+void irq_set_vector(unsigned short bank, unsigned short off) {
+    mmio_write(MMIO_IRQ_VECTOR_BANK, bank);
+    mmio_write(MMIO_IRQ_VECTOR_OFF, off);
+}
+
+unsigned short irq_get_cause(void) {
+    return mmio_read(MMIO_IRQ_CAUSE);
+}

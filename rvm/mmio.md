@@ -31,7 +31,13 @@ The Ripple VM implements a memory-mapped I/O (MMIO) system with a dedicated 32-w
 | 18      | `HDR_STORE_ADDR`      | W   | Select byte address within block (0-65535)            |
 | 19      | `HDR_STORE_DATA`      | R/W | Data register: read/write byte at (block, addr)       |
 | 20      | `HDR_STORE_CTL`       | R/W | Storage control (busy/dirty/commit bits)              |
-| 21-31   | Reserved              | -   | Reserved for future use (return 0 on read)            |
+| 21      | `HDR_IRQ_STATUS`      | R/W | Pending IRQ flags (write ORs into pending)            |
+| 22      | `HDR_IRQ_ENABLE`      | R/W | IRQ enable mask                                       |
+| 23      | `HDR_IRQ_BUSY`        | R/W | R: in-service (0/1); W: nonzero acknowledges          |
+| 24      | `HDR_IRQ_VECTOR_BANK` | R/W | Handler PCB                                           |
+| 25      | `HDR_IRQ_VECTOR_OFF`  | R/W | Handler PC                                            |
+| 26      | `HDR_IRQ_CAUSE`       | R   | 0=none, else 1 + bit index of in-service IRQ          |
+| 27-31   | Reserved              | -   | Reserved for future use (return 0 on read)            |
 
 ### TEXT40 VRAM (Bank 0, Words 32-1031)
 
@@ -113,6 +119,59 @@ Regular data memory starts at word 1032, after the VRAM region.
   - Bit 2 (COMMIT): Write-only, writing 1 commits current block
   - Bit 3 (COMMIT_ALL): Write-only, writing 1 commits all dirty blocks
   - Bits 15-4: Reserved (read as 0)
+
+### Interrupt Controller
+
+Unpacked 16-bit registers (no bit-packing of cause into STATUS). Dispatch happens at the **start** of each instruction, before fetch: if `BUSY` is 0 and `(STATUS & ENABLE) != 0`, the VM takes the **lowest set bit**, sets `BUSY`, sets `CAUSE` to `1 + bit index` (bit 0 → cause 1), saves the current PC/PCB into RA/RAB (the interrupted instruction has not run yet), and jumps to `VECTOR_BANK`/`VECTOR_OFF`. IRQs do not nest while `BUSY` is set. There is no dedicated IRQ instruction.
+
+Return with `RET` if the handler is in the same bank, or `JALR R0, RAB, RA` for a cross-bank handler. Acknowledge (`BUSY` write nonzero) as the last action before returning, or leave overlapping ENABLE bits clear: a still-pending enabled IRQ can otherwise fire before `RET` and overwrite RA/RAB.
+
+**IRQ Status (HDR_IRQ_STATUS)**
+- Read/Write register at address 21
+- Each bit is an interrupt source; bit 0 is the software IRQ (`IRQ_SW`)
+- Write ORs into the pending mask (bits cannot be cleared here)
+- Read returns the current pending mask
+
+**IRQ Enable (HDR_IRQ_ENABLE)**
+- Read/Write register at address 22
+- Bit mask of enabled sources; only `STATUS & ENABLE` can dispatch
+
+**IRQ Busy (HDR_IRQ_BUSY)**
+- Address 23
+- Read: 0 = idle, 1 = an IRQ is in service
+- Write nonzero: ACK — clear BUSY, clear CAUSE, and clear the STATUS bit for the in-service cause
+- Write 0 is ignored; ACK while not busy is ignored
+
+**IRQ Vector (HDR_IRQ_VECTOR_BANK / HDR_IRQ_VECTOR_OFF)**
+- Read/Write registers at addresses 24 and 25
+- Handler PCB and PC used on dispatch
+
+**IRQ Cause (HDR_IRQ_CAUSE)**
+- Read-only register at address 26
+- 0 = none in service; otherwise `1 + bit index` of the in-service IRQ
+- Writes are ignored
+
+**Software IRQ**
+```asm
+; Install a same-bank handler, enable bit 0, then raise it
+LI    T1, 25       ; HDR_IRQ_VECTOR_OFF
+LI    T2, handler
+STORE T2, R0, T1
+
+LI    T1, 22       ; HDR_IRQ_ENABLE
+LI    T2, 1        ; IRQ_SW
+STORE T2, R0, T1
+
+LI    T1, 21       ; HDR_IRQ_STATUS
+STORE T2, R0, T1   ; raise: next instruction is interrupted
+
+handler:
+    ; ... handle ...
+    LI    T1, 23   ; HDR_IRQ_BUSY
+    LI    T2, 1
+    STORE T2, R0, T1  ; ACK
+    RET
+```
 
 ### Keyboard Input (TEXT40 Mode Only)
 
@@ -439,11 +498,20 @@ int getchar(void) {
 }
 ```
 
+IRQ helpers live in `runtime/include/mmio.h`. Do not enable a pending STATUS bit unless a handler is installed — dispatch runs at the start of the next instruction.
+
+```c
+irq_set_vector(0, handler_pc);
+irq_set_enable(IRQ_SW);
+irq_raise(IRQ_SW);
+irq_ack();  // write 1 to MMIO_IRQ_BUSY
+```
+
 ## Design Rationale
 
 1. **Fixed Addresses**: All MMIO addresses are fixed at compile time, eliminating runtime discovery overhead
 2. **Bank 0 Only**: MMIO is only active in bank 0, simplifying implementation and preventing conflicts
-3. **Minimal Header**: 32-word header provides space for current devices plus 22 reserved words for future expansion
+3. **Minimal Header**: 32-word header holds current devices plus 5 reserved words (27-31) for future expansion
 4. **Efficient Access**: Low addresses (0-31) are optimal for Brainfuck-generated code
 5. **Backward Compatible**: Legacy MMIO_OUT and MMIO_OUT_FLAG aliases maintained at addresses 0 and 1
 
@@ -472,6 +540,14 @@ pub const HDR_STORE_BLOCK: usize   = 17;
 pub const HDR_STORE_ADDR: usize    = 18;
 pub const HDR_STORE_DATA: usize    = 19;
 pub const HDR_STORE_CTL: usize     = 20;
+pub const HDR_IRQ_STATUS: usize    = 21;
+pub const HDR_IRQ_ENABLE: usize    = 22;
+pub const HDR_IRQ_BUSY: usize      = 23;
+pub const HDR_IRQ_VECTOR_BANK: usize = 24;
+pub const HDR_IRQ_VECTOR_OFF: usize  = 25;
+pub const HDR_IRQ_CAUSE: usize     = 26;
+
+pub const IRQ_SW: u16              = 0x0001;  // STATUS/ENABLE bit 0
 
 // TEXT40 VRAM
 pub const TEXT40_BASE_WORD: usize  = 32;
@@ -501,12 +577,11 @@ pub const STORE_COMMIT_ALL: u16    = 0x0008;  // bit3
 
 ## Future Enhancements
 
-The reserved MMIO addresses (21-31) are available for future devices such as:
+The reserved MMIO addresses (27-31) are available for future devices such as:
 - Timer/counter peripherals
 - Additional display modes
 - Sound generation
 - Network I/O
-- Interrupt controllers
 - DMA controllers
 - Serial communication ports
 

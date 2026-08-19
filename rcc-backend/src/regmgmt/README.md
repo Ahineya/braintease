@@ -1,5 +1,7 @@
 # Register Management Module
 
+> Stack bank is **SB (R28) = 2**, not R13. R13 is X2. Current ABI: [`docs/arch/`](../../../docs/arch/README.md).
+
 ## Overview
 
 This module provides the encapsulated register management system for the V2 backend. It ensures safe, automatic handling of register allocation, spilling, and bank management.

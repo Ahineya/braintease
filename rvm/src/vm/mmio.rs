@@ -170,7 +170,13 @@ impl VM {
                     Some(0)  // No storage available
                 }
             },
-            21..=31 => Some(0), // Reserved addresses return 0
+            HDR_IRQ_STATUS => Some(self.irq_status),
+            HDR_IRQ_ENABLE => Some(self.irq_enable),
+            HDR_IRQ_BUSY => Some(self.irq_busy),
+            HDR_IRQ_VECTOR_BANK => Some(self.irq_vector_bank),
+            HDR_IRQ_VECTOR_OFF => Some(self.irq_vector_off),
+            HDR_IRQ_CAUSE => Some(self.irq_cause),
+            27..=31 => Some(0), // Reserved addresses return 0
             _ => None, // Not an MMIO address
         }
     }
@@ -299,7 +305,40 @@ impl VM {
                 }
                 true
             },
-            21..=31 => true, // Reserved addresses, ignore writes
+            HDR_IRQ_STATUS => {
+                self.irq_status |= value;
+                self.sync_irq_memory();
+                true
+            },
+            HDR_IRQ_ENABLE => {
+                self.irq_enable = value;
+                self.sync_irq_memory();
+                true
+            },
+            HDR_IRQ_BUSY => {
+                if value != 0 && self.irq_busy != 0 {
+                    if self.irq_cause > 0 && self.irq_cause <= 16 {
+                        let bit = self.irq_cause - 1;
+                        self.irq_status &= !(1u16 << bit);
+                    }
+                    self.irq_busy = 0;
+                    self.irq_cause = 0;
+                    self.sync_irq_memory();
+                }
+                true
+            },
+            HDR_IRQ_VECTOR_BANK => {
+                self.irq_vector_bank = value;
+                self.sync_irq_memory();
+                true
+            },
+            HDR_IRQ_VECTOR_OFF => {
+                self.irq_vector_off = value;
+                self.sync_irq_memory();
+                true
+            },
+            HDR_IRQ_CAUSE => true, // Read-only
+            27..=31 => true, // Reserved addresses, ignore writes
             _ => false, // Not an MMIO address
         }
     }

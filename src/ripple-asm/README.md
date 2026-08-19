@@ -89,16 +89,21 @@ rasm format input.pobj -o output.bfm
 
 ### Registers
 
+32 registers. Numeric (`R0`–`R31`) and symbolic names are interchangeable. Full map: [`docs/arch/registers.md`](../../docs/arch/registers.md).
+
 | Register | Index | Purpose |
 |----------|-------|---------|
 | R0 | 0 | Always reads as 0 |
-| PC | 1 | Program Counter |
-| PCB | 2 | Program Counter Bank |
-| RA | 3 | Return Address |
-| RAB | 4 | Return Address Bank |
-| R3-R15 | 5-17 | General Purpose |
+| PC / PCB | 1 / 2 | Program counter |
+| RA / RAB | 3 / 4 | Return address |
+| RV0 / RV1 | 5 / 6 | Return values |
+| A0–A3 | 7–10 | Arguments |
+| X0–X3 | 11–14 | IMEM copy / wide scratch |
+| T0–T7 | 15–22 | Temporaries (caller-saved) |
+| S0–S3 | 23–26 | Callee-saved |
+| SC / SB / SP / FP / GP | 27–31 | Scratch, stack bank, stack, frame, global bank |
 
-R13 and R14 are often used as stack and frame pointers by convention.
+C `crt0` uses SB=2, SP/FP=1, GP=1. See [`docs/arch/abi.md`](../../docs/arch/abi.md).
 
 ### Instruction Set
 
@@ -160,8 +165,8 @@ These expand to real instruction sequences:
 - `DEC rd` → `ADDI rd, rd, -1`
 - `PUSH rs` → Stack push (2 instructions)
 - `POP rd` → Stack pop (2 instructions)
-- `CALL target` → `JAL RA, target`
-- `RET` → `JALR R0, RA, 0`
+- `CALL target` → `JAL RA, R0, target` (assembler); `rlink` patches the bank/offset
+- `RET` → `JALR R0, RAB, RA`
 
 ## Assembly Syntax
 

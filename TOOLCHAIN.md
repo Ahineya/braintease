@@ -1,5 +1,7 @@
 # Ripple C Toolchain
 
+Architecture (registers, ISA, C ABI, banks): [`docs/arch/`](docs/arch/README.md).
+
 C99 source is compiled to Ripple assembly, assembled, linked with startup code and a runtime library, then executed. The **primary target is the Ripple VM** (`rvm`). A Brainfuck backend still exists for programs that do not need MMIO/display.
 
 ```
@@ -118,7 +120,7 @@ rvm program.bin --frequency 1MHz
 rvm program.bin --disk path.img   # storage image (default: ~/.RippleVM/disk.img)
 ```
 
-See `rvm/mmio.md` for TEXT40, RGB565, keyboard, RNG, and storage MMIO.
+See [`rvm/mmio.md`](rvm/mmio.md) and [`docs/arch/mmio.md`](docs/arch/mmio.md) for TEXT40, RGB565, keyboard, RNG, storage, and IRQ MMIO.
 
 ### Runtime library
 
@@ -134,7 +136,7 @@ Headers live in `runtime/include/`:
 | `stdio.h` | `putchar`, `puts`, `getchar`, `printf` |
 | `stdlib.h` | `malloc` / `free` / `calloc` / `realloc`, `rand` / `srand` |
 | `string.h` | `strlen`, `strcpy`, `memcpy`, `memset`, … |
-| `mmio.h` | TTY, RNG, TEXT40, keyboard, storage |
+| `mmio.h` | TTY, RNG, TEXT40, keyboard, storage, IRQ |
 | `graphics.h` | RGB565 drawing |
 | `mmio_constants.h` | MMIO addresses, display modes, palette |
 
@@ -288,7 +290,7 @@ cat libruntime.par | jq '.objects[].name'
 
 3. **Headers**: include `stdio.h` / `mmio.h` / etc. from `runtime/include` rather than hand-declaring `putchar`.
 
-4. **Program size**: all instructions must fit in one bank. If a binary is larger than `--bank-size`, `rvm` refuses to load it.
+4. **Program size**: the linked image may occupy several IMEM banks. `rlink` places each function in one bank and NOP-pads to the next bank boundary when the remainder is too small. A **single function** larger than `--bank-size` instructions will not link. `rvm` loads multi-bank binaries; it does not reject images longer than one bank.
 
 ## Troubleshooting
 

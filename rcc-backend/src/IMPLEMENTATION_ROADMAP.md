@@ -487,7 +487,7 @@ Compare V1 vs V2:
 ## Implementation Checklist
 
 ### Week 0: Preparation
-- [x] Migrate project to 32 registers architecture, described in `/docs/32-REGISTER-UPGRADE.md`
+- [x] Migrate project to 32 registers architecture, described in `/docs/arch/registers.md`
   - [x] Register allocations updated (A0-A3 for args, RV0-RV1 for returns, S0-S3 callee-saved)
   - [x] Calling convention updated to use A0-A3 for first 4 arguments
   - [x] Parameter type tracking for correct fat pointer handling
@@ -624,15 +624,15 @@ debug!("Doing GEP stuff");
 ## Resources
 
 ### Documentation
-- `/docs/ripple-calling-convention.md` - Calling convention spec
-- `/docs/v2-backend-architecture.md` - V2 design overview
-- `/rcc-ir/src/v2/README.md` - V2 implementation guide
-- `/rcc-ir/src/v2/regmgmt/README.md` - Register management API
+- `/docs/arch/` - Current ISA, registers, ABI, memory, MMIO
+- `/docs/archive/` - Deprecated specs (18-reg ABI, draft ISA, old roadmaps)
+- `/TOOLCHAIN.md` - Build and run
+- `/rcc-backend/src/README_ARCHITECTURE.md` - Backend module map
 
 ### Reference Implementation
 - V1 implementations in `/rcc-ir/src/lower/instr/` (fix the bugs!)
 - Test cases in `/c-test/tests/`
-- Assembly examples in `/docs/ASSEMBLY_FORMAT.md`
+- ISA examples in `/docs/arch/isa.md`
 
 ### Tools
 - `rvm --verbose` - Debug VM execution
@@ -652,7 +652,7 @@ The V2 backend is complete when:
 ## Contact & Support
 
 - Check test files for examples: `/rcc-ir/src/v2/tests/`
-- Refer to specifications in `/docs/32-REGISTER-UPGRADE.md`, /src/ripple-asm/src/types.rs, and './README_ARCHITECTURE.md`'
+- Refer to specifications in `/docs/arch/`, `/src/ripple-asm/src/types.rs`, and `./README_ARCHITECTURE.md`
 - Run tests frequently to catch issues early
 - Remember: R13 MUST BE 1 for stack operations!
 

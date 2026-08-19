@@ -30,6 +30,17 @@
 #define MMIO_STORE_DATA    19
 #define MMIO_STORE_CTL     20
 
+// Interrupt controller (bank 0, words 21..26)
+#define MMIO_IRQ_STATUS       21
+#define MMIO_IRQ_ENABLE       22
+#define MMIO_IRQ_BUSY         23
+#define MMIO_IRQ_VECTOR_BANK  24
+#define MMIO_IRQ_VECTOR_OFF   25
+#define MMIO_IRQ_CAUSE        26
+
+// Software interrupt source (STATUS/ENABLE bit 0)
+#define IRQ_SW             (1 << 0)
+
 // Storage control bits
 #define STORE_CTL_BUSY        (1 << 0)
 #define STORE_CTL_DIRTY       (1 << 1)

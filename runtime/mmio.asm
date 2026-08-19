@@ -1399,17 +1399,17 @@ L_text40_puts_25:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Mixed })
 ; LOAD: Pointer t13 has bank info: Dynamic("gep_new_bank_f24_op24_t13")
     LI S2, -1
-    BEQ T3, S2, L_bc_5cfc0d7e_use_global
+    BEQ T3, S2, L_bc_81f3be84_use_global
     LI S1, -2
-    BEQ T3, S1, L_bc_5cfc0d7e_use_stack
+    BEQ T3, S1, L_bc_81f3be84_use_stack
     ADD S3, T3, R0
-    BEQ R0, R0, L_bc_5cfc0d7e_done
-L_bc_5cfc0d7e_use_global:
+    BEQ R0, R0, L_bc_81f3be84_done
+L_bc_81f3be84_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_5cfc0d7e_done
-L_bc_5cfc0d7e_use_stack:
+    BEQ R0, R0, L_bc_81f3be84_done
+L_bc_81f3be84_use_stack:
     ADD S3, SB, R0
-L_bc_5cfc0d7e_done:
+L_bc_81f3be84_done:
 ; LOAD: Using bank register S3 for load
     LOAD S0, S3, T4
 ; Recompute alloca t9 at FP+6
@@ -2523,17 +2523,17 @@ L_text40_puts_color_58:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Mixed })
 ; LOAD: Pointer t17 has bank info: Dynamic("gep_new_bank_f30_op28_t17")
     LI S0, -1
-    BEQ S3, S0, L_bc_23979a3b_use_global
+    BEQ S3, S0, L_bc_aae59174_use_global
     LI T7, -2
-    BEQ S3, T7, L_bc_23979a3b_use_stack
+    BEQ S3, T7, L_bc_aae59174_use_stack
     ADD S1, S3, R0
-    BEQ R0, R0, L_bc_23979a3b_done
-L_bc_23979a3b_use_global:
+    BEQ R0, R0, L_bc_aae59174_done
+L_bc_aae59174_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_23979a3b_done
-L_bc_23979a3b_use_stack:
+    BEQ R0, R0, L_bc_aae59174_done
+L_bc_aae59174_use_stack:
     ADD S1, SB, R0
-L_bc_23979a3b_done:
+L_bc_aae59174_done:
 ; LOAD: Using bank register S1 for load
     LOAD T6, S1, T3
 ; Recompute alloca t13 at FP+8
@@ -2908,17 +2908,17 @@ L_text40_puts_attr_65:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(15), bank: Mixed })
 ; LOAD: Pointer t15 has bank info: Dynamic("gep_new_bank_f32_op26_t15")
     LI S1, -1
-    BEQ T1, S1, L_bc_c6aafc10_use_global
+    BEQ T1, S1, L_bc_1e6a218e_use_global
     LI S0, -2
-    BEQ T1, S0, L_bc_c6aafc10_use_stack
+    BEQ T1, S0, L_bc_1e6a218e_use_stack
     ADD S2, T1, R0
-    BEQ R0, R0, L_bc_c6aafc10_done
-L_bc_c6aafc10_use_global:
+    BEQ R0, R0, L_bc_1e6a218e_done
+L_bc_1e6a218e_use_global:
     ADD S2, GP, R0
-    BEQ R0, R0, L_bc_c6aafc10_done
-L_bc_c6aafc10_use_stack:
+    BEQ R0, R0, L_bc_1e6a218e_done
+L_bc_1e6a218e_use_stack:
     ADD S2, SB, R0
-L_bc_c6aafc10_done:
+L_bc_1e6a218e_done:
 ; LOAD: Using bank register S2 for load
     LOAD T7, S2, T4
 ; Recompute alloca t11 at FP+7
@@ -6425,17 +6425,17 @@ L_storage_write_buffer_141:
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Mixed })
 ; LOAD: Pointer t17 has bank info: Dynamic("gep_new_bank_f82_op33_t17")
     LI T6, -1
-    BEQ S1, T6, L_bc_878f93b9_use_global
+    BEQ S1, T6, L_bc_91ae8be7_use_global
     LI T7, -2
-    BEQ S1, T7, L_bc_878f93b9_use_stack
+    BEQ S1, T7, L_bc_91ae8be7_use_stack
     ADD T0, S1, R0
-    BEQ R0, R0, L_bc_878f93b9_done
-L_bc_878f93b9_use_global:
+    BEQ R0, R0, L_bc_91ae8be7_done
+L_bc_91ae8be7_use_global:
     ADD T0, GP, R0
-    BEQ R0, R0, L_bc_878f93b9_done
-L_bc_878f93b9_use_stack:
+    BEQ R0, R0, L_bc_91ae8be7_done
+L_bc_91ae8be7_use_stack:
     ADD T0, SB, R0
-L_bc_878f93b9_done:
+L_bc_91ae8be7_done:
 ; LOAD: Using bank register T0 for load
     LOAD T4, T0, T3
     ADD A0, T4, R0
@@ -6755,17 +6755,17 @@ L_storage_read_buffer_146:
     ADDI SC, SC, 26
     LOAD T7, SB, SC
     LI T5, -1
-    BEQ T7, T5, L_bc_293b16c3_use_global
+    BEQ T7, T5, L_bc_53923388_use_global
     LI T2, -2
-    BEQ T7, T2, L_bc_293b16c3_use_stack
+    BEQ T7, T2, L_bc_53923388_use_stack
     ADD T4, T7, R0
-    BEQ R0, R0, L_bc_293b16c3_done
-L_bc_293b16c3_use_global:
+    BEQ R0, R0, L_bc_53923388_done
+L_bc_53923388_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_293b16c3_done
-L_bc_293b16c3_use_stack:
+    BEQ R0, R0, L_bc_53923388_done
+L_bc_53923388_use_stack:
     ADD T4, SB, R0
-L_bc_293b16c3_done:
+L_bc_53923388_done:
     STORE T0, T4, T6
     BEQ R0, R0, L_storage_read_buffer_147
 ; Unconditional branch to L_storage_read_buffer_147
@@ -6795,6 +6795,658 @@ L_storage_read_buffer_148:
 ; Jump to epilogue
     BEQ R0, R0, L_storage_read_buffer_99999
 L_storage_read_buffer_99999:
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_get_status:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+L_irq_get_status_149:
+    LI S3, 21
+    ADD A0, S3, R0
+; Spill live registers before call
+; Spill const_f86_op0_21 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    STORE S3, SB, SC
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
+; Setting up 1 register arguments
+; Arg 0 (scalar) to A0
+; Call function mmio_read
+    CALL mmio_read
+; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
+; Jump to epilogue
+    BEQ R0, R0, L_irq_get_status_99999
+L_irq_get_status_99999:
+; Return scalar value
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_raise:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 9 slots for locals
+    ADDI SP, SP, 9
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+; Load param 0 from A0
+    ADD S3, A0, R0
+L_irq_raise_150:
+    ADD S2, FP, R0
+    STORE S3, SB, S2
+; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; LOAD: Pointer load_src_ptr_f88_op2_t2 has bank info: Stack
+; LOAD: Using bank register Sb for load
+    LOAD S1, SB, S2
+    LI S0, 21
+    ADD A0, S0, R0
+    ADD A1, S1, R0
+; Spill live registers before call
+; Spill t0 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 9
+    STORE S3, SB, SC
+; Spill const_f88_op4_21 to slot 1
+    ADD SC, FP, R0
+    ADDI SC, SC, 10
+    STORE S0, SB, SC
+; Spill t2 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 11
+    STORE S1, SB, SC
+; Set SP = FP+29 so callee frame is above spills
+    ADDI SP, FP, 29
+; Setting up 2 register arguments
+; Arg 0 (scalar) to A0
+; Arg 1 (scalar) to A1
+; Call function mmio_write
+    CALL mmio_write
+; Jump to epilogue
+    BEQ R0, R0, L_irq_raise_99999
+L_irq_raise_99999:
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_get_enable:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+L_irq_get_enable_151:
+    LI S3, 22
+    ADD A0, S3, R0
+; Spill live registers before call
+; Spill const_f90_op0_22 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    STORE S3, SB, SC
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
+; Setting up 1 register arguments
+; Arg 0 (scalar) to A0
+; Call function mmio_read
+    CALL mmio_read
+; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
+; Jump to epilogue
+    BEQ R0, R0, L_irq_get_enable_99999
+L_irq_get_enable_99999:
+; Return scalar value
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_set_enable:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 9 slots for locals
+    ADDI SP, SP, 9
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+; Load param 0 from A0
+    ADD S3, A0, R0
+L_irq_set_enable_152:
+    ADD S2, FP, R0
+    STORE S3, SB, S2
+; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
+; LOAD: Pointer load_src_ptr_f92_op2_t2 has bank info: Stack
+; LOAD: Using bank register Sb for load
+    LOAD S1, SB, S2
+    LI S0, 22
+    ADD A0, S0, R0
+    ADD A1, S1, R0
+; Spill live registers before call
+; Spill t0 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 9
+    STORE S3, SB, SC
+; Spill const_f92_op4_22 to slot 1
+    ADD SC, FP, R0
+    ADDI SC, SC, 10
+    STORE S0, SB, SC
+; Spill t2 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 11
+    STORE S1, SB, SC
+; Set SP = FP+29 so callee frame is above spills
+    ADDI SP, FP, 29
+; Setting up 2 register arguments
+; Arg 0 (scalar) to A0
+; Arg 1 (scalar) to A1
+; Call function mmio_write
+    CALL mmio_write
+; Jump to epilogue
+    BEQ R0, R0, L_irq_set_enable_99999
+L_irq_set_enable_99999:
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_is_busy:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+L_irq_is_busy_153:
+    LI S3, 23
+    ADD A0, S3, R0
+; Spill live registers before call
+; Spill const_f94_op0_23 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    STORE S3, SB, SC
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
+; Setting up 1 register arguments
+; Arg 0 (scalar) to A0
+; Call function mmio_read
+    CALL mmio_read
+; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    LI S1, 0
+    XOR S0, S2, S1
+    LI T7, 0
+    SLTU S2, T7, S0
+    MOVE RV0, S2
+; Jump to epilogue
+    BEQ R0, R0, L_irq_is_busy_99999
+L_irq_is_busy_99999:
+; Return scalar value
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_ack:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+L_irq_ack_154:
+    LI S3, 23
+    ADD A0, S3, R0
+    LI S2, 1
+    ADD A1, S2, R0
+; Spill live registers before call
+; Spill const_f96_op0_23 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    STORE S3, SB, SC
+; Spill const_f96_op1_1 to slot 1
+    ADD SC, FP, R0
+    ADDI SC, SC, 9
+    STORE S2, SB, SC
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
+; Setting up 2 register arguments
+; Arg 0 (scalar) to A0
+; Arg 1 (scalar) to A1
+; Call function mmio_write
+    CALL mmio_write
+; Jump to epilogue
+    BEQ R0, R0, L_irq_ack_99999
+L_irq_ack_99999:
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_set_vector:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 10 slots for locals
+    ADDI SP, SP, 10
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+; Load param 0 from A0
+    ADD S3, A0, R0
+; Load param 1 from A1
+    ADD S2, A1, R0
+L_irq_set_vector_155:
+    ADD S1, FP, R0
+    STORE S3, SB, S1
+    ADD S0, FP, R0
+    ADDI S0, S0, 1
+    STORE S2, SB, S0
+; Load instruction: t4 = load FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(2), bank: Stack })
+; LOAD: Pointer load_src_ptr_f98_op4_t4 has bank info: Stack
+; LOAD: Using bank register Sb for load
+    LOAD T7, SB, S1
+    LI T6, 24
+    ADD A0, T6, R0
+    ADD A1, T7, R0
+; Spill live registers before call
+; Spill t0 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 10
+    STORE S3, SB, SC
+; Spill t1 to slot 1
+    ADD SC, FP, R0
+    ADDI SC, SC, 11
+    STORE S2, SB, SC
+; Spill const_f98_op6_24 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 12
+    STORE T6, SB, SC
+; Spill t4 to slot 3
+    ADD SC, FP, R0
+    ADDI SC, SC, 13
+    STORE T7, SB, SC
+; Set SP = FP+30 so callee frame is above spills
+    ADDI SP, FP, 30
+; Setting up 2 register arguments
+; Arg 0 (scalar) to A0
+; Arg 1 (scalar) to A1
+; Call function mmio_write
+    CALL mmio_write
+; Load instruction: t5 = load FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(3), bank: Stack })
+; LOAD: Pointer load_src_ptr_f98_op7_t5 has bank info: Stack
+; LOAD: Using bank register Sb for load
+; Recompute alloca t3 at FP+1
+    ADD T5, FP, R0
+    ADDI T5, T5, 1
+    LOAD T4, SB, T5
+    LI T3, 25
+    ADD A0, T3, R0
+    ADD A1, T4, R0
+; Spill live registers before call
+; Spill const_f98_op9_25 to slot 4
+    ADD SC, FP, R0
+    ADDI SC, SC, 14
+    STORE T3, SB, SC
+; Spill t5 to slot 5
+    ADD SC, FP, R0
+    ADDI SC, SC, 15
+    STORE T4, SB, SC
+; Set SP = FP+30 so callee frame is above spills
+    ADDI SP, FP, 30
+; Setting up 2 register arguments
+; Arg 0 (scalar) to A0
+; Arg 1 (scalar) to A1
+; Call function mmio_write
+    CALL mmio_write
+; Jump to epilogue
+    BEQ R0, R0, L_irq_set_vector_99999
+L_irq_set_vector_99999:
+; === Function Epilogue ===
+; Restore SP = FP
+    ADD SP, FP, R0
+; Restore callee-saved registers S3-S0
+    ADDI SC, FP, -1
+    LOAD S3, SB, SC
+    ADDI SC, FP, -2
+    LOAD S2, SB, SC
+    ADDI SC, FP, -3
+    LOAD S1, SB, SC
+    ADDI SC, FP, -4
+    LOAD S0, SB, SC
+; Restore old FP
+    ADDI SP, SP, -5
+    LOAD FP, SB, SP
+; Restore RAB
+    ADDI SP, SP, -1
+    LOAD RAB, SB, SP
+; Restore RA
+    ADDI SP, SP, -1
+    LOAD RA, SB, SP
+; Return to caller
+    JALR R0, RAB, RA
+irq_get_cause:
+; === Function Prologue ===
+; Save RA at SP
+    STORE RA, SB, SP
+    ADDI SP, SP, 1
+; Save RAB at SP
+    STORE RAB, SB, SP
+    ADDI SP, SP, 1
+; Save old FP
+    STORE FP, SB, SP
+    ADDI SP, SP, 1
+; Save callee-saved registers S0-S3
+    STORE S0, SB, SP
+    ADDI SP, SP, 1
+    STORE S1, SB, SP
+    ADDI SP, SP, 1
+    STORE S2, SB, SP
+    ADDI SP, SP, 1
+    STORE S3, SB, SP
+    ADDI SP, SP, 1
+; Set FP = SP
+    ADD FP, SP, R0
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
+; Reserve 20 spill slots above locals
+    ADDI SP, SP, 20
+L_irq_get_cause_156:
+    LI S3, 26
+    ADD A0, S3, R0
+; Spill live registers before call
+; Spill const_f100_op0_26 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    STORE S3, SB, SC
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
+; Setting up 1 register arguments
+; Arg 0 (scalar) to A0
+; Call function mmio_read
+    CALL mmio_read
+; Scalar return value for t0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
+; Jump to epilogue
+    BEQ R0, R0, L_irq_get_cause_99999
+L_irq_get_cause_99999:
+; Return scalar value
 ; === Function Epilogue ===
 ; Restore SP = FP
     ADD SP, FP, R0

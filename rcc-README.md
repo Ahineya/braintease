@@ -1,8 +1,19 @@
 # Ripple C99 Compiler (rcc)
 
-A C99 freestanding compiler targeting the Ripple VM ISA, built with Rust using a backend-first approach.
+> This README is stale (M1 “backend skeleton”, old crate names).  
+> **Build/run:** [`TOOLCHAIN.md`](TOOLCHAIN.md) · **Architecture:** [`docs/arch/`](docs/arch/README.md) · **Language coverage:** [`SUPPORTED_FEATURES.md`](SUPPORTED_FEATURES.md)
 
-## Project Status: M1 - Backend Skeleton
+A C99 freestanding compiler targeting the Ripple VM ISA.
+
+## Architecture (current)
+
+```
+C → rcc-frontend (parse/IR) → rcc-backend (lower/alloc) → rcc-codegen (asm) → rasm → rlink → rvm
+```
+
+The remainder of this file describes an early milestone and should not be used as a spec.
+
+## Historical (M1 notes)
 
 Currently implementing the foundational backend components for code generation:
 

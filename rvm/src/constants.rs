@@ -35,13 +35,24 @@ pub const HDR_STORE_ADDR: usize = 18;  // Write: Select word address within bloc
 pub const HDR_STORE_DATA: usize = 19;  // R/W: Data register for current (block, addr)
 pub const HDR_STORE_CTL: usize = 20;   // R/W: Control register (busy/dirty/commit bits)
 
+// Interrupt controller (bank 0, words 21..26)
+pub const HDR_IRQ_STATUS: usize = 21;       // R/W: pending bits (write ORs into pending)
+pub const HDR_IRQ_ENABLE: usize = 22;       // R/W: enable mask
+pub const HDR_IRQ_BUSY: usize = 23;         // R: in-service (0/1); W: nonzero acknowledges
+pub const HDR_IRQ_VECTOR_BANK: usize = 24;  // R/W: handler PCB
+pub const HDR_IRQ_VECTOR_OFF: usize = 25;   // R/W: handler PC
+pub const HDR_IRQ_CAUSE: usize = 26;        // R: 0=none, else 1 + bit index of in-service IRQ
+
+// Software interrupt source (STATUS/ENABLE bit 0)
+pub const IRQ_SW: u16 = 1 << 0;
+
 // Storage control bits
 pub const STORE_BUSY: u16 = 1 << 0;        // bit0: VM is processing storage operation
 pub const STORE_DIRTY: u16 = 1 << 1;       // bit1: Current block has uncommitted writes
 pub const STORE_COMMIT: u16 = 1 << 2;      // bit2: Trigger commit of current block
 pub const STORE_COMMIT_ALL: u16 = 1 << 3;  // bit3: Trigger commit of all dirty blocks
 
-// Words 21..31 are reserved for future use
+// Words 27..31 are reserved for future use
 
 // TEXT40 display constants
 pub const TEXT40_BASE_WORD: usize  = 32;         // Start of VRAM

@@ -1,5 +1,7 @@
 # V2 Backend Architecture
 
+> Module map for `rcc-backend`. Machine ABI: [`docs/arch/`](../../docs/arch/README.md). Some examples below still use old crate names (`rcc_ir`).
+
 ## Design Principles
 
 The V2 backend follows strict encapsulation to ensure safety and prevent misuse:

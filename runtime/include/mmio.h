@@ -65,4 +65,16 @@ unsigned short storage_read_at(unsigned short block, unsigned short addr);
 void storage_write_buffer(unsigned short block, unsigned short addr, const unsigned short* data, unsigned short count);
 void storage_read_buffer(unsigned short block, unsigned short addr, unsigned short* data, unsigned short count);
 
+// Interrupt controller
+// Do not enable a STATUS bit that is already pending unless a handler is installed:
+// the VM dispatches at the start of the next instruction.
+unsigned short irq_get_status(void);
+void irq_raise(unsigned short bits);
+unsigned short irq_get_enable(void);
+void irq_set_enable(unsigned short mask);
+int irq_is_busy(void);
+void irq_ack(void);
+void irq_set_vector(unsigned short bank, unsigned short off);
+unsigned short irq_get_cause(void);
+
 #endif // MMIO_H

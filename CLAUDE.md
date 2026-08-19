@@ -32,8 +32,8 @@ The IDE includes a custom RISC-like assembler for the Ripple VM architecture loc
 
 ### Architecture Overview
 - **16-bit architecture** with configurable bank size
-- **18 registers**: R0, PC, PCB, RA, RAB, R3-R15,
-- **Instruction format**: 8-bit opcode + 3x 16-bit operands
+- **32 registers**: R0, PC, PCB, RA, RAB, RV0–RV1, A0–A3, X0–X3, T0–T7, S0–S3, SC, SB, SP, FP, GP — see [`docs/arch/registers.md`](docs/arch/registers.md)
+- **Instruction format**: 8-byte instructions (opcode + pad + 3× 16-bit operands)
 - **Two-pass assembly** with label resolution
 - **Linker** for resolving cross-references between modules
 

@@ -2,6 +2,8 @@
 
 A design doc for the Ripple Virtual Machine architecture and its assembly language.
 
+> Canonical spec: [`docs/arch/`](../docs/arch/README.md). Parts of this tutorial still mix older ABI sketches with the 32-register machine; prefer the `docs/arch` pages if they disagree.
+
 ## Table of Contents
 1. [Architecture Overview](#architecture-overview)
 2. [Register Architecture](#register-architecture)

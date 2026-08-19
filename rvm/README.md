@@ -152,24 +152,21 @@ The test suite includes:
 - `test_jumps` - CALL/RET (JAL/JALR)
 - `test_memory` - LOAD/STORE operations
 - `test_loadc_storc` - LOADC/STORC instruction-memory copies
+- `test_irq` - software IRQ dispatch, ACK, and RET
 
 ## Architecture
 
-The VM implements the Ripple architecture as specified in `docs/ASSEMBLY_FORMAT.md`:
+The VM implements the Ripple architecture as specified in [`docs/arch/`](../docs/arch/README.md). Device MMIO: [`mmio.md`](mmio.md).
 
 ### Registers
-- R0: Always reads as 0
-- PC: Program counter (offset within bank)
-- PCB: Program counter bank
-- RA: Return address (low)
-- RAB: Return address bank (high)
-- R3-R15: General purpose
+32 registers: R0 (zero), PC/PCB, RA/RAB, RV0/RV1, A0–A3, X0–X3, T0–T7, S0–S3, SC, SB, SP, FP, GP. Full map: [`docs/arch/registers.md`](../docs/arch/registers.md).
 
 ### Memory
-- 64KB address space (65536 16-bit cells)
-- Memory-mapped I/O:
-  - 0x0000: Output register (write byte to stdout)
-  - 0x0001: Output ready flag
+- Banked 16-bit data memory; C uses bank 1 globals, bank 2 stack, banks 5+ heap ([`docs/arch/memory.md`](../docs/arch/memory.md))
+- Memory-mapped I/O in bank 0, words 0-31 (see `mmio.md`):
+  - 0: TTY output
+  - 1: TTY ready flag
+  - 21-26: interrupt controller (`IRQ_STATUS` … `IRQ_CAUSE`)
 
 ### Instruction Set
 All opcodes from 0x00 to 0x21 are implemented, including:

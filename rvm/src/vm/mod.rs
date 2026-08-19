@@ -79,6 +79,14 @@ pub struct VM {
     
     // Storage subsystem
     storage: Option<Storage>,
+
+    // Interrupt controller
+    irq_status: u16,
+    irq_enable: u16,
+    irq_busy: u16,
+    irq_vector_bank: u16,
+    irq_vector_off: u16,
+    irq_cause: u16,
 }
 
 impl VM {
@@ -136,6 +144,12 @@ impl VM {
             display_resolution: 0,
             debug_symbols: HashMap::new(),
             storage,
+            irq_status: 0,
+            irq_enable: 0,
+            irq_busy: 0,
+            irq_vector_bank: 0,
+            irq_vector_off: 0,
+            irq_cause: 0,
         }
     }
     
@@ -311,6 +325,8 @@ impl VM {
         // Keyboard/TTY input is polled from MMIO reads (TTY_IN_STATUS / KEY_*),
         // not every instruction — crossterm event::poll is a syscall.
 
+        self.maybe_dispatch_irq();
+
         // Calculate instruction address
         let pc = self.registers[Register::Pc as usize];
         let pcb = self.registers[Register::Pcb as usize];
@@ -361,7 +377,39 @@ impl VM {
         }
         Ok(())
     }
-    
+
+    /// If a pending IRQ is enabled and none is in service, jump to the vector.
+    /// Saves PC/PCB into RA/RAB like JAL so the handler can RET.
+    fn maybe_dispatch_irq(&mut self) {
+        if self.irq_busy != 0 {
+            return;
+        }
+        let ready = self.irq_status & self.irq_enable;
+        if ready == 0 {
+            return;
+        }
+        let bit = ready.trailing_zeros() as u16;
+        self.irq_busy = 1;
+        self.irq_cause = bit + 1;
+        self.sync_irq_memory();
+
+        self.registers[Register::Ra as usize] = self.registers[Register::Pc as usize];
+        self.registers[Register::Rab as usize] = self.registers[Register::Pcb as usize];
+        self.registers[Register::Pcb as usize] = self.irq_vector_bank;
+        self.registers[Register::Pc as usize] = self.irq_vector_off;
+    }
+
+    fn sync_irq_memory(&mut self) {
+        if self.memory.len() > HDR_IRQ_CAUSE {
+            self.memory[HDR_IRQ_STATUS] = self.irq_status;
+            self.memory[HDR_IRQ_ENABLE] = self.irq_enable;
+            self.memory[HDR_IRQ_BUSY] = self.irq_busy;
+            self.memory[HDR_IRQ_VECTOR_BANK] = self.irq_vector_bank;
+            self.memory[HDR_IRQ_VECTOR_OFF] = self.irq_vector_off;
+            self.memory[HDR_IRQ_CAUSE] = self.irq_cause;
+        }
+    }
+
     pub fn get_output(&mut self) -> Vec<u8> {
         self.output_buffer.drain(..).collect()
     }
@@ -430,6 +478,13 @@ impl VM {
         self.display_enabled = false;
         self.display_flush_done = true;
         self.display_resolution = 0;
+
+        self.irq_status = 0;
+        self.irq_enable = 0;
+        self.irq_busy = 0;
+        self.irq_vector_bank = 0;
+        self.irq_vector_off = 0;
+        self.irq_cause = 0;
         
         // Clear all memory (reset to zeros)
         self.memory.fill(0);
@@ -566,6 +621,103 @@ mod tests {
         assert_eq!(written.word2, 65);
         assert_eq!(written.word3, 0);
         assert_eq!(vm.memory[2], 0xBEEF);
+    }
+
+    #[test]
+    fn irq_registers_read_write_without_dispatch() {
+        let mut vm = VM::with_memory_size(8, 256);
+        vm.instructions = vec![halt(), nop(), nop(), nop(), nop(), nop(), nop(), nop()];
+        vm.state = VMState::Running;
+
+        assert!(vm.handle_mmio_write(HDR_IRQ_ENABLE, 0x0005));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_ENABLE), Some(0x0005));
+        assert!(vm.handle_mmio_write(HDR_IRQ_VECTOR_BANK, 3));
+        assert!(vm.handle_mmio_write(HDR_IRQ_VECTOR_OFF, 0x1234));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_VECTOR_BANK), Some(3));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_VECTOR_OFF), Some(0x1234));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(0));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(0));
+        assert_eq!(vm.handle_mmio_read(27), Some(0));
+        vm.handle_mmio_write(HDR_IRQ_CAUSE, 7);
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(0));
+        vm.handle_mmio_write(HDR_IRQ_BUSY, 1); // not in-service: ignore
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(0));
+
+        // Pending without overlapping enable: no dispatch
+        vm.handle_mmio_write(HDR_IRQ_ENABLE, 0);
+        vm.handle_mmio_write(HDR_IRQ_STATUS, IRQ_SW);
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_STATUS), Some(IRQ_SW));
+        vm.step().unwrap();
+        assert!(matches!(vm.state, VMState::Halted));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(0));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(0));
+    }
+
+    #[test]
+    fn irq_status_or_and_ack_clears_current_bit() {
+        let mut vm = VM::with_memory_size(8, 256);
+        vm.instructions = vec![
+            nop(),
+            halt(),
+            nop(),
+            nop(),
+            instr(0x0E, Register::Rv0 as u16, 99, 0), // handler: LI RV0, 99
+            nop(), nop(), nop(),
+        ];
+        vm.state = VMState::Running;
+        vm.handle_mmio_write(HDR_IRQ_VECTOR_BANK, 0);
+        vm.handle_mmio_write(HDR_IRQ_VECTOR_OFF, 4);
+        vm.handle_mmio_write(HDR_IRQ_ENABLE, 0x0005); // bits 0 and 2
+        vm.handle_mmio_write(HDR_IRQ_STATUS, 0x0004); // bit 2
+        vm.handle_mmio_write(HDR_IRQ_STATUS, 0x0001); // OR bit 0
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_STATUS), Some(0x0005));
+
+        vm.step().unwrap();
+        // Lowest enabled pending bit is 0 → cause 1, handler at 4 executed
+        assert_eq!(vm.registers[Register::Pc as usize], 5);
+        assert_eq!(vm.registers[Register::Ra as usize], 0);
+        assert_eq!(vm.registers[Register::Rv0 as usize], 99);
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(1));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(1));
+
+        vm.handle_mmio_write(HDR_IRQ_BUSY, 0); // write 0 does not ACK
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(1));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(1));
+
+        vm.handle_mmio_write(HDR_IRQ_BUSY, 1); // ACK
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(0));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(0));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_STATUS), Some(0x0004)); // bit 2 still pending
+    }
+
+    #[test]
+    fn irq_does_not_nest_while_busy() {
+        let mut vm = VM::with_memory_size(8, 256);
+        vm.instructions = vec![
+            nop(),
+            halt(),
+            nop(),
+            nop(),
+            nop(), // 4 handler
+            nop(),
+            nop(),
+            nop(),
+        ];
+        vm.state = VMState::Running;
+        vm.handle_mmio_write(HDR_IRQ_VECTOR_OFF, 4);
+        vm.handle_mmio_write(HDR_IRQ_ENABLE, 0x0003);
+        vm.handle_mmio_write(HDR_IRQ_STATUS, 0x0003);
+
+        vm.step().unwrap();
+        assert_eq!(vm.registers[Register::Pc as usize], 5);
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(1));
+        let ra = vm.registers[Register::Ra as usize];
+
+        vm.step().unwrap();
+        // Still in handler; did not re-enter at 4
+        assert_eq!(vm.registers[Register::Pc as usize], 6);
+        assert_eq!(vm.registers[Register::Ra as usize], ra);
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(1));
     }
 }
 
