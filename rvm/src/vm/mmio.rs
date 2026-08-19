@@ -195,8 +195,10 @@ impl VM {
                 
                 use std::io::{self, Write};
                 
-                // If we're in raw mode and outputting a newline, also output carriage return
-                if self.tty_input_enabled && byte == b'\n' {
+                // Host raw mode disables ONLCR, so LF alone stair-steps.
+                // Convert once TTY display is raw (boot putchar) or once
+                // stdin capture is on (first getchar). Guest still sees `\n`.
+                if byte == b'\n' && (self.terminal_raw_mode || self.tty_input_enabled) {
                     let _ = io::stdout().write_all(b"\r\n");
                 } else {
                     let _ = io::stdout().write_all(&[byte]);
