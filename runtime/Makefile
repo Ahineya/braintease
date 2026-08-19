@@ -22,8 +22,16 @@ RUNTIME_OBJ_FILES = $(C_OBJ_FILES)
 ALL_OBJ_FILES = $(C_OBJ_FILES) crt0.pobj
 RUNTIME_LIB = libruntime.par
 
+# rOS apps: INT21 putchar/getchar, no mmio. crt0_ros is linked separately.
+ROS_C_SOURCES = ros/putchar.c ros/getchar.c
+ROS_C_ASM = $(ROS_C_SOURCES:.c=.asm)
+ROS_C_OBJ = $(ROS_C_SOURCES:.c=.pobj)
+ROS_ASM_OBJ = ros/int21.pobj ros/crt0_ros.pobj ros/crt0_sys.pobj
+LIBROS_OBJ = ros/int21.pobj ros/putchar.pobj ros/getchar.pobj puts.pobj
+LIBROS = libros.par
+
 # Default target
-all: $(RUNTIME_LIB)
+all: $(RUNTIME_LIB) $(LIBROS) crt0.pobj $(ROS_ASM_OBJ)
 
 # Compile C files to assembly
 %.asm: %.c
@@ -45,14 +53,31 @@ crt0.pobj: crt0.asm
 	@echo "Assembling crt0.asm to object..."
 	@$(RASM) assemble crt0.asm -o crt0.pobj --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
+$(ROS_C_OBJ): %.pobj: %.asm
+	@echo "Assembling $< to object..."
+	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
+
+ros/int21.pobj: ros/int21.asm
+	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
+
+ros/crt0_ros.pobj: ros/crt0_ros.asm
+	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
+
+ros/crt0_sys.pobj: ros/crt0_sys.asm
+	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
+
 # Create runtime library archive (without crt0)
 $(RUNTIME_LIB): $(RUNTIME_OBJ_FILES)
 	@echo "Creating runtime library archive..."
 	@$(RLINK) $(RUNTIME_OBJ_FILES) -f archive -o $(RUNTIME_LIB)
 
-# Clean generated files (but not crt0.asm which is hand-written)
+$(LIBROS): $(LIBROS_OBJ)
+	@echo "Creating rOS library archive..."
+	@$(RLINK) $(LIBROS_OBJ) -f archive -o $(LIBROS)
+
+# Clean generated files (but not hand-written .asm)
 clean:
-	rm -f $(ASM_FILES) *.pobj *.par *.bf *.bfm
+	rm -f $(ASM_FILES) $(ROS_C_ASM) *.pobj *.par *.bf *.bfm ros/*.pobj
 	@echo "Cleaned runtime directory"
 
 # Test target - build a test program with runtime

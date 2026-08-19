@@ -3,6 +3,7 @@
 #include "fat16.h"
 #include "disk.h"
 #include "loader.h"
+#include "bootmsg.h"
 
 int io_disk_read8(unsigned long off) {
     return disk_read8(off);
@@ -31,18 +32,22 @@ int main(void) {
     int r;
 
     display_set_mode(1);
+    boot_stage("IO.SYS");
+    boot_item("TTY", "ready");
+    boot_item("Disk", "ready");
 
     r = fat16_mount(&fs);
     if (r != FAT16_OK) {
-        puts("IO: no FAT16");
+        boot_fail("no FAT16 volume");
         return 1;
     }
     r = fat16_lookup(&fs, 0, "KERNEL.SYS", &ent);
     if (r != FAT16_OK) {
-        puts("IO: no KERNEL.SYS");
+        boot_fail("KERNEL.SYS not found");
         return 1;
     }
+    boot_load("KERNEL.SYS");
     sys1_load_and_enter(&fs, &ent);
-    puts("IO: KERNEL returned");
+    boot_fail("KERNEL returned");
     return 1;
 }

@@ -30,8 +30,10 @@ DISK      := $(DISKS)/ros.img
 INPUT     ?=
 
 CRT0      := $(RUNTIME)/crt0.pobj
-CRT0_SYS  := $(BUILD)/crt0_sys.pobj
+CRT0_SYS  := $(RUNTIME)/ros/crt0_sys.pobj
+CRT0_ROS  := $(RUNTIME)/ros/crt0_ros.pobj
 LIBRT     := $(RUNTIME)/libruntime.par
+LIBROS    := $(RUNTIME)/libros.par
 
 # Slim runtime: full libruntime.par is huge and made SYS loads look hung.
 MIN_RT := \
@@ -67,8 +69,7 @@ $(BUILD):
 runtime:
 	$(MAKE) -C $(RUNTIME) all crt0.pobj BANK_SIZE=$(BANK_SIZE)
 
-$(CRT0_SYS): $(RUNTIME)/ros/crt0_sys.asm | $(BUILD)
-	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
+$(CRT0_SYS) $(CRT0_ROS) $(LIBROS): runtime
 
 $(BUILD)/%.pobj: $(SRC)/%.asm | $(BUILD)
 	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
@@ -84,29 +85,37 @@ io: runtime $(IO_SYS)
 kernel: runtime $(KERNEL_SYS)
 command: runtime $(COMMAND_COM)
 
-$(BIOS_BIN): runtime $(CRT0) $(BUILD)/bios.pobj $(BUILD)/disk.pobj $(BUILD)/fat16.pobj $(BUILD)/loader.pobj $(BUILD)/imem.pobj
+$(BIOS_BIN): runtime $(CRT0) $(BUILD)/bios.pobj $(BUILD)/bootmsg.pobj \
+		$(BUILD)/disk.pobj $(BUILD)/fat16.pobj $(BUILD)/loader.pobj $(BUILD)/imem.pobj
 	$(RLINK) $(CRT0) $(MIN_RT) \
-		$(BUILD)/bios.pobj $(BUILD)/disk.pobj $(BUILD)/fat16.pobj \
+		$(BUILD)/bootmsg.pobj $(BUILD)/bios.pobj $(BUILD)/disk.pobj $(BUILD)/fat16.pobj \
 		$(BUILD)/loader.pobj $(BUILD)/imem.pobj \
 		-f binary --bank-size $(BANK_SIZE) -o $@
 
-$(IO_SYS): runtime $(CRT0_SYS) $(BUILD)/io_vectors.pobj $(BUILD)/io.pobj $(BUILD)/disk.pobj $(BUILD)/fat16.pobj $(BUILD)/loader.pobj $(BUILD)/imem.pobj
+$(IO_SYS): runtime $(CRT0_SYS) $(BUILD)/io_vectors.pobj $(BUILD)/bootmsg.pobj \
+		$(BUILD)/io.pobj $(BUILD)/disk.pobj $(BUILD)/fat16.pobj $(BUILD)/loader.pobj $(BUILD)/imem.pobj
 	$(RLINK) $(BUILD)/io_vectors.pobj $(CRT0_SYS) $(MIN_RT) \
-		$(BUILD)/io.pobj $(BUILD)/disk.pobj $(BUILD)/fat16.pobj \
+		$(BUILD)/bootmsg.pobj $(BUILD)/io.pobj $(BUILD)/disk.pobj $(BUILD)/fat16.pobj \
 		$(BUILD)/loader.pobj $(BUILD)/imem.pobj \
 		-f sys --bank-size $(BANK_SIZE) \
 		--code-bank-base 1 --gp-bank 3 --sb-bank 2 -o $@
 
 $(KERNEL_SYS): runtime $(CRT0_SYS) $(BUILD)/kernel_vectors.pobj $(BUILD)/io_disk.pobj \
-		$(BUILD)/kernel.pobj $(BUILD)/fat16.pobj $(BUILD)/loader.pobj $(BUILD)/imem.pobj
+		$(BUILD)/bootmsg.pobj $(BUILD)/kernel.pobj $(BUILD)/fat16.pobj \
+		$(BUILD)/loader.pobj $(BUILD)/imem.pobj
 	$(RLINK) $(BUILD)/kernel_vectors.pobj $(CRT0_SYS) $(MIN_RT) $(BUILD)/io_disk.pobj \
-		$(BUILD)/kernel.pobj $(BUILD)/fat16.pobj $(BUILD)/loader.pobj $(BUILD)/imem.pobj \
+		$(BUILD)/bootmsg.pobj $(BUILD)/kernel.pobj $(BUILD)/fat16.pobj \
+		$(BUILD)/loader.pobj $(BUILD)/imem.pobj \
 		-f sys --bank-size $(BANK_SIZE) \
 		--code-bank-base 2 --gp-bank 4 --sb-bank 2 -o $@
 
-$(COMMAND_COM): runtime $(CRT0_SYS) $(BUILD)/io_tty.pobj $(BUILD)/kernel_api.pobj \
+$(COMMAND_COM): runtime $(CRT0_SYS) $(RUNTIME)/ros/int21.pobj \
+		$(RUNTIME)/ros/putchar.pobj $(RUNTIME)/ros/getchar.pobj \
+		$(BUILD)/bootmsg.pobj $(BUILD)/kernel_api.pobj \
 		$(BUILD)/shell.pobj $(BUILD)/util.pobj $(CMD_RT_OBJS)
-	$(RLINK) $(CRT0_SYS) $(BUILD)/io_tty.pobj $(BUILD)/kernel_api.pobj \
+	$(RLINK) $(CRT0_SYS) $(RUNTIME)/ros/int21.pobj \
+		$(RUNTIME)/ros/putchar.pobj $(RUNTIME)/ros/getchar.pobj \
+		$(BUILD)/bootmsg.pobj $(BUILD)/kernel_api.pobj \
 		$(CMD_RT_OBJS) $(BUILD)/util.pobj $(BUILD)/shell.pobj \
 		-f sys --bank-size $(BANK_SIZE) \
 		--code-bank-base 3 --gp-bank 6 --sb-bank 7 -o $@
@@ -127,19 +136,9 @@ $(STUB_COMMAND): runtime $(CRT0_SYS) $(BUILD)/stub_command.pobj
 		--code-bank-base 3 --gp-bank 6 --sb-bank 7 -o $@
 
 hello: runtime $(HELLO_RXE)
-$(RUNTIME)/ros/%.pobj: $(RUNTIME)/ros/%.asm
-	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
 
-$(BUILD)/ros_putchar.asm: $(RUNTIME)/ros/putchar.c | $(BUILD)
-	$(RCC) compile $< -o $@ --bank-size $(BANK_SIZE) -I $(RUNTIME)/include
-
-$(BUILD)/ros_putchar.pobj: $(BUILD)/ros_putchar.asm
-	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMM)
-
-$(HELLO_RXE): runtime $(RUNTIME)/ros/crt0_ros.pobj $(RUNTIME)/ros/int21.pobj \
-		$(BUILD)/ros_putchar.pobj $(RUNTIME)/puts.pobj $(BUILD)/hello.pobj
-	$(RLINK) $(RUNTIME)/ros/crt0_ros.pobj $(RUNTIME)/ros/int21.pobj \
-		$(BUILD)/ros_putchar.pobj $(RUNTIME)/puts.pobj $(BUILD)/hello.pobj \
+$(HELLO_RXE): runtime $(CRT0_ROS) $(LIBROS) $(BUILD)/hello.pobj
+	$(RLINK) $(CRT0_ROS) $(LIBROS) $(BUILD)/hello.pobj \
 		-f rxe --bank-size $(BANK_SIZE) -o $@
 
 disk: $(BIOS_BIN) $(IO_SYS) $(KERNEL_SYS) $(COMMAND_COM) $(HELLO_RXE)

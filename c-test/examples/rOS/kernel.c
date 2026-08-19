@@ -5,6 +5,7 @@
 #include "loader.h"
 #include "imem.h"
 #include "sys.h"
+#include "bootmsg.h"
 
 static Fat16Fs g_kfs;
 
@@ -83,20 +84,24 @@ int main(void) {
     Fat16DirEnt ent;
     int r;
 
+    boot_stage("KERNEL.SYS");
+
     irq_set_vector(ROS_IMEM_KERNEL, K_SLOT_INT21);
     irq_set_enable(IRQ_SW);
+    boot_item("INT21", "vector 8");
 
     r = fat16_mount(&g_kfs);
     if (r != FAT16_OK) {
-        puts("KERNEL: no FAT16");
+        boot_fail("no FAT16 volume");
         return 1;
     }
     r = fat16_lookup(&g_kfs, 0, "COMMAND.COM", &ent);
     if (r != FAT16_OK) {
-        puts("KERNEL: no COMMAND.COM");
+        boot_fail("COMMAND.COM not found");
         return 1;
     }
+    boot_load("COMMAND.COM");
     sys1_load_and_enter(&g_kfs, &ent);
-    puts("KERNEL: COMMAND returned");
+    boot_fail("COMMAND returned");
     return 1;
 }

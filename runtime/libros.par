@@ -1,0 +1,2150 @@
+{
+  "version": 1,
+  "objects": [
+    {
+      "name": "int21",
+      "object": {
+        "version": 1,
+        "instructions": [
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 15,
+            "word2": 1,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 16,
+            "word2": 21,
+            "word3": 0
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 15,
+            "word2": 0,
+            "word3": 16
+          },
+          {
+            "opcode": 66,
+            "word0": 66,
+            "word1": 0,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 20,
+            "word0": 20,
+            "word1": 0,
+            "word2": 4,
+            "word3": 3
+          }
+        ],
+        "data": [],
+        "labels": {
+          "ros_int21": {
+            "name": "ros_int21",
+            "bank": 0,
+            "offset": 0,
+            "absolute_address": 0
+          }
+        },
+        "data_labels": {},
+        "unresolved_references": {},
+        "entry_point": null
+      }
+    },
+    {
+      "name": "putchar",
+      "object": {
+        "version": 1,
+        "instructions": [
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 30,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 24,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 30,
+            "word2": 29,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 9
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 20
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 26,
+            "word2": 7,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 25,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 25
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 24,
+            "word2": 28,
+            "word3": 25
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 23,
+            "word2": 2,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 7,
+            "word2": 23,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 8,
+            "word2": 24,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 22,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 9,
+            "word2": 22,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 21,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 10,
+            "word2": 21,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 9
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 10
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 11
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 24,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 12
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 22,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 13
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 21,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 30,
+            "word3": 29
+          },
+          {
+            "opcode": 19,
+            "word0": 19,
+            "word1": 3,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 20,
+            "word2": 5,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 29,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65534
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65533
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 24,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65532
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65531
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 30,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 20,
+            "word0": 20,
+            "word1": 0,
+            "word2": 4,
+            "word3": 3
+          }
+        ],
+        "data": [],
+        "labels": {
+          "L_putchar_99999": {
+            "name": "L_putchar_99999",
+            "bank": 0,
+            "offset": 188,
+            "absolute_address": 188
+          },
+          "putchar": {
+            "name": "putchar",
+            "bank": 0,
+            "offset": 0,
+            "absolute_address": 0
+          }
+        },
+        "data_labels": {},
+        "unresolved_references": {
+          "44": {
+            "label": "ros_int21",
+            "ref_type": "absolute"
+          }
+        },
+        "entry_point": null
+      }
+    },
+    {
+      "name": "getchar",
+      "object": {
+        "version": 1,
+        "instructions": [
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 30,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 24,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 30,
+            "word2": 29,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 8
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 20
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 26,
+            "word2": 1,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 7,
+            "word2": 26,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 25,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 8,
+            "word2": 25,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 24,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 9,
+            "word2": 24,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 23,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 10,
+            "word2": 23,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 8
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 9
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 10
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 24,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 11
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 30,
+            "word3": 28
+          },
+          {
+            "opcode": 19,
+            "word0": 19,
+            "word1": 3,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 22,
+            "word2": 5,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 5,
+            "word2": 22,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 29,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65534
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65533
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 24,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65532
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65531
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 30,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 20,
+            "word0": 20,
+            "word1": 0,
+            "word2": 4,
+            "word3": 3
+          }
+        ],
+        "data": [],
+        "labels": {
+          "L_getchar_99999": {
+            "name": "L_getchar_99999",
+            "bank": 0,
+            "offset": 168,
+            "absolute_address": 168
+          },
+          "getchar": {
+            "name": "getchar",
+            "bank": 0,
+            "offset": 0,
+            "absolute_address": 0
+          }
+        },
+        "data_labels": {},
+        "unresolved_references": {
+          "38": {
+            "label": "ros_int21",
+            "ref_type": "absolute"
+          }
+        },
+        "entry_point": null
+      }
+    },
+    {
+      "name": "puts",
+      "object": {
+        "version": 1,
+        "instructions": [
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 30,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 24,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 30,
+            "word2": 29,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 10
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 20
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 26,
+            "word2": 7,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 25,
+            "word2": 8,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 24,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 23,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 22,
+            "word2": 28,
+            "word3": 23
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 21,
+            "word2": 23,
+            "word3": 1
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 20,
+            "word2": 28,
+            "word3": 21
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 18,
+            "word2": 65535,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 20,
+            "word2": 18,
+            "word3": 5
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 17,
+            "word2": 65534,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 20,
+            "word2": 17,
+            "word3": 5
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 19,
+            "word2": 20,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 4
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 19,
+            "word2": 31,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 2
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 19,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 16,
+            "word2": 19,
+            "word3": 22
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 15,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 5,
+            "word0": 5,
+            "word1": 24,
+            "word2": 16,
+            "word3": 15
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 21,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 9,
+            "word0": 9,
+            "word1": 16,
+            "word2": 21,
+            "word3": 24
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 16,
+            "word2": 0,
+            "word3": 65
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 18,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 17,
+            "word2": 28,
+            "word3": 18
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 24,
+            "word2": 18,
+            "word3": 1
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 21,
+            "word2": 28,
+            "word3": 24
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 16,
+            "word2": 65535,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 21,
+            "word2": 16,
+            "word3": 5
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 23,
+            "word2": 65534,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 21,
+            "word2": 23,
+            "word3": 5
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 15,
+            "word2": 21,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 4
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 15,
+            "word2": 31,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 2
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 15,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 24,
+            "word2": 15,
+            "word3": 17
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 7,
+            "word2": 24,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 10
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 11
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 12
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 13
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 22,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 14
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 20,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 15
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 20,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 16
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 19,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 17
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 17,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 18
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 21,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 19
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 21,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 20
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 15,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 21
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 24,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 30,
+            "word3": 30
+          },
+          {
+            "opcode": 19,
+            "word0": 19,
+            "word1": 3,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 16,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 23,
+            "word2": 28,
+            "word3": 16
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 26,
+            "word2": 16,
+            "word3": 1
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 25,
+            "word2": 28,
+            "word3": 26
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 22,
+            "word2": 23,
+            "word3": 1
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 22,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 65454
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 20,
+            "word2": 10,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 7,
+            "word2": 20,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 22
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 23
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 24
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 22,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 25
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 26
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 27
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 20,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 30,
+            "word3": 30
+          },
+          {
+            "opcode": 19,
+            "word0": 19,
+            "word1": 3,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 5,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 29,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65534
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65533
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 24,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 30,
+            "word3": 65532
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65531
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 30,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 4,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 29,
+            "word3": 65535
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 3,
+            "word2": 28,
+            "word3": 29
+          },
+          {
+            "opcode": 20,
+            "word0": 20,
+            "word1": 0,
+            "word2": 4,
+            "word3": 3
+          }
+        ],
+        "data": [],
+        "labels": {
+          "L_bc_22d8f343_use_stack": {
+            "name": "L_bc_22d8f343_use_stack",
+            "bank": 0,
+            "offset": 228,
+            "absolute_address": 228
+          },
+          "L_bc_22d8f343_use_global": {
+            "name": "L_bc_22d8f343_use_global",
+            "bank": 0,
+            "offset": 220,
+            "absolute_address": 220
+          },
+          "L_bc_22d8f343_done": {
+            "name": "L_bc_22d8f343_done",
+            "bank": 0,
+            "offset": 232,
+            "absolute_address": 232
+          },
+          "puts": {
+            "name": "puts",
+            "bank": 0,
+            "offset": 0,
+            "absolute_address": 0
+          },
+          "L_puts_3": {
+            "name": "L_puts_3",
+            "bank": 0,
+            "offset": 432,
+            "absolute_address": 432
+          },
+          "L_bc_0303da2f_done": {
+            "name": "L_bc_0303da2f_done",
+            "bank": 0,
+            "offset": 152,
+            "absolute_address": 152
+          },
+          "L_puts_2": {
+            "name": "L_puts_2",
+            "bank": 0,
+            "offset": 180,
+            "absolute_address": 180
+          },
+          "L_puts_1": {
+            "name": "L_puts_1",
+            "bank": 0,
+            "offset": 100,
+            "absolute_address": 100
+          },
+          "L_bc_0303da2f_use_global": {
+            "name": "L_bc_0303da2f_use_global",
+            "bank": 0,
+            "offset": 140,
+            "absolute_address": 140
+          },
+          "L_bc_0303da2f_use_stack": {
+            "name": "L_bc_0303da2f_use_stack",
+            "bank": 0,
+            "offset": 148,
+            "absolute_address": 148
+          },
+          "L_puts_99999": {
+            "name": "L_puts_99999",
+            "bank": 0,
+            "offset": 528,
+            "absolute_address": 528
+          }
+        },
+        "data_labels": {},
+        "unresolved_references": {
+          "129": {
+            "label": "putchar",
+            "ref_type": "absolute"
+          },
+          "97": {
+            "label": "putchar",
+            "ref_type": "absolute"
+          }
+        },
+        "entry_point": null
+      }
+    }
+  ]
+}

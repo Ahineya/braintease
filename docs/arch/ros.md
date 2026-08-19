@@ -158,7 +158,7 @@ runtime/
   ros/              crt0_sys.asm (GP/SB already set), crt0_ros.asm (INT21 exit), INT21 wrappers
 ```
 
-`libruntime.par` is the rct/freestanding archive. `libros.par` is apps + COMMAND. Include path stays `-I runtime/include`. `mmio.h` is BIOS/IO/KERNEL (and rct), not user apps.
+`libruntime.par` is the rct/freestanding archive (MMIO `putchar`). `libros.par` is INT21 `putchar`/`getchar` plus common C helpers for RXE apps. COMMAND.COM also uses the INT21 tty wrappers. Include path stays `-I runtime/include`. `mmio.h` is BIOS/IO/KERNEL (and rct), not user apps.
 
 ## Disk image
 

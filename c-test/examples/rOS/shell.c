@@ -5,6 +5,7 @@
 #include "fat16.h"
 #include "util.h"
 #include "kernel_api.h"
+#include "bootmsg.h"
 
 #define PAGE_HEIGHT 22
 #define MAX_ARGS 8
@@ -513,8 +514,10 @@ int main(void) {
     g_cwd = 0;
     g_nparts = 0;
 
-    printf("rOS FAT16 explorer  Volume %s\n", g_fs.label);
-    puts("Type HELP for commands.");
+    boot_banner("rOS");
+    boot_palette();
+    printf("  Volume %s\n", g_fs.label);
+    puts("  Type HELP for commands.");
 
     while (1) {
         print_cwd();
