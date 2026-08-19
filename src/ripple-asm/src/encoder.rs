@@ -26,8 +26,8 @@ impl InstructionEncoder {
         opcode: Opcode,
         operands: &[String],
     ) -> Result<Instruction, String> {
-        // Special case for HALT (NOP with no operands)
-        if opcode == Opcode::Nop && operands.is_empty() {
+        // HALT and NOP take no operands
+        if (opcode == Opcode::Halt || opcode == Opcode::Nop) && operands.is_empty() {
             return Ok(Instruction::new(opcode, 0, 0, 0));
         }
 
@@ -209,13 +209,21 @@ mod tests {
     #[test]
     fn test_encode_halt() {
         let encoder = InstructionEncoder::new(65535);
-        let inst = encoder.encode(Opcode::Nop, &[]).unwrap();
+        let inst = encoder.encode(Opcode::Halt, &[]).unwrap();
         
-        assert_eq!(inst.opcode, Opcode::Nop as u8);
+        assert_eq!(inst.opcode, Opcode::Halt as u8);
         assert_eq!(inst.word1, 0);
         assert_eq!(inst.word2, 0);
         assert_eq!(inst.word3, 0);
         assert!(inst.is_halt());
+    }
+
+    #[test]
+    fn test_encode_nop() {
+        let encoder = InstructionEncoder::new(65535);
+        let inst = encoder.encode(Opcode::Nop, &[]).unwrap();
+        assert_eq!(inst.opcode, Opcode::Nop as u8);
+        assert!(!inst.is_halt());
     }
 
     #[test]

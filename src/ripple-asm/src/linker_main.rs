@@ -15,13 +15,25 @@ struct Cli {
     #[arg(short, long)]
     output: Option<PathBuf>,
     
-    /// Output format (binary, text, macro, archive)
+    /// Output format (binary, text, macro, archive, sys, rxe)
     #[arg(short, long, default_value = "binary")]
     format: String,
     
     /// Bank size
     #[arg(short, long, default_value = "16")]
     bank_size: u16,
+
+    /// Add this to every JAL code bank (SYS images loaded away from PCB 0)
+    #[arg(long, default_value = "0")]
+    code_bank_base: u16,
+
+    /// GP bank written into SYS1 header
+    #[arg(long, default_value = "1")]
+    gp_bank: u16,
+
+    /// SB bank written into SYS1 header
+    #[arg(long, default_value = "2")]
+    sb_bank: u16,
     
     /// Generate standalone macro file with CPU template (for macro format only)
     #[arg(short = 's', long = "standalone")]
@@ -92,11 +104,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Link the object files
     let linker = Linker::new(cli.bank_size);
     match linker.link(object_files) {
-        Ok(program) => {
+        Ok(mut program) => {
+            if cli.format == "sys" {
+                program.apply_code_bank_base(cli.code_bank_base);
+            }
             let output_path = cli.output.unwrap_or_else(|| {
                 PathBuf::from(match cli.format.as_str() {
                     "text" => "a.txt",
                     "macro" => "a.bfm",
+                    "sys" => "a.sys",
+                    "rxe" => "a.rxe",
                     _ => "a.out",
                 })
             });
@@ -106,6 +123,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let binary = program.to_binary();
                     fs::write(&output_path, binary)?;
                     println!("✓ Linked to binary {}", output_path.display());
+                }
+                "sys" => {
+                    let binary = program.to_sys(cli.code_bank_base, cli.gp_bank, cli.sb_bank);
+                    fs::write(&output_path, binary)?;
+                    println!("✓ Linked to SYS1 {}", output_path.display());
+                }
+                "rxe" => {
+                    let binary = program.to_rxe();
+                    fs::write(&output_path, binary)?;
+                    println!("✓ Linked to RXE1 {}", output_path.display());
                 }
                 "text" => {
                     let text = program.to_text();

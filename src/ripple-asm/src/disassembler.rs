@@ -184,7 +184,7 @@ impl Disassembler {
         let opcode = self.opcode_from_byte(inst.opcode)
             .ok_or_else(|| format!("Unknown opcode: 0x{:02X}", inst.opcode))?;
 
-        // Check for HALT (NOP with all zeros)
+        // Check for HALT
         if inst.is_halt() {
             return Ok("HALT".to_string());
         }
@@ -198,7 +198,7 @@ impl Disassembler {
 
     fn disassemble_r_format(&self, opcode: Opcode, inst: &Instruction) -> Result<String, String> {
         match opcode {
-            Opcode::Nop | Opcode::Brk if inst.word1 == 0 && inst.word2 == 0 && inst.word3 == 0 => {
+            Opcode::Halt | Opcode::Nop | Opcode::Brk => {
                 Ok(opcode.to_str().to_string())
             }
             Opcode::Jalr => {

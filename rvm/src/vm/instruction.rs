@@ -30,6 +30,6 @@ impl Instr {
     
     #[allow(dead_code)]
     pub fn is_halt(&self) -> bool {
-        self.opcode == 0x00 && self.word1 == 0 && self.word2 == 0 && self.word3 == 0
+        self.opcode == 0x00
     }
 }

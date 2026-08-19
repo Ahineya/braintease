@@ -20,7 +20,7 @@ pub use types::{
 pub use parser::Parser;
 pub use encoder::InstructionEncoder;
 pub use assembler::RippleAssembler;
-pub use linker::{Linker, LinkedProgram};
+pub use linker::{Linker, LinkedProgram, Reloc, RelocKind};
 pub use macro_formatter::MacroFormatter;
 pub use virtual_instructions::{VirtualInstructionRegistry, create_custom_instruction};
 pub use disassembler::Disassembler;

@@ -10,6 +10,7 @@ This folder is the **current** architectural specification for the Ripple VM, as
 | [abi.md](abi.md) | C data model, calling convention, stack frames |
 | [memory.md](memory.md) | Bank map, fat pointers, GEP, heap |
 | [mmio.md](mmio.md) | MMIO header summary; full device spec in `rvm/mmio.md` |
+| [ros.md](ros.md) | rOS boot, SYS1/RXE1, banks, INT21, runtime split |
 
 Related (not duplicated here):
 

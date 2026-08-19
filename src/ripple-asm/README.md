@@ -152,9 +152,9 @@ C `crt0` uses SB=2, SP/FP=1, GP=1. See [`docs/arch/abi.md`](../../docs/arch/abi.
 - `BGE rs1, rs2, label` - Branch if greater or equal
 
 #### Special Instructions
-- `NOP` - No operation
+- `NOP` - No operation (opcode 0x42)
 - `BRK` - Breakpoint (triggers debugger)
-- `HALT` - Stop execution (NOP with all zeros)
+- `HALT` - Stop execution (opcode 0x00)
 
 ### Virtual Instructions
 

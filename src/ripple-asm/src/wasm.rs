@@ -51,10 +51,7 @@ impl WasmAssembler {
             mnemonics.push(opcode.to_string());
         }
         
-        // Add HALT as special case (it's NOP with all zeros)
-        mnemonics.push("HALT".to_string());
-        
-        // Add virtual instructions
+        // HALT is a first-class opcode listed by Opcode::all()
         let registry = VirtualInstructionRegistry::new();
         for name in registry.get_all_names() {
             mnemonics.push(name);

@@ -5,7 +5,7 @@ use std::hash::Hash;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Opcode {
-    Nop = 0x00,
+    Halt = 0x00,
     Add = 0x01,
     Sub = 0x02,
     And = 0x03,
@@ -39,11 +39,13 @@ pub enum Opcode {
     Modi = 0x1F,
     Loadc = 0x20,
     Storc = 0x21,
+    Nop = 0x42,
 }
 
 impl Opcode {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
+            "HALT" => Some(Opcode::Halt),
             "NOP" => Some(Opcode::Nop),
             "ADD" => Some(Opcode::Add),
             "SUB" => Some(Opcode::Sub),
@@ -84,7 +86,7 @@ impl Opcode {
 
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
-            0x00 => Some(Opcode::Nop),
+            0x00 => Some(Opcode::Halt),
             0x01 => Some(Opcode::Add),
             0x02 => Some(Opcode::Sub),
             0x03 => Some(Opcode::And),
@@ -118,12 +120,14 @@ impl Opcode {
             0x1F => Some(Opcode::Modi),
             0x20 => Some(Opcode::Loadc),
             0x21 => Some(Opcode::Storc),
+            0x42 => Some(Opcode::Nop),
             _ => None,
         }
     }
 
     pub fn to_str(&self) -> &'static str {
         match self {
+            Opcode::Halt => "HALT",
             Opcode::Nop => "NOP",
             Opcode::Add => "ADD",
             Opcode::Sub => "SUB",
@@ -163,7 +167,7 @@ impl Opcode {
 
     pub fn all() -> Vec<&'static str> {
         vec![
-            "NOP", "ADD", "SUB", "AND", "OR", "XOR", "SLL", "SRL", "SLT", "SLTU",
+            "HALT", "NOP", "ADD", "SUB", "AND", "OR", "XOR", "SLL", "SRL", "SLT", "SLTU",
             "ADDI", "ANDI", "ORI", "XORI", "LI", "SLLI", "SRLI", "LOAD", "STORE",
             "JAL", "JALR", "BEQ", "BNE", "BLT", "BGE", "BRK", "MUL", "DIV", "MOD",
             "MULI", "DIVI", "MODI", "LOADC", "STORC"
@@ -172,7 +176,7 @@ impl Opcode {
 
     pub fn format(&self) -> InstructionFormat {
         match self {
-            Opcode::Nop | Opcode::Add | Opcode::Sub | Opcode::And | Opcode::Or | 
+            Opcode::Halt | Opcode::Nop | Opcode::Add | Opcode::Sub | Opcode::And | Opcode::Or | 
             Opcode::Xor | Opcode::Sll | Opcode::Srl | Opcode::Slt | Opcode::Sltu | 
             Opcode::Jalr | Opcode::Brk | Opcode::Mul | Opcode::Div | Opcode::Mod |
             Opcode::Loadc | Opcode::Storc => InstructionFormat::R,
@@ -421,10 +425,7 @@ impl Instruction {
     }
 
     pub fn is_halt(&self) -> bool {
-        self.opcode == Opcode::Nop as u8 && 
-        self.word1 == 0 && 
-        self.word2 == 0 && 
-        self.word3 == 0
+        self.opcode == Opcode::Halt as u8
     }
 }
 

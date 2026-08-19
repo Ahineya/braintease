@@ -35,7 +35,7 @@ impl Linker {
 
         // Pack objects (or functions, if an object does not fit in one bank)
         // so instruction index = PCB * bank_size + PC. Pad unused bank tails
-        // with NOP (not HALT: opcode 0 with all-zero operands is HALT).
+        // with NOP 0x42 (HALT is opcode 0x00).
         let mut packed_instructions = Vec::new();
         let mut file_maps: Vec<Vec<usize>> = Vec::with_capacity(object_files.len());
 
@@ -78,6 +78,7 @@ impl Linker {
         let mut all_data = Vec::new();
         let mut global_labels = HashMap::new();
         let mut global_data_labels = HashMap::new();
+        let mut relocs: Vec<Reloc> = Vec::new();
 
         for (file_idx, obj) in object_files.iter().enumerate() {
             let file_data_start = all_data.len() as u32;
@@ -131,6 +132,14 @@ impl Linker {
                     global_idx,
                 ) {
                     errors.push(format!("File {}, instruction {}: {}", file_idx, local_idx, e));
+                } else if unresolved.ref_type == "absolute"
+                    && resolved_instructions[global_idx].opcode == Opcode::Jal as u8
+                {
+                    relocs.push(Reloc { kind: RelocKind::JalAbs, index: global_idx as u32 });
+                } else if unresolved.ref_type == "data"
+                    && resolved_instructions[global_idx].opcode == Opcode::Li as u8
+                {
+                    relocs.push(Reloc { kind: RelocKind::LiData, index: global_idx as u32 });
                 }
             }
 
@@ -149,6 +158,7 @@ impl Linker {
                 let new_target = file_maps[file_idx][local_target];
                 let global_idx = file_maps[file_idx][local_idx];
                 Self::encode_jal_target(&mut resolved_instructions[global_idx], new_target, bank_size);
+                relocs.push(Reloc { kind: RelocKind::JalAbs, index: global_idx as u32 });
             }
         }
 
@@ -170,6 +180,7 @@ impl Linker {
             data_labels: global_data_labels,
             entry_point,
             bank_size: self.bank_size,
+            relocs,
         })
     }
 
@@ -181,7 +192,7 @@ impl Linker {
     }
 
     fn nop_pad_instruction() -> Instruction {
-        Instruction::new(Opcode::Nop, 1, 0, 0)
+        Instruction::new(Opcode::Nop, 0, 0, 0)
     }
 
     fn pad_to_bank_end(instructions: &mut Vec<Instruction>, bank_size: usize) {
@@ -335,6 +346,20 @@ struct CodeSegment {
     name: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+pub enum RelocKind {
+    JalAbs = 0,
+    LiData = 1,
+    DataWord = 2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reloc {
+    pub kind: RelocKind,
+    pub index: u32,
+}
+
 #[derive(Debug)]
 pub struct LinkedProgram {
     pub instructions: Vec<Instruction>,
@@ -343,6 +368,7 @@ pub struct LinkedProgram {
     pub data_labels: HashMap<String, u32>,
     pub entry_point: u32,
     pub bank_size: u16,
+    pub relocs: Vec<Reloc>,
 }
 
 impl LinkedProgram {
@@ -353,6 +379,32 @@ impl LinkedProgram {
             0
         } else {
             (self.instructions.len() + bs - 1) / bs
+        }
+    }
+
+    pub fn entry_insn(&self) -> u32 {
+        self.entry_point / 4
+    }
+
+    /// Add `base` to every JAL code-bank immediate so the image can live at PCB `base`.
+    pub fn apply_code_bank_base(&mut self, base: u16) {
+        if base == 0 {
+            return;
+        }
+        for inst in &mut self.instructions {
+            if inst.opcode == Opcode::Jal as u8 {
+                inst.word2 = inst.word2.wrapping_add(base);
+            }
+        }
+    }
+
+    fn write_instructions(binary: &mut Vec<u8>, instructions: &[Instruction]) {
+        for inst in instructions {
+            binary.push(inst.opcode);
+            binary.push(inst.word0);
+            binary.extend_from_slice(&inst.word1.to_le_bytes());
+            binary.extend_from_slice(&inst.word2.to_le_bytes());
+            binary.extend_from_slice(&inst.word3.to_le_bytes());
         }
     }
 
@@ -372,13 +424,7 @@ impl LinkedProgram {
         binary.extend_from_slice(&(self.instructions.len() as u32).to_le_bytes());
         
         // Write instructions
-        for inst in &self.instructions {
-            binary.push(inst.opcode);
-            binary.push(inst.word0);
-            binary.extend_from_slice(&inst.word1.to_le_bytes());
-            binary.extend_from_slice(&inst.word2.to_le_bytes());
-            binary.extend_from_slice(&inst.word3.to_le_bytes());
-        }
+        Self::write_instructions(&mut binary, &self.instructions);
         
         // Write data section size
         binary.extend_from_slice(&(self.data.len() as u32).to_le_bytes());
@@ -412,6 +458,42 @@ impl LinkedProgram {
             binary.extend_from_slice(&instruction_idx.to_le_bytes());
         }
         
+        binary
+    }
+
+    /// SYS1: on-disk boot module, already linked for `code_bank`.
+    pub fn to_sys(&self, code_bank: u16, gp_bank: u16, sb_bank: u16) -> Vec<u8> {
+        let mut binary = Vec::new();
+        binary.extend_from_slice(b"SYS1");
+        binary.extend_from_slice(&self.bank_size.to_le_bytes());
+        binary.extend_from_slice(&code_bank.to_le_bytes());
+        binary.extend_from_slice(&gp_bank.to_le_bytes());
+        binary.extend_from_slice(&sb_bank.to_le_bytes());
+        binary.extend_from_slice(&self.entry_insn().to_le_bytes());
+        binary.extend_from_slice(&(self.instructions.len() as u32).to_le_bytes());
+        binary.extend_from_slice(&(self.data.len() as u32).to_le_bytes());
+        Self::write_instructions(&mut binary, &self.instructions);
+        binary.extend_from_slice(&self.data);
+        binary
+    }
+
+    /// RXE1: relocatable app. JAL banks are relative to image base 0.
+    pub fn to_rxe(&self) -> Vec<u8> {
+        let mut binary = Vec::new();
+        binary.extend_from_slice(b"RXE1");
+        binary.extend_from_slice(&self.bank_size.to_le_bytes());
+        binary.extend_from_slice(&0u16.to_le_bytes());
+        binary.extend_from_slice(&self.entry_insn().to_le_bytes());
+        binary.extend_from_slice(&(self.instructions.len() as u32).to_le_bytes());
+        binary.extend_from_slice(&(self.data.len() as u32).to_le_bytes());
+        binary.extend_from_slice(&(self.relocs.len() as u32).to_le_bytes());
+        Self::write_instructions(&mut binary, &self.instructions);
+        binary.extend_from_slice(&self.data);
+        for reloc in &self.relocs {
+            binary.extend_from_slice(&(reloc.kind as u16).to_le_bytes());
+            binary.extend_from_slice(&0u16.to_le_bytes());
+            binary.extend_from_slice(&reloc.index.to_le_bytes());
+        }
         binary
     }
 
@@ -623,5 +705,25 @@ func:
         // func: LI R4, base2 (after start + HALT)
         assert_eq!(linked.instructions[2].opcode, Opcode::Li as u8);
         assert_eq!(linked.instructions[2].word2, 10);
+    }
+
+    #[test]
+    fn test_sys_and_rxe_headers() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let obj = assembler.assemble("start:\n    CALL dest\n    HALT\ndest:\n    RET\n").unwrap();
+        let linker = Linker::new(16);
+        let mut linked = linker.link(vec![obj]).unwrap();
+        assert!(linked.relocs.iter().any(|r| r.kind == RelocKind::JalAbs));
+
+        let rxe = linked.to_rxe();
+        assert_eq!(&rxe[0..4], b"RXE1");
+
+        linked.apply_code_bank_base(1);
+        let sys = linked.to_sys(1, 3, 2);
+        assert_eq!(&sys[0..4], b"SYS1");
+        assert_eq!(u16::from_le_bytes([sys[6], sys[7]]), 1);
+        // First instruction is JAL; bank should be 1 after apply_code_bank_base
+        assert_eq!(linked.instructions[0].opcode, Opcode::Jal as u8);
+        assert_eq!(linked.instructions[0].word2, 1);
     }
 }

@@ -79,7 +79,7 @@ enum Commands {
 fn get_instruction_format(opcode: Opcode) -> &'static str {
     match opcode.format() {
         InstructionFormat::R => match opcode {
-            Opcode::Nop => "",
+            Opcode::Halt | Opcode::Nop => "",
             Opcode::Brk => "",
             Opcode::Loadc | Opcode::Storc => "R0, bank, addr",
             _ => "rd, rs1, rs2",
@@ -144,6 +144,7 @@ fn get_instruction_description(opcode: Opcode) -> &'static str {
         Opcode::Bge => "if (rs1 >= rs2) PC += offset",
         
         // Special
+        Opcode::Halt => "Stop execution",
         Opcode::Nop => "No operation",
         Opcode::Brk => "Break/Debug",
     }
@@ -166,7 +167,7 @@ fn get_instruction_category(opcode: Opcode) -> &'static str {
         Opcode::Jal | Opcode::Jalr | Opcode::Beq | Opcode::Bne | 
         Opcode::Blt | Opcode::Bge => "CONTROL FLOW",
         
-        Opcode::Nop | Opcode::Brk => "SPECIAL",
+        Opcode::Halt | Opcode::Nop | Opcode::Brk => "SPECIAL",
     }
 }
 
@@ -207,12 +208,6 @@ fn print_instruction_reference() {
             println!();
         }
     }
-    
-    // Add HALT as special case
-    println!("SPECIAL INSTRUCTION (ALIAS)");
-    println!("---------------------------");
-    println!("HALT                 # Stop execution (NOP with all zeros)");
-    println!();
     
     // Virtual instructions
     println!("VIRTUAL INSTRUCTIONS");

@@ -510,7 +510,7 @@ mod tests {
     }
 
     fn nop() -> Instr {
-        instr(0x00, 1, 0, 0)
+        instr(0x42, 0, 0, 0)
     }
 
     fn halt() -> Instr {
@@ -547,6 +547,28 @@ mod tests {
 
         vm.step().unwrap();
         assert!(matches!(vm.state, VMState::Halted));
+    }
+
+    #[test]
+    fn jal_r0_does_not_clobber_ra_or_rab() {
+        let mut vm = VM::with_memory_size(8, 256);
+        vm.registers[Register::Ra as usize] = 50;
+        vm.registers[Register::Rab as usize] = 7;
+        vm.instructions = vec![
+            instr(0x13, 0, 1, 0), // JAL R0, bank 1, addr 0
+            halt(),
+        ];
+        while vm.instructions.len() < 8 {
+            vm.instructions.push(nop());
+        }
+        vm.instructions.push(halt());
+        vm.state = VMState::Running;
+
+        vm.step().unwrap();
+        assert_eq!(vm.registers[Register::Pcb as usize], 1);
+        assert_eq!(vm.registers[Register::Pc as usize], 0);
+        assert_eq!(vm.registers[Register::Ra as usize], 50);
+        assert_eq!(vm.registers[Register::Rab as usize], 7);
     }
 
     #[test]

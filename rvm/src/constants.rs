@@ -4,6 +4,8 @@
 
 // Default VM configuration
 pub const DEFAULT_BANK_SIZE: u16 = 65535;
+pub const OP_HALT: u8 = 0x00;
+pub const OP_NOP: u8 = 0x42;
 pub const DEFAULT_MEMORY_SIZE: usize = 65536 * 65536; // 64K words in 64K banks
 
 // Memory-mapped I/O header addresses (bank 0, words 0..31)

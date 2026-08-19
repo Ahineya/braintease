@@ -10,12 +10,11 @@ impl VM {
         
         match instr.opcode {
             0x00 => {
-                // NOP or HALT (HALT is NOP with all operands 0)
-                if instr.word0 == 0 && instr.word1 == 0 && instr.word2 == 0 && instr.word3 == 0 {
-                    // HALT
-                    self.state = VMState::Halted;
-                }
-                // else NOP - do nothing
+                // HALT (operands ignored)
+                self.state = VMState::Halted;
+            },
+            0x42 => {
+                // NOP
             },
             
             // ALU R-type operations
@@ -242,8 +241,8 @@ impl VM {
             
             // Control flow
             0x13 => { // JAL rd, bank, addr
-                // Save return (bank, offset) first, then jump. Matches BF ins_jal:
-                // RA ← PC+1, RAB ← PCB, then PCB ← bank, PC ← addr.
+                // Link pair is (rd, RAB). rd=R0 means a non-linking jump, same as JALR R0:
+                // do not clobber RA or RAB (rOS vector tables rely on this).
                 let rd = instr.word1 as usize;
                 let target_bank = instr.word2;
                 let target_addr = instr.word3;
@@ -251,8 +250,8 @@ impl VM {
                 let ret_pcb = self.registers[Register::Pcb as usize];
                 if rd < 32 && rd != Register::R0 as usize {
                     self.registers[rd] = ret_pc;
+                    self.registers[Register::Rab as usize] = ret_pcb;
                 }
-                self.registers[Register::Rab as usize] = ret_pcb;
                 self.registers[Register::Pcb as usize] = target_bank;
                 self.registers[Register::Pc as usize] = target_addr;
                 self.skip_pc_increment = true;
@@ -432,8 +431,22 @@ impl VM {
                     let bank_val = self.registers[bank_reg];
                     let addr_val = self.registers[addr_reg];
                     let idx = (bank_val as usize * self.bank_size as usize) + addr_val as usize;
-                    if idx >= self.instructions.len() {
+                    const MAX_IMEM: usize = 64 * 65536;
+                    if idx >= MAX_IMEM {
                         return Err(format!("STORC: instruction address out of bounds: bank={bank_val}, addr={addr_val}, idx={idx}"));
+                    }
+                    if idx >= self.instructions.len() {
+                        let nop = Instr {
+                            opcode: OP_NOP,
+                            word0: OP_NOP,
+                            word1: 0,
+                            word2: 0,
+                            word3: 0,
+                        };
+                        let bs = self.bank_size.max(1) as usize;
+                        let bank_end = (bank_val as usize + 1).saturating_mul(bs);
+                        let new_len = (idx + 1).max(bank_end).min(MAX_IMEM);
+                        self.instructions.resize(new_len, nop);
                     }
                     let x0 = self.registers[Register::X0 as usize];
                     let x1 = self.registers[Register::X1 as usize];
@@ -529,13 +542,8 @@ impl VM {
     
     pub(super) fn print_instruction(&self, instr: &Instr) {
         match instr.opcode {
-            0x00 => {
-                if instr.word0 == 0 && instr.word1 == 0 && instr.word2 == 0 && instr.word3 == 0 {
-                    eprintln!("HALT");
-                } else {
-                    eprintln!("NOP");
-                }
-            },
+            0x00 => eprintln!("HALT"),
+            0x42 => eprintln!("NOP"),
             0x01 => eprintln!("ADD R{}, R{}, R{}", instr.word1, instr.word2, instr.word3),
             0x02 => eprintln!("SUB R{}, R{}, R{}", instr.word1, instr.word2, instr.word3),
             0x03 => eprintln!("AND R{}, R{}, R{}", instr.word1, instr.word2, instr.word3),

@@ -95,7 +95,7 @@
 #define T_VAL 1
 
 #define OP_HALT 0
-#define OP_NOP  0 // TODO: Make some real code
+#define OP_NOP  0x42
 
 #define OP_ADD  0x1
 #define OP_SUB  0x2
@@ -136,8 +136,6 @@
 #define OP_MULI  0x1D
 #define OP_DIVI  0x1E
 #define OP_MODI  0x1F
-#define OP_LOADC 0x20
-#define OP_STORC 0x21
 
 // MARK: ----- Register Constants
 #define REG_ZONE_W  36
@@ -810,16 +808,10 @@
 
 #define _jump_to_bank_addr {
   // START JTADDR, addr is word[-2] for BANK, word[-3] for ADDR
-
-  // Algo:
-  // REG_ZONE_W
-  // + PCB * BANK_SIZE * CMD_SIZE
-  // + PC  * CMD_SIZE
-
   // 1. Copy fastlane to PTR. Now fastlane can be freely changed
   @_copy_fastlane_to_ptr
 
-  // Clean the fastlane
+  // Now we want to fill fastlane with REG_ZONE + new PCB * BANK_SIZE * CMD_SIZE + PC
   @prevword
   @fl([-@prevword])
 
@@ -828,53 +820,16 @@
   @nextword
   @goto_ptr_end
 
-  // Here we start to fill fastlane with 1 up to:
-  // REG_ZONE_W
-  // + PCB * BANK_SIZE * CMD_SIZE
   @prevword
-
   @lane(@L_SA, @set(@BANK_SIZE))
   @lane(@L_SB, @set(@CMD_SIZE))
 
   @prevword
-
-  @lane(@L_SB,
-    // Here we are at a cell that holds new bank
-    // @nextword has @CMD_SIZE, @nextword < has @BANK_SIZE
-    @times(
-      @nextword // Here we are at CMD_SIZE
-      @times(
-        < // Here we are at BANK_SIZE
-
-        @times(
-          @lane_end(@L_SA)
-
-          @goto_ptr_start // Get to the very beginning of everything, add 1 to fastlane
-
-          @nextword @fl(@goto_zero_right_lane + @goto_zero_left_lane)
-          @nextword
-
-          @goto_ptr_end
-          @prevwords(1)
-
-          @lane_start(@L_SA)
-
-        )
-
-        @set(@BANK_SIZE) // Restore the bank size here for the outer loop
-
-        >
-      )
-
-      @set(@CMD_SIZE) // Restore the cmd_size here for the outer loop
-
-      @prevword
-    )
-
-    @nextword @clear < @clear > @prevword // Now cleanup unnecessary restored values
+  @lane(@L_SB, // Now we are at a new bank. @nextword has @CMD_SIZE, @nextword < has @BANK_SIZE
+    @nop // MARK: HERE WE CAN SWITCH TO ANOTHER BANK, DO WHEN NEEDED!
+    @nextword @clear < @clear > @prevword // Now let's just clear the fuck out
   )
 
-  // And here we do the second part:  + PC  * CMD_SIZE
   @prevword
 
   @lane(@L_SB,
@@ -894,7 +849,7 @@
 
       @times( // PC times
         @lane_end(@L_SB)
-        @goto_ptr_start // Get to the very beginning of everything, add 1 to fastlane
+        @goto_ptr_start
 
         @nextword @fl(@goto_zero_right_lane + @goto_zero_left_lane)
 
@@ -922,7 +877,6 @@
   @fl({repeat(4, @set(1) @nextword)})
   @prevword
   @fl(@clear) // We need 0 in the last fastlane pos
-
 }
 
 #define ins_jal {
@@ -1519,11 +1473,13 @@
 #define blt  @ophandler(@two_registers_branch_op(@ins_blt(#FALSE)))
 #define bge  @ophandler(@two_registers_branch_op(@ins_blt(#TRUE)))
 
+#define opnop @ophandler(@nop)
+
 #define opcase(op, han) @case(op,  han, >, <)
 
 #define program_start(w1, w2, w3, w4) {
   {repeat(@REG_ZONE_CW,
-    @instr(@i1(#OP_NOP) @i1(0) @i1(0) @i1(0))
+    @instr(@i1(#OP_HALT) @i1(0) @i1(0) @i1(0))
   )}
 
   @instr(@i0(w1) @i1(w2) @i1(w3) @i1(w4))
@@ -1534,7 +1490,7 @@
 }
 
 #define program_end {
-  @cmd(  #OP_HALT, #OP_NOP, #OP_NOP, #OP_NOP)
+  @cmd(  #OP_HALT, #OP_HALT, #OP_HALT, #OP_HALT)
 }
 
 // MARK: ------------ MAIN ---------------
@@ -1581,7 +1537,9 @@
     @inc(1) // To properly work with switch statement
 
     // MARK: ------- Opcode Switch
-    @switch(32, @default, >, <)
+    @switch(33, @default, >, <)
+      @opcase(#OP_NOP,    @opnop )
+
       @opcase(#OP_MODI,   @modi )
       @opcase(#OP_DIVI,   @divi )
       @opcase(#OP_MULI,   @muli )

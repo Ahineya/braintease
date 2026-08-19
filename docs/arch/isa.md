@@ -23,7 +23,8 @@ Source of truth: `src/ripple-asm/src/types.rs` (`enum Opcode`) and `rvm/src/vm/e
 
 | Hex | Mnemonic | Effect |
 |-----|----------|--------|
-| 00 | NOP | No operation. All-zero encoding is **HALT**. |
+| 00 | HALT | Stop. Operands ignored. |
+| 42 | NOP | No operation. |
 | 01 | ADD rd, rs, rt | rd ← rs + rt |
 | 02 | SUB rd, rs, rt | rd ← rs − rt |
 | 03 | AND rd, rs, rt | rd ← rs & rt |
@@ -67,7 +68,7 @@ Source of truth: `src/ripple-asm/src/types.rs` (`enum Opcode`) and `rvm/src/vm/e
 
 | Hex | Mnemonic | Effect |
 |-----|----------|--------|
-| 13 | JAL rd, bank, addr | RA-like: if rd ≠ R0, rd ← PC+1; always RAB ← PCB; then PCB ← bank, PC ← addr; skip increment. Bank and addr are **immediates** (or a label in word3). |
+| 13 | JAL rd, bank, addr | If rd ≠ R0: rd ← PC+1 and RAB ← PCB. Then PCB ← bank, PC ← addr; skip increment. Bank and addr are **immediates** (or a label in word3). `JAL R0` is a non-linking jump and must not clobber RA/RAB (same rule as `JALR R0`). |
 | 14 | JALR rd, bank_reg, addr_reg | Snapshot targets first. If rd ≠ R0: rd ← PC+1, RAB ← PCB. Then PCB ← R\[bank_reg\], PC ← R\[addr_reg\]. |
 | 15 | BEQ rs, rt, imm | if rs==rt, PC ← PC+imm (signed), skip increment |
 | 16 | BNE | |
@@ -81,7 +82,8 @@ Cross-bank C calls save RAB in the prologue because a nested `CALL` overwrites R
 
 ### Special
 
-- **HALT**: NOP with all operands 0.
+- **HALT**: opcode `0x00` (operands ignored).
+- **NOP**: opcode `0x42`.
 - **IRQ dispatch** is not an instruction. See [mmio.md](mmio.md).
 
 ## Virtual instructions (assembler)

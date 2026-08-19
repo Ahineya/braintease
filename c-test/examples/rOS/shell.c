@@ -2,9 +2,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <mmio.h>
 #include "fat16.h"
 #include "util.h"
+#include "kernel_api.h"
 
 #define PAGE_HEIGHT 22
 #define MAX_ARGS 8
@@ -395,6 +395,7 @@ static void run_line(char *line) {
     int i;
     int page;
     int more;
+    int r;
     char *cmd;
     char *arg = 0;
 
@@ -406,7 +407,7 @@ static void run_line(char *line) {
     cmd = args[0];
     if (str_eq_i(cmd, "exit") || str_eq_i(cmd, "quit") || str_eq_i(cmd, "q")) {
         puts("Goodbye.");
-        display_set_mode(0);
+        k_exit(0);
         exit(0);
     }
     if (str_eq_i(cmd, "help") || str_eq_i(cmd, "?")) {
@@ -466,20 +467,19 @@ static void run_line(char *line) {
         return;
     }
 
-    printf("Bad command or file name\n");
+    r = k_exec(cmd);
+    if (r == FAT16_ERR_NOTFOUND) {
+        printf("Bad command or file name\n");
+    }
 }
 
 int main(void) {
     char line[80];
     int r;
 
-    display_set_mode(1);
-
     r = fat16_mount(&g_fs);
     if (r != FAT16_OK) {
         puts("Cannot mount FAT16 disk.");
-        puts("Run with: rvm rOS.bin --disk disks/ripple_fat16.img");
-        display_set_mode(0);
         return 1;
     }
 

@@ -25,12 +25,10 @@ impl Debugger {
         // Format based on instruction type
         let formatted = match instr.opcode {
             0x00 => {
-                // NOP or HALT
-                if instr.word0 == 0 && instr.word1 == 0 && instr.word2 == 0 && instr.word3 == 0 {
-                    "HALT".to_string()
-                } else {
-                    "NOP".to_string()
-                }
+                "HALT".to_string()
+            },
+            0x42 => {
+                "NOP".to_string()
             },
             0x01..=0x09 | 0x1A..=0x1C | 0x20 | 0x21 => {
                 // R-format: ADD, SUB, AND, OR, XOR, SLL, SRL, SLT, SLTU, MUL, DIV, MOD, LOADC, STORC
@@ -154,7 +152,7 @@ impl Debugger {
             let instr = vm.get_current_instruction().unwrap();
             let colored = if instr.opcode == 0x19 { // BRK
                 formatted.bright_red().bold()
-            } else if instr.opcode == 0x00 && instr.word1 == 0 && instr.word2 == 0 && instr.word3 == 0 { // HALT
+            } else if instr.opcode == 0x00 { // HALT
                 formatted.bright_red()
             } else if instr.opcode >= 0x13 && instr.opcode <= 0x18 { // Jumps/branches
                 formatted.bright_yellow()
@@ -206,7 +204,7 @@ impl Debugger {
     
     fn opcode_name(opcode: u8) -> &'static str {
         match opcode {
-            0x00 => "NOP",
+            0x00 => "HALT",
             0x01 => "ADD",
             0x02 => "SUB",
             0x03 => "AND",
@@ -240,6 +238,7 @@ impl Debugger {
             0x1F => "MODI",
             0x20 => "LOADC",
             0x21 => "STORC",
+            0x42 => "NOP",
             _ => "UNKNOWN",
         }
     }

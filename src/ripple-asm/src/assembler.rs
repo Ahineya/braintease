@@ -298,7 +298,7 @@ impl RippleAssembler {
             if let Some(mnemonic) = &line.mnemonic {
                 // Special handling for HALT
                 if mnemonic == "HALT" {
-                    state.instructions.push(Instruction::new(Opcode::Nop, 0, 0, 0));
+                    state.instructions.push(Instruction::new(Opcode::Halt, 0, 0, 0));
                 } else if let Some(opcode) = Opcode::from_str(mnemonic) {
                     // Check if operands contain label references and replace them with placeholders
                     let mut modified_operands = line.operands.clone();

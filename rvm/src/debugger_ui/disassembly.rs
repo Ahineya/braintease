@@ -158,12 +158,11 @@ impl TuiDebugger {
         let opcode = Opcode::from_u8(instr.opcode);
         
         match opcode {
+            Some(Opcode::Halt) => {
+                spans.push(Span::styled("HALT", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
+            },
             Some(Opcode::Nop) => {
-                if instr.word0 == 0 && instr.word1 == 0 && instr.word2 == 0 && instr.word3 == 0 {
-                    spans.push(Span::styled("HALT", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
-                } else {
-                    spans.push(Span::styled("NOP", opcode_style));
-                }
+                spans.push(Span::styled("NOP", opcode_style));
             },
             Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or) | 
             Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt) | 
@@ -272,13 +271,8 @@ impl TuiDebugger {
         let opcode = Opcode::from_u8(instr.opcode);
 
         match opcode {
-            Some(Opcode::Nop) => {
-                if instr.word0 == 0 && instr.word1 == 0 && instr.word2 == 0 && instr.word3 == 0 {
-                    "HALT".to_string()
-                } else {
-                    "NOP".to_string()
-                }
-            },
+            Some(Opcode::Halt) => "HALT".to_string(),
+            Some(Opcode::Nop) => "NOP".to_string(),
             Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or) | 
             Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt) | 
             Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod) |
@@ -328,8 +322,7 @@ impl TuiDebugger {
         let opcode = Opcode::from_u8(instr.opcode);
         
         match opcode {
-            Some(Opcode::Nop) if instr.word1 == 0 && instr.word2 == 0 && instr.word3 == 0 => {
-                // HALT instruction (all zeros)
+            Some(Opcode::Halt) => {
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
             },
             Some(Opcode::Brk) => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),

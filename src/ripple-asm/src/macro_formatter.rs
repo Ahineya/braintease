@@ -13,6 +13,7 @@ impl MacroFormatter {
     pub fn new() -> Self {
         let mut opcode_to_macro = HashMap::new();
         
+        opcode_to_macro.insert(Opcode::Halt as u8, "@OP_HALT");
         opcode_to_macro.insert(Opcode::Nop as u8, "@OP_NOP");
         opcode_to_macro.insert(Opcode::Add as u8, "@OP_ADD");
         opcode_to_macro.insert(Opcode::Sub as u8, "@OP_SUB");
@@ -72,7 +73,7 @@ impl MacroFormatter {
                        instruction.opcode, instruction.opcode)
             });
         
-        // Special case for HALT (encoded as NOP 0,0,0)
+        // HALT is its own opcode; keep the lookup for unknown 0x00 encodings
         if instruction.is_halt() {
             opcode_macro = "@OP_HALT";
         }
@@ -339,7 +340,7 @@ mod tests {
     #[test]
     fn test_format_halt() {
         let formatter = MacroFormatter::new();
-        let inst = Instruction::new(Opcode::Nop, 0, 0, 0);
+        let inst = Instruction::new(Opcode::Halt, 0, 0, 0);
         let formatted = formatter.format_instruction(&inst, true);
         
         assert!(formatted.contains("@OP_HALT"));
@@ -379,7 +380,7 @@ mod tests {
         let formatter = MacroFormatter::new();
         let instructions = vec![
             Instruction::new(Opcode::Li, Register::Ra as u16, 42, 0),
-            Instruction::new(Opcode::Nop, 0, 0, 0),
+            Instruction::new(Opcode::Halt, 0, 0, 0),
         ];
         let data = b"Test";
         
