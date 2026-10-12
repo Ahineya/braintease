@@ -5,7 +5,7 @@
 //! Based on the formalized register spilling algorithm with Sethi-Ullman
 //! expression evaluation order to minimize register pressure.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use rcc_codegen::{AsmInst, Reg};
 use rcc_common::TempId;
 use rcc_frontend::ir::{BasicBlock, Instruction, Value, IrBinaryOp};
@@ -102,6 +102,10 @@ pub struct RegisterPressureManager {
     /// Linker-relocatable base of this TU's GP data (None if the TU has no globals).
     gp_base_label: Option<String>,
     memory_bank_size: u16,
+
+    /// IR roots needed after the instruction currently being lowered. Older
+    /// standalone lowering tests may omit this; whole functions always set it.
+    live_after: Option<BTreeSet<TempId>>,
 }
 
 impl RegisterPressureManager {
@@ -133,6 +137,7 @@ impl RegisterPressureManager {
             pinned_registers: std::collections::BTreeMap::new(),
             gp_base_label: None,
             memory_bank_size: 64000,
+            live_after: None,
         }
     }
     
@@ -614,6 +619,9 @@ impl RegisterPressureManager {
     
     /// Free a register
     pub fn free_register(&mut self, reg: Reg) {
+        // Operand lowerers used to assume a temporary had only one use. SSA
+        // promotion and LICM deliberately share values between instructions.
+        if self.register_is_live_after(reg) { return; }
         trace!("free_register({reg:?})");
         if let Some(value) = self.reg_contents.get(&reg) {
             debug!("Freeing {reg:?} containing '{value}'");
@@ -626,6 +634,66 @@ impl RegisterPressureManager {
             self.free_list.push_back(reg);
             trace!("  Added {reg:?} back to free list");
         }
+    }
+
+    /// Install the next instruction's liveness before any operand lowering.
+    pub(crate) fn set_live_after(&mut self, live: &BTreeSet<TempId>) {
+        self.live_after = Some(live.clone());
+    }
+
+    /// Whether overwriting or freeing this register would lose a later IR use,
+    /// including a pointer bank or wide companion reachable through an alias.
+    pub(crate) fn register_is_live_after(&self, register: Reg) -> bool {
+        let (Some(live), Some(value)) = (&self.live_after, self.reg_contents.get(&register)) else {
+            return false;
+        };
+        self.live_value_names(live, false).contains(value)
+    }
+
+    fn live_value_names(&self, live: &BTreeSet<TempId>, include_pinned: bool) -> BTreeSet<String> {
+        let mut retained: BTreeSet<String> = live.iter().map(|id| format!("t{id}")).collect();
+        if include_pinned {
+            for register in self.pinned_registers.keys() {
+                if let Some(value) = self.reg_contents.get(register) {
+                    retained.insert(value.clone());
+                }
+            }
+        }
+        let mut pending: Vec<String> = retained.iter().cloned().collect();
+        while let Some(value) = pending.pop() {
+            let mut dependencies = Vec::new();
+            if let Some(high) = self.i32_high.get(&value) {
+                dependencies.push(high.clone());
+            }
+            if let Some(words) = self.i64_words.get(&value) {
+                dependencies.extend(words.iter().cloned());
+            }
+            match self.allocator.pointer_banks.get(&value) {
+                Some(BankInfo::Dynamic(name)) => dependencies.push(name.clone()),
+                Some(BankInfo::Register(register)) => {
+                    if let Some(name) = self.reg_contents.get(register) {
+                        dependencies.push(name.clone());
+                    }
+                }
+                _ => {}
+            }
+            for dependency in dependencies {
+                if retained.insert(dependency.clone()) { pending.push(dependency); }
+            }
+        }
+        retained
+    }
+
+    /// Reclaim dead IR values and helper registers between complete instructions.
+    /// Live roots retain transitive companions and pointer banks. Keep spill slots
+    /// and metadata for alternative CFG paths that have not been emitted yet.
+    pub(crate) fn retain_live_registers(&mut self, live: &BTreeSet<TempId>) {
+        let retained = self.live_value_names(live, true);
+        let dead: Vec<Reg> = self.reg_contents.iter()
+            .filter(|(register, value)| !retained.contains(*value)
+                && !self.pinned_registers.contains_key(register))
+            .map(|(register, _)| *register).collect();
+        for register in dead { self.free_register(register); }
     }
     
     /// Bind a value to a specific register (e.g., after a function call)
@@ -731,6 +799,18 @@ impl RegisterPressureManager {
         }
         debug!("Unpinned registers spilled, {} slots used, {} still pinned",
                self.next_spill_slot, self.pinned_registers.len());
+    }
+
+    /// Save pinned call operands that remain live after the call. Their physical
+    /// registers must stay reserved until argument stores / JALR consume them,
+    /// but the callee may clobber them and their bindings are then forgotten.
+    /// Do this before moving SP above the caller's final spill area.
+    pub(crate) fn spill_live_pinned_for_call(&mut self) {
+        let registers: Vec<Reg> = self.pinned_registers.keys().copied()
+            .filter(|&register| self.register_is_live_after(register)).collect();
+        for register in registers {
+            self.spill_register(register);
+        }
     }
 
     /// Drop tracking for registers that were used only to materialize stack
@@ -1045,5 +1125,79 @@ impl RegisterPressureManager {
         if count > 0 {
             self.instructions.push(AsmInst::Comment(format!("Invalidated {count} GEP bank bindings")));
         }
+    }
+}
+
+#[cfg(test)]
+mod lifetime_reclamation_tests {
+    use super::*;
+
+    #[test]
+    fn dead_helpers_do_not_spill_at_instruction_or_call_boundaries() {
+        let mut manager = RegisterPressureManager::new(8);
+        manager.init();
+        let live = manager.get_register("t1".into());
+        for instruction in 0..100 {
+            for helper in 0..5 {
+                manager.get_register(format!("helper_{instruction}_{helper}"));
+            }
+            manager.retain_live_registers(&BTreeSet::from([1]));
+        }
+        assert_eq!(manager.reg_contents, BTreeMap::from([(live, "t1".into())]));
+        assert_eq!(manager.frame_high_water(), 8);
+        assert!(!manager.take_instructions().iter().any(|i| matches!(i, AsmInst::Store(..))));
+        manager.spill_all();
+        assert_eq!(manager.get_spill_count(), 1);
+        assert!(manager.value_to_slot.contains_key("t1"));
+    }
+
+    #[test]
+    fn preserves_shared_wide_companions_pointer_banks_and_pinned_helpers() {
+        let mut manager = RegisterPressureManager::new(0);
+        manager.init();
+        manager.get_register("t1".into());
+        manager.get_register("shared_hi".into());
+        manager.get_register("t2".into());
+        for word in ["w1", "w2", "w3"] { manager.get_register(word.into()); }
+        manager.get_register("t3".into());
+        let bank = manager.get_register("pointer_bank".into());
+        manager.set_i32_high("t1".into(), "shared_hi".into());
+        // A dead source may share its high word with a live cast result.
+        manager.set_i32_high("t99".into(), "shared_hi".into());
+        manager.set_i64_words("t2".into(), ["w1".into(), "w2".into(), "w3".into()]);
+        manager.set_pointer_bank("t3".into(), BankInfo::Register(bank));
+        let pinned = manager.get_register("pinned_helper".into());
+        manager.pin_register(pinned);
+        manager.get_register("dead_helper".into());
+        manager.retain_live_registers(&BTreeSet::from([1, 2, 3]));
+        let values: BTreeSet<_> = manager.reg_contents.values().cloned().collect();
+        assert_eq!(values, BTreeSet::from_iter([
+            "t1", "shared_hi", "t2", "w1", "w2", "w3", "t3", "pointer_bank", "pinned_helper",
+        ].into_iter().map(String::from)));
+        manager.unpin_register(pinned);
+        manager.retain_live_registers(&BTreeSet::new());
+        assert!(manager.reg_contents.is_empty());
+        assert!(manager.get_i32_high("t99").is_some());
+    }
+
+    #[test]
+    fn preserves_spill_slots_for_later_emitted_alternative_path() {
+        let mut manager = RegisterPressureManager::new(0);
+        manager.init();
+        manager.get_register("t1".into());
+        manager.get_register("bank".into());
+        manager.set_pointer_bank("t1".into(), BankInfo::Dynamic("bank".into()));
+        manager.spill_all();
+        let slots = manager.value_to_slot.clone();
+        // First arm no longer uses the pointer. The other arm is emitted later.
+        manager.get_register("t1".into());
+        manager.retain_live_registers(&BTreeSet::new());
+        assert!(manager.reg_contents.is_empty());
+        assert_eq!(manager.value_to_slot, slots);
+        manager.forget_all_registers();
+        manager.take_instructions();
+        manager.get_register("t1".into());
+        assert!(manager.take_instructions().iter().any(|i| matches!(i, AsmInst::Load(..))));
+        assert!(matches!(manager.get_pointer_bank("t1"), Some(BankInfo::Dynamic(name)) if name == "bank"));
     }
 }

@@ -22,19 +22,14 @@ __ld8:
     ADDI SP, SP, 1
 ; Set FP = SP
     ADD FP, SP, R0
-; Allocate 10 slots for locals
-    ADDI SP, SP, 10
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
 ; Reserve 20 spill slots above locals
     ADDI SP, SP, 20
 ; Load param 0 from A0
     ADD S3, A0, R0
 ; Load param 1 from A1
     ADD S2, A1, R0
-    ADD S1, FP, R0
-    STORE S3, SB, S1
-    ADD S0, FP, R0
-    ADDI S0, S0, 1
-    STORE S2, SB, S0
     SRLI T0, A1, 1
     LOAD T1, A0, T0
     ANDI T0, A1, 1
@@ -93,8 +88,8 @@ __st8:
     ADDI SP, SP, 1
 ; Set FP = SP
     ADD FP, SP, R0
-; Allocate 11 slots for locals
-    ADDI SP, SP, 11
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
 ; Reserve 20 spill slots above locals
     ADDI SP, SP, 20
 ; Load param 0 from A0
@@ -104,14 +99,6 @@ __st8:
 ; Load param 2 from A2
     ADD S1, A2, R0
 L___st8_1:
-    ADD S0, FP, R0
-    STORE S3, SB, S0
-    ADD T7, FP, R0
-    ADDI T7, T7, 1
-    STORE S2, SB, T7
-    ADD T6, FP, R0
-    ADDI T6, T6, 2
-    STORE S1, SB, T6
     SRLI T0, A1, 1
     LOAD T1, A0, T0
     ANDI T0, A1, 1

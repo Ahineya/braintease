@@ -41,9 +41,10 @@ pub fn lower_unary_op(
     let operand_reg = get_value_register(mgr, naming, operand);
     insts.extend(mgr.take_instructions());
     trace!("  Operand in {operand_reg:?}");
+    mgr.pin_register(operand_reg);
     
     // Allocate result register (can often reuse operand register for some operations)
-    let result_reg = if can_reuse_register(op) {
+    let result_reg = if can_reuse_register(op) && !mgr.register_is_live_after(operand_reg) {
         trace!("  Reusing operand register {operand_reg:?} for result");
         operand_reg
     } else {
@@ -52,6 +53,7 @@ pub fn lower_unary_op(
         trace!("  Allocated new register {reg:?} for result");
         reg
     };
+    mgr.pin_register(result_reg);
     
     // Generate the appropriate instruction(s)
     match op {
@@ -158,6 +160,9 @@ pub fn lower_unary_op(
     // different name; without this bind, later uses of the result allocate a
     // fresh uninitialized register (seen when truncating long constants to int).
     mgr.bind_value_to_register(result_name, result_reg);
+
+    mgr.unpin_register(operand_reg);
+    mgr.unpin_register(result_reg);
 
     // Free operand register if not reused
     if result_reg != operand_reg {

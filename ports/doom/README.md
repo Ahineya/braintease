@@ -14,9 +14,12 @@ The verified milestone is real engine startup: the title screen, scripted
 menu-to-E1M1 startup, and direct E1M1 startup all produce exactly the same RGB565
 pixels and frame/tick/game-state logs as the native reference. These checks run
 `D_DoomMain` and the real world renderer. They do not substitute the asset viewer.
-The first world capture currently takes roughly 25–35 seconds on the development
-machine, including startup. Playable speed and sustained gameplay are future
-milestones.
+Compiler optimizations reduced steady menu frames from about 268 million to
+26.1 million VM instructions. A consecutive local benchmark measured median
+frame time falling from 2.62 seconds to 0.224 seconds; host load affects timings.
+See [compiler optimizations](../../rcc-backend/OPTIMIZATIONS.md) for the passes,
+validation and measurement details. Playable speed and sustained gameplay
+remain future milestones.
 
 ## Build and launch
 

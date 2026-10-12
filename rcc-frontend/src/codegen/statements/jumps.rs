@@ -40,7 +40,20 @@ pub fn generate_return(
         // Aggregates generate as pointers; the calling convention copies them.
         if ret_type.is_aggregate() {
             let struct_ptr = expr_gen.generate(ret_expr)?;
-            gen.builder.build_return(Some(struct_ptr))?;
+            let declared = ret_expr.get_declared_type();
+            let has_volatile = (0..declared.size_in_words().unwrap_or(0))
+                .any(|offset| declared.volatile_at_offset(offset));
+            let returned = if has_volatile {
+                // Evaluate volatile aggregate reads here, before leaving this
+                // function; the ABI may copy the resulting temporary later.
+                let ir_type = crate::codegen::types::convert_type(ret_type, rcc_common::SourceLocation::new_simple(0, 0))?;
+                let temporary = expr_gen.builder.build_alloca(ir_type, None)?;
+                super::super::expressions::copy_struct_access(
+                    &mut expr_gen, struct_ptr, temporary.clone(), declared, ret_type,
+                )?;
+                temporary
+            } else { struct_ptr };
+            gen.builder.build_return(Some(returned))?;
         } else {
             let ret_val = expr_gen.generate(ret_expr)?;
             let dest_ty = match fn_ret {

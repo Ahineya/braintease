@@ -19,6 +19,16 @@ pub fn copy_struct(
     dst_ptr: Value,
     struct_type: &Type,
 ) -> Result<(), CompilerError> {
+    copy_struct_access(gen, src_ptr, dst_ptr, struct_type, struct_type)
+}
+
+pub fn copy_struct_access(
+    gen: &mut TypedExpressionGenerator,
+    src_ptr: Value,
+    dst_ptr: Value,
+    src_type: &Type,
+    struct_type: &Type,
+) -> Result<(), CompilerError> {
     // Calculate struct size
     let struct_size = struct_type.size_in_words()
         .ok_or_else(|| CodegenError::InternalError {
@@ -45,10 +55,10 @@ pub fn copy_struct(
         )?;
         
         // Load from source
-        let word = gen.builder.build_load(src_addr, IrType::I16)?;
+        let word = gen.builder.build_load_volatile(src_addr, IrType::I16, src_type.volatile_at_offset(offset))?;
         
         // Store to destination
-        gen.builder.build_store(Value::Temp(word), dst_addr, IrType::I16)?;
+        gen.builder.build_store_volatile(Value::Temp(word), dst_addr, IrType::I16, struct_type.volatile_at_offset(offset))?;
     }
     
     Ok(())
@@ -67,7 +77,7 @@ pub fn generate_assignment(
     // The RHS generates as a pointer to the source object.
     if lhs_type.is_aggregate() && rhs_type.is_aggregate() {
         let rhs_val = gen.generate(rhs)?;
-        copy_struct(gen, rhs_val.clone(), lhs_addr, &lhs_type)?;
+        copy_struct_access(gen, rhs_val.clone(), lhs_addr, rhs.get_declared_type(), lhs.get_declared_type())?;
         Ok(rhs_val)
     } else {
         let rhs_val = gen.generate(rhs)?;
@@ -81,7 +91,7 @@ pub fn generate_assignment(
             rhs_val
         };
         let ir_type = super::convert_type_default(lhs_type)?;
-        gen.builder.build_store(stored.clone(), lhs_addr, ir_type)?;
+        gen.builder.build_store_volatile(stored.clone(), lhs_addr, ir_type, lhs.get_declared_type().is_volatile())?;
         Ok(stored)
     }
 }

@@ -40,7 +40,7 @@ pub fn materialize_wide(
     val: Value,
     ty: &Type,
 ) -> Result<Value, CompilerError> {
-    let ir_type = match ty {
+    let ir_type = match ty.unqualified() {
         Type::Float => IrType::I32,
         Type::Double => IrType::I64,
         Type::Long | Type::UnsignedLong => IrType::I32,
@@ -117,6 +117,7 @@ pub fn emit_float_binop(
     right: Value,
     common: &Type,
 ) -> Result<Value, CompilerError> {
+    let common = common.unqualified();
     let is_f64 = matches!(common, Type::Double);
     let left = materialize_wide(gen, left, common)?;
     let right = materialize_wide(gen, right, common)?;
@@ -169,6 +170,8 @@ pub fn convert_value(
     from: &Type,
     to: &Type,
 ) -> Result<Value, CompilerError> {
+    let from = from.unqualified();
+    let to = to.unqualified();
     if from == to {
         return Ok(val);
     }
@@ -250,6 +253,8 @@ pub fn convert_integer(
     from: &Type,
     to: &Type,
 ) -> Result<Value, CompilerError> {
+    let from = from.unqualified();
+    let to = to.unqualified();
     if !from.is_integer() || !to.is_integer() {
         return convert_value(gen, val, from, to);
     }
@@ -284,6 +289,7 @@ pub fn convert_to_bool(
     val: Value,
     from: &Type,
 ) -> Result<Value, CompilerError> {
+    let from = from.unqualified();
     if from.is_floating() {
         let zero = Value::Constant(0);
         return emit_float_binop(gen, crate::ast::BinaryOp::NotEqual, val, zero, from);
@@ -301,7 +307,7 @@ pub fn convert_to_bool(
 }
 
 pub fn one_as_float(ty: &Type) -> Value {
-    match ty {
+    match ty.unqualified() {
         Type::Float => Value::Constant(1.0f32.to_bits() as i64),
         Type::Double => Value::Constant(1.0f64.to_bits() as i64),
         _ => Value::Constant(1),

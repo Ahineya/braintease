@@ -1,0 +1,5 @@
+{
+  "description": "Register lifetime reclamation preserves I32/I64 call operands, indirect callbacks and global/stack/heap pointer bank companions through branches and loops",
+  "use_runtime": true,
+  "expected": "YYYYYYYY\n"
+}

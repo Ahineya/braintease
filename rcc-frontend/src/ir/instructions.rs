@@ -44,6 +44,8 @@ pub enum Instruction {
         result: TempId,
         ptr: Value,
         result_type: IrType,
+        #[serde(default)]
+        volatile: bool,
     },
     
     /// Store to memory: store value, ptr
@@ -54,6 +56,8 @@ pub enum Instruction {
         /// even when the IR value is a small constant.
         #[serde(default = "default_store_type")]
         value_type: IrType,
+        #[serde(default)]
+        volatile: bool,
     },
     
     /// Get element pointer: result = getelementptr ptr, index
@@ -163,11 +167,11 @@ impl fmt::Display for Instruction {
             Instruction::Unary { result, op, operand, result_type } => {
                 write!(f, "%{result} = {op} {result_type} {operand} to {result_type}")
             }
-            Instruction::Load { result, ptr, result_type } => {
-                write!(f, "%{result} = load {result_type}, {result_type}* {ptr}")
+            Instruction::Load { result, ptr, result_type, volatile } => {
+                write!(f, "%{result} = load {}{result_type}, {result_type}* {ptr}", if *volatile { "volatile " } else { "" })
             }
-            Instruction::Store { value, ptr, value_type } => {
-                write!(f, "store {value_type} {value}, {value_type}* {ptr}")
+            Instruction::Store { value, ptr, value_type, volatile } => {
+                write!(f, "store {}{value_type} {value}, {value_type}* {ptr}", if *volatile { "volatile " } else { "" })
             }
             Instruction::GetElementPtr { result, ptr, indices, result_type: _, source_element_type, is_struct_field } => {
                 write!(f, "%{result} = getelementptr {source_element_type}, {ptr}")?;

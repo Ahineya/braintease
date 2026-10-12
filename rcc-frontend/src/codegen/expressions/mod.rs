@@ -19,6 +19,7 @@ pub use unary_ops::{generate_unary_operation, generate_lvalue_address};
 pub use pointer_ops::{generate_pointer_arithmetic, generate_pointer_difference, generate_array_index, generate_pointer_compound_assignment};
 pub use function_calls::generate_function_call;
 pub use assignments::{generate_assignment, copy_struct};
+pub(crate) use assignments::copy_struct_access;
 pub use misc_ops::{generate_sizeof_expr, generate_sizeof_type, generate_array_initializer};
 pub use aggregate_init::store_initializer;
 pub(crate) use conversions::{convert_integer, convert_to_bool};
@@ -74,10 +75,10 @@ impl<'a> TypedExpressionGenerator<'a> {
             TypedExpr::StringLiteral { value, .. } => literals::generate_string_literal(self, value),
             
             TypedExpr::Variable { name, expr_type, .. } => {
-                if matches!(expr_type, Type::Function { .. }) {
+                if matches!(expr_type.unqualified(), Type::Function { .. }) {
                     Ok(Value::Function(name.clone()))
                 } else {
-                    identifiers::generate_identifier(self, name)
+                    identifiers::generate_identifier(self, name, expr_type.is_volatile())
                 }
             },
             
@@ -151,7 +152,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                 };
                 
                 // Handle different cast scenarios
-                match (&source_type, target_type) {
+                match (source_type.unqualified(), target_type.unqualified()) {
                     // Pointer to pointer cast (including void*)
                     (Type::Pointer { .. }, Type::Pointer { .. }) => {
                         // Pointer-to-pointer casts preserve the value
@@ -230,7 +231,7 @@ impl<'a> TypedExpressionGenerator<'a> {
             
             TypedExpr::CompoundLiteral { initializer, expr_type } => {
                 // Compound literals create anonymous temporary objects with automatic storage duration
-                let alloc_type = match expr_type {
+                let alloc_type = match expr_type.unqualified() {
                     Type::Array { element_type, size } => {
                         let array_size = size.unwrap_or(initializer.len() as u64);
                         let elem_ir_type = convert_type_default(element_type)?;
@@ -314,16 +315,16 @@ impl<'a> TypedExpressionGenerator<'a> {
                 // Check if the field is an array type, struct type, or pointer type
                 // Arrays and structs should decay to pointers when accessed (not loaded)
                 // Pointers should be returned as FatPtr for further operations
-                if matches!(expr_type, Type::Array { .. }) || expr_type.is_aggregate() {
+                if matches!(expr_type.unqualified(), Type::Array { .. }) || expr_type.is_aggregate() {
                     // Aggregates decay to pointers when accessed as values
                     Ok(field_ptr)
-                } else if let Type::Pointer { target, .. } = expr_type {
+                } else if let Type::Pointer { target, .. } = expr_type.unqualified() {
                     // For pointer fields, load the value as a fat pointer
                     // The backend's load instruction will handle loading both components
                     // Convert the pointee type to IR type for the FatPtr
                     let pointee_ir_type = convert_type(target, rcc_common::SourceLocation::new_simple(0, 0))?;
                     let ptr_load_type = crate::ir::IrType::FatPtr(Box::new(pointee_ir_type));
-                    let temp_id = self.builder.build_load(field_ptr, ptr_load_type)
+                    let temp_id = self.builder.build_load_volatile(field_ptr, ptr_load_type, expr_type.is_volatile())
                         .map_err(|e| CodegenError::InternalError {
                             message: e,
                             location: rcc_common::SourceLocation::new_simple(0, 0),
@@ -335,7 +336,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                     }))
                 } else {
                     // For other fields (scalars), load the value normally
-                    let temp_id = self.builder.build_load(field_ptr, field_type_ir)
+                    let temp_id = self.builder.build_load_volatile(field_ptr, field_type_ir, expr_type.is_volatile())
                         .map_err(|e| CodegenError::InternalError {
                             message: e,
                             location: rcc_common::SourceLocation::new_simple(0, 0),
@@ -351,7 +352,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                 
                 // Arrays in a ternary decay to pointers (C99).
                 let is_aggregate = expr_type.is_aggregate();
-                let value_type = match expr_type {
+                let value_type = match expr_type.unqualified() {
                     Type::Array { element_type, .. } => Type::Pointer {
                         target: element_type.clone(),
                         bank: None,
@@ -390,7 +391,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                     })?;
                 let then_value = self.generate(then_expr)?;
                 if is_aggregate {
-                    assignments::copy_struct(self, then_value, result_ptr.clone(), expr_type)?;
+                    assignments::copy_struct_access(self, then_value, result_ptr.clone(), then_expr.get_declared_type(), &value_type)?;
                 } else {
                     let then_value = if then_expr.get_type() != &value_type {
                         conversions::convert_value(self, then_value, then_expr.get_type(), &value_type)?
@@ -420,7 +421,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                     })?;
                 let else_value = self.generate(else_expr)?;
                 if is_aggregate {
-                    assignments::copy_struct(self, else_value, result_ptr.clone(), expr_type)?;
+                    assignments::copy_struct_access(self, else_value, result_ptr.clone(), else_expr.get_declared_type(), &value_type)?;
                 } else {
                     let else_value = if else_expr.get_type() != &value_type {
                         conversions::convert_value(self, else_value, else_expr.get_type(), &value_type)?
@@ -489,7 +490,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                     })?;
                 match result {
                     Some(temp_id) => {
-                        if matches!(expr_type, Type::Pointer { .. }) {
+                        if matches!(expr_type.unqualified(), Type::Pointer { .. }) {
                             Ok(Value::FatPtr(FatPointer {
                                 addr: Box::new(Value::Temp(temp_id)),
                                 bank: BankTag::Mixed,

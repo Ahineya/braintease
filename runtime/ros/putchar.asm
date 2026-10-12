@@ -22,49 +22,40 @@ putchar:
     ADDI SP, SP, 1
 ; Set FP = SP
     ADD FP, SP, R0
-; Allocate 9 slots for locals
-    ADDI SP, SP, 9
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
 ; Reserve 20 spill slots above locals
     ADDI SP, SP, 20
 ; Load param 0 from A0
     ADD S3, A0, R0
-    ADD S2, FP, R0
-    STORE S3, SB, S2
-; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
-; LOAD: Pointer load_src_ptr_f0_op2_t2 has bank info: Stack
-; LOAD: Using bank register Sb for load
-    LOAD S1, SB, S2
-    LI S0, 2
-    ADD A0, S0, R0
-    ADD A1, S1, R0
+    LI S2, 0
+    ADD S3, S3, S2
+    LI S1, 2
+    ADD A0, S1, R0
+    ADD A1, S3, R0
+    LI S0, 0
+    ADD A2, S0, R0
     LI T7, 0
-    ADD A2, T7, R0
-    LI T6, 0
-    ADD A3, T6, R0
+    ADD A3, T7, R0
 ; Spill live registers before call
-; Spill t0 to slot 0
+; Spill const_f0_op1_2 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    STORE S1, SB, SC
+; Spill t2 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 9
     STORE S3, SB, SC
-; Spill const_f0_op4_2 to slot 1
+; Spill const_f0_op2_0 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 10
     STORE S0, SB, SC
-; Spill t2 to slot 2
+; Spill const_f0_op3_0 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 11
-    STORE S1, SB, SC
-; Spill const_f0_op5_0 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
     STORE T7, SB, SC
-; Spill const_f0_op6_0 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T6, SB, SC
-; Set SP = FP+29 so callee frame is above spills
-    ADDI SP, FP, 29
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
 ; Arg 1 (scalar) to A1
@@ -73,8 +64,8 @@ putchar:
 ; Call function ros_int21
     CALL ros_int21
 ; Scalar return value for t3
-; Copy Rv0 to allocatable T5
-    ADD T5, RV0, R0
+; Copy Rv0 to allocatable T6
+    ADD T6, RV0, R0
 ; Jump to epilogue
     BEQ R0, R0, L_putchar_99999
 L_putchar_99999:

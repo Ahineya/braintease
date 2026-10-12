@@ -1,7 +1,6 @@
 //! Store aggregate initializers (arrays, structs, unions, compound literals)
 
 use super::TypedExpressionGenerator;
-use super::assignments::copy_struct;
 use super::convert_type_default;
 use crate::ir::{IrType, Value, FatPointer};
 use crate::typed_ast::TypedExpr;
@@ -55,7 +54,7 @@ pub fn store_initializer(
     dest_type: &Type,
     init: &TypedExpr,
 ) -> Result<(), CompilerError> {
-    match (dest_type, init) {
+    match (dest_type.unqualified(), init) {
         (Type::Array { element_type, .. }, TypedExpr::ArrayInitializer { elements, .. })
         | (Type::Array { element_type, .. }, TypedExpr::CompoundLiteral { initializer: elements, .. }) => {
             for (i, elem) in elements.iter().enumerate() {
@@ -69,11 +68,12 @@ pub fn store_initializer(
             let layout = crate::semantic::struct_layout::calculate_struct_layout(fields, loc())
                 .map_err(|e| intern_err(format!("Failed to calculate struct layout: {e}")))?;
             for (i, field) in layout.fields.iter().enumerate() {
+                let qualified_field = dest_type.qualify_member(&field.field_type);
                 let field_ptr = field_gep(gen, dest.clone(), dest_type, &field.field_type, field.offset as i64)?;
                 if i < elements.len() {
-                    store_initializer(gen, field_ptr, &field.field_type, &elements[i])?;
+                    store_initializer(gen, field_ptr, &qualified_field, &elements[i])?;
                 } else {
-                    store_initializer(gen, field_ptr, &field.field_type, &zero_typed(&field.field_type))?;
+                    store_initializer(gen, field_ptr, &qualified_field, &zero_typed(&field.field_type))?;
                 }
             }
             Ok(())
@@ -81,30 +81,31 @@ pub fn store_initializer(
         (Type::Union { .. }, TypedExpr::ArrayInitializer { elements, .. })
         | (Type::Union { .. }, TypedExpr::CompoundLiteral { initializer: elements, .. }) => {
             if let Some(first) = elements.first() {
-                store_initializer(gen, dest, first.get_type(), first)?;
+                store_initializer(gen, dest, &dest_type.qualify_member(first.get_declared_type()), first)?;
             }
             Ok(())
         }
         (ty, _) if ty.is_aggregate() => {
             let src = gen.generate(init)?;
-            copy_struct(gen, src, dest, dest_type)
+            super::assignments::copy_struct_access(gen, src, dest, init.get_declared_type(), dest_type)
         }
         (Type::Pointer { .. }, TypedExpr::IntLiteral { value: 0, .. })
         | (Type::Pointer { .. }, TypedExpr::CharLiteral { value: 0, .. }) => {
             gen.builder
-                .build_store(
+                .build_store_volatile(
                     Value::FatPtr(FatPointer {
                         addr: Box::new(Value::Constant(0)),
                         bank: BankTag::Null,
                     }),
                     dest,
                     convert_type_default(dest_type)?,
+                    dest_type.is_volatile(),
                 )
                 .map_err(|e| intern_err(e))
         }
         (Type::Pointer { .. }, TypedExpr::CompoundLiteral { .. }) => {
             let val = gen.generate(init)?;
-            gen.builder.build_store(val, dest, convert_type_default(dest_type)?).map_err(|e| intern_err(e))
+            gen.builder.build_store_volatile(val, dest, convert_type_default(dest_type)?, dest_type.is_volatile()).map_err(|e| intern_err(e))
         }
         (_, TypedExpr::ArrayInitializer { elements, .. })
         | (_, TypedExpr::CompoundLiteral { initializer: elements, .. }) => {
@@ -116,7 +117,7 @@ pub fn store_initializer(
         }
         _ => {
             let val = gen.generate(init)?;
-            let stored = if matches!(dest_type, Type::Bool) {
+            let stored = if matches!(dest_type.unqualified(), Type::Bool) {
                 super::conversions::convert_to_bool(gen, val, init.get_type())
                     .map_err(|e| intern_err(format!("{e}")))?
             } else if dest_type.is_floating() || init.get_type().is_floating() {
@@ -128,13 +129,13 @@ pub fn store_initializer(
             } else {
                 val
             };
-            gen.builder.build_store(stored, dest, convert_type_default(dest_type)?).map_err(|e| intern_err(e))
+            gen.builder.build_store_volatile(stored, dest, convert_type_default(dest_type)?, dest_type.is_volatile()).map_err(|e| intern_err(e))
         }
     }
 }
 
 fn zero_typed(ty: &Type) -> TypedExpr {
-    match ty {
+    match ty.unqualified() {
         Type::Array { element_type, size: Some(n) } => TypedExpr::ArrayInitializer {
             elements: (0..*n).map(|_| zero_typed(element_type)).collect(),
             expr_type: ty.clone(),

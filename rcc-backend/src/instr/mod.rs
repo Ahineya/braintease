@@ -26,4 +26,4 @@ pub use inline_asm::{lower_inline_asm_basic, lower_inline_asm_extended};
 
 // Test modules
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

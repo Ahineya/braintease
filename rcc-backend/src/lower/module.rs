@@ -13,6 +13,11 @@ use super::function::lower_function_v2;
 
 /// Lower an entire module using the V2 backend
 pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Result<Vec<AsmInst>, String> {
+    let mut optimized = module.clone();
+    for function in &mut optimized.functions {
+        crate::optimize::optimize_function(function);
+    }
+    let module = &optimized;
     info!("V2: Lowering module '{}' with bank_size {}", module.name, bank_size);
     let mut all_instructions = Vec::new();
     

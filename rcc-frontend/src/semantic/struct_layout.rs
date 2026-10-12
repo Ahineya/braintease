@@ -156,6 +156,7 @@ pub fn calculate_union_layout_with_defs(
 /// Get the size of a type, resolving named struct references if needed
 fn get_type_size(ty: &Type, type_definitions: Option<&HashMap<String, Type>>) -> Option<u64> {
     match ty {
+        Type::Volatile(inner) => get_type_size(inner, type_definitions),
         // For named struct references, look up the actual definition
         Type::Struct { name: Some(name), fields } if fields.is_empty() => {
             if let Some(defs) = type_definitions {

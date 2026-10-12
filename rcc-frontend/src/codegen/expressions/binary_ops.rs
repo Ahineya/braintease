@@ -182,7 +182,7 @@ pub fn generate_compound_assignment(
     let lhs_addr = generate_lvalue_address(gen, lhs)?;
     let lhs_val = {
         let ir_type = convert_type_default(lhs.get_type())?;
-        let temp = gen.builder.build_load(lhs_addr.clone(), ir_type.clone())?;
+        let temp = gen.builder.build_load_volatile(lhs_addr.clone(), ir_type.clone(), lhs.get_declared_type().is_volatile())?;
         Value::Temp(temp)
     };
     let rhs_val = gen.generate(rhs)?;
@@ -202,7 +202,7 @@ pub fn generate_compound_assignment(
         let result = emit_float_binop(gen, op, lhs_for_op, rhs_val, &common)?;
         let result = convert_value(gen, result, &common, lhs_ty)?;
         let ir_type = convert_type_default(lhs_ty)?;
-        gen.builder.build_store(result.clone(), lhs_addr, ir_type)?;
+        gen.builder.build_store_volatile(result.clone(), lhs_addr, ir_type, lhs.get_declared_type().is_volatile())?;
         return Ok(result);
     }
 
@@ -240,7 +240,7 @@ pub fn generate_compound_assignment(
         .builder
         .build_binary(ir_op, lhs_val, rhs_val, ir_type)?;
     let result = convert_integer(gen, Value::Temp(result), &common, lhs_ty)?;
-    gen.builder.build_store(result.clone(), lhs_addr, convert_type_default(lhs_ty)?)?;
+    gen.builder.build_store_volatile(result.clone(), lhs_addr, convert_type_default(lhs_ty)?, lhs.get_declared_type().is_volatile())?;
     
     Ok(result)
 }

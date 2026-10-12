@@ -1,0 +1,5 @@
+{
+  "description": "Optimization preserves fixed-width constants, aliased and volatile loads across calls, zero-trip and nested loop behavior, wide branch lifetimes and cross-bank pointers",
+  "expected": "optimizer semantics ok\n",
+  "use_runtime": true
+}

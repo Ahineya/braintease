@@ -21,6 +21,7 @@ impl Parser {
     /// surrounding base and suffixes. Preserve every pointer/array layer.
     fn replace_declarator_base(ty: Type, replacement: Type) -> Type {
         match ty {
+            Type::Volatile(inner) => Self::replace_declarator_base(*inner, replacement).with_volatile(),
             Type::Void => replacement,
             Type::Pointer { target, bank } => Type::Pointer {
                 target: Box::new(Self::replace_declarator_base(*target, replacement)), bank,
@@ -64,11 +65,16 @@ impl Parser {
         }
     }
 
-    /// Skip C99 specifiers we do not model: const, volatile, restrict, inline.
+    /// Preserve volatile for the surrounding type/declarator; other currently
+    /// unmodeled specifiers do not affect generated memory accesses.
     pub fn skip_ignored_specifiers(&mut self) {
         while let Some(token) = self.peek() {
             match &token.token_type {
-                TokenType::Const | TokenType::Volatile | TokenType::Restrict | TokenType::Inline => {
+                TokenType::Volatile => {
+                    self.pending_volatile = true;
+                    self.advance();
+                }
+                TokenType::Const | TokenType::Restrict | TokenType::Inline => {
                     warn!("Ignoring specifier: {:?}", token.token_type);
                     self.advance();
                 }
@@ -107,6 +113,7 @@ impl Parser {
 
     pub(crate) fn resolve_known_typedefs(&self, ty: &Type) -> Type {
         match ty {
+            Type::Volatile(inner) => self.resolve_known_typedefs(inner).with_volatile(),
             Type::Typedef(name) => self
                 .typedef_names
                 .get(name)
@@ -206,8 +213,9 @@ impl Parser {
         let location = self.current_location();
         
         self.skip_ignored_specifiers();
-        
-        match self.peek().map(|t| &t.token_type) {
+        let volatile = std::mem::take(&mut self.pending_volatile);
+
+        let ty = match self.peek().map(|t| &t.token_type) {
             Some(TokenType::Void) => { self.advance(); Ok(Type::Void) }
             Some(TokenType::Bool) => { self.advance(); Ok(Type::Bool) }
             Some(TokenType::Char) => { self.advance(); Ok(Type::Char) }
@@ -281,7 +289,10 @@ impl Parser {
                     location,
                 }.into())
             }
-        }
+        }?;
+        self.skip_ignored_specifiers();
+        let trailing_volatile = std::mem::take(&mut self.pending_volatile);
+        Ok(if volatile || trailing_volatile { ty.with_volatile() } else { ty })
     }
     
     /// Parse the contents of `( parameter-type-list )` after the opening paren
@@ -497,7 +508,7 @@ impl Parser {
     }
 
     fn check_field_declarator(&self, name: &str, ty: &Type) -> Result<(), CompilerError> {
-        if name.is_empty() && !matches!(ty, Type::Struct { .. } | Type::Union { .. }) {
+        if name.is_empty() && !matches!(ty.unqualified(), Type::Struct { .. } | Type::Union { .. }) {
             return Err(ParseError::InvalidType {
                 message: "Expected identifier in declarator".to_string(),
                 location: self.current_location(),
@@ -522,10 +533,15 @@ impl Parser {
     pub fn parse_declarator(&mut self, base_type: Type) -> Result<(String, Type), CompilerError> {
         self.skip_ignored_specifiers();
         // Parse pointer prefix
-        let mut current_type = base_type;
+        let mut current_type = if std::mem::take(&mut self.pending_volatile) {
+            base_type.with_volatile()
+        } else { base_type };
         while self.match_token(&TokenType::Star) {
             self.skip_ignored_specifiers();
             current_type = Type::Pointer { target: Box::new(current_type), bank: None };
+            if std::mem::take(&mut self.pending_volatile) {
+                current_type = current_type.with_volatile();
+            }
         }
         
         // Parse direct declarator

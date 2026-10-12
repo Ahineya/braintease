@@ -1,0 +1,5 @@
+{
+  "description": "Wide variadic integers and pointer banks survive extraction with live I32 and F32 values under register pressure",
+  "expected": "vararg register pressure ok\n",
+  "use_runtime": true
+}

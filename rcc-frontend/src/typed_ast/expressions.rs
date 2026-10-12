@@ -170,8 +170,13 @@ pub enum TypedExpr {
 }
 
 impl TypedExpr {
-    /// Get the type of this expression
+    /// The value type after dropping top-level lvalue qualifiers.
     pub fn get_type(&self) -> &Type {
+        self.get_declared_type().unqualified()
+    }
+
+    /// Preserve lvalue qualifiers when deciding how to access an object.
+    pub fn get_declared_type(&self) -> &Type {
         match self {
             TypedExpr::IntLiteral { expr_type, .. } |
             TypedExpr::FloatLiteral { expr_type, .. } |

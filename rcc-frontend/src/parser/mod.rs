@@ -25,6 +25,7 @@ pub struct Parser {
     // None marks an ordinary identifier hiding an outer enumeration constant.
     pub(crate) constant_scopes: Vec<HashMap<String, Option<i64>>>,
     pub(crate) typedef_names: HashMap<String, Type>, // Typedef name -> type, for parsing and sizeof
+    pub(crate) pending_volatile: bool,
 }
 
 impl Parser {
@@ -45,6 +46,7 @@ impl Parser {
             node_id_gen: NodeIdGenerator::new(),
             last_function_params: None,
             typedef_names: HashMap::new(),
+            pending_volatile: false,
             constant_scopes: vec![HashMap::new()],
         }
     }

@@ -104,9 +104,10 @@ pub fn generate_inline_asm_extended(
     for (i, op) in outputs.iter().enumerate() {
         if op.constraint.starts_with('+') {
             // For read-write, load the current value from the address
-            let current_value = gen.builder.build_load(
+            let current_value = gen.builder.build_load_volatile(
                 output_addresses[i].clone(),
-                output_types[i].clone()
+                output_types[i].clone(),
+                op.expr.get_declared_type().is_volatile(),
             )?;
             
             ir_inputs.push(AsmOperandIR {
@@ -127,10 +128,11 @@ pub fn generate_inline_asm_extended(
     
     // After the inline assembly, store the output values back to their addresses
     for (i, output) in ir_outputs.iter().enumerate() {
-        gen.builder.build_store(
+        gen.builder.build_store_volatile(
             output.value.clone(),
             output_addresses[i].clone(),
             output_types[i].clone(),
+            outputs[i].expr.get_declared_type().is_volatile(),
         )?;
     }
     

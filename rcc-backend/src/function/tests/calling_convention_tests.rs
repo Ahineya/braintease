@@ -4,6 +4,53 @@ use crate::naming::new_function_naming;
 use rcc_codegen::{AsmInst, Reg};
 
 #[test]
+fn pinned_stack_argument_words_survive_the_call_when_still_live() {
+    use std::collections::BTreeSet;
+    use crate::instr::tests::machine::Machine;
+
+    for width in [1, 2, 4] {
+        let cc = CallingConvention::new();
+        let mut manager = RegisterPressureManager::new(0);
+        manager.init();
+        let names = ["t1", "t1__hi", "t1__w2", "t1__w3"];
+        if width == 2 {
+            manager.set_i32_high(names[0].into(), names[1].into());
+        } else if width == 4 {
+            manager.set_i64_words(names[0].into(),
+                [names[1].into(), names[2].into(), names[3].into()]);
+        }
+        manager.set_live_after(&BTreeSet::from([1]));
+        let mut regs = [Reg::R0; 4];
+        let mut machine = Machine::new(64000);
+        machine.regs[Reg::Fp as usize] = 100;
+        for index in 0..width {
+            regs[index] = manager.get_register(names[index].into());
+            manager.pin_register(regs[index]);
+            machine.regs[regs[index] as usize] = 0x1234 + index as u16;
+        }
+        let stack_arg = match width {
+            1 => CallArg::Scalar(regs[0]),
+            2 => CallArg::FatPointer { addr: regs[0], bank: regs[1] },
+            _ => CallArg::I64 { words: regs },
+        };
+        let assembly = cc.setup_call_args(&mut manager, &mut new_function_naming(),
+            vec![stack_arg], Some(0));
+        machine.run(&assembly);
+        // Simulate an arbitrary callee clobbering every source register.
+        for register in regs.iter().take(width) {
+            machine.regs[*register as usize] = 0xdead;
+            manager.unpin_register(*register);
+        }
+        for index in 0..width {
+            let restored = manager.get_register(names[index].into());
+            machine.run(&manager.take_instructions());
+            assert_eq!(machine.regs[restored as usize], 0x1234 + index as u16,
+                "lost word {index} of a {width}-word live stack argument");
+        }
+    }
+}
+
+#[test]
 fn test_register_based_scalar_args() {
     let cc = CallingConvention::new();
     let mut pm = RegisterPressureManager::new(0);

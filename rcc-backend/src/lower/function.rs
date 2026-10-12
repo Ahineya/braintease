@@ -15,6 +15,7 @@ use crate::globals::GlobalManager;
 use crate::instr::helpers::get_bank_register_with_runtime_check_safe;
 use crate::naming::NameGenerator;
 use crate::regmgmt::RegisterPressureManager;
+use crate::regmgmt::liveness::FunctionLiveness;
 use super::instruction::lower_instruction;
 
 /// Compute stack offsets (relative to FP) for each alloca result
@@ -332,6 +333,7 @@ fn lower_basic_block(
     epilogue_label: &str,
     bank_size: u16,
     vararg_fp_offset: Option<i16>,
+    liveness: &FunctionLiveness,
 ) -> Result<Vec<(Option<(Reg, Option<Reg>)>, usize)>, String> {
     debug!("Lowering block {} (index {}) [loop_condition={}]", block.id, block_idx, block.is_loop_condition);
     
@@ -353,8 +355,10 @@ fn lower_basic_block(
     let mut return_values = Vec::new();
     
     // Lower each instruction in the block
-    for instruction in &block.instructions {
+    for (instruction_index, instruction) in block.instructions.iter().enumerate() {
         trace!("  Lowering instruction: {instruction:?}");
+        mgr.set_live_after(&liveness.after[block_idx][instruction_index]);
+        mgr.retain_live_registers(&liveness.before[block_idx][instruction_index]);
         
         match instruction {
             Instruction::Return(value) => {
@@ -381,6 +385,7 @@ fn lower_basic_block(
                 builder.add_instructions(insts);
             }
         }
+        mgr.retain_live_registers(&liveness.after[block_idx][instruction_index]);
     }
     
     Ok(return_values)
@@ -431,6 +436,7 @@ pub fn lower_function_v2(
     // Get local slots from the manager (already calculated in module.rs)
     let local_slots = mgr.local_count();
     let alloca_offsets = compute_alloca_offsets(function);
+    let liveness = FunctionLiveness::analyze(function);
     
     // Begin the function (this will emit the prologue)
     builder.begin_function(local_slots);
@@ -469,6 +475,7 @@ pub fn lower_function_v2(
             &epilogue_label,
             bank_size,
             vararg_fp_offset,
+            &liveness,
         )?;
         
         if !return_values.is_empty() {
@@ -503,4 +510,35 @@ pub fn lower_function_v2(
     }
     instructions.append(&mut builder_instructions);
     Ok(instructions)
+}
+
+#[cfg(test)]
+mod lifetime_tests {
+    use super::*;
+    use rcc_frontend::ir::{BasicBlock, IrBinaryOp};
+
+    #[test]
+    fn lowering_reclaims_dead_ir_results_before_they_fill_registers() {
+        let mut function = Function::new("discard_dead_results".into(), IrType::I16);
+        let mut block = BasicBlock::new(0);
+        for result in 0..100 {
+            block.instructions.push(Instruction::Binary {
+                result,
+                op: IrBinaryOp::Add,
+                lhs: Value::Constant(result as i64),
+                rhs: Value::Constant(5),
+                result_type: IrType::I16,
+            });
+        }
+        block.instructions.push(Instruction::Return(Some(Value::Temp(99))));
+        function.blocks.push(block);
+        let mut manager = RegisterPressureManager::new(8);
+        manager.init();
+        let assembly = lower_function_v2(&function, &mut manager,
+            &mut NameGenerator::new(0), &GlobalManager::new(), 64000).unwrap();
+        assert_eq!(manager.get_spill_count(), 0);
+        assert!(!assembly.iter().any(|instruction| {
+            matches!(instruction, AsmInst::Comment(text) if text.starts_with("Spill "))
+        }));
+    }
 }

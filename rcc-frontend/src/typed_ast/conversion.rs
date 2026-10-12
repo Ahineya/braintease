@@ -71,7 +71,7 @@ fn type_initializer(
     match &init.kind {
         InitializerKind::Expression(expr) => {
             // A scalar initializer for a union initializes the first member.
-            if let Type::Union { fields, .. } = &resolved {
+            if let Type::Union { fields, .. } = resolved.unqualified() {
                 if !fields.is_empty() {
                     let inner = type_expression(expr, type_env)?;
                     return Ok(TypedExpr::ArrayInitializer {
@@ -119,7 +119,7 @@ fn infer_array_len(initializers: &[Initializer]) -> Result<u64, TypeError> {
 }
 
 fn zero_expr(ty: &Type) -> TypedExpr {
-    match ty {
+    match ty.unqualified() {
         Type::Array { element_type, size: Some(n) } => TypedExpr::ArrayInitializer {
             elements: (0..*n).map(|_| zero_expr(element_type)).collect(),
             expr_type: ty.clone(),
@@ -165,7 +165,7 @@ fn expand_list_initializer(
     expected_type: &Type,
     type_env: &TypeEnvironment,
 ) -> Result<TypedExpr, TypeError> {
-    match expected_type {
+    match expected_type.unqualified() {
         Type::Array { element_type, size } => {
             let n = if let Some(array_size) = size {
                 *array_size
@@ -638,13 +638,13 @@ pub fn type_expression(
                 }
             } else {
                 // For . operator, object should be a struct
-                object_typed.get_type()
+                object_typed.get_declared_type()
             };
             
             // Extract struct fields - need to resolve typedef if necessary
             let resolved_struct_type = type_env.type_analyzer.borrow().resolve_type(struct_type);
             
-            let fields = match &resolved_struct_type {
+            let fields = match resolved_struct_type.unqualified() {
                 Type::Struct { fields, .. } | Type::Union { fields, .. } => {
                     fields.clone()
                 }
@@ -653,7 +653,7 @@ pub fn type_expression(
                 ))
             };
             
-            let is_union = matches!(resolved_struct_type, Type::Union { .. });
+            let is_union = matches!(resolved_struct_type.unqualified(), Type::Union { .. });
             
             // Calculate struct layout to get field offset
             let loc = rcc_common::SourceLocation::new_simple(0, 0);
@@ -689,7 +689,10 @@ pub fn type_expression(
                 member: member.clone(),
                 offset,
                 is_pointer: *is_pointer,
-                expr_type: type_env.type_analyzer.borrow().resolve_type(&field_layout.field_type),
+                expr_type: {
+                    let field = type_env.type_analyzer.borrow().resolve_type(&field_layout.field_type);
+                    if resolved_struct_type.is_volatile() { field.with_volatile() } else { field }
+                },
             })
         }
         
@@ -698,8 +701,11 @@ pub fn type_expression(
             let then_typed = type_expression(then_expr, type_env)?;
             let else_typed = type_expression(else_expr, type_env)?;
             
-            // TODO: Verify that then_expr and else_expr have compatible types
-            let result_type = then_typed.get_type().clone();
+            // Semantic analysis merges pointer target qualifiers from both
+            // alternatives. Taking just the first type can discard volatile.
+            let result_type = expr.expr_type.as_ref()
+                .map(|ty| type_env.type_analyzer.borrow().resolve_type(ty))
+                .unwrap_or_else(|| then_typed.get_type().clone());
             
             Ok(TypedExpr::Conditional {
                 condition: Box::new(cond_typed),

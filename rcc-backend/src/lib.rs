@@ -9,6 +9,7 @@ pub mod instr;
 pub mod function;
 pub mod naming;
 pub mod globals;
+pub mod optimize;
 
 // Re-export IR types from frontend for convenience
 pub use rcc_frontend::ir::{

@@ -100,7 +100,7 @@ impl InitializerAnalyzer {
         match &mut init.kind {
             InitializerKind::Expression(expr) => {
                 self.expression_analyzer.borrow().analyze(expr)?;
-                let target = match &resolved {
+                let target = match resolved.unqualified() {
                     Type::Union { fields, .. } => fields.first().map(|f| &f.field_type).unwrap_or(&resolved),
                     _ => &resolved,
                 };
@@ -109,7 +109,7 @@ impl InitializerAnalyzer {
                 // Check type compatibility with typedef awareness
                 if let Some(expr_type) = &expr.expr_type {
                     let expression_type = self.type_analyzer.borrow().resolve_type(expr_type);
-                    let assign_to = match (&resolved, &expression_type) {
+                    let assign_to = match (resolved.unqualified(), expression_type.unqualified()) {
                         // A union expression initializes the union object as a whole.
                         (Type::Union { .. }, Type::Union { .. }) => &resolved,
                         (Type::Union { fields, .. }, _) => {
@@ -118,7 +118,7 @@ impl InitializerAnalyzer {
                         _ => &resolved,
                     };
                     // Special case: Allow 0 to initialize pointers (NULL)
-                    let is_null_init = matches!(assign_to, Type::Pointer { .. })
+                    let is_null_init = matches!(assign_to.unqualified(), Type::Pointer { .. })
                         && self.type_analyzer.borrow().is_integer(expr_type)
                         && matches!(expr.kind, ExpressionKind::IntLiteral { value: 0, .. });
                     
@@ -138,7 +138,7 @@ impl InitializerAnalyzer {
             }
         
             InitializerKind::List(initializers) => {
-                match &resolved {
+                match resolved.unqualified() {
                     Type::Array { element_type, .. } => {
                         for item in initializers {
                             let is_designated = matches!(item.kind, InitializerKind::Designated { .. });
@@ -239,7 +239,7 @@ impl InitializerAnalyzer {
 
 /// C permits a character array's string initializer with or without braces.
 pub(crate) fn character_array_string<'a>(init: &'a Initializer, element_type: &Type) -> Option<&'a str> {
-    if !matches!(element_type, Type::Char | Type::SignedChar | Type::UnsignedChar) {
+    if !matches!(element_type.unqualified(), Type::Char | Type::SignedChar | Type::UnsignedChar) {
         return None;
     }
     match &init.kind {

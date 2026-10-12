@@ -183,7 +183,7 @@ impl ExpressionAnalyzer {
                 if let Some(func_type) = &function.expr_type {
                     let resolved_type = self.type_analyzer.borrow().resolve_type(func_type);
                     // Dereference function pointer to get the actual function type
-                    let callable_type = match &resolved_type {
+                    let callable_type = match resolved_type.unqualified() {
                         Type::Pointer { target, .. } => target.as_ref(),
                         other => other,
                     };
@@ -383,10 +383,13 @@ impl ExpressionAnalyzer {
         // First resolve the type if it's a struct reference
         let resolved_type = self.type_analyzer.borrow().resolve_type(struct_type);
         
-        match &resolved_type {
+        match resolved_type.unqualified() {
             Type::Struct { fields, name, .. } | Type::Union { fields, name, .. } => {
                 if let Some(field_type) = crate::semantic::struct_layout::find_member_type(fields, member) {
-                    Ok(self.type_analyzer.borrow().resolve_type(&field_type))
+                    {
+                        let field = self.type_analyzer.borrow().resolve_type(&field_type);
+                        Ok(if resolved_type.is_volatile() { field.with_volatile() } else { field })
+                    }
                 } else {
                     let struct_name = name
                         .clone()
@@ -412,10 +415,13 @@ impl ExpressionAnalyzer {
                     .into());
                 }
 
-                match &resolved_type {
+                match resolved_type.unqualified() {
                     Type::Struct { fields, .. } | Type::Union { fields, .. } => {
                         if let Some(field_type) = crate::semantic::struct_layout::find_member_type(fields, member) {
-                            Ok(self.type_analyzer.borrow().resolve_type(&field_type))
+                            {
+                        let field = self.type_analyzer.borrow().resolve_type(&field_type);
+                        Ok(if resolved_type.is_volatile() { field.with_volatile() } else { field })
+                    }
                         } else {
                             Err(SemanticError::UndefinedMember {
                                 struct_name: name.clone(),

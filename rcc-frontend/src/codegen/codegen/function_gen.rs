@@ -119,7 +119,7 @@ pub fn generate_function(
         } else {
             // Store parameter value (parameters are passed as temporaries)
             let param_value = Value::Temp(i as rcc_common::TempId);
-            builder.build_store(param_value, param_addr.clone(), ir_type.clone())?;
+            builder.build_store_volatile(param_value, param_addr.clone(), ir_type.clone(), param_type.is_volatile())?;
         }
         
         // Track the parameter

@@ -149,6 +149,7 @@ impl CallingConvention {
         // This prevents source registers from being clobbered during argument setup
         debug!("  Spilling all live registers before call");
         insts.push(AsmInst::Comment("Spill live registers before call".to_string()));
+        pressure_manager.spill_live_pinned_for_call();
         pressure_manager.spill_all();
         let spill_insts = pressure_manager.take_instructions();
         if !spill_insts.is_empty() {

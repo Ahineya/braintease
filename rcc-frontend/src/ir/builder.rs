@@ -100,15 +100,23 @@ impl IrBuilder {
     }
     
     pub fn build_load(&mut self, ptr: Value, result_type: IrType) -> Result<TempId, String> {
+        self.build_load_volatile(ptr, result_type, false)
+    }
+
+    pub fn build_load_volatile(&mut self, ptr: Value, result_type: IrType, volatile: bool) -> Result<TempId, String> {
         let result = self.new_temp();
-        let instr = Instruction::Load { result, ptr, result_type };
+        let instr = Instruction::Load { result, ptr, result_type, volatile };
         
         self.add_instruction(instr)?;
         Ok(result)
     }
     
     pub fn build_store(&mut self, value: Value, ptr: Value, value_type: IrType) -> Result<(), String> {
-        let instr = Instruction::Store { value, ptr, value_type };
+        self.build_store_volatile(value, ptr, value_type, false)
+    }
+
+    pub fn build_store_volatile(&mut self, value: Value, ptr: Value, value_type: IrType, volatile: bool) -> Result<(), String> {
+        let instr = Instruction::Store { value, ptr, value_type, volatile };
         self.add_instruction(instr)
     }
 

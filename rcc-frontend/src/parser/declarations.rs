@@ -27,13 +27,13 @@ impl Parser {
         // Standalone struct/union/enum definition or forward declaration:
         // `struct T { int x; };`, `struct T;`, `enum efoo;`
         if self.check(&TokenType::Semicolon) {
-            match &base_type {
+            match base_type.unqualified() {
                 Type::Struct { name, .. } | Type::Union { name, .. } | Type::Enum { name, .. } => {
                     let end_loc = self.current_location();
                     self.advance();
                     return Ok(TopLevelItem::TypeDefinition {
                         name: name.clone().unwrap_or_default(),
-                        type_def: base_type,
+                        type_def: base_type.unqualified().clone(),
                         span: SourceSpan::new(start_loc, end_loc),
                     });
                 }
@@ -225,12 +225,12 @@ impl Parser {
 
         // Block-scope tag definition / forward declaration: `struct T { int x; };`
         if self.check(&TokenType::Semicolon) {
-            match &base_type {
+            match base_type.unqualified() {
                 Type::Struct { .. } | Type::Union { .. } | Type::Enum { .. } => {
                     declarations.push(Declaration {
                         node_id: self.node_id_gen.next(),
                         name: String::new(),
-                        decl_type: base_type,
+                        decl_type: base_type.unqualified().clone(),
                         storage_class,
                         initializer: None,
                         span: SourceSpan::new(self.current_location(), self.current_location()),

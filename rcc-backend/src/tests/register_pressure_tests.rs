@@ -329,6 +329,7 @@ fn test_lifetime_analysis() {
                 value: Value::Temp(2),
                 ptr: Value::Temp(0),
                 value_type: IrType::I16,
+                volatile: false,
             },
         ],
         predecessors: vec![],
@@ -749,6 +750,7 @@ fn test_complex_lifetime_patterns() {
                 value: Value::Temp(3),
                 ptr: Value::Temp(2), // Temp 2 used as pointer
                 value_type: IrType::I16,
+                volatile: false,
             },
         ],
         predecessors: vec![],

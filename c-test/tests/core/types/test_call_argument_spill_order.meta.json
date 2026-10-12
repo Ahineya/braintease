@@ -1,0 +1,5 @@
+{
+  "description": "Wide live parameters survive register spills while materializing a trailing NULL call argument, as required by Doom object spawning",
+  "use_runtime": true,
+  "expected": "YYYY\n"
+}

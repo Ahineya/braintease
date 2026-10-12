@@ -1,3 +1,6 @@
+7442413	Mon Oct 12 19:03:31 2026 +0200	Doom boots into E1M1
+ea28cb9	Mon Oct 12 15:47:30 2026 +0200	VM Host fixes, RGB565_EXT, automated visual testing infra
+231c496	Mon Oct 12 12:15:02 2026 +0200	Much more compiler fixes
 8057c1b	Wed Aug 19 04:42:45 2026 +0200	Pretty mimimi boot telemetry ^_^
 34ae4be	Wed Aug 19 04:33:22 2026 +0200	Syscalls instead of direct mmio
 c7852cc	Wed Aug 19 04:16:25 2026 +0200	RXE execution

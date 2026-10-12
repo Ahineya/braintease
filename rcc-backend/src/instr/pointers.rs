@@ -112,27 +112,223 @@ pub fn offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     if let Value::Constant(n) = index {
         return constant_offset(mgr, naming, ptr, n.wrapping_mul(size as i64), result, bank_size);
     }
-    let base = naming.new_internal_temp();
-    let mut insts = to_linear(mgr, naming, ptr, base, bank_size);
-    let displacement = if size == 1 { index.clone() } else {
-        let t = naming.new_internal_temp();
-        insts.extend(wide::lower_i32_binary(mgr, naming, IrBinaryOp::Mul, index, &Value::Constant(size as i64), t));
-        Value::Temp(t)
-    };
-    let total = naming.new_internal_temp();
-    insts.extend(wide::lower_i32_binary(mgr, naming, IrBinaryOp::Add, &Value::Temp(base), &displacement, total));
-    let bank = naming.new_internal_temp();
-    let addr = naming.new_internal_temp();
-    insts.extend(wide::lower_i32_binary(mgr, naming, IrBinaryOp::UDiv, &Value::Temp(total), &Value::Constant(bank_size as i64), bank));
-    // Derive the remainder from the quotient; do not emit a second division.
-    let used = naming.new_internal_temp();
-    insts.extend(wide::lower_i32_binary(mgr, naming, IrBinaryOp::Mul, &Value::Temp(bank), &Value::Constant(bank_size as i64), used));
-    insts.extend(wide::lower_i32_binary(mgr, naming, IrBinaryOp::Sub, &Value::Temp(total), &Value::Temp(used), addr));
-    let bname = naming.temp_name(bank);
-    let aname = naming.temp_name(addr);
-    let ar = mgr.get_register(aname); insts.extend(mgr.take_instructions());
-    mgr.bind_value_to_register(naming.temp_name(result), ar);
-    mgr.set_pointer_bank(naming.temp_name(result), BankInfo::Dynamic(bname));
+    if size == 0 {
+        return constant_offset(mgr, naming, ptr, 0, result, bank_size);
+    }
+
+    let mut insts = vec![AsmInst::Comment("GEP: native narrow displacement, wide fallback".into())];
+    let (addr, bank) = components(mgr, naming, ptr, &mut insts);
+    let (index_lo, index_hi, ii) = wide::get_i32_pair(mgr, naming, index, false);
+    insts.extend(ii);
+    mgr.pin_register(index_lo);
+    mgr.pin_register(index_hi);
+
+    // Allocate every working register before emitting internal branches. The
+    // register allocator is linear: a spill emitted on just one arm would not
+    // initialize its slot on the other arm. Work on owned copies and keep the
+    // complete operation pinned so either arm has the same allocator state.
+    let mut scratch = Vec::new();
+    for tag in ["index_lo", "index_hi", "remainder_lo", "remainder_hi", "bits", "one", "carry", "temporary", "bank_size"] {
+        let r = reg(mgr, naming, &mut insts, tag);
+        mgr.pin_register(r);
+        scratch.push(r);
+        // Release the input pins as soon as both words have been copied; the
+        // full operation uses eleven of the twelve allocatable registers.
+        match scratch.len() {
+            1 => insts.push(AsmInst::Move(r, index_lo)),
+            2 => {
+                insts.push(AsmInst::Move(r, index_hi));
+                mgr.unpin_register(index_lo);
+                mgr.unpin_register(index_hi);
+            }
+            _ => {}
+        }
+    }
+    let (lo, hi, rlo, rhi, bits, one, carry, tmp, bs) =
+        (scratch[0], scratch[1], scratch[2], scratch[3], scratch[4], scratch[5], scratch[6], scratch[7], scratch[8]);
+
+    // Scale using shifts/adds in the existing registers. In particular, arrays
+    // of 32-bit words use a two-word shift rather than a general multiplication.
+    if size.is_power_of_two() {
+        let shift = size.trailing_zeros();
+        if shift >= 16 {
+            insts.push(AsmInst::Li(bits, (shift - 16) as i16));
+            insts.push(AsmInst::Sll(hi, lo, bits));
+            insts.push(AsmInst::Li(lo, 0));
+        } else if shift != 0 {
+            insts.push(AsmInst::Li(bits, (16 - shift) as i16));
+            insts.push(AsmInst::Srl(tmp, lo, bits));
+            insts.push(AsmInst::Li(bits, shift as i16));
+            insts.push(AsmInst::Sll(hi, hi, bits));
+            insts.push(AsmInst::Or(hi, hi, tmp));
+            insts.push(AsmInst::Sll(lo, lo, bits));
+        }
+    } else {
+        insts.push(AsmInst::Li(rlo, 0));
+        insts.push(AsmInst::Li(rhi, 0));
+        for shift in 0..32 {
+            if size & (1u32 << shift) == 0 { continue; }
+            if shift >= 16 {
+                insts.push(AsmInst::Li(bits, (shift - 16) as i16));
+                insts.push(AsmInst::Sll(tmp, lo, bits));
+                insts.push(AsmInst::Add(rhi, rhi, tmp));
+                continue;
+            }
+            if shift == 0 {
+                insts.push(AsmInst::Move(tmp, lo));
+                insts.push(AsmInst::Move(one, hi));
+            } else {
+                insts.push(AsmInst::Li(bits, shift as i16));
+                insts.push(AsmInst::Sll(tmp, lo, bits));
+                insts.push(AsmInst::Sll(one, hi, bits));
+                insts.push(AsmInst::Li(bits, (16 - shift) as i16));
+                insts.push(AsmInst::Srl(bs, lo, bits));
+                insts.push(AsmInst::Or(one, one, bs));
+            }
+            insts.push(AsmInst::Add(bs, rlo, tmp));
+            insts.push(AsmInst::Sltu(carry, bs, rlo));
+            insts.push(AsmInst::Move(rlo, bs));
+            insts.push(AsmInst::Add(rhi, rhi, one));
+            insts.push(AsmInst::Add(rhi, rhi, carry));
+        }
+        insts.push(AsmInst::Move(lo, rlo));
+        insts.push(AsmInst::Move(hi, rhi));
+    }
+
+    let positive = naming.i32_label("gep_positive_word");
+    let negative = naming.i32_label("gep_negative_word");
+    let add = naming.i32_label("gep_native_add");
+    let adjust = naming.i32_label("gep_native_carry");
+    let subtract = naming.i32_label("gep_native_subtract");
+    let general = naming.i32_label("gep_wide_offset");
+    let divide = naming.i32_label("gep_divide");
+    let ge = naming.i32_label("gep_divide_ge");
+    let next = naming.i32_label("gep_divide_next");
+    let finish_divide = naming.i32_label("gep_divide_done");
+    let done = naming.i32_label("gep_offset_done");
+    insts.push(AsmInst::Li(bs, bank_size as i16));
+    // Integer-to-pointer casts can supply a noncanonical offset. Normalize
+    // those using the full linear-address path before using single-carry math.
+    insts.push(AsmInst::Sltu(tmp, addr, bs));
+    insts.push(AsmInst::Beq(tmp, Reg::R0, general.clone()));
+    insts.push(AsmInst::Beq(hi, Reg::R0, positive.clone()));
+    insts.push(AsmInst::Li(tmp, -1));
+    insts.push(AsmInst::Beq(hi, tmp, negative.clone()));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, general.clone()));
+
+    // An unsigned one-word displacement needs at most one carry adjustment
+    // after removing its whole-bank portion. For the common index < bank_size
+    // case this does not execute any division, even native 16-bit division.
+    insts.push(AsmInst::Label(positive));
+    insts.push(AsmInst::Sltu(tmp, lo, bs));
+    insts.push(AsmInst::Bne(tmp, Reg::R0, add.clone()));
+    insts.push(AsmInst::Div(tmp, lo, bs));
+    insts.push(AsmInst::Add(bank, bank, tmp));
+    insts.push(AsmInst::Mod(lo, lo, bs));
+    insts.push(AsmInst::Label(add));
+    insts.push(AsmInst::Add(tmp, addr, lo));
+    insts.push(AsmInst::Sltu(carry, tmp, addr));
+    insts.push(AsmInst::Move(addr, tmp));
+    insts.push(AsmInst::Bne(carry, Reg::R0, adjust.clone()));
+    insts.push(AsmInst::Sltu(tmp, addr, bs));
+    insts.push(AsmInst::Bne(tmp, Reg::R0, done.clone()));
+    insts.push(AsmInst::Label(adjust));
+    insts.push(AsmInst::Sub(addr, addr, bs));
+    insts.push(AsmInst::AddI(bank, bank, 1));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
+
+    insts.push(AsmInst::Label(negative));
+    // -65536 has no one-word magnitude. Also keep unsigned 32-bit wraparound
+    // semantics for underflowing linear addresses by using the general path
+    // when the base might be smaller than the displacement magnitude.
+    insts.push(AsmInst::Beq(lo, Reg::R0, general.clone()));
+    insts.push(AsmInst::Li(tmp, (u16::MAX as u32).div_ceil(bank_size as u32) as i16));
+    insts.push(AsmInst::Sltu(tmp, bank, tmp));
+    insts.push(AsmInst::Bne(tmp, Reg::R0, general.clone()));
+    insts.push(AsmInst::Sub(lo, Reg::R0, lo));
+    insts.push(AsmInst::Sltu(tmp, lo, bs));
+    insts.push(AsmInst::Bne(tmp, Reg::R0, subtract.clone()));
+    insts.push(AsmInst::Div(tmp, lo, bs));
+    insts.push(AsmInst::Sub(bank, bank, tmp));
+    insts.push(AsmInst::Mod(lo, lo, bs));
+    insts.push(AsmInst::Label(subtract));
+    insts.push(AsmInst::Sltu(carry, addr, lo));
+    insts.push(AsmInst::Sub(addr, addr, lo));
+    insts.push(AsmInst::Beq(carry, Reg::R0, done.clone()));
+    insts.push(AsmInst::Add(addr, addr, bs));
+    insts.push(AsmInst::AddI(bank, bank, -1));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
+
+    // Full fallback: form (bank * bank_size + addr + displacement) mod 2^32,
+    // then divide by the one-word bank size. This retains the previous behavior
+    // for arbitrary signed offsets, including linear-address wraparound.
+    insts.push(AsmInst::Label(general));
+    insts.push(AsmInst::Add(tmp, lo, addr));
+    insts.push(AsmInst::Sltu(carry, tmp, lo));
+    insts.push(AsmInst::Move(lo, tmp));
+    insts.push(AsmInst::Add(hi, hi, carry));
+    for shift in 0..16 {
+        if bank_size & (1u16 << shift) == 0 { continue; }
+        if shift == 0 {
+            insts.push(AsmInst::Move(rlo, bank));
+            insts.push(AsmInst::Li(rhi, 0));
+        } else {
+            insts.push(AsmInst::Li(bits, shift as i16));
+            insts.push(AsmInst::Sll(rlo, bank, bits));
+            insts.push(AsmInst::Li(bits, (16 - shift) as i16));
+            insts.push(AsmInst::Srl(rhi, bank, bits));
+        }
+        insts.push(AsmInst::Add(tmp, lo, rlo));
+        insts.push(AsmInst::Sltu(carry, tmp, lo));
+        insts.push(AsmInst::Move(lo, tmp));
+        insts.push(AsmInst::Add(hi, hi, rhi));
+        insts.push(AsmInst::Add(hi, hi, carry));
+    }
+    insts.push(AsmInst::Li(addr, 0));
+    insts.push(AsmInst::Li(rlo, 0));
+    insts.push(AsmInst::Li(rhi, 0));
+    insts.push(AsmInst::Li(bits, 32));
+    insts.push(AsmInst::Li(one, 1));
+    insts.push(AsmInst::Label(divide.clone()));
+    insts.push(AsmInst::Slt(tmp, hi, Reg::R0));
+    insts.push(AsmInst::Slt(carry, rlo, Reg::R0));
+    insts.push(AsmInst::Add(rlo, rlo, rlo));
+    insts.push(AsmInst::Or(rlo, rlo, tmp));
+    insts.push(AsmInst::Add(rhi, rhi, rhi));
+    insts.push(AsmInst::Or(rhi, rhi, carry));
+    insts.push(AsmInst::Slt(carry, lo, Reg::R0));
+    insts.push(AsmInst::Add(lo, lo, lo));
+    insts.push(AsmInst::Add(hi, hi, hi));
+    insts.push(AsmInst::Or(hi, hi, carry));
+    // Only the low quotient word is part of the pointer's bank component.
+    insts.push(AsmInst::Add(addr, addr, addr));
+    insts.push(AsmInst::Bne(rhi, Reg::R0, ge.clone()));
+    insts.push(AsmInst::Sltu(carry, rlo, bs));
+    insts.push(AsmInst::Bne(carry, Reg::R0, next.clone()));
+    insts.push(AsmInst::Label(ge));
+    insts.push(AsmInst::Sltu(carry, rlo, bs));
+    insts.push(AsmInst::Sub(rlo, rlo, bs));
+    insts.push(AsmInst::Sub(rhi, rhi, carry));
+    insts.push(AsmInst::Or(addr, addr, one));
+    insts.push(AsmInst::Label(next));
+    insts.push(AsmInst::Sub(bits, bits, one));
+    insts.push(AsmInst::Beq(bits, Reg::R0, finish_divide.clone()));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, divide));
+    insts.push(AsmInst::Label(finish_divide));
+    insts.push(AsmInst::Move(bank, addr));
+    insts.push(AsmInst::Move(addr, rlo));
+    insts.push(AsmInst::Label(done));
+
+    let bank_name = naming.temp_with_context("pointer", "offset_bank");
+    mgr.bind_value_to_register(bank_name.clone(), bank);
+    mgr.bind_value_to_register(naming.temp_name(result), addr);
+    mgr.set_pointer_bank(naming.temp_name(result), BankInfo::Dynamic(bank_name));
+    mgr.unpin_register(addr);
+    mgr.unpin_register(bank);
+    for r in scratch {
+        mgr.unpin_register(r);
+        mgr.free_register(r);
+    }
     insts
 }
 

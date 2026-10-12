@@ -93,7 +93,8 @@ pub fn lower_binary_op(
 
     // Step 4: Allocate result register
     // Optimization: Try to reuse first register if possible
-    let result_reg = if can_reuse_register(op) && lhs_reg != rhs_reg {
+    let result_reg = if can_reuse_register(op) && lhs_reg != rhs_reg
+        && !mgr.register_is_live_after(lhs_reg) {
         trace!("  Reusing LHS register {lhs_reg:?} for result");
         lhs_reg
     } else {
@@ -284,4 +285,66 @@ pub fn lower_binary_op_immediate(
     
     debug!("lower_binary_op_immediate complete: generated {} instructions", insts.len());
     insts
+}
+
+#[cfg(test)]
+mod shared_operand_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+    use crate::instr::{lower_unary_op, tests::machine::Machine};
+    use rcc_frontend::ir::{IrType, IrUnaryOp};
+
+    #[test]
+    fn arithmetic_comparison_not_and_neg_preserve_future_operand_uses() {
+        let mut manager = RegisterPressureManager::new(0);
+        let mut names = NameGenerator::new(0);
+        manager.init();
+        let a = manager.get_register("t1".into());
+        let b = manager.get_register("t2".into());
+        let mut code = manager.take_instructions();
+        code.extend([AsmInst::Li(a, 7), AsmInst::Li(b, 11)]);
+        manager.set_live_after(&BTreeSet::from([1, 2, 3]));
+        code.extend(lower_binary_op(&mut manager, &mut names, IrBinaryOp::Sub,
+            &Value::Temp(1), &Value::Temp(2), 3));
+        manager.set_live_after(&BTreeSet::from([1, 2, 3, 4]));
+        code.extend(lower_binary_op(&mut manager, &mut names, IrBinaryOp::Slt,
+            &Value::Temp(1), &Value::Temp(2), 4));
+        manager.set_live_after(&BTreeSet::from([1, 2, 3, 4, 5]));
+        code.extend(lower_unary_op(&mut manager, &mut names, IrUnaryOp::Not,
+            &Value::Temp(1), &IrType::I16, 5));
+        manager.set_live_after(&BTreeSet::from([1, 2, 3, 4, 5, 6]));
+        code.extend(lower_unary_op(&mut manager, &mut names, IrUnaryOp::Neg,
+            &Value::Temp(2), &IrType::I16, 6));
+        let outputs: Vec<_> = (1..=6).map(|id| manager.get_register(format!("t{id}"))).collect();
+        code.extend(manager.take_instructions());
+        let mut machine = Machine::new(64000);
+        machine.run(&code);
+        let actual: Vec<_> = outputs.iter().map(|r| machine.regs[*r as usize]).collect();
+        assert_eq!(actual, vec![7, 11, (-4i16) as u16, 1, !7u16, (-11i16) as u16]);
+    }
+
+    #[test]
+    fn truncating_shared_wide_operand_does_not_destroy_low_word_or_companion() {
+        let mut manager = RegisterPressureManager::new(0);
+        let mut names = NameGenerator::new(0);
+        manager.init();
+        let low = manager.get_register("t1".into());
+        let high = manager.get_register("source_hi".into());
+        manager.set_i32_high("t1".into(), "source_hi".into());
+        let mut code = manager.take_instructions();
+        code.extend([AsmInst::Li(low, 0x3456), AsmInst::Li(high, 0x789a)]);
+        manager.set_live_after(&BTreeSet::from([1, 2]));
+        code.extend(lower_unary_op(&mut manager, &mut names, IrUnaryOp::Trunc,
+            &Value::Temp(1), &IrType::I8, 2));
+        manager.retain_live_registers(&BTreeSet::from([1, 2]));
+        let source = manager.get_register("t1".into());
+        let companion = manager.get_register("source_hi".into());
+        let truncated = manager.get_register("t2".into());
+        code.extend(manager.take_instructions());
+        let mut machine = Machine::new(64000);
+        machine.run(&code);
+        assert_eq!(machine.regs[source as usize], 0x3456);
+        assert_eq!(machine.regs[companion as usize], 0x789a);
+        assert_eq!(machine.regs[truncated as usize], 0x56);
+    }
 }

@@ -1,0 +1,5 @@
+{
+  "description": "Volatile object, target, array and aggregate accesses preserve observable RNG reads, including discarded values and exactly one read for increment",
+  "expected": "volatile semantics ok\n",
+  "use_runtime": true
+}

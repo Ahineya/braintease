@@ -39,6 +39,31 @@ pub fn lower_instruction(
     match instruction {
         Instruction::Binary { result, op, lhs, rhs, result_type } => {
             debug!("V2: Binary: t{result} = {lhs:?} {op:?} {rhs:?}");
+            if let (Value::Constant(a), Value::Constant(b)) = (lhs, rhs) {
+                if let Some(value) = crate::optimize::fold_binary(*op, *a, *b, result_type) {
+                    let comparison = matches!(op, rcc_frontend::ir::IrBinaryOp::Eq | rcc_frontend::ir::IrBinaryOp::Ne
+                        | rcc_frontend::ir::IrBinaryOp::Slt | rcc_frontend::ir::IrBinaryOp::Sle
+                        | rcc_frontend::ir::IrBinaryOp::Sgt | rcc_frontend::ir::IrBinaryOp::Sge
+                        | rcc_frontend::ir::IrBinaryOp::Ult | rcc_frontend::ir::IrBinaryOp::Ule
+                        | rcc_frontend::ir::IrBinaryOp::Ugt | rcc_frontend::ir::IrBinaryOp::Uge);
+                    let words = if comparison { 1 } else { result_type.abi_slots() };
+                    let name = naming.temp_name(*result);
+                    let mut regs = [Reg::R0; 4];
+                    for (i, reg) in regs.iter_mut().enumerate().take(words) {
+                        let word_name = if i == 0 { name.clone() } else if words == 2 {
+                            naming.i32_high_name(&name)
+                        } else { naming.i64_word_name(&name, i as u8) };
+                        *reg = mgr.get_register(word_name);
+                        insts.extend(mgr.take_instructions());
+                        mgr.pin_register(*reg);
+                        insts.push(AsmInst::Li(*reg, ((value as u64 >> (16 * i)) & 65535) as i16));
+                    }
+                    if words == 2 { crate::instr::wide::bind_i32(mgr, naming, &name, regs[0], regs[1]); }
+                    if words == 4 { crate::instr::i64::bind_i64(mgr, naming, &name, regs); }
+                    for reg in regs.iter().take(words) { mgr.unpin_register(*reg); }
+                    return Ok(insts);
+                }
+            }
             let use_i64 = result_type.is_i64()
                 || crate::instr::i64::value_is_i64(mgr, naming, lhs)
                 || crate::instr::i64::value_is_i64(mgr, naming, rhs);
@@ -88,7 +113,7 @@ pub fn lower_instruction(
             insts.extend(unary_insts);
         }
         
-        Instruction::Load { result, ptr, result_type } => {
+        Instruction::Load { result, ptr, result_type, .. } => {
             debug!("V2: Load: t{result} = load {ptr:?}");
             
             insts.push(AsmInst::Comment(format!("Load instruction: t{result} = load {ptr:?}")));
@@ -111,7 +136,7 @@ pub fn lower_instruction(
             insts.extend(load_insts);
         }
         
-        Instruction::Store { value, ptr, value_type } => {
+        Instruction::Store { value, ptr, value_type, .. } => {
             debug!("V2: Store: {value:?} -> {ptr:?}");
 
             // Canonicalize both value and pointer to resolve any global references
@@ -309,6 +334,10 @@ pub fn lower_instruction(
                             Value::Constant(c) => {
                                 let temp_name = naming.const_value(*c);
                                 let reg = mgr.get_register(temp_name);
+                                // Allocation can evict a live argument/parameter.
+                                // Save it before materializing the address into
+                                // the reused register (not after the LI).
+                                insts.extend(mgr.take_instructions());
                                 insts.extend(emit_addr_constant(
                                     reg,
                                     *c as i16,
@@ -769,13 +798,16 @@ fn lower_va_arg(
         mgr.pin_register(ap_reg);
         let dest_reg = mgr.get_register(dest_name.clone());
         insts.extend(mgr.take_instructions());
+        mgr.pin_register(dest_reg);
         insts.push(AsmInst::Load(dest_reg, Reg::Sb, ap_reg));
 
-        insts.push(AsmInst::AddI(Reg::Sc, ap_reg, -1));
         if result_type.is_two_word_scalar() {
             let hi_name = naming.i32_high_name(&dest_name);
             let hi_reg = mgr.get_register(hi_name.clone());
             insts.extend(mgr.take_instructions());
+            // Allocation may spill through SC. Form the argument address only
+            // after those stores/reloads, while retaining its loaded low word.
+            insts.push(AsmInst::AddI(Reg::Sc, ap_reg, -1));
             insts.push(AsmInst::Load(hi_reg, Reg::Sb, Reg::Sc));
             mgr.bind_value_to_register(hi_name.clone(), hi_reg);
             mgr.set_i32_high(dest_name.clone(), hi_name);
@@ -786,11 +818,13 @@ fn lower_va_arg(
             let bank_name = naming.load_bank_value(dest);
             let bank_reg = mgr.get_register(bank_name.clone());
             insts.extend(mgr.take_instructions());
+            insts.push(AsmInst::AddI(Reg::Sc, ap_reg, -1));
             insts.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
             mgr.bind_value_to_register(bank_name.clone(), bank_reg);
             mgr.set_pointer_bank(dest_name, BankInfo::Dynamic(bank_name));
         }
         mgr.bind_value_to_register(naming.temp_name(dest), dest_reg);
+        mgr.unpin_register(dest_reg);
         mgr.unpin_register(ap_reg);
     } else {
         insts.extend(lower_load(mgr, naming, &ap_val, result_type, dest));

@@ -14,6 +14,7 @@ fn is_memory_object(ir_type: &IrType) -> bool {
 pub fn generate_identifier(
     gen: &mut TypedExpressionGenerator,
     name: &str,
+    volatile: bool,
 ) -> Result<Value, CompilerError> {
     if let Some(var_info) = gen.variables.get(name) {
         if gen.array_variables.contains(name) || is_memory_object(&var_info.ir_type) {
@@ -25,7 +26,7 @@ pub fn generate_identifier(
             
             let result = gen
                 .builder
-                .build_load(var_info.value.clone(), load_type)?;
+                .build_load_volatile(var_info.value.clone(), load_type, volatile)?;
             
             // If it's a pointer type, we need to wrap the loaded value as a FatPtr
             // For pointer parameters, we use Mixed bank to indicate runtime-determined bank
@@ -43,7 +44,7 @@ pub fn generate_identifier(
             
             let result = gen
                 .builder
-                .build_load(var_info.value.clone(), load_type)?;
+                .build_load_volatile(var_info.value.clone(), load_type, volatile)?;
             
             // If it's a pointer type, wrap it in FatPtr to preserve bank information
             if var_info.ir_type.is_pointer() {

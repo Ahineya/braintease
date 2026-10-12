@@ -103,12 +103,12 @@ pub fn generate_array_index(
     
     // Arrays decay to pointers. Aggregates are used as pointers (member
     // access, assignment, byval args) so do not load them as scalars.
-    if matches!(elem_type, Type::Array { .. }) || elem_type.is_aggregate() {
+    if matches!(elem_type.unqualified(), Type::Array { .. }) || elem_type.is_aggregate() {
         Ok(elem_ptr)
     } else {
         let elem_ir_type = convert_type_default(elem_type)?;
-        let result = gen.builder.build_load(elem_ptr, elem_ir_type)?;
-        if matches!(elem_type, Type::Pointer { .. }) {
+        let result = gen.builder.build_load_volatile(elem_ptr, elem_ir_type, elem_type.is_volatile())?;
+        if matches!(elem_type.unqualified(), Type::Pointer { .. }) {
             Ok(Value::FatPtr(FatPointer {
                 addr: Box::new(Value::Temp(result)),
                 bank: BankTag::Mixed,
@@ -131,7 +131,7 @@ pub fn generate_pointer_compound_assignment(
     let lhs_addr = generate_lvalue_address(gen, lhs)?;
     let lhs_val = {
         let ir_type = convert_type_default(lhs.get_type())?;
-        let temp = gen.builder.build_load(lhs_addr.clone(), ir_type)?;
+        let temp = gen.builder.build_load_volatile(lhs_addr.clone(), ir_type, lhs.get_declared_type().is_volatile())?;
         // A pointer load carries both runtime components. Preserve that value
         // shape for GEP just as identifier loads and pointer increments do;
         // the bank of the lvalue's storage is not the pointee's bank.
@@ -175,7 +175,7 @@ pub fn generate_pointer_compound_assignment(
         .builder
         .build_pointer_offset(lhs_val, final_offset, ir_type.clone())?;
     
-    gen.builder.build_store(result.clone(), lhs_addr, ir_type)?;
+    gen.builder.build_store_volatile(result.clone(), lhs_addr, ir_type, lhs.get_declared_type().is_volatile())?;
     Ok(result)
 }
 /// Integer representation of a pointer includes both its offset and bank.

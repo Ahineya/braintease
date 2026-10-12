@@ -16,7 +16,7 @@ fn materialize_wide_int(
     val: Value,
     ty: &Type,
 ) -> Result<Value, CompilerError> {
-    if !matches!(ty, Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong | Type::Float | Type::Double) {
+    if !matches!(ty.unqualified(), Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong | Type::Float | Type::Double) {
         return Ok(val);
     }
     if matches!(val, Value::Temp(_)) {
@@ -24,7 +24,7 @@ fn materialize_wide_int(
     }
     // Split constant bits with integer Add-0. Using F32/F64 here would hit the
     // backend's "floating Binary should be a call" guard.
-    let ir_type = match ty {
+    let ir_type = match ty.unqualified() {
         Type::Float | Type::Long | Type::UnsignedLong => crate::ir::IrType::I32,
         Type::Double | Type::LongLong | Type::UnsignedLongLong => crate::ir::IrType::I64,
         _ => convert_type_default(ty)?,
@@ -86,7 +86,7 @@ pub fn generate_function_call(
                     message: format!("Failed to allocate temp for aggregate argument: {e}"),
                     location: rcc_common::SourceLocation::new_simple(0, 0),
                 })?;
-            copy_struct(gen, val, dest.clone(), &arg_type)?;
+            super::assignments::copy_struct_access(gen, val, dest.clone(), arg.get_declared_type(), arg_type)?;
             arg_vals.push(dest);
         } else if i < param_types.len() && (arg_type.is_integer() || arg_type.is_floating()) && (param_types[i].is_integer() || param_types[i].is_floating()) {
             let converted = convert_value(gen, val, arg_type, &param_types[i])?;
@@ -118,7 +118,7 @@ pub fn generate_function_call(
         Some(temp_id) => {
             // If the return type is a pointer, wrap it in a FatPointer with Mixed bank
             // Mixed is used for pointers that can come from different sources
-            if matches!(return_type, Type::Pointer { .. }) {
+            if matches!(return_type.unqualified(), Type::Pointer { .. }) {
                 Ok(Value::FatPtr(FatPointer {
                     addr: Box::new(Value::Temp(temp_id)),
                     bank: BankTag::Mixed,

@@ -6,6 +6,7 @@ use rcc_codegen::{AsmInst, Reg};
 pub struct Machine {
     pub regs: [u16; 32],
     pub memory: HashMap<(u16, u16), u16>,
+    pub executed_instructions: usize,
     bank_size: u16,
 }
 
@@ -14,7 +15,7 @@ impl Machine {
         let mut regs = [0; 32];
         regs[Reg::Gp as usize] = 1;
         regs[Reg::Sb as usize] = 2;
-        Self { regs, memory: HashMap::new(), bank_size }
+        Self { regs, memory: HashMap::new(), executed_instructions: 0, bank_size }
     }
 
     pub fn run(&mut self, insts: &[AsmInst]) {
@@ -26,6 +27,9 @@ impl Machine {
         while pc < insts.len() {
             steps += 1;
             assert!(steps < 1_000_000, "Generated code did not terminate");
+            if !matches!(insts[pc], AsmInst::Label(_) | AsmInst::Comment(_)) {
+                self.executed_instructions += 1;
+            }
             let r = &self.regs;
             let mut write = None;
             match &insts[pc] {

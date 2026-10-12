@@ -250,7 +250,7 @@ impl StatementAnalyzer {
 
         // Tag-only declaration: `struct T { int x; };` / `struct T;`
         if decl.name.is_empty() {
-            match &decl.decl_type {
+            match decl.decl_type.unqualified() {
                 Type::Struct { name: Some(name), .. }
                 | Type::Union { name: Some(name), .. }
                 | Type::Enum { name: Some(name), .. } => {

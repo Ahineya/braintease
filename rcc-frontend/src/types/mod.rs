@@ -33,6 +33,9 @@ impl fmt::Display for BankTag {
 /// C99 type system
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
+    /// A volatile-qualified object type. Placement distinguishes a volatile
+    /// pointer object from a pointer whose target is volatile.
+    Volatile(Box<Type>),
     /// Void type
     Void,
     
@@ -104,9 +107,58 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn unqualified(&self) -> &Type {
+        match self {
+            Type::Volatile(inner) => inner.unqualified(),
+            _ => self,
+        }
+    }
+
+    pub fn is_volatile(&self) -> bool {
+        matches!(self, Type::Volatile(_))
+    }
+
+    pub fn with_volatile(self) -> Type {
+        match self {
+            Type::Volatile(_) => self,
+            Type::Array { element_type, size } => Type::Array {
+                element_type: Box::new(element_type.with_volatile()), size,
+            },
+            other => Type::Volatile(Box::new(other)),
+        }
+    }
+
+    /// Qualifiers of the containing aggregate apply to its member lvalues.
+    pub fn qualify_member(&self, member: &Type) -> Type {
+        if self.is_volatile() { member.clone().with_volatile() } else { member.clone() }
+    }
+
+    /// Aggregate copies preserve volatile access to qualified fields too.
+    pub fn volatile_at_offset(&self, offset: u64) -> bool {
+        if self.is_volatile() { return true; }
+        match self {
+            Type::Array { element_type, .. } => element_type.size_in_words()
+                .is_some_and(|size| size != 0 && element_type.volatile_at_offset(offset % size)),
+            Type::Struct { fields, .. } => {
+                let mut base = 0;
+                for field in fields {
+                    let size = field.field_type.size_in_words().unwrap_or(0);
+                    if offset >= base && offset - base < size {
+                        return field.field_type.volatile_at_offset(offset - base);
+                    }
+                    base += size;
+                }
+                false
+            }
+            Type::Union { fields, .. } => fields.iter().any(|field|
+                field.field_type.size_in_words().is_some_and(|size| offset < size)
+                && field.field_type.volatile_at_offset(offset)),
+            _ => false,
+        }
+    }
     /// Check if this type is an integer type
     pub fn is_integer(&self) -> bool {
-        matches!(self, 
+        matches!(self.unqualified(),
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
             Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
             Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
@@ -116,7 +168,7 @@ impl Type {
     
     /// Check if this type is a signed integer type
     pub fn is_signed_integer(&self) -> bool {
-        matches!(self,
+        matches!(self.unqualified(),
             Type::Char | Type::SignedChar | Type::Short | Type::Int | Type::Long |
             Type::LongLong | Type::Enum { .. }
         )
@@ -128,7 +180,7 @@ impl Type {
     /// promoted to signed `int` (their range does not fit). Comparisons and
     /// division involving these types must use unsigned operations.
     pub fn is_unsigned_integer(&self) -> bool {
-        matches!(self,
+        matches!(self.unqualified(),
             Type::UnsignedChar | Type::UnsignedShort | Type::UnsignedInt | Type::UnsignedLong |
             Type::UnsignedLongLong
         )
@@ -136,12 +188,12 @@ impl Type {
     
     /// Check if this type is a pointer type
     pub fn is_pointer(&self) -> bool {
-        matches!(self, Type::Pointer { .. })
+        matches!(self.unqualified(), Type::Pointer { .. })
     }
 
     /// Check if this type is a floating type
     pub fn is_floating(&self) -> bool {
-        matches!(self, Type::Float | Type::Double)
+        matches!(self.unqualified(), Type::Float | Type::Double)
     }
 
     /// Check if this type is a scalar (integer, float, or pointer)
@@ -151,12 +203,12 @@ impl Type {
 
     /// Struct or union (typedefs must already be resolved)
     pub fn is_aggregate(&self) -> bool {
-        matches!(self, Type::Struct { .. } | Type::Union { .. })
+        matches!(self.unqualified(), Type::Struct { .. } | Type::Union { .. })
     }
     
     /// Check if this type can be assigned from another type
     pub fn is_assignable_from(&self, other: &Type) -> bool {
-        match (self, other) {
+        match (self.unqualified(), other.unqualified()) {
             // Same type is always assignable
             (a, b) if a == b => true,
             
@@ -170,12 +222,12 @@ impl Type {
             
             // void* can be assigned from any pointer
             (Type::Pointer { target: t1, .. }, Type::Pointer { target: t2, .. }) => {
-                **t1 == Type::Void || **t2 == Type::Void || t1 == t2
+                *t1.unqualified() == Type::Void || *t2.unqualified() == Type::Void || t1.unqualified() == t2.unqualified()
             }
             
             // Arrays decay to pointers
             (Type::Pointer { target: t1, .. }, Type::Array { element_type: t2, .. }) => {
-                **t1 == Type::Void || t1 == t2
+                *t1.unqualified() == Type::Void || t1.unqualified() == t2.unqualified()
             }
             
             _ => false,
@@ -185,6 +237,7 @@ impl Type {
     /// Get the size of this type in Ripple VM words (16-bit cells)
     pub fn size_in_words(&self) -> Option<u64> {
         match self {
+            Type::Volatile(inner) => inner.size_in_words(),
             Type::Void => None,
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => Some(1),
             Type::Short | Type::UnsignedShort => Some(1),
@@ -228,16 +281,16 @@ impl Type {
     /// Integer promotions for a target with 16-bit char, short and int.
     /// Unsigned char/short cannot be represented by int and promote to unsigned int.
     pub fn integer_promoted(&self) -> Type {
-        match self {
+        match self.unqualified() {
             Type::UnsignedChar | Type::UnsignedShort => Type::UnsignedInt,
             Type::Bool | Type::Char | Type::SignedChar | Type::Short | Type::Enum { .. } => Type::Int,
-            _ => self.clone(),
+            other => other.clone(),
         }
     }
 
     /// Get pointer target type
     pub fn pointer_target(&self) -> Option<&Type> {
-        match self {
+        match self.unqualified() {
             Type::Pointer { target, .. } => Some(target),
             Type::Array { element_type, .. } => Some(element_type),
             _ => None,
@@ -248,6 +301,7 @@ impl Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Type::Volatile(inner) => write!(f, "volatile {inner}"),
             Type::Void => write!(f, "void"),
             Type::Bool => write!(f, "_Bool"),
             Type::Char => write!(f, "char"),

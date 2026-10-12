@@ -22,23 +22,27 @@ getchar:
     ADDI SP, SP, 1
 ; Set FP = SP
     ADD FP, SP, R0
-; Allocate 9 slots for locals
-    ADDI SP, SP, 9
+; Allocate 8 slots for locals
+    ADDI SP, SP, 8
 ; Reserve 20 spill slots above locals
     ADDI SP, SP, 20
-    ADD S3, FP, R0
+    LI S3, 1
+; Spill t3 to slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    STORE S3, SB, SC
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1
 L_getchar_1:
     LI S2, 3
     ADD A0, S2, R0
 ; Spill live registers before call
-; Spill const_f0_op0_3 to slot 0
+; Spill const_f0_op0_3 to slot 1
     ADD SC, FP, R0
     ADDI SC, SC, 9
     STORE S2, SB, SC
-; Set SP = FP+29 so callee frame is above spills
-    ADDI SP, FP, 29
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
 ; Call function mmio_read
@@ -46,65 +50,66 @@ L_getchar_1:
 ; Scalar return value for t1
 ; Copy Rv0 to allocatable S1
     ADD S1, RV0, R0
-; Recompute alloca t0 at FP+0
-    ADD S0, FP, R0
-    STORE S1, SB, S0
-; Spill t1 to slot 1
+; Spill t1 to slot 2
     ADD SC, FP, R0
     ADDI SC, SC, 10
     STORE S1, SB, SC
     BEQ R0, R0, L_getchar_2
 ; Unconditional branch to L_getchar_2
 L_getchar_2:
-; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(0), bank: Stack })
-; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(0), bank: Stack })
-; Recompute alloca t0 at FP+0
-    ADD T7, FP, R0
-; LOAD: Pointer load_src_ptr_f0_op2_t2 has bank info: Stack
-; LOAD: Using bank register Sb for load
-    LOAD T6, SB, T7
-    LI T5, 1
-    LI T4, 0
-    SLL T5, T5, T4
-    AND T6, T6, T5
-    LI T3, 0
-    XOR T2, T6, T3
-    LI T1, 1
-    SLTU T6, T2, T1
+; Reload t1 from slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 10
+    LOAD S0, SB, SC
+    LI T7, 0
+    ADD S0, S0, T7
+; Reload t3 from slot 0
+    ADD SC, FP, R0
+    ADDI SC, SC, 8
+    LOAD T6, SB, SC
+    AND S0, S0, T6
+    LI T5, 0
+    XOR T4, S0, T5
+    LI T3, 1
+    SLTU S0, T4, T3
+    LI T2, 0
+    XOR T1, S0, T2
     LI T0, 0
-    XOR S3, T6, T0
-    LI S2, 0
-    SLTU T6, S2, S3
-; Spill t6 to slot 2
+    SLTU S0, T0, T1
+; Spill t3 to slot 0
     ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, SC, 8
     STORE T6, SB, SC
-; Reload t6 from slot 2
+; Spill t6 to slot 3
     ADD SC, FP, R0
     ADDI SC, SC, 11
-    LOAD S1, SB, SC
-    BEQ S1, R0, L_getchar_3
+    STORE S0, SB, SC
+; Reload t6 from slot 3
+    ADD SC, FP, R0
+    ADDI SC, SC, 11
+    LOAD S3, SB, SC
+    BEQ S3, R0, L_getchar_3
 ; Branch to L_getchar_3 if condition is false
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1 (condition was true)
 L_getchar_3:
-    LI S0, 2
-    ADD A0, S0, R0
+    LI S2, 2
+    ADD A0, S2, R0
 ; Spill live registers before call
-; Spill const_f0_op8_2 to slot 3
+; Spill const_f0_op5_2 to slot 4
     ADD SC, FP, R0
     ADDI SC, SC, 12
-    STORE S0, SB, SC
-; Set SP = FP+29 so callee frame is above spills
-    ADDI SP, FP, 29
+    STORE S2, SB, SC
+; Set SP = FP+28 so callee frame is above spills
+    ADDI SP, FP, 28
 ; Setting up 1 register arguments
 ; Arg 0 (scalar) to A0
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t7
-; Copy Rv0 to allocatable T4
-    ADD T4, RV0, R0
-    MOVE RV0, T4
+; Copy Rv0 to allocatable S1
+    ADD S1, RV0, R0
+    MOVE RV0, S1
 ; Jump to epilogue
     BEQ R0, R0, L_getchar_99999
 L_getchar_99999:

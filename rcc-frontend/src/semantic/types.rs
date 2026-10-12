@@ -38,6 +38,7 @@ impl TypeAnalyzer {
     /// This is used when declaring variables to keep typedef information
     pub fn resolve_struct_references(&self, ty: &Type) -> Type {
         match ty {
+            Type::Volatile(inner) => self.resolve_struct_references(inner).with_volatile(),
             Type::Typedef(_) => {
                 // Preserve typedef - don't resolve it
                 ty.clone()
@@ -115,6 +116,7 @@ impl TypeAnalyzer {
     /// Returns the resolved type, or the original type if it cannot be resolved
     pub fn resolve_type(&self, ty: &Type) -> Type {
         match ty {
+            Type::Volatile(inner) => self.resolve_type(inner).with_volatile(),
             Type::Typedef(name) => {
                 // Look up typedef name
                 if let Some(actual_type) = self.type_definitions.borrow().get(name) {
@@ -224,6 +226,7 @@ impl TypeAnalyzer {
     /// for lists such as `struct node { struct node *next; }`.
     fn unwrap_typedefs_shallow(&self, ty: &Type) -> Type {
         match ty {
+            Type::Volatile(inner) => self.unwrap_typedefs_shallow(inner).with_volatile(),
             Type::Typedef(name) => {
                 if let Some(actual_type) = self.type_definitions.borrow().get(name) {
                     self.unwrap_typedefs_shallow(&actual_type.clone())
@@ -275,6 +278,7 @@ impl TypeAnalyzer {
 
     fn resolve_aggregate_field_pointee(&self, ty: &Type) -> Type {
         match ty {
+            Type::Volatile(inner) => self.resolve_aggregate_field_pointee(inner).with_volatile(),
             Type::Typedef(name) => {
                 let actual = self.type_definitions.borrow().get(name).cloned();
                 actual.map(|ty| self.resolve_aggregate_field_pointee(&ty)).unwrap_or_else(|| ty.clone())
@@ -307,6 +311,14 @@ impl TypeAnalyzer {
     
     /// Get common type between two types
     pub fn common_type(&self, left: &Type, right: &Type) -> Type {
+        if let (Some(left_target), Some(right_target)) = (self.pointer_target(left), self.pointer_target(right)) {
+            if left_target.unqualified() == right_target.unqualified() {
+                let target = if left_target.is_volatile() || right_target.is_volatile() {
+                    left_target.unqualified().clone().with_volatile()
+                } else { left_target };
+                return Type::Pointer { target: Box::new(target), bank: None };
+            }
+        }
         if left == right {
             left.clone()
         } else if self.is_assignable(left, right) {
@@ -365,7 +377,7 @@ impl TypeAnalyzer {
     /// Check if a type is an integer (resolving typedefs)
     pub fn is_integer(&self, ty: &Type) -> bool {
         let resolved = self.resolve_type(ty);
-        matches!(resolved, 
+        matches!(resolved.unqualified(),
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar |
             Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt |
             Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong |
@@ -376,7 +388,7 @@ impl TypeAnalyzer {
     /// Check if a type is floating (resolving typedefs)
     pub fn is_floating(&self, ty: &Type) -> bool {
         let resolved = self.resolve_type(ty);
-        matches!(resolved, Type::Float | Type::Double)
+        matches!(resolved.unqualified(), Type::Float | Type::Double)
     }
 
     /// Check if a type is arithmetic (integer or floating)
@@ -387,15 +399,15 @@ impl TypeAnalyzer {
     /// Check if a type is a pointer (resolving typedefs)
     pub fn is_pointer(&self, ty: &Type) -> bool {
         let resolved = self.resolve_type(ty);
-        matches!(resolved, Type::Pointer { .. } | Type::Array { .. })
+        matches!(resolved.unqualified(), Type::Pointer { .. } | Type::Array { .. })
     }
     
     /// Get pointer target type (resolving typedefs)
     pub fn pointer_target(&self, ty: &Type) -> Option<Type> {
         let resolved = self.resolve_type(ty);
-        match resolved {
-            Type::Pointer { target, .. } => Some(*target),
-            Type::Array { element_type, .. } => Some(*element_type),
+        match resolved.unqualified() {
+            Type::Pointer { target, .. } => Some((**target).clone()),
+            Type::Array { element_type, .. } => Some((**element_type).clone()),
             _ => None,
         }
     }
@@ -404,7 +416,7 @@ impl TypeAnalyzer {
     /// Keeping it explicit ensures calls and stores use both pointer ABI cells.
     pub fn convert_null_pointer_constant(&self, target: &Type, expr: &mut Expression) {
         let target = self.resolve_type(target);
-        if !matches!(target, Type::Pointer { .. })
+        if !matches!(target.unqualified(), Type::Pointer { .. })
             || !expr.expr_type.as_ref().is_some_and(|ty| self.is_integer(ty))
             || crate::ast::const_eval::eval_integer_constant(expr).ok() != Some(0)
         {
@@ -445,7 +457,7 @@ impl TypeAnalyzer {
         let to_resolved = self.resolve_type(to);
         let from_resolved = self.resolve_type(from);
         
-        match (&to_resolved, &from_resolved) {
+        match (to_resolved.unqualified(), from_resolved.unqualified()) {
             // Exact match after resolution
             (a, b) if a == b => true,
             
@@ -665,6 +677,7 @@ impl TypeAnalyzer {
     /// reference and must find that definition. File-scope
     /// `struct S { ... };` already goes through `register_type_definition`.
     pub fn register_complete_type_from_decl(&self, ty: &Type) {
+        let ty = ty.unqualified();
         match ty {
             Type::Struct { name: Some(name), fields } if !fields.is_empty() => {
                 {

@@ -29,13 +29,13 @@ pub fn generate_unary_operation(
             
             // Arrays decay to pointers. Aggregates are used as pointers
             // (assignment, member access, byval args) so do not load them.
-            if matches!(result_type, Type::Array { .. } | Type::Function { .. }) || result_type.is_aggregate() {
+            if matches!(result_type.unqualified(), Type::Array { .. } | Type::Function { .. }) || result_type.is_aggregate() {
                 Ok(ptr)
             } else {
                 // Regular dereference - load the value
                 let ir_type = convert_type_default(result_type)?;
-                let result = gen.builder.build_load(ptr, ir_type)?;
-                if matches!(result_type, Type::Pointer { .. }) {
+                let result = gen.builder.build_load_volatile(ptr, ir_type, result_type.is_volatile())?;
+                if matches!(result_type.unqualified(), Type::Pointer { .. }) {
                     Ok(Value::FatPtr(FatPointer {
                         addr: Box::new(Value::Temp(result)),
                         bank: BankTag::Mixed,
@@ -58,7 +58,7 @@ pub fn generate_unary_operation(
             let ir_type = convert_type_default(result_type)?;
             
             // 2. Load the current value
-            let current_val = gen.builder.build_load(addr.clone(), ir_type.clone())?;
+            let current_val = gen.builder.build_load_volatile(addr.clone(), ir_type.clone(), operand.get_declared_type().is_volatile())?;
             
             // Check if this is a pointer type
             let is_pointer = matches!(operand.get_type(), Type::Pointer { .. });
@@ -122,7 +122,7 @@ pub fn generate_unary_operation(
             };
             
             // 5. Store the new value back
-            gen.builder.build_store(new_value.clone(), addr, ir_type)?;
+            gen.builder.build_store_volatile(new_value.clone(), addr, ir_type, operand.get_declared_type().is_volatile())?;
             
             // 6. Return the new value (for pre-increment/decrement)
             Ok(new_value)
@@ -134,7 +134,7 @@ pub fn generate_unary_operation(
             let ir_type = convert_type_default(result_type)?;
             
             // 2. Load the current value
-            let old_value = gen.builder.build_load(addr.clone(), ir_type.clone())?;
+            let old_value = gen.builder.build_load_volatile(addr.clone(), ir_type.clone(), operand.get_declared_type().is_volatile())?;
             
             // Check if this is a pointer type
             let is_pointer = matches!(operand.get_type(), Type::Pointer { .. });
@@ -171,8 +171,8 @@ pub fn generate_unary_operation(
                 Value::Constant(1)
             };
             
-            // 5. Load the value again for the increment operation
-            let current = gen.builder.build_load(addr.clone(), ir_type.clone())?;
+            // Reuse the original value: volatile increment performs one read.
+            let current = old_value;
             
             // 6. Perform the increment/decrement
             let new_value = if is_pointer {
@@ -217,7 +217,7 @@ pub fn generate_unary_operation(
             };
             
             // 7. Store the new value back to memory
-            gen.builder.build_store(new_value, addr, ir_type)?;
+            gen.builder.build_store_volatile(new_value, addr, ir_type, operand.get_declared_type().is_volatile())?;
             
             // 8. Return the saved old value (this is what makes it post-increment)
             Ok(saved_old)
