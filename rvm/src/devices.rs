@@ -242,6 +242,30 @@ pub fn key_code(name: &str) -> Option<u16> {
     })
 }
 
+/// Logical guest RAM, independent of a backend's physical tape layout.
+/// Callers validate ranges before accessing cells; implementations must expose
+/// exactly `len()` addressable cells and must not route accesses through MMIO.
+pub trait GuestMemory {
+    fn len(&self) -> usize;
+    fn read(&self, index: usize) -> u16;
+    fn write(&mut self, index: usize, value: u16);
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl GuestMemory for [u16] {
+    fn len(&self) -> usize { <[u16]>::len(self) }
+    fn read(&self, index: usize) -> u16 { self[index] }
+    fn write(&mut self, index: usize, value: u16) { self[index] = value; }
+}
+
+impl GuestMemory for Vec<u16> {
+    fn len(&self) -> usize { Vec::len(self) }
+    fn read(&self, index: usize) -> u16 { self[index] }
+    fn write(&mut self, index: usize, value: u16) { self[index] = value; }
+}
+
 /// Validate a contiguous cell span, including bank crossings, in ordinary RAM.
 pub fn guest_range(
     memory_len: usize,
@@ -396,6 +420,17 @@ impl DeviceState {
         bank_size: u16,
         display_mode: u16,
     ) -> Option<PresentFrame> {
+        self.write_register_with_memory(address, value, memory, bank_size, display_mode)
+    }
+
+    pub fn write_register_with_memory<M: GuestMemory + ?Sized>(
+        &mut self,
+        address: usize,
+        value: u16,
+        memory: &mut M,
+        bank_size: u16,
+        display_mode: u16,
+    ) -> Option<PresentFrame> {
         match address {
             REGISTER_DESCRIPTOR_BANK => self.descriptor.bank = value,
             REGISTER_DESCRIPTOR_OFFSET => self.descriptor.offset = value,
@@ -415,17 +450,17 @@ impl DeviceState {
         None
     }
 
-    fn descriptor_range(
+    fn descriptor_range<M: GuestMemory + ?Sized>(
         pointer: DescriptorPointer,
-        memory: &[u16],
+        memory: &M,
         bank_size: u16,
         length: usize,
     ) -> Result<Range<usize>, u16> {
         let header = guest_range(memory.len(), bank_size, pointer.bank, pointer.offset, 2)?;
-        if memory[header.start] != ABI_VERSION {
+        if memory.read(header.start) != ABI_VERSION {
             return Err(STATUS_VERSION);
         }
-        if usize::from(memory[header.start + 1]) != length {
+        if usize::from(memory.read(header.start + 1)) != length {
             return Err(STATUS_BAD_DESCRIPTOR);
         }
         guest_range(
@@ -437,10 +472,10 @@ impl DeviceState {
         )
     }
 
-    fn execute_command(
+    fn execute_command<M: GuestMemory + ?Sized>(
         &mut self,
         command: u16,
-        memory: &mut [u16],
+        memory: &mut M,
         bank_size: u16,
         display_mode: u16,
     ) -> Result<Option<PresentFrame>, u16> {
@@ -451,13 +486,17 @@ impl DeviceState {
             _ => return Err(STATUS_UNKNOWN_COMMAND),
         };
         let range = Self::descriptor_range(self.descriptor, memory, bank_size, length)?;
+        let mut words = [0u16; 19];
+        for (word, address) in words.iter_mut().zip(range.clone()) {
+            *word = memory.read(address);
+        }
+        let descriptor = &mut words[..length];
         self.status = STATUS_OK;
         match command {
             COMMAND_PRESENT => {
                 if display_mode != DISPLAY_MODE_EXTENDED {
                     return Err(STATUS_DISPLAY_MODE);
                 }
-                let descriptor = &memory[range];
                 let width = descriptor[2];
                 let height = descriptor[3];
                 let stride = descriptor[4];
@@ -477,7 +516,7 @@ impl DeviceState {
                 pixels.try_reserve_exact(size).map_err(|_| STATUS_BOUNDS)?;
                 for row in 0..usize::from(height) {
                     let start = buffer.start + row * usize::from(stride);
-                    pixels.extend_from_slice(&memory[start..start + usize::from(width)]);
+                    pixels.extend((start..start + usize::from(width)).map(|i| memory.read(i)));
                 }
                 return Ok(Some(PresentFrame {
                     width,
@@ -486,16 +525,16 @@ impl DeviceState {
                 }));
             }
             COMMAND_CAPABILITIES => {
-                memory[range.start + 2] = CAPABILITIES;
-                memory[range.start + 3] = KEY_COUNT as u16;
+                descriptor[2] = CAPABILITIES;
+                descriptor[3] = KEY_COUNT as u16;
             }
             COMMAND_NEXT_TICK => {
                 self.pending_tick = Some(self.descriptor);
                 self.status = STATUS_PENDING;
+                return Ok(None);
             }
-            COMMAND_GET_TIME => self.write_time(&mut memory[range]),
+            COMMAND_GET_TIME => self.write_time(descriptor),
             COMMAND_INPUT_POP => {
-                let descriptor = &mut memory[range];
                 descriptor[2..].fill(0);
                 if let Some(event) = self.events.pop_front() {
                     descriptor[2] = 1;
@@ -507,7 +546,6 @@ impl DeviceState {
                 descriptor[7] = u16::from(self.input_overflow);
             }
             COMMAND_INPUT_STATE => {
-                let descriptor = &mut memory[range];
                 descriptor[2] = u16::from(self.input_overflow);
                 descriptor[3..].copy_from_slice(&self.held);
                 // A snapshot acknowledges lost transitions. Any older queued
@@ -518,6 +556,9 @@ impl DeviceState {
                 self.input_overflow = false;
             }
             _ => unreachable!("command was validated above"),
+        }
+        for (address, &word) in range.zip(descriptor.iter()) {
+            memory.write(address, word);
         }
         Ok(None)
     }
@@ -566,6 +607,15 @@ impl DeviceState {
         bank_size: u16,
         live_events: &[KeyTransition],
     ) -> Result<(), String> {
+        self.complete_tick_with_memory(memory, bank_size, live_events)
+    }
+
+    pub fn complete_tick_with_memory<M: GuestMemory + ?Sized>(
+        &mut self,
+        memory: &mut M,
+        bank_size: u16,
+        live_events: &[KeyTransition],
+    ) -> Result<(), String> {
         let Some(pointer) = self.pending_tick.take() else {
             return Ok(());
         };
@@ -588,7 +638,11 @@ impl DeviceState {
         for &transition in live_events {
             self.apply_transition(transition);
         }
-        self.write_time(&mut memory[range]);
+        let mut descriptor = [0u16; 8];
+        self.write_time(&mut descriptor);
+        for offset in 2..8 {
+            memory.write(range.start + offset, descriptor[offset]);
+        }
         self.status = if self.input_overflow {
             STATUS_INPUT_OVERFLOW
         } else {
@@ -601,6 +655,51 @@ impl DeviceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct StridedMemory(Vec<u16>);
+    impl GuestMemory for StridedMemory {
+        fn len(&self) -> usize { self.0.len() / 8 }
+        fn read(&self, index: usize) -> u16 { self.0[index * 8 + 4] }
+        fn write(&mut self, index: usize, value: u16) { self.0[index * 8 + 4] = value; }
+    }
+
+    #[test]
+    fn strided_memory_matches_flat_commands_without_touching_other_lanes() {
+        let mut flat = vec![0u16; 256];
+        let mut strided = StridedMemory(vec![0xa55a; flat.len() * 8]);
+        for index in 0..flat.len() { strided.write(index, 0); }
+        let mut native = DeviceState::default();
+        let mut bf = DeviceState::default();
+        let script = InputScript::from_json(r#"[{"tick":1,"key":"UP","down":true}]"#).unwrap();
+        native.set_script(script.clone()).unwrap();
+        bf.set_script(script).unwrap();
+        for (command, length) in [(COMMAND_CAPABILITIES, 4), (COMMAND_NEXT_TICK, 8),
+            (COMMAND_GET_TIME, 8), (COMMAND_INPUT_POP, 8), (COMMAND_INPUT_STATE, 19),
+            (COMMAND_PRESENT, 8), (99, 8)] {
+            // The descriptor crosses bank 0->1; framebuffer crosses bank 1->2.
+            flat[63..82].fill(0);
+            flat[63] = ABI_VERSION;
+            flat[64] = length;
+            if command == COMMAND_PRESENT {
+                flat[65..71].copy_from_slice(&[3, 2, 5, 1, 62, 0]);
+                flat[126..134].copy_from_slice(&[1, 2, 3, 99, 99, 4, 5, 6]);
+            }
+            for (index, &value) in flat.iter().enumerate() { strided.write(index, value); }
+            native.write_register(REGISTER_DESCRIPTOR_OFFSET, 63, &mut flat, 64, 4);
+            bf.write_register_with_memory(REGISTER_DESCRIPTOR_OFFSET, 63, &mut strided, 64, 4);
+            let expected = native.write_register(REGISTER_COMMAND, command, &mut flat, 64, 4);
+            let actual = bf.write_register_with_memory(REGISTER_COMMAND, command, &mut strided, 64, 4);
+            assert_eq!(actual, expected);
+            if command == COMMAND_NEXT_TICK {
+                native.complete_tick(&mut flat, 64, &[]).unwrap();
+                bf.complete_tick_with_memory(&mut strided, 64, &[]).unwrap();
+            }
+            assert_eq!(bf.status(), native.status());
+            assert_eq!(bf.tick(), native.tick());
+            assert_eq!((0..flat.len()).map(|i| strided.read(i)).collect::<Vec<_>>(), flat);
+            assert!(strided.0.iter().enumerate().all(|(i, &v)| i % 8 == 4 || v == 0xa55a));
+        }
+    }
 
     fn command(
         device: &mut DeviceState,

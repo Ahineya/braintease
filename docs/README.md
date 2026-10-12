@@ -21,6 +21,7 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 |----------|-------|
 | [c-testsuite.md](c-testsuite.md) | Vendored c-testsuite vs Ripple data model |
 | [compiler-trace-formats.md](compiler-trace-formats.md) | `rcc --trace` JSON |
+| [Brainfuck host](../rbf/README.md) | Native BF CPU host, devices, capture and bounded tests |
 
 ## Deprecated
 

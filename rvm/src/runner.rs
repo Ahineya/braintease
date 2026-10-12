@@ -128,14 +128,16 @@ impl RunReport {
     }
 }
 
-struct Controller {
-    credits: u64,
-    events: Vec<KeyTransition>,
-    closed: bool,
-    quit: bool,
+/// Ordered host commands, shared by the native CPU and Brainfuck runners.
+#[derive(Default)]
+pub struct Controller {
+    pub credits: u64,
+    pub events: Vec<KeyTransition>,
+    pub closed: bool,
+    pub quit: bool,
 }
 impl Controller {
-    fn poll(
+    pub fn poll(
         &mut self,
         receiver: &Option<Receiver<Result<ControlCommand, String>>>,
     ) -> Result<(), String> {

@@ -12,12 +12,12 @@ mod devices;
 pub use instruction::Instr;
 pub use state::{VMState, KeyboardState};
 pub use terminal::install_terminal_cleanup_hook;
+pub use storage::Storage;
 
 use std::collections::{VecDeque, HashMap};
 use ripple_asm::Register;
 use crate::constants::*;
 use crate::display_rgb565::RGB565Display;
-use crate::vm::storage::Storage;
 
 /// The Ripple Virtual Machine
 pub struct VM {

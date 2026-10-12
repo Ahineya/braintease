@@ -166,11 +166,23 @@ impl MacroFormatter {
     }
 
     pub fn format_program(&self, instructions: &[Instruction], comments: Option<&HashMap<usize, String>>) -> String {
+        self.format_program_at_entry(instructions, comments, 0)
+    }
+
+    fn format_program_at_entry(&self, instructions: &[Instruction], comments: Option<&HashMap<usize, String>>, entry: usize) -> String {
         let mut lines = Vec::new();
         
         for (index, instruction) in instructions.iter().enumerate() {
             let comment = comments.and_then(|c| c.get(&index));
-            let formatted_inst = self.format_instruction(instruction, index == 0);
+            let mut formatted_inst = self.format_instruction(instruction, index == 0);
+            if entry != 0 {
+                let command = if index == 0 { "@program_prefix_start" }
+                    else if index < entry { "@cmd_prefix" }
+                    else if index == entry { "@cmd_entry" }
+                    else { "@cmd" };
+                let arguments = &formatted_inst[formatted_inst.find('(').unwrap()..];
+                formatted_inst = format!("{command}{arguments}");
+            }
             
             if let Some(comment_text) = comment {
                 lines.push(format!("{}        // {}", formatted_inst, comment_text));
@@ -230,6 +242,17 @@ impl MacroFormatter {
         comments: Option<&HashMap<usize, String>>,
         header: Option<&str>,
     ) -> String {
+        self.format_full_program_at_entry(instructions, data, comments, header, 0)
+    }
+
+    fn format_full_program_at_entry(
+        &self,
+        instructions: &[Instruction],
+        data: Option<&[u8]>,
+        comments: Option<&HashMap<usize, String>>,
+        header: Option<&str>,
+        entry: usize,
+    ) -> String {
         let mut lines = Vec::new();
         
         if let Some(header_text) = header {
@@ -269,7 +292,7 @@ impl MacroFormatter {
         // Format program section or @nop if empty
         if !instructions.is_empty() {
             lines.push("  // Program".to_string());
-            let program_lines = self.format_program(instructions, comments);
+            let program_lines = self.format_program_at_entry(instructions, comments, entry);
             for line in program_lines.lines() {
                 lines.push(format!("  {}", line));
             }
@@ -293,24 +316,74 @@ impl MacroFormatter {
     }
 
     pub fn format_linked_program_standalone(&self, program: &LinkedProgram, debug: bool) -> String {
+        self.format_standalone(program, debug, None)
+    }
+
+    /// An instrumented BF CPU remains ordinary Brainfuck computation, with
+    /// explicit host callbacks at completed memory accesses. Its ASCII header
+    /// deliberately contains no BF commands (or host callback characters).
+    pub fn format_linked_program_host(&self, program: &LinkedProgram, memory_banks: u16) -> Result<String, String> {
+        if program.bank_size < 32 {
+            return Err("BF host bank size must be at least 32 cells for MMIO".into());
+        }
+        if memory_banks == 0 {
+            return Err("BF host requires at least one RAM bank".into());
+        }
+        if !program.bf_host_gp_data_only {
+            return Err("BF host does not support legacy .data overlapping MMIO; use C global initializers".into());
+        }
+        if program.code_bank_count() > 1 {
+            return Err("BF CPU cannot seek code banks yet".into());
+        }
+        if program.entry_point % 4 != 0 || program.entry_point as usize / 4 >= program.instructions.len() {
+            return Err("BF host entry point is outside the instruction image".into());
+        }
+        for instruction in &program.instructions {
+            if matches!(instruction.opcode, x if x == Opcode::Loadc as u8 || x == Opcode::Storc as u8) {
+                return Err("BF CPU does not implement LOADC/STORC code-memory access".into());
+            }
+        }
+        Ok(self.format_standalone(program, true, Some(memory_banks)))
+    }
+
+    fn format_standalone(&self, program: &LinkedProgram, debug: bool, memory_banks: Option<u16>) -> String {
         let mut output = String::new();
+        let entry = program.entry_point as usize / 4;
+        if let Some(banks) = memory_banks {
+            // Include the implicit HALT and the ALU's temporary words beyond
+            // the last instruction, plus a guard for lane seeking.
+            let words = (usize::from(banks) * usize::from(program.bank_size))
+                .max(40 + 4 * program.instructions.len() + 36) + 32;
+            output.push_str(&format!("{{preserve(BFHOST 1 BANK_SIZE {} MEMORY_BANKS {} INSTRUCTIONS {} ENTRY {} ORIGIN 8 TAPE_CELLS {} END_BFHOST)}}\n>>>>>>>>\n",
+                program.bank_size, banks, program.instructions.len(), entry, (words + 1) * 8));
+        }
         
         // Add CPU header with modified DEBUG value
-        let header = if debug {
+        let mut header = if debug {
             CPU_HEADER.replace("#define DEBUG 0", "#define DEBUG 1")
         } else {
             CPU_HEADER.to_string()
         };
+        header = header.replace("#define ENTRY_POINT 0", &format!("#define ENTRY_POINT {entry}"));
+        header = header.replace("#define PROGRAM_WORDS 0", &format!("#define PROGRAM_WORDS {}", 40 + 4 * program.instructions.len()));
+        if memory_banks.is_some() {
+            header = header.replace("#define HOST_MODE 0", "#define HOST_MODE 1")
+                .replace("#define HOST_LOAD @nop", "#define HOST_LOAD {preserve(?)}")
+                .replace("#define HOST_STORE @nop", "#define HOST_STORE {preserve(!)}")
+                .replace("#define HOST_TTY @print", "#define HOST_TTY @nop")
+                .replace("#define HOST_BREAK $", "#define HOST_BREAK @nop");
+        }
         output.push_str(&header);
         output.push('\n');
         
         // Add the program content (without @prg wrapper since it's in the template)
         let comments = HashMap::new();
-        let program_content = self.format_full_program(
+        let program_content = self.format_full_program_at_entry(
             &program.instructions,
-            Some(&program.data),
+            if memory_banks.is_some() { None } else { Some(&program.data) },
             Some(&comments),
             Some(&format!("Linked program with entry point at 0x{:08X}", program.entry_point)),
+            entry,
         );
         
         // Add indentation to match the template structure
@@ -321,7 +394,7 @@ impl MacroFormatter {
         }
         
         // Add CPU footer
-        output.push_str(CPU_FOOTER);
+        output.push_str(&CPU_FOOTER.replace("#define BANK_SIZE 64000", &format!("#define BANK_SIZE {}", program.bank_size)));
         
         output
     }

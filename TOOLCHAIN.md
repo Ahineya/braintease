@@ -2,11 +2,11 @@
 
 Architecture (registers, ISA, C ABI, banks): [`docs/arch/`](docs/arch/README.md).
 
-C99 source is compiled to Ripple assembly, assembled, linked with startup code and a runtime library, then executed. The **primary target is the Ripple VM** (`rvm`). A Brainfuck backend still exists for programs that do not need MMIO/display.
+C99 source is compiled to Ripple assembly, assembled, linked with startup code and a runtime library, then executed. The **primary target is the Ripple VM** (`rvm`). The [Brainfuck host](rbf/README.md) (`rbf`) runs the BF CPU with graphics, input, clock and storage devices, subject to the BF CPU's single code-bank limit.
 
 ```
 C  →  rcc  →  .asm  →  rasm  →  .pobj  →  rlink (+ crt0 + libruntime)  →  .bin  →  rvm
-                                                                      ↘  .bfm  →  bfm expand  →  bf
+                                                                      ↘  .bfm  →  bfm expand  →  rbf
 ```
 
 ## Building the tools
@@ -14,7 +14,7 @@ C  →  rcc  →  .asm  →  rasm  →  .pobj  →  rlink (+ crt0 + libruntime) 
 From the repo root:
 
 ```bash
-cargo build --release                          # rcc, rcpp, rvm, rct
+cargo build --release                          # rcc, rcpp, rvm, rbf, rct
 (cd src/ripple-asm && cargo build --release)   # rasm, rlink
 ```
 
@@ -27,6 +27,7 @@ Binaries:
 | `rcc` | `target/release/rcc` |
 | `rcpp` | `target/release/rcpp` |
 | `rvm` | `target/release/rvm` |
+| `rbf` | `target/release/rbf` |
 | `rct` | `target/release/rct` (also `./rct` from repo root) |
 | `rasm` | `src/ripple-asm/target/release/rasm` |
 | `rlink` | `src/ripple-asm/target/release/rlink` |
@@ -61,7 +62,8 @@ Display modes:
 - **TEXT40** (40×25 color cells in the terminal) — do **not** pass `--visual`
 - **RGB565** (pixel window) — pass `--visual`
 
-MMIO and display examples need the RVM backend.
+`rct --backend bf` remains the legacy console BF path. For device-enabled BF
+programs use `scripts/build-bf.sh` and `rbf`; TEXT40 and IRQ programs still need RVM.
 
 ## Toolchain components
 
@@ -167,14 +169,19 @@ rlink runtime/crt0.pobj runtime/libruntime.par program.pobj \
 rvm program.bin
 ```
 
-Brainfuck instead of RVM:
+Brainfuck with host devices instead of RVM (also build the macro expander):
 
 ```bash
-rlink runtime/crt0.pobj runtime/libruntime.par program.pobj \
-  -f macro --standalone --bank-size $BANK -o program.bfm
-bfm expand program.bfm -o program.bf
-bf program.bf --cell-size 16 --tape-size 150000000
+rlink runtime/crt0.pobj program.pobj \
+  -f macro --standalone --bf-host --memory-banks 16 --bank-size $BANK -o program.bfm
+bfm expand program.bfm --strip-comments -o program.bf
+target/release/rbf program.bf --headless --timeout 30
 ```
+
+Pass any runtime object files the program calls (for example `runtime/putchar.pobj`).
+The linker currently includes whole archives, so adding the entire runtime can
+exceed the BF CPU's single code-bank limit. The [BF host guide](rbf/README.md)
+includes a bounded small-bank C example and device smoke checks.
 
 ## Building a multi-file program
 

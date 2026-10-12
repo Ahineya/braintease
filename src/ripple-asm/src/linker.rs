@@ -92,6 +92,15 @@ impl Linker {
 
         // Concatenate data independently of code banking
         let mut all_data = Vec::new();
+        // RCC's .space blocks reserve GP-bank addresses; they are initialized
+        // by generated code, not by loading bytes into bank-zero legacy data.
+        // Track this per object so mixing in a legacy .data object stays visible.
+        let bf_host_gp_data_only = object_files.iter().all(|obj| {
+            obj.data.is_empty() || (obj.data.iter().all(|&byte| byte == 0)
+                && obj.data_labels.keys().any(|name| name.strip_prefix("__gp_")
+                    .map(|tag| obj.labels.contains_key(&format!("__rcc_init_{tag}")))
+                    .unwrap_or(false)))
+        });
         let mut global_labels = HashMap::new();
         let mut global_data_labels = HashMap::new();
         let mut relocs: Vec<Reloc> = Vec::new();
@@ -197,6 +206,7 @@ impl Linker {
         Ok(LinkedProgram {
             instructions: resolved_instructions,
             data: all_data,
+            bf_host_gp_data_only,
             labels: global_labels,
             data_labels: global_data_labels,
             entry_point,
@@ -395,6 +405,8 @@ pub struct Reloc {
 pub struct LinkedProgram {
     pub instructions: Vec<Instruction>,
     pub data: Vec<u8>,
+    /// Every nonempty data object is an RCC zero-filled GP reservation.
+    pub bf_host_gp_data_only: bool,
     pub labels: HashMap<String, Label>,
     pub data_labels: HashMap<String, u32>,
     pub entry_point: u32,

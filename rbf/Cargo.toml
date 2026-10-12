@@ -1,0 +1,16 @@
+[package]
+name = "rbf"
+version = "0.1.0"
+edition = "2021"
+description = "Native device host for the Ripple CPU implemented in Brainfuck"
+
+[dependencies]
+bf = { path = "../src/rust-bf" }
+rvm = { path = "../rvm" }
+clap = { version = "4.5", features = ["derive"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+signal-hook = "0.3"
+
+[lints]
+workspace = true

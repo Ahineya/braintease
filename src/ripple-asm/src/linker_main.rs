@@ -42,10 +42,21 @@ struct Cli {
     /// Enable debug mode in standalone macro output (sets DEBUG to 1)
     #[arg(short = 'd', long = "debug")]
     debug: bool,
+
+    /// Export the instrumented Brainfuck host protocol (requires macro --standalone)
+    #[arg(long)]
+    bf_host: bool,
+
+    /// RAM banks declared by --bf-host; this is a limit, not inferred usage
+    #[arg(long, default_value = "16")]
+    memory_banks: u16,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    if cli.bf_host && (cli.format != "macro" || !cli.standalone) {
+        return Err("--bf-host requires --format macro --standalone".into());
+    }
     
     if cli.inputs.is_empty() {
         eprintln!("Error: No input files specified");
@@ -150,7 +161,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         std::process::exit(1);
                     }
                     let formatter = MacroFormatter::new();
-                    let macro_output = if cli.standalone {
+                    let macro_output = if cli.bf_host {
+                        formatter.format_linked_program_host(&program, cli.memory_banks)?
+                    } else if cli.standalone {
                         formatter.format_linked_program_standalone(&program, cli.debug)
                     } else {
                         formatter.format_linked_program(&program)

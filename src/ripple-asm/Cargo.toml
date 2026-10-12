@@ -30,6 +30,7 @@ regex = "1.11"
 
 [dev-dependencies]
 pretty_assertions = "1.4"
+bf-macro-expander = { path = "../bf-macro-expander" }
 
 [features]
 default = []

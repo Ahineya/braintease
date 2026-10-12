@@ -879,21 +879,56 @@
   @fl(@clear) // We need 0 in the last fastlane pos
 }
 
-#define ins_jal {
-  @prevword
-  @goto_PC
-  @lane_reg_end
-
-  // Copy PC to RA // Here is the bug! We need to put +1 here!
-
-  @_inc_and_copy_pc_ra
-
-
-  @nextword
-
-  @_copy_pc_ra
-
+// Preserve a register in an unused scratch-B cell at the current instruction.
+// goto_reg must finish in L_REG; offs selects a word relative to the opcode.
+#define copy_register_to_ip_B(goto_reg, offs) {
+  @prevword goto_reg @lane_reg_end
+  @copy_reg_to_A_via_B
+  @lane(@L_SA,
+    @times(
+      @lane_end(@L_SA)
+      @goto_ip_word offs @lane(@L_SB, +)
+      @prevword goto_reg @lane_reg_end @lane_start(@L_SA)
+    )
+  )
   @goto_ip_word
+}
+
+#define link_return_address {
+  // Snapshot PCB before writing rd: rd itself may be PCB or RAB.
+  @copy_register_to_ip_B(@goto_PCB, @prevword)
+  @copy_register_to_ip_B(@goto_PC, @nop)
+  @lane(@L_SB, +)
+  @clear_and_mark_destination_register
+  @move_result_to_destination_register
+  @reset_register_mark
+
+  // The link pair is (rd, RAB), with the saved PCB winning if rd == RAB.
+  @prevword @goto_PCB @nextwords(2) @clear @lane_reg_end
+  @goto_ip_word @prevword
+  @lane(@L_SB,
+    @times(
+      @lane_end(@L_SB)
+      @goto_PCB @nextwords(2) + @lane_reg_end
+      @goto_ip_word @prevword @lane_start(@L_SB)
+    )
+  )
+  @nextword
+}
+
+#define ins_jal {
+  // rd == R0 is a non-linking jump. JALR operands were already fetched, so
+  // writing an aliased link destination cannot change the snapshotted target.
+  @prevword
+  @copy_value_to_A
+  @lane(@L_SA,
+    @if
+      @lane_end(@L_SA) @nextword
+      @link_return_address
+      @prevword @lane_start(@L_SA)
+    @endif
+  )
+  @nextword
   @prevwords(2)
   @lane(@L_SA, // First op param is BANK
     [->+@nextwords(2)+@prevwords(2)<]@nextwords(2)
@@ -955,7 +990,8 @@
 }
 
 #define ins_beq(should_inverse) @ins_branch(@eq(@nextword, @prevword), should_inverse)
-#define ins_blt(should_inverse) @ins_branch(@lt, should_inverse)
+#define signed_lt @dec(0x8000) @prevword @dec(0x8000) @nextword @lt
+#define ins_blt(should_inverse) @ins_branch(@signed_lt, should_inverse)
 
 #define ins_branch(cmp, should_inverse) {
   @prevword
@@ -1065,12 +1101,10 @@
 }
 
 #define mem_ptr_fill_banks(offs_from_ip) {
-  @lane(@L_SB,
-    @set(@BANK_SIZE)
-  )
   @lane(@L_SA,
     @times(
       >
+      @set(@BANK_SIZE)
       @times(
         @lane_end(@L_SB)
         @goto_start
@@ -1131,7 +1165,7 @@
 
       @if
         @nextwords(2) <
-          @print
+          @HOST_TTY
         > @prevwords(2)
       @endif
     )
@@ -1174,6 +1208,8 @@
     )
   )
 
+  // A host sees the completed store, never its intermediate clear/increments.
+  {if(#HOST_MODE, @notify_host_store, @nop)}
 
   @prevwords(3)
   @lane(@L_SB,
@@ -1195,6 +1231,13 @@
   @goto_ip_word
 }
 
+#define notify_host_store {
+  @goto_start
+  @goto_ptr_end
+  @lane(@L_RAM, @HOST_STORE)
+  @prevword @goto_ptr_start @nextword @goto_ip_word @prevword
+}
+
 #define ins_load {
   @prevwords(2)
   @mem_ptr_fill_banks(@prevwords(2))
@@ -1210,6 +1253,7 @@
   @goto_ptr_end
 
   @lane(@L_RAM,
+    @HOST_LOAD
     [->+>+<<] >> [-<<+>>] << // Copy ram value to sA via sB
   )
 
@@ -1485,6 +1529,20 @@
   @instr(@i0(w1) @i1(w2) @i1(w3) @i1(w4))
 }
 
+// Instructions preceding a nonzero entry point have a filled fast lane.
+#define program_prefix_start(w1, w2, w3, w4) {
+  {repeat(@REG_ZONE_CW,
+    @instr(@i1(#OP_HALT) @i1(0) @i1(0) @i1(0))
+  )}
+  @cmd_prefix(w1, w2, w3, w4)
+}
+#define cmd_prefix(w1, w2, w3, w4) {
+  @instr(@i1(w1) @i1(w2) @i1(w3) @i1(w4))
+}
+#define cmd_entry(w1, w2, w3, w4) {
+  @instr(@i0(w1) @i1(w2) @i1(w3) @i1(w4))
+}
+
 #define cmd(w1, w2, w3, w4) {
   @instr(@i0(w1) @i0(w2) @i0(w3) @i0(w4))
 }
@@ -1500,7 +1558,7 @@
 // MARK: -- Set registers
 @nextword
 @nextword
-#define REG_VALUES {0,0}
+#define REG_VALUES {#ENTRY_POINT,0}
 @lane(#L_REG,
   {for(v in #REG_VALUES, @set(v) @nextword)}
 )
@@ -1513,8 +1571,9 @@
 @PROGRAM
 
 @prevword
-@clear_to_zero_left_lane
-@nextword
+// Generated images know their extent: stop at word zero instead of wrapping
+// around the tape while searching for a zero to the left of the state flag.
+{if(#PROGRAM_WORDS, {repeat(#PROGRAM_WORDS, @clear @prevword)}, @clear_to_zero_left_lane @nextword)}
 @set(#STATE_RUNNING)
 
 // MARK: -- Main loop
@@ -1548,7 +1607,7 @@
       @opcase(#OP_DIV,   @div )
       @opcase(#OP_MUL,   @mul )
 
-      @opcase(#OP_BRK,   $ )
+      @opcase(#OP_BRK,   @HOST_BREAK )
 
       @opcase(#OP_BGE,   @bge)
       @opcase(#OP_BLT,   @blt)
@@ -1583,4 +1642,6 @@
   @move_ip_next_command
 
   @goto_start
+  // Every guest instruction preserves the architectural zero register.
+  @nextword @lane(@L_REG, @clear) @prevword
 }

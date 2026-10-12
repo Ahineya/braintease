@@ -2,6 +2,7 @@ use clap::{Parser, ArgAction};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::time::Instant;
+use bf_wasm::engine::{Machine, Program, Stop};
 
 #[derive(Parser, Debug)]
 #[command(name = "bf")]
@@ -209,7 +210,7 @@ impl<T: Cell> Interpreter<T> {
                 self.tape[self.ptr] = T::from_u8(buf[0]);
             }
             Op::Output => {
-                print!("{}", self.tape[self.ptr].to_u8() as char);
+                io::stdout().write_all(&[self.tape[self.ptr].to_u8()]).unwrap();
                 io::stdout().flush().unwrap();
             }
             Op::Clear => {
@@ -633,6 +634,53 @@ fn run_interpreter<T: Cell>(tape_size: usize, wrap: bool, wrap_tape: bool, optim
     interpreter.run(optimized);
 }
 
+// Compatibility modes retain literal operations. Arithmetic cancellation and
+// affine/scan reductions are not generally valid for saturating cells or
+// clamped pointers, and the old optimizer did not account for those settings.
+fn parse_literal(code: &str) -> Result<Vec<Op>, String> {
+    let mut scopes = vec![Vec::new()];
+    for (offset, byte) in code.bytes().enumerate() {
+        let op = match byte {
+            b'+' => Op::Add(1), b'-' => Op::Add(-1),
+            b'>' => Op::Move(1), b'<' => Op::Move(-1),
+            b',' => Op::Input, b'.' => Op::Output,
+            b'[' => { scopes.push(Vec::new()); continue; }
+            b']' => {
+                if scopes.len() == 1 { return Err(format!("unmatched closing bracket at source byte {offset}")); }
+                Op::Loop(scopes.pop().unwrap())
+            }
+            _ => continue,
+        };
+        scopes.last_mut().unwrap().push(op);
+    }
+    if scopes.len() != 1 { return Err("unmatched opening bracket".into()); }
+    Ok(scopes.pop().unwrap())
+}
+
+fn run_fast(program: &Program, tape_size: usize) -> Result<u64, Box<dyn std::error::Error>> {
+    let mut machine = Machine::with_wrapping_tape(tape_size)?;
+    let mut input = io::stdin().lock();
+    let mut output = io::stdout().lock();
+    loop {
+        match machine.run(program, 65_536)? {
+            Stop::Budget => {}
+            Stop::Halted => { output.flush()?; return Ok(machine.dispatches()); }
+            Stop::Output(value) => output.write_all(&[value])?,
+            Stop::Input => {
+                output.flush()?;
+                let mut value = [0u8];
+                match input.read_exact(&mut value) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {}
+                    Err(error) => return Err(error.into()),
+                }
+                machine.provide_input(value[0])?;
+            }
+            Stop::Hook(_) => unreachable!("plain bf does not enable host markers"),
+        }
+    }
+}
+
 fn main() {
     let args = Args::parse();
     
@@ -643,6 +691,10 @@ fn main() {
             eprintln!("Error: cell-size must be 8, 16, or 32");
             std::process::exit(1);
         }
+    }
+    if args.tape_size == 0 {
+        eprintln!("Error: tape-size must be positive");
+        std::process::exit(1);
     }
     
     let code = if let Some(inline_code) = args.execute {
@@ -674,6 +726,47 @@ fn main() {
     } else {
         None
     };
+
+    if !args.emit_optimized && args.cell_size == 16 && args.wrap && args.wrap_tape {
+        let result = Program::parse(&code, !args.no_optimize, false)
+            .map_err(|error| error.to_string())
+            .and_then(|program| {
+                if args.verbose {
+                    eprintln!("Parsed {} IR instructions, {} optimized regions", program.instruction_count(), program.optimization_count());
+                }
+                run_fast(&program, args.tape_size).map_err(|error| error.to_string())
+            });
+        match result {
+            Ok(dispatches) => {
+                if let Some(start) = start {
+                    eprintln!("Execution time: {:.6} seconds; {} IR dispatches", start.elapsed().as_secs_f64(), dispatches);
+                }
+            }
+            Err(error) => { eprintln!("Error: {error}"); std::process::exit(1); }
+        }
+        return;
+    }
+
+    // Validate brackets even for the older emission/compatibility paths.
+    let literal = parse_literal(&code).unwrap_or_else(|error| {
+        eprintln!("Error: {error}"); std::process::exit(1);
+    });
+    if !args.emit_optimized || !args.wrap || !args.wrap_tape {
+        if args.emit_optimized {
+            println!("{}", ops_to_brainfuck(&literal));
+        } else {
+            if args.verbose { eprintln!("Using literal compatibility execution for these cell/pointer settings"); }
+            match args.cell_size {
+                8 => run_interpreter::<u8>(args.tape_size, args.wrap, args.wrap_tape, &literal),
+                16 => run_interpreter::<u16>(args.tape_size, args.wrap, args.wrap_tape, &literal),
+                32 => run_interpreter::<u32>(args.tape_size, args.wrap, args.wrap_tape, &literal),
+                _ => unreachable!(),
+            }
+        }
+        if let Some(start) = start { eprintln!("Execution time: {:.6} seconds", start.elapsed().as_secs_f64()); }
+        return;
+    }
+    drop(literal);
     
     if args.verbose {
         eprintln!("Preprocessing {} bytes of code...", code.len());
@@ -708,13 +801,7 @@ fn main() {
         }
         
         let opt_start = if args.verbose { Some(Instant::now()) } else { None };
-        let result = if ops.len() > 100000 && args.verbose {
-            eprintln!("WARNING: Large program ({} ops), optimization may take time...", ops.len());
-            // For very large programs, skip the expensive optimizations
-            ops
-        } else {
-            optimize(ops)
-        };
+        let result = optimize(ops);
         if let Some(os) = opt_start {
             eprintln!("Optimization complete: {} operations in {:.3}s", 
                      result.len(), os.elapsed().as_secs_f64());
@@ -732,16 +819,4 @@ fn main() {
         return;
     }
     
-    // Run with appropriate cell size
-    match args.cell_size {
-        8 => run_interpreter::<u8>(args.tape_size, args.wrap, args.wrap_tape, &optimized),
-        16 => run_interpreter::<u16>(args.tape_size, args.wrap, args.wrap_tape, &optimized),
-        32 => run_interpreter::<u32>(args.tape_size, args.wrap, args.wrap_tape, &optimized),
-        _ => unreachable!(),
-    }
-    
-    if let Some(start_time) = start {
-        let duration = start_time.elapsed();
-        eprintln!("\nExecution time: {:.6} seconds", duration.as_secs_f64());
-    }
 }

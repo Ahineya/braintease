@@ -1,9 +1,9 @@
 # Doom platform boundary
 
 The Rust VM is the development and playable-game target. The first Brainfuck
-milestone is one correctly rendered frame; running full compiled C programs on
-the Brainfuck backend is outside the current validation loop. No Brainfuck
-execution is needed to develop or test this interface.
+milestone is one correctly rendered Doom frame. Full Doom runs on the Brainfuck
+backend remain outside the validation loop; its native device host is validated
+with small assembly and C fixtures.
 
 ## Stable guest interface
 
@@ -168,11 +168,12 @@ open between steps.
 
 ## Brainfuck host adapter
 
-The new device ABI is not yet implemented by the Brainfuck host. Future support
-must honor the same descriptors, status results, tick yields, key IDs and
-presentation boundaries. The first milestone can stop after one frame; it need
-not offer playable speed. Device handling must remain outside guest CPU
-instruction semantics so that the port's platform adapter can be reused.
+The [`rbf` host](../rbf/README.md) implements ABI 1 over the BF CPU's strided RAM,
+using explicit LOAD/STORE hooks. It reuses the Rust VM's descriptor handling,
+logical clock, input replay, RGB565 display and capture code. All guest CPU work
+continues to execute in Brainfuck. Small bounded tests cover both display modes,
+bank crossings and logical tick/input behavior. The remaining single-code-bank
+export restriction must be lifted in the BF CPU before attempting full Doom.
 
 ## Current Doom port
 
@@ -209,8 +210,8 @@ merely because a test failed; establish why the image changed and inspect it.
 
 ## Later Brainfuck gate
 
-BF execution remains outside the Rust port milestones. Once a real level frame
-works in Rust, the separate BF feasibility gate must cover both the device host
-adapter and the linker's existing multi-code-bank export restriction (see
+Full Doom BF execution remains outside the Rust port milestones. The device
+host now has its own small checks; the next BF feasibility gate must address
+the linker's existing multi-code-bank export restriction (see
 [linker_main.rs](../src/ripple-asm/src/linker_main.rs)). Only then attempt a
 bounded first-level-frame run. Playable BF speed is not an acceptance criterion.

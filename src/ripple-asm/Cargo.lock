@@ -62,6 +62,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bf-macro-expander"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "lazy_static",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -154,6 +166,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lazy_static"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+
+[[package]]
 name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -238,6 +256,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 name = "ripple-asm"
 version = "0.1.0"
 dependencies = [
+ "bf-macro-expander",
  "clap",
  "js-sys",
  "pretty_assertions",

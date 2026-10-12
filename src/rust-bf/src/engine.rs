@@ -1,0 +1,519 @@
+//! Resumable, optimized Brainfuck execution with wrapping 16-bit cells.
+//!
+//! This module has no device dependencies. Input, output and optional host
+//! markers are synchronous barriers: execution resumes only after the caller
+//! has had an opportunity to inspect or modify the tape. Budgets and
+//! `dispatches()` count IR dispatches, not original Brainfuck characters.
+
+use std::collections::BTreeMap;
+use std::fmt;
+
+const NO_FAST_OP: u32 = u32::MAX;
+const BLOCK_LIMIT: usize = 128;
+const SCAN_LIMIT: usize = 256;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Error {
+    Parse {
+        offset: usize,
+        message: &'static str,
+    },
+    EmptyTape,
+    TapeAllocation {
+        cells: usize,
+    },
+    TapeBounds {
+        offset: usize,
+        pointer: usize,
+    },
+    NoPendingInput,
+    DispatchOverflow,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse { offset, message } => write!(f, "Brainfuck source byte {offset}: {message}"),
+            Self::EmptyTape => write!(f, "Brainfuck tape must contain at least one cell"),
+            Self::TapeAllocation { cells } => write!(f, "cannot allocate a Brainfuck tape of {cells} cells"),
+            Self::TapeBounds { offset, pointer } => write!(f, "Brainfuck pointer left the tape near source byte {offset} (last valid cell {pointer})"),
+            Self::NoPendingInput => write!(f, "Brainfuck machine is not awaiting input"),
+            Self::DispatchOverflow => write!(f, "Brainfuck dispatch counter overflow"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stop {
+    Halted,
+    Budget,
+    Input,
+    Output(u8),
+    Hook(u8),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Op {
+    Add(u16),
+    Move(isize),
+    Open(usize),
+    Close(usize),
+    Input,
+    Output,
+    Hook(u8),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Instruction {
+    op: Op,
+    offset: usize,
+}
+
+#[derive(Debug)]
+struct Arithmetic {
+    changes: Vec<(isize, u16)>,
+    advance: isize,
+    minimum: isize,
+    maximum: isize,
+}
+
+#[derive(Debug)]
+enum FastOp {
+    Block {
+        arithmetic: Arithmetic,
+        next: usize,
+    },
+    Affine {
+        arithmetic: Arithmetic,
+        inverse: u16,
+        next: usize,
+    },
+    Scan {
+        stride: isize,
+        minimum: isize,
+        maximum: isize,
+        next: usize,
+    },
+}
+
+/// Immutable parsed code; a program can be shared by independent machines.
+#[derive(Debug)]
+pub struct Program {
+    code: Vec<Instruction>,
+    fast_at: Vec<u32>,
+    fast: Vec<FastOp>,
+}
+
+impl Program {
+    /// Parse ordinary BF, optionally recognizing `?`, `!` and `$` as host hooks.
+    /// All other bytes are comments. Cell arithmetic always wraps modulo 65536.
+    pub fn parse(source: &str, optimize: bool, host_hooks: bool) -> Result<Self, Error> {
+        let mut code: Vec<Instruction> = Vec::new();
+        let mut brackets: Vec<usize> = Vec::new();
+        for (offset, byte) in source.bytes().enumerate() {
+            let op = match byte {
+                b'+' | b'-' => {
+                    let delta = if byte == b'+' { 1 } else { u16::MAX };
+                    if let Some(Instruction {
+                        op: Op::Add(value), ..
+                    }) = code.last_mut()
+                    {
+                        *value = value.wrapping_add(delta);
+                        continue;
+                    }
+                    Op::Add(delta)
+                }
+                b'>' | b'<' => {
+                    let delta = if byte == b'>' { 1isize } else { -1isize };
+                    if let Some(Instruction {
+                        op: Op::Move(value),
+                        ..
+                    }) = code.last_mut()
+                    {
+                        if value.signum() == delta {
+                            *value = value.checked_add(delta).ok_or(Error::Parse {
+                                offset,
+                                message: "pointer movement is too large",
+                            })?;
+                            continue;
+                        }
+                    }
+                    Op::Move(delta)
+                }
+                b'[' => {
+                    brackets.push(code.len());
+                    Op::Open(usize::MAX)
+                }
+                b']' => {
+                    let start = brackets.pop().ok_or(Error::Parse {
+                        offset,
+                        message: "unmatched closing bracket",
+                    })?;
+                    code[start].op = Op::Open(code.len() + 1);
+                    Op::Close(start + 1)
+                }
+                b',' => Op::Input,
+                b'.' => Op::Output,
+                b'?' | b'!' | b'$' if host_hooks => Op::Hook(byte),
+                _ => continue,
+            };
+            code.push(Instruction { op, offset });
+        }
+        if let Some(start) = brackets.pop() {
+            return Err(Error::Parse {
+                offset: code[start].offset,
+                message: "unmatched opening bracket",
+            });
+        }
+        let mut program = Self {
+            fast_at: vec![NO_FAST_OP; code.len()],
+            code,
+            fast: Vec::new(),
+        };
+        if optimize {
+            program.optimize()?;
+        }
+        Ok(program)
+    }
+
+    pub fn instruction_count(&self) -> usize {
+        self.code.len()
+    }
+    pub fn optimization_count(&self) -> usize {
+        self.fast.len()
+    }
+
+    fn install(&mut self, at: usize, fast: FastOp) -> Result<(), Error> {
+        if self.fast.len() >= NO_FAST_OP as usize {
+            return Err(Error::Parse {
+                offset: self.code[at].offset,
+                message: "too many optimized operations",
+            });
+        }
+        self.fast_at[at] = self.fast.len() as u32;
+        self.fast.push(fast);
+        Ok(())
+    }
+
+    fn arithmetic(&self, start: usize, end: usize) -> Option<Arithmetic> {
+        if end - start > BLOCK_LIMIT {
+            return None;
+        }
+        let mut changes = BTreeMap::<isize, u16>::new();
+        let (mut advance, mut minimum, mut maximum) = (0isize, 0isize, 0isize);
+        for instruction in &self.code[start..end] {
+            match instruction.op {
+                Op::Add(delta) => {
+                    let value = changes.entry(advance).or_default();
+                    *value = value.wrapping_add(delta);
+                }
+                Op::Move(delta) => {
+                    advance = advance.checked_add(delta)?;
+                    minimum = minimum.min(advance);
+                    maximum = maximum.max(advance);
+                }
+                _ => return None,
+            }
+        }
+        Some(Arithmetic {
+            changes: changes
+                .into_iter()
+                .filter(|(_, delta)| *delta != 0)
+                .collect(),
+            advance,
+            minimum,
+            maximum,
+        })
+    }
+
+    fn optimize(&mut self) -> Result<(), Error> {
+        // Preserve the original instructions as the fallback for a fast path
+        // whose complete pointer range would leave the tape. This preserves
+        // wrapping aliases and the exact partial state before a bounds error.
+        for at in 0..self.code.len() {
+            let Op::Open(next) = self.code[at].op else {
+                continue;
+            };
+            let end = next - 1;
+            let Some(mut arithmetic) = self.arithmetic(at + 1, end) else {
+                continue;
+            };
+            if arithmetic.changes.is_empty() && arithmetic.advance != 0 {
+                self.install(
+                    at,
+                    FastOp::Scan {
+                        stride: arithmetic.advance,
+                        minimum: arithmetic.minimum,
+                        maximum: arithmetic.maximum,
+                        next,
+                    },
+                )?;
+            } else if arithmetic.advance == 0 {
+                let delta = arithmetic
+                    .changes
+                    .iter()
+                    .find(|(offset, _)| *offset == 0)
+                    .map_or(0, |(_, delta)| *delta);
+                // An odd increment is invertible modulo 2^16. Even increments
+                // may never reach zero, so leave those loops intact.
+                if delta & 1 != 0 {
+                    let mut inverse = 1u16;
+                    for _ in 0..4 {
+                        inverse =
+                            inverse.wrapping_mul(2u16.wrapping_sub(delta.wrapping_mul(inverse)));
+                    }
+                    arithmetic.changes.retain(|(offset, _)| *offset != 0);
+                    self.install(
+                        at,
+                        FastOp::Affine {
+                            arithmetic,
+                            inverse,
+                            next,
+                        },
+                    )?;
+                }
+            }
+        }
+        let mut at = 0;
+        while at < self.code.len() {
+            if !matches!(self.code[at].op, Op::Add(_) | Op::Move(_)) {
+                at += 1;
+                continue;
+            }
+            let mut end = at + 1;
+            while end < self.code.len()
+                && end - at < BLOCK_LIMIT
+                && matches!(self.code[end].op, Op::Add(_) | Op::Move(_))
+            {
+                end += 1;
+            }
+            if end - at > 1 {
+                if let Some(arithmetic) = self.arithmetic(at, end) {
+                    self.install(
+                        at,
+                        FastOp::Block {
+                            arithmetic,
+                            next: end,
+                        },
+                    )?;
+                }
+            }
+            at = end;
+        }
+        Ok(())
+    }
+}
+
+/// Mutable execution state. `new` uses fixed, checked tape bounds for native
+/// hosts; `with_wrapping_tape` preserves the traditional CLI's pointer wrapping.
+pub struct Machine {
+    tape: Vec<u16>,
+    pointer: usize,
+    pc: usize,
+    dispatches: u64,
+    pending_input: bool,
+    wrapping_tape: bool,
+}
+
+impl Machine {
+    pub fn new(tape_cells: usize) -> Result<Self, Error> {
+        Self::allocate(tape_cells, false)
+    }
+    pub fn with_wrapping_tape(tape_cells: usize) -> Result<Self, Error> {
+        Self::allocate(tape_cells, true)
+    }
+
+    fn allocate(cells: usize, wrapping_tape: bool) -> Result<Self, Error> {
+        if cells == 0 {
+            return Err(Error::EmptyTape);
+        }
+        // Offsets use isize; reject tapes that cannot be indexed by that type.
+        if cells > isize::MAX as usize {
+            return Err(Error::TapeAllocation { cells });
+        }
+        let mut tape = Vec::new();
+        tape.try_reserve_exact(cells)
+            .map_err(|_| Error::TapeAllocation { cells })?;
+        tape.resize(cells, 0);
+        Ok(Self {
+            tape,
+            pointer: 0,
+            pc: 0,
+            dispatches: 0,
+            pending_input: false,
+            wrapping_tape,
+        })
+    }
+
+    pub fn tape(&self) -> &[u16] {
+        &self.tape
+    }
+    pub fn tape_mut(&mut self) -> &mut [u16] {
+        &mut self.tape
+    }
+    pub fn pointer(&self) -> usize {
+        self.pointer
+    }
+    pub fn dispatches(&self) -> u64 {
+        self.dispatches
+    }
+
+    pub fn provide_input(&mut self, value: u8) -> Result<(), Error> {
+        if !self.pending_input {
+            return Err(Error::NoPendingInput);
+        }
+        self.tape[self.pointer] = u16::from(value);
+        self.pending_input = false;
+        Ok(())
+    }
+
+    #[inline]
+    fn range_fits(&self, minimum: isize, maximum: isize) -> bool {
+        // Every summarized range includes zero; unsigned_abs handles MIN.
+        minimum.unsigned_abs() <= self.pointer
+            && (maximum as usize) < self.tape.len() - self.pointer
+    }
+
+    #[inline]
+    fn apply(&mut self, arithmetic: &Arithmetic, multiplier: u16) {
+        for &(offset, delta) in &arithmetic.changes {
+            let target = (self.pointer as isize + offset) as usize;
+            self.tape[target] = self.tape[target].wrapping_add(delta.wrapping_mul(multiplier));
+        }
+        self.pointer = (self.pointer as isize + arithmetic.advance) as usize;
+    }
+
+    fn fast(&mut self, operation: &FastOp) -> bool {
+        match operation {
+            FastOp::Block { arithmetic, next } => {
+                if !self.range_fits(arithmetic.minimum, arithmetic.maximum) {
+                    return false;
+                }
+                self.apply(arithmetic, 1);
+                self.pc = *next;
+            }
+            FastOp::Affine {
+                arithmetic,
+                inverse,
+                next,
+            } => {
+                let value = self.tape[self.pointer];
+                if value != 0 {
+                    if !self.range_fits(arithmetic.minimum, arithmetic.maximum) {
+                        return false;
+                    }
+                    let iterations = value.wrapping_neg().wrapping_mul(*inverse);
+                    self.apply(arithmetic, iterations);
+                    self.tape[self.pointer] = 0;
+                }
+                self.pc = *next;
+            }
+            FastOp::Scan {
+                stride,
+                minimum,
+                maximum,
+                next,
+            } => {
+                for _ in 0..SCAN_LIMIT {
+                    if self.tape[self.pointer] == 0 {
+                        self.pc = *next;
+                        return true;
+                    }
+                    if !self.range_fits(*minimum, *maximum) {
+                        return false;
+                    }
+                    self.pointer = (self.pointer as isize + *stride) as usize;
+                }
+                // Retain this instruction to continue a long scan next time.
+                if self.tape[self.pointer] == 0 {
+                    self.pc = *next;
+                }
+            }
+        }
+        true
+    }
+
+    /// Execute at most `budget` IR dispatches. Each optimized operation performs
+    /// bounded work (at most 128 arithmetic instructions or 256 scan steps).
+    /// An input stop repeats until `provide_input` is called, without consuming
+    /// another dispatch. Output and hooks have already advanced past the marker.
+    pub fn run(&mut self, program: &Program, budget: u64) -> Result<Stop, Error> {
+        if self.pending_input {
+            return Ok(Stop::Input);
+        }
+        let mut remaining = budget;
+        loop {
+            if self.pc >= program.code.len() {
+                return Ok(Stop::Halted);
+            }
+            if remaining == 0 {
+                return Ok(Stop::Budget);
+            }
+            self.dispatches = self
+                .dispatches
+                .checked_add(1)
+                .ok_or(Error::DispatchOverflow)?;
+            remaining -= 1;
+            let fast = program.fast_at[self.pc];
+            if fast != NO_FAST_OP && self.fast(&program.fast[fast as usize]) {
+                continue;
+            }
+            let instruction = program.code[self.pc];
+            match instruction.op {
+                Op::Add(delta) => {
+                    self.tape[self.pointer] = self.tape[self.pointer].wrapping_add(delta);
+                    self.pc += 1;
+                }
+                Op::Move(delta) => {
+                    let next = self.pointer as i128 + delta as i128;
+                    if next >= 0 && next < self.tape.len() as i128 {
+                        self.pointer = next as usize;
+                    } else if self.wrapping_tape {
+                        self.pointer = next.rem_euclid(self.tape.len() as i128) as usize;
+                    } else {
+                        // A collapsed monotonic move traps at the same edge as
+                        // individual BF moves, after all preceding valid moves.
+                        self.pointer = if delta < 0 { 0 } else { self.tape.len() - 1 };
+                        return Err(Error::TapeBounds {
+                            offset: instruction.offset,
+                            pointer: self.pointer,
+                        });
+                    }
+                    self.pc += 1;
+                }
+                Op::Open(next) => {
+                    self.pc = if self.tape[self.pointer] == 0 {
+                        next
+                    } else {
+                        self.pc + 1
+                    }
+                }
+                Op::Close(next) => {
+                    self.pc = if self.tape[self.pointer] != 0 {
+                        next
+                    } else {
+                        self.pc + 1
+                    }
+                }
+                Op::Input => {
+                    self.pc += 1;
+                    self.pending_input = true;
+                    return Ok(Stop::Input);
+                }
+                Op::Output => {
+                    self.pc += 1;
+                    return Ok(Stop::Output(self.tape[self.pointer] as u8));
+                }
+                Op::Hook(marker) => {
+                    self.pc += 1;
+                    return Ok(Stop::Hook(marker));
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

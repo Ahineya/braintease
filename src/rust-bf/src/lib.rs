@@ -1,6 +1,8 @@
 use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
 
+pub mod engine;
+
 #[derive(Debug, Clone)]
 pub enum Op {
     Add(i32),
@@ -905,7 +907,7 @@ fn truncate_tape_u32(tape: &[u32], pointer: usize, max_size: usize) -> (Vec<u32>
     
     if tape_len <= max_size {
         // Return the entire tape if it's small enough
-        return (tape.clone().to_vec(), false, tape_len);
+        return (tape.to_vec(), false, tape_len);
     }
     
     // For large tapes, return a window around the pointer
