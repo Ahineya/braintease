@@ -7,3 +7,4 @@
 pub mod module;
 pub(crate) mod function;
 mod instruction;
+mod loop_registers;

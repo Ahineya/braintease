@@ -31,6 +31,7 @@ struct Part {
 #[derive(Debug)]
 pub(super) struct Routed {
     parts: Vec<Part>,
+    start: usize,
     next: usize,
     fill: Option<fill::Fill>,
 }
@@ -94,7 +95,12 @@ impl Routed {
             cursor += 1;
         }
         let fill = fill::Fill::parse(&parts);
-        (scans != 0).then_some(Self { parts, next, fill })
+        (scans != 0).then_some(Self {
+            parts,
+            start: at,
+            next,
+            fill,
+        })
     }
 
     pub(super) fn resumes(&self) -> bool {
@@ -121,10 +127,12 @@ impl Routed {
         // otherwise change an intervening scan before it is cancelled again.
         let mut changes = [Change::default(); BLOCK_LIMIT];
         let mut paths = [Path::default(); BLOCK_LIMIT];
+        let mut locations = [0usize; BLOCK_LIMIT];
         let (mut change_count, mut path_count) = (0, 0);
         let mut pointer = start;
         let mut probes = SCAN_LIMIT;
-        for part in &self.parts {
+        for (part_index, part) in self.parts.iter().enumerate() {
+            locations[part_index] = pointer;
             match part.kind {
                 Kind::Add(delta) => {
                     if let Some(change) = changes[..change_count]
@@ -174,12 +182,6 @@ impl Routed {
             return false;
         }
         let changes = &changes[..change_count];
-        if paths[..path_count]
-            .iter()
-            .any(|path| changes.iter().any(|change| path.contains(change.index)))
-        {
-            return false;
-        }
         let delta = changes
             .iter()
             .find(|change| change.index == start)
@@ -192,14 +194,86 @@ impl Routed {
             inverse = inverse.wrapping_mul(2u16.wrapping_sub(delta.wrapping_mul(inverse)));
         }
         let iterations = value.wrapping_neg().wrapping_mul(inverse);
+        let mut prefix = iterations;
+        // Replay just the writes symbolically at their resolved destinations.
+        // A written scan cell is safe only when every evaluation sees the same
+        // zero/nonzero result as the unmodified route used above. Include the
+        // exact partial delta at each scan, not only the whole-body delta.
+        let mut partial = [0u16; BLOCK_LIMIT];
+        let mut path_index = 0;
+        for (part_index, part) in self.parts.iter().enumerate() {
+            match part.kind {
+                Kind::Add(delta) => {
+                    let index = changes
+                        .iter()
+                        .position(|c| c.index == locations[part_index])
+                        .unwrap();
+                    partial[index] = partial[index].wrapping_add(delta);
+                }
+                Kind::Scan { .. } => {
+                    let path = paths[path_index];
+                    path_index += 1;
+                    for (index, change) in changes.iter().enumerate() {
+                        if path.contains(change.index) {
+                            prefix = prefix.min(predicate_prefix(
+                                machine.tape[change.index],
+                                partial[index],
+                                change.delta,
+                            ));
+                            if prefix == 0 {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                Kind::Move(_) => {}
+            }
+        }
         for change in changes {
             machine.write_cell(
                 change.index,
-                machine.tape[change.index].wrapping_add(change.delta.wrapping_mul(iterations)),
+                machine.tape[change.index].wrapping_add(change.delta.wrapping_mul(prefix)),
             );
         }
-        machine.pc = self.next;
+        // A partial summary has completed whole bodies, but not their final
+        // backedge check. Rechecking `[` is equivalent to that `]` predicate,
+        // including after host mutation at a budget yield. Re-resolve the
+        // route before another summary; a changed boundary uses literal BF.
+        machine.pc = if prefix == iterations {
+            self.next
+        } else {
+            self.start
+        };
         true
+    }
+}
+
+fn predicate_prefix(initial: u16, partial: u16, delta: u16) -> u16 {
+    let first = initial.wrapping_add(partial);
+    if initial == 0 {
+        return if first != 0 {
+            0
+        } else if delta == 0 {
+            u16::MAX
+        } else {
+            1
+        };
+    }
+    if first == 0 {
+        return 0;
+    }
+    // A signed representative of the modular delta gives a conservative
+    // monotone interval. Keeping both endpoints in1..65535 proves every read
+    // nonzero without simulating the counter or assuming wrapping never occurs.
+    // Stop before the first read that could cross either endpoint. Values
+    // after the final read may wrap: they are materialized and checked afresh.
+    let signed = i32::from(delta as i16);
+    if signed > 0 {
+        (1 + (65535 - i32::from(first)) / signed) as u16
+    } else if signed < 0 {
+        (1 + (i32::from(first) - 1) / -signed) as u16
+    } else {
+        u16::MAX
     }
 }
 
@@ -261,24 +335,184 @@ mod tests {
     }
 
     #[test]
-    fn changing_any_scan_predicate_rejects_the_fold_without_writes() {
-        for source in [
-            "[->+[>]>+<<[<]<]",
-            "[->>[>]+>+<<[<]<]",
-            "[->>+[>]>+<<[<]<]",
-            "[->>+->[>]>+<<<[<]<]",
+    fn changed_zero_tests_reject_the_fold_without_writes() {
+        for (source, scan_value) in [
+            ("[->+[>]>+<<[<]<]", 1),
+            ("[->>[>]+[<]<]", 1),
+            ("[->>+[>]>+<<[<]<]", 65535),
         ] {
             let program = Program::parse(source, true, false).unwrap();
             let candidate = Routed::parse(&program, 0).unwrap();
             let mut machine = Machine::new(9).unwrap();
             machine
                 .tape_mut()
-                .copy_from_slice(&[3, 0, 1, 1, 1, 0, 4, 0, 0]);
+                .copy_from_slice(&[3, 0, scan_value, 1, 1, 0, 4, 0, 0]);
             let before = machine.tape().to_vec();
             assert!(!candidate.execute_affine(&mut machine), "{source}");
             assert_eq!(machine.tape(), before);
             assert_eq!(machine.pointer(), 0);
             assert_eq!(machine.pc, 0);
+        }
+    }
+
+    #[test]
+    fn written_scan_cells_fold_only_while_each_iteration_preserves_the_predicate() {
+        for source in [">>[-<-[<]>>]", ">>[-<+[<]>>]"] {
+            for count in [0, 1, 2, 3, 17, 63] {
+                for scanned in [0, 1, 2, 3, 16, 64, 32768, 65534, 65535] {
+                    compare(source, &[0, scanned, count, 0, 0], false, false);
+                    compare(source, &[0, scanned, count, 0, 0], true, false);
+                }
+            }
+        }
+        let source = "[-<-[<]>>]";
+        let program = Program::parse(source, true, false).unwrap();
+        let mut machine = Machine::new(4).unwrap();
+        machine.pointer = 2;
+        machine.write_cell(1, 65535);
+        machine.write_cell(2, 32768);
+        assert_eq!(machine.run(&program, 1).unwrap(), Stop::Halted);
+        assert_eq!(machine.tape(), &[0, 32767, 0, 0]);
+        assert_eq!(machine.pointer(), 2);
+    }
+
+    #[test]
+    fn prefixes_materialize_whole_bodies_before_a_changed_boundary_iteration() {
+        for (source, initial, prefix_tape, final_tape) in [
+            (
+                "[-<-[<]>>]",
+                [0, 3, 7, 0, 0],
+                [0, 1, 5, 0, 0],
+                [0, 0, 4, 0, 0],
+            ),
+            (
+                "[-<+[<]>>]",
+                [0, 65533, 7, 0, 0],
+                [0, 65535, 5, 0, 0],
+                [0, 0, 4, 0, 0],
+            ),
+        ] {
+            compare(&format!(">>{source}"), &initial, false, false);
+            let program = Program::parse(source, true, false).unwrap();
+            let mut machine = Machine::new(initial.len()).unwrap();
+            machine.pointer = 2;
+            machine.tape_mut().copy_from_slice(&initial);
+            assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
+            assert_eq!(machine.tape(), prefix_tape);
+            assert_eq!(machine.pointer(), 2);
+            assert_eq!(machine.pc, 0);
+            let candidate = Routed::parse(&program, 0).unwrap();
+            assert!(!candidate.execute_affine(&mut machine));
+            assert_eq!(machine.tape(), prefix_tape);
+            while machine.run(&program, 1).unwrap() == Stop::Budget {}
+            assert_eq!(machine.tape(), final_tape);
+            assert_eq!(machine.pointer(), 3);
+        }
+        // An unchanged zero exit can become nonzero after its final read. Only
+        // one body is safe for that route, and the next one must find a new exit.
+        compare(
+            "[->>[>]+<<[<]<]",
+            &[3, 0, 1, 1, 1, 0, 0, 0, 0],
+            false,
+            false,
+        );
+        compare(
+            "[->>[>]+>+<<[<]<]",
+            &[3, 0, 1, 1, 1, 0, 4, 0, 0],
+            false,
+            false,
+        );
+        // The changed boundary can expose a later bounds error. All preceding
+        // folded bodies and the failing body's partial updates must survive.
+        compare(">>[-<-[<]>>>+<]", &[0, 3, 7, 0, 0], false, false);
+    }
+
+    #[test]
+    fn prefix_budget_yields_recheck_host_changes_and_wrapping_control() {
+        let source = "[-<-[<]>>]";
+        let program = Program::parse(source, true, false).unwrap();
+        for (scanned, count) in [(12, 4), (12, 0), (0, 4), (1, 4)] {
+            let mut actual = Machine::new(5).unwrap();
+            actual.pointer = 2;
+            actual.tape_mut().copy_from_slice(&[0, 3, 7, 0, 0]);
+            assert_eq!(actual.run(&program, 1).unwrap(), Stop::Budget);
+            assert_eq!(actual.tape(), &[0, 1, 5, 0, 0]);
+            actual.write_cell(1, scanned);
+            actual.write_cell(2, count);
+            // The summary stopped before the backedge predicate. Compare a
+            // literal parser resumed at `]`, including a host-zeroed control.
+            let plain = Program::parse(source, false, false).unwrap();
+            let mut expected = Machine::new(5).unwrap();
+            expected.pointer = actual.pointer;
+            expected.pc = plain.code.len() - 1;
+            expected.tape_mut().copy_from_slice(actual.tape());
+            let run = |machine: &mut Machine, program: &Program| loop {
+                match machine.run(program, 100) {
+                    Ok(Stop::Budget) => {}
+                    result => break result,
+                }
+            };
+            let got = run(&mut actual, &program);
+            let want = run(&mut expected, &plain);
+            assert_eq!(got, want);
+            assert_eq!(actual.pointer(), expected.pointer());
+            assert_eq!(actual.tape(), expected.tape());
+        }
+        for control in ["+", "+++", "---", "--"] {
+            for count in [0, 1, 2, 3, 65535] {
+                let source = format!(">>[{control}<-[<]>>]");
+                compare(&source, &[0, 7, count, 0, 0], false, false);
+            }
+        }
+        // Odd modular counters still fold large prefixes in constant work.
+        let mut machine = Machine::new(5).unwrap();
+        machine.pointer = 2;
+        machine.tape_mut().copy_from_slice(&[0, 16384, 64000, 0, 0]);
+        assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
+        assert_eq!(machine.tape(), &[0, 1, 47617, 0, 0]);
+        assert_eq!(machine.pointer(), 2);
+    }
+
+    #[test]
+    fn partial_deltas_at_multiple_scans_cannot_be_replaced_with_the_net_delta() {
+        let source = ">>[-<+[<]>><-[<]>>]";
+        for count in [0, 1, 3, 7] {
+            for scanned in [1, 2, 65534, 65535] {
+                compare(source, &[0, scanned, count, 0, 0], false, false);
+            }
+        }
+        let raw = &source[2..];
+        let program = Program::parse(raw, true, false).unwrap();
+        let candidate = Routed::parse(&program, 0).unwrap();
+        let mut machine = Machine::new(5).unwrap();
+        machine.pointer = 2;
+        machine.write_cell(1, 65535);
+        machine.write_cell(2, 3);
+        let before = machine.tape().to_vec();
+        assert!(!candidate.execute_affine(&mut machine));
+        assert_eq!(machine.tape(), before);
+        machine.write_cell(1, 12);
+        assert!(candidate.execute_affine(&mut machine));
+        assert_eq!(machine.tape(), &[0, 12, 0, 0, 0]);
+        // A cancelled update before the scan keeps a zero exit safe; cancelling
+        // after the scan cannot justify treating its transient one as zero.
+        compare("[->+-[>]<]", &[5, 0, 0, 0], false, false);
+        compare("[->+[>]-<]", &[5, 0, 0, 0], false, false);
+    }
+
+    #[test]
+    fn accepted_predicate_bounds_match_all_wrapping_read_values() {
+        for initial in [0u16, 1, 2, 127, 32768, 65535] {
+            for partial in [0u16, 1, 127, 65534, 65535] {
+                for delta in [0u16, 1, 2, 9, 32768, 65529, 65533, 65535] {
+                    let prefix = predicate_prefix(initial, partial, delta);
+                    let mut value = initial.wrapping_add(partial);
+                    for _ in 0..prefix {
+                        assert_eq!(value == 0, initial == 0);
+                        value = value.wrapping_add(delta);
+                    }
+                }
+            }
         }
     }
 

@@ -46,10 +46,16 @@ generic marker cleanup.
 Arithmetic loops can also route through nested scans. For example,
 `[->>[>]>+<<[<]<]` transfers a value into a destination found by zero sentinels.
 The engine first resolves the route without changing the tape, then verifies
-that the pointer returns and that no write touches any scan predicate, including
-its exit cell. Only then can it fold the entire wrapping affine transfer.
-Cancelled writes remain part of this proof, because their intermediate values
-could affect a scan.
+that the pointer returns and every scan sees the same zero/nonzero predicates
+throughout the loop. Written predicates include their precise partial update
+at each scan and a conservative bound across the summarized iterations. For
+example, a decreasing scanned cell may be folded only while every tested value
+stays nonzero. If a later iteration might change a predicate, the summary stops
+before that iteration, materializes every updated cell, and resumes at the loop
+predicate. A new proof or ordinary BF handles the boundary, including any host
+changes during a budget yield. Exit cells must remain zero at every summarized
+evaluation. Cancelled writes remain part of this proof, because their
+intermediate values could affect a scan.
 
 Counted first-zero fills such as `[->>[>]+[<]<]` deliberately change their scan
 predicates. A separate guard proves that the loop decrements its original

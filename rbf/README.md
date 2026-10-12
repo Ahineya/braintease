@@ -85,15 +85,12 @@ examples perform much more guest work and are unsuitable for checking that the
 BF display works promptly.
 
 In particular, the 64×64 `rgb565_interactive_simple.c` demo clears 4096 pixels
-before its first flush. Its 16,384-cell bank layout also places the C stack in
-bank 2, requiring BF seeks to guest addresses above 32,768. Before compiler
-inlining, frame reduction and pointer optimizations, a bounded 40-second trace
-reached only 28 background writes and no flush. The black window did not indicate
-a failed display. The compiler now removes much of that overhead, but the larger
-frame and bank layout still make this a heavier workload than the assembly demo.
-The same 40-second local check after those changes reached 487 background writes
-without flushing a frame. Use the small compiled-C checks below for bounded,
-exact-pixel verification; the larger demo still has a long startup in BF.
+before its first flush. Its unchanged 16,384-cell bank layout places the C stack
+in bank 2, requiring BF seeks to guest addresses above 32,768. This makes it a
+useful compiler/interpreter workload as well as a display demo. The host cannot
+show a completed frame until C finishes drawing and requests a flush; telemetry
+shows the intervening progress. Use the small compiled-C checks below for quick,
+exact-pixel verification.
 
 To rebuild and run that original C demo with progress reporting:
 
@@ -103,18 +100,11 @@ scripts/run-bf-rgb565-c.sh --telemetry
 
 This checks tool freshness and recompiles the demo plus its graphics and MMIO
 libraries on every run. It replaces `build/bf/rgb565-demo.bf`, keeping intermediate
-files and a matching `.bin` for RVM comparisons alongside it. It defaults to
-16,384-cell banks and uses three RAM banks for the display, C globals and stack.
+files and a matching `.bin` for RVM comparisons alongside it. It uses
+three 16,384-cell RAM banks for the display, C globals and stack.
 Runtime objects under `runtime/` are untouched. Set `BF_RGB565_C_OUT` to choose
 another output directory, or use `--build-only` to prepare the image without
 running it. Arrow keys move the red square once frames are being presented.
-
-`BF_RGB565_C_BANK_SIZE` can select a smaller bank, for example
-`BF_RGB565_C_BANK_SIZE=8320 scripts/run-bf-rgb565-c.sh --telemetry`. Smaller banks
-place the globals and stack closer to the beginning of the BF tape. The accepted
-range is 8,224–65,535 cells; 8,224 is exactly the 32 MMIO cells plus two 64×64
-framebuffers. Banks need not be powers of two. All objects are rebuilt with the
-selected bank size.
 
 For a bounded headless first-frame capture:
 
@@ -274,6 +264,7 @@ cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_host
 cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_multibank
 scripts/test-bf-host.sh
 node scripts/test-bf-compiler.mjs
+node scripts/test-bf-compiler.mjs --large-banks
 ```
 
 The smoke script runs small assembly fixtures and a compiled C program. It
@@ -295,7 +286,10 @@ instruction ceilings; wall time is recorded but never used as a pass/fail limit
 apart from a generous execution timeout. Run it after building the release tools
 listed above. `--rvm-only` skips BF execution. Reports, tool hashes, reproduction
 commands and captures go to `build/bf-compiler-regression`; `BF_COMPILER_OUT`
-overrides that directory. No runtime rebuild or Doom source is involved.
+overrides that directory. `--large-banks` runs the same checks with 64,000-cell
+banks and stores them in `build/bf-compiler-regression-large`, exercising distant
+globals and stack without changing the demo's bank size. No runtime rebuild or
+Doom source is involved.
 
 ## Remaining BF CPU limits
 

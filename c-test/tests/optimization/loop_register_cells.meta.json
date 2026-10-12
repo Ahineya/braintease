@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYY\n",
+  "use_runtime": true,
+  "description": "Loop-carried stack promotion with zero trips, wrapping, nested loops, exits, wide cells, calls and escaped volatile locals"
+}

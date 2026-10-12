@@ -278,3 +278,251 @@ fn unreachable_phi_inputs_are_removed_before_phi_lowering() {
         .any(|i| matches!(i, I::Phi { .. })));
     super::super::phi::destroy_phis(&mut f).unwrap();
 }
+
+fn short_circuit(and: bool, selected_outcome: bool) -> Function {
+    let mut f = Function::new("short_circuit_bounds".into(), IrType::I16);
+    f.parameters = vec![(0, IrType::I16), (1, IrType::I16)];
+    let op = if and { B::Ult } else { B::Uge };
+    f.blocks = vec![
+        block(
+            0,
+            vec![
+                bin(2, op, Value::Temp(0), Value::Constant(8)),
+                I::BranchCond {
+                    condition: Value::Temp(2),
+                    true_label: if and { 1 } else { 2 },
+                    false_label: if and { 2 } else { 1 },
+                },
+            ],
+        ),
+        block(
+            1,
+            vec![bin(3, op, Value::Temp(1), Value::Constant(9)), I::Branch(3)],
+        ),
+        block(2, vec![I::Branch(3)]),
+        block(
+            3,
+            vec![
+                I::Phi {
+                    result: 4,
+                    incoming: vec![(Value::Temp(3), 1), (Value::Constant(i64::from(!and)), 2)],
+                    result_type: IrType::I16,
+                },
+                I::BranchCond {
+                    condition: Value::Temp(4),
+                    true_label: if selected_outcome { 4 } else { 8 },
+                    false_label: if selected_outcome { 8 } else { 4 },
+                },
+            ],
+        ),
+        block(
+            4,
+            vec![
+                bin(5, B::Uge, Value::Temp(0), Value::Constant(8)),
+                I::BranchCond {
+                    condition: Value::Temp(5),
+                    true_label: 5,
+                    false_label: 6,
+                },
+            ],
+        ),
+        block(5, vec![I::Return(Some(Value::Constant(91)))]),
+        block(
+            6,
+            vec![
+                bin(6, B::Uge, Value::Temp(1), Value::Constant(9)),
+                I::BranchCond {
+                    condition: Value::Temp(6),
+                    true_label: 7,
+                    false_label: 8,
+                },
+            ],
+        ),
+        block(7, vec![I::Return(Some(Value::Constant(92)))]),
+        block(8, vec![I::Return(Some(Value::Constant(0)))]),
+    ];
+    f
+}
+
+fn returns(f: &Function, value: i64) -> bool {
+    f.blocks
+        .iter()
+        .flat_map(|b| &b.instructions)
+        .any(|i| matches!(i, I::Return(Some(Value::Constant(c))) if *c == value))
+}
+
+#[test]
+fn true_and_and_false_or_prove_both_complementary_bounds() {
+    for and in [false, true] {
+        let mut f = short_circuit(and, and);
+        eliminate_redundancy(&mut f);
+        assert!(
+            !returns(&f, 91),
+            "guard bound must be implied for && true / || false"
+        );
+        assert!(
+            !returns(&f, 92),
+            "RHS bound must be implied for && true / || false"
+        );
+    }
+}
+
+#[test]
+fn false_and_and_true_or_do_not_select_a_unique_phi_edge() {
+    for and in [false, true] {
+        let mut f = short_circuit(and, !and);
+        eliminate_redundancy(&mut f);
+        assert!(returns(&f, 91));
+        assert!(returns(&f, 92));
+    }
+}
+
+#[test]
+fn phi_facts_require_a_unique_control_edge_and_preserve_signedness() {
+    let mut f = short_circuit(true, true);
+    f.parameters.push((7, IrType::I16));
+    f.blocks[0].id = 9;
+    f.blocks.insert(
+        0,
+        block(
+            0,
+            vec![I::BranchCond {
+                condition: Value::Temp(7),
+                true_label: 9,
+                false_label: 4,
+            }],
+        ),
+    );
+    eliminate_redundancy(&mut f);
+    assert!(returns(&f, 91));
+    assert!(returns(&f, 92));
+
+    let mut f = short_circuit(true, true);
+    if let I::Binary { op, .. } = &mut f.blocks[6].instructions[0] {
+        *op = B::Sge;
+    }
+    eliminate_redundancy(&mut f);
+    assert!(!returns(&f, 91));
+    assert!(
+        returns(&f, 92),
+        "an unsigned bound cannot prove the signed comparison"
+    );
+}
+
+#[test]
+fn phi_facts_do_not_reuse_distinct_volatile_reads() {
+    let mut f = short_circuit(true, true);
+    f.blocks[0].instructions.insert(0, load(7, "x", true));
+    if let I::Binary { lhs, .. } = &mut f.blocks[0].instructions[1] {
+        *lhs = Value::Temp(7);
+    }
+    f.blocks[4].instructions.insert(0, load(8, "x", true));
+    if let I::Binary { lhs, .. } = &mut f.blocks[4].instructions[1] {
+        *lhs = Value::Temp(8);
+    }
+    eliminate_redundancy(&mut f);
+    assert!(returns(&f, 91));
+    assert_eq!(
+        f.blocks
+            .iter()
+            .flat_map(|b| &b.instructions)
+            .filter(|i| matches!(i, I::Load { volatile: true, .. }))
+            .count(),
+        2
+    );
+}
+
+fn infer_phi(f: &Function, id: u32, label: u32) -> Option<HashMap<String, bool>> {
+    let cfg = super::super::cfg::Cfg::new(f).unwrap();
+    let defs = f
+        .blocks
+        .iter()
+        .flat_map(|b| &b.instructions)
+        .filter_map(|i| super::super::result(i).map(|id| (id, i.clone())))
+        .collect();
+    let (constants, _) = super::super::constants::integer_facts(f);
+    let block = f.blocks.iter().position(|b| b.id == label).unwrap();
+    let context = PhiContext::new(f, &defs);
+    short_circuit_facts(
+        id,
+        true,
+        block,
+        &context,
+        &cfg,
+        &defs,
+        &constants,
+        &vec![HashMap::new(); f.blocks.len()],
+    )
+}
+
+#[test]
+fn malformed_phi_inputs_and_duplicate_ssa_definitions_are_not_proofs() {
+    for incoming in [
+        vec![(Value::Temp(3), 1), (Value::Constant(0), 1)],
+        vec![(Value::Temp(3), 1)],
+        vec![(Value::Temp(3), 1), (Value::Constant(0), 99)],
+        vec![
+            (Value::Temp(3), 1),
+            (Value::Constant(0), 2),
+            (Value::Constant(0), 2),
+        ],
+    ] {
+        let mut f = short_circuit(true, true);
+        if let I::Phi {
+            incoming: values, ..
+        } = &mut f.blocks[3].instructions[0]
+        {
+            *values = incoming;
+        }
+        assert!(infer_phi(&f, 4, 3).is_none());
+    }
+    let mut f = short_circuit(true, true);
+    f.blocks[2]
+        .instructions
+        .insert(0, bin(3, B::Ult, Value::Temp(1), Value::Constant(9)));
+    assert!(infer_phi(&f, 4, 3).is_none());
+}
+
+#[test]
+fn loop_carried_phi_and_rhs_only_operands_are_not_proofs() {
+    let mut f = Function::new("loop_carried_condition".into(), IrType::I16);
+    f.parameters.push((0, IrType::I16));
+    f.blocks = vec![
+        block(0, vec![I::Branch(1)]),
+        block(
+            1,
+            vec![
+                I::Phi {
+                    result: 1,
+                    incoming: vec![(Value::Constant(0), 0), (Value::Temp(2), 2)],
+                    result_type: IrType::I16,
+                },
+                I::BranchCond {
+                    condition: Value::Temp(1),
+                    true_label: 2,
+                    false_label: 3,
+                },
+            ],
+        ),
+        block(
+            2,
+            vec![
+                bin(2, B::Ult, Value::Temp(0), Value::Constant(8)),
+                I::Branch(1),
+            ],
+        ),
+        block(3, vec![I::Return(Some(Value::Constant(0)))]),
+    ];
+    assert!(infer_phi(&f, 1, 1).is_none());
+    f = short_circuit(true, true);
+    f.blocks[1]
+        .instructions
+        .insert(0, bin(7, B::Add, Value::Temp(1), Value::Constant(2)));
+    if let I::Binary { lhs, .. } = &mut f.blocks[1].instructions[1] {
+        *lhs = Value::Temp(7);
+    }
+    assert!(
+        infer_phi(&f, 4, 3).is_none(),
+        "RHS-only expressions do not dominate the join"
+    );
+}

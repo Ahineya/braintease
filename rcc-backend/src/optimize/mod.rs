@@ -23,6 +23,7 @@ pub use constants::fold_binary;
 pub use pointers::preserve_pointer_banks;
 pub use phi::destroy_phis;
 pub use reachability::{function_symbols, function_has_opaque_asm, value_symbols};
+pub(crate) use inline::safe_asm;
 
 pub fn optimize_module(module: &mut rcc_frontend::ir::Module) {
     for function in &mut module.functions { optimize_function(function); }
@@ -60,7 +61,7 @@ pub(crate) fn result(inst: &Instruction) -> Option<TempId> {
     }
 }
 
-fn value_temps(value: &Value, temps: &mut HashSet<TempId>) {
+pub(crate) fn value_temps(value: &Value, temps: &mut HashSet<TempId>) {
     match value {
         Value::Temp(t) => {
             temps.insert(*t);
@@ -105,7 +106,7 @@ fn operands(inst: &Instruction) -> Vec<&Value> {
     }
 }
 
-fn used_temps(inst: &Instruction) -> HashSet<TempId> {
+pub(crate) fn used_temps(inst: &Instruction) -> HashSet<TempId> {
     let mut temps = HashSet::new();
     for value in operands(inst) {
         value_temps(value, &mut temps);

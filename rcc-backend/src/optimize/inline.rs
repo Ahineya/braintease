@@ -107,7 +107,7 @@ fn scalar(ty: &IrType) -> bool {
     ty.is_integer() || ty.is_pointer()
 }
 
-pub(super) fn safe_asm(assembly: &str, clobbers: &[String]) -> bool {
+pub(crate) fn safe_asm(assembly: &str, clobbers: &[String]) -> bool {
     // Only operand-driven single instructions. No labels, branches, implicit
     // frame registers or hard-coded scratch registers that could hit the caller.
     if clobbers.iter().any(|c| c != "memory") {

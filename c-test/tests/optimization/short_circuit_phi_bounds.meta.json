@@ -1,0 +1,5 @@
+{
+  "description": "Short-circuit Phi branch facts, ambiguous outcomes, volatile RHS effects and loop-carried booleans",
+  "use_runtime": true,
+  "expected": "YYYYYYYYYY\n"
+}

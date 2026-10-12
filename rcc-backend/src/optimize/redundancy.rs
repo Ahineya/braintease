@@ -212,6 +212,166 @@ fn predicate(inst: &I) -> Option<(String, bool)> {
     Some((format!("{family}:{result_type:?}:{a:?}:{b:?}"), inverse))
 }
 
+struct PhiContext {
+    ids: HashMap<u32, usize>,
+    locations: HashMap<TempId, usize>,
+    parameters: HashSet<TempId>,
+    predicates: HashMap<String, TempId>,
+    valid_ssa: bool,
+}
+
+impl PhiContext {
+    fn new(function: &Function, defs: &HashMap<TempId, I>) -> Self {
+        let ids = function
+            .blocks
+            .iter()
+            .enumerate()
+            .map(|(i, b)| (b.id, i))
+            .collect();
+        let parameters: HashSet<_> = function.parameters.iter().map(|(id, _)| *id).collect();
+        let mut valid_ssa = parameters.len() == function.parameters.len();
+        let mut locations = HashMap::new();
+        for (bi, bb) in function.blocks.iter().enumerate() {
+            for inst in &bb.instructions {
+                if let Some(id) = super::result(inst) {
+                    valid_ssa &= !parameters.contains(&id) && locations.insert(id, bi).is_none();
+                }
+            }
+        }
+        let predicates = defs
+            .iter()
+            .filter_map(|(id, inst)| predicate(inst).map(|(key, _)| (key, *id)))
+            .collect();
+        Self {
+            ids,
+            locations,
+            parameters,
+            predicates,
+            valid_ssa,
+        }
+    }
+}
+
+/// A short-circuit join carries either its RHS comparison or the boolean that
+/// skipped that comparison. Only the opposite outcome proves which edge ran.
+/// Require every predicate operand to be available before the join, rather
+/// than treating a value produced only on the selected edge as dominating it.
+fn short_circuit_facts(
+    condition: TempId,
+    outcome: bool,
+    block: usize,
+    context: &PhiContext,
+    cfg: &super::cfg::Cfg,
+    defs: &HashMap<TempId, I>,
+    constants: &HashMap<TempId, i64>,
+    facts: &[HashMap<String, bool>],
+) -> Option<HashMap<String, bool>> {
+    let I::Phi {
+        incoming,
+        result_type,
+        ..
+    } = defs.get(&condition)?
+    else {
+        return None;
+    };
+    if !context.valid_ssa || !matches!(result_type, IrType::I1 | IrType::I16) || incoming.len() != 2
+    {
+        return None;
+    }
+    let PhiContext {
+        ids,
+        locations,
+        parameters,
+        ..
+    } = context;
+    if locations.get(&condition) != Some(&block) {
+        return None;
+    }
+    let predecessors: HashSet<_> = incoming
+        .iter()
+        .filter_map(|(_, label)| ids.get(label).copied())
+        .collect();
+    if predecessors.len() != 2
+        || predecessors != cfg.predecessors[block].iter().copied().collect()
+        || predecessors
+            .iter()
+            .any(|p| !cfg.reachable.contains(p) || cfg.dominators[*p].contains(&block))
+    {
+        return None;
+    }
+    let constant = |value: &Value| match value {
+        Value::Constant(c) => Some(*c),
+        Value::Temp(id) => constants.get(id).copied(),
+        _ => None,
+    };
+    let mut selected = None;
+    let mut skipped = false;
+    for (value, label) in incoming {
+        match constant(value) {
+            Some(c @ (0 | 1)) if (c != 0) != outcome => skipped = true,
+            Some(_) => return None,
+            None => {
+                let Value::Temp(id) = value else {
+                    return None;
+                };
+                if selected.replace((*id, ids[label])).is_some() {
+                    return None;
+                }
+            }
+        }
+    }
+    if !skipped {
+        return None;
+    }
+    let (selected, predecessor) = selected?;
+    if locations.get(&selected) != Some(&predecessor) {
+        return None;
+    }
+    let available = |inst: &I| {
+        let I::Binary {
+            lhs,
+            rhs,
+            result_type,
+            ..
+        } = inst
+        else {
+            return false;
+        };
+        result_type.is_integer()
+            && [lhs, rhs].iter().all(|value| match value {
+                Value::Constant(_) => true,
+                Value::Temp(id) => {
+                    parameters.contains(id)
+                        || locations
+                            .get(id)
+                            .is_some_and(|&at| at != block && cfg.dominators[block].contains(&at))
+                }
+                _ => false,
+            })
+    };
+    let comparison = defs.get(&selected)?;
+    if !available(comparison) {
+        return None;
+    }
+    let (key, inverse) = predicate(comparison)?;
+    let mut result: HashMap<_, _> = facts[predecessor]
+        .iter()
+        .filter(|(key, _)| {
+            context
+                .predicates
+                .get(*key)
+                .is_some_and(|id| available(&defs[id]))
+        })
+        .map(|(key, value)| (key.clone(), *value))
+        .collect();
+    let value = outcome != inverse;
+    if result.get(&key).is_some_and(|prior| *prior != value) {
+        return None;
+    }
+    result.insert(key, value);
+    Some(result)
+}
+
 fn simplify_control_flow(function: &mut Function) {
     let Ok(cfg) = super::cfg::Cfg::new(function) else {
         return;
@@ -230,6 +390,7 @@ fn simplify_control_flow(function: &mut Function) {
         .map(|(i, b)| (b.id, i))
         .collect();
     let mut facts = vec![HashMap::<String, bool>::new(); function.blocks.len()];
+    let phi_context = PhiContext::new(function, &defs);
     for (bi, block) in function.blocks.iter().enumerate() {
         let Some(I::BranchCond {
             condition: Value::Temp(id),
@@ -257,6 +418,53 @@ fn simplify_control_flow(function: &mut Function) {
             }
         }
     }
+    // Direct branch facts above establish the guard on each RHS predecessor.
+    // A bounded fixed point also covers nested &&/|| joins. Every addition is
+    // independently proven; the bound can only leave an optimization undone.
+    for _ in 0..4 {
+        let mut changed = false;
+        for (bi, block) in function.blocks.iter().enumerate() {
+            let Some(I::BranchCond {
+                condition: Value::Temp(id),
+                true_label,
+                false_label,
+            }) = block.instructions.last()
+            else {
+                continue;
+            };
+            if true_label == false_label {
+                continue;
+            }
+            for (label, outcome) in [(true_label, true), (false_label, false)] {
+                let target = ids[label];
+                if target == 0 || cfg.predecessors[target] != [bi] {
+                    continue;
+                }
+                let Some(implied) = short_circuit_facts(
+                    *id,
+                    outcome,
+                    bi,
+                    &phi_context,
+                    &cfg,
+                    &defs,
+                    &constants,
+                    &facts,
+                ) else {
+                    continue;
+                };
+                for &at in &cfg.reachable {
+                    if cfg.dominators[at].contains(&target) {
+                        for (key, value) in &implied {
+                            changed |= facts[at].insert(key.clone(), *value) != Some(*value);
+                        }
+                    }
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
     for (bi, block) in function.blocks.iter_mut().enumerate() {
         let mut local = constants.clone();
         for inst in &mut block.instructions {
@@ -276,7 +484,14 @@ fn simplify_control_flow(function: &mut Function) {
             {
                 let value = match condition {
                     Value::Constant(c) => Some(*c),
-                    Value::Temp(id) => local.get(id).copied(),
+                    Value::Temp(id) => local.get(id).copied().or_else(|| {
+                        // CSE may make this branch use the original predicate
+                        // directly, with no comparison left in this block.
+                        let (key, inverse) = defs.get(id).and_then(predicate)?;
+                        facts[bi]
+                            .get(&key)
+                            .map(|value| i64::from(*value != inverse))
+                    }),
                     _ => None,
                 };
                 if let Some(value) = value {

@@ -222,6 +222,45 @@ mod tests {
     }
 
     #[test]
+    fn maximum_cell_count_fills_the_complete_physical_tape_in_bounded_slices() {
+        for stride in [-2isize, -1, 1, 2] {
+            let movement = |delta: isize| {
+                if delta >= 0 {
+                    ">".repeat(delta as usize)
+                } else {
+                    "<".repeat(delta.unsigned_abs())
+                }
+            };
+            let source = format!(
+                "[-{}[{}]+[{}]{}]",
+                movement(2 * stride),
+                movement(stride),
+                movement(-stride),
+                movement(-stride)
+            );
+            let program = Program::parse(&source, true, false).unwrap();
+            let cells = 65540 * stride.unsigned_abs();
+            let start = if stride > 0 { 0 } else { cells - 1 };
+            let mut machine = Machine::new(cells).unwrap();
+            machine.pointer = start;
+            machine.write_cell(start, 65535);
+            assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
+            assert_eq!(machine.tape[start], 65535 - 128);
+            while machine.run(&program, 1).unwrap() == Stop::Budget {}
+            assert_eq!(machine.pointer(), start);
+            assert_eq!(machine.tape[start], 0);
+            assert_eq!(machine.tape.iter().filter(|&&v| v != 0).count(), 65535);
+            for marker in 0..65535 {
+                assert_eq!(
+                    machine.tape[(start as isize + (marker + 2) * stride) as usize],
+                    1
+                );
+            }
+            assert!(machine.dispatches() <= 513);
+        }
+    }
+
+    #[test]
     fn varying_strides_holes_and_marker_values_match_literal_bf() {
         for stride in [-5isize, -2, -1, 1, 2, 5] {
             let mv = |n: isize| {

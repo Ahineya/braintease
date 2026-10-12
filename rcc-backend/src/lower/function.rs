@@ -540,6 +540,7 @@ pub fn lower_function_v2(
             builder_instructions[index + 1] = AsmInst::AddI(Reg::Sp, Reg::Fp, frame_top);
         }
     }
+    super::loop_registers::promote(&mut builder_instructions, function, &alloca_offsets, local_slots, frame_top);
     instructions.extend(crate::function::frame::finalize(builder_instructions, frame_top));
     Ok(instructions)
 }

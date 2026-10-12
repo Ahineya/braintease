@@ -10,17 +10,20 @@ import { createHash } from 'node:crypto';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
-    console.log('Usage: node scripts/test-bf-compiler.mjs [--rvm-only]\n' +
+    console.log('Usage: node scripts/test-bf-compiler.mjs [--rvm-only] [--large-banks]\n' +
         'Verify exact 4x2 and 8x2 C RGB565 frames and guest-instruction ceilings.\n' +
         'Runs bounded BF captures sequentially unless --rvm-only is supplied.\n' +
-        'BF_COMPILER_OUT selects the output directory (default build/bf-compiler-regression).\n' +
+        '--large-banks uses 64000-cell banks to exercise distant globals and stack.\n' +
+        'BF_COMPILER_OUT selects the output directory (default build/bf-compiler-regression[-large]).\n' +
         'Build current release tools first; elapsed time is reported, never asserted.');
     process.exit(0);
 }
-assert.ok(args.every(arg => arg === '--rvm-only'), `Unknown options: ${args}`);
+assert.ok(args.every(arg => ['--rvm-only', '--large-banks'].includes(arg)), `Unknown options: ${args}`);
 const rvmOnly = args.includes('--rvm-only');
+const largeBanks = args.includes('--large-banks');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const out = path.resolve(process.env.BF_COMPILER_OUT || path.join(root, 'build/bf-compiler-regression'));
+const out = path.resolve(process.env.BF_COMPILER_OUT || path.join(root,
+    `build/bf-compiler-regression${largeBanks ? '-large' : ''}`));
 fs.mkdirSync(out, { recursive: true });
 const tools = {
     rcc: path.join(root, 'target/release/rcc'),
@@ -44,7 +47,7 @@ function run(tool, argv, log) {
     fs.writeFileSync(logPath, (result.stdout || '') + (result.stderr || ''));
     assert.equal(result.status, 0, `${tool} failed; see ${logPath}\n${result.error || result.stderr || ''}`);
 }
-const bank = 2048, memoryBanks = 3;
+const bank = largeBanks ? 64000 : 2048, memoryBanks = 3;
 function assemble(source, name) {
     const object = path.join(out, `${name}.pobj`);
     run('rasm', ['assemble', source, '-o', object, '--bank-size', String(bank), '--max-immediate', '65535'], `${name}-assemble`);
