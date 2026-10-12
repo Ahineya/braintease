@@ -80,6 +80,66 @@ fn moving_updates_recheck_predicates_after_budget_mutations() {
 }
 
 #[test]
+fn batched_predicate_updates_preserve_cached_scan_stops() {
+    for stride in [1usize, 3, 37] {
+        for reverse in [false, true] {
+            for (update, old) in [("-", 1), ("+", u16::MAX)] {
+                let mut initial = vec![0; 602 * stride];
+                for index in 1..601 {
+                    initial[index * stride] = old;
+                }
+                // Include a non-cleared cell among the changed predicates, so
+                // the invalidation must cover mixed as well as all-zero runs.
+                initial[300 * stride] = 9;
+                let first = if reverse { 450 } else { 150 };
+                let restart = if reverse { 600 } else { 1 };
+                let end = if reverse { 0 } else { 601 };
+                let direction = if reverse {
+                    -(stride as isize)
+                } else {
+                    stride as isize
+                };
+                let source = format!(
+                    "{}[{}]{}[{update}{}]{}[{}]",
+                    movement(stride as isize),
+                    movement(stride as isize),
+                    movement((first - 601) * stride as isize),
+                    movement(direction),
+                    movement((restart - end) * stride as isize),
+                    movement(direction),
+                );
+                super::tests::compare(&source, &initial, false, false);
+            }
+        }
+    }
+}
+
+#[test]
+fn cleared_run_facts_observe_new_host_search_stops() {
+    let mut actual = Machine::new(1025).unwrap();
+    actual.tape_mut()[1..1024].fill(1);
+    actual.pointer = 1;
+    let clear = Program::parse("[->]", true, false).unwrap();
+    while actual.run(&clear, 1).unwrap() == Stop::Budget {}
+    assert!(actual.tape().iter().all(|&value| value == 0));
+    actual.write_cell(1, 1);
+    actual.write_cell(513, 73);
+    actual.pointer = 1;
+    actual.pc = 0;
+    let source = "[>[<-]<[->+<]>]";
+    let fast = Program::parse(source, true, false).unwrap();
+    let plain = Program::parse(source, false, false).unwrap();
+    let mut expected = Machine::new(1025).unwrap();
+    expected.tape_mut().copy_from_slice(actual.tape());
+    expected.pointer = 1;
+    assert_eq!(actual.run(&fast, 1000).unwrap(), Stop::Halted);
+    assert_eq!(expected.run(&plain, 20000).unwrap(), Stop::Halted);
+    assert_eq!(actual.pointer(), 512);
+    assert_eq!(actual.pointer(), expected.pointer());
+    assert_eq!(actual.tape(), expected.tape());
+}
+
+#[test]
 fn randomized_moving_arithmetic_matches_independent_literal_full_state() {
     let mut seed = 0x68d1_925bu32;
     let mut random = || {

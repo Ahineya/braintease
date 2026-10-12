@@ -15,6 +15,7 @@ mod search;
 const NO_FAST_OP: u32 = u32::MAX;
 const BLOCK_LIMIT: usize = 128;
 const SCAN_LIMIT: usize = 256;
+const FILL_LIMIT: usize = 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
@@ -473,6 +474,9 @@ impl Machine {
                 return self.scan(*stride, *minimum, *maximum, *next);
             }
             FastOp::Walk { arithmetic, next } => {
+                if let [(0, delta)] = arithmetic.changes.as_slice() {
+                    return self.walk_current(arithmetic, *delta, *next);
+                }
                 // Moving arithmetic loops can change their next predicate.
                 // Execute complete bodies in order, including all writes;
                 // only the per-iteration interpreter dispatch is removed.
@@ -495,13 +499,55 @@ impl Machine {
         true
     }
 
+    fn walk_current(&mut self, arithmetic: &Arithmetic, delta: u16, next: usize) -> bool {
+        let first = self.pointer;
+        let mut last = None;
+        let mut created_zero = false;
+        let mut all_zero = true;
+        let mut success = true;
+        // These bodies touch only their own predicate, and strict in-bounds
+        // movement makes their cells distinct. Batch cache maintenance while
+        // retaining every physical write and every intermediate bounds check.
+        for _ in 0..SCAN_LIMIT / 2 {
+            if self.tape[self.pointer] == 0 {
+                break;
+            }
+            if !self.range_fits(arithmetic.minimum, arithmetic.maximum) {
+                success = false;
+                break;
+            }
+            let value = self.tape[self.pointer].wrapping_add(delta);
+            self.tape[self.pointer] = value;
+            created_zero |= value == 0;
+            all_zero &= value == 0;
+            last = Some(self.pointer);
+            self.pointer = (self.pointer as isize + arithmetic.advance) as usize;
+        }
+        if let Some(last) = last {
+            let step = arithmetic.advance.unsigned_abs();
+            if created_zero {
+                self.scan_cache.invalidate_run(first, last, step);
+            }
+            // All old predicates were nonzero, so zero-cache facts cannot have
+            // been invalidated. A completely cleared run adds useful new facts.
+            if all_zero {
+                let (slot, _) = self.zero_cache.prepare(step, first);
+                self.zero_cache.remember(slot, first, last);
+            }
+        }
+        if self.tape[self.pointer] == 0 {
+            self.pc = next;
+        }
+        success
+    }
+
     /// Execute at most `budget` IR dispatches. Each optimized operation performs
     /// bounded work: basic summaries cover at most 128 arithmetic instructions,
     /// 256 scan/search probes, or 256 combined moving-loop
     /// iterations and cell updates. Routed loops inspect at most 128 parts per
     /// proof, with at most two proofs of 256 scan probes and bounded predicate
-    /// checks; a counted fill writes at most 128 markers. A scan probe can skip
-    /// a previously verified run of equal zero-ness in constant time.
+    /// checks; a counted fill examines and writes at most 1024 markers. A scan
+    /// probe can skip a previously verified run of equal zero-ness in constant time.
     /// An input stop repeats until `provide_input` is called, without consuming
     /// another dispatch. Output and hooks have already advanced past the marker.
     pub fn run(&mut self, program: &Program, budget: u64) -> Result<Stop, Error> {

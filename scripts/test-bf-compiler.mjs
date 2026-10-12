@@ -83,7 +83,7 @@ for (const { width, height, kind } of cases) {
         expected.writeUInt16LE(color, (y * width + x) * 2);
     }
     fs.writeFileSync(`${prefix}.expected.rgb565`, expected);
-    // Current 4x2/8x2 counts: API281/337, direct114/186. Allow allocator
+    // Current 4x2/8x2 counts: API260/308, direct101/165. Allow allocator
     // variation while catching lost bounds/global-load optimizations (the
     // previous API counts were711/1247). Never assert wall time.
     const ceiling = kind === 'rectangles' ? 6000 : kind === 'graphics' ? (width === 4 ? 550 : 850) : (width === 4 ? 220 : 380);

@@ -4,6 +4,7 @@
 //! assumed; checked batches leave every marker physically present on the tape.
 
 use super::{Kind, Machine, Part, Path, Routed, BLOCK_LIMIT, SCAN_LIMIT};
+use crate::engine::FILL_LIMIT;
 
 #[derive(Debug)]
 pub(super) struct Fill {
@@ -157,18 +158,34 @@ impl Fill {
         let Some(first) = target else {
             return false;
         };
-        // Bound both fill writes and disjointness checks. A nonzero cell ends
-        // this batch; the next invocation resolves the next first-zero route.
-        let limit = usize::from(count).min(SCAN_LIMIT / (path_count + 2));
+        if minimum.unsigned_abs() > first || maximum as usize >= machine.tape.len() - first {
+            return false;
+        }
+        // The extreme starting pointer bounds every complete body's excursion.
+        // Exclude invariant routes once for this progression, instead of doing
+        // a divisibility check for every prospective marker and every path.
+        let step = self.stride.unsigned_abs();
+        let safe_steps = if self.stride > 0 {
+            (machine.tape.len() - 1 - first - maximum as usize) / step + 1
+        } else {
+            (first - minimum.unsigned_abs()) / step + 1
+        };
+        let mut limit = usize::from(count).min(FILL_LIMIT).min(safe_steps);
+        for path in paths[..path_count]
+            .iter()
+            .copied()
+            .chain(std::iter::once(Path {
+                first: control,
+                last: control,
+                stride: 1,
+            }))
+        {
+            limit = before_path(first, self.stride, limit, path);
+        }
         let mut filled = 0;
         let mut current = first;
         while filled < limit {
-            if current == control
-                || machine.tape[current] != 0
-                || minimum.unsigned_abs() > current
-                || maximum as usize >= machine.tape.len() - current
-                || paths[..path_count].iter().any(|p| p.contains(current))
-            {
+            if machine.tape[current] != 0 {
                 break;
             }
             filled += 1;
@@ -183,11 +200,19 @@ impl Fill {
         if filled == 0 {
             return false;
         }
+        let last = (first as isize + (filled - 1) as isize * self.stride) as usize;
+        machine.zero_cache.invalidate_run(first, last, step);
         current = first;
         for _ in 0..filled {
-            machine.write_cell(current, self.value);
+            // Every old value was checked zero. Only zero-cache facts can be
+            // invalidated, and that exact progression was invalidated above.
+            machine.tape[current] = self.value;
             current = (current as isize).wrapping_add(self.stride) as usize;
         }
+        // The writes themselves prove a contiguous nonzero run on this
+        // lattice. Reuse that fact when the next body returns through it.
+        let (slot, _) = machine.scan_cache.prepare(step, first);
+        machine.scan_cache.remember(slot, first, last);
         machine.write_cell(control, count - filled as u16);
         machine.pc = if count == filled as u16 {
             routed.next
@@ -195,6 +220,36 @@ impl Fill {
             routed.next - 1
         };
         true
+    }
+}
+
+fn before_path(first: usize, stride: isize, limit: usize, path: Path) -> usize {
+    let low = path.first.min(path.last);
+    let high = path.first.max(path.last);
+    let step = stride.unsigned_abs();
+    if path.stride == step && first % step != low % step {
+        return limit;
+    }
+    let distance = if stride > 0 {
+        if first > high {
+            return limit;
+        }
+        low.saturating_sub(first)
+    } else {
+        if first < low {
+            return limit;
+        }
+        first.saturating_sub(high)
+    };
+    let bodies = distance / step + usize::from(distance % step != 0);
+    if bodies >= limit {
+        return limit;
+    }
+    let candidate = first.checked_add_signed(stride * bodies as isize);
+    if candidate.is_some_and(|index| low <= index && index <= high) {
+        bodies
+    } else {
+        limit
     }
 }
 
@@ -249,7 +304,7 @@ mod tests {
             machine.pointer = start;
             machine.write_cell(start, 65535);
             assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
-            assert_eq!(machine.tape[start], 65535 - 128);
+            assert_eq!(machine.tape[start], 65535 - FILL_LIMIT as u16);
             while machine.run(&program, 1).unwrap() == Stop::Budget {}
             assert_eq!(machine.pointer(), start);
             assert_eq!(machine.tape[start], 0);
@@ -260,7 +315,7 @@ mod tests {
                     1
                 );
             }
-            assert!(machine.dispatches() <= 513);
+            assert!(machine.dispatches() <= 65);
         }
     }
 
@@ -297,21 +352,70 @@ mod tests {
     #[test]
     fn budget_mutation_rechecks_the_route_and_preserves_bounds_failures() {
         let program = Program::parse(SOURCE, true, false).unwrap();
-        let mut machine = Machine::new(1000).unwrap();
-        machine.write_cell(0, 500);
+        let mut machine = Machine::new(3000).unwrap();
+        machine.write_cell(0, 2500);
         assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
-        let filled = 500 - machine.tape()[0] as usize;
-        assert!(filled > 0 && filled <= SCAN_LIMIT);
+        let filled = 2500 - machine.tape()[0] as usize;
+        assert!(filled > 0 && filled <= FILL_LIMIT);
         machine.write_cell(20, 0);
         while machine.run(&program, 1).unwrap() == Stop::Budget {}
         assert_eq!(machine.tape()[0], 0);
-        assert!(machine.tape()[2..501].iter().all(|&v| v == 1));
-        assert_eq!(machine.tape()[501], 0);
+        assert!(machine.tape()[2..2501].iter().all(|&v| v == 1));
+        assert_eq!(machine.tape()[2501], 0);
         for cells in [1, 2, 3, 9, 130] {
             let mut initial = vec![0; cells];
             initial[0] = 200;
             compare(SOURCE, &initial, false, false);
         }
+    }
+
+    #[test]
+    fn whole_batch_path_guards_never_cover_an_invariant_scan_cell() {
+        let mut seed = 0xf793_7312u32;
+        for _ in 0..10000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            let stride = (seed % 17 + 1) as isize * if seed & 32 == 0 { 1 } else { -1 };
+            let first = 512;
+            let limit = (seed % 32 + 1) as usize;
+            let scan_stride = (seed % 11 + 1) as usize;
+            let path = Path {
+                first: (seed % 1024) as usize,
+                last: (seed % 1024) as usize + (seed % 31) as usize * scan_stride,
+                stride: scan_stride,
+            };
+            let allowed = before_path(first, stride, limit, path);
+            assert!(allowed <= limit);
+            for i in 0..allowed {
+                assert!(!path.contains((first as isize + i as isize * stride) as usize));
+            }
+        }
+    }
+
+    #[test]
+    fn filling_a_cached_zero_run_does_not_hide_new_search_stops() {
+        let source = format!("[-{}[>]+[<]{}]", ">".repeat(512), "<".repeat(511));
+        let program = Program::parse(&source, true, false).unwrap();
+        let mut actual = Machine::new(2050).unwrap();
+        actual.write_cell(0, 100);
+        let (slot, _) = actual.zero_cache.prepare(1, 2);
+        actual.zero_cache.remember(slot, 2, 2048);
+        assert_eq!(actual.run(&program, 1).unwrap(), Stop::Halted);
+        actual.pointer = 2;
+        actual.pc = 0;
+        actual.write_cell(2, 1);
+        let source = "[>[<-]<[->+<]>]";
+        let optimized = Program::parse(source, true, false).unwrap();
+        let literal = Program::parse(source, false, false).unwrap();
+        let mut expected = Machine::new(2050).unwrap();
+        expected.pointer = 2;
+        expected.tape_mut().copy_from_slice(actual.tape());
+        assert_eq!(actual.run(&optimized, 1000).unwrap(), Stop::Halted);
+        assert_eq!(expected.run(&literal, 10000).unwrap(), Stop::Halted);
+        assert_eq!(actual.pointer(), 511);
+        assert_eq!(actual.pointer(), expected.pointer());
+        assert_eq!(actual.tape(), expected.tape());
     }
 
     #[test]

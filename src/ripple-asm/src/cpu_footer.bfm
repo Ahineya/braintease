@@ -317,7 +317,6 @@
   @goto_PC @lane_reg_end @copy_reg_to_A_via_B
   @prevword @lane(@L_SA, @set(@BANK_SIZE) -) @nextword
   @lane(@L_SA,
-    // lt internally increments both operands, so its maximum x would wrap.
     // PC=65535 is unconditionally an overflow. For other values, retain the
     // comparison result in the now-clear state flag while leaving this loop.
     +[
@@ -507,8 +506,24 @@
 #define not(totemp, tox) - [totemp-tox-] totemp[tox+totemp-] tox
 #define neq(tox, toy) @eq(tox, toy) @not(tox, toy)
 
-// Ok. This abomination works ONLY in sA, required layout words: [0, y, >x, [0, 1]]
+// Unsigned x < y, consuming both operands and returning the result at x.
+// Scratch-A words: [0, y, >x, 0]; the next word's scratch-B marker is cleared.
+// The scan increments x before counting down. Guard its wrapping maximum:
+// maximum < y is always false, including when y is also maximum. The first
+// scratch-A word holds the result only after the scan has finished using it.
 #define lt {
+  +[
+    - @_lt_nonmaximum
+    @move_to(@prevwords(2), @nextwords(2)) @nextwords(2)
+  ]
+  @nextword > @clear < @prevword
+  @prevword @clear @prevword
+  @move_to(@nextwords(2), @prevwords(2))
+}
+
+// x must not be the maximum cell value. A maximum y is safe: its increment
+// wraps to zero, and its first decrement restores the full countdown range.
+#define _lt_nonmaximum {
   @nextword > + < @prevword
   +@prevword+@nextword
 

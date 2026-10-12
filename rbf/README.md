@@ -117,15 +117,23 @@ scripts/run-bf-rgb565-c.sh --headless --telemetry --capture-frame 1 \
 The timeout is a safety bound, not a promised completion time. Missing a
 requested frame returns a nonzero status and still leaves a diagnostic report.
 
-On the development machine, the compiler/interpreter changes measured on
-2026-10-13 brought this demo's first frame to about 10.2 seconds, with the same
-16,384-cell banks and exact pixels. The compiler reduced first-frame work from
-339,371 to 74,261 guest instructions. In a separate interpreter comparison,
-the identical saved BF image took 24.21 seconds before and 1.49 seconds after
-to execute its first 10,000 guest instructions. These are individual release
-runs, excluding build/parsing time; they are not estimates for Doom. The
-screen-clear loop now keeps its private values in registers, using seven
-instructions per pixel instead of seventeen. Other drawing loops still spill.
+On the development machine, the latest compiler/interpreter changes measured
+on 2026-10-13 reduced the first frame from 9.78 to 2.06 seconds, keeping the same
+16,384-cell banks and exact pixels. Reaching two frames took 27.77 seconds before
+and 4.13 seconds after. Compiler changes alone brought the first frame to 6.23
+seconds; interpreter changes alone brought it to 5.55 seconds. These are
+individual sequential release runs, including tape initialization but excluding
+build, parsing and host setup; they are not estimates for Doom.
+
+First-frame work fell from 74,261 to 48,349 guest instructions. The next frame
+fell from 124,190 to 48,270. The compiler now reuses registers that are free
+within a loop, hoists repeated safe arithmetic out of short-circuit branches,
+and removes provably finite, unobservable loops, including the demo's empty
+delay. The rectangle loop uses 17 instructions per in-bounds pixel instead of
+66, with one stack load and no stack stores instead of 14 loads and seven stores.
+The screen-clear loop remains seven instructions per pixel. Demo source, CPU,
+ISA and bank sizes are unchanged. Some branch-related copies and row-base loads
+remain opportunities for further compiler work.
 
 ## Ordinary Brainfuck interpreters
 
@@ -250,10 +258,15 @@ The reusable core is [`src/rust-bf/src/engine.rs`](../src/rust-bf/src/engine.rs)
 It uses a flat instruction stream with resolved jumps, offset arithmetic blocks,
 multi-target affine-loop reduction (including odd control-cell deltas), and
 cached tape scans. Separate caches track nonzero scan runs and zero runs used
-by moving-marker searches. Guarded folds handle transfers through scan routes
-while their predicates remain unchanged, stopping before a changing boundary,
-and counted loops that fill successive zero cells. Fills use bounded batches
-and preserve every actual tape write. These optimizations inspect BF operations and tape cells,
+by moving-marker searches. Guarded folds handle transfers through scan routes,
+including nested moving-marker return searches, while their predicates remain
+unchanged. They verify exact marker, zero-cell and sentinel conditions and stop
+before a changing boundary. Other folds handle counted loops that fill
+successive zero cells. Fills check route exclusions once per bounded batch,
+invalidate cached runs together, and record the verified nonzero cells for
+subsequent scans. Moving loops that update only their current cell similarly
+batch cache maintenance. Every actual tape write remains present, and fallback
+execution preserves partial bounds failures. These optimizations inspect BF operations and tape cells,
 with no knowledge of Ripple opcodes or register layouts. Checked fallback
 execution preserves tape-boundary behavior. Device and byte-I/O hooks are
 optimization barriers. The host accesses the RAM lane directly through
@@ -290,10 +303,16 @@ covering its first flush, both buffers and marker wraparound.
 Artifacts are written to `build/bf-smoke`; set `BF_SMOKE_OUT` to override it.
 The interpreter tests compare full state and events against an independent
 literal BF oracle. Shared device tests compare flat and strided RAM.
+The CPU comparison tests cover unsigned 65535 and signed 32767 in both host
+and ordinary standalone BF. The shared comparator guards its increment against
+maximum-value wraparound; a direct literal oracle checks all 8-bit operand
+pairs plus 16-bit boundary/sample pairs, including scratch cleanup.
 No check builds or executes Doom.
 
 The compiler check builds ordinary C graphics-API and direct-pointer examples,
-then compares exact 4×2 and 8×2 RGB565 frames on RVM and BF. It also checks guest
+then compares exact 4×2 and 8×2 RGB565 frames on RVM and BF. A 12×8 rectangle
+fixture covers overlap, clipping, empty dimensions, maximum dimensions and high
+unsigned coordinates outside the screen, including 65534 and 65535. It also checks guest
 instruction ceilings; wall time is recorded but never used as a pass/fail limit
 apart from a generous execution timeout. Run it after building the release tools
 listed above. `--rvm-only` skips BF execution. Reports, tool hashes, reproduction

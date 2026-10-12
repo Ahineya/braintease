@@ -414,3 +414,197 @@ fn multiple_latches_keep_one_register_value_and_restore_the_home() {
     let code = crate::function::frame::finalize(code, 2);
     assert_eq!(run(&code, 0, 19).regs[Reg::Rv0 as usize], 19);
 }
+
+fn compare_cleanup(source: &[A], inputs: &[(Reg, u16)]) -> Vec<A> {
+    let mut actual = source.to_vec();
+    cleanup(&mut actual);
+    let execute = |code: &[A]| {
+        let mut machine = Machine::new(64000);
+        for &(reg, value) in inputs {
+            machine.regs[reg as usize] = value;
+        }
+        machine.run(code);
+        (
+            machine.regs[Reg::Rv0 as usize],
+            machine.regs[Reg::Rv1 as usize],
+        )
+    };
+    assert_eq!(execute(&actual), execute(source));
+    actual
+}
+
+#[test]
+fn copies_cross_branches_and_disappear_when_all_reads_use_the_original() {
+    let code = vec![
+        A::Move(Reg::T0, Reg::S0),
+        A::Beq(Reg::A0, Reg::R0, "exit".into()),
+        A::AddI(Reg::Rv0, Reg::T0, 7),
+        A::Beq(Reg::R0, Reg::R0, "done".into()),
+        A::Label("exit".into()),
+        A::AddI(Reg::Rv0, Reg::T0, 3),
+        A::Label("done".into()),
+    ];
+    for flag in [0, 1] {
+        let actual = compare_cleanup(&code, &[(Reg::S0, 65534), (Reg::A0, flag)]);
+        assert!(!actual.iter().any(|i| matches!(i, A::Move(Reg::T0, _))));
+    }
+}
+
+#[test]
+fn unequal_join_values_and_conditional_clobbers_keep_their_path_values() {
+    for second in [A::Move(Reg::T0, Reg::A1), A::AddI(Reg::A0, Reg::A0, 1)] {
+        let code = vec![
+            A::Move(Reg::T0, Reg::A0),
+            A::Beq(Reg::A2, Reg::R0, "join".into()),
+            second,
+            A::Label("join".into()),
+            A::Move(Reg::Rv0, Reg::T0),
+            A::Move(Reg::Rv1, Reg::A0),
+        ];
+        for flag in [0, 1] {
+            compare_cleanup(&code, &[(Reg::A0, 17), (Reg::A1, 42), (Reg::A2, flag)]);
+        }
+    }
+}
+
+#[test]
+fn entry_backedges_never_invent_first_iteration_equalities() {
+    let code = vec![
+        A::Label("head".into()),
+        A::Add(Reg::Rv0, Reg::Rv0, Reg::T0),
+        A::Beq(Reg::A0, Reg::R0, "exit".into()),
+        A::Move(Reg::T0, Reg::S0),
+        A::AddI(Reg::A0, Reg::A0, -1),
+        A::Beq(Reg::R0, Reg::R0, "head".into()),
+        A::Label("exit".into()),
+    ];
+    for count in [0, 1, 5] {
+        compare_cleanup(&code, &[(Reg::A0, count), (Reg::T0, 7), (Reg::S0, 19)]);
+    }
+}
+
+#[test]
+fn copy_facts_survive_only_matching_reachable_predecessors() {
+    let code = vec![
+        A::Move(Reg::T0, Reg::S0),
+        A::Beq(Reg::R0, Reg::R0, "join".into()),
+        A::Label("unreachable".into()),
+        A::Move(Reg::T0, Reg::A1),
+        A::Beq(Reg::R0, Reg::R0, "join".into()),
+        A::Label("join".into()),
+        A::Move(Reg::Rv0, Reg::T0),
+    ];
+    let actual = compare_cleanup(&code, &[(Reg::S0, 99), (Reg::A1, 4)]);
+    assert!(actual
+        .iter()
+        .any(|i| matches!(i, A::Move(Reg::Rv0, Reg::S0))));
+}
+
+#[test]
+fn calls_and_unknown_effects_kill_all_copy_facts() {
+    for barrier in [A::Call("callee".into()), A::Raw("opaque".into())] {
+        let mut code = vec![
+            A::Move(Reg::T0, Reg::S0),
+            barrier,
+            A::Move(Reg::Rv0, Reg::T0),
+        ];
+        let cfg = Cfg::new(&code).unwrap();
+        propagate_copies(&mut code, &cfg);
+        assert!(matches!(code[2], A::Move(Reg::Rv0, Reg::T0)));
+    }
+}
+
+#[test]
+fn redefinitions_preserve_copied_old_values_and_immutable_zero() {
+    let code = vec![
+        A::Move(Reg::T0, Reg::S0),
+        A::Move(Reg::T1, Reg::T0),
+        A::Li(Reg::S0, 55),
+        A::Move(Reg::Rv0, Reg::T1),
+        A::Li(Reg::T2, 0),
+        A::AddI(Reg::R0, Reg::S0, 9),
+        A::Move(Reg::Rv1, Reg::T2),
+    ];
+    compare_cleanup(&code, &[(Reg::S0, 29)]);
+    let mut equal = identity_equalities();
+    transfer_equalities(&A::Move(Reg::T0, Reg::S0), &mut equal);
+    transfer_equalities(&A::Move(Reg::T0, Reg::T0), &mut equal);
+    assert_ne!(equal[Reg::T0 as usize] & bit(Reg::S0), 0);
+    transfer_equalities(&A::Load(Reg::S0, Reg::Gp, Reg::A0), &mut equal);
+    assert_eq!(equal[Reg::T0 as usize], bit(Reg::T0));
+}
+
+#[test]
+fn second_round_reuses_freed_registers_without_disturbing_first_cache_or_exits() {
+    let mut body = source();
+    let at = body
+        .iter()
+        .position(|i| matches!(i, A::Label(s) if s == "head"))
+        .unwrap()
+        + 1;
+    let occupied = [
+        Reg::T3,
+        Reg::T4,
+        Reg::T5,
+        Reg::T6,
+        Reg::T7,
+        Reg::A0,
+        Reg::A1,
+        Reg::A2,
+    ];
+    body.splice(
+        at..at,
+        occupied.into_iter().map(|r| A::Store(r, Reg::Gp, Reg::R0)),
+    );
+    // Before cleanup only A3 is free, so the first round caches the counter.
+    // Its cleanup removes these dead writes, making saved registers available
+    // to the second round for the remaining loop-invariant bound.
+    body.splice(
+        at..at,
+        [Reg::S0, Reg::S1, Reg::S2, Reg::S3]
+            .into_iter()
+            .map(|r| A::Li(r, 23)),
+    );
+    let at = body
+        .iter()
+        .rposition(|i| matches!(i, A::Beq(_, _, s) if s == "head"))
+        .unwrap();
+    body.splice(
+        at..at,
+        [A::Li(Reg::T2, 5), A::Beq(Reg::T0, Reg::T2, "early".into())],
+    );
+    body.extend([
+        A::Beq(Reg::R0, Reg::R0, "done".into()),
+        A::Label("early".into()),
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Load(Reg::Rv0, Reg::Sb, Reg::Sc),
+        A::Label("done".into()),
+    ]);
+    let mut code = framed(body);
+    promote(&mut code, &function(), &HashMap::new(), 0, 2);
+    assert_eq!(code.iter().filter(|i| matches!(i, A::Comment(s) if s == "Cache private loop cells in unused registers")).count(), 2);
+    let header = code
+        .iter()
+        .position(|i| matches!(i, A::Label(s) if s == "head"))
+        .unwrap();
+    let exit = code
+        .iter()
+        .position(|i| matches!(i, A::Label(s) if s == "exit"))
+        .unwrap();
+    assert!(!code[header..exit]
+        .iter()
+        .any(|i| matches!(i, A::Load(_, Reg::Sb, _) | A::Store(_, Reg::Sb, _))));
+    let code = crate::function::frame::finalize(code, 2);
+    assert!(code
+        .iter()
+        .any(|i| matches!(i, A::Store(Reg::S0, Reg::Sb, Reg::Sp))));
+    for (start, limit, expected) in [(0, 0, 0), (7, 0, 7), (0, 19, 5), (7, 19, 19)] {
+        let m = run(&code, start, limit);
+        assert_eq!(m.regs[Reg::Rv0 as usize], expected);
+        assert_eq!(m.regs[Reg::Sp as usize], 1000);
+        assert_eq!(m.regs[Reg::Fp as usize], 700);
+        for r in [Reg::S0, Reg::S1, Reg::S2, Reg::S3] {
+            assert_eq!(m.regs[r as usize], 900 + r as u16);
+        }
+    }
+}

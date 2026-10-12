@@ -1,0 +1,5 @@
+{
+  "description": "Register copies across loop branches, unequal joins, early exits and calls",
+  "use_runtime": true,
+  "expected": "YYYYYYYYY\n"
+}

@@ -42,6 +42,9 @@ per dispatch. Each iteration still applies its writes before testing the next
 cell, so updates that create or remove a future stopping point retain their BF
 meaning. Both iteration count and total cell updates are bounded. This speeds up
 generic marker cleanup.
+When a moving loop updates only its own predicate, cache maintenance is batched
+over the changed progression. Completely cleared runs also become verified
+zero-run facts. The engine still checks each predicate and writes each cell.
 
 Arithmetic loops can also route through nested scans. For example,
 `[->>[>]>+<<[<]<]` transfers a value into a destination found by zero sentinels.
@@ -72,6 +75,9 @@ control, fills a zero, and returns over the growing run. The changing scans must
 have equal and opposite strides; all other scan predicates must remain disjoint
 from the counter and every new marker. Batches check actual zeros, pointer
 excursions, and existing holes, and write every marker physically to the tape.
+Invariant scan paths are excluded for the whole batch, and cache invalidation
+covers the written progression. The new nonzero cells become scan-cache facts,
+so returning through a long freshly filled run needs no second traversal.
 They resume at the closing bracket, so a host mutation after a budget yield is
 observed by the next proof. Failed proofs retain the original BF instructions.
 
@@ -112,7 +118,7 @@ length. Long uncached scans and infinite loops yield to the caller; an exhausted
 budget preserves resumable state. A zero budget does no work. Dispatch counts
 can change when optimizations improve, and are not a stable virtual clock.
 Routed loops examine at most 128 parts per proof, perform at most two proofs of
-256 scan probes plus bounded predicate checks, and fill at most 128 cells in a
+256 scan probes plus bounded predicate checks, and fill at most 1024 cells in a
 dispatch. This work also stays independent of tape size and counter value.
 
 The native `bf` CLI uses this core for its default wrapping 16-bit configuration

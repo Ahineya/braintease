@@ -120,6 +120,83 @@ impl Cache {
             };
         }
     }
+
+    /// Forget a complete progression of changed cells, without repeatedly
+    /// splitting the same cached run. Differing lattices conservatively reset
+    /// the cache; equal strides retain other residues and the larger safe side.
+    pub(super) fn invalidate_run(&mut self, first: usize, last: usize, stride: usize) {
+        if self.stride == 0 {
+            return;
+        }
+        if self.stride != stride {
+            self.reset();
+            return;
+        }
+        let residue = self.residue(first);
+        let run = &mut self.runs[residue % SLOTS];
+        let low = first.min(last);
+        let high = first.max(last);
+        if run.residue != residue || low > run.high || high < run.low {
+            return;
+        }
+        let before = low.saturating_sub(run.low);
+        let after = run.high.saturating_sub(high);
+        if before >= after && before != 0 {
+            run.high = low - stride;
+        } else if after != 0 {
+            run.low = high + stride;
+        } else {
+            *run = Run {
+                residue,
+                ..Run::EMPTY
+            };
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strided_invalidation_never_retains_changed_cells_or_discards_other_residues() {
+        for stride in [1usize, 2, 3, 8, 37, 65] {
+            for start in 0..16 {
+                for length in 1..20 {
+                    for reverse in [false, true] {
+                        let mut cache = Cache::default();
+                        let residue = stride - 1;
+                        let (slot, _) = cache.prepare(stride, residue);
+                        cache.remember(slot, stride * 4 + residue, stride * 24 + residue);
+                        let first = start * stride + residue;
+                        let last = (start + length - 1) * stride + residue;
+                        if reverse {
+                            cache.invalidate_run(last, first, stride);
+                        } else {
+                            cache.invalidate_run(first, last, stride);
+                        }
+                        let (_, run) = cache.prepare(stride, residue);
+                        for i in 0..40 {
+                            let index = i * stride + residue;
+                            if run.contains(index) {
+                                assert!((4..=24).contains(&i));
+                                assert!(i < start || i >= start + length);
+                            }
+                        }
+                    }
+                }
+            }
+            if stride > 1 {
+                let mut cache = Cache::default();
+                let (slot, _) = cache.prepare(stride, 0);
+                cache.remember(slot, stride, stride * 10);
+                cache.invalidate_run(stride + 1, stride * 10 + 1, stride);
+                assert!(cache.prepare(stride, 0).1.contains(stride * 5));
+                cache.invalidate_run(stride, stride * 10, stride + 1);
+                assert!(!cache.prepare(stride, 0).1.contains(stride * 5));
+            }
+        }
+    }
 }
 
 impl Machine {

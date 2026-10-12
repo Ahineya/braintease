@@ -435,32 +435,48 @@ pub(super) fn promote(
     locals: i16,
     top: i16,
 ) {
+    if let Some(header) = promote_once(code, function, offsets, locals, top, None) {
+        // Copy cleanup can release registers occupied by duplicate cached
+        // values. Recompute every proof before filling those registers, and
+        // keep this second, bounded round on the same inner loop.
+        promote_once(code, function, offsets, locals, top, Some(&header));
+    }
+}
+
+fn promote_once(
+    code: &mut Vec<A>,
+    function: &Function,
+    offsets: &HashMap<u32, i16>,
+    locals: i16,
+    top: i16,
+    only_header: Option<&str>,
+) -> Option<String> {
     if !safe_ir(function) {
-        return;
+        return None;
     }
     let Some(begin) = code.iter().position(|i| {
         matches!(i, A::Comment(s) if s.starts_with("Reserve ") && s.ends_with(" spill slots above locals"))
     }).map(|i| i + 2) else {
-        return;
+        return None;
     };
     let Some(end) = code
         .iter()
         .position(|i| matches!(i,A::Comment(s)if s=="=== Function Epilogue ==="))
     else {
-        return;
+        return None;
     };
     let body = &code[begin..end];
     if body
         .iter()
         .any(|i| matches!(i, A::Raw(_) | A::Push(_) | A::Pop(_)))
     {
-        return;
+        return None;
     }
     if body.iter().any(|i| {
         effects(i).1 & (bit(Reg::Fp) | bit(Reg::Sb)) != 0
             && !matches!(i, A::Call(_) | A::Jal(..) | A::Jalr(..))
     }) {
-        return;
+        return None;
     }
     let used = body
         .iter()
@@ -470,13 +486,24 @@ pub(super) fn promote(
             used | u | d
         });
     let Some(cfg) = Cfg::new(body) else {
-        return;
+        return None;
     };
     let slots = accesses(body, &cfg);
     let private = private_cells(function, offsets, locals, top);
     let (live_in, live_out, after) = cfg.liveness(body);
     let mut choices = vec![];
     for (head, members) in cfg.inner_loops() {
+        let label = body[cfg.blocks[head].start..cfg.blocks[head].end]
+            .iter()
+            .find_map(|inst| match inst {
+                A::Label(label) => Some(label),
+                _ => None,
+            });
+        if label.is_none()
+            || only_header.is_some_and(|wanted| label.map(String::as_str) != Some(wanted))
+        {
+            continue;
+        }
         let outside: Vec<_> = cfg.preds[head]
             .iter()
             .copied()
@@ -593,9 +620,15 @@ pub(super) fn promote(
         choices.push((score, head, members, exits, insert, hot, free));
     }
     choices.sort_by_key(|(score, head, ..)| (std::cmp::Reverse(*score), *head));
-    let Some((_, _, members, exits, insert, hot, free)) = choices.into_iter().next() else {
-        return;
+    let Some((_, head, members, exits, insert, hot, free)) = choices.into_iter().next() else {
+        return None;
     };
+    let header = body[cfg.blocks[head].start..cfg.blocks[head].end]
+        .iter()
+        .find_map(|inst| match inst {
+            A::Label(label) => Some(label.clone()),
+            _ => None,
+        })?;
     let promoted: BTreeMap<_, _> = hot
         .iter()
         .zip(&free)
@@ -655,6 +688,7 @@ pub(super) fn promote(
     }
     cleanup(&mut changed);
     code.splice(begin..end, changed);
+    Some(header)
 }
 
 fn pure_write(inst: &A) -> Option<Reg> {
@@ -736,11 +770,121 @@ fn set_dest(inst: &mut A, target: Reg) {
         _ => {}
     }
 }
+
+type Equalities = [u32; 32];
+
+fn identity_equalities() -> Equalities {
+    std::array::from_fn(|r| 1 << r)
+}
+
+fn copied_register(inst: &A) -> Option<(Reg, Reg)> {
+    match *inst {
+        A::Move(d, s)
+        | A::AddI(d, s, 0)
+        | A::SubI(d, s, 0)
+        | A::Add(d, s, Reg::R0)
+        | A::Add(d, Reg::R0, s)
+        | A::Sub(d, s, Reg::R0) => Some((d, s)),
+        A::Li(d, 0) => Some((d, Reg::R0)),
+        _ => None,
+    }
+}
+
+fn transfer_equalities(inst: &A, equal: &mut Equalities) {
+    if copied_register(inst).is_some_and(|(dest, source)| dest == source) {
+        return;
+    }
+    // R0 never changes, including when an instruction names it as an output.
+    let defs = effects(inst).1 & !bit(Reg::R0);
+    for (r, class) in equal.iter_mut().enumerate() {
+        *class = if defs & (1 << r) != 0 {
+            1 << r
+        } else {
+            *class & !defs
+        };
+    }
+    if let Some((dest, source)) = copied_register(inst) {
+        if dest != Reg::R0 && dest != source {
+            let class = equal[source as usize] | bit(dest);
+            for (r, members) in equal.iter_mut().enumerate() {
+                if class & (1 << r) != 0 {
+                    *members = class;
+                }
+            }
+        }
+    }
+}
+
+/// Keep only physical-register equalities established on every incoming path.
+/// Starting with identity facts prevents a backedge from inventing an equality
+/// on the first entry. No memory values or branch outcomes are inferred.
+fn propagate_copies(code: &mut [A], cfg: &Cfg) {
+    let identity = identity_equalities();
+    let mut inputs = vec![identity; cfg.blocks.len()];
+    let mut outputs = inputs.clone();
+    let mut pending: BTreeSet<_> = cfg.reachable.iter().copied().collect();
+    // Bounds compile time even for unusually tangled machine CFGs. An
+    // unfinished analysis performs no rewriting at all.
+    let mut remaining = cfg.blocks.len().saturating_mul(64);
+    while let Some(b) = pending.pop_first() {
+        if remaining == 0 {
+            return;
+        }
+        remaining -= 1;
+        let mut input = identity;
+        if b != 0 {
+            let mut preds = cfg.preds[b].iter().filter(|p| cfg.reachable.contains(p));
+            if let Some(&first) = preds.next() {
+                input = outputs[first];
+                for &pred in preds {
+                    for (r, class) in input.iter_mut().enumerate() {
+                        *class &= outputs[pred][r];
+                    }
+                }
+            }
+        }
+        inputs[b] = input;
+        let mut output = input;
+        for inst in &code[cfg.blocks[b].start..cfg.blocks[b].end] {
+            transfer_equalities(inst, &mut output);
+        }
+        if output != outputs[b] {
+            outputs[b] = output;
+            pending.extend(&cfg.succs[b]);
+        }
+    }
+    for &b in &cfg.reachable {
+        let mut equal = inputs[b];
+        for inst in &mut code[cfg.blocks[b].start..cfg.blocks[b].end] {
+            let aliases = std::array::from_fn(|r| {
+                let class = equal[r];
+                // Prefer immutable zero, then the higher-numbered register.
+                // Promoted S registers then survive temporary copies across
+                // loop branches; the choice only affects code quality.
+                let representative = if class & bit(Reg::R0) != 0 {
+                    Reg::R0 as u8
+                } else {
+                    (31 - class.leading_zeros()) as u8
+                };
+                Reg::from_u8(representative).unwrap()
+            });
+            rewrite_reads(inst, &aliases);
+            if copied_register(inst).is_some_and(|(dest, source)| {
+                dest == source || dest == Reg::R0 || equal[dest as usize] & bit(source) != 0
+            }) {
+                *inst = A::Comment("Removed redundant register copy".into());
+            }
+            transfer_equalities(inst, &mut equal);
+        }
+    }
+}
+
 fn cleanup(code: &mut Vec<A>) {
     for _ in 0..4 {
         let Some(cfg) = Cfg::new(code) else {
             return;
         };
+        propagate_copies(code, &cfg);
         for block in &cfg.blocks {
             let mut aliases = std::array::from_fn(|i| Reg::from_u8(i as u8).unwrap());
             let mut constants = [None; 32];

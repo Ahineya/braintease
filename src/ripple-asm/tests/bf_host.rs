@@ -94,6 +94,10 @@ struct ResultState {
 }
 
 fn run(source: &str) -> ResultState {
+    run_with_fuel(source, 100_000_000)
+}
+
+fn run_with_fuel(source: &str, initial_fuel: u64) -> ResultState {
     let expanded = expand(source, 64, 4).unwrap();
     let (header, code) = expanded.split_once("END_BFHOST").unwrap();
     let words: Vec<_> = header.split_whitespace().collect();
@@ -110,7 +114,7 @@ fn run(source: &str) -> ResultState {
         writes: vec![],
         boundaries: 0,
     };
-    let (mut ptr, mut pc, mut fuel) = (0usize, 0usize, 100_000_000u64);
+    let (mut ptr, mut pc, mut fuel) = (0usize, 0usize, initial_fuel);
     while pc < ops.len() {
         assert!(
             fuel > 0,
@@ -226,14 +230,143 @@ fn arithmetic_and_logic_smoke() {
 }
 
 #[test]
-#[ignore = "Known BF CPU unsigned compare bug: lhs65535 wraps @lt; CPU unchanged during optimizer work"]
 fn unsigned_maximum_is_not_less_than_a_small_value() {
-    // The CPU's @lt algorithm increments its operands; 65535 wraps to zero.
-    // Keep the architectural expectation, independently of rbf optimizations.
-    let state = run(
-        "start:\nLI T0, -1\nLI T1, 12\nSLTU T2, T0, T1\nSTORE T2, R0, R0\nHALT\n",
-    );
+    // The comparator must account for the increment of 65535 wrapping to zero.
+    // This literal interpreter is independent of rbf's loop optimizations.
+    let state = run("start:\nLI T0, -1\nLI T1, 12\nSLTU T2, T0, T1\nSTORE T2, R0, R0\nHALT\n");
     assert_eq!(state.writes, [(0, 0)], "unsigned 65535 < 12 must be false");
+}
+
+#[test]
+fn unsigned_comparison_edges_and_aliased_destinations() {
+    let cases = [
+        (65535u16, 12u16),
+        (12, 65535),
+        (65535, 65535),
+        (65534, 12),
+        (0, 65535),
+        (65535, 0),
+        (0, 0),
+        (1, 12),
+        (65535, 65534),
+        (65534, 65535),
+    ];
+    for (i, (lhs, rhs)) in cases.into_iter().enumerate() {
+        let destination = if i % 2 == 0 { "T0" } else { "T1" };
+        let source = format!(
+            "start:\nLI T0, {lhs}\nLI T1, {rhs}\nSLTU {destination}, T0, T1\nSTORE {destination}, R0, R0\nHALT\n"
+        );
+        // Literal register fetches for two near-maximum operands need more
+        // steps than the small-value smoke programs, even with a short body.
+        assert_eq!(
+            run_with_fuel(&source, 300_000_000).writes,
+            [(0, u16::from(lhs < rhs))]
+        );
+    }
+}
+
+#[test]
+fn signed_comparison_and_branch_maximum_edges() {
+    // Biasing signed operands by 0x8000 maps 32767 onto the unsigned maximum.
+    for (lhs, rhs) in [
+        (32767i16, 0i16),
+        (0, 32767),
+        (32767, 32767),
+        (32767, -32768),
+    ] {
+        let source =
+            format!("start:\nLI T0, {lhs}\nLI T1, {rhs}\nSLT T2, T0, T1\nSTORE T2, R0, R0\nHALT\n");
+        let less = u16::from(lhs < rhs);
+        assert_eq!(run(&source).writes, [(0, less)]);
+        for (branch, expected) in [("BLT", less), ("BGE", 1 - less)] {
+            let source = format!(
+                "start:\nLI T0, {lhs}\nLI T1, {rhs}\nLI A0, 1\n{branch} T0, T1, done\nLI A0, 0\ndone:\nSTORE A0, R0, R0\nHALT\n"
+            );
+            assert_eq!(run(&source).writes, [(0, expected)]);
+        }
+    }
+}
+
+// Exercise the real shared macro directly so a broad arithmetic oracle does
+// not spend most of its time fetching registers and dispatching instructions.
+// The evaluator only implements literal wrapping Brainfuck operations.
+fn comparison_helper_ops() -> Vec<Op> {
+    let (header, _) = include_str!("../src/cpu_header.bfm")
+        .split_once("#define PROGRAM {")
+        .unwrap();
+    let (_, definitions) = include_str!("../src/cpu_footer.bfm")
+        .split_once("// MARK: ----------- CODE END ----------")
+        .unwrap();
+    let (definitions, _) = definitions
+        .split_once("// MARK: ------------ MAIN ---------------")
+        .unwrap();
+    let result = MacroExpander::new().expand(
+        &format!("{header}\n{definitions}\n@lt\n"),
+        MacroExpanderOptions {
+            strip_comments: true,
+            ..Default::default()
+        },
+    );
+    assert!(result.errors.is_empty(), "{:?}", result.errors);
+    parse(&result.expanded)
+}
+
+fn check_comparison_helper(ops: &[Op], lhs: u16, rhs: u16, mask: u16, marker: u16) {
+    let mut tape = [0u16; 40];
+    tape[13] = rhs;
+    tape[21] = lhs;
+    tape[30] = marker; // SLTU preinitializes this marker; signed users do not.
+    let (mut ptr, mut pc, mut fuel) = (21usize, 0usize, 2_000_000u64);
+    while pc < ops.len() {
+        assert!(fuel > 0, "comparison did not terminate for {lhs} < {rhs}");
+        fuel -= 1;
+        match ops[pc] {
+            Op::Add(n) => tape[ptr] = tape[ptr].wrapping_add(n as u16) & mask,
+            Op::Move(n) => ptr = usize::try_from(ptr as i64 + i64::from(n)).unwrap(),
+            Op::Open(end) if tape[ptr] == 0 => pc = end,
+            Op::Close(start) if tape[ptr] != 0 => pc = start,
+            Op::Clear => tape[ptr] = 0,
+            Op::Hook(_) | Op::Output => panic!("comparison must use ordinary arithmetic BF"),
+            _ => {}
+        }
+        pc += 1;
+    }
+    assert_eq!(ptr, 21, "comparison must return to its lhs cell");
+    assert_eq!(tape[21], u16::from(lhs < rhs), "{lhs} < {rhs}, mask={mask}");
+    tape[21] = 0;
+    assert_eq!(
+        tape, [0; 40],
+        "comparison must consume inputs and clear scratch"
+    );
+}
+
+#[test]
+fn comparison_helper_wraparound_oracle() {
+    let ops = comparison_helper_ops();
+    // Exhaust the same wrapping algorithm with 8-bit cells, then exercise the
+    // full 16-bit boundaries and deterministic pairs on the production width.
+    for lhs in 0..=255 {
+        for rhs in 0..=255 {
+            check_comparison_helper(&ops, lhs, rhs, 255, lhs & 1);
+        }
+    }
+    let edges = [
+        0, 1, 2, 12, 255, 256, 32767, 32768, 32769, 65533, 65534, 65535,
+    ];
+    for lhs in edges {
+        for rhs in edges {
+            for marker in 0..=1 {
+                check_comparison_helper(&ops, lhs, rhs, u16::MAX, marker);
+            }
+        }
+    }
+    let mut sample = 0x8a5bu32;
+    for _ in 0..128 {
+        sample = sample.wrapping_mul(1664525).wrapping_add(1013904223);
+        let lhs = sample as u16;
+        sample = sample.wrapping_mul(1664525).wrapping_add(1013904223);
+        check_comparison_helper(&ops, lhs, sample as u16, u16::MAX, 0);
+    }
 }
 
 #[test]
@@ -315,6 +448,10 @@ fn compiler_gp_reservations_are_not_legacy_mmio_data() {
 // and a circular tape. No host metadata, device hooks, or Ripple decoding are
 // involved. Small programs keep the unoptimized scan loops within this budget.
 fn run_plain(source: &str) -> (Vec<u8>, Vec<u16>) {
+    run_plain_with_fuel(source, 100_000_000)
+}
+
+fn run_plain_with_fuel(source: &str, initial_fuel: u64) -> (Vec<u8>, Vec<u16>) {
     let object = RippleAssembler::new(AssemblerOptions::default())
         .assemble(source)
         .unwrap();
@@ -340,7 +477,7 @@ fn run_plain(source: &str) -> (Vec<u8>, Vec<u16>) {
     let ops = parse(&code);
     let mut tape = vec![0u16; 30_000];
     let mut output = Vec::new();
-    let (mut ptr, mut pc, mut fuel) = (0usize, 0usize, 100_000_000u64);
+    let (mut ptr, mut pc, mut fuel) = (0usize, 0usize, initial_fuel);
     while pc < ops.len() {
         assert!(fuel > 0, "plain BF operation budget exhausted at {pc}");
         fuel -= 1;
@@ -376,6 +513,23 @@ fn plain_export_preserves_wrapping_arithmetic_and_zero_register() {
         "start:\nLI A0, 32768\nADD A0, A0, A0\nADDI A0, A0, 65\nLI R0, 3\nADD A0, A0, R0\nSTORE A0, R0, R0\nHALT\n",
     );
     assert_eq!(output, b"A");
+}
+
+#[test]
+fn plain_export_comparison_maximum_edges() {
+    for (instruction, lhs, rhs, expected) in [
+        ("SLTU", 65535, 12, b'0'),
+        ("SLTU", 12, 65535, b'1'),
+        ("SLTU", 65535, 65535, b'0'),
+        ("SLT", 32767, 12, b'0'),
+        ("SLT", 12, 32767, b'1'),
+    ] {
+        let source = format!(
+            "start:\nLI T0, {lhs}\nLI T1, {rhs}\n{instruction} A0, T0, T1\nADDI A0, A0, 48\nSTORE A0, R0, R0\nHALT\n"
+        );
+        assert_eq!(run_plain_with_fuel(&source, 300_000_000).0, [expected]);
+    }
+    assert_eq!(run_plain("start:\nLI T0, 32767\nLI T1, 12\nLI A0, 49\nBGE T0, T1, done\nLI A0, 48\ndone:\nSTORE A0, R0, R0\nHALT\n").0, b"1");
 }
 
 #[test]

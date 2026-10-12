@@ -14,10 +14,10 @@ int main(void) {
     fill_rect(0, 0, 12, 0, RGB_WHITE);
     fill_rect(12, 0, 1, 1, RGB_WHITE);
     fill_rect(0, 8, 1, 1, RGB_WHITE);
-    /* The unchanged BF CPU miscompares an unsigned left operand of 65535.
-       Its separate ignored bf_host regression records that existing limit. */
     fill_rect(65534, 0, 2, 1, RGB_WHITE);
     fill_rect(0, 65534, 1, 2, RGB_WHITE);
+    fill_rect(65535, 0, 2, 1, RGB_WHITE);
+    fill_rect(0, 65535, 1, 2, RGB_WHITE);
     graphics_flush();
     return 0;
 }
