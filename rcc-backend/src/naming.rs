@@ -29,6 +29,7 @@ pub struct NameGenerator {
 
     /// Per-instance tag so I32 labels do not collide across object files.
     unit_tag: u32,
+    next_internal_temp: u32,
 }
 
 impl NameGenerator {
@@ -39,9 +40,18 @@ impl NameGenerator {
             next_op_id: 0,
             next_label_id: 0,
             unit_tag: Uuid::new_v4().as_u128() as u32,
+            next_internal_temp: u32::MAX,
         }
     }
     
+    /// Backend-only temporaries occupy the upper half of the ID namespace.
+    pub fn new_internal_temp(&mut self) -> TempId {
+        assert!(self.next_internal_temp >= 0x8000_0000, "backend temporary IDs exhausted");
+        let id = self.next_internal_temp;
+        self.next_internal_temp -= 1;
+        id
+    }
+
     /// Get the next operation ID and increment counter
     pub fn next_operation_id(&mut self) -> u32 {
         let id = self.next_op_id;

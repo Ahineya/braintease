@@ -6,8 +6,10 @@ RASM = ../src/ripple-asm/target/release/rasm
 RLINK = ../src/ripple-asm/target/release/rlink
 
 # Assembler settings (can be overridden from command line)
-BANK_SIZE ?= 64000  # Default: 16KB (doubled from 8192 to handle larger programs)
+BANK_SIZE ?= 64000  # Addressable 16-bit cells per bank
 MAX_IMMEDIATE = 65535
+RUNTIME_HEADERS = $(wildcard include/*.h)
+BANK_SIZE_STAMP = .bank-size
 
 # Source files
 C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c scanf.c
@@ -33,51 +35,60 @@ LIBROS = libros.par
 # Default target
 all: $(RUNTIME_LIB) $(LIBROS) crt0.pobj $(ROS_ASM_OBJ)
 
+# Rewrite the stamp only when the configured bank size changes. Assembly and
+# object files embed this setting and must not be reused for another size.
+$(BANK_SIZE_STAMP): FORCE
+	@if test "$$(cat $@ 2>/dev/null)" != "$(strip $(BANK_SIZE))"; then \
+		printf '%s\n' "$(strip $(BANK_SIZE))" > $@; \
+	fi
+
+FORCE:
+
 # Compile C files to assembly
-%.asm: %.c
+%.asm: %.c $(RCC) $(RUNTIME_HEADERS) $(BANK_SIZE_STAMP)
 	@echo "Compiling $< to assembly..."
 	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
 
 # Compile qfixed source
-qfixed.asm: src/qfixed.c
+qfixed.asm: src/qfixed.c $(RCC) $(RUNTIME_HEADERS) $(BANK_SIZE_STAMP)
 	@echo "Compiling qfixed.c to assembly..."
 	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
 
 # Assemble C-generated assembly to object files
-$(C_OBJ_FILES): %.pobj: %.asm
+$(C_OBJ_FILES): %.pobj: %.asm $(RASM) $(BANK_SIZE_STAMP)
 	@echo "Assembling $< to object..."
 	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
 # Special rule for crt0.pobj (already in assembly)
-crt0.pobj: crt0.asm
+crt0.pobj: crt0.asm $(RASM) $(BANK_SIZE_STAMP)
 	@echo "Assembling crt0.asm to object..."
 	@$(RASM) assemble crt0.asm -o crt0.pobj --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
-$(ROS_C_OBJ): %.pobj: %.asm
+$(ROS_C_OBJ): %.pobj: %.asm $(RASM) $(BANK_SIZE_STAMP)
 	@echo "Assembling $< to object..."
 	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
-ros/int21.pobj: ros/int21.asm
+ros/int21.pobj: ros/int21.asm $(RASM) $(BANK_SIZE_STAMP)
 	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
-ros/crt0_ros.pobj: ros/crt0_ros.asm
+ros/crt0_ros.pobj: ros/crt0_ros.asm $(RASM) $(BANK_SIZE_STAMP)
 	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
-ros/crt0_sys.pobj: ros/crt0_sys.asm
+ros/crt0_sys.pobj: ros/crt0_sys.asm $(RASM) $(BANK_SIZE_STAMP)
 	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
 # Create runtime library archive (without crt0)
-$(RUNTIME_LIB): $(RUNTIME_OBJ_FILES)
+$(RUNTIME_LIB): $(RUNTIME_OBJ_FILES) $(RLINK)
 	@echo "Creating runtime library archive..."
 	@$(RLINK) $(RUNTIME_OBJ_FILES) -f archive -o $(RUNTIME_LIB)
 
-$(LIBROS): $(LIBROS_OBJ)
+$(LIBROS): $(LIBROS_OBJ) $(RLINK)
 	@echo "Creating rOS library archive..."
 	@$(RLINK) $(LIBROS_OBJ) -f archive -o $(LIBROS)
 
 # Clean generated files (but not hand-written .asm)
 clean:
-	rm -f $(ASM_FILES) $(ROS_C_ASM) *.pobj *.par *.bf *.bfm ros/*.pobj
+	rm -f $(ASM_FILES) $(ROS_C_ASM) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
 	@echo "Cleaned runtime directory"
 
 # Test target - build a test program with runtime
@@ -90,4 +101,4 @@ test: $(RUNTIME_LIB) crt0.pobj
 	@echo "Test program built: test_standalone.bf"
 	@echo "Run with: bfm expand test_standalone.bf | bf"
 
-.PHONY: all clean test
+.PHONY: all clean test FORCE

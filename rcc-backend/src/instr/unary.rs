@@ -132,6 +132,7 @@ pub fn lower_unary_op(
             }
         }
         
+        IrUnaryOp::PtrToLinear => panic!("linear pointer conversion must use pointer lowering"),
         IrUnaryOp::PtrToInt => {
             // Pointer to integer cast - just treat the pointer address as an integer
             // Fat pointers: only use the address part, ignore the bank

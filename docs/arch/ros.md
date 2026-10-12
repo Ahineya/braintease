@@ -154,7 +154,7 @@ Do not enable overlapping STATUS bits from apps except `IRQ_SW`. Kernel `putchar
 runtime/
   include/          shared headers
   common/           string, ctype, memcpy, memset, printf guts, softfloat, qfixed
-  freestanding/     crt0.asm (HALT), mmio.c, MMIO putchar/getchar, bump malloc, graphics
+  freestanding/     crt0.asm (HALT), mmio.c, MMIO putchar/getchar, banked heap allocator, graphics
   ros/              crt0_sys.asm (GP/SB already set), crt0_ros.asm (INT21 exit), INT21 wrappers
 ```
 

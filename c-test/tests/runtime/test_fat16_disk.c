@@ -4,7 +4,7 @@
 #include "../../examples/rOS/disk.c"
 
 int main() {
-    uint8_t b;
+    uint_least8_t b;
     uint16_t w;
     uint32_t d;
 

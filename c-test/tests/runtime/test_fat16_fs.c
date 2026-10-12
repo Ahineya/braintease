@@ -150,7 +150,7 @@ int main() {
     Fat16Fs fs;
     Fat16DirEnt ent;
     Fat16Dir dir;
-    uint8_t buf[8];
+    uint_least8_t buf[8];
     int r;
     int n;
     int saw_hello;

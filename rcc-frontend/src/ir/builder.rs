@@ -29,6 +29,7 @@ impl IrBuilder {
     }
     
     pub fn new_temp(&mut self) -> TempId {
+        assert!(self.next_temp_id < 0x8000_0000, "IR temporary namespace exhausted");
         let temp = self.next_temp_id;
         self.next_temp_id += 1;
         temp
@@ -209,7 +210,7 @@ impl IrBuilder {
         // CRITICAL FIX: For dynamic offsets, the result bank is Mixed
         // because we don't know at compile time if we'll cross a bank boundary
         let result_bank = match offset {
-            Value::Constant(_) => bank,  // Static offset keeps the same bank tag
+            Value::Constant(0) => bank,  // Static offset keeps the same bank tag
             _ => BankTag::Mixed,         // Dynamic offset results in Mixed bank
         };
         
@@ -256,7 +257,7 @@ impl IrBuilder {
         
         // For struct field access, the offset is constant and small
         // so we keep the same bank tag
-        let result_bank = bank;
+        let result_bank = if field_offset == 0 { bank } else { BankTag::Mixed };
         
         let instr = Instruction::GetElementPtr { 
             result, 

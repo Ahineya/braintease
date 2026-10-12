@@ -8,8 +8,8 @@ long long add1(long long x) {
 }
 
 int main() {
-    if (sizeof(long long) == 8) putchar('Y'); else putchar('N');
-    if (sizeof(unsigned long long) == 8) putchar('Y'); else putchar('N');
+    if (sizeof(long long) == 4) putchar('Y'); else putchar('N');
+    if (sizeof(unsigned long long) == 4) putchar('Y'); else putchar('N');
 
     long long a = 4294967295LL;
     if (a + 1 == 4294967296LL) putchar('Y'); else putchar('N');

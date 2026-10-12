@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYYYYYYYYY\n",
+  "description": "16-bit C bytes, wide size_t, character promotions, and exact object representation copies"
+}

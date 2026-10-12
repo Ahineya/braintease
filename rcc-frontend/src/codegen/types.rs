@@ -44,7 +44,7 @@ pub fn convert_type(ast_type: &Type, location: SourceLocation) -> Result<IrType,
     match ast_type {
         Type::Void => Ok(IrType::Void),
         Type::Bool => Ok(IrType::I16),
-        Type::Char | Type::SignedChar | Type::UnsignedChar => Ok(IrType::I8),
+        Type::Char | Type::SignedChar | Type::UnsignedChar => Ok(IrType::I16),
         Type::Short | Type::UnsignedShort => Ok(IrType::I16),
         Type::Int | Type::UnsignedInt => Ok(IrType::I16), // 16-bit int on Ripple
         Type::Long | Type::UnsignedLong => Ok(IrType::I32),

@@ -51,6 +51,7 @@ pub struct Macro {
 #[derive(Debug, Clone)]
 struct ConditionalState {
     active: bool,
+    branch_taken: bool,
     has_else: bool,
     parent_active: bool,
 }
@@ -143,16 +144,18 @@ impl Preprocessor {
         for directive in directives {
             match directive {
                 Directive::Include { .. } => {
-                    let included = self.handle_include(directive)?;
-                    output.push_str(&included);
+                    if self.should_output() {
+                        let included = self.handle_include(directive)?;
+                        output.push_str(&included);
+                    }
                     self.current_line += 1;
                 }
                 Directive::Define { .. } => {
-                    self.handle_define(directive)?;
+                    if self.should_output() { self.handle_define(directive)?; }
                     self.current_line += 1;
                 }
                 Directive::Undef { .. } => {
-                    self.handle_undef(directive)?;
+                    if self.should_output() { self.handle_undef(directive)?; }
                     self.current_line += 1;
                 }
                 Directive::If { .. } | Directive::Ifdef { .. } | Directive::Ifndef { .. } => {
@@ -168,14 +171,18 @@ impl Preprocessor {
                     self.current_line += 1;
                 }
                 Directive::Line { number, file } => {
-                    self.current_line = number;
-                    if self.keep_line_directives {
-                        output.push_str(&self.handle_line(Directive::Line { number, file })?);
+                    if self.should_output() {
+                        self.current_line = number;
+                        if self.keep_line_directives {
+                            output.push_str(&self.handle_line(Directive::Line { number, file })?);
+                        }
+                    } else {
+                        self.current_line += 1;
                     }
                 }
                 Directive::Pragma { content } => {
                     // Handle #pragma once
-                    if content.trim() == "once" {
+                    if self.should_output() && content.trim() == "once" {
                         if let Some(file) = &self.current_file {
                             self.pragma_once_files.insert(file.clone());
                         }
@@ -356,6 +363,7 @@ impl Preprocessor {
         
         self.conditional_stack.push(ConditionalState {
             active,
+            branch_taken: active,
             has_else: false,
             parent_active,
         });
@@ -376,7 +384,8 @@ impl Preprocessor {
                     return Err(anyhow::anyhow!("Multiple #else directives"));
                 }
                 state.has_else = true;
-                state.active = state.parent_active && !state.active;
+                state.active = state.parent_active && !state.branch_taken;
+                state.branch_taken |= state.active;
             }
             Directive::Elif { condition } => {
                 // First evaluate the condition, then update state
@@ -385,13 +394,14 @@ impl Preprocessor {
                     if state.has_else {
                         return Err(anyhow::anyhow!("#elif after #else"));
                     }
-                    !state.active && state.parent_active
+                    !state.branch_taken && state.parent_active
                 };
                 
                 if should_activate {
                     let active = self.evaluate_condition(&condition)?;
                     let state = self.conditional_stack.last_mut().unwrap();
                     state.active = active;
+                    state.branch_taken |= active;
                 } else {
                     let state = self.conditional_stack.last_mut().unwrap();
                     state.active = false;

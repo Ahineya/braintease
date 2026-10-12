@@ -9,6 +9,7 @@ use crate::naming::NameGenerator;
 use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use log::{debug, trace, warn};
 use rcc_frontend::BankTag;
+use super::load::MemoryCursor;
 use super::helpers::{resolve_mixed_bank, resolve_bank_tag_to_info, get_bank_register_with_runtime_check_safe, get_bank_value_for_argument, materialize_bank_to_register};
 
 /// Lower a Store instruction to assembly
@@ -39,6 +40,8 @@ pub fn lower_store(
             let name = naming.temp_name(*t);
             trace!("  Storing temp value: {name}");
             let reg = mgr.get_register(name.clone());
+            insts.extend(mgr.take_instructions());
+            mgr.pin_register(reg);
 
             let bank_src: Option<(Reg, bool)> = mgr.get_pointer_bank(&name)
                 .map(|info| {
@@ -77,6 +80,7 @@ pub fn lower_store(
             } else {
                 insts.push(AsmInst::Li(temp_reg, *c as i16));
             }
+            mgr.pin_register(temp_reg);
             (temp_reg, false, None)
         }
         Value::Global(name) => {
@@ -111,6 +115,9 @@ pub fn lower_store(
                 }
                 _ => panic!("Invalid fat pointer address type: {:?} in STORE", fp.addr),
             };
+
+            insts.extend(mgr.take_instructions());
+            mgr.pin_register(addr_reg);
 
             // Decide how to materialize the bank component for the value we are storing
             // Return (bank_reg, owned) — owned = true if we allocated a temp that must be freed here
@@ -205,45 +212,7 @@ pub fn lower_store(
         && !value_type.is_four_word_scalar()
         && !value_type.is_two_word_scalar();
 
-    // Fast path: fat pointer -> stack alloca. Compute dest as FP+offset in SC
-    // so we never allocate a register while `bank_reg` is still live.
-    if is_pointer {
-        if let Some((bank_reg, bank_owned)) = ptr_bank_reg {
-            if let Value::FatPtr(fp) = ptr_value {
-                if matches!(fp.bank, BankTag::Stack) {
-                    if let Value::Temp(t) = fp.addr.as_ref() {
-                        let alloca_name = naming.temp_name(*t);
-                        if let Some(offset) = mgr.alloca_fp_offset(&alloca_name) {
-                            insts.push(AsmInst::Comment(format!(
-                                "Store fat ptr to stack alloca {alloca_name} at FP+{offset}"
-                            )));
-                            insts.push(AsmInst::AddI(Reg::Sc, Reg::Fp, offset));
-                            insts.push(AsmInst::Store(src_reg, Reg::Sb, Reg::Sc));
-                            insts.push(AsmInst::AddI(Reg::Sc, Reg::Sc, 1));
-                            insts.push(AsmInst::Store(bank_reg, Reg::Sb, Reg::Sc));
-                            if bank_owned {
-                                mgr.free_register(bank_reg);
-                            }
-                            match value {
-                                Value::Constant(_) => mgr.free_register(src_reg),
-                                Value::FatPtr(vfp) if matches!(vfp.addr.as_ref(), Value::Constant(_)) => {
-                                    mgr.free_register(src_reg);
-                                }
-                                _ => {}
-                            }
-                            debug!("lower_store complete (stack-alloca fat ptr): generated {} instructions", insts.len());
-                            return insts;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Source registers are held by value below. Pin them so allocating the
-    // destination cannot spill and reuse them (fat-pointer bank was being
-    // clobbered when storing stack-passed pointer parameters).
-    mgr.pin_register(src_reg);
+    // Keep both source components live while resolving the destination.
     if let Some((bank_reg, _)) = ptr_bank_reg {
         mgr.pin_register(bank_reg);
     }
@@ -254,6 +223,8 @@ pub fn lower_store(
             let name = naming.temp_name(*t);
             trace!("  Storing to temp pointer: {name}");
             let reg = mgr.get_register(name.clone());
+            insts.extend(mgr.take_instructions());
+            mgr.pin_register(reg);
             (reg, name)
         }
         Value::FatPtr(fp) => {
@@ -284,6 +255,9 @@ pub fn lower_store(
                 _ => panic!("Invalid fat pointer address type: {:?} in STORE", fp.addr),
             };
             
+            insts.extend(mgr.take_instructions());
+            mgr.pin_register(addr_reg);
+
             // Set bank info for the pointer
             let bank_info = resolve_bank_tag_to_info(&fp.bank, fp, mgr, naming);
 
@@ -323,7 +297,6 @@ pub fn lower_store(
     insts.extend(check_insts);
     insts.extend(mgr.take_instructions());
 
-    mgr.pin_register(dest_addr_reg);
     mgr.pin_register(dest_bank_reg);
     
     // Step 4: Generate STORE instruction(s)
@@ -333,100 +306,53 @@ pub fn lower_store(
     trace!("  Generated STORE: {store_inst:?}");
     insts.push(store_inst);
 
-    // I64: store words 1..3 at dest+1..+3
     let storing_i64 = value_type.is_four_word_scalar()
         || matches!(value, Value::Temp(t) if mgr.get_i64_words(&naming.temp_name(*t)).is_some());
-    if storing_i64 && !is_pointer {
-        match value {
-            Value::Temp(t) => {
-                let lo_name = naming.temp_name(*t);
-                if let Some(words) = mgr.get_i64_words(&lo_name) {
-                    for i in 0..3 {
-                        let r = mgr.get_register(words[i].clone());
-                        insts.extend(mgr.take_instructions());
-                        mgr.pin_register(r);
-                        insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, (i + 1) as i16));
-                        insts.push(AsmInst::Store(r, dest_bank_reg, Reg::Sc));
-                        mgr.unpin_register(r);
-                    }
-                }
-            }
-            Value::Constant(c) => {
-                let parts = crate::instr::i64::split_const64(*c);
-                for i in 1..4 {
-                    let name = naming.store_const_value();
-                    let r = mgr.get_register(name);
-                    insts.extend(mgr.take_instructions());
-                    insts.push(AsmInst::Li(r, parts[i]));
-                    insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, i as i16));
-                    insts.push(AsmInst::Store(r, dest_bank_reg, Reg::Sc));
-                    mgr.free_register(r);
-                }
-            }
-            _ => panic!("I64 store of unsupported value {value:?}"),
-        }
-        debug!("  Stored I64 extra words");
-    } else {
-    // I32: store the high word at dest+1
     let storing_i32 = value_type.is_two_word_scalar()
         || matches!(value, Value::Temp(t) if mgr.get_i32_high(&naming.temp_name(*t)).is_some());
-    if storing_i32 && !is_pointer {
-        let hi_reg = match value {
-            Value::Temp(t) => {
-                let lo_name = naming.temp_name(*t);
-                if let Some(hi_name) = mgr.get_i32_high(&lo_name) {
-                    let r = mgr.get_register(hi_name);
-                    insts.extend(mgr.take_instructions());
-                    r
-                } else {
-                    // Narrow temp stored as I32: sign-extend
-                    let (hi, ext) = {
-                        let sh = mgr.get_register(naming.temp_with_context("store", "sh15"));
+    if is_pointer || storing_i32 || storing_i64 {
+        let cursor = MemoryCursor::new(mgr, naming, &mut insts, dest_addr_reg, dest_bank_reg);
+        let words = if storing_i64 && !is_pointer { 4 } else { 2 };
+        for i in 1..words {
+            let (word, temporary) = if is_pointer {
+                (ptr_bank_reg.expect("pointer value has a bank").0, false)
+            } else {
+                match value {
+                    Value::Temp(t) => {
+                        let name = naming.temp_name(*t);
+                        let word_name = if storing_i64 {
+                            mgr.get_i64_words(&name).map(|parts| parts[i - 1].clone())
+                        } else {
+                            mgr.get_i32_high(&name)
+                        };
+                        if let Some(word_name) = word_name {
+                            let r = mgr.get_register(word_name);
+                            insts.extend(mgr.take_instructions());
+                            (r, false)
+                        } else {
+                            // Narrow scalar stored into a wider slot.
+                            let r = mgr.get_register(naming.temp_with_context("store", "sign"));
+                            insts.extend(mgr.take_instructions());
+                            insts.push(AsmInst::Slt(r, src_reg, Reg::R0));
+                            insts.push(AsmInst::Sub(r, Reg::R0, r));
+                            (r, true)
+                        }
+                    }
+                    Value::Constant(c) => {
+                        let parts = crate::instr::i64::split_const64(*c);
+                        let r = mgr.get_register(naming.store_const_value());
                         insts.extend(mgr.take_instructions());
-                        insts.push(AsmInst::Li(sh, 15));
-                        let hi = mgr.get_register(naming.temp_with_context("store", "hi"));
-                        insts.extend(mgr.take_instructions());
-                        insts.push(AsmInst::Srl(hi, src_reg, sh));
-                        insts.push(AsmInst::Sub(hi, Reg::R0, hi));
-                        mgr.free_register(sh);
-                        (hi, ())
-                    };
-                    let _ = ext;
-                    hi
+                        insts.push(AsmInst::Li(r, parts[i]));
+                        (r, true)
+                    }
+                    _ => panic!("Multiword store of unsupported value {value:?}"),
                 }
-            }
-            Value::Constant(c) => {
-                let (_lo, hi) = crate::instr::wide::split_const(*c);
-                let name = naming.store_const_value();
-                let r = mgr.get_register(name);
-                insts.extend(mgr.take_instructions());
-                insts.push(AsmInst::Li(r, hi));
-                r
-            }
-            _ => panic!("I32 store of unsupported value {value:?}"),
-        };
-        mgr.pin_register(hi_reg);
-        insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, 1));
-        insts.push(AsmInst::Store(hi_reg, dest_bank_reg, Reg::Sc));
-        mgr.unpin_register(hi_reg);
-        if matches!(value, Value::Constant(_)) {
-            mgr.free_register(hi_reg);
+            };
+            cursor.advance(naming, &mut insts);
+            insts.push(AsmInst::Store(word, cursor.bank, cursor.addr));
+            if temporary { mgr.free_register(word); }
         }
-        debug!("  Stored I32 high word from {hi_reg:?}");
-    }
-    }
-    // Use SC for dest+1 instead of allocating a new register: get_register()
-    // can spill `bank_reg` and reuse it, then STORE would write the clobbered
-    // register (seen with stack-passed unsigned short* out-params).
-    if is_pointer {
-        if let Some((bank_reg, _)) = ptr_bank_reg {
-            debug!("  Storing fat pointer bank component");
-            insts.push(AsmInst::AddI(Reg::Sc, dest_addr_reg, 1));
-            trace!("  Bank component at address {dest_addr_reg:?} + 1 (via SC)");
-            let bank_store = AsmInst::Store(bank_reg, dest_bank_reg, Reg::Sc);
-            trace!("  Generated bank STORE: {bank_store:?}");
-            insts.push(bank_store);
-        }
+        cursor.release(mgr);
     }
 
     mgr.unpin_register(src_reg);

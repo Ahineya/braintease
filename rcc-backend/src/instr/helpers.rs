@@ -58,7 +58,7 @@ pub fn get_value_register(
             // The bank component is handled separately when needed
             get_value_register(mgr, naming, &fp.addr)
         }
-        Value::ConstantArray(_) => {
+        Value::ConstantArray(_) | Value::ConstantAggregate(_) => {
             panic!("Cannot load constant array into register - arrays should be initialized separately");
         }
         Value::Undef => {
@@ -80,7 +80,7 @@ pub fn get_value_register(
 pub fn calculate_value_need(value: &Value) -> usize {
     match value {
         Value::Constant(_) => 1,    // Need to load into register
-        Value::ConstantArray(_) => 0, // Arrays don't go in registers
+        Value::ConstantArray(_) | Value::ConstantAggregate(_) => 0, // Arrays don't go in registers
         Value::Temp(_) => 1,         // Temps need a register
         Value::Global(_) => panic!("Value::Global should be resolved in lower.rs {value:?}"), // Should be resolved to FatPtr
         Value::FatPtr(_) => 2,       // Fat pointers need 2 registers (addr + bank)
@@ -220,20 +220,39 @@ fn get_bank_register_with_runtime_check(
 /// Converts Value::Global to Value::FatPtr with the resolved address
 /// from the global manager.
 pub fn resolve_global_to_fatptr(
-    name: &str, 
-    global_manager: &GlobalManager
+    name: &str,
+    global_manager: &GlobalManager,
+    mgr: &mut RegisterPressureManager,
+    naming: &mut NameGenerator,
 ) -> Result<Value, String> {
-    if let Some(info) = global_manager.get_global_info(name) {
-        Ok(Value::FatPtr(FatPointer {
-            addr: Box::new(Value::Constant(info.address as i64)),
-            bank: BankTag::Global,
-        }))
-    } else {
-        // If it's not a global variable, it might be a function
-        // Functions don't have addresses in global memory, they're just labels
-        // Return an error that will be caught and handled appropriately
-        Err(format!("Unknown global variable: {name}"))
+    if global_manager.get_global_info(name).is_none() {
+        return Err(format!("Unknown global variable: {name}"));
     }
+    let id = naming.new_internal_temp();
+    let temp_name = naming.temp_name(id);
+    let reg = mgr.get_register(temp_name.clone());
+    mgr.emit(AsmInst::LiLabel(reg, name.to_string()));
+    mgr.set_pointer_bank(temp_name, BankInfo::Global);
+    Ok(Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(id)), bank: BankTag::Global }))
+}
+
+/// Materialize both relocatable components of a function pointer using LI.
+pub fn materialize_function_pointer(
+    name: &str,
+    mgr: &mut RegisterPressureManager,
+    naming: &mut NameGenerator,
+) -> Value {
+    let id = naming.new_internal_temp();
+    let temp_name = naming.temp_name(id);
+    let reg = mgr.get_register(temp_name.clone());
+    mgr.emit(AsmInst::LiLabel(reg, format!("%offset({name})")));
+    mgr.pin_register(reg);
+    let bank_name = format!("{temp_name}__code_bank");
+    let bank = mgr.get_register(bank_name.clone());
+    mgr.emit(AsmInst::LiLabel(bank, format!("%bank({name})")));
+    mgr.unpin_register(reg);
+    mgr.set_pointer_bank(temp_name, BankInfo::Dynamic(bank_name));
+    Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(id)), bank: BankTag::Mixed })
 }
 
 /// Resolve any BankTag to concrete BankInfo
@@ -491,30 +510,18 @@ pub fn get_pointer_address_and_name(
 /// This is used to canonicalize values before processing in instruction lowering.
 pub fn canonicalize_value(
     value: &Value,
-    global_manager: &GlobalManager
+    global_manager: &GlobalManager,
+    mgr: &mut RegisterPressureManager,
+    naming: &mut NameGenerator,
 ) -> Result<Value, String> {
     match value {
-        Value::Global(name) => resolve_global_to_fatptr(name, global_manager),
-        Value::FatPtr(fp) => {
-            // Check if the address contains a Global that needs resolution
-            match fp.addr.as_ref() {
-                Value::Global(name) => {
-                    if let Some(info) = global_manager.get_global_info(name) {
-                        Ok(Value::FatPtr(FatPointer {
-                            addr: Box::new(Value::Constant(info.address as i64)),
-                            bank: fp.bank,
-                        }))
-                    } else {
-                        Err(format!("Unknown global variable in FatPtr: {name}"))
-                    }
-                }
-                _ => Ok(value.clone())
-            }
-        }
-        Value::Function(name) => {
-            // Function pointers are not yet implemented
-            Err(format!("Function pointers not yet implemented. Cannot use function '{name}' as a value"))
-        }
-        _ => Ok(value.clone())
+        Value::Global(name) => resolve_global_to_fatptr(name, global_manager, mgr, naming),
+        Value::Function(name) => Ok(materialize_function_pointer(name, mgr, naming)),
+        Value::FatPtr(fp) => match fp.addr.as_ref() {
+            Value::Global(name) => resolve_global_to_fatptr(name, global_manager, mgr, naming),
+            Value::Function(name) => Ok(materialize_function_pointer(name, mgr, naming)),
+            _ => Ok(value.clone()),
+        },
+        _ => Ok(value.clone()),
     }
 }

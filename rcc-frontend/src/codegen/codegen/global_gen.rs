@@ -21,6 +21,7 @@ pub fn generate_global_variable(
     name: &str,
     var_type: &Type,
     initializer: Option<&TypedExpr>,
+    storage_class: crate::StorageClass,
 ) -> Result<(), CompilerError> {
     // Handle initializer first to determine array size if needed
     let init_value = if let Some(init_expr) = initializer {
@@ -36,14 +37,14 @@ pub fn generate_global_variable(
             next_string_id,
         };
         
-        match expr_gen.generate(init_expr) {
+        match generate_constant_initializer(&mut expr_gen, init_expr) {
             Ok(value) => match value {
-                Value::Constant(_) | Value::ConstantArray(_) => Some(value),
+                Value::Constant(_) | Value::ConstantArray(_) | Value::ConstantAggregate(_) | Value::Function(_) => Some(value),
                 Value::FatPtr(ref fp) => {
                     // Allow FatPtr for pointer initializers (e.g., string literals)
                     // But only if the address is a constant or global
                     match fp.addr.as_ref() {
-                        Value::Global(_) | Value::Constant(_) => Some(value),
+                        Value::Global(_) | Value::Constant(_) | Value::Function(_) => Some(value),
                         _ => {
                             return Err(CodegenError::UnsupportedConstruct {
                                 construct: format!("Non-constant pointer initializer for global variable '{}'", name),
@@ -70,9 +71,19 @@ pub fn generate_global_variable(
     let completed_type = complete_type_from_initializer(var_type, initializer);
     let ir_type = convert_type_default(&completed_type)?;
     
+    let linkage = match storage_class {
+        crate::StorageClass::Static => Linkage::Internal,
+        crate::StorageClass::Extern if initializer.is_none() => Linkage::Declaration,
+        _ => Linkage::External,
+    };
+
     // `extern T x;` plus a later tentative definition or definition in the same
     // TU must not emit two globals. Merge into the existing one.
     if let Some(existing) = module.globals.iter_mut().find(|g| g.name == name) {
+        if linkage != Linkage::Declaration {
+            existing.linkage = linkage;
+            existing.var_type = ir_type.clone();
+        }
         if let Some(init) = init_value {
             if existing.initializer.is_some() {
                 return Err(CodegenError::InternalError {
@@ -100,7 +111,7 @@ pub fn generate_global_variable(
         var_type: ir_type.clone(),
         is_constant: false,
         initializer: init_value,
-        linkage: Linkage::External,
+        linkage,
         symbol_id: None,
     };
     
@@ -119,4 +130,82 @@ pub fn generate_global_variable(
     }
     
     Ok(())
+}
+/// Preserve aggregate element boundaries until layout is known in the backend.
+fn generate_constant_initializer(
+    gen: &mut TypedExpressionGenerator,
+    expr: &TypedExpr,
+) -> Result<Value, CompilerError> {
+    if let Some(value) = scalar_initializer_constant(expr) { return Ok(Value::Constant(value)); }
+    match expr {
+        TypedExpr::Cast { operand, target_type: Type::Pointer { .. }, .. }
+            if matches!(operand.get_type(), Type::Pointer { .. } | Type::Function { .. }) => {
+            // Function-pointer casts change the callable type, not its address.
+            generate_constant_initializer(gen, operand)
+        }
+        TypedExpr::ArrayInitializer { elements, .. }
+        | TypedExpr::CompoundLiteral { initializer: elements, .. } => {
+            let values = elements.iter().map(|elem| generate_constant_initializer(gen, elem))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Value::ConstantAggregate(values))
+        }
+        _ => gen.generate(expr),
+    }
+}
+
+fn scalar_initializer_constant(expr: &TypedExpr) -> Option<i64> {
+    use crate::ast::{BinaryOp as B, UnaryOp as U};
+    let value = match expr {
+        TypedExpr::IntLiteral { value, .. } => *value,
+        TypedExpr::CharLiteral { value, .. } => *value as i64,
+        TypedExpr::Unary { op, operand, .. } => {
+            let v = scalar_initializer_constant(operand)?;
+            match op { U::Plus => v, U::Minus => v.wrapping_neg(), U::BitNot => !v, U::LogicalNot => (v == 0) as i64, _ => return None }
+        }
+        TypedExpr::Cast { operand, target_type, .. } if target_type.is_integer() => scalar_initializer_constant(operand)?,
+        TypedExpr::SizeofExpr { operand, .. } => operand.get_type().size_in_bytes()? as i64,
+        TypedExpr::SizeofType { target_type, .. } => target_type.size_in_bytes()? as i64,
+        TypedExpr::Conditional { condition, then_expr, else_expr, .. } => {
+            return scalar_initializer_constant(if scalar_initializer_constant(condition)? != 0 { then_expr } else { else_expr });
+        }
+        TypedExpr::Binary { op, left, right, .. } => {
+            let a = scalar_initializer_constant(left)?;
+            if *op == B::LogicalAnd && a == 0 { return Some(0); }
+            if *op == B::LogicalOr && a != 0 { return Some(1); }
+            let b = scalar_initializer_constant(right)?;
+            let common = crate::codegen::expressions::usual_arithmetic_type(left.get_type(), right.get_type());
+            let unsigned = common.is_unsigned_integer();
+            let (a, b) = if matches!(op, B::LeftShift | B::RightShift) { (a, b) } else {
+                (normalize_initializer_integer(a, &common), normalize_initializer_integer(b, &common))
+            };
+            match op {
+                B::Add => a.wrapping_add(b), B::Sub => a.wrapping_sub(b), B::Mul => a.wrapping_mul(b),
+                B::Div if b != 0 => if unsigned { ((a as u64) / (b as u64)) as i64 } else { a.wrapping_div(b) },
+                B::Mod if b != 0 => if unsigned { ((a as u64) % (b as u64)) as i64 } else { a.wrapping_rem(b) },
+                B::BitAnd => a & b, B::BitOr => a | b, B::BitXor => a ^ b,
+                B::LeftShift if (0..64).contains(&b) => a.wrapping_shl(b as u32),
+                B::RightShift if (0..64).contains(&b) => if left.get_type().is_unsigned_integer() { ((a as u64) >> b) as i64 } else { a >> b },
+                B::Equal => (a == b) as i64, B::NotEqual => (a != b) as i64,
+                B::Less => if unsigned { ((a as u64) < b as u64) as i64 } else { (a < b) as i64 },
+                B::Greater => if unsigned { ((a as u64) > b as u64) as i64 } else { (a > b) as i64 },
+                B::LessEqual => if unsigned { ((a as u64) <= b as u64) as i64 } else { (a <= b) as i64 },
+                B::GreaterEqual => if unsigned { ((a as u64) >= b as u64) as i64 } else { (a >= b) as i64 },
+                B::LogicalAnd => (a != 0 && b != 0) as i64, B::LogicalOr => (a != 0 || b != 0) as i64,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    Some(normalize_initializer_integer(value, expr.get_type()))
+}
+
+fn normalize_initializer_integer(value: i64, ty: &Type) -> i64 {
+    match ty {
+        Type::Bool => (value != 0) as i64,
+        Type::Char | Type::SignedChar | Type::Short | Type::Int => value as i16 as i64,
+        Type::UnsignedChar | Type::UnsignedShort | Type::UnsignedInt => value as u16 as i64,
+        Type::Long => value as i32 as i64,
+        Type::UnsignedLong => value as u32 as i64,
+        _ => value,
+    }
 }

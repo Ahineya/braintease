@@ -37,7 +37,7 @@ enum Commands {
         bank_size: u16,
         
         /// Maximum immediate value
-        #[arg(short, long, default_value = "65535")]
+        #[arg(short = 'M', long, default_value = "65535")]
         max_immediate: u32,
         
         /// Memory offset for data addresses (default 2 for VM special values)

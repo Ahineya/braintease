@@ -175,7 +175,7 @@ impl Type {
             
             // Arrays decay to pointers
             (Type::Pointer { target: t1, .. }, Type::Array { element_type: t2, .. }) => {
-                t1 == t2
+                **t1 == Type::Void || t1 == t2
             }
             
             _ => false,
@@ -214,42 +214,24 @@ impl Type {
                     .filter_map(|f| f.field_type.size_in_words())
                     .max()
             }
-            Type::Enum { .. } => Some(2), // Enum is like int
+            Type::Enum { .. } => Some(1), // Enum is like int
             Type::Typedef(_) | Type::Error => None,
         }
     }
     
-    /// C `sizeof` in bytes (not VM words). `char` is 1 byte; `int` is 2.
+    /// C bytes are the smallest addressable unit: one 16-bit VM cell.
+    /// Keep sizeof, object layout and character-pointer traversal in agreement.
     pub fn size_in_bytes(&self) -> Option<u64> {
+        self.size_in_words()
+    }
+
+    /// Integer promotions for a target with 16-bit char, short and int.
+    /// Unsigned char/short cannot be represented by int and promote to unsigned int.
+    pub fn integer_promoted(&self) -> Type {
         match self {
-            Type::Void => None,
-            Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => Some(1),
-            Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt => Some(2),
-            Type::Long | Type::UnsignedLong | Type::Float => Some(4),
-            Type::LongLong | Type::UnsignedLongLong | Type::Double => Some(8),
-            Type::Pointer { .. } => Some(4),
-            Type::Array {
-                element_type,
-                size: Some(count),
-            } => element_type.size_in_bytes().map(|elem| elem * count),
-            Type::Array { size: None, .. } => None,
-            Type::Function { .. } => None,
-            Type::Struct { fields, .. } => {
-                let mut total = 0u64;
-                for field in fields {
-                    if matches!(field.field_type, Type::Array { size: None, .. }) {
-                        continue;
-                    }
-                    total += field.field_type.size_in_bytes()?;
-                }
-                Some(total)
-            }
-            Type::Union { fields, .. } => fields
-                .iter()
-                .filter_map(|f| f.field_type.size_in_bytes())
-                .max(),
-            Type::Enum { .. } => Some(2),
-            Type::Typedef(_) | Type::Error => None,
+            Type::UnsignedChar | Type::UnsignedShort => Type::UnsignedInt,
+            Type::Bool | Type::Char | Type::SignedChar | Type::Short | Type::Enum { .. } => Type::Int,
+            _ => self.clone(),
         }
     }
 
@@ -359,9 +341,9 @@ mod tests {
         assert_eq!(Type::Int.size_in_words(), Some(1)); // 16-bit int = 1 word
         assert_eq!(Type::Long.size_in_words(), Some(2)); // 32-bit long = 2 words
         assert_eq!(Type::Float.size_in_words(), Some(2));
-        assert_eq!(Type::Float.size_in_bytes(), Some(4));
+        assert_eq!(Type::Float.size_in_bytes(), Some(2));
         assert_eq!(Type::Double.size_in_words(), Some(4));
-        assert_eq!(Type::Double.size_in_bytes(), Some(8));
+        assert_eq!(Type::Double.size_in_bytes(), Some(4));
         assert_eq!(Type::Pointer { target: Box::new(Type::Int), bank: None }.size_in_words(), Some(2)); // Fat pointer = 2 words
         
         let array_type = Type::Array { 
@@ -434,6 +416,6 @@ mod tests {
             ],
         };
         assert_eq!(fam.size_in_words(), Some(1));
-        assert_eq!(fam.size_in_bytes(), Some(2));
+        assert_eq!(fam.size_in_bytes(), Some(1));
     }
 }

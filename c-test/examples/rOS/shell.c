@@ -345,7 +345,7 @@ static void cmd_type(char *path, int page) {
     uint32_t off;
     int n;
     int i;
-    uint8_t buf[64];
+    uint_least8_t buf[64];
     int c;
 
     if (!path || !path[0]) {

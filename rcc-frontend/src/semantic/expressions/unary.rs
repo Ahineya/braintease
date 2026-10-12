@@ -28,7 +28,7 @@ impl UnaryOperationAnalyzer {
         match op {
             UnaryOp::Plus | UnaryOp::Minus => {
                 if self.type_analyzer.borrow().is_arithmetic(operand_type) {
-                    Ok(operand_type.clone())
+                    Ok(operand_type.integer_promoted())
                 } else {
                     Err(SemanticError::InvalidOperation {
                         operation: format!("{op}"),
@@ -41,7 +41,7 @@ impl UnaryOperationAnalyzer {
 
             UnaryOp::BitNot => {
                 if self.type_analyzer.borrow().is_integer(operand_type) {
-                    Ok(operand_type.clone())
+                    Ok(operand_type.integer_promoted())
                 } else {
                     Err(SemanticError::InvalidOperation {
                         operation: "bitwise NOT".to_string(),
@@ -111,7 +111,7 @@ impl UnaryOperationAnalyzer {
             }
 
             UnaryOp::Sizeof => {
-                Ok(Type::UnsignedInt) // sizeof yields size_t (unsigned int)
+                Ok(Type::UnsignedLong) // sizeof yields size_t (unsigned long)
             }
         }
     }

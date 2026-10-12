@@ -7,6 +7,7 @@ pub mod helpers;
 pub mod load;
 pub mod store;
 pub mod gep;
+pub mod pointers;
 pub mod binary;
 pub mod unary;
 pub mod branch;

@@ -22,7 +22,7 @@ pub enum IrType {
     
     /// Integer types with bit width
     I1,   // Boolean
-    I8,   // 8-bit integer (char)
+    I8,   // Internal 8-bit integer; C char is I16 on this target
     I16,  // 16-bit integer (short, int on Ripple)
     I32,  // 32-bit integer (long on Ripple)
     I64,  // 64-bit integer (long long on Ripple)

@@ -16,7 +16,9 @@ fn intern_temp(result: Result<rcc_common::TempId, String>) -> Result<rcc_common:
 
 /// C99 6.3.1.8 usual arithmetic conversions.
 pub fn usual_arithmetic_type(left: &Type, right: &Type) -> Type {
-    match (left, right) {
+    let left = left.integer_promoted();
+    let right = right.integer_promoted();
+    match (&left, &right) {
         (Type::Double, _) | (_, Type::Double) => Type::Double,
         (Type::Float, _) | (_, Type::Float) => Type::Float,
         (Type::UnsignedLongLong, _) | (_, Type::UnsignedLongLong) => Type::UnsignedLongLong,
@@ -286,10 +288,9 @@ pub fn convert_to_bool(
         let zero = Value::Constant(0);
         return emit_float_binop(gen, crate::ast::BinaryOp::NotEqual, val, zero, from);
     }
-    let scalar = match val {
-        Value::FatPtr(fp) => *fp.addr,
-        other => other,
-    };
+    let scalar = if matches!(from, Type::Pointer { .. } | Type::Array { .. }) {
+        super::pointer_ops::pointer_integer(gen, val)?
+    } else { val };
     let temp = intern_temp(gen.builder.build_binary(
         crate::ir::IrBinaryOp::Ne,
         scalar,

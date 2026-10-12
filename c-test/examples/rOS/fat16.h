@@ -37,7 +37,7 @@ typedef struct Fat16Fs {
 
 typedef struct Fat16DirEnt {
     char name[13];
-    uint8_t attr;
+    uint_least8_t attr;
     uint16_t cluster;
     uint32_t size;
 } Fat16DirEnt;
@@ -50,8 +50,8 @@ typedef struct Fat16Dir {
 } Fat16Dir;
 
 void fat16_canon83(const char *in, char out11[11]);
-void fat16_format83(const uint8_t raw11[11], char out13[13]);
-int fat16_name_eq(const uint8_t raw11[11], const char *user);
+void fat16_format83(const uint_least8_t raw11[11], char out13[13]);
+int fat16_name_eq(const uint_least8_t raw11[11], const char *user);
 
 int fat16_mount(Fat16Fs *fs);
 int fat16_is_eof(uint16_t cluster);
@@ -65,6 +65,6 @@ int fat16_lookup(Fat16Fs *fs, uint16_t dir_cluster, const char *name, Fat16DirEn
 int fat16_resolve(Fat16Fs *fs, uint16_t start_cluster, const char *path, Fat16DirEnt *ent);
 
 int fat16_read_at(Fat16Fs *fs, uint16_t cluster, uint32_t size,
-                  uint32_t offset, uint8_t *buf, uint16_t len);
+                  uint32_t offset, uint_least8_t *buf, uint16_t len);
 
 #endif

@@ -67,7 +67,7 @@ impl BinaryOperationAnalyzer {
             | BinaryOp::RightShift => {
                 // C99 6.5.7: the result type is that of the promoted left operand.
                 if self.type_analyzer.borrow().is_integer(left_type) && self.type_analyzer.borrow().is_integer(right_type) {
-                    Ok(left_type.clone())
+                    Ok(left_type.integer_promoted())
                 } else {
                     Err(SemanticError::InvalidOperation {
                         operation: format!("{op}"),
@@ -295,19 +295,6 @@ impl BinaryOperationAnalyzer {
                     .into());
                 }
                 
-                // CRITICAL FIX: If pointer points to an array, arithmetic on it
-                // should yield a pointer to the array's element type, not to the array itself.
-                // For example: int (*p)[3] + 1 should give int*, not int (*)[3]
-                if let Type::Array { element_type, .. } = &target {
-                    return Ok(Type::Pointer {
-                        target: element_type.clone(),
-                        bank: if let Type::Pointer { bank, .. } = &left_decayed {
-                            bank.clone()
-                        } else {
-                            None
-                        }
-                    });
-                }
             }
             return Ok(left_decayed.clone());
         }
@@ -325,19 +312,6 @@ impl BinaryOperationAnalyzer {
                     .into());
                 }
                 
-                // CRITICAL FIX: If pointer points to an array, arithmetic on it
-                // should yield a pointer to the array's element type, not to the array itself.
-                // For example: int (*p)[3] + 1 should give int*, not int (*)[3]
-                if let Type::Array { element_type, .. } = &target {
-                    return Ok(Type::Pointer {
-                        target: element_type.clone(),
-                        bank: if let Type::Pointer { bank, .. } = &right_decayed {
-                            bank.clone()
-                        } else {
-                            None
-                        }
-                    });
-                }
             }
             return Ok(right_decayed.clone());
         }
@@ -370,8 +344,8 @@ impl BinaryOperationAnalyzer {
                 }
             }
 
-            // Pointer difference returns ptrdiff_t (we use int)
-            return Ok(Type::Int);
+            // Pointer differences span banks and use the 32-bit ptrdiff_t.
+            return Ok(Type::Long);
         }
 
         Err(SemanticError::InvalidOperation {

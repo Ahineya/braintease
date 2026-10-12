@@ -80,6 +80,24 @@ if [[ -z "$wad" && -f "$DEFAULT_WAD" ]]; then
   wad="$DEFAULT_WAD"
 fi
 
+require_tool() {
+  local path="$1" name="$2"
+  if [[ ! -x "$path" ]]; then
+    echo "error: missing $name at $path" >&2
+    echo "Build the toolchain first (from $ROOT):" >&2
+    echo "  cargo build --release" >&2
+    echo "  cargo build --release --manifest-path src/ripple-asm/Cargo.toml" >&2
+    exit 1
+  fi
+}
+
+require_tool "$ROOT/target/release/rcc" rcc
+require_tool "$ROOT/src/ripple-asm/target/release/rasm" rasm
+require_tool "$ROOT/src/ripple-asm/target/release/rlink" rlink
+if [[ "$build_only" -eq 0 ]]; then
+  require_tool "$ROOT/target/release/rvm" rvm
+fi
+
 make_args=()
 if [[ -n "$wad" ]]; then
   make_args+=("WAD=$wad")

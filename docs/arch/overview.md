@@ -7,7 +7,7 @@ Ripple is a 16-bit, banked RISC VM. The C toolchain (`rcc` → `rasm` → `rlink
 - Every register and data-memory location is a **16-bit cell** (0…65535).
 - Arithmetic wraps modulo 2¹⁶.
 - There is **no flags register**. Comparisons write 0 or 1 into a register (`SLT` / `SLTU`); branches compare two registers.
-- C `char` occupies one cell (value in the low 8 bits). C `sizeof` is still in **bytes**: `sizeof(char) == 1`, `sizeof(int) == 2`. See [abi.md](abi.md).
+- A C byte is one 16-bit cell (`CHAR_BIT == 16`): `sizeof(char) == 1`, `sizeof(int) == 1`. See [abi.md](abi.md).
 
 ## Two memories
 

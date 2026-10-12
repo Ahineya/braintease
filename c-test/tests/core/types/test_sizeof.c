@@ -21,31 +21,31 @@ int main() {
         putchar('X');
     }
     
-    if (size_int == 2) {
+    if (size_int == 1) {
         putchar('2');
     } else {
         putchar('X');
     }
     
-    if (size_long == 4) {
+    if (size_long == 2) {
         putchar('3');
     } else {
         putchar('X');
     }
     
-    if (size_ptr == 4) {
+    if (size_ptr == 2) {
         putchar('4');
     } else {
         putchar('X');
     }
     
-    if (size_var == 2) {
+    if (size_var == 1) {
         putchar('5');
     } else {
         putchar('X');
     }
     
-    if (size_arr == 20) {
+    if (size_arr == 10) {
         putchar('6');
     } else {
         putchar('X');

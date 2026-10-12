@@ -21,9 +21,9 @@ pub type TempId = u32;
 /// Basic integer types supported by the Ripple VM
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IntType {
-    /// signed char (8 bits)
+    /// Legacy narrow integer kind (not the C char ABI; C char is 16 bits)
     I8,
-    /// unsigned char (8 bits)
+    /// Legacy unsigned narrow integer kind (C unsigned char is 16 bits)
     U8,
     /// short (16 bits) - native Ripple VM size
     I16,

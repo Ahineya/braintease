@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "banked pointer semantics ok\n",
+  "description": "Pointer banks, null tests, integer round trips, signed/wide offsets and short-circuit joins"
+}

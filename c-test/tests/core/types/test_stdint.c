@@ -2,8 +2,8 @@
 #include <stdio.h>
 
 int main() {
-    int8_t a;
-    uint8_t b;
+    int_least8_t a;
+    uint_least8_t b;
     int16_t c;
     uint16_t d;
     int32_t e;
@@ -28,8 +28,8 @@ int main() {
     if (f == 80000UL) putchar('Y'); else putchar('N');
 
     if (sizeof(a) == 1) putchar('Y'); else putchar('N');
-    if (sizeof(c) == 2) putchar('Y'); else putchar('N');
-    if (sizeof(e) == 4) putchar('Y'); else putchar('N');
+    if (sizeof(c) == 1) putchar('Y'); else putchar('N');
+    if (sizeof(e) == 2) putchar('Y'); else putchar('N');
 
     if (INT32_MAX == 2147483647L) putchar('Y'); else putchar('N');
     if (UINT32_MAX == 4294967295UL) putchar('Y'); else putchar('N');
@@ -41,11 +41,11 @@ int main() {
     if (g == 4294967296LL) putchar('Y'); else putchar('N');
     h = 1ULL << 40;
     if (h == 1099511627776ULL) putchar('Y'); else putchar('N');
-    if (sizeof(g) == 8) putchar('Y'); else putchar('N');
+    if (sizeof(g) == 4) putchar('Y'); else putchar('N');
     if (INT64_MAX == 9223372036854775807LL) putchar('Y'); else putchar('N');
     if (INT64_C(1) << 32 == 4294967296LL) putchar('Y'); else putchar('N');
 
-    if (SIZE_MAX == 65535U) putchar('Y'); else putchar('N');
+    if (SIZE_MAX == 4294967295UL) putchar('Y'); else putchar('N');
 
     putchar('\n');
     return 0;

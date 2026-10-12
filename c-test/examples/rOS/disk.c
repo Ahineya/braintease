@@ -13,16 +13,16 @@ static uint16_t disk_word_at(uint32_t off) {
     return storage_read_at(block, byte_addr >> 1);
 }
 
-uint8_t disk_read8(uint32_t off) {
+uint_least8_t disk_read8(uint32_t off) {
     uint16_t word;
     uint16_t byte_addr;
 
     word = disk_word_at(off);
     byte_addr = (uint16_t)off;
     if (byte_addr & 1) {
-        return (uint8_t)((word >> 8) & 0xFF);
+        return (uint_least8_t)((word >> 8) & 0xFF);
     }
-    return (uint8_t)(word & 0xFF);
+    return (uint_least8_t)(word & 0xFF);
 }
 
 uint16_t disk_read16(uint32_t off) {
@@ -43,7 +43,7 @@ uint32_t disk_read32(uint32_t off) {
     return lo | (hi << 16);
 }
 
-void disk_read(uint32_t off, uint8_t *buf, uint16_t n) {
+void disk_read(uint32_t off, uint_least8_t *buf, uint16_t n) {
     uint16_t i;
 
     i = 0;
@@ -53,12 +53,14 @@ void disk_read(uint32_t off, uint8_t *buf, uint16_t n) {
     }
 }
 
-void disk_write8(uint32_t off, uint8_t v) {
+void disk_write8(uint32_t off, uint_least8_t v) {
     uint16_t block;
     uint16_t byte_addr;
     uint16_t word_addr;
     uint16_t word;
 
+    /* File bytes remain octets even though C unsigned char is 16 bits. */
+    v = v & 0xFF;
     block = (uint16_t)(off >> 16);
     byte_addr = (uint16_t)off;
     word_addr = byte_addr >> 1;
@@ -72,8 +74,8 @@ void disk_write8(uint32_t off, uint8_t v) {
 }
 
 void disk_write16(uint32_t off, uint16_t v) {
-    disk_write8(off, (uint8_t)(v & 0xFF));
-    disk_write8(off + 1, (uint8_t)((v >> 8) & 0xFF));
+    disk_write8(off, (uint_least8_t)(v & 0xFF));
+    disk_write8(off + 1, (uint_least8_t)((v >> 8) & 0xFF));
 }
 
 void disk_write32(uint32_t off, uint32_t v) {

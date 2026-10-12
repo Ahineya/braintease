@@ -33,6 +33,7 @@ pub fn lower_instruction(
     bank_size: u16,
     vararg_fp_offset: Option<i16>,
 ) -> Result<Vec<AsmInst>, String> {
+    mgr.set_memory_bank_size(bank_size);
     let mut insts = Vec::new();
     
     match instruction {
@@ -61,7 +62,15 @@ pub fn lower_instruction(
         
         Instruction::Unary { result, op, operand, result_type } => {
             debug!("V2: Unary: t{result} = {op:?} {operand:?}");
-            let unary_insts = if result_type.is_i64()
+            let canonical_operand = canonicalize_value(operand, global_manager, mgr, naming)?;
+            let operand = &canonical_operand;
+            let unary_insts = if matches!(op, rcc_frontend::ir::IrUnaryOp::PtrToInt) {
+                crate::instr::pointers::to_integer(mgr, naming, operand, *result)
+            } else if matches!(op, rcc_frontend::ir::IrUnaryOp::PtrToLinear) {
+                crate::instr::pointers::to_linear(mgr, naming, operand, *result, bank_size)
+            } else if matches!(op, rcc_frontend::ir::IrUnaryOp::IntToPtr) {
+                crate::instr::pointers::from_integer(mgr, naming, operand, *result)
+            } else if result_type.is_i64()
                 && matches!(op, rcc_frontend::ir::IrUnaryOp::SExt | rcc_frontend::ir::IrUnaryOp::ZExt)
             {
                 crate::instr::i64::lower_i64_extend(mgr, naming, *op, operand, *result)
@@ -88,12 +97,12 @@ pub fn lower_instruction(
             let load_insts = if let Value::Global(name) = ptr {
                 // Resolve global to fat pointer
                 insts.push(AsmInst::Comment(format!("Canonicalizing global variable: {name}")));
-                let global_ptr = resolve_global_to_fatptr(name, global_manager)?;
+                let global_ptr = resolve_global_to_fatptr(name, global_manager, mgr, naming)?;
                 lower_load(mgr, naming, &global_ptr, result_type, *result)
             } else if let Value::FatPtr(_) = ptr {
                 // Canonicalize to resolve any global references
                 insts.push(AsmInst::Comment(format!("Canonicalizing fat pointer: {ptr:?}")));
-                let canonical_ptr = canonicalize_value(ptr, global_manager)?;
+                let canonical_ptr = canonicalize_value(ptr, global_manager, mgr, naming)?;
                 lower_load(mgr, naming, &canonical_ptr, result_type, *result)
             } else {
                 insts.push(AsmInst::Comment(format!("Canonicalizing pointer: {ptr:?}")));
@@ -106,8 +115,8 @@ pub fn lower_instruction(
             debug!("V2: Store: {value:?} -> {ptr:?}");
 
             // Canonicalize both value and pointer to resolve any global references
-            let canon_value = canonicalize_value(value, global_manager)?;
-            let canon_ptr = canonicalize_value(ptr, global_manager)?;
+            let canon_value = canonicalize_value(value, global_manager, mgr, naming)?;
+            let canon_ptr = canonicalize_value(ptr, global_manager, mgr, naming)?;
 
             // Delegate to store lowering with canonicalized operands
             let store_insts = lower_store(mgr, naming, &canon_value, &canon_ptr, value_type);
@@ -131,9 +140,9 @@ pub fn lower_instruction(
                 } else {
                     // For array indexing and pointer arithmetic,
                     // multiply index by the size of source_element_type
-                    let size = source_element_type.size_in_words()
-                        .and_then(|s| if s > 0 { Some(s as i16) } else { None })
-                        .unwrap_or(1);
+                    let size = source_element_type.size_in_words().unwrap_or(1).max(1);
+                    let size = u32::try_from(size)
+                        .map_err(|_| "Pointer element size exceeds the 32-bit address space".to_string())?;
                     debug!("  GEP is array indexing/pointer arithmetic, element size = {size} words (size of {source_element_type:?})");
                     size
                 }
@@ -143,7 +152,7 @@ pub fn lower_instruction(
             };
             
             // Canonicalize pointer to resolve any global references
-            let canonical_ptr = canonicalize_value(ptr, global_manager)?;
+            let canonical_ptr = canonicalize_value(ptr, global_manager, mgr, naming)?;
             let gep_insts = lower_gep(mgr, naming, &canonical_ptr, indices, element_size, *result, bank_size);
             insts.extend(gep_insts);
         }
@@ -177,6 +186,33 @@ pub fn lower_instruction(
         Instruction::Call { result, function: func, args, result_type, stack_args_from } => {
             debug!("V2: Call: {:?} = call {}({})", result, func, args.len());
             
+            let mut target_regs = Vec::new();
+            let target = match func {
+                Value::Function(name) | Value::Global(name) => CallTarget::Label(name.clone()),
+                _ => {
+                    let ptr = canonicalize_value(func, global_manager, mgr, naming)?;
+                    let id = naming.new_internal_temp();
+                    let (addr, _, code) = crate::instr::helpers::get_pointer_address_and_name(&ptr, mgr, naming, id);
+                    insts.extend(mgr.take_instructions());
+                    insts.extend(code);
+                    mgr.pin_register(addr);
+                    let bank_info = match &ptr {
+                        Value::FatPtr(fp) => crate::instr::helpers::resolve_bank_tag_to_info(&fp.bank, fp, mgr, naming),
+                        Value::Temp(id) => mgr.get_pointer_bank(&naming.temp_name(*id)).ok_or("indirect call lacks code bank")?,
+                        _ => return Err("invalid indirect call target".into()),
+                    };
+                    let (bank, code) = crate::instr::helpers::get_bank_value_for_argument(&bank_info, mgr, naming, "indirect_call");
+                    insts.extend(code);
+                    mgr.pin_register(bank);
+                    target_regs.extend([addr, bank]);
+                    CallTarget::Registers { addr, bank }
+                }
+            };
+            let mut canonical_args = Vec::new();
+            for arg in args { canonical_args.push(canonicalize_value(arg, global_manager, mgr, naming)?); }
+            insts.extend(mgr.take_instructions());
+            let args = &canonical_args;
+
             // Convert IR Values to CallArgs for the calling convention.
             // Register-file args are parked in A0-A3 immediately so later
             // arguments cannot steal those T/S registers (an I64 + pointer
@@ -281,27 +317,6 @@ pub fn lower_instruction(
                                 ));
                                 reg
                             }
-                            Value::Global(name) => {
-                                // Resolve global and extract address
-                                let global_ptr = resolve_global_to_fatptr(name, global_manager)?;
-                                if let Value::FatPtr(resolved) = global_ptr {
-                                    if let Value::Constant(addr) = *resolved.addr {
-                                        let temp_name = naming.const_value(addr);
-                                        let reg = mgr.get_register(temp_name);
-                                        insts.extend(emit_addr_constant(
-                                            reg,
-                                            addr as i16,
-                                            true,
-                                            mgr.gp_base_label(),
-                                        ));
-                                        reg
-                                    } else {
-                                        panic!("Resolved global should have constant address");
-                                    }
-                                } else {
-                                    panic!("resolve_global_to_fatptr should return FatPtr");
-                                }
-                            }
                             _ => panic!("Unsupported fat pointer address type, {:?}", fp.addr),
                         };
                         insts.extend(mgr.take_instructions());
@@ -310,7 +325,13 @@ pub fn lower_instruction(
                         // Use the helper function to resolve bank tag to bank info
                         // This handles all bank types including Mixed properly
                         use crate::instr::helpers::{resolve_bank_tag_to_info, get_bank_value_for_argument};
-                        let bank_info = resolve_bank_tag_to_info(&fp.bank, fp, mgr, naming);
+                        let bank_info = if fp.bank == BankTag::Null {
+                            // Passing NULL is not a dereference. Preserve its
+                            // tag just as when storing a null pointer in memory.
+                            BankInfo::Heap(crate::regmgmt::BankTagValue::NULL as u16)
+                        } else {
+                            resolve_bank_tag_to_info(&fp.bank, fp, mgr, naming)
+                        };
                         
                         // Use the new function that preserves bank tags for arguments
                         let (bank_reg, check_insts) = get_bank_value_for_argument(
@@ -345,12 +366,6 @@ pub fn lower_instruction(
                 }
             }
             
-            // Extract function name for label-based calls
-            let func_name = match func {
-                Value::Function(name) | Value::Global(name) => name.clone(),
-                _ => return Err(format!("V2: Invalid function value for call: {func:?}")),
-            };
-            
             // Prepare the result name if there's a return value
             let result_name = result.map(|id| naming.temp_name(id));
             
@@ -359,7 +374,7 @@ pub fn lower_instruction(
             let call_insts = FunctionBuilder::make_standalone_call(
                 mgr,
                 naming,
-                CallTarget::Label(func_name.clone()),
+                target,
                 call_args,
                 result_type.is_pointer(),
                 result_type.is_wide() || result_type.is_f32(),
@@ -369,6 +384,7 @@ pub fn lower_instruction(
             );
             
             insts.extend(call_insts);
+            for r in target_regs { mgr.unpin_register(r); }
             for r in pinned_stack_regs {
                 mgr.unpin_register(r);
             }
@@ -556,14 +572,14 @@ pub fn lower_instruction(
                     if args.is_empty() {
                         return Err("va_start requires the address of the va_list".to_string());
                     }
-                    let ap_ptr = canonicalize_value(&args[0], global_manager)?;
+                    let ap_ptr = canonicalize_value(&args[0], global_manager, mgr, naming)?;
                     insts.extend(lower_va_start(mgr, naming, &ap_ptr, offset));
                 }
                 "va_arg" => {
                     if args.is_empty() {
                         return Err("va_arg requires the address of the va_list".to_string());
                     }
-                    let ap_ptr = canonicalize_value(&args[0], global_manager)?;
+                    let ap_ptr = canonicalize_value(&args[0], global_manager, mgr, naming)?;
                     let dest = result.ok_or_else(|| "va_arg must produce a result".to_string())?;
                     insts.extend(lower_va_arg(mgr, naming, &ap_ptr, result_type, dest));
                 }

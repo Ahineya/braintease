@@ -67,7 +67,7 @@ mod tests {
         
         // Check that it's an array type
         if let IrType::Array { element_type, size } = &string_globals[0].var_type {
-            assert!(matches!(**element_type, IrType::I8));
+            assert!(matches!(**element_type, IrType::I16));
             assert_eq!(*size, 6); // "Hello" + null terminator
         } else {
             panic!("String literal should be an array type");
@@ -223,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logical_and_converts_operands_to_bool() {
+    fn test_logical_and_short_circuits_and_converts_operands_to_bool() {
         let source = r#"
             int f(char c, int i) {
                 return c && i < 31;
@@ -255,7 +255,18 @@ mod tests {
             }
         }
         assert!(ne_count >= 2, "&& must compare each operand against 0, got {ne_count} ne");
-        assert_eq!(and_count, 1, "&& should AND the two boolean results");
+        assert_eq!(and_count, 0, "&& must not eagerly evaluate both operands with bitwise AND");
+        let function = module.functions.iter().find(|f| f.name == "f").unwrap();
+        let comparison_block = function.blocks.iter().find(|b| {
+            b.instructions.iter().any(|inst| matches!(inst,
+                crate::ir::Instruction::Binary { op: crate::ir::IrBinaryOp::Slt, .. }))
+        }).expect("RHS comparison block");
+        let entry = &function.blocks[0];
+        assert_ne!(entry.id, comparison_block.id, "RHS must not execute in the entry block");
+        assert!(entry.instructions.iter().any(|inst| matches!(inst,
+            crate::ir::Instruction::BranchCond { true_label, false_label, .. }
+                if *true_label == comparison_block.id && *false_label != comparison_block.id)),
+            "RHS must only execute when the LHS is true");
     }
 
     #[test]

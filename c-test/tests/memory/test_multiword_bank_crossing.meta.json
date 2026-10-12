@@ -1,0 +1,5 @@
+{
+  "expected": "Y\n",
+  "use_runtime": false,
+  "description": "Store and load long, long long and pointer objects that straddle a bank boundary"
+}

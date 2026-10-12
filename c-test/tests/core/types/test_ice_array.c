@@ -11,7 +11,7 @@ int main() {
     }
     if (a[0] == 1 && a[1] == 2 && a[2] == 3) putchar('Y'); else putchar('N');
 
-    if (sizeof(b) == 8) putchar('Y'); else putchar('N');
+    if (sizeof(b) == 2) putchar('Y'); else putchar('N');
 
     if (d[2] == 7 && d[0] == 0) putchar('Y'); else putchar('N');
     putchar('\n');

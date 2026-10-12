@@ -132,6 +132,6 @@ mod tests {
             ),
             expr_type: None,
         };
-        assert_eq!(eval_integer_constant(&expr).unwrap(), 2);
+        assert_eq!(eval_integer_constant(&expr).unwrap(), 1);
     }
 }

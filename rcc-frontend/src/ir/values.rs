@@ -28,6 +28,9 @@ pub enum Value {
     
     /// Array of constant values (for initializers)
     ConstantArray(Vec<i64>),
+
+    /// Typed aggregate initializer; preserves pointers and multiword scalars.
+    ConstantAggregate(Vec<Value>),
     
     /// Undefined value (for uninitialized variables)
     Undef,
@@ -41,6 +44,14 @@ impl fmt::Display for Value {
             Value::Global(name) => write!(f, "@{name}"),
             Value::Function(name) => write!(f, "@{name}"),
             Value::FatPtr(ptr) => write!(f, "{{addr: {}, bank: {:?}}}", ptr.addr, ptr.bank),
+            Value::ConstantAggregate(values) => {
+                write!(f, "{{")?;
+                for (i, value) in values.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{value}")?;
+                }
+                write!(f, "}}")
+            }
             Value::ConstantArray(values) => {
                 write!(f, "[")?;
                 for (i, val) in values.iter().enumerate() {

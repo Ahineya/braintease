@@ -3,7 +3,7 @@
 //! This module is responsible for lowering IR modules to assembly,
 //! including global variable initialization and function lowering.
 
-use rcc_frontend::ir::Module;
+use rcc_frontend::ir::{Module, Linkage, Instruction, Value};
 use rcc_codegen::AsmInst;
 use log::{debug, info};
 use crate::globals::GlobalManager;
@@ -20,6 +20,12 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
     let mut global_manager = GlobalManager::with_module(&module.name);
     
     // First pass: allocate addresses for all globals
+    let total_words: u64 = module.globals.iter()
+        .filter(|g| g.linkage != Linkage::Declaration)
+        .map(|g| g.var_type.size_in_words().unwrap_or(1)).sum();
+    if total_words > bank_size as u64 {
+        return Err(format!("global storage needs {total_words} cells, exceeds one data bank ({bank_size}); split or dynamically allocate these objects"));
+    }
     for global in &module.globals {
         global_manager.allocate_global(global);
     }
@@ -28,42 +34,18 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
     // across separately compiled objects instead of every object starting at 0.
     all_instructions.extend(global_manager.emit_data_section());
     
-    // Check if this module has a main function (indicating it's the main module)
-    let has_main = module.functions.iter().any(|f| f.name == "main");
-    
-    // Only generate _init_globals for the main module
-    // This avoids duplicate labels when linking multiple object files
-    if has_main {
-        all_instructions.push(AsmInst::Label("_init_globals".to_string()));
-        
-        // Generate initialization code for each global
-        if !module.globals.is_empty() {
-            info!("V2: Initializing {} globals", module.globals.len());
-            
-            for global in &module.globals {
-                debug!("Processing global '{}' with initializer: {:?}", global.name, global.initializer);
-                if let Some(info) = global_manager.get_global_info(&global.name) {
-                    let global_insts = global_manager.lower_global_init(global, info);
-                    all_instructions.extend(global_insts);
-                }
-            }
-        }
-        
-        all_instructions.push(AsmInst::Ret);
-    } else if !module.globals.is_empty() {
-        // For library modules, still allocate space but don't generate init code
-        info!("V2: Library module with {} globals (no _init_globals generated)", module.globals.len());
-        
-        // We still need to generate comments for globals so they can be referenced
+    // Each object contributes an initializer; the linker constructs the dispatcher.
+    if module.globals.iter().any(|g| g.linkage != Linkage::Declaration) {
+        all_instructions.push(AsmInst::Label(format!("__rcc_init_{}", global_manager.unit_tag())));
         for global in &module.globals {
+            if global.linkage == Linkage::Declaration { continue; }
             if let Some(info) = global_manager.get_global_info(&global.name) {
-                all_instructions.push(AsmInst::Comment(format!("Global '{}' at address {}", 
-                                                               global.name, info.address)));
+                all_instructions.extend(global_manager.lower_global_init(global, info));
             }
-            // The actual initialization will be done by the main module's _init_globals
         }
+        all_instructions.push(AsmInst::Ret);
     }
-    
+
     // Lower each function
     for function in &module.functions {
         if function.is_external {
@@ -73,6 +55,31 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
         
         debug!("V2: Lowering function '{}'", function.name);
         
+        // The frame allocator uses signed 16-bit FP offsets. Validate before
+        // narrowing sizes or adding offsets, rather than wrapping large arrays.
+        let mut local_cells = 0u64;
+        for instruction in function.blocks.iter().flat_map(|block| &block.instructions) {
+            if let Instruction::Alloca { alloc_type, count, .. } = instruction {
+                let elements = match count {
+                    Some(Value::Constant(n)) => u64::try_from(*n)
+                        .map_err(|_| format!("function '{}' has a negative local allocation size", function.name))?,
+                    _ => 1,
+                };
+                let cells = alloc_type.size_in_words().unwrap_or(1).checked_mul(elements)
+                    .ok_or_else(|| format!("function '{}' local allocation size overflow", function.name))?;
+                local_cells = local_cells.checked_add(cells)
+                    .ok_or_else(|| format!("function '{}' local allocation size overflow", function.name))?;
+            }
+        }
+        // Eight local scratch cells, twenty initial spill cells, seven saved
+        // registers; SP starts at one. Later lowering checks actual spill use.
+        let minimum_frame = local_cells.checked_add(8 + 20 + 7)
+            .ok_or_else(|| format!("function '{}' local frame size overflow", function.name))?;
+        let frame_limit = u64::from(bank_size.saturating_sub(1)).min(i16::MAX as u64);
+        if minimum_frame > frame_limit {
+            return Err(format!("function '{}' local frame needs at least {minimum_frame} cells, exceeds stack frame capacity {frame_limit}", function.name));
+        }
+
         // Calculate the number of local slots needed for this function
         // This is critical for proper spill slot allocation - the RegisterPressureManager
         // needs to know where locals end so it can place spill slots after them (FP + local_slots + spill_index)
@@ -90,6 +97,27 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
         all_instructions.extend(function_asm);
     }
     
+    // Internal C linkage is object-local even when different files use the same names.
+    let mut internal = module.internal_functions.clone();
+    internal.extend(module.globals.iter().filter(|g| matches!(g.linkage, Linkage::Internal | Linkage::Private)).map(|g| g.name.clone()));
+    for inst in &mut all_instructions {
+        let label = match inst {
+            AsmInst::Label(s) | AsmInst::Call(s) | AsmInst::LiLabel(_, s)
+            | AsmInst::Beq(_, _, s) | AsmInst::Bne(_, _, s)
+            | AsmInst::Blt(_, _, s) | AsmInst::Bge(_, _, s) => s,
+            _ => continue,
+        };
+        for name in &internal {
+            let unique = format!("__rcc_local_{}_{}", global_manager.unit_tag(), name);
+            if *label == *name { *label = unique; break; }
+            if *label == format!("%offset({name})") { *label = format!("%offset({unique})"); break; }
+            if *label == format!("%bank({name})") { *label = format!("%bank({unique})"); break; }
+            let block_prefix = format!("L_{name}_");
+            if let Some(tail) = label.strip_prefix(&block_prefix) {
+                *label = format!("L_{unique}_{tail}"); break;
+            }
+        }
+    }
     info!("V2: Module lowering complete, generated {} instructions", all_instructions.len());
     Ok(all_instructions)
 }

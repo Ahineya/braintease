@@ -7,48 +7,28 @@ use crate::types::Type;
 use crate::codegen::CodegenError;
 use crate::CompilerError;
 
-/// Get size in bytes for C sizeof operator
-/// This is ONLY for C sizeof compatibility - Ripple VM is word-addressed
-/// so all actual memory operations use size_in_words()
-fn size_in_bytes(ty: &Type) -> u64 {
-    match ty {
-        Type::Void => 0,
-        Type::Bool => 1,
-        Type::Char | Type::SignedChar | Type::UnsignedChar => 1,
-        Type::Short | Type::UnsignedShort => 2,
-        Type::Int | Type::UnsignedInt => 2,  // 16-bit int
-        Type::Long | Type::UnsignedLong => 4, // 32-bit long
-        Type::LongLong | Type::UnsignedLongLong => 8,
-        Type::Float => 4,
-        Type::Double => 8,
-        Type::Pointer { .. } => 4, // Fat pointer: 2 words = 4 bytes
-        Type::Array { element_type, size } => {
-            size.map(|s| s * size_in_bytes(element_type)).unwrap_or(0)
-        }
-        Type::Struct { .. } | Type::Union { .. } => {
-            // Structs/unions: words * 2
-            ty.size_in_words().unwrap_or(0) * 2
-        }
-        _ => 0,
-    }
+/// Produce a size_t value in C bytes (16-bit addressable cells).
+/// Materialize the 32-bit result so calls and assignments retain both words.
+fn generate_sizeof(gen: &mut TypedExpressionGenerator, ty: &Type) -> Result<Value, CompilerError> {
+    let size = ty.size_in_bytes().ok_or_else(|| CodegenError::InvalidType {
+        ast_type: ty.clone(),
+        location: rcc_common::SourceLocation::new_simple(0, 0),
+    })?;
+    super::conversions::materialize_wide(gen, Value::Constant(size as i64), &Type::UnsignedLong)
 }
 
 pub fn generate_sizeof_expr(
-    _gen: &mut TypedExpressionGenerator,
+    gen: &mut TypedExpressionGenerator,
     operand: &TypedExpr,
 ) -> Result<Value, CompilerError> {
-    // sizeof returns size in bytes for C compatibility
-    let size = size_in_bytes(operand.get_type());
-    Ok(Value::Constant(size as i64))
+    generate_sizeof(gen, operand.get_type())
 }
 
 pub fn generate_sizeof_type(
-    _gen: &mut TypedExpressionGenerator,
+    gen: &mut TypedExpressionGenerator,
     target_type: &Type,
 ) -> Result<Value, CompilerError> {
-    // sizeof returns size in bytes for C compatibility
-    let size = size_in_bytes(target_type);
-    Ok(Value::Constant(size as i64))
+    generate_sizeof(gen, target_type)
 }
 
 pub fn generate_array_initializer(

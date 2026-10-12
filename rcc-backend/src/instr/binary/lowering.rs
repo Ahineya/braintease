@@ -5,7 +5,7 @@ use rcc_common::TempId;
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::NameGenerator;
 use rcc_codegen::AsmInst;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 
 use crate::instr::helpers::get_value_register;
 use super::{
@@ -13,6 +13,7 @@ use super::{
     generate_arithmetic_instruction, generate_comparison_instructions
 };
 use super::comparison::is_comparison;
+use super::arithmetic::generate_signed_arithmetic_instructions;
 
 /// Lower a binary operation to assembly instructions
 /// 
@@ -134,7 +135,11 @@ pub fn lower_binary_op(
     }
     
     // For arithmetic operations
-    if let Some(inst) = generate_arithmetic_instruction(op, result_reg, lhs_reg, rhs_reg, should_swap) {
+    if matches!(op, IrBinaryOp::SDiv | IrBinaryOp::SRem | IrBinaryOp::AShr) {
+        insts.extend(generate_signed_arithmetic_instructions(
+            mgr, naming, op, result_reg, lhs_reg, rhs_reg,
+        ));
+    } else if let Some(inst) = generate_arithmetic_instruction(op, result_reg, lhs_reg, rhs_reg, should_swap) {
         trace!("  Generated instruction: {inst:?}");
         insts.push(inst);
     } else {
@@ -177,6 +182,12 @@ pub fn lower_binary_op_immediate(
     result_temp: TempId,
 ) -> Vec<AsmInst> {
     debug!("lower_binary_op_immediate: op={op:?}, lhs={lhs:?}, rhs={rhs_const}, result=t{result_temp}");
+
+    // These operations require a sequence of instructions. Delegate before
+    // allocating anything, so any spill/reload instructions remain intact.
+    if is_comparison(op) || matches!(op, IrBinaryOp::SDiv | IrBinaryOp::SRem | IrBinaryOp::AShr) {
+        return lower_binary_op(mgr, naming, op, lhs, &Value::Constant(rhs_const as i64), result_temp);
+    }
     
     let mut insts = vec![];
     let result_name = naming.temp_name(result_temp);
@@ -189,6 +200,7 @@ pub fn lower_binary_op_immediate(
     // Allocate result register (can often reuse lhs)
     let result_reg = mgr.get_register(result_name);
     insts.extend(mgr.take_instructions());
+    mgr.pin_register(result_reg);
     
     // Handle operations with immediate values
     match op {
@@ -199,31 +211,17 @@ pub fn lower_binary_op_immediate(
         }
         IrBinaryOp::Sub => {
             // SubI doesn't exist, use AddI with negative value
-            insts.push(AsmInst::AddI(result_reg, lhs_reg, -rhs_const));
+            insts.push(AsmInst::AddI(result_reg, lhs_reg, rhs_const.wrapping_neg()));
             trace!("  Generated ADDI with negated immediate for SUB");
         }
         IrBinaryOp::Mul => {
             insts.push(AsmInst::MulI(result_reg, lhs_reg, rhs_const));
             trace!("  Generated MULI instruction");
         }
-        IrBinaryOp::SDiv => {
-            // VM DIVI is unsigned, need to handle signs for signed division
-            warn!("  SDiv with immediate not fully implemented - using unsigned division");
-            warn!("  This will produce incorrect results for negative numbers!");
-            insts.push(AsmInst::DivI(result_reg, lhs_reg, rhs_const));
-            trace!("  Generated DIVI instruction (unsigned)");
-        }
         IrBinaryOp::UDiv => {
             // VM DIVI is unsigned - direct mapping
             insts.push(AsmInst::DivI(result_reg, lhs_reg, rhs_const));
             trace!("  Generated DIVI instruction");
-        }
-        IrBinaryOp::SRem => {
-            // VM MODI is unsigned, need to handle signs for signed remainder
-            warn!("  SRem with immediate not fully implemented - using unsigned modulo");
-            warn!("  This will produce incorrect results for negative numbers!");
-            insts.push(AsmInst::ModI(result_reg, lhs_reg, rhs_const));
-            trace!("  Generated MODI instruction (unsigned)");
         }
         IrBinaryOp::URem => {
             // VM MODI is unsigned - direct mapping
@@ -249,7 +247,7 @@ pub fn lower_binary_op_immediate(
             trace!("  Generated {op:?} with loaded immediate");
         }
         
-        IrBinaryOp::Shl | IrBinaryOp::LShr | IrBinaryOp::AShr => {
+        IrBinaryOp::Shl | IrBinaryOp::LShr => {
             debug!("  No immediate form for shift, loading constant into register");
             let rhs_reg = mgr.get_register(naming.imm_value(rhs_const));
             insts.extend(mgr.take_instructions());
@@ -257,10 +255,7 @@ pub fn lower_binary_op_immediate(
             
             match op {
                 IrBinaryOp::Shl => insts.push(AsmInst::Sll(result_reg, lhs_reg, rhs_reg)),
-                IrBinaryOp::LShr | IrBinaryOp::AShr => {
-                    if matches!(op, IrBinaryOp::AShr) {
-                        warn!("  AShr treated as logical shift right");
-                    }
+                IrBinaryOp::LShr => {
                     insts.push(AsmInst::Srl(result_reg, lhs_reg, rhs_reg));
                 }
                 _ => unreachable!(),
@@ -270,22 +265,17 @@ pub fn lower_binary_op_immediate(
             trace!("  Generated shift with loaded immediate");
         }
         
-        // Comparison operations - delegate to main binary op handler
+        // Delegated above before allocating registers.
+        IrBinaryOp::SDiv | IrBinaryOp::SRem | IrBinaryOp::AShr |
         IrBinaryOp::Eq | IrBinaryOp::Ne | 
         IrBinaryOp::Slt | IrBinaryOp::Sle | IrBinaryOp::Sgt | IrBinaryOp::Sge |
         IrBinaryOp::Ult | IrBinaryOp::Ule | IrBinaryOp::Ugt | IrBinaryOp::Uge => {
-            debug!("  Comparison with immediate - using general binary op handler");
-            mgr.unpin_register(lhs_reg);
-            // Free the registers we've allocated since lower_binary_op will reallocate
-            mgr.free_register(lhs_reg);
-            mgr.free_register(result_reg);
-            
-            let rhs_val = Value::Constant(rhs_const as i64);
-            return lower_binary_op(mgr, naming, op, lhs, &rhs_val, result_temp);
+            unreachable!();
         }
     }
 
     mgr.unpin_register(lhs_reg);
+    mgr.unpin_register(result_reg);
     
     // Free lhs register if not reused
     if result_reg != lhs_reg {

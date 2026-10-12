@@ -35,3 +35,5 @@ electron-dist
 public/downloads
 
 c-test/vendor/result.txt
+# Runtime build configuration stamp
+/runtime/.bank-size

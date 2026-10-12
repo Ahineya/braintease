@@ -9,17 +9,10 @@ use crate::types::Type;
 use crate::codegen::CodegenError;
 use crate::CompilerError;
 
-/// C usual arithmetic conversions on this 16-bit target: if either operand is
-/// unsigned, the operation is unsigned. Comparison result type is always `int`,
-/// so signedness must come from the operands, not `result_type`.
-fn operands_are_unsigned(left: &TypedExpr, right: &TypedExpr) -> bool {
-    left.get_type().is_unsigned_integer() || right.get_type().is_unsigned_integer()
-}
-
-fn select_ir_op(op: BinaryOp, left: &TypedExpr, right: &TypedExpr) -> Result<IrBinaryOp, CompilerError> {
-    let unsigned = operands_are_unsigned(left, right);
-    // Right shift signedness follows the (promoted) left operand only.
-    let left_unsigned = left.get_type().is_unsigned_integer();
+/// Signedness follows the converted operation type. For example, signed long
+/// can represent every unsigned int, so `long / unsigned int` is signed.
+fn select_ir_op(op: BinaryOp, common: &Type) -> Result<IrBinaryOp, CompilerError> {
+    let unsigned = common.is_unsigned_integer();
 
     match op {
         BinaryOp::Add => Ok(IrBinaryOp::Add),
@@ -31,7 +24,7 @@ fn select_ir_op(op: BinaryOp, left: &TypedExpr, right: &TypedExpr) -> Result<IrB
         BinaryOp::BitOr => Ok(IrBinaryOp::Or),
         BinaryOp::BitXor => Ok(IrBinaryOp::Xor),
         BinaryOp::LeftShift => Ok(IrBinaryOp::Shl),
-        BinaryOp::RightShift => Ok(if left_unsigned { IrBinaryOp::LShr } else { IrBinaryOp::AShr }),
+        BinaryOp::RightShift => Ok(if unsigned { IrBinaryOp::LShr } else { IrBinaryOp::AShr }),
         BinaryOp::Less => Ok(if unsigned { IrBinaryOp::Ult } else { IrBinaryOp::Slt }),
         BinaryOp::Greater => Ok(if unsigned { IrBinaryOp::Ugt } else { IrBinaryOp::Sgt }),
         BinaryOp::LessEqual => Ok(if unsigned { IrBinaryOp::Ule } else { IrBinaryOp::Sle }),
@@ -134,7 +127,7 @@ pub fn generate_binary_operation(
     op: BinaryOp,
     left: &TypedExpr,
     right: &TypedExpr,
-    result_type: &Type,
+    _result_type: &Type,
 ) -> Result<Value, CompilerError> {
     if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
         return generate_logical_operation(gen, op, left, right);
@@ -147,20 +140,13 @@ pub fn generate_binary_operation(
 
     let left_val = gen.generate(left)?;
     let right_val = gen.generate(right)?;
-    let is_cmp = matches!(
-        op,
-        BinaryOp::Less | BinaryOp::Greater | BinaryOp::LessEqual | BinaryOp::GreaterEqual
-            | BinaryOp::Equal | BinaryOp::NotEqual
-    );
     let is_shift = matches!(op, BinaryOp::LeftShift | BinaryOp::RightShift);
-    let common = if is_cmp {
-        usual_arithmetic_type(left.get_type(), right.get_type())
-    } else if is_shift {
+    let common = if is_shift {
         // C99 6.5.7: result type is the promoted left operand; the count is not
         // converted to that type.
-        result_type.clone()
+        left.get_type().integer_promoted()
     } else {
-        result_type.clone()
+        usual_arithmetic_type(left.get_type(), right.get_type())
     };
 
     if common.is_floating() {
@@ -177,7 +163,7 @@ pub fn generate_binary_operation(
     };
     let ir_type = convert_type_default(&common)?;
     
-    let ir_op = select_ir_op(op, left, right)?;
+    let ir_op = select_ir_op(op, &common)?;
     
     let result = gen
         .builder
@@ -203,8 +189,14 @@ pub fn generate_compound_assignment(
     let lhs_ty = lhs.get_type();
     let rhs_ty = rhs.get_type();
 
-    if lhs_ty.is_floating() {
-        let common = usual_arithmetic_type(lhs_ty, rhs_ty);
+    let is_shift = matches!(op, BinaryOp::LeftShiftAssign | BinaryOp::RightShiftAssign);
+    let common = if is_shift {
+        lhs_ty.integer_promoted()
+    } else {
+        usual_arithmetic_type(lhs_ty, rhs_ty)
+    };
+
+    if common.is_floating() {
         let rhs_val = convert_value(gen, rhs_val, rhs_ty, &common)?;
         let lhs_for_op = convert_value(gen, lhs_val, lhs_ty, &common)?;
         let result = emit_float_binop(gen, op, lhs_for_op, rhs_val, &common)?;
@@ -214,11 +206,15 @@ pub fn generate_compound_assignment(
         return Ok(result);
     }
 
-    let rhs_val = convert_integer(gen, rhs_val, rhs.get_type(), lhs.get_type())?;
+    let lhs_val = convert_integer(gen, lhs_val, lhs_ty, &common)?;
+    let rhs_val = if is_shift {
+        rhs_val
+    } else {
+        convert_integer(gen, rhs_val, rhs_ty, &common)?
+    };
     
-    let ir_type = convert_type_default(lhs.get_type())?;
-    let unsigned = lhs.get_type().is_unsigned_integer() || rhs.get_type().is_unsigned_integer();
-    let left_unsigned = lhs.get_type().is_unsigned_integer();
+    let ir_type = convert_type_default(&common)?;
+    let unsigned = common.is_unsigned_integer();
     
     let ir_op = match op {
         BinaryOp::AddAssign => IrBinaryOp::Add,
@@ -230,7 +226,7 @@ pub fn generate_compound_assignment(
         BinaryOp::BitOrAssign => IrBinaryOp::Or,
         BinaryOp::BitXorAssign => IrBinaryOp::Xor,
         BinaryOp::LeftShiftAssign => IrBinaryOp::Shl,
-        BinaryOp::RightShiftAssign => if left_unsigned { IrBinaryOp::LShr } else { IrBinaryOp::AShr },
+        BinaryOp::RightShiftAssign => if unsigned { IrBinaryOp::LShr } else { IrBinaryOp::AShr },
         _ => {
             return Err(CodegenError::UnsupportedConstruct {
                 construct: format!("compound assignment: {op:?}"),
@@ -242,8 +238,9 @@ pub fn generate_compound_assignment(
     
     let result = gen
         .builder
-        .build_binary(ir_op, lhs_val, rhs_val, ir_type.clone())?;
-    gen.builder.build_store(Value::Temp(result), lhs_addr, ir_type)?;
+        .build_binary(ir_op, lhs_val, rhs_val, ir_type)?;
+    let result = convert_integer(gen, Value::Temp(result), &common, lhs_ty)?;
+    gen.builder.build_store(result.clone(), lhs_addr, convert_type_default(lhs_ty)?)?;
     
-    Ok(Value::Temp(result))
+    Ok(result)
 }

@@ -14,11 +14,11 @@ int main() {
     // Print sizes as digits (for simple testing)
     putchar('0' + size_char);  // Should be 1
     putchar(' ');
-    putchar('0' + size_int);   // Should be 2
+    putchar('0' + size_int);   // Should be 1
     putchar(' ');
-    putchar('0' + size_ptr);   // Should be 4
+    putchar('0' + size_ptr);   // Should be 2
     putchar(' ');
-    putchar('0' + size_arr);   // Should be 6 (3 * 2)
+    putchar('0' + size_arr);   // Should be 3 (3 * 1)
     putchar('\n');
     
     return 0;

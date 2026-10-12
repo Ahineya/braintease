@@ -14,7 +14,7 @@ int main() {
     // Test 2: int size  
     putchar('2');
     putchar(':');
-    if (sizeof(int) == 2)
+    if (sizeof(int) == 1)
         putchar('Y');
     else
         putchar('N');
@@ -24,7 +24,7 @@ int main() {
     int arr[5];
     putchar('3');
     putchar(':');
-    if (sizeof(arr) == 10)
+    if (sizeof(arr) == 5)
         putchar('Y');
     else
         putchar('N');

@@ -610,7 +610,7 @@ pub fn type_expression(
             
             Ok(TypedExpr::SizeofExpr {
                 operand: Box::new(operand_typed),
-                expr_type: Type::UnsignedInt,
+                expr_type: Type::UnsignedLong,
             })
         }
         
@@ -619,7 +619,7 @@ pub fn type_expression(
             let resolved_target = type_env.type_analyzer.borrow().resolve_type(target_type);
             Ok(TypedExpr::SizeofType {
                 target_type: resolved_target,
-                expr_type: Type::UnsignedInt,
+                expr_type: Type::UnsignedLong,
             })
         }
         
@@ -1024,6 +1024,7 @@ pub fn type_translation_unit(
                     return_type: resolved_return_type,
                     parameters: resolved_parameters,
                     is_variadic: func.is_variadic,
+                    storage_class: func.storage_class,
                     body: typed_body,
                 };
                 
@@ -1058,6 +1059,7 @@ pub fn type_translation_unit(
                         name: decl.name.clone(),
                         var_type: resolved_type,
                         initializer: init,
+                        storage_class: decl.storage_class,
                     });
                 }
             }

@@ -55,10 +55,10 @@ void fat16_canon83(const char *in, char out11[11]) {
     }
 }
 
-void fat16_format83(const uint8_t raw11[11], char out13[13]) {
+void fat16_format83(const uint_least8_t raw11[11], char out13[13]) {
     int i;
     int o;
-    uint8_t c;
+    uint_least8_t c;
 
     o = 0;
     i = 0;
@@ -88,7 +88,7 @@ void fat16_format83(const uint8_t raw11[11], char out13[13]) {
     out13[o] = 0;
 }
 
-int fat16_name_eq(const uint8_t raw11[11], const char *user) {
+int fat16_name_eq(const uint_least8_t raw11[11], const char *user) {
     char canon[11];
     int i;
 
@@ -136,7 +136,7 @@ int fat16_mount(Fat16Fs *fs) {
     uint32_t root_off;
     uint32_t data_off;
     int i;
-    uint8_t c;
+    uint_least8_t c;
 
     bps = disk_read16(11);
     spc = disk_read8(13);
@@ -225,7 +225,7 @@ int fat16_dir_open(Fat16Fs *fs, uint16_t dir_cluster, Fat16Dir *dir) {
 }
 
 static void fill_dirent(uint32_t off, Fat16DirEnt *ent) {
-    uint8_t raw[11];
+    uint_least8_t raw[11];
     int i;
 
     i = 0;
@@ -241,8 +241,8 @@ static void fill_dirent(uint32_t off, Fat16DirEnt *ent) {
 
 int fat16_dir_next(Fat16Fs *fs, Fat16Dir *dir, Fat16DirEnt *ent) {
     uint32_t off;
-    uint8_t first;
-    uint8_t attr;
+    uint_least8_t first;
+    uint_least8_t attr;
     uint16_t per;
     uint16_t next;
 
@@ -402,7 +402,7 @@ int fat16_resolve(Fat16Fs *fs, uint16_t start_cluster, const char *path, Fat16Di
 }
 
 int fat16_read_at(Fat16Fs *fs, uint16_t cluster, uint32_t size,
-                  uint32_t offset, uint8_t *buf, uint16_t len) {
+                  uint32_t offset, uint_least8_t *buf, uint16_t len) {
     uint32_t remain;
     uint16_t clus;
     uint32_t skip;

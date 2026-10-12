@@ -16,6 +16,9 @@ pub fn generate_unary_operation(
 ) -> Result<Value, CompilerError> {
     match op {
         UnaryOp::AddressOf => {
+            if matches!(operand.get_type(), Type::Function { .. }) {
+                return gen.generate(operand);
+            }
             // For address-of, we need to get the lvalue address
             generate_lvalue_address(gen, operand)
         }
@@ -26,7 +29,7 @@ pub fn generate_unary_operation(
             
             // Arrays decay to pointers. Aggregates are used as pointers
             // (assignment, member access, byval args) so do not load them.
-            if matches!(result_type, Type::Array { .. }) || result_type.is_aggregate() {
+            if matches!(result_type, Type::Array { .. } | Type::Function { .. }) || result_type.is_aggregate() {
                 Ok(ptr)
             } else {
                 // Regular dereference - load the value
@@ -73,15 +76,8 @@ pub fn generate_unary_operation(
             // For pointers, we need to use GEP to preserve bank information
             let new_value = if is_pointer {
                 // Load creates a temp, wrap it in FatPtr for pointer arithmetic
-                // Get the bank from the original address
-                let bank = match &addr {
-                    Value::FatPtr(fp) => fp.bank,
-                    // If addr is not a FatPtr, something is wrong - all addresses should be FatPtrs
-                    _ => return Err(CodegenError::InternalError {
-                        message: format!("Address is not a FatPtr: {:?}", addr),
-                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                    }.into()),
-                };
+                // A loaded pointer carries its own bank; its storage may be elsewhere.
+                let bank = BankTag::Mixed;
                 
                 let current_ptr = Value::FatPtr(FatPointer {
                     addr: Box::new(Value::Temp(current_val)),
@@ -92,13 +88,7 @@ pub fn generate_unary_operation(
                 let offset = if matches!(op, UnaryOp::PreIncrement) {
                     amount
                 } else {
-                    // Negate for decrement
-                    Value::Temp(gen.builder.build_binary(
-                        IrBinaryOp::Sub,
-                        Value::Constant(0),
-                        amount,
-                        IrType::I16
-                    )?)
+                    Value::Constant(-1)
                 };
                 
                 {
@@ -146,15 +136,8 @@ pub fn generate_unary_operation(
             // 3. Save the old value to return later
             let saved_old = if is_pointer {
                 // For pointers, wrap in FatPtr to preserve bank info
-                // Get the bank from the original address
-                let bank = match &addr {
-                    Value::FatPtr(fp) => fp.bank,
-                    // If addr is not a FatPtr, something is wrong - all addresses should be FatPtrs
-                    _ => return Err(CodegenError::InternalError {
-                        message: format!("Address is not a FatPtr: {:?}", addr),
-                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                    }.into()),
-                };
+                // A loaded pointer carries its own bank; its storage may be elsewhere.
+                let bank = BankTag::Mixed;
                 
                 Value::FatPtr(FatPointer {
                     addr: Box::new(Value::Temp(old_value)),
@@ -187,15 +170,8 @@ pub fn generate_unary_operation(
             // 6. Perform the increment/decrement
             let new_value = if is_pointer {
                 // For pointers, use GEP to preserve bank information
-                // Get the bank from the original address
-                let bank = match &addr {
-                    Value::FatPtr(fp) => fp.bank,
-                    // If addr is not a FatPtr, something is wrong - all addresses should be FatPtrs
-                    _ => return Err(CodegenError::InternalError {
-                        message: format!("Address is not a FatPtr: {:?}", addr),
-                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                    }.into()),
-                };
+                // A loaded pointer carries its own bank; its storage may be elsewhere.
+                let bank = BankTag::Mixed;
                 
                 let current_ptr = Value::FatPtr(FatPointer {
                     addr: Box::new(Value::Temp(current)),
@@ -206,13 +182,7 @@ pub fn generate_unary_operation(
                 let offset = if matches!(op, UnaryOp::PostIncrement) {
                     amount
                 } else {
-                    // Negate for decrement
-                    Value::Temp(gen.builder.build_binary(
-                        IrBinaryOp::Sub,
-                        Value::Constant(0),
-                        amount,
-                        IrType::I16
-                    )?)
+                    Value::Constant(-1)
                 };
                 
                 gen.builder.build_pointer_offset(current_ptr, offset, ir_type.clone())?
@@ -299,6 +269,7 @@ pub fn generate_unary_operation(
                 IrUnaryOp::ZExt
                 | IrUnaryOp::SExt
                 | IrUnaryOp::Trunc
+                | IrUnaryOp::PtrToLinear
                 | IrUnaryOp::PtrToInt
                 | IrUnaryOp::IntToPtr => {
                     return Err(CodegenError::UnsupportedConstruct {
@@ -338,7 +309,12 @@ pub fn generate_lvalue_address(
         } => {
             // For array indexing lvalue, generate GEP
             let array_val = gen.generate(array)?;
-            let index_val = gen.generate(index)?;
+            let raw_index = gen.generate(index)?;
+            let index_val = if matches!(raw_index, Value::Constant(_)) {
+                raw_index
+            } else {
+                super::conversions::convert_integer(gen, raw_index, index.get_type(), &Type::Long)?
+            };
             
             let elem_ptr_type = convert_type_default(&Type::Pointer {
                 target: Box::new(elem_type.clone()),

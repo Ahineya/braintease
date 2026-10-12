@@ -62,6 +62,7 @@ pub enum IrUnaryOp {
     ZExt,    // Zero extend
     SExt,    // Sign extend
     Trunc,   // Truncate
+    PtrToLinear, // Linear cell address, for bank-aware pointer subtraction
     PtrToInt, // Pointer to integer cast
     IntToPtr, // Integer to pointer cast
 }
@@ -74,6 +75,7 @@ impl fmt::Display for IrUnaryOp {
             IrUnaryOp::ZExt => "zext",
             IrUnaryOp::SExt => "sext",
             IrUnaryOp::Trunc => "trunc",
+            IrUnaryOp::PtrToLinear => "ptrtolinear",
             IrUnaryOp::PtrToInt => "ptrtoint",
             IrUnaryOp::IntToPtr => "inttoptr",
         };

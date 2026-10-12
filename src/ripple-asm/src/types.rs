@@ -499,6 +499,8 @@ pub struct PendingReference {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReferenceType {
+    CodeBank,
+    CodeOffset,
     Branch,
     Absolute,
     Data,

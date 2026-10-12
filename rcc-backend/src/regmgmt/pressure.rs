@@ -101,6 +101,7 @@ pub struct RegisterPressureManager {
 
     /// Linker-relocatable base of this TU's GP data (None if the TU has no globals).
     gp_base_label: Option<String>,
+    memory_bank_size: u16,
 }
 
 impl RegisterPressureManager {
@@ -131,6 +132,7 @@ impl RegisterPressureManager {
             fp64: std::collections::BTreeSet::new(),
             pinned_registers: std::collections::BTreeMap::new(),
             gp_base_label: None,
+            memory_bank_size: 64000,
         }
     }
     
@@ -142,6 +144,15 @@ impl RegisterPressureManager {
         // Take any initialization instructions from the allocator
         self.instructions.extend(self.allocator.take_instructions());
         trace!("  R13 initialized, spill base set to FP+{}", self.local_count);
+    }
+
+    pub fn set_memory_bank_size(&mut self, bank_size: u16) {
+        assert_ne!(bank_size, 0, "memory bank size must be nonzero");
+        self.memory_bank_size = bank_size;
+    }
+
+    pub fn memory_bank_size(&self) -> u16 {
+        self.memory_bank_size
     }
 
     /// Prevent `reg` from being reused as a spill victim until `unpin_register`.
@@ -319,7 +330,7 @@ impl RegisterPressureManager {
                 // Fat pointers need 2 registers
                 RegisterNeed { count: 2, is_leaf: false }
             }
-            Value::ConstantArray(_) => {
+            Value::ConstantArray(_) | Value::ConstantAggregate(_) => {
                 // Constant arrays are initialized separately, not loaded into registers
                 RegisterNeed { count: 0, is_leaf: true }
             }
@@ -730,6 +741,10 @@ impl RegisterPressureManager {
     ///
     /// Do not spill here: `SP` already points at the outgoing args, and a
     /// new spill slot can overwrite them.
+    pub fn forget_all_registers(&mut self) {
+        self.forget_registers(&ALLOCATABLE_REGISTERS);
+    }
+
     pub fn forget_registers(&mut self, regs: &[Reg]) {
         for &reg in regs {
             if !ALLOCATABLE_REGISTERS.contains(&reg) {
@@ -944,6 +959,9 @@ impl RegisterPressureManager {
         }
     }
     
+    /// Queue materialization alongside allocator spill/reload instructions.
+    pub fn emit(&mut self, inst: AsmInst) { self.instructions.push(inst); }
+
     /// Take accumulated instructions
     pub fn take_instructions(&mut self) -> Vec<AsmInst> {
         std::mem::take(&mut self.instructions)

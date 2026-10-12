@@ -2,49 +2,47 @@
 
 use super::{TypedExpressionGenerator, convert_type_default};
 use crate::ast::BinaryOp;
-use crate::ir::{IrBinaryOp, IrType, Value};
+use crate::ir::{IrBinaryOp, IrUnaryOp, IrType, Value};
 use crate::typed_ast::TypedExpr;
 use crate::types::Type;
 use crate::codegen::CodegenError;
 use crate::CompilerError;
 
+pub(super) fn widen_index(gen: &mut TypedExpressionGenerator, value: Value, ty: &Type) -> Result<Value, CompilerError> {
+    // Keep compile-time displacements visible to the native constant GEP path.
+    if matches!(value, Value::Constant(_)) { return Ok(value); }
+    super::conversions::convert_integer(gen, value, ty, &Type::Long)
+}
+
 pub fn generate_pointer_arithmetic(
     gen: &mut TypedExpressionGenerator,
     ptr: &TypedExpr,
     offset: &TypedExpr,
-    elem_type: &Type,
+    _elem_type: &Type,
     is_add: bool,
     expr_type: &Type,
 ) -> Result<Value, CompilerError> {
     // THIS IS THE KEY PART: Generate GEP for pointer arithmetic!
     let ptr_val = gen.generate(ptr)?;
-    let offset_val = gen.generate(offset)?;
+    let raw_offset = gen.generate(offset)?;
+    let offset_val = widen_index(gen, raw_offset, offset.get_type())?;
     
-    // CRITICAL FIX: Check if we're doing arithmetic on a pointer to an array.
-    // If so, we need to handle array decay - the array should decay to a pointer
-    // to its first element for arithmetic purposes.
-    let ir_type = if let Type::Array { element_type, .. } = elem_type {
-        // Array decay: when doing arithmetic on a pointer to an array,
-        // treat it as arithmetic on a pointer to the array's element type
-        convert_type_default(&Type::Pointer {
-            target: element_type.clone(),
-            bank: None,
-        })?
-    } else {
-        // Normal case: use the expr_type from semantic analysis
-        convert_type_default(expr_type)?
-    };
+    // A pointer to an array advances by a complete array. Array decay has
+    // already happened in semantic analysis; do not decay its pointee again.
+    let ir_type = convert_type_default(expr_type)?;
     
     // Handle add vs subtract
     let final_offset = if is_add {
         offset_val
+    } else if let Value::Constant(n) = offset_val {
+        Value::Constant(n.wrapping_neg())
     } else {
         // For subtraction, negate the offset
         let neg_offset = gen.builder.build_binary(
             IrBinaryOp::Sub,
             Value::Constant(0),
             offset_val,
-            IrType::I16,
+            IrType::I32,
         )?;
         Value::Temp(neg_offset)
     };
@@ -67,33 +65,18 @@ pub fn generate_pointer_difference(
     let left_val = gen.generate(left)?;
     let right_val = gen.generate(right)?;
     
-    // Extract address components from FatPointers
-    // When subtracting pointers, we only care about addresses, not banks
-    let left_addr = match left_val {
-        Value::FatPtr(ref fp) => *fp.addr.clone(),
-        _ => left_val.clone(),
-    };
-    
-    let right_addr = match right_val {
-        Value::FatPtr(ref fp) => *fp.addr.clone(),
-        _ => right_val.clone(),
-    };
-    
-    // Calculate byte difference using only addresses
-    let byte_diff =
-        gen.builder
-            .build_binary(IrBinaryOp::Sub, left_addr, right_addr, IrType::I16)?;
-    
-    // Divide by element size to get element count
-    // Use size_in_words since Ripple VM is word-addressed
+    // Linear cell addresses retain the bank when subtracting pointers.
+    let left_addr = gen.builder.build_unary(IrUnaryOp::PtrToLinear, left_val, IrType::I32)?;
+    let right_addr = gen.builder.build_unary(IrUnaryOp::PtrToLinear, right_val, IrType::I32)?;
+    let diff = gen.builder.build_binary(IrBinaryOp::Sub,
+        Value::Temp(left_addr), Value::Temp(right_addr), IrType::I32)?;
     let elem_size = elem_type.size_in_words().unwrap_or(1) as i64;
-    let result = gen.builder.build_binary(
-        IrBinaryOp::UDiv,
-        Value::Temp(byte_diff),
-        Value::Constant(elem_size),
-        IrType::I16,
-    )?;
-    
+    if elem_size == 1 {
+        return Ok(Value::Temp(diff));
+    }
+    let result = gen.builder.build_binary(IrBinaryOp::SDiv,
+        Value::Temp(diff), Value::Constant(elem_size), IrType::I32)?;
+
     Ok(Value::Temp(result))
 }
 
@@ -105,7 +88,8 @@ pub fn generate_array_index(
 ) -> Result<Value, CompilerError> {
     // Array indexing is pointer arithmetic followed by load (sometimes)
     let array_val = gen.generate(array)?;
-    let index_val = gen.generate(index)?;
+    let raw_index = gen.generate(index)?;
+    let index_val = widen_index(gen, raw_index, index.get_type())?;
     
     // Generate GEP for the element address
     let elem_ptr_type = convert_type_default(&Type::Pointer {
@@ -143,20 +127,25 @@ pub fn generate_pointer_compound_assignment(
         let temp = gen.builder.build_load(lhs_addr.clone(), ir_type)?;
         Value::Temp(temp)
     };
-    let rhs_val = gen.generate(rhs)?;
+    let raw_rhs = gen.generate(rhs)?;
+    let rhs_val = widen_index(gen, raw_rhs, rhs.get_type())?;
     
     // Handle add vs subtract
     let final_offset = match op {
         BinaryOp::AddAssign => rhs_val,
         BinaryOp::SubAssign => {
+            if let Value::Constant(n) = rhs_val {
+                Value::Constant(n.wrapping_neg())
+            } else {
             // Negate for subtraction
             let neg = gen.builder.build_binary(
                 IrBinaryOp::Sub,
                 Value::Constant(0),
                 rhs_val,
-                IrType::I16,
+                IrType::I32,
             )?;
             Value::Temp(neg)
+            }
         }
         _ => {
             return Err(CodegenError::UnsupportedConstruct {
@@ -175,4 +164,25 @@ pub fn generate_pointer_compound_assignment(
     
     gen.builder.build_store(result.clone(), lhs_addr, ir_type)?;
     Ok(result)
+}
+/// Integer representation of a pointer includes both its offset and bank.
+pub fn pointer_integer(gen: &mut TypedExpressionGenerator, value: Value) -> Result<Value, CompilerError> {
+    if matches!(value, Value::Constant(0)) { return Ok(value); }
+    let id = gen.builder.build_unary(IrUnaryOp::PtrToInt, value, IrType::I32)?;
+    Ok(Value::Temp(id))
+}
+
+pub fn generate_pointer_comparison(gen: &mut TypedExpressionGenerator, op: BinaryOp,
+    left: &TypedExpr, right: &TypedExpr) -> Result<Value, CompilerError> {
+    let lv = gen.generate(left)?;
+    let rv = gen.generate(right)?;
+    let lv = pointer_integer(gen, lv)?;
+    let rv = pointer_integer(gen, rv)?;
+    let op = match op {
+        BinaryOp::Equal => IrBinaryOp::Eq, BinaryOp::NotEqual => IrBinaryOp::Ne,
+        BinaryOp::Less => IrBinaryOp::Ult, BinaryOp::LessEqual => IrBinaryOp::Ule,
+        BinaryOp::Greater => IrBinaryOp::Ugt, BinaryOp::GreaterEqual => IrBinaryOp::Uge,
+        _ => unreachable!("pointer comparison"),
+    };
+    Ok(Value::Temp(gen.builder.build_binary(op, lv, rv, IrType::I16)?))
 }

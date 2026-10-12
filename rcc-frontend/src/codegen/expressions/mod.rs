@@ -11,6 +11,7 @@ mod misc_ops;
 mod aggregate_init;
 mod conversions;
 
+pub(crate) use conversions::usual_arithmetic_type;
 pub use literals::generate_string_literal;
 pub use identifiers::generate_identifier;
 pub use binary_ops::{generate_binary_operation, generate_compound_assignment};
@@ -22,6 +23,7 @@ pub use misc_ops::{generate_sizeof_expr, generate_sizeof_type, generate_array_in
 pub use aggregate_init::store_initializer;
 pub(crate) use conversions::{convert_integer, convert_to_bool};
 
+use crate::ast::BinaryOp;
 use super::errors::CodegenError;
 use super::types::convert_type;
 use super::VarInfo;
@@ -71,14 +73,28 @@ impl<'a> TypedExpressionGenerator<'a> {
             
             TypedExpr::StringLiteral { value, .. } => literals::generate_string_literal(self, value),
             
-            TypedExpr::Variable { name, .. } => identifiers::generate_identifier(self, name),
+            TypedExpr::Variable { name, expr_type, .. } => {
+                if matches!(expr_type, Type::Function { .. }) {
+                    Ok(Value::Function(name.clone()))
+                } else {
+                    identifiers::generate_identifier(self, name)
+                }
+            },
             
             TypedExpr::Binary {
                 op,
                 left,
                 right,
                 expr_type,
-            } => binary_ops::generate_binary_operation(self, *op, left, right, expr_type),
+            } => {
+                if matches!(op, BinaryOp::Equal | BinaryOp::NotEqual | BinaryOp::Less | BinaryOp::LessEqual | BinaryOp::Greater | BinaryOp::GreaterEqual)
+                    && (matches!(left.get_type(), Type::Pointer { .. } | Type::Array { .. })
+                        || matches!(right.get_type(), Type::Pointer { .. } | Type::Array { .. })) {
+                    pointer_ops::generate_pointer_comparison(self, *op, left, right)
+                } else {
+                    binary_ops::generate_binary_operation(self, *op, left, right, expr_type)
+                }
+            },
             
             TypedExpr::PointerArithmetic {
                 ptr,
@@ -135,33 +151,19 @@ impl<'a> TypedExpressionGenerator<'a> {
                     
                     // Integer to pointer cast
                     (source, Type::Pointer { .. }) if is_integer_type(source) => {
-                        // Create a fat pointer from an integer value
-                        // Check if this is a NULL pointer (literal 0)
-                        let bank_tag = match &operand_val {
-                            Value::Constant(0) => BankTag::Null,  // NULL pointer
-                            _ => BankTag::Heap(0),  // Integer-to-pointer (MMIO, etc.) uses bank 0
-                        };
-                        Ok(Value::FatPtr(FatPointer {
-                            addr: Box::new(operand_val),
-                            bank: bank_tag,
-                        }))
-                    }
-                    
-                    // Pointer to integer cast  
-                    (Type::Pointer { .. }, target) if is_integer_type(target) => {
-                        // Extract address component from fat pointer
-                        match operand_val {
-                            Value::FatPtr(ref fp) => {
-                                // Return just the address component
-                                Ok(*fp.addr.clone())
-                            }
-                            _ => {
-                                // If it's not a FatPtr (shouldn't happen), pass through
-                                Ok(operand_val)
-                            }
+                        if matches!(operand_val, Value::Constant(0)) {
+                            return Ok(Value::FatPtr(FatPointer { addr: Box::new(Value::Constant(0)), bank: BankTag::Null }));
                         }
+                        let wide = conversions::convert_integer(self, operand_val, source, &Type::UnsignedLong)?;
+                        let id = self.builder.build_unary(crate::ir::IrUnaryOp::IntToPtr, wide, convert_type_default(target_type)?)?;
+                        Ok(Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(id)), bank: BankTag::Mixed }))
                     }
-                    
+                    (Type::Pointer { .. }, Type::Bool) => conversions::convert_to_bool(self, operand_val, source_type),
+                    (Type::Pointer { .. }, target) if is_integer_type(target) => {
+                        let wide = pointer_ops::pointer_integer(self, operand_val)?;
+                        conversions::convert_integer(self, wide, &Type::UnsignedLong, target)
+                    }
+
                     // Integer / pointer / float to _Bool: nonzero becomes 1
                     (source, Type::Bool) if is_integer_type(source) || source.is_floating() || matches!(source, Type::Pointer { .. }) => {
                         conversions::convert_to_bool(self, operand_val, source)
@@ -184,10 +186,9 @@ impl<'a> TypedExpressionGenerator<'a> {
                         Ok(Value::Constant(0))
                     }
                     
-                    // Array to pointer decay (implicit cast)
-                    (Type::Array { element_type, .. }, Type::Pointer { target, .. })
-                        if **element_type == **target => {
-                        // Array decays to pointer to first element
+                    // Array decay followed by an explicit pointer cast keeps
+                    // the same address and bank, including character views.
+                    (Type::Array { .. }, Type::Pointer { .. }) => {
                         Ok(operand_val)
                     }
                     

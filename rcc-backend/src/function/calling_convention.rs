@@ -16,6 +16,7 @@ use crate::naming::NameGenerator;
 pub enum CallTarget {
     /// Direct call to a known address with bank
     Address { addr: u16, bank: u16 },
+    Registers { addr: Reg, bank: Reg },
     /// Call to a function by label (will be resolved by assembler)
     Label(String),
 }
@@ -336,8 +337,12 @@ impl CallingConvention {
                 // Bind Rv0 to the result name
                 pressure_manager.bind_value_to_register(name.clone(), Reg::Rv0);
                 
-                // Track that Rv1 has the bank
-                pressure_manager.set_pointer_bank(name, BankInfo::Register(Reg::Rv1));
+                // RV1 is caller-clobbered and not allocatable. Preserve the bank
+                // under a managed name, just like the high word of an I32 return;
+                // otherwise a later call changes this pointer's bank in place.
+                let bank_name = format!("{name}__return_bank");
+                pressure_manager.bind_value_to_register(bank_name.clone(), Reg::Rv1);
+                pressure_manager.set_pointer_bank(name, BankInfo::Dynamic(bank_name));
                 insts.extend(pressure_manager.take_instructions());
                 
                 (insts, Some((Reg::Rv0, Some(Reg::Rv1))))
@@ -416,6 +421,7 @@ impl CallingConvention {
         stack_args_from: Option<usize>,
     ) -> (Vec<AsmInst>, Option<(Reg, Option<Reg>)>) {
         match &target {
+            CallTarget::Registers { .. } => {},
             CallTarget::Address { addr, bank } => {
                 info!("Making complete call to function at bank:{}, addr:{} with {} args", 
                       bank, addr, args.len());
@@ -453,6 +459,10 @@ impl CallingConvention {
         // 2. Emit call instruction
         trace!("  Emitting call instruction");
         match target {
+            CallTarget::Registers { addr, bank } => {
+                insts.push(AsmInst::Raw(format!("JALR RA, {bank}, {addr}")));
+                pressure_manager.forget_registers(&[addr, bank]);
+            }
             CallTarget::Address { addr, bank } => {
                 let call = self.emit_call(addr, bank);
                 insts.extend(call);

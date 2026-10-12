@@ -60,8 +60,10 @@ pub fn get_i32_pair(
             let lo_reg = mgr.get_register(lo_name.clone());
             insts.extend(mgr.take_instructions());
             if let Some(hi_name) = mgr.get_i32_high(&lo_name) {
+                mgr.pin_register(lo_reg);
                 let hi_reg = mgr.get_register(hi_name);
                 insts.extend(mgr.take_instructions());
+                mgr.unpin_register(lo_reg);
                 (lo_reg, hi_reg, insts)
             } else {
                 mgr.pin_register(lo_reg);

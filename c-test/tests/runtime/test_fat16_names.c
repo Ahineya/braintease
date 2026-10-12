@@ -6,7 +6,7 @@
 int main() {
     char o[11];
     char n[13];
-    uint8_t raw[11];
+    uint_least8_t raw[11];
     int i;
 
     fat16_canon83("readme.txt", o);
@@ -39,7 +39,7 @@ int main() {
 
     i = 0;
     while (i < 11) {
-        raw[i] = (uint8_t)' ';
+        raw[i] = (uint_least8_t)' ';
         i = i + 1;
     }
     raw[0] = 'R';

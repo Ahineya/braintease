@@ -29,7 +29,6 @@ getchar:
     ADD S3, FP, R0
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1
-; Invalidated 1 alloca bindings
 L_getchar_1:
     LI S2, 3
     ADD A0, S2, R0
@@ -50,16 +49,19 @@ L_getchar_1:
 ; Recompute alloca t0 at FP+0
     ADD S0, FP, R0
     STORE S1, SB, S0
+; Spill t1 to slot 1
+    ADD SC, FP, R0
+    ADDI SC, SC, 10
+    STORE S1, SB, SC
     BEQ R0, R0, L_getchar_2
 ; Unconditional branch to L_getchar_2
-; Invalidated 1 alloca bindings
 L_getchar_2:
 ; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(0), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(0), bank: Stack })
-; LOAD: Pointer load_src_ptr_f0_op2_t2 has bank info: Stack
-; LOAD: Using bank register Sb for load
 ; Recompute alloca t0 at FP+0
     ADD T7, FP, R0
+; LOAD: Pointer load_src_ptr_f0_op2_t2 has bank info: Stack
+; LOAD: Using bank register Sb for load
     LOAD T6, SB, T7
     LI T5, 1
     LI T4, 0
@@ -73,22 +75,25 @@ L_getchar_2:
     XOR S3, T6, T0
     LI S2, 0
     SLTU T6, S2, S3
-    BEQ T6, R0, L_getchar_3
+; Spill t6 to slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 11
+    STORE T6, SB, SC
+; Reload t6 from slot 2
+    ADD SC, FP, R0
+    ADDI SC, SC, 11
+    LOAD S1, SB, SC
+    BEQ S1, R0, L_getchar_3
 ; Branch to L_getchar_3 if condition is false
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1 (condition was true)
-; Invalidated 1 alloca bindings
 L_getchar_3:
     LI S0, 2
     ADD A0, S0, R0
 ; Spill live registers before call
-; Spill t1 to slot 1
+; Spill const_f0_op8_2 to slot 3
     ADD SC, FP, R0
-    ADDI SC, SC, 10
-    STORE S1, SB, SC
-; Spill const_f0_op8_2 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, SC, 12
     STORE S0, SB, SC
 ; Set SP = FP+29 so callee frame is above spills
     ADDI SP, FP, 29

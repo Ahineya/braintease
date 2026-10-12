@@ -1,0 +1,5 @@
+{
+  "expected": "signed common type ok\n",
+  "use_runtime": true,
+  "description": "Mixed-width arithmetic signedness and compound assignment conversions"
+}

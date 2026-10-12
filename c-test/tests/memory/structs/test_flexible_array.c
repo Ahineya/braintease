@@ -10,10 +10,10 @@ int main() {
     struct Packet *p;
     int i;
 
-    if (sizeof(struct Packet) == 2) putchar('Y'); else putchar('N');
+    if (sizeof(struct Packet) == 1) putchar('Y'); else putchar('N');
 
-    /* malloc size is words: 1 for n + 4 for data. */
-    p = (struct Packet *)malloc(5);
+    /* Allocation and sizeof use the same 16-bit C-byte unit. */
+    p = (struct Packet *)malloc(sizeof(struct Packet) + 4);
     if (p == 0) {
         putchar('N');
         putchar('\n');

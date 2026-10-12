@@ -63,6 +63,8 @@ impl RippleAssembler {
             .into_iter()
             .map(|(idx, pending)| {
                 let ref_type = match pending.ref_type {
+                    ReferenceType::CodeBank => "code_bank",
+                    ReferenceType::CodeOffset => "code_offset",
                     ReferenceType::Branch => "branch",
                     ReferenceType::Absolute => "absolute",
                     ReferenceType::Data => "data",
@@ -393,7 +395,13 @@ impl RippleAssembler {
                 let is_local_data = state.data_labels.contains_key(operand);
 
                 if !is_local_label {
-                    let ref_type = if is_local_data {
+                    let projection = operand.strip_prefix("%bank(").and_then(|s| s.strip_suffix(')'))
+                        .map(|s| (s.to_string(), ReferenceType::CodeBank))
+                        .or_else(|| operand.strip_prefix("%offset(").and_then(|s| s.strip_suffix(')'))
+                            .map(|s| (s.to_string(), ReferenceType::CodeOffset)));
+                    let ref_type = if let Some((_, kind)) = &projection {
+                        *kind
+                    } else if is_local_data {
                         ReferenceType::Data
                     } else {
                         match opcode {
@@ -405,7 +413,7 @@ impl RippleAssembler {
                     };
 
                     state.pending_references.insert(instruction_idx, PendingReference {
-                        label: operand.clone(),
+                        label: projection.map(|(name, _)| name).unwrap_or_else(|| operand.clone()),
                         ref_type,
                     });
                 }

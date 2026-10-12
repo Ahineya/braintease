@@ -35,7 +35,7 @@ int sys1_parse(unsigned char *raw, Sys1Header *hdr) {
 }
 
 /* Walk the file once. Restarting fat16_read_at per instruction is O(n^2). */
-static uint8_t seq_get(Fat16Fs *fs, uint16_t *clus, uint32_t *pos) {
+static uint_least8_t seq_get(Fat16Fs *fs, uint16_t *clus, uint32_t *pos) {
     uint32_t coff;
 
     if (*pos >= fs->cluster_bytes) {

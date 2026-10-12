@@ -4,11 +4,11 @@
 // Implementation limits for Ripple C
 // Based on 16-bit architecture
 
-// Char limits (assuming signed char)
-#define CHAR_BIT 8
-#define SCHAR_MIN (-128)
-#define SCHAR_MAX 127
-#define UCHAR_MAX 255
+// A C byte is one addressable 16-bit VM cell. Plain char is signed.
+#define CHAR_BIT 16
+#define SCHAR_MIN (-32767-1)
+#define SCHAR_MAX 32767
+#define UCHAR_MAX 65535U
 
 // For default char (assuming signed)
 #define CHAR_MIN SCHAR_MIN

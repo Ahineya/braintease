@@ -561,17 +561,17 @@
         ],
         "data": [],
         "labels": {
-          "L_putchar_99999": {
-            "name": "L_putchar_99999",
-            "bank": 0,
-            "offset": 188,
-            "absolute_address": 188
-          },
           "putchar": {
             "name": "putchar",
             "bank": 0,
             "offset": 0,
             "absolute_address": 0
+          },
+          "L_putchar_99999": {
+            "name": "L_putchar_99999",
+            "bank": 0,
+            "offset": 188,
+            "absolute_address": 188
           }
         },
         "data_labels": {},
@@ -998,17 +998,17 @@
         ],
         "data": [],
         "labels": {
-          "L_getchar_99999": {
-            "name": "L_getchar_99999",
-            "bank": 0,
-            "offset": 168,
-            "absolute_address": 168
-          },
           "getchar": {
             "name": "getchar",
             "bank": 0,
             "offset": 0,
             "absolute_address": 0
+          },
+          "L_getchar_99999": {
+            "name": "L_getchar_99999",
+            "bank": 0,
+            "offset": 168,
+            "absolute_address": 168
           }
         },
         "data_labels": {},
@@ -1143,7 +1143,7 @@
             "word0": 10,
             "word1": 29,
             "word2": 29,
-            "word3": 20
+            "word3": 26
           },
           {
             "opcode": 1,
@@ -1167,284 +1167,67 @@
             "word3": 0
           },
           {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 27,
-            "word2": 30,
-            "word3": 0
-          },
-          {
             "opcode": 18,
             "word0": 18,
             "word1": 26,
             "word2": 28,
-            "word3": 27
+            "word3": 24
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 23,
+            "word2": 24,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 22,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 21,
+            "word2": 64000,
+            "word3": 0
           },
           {
             "opcode": 10,
             "word0": 10,
-            "word1": 27,
-            "word2": 27,
+            "word1": 23,
+            "word2": 23,
+            "word3": 1
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 23,
+            "word2": 21,
+            "word3": 3
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 23,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 22,
+            "word2": 22,
             "word3": 1
           },
           {
             "opcode": 18,
             "word0": 18,
             "word1": 25,
-            "word2": 28,
-            "word3": 27
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 0,
-            "word2": 0,
-            "word3": 1
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 23,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 17,
-            "word0": 17,
-            "word1": 22,
-            "word2": 28,
+            "word2": 22,
             "word3": 23
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 21,
-            "word2": 23,
-            "word3": 1
-          },
-          {
-            "opcode": 17,
-            "word0": 17,
-            "word1": 20,
-            "word2": 28,
-            "word3": 21
-          },
-          {
-            "opcode": 14,
-            "word0": 14,
-            "word1": 18,
-            "word2": 65535,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 20,
-            "word2": 18,
-            "word3": 5
-          },
-          {
-            "opcode": 14,
-            "word0": 14,
-            "word1": 17,
-            "word2": 65534,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 20,
-            "word2": 17,
-            "word3": 5
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 19,
-            "word2": 20,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 0,
-            "word2": 0,
-            "word3": 4
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 19,
-            "word2": 31,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 0,
-            "word2": 0,
-            "word3": 2
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 19,
-            "word2": 28,
-            "word3": 0
-          },
-          {
-            "opcode": 17,
-            "word0": 17,
-            "word1": 16,
-            "word2": 19,
-            "word3": 22
-          },
-          {
-            "opcode": 14,
-            "word0": 14,
-            "word1": 15,
-            "word2": 0,
-            "word3": 0
-          },
-          {
-            "opcode": 5,
-            "word0": 5,
-            "word1": 24,
-            "word2": 16,
-            "word3": 15
-          },
-          {
-            "opcode": 14,
-            "word0": 14,
-            "word1": 21,
-            "word2": 0,
-            "word3": 0
-          },
-          {
-            "opcode": 9,
-            "word0": 9,
-            "word1": 16,
-            "word2": 21,
-            "word3": 24
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 16,
-            "word2": 0,
-            "word3": 65
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 0,
-            "word2": 0,
-            "word3": 1
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 18,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 17,
-            "word0": 17,
-            "word1": 17,
-            "word2": 28,
-            "word3": 18
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 24,
-            "word2": 18,
-            "word3": 1
-          },
-          {
-            "opcode": 17,
-            "word0": 17,
-            "word1": 21,
-            "word2": 28,
-            "word3": 24
-          },
-          {
-            "opcode": 14,
-            "word0": 14,
-            "word1": 16,
-            "word2": 65535,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 21,
-            "word2": 16,
-            "word3": 5
-          },
-          {
-            "opcode": 14,
-            "word0": 14,
-            "word1": 23,
-            "word2": 65534,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 21,
-            "word2": 23,
-            "word3": 5
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 15,
-            "word2": 21,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 0,
-            "word2": 0,
-            "word3": 4
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 15,
-            "word2": 31,
-            "word3": 0
-          },
-          {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 0,
-            "word2": 0,
-            "word3": 2
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 15,
-            "word2": 28,
-            "word3": 0
-          },
-          {
-            "opcode": 17,
-            "word0": 17,
-            "word1": 24,
-            "word2": 15,
-            "word3": 17
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 7,
-            "word2": 24,
-            "word3": 0
           },
           {
             "opcode": 1,
@@ -1510,6 +1293,181 @@
             "word3": 27
           },
           {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 1
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 20,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 19,
+            "word2": 28,
+            "word3": 20
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 18,
+            "word2": 20,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 17,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 16,
+            "word2": 64000,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 18,
+            "word2": 18,
+            "word3": 1
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 18,
+            "word2": 16,
+            "word3": 3
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 18,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 17,
+            "word2": 17,
+            "word3": 1
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 15,
+            "word2": 17,
+            "word3": 18
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 22,
+            "word2": 65535,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 15,
+            "word2": 22,
+            "word3": 5
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 21,
+            "word2": 65534,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 15,
+            "word2": 21,
+            "word3": 5
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 23,
+            "word2": 15,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 4
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 23,
+            "word2": 31,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 2
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 23,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 26,
+            "word2": 23,
+            "word3": 19
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 25,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 5,
+            "word0": 5,
+            "word1": 24,
+            "word2": 26,
+            "word3": 25
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 18,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 9,
+            "word0": 9,
+            "word1": 26,
+            "word2": 18,
+            "word3": 24
+          },
+          {
             "opcode": 1,
             "word0": 1,
             "word1": 27,
@@ -1522,69 +1480,6 @@
             "word1": 27,
             "word2": 27,
             "word3": 13
-          },
-          {
-            "opcode": 18,
-            "word0": 18,
-            "word1": 22,
-            "word2": 28,
-            "word3": 27
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 27,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 27,
-            "word2": 27,
-            "word3": 14
-          },
-          {
-            "opcode": 18,
-            "word0": 18,
-            "word1": 20,
-            "word2": 28,
-            "word3": 27
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 27,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 27,
-            "word2": 27,
-            "word3": 15
-          },
-          {
-            "opcode": 18,
-            "word0": 18,
-            "word1": 20,
-            "word2": 28,
-            "word3": 27
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 27,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 27,
-            "word2": 27,
-            "word3": 16
           },
           {
             "opcode": 18,
@@ -1605,70 +1500,7 @@
             "word0": 10,
             "word1": 27,
             "word2": 27,
-            "word3": 17
-          },
-          {
-            "opcode": 18,
-            "word0": 18,
-            "word1": 17,
-            "word2": 28,
-            "word3": 27
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 27,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 27,
-            "word2": 27,
-            "word3": 18
-          },
-          {
-            "opcode": 18,
-            "word0": 18,
-            "word1": 21,
-            "word2": 28,
-            "word3": 27
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 27,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 27,
-            "word2": 27,
-            "word3": 19
-          },
-          {
-            "opcode": 18,
-            "word0": 18,
-            "word1": 21,
-            "word2": 28,
-            "word3": 27
-          },
-          {
-            "opcode": 1,
-            "word0": 1,
-            "word1": 27,
-            "word2": 30,
-            "word3": 0
-          },
-          {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 27,
-            "word2": 27,
-            "word3": 20
+            "word3": 14
           },
           {
             "opcode": 18,
@@ -1689,28 +1521,91 @@
             "word0": 10,
             "word1": 27,
             "word2": 27,
-            "word3": 21
+            "word3": 15
           },
           {
             "opcode": 18,
             "word0": 18,
-            "word1": 24,
+            "word1": 15,
             "word2": 28,
             "word3": 27
           },
           {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 29,
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
             "word2": 30,
-            "word3": 30
+            "word3": 0
           },
           {
-            "opcode": 19,
-            "word0": 19,
-            "word1": 3,
-            "word2": 0,
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 16
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
             "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 17
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 26,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 17
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 17,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 17,
+            "word2": 0,
+            "word3": 120
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 1
           },
           {
             "opcode": 1,
@@ -1722,37 +1617,156 @@
           {
             "opcode": 17,
             "word0": 17,
-            "word1": 23,
+            "word1": 22,
             "word2": 28,
             "word3": 16
           },
           {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 21,
+            "word2": 16,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 24,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 18,
+            "word2": 64000,
+            "word3": 0
+          },
+          {
             "opcode": 10,
             "word0": 10,
-            "word1": 26,
-            "word2": 16,
+            "word1": 21,
+            "word2": 21,
+            "word3": 1
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 21,
+            "word2": 18,
+            "word3": 3
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 21,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 24,
+            "word2": 24,
             "word3": 1
           },
           {
             "opcode": 17,
             "word0": 17,
             "word1": 25,
-            "word2": 28,
-            "word3": 26
+            "word2": 24,
+            "word3": 21
           },
           {
-            "opcode": 10,
-            "word0": 10,
-            "word1": 22,
+            "opcode": 14,
+            "word0": 14,
+            "word1": 19,
+            "word2": 65535,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 25,
+            "word2": 19,
+            "word3": 5
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 15,
+            "word2": 65534,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 25,
+            "word2": 15,
+            "word3": 5
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 20,
+            "word2": 25,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 4
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 20,
+            "word2": 31,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 2
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 20,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 23,
+            "word2": 20,
+            "word3": 22
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 7,
             "word2": 23,
-            "word3": 1
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
           },
           {
             "opcode": 10,
             "word0": 10,
             "word1": 27,
-            "word2": 30,
-            "word3": 0
+            "word2": 27,
+            "word3": 18
           },
           {
             "opcode": 18,
@@ -1762,11 +1776,18 @@
             "word3": 27
           },
           {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
             "opcode": 10,
             "word0": 10,
             "word1": 27,
             "word2": 27,
-            "word3": 1
+            "word3": 19
           },
           {
             "opcode": 18,
@@ -1776,25 +1797,46 @@
             "word3": 27
           },
           {
-            "opcode": 21,
-            "word0": 21,
-            "word1": 0,
-            "word2": 0,
-            "word3": 65454
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
           },
           {
-            "opcode": 14,
-            "word0": 14,
-            "word1": 20,
-            "word2": 10,
-            "word3": 0
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 20
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
           },
           {
             "opcode": 1,
             "word0": 1,
-            "word1": 7,
-            "word2": 20,
+            "word1": 27,
+            "word2": 30,
             "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 21
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 20,
+            "word2": 28,
+            "word3": 27
           },
           {
             "opcode": 1,
@@ -1818,6 +1860,265 @@
             "word3": 27
           },
           {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 29,
+            "word2": 30,
+            "word3": 36
+          },
+          {
+            "opcode": 19,
+            "word0": 19,
+            "word1": 3,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 26,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 17,
+            "word2": 28,
+            "word3": 26
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 21,
+            "word2": 26,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 24,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 18,
+            "word2": 64000,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 21,
+            "word2": 21,
+            "word3": 1
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 21,
+            "word2": 18,
+            "word3": 3
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 21,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 24,
+            "word2": 24,
+            "word3": 1
+          },
+          {
+            "opcode": 17,
+            "word0": 17,
+            "word1": 19,
+            "word2": 24,
+            "word3": 21
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 16,
+            "word2": 65535,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 19,
+            "word2": 16,
+            "word3": 5
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 22,
+            "word2": 65534,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 19,
+            "word2": 22,
+            "word3": 5
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 15,
+            "word2": 19,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 4
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 15,
+            "word2": 31,
+            "word3": 0
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 2
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 15,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 25,
+            "word2": 17,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 20,
+            "word2": 15,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 23,
+            "word2": 65533,
+            "word3": 0
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 20,
+            "word2": 23,
+            "word3": 3
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 25,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 20,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 16,
+            "word2": 20,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 21,
+            "word2": 25,
+            "word3": 1
+          },
+          {
+            "opcode": 9,
+            "word0": 9,
+            "word1": 24,
+            "word2": 21,
+            "word3": 25
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 18,
+            "word2": 64000,
+            "word3": 0
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 24,
+            "word2": 0,
+            "word3": 3
+          },
+          {
+            "opcode": 9,
+            "word0": 9,
+            "word1": 24,
+            "word2": 21,
+            "word3": 18
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 24,
+            "word2": 0,
+            "word3": 3
+          },
+          {
+            "opcode": 2,
+            "word0": 2,
+            "word1": 21,
+            "word2": 21,
+            "word3": 18
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 16,
+            "word2": 16,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 21,
+            "word2": 28,
+            "word3": 26
+          },
+          {
             "opcode": 1,
             "word0": 1,
             "word1": 27,
@@ -1834,7 +2135,7 @@
           {
             "opcode": 18,
             "word0": 18,
-            "word1": 25,
+            "word1": 17,
             "word2": 28,
             "word3": 27
           },
@@ -1855,7 +2156,7 @@
           {
             "opcode": 18,
             "word0": 18,
-            "word1": 22,
+            "word1": 19,
             "word2": 28,
             "word3": 27
           },
@@ -1876,9 +2177,65 @@
           {
             "opcode": 18,
             "word0": 18,
-            "word1": 25,
+            "word1": 19,
             "word2": 28,
             "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 22,
+            "word2": 26,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 17,
+            "word2": 28,
+            "word3": 0
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 19,
+            "word2": 64000,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 22,
+            "word2": 22,
+            "word3": 1
+          },
+          {
+            "opcode": 22,
+            "word0": 22,
+            "word1": 22,
+            "word2": 19,
+            "word3": 3
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 22,
+            "word2": 0,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 17,
+            "word2": 17,
+            "word3": 1
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 16,
+            "word2": 17,
+            "word3": 22
           },
           {
             "opcode": 1,
@@ -1897,7 +2254,7 @@
           {
             "opcode": 18,
             "word0": 18,
-            "word1": 25,
+            "word1": 15,
             "word2": 28,
             "word3": 27
           },
@@ -1918,7 +2275,196 @@
           {
             "opcode": 18,
             "word0": 18,
+            "word1": 25,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 28
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
             "word1": 20,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 29
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 23,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 30
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 24,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 31
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 18,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 32
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 21,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 33
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 16,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 34
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 16,
+            "word2": 28,
+            "word3": 27
+          },
+          {
+            "opcode": 21,
+            "word0": 21,
+            "word1": 0,
+            "word2": 0,
+            "word3": 65375
+          },
+          {
+            "opcode": 14,
+            "word0": 14,
+            "word1": 22,
+            "word2": 10,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 7,
+            "word2": 22,
+            "word3": 0
+          },
+          {
+            "opcode": 1,
+            "word0": 1,
+            "word1": 27,
+            "word2": 30,
+            "word3": 0
+          },
+          {
+            "opcode": 10,
+            "word0": 10,
+            "word1": 27,
+            "word2": 27,
+            "word3": 35
+          },
+          {
+            "opcode": 18,
+            "word0": 18,
+            "word1": 22,
             "word2": 28,
             "word3": 27
           },
@@ -1927,7 +2473,7 @@
             "word0": 10,
             "word1": 29,
             "word2": 30,
-            "word3": 30
+            "word3": 36
           },
           {
             "opcode": 19,
@@ -2065,23 +2611,23 @@
         ],
         "data": [],
         "labels": {
-          "L_bc_22d8f343_use_stack": {
-            "name": "L_bc_22d8f343_use_stack",
+          "L_bc_7690f337_use_global": {
+            "name": "L_bc_7690f337_use_global",
             "bank": 0,
-            "offset": 228,
-            "absolute_address": 228
+            "offset": 396,
+            "absolute_address": 396
           },
-          "L_bc_22d8f343_use_global": {
-            "name": "L_bc_22d8f343_use_global",
+          "L_puts_99999": {
+            "name": "L_puts_99999",
             "bank": 0,
-            "offset": 220,
-            "absolute_address": 220
+            "offset": 840,
+            "absolute_address": 840
           },
-          "L_bc_22d8f343_done": {
-            "name": "L_bc_22d8f343_done",
+          "L_bc_c920c278_use_global": {
+            "name": "L_bc_c920c278_use_global",
             "bank": 0,
-            "offset": 232,
-            "absolute_address": 232
+            "offset": 548,
+            "absolute_address": 548
           },
           "puts": {
             "name": "puts",
@@ -2089,56 +2635,122 @@
             "offset": 0,
             "absolute_address": 0
           },
+          "L_bc_a564911b_use_stack": {
+            "name": "L_bc_a564911b_use_stack",
+            "bank": 0,
+            "offset": 228,
+            "absolute_address": 228
+          },
+          "L_i32_memory_next_word_1573f8a0_0_1": {
+            "name": "L_i32_memory_next_word_1573f8a0_0_1",
+            "bank": 0,
+            "offset": 192,
+            "absolute_address": 192
+          },
           "L_puts_3": {
             "name": "L_puts_3",
             "bank": 0,
-            "offset": 432,
-            "absolute_address": 432
+            "offset": 804,
+            "absolute_address": 804
           },
-          "L_bc_0303da2f_done": {
-            "name": "L_bc_0303da2f_done",
+          "L_bc_c920c278_done": {
+            "name": "L_bc_c920c278_done",
             "bank": 0,
-            "offset": 152,
-            "absolute_address": 152
+            "offset": 560,
+            "absolute_address": 560
+          },
+          "L_bc_7690f337_use_stack": {
+            "name": "L_bc_7690f337_use_stack",
+            "bank": 0,
+            "offset": 404,
+            "absolute_address": 404
           },
           "L_puts_2": {
             "name": "L_puts_2",
             "bank": 0,
-            "offset": 180,
-            "absolute_address": 180
+            "offset": 332,
+            "absolute_address": 332
+          },
+          "L_bc_c920c278_use_stack": {
+            "name": "L_bc_c920c278_use_stack",
+            "bank": 0,
+            "offset": 556,
+            "absolute_address": 556
+          },
+          "L_bc_a564911b_use_global": {
+            "name": "L_bc_a564911b_use_global",
+            "bank": 0,
+            "offset": 220,
+            "absolute_address": 220
+          },
+          "L_bc_7690f337_done": {
+            "name": "L_bc_7690f337_done",
+            "bank": 0,
+            "offset": 408,
+            "absolute_address": 408
+          },
+          "L_i32_gep_adjust_1573f8a0_0_5": {
+            "name": "L_i32_gep_adjust_1573f8a0_0_5",
+            "bank": 0,
+            "offset": 612,
+            "absolute_address": 612
+          },
+          "L_i32_memory_next_word_1573f8a0_0_0": {
+            "name": "L_i32_memory_next_word_1573f8a0_0_0",
+            "bank": 0,
+            "offset": 112,
+            "absolute_address": 112
+          },
+          "L_i32_memory_next_word_1573f8a0_0_3": {
+            "name": "L_i32_memory_next_word_1573f8a0_0_3",
+            "bank": 0,
+            "offset": 520,
+            "absolute_address": 520
+          },
+          "L_bc_a564911b_done": {
+            "name": "L_bc_a564911b_done",
+            "bank": 0,
+            "offset": 232,
+            "absolute_address": 232
+          },
+          "L_i32_pointer_nonnull_1573f8a0_0_4": {
+            "name": "L_i32_pointer_nonnull_1573f8a0_0_4",
+            "bank": 0,
+            "offset": 584,
+            "absolute_address": 584
           },
           "L_puts_1": {
             "name": "L_puts_1",
             "bank": 0,
-            "offset": 100,
-            "absolute_address": 100
+            "offset": 156,
+            "absolute_address": 156
           },
-          "L_bc_0303da2f_use_global": {
-            "name": "L_bc_0303da2f_use_global",
+          "L_i32_memory_next_word_1573f8a0_0_7": {
+            "name": "L_i32_memory_next_word_1573f8a0_0_7",
             "bank": 0,
-            "offset": 140,
-            "absolute_address": 140
+            "offset": 688,
+            "absolute_address": 688
           },
-          "L_bc_0303da2f_use_stack": {
-            "name": "L_bc_0303da2f_use_stack",
+          "L_i32_gep_done_1573f8a0_0_6": {
+            "name": "L_i32_gep_done_1573f8a0_0_6",
             "bank": 0,
-            "offset": 148,
-            "absolute_address": 148
+            "offset": 620,
+            "absolute_address": 620
           },
-          "L_puts_99999": {
-            "name": "L_puts_99999",
+          "L_i32_memory_next_word_1573f8a0_0_2": {
+            "name": "L_i32_memory_next_word_1573f8a0_0_2",
             "bank": 0,
-            "offset": 528,
-            "absolute_address": 528
+            "offset": 368,
+            "absolute_address": 368
           }
         },
         "data_labels": {},
         "unresolved_references": {
-          "129": {
+          "120": {
             "label": "putchar",
             "ref_type": "absolute"
           },
-          "97": {
+          "207": {
             "label": "putchar",
             "ref_type": "absolute"
           }

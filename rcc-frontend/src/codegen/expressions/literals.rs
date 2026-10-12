@@ -23,7 +23,7 @@ pub fn generate_string_literal(
     let global = GlobalVariable {
         name: name.clone(),
         var_type: IrType::Array {
-            element_type: Box::new(IrType::I8),
+            element_type: Box::new(IrType::I16),
             size: char_values.len() as u64,
         },
         is_constant: true, // String literals are constant

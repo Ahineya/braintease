@@ -1,10 +1,9 @@
 #ifndef STDINT_H
 #define STDINT_H
 
-/* Exact-width types (ILP16, 32-bit long, 64-bit long long). */
-
-typedef signed char int8_t;
-typedef unsigned char uint8_t;
+/* CHAR_BIT is 16. No exact-width 8-bit types exist on this target.
+ * Use the least8 types and explicitly mask to 255 for file/network octets.
+ * Exact-width types: 16-bit int, 32-bit long, 64-bit long long. */
 typedef int int16_t;
 typedef unsigned int uint16_t;
 typedef long int32_t;
@@ -13,8 +12,8 @@ typedef long long int64_t;
 typedef unsigned long long uint64_t;
 
 /* Minimum-width types. */
-typedef int8_t int_least8_t;
-typedef uint8_t uint_least8_t;
+typedef signed char int_least8_t;
+typedef unsigned char uint_least8_t;
 typedef int16_t int_least16_t;
 typedef uint16_t uint_least16_t;
 typedef int32_t int_least32_t;
@@ -39,10 +38,6 @@ typedef unsigned long long uintmax_t;
 typedef long intptr_t;
 typedef unsigned long uintptr_t;
 
-#define INT8_MIN (-128)
-#define INT8_MAX 127
-#define UINT8_MAX 255
-
 #define INT16_MIN (-32768)
 #define INT16_MAX 32767
 #define UINT16_MAX 65535U
@@ -55,9 +50,9 @@ typedef unsigned long uintptr_t;
 #define INT64_MAX 9223372036854775807LL
 #define UINT64_MAX 18446744073709551615ULL
 
-#define INT_LEAST8_MIN INT8_MIN
-#define INT_LEAST8_MAX INT8_MAX
-#define UINT_LEAST8_MAX UINT8_MAX
+#define INT_LEAST8_MIN INT16_MIN
+#define INT_LEAST8_MAX INT16_MAX
+#define UINT_LEAST8_MAX UINT16_MAX
 #define INT_LEAST16_MIN INT16_MIN
 #define INT_LEAST16_MAX INT16_MAX
 #define UINT_LEAST16_MAX UINT16_MAX
@@ -89,12 +84,12 @@ typedef unsigned long uintptr_t;
 #define INTPTR_MAX INT32_MAX
 #define UINTPTR_MAX UINT32_MAX
 
-#define PTRDIFF_MIN INT16_MIN
-#define PTRDIFF_MAX INT16_MAX
-#define SIZE_MAX UINT16_MAX
+#define PTRDIFF_MIN INT32_MIN
+#define PTRDIFF_MAX INT32_MAX
+#define SIZE_MAX UINT32_MAX
 
 #define INT8_C(v) (v)
-#define UINT8_C(v) (v)
+#define UINT8_C(v) (v##U)
 #define INT16_C(v) (v)
 #define UINT16_C(v) (v##U)
 #define INT32_C(v) (v##L)

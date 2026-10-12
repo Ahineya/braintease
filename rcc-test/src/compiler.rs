@@ -118,7 +118,7 @@ impl ToolPaths {
 /// Build the runtime library
 pub fn build_runtime(tools: &ToolPaths, bank_size: usize) -> Result<()> {
     let cmd = format!(
-        "cd {} && make clean && make all BANK_SIZE={}",
+        "cd {} && make all BANK_SIZE={}",
         tools.runtime_dir.display(),
         bank_size
     );

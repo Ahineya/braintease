@@ -257,7 +257,7 @@ impl Lexer {
                     value = value * 16 + digit;
                     if value > 255 {
                         return Err(CompilerError::lexer_error(
-                            "Hex escape sequence out of range".to_string(),
+                            "Character escapes above 255 are not yet supported (target CHAR_BIT is 16)".to_string(),
                             self.current_location(),
                         ));
                     }
@@ -283,7 +283,7 @@ impl Lexer {
                     value = value * 8 + (ch as u32 - '0' as u32);
                     if value > 255 {
                         return Err(CompilerError::lexer_error(
-                            "Octal escape sequence out of range".to_string(),
+                            "Character escapes above 255 are not yet supported (target CHAR_BIT is 16)".to_string(),
                             self.current_location(),
                         ));
                     }
@@ -311,6 +311,12 @@ impl Lexer {
                 self.parse_escape_byte()?
             }
             Some(ch) if ch != '\'' => {
+                if ch as u32 > 255 {
+                    return Err(CompilerError::lexer_error(
+                        "Character literals above 255 are not yet supported (target CHAR_BIT is 16)".to_string(),
+                        self.current_location(),
+                    ));
+                }
                 self.advance();
                 ch as u8
             }

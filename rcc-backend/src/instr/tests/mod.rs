@@ -33,3 +33,5 @@ mod branch_tests;
 // Integration tests for instruction combinations
 #[cfg(test)]
 mod integration_tests;
+
+pub(crate) mod machine;

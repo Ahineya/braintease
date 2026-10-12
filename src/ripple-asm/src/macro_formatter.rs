@@ -1,4 +1,4 @@
-use crate::types::{Instruction, Opcode, Register};
+use crate::types::{Instruction, Opcode};
 use crate::linker::LinkedProgram;
 use std::collections::HashMap;
 
@@ -20,8 +20,8 @@ impl MacroFormatter {
         opcode_to_macro.insert(Opcode::And as u8, "@OP_AND");
         opcode_to_macro.insert(Opcode::Or as u8, "@OP_OR");
         opcode_to_macro.insert(Opcode::Xor as u8, "@OP_XOR");
-        opcode_to_macro.insert(Opcode::Sll as u8, "@OP_SLL");
-        opcode_to_macro.insert(Opcode::Srl as u8, "@OP_SRL");
+        opcode_to_macro.insert(Opcode::Sll as u8, "@OP_SL");
+        opcode_to_macro.insert(Opcode::Srl as u8, "@OP_SR");
         opcode_to_macro.insert(Opcode::Slt as u8, "@OP_SLT");
         opcode_to_macro.insert(Opcode::Sltu as u8, "@OP_SLTU");
         opcode_to_macro.insert(Opcode::Addi as u8, "@OP_ADDI");
@@ -53,15 +53,9 @@ impl MacroFormatter {
     }
 
     fn register_to_macro(&self, reg: u16) -> String {
-        match reg as u8 {
-            r if r == Register::R0 as u8 => "@R0".to_string(),
-            r if r == Register::Pc as u8 => "@PC".to_string(),
-            r if r == Register::Pcb as u8 => "@PCB".to_string(),
-            r if r == Register::Ra as u8 => "@RA".to_string(),
-            r if r == Register::Rab as u8 => "@RAB".to_string(),
-            r if r >= 5 && r <= 17 => format!("@R{}", r - 2),
-            r => format!("#R{}", r),
-        }
+        // The existing BF CPU has the same 32 physical registers as the ISA.
+        // In particular R5/R6 are RV0/RV1, not the old shifted register names.
+        format!("#R{reg}")
     }
 
     pub fn format_instruction(&self, instruction: &Instruction, is_first: bool) -> String {
@@ -336,6 +330,7 @@ impl MacroFormatter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Register;
 
     #[test]
     fn test_format_halt() {
@@ -354,10 +349,37 @@ mod tests {
         let formatted = formatter.format_instruction(&inst, false);
         
         assert!(formatted.contains("@OP_ADD"));
-        assert!(formatted.contains("@R3"));
-        assert!(formatted.contains("@R4"));
-        assert!(formatted.contains("@R5"));
+        assert!(formatted.contains("#R5"));
+        assert!(formatted.contains("#R6"));
+        assert!(formatted.contains("#R7"));
         assert!(formatted.starts_with("@cmd"));
+    }
+
+    #[test]
+    fn physical_register_macros_match_existing_bf_cpu() {
+        let formatter = MacroFormatter::new();
+        let definitions: HashMap<_, _> = CPU_FOOTER.lines().filter_map(|line| {
+            let mut words = line.split_whitespace();
+            if words.next()? != "#define" { return None; }
+            Some((words.next()?, words.next()?))
+        }).collect();
+        for reg in 0..32 {
+            let name = formatter.register_to_macro(reg);
+            let mut value = name.as_str();
+            while let Some(symbol) = value.strip_prefix('#') {
+                value = definitions[symbol];
+            }
+            assert_eq!(value.parse::<u16>().unwrap(), reg);
+        }
+    }
+
+    #[test]
+    fn shift_opcodes_use_existing_bf_cpu_macros() {
+        let formatter = MacroFormatter::new();
+        for opcode in [Opcode::Sll, Opcode::Srl] {
+            let name = formatter.opcode_to_macro[&(opcode as u8)].trim_start_matches('@');
+            assert!(CPU_FOOTER.contains(&format!("#define {name} ")));
+        }
     }
 
     #[test]

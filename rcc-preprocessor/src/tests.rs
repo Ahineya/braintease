@@ -25,6 +25,27 @@ mod tests {
     }
 
     #[test]
+    fn test_command_line_define_survives_inactive_fallback() {
+        let input = "#ifndef BANK_SIZE\n#define BANK_SIZE 64000\n#endif\nBANK_SIZE\n";
+        assert_eq!(preprocess_with_defines(input, vec![("BANK_SIZE", "4096")]).unwrap().trim(), "4096");
+        assert_eq!(preprocess(input).unwrap().trim(), "64000");
+    }
+
+    #[test]
+    fn test_inactive_directives_have_no_effect() {
+        let input = "#define KEEP 7\n#if 0\n#undef KEEP\n#define BAD 1\n#include \"does-not-exist.h\"\n#if 1\n#define NESTED 1\n#endif\n#endif\nKEEP BAD NESTED\n";
+        assert_eq!(preprocess(input).unwrap().trim(), "7 BAD NESTED");
+    }
+
+    #[test]
+    fn test_only_one_conditional_branch_is_taken() {
+        let input = "#if 1\nfirst\n#elif 1\nsecond\n#elif 1\nthird\n#else\nfourth\n#endif\n";
+        assert_eq!(preprocess(input).unwrap().trim(), "first");
+        let input = "#if 0\nfirst\n#elif 1\nsecond\n#elif 1\nthird\n#else\nfourth\n#endif\n";
+        assert_eq!(preprocess(input).unwrap().trim(), "second");
+    }
+
+    #[test]
     fn test_simple_define() {
         let input = indoc! {"
             #define MAX 100

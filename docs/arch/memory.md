@@ -40,9 +40,21 @@ Set in `runtime/crt0.asm` and `runtime/malloc.c`:
 | 1 | Globals (`GP`) |
 | 2 | Stack (`SB`), grows up from address 1 |
 | 3–4 | Unused |
-| 5–255 | Heap bump allocator. Allocations may span banks. |
+| 5–255 | Heap arena with first-fit allocation, splitting and coalescing. Allocations may span banks. |
 
 `BANK_SIZE` (words) is injected when compiling the runtime (`-D BANK_SIZE=…`) and must match `rcc` / `rasm` / `rlink` / `rvm`.
+
+The heap stores a five-cell header before each allocation: a two-cell size, a
+two-cell next pointer, and a one-cell availability flag. `malloc` splits free
+blocks, `free` coalesces adjacent free blocks, and `realloc` grows in place when
+possible or copies the old contents into another allocation. Zero-size allocation
+returns null; failed nonzero `realloc` preserves the old allocation. `calloc`
+checks multiplication overflow before allocating and clearing memory.
+
+Allocation sizes, `sizeof`, and `memcpy`/`memset` lengths are all C bytes (one cell),
+not file-format octets. They use 32-bit `size_t`, so one allocation can span banks.
+The fixed heap range remains banks 5–255; no VM instruction or bank layout changes
+are required.
 
 ## Instruction memory
 

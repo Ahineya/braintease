@@ -29,7 +29,23 @@ impl Linker {
             .collect()
     }
 
-    pub fn link(&self, object_files: Vec<ObjectFile>) -> Result<LinkedProgram, Vec<String>> {
+    pub fn link(&self, mut object_files: Vec<ObjectFile>) -> Result<LinkedProgram, Vec<String>> {
+        // Startup has always called _init_globals. Build one ordinary ISA routine
+        // that visits every separately compiled object's initializer.
+        if !object_files.iter().any(|obj| obj.labels.contains_key("_init_globals")) {
+            let mut names: Vec<_> = object_files.iter().flat_map(|obj| obj.labels.keys())
+                .filter(|name| name.starts_with("__rcc_init_")).cloned().collect();
+            names.sort();
+            let needs_dispatcher = !names.is_empty() || object_files.iter().any(|obj|
+                obj.unresolved_references.values().any(|r| r.label == "_init_globals"));
+            if needs_dispatcher {
+                let mut source = "_init_globals:\nSTORE RA, SB, SP\nADDI SP, SP, 1\nSTORE RAB, SB, SP\nADDI SP, SP, 1\n".to_string();
+                for name in names { source.push_str(&format!("CALL {name}\n")); }
+                source.push_str("ADDI SP, SP, -1\nLOAD RAB, SB, SP\nADDI SP, SP, -1\nLOAD RA, SB, SP\nRET\n");
+                let assembler = crate::assembler::RippleAssembler::new(crate::types::AssemblerOptions::default());
+                object_files.push(assembler.assemble(&source)?);
+            }
+        }
         let mut errors = Vec::new();
         let bank_size = self.bank_size.max(1) as usize;
 
@@ -107,6 +123,9 @@ impl Linker {
             }
         }
 
+        if all_data.len() > bank_size {
+            errors.push(format!("global data needs {} cells, exceeds GP bank capacity {} (would overlap the stack bank)", all_data.len(), bank_size));
+        }
         if !errors.is_empty() {
             return Err(errors);
         }
@@ -135,6 +154,8 @@ impl Linker {
                 } else if unresolved.ref_type == "absolute"
                     && resolved_instructions[global_idx].opcode == Opcode::Jal as u8
                 {
+                    relocs.push(Reloc { kind: RelocKind::JalAbs, index: global_idx as u32 });
+                } else if unresolved.ref_type == "code_bank" {
                     relocs.push(Reloc { kind: RelocKind::JalAbs, index: global_idx as u32 });
                 } else if unresolved.ref_type == "data"
                     && resolved_instructions[global_idx].opcode == Opcode::Li as u8
@@ -267,6 +288,16 @@ impl Linker {
         current_idx: usize,
     ) -> Result<(), String> {
         match reference.ref_type.as_str() {
+            "code_bank" | "code_offset" => {
+                let label = labels.get(&reference.label)
+                    .ok_or_else(|| format!("Undefined function label: {}", reference.label))?;
+                let index = label.absolute_address / 4;
+                instruction.word2 = if reference.ref_type == "code_bank" {
+                    (index / self.bank_size.max(1) as u32) as u16
+                } else {
+                    (index % self.bank_size.max(1) as u32) as u16
+                };
+            }
             "branch" => {
                 // For branch instructions, calculate relative offset
                 let target_label = labels.get(&reference.label)
@@ -394,6 +425,16 @@ impl LinkedProgram {
         for inst in &mut self.instructions {
             if inst.opcode == Opcode::Jal as u8 {
                 inst.word2 = inst.word2.wrapping_add(base);
+            }
+        }
+        // Code-bank LI operands use the existing word2/JalAbs relocation,
+        // so existing image loaders need no new format or opcode.
+        for reloc in &self.relocs {
+            if reloc.kind == RelocKind::JalAbs {
+                let inst = &mut self.instructions[reloc.index as usize];
+                if inst.opcode != Opcode::Jal as u8 {
+                    inst.word2 = inst.word2.wrapping_add(base);
+                }
             }
         }
     }
@@ -536,6 +577,36 @@ mod tests {
     use super::*;
     use crate::assembler::RippleAssembler;
     use crate::types::{AssemblerOptions, Opcode};
+
+    #[test]
+    fn code_pointer_components_follow_packing_and_existing_bank_relocation() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let source = "start:\nLI T0, %offset(callback)\nLI T1, %bank(callback)\nHALT\n";
+        let caller = assembler.assemble(source).unwrap();
+        let pad = assembler.assemble(&format!("padding:\n{}", "NOP\n".repeat(16))).unwrap();
+        let callback = assembler.assemble("callback:\nRET\n").unwrap();
+        let mut linked = Linker::new(16).link(vec![caller, pad, callback]).unwrap();
+        assert_eq!(linked.instructions[0].word2, 0);
+        assert_eq!(linked.instructions[1].word2, 2);
+        assert!(linked.relocs.iter().any(|r| r.index == 1 && r.kind == RelocKind::JalAbs));
+        linked.apply_code_bank_base(7);
+        assert_eq!(linked.instructions[0].word2, 0);
+        assert_eq!(linked.instructions[1].word2, 9);
+    }
+
+    #[test]
+    fn initializer_dispatch_uses_the_banked_stack_abi() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let start = assembler.assemble("start:\nCALL _init_globals\nHALT\n").unwrap();
+        let init = assembler.assemble("__rcc_init_one:\nRET\n").unwrap();
+        let linked = Linker::new(16).link(vec![start, init]).unwrap();
+        let index = (linked.labels["_init_globals"].absolute_address / 4) as usize;
+        let save = linked.instructions[index];
+        assert_eq!(save.opcode, Opcode::Store as u8);
+        assert_eq!(save.word1, crate::types::Register::Ra as u16);
+        assert_eq!(save.word2, crate::types::Register::Sb as u16);
+        assert_eq!(save.word3, crate::types::Register::Sp as u16);
+    }
 
     #[test]
     fn test_link_single_file() {

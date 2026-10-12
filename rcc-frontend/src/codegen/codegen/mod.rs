@@ -56,6 +56,9 @@ impl TypedCodeGenerator {
     fn generate_top_level_item(&mut self, item: &TypedTopLevelItem) -> Result<(), CompilerError> {
         match item {
             TypedTopLevelItem::Function(func) => {
+                if func.storage_class == crate::StorageClass::Static {
+                    self.module.internal_functions.push(func.name.clone());
+                }
                 function_gen::generate_function(
                     &mut self.builder,
                     &mut self.module,
@@ -69,7 +72,7 @@ impl TypedCodeGenerator {
                     func,
                 )?;
             }
-            TypedTopLevelItem::GlobalVariable { name, var_type, initializer } => {
+            TypedTopLevelItem::GlobalVariable { name, var_type, initializer, storage_class } => {
                 global_gen::generate_global_variable(
                     &mut self.builder,
                     &mut self.module,
@@ -81,6 +84,7 @@ impl TypedCodeGenerator {
                     name,
                     var_type,
                     initializer.as_ref(),
+                    *storage_class,
                 )?;
             }
         }

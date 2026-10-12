@@ -39,11 +39,14 @@ impl InitializerAnalyzer {
         
                 // Check type compatibility with typedef awareness
                 if let Some(expr_type) = &expr.expr_type {
-                    let assign_to = match &resolved {
-                        Type::Union { fields, .. } => {
+                    let expression_type = self.type_analyzer.borrow().resolve_type(expr_type);
+                    let assign_to = match (&resolved, &expression_type) {
+                        // A union expression initializes the union object as a whole.
+                        (Type::Union { .. }, Type::Union { .. }) => &resolved,
+                        (Type::Union { fields, .. }, _) => {
                             fields.first().map(|f| &f.field_type).unwrap_or(&resolved)
                         }
-                        other => other,
+                        _ => &resolved,
                     };
                     // Special case: Allow 0 to initialize pointers (NULL)
                     let is_null_init = matches!(assign_to, Type::Pointer { .. })

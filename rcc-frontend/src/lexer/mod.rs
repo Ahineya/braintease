@@ -654,4 +654,13 @@ int main() {
         assert!(matches!(tokens[1].token_type, TokenType::Restrict));
         assert!(matches!(tokens[2].token_type, TokenType::Int));
     }
+    #[test]
+    fn rejects_unsupported_wide_character_literals_without_truncating() {
+        for input in [r"'\x100'", r"'\777'", "'Ā'"] {
+            let mut lexer = Lexer::new(input);
+            let error = lexer.tokenize().expect_err("wide character literals need a diagnostic");
+            assert!(error.to_string().contains("not yet supported"));
+        }
+    }
+
 }

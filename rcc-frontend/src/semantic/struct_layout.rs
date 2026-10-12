@@ -56,7 +56,8 @@ pub fn calculate_struct_layout_with_defs(
         let is_fam = matches!(field.field_type, Type::Array { size: None, .. });
 
         if is_fam {
-            if !is_last {
+            // A flexible member requires a preceding member and must be last.
+            if !is_last || i == 0 {
                 return Err(crate::semantic::SemanticError::IncompleteType {
                     type_name: format!("field '{}' has incomplete type {:?}",
                                      field.name, field.field_type),
@@ -117,25 +118,13 @@ pub fn calculate_union_layout_with_defs(
     let mut layout_fields = Vec::new();
     let mut total_size = 0u64;
 
-    for (i, field) in fields.iter().enumerate() {
-        let is_last = i + 1 == fields.len();
-        let is_fam = matches!(field.field_type, Type::Array { size: None, .. });
-
-        if is_fam {
-            if !is_last {
-                return Err(crate::semantic::SemanticError::IncompleteType {
-                    type_name: format!("field '{}' has incomplete type {:?}",
-                                     field.name, field.field_type),
-                    location: location.clone(),
-                }.into());
-            }
-            layout_fields.push(FieldLayout {
-                name: field.name.clone(),
-                field_type: field.field_type.clone(),
-                offset: 0,
-                size: 0,
-            });
-            continue;
+    for field in fields {
+        // Flexible array members are permitted in structs, never unions.
+        if matches!(field.field_type, Type::Array { size: None, .. }) {
+            return Err(crate::semantic::SemanticError::IncompleteType {
+                type_name: format!("field '{}' has incomplete type {:?}", field.name, field.field_type),
+                location: location.clone(),
+            }.into());
         }
 
         let field_size = match get_type_size(&field.field_type, type_definitions) {

@@ -13,6 +13,7 @@ pub enum Linkage {
     External,  // Visible to other modules
     Internal,  // Only visible within this module (static)
     Private,   // Not visible outside this function
+    Declaration, // extern declaration without storage
 }
 
 /// Global variable definition
@@ -32,6 +33,8 @@ pub struct Module {
     pub name: String,
     pub functions: Vec<Function>,
     pub globals: Vec<GlobalVariable>,
+    #[serde(default)]
+    pub internal_functions: Vec<String>,
     pub type_definitions: HashMap<String, IrType>,
 }
 
@@ -41,6 +44,7 @@ impl Module {
             name,
             functions: Vec::new(),
             globals: Vec::new(),
+            internal_functions: Vec::new(),
             type_definitions: HashMap::new(),
         }
     }

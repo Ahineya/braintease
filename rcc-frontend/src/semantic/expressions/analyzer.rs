@@ -191,8 +191,9 @@ impl ExpressionAnalyzer {
 
                 // Check if function is callable
                 if let Some(func_type) = &function.expr_type {
+                    let resolved_type = self.type_analyzer.borrow().resolve_type(func_type);
                     // Dereference function pointer to get the actual function type
-                    let callable_type = match func_type {
+                    let callable_type = match &resolved_type {
                         Type::Pointer { target, .. } => target.as_ref(),
                         other => other,
                     };
@@ -317,10 +318,10 @@ impl ExpressionAnalyzer {
 
             ExpressionKind::SizeofExpr(operand) => {
                 self.analyze(operand)?;
-                Type::UnsignedInt // sizeof yields size_t (unsigned int)
+                Type::UnsignedLong // sizeof yields size_t (unsigned long)
             }
 
-            ExpressionKind::SizeofType(_) => Type::UnsignedInt,
+            ExpressionKind::SizeofType(_) => Type::UnsignedLong,
 
             ExpressionKind::CompoundLiteral {
                 type_name,

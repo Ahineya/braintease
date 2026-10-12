@@ -14,6 +14,7 @@ pub struct TypedFunction {
     pub return_type: Type,
     pub parameters: Vec<(String, Type)>,
     pub is_variadic: bool,
+    pub storage_class: crate::StorageClass,
     pub body: TypedStmt,
 }
 
@@ -25,6 +26,7 @@ pub enum TypedTopLevelItem {
         name: String,
         var_type: Type,
         initializer: Option<TypedExpr>,
+        storage_class: crate::StorageClass,
     },
 }
 

@@ -250,8 +250,8 @@ impl TypeAnalyzer {
     
     /// Get the common type for two operands (for arithmetic operations)
     pub fn arithmetic_result_type(&self, left: &Type, right: &Type) -> Type {
-        let left = self.resolve_type(left);
-        let right = self.resolve_type(right);
+        let left = self.resolve_type(left).integer_promoted();
+        let right = self.resolve_type(right).integer_promoted();
         match (&left, &right) {
             (Type::Double, _) | (_, Type::Double) => Type::Double,
             (Type::Float, _) | (_, Type::Float) => Type::Float,
@@ -385,8 +385,9 @@ impl TypeAnalyzer {
             // Exact match after resolution
             (a, b) if a == b => true,
             
-            // Struct types with same name are compatible
-            (Type::Struct { name: Some(name1), .. }, Type::Struct { name: Some(name2), .. }) 
+            // Tagged aggregate types retain identity when one reference is incomplete.
+            (Type::Struct { name: Some(name1), .. }, Type::Struct { name: Some(name2), .. })
+            | (Type::Union { name: Some(name1), .. }, Type::Union { name: Some(name2), .. })
                 if name1 == name2 => true,
             
             // Integer conversions
@@ -410,6 +411,7 @@ impl TypeAnalyzer {
                 // An array decays to a pointer to its first element
                 // For multidimensional arrays like int[2][3], the first element is int[3]
                 // So it should decay to int(*)[3]
+                matches!(target.as_ref(), Type::Void) ||
                 self.is_assignable(target.as_ref(), element_type.as_ref()) || 
                 target.as_ref() == element_type.as_ref()
             }
@@ -722,9 +724,6 @@ impl TypeAnalyzer {
                 if let Some(existing_type) = existing_type {
                     if self.types_compatible_for_object_redeclaration(&existing_type, &decl.decl_type) {
                         decl.symbol_id = Some(existing_symbol_id);
-                        if decl.storage_class == StorageClass::Auto {
-                            decl.storage_class = StorageClass::Extern;
-                        }
                         return Ok(());
                     }
                     return Err(CompilerError::semantic_error(
@@ -747,11 +746,9 @@ impl TypeAnalyzer {
         // Resolve the type (in case it references a named struct/union/enum)
         decl.decl_type = self.resolve_type(&decl.decl_type);
 
-        // Fix storage class for global variables
-        // If storage class is Auto (the default), change it to Extern for globals
-        if decl.storage_class == StorageClass::Auto {
-            decl.storage_class = StorageClass::Extern;
-        }
+        // Preserve the source spelling: file-scope default storage defines an
+        // object, while explicit extern without an initializer only declares it.
+        // The symbol table below still records external linkage for both.
 
         let symbol_id = self.symbol_table.borrow_mut().add_symbol(decl.name.clone());
         decl.symbol_id = Some(symbol_id);

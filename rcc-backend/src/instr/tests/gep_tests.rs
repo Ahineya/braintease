@@ -1,423 +1,129 @@
-//! Comprehensive tests for GEP (GetElementPtr) instruction lowering
-
+//! Behavioral GEP regressions: verify normalized addresses and banks rather
+//! than requiring a particular instruction sequence or bank metadata variant.
 use rcc_frontend::ir::{Value, FatPointer};
-use crate::instr::lower_gep;
+use crate::instr::{lower_gep, pointers, wide};
 use crate::regmgmt::{RegisterPressureManager, BankInfo};
-use crate::naming::new_function_naming;
+use crate::naming::{new_function_naming, NameGenerator};
 use rcc_codegen::{AsmInst, Reg};
 use rcc_frontend::BankTag;
+use super::machine::Machine;
 
-const BANK_SIZE_INSTRUCTIONS: u16 = 4096;
+pub(super) fn seed(mgr: &mut RegisterPressureManager, name: String, value: u16, insts: &mut Vec<AsmInst>) -> Reg {
+    let reg = mgr.get_register(name);
+    insts.extend(mgr.take_instructions());
+    insts.push(AsmInst::Li(reg, value as i16));
+    reg
+}
 
-#[test]
-fn test_gep_simple_array_access() {
+pub(super) fn seed_index(mgr: &mut RegisterPressureManager, naming: &NameGenerator, id: u32, value: i32, insts: &mut Vec<AsmInst>) -> Value {
+    let name = naming.temp_name(id);
+    let lo = seed(mgr, name.clone(), value as u16, insts);
+    mgr.pin_register(lo);
+    let hi = seed(mgr, naming.i32_high_name(&name), (value >> 16) as u16, insts);
+    wide::bind_i32(mgr, naming, &name, lo, hi);
+    mgr.unpin_register(lo);
+    Value::Temp(id)
+}
+
+pub(super) fn capture_pointer(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator, value: &Value,
+    low: Reg, high: Reg, insts: &mut Vec<AsmInst>) {
+    let (addr, bank) = pointers::components(mgr, naming, value, insts);
+    insts.push(AsmInst::Move(low, addr));
+    insts.push(AsmInst::Move(high, bank));
+    mgr.unpin_register(addr);
+    mgr.unpin_register(bank);
+}
+
+fn check(bank_size: u16, offset: u16, bank: BankInfo, index: i32, size: u32, dynamic: bool, pressure: bool) {
     let mut mgr = RegisterPressureManager::new(0);
     mgr.init();
+    mgr.set_memory_bank_size(bank_size);
     let mut naming = new_function_naming();
-    
-    // int arr[10]; arr[3]
-    let base_ptr = Value::Temp(1);
-    mgr.set_pointer_bank("t1".to_string(), BankInfo::Stack);
-    
-    let indices = vec![Value::Constant(3)];
-    let element_size = 1; // 16-bit integers take 1 cell each
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 10, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should calculate offset = 3 * 1 = 3
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::AddI(_, _, 3))
-    }));
-    
-    // Result should maintain stack bank
-    assert!(matches!(
-        mgr.get_pointer_bank("t10"),
-        Some(BankInfo::Stack)
-    ));
+    let mut insts = vec![];
+    let expected_bank = match &bank {
+        BankInfo::Global => 1,
+        BankInfo::Stack => 2,
+        BankInfo::Heap(n) => *n,
+        BankInfo::Dynamic(name) => { seed(&mut mgr, name.clone(), 10, &mut insts); 10 },
+        _ => unreachable!(),
+    };
+    seed(&mut mgr, naming.temp_name(1), offset, &mut insts);
+    mgr.set_pointer_bank(naming.temp_name(1), bank);
+    let rhs = if dynamic { seed_index(&mut mgr, &naming, 2, index, &mut insts) } else { Value::Constant(index as i64) };
+    if pressure {
+        for i in 0..16 { seed(&mut mgr, format!("pressure_{i}"), (i * 37) as u16, &mut insts); }
+    }
+    insts.extend(lower_gep(&mut mgr, &mut naming, &Value::Temp(1), &[rhs], size, 10, bank_size));
+    capture_pointer(&mut mgr, &mut naming, &Value::Temp(10), Reg::Rv0, Reg::Rv1, &mut insts);
+    capture_pointer(&mut mgr, &mut naming, &Value::Temp(1), Reg::A0, Reg::A1, &mut insts);
+    let mut machine = Machine::new(bank_size);
+    machine.run(&insts);
+    let linear = i64::from(expected_bank) * i64::from(bank_size) + i64::from(offset) + i64::from(index) * i64::from(size);
+    assert!(linear >= 0);
+    assert_eq!(machine.regs[Reg::Rv0 as usize], (linear % i64::from(bank_size)) as u16,
+        "offset: bank_size={bank_size}, offset={offset}, index={index}, size={size}, dynamic={dynamic}");
+    assert_eq!(machine.regs[Reg::Rv1 as usize], (linear / i64::from(bank_size)) as u16,
+        "bank: bank_size={bank_size}, offset={offset}, index={index}, size={size}, dynamic={dynamic}");
+    assert_eq!((machine.regs[Reg::A0 as usize], machine.regs[Reg::A1 as usize]), (offset, expected_bank), "Base pointer must remain usable");
 }
 
 #[test]
-fn test_gep_zero_offset() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // arr[0] - should just copy the base pointer
-    let base_ptr = Value::Temp(5);
-    mgr.set_pointer_bank("t5".to_string(), BankInfo::Global);
-    
-    let indices = vec![Value::Constant(0)];
-    let element_size = 2; // Fat pointer takes 2 cells
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 20, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should just copy base address (add with R0)
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Add(_, _, r) if *r == Reg::R0)
-    }));
-    
-    // Bank should remain global (uses GP register)
-    assert!(matches!(
-        mgr.get_pointer_bank("t20"),
-        Some(BankInfo::Global)
-    ));
-}
-
+fn test_gep_simple_array_access() { check(4096, 100, BankInfo::Stack, 3, 1, false, false); }
 #[test]
-fn test_gep_dynamic_index() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // arr[i] where i is in a temp
-    let base_ptr = Value::FatPtr(FatPointer {
-        addr: Box::new(Value::Temp(10)),
-        bank: BankTag::Stack,
-    });
-    
-    let indices = vec![Value::Temp(11)]; // Dynamic index
-    let element_size = 2; // Fat pointer takes 2 cells
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 30, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should generate shift instruction (element_size = 2 = 2^1)
-    // First load shift amount (1), then shift
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Li(_, 1))
-    }), "Should load shift amount 1 for element_size=2");
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Sll(_, _, _))
-    }), "Should generate shift instruction");
-    
-    // Should add offset to base
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Add(_, _, _))
-    }));
-    
-    // Should have runtime overflow calculation comment
-    assert!(insts.iter().any(|inst| {
-        if let AsmInst::Comment(s) = inst {
-            s.contains("Runtime bank overflow calculation")
-        } else {
-            false
-        }
-    }));
-    
-    // Should generate DIV and MOD instructions for bank calculation
-    assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Div(_, _, _))));
-    assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Mod(_, _, _))));
-}
-
+fn test_gep_zero_offset() { check(4096, 100, BankInfo::Global, 0, 2, false, false); }
+#[test]
+fn test_gep_dynamic_index() { check(4096, 100, BankInfo::Stack, 17, 2, true, false); }
 #[test]
 fn test_gep_power_of_two_optimization() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Test various power-of-2 element sizes
-    let test_cases = vec![
-        (1, None),           // No shift needed
-        (2, Some(1)),        // Shift by 1
-        (4, Some(2)),        // Shift by 2
-        (8, Some(3)),        // Shift by 3
-        (16, Some(4)),       // Shift by 4
-    ];
-    
-    for (element_size, expected_shift) in test_cases {
-        let base_ptr = Value::Temp(100);
-        mgr.set_pointer_bank("t100".to_string(), BankInfo::Stack);
-        
-        let indices = vec![Value::Temp(101)]; // Dynamic index
-        
-        let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 200, BANK_SIZE_INSTRUCTIONS);
-        
-        if let Some(shift) = expected_shift {
-            // Check that we load the shift amount and then perform the shift
-            assert!(
-                insts.iter().any(|inst| matches!(inst, AsmInst::Li(_, s) if *s == shift)),
-                "Expected to load shift amount {} for element size {}", shift, element_size
-            );
-            assert!(
-                insts.iter().any(|inst| matches!(inst, AsmInst::Sll(_, _, _))),
-                "Expected shift instruction for element size {}", element_size
-            );
-        }
+    for size in [1, 2, 4, 8, 16] { check(4096, 4000, BankInfo::Heap(10), 33, size, true, false); }
+}
+#[test]
+fn test_gep_non_power_of_two_size() { check(4096, 4000, BankInfo::Stack, 51, 3, true, false); }
+#[test]
+fn test_gep_large_static_offset() { check(4096, 100, BankInfo::Stack, 2000, 8, false, false); }
+#[test]
+fn test_gep_element_larger_than_one_word() {
+    for dynamic in [false, true] {
+        check(64000, 100, BankInfo::Heap(10), 2, 70000, dynamic, false);
     }
 }
-
 #[test]
-fn test_gep_non_power_of_two_size() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Element size that's not a power of 2
-    let base_ptr = Value::Temp(50);
-    mgr.set_pointer_bank("t50".to_string(), BankInfo::Stack);
-    
-    let indices = vec![Value::Temp(51)];
-    let element_size = 3; // Not a power of 2
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 60, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should use multiplication
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Mul(_, _, _))
-    }));
-    
-    // Should load the size constant
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Li(_, 3))
-    }));
-}
-
-#[test]
-fn test_gep_large_static_offset() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Large offset that crosses bank boundary
-    let base_ptr = Value::Temp(70);
-    mgr.set_pointer_bank("t70".to_string(), BankInfo::Stack);
-    
-    let indices = vec![Value::Constant(2000)]; // Large index
-    let element_size = 8; // Total offset = 16000 (crosses bank at 4096)
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 80, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should generate large offset
-    let expected_offset = 2000 * 8;
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::AddI(_, _, off) if *off == expected_offset)
-    }));
-    
-    // Should have bank overflow warning
-    assert!(insts.iter().any(|inst| {
-        if let AsmInst::Comment(s) = inst {
-            s.contains("bank overflow")
-        } else {
-            false
-        }
-    }), "Expected bank overflow warning for large offset");
-}
-
-#[test]
-fn test_gep_global_pointer() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // GEP on a global array - simulate how lower.rs would resolve it
-    let base_ptr = Value::FatPtr(FatPointer {
-        addr: Box::new(Value::Constant(1000)), // Simulated global address
-        bank: BankTag::Global,
-    });
-    
-    let indices = vec![Value::Constant(5)];
-    let element_size = 2;
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 90, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should load the constant global address
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Li(_, 1000))
-    }), "Should load global address 1000");
-    
-    // Should calculate offset
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::AddI(_, _, 10))
-    }));
-    
-    // Result should have global bank (uses GP register) 
-    assert!(matches!(
-        mgr.get_pointer_bank("t90"),
-        Some(BankInfo::Global)
-    ));
-}
-
+fn test_gep_global_pointer() { check(4096, 1000, BankInfo::Global, 5, 2, false, false); }
 #[test]
 fn test_gep_fat_pointer_with_constant_addr() {
     let mut mgr = RegisterPressureManager::new(0);
     mgr.init();
     let mut naming = new_function_naming();
-    
-    // Fat pointer with constant address
-    let base_ptr = Value::FatPtr(FatPointer {
-        addr: Box::new(Value::Constant(0x1000)),
-        bank: BankTag::Global,
-    });
-    
-    let indices = vec![Value::Constant(10)];
-    let element_size = 4;
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 100, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should load constant address
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::Li(_, 0x1000))
-    }));
-    
-    // Should add offset
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::AddI(_, _, 40))
-    }));
+    let ptr = Value::FatPtr(FatPointer { addr: Box::new(Value::Constant(4090)), bank: BankTag::Global });
+    let mut insts = lower_gep(&mut mgr, &mut naming, &ptr, &[Value::Constant(10)], 4, 10, 4096);
+    capture_pointer(&mut mgr, &mut naming, &Value::Temp(10), Reg::Rv0, Reg::Rv1, &mut insts);
+    let mut machine = Machine::new(4096);
+    machine.run(&insts);
+    assert_eq!((machine.regs[Reg::Rv0 as usize], machine.regs[Reg::Rv1 as usize]), (34, 2));
 }
-
 #[test]
 fn test_gep_preserves_bank_info() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Test that bank info is preserved through GEP
-    let test_cases = vec![
-        (BankTag::Global, BankInfo::Global),
-        (BankTag::Stack, BankInfo::Stack),
-    ];
-    
-    for (input_bank, expected_bank) in test_cases {
-        let base_ptr = Value::FatPtr(FatPointer {
-            addr: Box::new(Value::Temp(200)),
-            bank: input_bank,
-        });
-        
-        let indices = vec![Value::Constant(5)];
-        let element_size = 2;
-        let result_temp = 210;
-        
-        let _insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, result_temp, BANK_SIZE_INSTRUCTIONS);
-        
-        // Check that bank info is preserved
-        let result_name = format!("t{}", result_temp);
-        assert!(matches!(
-            mgr.get_pointer_bank(&result_name),
-            Some(ref bank) if std::mem::discriminant(bank) == std::mem::discriminant(&expected_bank)
-        ), "Bank info should be preserved for {:?}", input_bank);
+    for bank in [BankInfo::Global, BankInfo::Stack, BankInfo::Heap(10), BankInfo::Dynamic("bank".into())] {
+        check(4096, 100, bank, 5, 2, false, false);
     }
 }
-
 #[test]
 fn test_gep_negative_offset() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Negative array index (going backwards)
-    let base_ptr = Value::Temp(300);
-    mgr.set_pointer_bank("t300".to_string(), BankInfo::Stack);
-    
-    let indices = vec![Value::Constant(-5)];
-    let element_size = 4;
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 310, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should generate negative offset
-    assert!(insts.iter().any(|inst| {
-        matches!(inst, AsmInst::AddI(_, _, -20))
-    }));
+    for dynamic in [false, true] { check(4096, 10, BankInfo::Heap(10), -5, 4, dynamic, false); }
 }
-
 #[test]
-fn test_gep_register_pressure() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Fill up some registers to test spilling behavior
-    for i in 0..10 {
-        let name = format!("dummy_{}", i);
-        mgr.get_register(name);
-    }
-    
-    // Now do GEP with dynamic offset (needs multiple registers)
-    let base_ptr = Value::Temp(400);
-    mgr.set_pointer_bank("t400".to_string(), BankInfo::Stack);
-    
-    let indices = vec![Value::Temp(401)];
-    let element_size = 7; // Non-power-of-2 to force multiplication
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 410, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should have spill/reload comments if register pressure is high
-    let has_spills = insts.iter().any(|inst| {
-        if let AsmInst::Comment(s) = inst {
-            s.contains("Spill") || s.contains("Reload")
-        } else {
-            false
-        }
-    });
-    
-    // This test just ensures the code doesn't panic under register pressure
-    assert!(!insts.is_empty());
-    
-    // If spills occurred, that's fine
-    if has_spills {
-        println!("Register spills occurred as expected under pressure");
-    }
-}
-
+fn test_gep_register_pressure() { check(4096, 4000, BankInfo::Heap(10), 300, 7, true, true); }
 #[test]
 fn test_gep_runtime_bank_overflow() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Test that runtime bank overflow correctly updates the bank register
-    let base_ptr = Value::Temp(500);
-    mgr.set_pointer_bank("t500".to_string(), BankInfo::Stack);
-    
-    // Dynamic index that will cause bank overflow
-    let indices = vec![Value::Temp(501)];
-    let element_size = 1; // Simple case
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 510, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should calculate bank delta
-    assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Div(_, _, _))), 
-            "Should calculate bank delta with DIV");
-    
-    // Should calculate new address within bank
-    assert!(insts.iter().any(|inst| matches!(inst, AsmInst::Mod(_, _, _))), 
-            "Should calculate address within bank with MOD");
-    
-    // Should update bank register (adding to SB since base is stack)
-    assert!(insts.iter().any(|inst| {
-        if let AsmInst::Add(_, sb, _) = inst {
-            *sb == Reg::Sb
-        } else {
-            false
+    for bank_size in [128, 4096, 64000, 65535] {
+        for dynamic in [false, true] {
+            for index in [0, 1, 2, 56000, 70000, -1, -100] {
+                check(bank_size, bank_size - 1, BankInfo::Heap(10), index, 1, dynamic, false);
+            }
         }
-    }), "Should add bank delta to SB for stack-based pointer");
-    
-    // Result should have dynamic bank
-    assert!(matches!(
-        mgr.get_pointer_bank("t510"),
-        Some(BankInfo::Dynamic(_))
-    ), "Result should have dynamic bank in a register");
+    }
+    // Reproduces the audit failure: addition exceeds the 16-bit word width.
+    check(64000, 10001, BankInfo::Heap(5), 56000, 1, true, false);
 }
-
-#[test] 
-fn test_gep_dynamic_with_existing_dynamic_bank() {
-    let mut mgr = RegisterPressureManager::new(0);
-    mgr.init();
-    let mut naming = new_function_naming();
-    
-    // Start with a pointer that already has a dynamic bank
-    let base_ptr = Value::Temp(600);
-    mgr.set_pointer_bank("t600".to_string(), BankInfo::Register(Reg::T5));
-    
-    let indices = vec![Value::Temp(601)];
-    let element_size = 2;
-    
-    let insts = lower_gep(&mut mgr, &mut naming, &base_ptr, &indices, element_size, 610, BANK_SIZE_INSTRUCTIONS);
-    
-    // Should update the existing dynamic bank register
-    assert!(insts.iter().any(|inst| {
-        if let AsmInst::Add(t5, t5_2, _) = inst {
-            *t5 == Reg::T5 && *t5_2 == Reg::T5
-        } else {
-            false
-        }
-    }), "Should update existing dynamic bank register in place");
-}
+#[test]
+fn test_gep_dynamic_with_existing_dynamic_bank() { check(4096, 4000, BankInfo::Dynamic("bank".into()), 100, 2, true, false); }

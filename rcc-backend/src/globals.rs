@@ -3,7 +3,7 @@
 //! This module manages global variable allocation, tracking, and initialization
 //! code generation for the V2 backend.
 
-use rcc_frontend::ir::{GlobalVariable, IrType, Value};
+use rcc_frontend::ir::{GlobalVariable, IrType, Value, Linkage};
 use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use std::collections::HashMap;
 use log::debug;
@@ -25,6 +25,7 @@ pub struct GlobalManager {
     next_address: u16,
     /// Sanitized module name used to uniquify the GP base label
     module_name: String,
+    definitions: Vec<(String, u16)>,
 }
 
 fn sanitize_module_name(name: &str) -> String {
@@ -49,7 +50,8 @@ impl GlobalManager {
         Self {
             allocations: HashMap::new(),
             next_address: 0,
-            module_name: sanitize_module_name(module_name),
+            module_name: format!("{}_{}", sanitize_module_name(module_name), uuid::Uuid::new_v4().simple()),
+            definitions: Vec::new(),
         }
     }
 
@@ -72,13 +74,16 @@ impl GlobalManager {
         let Some(label) = self.gp_base_label() else {
             return Vec::new();
         };
-        vec![
-            AsmInst::Raw(".data".to_string()),
-            AsmInst::Label(label),
-            AsmInst::Raw(format!(".space {}", self.next_address)),
-            AsmInst::Raw(".code".to_string()),
-        ]
+        let mut insts = vec![AsmInst::Raw(".data".to_string()), AsmInst::Label(label)];
+        for (name, size) in &self.definitions {
+            insts.push(AsmInst::Label(name.clone()));
+            insts.push(AsmInst::Raw(format!(".space {size}")));
+        }
+        insts.push(AsmInst::Raw(".code".to_string()));
+        insts
     }
+
+    pub fn unit_tag(&self) -> &str { &self.module_name }
 
     fn emit_gp_addr(&self, dest: Reg, address: u16) -> Vec<AsmInst> {
         let label = self.gp_base_label();
@@ -95,7 +100,11 @@ impl GlobalManager {
             size,
         };
         
-        self.next_address += size;
+        if global.linkage != Linkage::Declaration {
+            self.next_address = self.next_address.checked_add(size)
+                .expect("global storage exceeds the 16-bit data address space");
+            self.definitions.push((global.name.clone(), size));
+        }
         self.allocations.insert(global.name.clone(), info.clone());
         
         debug!("Allocated global '{}' at address {} (size: {} words)", 
@@ -120,6 +129,9 @@ impl GlobalManager {
         
         // Generate initialization based on the initializer
         match &global.initializer {
+            Some(Value::ConstantAggregate(values)) => {
+                insts.extend(self.lower_aggregate_init(global, &global.var_type, values, info.address));
+            }
             Some(Value::ConstantArray(values)) => {
                 // Initialize array with provided values
                 insts.extend(self.lower_array_init(global, values, info.address));
@@ -221,6 +233,9 @@ impl GlobalManager {
                 // For FatPtr initializers (e.g., pointer to string literal)
                 // Store the address component
                 match fp.addr.as_ref() {
+                    Value::Function(name) => {
+                        insts.extend(self.lower_function_pointer_init(name, address));
+                    }
                     Value::Global(name) => {
                         // Need to get the address of the referenced global
                         insts.push(AsmInst::Comment(format!("Pointer to global '{}'", name)));
@@ -230,7 +245,8 @@ impl GlobalManager {
                         if let Some(target_info) = self.get_global_info(name) {
                             debug!("Found global '{}' at address {}", name, target_info.address);
                             // Store the (relocatable) address of the target global
-                            insts.extend(self.emit_gp_addr(Reg::T0, target_info.address));
+                            let _ = target_info;
+                            insts.push(AsmInst::LiLabel(Reg::T0, name.clone()));
                             insts.extend(self.emit_gp_addr(Reg::T1, address));
                             insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
                             
@@ -262,9 +278,11 @@ impl GlobalManager {
                             rcc_frontend::BankTag::Stack => {
                                 insts.push(AsmInst::Add(Reg::T0, Reg::Sb, Reg::R0)); // Copy SB register
                             }
-                            _ => {
-                                insts.push(AsmInst::Add(Reg::T0, Reg::Gp, Reg::R0)); // Default to GP
+                            rcc_frontend::BankTag::Null => {
+                                insts.push(AsmInst::Li(Reg::T0, crate::regmgmt::BankTagValue::NULL));
                             }
+                            rcc_frontend::BankTag::Heap(bank) => insts.push(AsmInst::Li(Reg::T0, bank as i16)),
+                            _ => panic!("unsupported constant global pointer bank"),
                         }
                         insts.extend(self.emit_gp_addr(Reg::T1, address + 1));
                         insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
@@ -275,6 +293,7 @@ impl GlobalManager {
                     }
                 }
             }
+            Value::Function(name) => insts.extend(self.lower_function_pointer_init(name, address)),
             Value::Global(name) => {
                 // Direct reference to another global (for non-pointer types)
                 panic!("COMPILER ERROR: Global '{}' initialized with reference to '{}' - not yet supported", 
@@ -289,6 +308,58 @@ impl GlobalManager {
         
         insts
     }
+    fn lower_aggregate_init(&self, global: &GlobalVariable, ty: &IrType, values: &[Value], address: u16) -> Vec<AsmInst> {
+        let mut values = values.iter().peekable();
+        let insts = self.lower_aggregate_elements(global, ty, &mut values, address);
+        assert!(values.next().is_none(), "too many global aggregate initializers");
+        insts
+    }
+
+    fn lower_aggregate_elements<'a>(&self, global: &GlobalVariable, ty: &IrType, values: &mut std::iter::Peekable<std::slice::Iter<'a, Value>>, address: u16) -> Vec<AsmInst> {
+        let element_types: Vec<&IrType> = match ty {
+            IrType::Array { size, element_type } => (0..*size).map(|_| element_type.as_ref()).collect(),
+            IrType::Struct { fields, .. } => fields.iter().collect(),
+            _ => vec![ty],
+        };
+        let mut insts = Vec::new();
+        let mut offset = address;
+        for element_type in element_types {
+            let Some(value) = values.peek().copied() else { break; };
+            match value {
+                Value::ConstantAggregate(nested) => {
+                    values.next();
+                    insts.extend(self.lower_aggregate_init(global, element_type, nested, offset));
+                }
+                Value::ConstantArray(cells) => {
+                    values.next();
+                    insts.extend(self.lower_array_init(global, cells, offset));
+                }
+                _ if matches!(element_type, IrType::Array { .. } | IrType::Struct { .. }) => {
+                    // C permits brace elision: int a[2][2] = {1,2,3,4}.
+                    insts.extend(self.lower_aggregate_elements(global, element_type, values, offset));
+                }
+                _ => {
+                    values.next();
+                    let mut element = global.clone();
+                    element.var_type = element_type.clone();
+                    insts.extend(self.lower_single_value_init(&element, value, offset));
+                }
+            }
+            offset += element_type.size_in_words().expect("sized global initializer") as u16;
+        }
+        insts
+    }
+
+    fn lower_function_pointer_init(&self, name: &str, address: u16) -> Vec<AsmInst> {
+        let mut insts = vec![AsmInst::LiLabel(Reg::T0, format!("%offset({name})"))];
+        insts.extend(self.emit_gp_addr(Reg::T1, address));
+        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        insts.push(AsmInst::LiLabel(Reg::T0, format!("%bank({name})")));
+        insts.extend(self.emit_gp_addr(Reg::T1, address + 1));
+        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        insts
+    }
+
 }
 
 impl Default for GlobalManager {

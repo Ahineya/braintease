@@ -7,8 +7,8 @@ float addf(float a, float b) {
 }
 
 int main() {
-    if (sizeof(float) == 4) putchar('Y'); else putchar('N');
-    if (sizeof(double) == 8) putchar('Y'); else putchar('N');
+    if (sizeof(float) == 2) putchar('Y'); else putchar('N');
+    if (sizeof(double) == 4) putchar('Y'); else putchar('N');
 
     if (1.0f + 2.0f == 3.0f) putchar('Y'); else putchar('N');
     if (2.0f * 3.0f == 6.0f) putchar('Y'); else putchar('N');
