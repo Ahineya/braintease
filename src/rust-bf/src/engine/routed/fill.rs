@@ -16,6 +16,9 @@ pub(super) struct Fill {
 
 impl Fill {
     pub(super) fn parse(parts: &[Part]) -> Option<Self> {
+        if parts.iter().any(|p| matches!(p.kind, Kind::Search(_))) {
+            return None;
+        }
         if !matches!(parts.first()?.kind, Kind::Add(u16::MAX)) {
             return None;
         }
@@ -77,6 +80,7 @@ impl Fill {
                     }
                 }
                 Kind::Add(_) => return false,
+                Kind::Search(_) => return false,
                 Kind::Move(delta) => {
                     let Some(next) = pointer.checked_add_signed(delta) else {
                         return false;

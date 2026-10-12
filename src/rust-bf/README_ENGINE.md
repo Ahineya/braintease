@@ -57,6 +57,15 @@ changes during a budget yield. Exit cells must remain zero at every summarized
 evaluation. Cancelled writes remain part of this proof, because their
 intermediate values could affect a scan.
 
+These routes may also return through a moving-marker search. A read-only
+zero-run trace finds its destination, then the proof requires the marker to be
+exactly one, the trailing and intermediate cells to be zero, and the found cell
+to remain nonzero at each summarized search. Consuming the initial marker is a
+symbolic decrement; all intermediate marker writes cancel before the enclosing
+body continues. Repeated searches include their own preceding partial updates.
+Failed or cold proofs leave real tape untouched. A closing-bracket retry lets
+the first literal body warm a long route before folding later iterations.
+
 Counted first-zero fills such as `[->>[>]+[<]<]` deliberately change their scan
 predicates. A separate guard proves that the loop decrements its original
 control, fills a zero, and returns over the growing run. The changing scans must

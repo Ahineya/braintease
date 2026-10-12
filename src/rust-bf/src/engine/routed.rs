@@ -8,7 +8,7 @@
 //! guarded summary handles counted first-zero filling; all other changing
 //! routes retain the original BF instructions.
 
-use super::{Machine, Op, Program, BLOCK_LIMIT, SCAN_LIMIT};
+use super::{search::Search, Machine, Op, Program, BLOCK_LIMIT, SCAN_LIMIT};
 
 mod fill;
 
@@ -21,6 +21,7 @@ enum Kind {
         minimum: isize,
         maximum: isize,
     },
+    Search(Search),
 }
 
 #[derive(Debug)]
@@ -74,6 +75,14 @@ impl Routed {
                 Op::Add(value) => Kind::Add(value),
                 Op::Move(delta) => Kind::Move(delta),
                 Op::Open(after) => {
+                    if let Some(search) = Search::parse(program, cursor) {
+                        cursor = search.next;
+                        parts.push(Part {
+                            kind: Kind::Search(search),
+                        });
+                        scans += 1;
+                        continue;
+                    }
                     let scan = program.arithmetic(cursor + 1, after - 1)?;
                     if !scan.changes.is_empty() || scan.advance == 0 {
                         return None;
@@ -104,7 +113,7 @@ impl Routed {
     }
 
     pub(super) fn resumes(&self) -> bool {
-        self.fill.is_some()
+        self.fill.is_some() || self.parts.iter().any(|p| matches!(p.kind, Kind::Search(_)))
     }
 
     pub(super) fn execute(&self, machine: &mut Machine) -> bool {
@@ -128,7 +137,7 @@ impl Routed {
         let mut changes = [Change::default(); BLOCK_LIMIT];
         let mut paths = [Path::default(); BLOCK_LIMIT];
         let mut locations = [0usize; BLOCK_LIMIT];
-        let (mut change_count, mut path_count) = (0, 0);
+        let mut change_count = 0;
         let mut pointer = start;
         let mut probes = SCAN_LIMIT;
         for (part_index, part) in self.parts.iter().enumerate() {
@@ -168,13 +177,53 @@ impl Routed {
                     else {
                         return false;
                     };
-                    paths[path_count] = Path {
+                    paths[part_index] = Path {
                         first: pointer,
                         last: target,
                         stride: stride.unsigned_abs(),
                     };
-                    path_count += 1;
                     pointer = target;
+                }
+                Kind::Search(ref search) => {
+                    let partial = changes[..change_count]
+                        .iter()
+                        .find(|c| c.index == pointer)
+                        .map_or(0, |c| c.delta);
+                    if machine.tape[pointer].wrapping_add(partial) != 1
+                        || search.minimum.unsigned_abs() > pointer
+                        || search.maximum as usize >= machine.tape.len() - pointer
+                    {
+                        return false;
+                    }
+                    let behind = (pointer as isize - search.stride) as usize;
+                    if machine.tape[behind] != 0 {
+                        return false;
+                    }
+                    let first = (pointer as isize + search.stride) as usize;
+                    let Some(found) = machine.trace_zeros(first, search.stride, &mut probes) else {
+                        return false;
+                    };
+                    paths[part_index] = Path {
+                        first: behind,
+                        last: found,
+                        stride: search.stride.unsigned_abs(),
+                    };
+                    // All intermediate markers cancel. The only net write is
+                    // consuming the initial one; retain this transient write
+                    // even if an earlier increment makes its total delta zero.
+                    if let Some(change) = changes[..change_count]
+                        .iter_mut()
+                        .find(|c| c.index == pointer)
+                    {
+                        change.delta = change.delta.wrapping_sub(1);
+                    } else {
+                        changes[change_count] = Change {
+                            index: pointer,
+                            delta: u16::MAX,
+                        };
+                        change_count += 1;
+                    }
+                    pointer = (found as isize - search.stride) as usize;
                 }
             }
         }
@@ -200,7 +249,6 @@ impl Routed {
         // zero/nonzero result as the unmodified route used above. Include the
         // exact partial delta at each scan, not only the whole-body delta.
         let mut partial = [0u16; BLOCK_LIMIT];
-        let mut path_index = 0;
         for (part_index, part) in self.parts.iter().enumerate() {
             match part.kind {
                 Kind::Add(delta) => {
@@ -211,8 +259,7 @@ impl Routed {
                     partial[index] = partial[index].wrapping_add(delta);
                 }
                 Kind::Scan { .. } => {
-                    let path = paths[path_index];
-                    path_index += 1;
+                    let path = paths[part_index];
                     for (index, change) in changes.iter().enumerate() {
                         if path.contains(change.index) {
                             prefix = prefix.min(predicate_prefix(
@@ -225,6 +272,43 @@ impl Routed {
                             }
                         }
                     }
+                }
+                Kind::Search(_) => {
+                    let marker = changes
+                        .iter()
+                        .position(|c| c.index == locations[part_index])
+                        .unwrap();
+                    prefix = prefix.min(equality_prefix(
+                        machine.tape[changes[marker].index],
+                        partial[marker],
+                        changes[marker].delta,
+                        1,
+                    ));
+                    let path = paths[part_index];
+                    for (index, change) in changes.iter().enumerate() {
+                        if index == marker || !path.contains(change.index) {
+                            continue;
+                        }
+                        let limit = if change.index == path.last {
+                            predicate_prefix(
+                                machine.tape[change.index],
+                                partial[index],
+                                change.delta,
+                            )
+                        } else {
+                            equality_prefix(
+                                machine.tape[change.index],
+                                partial[index],
+                                change.delta,
+                                0,
+                            )
+                        };
+                        prefix = prefix.min(limit);
+                    }
+                    if prefix == 0 {
+                        return false;
+                    }
+                    partial[marker] = partial[marker].wrapping_sub(1);
                 }
                 Kind::Move(_) => {}
             }
@@ -245,6 +329,16 @@ impl Routed {
             self.start
         };
         true
+    }
+}
+
+fn equality_prefix(initial: u16, partial: u16, delta: u16, expected: u16) -> u16 {
+    if initial.wrapping_add(partial) != expected {
+        0
+    } else if delta == 0 {
+        u16::MAX
+    } else {
+        1
     }
 }
 
@@ -281,6 +375,154 @@ fn predicate_prefix(initial: u16, partial: u16, delta: u16) -> u16 {
 mod tests {
     use super::*;
     use crate::engine::{tests::compare, Stop};
+
+    // Even cells route forward over nonzero values; odd cells route back over
+    // zeros to a nonzero sentinel. The temporary marker cancels each body.
+    const SEARCH_TRANSFER: &str = "[->>[>>]<<+>+[<<[>>-]>>[-<<+>>]<<]<<<]";
+
+    #[test]
+    fn marker_searches_inside_affine_routes_fold_complete_transfers() {
+        for count in [0, 1, 3, 31, 32768, 65535] {
+            let initial = [count, 7, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0];
+            if count < 100 {
+                compare(SEARCH_TRANSFER, &initial, false, false);
+            }
+            let program = Program::parse(SEARCH_TRANSFER, true, false).unwrap();
+            let mut machine = Machine::new(initial.len()).unwrap();
+            machine.tape_mut().copy_from_slice(&initial);
+            assert_eq!(machine.run(&program, 1).unwrap(), Stop::Halted);
+            let mut expected = initial;
+            expected[0] = 0;
+            expected[8] = 1u16.wrapping_add(count);
+            assert_eq!(machine.tape(), expected);
+            assert_eq!(machine.pointer(), 0);
+        }
+    }
+
+    #[test]
+    fn searched_transfers_preserve_stride_direction_and_wrapping_read_boundaries() {
+        for stride in [-7isize, -3, -1, 1, 3, 7] {
+            let mut source = String::new();
+            for ch in SEARCH_TRANSFER.chars() {
+                match ch {
+                    '<' | '>' => {
+                        let forward = (ch == '>') == (stride > 0);
+                        source.push_str(
+                            &if forward { ">" } else { "<" }.repeat(stride.unsigned_abs()),
+                        );
+                    }
+                    _ => source.push(ch),
+                }
+            }
+            let cells = 12 * stride.unsigned_abs();
+            let start = if stride > 0 { 0 } else { cells - 1 };
+            let source = format!("{}{source}", ">".repeat(start));
+            for count in [0, 1, 2, 7, 31] {
+                for destination in [0, 1, 65534, 65535] {
+                    let mut initial = vec![0; cells];
+                    for (at, value) in
+                        [(0, count), (1, 7), (2, 1), (4, 1), (6, 1), (8, destination)]
+                    {
+                        initial[(start as isize + at * stride) as usize] = value;
+                    }
+                    compare(&source, &initial, false, false);
+                    compare(&source, &initial, true, false);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn searched_routes_check_transient_writes_and_marker_values_before_committing() {
+        for source in [
+            SEARCH_TRANSFER.replacen(">+[<<", ">+<<+>>[<<", 1),
+            SEARCH_TRANSFER.replacen("<<+>", "<<+>>>+<<", 1),
+            SEARCH_TRANSFER.replacen(">+[<<", ">[<<", 1),
+            SEARCH_TRANSFER.replacen(">+[<<", ">++[<<", 1),
+            SEARCH_TRANSFER.replacen(">+[<<", ">+<<<<<<<<------->>>>>>>>[<<", 1),
+        ] {
+            let program = Program::parse(&source, true, false).unwrap();
+            let candidate = Routed::parse(&program, 0).unwrap();
+            let mut machine = Machine::new(12).unwrap();
+            machine
+                .tape_mut()
+                .copy_from_slice(&[3, 7, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0]);
+            let before = machine.tape().to_vec();
+            assert!(!candidate.execute_affine(&mut machine), "{source}");
+            assert_eq!(machine.tape(), before);
+            assert_eq!(machine.pointer(), 0);
+            assert_eq!(machine.pc, 0);
+            compare(&source, &before, false, false);
+        }
+        // A marker update that wraps to one is valid once; its net change
+        // prevents folding a second body under the same exact-one guard.
+        let source = SEARCH_TRANSFER.replacen(">+[<<", ">++[<<", 1);
+        compare(
+            &source,
+            &[2, 7, 1, 0, 1, 0, 1, 0, 1, 65535, 0, 0],
+            false,
+            false,
+        );
+        // Cancelling an intermediate write before the search is safe.
+        let source = SEARCH_TRANSFER.replacen(">+[<<", ">+<<+->>[<<", 1);
+        compare(&source, &[7, 7, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0], false, false);
+    }
+
+    #[test]
+    fn searched_routes_preserve_cold_budget_boundaries_host_changes_and_fault_state() {
+        let source = format!("{}!{}", SEARCH_TRANSFER, SEARCH_TRANSFER);
+        compare(&source, &[3, 7, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0], false, true);
+        for length in [1, 2, 7, 9, 11] {
+            let mut initial = vec![0; length];
+            initial[0] = 3;
+            for at in [1, 2, 4, 6, 8] {
+                if at < length {
+                    initial[at] = 1;
+                }
+            }
+            compare(SEARCH_TRANSFER, &initial, false, false);
+        }
+        // Warmed zero/nonzero facts survive a failed readonly proof. The
+        // executor installed at the closing bracket can try again after the
+        // first literal body has learned its longer route.
+        let program = Program::parse(SEARCH_TRANSFER, true, false).unwrap();
+        let mut machine = Machine::new(2052).unwrap();
+        machine.write_cell(0, 64000);
+        machine.write_cell(1, 7);
+        for at in (2..=2048).step_by(2) {
+            machine.write_cell(at, 1);
+        }
+        assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
+        assert_eq!(machine.tape[0], 64000);
+        assert_eq!(machine.pointer(), 0);
+        machine.write_cell(0, 31);
+        while machine.run(&program, 7).unwrap() == Stop::Budget {}
+        assert_eq!(machine.tape[0], 0);
+        assert_eq!(machine.tape[2048], 32);
+        assert_eq!(machine.pointer(), 0);
+        assert!(machine.dispatches() < 100);
+    }
+
+    #[test]
+    fn repeated_searches_use_their_own_partial_updates_and_caches() {
+        let route = &SEARCH_TRANSFER[2..SEARCH_TRANSFER.len() - 1];
+        let source = format!("[-{route}{route}]");
+        let mut seed = 0x917c_326bu32;
+        for _ in 0..100 {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            let count = 1 + (seed % 31) as u16;
+            let destination = [0, 1, 32768, 65533, 65534, 65535][seed as usize % 6];
+            let initial = [count, 7, 1, 0, 1, 0, 1, 0, destination, 0, 0, 0];
+            compare(&source, &initial, false, false);
+            compare(&source, &initial, true, false);
+        }
+        compare(SEARCH_TRANSFER, &[0], false, false);
+        let hooked = SEARCH_TRANSFER.replacen("[<<[>>-]", "[!<<[>>-]", 1);
+        let program = Program::parse(&hooked, true, true).unwrap();
+        assert!(Routed::parse(&program, 0).is_none());
+    }
 
     #[test]
     fn scanned_transfer_folds_all_iterations_and_preserves_other_cells() {

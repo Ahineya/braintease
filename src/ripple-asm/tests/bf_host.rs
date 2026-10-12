@@ -226,6 +226,17 @@ fn arithmetic_and_logic_smoke() {
 }
 
 #[test]
+#[ignore = "Known BF CPU unsigned compare bug: lhs65535 wraps @lt; CPU unchanged during optimizer work"]
+fn unsigned_maximum_is_not_less_than_a_small_value() {
+    // The CPU's @lt algorithm increments its operands; 65535 wraps to zero.
+    // Keep the architectural expectation, independently of rbf optimizations.
+    let state = run(
+        "start:\nLI T0, -1\nLI T1, 12\nSLTU T2, T0, T1\nSTORE T2, R0, R0\nHALT\n",
+    );
+    assert_eq!(state.writes, [(0, 0)], "unsigned 65535 < 12 must be false");
+}
+
+#[test]
 fn signed_branch_edges() {
     let state = run("start:\nLI T0, -32768\nLI T1, 1\nLI A0, 0\nBLT T0, T1, less\nLI A0, 99\nless:\nSTORE A0, R0, R0\nBGE T1, T0, greater\nLI A0, 98\ngreater:\nSTORE A0, R0, R0\nHALT\n");
     assert_eq!(state.writes, [(0, 0), (0, 0)]);

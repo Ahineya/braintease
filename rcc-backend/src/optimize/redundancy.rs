@@ -3,7 +3,7 @@
 //! Unknown stores/calls and assembly memory clobbers remain hard barriers.
 use rcc_common::TempId;
 use rcc_frontend::ir::{Function, Instruction as I, IrBinaryOp as B, IrType, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 fn global(value: &Value) -> Option<&str> {
     match value {
@@ -179,6 +179,108 @@ fn common_expressions(function: &mut Function) {
                 values.push((bi, result));
             }
         }
+    }
+}
+
+/// Give repeated one-word arithmetic a real common definition before a
+/// short-circuit diamond. This is speculation only of total register arithmetic:
+/// loads, calls, divisions, shifts and pointer computations never move here.
+/// Ordinary CSE and branch facts can then use the existing dominance rules.
+fn hoist_common_arithmetic(function: &mut Function) {
+    if super::function_has_opaque_asm(function) {
+        return;
+    }
+    let Ok(cfg) = super::cfg::Cfg::new(function) else {
+        return;
+    };
+    let parameters: HashSet<_> = function.parameters.iter().map(|(id, _)| *id).collect();
+    if parameters.len() != function.parameters.len() {
+        return;
+    }
+    let mut definitions = HashMap::new();
+    let mut groups = BTreeMap::<String, Vec<(usize, usize, TempId)>>::new();
+    for (bi, block) in function.blocks.iter().enumerate() {
+        for (ii, inst) in block.instructions.iter().enumerate() {
+            if let Some(id) = super::result(inst) {
+                if parameters.contains(&id) || definitions.insert(id, (bi, ii)).is_some() {
+                    return;
+                }
+            }
+            if cfg.reachable.contains(&bi)
+                && matches!(
+                    inst,
+                    I::Binary {
+                        op: B::Add | B::Sub | B::And | B::Or | B::Xor,
+                        result_type: IrType::I1 | IrType::I8 | IrType::I16,
+                        ..
+                    }
+                )
+            {
+                let (key, id, _) = expression(inst).unwrap();
+                groups.entry(key).or_default().push((bi, ii, id));
+            }
+        }
+    }
+    let insertion = |block: usize| {
+        let code = &function.blocks[block].instructions;
+        code.len()
+            - usize::from(code.last().is_some_and(|inst| {
+                matches!(inst, I::Branch(_) | I::BranchCond { .. } | I::Return(_))
+            }))
+    };
+    let mut moved = HashSet::new();
+    let mut hoisted = BTreeMap::<usize, Vec<I>>::new();
+    for occurrences in groups.values().filter(|values| values.len() > 1) {
+        let (first, index, id) = occurrences[0];
+        let mut common = cfg.dominators[first].clone();
+        for &(block, _, _) in &occurrences[1..] {
+            common.retain(|d| cfg.dominators[block].contains(d));
+        }
+        let Some(target) = common
+            .into_iter()
+            .max_by_key(|&at| cfg.dominators[at].len())
+        else {
+            continue;
+        };
+        // An existing occurrence at the common dominator already serves CSE.
+        if occurrences.iter().any(|&(block, _, _)| block == target) {
+            continue;
+        }
+        let inst = &function.blocks[first].instructions[index];
+        let I::Binary { lhs, rhs, .. } = inst else {
+            unreachable!();
+        };
+        let available = [lhs, rhs].iter().all(|value| match value {
+            Value::Constant(_) => true,
+            Value::Temp(id) => {
+                parameters.contains(id)
+                    || definitions.get(id).is_some_and(|&(block, index)| {
+                        cfg.dominators[target].contains(&block)
+                            && (block != target || index < insertion(target))
+                    })
+            }
+            _ => false,
+        });
+        if available {
+            moved.insert(id);
+            hoisted.entry(target).or_default().push(inst.clone());
+        }
+    }
+    if moved.is_empty() {
+        return;
+    }
+    for block in &mut function.blocks {
+        block
+            .instructions
+            .retain(|inst| !super::result(inst).is_some_and(|id| moved.contains(&id)));
+    }
+    for (target, instructions) in hoisted {
+        let code = &mut function.blocks[target].instructions;
+        let insertion = code.len()
+            - usize::from(code.last().is_some_and(|inst| {
+                matches!(inst, I::Branch(_) | I::BranchCond { .. } | I::Return(_))
+            }));
+        code.splice(insertion..insertion, instructions);
     }
 }
 
@@ -552,6 +654,7 @@ pub(super) fn eliminate_redundancy(function: &mut Function) {
     hoist_readonly_globals(function);
     for _ in 0..6 {
         super::constants::simplify(function);
+        hoist_common_arithmetic(function);
         common_expressions(function);
         super::constants::simplify(function);
         simplify_control_flow(function);

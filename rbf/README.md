@@ -111,11 +111,21 @@ For a bounded headless first-frame capture:
 ```sh
 scripts/run-bf-rgb565-c.sh --headless --telemetry --capture-frame 1 \
   --screenshot build/bf/rgb565-demo.png --raw-frame build/bf/rgb565-demo.rgb565 \
-  --report build/bf/rgb565-demo.json --timeout 600
+  --report build/bf/rgb565-demo.json --timeout 120
 ```
 
 The timeout is a safety bound, not a promised completion time. Missing a
 requested frame returns a nonzero status and still leaves a diagnostic report.
+
+On the development machine, the compiler/interpreter changes measured on
+2026-10-13 brought this demo's first frame to about 10.2 seconds, with the same
+16,384-cell banks and exact pixels. The compiler reduced first-frame work from
+339,371 to 74,261 guest instructions. In a separate interpreter comparison,
+the identical saved BF image took 24.21 seconds before and 1.49 seconds after
+to execute its first 10,000 guest instructions. These are individual release
+runs, excluding build/parsing time; they are not estimates for Doom. The
+screen-clear loop now keeps its private values in registers, using seven
+instructions per pixel instead of seventeen. Other drawing loops still spill.
 
 ## Ordinary Brainfuck interpreters
 
@@ -239,7 +249,9 @@ with headless or visual runs; it cannot share the TEXT40 terminal screen.
 The reusable core is [`src/rust-bf/src/engine.rs`](../src/rust-bf/src/engine.rs).
 It uses a flat instruction stream with resolved jumps, offset arithmetic blocks,
 multi-target affine-loop reduction (including odd control-cell deltas), and
-cached tape scans. Guarded folds handle transfers through invariant scan routes
+cached tape scans. Separate caches track nonzero scan runs and zero runs used
+by moving-marker searches. Guarded folds handle transfers through scan routes
+while their predicates remain unchanged, stopping before a changing boundary,
 and counted loops that fill successive zero cells. Fills use bounded batches
 and preserve every actual tape write. These optimizations inspect BF operations and tape cells,
 with no knowledge of Ripple opcodes or register layouts. Checked fallback

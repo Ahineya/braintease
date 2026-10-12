@@ -2,6 +2,7 @@
 //! their order; a pure expression is never a license to speculate a load.
 
 mod constants;
+mod dead_loops;
 mod inline;
 mod locals;
 mod loops;
@@ -44,6 +45,7 @@ pub fn optimize_function(function: &mut Function) {
     narrow::narrow_gep_indices(function);
     eliminate_dead_expressions(function);
     loops::hoist_invariants(function);
+    dead_loops::eliminate(function);
 }
 
 pub(crate) fn result(inst: &Instruction) -> Option<TempId> {

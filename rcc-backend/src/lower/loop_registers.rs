@@ -1,6 +1,6 @@
 //! Promote private stack cells across a natural inner loop. This is a bounded
-//! machine allocation pass: only registers unused by the rest of the body are
-//! borrowed, and every entry/exit keeps the existing stack-home contract.
+//! machine allocation pass: registers unused and dead through the selected loop
+//! are borrowed, and every entry/exit keeps the existing stack-home contract.
 use rcc_codegen::{AsmInst as A, Reg};
 use rcc_frontend::{
     ir::{Function, Instruction as I, Value},
@@ -22,6 +22,7 @@ const REGS: [Reg; 12] = [
     Reg::S2,
     Reg::S3,
 ];
+const ARGUMENTS: [Reg; 4] = [Reg::A0, Reg::A1, Reg::A2, Reg::A3];
 fn bit(reg: Reg) -> u32 {
     1 << reg as u32
 }
@@ -468,10 +469,6 @@ pub(super) fn promote(
             let (u, d) = effects(i);
             used | u | d
         });
-    let free: Vec<_> = REGS.into_iter().filter(|&r| used & bit(r) == 0).collect();
-    if free.is_empty() {
-        return;
-    }
     let Some(cfg) = Cfg::new(body) else {
         return;
     };
@@ -551,6 +548,31 @@ pub(super) fn promote(
         if live & bit(Reg::Sc) != 0 {
             continue;
         }
+        // A register used by setup or a different loop can still be borrowed
+        // here. Reject every explicit use/write in this region and every value
+        // live across its boundaries, including zero-trip and early-exit paths.
+        let region_used = members.iter().fold(live, |used, &b| {
+            body[cfg.blocks[b].start..cfg.blocks[b].end]
+                .iter()
+                .fold(used, |used, inst| {
+                    let (reads, writes) = effects(inst);
+                    used | reads | writes
+                })
+        }) | exits.iter().fold(0, |used, &b| used | live_in[b]);
+        let mut free: Vec<_> = REGS
+            .into_iter()
+            .chain(ARGUMENTS)
+            .filter(|&r| region_used & bit(r) == 0)
+            .collect();
+        // Prefer an already globally unused register when possible, retaining
+        // the smaller frame/prologue chosen by the earlier conservative pass.
+        // Argument registers are caller-saved and may be reused after parameter
+        // setup. They remain the last choice; explicit operand/liveness checks
+        // and the call-free-region guard apply to them exactly as to T/S regs.
+        free.sort_by_key(|&r| (ARGUMENTS.contains(&r), used & bit(r) != 0, r as u8));
+        if free.is_empty() {
+            continue;
+        }
         let mut counts = BTreeMap::<i16, (usize, bool)>::new();
         for &b in &members {
             for i in cfg.blocks[b].start..cfg.blocks[b].end {
@@ -568,10 +590,10 @@ pub(super) fn promote(
             continue;
         }
         let score: usize = hot.iter().map(|(_, (count, _))| count).sum();
-        choices.push((score, head, members, exits, insert, hot));
+        choices.push((score, head, members, exits, insert, hot, free));
     }
     choices.sort_by_key(|(score, head, ..)| (std::cmp::Reverse(*score), *head));
-    let Some((_, _, members, exits, insert, hot)) = choices.into_iter().next() else {
+    let Some((_, _, members, exits, insert, hot, free)) = choices.into_iter().next() else {
         return;
     };
     let promoted: BTreeMap<_, _> = hot

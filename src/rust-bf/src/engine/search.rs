@@ -9,10 +9,61 @@ use super::{Machine, Op, Program, SCAN_LIMIT};
 
 #[derive(Debug)]
 pub(super) struct Search {
-    stride: isize,
-    minimum: isize,
-    maximum: isize,
-    next: usize,
+    pub(super) stride: isize,
+    pub(super) minimum: isize,
+    pub(super) maximum: isize,
+    pub(super) next: usize,
+}
+
+impl Machine {
+    /// Find a nonzero cell on unchanged tape for a larger route proof. The
+    /// caller checks the marker and its trailing cell separately. A monotonic
+    /// path to an in-bounds result then covers every search body excursion.
+    pub(super) fn trace_zeros(
+        &mut self,
+        mut pointer: usize,
+        stride: isize,
+        probes: &mut usize,
+    ) -> Option<usize> {
+        let step = stride.unsigned_abs();
+        let (slot, known) = self.zero_cache.prepare(step, pointer);
+        let first = pointer;
+        let mut last = None;
+        let result = loop {
+            if *probes == 0 {
+                break None;
+            }
+            *probes -= 1;
+            if self.tape[pointer] != 0 {
+                break Some(pointer);
+            }
+            last = Some(pointer);
+            let safe_steps = if stride > 0 {
+                (self.tape.len() - 1 - pointer) / step
+            } else {
+                pointer / step
+            };
+            if safe_steps == 0 {
+                break None;
+            }
+            let count = if known.contains(pointer) {
+                known.steps_from(pointer, stride).min(safe_steps)
+            } else {
+                1
+            };
+            if stride > 0 {
+                last = Some(pointer + (count - 1) * step);
+                pointer += count * step;
+            } else {
+                last = Some(pointer - (count - 1) * step);
+                pointer -= count * step;
+            }
+        };
+        if let Some(last) = last {
+            self.zero_cache.remember(slot, first, last);
+        }
+        result
+    }
 }
 
 impl Search {

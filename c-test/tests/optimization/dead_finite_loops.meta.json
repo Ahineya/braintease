@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "description": "Proven finite empty counters disappear while live values and volatile effects survive",
+  "use_runtime": true
+}

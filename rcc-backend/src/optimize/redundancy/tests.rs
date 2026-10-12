@@ -224,7 +224,7 @@ fn cse_requires_dominance_and_preserves_comparison_signedness() {
             ],
         ),
     ];
-    eliminate_redundancy(&mut f);
+    common_expressions(&mut f);
     assert_eq!(
         f.blocks
             .iter()
@@ -525,4 +525,206 @@ fn loop_carried_phi_and_rhs_only_operands_are_not_proofs() {
         infer_phi(&f, 4, 3).is_none(),
         "RHS-only expressions do not dominate the join"
     );
+}
+
+#[test]
+fn repeated_rhs_arithmetic_gains_real_dominance_before_phi_fact_propagation() {
+    for and in [false, true] {
+        let mut f = short_circuit(and, and);
+        f.blocks[1]
+            .instructions
+            .insert(0, bin(7, B::Add, Value::Temp(1), Value::Constant(2)));
+        if let I::Binary { lhs, .. } = &mut f.blocks[1].instructions[1] {
+            *lhs = Value::Temp(7);
+        }
+        f.blocks[6]
+            .instructions
+            .insert(0, bin(8, B::Add, Value::Temp(1), Value::Constant(2)));
+        if let I::Binary { lhs, .. } = &mut f.blocks[6].instructions[1] {
+            *lhs = Value::Temp(8);
+        }
+        assert!(infer_phi(&f, 4, 3).is_none());
+        eliminate_redundancy(&mut f);
+        assert!(!returns(&f, 91));
+        assert!(!returns(&f, 92));
+        assert_eq!(
+            f.blocks
+                .iter()
+                .flat_map(|b| &b.instructions)
+                .filter(|inst| matches!(
+                    inst,
+                    I::Binary {
+                        op: B::Add,
+                        lhs: Value::Temp(1),
+                        rhs: Value::Constant(2),
+                        ..
+                    }
+                ))
+                .count(),
+            1
+        );
+        assert!(f.blocks[0].instructions.iter().any(|inst| matches!(
+            inst,
+            I::Binary {
+                op: B::Add,
+                lhs: Value::Temp(1),
+                rhs: Value::Constant(2),
+                ..
+            }
+        )));
+    }
+}
+
+fn arithmetic_diamond(op: B) -> Function {
+    let mut f = Function::new("arithmetic_diamond".into(), IrType::I16);
+    f.parameters = vec![(0, IrType::I16), (1, IrType::I16), (2, IrType::I16)];
+    f.blocks = vec![
+        block(
+            0,
+            vec![I::BranchCond {
+                condition: Value::Temp(0),
+                true_label: 1,
+                false_label: 2,
+            }],
+        ),
+        block(
+            1,
+            vec![
+                bin(3, op, Value::Temp(1), Value::Temp(2)),
+                I::Return(Some(Value::Temp(3))),
+            ],
+        ),
+        block(
+            2,
+            vec![
+                bin(4, op, Value::Temp(1), Value::Temp(2)),
+                I::Return(Some(Value::Temp(4))),
+            ],
+        ),
+    ];
+    f
+}
+
+#[test]
+fn common_arithmetic_hoists_only_total_one_word_operations() {
+    for op in [B::Add, B::Sub, B::And, B::Or, B::Xor] {
+        let mut f = arithmetic_diamond(op);
+        hoist_common_arithmetic(&mut f);
+        assert!(matches!(
+            f.blocks[0].instructions.first(),
+            Some(I::Binary { result: 3, .. })
+        ));
+        common_expressions(&mut f);
+        assert!(matches!(
+            f.blocks[2].instructions.first(),
+            Some(I::Binary {
+                op: B::Add,
+                lhs: Value::Temp(3),
+                rhs: Value::Constant(0),
+                ..
+            })
+        ));
+    }
+    for op in [
+        B::SDiv,
+        B::UDiv,
+        B::SRem,
+        B::URem,
+        B::Shl,
+        B::LShr,
+        B::AShr,
+        B::Mul,
+    ] {
+        let mut f = arithmetic_diamond(op);
+        let before = format!("{f:?}");
+        hoist_common_arithmetic(&mut f);
+        assert_eq!(format!("{f:?}"), before);
+    }
+    let mut f = arithmetic_diamond(B::Add);
+    for block in &mut f.blocks {
+        for inst in &mut block.instructions {
+            if let I::Binary { result_type, .. } = inst {
+                *result_type = IrType::I32;
+            }
+        }
+    }
+    let before = format!("{f:?}");
+    hoist_common_arithmetic(&mut f);
+    assert_eq!(format!("{f:?}"), before);
+}
+
+#[test]
+fn common_arithmetic_keeps_phi_induction_values_inside_their_iteration() {
+    let mut f = arithmetic_diamond(B::Add);
+    f.blocks[0].id = 1;
+    f.blocks[1].id = 2;
+    f.blocks[2].id = 3;
+    f.blocks[0].instructions = vec![
+        I::Phi {
+            result: 5,
+            incoming: vec![(Value::Constant(0), 0), (Value::Temp(6), 4)],
+            result_type: IrType::I16,
+        },
+        I::BranchCond {
+            condition: Value::Temp(0),
+            true_label: 2,
+            false_label: 3,
+        },
+    ];
+    for block in &mut f.blocks[1..] {
+        if let I::Binary { lhs, .. } = &mut block.instructions[0] {
+            *lhs = Value::Temp(5);
+        }
+        *block.instructions.last_mut().unwrap() = I::Branch(4);
+    }
+    f.blocks.insert(0, block(0, vec![I::Branch(1)]));
+    f.blocks.push(block(
+        4,
+        vec![
+            bin(6, B::Add, Value::Temp(5), Value::Constant(1)),
+            I::Branch(1),
+        ],
+    ));
+    hoist_common_arithmetic(&mut f);
+    assert!(matches!(
+        f.blocks[0].instructions.as_slice(),
+        [I::Branch(1)]
+    ));
+    assert!(matches!(
+        f.blocks[1].instructions[1],
+        I::Binary {
+            result: 3,
+            lhs: Value::Temp(5),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn common_arithmetic_does_not_merge_volatile_operands_or_cross_opaque_asm() {
+    let mut f = arithmetic_diamond(B::Add);
+    for (bi, id) in [(1, 5), (2, 6)] {
+        f.blocks[bi]
+            .instructions
+            .insert(0, load(id, "changing", true));
+        if let I::Binary { lhs, .. } = &mut f.blocks[bi].instructions[1] {
+            *lhs = Value::Temp(id);
+        }
+    }
+    let before = format!("{f:?}");
+    hoist_common_arithmetic(&mut f);
+    assert_eq!(format!("{f:?}"), before);
+    f = arithmetic_diamond(B::Add);
+    f.blocks[1].instructions.insert(
+        0,
+        I::InlineAsm {
+            assembly: "CALL unknown".into(),
+            inputs: vec![],
+            outputs: vec![],
+            clobbers: vec![],
+        },
+    );
+    let before = format!("{f:?}");
+    hoist_common_arithmetic(&mut f);
+    assert_eq!(format!("{f:?}"), before);
 }

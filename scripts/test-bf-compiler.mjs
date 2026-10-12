@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
     console.log('Usage: node scripts/test-bf-compiler.mjs [--rvm-only] [--large-banks]\n' +
-        'Verify exact 4x2 and 8x2 C RGB565 frames and guest-instruction ceilings.\n' +
+        'Verify exact C RGB565 clear, pointer and clipped-rectangle frames and instruction ceilings.\n' +
         'Runs bounded BF captures sequentially unless --rvm-only is supplied.\n' +
         '--large-banks uses 64000-cell banks to exercise distant globals and stack.\n' +
         'BF_COMPILER_OUT selects the output directory (default build/bf-compiler-regression[-large]).\n' +
@@ -62,17 +62,31 @@ function compile(source, name, defines = []) {
 const startup = assemble(path.join(root, 'runtime/crt0.asm'), 'crt0');
 const libraries = ['graphics', 'mmio'].map(name => compile(path.join(root, `runtime/${name}.c`), name));
 const results = [];
-for (const width of [4, 8]) for (const kind of ['graphics', 'direct']) {
-    const name = `${kind}-${width * 2}`, prefix = path.join(out, name);
+const cases = [4, 8].flatMap(width => ['graphics', 'direct'].map(kind => ({ width, height: 2, kind })));
+cases.push({ width: 12, height: 8, kind: 'rectangles' });
+for (const { width, height, kind } of cases) {
+    const name = `${kind}-${width * height}`, prefix = path.join(out, name);
     const fixture = path.join(root, `rbf/tests/fixtures/rgb565-${kind}.c`);
-    const objects = [startup, compile(fixture, name, [`RENDER_WIDTH=${width}`, `RENDER_PIXELS=${width * 2}`]), ...(kind === 'graphics' ? libraries : [])];
-    const expected = Buffer.alloc(width * 2 * 2);
-    for (let i = 0; i < width * 2; i++) expected.writeUInt16LE(0x0843, i * 2);
+    const objects = [startup, compile(fixture, name, [`RENDER_WIDTH=${width}`, `RENDER_PIXELS=${width * height}`]), ...(kind !== 'direct' ? libraries : [])];
+    const expected = Buffer.alloc(width * height * 2);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        let color = 0x0843;
+        if (kind === 'rectangles') {
+            // Explicit visible regions, independent of the C clipping loops.
+            color = 0;
+            if (x >= 1 && x < 5 && y >= 1 && y < 4) color = 0xf800;
+            if (x >= 3 && x < 9 && y >= 2 && y < 5) color = 0x07e0;
+            if (x >= 10 && y >= 6) color = 0x001f;
+            if (x === 11 && y === 0) color = 0xffe0;
+            if (x < 2 && y === 7) color = 0x07ff;
+        }
+        expected.writeUInt16LE(color, (y * width + x) * 2);
+    }
     fs.writeFileSync(`${prefix}.expected.rgb565`, expected);
-    // Current 4x2/8x2 counts: API338/474, direct141/245. Allow allocator
+    // Current 4x2/8x2 counts: API281/337, direct114/186. Allow allocator
     // variation while catching lost bounds/global-load optimizations (the
     // previous API counts were711/1247). Never assert wall time.
-    const ceiling = kind === 'graphics' ? (width === 4 ? 550 : 850) : (width === 4 ? 220 : 380);
+    const ceiling = kind === 'rectangles' ? 6000 : kind === 'graphics' ? (width === 4 ? 550 : 850) : (width === 4 ? 220 : 380);
     run('rlink', [...objects, '-f', 'binary', '--bank-size', String(bank), '-o', `${prefix}.bin`], `${name}-link`);
     run('rvm', [`${prefix}.bin`, '--bank-size', String(bank), '--memory', String(bank * memoryBanks),
         '--headless', '--clock', 'unthrottled', '--capture-frame', '1', '--screenshot', `${prefix}.png`, '--raw-frame', `${prefix}.rvm.rgb565`,
@@ -83,7 +97,7 @@ for (const width of [4, 8]) for (const kind of ['graphics', 'direct']) {
     assert.equal(vm.frame, 1);
     assert.deepEqual(fs.readFileSync(`${prefix}.rvm.rgb565`), expected);
     assert.ok(vm.instructions <= ceiling, `${name}: ${vm.instructions} > ${ceiling}`);
-    const result = { name, width, height: 2, source_sha256: hash(fixture), instruction_ceiling: ceiling,
+    const result = { name, width, height, source_sha256: hash(fixture), instruction_ceiling: ceiling,
         guest_instructions: vm.instructions, exact_pixels: true };
     if (!rvmOnly) {
         run('rlink', [...objects, '-f', 'macro', '--standalone', '--bf-host', '--bank-size', String(bank),
