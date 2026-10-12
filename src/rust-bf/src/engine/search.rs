@@ -64,12 +64,17 @@ impl Search {
             return false;
         }
         let original = machine.pointer;
+        let step = self.stride.unsigned_abs();
+        let first_target = (original as isize + self.stride) as usize;
+        let (slot, known) = machine.zero_cache.prepare(step, first_target);
         for _ in 0..SCAN_LIMIT {
             if !machine.range_fits(self.minimum, self.maximum) {
                 // Previous iterations are complete BF loop iterations, with
                 // the marker materialized before falling back to literal BF.
                 machine.write_cell(original, 0);
                 machine.write_cell(machine.pointer, 1);
+                let last_zero = (machine.pointer as isize - self.stride) as usize;
+                machine.zero_cache.remember(slot, behind, last_zero);
                 return false;
             }
             let current = machine.pointer;
@@ -79,6 +84,7 @@ impl Search {
                 // unchanged, and exits one stride before that cell. Any final
                 // pointer movement following the loop remains ordinary code.
                 machine.write_cell(original, 0);
+                machine.zero_cache.remember(slot, behind, current);
                 machine.pc = self.next;
                 return true;
             }
@@ -86,12 +92,32 @@ impl Search {
             // monotonic/in bounds. Its temporary one is consumed by the next
             // iteration before BF can observe it. Delay those cancelling
             // writes, retaining only the marker at a budget or bounds stop.
-            machine.pointer = target;
+            if known.contains(target) {
+                // Each skipped iteration starts one stride before its zero
+                // target. Bound the last complete body's excursion as well
+                // as the cached interval; never jump across a tape edge.
+                let safe_steps = if self.stride > 0 {
+                    (machine.tape.len() - 1 - current - self.maximum as usize) / step + 1
+                } else {
+                    (current - self.minimum.unsigned_abs()) / step + 1
+                };
+                let count = known.steps_from(target, self.stride).min(safe_steps);
+                machine.pointer = if self.stride > 0 {
+                    current + count * step
+                } else {
+                    current - count * step
+                };
+            } else {
+                machine.pointer = target;
+            }
         }
-        // This is exactly the loop-head state after SCAN_LIMIT iterations.
+        // This is exactly a loop-head state after SCAN_LIMIT bounded probes.
+        // Cached probes may represent many iterations with constant host work.
         // Leave PC unchanged so a long search can resume in the next dispatch.
         machine.write_cell(original, 0);
         machine.write_cell(machine.pointer, 1);
+        let last_zero = (machine.pointer as isize - self.stride) as usize;
+        machine.zero_cache.remember(slot, behind, last_zero);
         true
     }
 }
@@ -285,5 +311,140 @@ mod tests {
         );
         assert_eq!(machine.pointer, expected.pointer);
         assert_eq!(machine.tape, expected.tape);
+    }
+
+    #[test]
+    fn cached_zero_runs_accelerate_reverse_searches_without_changing_tape() {
+        for stride in [1isize, 3, 8, 37, 65] {
+            let start = stride as usize * 2;
+            let stop = start + stride as usize * 1024;
+            let source = format!(
+                "{}${}[-]+{}$",
+                pattern(stride),
+                movement(stride),
+                pattern(-stride)
+            );
+            let program = Program::parse(&source, true, true).unwrap();
+            let literal = Program::parse(&source, false, true).unwrap();
+            let make = || {
+                let mut machine = Machine::new(stop + stride as usize + 1).unwrap();
+                machine.pointer = start;
+                machine.write_cell(start, 1);
+                machine.write_cell(0, 7);
+                machine.write_cell(stop, 19);
+                machine
+            };
+            let mut actual = make();
+            let mut expected = make();
+            assert_eq!(
+                finish(&mut actual, &program),
+                finish(&mut expected, &literal)
+            );
+            assert_eq!(actual.tape, expected.tape);
+            let before = actual.dispatches();
+            assert_eq!(
+                finish(&mut actual, &program),
+                finish(&mut expected, &literal)
+            );
+            assert_eq!(actual.pointer, expected.pointer);
+            assert_eq!(actual.tape, expected.tape);
+            assert!(
+                actual.dispatches() - before <= 6,
+                "warm reverse scan must reuse zero run"
+            );
+        }
+    }
+
+    #[test]
+    fn cached_zeros_observe_all_write_forms_and_mutable_tape_access() {
+        let program = Program::parse(&pattern(1), true, false).unwrap();
+        let literal = Program::parse(&pattern(1), false, false).unwrap();
+        for write in ["host", "slice", "+", "--", "transfer", "input"] {
+            let mut actual = Machine::new(2050).unwrap();
+            actual.pointer = 2;
+            actual.write_cell(2, 1);
+            actual.write_cell(2048, 9);
+            assert_eq!(finish(&mut actual, &program).unwrap(), Stop::Halted);
+            actual.pointer = 512;
+            actual.pc = 0;
+            match write {
+                "host" => actual.write_cell(512, 32768),
+                "slice" => actual.tape_mut()[512] = 32768,
+                "input" => {
+                    let input = Program::parse(",", true, false).unwrap();
+                    assert_eq!(actual.run(&input, 1).unwrap(), Stop::Input);
+                    actual.provide_input(17).unwrap();
+                }
+                _ => {
+                    let source = if write == "transfer" {
+                        actual.pointer = 511;
+                        actual.write_cell(511, 1);
+                        "[->+<]"
+                    } else {
+                        write
+                    };
+                    let writing = Program::parse(source, true, false).unwrap();
+                    assert_eq!(finish(&mut actual, &writing).unwrap(), Stop::Halted);
+                }
+            }
+            actual.pointer = 2;
+            actual.pc = 0;
+            actual.write_cell(2, 1);
+            let mut expected = Machine::new(actual.tape.len()).unwrap();
+            expected.pointer = actual.pointer;
+            expected.tape.copy_from_slice(actual.tape());
+            assert_eq!(
+                finish(&mut actual, &program),
+                finish(&mut expected, &literal),
+                "{write}"
+            );
+            assert_eq!(actual.pointer, 511, "{write}");
+            assert_eq!(actual.pointer, expected.pointer);
+            assert_eq!(actual.tape, expected.tape);
+        }
+    }
+
+    #[test]
+    fn warm_zero_runs_do_not_hide_removed_stops_or_boundary_fallbacks() {
+        for stride in [-8isize, -1, 1, 8] {
+            for wrapping in [false, true] {
+                let source = pattern(stride);
+                let program = Program::parse(&source, true, false).unwrap();
+                let literal = Program::parse(&source, false, false).unwrap();
+                let start = if stride > 0 { 16 } else { 2032 };
+                let stop = if stride > 0 { 2032 } else { 16 };
+                let mut actual = if wrapping {
+                    Machine::with_wrapping_tape(2049)
+                } else {
+                    Machine::new(2049)
+                }
+                .unwrap();
+                actual.pointer = start;
+                actual.write_cell(start, 1);
+                actual.write_cell(stop, 19);
+                // A sentinel across the wrapping boundary makes those cases
+                // terminate after the original per-character fallback wraps.
+                actual.write_cell(if stride > 0 { 0 } else { 2048 }, 7);
+                assert_eq!(finish(&mut actual, &program).unwrap(), Stop::Halted);
+                actual.write_cell(stop, 0);
+                actual.write_cell(start, 1);
+                actual.pointer = start;
+                actual.pc = 0;
+                let mut expected = if wrapping {
+                    Machine::with_wrapping_tape(2049)
+                } else {
+                    Machine::new(2049)
+                }
+                .unwrap();
+                expected.pointer = start;
+                expected.tape.copy_from_slice(actual.tape());
+                assert_eq!(
+                    finish(&mut actual, &program),
+                    finish(&mut expected, &literal)
+                );
+                assert_eq!(actual.pointer, expected.pointer);
+                assert_eq!(actual.tape, expected.tape);
+            }
+        }
     }
 }

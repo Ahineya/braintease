@@ -343,6 +343,7 @@ pub struct Machine {
     pending_input: bool,
     wrapping_tape: bool,
     scan_cache: scan::Cache,
+    zero_cache: scan::Cache,
 }
 
 impl Machine {
@@ -373,6 +374,7 @@ impl Machine {
             pending_input: false,
             wrapping_tape,
             scan_cache: scan::Cache::default(),
+            zero_cache: scan::Cache::default(),
         })
     }
 
@@ -382,6 +384,7 @@ impl Machine {
     pub fn tape_mut(&mut self) -> &mut [u16] {
         // The caller can change any cell, including a cached scan destination.
         self.scan_cache.reset();
+        self.zero_cache.reset();
         &mut self.tape
     }
     pub fn pointer(&self) -> usize {
@@ -405,9 +408,12 @@ impl Machine {
     /// `index` is outside the allocated tape, like indexing `tape_mut()`.
     #[inline]
     pub fn write_cell(&mut self, index: usize, value: u16) {
-        // Cached runs assert only nonzero-ness, not a particular cell value.
-        if value == 0 && self.tape[index] != 0 {
-            self.scan_cache.zero(index);
+        // Both predicates depend only on zero-ness, not a particular value.
+        let old = self.tape[index];
+        if value == 0 && old != 0 {
+            self.scan_cache.invalidate(index);
+        } else if value != 0 && old == 0 {
+            self.zero_cache.invalidate(index);
         }
         self.tape[index] = value;
     }
@@ -491,11 +497,11 @@ impl Machine {
 
     /// Execute at most `budget` IR dispatches. Each optimized operation performs
     /// bounded work: basic summaries cover at most 128 arithmetic instructions,
-    /// 256 scan probes, 256 moving-marker iterations, or 256 combined moving-loop
+    /// 256 scan/search probes, or 256 combined moving-loop
     /// iterations and cell updates. Routed loops inspect at most 128 parts per
     /// proof, with at most two proofs of 256 scan probes and bounded predicate
     /// checks; a counted fill writes at most 128 markers. A scan probe can skip
-    /// a previously verified nonzero run in constant time.
+    /// a previously verified run of equal zero-ness in constant time.
     /// An input stop repeats until `provide_input` is called, without consuming
     /// another dispatch. Output and hooks have already advanced past the marker.
     pub fn run(&mut self, program: &Program, budget: u64) -> Result<Stop, Error> {

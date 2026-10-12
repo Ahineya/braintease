@@ -32,6 +32,10 @@ and pointer state. Other states use the original BF instructions.
 Intermediate markers cross only verified zero cells and cancel before any event,
 so the engine writes only the original cell and the final marker. Budget yields
 and bounds fallbacks still materialize the exact literal marker state.
+An independent zero-run cache lets later searches cross verified zero cells in
+constant time. It also has 32 residue slots for its current stride, checks the
+complete body range before skipping, and rechecks the found cell. Every
+zero-to-nonzero write trims this cache; `tape_mut()` resets both caches.
 
 Moving update loops such as `[-<<<<<<<<]` execute several complete iterations
 per dispatch. Each iteration still applies its writes before testing the next
@@ -86,7 +90,7 @@ Ripple opcode execution lives in the core.
 
 Budgets and `dispatches()` count **IR dispatches**, not original BF characters or
 Ripple instructions. One dispatch performs at most 128 summarized arithmetic
-instructions, 256 scan probes, 256 moving-marker search iterations, or 256
+instructions, 256 scan or moving-marker search probes, or 256
 combined moving-update iterations and cell writes. A scan probe can skip a
 previously verified run in constant time, regardless of its
 length. Long uncached scans and infinite loops yield to the caller; an exhausted

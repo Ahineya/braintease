@@ -1,5 +1,6 @@
-//! Reuse facts learned by ordinary BF scans. A run contains only known nonzero
-//! cells at a particular stride; it never caches the value of the exit cell.
+//! Reuse facts learned by ordinary BF scans. Each cache contains runs satisfying
+//! one predicate (nonzero for scans, zero for marker searches) at a fixed stride.
+//! The exit cell is always checked rather than cached as a result.
 //! Storage and work are bounded independently of tape size. No CPU layout is
 //! involved, and losing a cached run affects performance only.
 
@@ -8,7 +9,7 @@ use super::{Machine, SCAN_LIMIT};
 const SLOTS: usize = 32;
 
 #[derive(Clone, Copy)]
-struct Run {
+pub(super) struct Run {
     low: usize,
     high: usize,
     residue: usize,
@@ -21,8 +22,16 @@ impl Run {
         residue: 0,
     };
 
-    fn contains(self, index: usize) -> bool {
+    pub(super) fn contains(self, index: usize) -> bool {
         self.low <= index && index <= self.high
+    }
+
+    pub(super) fn steps_from(self, index: usize, stride: isize) -> usize {
+        if stride > 0 {
+            (self.high - index) / stride as usize + 1
+        } else {
+            (index - self.low) / stride.unsigned_abs() + 1
+        }
     }
 }
 
@@ -55,7 +64,7 @@ impl Cache {
         }
     }
 
-    fn prepare(&mut self, stride: usize, index: usize) -> (usize, Run) {
+    pub(super) fn prepare(&mut self, stride: usize, index: usize) -> (usize, Run) {
         if self.stride != stride {
             self.stride = stride;
             self.mask = stride.is_power_of_two().then_some(stride - 1);
@@ -72,7 +81,7 @@ impl Cache {
         (slot, self.runs[slot])
     }
 
-    fn remember(&mut self, slot: usize, first: usize, last: usize) {
+    pub(super) fn remember(&mut self, slot: usize, first: usize, last: usize) {
         let low = first.min(last);
         let high = first.max(last);
         let run = &mut self.runs[slot];
@@ -89,7 +98,7 @@ impl Cache {
     }
 
     #[inline]
-    pub(super) fn zero(&mut self, index: usize) {
+    pub(super) fn invalidate(&mut self, index: usize) {
         if self.stride == 0 {
             return;
         }
@@ -99,7 +108,7 @@ impl Cache {
             return;
         }
         // Retain the larger side of an interrupted run. All discarded facts
-        // can be learned again by subsequent scans; never bridge the new zero.
+        // can be learned again; never bridge a cell violating this predicate.
         if index - run.low >= run.high - index && index > run.low {
             run.high = index - self.stride;
         } else if index < run.high {
