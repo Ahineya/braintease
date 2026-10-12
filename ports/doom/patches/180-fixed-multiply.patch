@@ -1,0 +1,17 @@
+--- a/doomgeneric/m_fixed.c
++++ b/doomgeneric/m_fixed.c
+@@ -35,6 +35,8 @@
+     return value < 0 ? UINT32_C(0) - bits : bits;
+ }
+ 
++/* Ripple supplies both exact operations in fixed_fast.asm. */
++#ifndef RIPPLE
+ fixed_t FixedMul(fixed_t a, fixed_t b)
+ {
+     /* Signed multiplication fits in 64 bits. Unsigned shifting then narrowing
+@@ -54,3 +56,5 @@
+     /* Multiplication avoids undefined left shifts of negative operands. */
+     return (fixed_t) (((int64_t) a * INT64_C(65536)) / (int64_t) b);
+ }
++
++#endif

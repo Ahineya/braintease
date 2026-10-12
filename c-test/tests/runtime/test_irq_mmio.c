@@ -57,12 +57,6 @@ int main() {
         putchar('N');
     }
 
-    if (mmio_read(27) == 0 && mmio_read(31) == 0) {
-        putchar('Y');
-    } else {
-        putchar('N');
-    }
-
     putchar('\n');
     return 0;
 }

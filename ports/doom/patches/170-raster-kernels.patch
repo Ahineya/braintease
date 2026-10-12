@@ -1,0 +1,68 @@
+--- a/doomgeneric/r_draw.c
++++ b/doomgeneric/r_draw.c
+@@ -30,6 +30,9 @@
+ #include "z_zone.h"
+ #include "w_wad.h"
+ #include "patch_cache.h"
++#ifdef RIPPLE
++#include "render_fast.h"
++#endif
+ 
+ #include "r_local.h"
+ 
+@@ -130,7 +133,12 @@
+     // Determine scaling,
+     //  which is the only mapping to be done.
+     fracstep = dc_iscale; 
+-    frac = dc_texturemid + (dc_yl-centery)*fracstep; 
++    frac = dc_texturemid + (dc_yl-centery)*fracstep;
++#ifdef RIPPLE
++    Doom_DrawColumn(dest, dc_source, dc_colormap, (uint32_t)frac,
++                    (uint32_t)fracstep, (unsigned int)(count + 1));
++    return;
++#endif
+ 
+     // Inner loop that does the actual texture mapping,
+     //  e.g. a DDA-lile scaling.
+@@ -237,10 +245,17 @@
+     x = dc_x << 1;
+     
+     dest = ylookup[dc_yl] + columnofs[x];
++#ifndef RIPPLE
+     dest2 = ylookup[dc_yl] + columnofs[x+1];
++#endif
+     
+     fracstep = dc_iscale; 
+     frac = dc_texturemid + (dc_yl-centery)*fracstep;
++#ifdef RIPPLE
++    Doom_DrawColumnLow(dest, dc_source, dc_colormap, (uint32_t)frac,
++                       (uint32_t)fracstep, (unsigned int)(count + 1));
++    return;
++#endif
+     
+     do 
+     {
+@@ -624,6 +639,11 @@
+ 
+     // We do not check for zero spans here?
+     count = ds_x2 - ds_x1;
++#ifdef RIPPLE
++    Doom_DrawSpan(dest, ds_source, ds_colormap, position, step,
++                  (unsigned int)(count + 1));
++    return;
++#endif
+ 
+     do
+     {
+@@ -751,6 +771,11 @@
+     ds_x2 <<= 1;
+ 
+     dest = ylookup[ds_y] + columnofs[ds_x1];
++#ifdef RIPPLE
++    Doom_DrawSpanLow(dest, ds_source, ds_colormap, position, step,
++                     (unsigned int)(count + 1));
++    return;
++#endif
+ 
+     do
+     {

@@ -1,0 +1,62 @@
+[
+  {
+    "tick": 3,
+    "key": 26,
+    "down": true
+  },
+  {
+    "tick": 8,
+    "key": 62,
+    "down": true
+  },
+  {
+    "tick": 9,
+    "key": 62,
+    "down": false
+  },
+  {
+    "tick": 10,
+    "key": 79,
+    "down": true
+  },
+  {
+    "tick": 16,
+    "key": 79,
+    "down": false
+  },
+  {
+    "tick": 18,
+    "key": 224,
+    "down": true
+  },
+  {
+    "tick": 23,
+    "key": 26,
+    "down": false
+  },
+  {
+    "tick": 24,
+    "key": 62,
+    "down": true
+  },
+  {
+    "tick": 25,
+    "key": 224,
+    "down": false
+  },
+  {
+    "tick": 25,
+    "key": 62,
+    "down": false
+  },
+  {
+    "tick": 26,
+    "key": 80,
+    "down": true
+  },
+  {
+    "tick": 30,
+    "key": 80,
+    "down": false
+  }
+]

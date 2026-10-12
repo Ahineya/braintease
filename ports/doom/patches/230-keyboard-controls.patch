@@ -1,0 +1,35 @@
+--- a/doomgeneric/g_game.c
++++ b/doomgeneric/g_game.c
+@@ -394,12 +394,12 @@
+ 	    cmd->angleturn += angleturn[tspeed]; 
+     } 
+  
+-    if (gamekeydown[key_up]) 
++    if (gamekeydown[key_up] || gamekeydown['w']) 
+     {
+ 	// fprintf(stderr, "up\n");
+ 	forward += forwardmove[speed]; 
+     }
+-    if (gamekeydown[key_down]) 
++    if (gamekeydown[key_down] || gamekeydown['s']) 
+     {
+ 	// fprintf(stderr, "down\n");
+ 	forward -= forwardmove[speed]; 
+@@ -410,7 +410,7 @@
+     if (joyymove > 0) 
+         forward -= forwardmove[speed]; 
+ 
+-    if (gamekeydown[key_strafeleft]
++    if (gamekeydown[key_strafeleft] || gamekeydown[',']
+      || joybuttons[joybstrafeleft]
+      || mousebuttons[mousebstrafeleft]
+      || joystrafemove < 0)
+@@ -418,7 +418,7 @@
+         side -= sidemove[speed];
+     }
+ 
+-    if (gamekeydown[key_straferight]
++    if (gamekeydown[key_straferight] || gamekeydown['.']
+      || joybuttons[joybstraferight]
+      || mousebuttons[mousebstraferight]
+      || joystrafemove > 0)

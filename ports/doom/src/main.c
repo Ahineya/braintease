@@ -5,6 +5,7 @@
 #include "doom_port.h"
 #include "doomstat.h"
 #include "m_argv.h"
+#include "m_menu.h"
 #include "tables.h"
 #include "info.h"
 #include "i_system.h"
@@ -33,6 +34,9 @@ int main(int argc, char **argv)
     myargc = start_map ? 6 : 3;
     myargv = engine_args;
     singletics = true;
+#ifdef DOOM_LOW_DETAIL
+    detailLevel = 1;
+#endif
     printf("DOOM PORT WAD %s\n", DOOM_WAD_SHA256);
     D_DoomMain();
     for (;;) doomgeneric_Tick();

@@ -14,6 +14,7 @@ ROOT = PORT.parent.parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scene", choices=["title", "e1m1"], default="title")
+    parser.add_argument("--low-detail", action="store_true", help="use Doom's faster, coarser world rendering (also toggled with F5)")
     parser.add_argument("--wad", type=Path, default=ROOT / "c-test/examples/doom/doom1.wad")
     parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--headless", action="store_true")
@@ -30,6 +31,8 @@ def main():
     command = [sys.executable, str(PORT / "build.py"), "engine", "--target", "ripple", "--wad", str(wad)]
     if args.scene == "e1m1":
         command.append("--start-map")
+    if args.low_detail:
+        command.append("--low-detail")
     subprocess.run(command, check=True, cwd=ROOT)
     if args.build_only:
         return
@@ -56,7 +59,8 @@ def main():
     if args.clock == "stepped":
         command += ["--control-stdin"]
     manifest = json.loads((PORT / "build/manifest.json").read_text())
-    manifest.update(disk_image=disk_metadata, scene=args.scene, command=command)
+    manifest.update(disk_image=disk_metadata, scene=args.scene,
+                    detail="low" if args.low_detail else "high", command=command)
     (out / (args.scene + ".manifest.json")).write_text(json.dumps(manifest, indent=2) + "\n")
     subprocess.run(command, check=True, cwd=ROOT)
 

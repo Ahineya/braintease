@@ -1,0 +1,44 @@
+--- a/doomgeneric/v_video.c
++++ b/doomgeneric/v_video.c
+@@ -37,6 +37,9 @@
+ #include "z_zone.h"
+ 
+ #include "config.h"
++#ifdef RIPPLE
++#include "render_fast.h"
++#endif
+ #ifdef HAVE_LIBPNG
+ #include <png.h>
+ #endif
+@@ -184,11 +187,15 @@
+             dest = desttop + column->topdelta* (int32_t)SCREENWIDTH;
+             count = column->length;
+ 
++#ifdef RIPPLE
++            Doom_CopyPatchColumn(dest, source, count);
++#else
+             while (count--)
+             {
+                 *dest = *source++;
+                 dest += SCREENWIDTH;
+             }
++#endif
+             column = (column_t *)((byte *)column + column->length + 4);
+         }
+     }
+@@ -248,11 +255,15 @@
+             dest = desttop + column->topdelta* (int32_t)SCREENWIDTH;
+             count = column->length;
+ 
++#ifdef RIPPLE
++            Doom_CopyPatchColumn(dest, source, count);
++#else
+             while (count--)
+             {
+                 *dest = *source++;
+                 dest += SCREENWIDTH;
+             }
++#endif
+             column = (column_t *)((byte *)column + column->length + 4);
+         }
+     }

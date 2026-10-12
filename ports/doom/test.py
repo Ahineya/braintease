@@ -30,6 +30,10 @@ DEMO_OUTPUT = "DEMO OK signed octets, bounded records, DEMO1 5026 9ca0bb8e\n"
 STAT_OUTPUT = "STAT STORAGE OK 32 retained snapshots, lazy allocation, wide times\n"
 INFO_OUTPUT = "INFO OK 967 states, 137 objects, canonical fields and callbacks\n"
 PROJECTION_OUTPUT = "PROJECTION OK wide wall tiers, empty spans and plane clipping\n"
+SKY_OUTPUT = "SKY OK: fixed-point midpoint and exposed sky row\n"
+EVENT_OUTPUT = "EVENT WIDTHS OK packed automap messages, queue copy, keyboard discrimination\n"
+TEXTURE_OUTPUT = "TEXTURE OK: short/tall composites, last-column guard, holes, masked posts\n"
+INPUT_OUTPUT = "INPUT OK: arrows/WASD, Control fire, Space use, Shift/Alt, aliases and releases\n"
 
 
 def digest(path):
@@ -144,7 +148,9 @@ class Smoke:
                                   ("wad_lookup", WAD_LOOKUP_OUTPUT),
                                   ("graphics_cache", GRAPHICS_OUTPUT), ("demo_playback", DEMO_OUTPUT),
                                   ("stat_storage", STAT_OUTPUT), ("info_storage", INFO_OUTPUT),
-                                  ("projection_widths", PROJECTION_OUTPUT)):
+                                  ("projection_widths", PROJECTION_OUTPUT), ("sky_widths", SKY_OUTPUT),
+                                  ("event_widths", EVENT_OUTPUT), ("texture_columns", TEXTURE_OUTPUT),
+                                  ("keyboard_controls", INPUT_OUTPUT)):
             self.build(program)
             native = self.run(program + "-native", [BUILD / "native" / program / program])
             require(native == expected, f"{program}: native diagnostic output differs from expected text")
@@ -232,6 +238,28 @@ class Smoke:
         self.build("engine", start_map=True)
         self.engine_case("map", "map", self.args.engine_frame, 0)
 
+    def kernels(self):
+        for name in ("render", "raster", "memory", "fixed"):
+            script = PORT / ("test_fixed_kernel.py" if name == "fixed"
+                             else "test_" + name + "_kernels.py")
+            self.run(name + "-kernels", [sys.executable, script])
+            self.result["checks"].append({"label": name + "-kernels", "success": True})
+            print(f"PASS {name} kernels: independent Rust VM oracle and ABI checks", flush=True)
+
+    def gameplay(self):
+        self.build("engine", start_map=True)
+        for label, script, frames in (("gameplay", "gameplay-long.json", 180),
+                                      ("arrow-controls", "arrow-controls.json", 32),
+                                      ("detail-toggle", "detail-toggle.json", 32)):
+            output = self.out / label
+            self.run(label, [sys.executable, PORT / "tools/benchmark.py",
+                             "--wad", self.wad, "--output", output,
+                             "--input", PORT / "tests" / script, "--frames", frames])
+            report = json.loads((output / "results.json").read_text())
+            require(report.get("success") is True, label + " comparison failed")
+            self.result["checks"].append({"label": label + "-native-vs-ripple", "report": report})
+            print(f"PASS {label}: {frames} exact native/Rust frames", flush=True)
+
     def finish(self):
         require(digest(self.wad) == self.wad_hash, "source WAD changed during testing")
         require(digest(self.disk) == self.disk_hash, "WAD disk image changed during testing")
@@ -245,7 +273,7 @@ class Smoke:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stage", choices=("foundations", "portability", "engine"), default="foundations",
+    parser.add_argument("--stage", choices=("foundations", "portability", "engine", "kernels", "gameplay"), default="foundations",
                         help="run one milestone's checks; engine needs a linked full engine")
     parser.add_argument("--wad", type=Path, default=ROOT / "c-test/examples/doom/doom1.wad")
     parser.add_argument("--artifacts", type=Path, default=BUILD / "test-artifacts")

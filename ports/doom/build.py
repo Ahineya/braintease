@@ -96,6 +96,19 @@ def prepare(wad):
 
 
 def sources_for(program, upstream, generated):
+    if program == "keyboard_controls":
+        run([sys.executable, PORT / "tools/extract_input_fixture.py", upstream / "g_game.c", generated])
+        return [PORT / "tests/input_commands.c", PORT / "src/config_port.c"]
+    if program == "event_widths":
+        return [PORT / "tests/event_widths.c"]
+    if program == "sky_widths":
+        return [PORT / "tests/sky_widths.c", upstream / "r_sky.c"]
+    if program == "memory_kernels":
+        return [PORT / "tests/memory_kernels.c", PORT / "src/memory_fast.asm"]
+    if program == "raster_kernels":
+        return [PORT / "tests/raster_kernels.c", PORT / "src/raster_fast.asm"]
+    if program == "render_kernels":
+        return [PORT / "tests/render_kernels.c", PORT / "src/render_fast.asm"]
     if program == "wad_lookup":
         return [PORT / "tests/wad_lookup.c"] + [upstream / name for name in (
             "w_wad.c", "w_file.c", "z_zone.c")] + [PORT / "src" / name for name in (
@@ -103,6 +116,9 @@ def sources_for(program, upstream, generated):
     if program == "projection_widths":
         run([sys.executable, PORT / "tools/extract_projection_fixture.py", upstream / "r_segs.c", generated])
         return [PORT / "tests/projection_widths.c", upstream / "m_fixed.c"]
+    if program == "texture_columns":
+        run([sys.executable, PORT / "tools/extract_texture_fixture.py", upstream / "r_data.c", generated])
+        return [PORT / "tests/texture_columns.c"]
     if program == "info_storage":
         run([sys.executable, PORT / "tools/generate_info.py", upstream / "info.c", generated])
         return [PORT / "tests/info_storage.c"] + sorted(generated.glob("info_fill_*.c")) + [generated / "info_init.c"]
@@ -121,7 +137,8 @@ def sources_for(program, upstream, generated):
         run([sys.executable, PORT / "tools/generate_info.py", upstream / "info.c", generated])
         info = sorted(generated.glob("info_fill_*.c")) + [generated / "info_init.c"]
         return engine + tables + info + [PORT / "src" / name for name in (
-            "main.c", "platform.c", "config_port.c", "wad_io.c", "w_file_port.c", "patch_cache.c")]
+            "main.c", "platform.c", "config_port.c", "wad_io.c", "w_file_port.c", "patch_cache.c",
+            "render_fast.asm", "raster_fast.asm", "memory_fast.asm")]
     if program == "assets":
         return [PORT / "tests/assets.c", PORT / "src/wad_io.c"]
     if program == "graphics_cache":
@@ -143,7 +160,7 @@ def sources_for(program, upstream, generated):
     raise RuntimeError(f"program not implemented: {program}")
 
 
-def build(program, target, sources, upstream, generated, keep_going=False, start_map=False, jobs=4):
+def build(program, target, sources, upstream, generated, keep_going=False, start_map=False, jobs=4, low_detail=False):
     out = BUILD / target / program
     out.mkdir(parents=True, exist_ok=True)
     includes = [PORT / "src", generated, upstream]
@@ -154,6 +171,8 @@ def build(program, target, sources, upstream, generated, keep_going=False, start
     if target == "native":
         if start_map:
             definitions.append("DOOM_START_MAP=1")
+        if low_detail:
+            definitions.append("DOOM_LOW_DETAIL=1")
         binary = out / program
         command = [os.environ.get("CC", "clang"), "-std=c99", "-O2", "-g",
                    "-Wall", "-Wextra", "-Wno-unused-parameter", "-fwrapv"]
@@ -164,7 +183,7 @@ def build(program, target, sources, upstream, generated, keep_going=False, start
         for path in includes:
             command += ["-I", path]
         command += ["-D" + definition for definition in definitions]
-        command += sources + ["-o", binary]
+        command += [source for source in sources if source.suffix == ".c"] + ["-o", binary]
         run(command, out / "build.log")
         return binary
     tools = {name: ROOT / location for name, location in {
@@ -178,6 +197,10 @@ def build(program, target, sources, upstream, generated, keep_going=False, start
     includes.insert(0, PORT / "include")
     includes.append(ROOT / "runtime/include")
     definitions += ["RIPPLE=1", f"BANK_SIZE={BANK_SIZE}"]
+    if program in ("engine", "memory_kernels"):
+        definitions.append("DOOM_FAST_MEMORY=1")
+    if any(source.name == "m_fixed.c" for source in sources):
+        sources = sources + [PORT / "src/fixed_fast.asm"]
     if program in ("engine", "libc", "wad_lookup"):
         sources = sources + [PORT / "src/compat_libc.c"]
     objects = []
@@ -187,6 +210,14 @@ def build(program, target, sources, upstream, generated, keep_going=False, start
         for header in sorted(directory.rglob("*.h")):
             header_hash.update(str(header).encode())
             header_hash.update(header.read_bytes())
+    # These fixtures compile excerpts of the prepared engine, not a separate
+    # source object. Changes to the excerpt must invalidate the fixture too.
+    fixture_includes = {"projection_widths": ("projection_loop.inc",),
+                        "texture_columns": ("texture_cache.inc",),
+                        "keyboard_controls": ("input_commands.inc", "controls_defaults.inc",
+                                              "platform_keyboard.inc")}.get(program, ())
+    for fixture_include in fixture_includes:
+        header_hash.update((generated / fixture_include).read_bytes())
     tool_key = {name: [path.stat().st_mtime_ns, path.stat().st_size]
                 for name, path in tools.items()}
     def compile_source(source):
@@ -197,19 +228,28 @@ def build(program, target, sources, upstream, generated, keep_going=False, start
         stamp = out / (stem + ".build.json")
         source_definitions = definitions + (["DOOM_START_MAP=1"]
             if start_map and source == PORT / "src/main.c" else [])
+        if low_detail and source == PORT / "src/main.c":
+            source_definitions.append("DOOM_LOW_DETAIL=1")
         recipe = {"source": digest(source), "headers": header_hash.hexdigest(),
                   "defines": source_definitions, "tools": tool_key}
         if obj.exists() and stamp.exists() and json.loads(stamp.read_text()) == recipe:
             return obj, None
-        command = [tools["rcc"], "compile", source, "-o", asm,
-                   "--bank-size", BANK_SIZE]
-        for path in includes:
-            command += ["-I", path]
-        for definition in source_definitions:
-            command += ["-D", definition]
+        if source.suffix == ".asm":
+            # Handwritten leaf kernels use the same ISA and ABI as compiled C.
+            command = None
+        else:
+            command = [tools["rcc"], "compile", source, "-o", asm,
+                       "--bank-size", BANK_SIZE]
+            for path in includes:
+                command += ["-I", path]
+            for definition in source_definitions:
+                command += ["-D", definition]
         print(f"  Ripple: {source.name}", flush=True)
         try:
-            run(command, out / (stem + ".compile.log"))
+            if command is not None:
+                run(command, out / (stem + ".compile.log"))
+            else:
+                shutil.copyfile(source, asm)
             run([tools["rasm"], "assemble", asm, "-o", obj, "--bank-size", BANK_SIZE,
                  "--max-immediate", "65535"], out / (stem + ".assemble.log"))
         except RuntimeError as error:
@@ -242,12 +282,13 @@ def build(program, target, sources, upstream, generated, keep_going=False, start
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("program", choices=["numeric", "assets", "libc", "wad_lookup", "graphics_cache", "demo_playback", "stat_storage", "info_storage", "projection_widths", "engine", "prepare"]
+    parser.add_argument("program", choices=["numeric", "assets", "libc", "wad_lookup", "graphics_cache", "demo_playback", "stat_storage", "info_storage", "projection_widths", "sky_widths", "event_widths", "texture_columns", "keyboard_controls", "render_kernels", "raster_kernels", "memory_kernels", "engine", "prepare"]
                         + sorted(NATIVE_FIXTURES))
     parser.add_argument("--target", choices=["native", "ripple", "both"], default="both")
     parser.add_argument("--wad", type=Path, default=ROOT / "c-test/examples/doom/doom1.wad")
     parser.add_argument("--keep-going", action="store_true", help="collect all Ripple compilation failures")
     parser.add_argument("--start-map", action="store_true", help="boot directly into E1M1")
+    parser.add_argument("--low-detail", action="store_true", help="start with Doom's faster, half-horizontal-resolution world rendering")
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1),
                         help="parallel Ripple compiler processes (default: up to 4)")
     args = parser.parse_args()
@@ -266,7 +307,7 @@ def main():
     targets = ["native", "ripple"] if args.target == "both" else [args.target]
     for target in targets:
         print(build(args.program, target, sources, upstream, generated, args.keep_going,
-                    args.start_map, args.jobs), flush=True)
+                    args.start_map, args.jobs, args.low_detail), flush=True)
 
 
 if __name__ == "__main__":

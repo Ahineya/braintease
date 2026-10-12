@@ -1,0 +1,191 @@
+--- a/doomgeneric/r_segs.c
++++ b/doomgeneric/r_segs.c
+@@ -207,45 +207,63 @@
+     int32_t top;
+     int32_t bottom;
+ 
+-    for ( ; rw_x < rw_stopx ; rw_x++)
+-    {
++    /* Wall columns are bounded by the viewport (0..320). Keep the array
++     * index in a native unsigned word, and load each clipping entry once.
++     * R_GetColumn only touches texture/zone caches; all colfunc variants only
++     * draw pixels and do not read or update rw_x or these clipping arrays.
++     * Keep short locals so assignments retain the original narrowing before
++     * the lower tier observes the updated ceiling clip. Projected values
++     * yl/yh/mid remain 32-bit until the clipping comparisons are complete. */
++    unsigned int x = (unsigned int)rw_x;
++    unsigned int stop = (unsigned int)rw_stopx;
++    short *ceiling_at;
++    short *floor_at;
++    short ceiling;
++    short floor;
++
++    for ( ; x < stop ; x++)
++    {
++        ceiling_at = ceilingclip + x;
++        floor_at = floorclip + x;
++        ceiling = *ceiling_at;
++        floor = *floor_at;
+ 	// mark floor / ceiling areas
+ 	yl = (topfrac+HEIGHTUNIT-1)>>HEIGHTBITS;
+ 
+ 	// no space above wall?
+-	if (yl < ceilingclip[rw_x]+1)
+-	    yl = ceilingclip[rw_x]+1;
++	if (yl < ceiling+1)
++	    yl = ceiling+1;
+ 	
+ 	if (markceiling)
+ 	{
+-	    top = ceilingclip[rw_x]+1;
++	    top = ceiling+1;
+ 	    bottom = yl-1;
+ 
+-	    if (bottom >= floorclip[rw_x])
+-		bottom = floorclip[rw_x]-1;
++	    if (bottom >= floor)
++		bottom = floor-1;
+ 
+ 	    if (top <= bottom)
+ 	    {
+-		ceilingplane->top[rw_x] = top;
+-		ceilingplane->bottom[rw_x] = bottom;
++		ceilingplane->top[x] = top;
++		ceilingplane->bottom[x] = bottom;
+ 	    }
+ 	}
+ 		
+ 	yh = bottomfrac>>HEIGHTBITS;
+ 
+-	if (yh >= floorclip[rw_x])
+-	    yh = floorclip[rw_x]-1;
++	if (yh >= floor)
++	    yh = floor-1;
+ 
+ 	if (markfloor)
+ 	{
+ 	    top = yh+1;
+-	    bottom = floorclip[rw_x]-1;
+-	    if (top <= ceilingclip[rw_x])
+-		top = ceilingclip[rw_x]+1;
++	    bottom = floor-1;
++	    if (top <= ceiling)
++		top = ceiling+1;
+ 	    if (top <= bottom)
+ 	    {
+-		floorplane->top[rw_x] = top;
+-		floorplane->bottom[rw_x] = bottom;
++		floorplane->top[x] = top;
++		floorplane->bottom[x] = bottom;
+ 	    }
+ 	}
+ 	
+@@ -253,7 +271,7 @@
+ 	if (segtextured)
+ 	{
+ 	    // calculate texture offset
+-	    angle = (rw_centerangle + xtoviewangle[rw_x])>>ANGLETOFINESHIFT;
++	    angle = (rw_centerangle + xtoviewangle[x])>>ANGLETOFINESHIFT;
+ 	    texturecolumn = rw_offset-FixedMul(finetangent[angle],rw_distance);
+ 	    texturecolumn >>= FRACBITS;
+ 	    // calculate lighting
+@@ -263,7 +281,7 @@
+ 		index = MAXLIGHTSCALE-1;
+ 
+ 	    dc_colormap = walllights[index];
+-	    dc_x = rw_x;
++	    dc_x = x;
+ 	    dc_iscale = 0xffffffffu / (uint32_t)rw_scale;
+ 	}
+         else
+@@ -287,8 +305,8 @@
+                 dc_source = R_GetColumn(midtexture,texturecolumn);
+                 colfunc ();
+             }
+-	    ceilingclip[rw_x] = viewheight;
+-	    floorclip[rw_x] = -1;
++	    ceiling = viewheight;
++	    floor = -1;
+ 	}
+ 	else
+ 	{
+@@ -299,8 +317,8 @@
+ 		mid = pixhigh>>HEIGHTBITS;
+ 		pixhigh += pixhighstep;
+ 
+-		if (mid >= floorclip[rw_x])
+-		    mid = floorclip[rw_x]-1;
++		if (mid >= floor)
++		    mid = floor-1;
+ 
+ 		if (mid >= yl)
+ 		{
+@@ -309,16 +327,16 @@
+ 		    dc_texturemid = rw_toptexturemid;
+ 		    dc_source = R_GetColumn(toptexture,texturecolumn);
+ 		    colfunc ();
+-		    ceilingclip[rw_x] = mid;
++		    ceiling = mid;
+ 		}
+ 		else
+-		    ceilingclip[rw_x] = yl-1;
++		    ceiling = yl-1;
+ 	    }
+ 	    else
+ 	    {
+ 		// no top wall
+ 		if (markceiling)
+-		    ceilingclip[rw_x] = yl-1;
++		    ceiling = yl-1;
+ 	    }
+ 			
+ 	    if (bottomtexture)
+@@ -328,8 +346,8 @@
+ 		pixlow += pixlowstep;
+ 
+ 		// no space above wall?
+-		if (mid <= ceilingclip[rw_x])
+-		    mid = ceilingclip[rw_x]+1;
++		if (mid <= ceiling)
++		    mid = ceiling+1;
+ 		
+ 		if (mid <= yh)
+ 		{
+@@ -339,30 +357,33 @@
+ 		    dc_source = R_GetColumn(bottomtexture,
+ 					    texturecolumn);
+ 		    colfunc ();
+-		    floorclip[rw_x] = mid;
++		    floor = mid;
+ 		}
+ 		else
+-		    floorclip[rw_x] = yh+1;
++		    floor = yh+1;
+ 	    }
+ 	    else
+ 	    {
+ 		// no bottom wall
+ 		if (markfloor)
+-		    floorclip[rw_x] = yh+1;
++		    floor = yh+1;
+ 	    }
+ 			
+ 	    if (maskedtexture)
+ 	    {
+ 		// save texturecol
+ 		//  for backdrawing of masked mid texture
+-		maskedtexturecol[rw_x] = texturecolumn;
++		maskedtexturecol[x] = texturecolumn;
+ 	    }
+ 	}
+ 		
++        *ceiling_at = ceiling;
++        *floor_at = floor;
+ 	rw_scale += rw_scalestep;
+ 	topfrac += topstep;
+ 	bottomfrac += bottomstep;
+     }
++    rw_x = x;
+ }
+ 
+ 

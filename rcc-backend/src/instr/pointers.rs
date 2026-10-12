@@ -115,6 +115,11 @@ pub fn offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     if size == 0 {
         return constant_offset(mgr, naming, ptr, 0, result, bank_size);
     }
+    if size == 1 && matches!(index, Value::Temp(t)
+        if mgr.get_i32_high(&naming.temp_name(*t)).is_none()
+            && mgr.get_i64_words(&naming.temp_name(*t)).is_none()) {
+        return word_offset(mgr, naming, ptr, index, result, bank_size);
+    }
 
     let mut insts = vec![AsmInst::Comment("GEP: native narrow displacement, wide fallback".into())];
     let (addr, bank) = components(mgr, naming, ptr, &mut insts);
@@ -326,6 +331,65 @@ pub fn offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     mgr.unpin_register(addr);
     mgr.unpin_register(bank);
     for r in scratch {
+        mgr.unpin_register(r);
+        mgr.free_register(r);
+    }
+    insts
+}
+
+/// A zero-extended native index cannot overflow the 32-bit linear address:
+/// bank * bank_size + offset + index <= 65535 * 65535 + 2 * 65535.
+/// Normalize each native word first, then add with one bank carry. This also
+/// accepts noncanonical offsets supplied by integer-to-pointer casts, without
+/// reserving the nine scratch registers needed by the general wide fallback.
+fn word_offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
+    ptr: &Value, index: &Value, result: TempId, bank_size: u16) -> Vec<AsmInst> {
+    let mut insts = vec![AsmInst::Comment("GEP: zero-extended native displacement".into())];
+    let (addr, bank) = components(mgr, naming, ptr, &mut insts);
+    let input = mgr.get_value_register(index);
+    insts.extend(mgr.take_instructions());
+    mgr.pin_register(input);
+    let delta = reg(mgr, naming, &mut insts, "word_delta");
+    mgr.pin_register(delta);
+    insts.push(AsmInst::Move(delta, input));
+    mgr.unpin_register(input);
+    let bs = reg(mgr, naming, &mut insts, "word_bank_size");
+    mgr.pin_register(bs);
+    let tmp = reg(mgr, naming, &mut insts, "word_temporary");
+    mgr.pin_register(tmp);
+    let carry = reg(mgr, naming, &mut insts, "word_carry");
+    mgr.pin_register(carry);
+    // All allocations precede branches, so no spill slot is initialized on
+    // only one path through this instruction.
+    insts.push(AsmInst::Li(bs, bank_size as i16));
+    for word in [addr, delta] {
+        let normalized = naming.i32_label("gep_word_normalized");
+        insts.push(AsmInst::Sltu(tmp, word, bs));
+        insts.push(AsmInst::Bne(tmp, Reg::R0, normalized.clone()));
+        insts.push(AsmInst::Div(tmp, word, bs));
+        insts.push(AsmInst::Add(bank, bank, tmp));
+        insts.push(AsmInst::Mod(word, word, bs));
+        insts.push(AsmInst::Label(normalized));
+    }
+    insts.push(AsmInst::Add(tmp, addr, delta));
+    insts.push(AsmInst::Sltu(carry, tmp, addr));
+    insts.push(AsmInst::Move(addr, tmp));
+    let adjust = naming.i32_label("gep_word_adjust");
+    let done = naming.i32_label("gep_word_done");
+    insts.push(AsmInst::Bne(carry, Reg::R0, adjust.clone()));
+    insts.push(AsmInst::Sltu(tmp, addr, bs));
+    insts.push(AsmInst::Bne(tmp, Reg::R0, done.clone()));
+    insts.push(AsmInst::Label(adjust));
+    insts.push(AsmInst::Sub(addr, addr, bs));
+    insts.push(AsmInst::AddI(bank, bank, 1));
+    insts.push(AsmInst::Label(done));
+    let bank_name = naming.temp_with_context("pointer", "word_offset_bank");
+    mgr.bind_value_to_register(bank_name.clone(), bank);
+    mgr.bind_value_to_register(naming.temp_name(result), addr);
+    mgr.set_pointer_bank(naming.temp_name(result), BankInfo::Dynamic(bank_name));
+    mgr.unpin_register(addr);
+    mgr.unpin_register(bank);
+    for r in [delta, bs, tmp, carry] {
         mgr.unpin_register(r);
         mgr.free_register(r);
     }

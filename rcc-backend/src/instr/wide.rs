@@ -721,6 +721,92 @@ fn emit_i32_shift(
     insts
 }
 
+/// A constant shift has no runtime cases to dispatch. Besides removing those
+/// branches, this needs at most two scratch registers instead of five (the
+/// amount plus the dynamic path's four), avoiding spills in fixed-point code.
+fn emit_i32_shift_const(
+    op: IrBinaryOp,
+    result_lo: Reg,
+    result_hi: Reg,
+    a_lo: Reg,
+    a_hi: Reg,
+    count: u16,
+    mgr: &mut RegisterPressureManager,
+    naming: &mut NameGenerator,
+) -> Vec<AsmInst> {
+    let mut insts = Vec::new();
+    if count == 0 {
+        insts.push(AsmInst::Add(result_lo, a_lo, Reg::R0));
+        insts.push(AsmInst::Add(result_hi, a_hi, Reg::R0));
+        return insts;
+    }
+    if count == 16 {
+        if op == IrBinaryOp::Shl {
+            insts.push(AsmInst::Add(result_hi, a_lo, Reg::R0));
+            insts.push(AsmInst::Li(result_lo, 0));
+        } else {
+            insts.push(AsmInst::Add(result_lo, a_hi, Reg::R0));
+            if op == IrBinaryOp::AShr {
+                insts.push(AsmInst::Slt(result_hi, a_hi, Reg::R0));
+                insts.push(AsmInst::Sub(result_hi, Reg::R0, result_hi));
+            } else {
+                insts.push(AsmInst::Li(result_hi, 0));
+            }
+        }
+        return insts;
+    }
+    let amount = mgr.get_register(naming.temp_with_context("i32_shift_const", "amount"));
+    insts.extend(mgr.take_instructions());
+    mgr.pin_register(amount);
+    let overlap = mgr.get_register(naming.temp_with_context("i32_shift_const", "overlap"));
+    insts.extend(mgr.take_instructions());
+    mgr.pin_register(overlap);
+    if count > 16 {
+        insts.push(AsmInst::Li(amount, (count - 16) as i16));
+        if op == IrBinaryOp::Shl {
+            insts.push(AsmInst::Sll(result_hi, a_lo, amount));
+            insts.push(AsmInst::Li(result_lo, 0));
+        } else {
+            insts.push(AsmInst::Srl(result_lo, a_hi, amount));
+            if op == IrBinaryOp::AShr {
+                insts.push(AsmInst::Slt(result_hi, a_hi, Reg::R0));
+                insts.push(AsmInst::Sub(result_hi, Reg::R0, result_hi));
+                insts.push(AsmInst::Li(amount, (32 - count) as i16));
+                insts.push(AsmInst::Sll(overlap, result_hi, amount));
+                insts.push(AsmInst::Or(result_lo, result_lo, overlap));
+            } else {
+                insts.push(AsmInst::Li(result_hi, 0));
+            }
+        }
+    } else {
+        insts.push(AsmInst::Li(amount, count as i16));
+        if op == IrBinaryOp::Shl {
+            insts.push(AsmInst::Sll(result_lo, a_lo, amount));
+            insts.push(AsmInst::Sll(result_hi, a_hi, amount));
+            insts.push(AsmInst::Li(amount, (16 - count) as i16));
+            insts.push(AsmInst::Srl(overlap, a_lo, amount));
+            insts.push(AsmInst::Or(result_hi, result_hi, overlap));
+        } else {
+            insts.push(AsmInst::Srl(result_lo, a_lo, amount));
+            insts.push(AsmInst::Srl(result_hi, a_hi, amount));
+            insts.push(AsmInst::Li(amount, (16 - count) as i16));
+            insts.push(AsmInst::Sll(overlap, a_hi, amount));
+            insts.push(AsmInst::Or(result_lo, result_lo, overlap));
+            if op == IrBinaryOp::AShr {
+                insts.push(AsmInst::Slt(overlap, a_hi, Reg::R0));
+                insts.push(AsmInst::Sub(overlap, Reg::R0, overlap));
+                insts.push(AsmInst::Sll(overlap, overlap, amount));
+                insts.push(AsmInst::Or(result_hi, result_hi, overlap));
+            }
+        }
+    }
+    for reg in [overlap, amount] {
+        mgr.unpin_register(reg);
+        mgr.free_register(reg);
+    }
+    insts
+}
+
 pub fn lower_i32_binary(
     mgr: &mut RegisterPressureManager,
     naming: &mut NameGenerator,
@@ -864,11 +950,18 @@ pub fn lower_i32_binary(
             insts.extend(emit_i32_sdiv(result_lo, result_hi, a_lo, a_hi, b_lo, b_hi, true, mgr, naming));
         }
         IrBinaryOp::Shl | IrBinaryOp::LShr | IrBinaryOp::AShr => {
-            let (amt, ai) = shift_amt_reg(mgr, naming, rhs);
-            insts.extend(ai);
-            mgr.pin_register(amt);
-            insts.extend(emit_i32_shift(op, result_lo, result_hi, a_lo, a_hi, amt, mgr, naming));
-            mgr.unpin_register(amt);
+            if let Value::Constant(count) = rhs {
+                // Keep the existing masked-count behavior outside C's defined
+                // 0..31 range; valid constant shifts use the straight-line path.
+                insts.extend(emit_i32_shift_const(op, result_lo, result_hi, a_lo, a_hi,
+                    (*count as u16) & 31, mgr, naming));
+            } else {
+                let (amt, ai) = shift_amt_reg(mgr, naming, rhs);
+                insts.extend(ai);
+                mgr.pin_register(amt);
+                insts.extend(emit_i32_shift(op, result_lo, result_hi, a_lo, a_hi, amt, mgr, naming));
+                mgr.unpin_register(amt);
+            }
         }
         _ => panic!("unexpected I32 binary op {op:?}"),
     }
@@ -1063,6 +1156,25 @@ mod shift_tests {
                             (0x5678, 0x1234), "live value after {op:?} by {count}, dynamic={dynamic}");
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn constant_shifts_need_no_branches_or_spills() {
+        for op in [IrBinaryOp::Shl, IrBinaryOp::LShr, IrBinaryOp::AShr] {
+            for count in 0..32 {
+                let mut mgr = RegisterPressureManager::new(0);
+                mgr.init();
+                let mut naming = new_function_naming();
+                let mut setup = Vec::new();
+                seed_pair(&mut mgr, &naming, 1, 0x87654321, &mut setup);
+                let insts = lower_i32_binary(&mut mgr, &mut naming, op,
+                    &Value::Temp(1), &Value::Constant(count), 2);
+                assert!(insts.len() <= 10, "{op:?} by {count}: {} instructions", insts.len());
+                assert!(!insts.iter().any(|i| matches!(i,
+                    AsmInst::Beq(..) | AsmInst::Bne(..) | AsmInst::Blt(..) | AsmInst::Bge(..)
+                    | AsmInst::Load(..) | AsmInst::Store(..))), "{op:?} by {count}: {insts:?}");
             }
         }
     }

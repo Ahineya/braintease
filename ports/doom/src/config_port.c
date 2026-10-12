@@ -1,8 +1,22 @@
 /* Deterministic initial profile: no host config files or save directory. */
 #include "m_config.h"
 #include "m_controls.h"
+#include "doomkeys.h"
 char *configdir = "";
-void M_LoadDefaults(void) { key_up = 'w'; key_down = 's'; key_strafeleft = 'a'; key_straferight = 'd'; }
+void M_LoadDefaults(void)
+{
+    key_up = KEY_UPARROW;
+    key_down = KEY_DOWNARROW;
+    key_left = KEY_LEFTARROW;
+    key_right = KEY_RIGHTARROW;
+    key_strafeleft = 'a';
+    key_straferight = 'd';
+    /* Doomgeneric's synthetic KEY_FIRE/KEY_USE are not physical key codes. */
+    key_fire = KEY_RCTRL;
+    key_use = ' ';
+    key_strafe = KEY_RALT;
+    key_speed = KEY_RSHIFT;
+}
 void M_SaveDefaults(void) {}
 void M_SaveDefaultsAlternate(char *main, char *extra) {}
 void M_SetConfigDir(char *dir) {}

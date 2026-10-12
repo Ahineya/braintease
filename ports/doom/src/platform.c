@@ -20,6 +20,7 @@
 #ifdef RIPPLE
 #include <mmio.h>
 #include <vm_devices.h>
+#include "render_fast.h"
 #endif
 
 byte *I_VideoBuffer;
@@ -90,6 +91,7 @@ static int doom_key(unsigned int key)
         case 40: return KEY_ENTER; case 41: return KEY_ESCAPE;
         case 42: return KEY_BACKSPACE; case 43: return KEY_TAB;
         case 44: return ' '; case 45: return '-'; case 46: return '=';
+        case 54: return ','; case 55: return '.';
         case 68: return KEY_F11; case 69: return KEY_F12;
         case 72: return KEY_PAUSE;
         case 79: return KEY_RIGHTARROW; case 80: return KEY_LEFTARROW;
@@ -217,8 +219,13 @@ int I_GetPaletteIndex(int r, int g, int b)
 void I_FinishUpdate(void)
 {
     size_t i;
+#ifdef RIPPLE
+    Doom_ConvertRGB565(framebuffer, I_VideoBuffer, palette565,
+                       SCREENWIDTH * (unsigned int)SCREENHEIGHT);
+#else
     for (i = 0; i < (size_t)SCREENWIDTH * SCREENHEIGHT; ++i)
         framebuffer[i] = palette565[I_VideoBuffer[i] & 255U];
+#endif
     ++presented;
     printf("ENGINE frame %lu tick %lu state %d episode %d map %d\n",
            (unsigned long)presented, (unsigned long)logical_tick,

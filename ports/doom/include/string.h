@@ -1,6 +1,12 @@
 #ifndef DOOM_PORT_STRING_H
 #define DOOM_PORT_STRING_H
 #include <stddef.h>
+#if defined(RIPPLE) && defined(DOOM_FAST_MEMORY)
+/* Port-local implementations; the shared runtime and both VMs stay unchanged. */
+#define memcpy Doom_Memcpy
+#define memmove Doom_Memmove
+#define memset Doom_Memset
+#endif
 char *strcpy(char *dest, const char *src);
 char *strncpy(char *dest, const char *src, size_t count);
 size_t strlen(const char *text);

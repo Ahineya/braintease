@@ -1,0 +1,62 @@
+--- a/doomgeneric/r_data.c
++++ b/doomgeneric/r_data.c
+@@ -247,6 +247,8 @@
+ 
+     collump = texturecolumnlump[texnum];
+     colofs = texturecolumnofs[texnum];
++    /* Missing posts must not expose uninitialized zone memory. */
++    memset(block, 0, texturecompositesize[texnum]);
+     
+     // Composite the columns together.
+     patch = texture->patches;
+@@ -283,6 +285,23 @@
+ 						
+     }
+ 
++    /* The column samplers address rows 0..127 even for short textures. In
++     * particular, projection rounding can sample row16 of a 16-row step.
++     * Give every composite column its own complete sampling window, then
++     * repeat the completed image instead of reading adjacent columns or zone
++     * metadata. Keep this work in cache generation, outside the pixel loop. */
++    if (texture->height < 128)
++    {
++        for (x = 0; x < texture->width; ++x)
++        {
++            byte *column;
++            if (collump[x] >= 0) continue;
++            column = block + colofs[x];
++            for (i = texture->height; i < 128; ++i)
++                column[i] = column[i - texture->height];
++        }
++    }
++
+     // Now that the texture has been built in column cache,
+     //  it is purgable from zone memory.
+     Z_ChangeTag (block, PU_CACHE);
+@@ -305,8 +324,10 @@
+     int			i;
+     short*		collump;
+     uint32_t*	colofs;
++    size_t columnsize;
+ 	
+     texture = textures[texnum];
++    columnsize = texture->height < 128 ? 128 : texture->height;
+ 
+     // Composited texture not created yet.
+     texturecomposite[texnum] = 0;
+@@ -361,13 +382,13 @@
+ 	    collump[x] = -1;	
+ 	    colofs[x] = texturecompositesize[texnum];
+ 	    
+-	    if (texturecompositesize[texnum] > 0x10000-texture->height)
++	    if (texturecompositesize[texnum] > 0x10000-columnsize)
+ 	    {
+ 		I_Error ("R_GenerateLookup: texture %i is >64k",
+ 			 texnum);
+ 	    }
+ 	    
+-	    texturecompositesize[texnum] += texture->height;
++	    texturecompositesize[texnum] += columnsize;
+ 	}
+     }
+ 

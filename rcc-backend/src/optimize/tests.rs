@@ -17,6 +17,39 @@ fn block(id: u32, instructions: Vec<Instruction>) -> BasicBlock {
 }
 
 #[test]
+fn gep_keeps_native_zero_extended_indices_but_not_signed_or_wide_ones() {
+    for (source_type, extension, expected) in [
+        (T::I16, U::ZExt, 0),
+        (T::I8, U::ZExt, 0),
+        (T::I16, U::SExt, 1),
+        (T::I32, U::ZExt, 1),
+    ] {
+        let mut f = Function::new("index".into(), T::FatPtr(Box::new(T::I16)));
+        f.add_parameter(0, source_type);
+        f.blocks.push(block(0, vec![
+            Instruction::Unary { result: 1, op: extension, operand: Value::Temp(0), result_type: T::I32 },
+            Instruction::GetElementPtr {
+                result: 2,
+                ptr: Value::FatPtr(rcc_frontend::ir::FatPointer {
+                    addr: Box::new(Value::Constant(1234)), bank: rcc_frontend::BankTag::Global,
+                }),
+                indices: vec![Value::Temp(1)],
+                result_type: T::FatPtr(Box::new(T::I16)),
+                source_element_type: T::I16,
+                is_struct_field: false,
+            },
+            Instruction::Return(Some(Value::Temp(2))),
+        ]));
+        optimize_function(&mut f);
+        let index = f.blocks[0].instructions.iter().find_map(|i| match i {
+            Instruction::GetElementPtr { indices, .. } => Some(&indices[0]),
+            _ => None,
+        }).unwrap();
+        assert_eq!(index, &Value::Temp(expected));
+    }
+}
+
+#[test]
 fn constants_obey_target_width_and_signedness() {
     assert_eq!(fold_binary(B::Add, 1, 0, &T::I1), Some(1));
     assert_eq!(fold_binary(B::Add, 255, 0, &T::I8), Some(255));

@@ -214,3 +214,52 @@ fn test_gep_scaled_dynamic_offsets_match_reference_for_varied_words() {
         check(bank_size, offset, BankInfo::Heap(bank), index, size, true, case % 17 == 0);
     }
 }
+
+fn check_word_index(bank_size: u16, offset: u16, index: u16, pressure: bool) -> usize {
+    let mut mgr = RegisterPressureManager::new(0);
+    mgr.init();
+    mgr.set_memory_bank_size(bank_size);
+    let mut naming = new_function_naming();
+    let mut insts = vec![];
+    seed(&mut mgr, naming.temp_name(1), offset, &mut insts);
+    mgr.set_pointer_bank(naming.temp_name(1), BankInfo::Heap(5));
+    seed(&mut mgr, naming.temp_name(2), index, &mut insts);
+    if pressure {
+        for i in 0..16 { seed(&mut mgr, format!("word_pressure_{i}"), (i * 31) as u16, &mut insts); }
+    }
+    insts.extend(lower_gep(&mut mgr, &mut naming, &Value::Temp(1), &[Value::Temp(2)], 1, 3, bank_size));
+    capture_pointer(&mut mgr, &mut naming, &Value::Temp(3), Reg::Rv0, Reg::Rv1, &mut insts);
+    capture_pointer(&mut mgr, &mut naming, &Value::Temp(1), Reg::A0, Reg::A1, &mut insts);
+    let input = mgr.get_value_register(&Value::Temp(2));
+    insts.extend(mgr.take_instructions());
+    insts.push(AsmInst::Move(Reg::A2, input));
+    // The small-bank arithmetic cases still need a normal stack for spills.
+    let mut machine = Machine::new(bank_size.max(128));
+    machine.run(&insts);
+    let linear = 5 * u32::from(bank_size) + u32::from(offset) + u32::from(index);
+    assert_eq!((machine.regs[Reg::Rv0 as usize], machine.regs[Reg::Rv1 as usize]),
+        ((linear % u32::from(bank_size)) as u16, (linear / u32::from(bank_size)) as u16),
+        "bank_size={bank_size}, offset={offset}, index={index}");
+    assert_eq!((machine.regs[Reg::A0 as usize], machine.regs[Reg::A1 as usize], machine.regs[Reg::A2 as usize]),
+        (offset, 5, index), "Base and index must remain usable");
+    machine.executed_instructions
+}
+
+#[test]
+fn test_gep_word_indices_preserve_carries_noncanonical_offsets_and_live_inputs() {
+    for bank_size in [1, 3, 128, 4096, 32768, 64000, 65535] {
+        for offset in [0, bank_size - 1, 32767, 64000, 65535] {
+            for index in [0, 1, 255, 32768, 64000, 65535] {
+                for pressure in [false, true] {
+                    check_word_index(bank_size, offset, index, pressure);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_gep_word_index_has_a_small_instruction_budget() {
+    let steps = check_word_index(64000, 1234, 255, false);
+    assert!(steps < 70, "Native one-word GEP and input preservation took {steps} instructions");
+}

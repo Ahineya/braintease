@@ -4,6 +4,7 @@
 mod constants;
 mod locals;
 mod loops;
+mod narrow;
 #[cfg(test)]
 mod tests;
 
@@ -19,6 +20,7 @@ pub fn optimize_function(function: &mut Function) {
     }
     locals::promote_single_store_locals(function);
     constants::simplify(function);
+    narrow::narrow_gep_indices(function);
     eliminate_dead_expressions(function);
     loops::hoist_invariants(function);
 }

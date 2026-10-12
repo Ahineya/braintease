@@ -18,9 +18,12 @@ and preserve the 16-bit C byte and two-cell banked pointer ABI.
 3. **Arithmetic strength reduction.** Multiplication and unsigned division by
    powers of two become shifts; unsigned remainder becomes a mask. Signed
    division keeps its rounding semantics.
-4. **Dead expression elimination.** Unused pure arithmetic and address
+4. **Native GEP indices.** A zero-extension of a known one-word integer can
+   supply its original word to pointer arithmetic. Signed extensions and wider
+   source values retain their full displacement.
+5. **Dead expression elimination.** Unused pure arithmetic and address
    calculations disappear. Loads, stores, calls and inline assembly remain.
-5. **Loop invariant code motion.** Dominator analysis identifies natural loops.
+6. **Loop invariant code motion.** Dominator analysis identifies natural loops.
    Pure arithmetic and address calculations whose operands are available before
    the loop move into an existing dedicated preheader. Dependent invariants
    move in dependency order. Memory accesses and division are not speculated;
@@ -39,6 +42,22 @@ shifts/additions. Positive or negative one-word displacements use native
 carry/borrow and bank adjustment. Other displacements use a 32-bit fallback.
 All scratch allocation precedes internal branches, so both paths initialize
 the same spill state. Non-power-of-two banks such as 64,000 are supported.
+
+A one-cell element with a native unsigned index uses a smaller path with six
+working registers, including the result pointer. It normalizes the input offset
+and index separately before adding with carry. This supports every nonzero
+16-bit bank size, noncanonical integer-to-pointer offsets, and live operands
+without reserving registers for a general 32-bit division fallback. The full
+64,000-pixel bank-crossing conversion kernel fell from 15,876,529 to 14,980,529
+instructions with this specialization; the pointer-walk variant fell from
+13,248,403 to 11,072,403. All output pixels remained identical.
+
+Constant 32-bit shifts lower directly to word shifts and merges. Counts of zero,
+16, below 16 and above 16 each have a dedicated path, including arithmetic sign
+fill. This avoids the dynamic shift dispatch and uses at most two scratch
+registers. Tests execute all 32 defined counts for left, unsigned right and
+signed right shifts under register pressure, and limit the emitted instruction
+count to prevent the dispatch overhead from returning.
 
 ## Volatile memory
 
@@ -64,6 +83,8 @@ bank crossings and observable volatile MMIO reads. The call spill test
 reproduces a wide parameter overwritten while materializing a null argument;
 this was caught by the first E1M1 snapshot after enabling scalar promotion.
 Run the fixtures with the Rust VM backend.
+`test_native_unsigned_gep` additionally checks native unsigned displacements,
+noncanonical pointer offsets, and preservation of signed and wider indices.
 `ports/doom/test.py --stage engine` compares title/menu/E1M1 screenshots
 against the native build; the foundations stage checks arithmetic and assets.
 
@@ -88,7 +109,7 @@ depends on host load; the instruction reduction is 10.26×. All seven captured
 frames match byte-for-byte. The conversion kernel checks all 64,000 pixels with
 varying palette entries and both source and destination crossing a bank.
 
-The final build passes 410 Rust tests, 157 registered C regressions, three
+That initial optimization build passed 410 Rust tests, 157 registered C regressions, three
 focused C checks, all nine Doom foundation checks, and exact native pixels and
 state logs for title, menu-to-E1M1, and direct E1M1 startup. These are startup
 and menu measurements, not a sustained gameplay benchmark.
@@ -105,3 +126,11 @@ and patch drawing about 40%. Spill loads/stores and their address setup fell
 from 91.2 million to 6.54 million instructions per sampled frame, but still
 account for about 25% of the remaining work. Further renderer and register
 allocation work is needed for playable speed.
+
+The subsequent gameplay work adds the native unsigned GEP and constant shift
+paths above. Its compiler validation passes 414 Rust tests and 199 registered C
+regressions. Doom also uses port-local assembly kernels for rasterization,
+palette conversion, memory operations and fixed-point arithmetic, all using the
+existing ISA. See `ports/doom/README.md` for sustained gameplay measurements and
+native pixel comparisons; these include renderer improvements beyond the
+general compiler passes.
