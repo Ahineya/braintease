@@ -70,6 +70,7 @@ pub const DISP_OFF: u16    = 0;
 pub const DISP_TTY: u16    = 1;
 pub const DISP_TEXT40: u16 = 2;
 pub const DISP_RGB565: u16 = 3;
+pub const DISP_RGB565_EXT: u16 = 4;
 
 // Display status bits
 pub const DISP_READY: u16      = 1 << 0;  // bit0

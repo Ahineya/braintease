@@ -1,40 +1,59 @@
-use std::sync::{Arc, Mutex};
 use pixels::{Pixels, SurfaceTexture};
+use std::sync::{Arc, Mutex};
 use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{EventLoopBuilder, ControlFlow};
+use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoopBuilder};
+use winit::platform::run_return::EventLoopExtRunReturn;
 use winit::window::WindowBuilder;
-use winit_input_helper::WinitInputHelper;
 
-/// RGB565 color format: RRRRRGGGGGGBBBBB
-fn rgb565_to_rgb888(color: u16) -> [u8; 3] {
-    let r = ((color >> 11) & 0x1F) as u8;
-    let g = ((color >> 5) & 0x3F) as u8;
-    let b = (color & 0x1F) as u8;
-    
-    // Scale to 8-bit values
-    let r8 = (r << 3) | (r >> 2);
-    let g8 = (g << 2) | (g >> 4);
-    let b8 = (b << 3) | (b >> 2);
-    
-    [r8, g8, b8]
+/// Expand RGB565 channels by repeating their high bits, without rounding drift.
+pub fn rgb565_to_rgb888(color: u16) -> [u8; 3] {
+    let r = ((color >> 11) & 0x1f) as u8;
+    let g = ((color >> 5) & 0x3f) as u8;
+    let b = (color & 0x1f) as u8;
+    [
+        (r << 3) | (r >> 2),
+        (g << 2) | (g >> 4),
+        (b << 3) | (b >> 2),
+    ]
 }
 
-/// Shared display state between VM and display
+/// A copy of a completed frame, independent of subsequent guest writes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FrameSnapshot {
+    pub width: u16,
+    pub height: u16,
+    pub sequence: u64,
+    pub pixels: Vec<u16>,
+}
+
+/// Shared display and host keyboard state. Device input is latched by the VM.
 pub struct RGB565State {
-    pub width: u8,
-    pub height: u8,
+    pub width: u16,
+    pub height: u16,
     pub initialized: bool,
     pub front_buffer: Vec<u16>,
     pub back_buffer: Vec<u16>,
+    pub sequence: u64,
     pub should_quit: bool,
-    // Keyboard state for RGB565 mode
     pub key_up: bool,
     pub key_down: bool,
     pub key_left: bool,
     pub key_right: bool,
     pub key_z: bool,
     pub key_x: bool,
+    /// Stable USB HID keyboard usage IDs; OS auto-repeat is suppressed.
+    pub pending_keys: Vec<(u16, bool)>,
+    pub keys_held: [bool; 256],
+    /// The VM must resynchronize from keys_held if this is set.
+    pub key_overflow: bool,
+    legacy_layout: bool,
+}
+
+impl Default for RGB565State {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RGB565State {
@@ -45,6 +64,7 @@ impl RGB565State {
             initialized: false,
             front_buffer: Vec::new(),
             back_buffer: Vec::new(),
+            sequence: 0,
             should_quit: false,
             key_up: false,
             key_down: false,
@@ -52,37 +72,83 @@ impl RGB565State {
             key_right: false,
             key_z: false,
             key_x: false,
+            pending_keys: Vec::new(),
+            keys_held: [false; 256],
+            key_overflow: false,
+            legacy_layout: false,
         }
     }
-    
+
     pub fn init(&mut self, width: u8, height: u8, bank_size: usize) -> Result<(), String> {
+        if width == 0 || height == 0 {
+            return Err("Display dimensions must be nonzero".to_string());
+        }
         let pixels_needed = width as usize * height as usize;
-        let available_space = (bank_size - 32) / 2; // 32 for MMIO, divide by 2 for double buffer
-        
-        if pixels_needed > available_space {
+        let available_space = bank_size.checked_sub(32).unwrap_or(0) / 2;
+        if bank_size < 32 || pixels_needed > available_space {
             return Err(format!(
-                "Display resolution {}x{} requires {} words, but only {} available in bank",
-                width, height, pixels_needed * 2, available_space * 2
+                "Display resolution {width}x{height} requires {} cells, but only {} available in bank",
+                pixels_needed * 2, available_space * 2
             ));
         }
-        
-        self.width = width;
-        self.height = height;
+        self.width = width as u16;
+        self.height = height as u16;
         self.front_buffer = vec![0; pixels_needed];
         self.back_buffer = vec![0; pixels_needed];
         self.initialized = true;
-        
+        self.legacy_layout = true;
         Ok(())
     }
-    
-    pub fn swap_buffers(&mut self) {
+
+    pub fn swap_buffers(&mut self) -> bool {
+        if !self.initialized || !self.legacy_layout {
+            return false;
+        }
+        let Some(next_sequence) = self.sequence.checked_add(1) else {
+            return false;
+        };
         std::mem::swap(&mut self.front_buffer, &mut self.back_buffer);
+        self.sequence = next_sequence;
+        true
+    }
+
+    /// Record a transition, preserving authoritative held state even on overflow.
+    pub fn set_key(&mut self, key: u16, down: bool) {
+        let Some(held) = self.keys_held.get_mut(key as usize) else {
+            return;
+        };
+        if *held == down {
+            return;
+        }
+        *held = down;
+        self.key_up = self.keys_held[82];
+        self.key_down = self.keys_held[81];
+        self.key_left = self.keys_held[80];
+        self.key_right = self.keys_held[79];
+        self.key_z = self.keys_held[29];
+        self.key_x = self.keys_held[27];
+        if self.pending_keys.len() < 4096 && !self.key_overflow {
+            self.pending_keys.push((key, down));
+        } else {
+            self.key_overflow = true;
+        }
+    }
+
+    pub fn release_keys(&mut self) {
+        for key in 0..256 {
+            self.set_key(key, false);
+        }
     }
 }
 
-/// RGB565 Display handler
 pub struct RGB565Display {
     state: Arc<Mutex<RGB565State>>,
+}
+
+impl Default for RGB565Display {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RGB565Display {
@@ -91,205 +157,473 @@ impl RGB565Display {
             state: Arc::new(Mutex::new(RGB565State::new())),
         }
     }
-    
-    /// Get a clone of the shared state
+
     pub fn get_state(&self) -> Arc<Mutex<RGB565State>> {
         Arc::clone(&self.state)
     }
-    
-    /// Initialize display with given resolution
+
     pub fn init(&mut self, width: u8, height: u8, bank_size: usize) -> Result<(), String> {
-        let mut state = self.state.lock().unwrap();
-        state.init(width, height, bank_size)
+        self.state.lock().unwrap().init(width, height, bank_size)
     }
-    
-    /// Write to back buffer at memory address
-    pub fn write_memory(&mut self, addr: usize, value: u16) {
+
+    /// Claim only the legacy framebuffer range; writes to its front are ignored.
+    pub fn write_memory(&mut self, addr: usize, value: u16) -> bool {
         let mut state = self.state.lock().unwrap();
-        if !state.initialized {
-            return;
+        if !state.initialized || !state.legacy_layout {
+            return false;
         }
-        
-        // Memory layout: 32 words MMIO, then front buffer, then back buffer
-        let buffer_size = state.width as usize * state.height as usize;
-        let back_buffer_start = 32 + buffer_size;
-        
-        if addr >= back_buffer_start && addr < back_buffer_start + buffer_size {
-            let pixel_idx = addr - back_buffer_start;
-            if pixel_idx < state.back_buffer.len() {
-                state.back_buffer[pixel_idx] = value;
-                // Debug: log first few pixel writes
-                static mut WRITE_COUNT: usize = 0;
-                unsafe {
-                    if WRITE_COUNT < 10 {
-                        eprintln!("RGB565: Write pixel[{}] = 0x{:04x}", pixel_idx, value);
-                        WRITE_COUNT += 1;
-                    }
-                }
-            }
+        let size = state.front_buffer.len();
+        if (32..32 + size).contains(&addr) {
+            return true;
         }
+        if (32 + size..32 + size * 2).contains(&addr) {
+            state.back_buffer[addr - 32 - size] = value;
+            return true;
+        }
+        false
     }
-    
-    /// Read from memory at address
+
     pub fn read_memory(&self, addr: usize) -> Option<u16> {
+        let state = self.state.lock().unwrap();
+        if !state.initialized || !state.legacy_layout {
+            return None;
+        }
+        let size = state.front_buffer.len();
+        if (32..32 + size).contains(&addr) {
+            Some(state.front_buffer[addr - 32])
+        } else if (32 + size..32 + size * 2).contains(&addr) {
+            Some(state.back_buffer[addr - 32 - size])
+        } else {
+            None
+        }
+    }
+
+    /// A legacy flush publishes exactly one completed frame.
+    pub fn flush(&mut self) -> bool {
+        self.state.lock().unwrap().swap_buffers()
+    }
+
+    /// Publish an RGB565_EXT buffer already copied and validated by the VM.
+    pub fn present(&mut self, width: u16, height: u16, pixels: Vec<u16>) -> Result<(), String> {
+        if width == 0 || height == 0 || pixels.len() != width as usize * height as usize {
+            return Err("Frame dimensions do not match its pixel buffer".to_string());
+        }
+        let mut state = self.state.lock().unwrap();
+        let next_sequence = state
+            .sequence
+            .checked_add(1)
+            .ok_or_else(|| "Frame sequence overflow".to_string())?;
+        state.width = width;
+        state.height = height;
+        state.front_buffer = pixels;
+        state.back_buffer.clear();
+        state.initialized = true;
+        state.legacy_layout = false;
+        state.sequence = next_sequence;
+        Ok(())
+    }
+
+    pub fn snapshot(&self) -> Option<FrameSnapshot> {
         let state = self.state.lock().unwrap();
         if !state.initialized {
             return None;
         }
-        
-        // Memory layout: 32 words MMIO, then front buffer, then back buffer
-        let buffer_size = state.width as usize * state.height as usize;
-        let front_buffer_start = 32;
-        let back_buffer_start = 32 + buffer_size;
-        
-        if addr >= front_buffer_start && addr < front_buffer_start + buffer_size {
-            let pixel_idx = addr - front_buffer_start;
-            if pixel_idx < state.front_buffer.len() {
-                return Some(state.front_buffer[pixel_idx]);
-            }
-        } else if addr >= back_buffer_start && addr < back_buffer_start + buffer_size {
-            let pixel_idx = addr - back_buffer_start;
-            if pixel_idx < state.back_buffer.len() {
-                return Some(state.back_buffer[pixel_idx]);
-            }
-        }
-        
-        None
+        Some(FrameSnapshot {
+            width: state.width,
+            height: state.height,
+            sequence: state.sequence,
+            pixels: state.front_buffer.clone(),
+        })
     }
-    
-    /// Swap buffers (called when HDR_DISP_FLUSH is written)
-    pub fn flush(&mut self) {
+
+    /// Keep the shared host/window connection alive when switching display mode.
+    pub fn disable(&mut self) {
         let mut state = self.state.lock().unwrap();
-        if state.initialized {
-            state.swap_buffers();
-        }
+        state.initialized = false;
+        state.legacy_layout = false;
+        state.width = 0;
+        state.height = 0;
+        state.front_buffer.clear();
+        state.back_buffer.clear();
     }
-    
-    /// Shutdown display
+
     pub fn shutdown(&mut self) {
-        let mut state = self.state.lock().unwrap();
-        state.should_quit = true;
+        self.state.lock().unwrap().should_quit = true;
     }
 }
 
-/// Run the RGB565 display window on the main thread
-/// This function takes over the thread and doesn't return until the window is closed
-pub fn run_rgb565_display(state: Arc<Mutex<RGB565State>>) -> Result<(), Box<dyn std::error::Error>> {
-    // Start with a default window size
-    let default_width = 256u32;
-    let default_height = 256u32;
-    eprintln!("Opening display window ({}x{})...", default_width, default_height);
-    
-    // Create event loop and window
-    let event_loop = EventLoopBuilder::new().build();
-    let mut input = WinitInputHelper::new();
-    
-    let window = WindowBuilder::new()
-        .with_title("Ripple VM - RGB565 Display")
-        .with_inner_size(LogicalSize::new(default_width * 2, default_height * 2))
-        .with_resizable(false)
-        .build(&event_loop)?;
-    
-    let window_size = window.inner_size();
-    let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-    let mut pixels = Pixels::new(default_width, default_height, surface_texture)?;
-    
-    // Track actual display size once initialized
-    let mut actual_width = default_width;
-    let mut actual_height = default_height;
-    let mut display_active = false;
-    
-    event_loop.run(move |event, _, control_flow| {
-        // Check if we should quit
-        {
-            let s = state.lock().unwrap();
-            if s.should_quit {
-                *control_flow = ControlFlow::Exit;
-                return;
+/// Convert host keys explicitly; no host enum discriminants are part of the ABI.
+pub fn key_usage(key: VirtualKeyCode) -> Option<u16> {
+    use VirtualKeyCode::*;
+    Some(match key {
+        A => 4,
+        B => 5,
+        C => 6,
+        D => 7,
+        E => 8,
+        F => 9,
+        G => 10,
+        H => 11,
+        I => 12,
+        J => 13,
+        K => 14,
+        L => 15,
+        M => 16,
+        N => 17,
+        O => 18,
+        P => 19,
+        Q => 20,
+        R => 21,
+        S => 22,
+        T => 23,
+        U => 24,
+        V => 25,
+        W => 26,
+        X => 27,
+        Y => 28,
+        Z => 29,
+        Key1 => 30,
+        Key2 => 31,
+        Key3 => 32,
+        Key4 => 33,
+        Key5 => 34,
+        Key6 => 35,
+        Key7 => 36,
+        Key8 => 37,
+        Key9 => 38,
+        Key0 => 39,
+        Return => 40,
+        Escape => 41,
+        Back => 42,
+        Tab => 43,
+        Space => 44,
+        Minus => 45,
+        Equals => 46,
+        LBracket => 47,
+        RBracket => 48,
+        Backslash => 49,
+        Semicolon => 51,
+        Apostrophe => 52,
+        Grave => 53,
+        Comma => 54,
+        Period => 55,
+        Slash => 56,
+        Capital => 57,
+        F1 => 58,
+        F2 => 59,
+        F3 => 60,
+        F4 => 61,
+        F5 => 62,
+        F6 => 63,
+        F7 => 64,
+        F8 => 65,
+        F9 => 66,
+        F10 => 67,
+        F11 => 68,
+        F12 => 69,
+        Snapshot => 70,
+        Scroll => 71,
+        Pause => 72,
+        Insert => 73,
+        Home => 74,
+        PageUp => 75,
+        Delete => 76,
+        End => 77,
+        PageDown => 78,
+        Right => 79,
+        Left => 80,
+        Down => 81,
+        Up => 82,
+        Numlock => 83,
+        NumpadDivide => 84,
+        NumpadMultiply => 85,
+        NumpadSubtract => 86,
+        NumpadAdd => 87,
+        NumpadEnter => 88,
+        Numpad1 => 89,
+        Numpad2 => 90,
+        Numpad3 => 91,
+        Numpad4 => 92,
+        Numpad5 => 93,
+        Numpad6 => 94,
+        Numpad7 => 95,
+        Numpad8 => 96,
+        Numpad9 => 97,
+        Numpad0 => 98,
+        NumpadDecimal => 99,
+        OEM102 => 100,
+        Apps => 101,
+        Power => 102,
+        NumpadEquals => 103,
+        F13 => 104,
+        F14 => 105,
+        F15 => 106,
+        F16 => 107,
+        F17 => 108,
+        F18 => 109,
+        F19 => 110,
+        F20 => 111,
+        F21 => 112,
+        F22 => 113,
+        F23 => 114,
+        F24 => 115,
+        NumpadComma => 133,
+        LControl => 224,
+        LShift => 225,
+        LAlt => 226,
+        LWin => 227,
+        RControl => 228,
+        RShift => 229,
+        RAlt => 230,
+        RWin => 231,
+        _ => return None,
+    })
+}
+
+/// Run on the main thread, returning when the guest finishes or the window closes.
+pub fn run_rgb565_display(
+    state: Arc<Mutex<RGB565State>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Also stop the guest when window/GPU initialization returns an error.
+    // Keep this guard outside the event-loop closure so unwinding releases it.
+    struct StopGuest(Arc<Mutex<RGB565State>>);
+    impl Drop for StopGuest {
+        fn drop(&mut self) {
+            if let Ok(mut state) = self.0.lock() {
+                state.should_quit = true;
             }
         }
-        
-        // Update input helper first to capture keyboard events
-        if input.update(&event) {
-            // Update keyboard state based on input
-            let mut s = state.lock().unwrap();
-            
-            // Update key states based on what's currently pressed
-            s.key_up = input.key_held(winit::event::VirtualKeyCode::Up);
-            s.key_down = input.key_held(winit::event::VirtualKeyCode::Down);
-            s.key_left = input.key_held(winit::event::VirtualKeyCode::Left);
-            s.key_right = input.key_held(winit::event::VirtualKeyCode::Right);
-            s.key_z = input.key_held(winit::event::VirtualKeyCode::Z);
-            s.key_x = input.key_held(winit::event::VirtualKeyCode::X);
+    }
+    let _stop_guest = StopGuest(Arc::clone(&state));
+    let mut event_loop = EventLoopBuilder::new().build();
+    let window = WindowBuilder::new()
+        .with_title("Ripple VM - RGB565 Display")
+        .with_inner_size(LogicalSize::new(512u32, 512u32))
+        .with_resizable(true)
+        .build(&event_loop)?;
+    let size = window.inner_size();
+    // Some hosts report a zero initial size until their first resize event.
+    // A minimized window may do the same. Pixels requires a nonzero backing
+    // surface, but rendering stays suspended until the real size is usable.
+    let (surface_width, surface_height) = backing_surface_size(size.width, size.height);
+    let mut surface_visible = size.width > 0 && size.height > 0;
+    let mut pixels = Pixels::new(
+        256,
+        256,
+        SurfaceTexture::new(surface_width, surface_height, &window),
+    )?;
+    let mut dimensions = (256u32, 256u32);
+    let mut render_error = None;
+
+    event_loop.run_return(|event, _, control_flow| {
+        *control_flow = ControlFlow::WaitUntil(
+            std::time::Instant::now() + std::time::Duration::from_millis(16),
+        );
+        if state.lock().unwrap().should_quit {
+            *control_flow = ControlFlow::Exit;
+            return;
         }
-        
-        // Handle events
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                let mut shared = state.lock().unwrap();
+                shared.release_keys();
+                shared.should_quit = true;
                 *control_flow = ControlFlow::Exit;
             }
-            Event::RedrawRequested(_) => {
-                // Check if display is now initialized and update if needed
-                let s = state.lock().unwrap();
-                if s.initialized && !display_active {
-                    // Display just got initialized!
-                    actual_width = s.width as u32;
-                    actual_height = s.height as u32;
-                    display_active = true;
-                    eprintln!("Display activated: {}x{}", actual_width, actual_height);
-                    
-                    // Recreate pixels buffer with actual size
-                    let window_size = window.inner_size();
-                    let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-                    pixels = Pixels::new(actual_width, actual_height, surface_texture).unwrap();
+            Event::WindowEvent {
+                event: WindowEvent::Focused(false),
+                ..
+            } => {
+                state.lock().unwrap().release_keys();
+            }
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { input, .. },
+                ..
+            } => {
+                if let Some(key) = input.virtual_keycode.and_then(key_usage) {
+                    state
+                        .lock()
+                        .unwrap()
+                        .set_key(key, input.state == ElementState::Pressed);
                 }
-                
-                if display_active && s.initialized {
-                    // Copy front buffer to pixels framebuffer
-                    let frame = pixels.frame_mut();
-                    let buffer_len = (actual_width * actual_height) as usize;
-                    for i in 0..buffer_len.min(s.front_buffer.len()) {
-                        let pixel = s.front_buffer[i];
-                        let [r, g, b] = rgb565_to_rgb888(pixel);
-                        let offset = i * 4;
-                        if offset + 3 < frame.len() {
-                            frame[offset] = r;
-                            frame[offset + 1] = g;
-                            frame[offset + 2] = b;
-                            frame[offset + 3] = 255; // Alpha
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                surface_visible = size.width > 0 && size.height > 0;
+                if surface_visible {
+                    if let Err(error) = pixels.resize_surface(size.width, size.height) {
+                        render_error = Some(error.to_string());
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::ScaleFactorChanged { new_inner_size, .. },
+                ..
+            } => {
+                surface_visible = new_inner_size.width > 0 && new_inner_size.height > 0;
+                if surface_visible {
+                    if let Err(error) =
+                        pixels.resize_surface(new_inner_size.width, new_inner_size.height)
+                    {
+                        render_error = Some(error.to_string());
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
+            }
+            Event::RedrawRequested(_) => {
+                if !surface_visible {
+                    return;
+                }
+                let shared = state.lock().unwrap();
+                if shared.initialized {
+                    let requested = (shared.width as u32, shared.height as u32);
+                    if requested != dimensions {
+                        if let Err(error) = pixels.resize_buffer(requested.0, requested.1) {
+                            render_error = Some(error.to_string());
+                            *control_flow = ControlFlow::Exit;
+                            return;
                         }
+                        dimensions = requested;
+                        window.set_inner_size(LogicalSize::new(requested.0 * 2, requested.1 * 2));
+                    }
+                    for (output, color) in pixels
+                        .frame_mut()
+                        .chunks_exact_mut(4)
+                        .zip(&shared.front_buffer)
+                    {
+                        let [r, g, b] = rgb565_to_rgb888(*color);
+                        output.copy_from_slice(&[r, g, b, 255]);
                     }
                 } else {
-                    // Show a placeholder pattern while waiting
-                    let frame = pixels.frame_mut();
-                    for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-                        let x = (i as u32) % default_width;
-                        let y = (i as u32) / default_width;
-                        let checker = ((x / 16) + (y / 16)) % 2 == 0;
-                        let color = if checker { 64 } else { 32 };
-                        pixel[0] = color;
-                        pixel[1] = color;
-                        pixel[2] = color;
-                        pixel[3] = 255;
+                    for (index, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
+                        let x = index as u32 % dimensions.0;
+                        let y = index as u32 / dimensions.0;
+                        let color = if ((x / 16) + (y / 16)) % 2 == 0 {
+                            64
+                        } else {
+                            32
+                        };
+                        pixel.copy_from_slice(&[color, color, color, 255]);
                     }
                 }
-                drop(s); // Release lock before rendering
-                
-                let _ = pixels.render();
+                drop(shared);
+                if let Err(error) = pixels.render() {
+                    render_error = Some(error.to_string());
+                    *control_flow = ControlFlow::Exit;
+                }
             }
-            Event::MainEventsCleared => {
-                window.request_redraw();
-            }
+            Event::MainEventsCleared => window.request_redraw(),
             _ => {}
         }
-    })
+    });
+    state.lock().unwrap().should_quit = true;
+    if let Some(error) = render_error {
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+fn backing_surface_size(width: u32, height: u32) -> (u32, u32) {
+    (width.max(1), height.max(1))
 }
 
 impl Drop for RGB565Display {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initially_hidden_windows_always_have_a_nonzero_backing_surface() {
+        assert_eq!(backing_surface_size(0, 0), (1, 1));
+        assert_eq!(backing_surface_size(512, 0), (512, 1));
+        assert_eq!(backing_surface_size(0, 512), (1, 512));
+        assert_eq!(backing_surface_size(640, 400), (640, 400));
+    }
+
+    #[test]
+    fn legacy_front_back_and_unclaimed_ram() {
+        let mut display = RGB565Display::new();
+        display.init(2, 1, 64).unwrap();
+        assert!(display.write_memory(34, 0xf800));
+        assert!(display.write_memory(35, 0x07e0));
+        assert!(display.write_memory(32, 0xffff));
+        assert_eq!(display.read_memory(32), Some(0));
+        assert!(!display.write_memory(36, 123));
+        assert!(display.flush());
+        let snapshot = display.snapshot().unwrap();
+        assert_eq!(snapshot.pixels, vec![0xf800, 0x07e0]);
+        assert_eq!(snapshot.sequence, 1);
+        display.write_memory(34, 0x001f);
+        display.flush();
+        assert_eq!(snapshot.pixels, vec![0xf800, 0x07e0]);
+        assert_eq!(display.snapshot().unwrap().sequence, 2);
+    }
+
+    #[test]
+    fn extended_frames_resize_and_modes_preserve_sequence() {
+        let mut display = RGB565Display::new();
+        let state = display.get_state();
+        display.present(320, 200, vec![0x001f; 64000]).unwrap();
+        assert_eq!(display.snapshot().unwrap().width, 320);
+        assert_eq!(display.read_memory(32), None);
+        assert!(!display.write_memory(32, 0xffff));
+        assert!(!display.flush());
+        display.disable();
+        assert!(display.snapshot().is_none());
+        assert!(!state.lock().unwrap().should_quit);
+        display.init(1, 1, 34).unwrap();
+        display.flush();
+        assert_eq!(display.snapshot().unwrap().sequence, 2);
+    }
+
+    #[test]
+    fn invalid_dimensions_do_not_publish() {
+        let mut display = RGB565Display::new();
+        assert!(display.init(0, 1, 64).is_err());
+        assert!(display.init(1, 1, 31).is_err());
+        assert!(display.init(2, 1, 35).is_err());
+        assert!(display.present(2, 2, vec![0; 3]).is_err());
+        assert!(display.present(0, 0, Vec::new()).is_err());
+        assert!(display.snapshot().is_none());
+    }
+
+    #[test]
+    fn keyboard_transitions_suppress_repeat_and_release_on_focus_loss() {
+        let mut state = RGB565State::new();
+        state.set_key(82, true);
+        state.set_key(82, true);
+        state.set_key(29, true);
+        assert!(state.key_up && state.key_z);
+        state.release_keys();
+        assert_eq!(
+            state.pending_keys,
+            vec![(82, true), (29, true), (29, false), (82, false)]
+        );
+        assert!(state.keys_held.iter().all(|held| !held));
+        assert!(!state.key_up && !state.key_z);
+        assert_eq!(key_usage(VirtualKeyCode::F12), Some(69));
+        assert_eq!(key_usage(VirtualKeyCode::RControl), Some(228));
+    }
+
+    #[test]
+    fn input_overflow_preserves_held_state() {
+        let mut state = RGB565State::new();
+        for index in 0..4097 {
+            state.set_key(4, index % 2 == 0);
+        }
+        assert!(state.key_overflow);
+        assert_eq!(state.pending_keys.len(), 4096);
+        assert!(state.keys_held[4]);
     }
 }

@@ -11,3 +11,6 @@ pub mod display_rgb565;
 // Re-export commonly used types
 pub use vm::{VM, Instr};
 pub use asm_formatter::{format_asm_line, format_instruction_spans, get_instruction_style};
+pub mod devices;
+pub mod capture;
+pub mod runner;

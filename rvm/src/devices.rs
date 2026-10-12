@@ -1,0 +1,859 @@
+//! Versioned, synchronous device commands shared by VM implementations.
+//!
+//! Device descriptors and framebuffers live in ordinary guest RAM. The five
+//! mailbox registers are the only new MMIO addresses. `NEXT_TICK` suspends the
+//! guest at an instruction boundary until its runner grants exactly one tick.
+
+use serde::Deserialize;
+use std::collections::VecDeque;
+use std::ops::Range;
+use std::path::Path;
+
+pub const ABI_VERSION: u16 = 1;
+pub const REGISTER_DESCRIPTOR_BANK: usize = 27;
+pub const REGISTER_DESCRIPTOR_OFFSET: usize = 28;
+pub const REGISTER_COMMAND: usize = 29;
+pub const REGISTER_STATUS: usize = 30;
+pub const REGISTER_VERSION: usize = 31;
+pub const DISPLAY_MODE_EXTENDED: u16 = 4;
+pub const CAPABILITIES: u16 = 15;
+pub const KEY_COUNT: usize = 256;
+pub const INPUT_QUEUE_CAPACITY: usize = 256;
+
+pub const COMMAND_PRESENT: u16 = 1;
+pub const COMMAND_CAPABILITIES: u16 = 2;
+pub const COMMAND_NEXT_TICK: u16 = 3;
+pub const COMMAND_GET_TIME: u16 = 4;
+pub const COMMAND_INPUT_POP: u16 = 5;
+pub const COMMAND_INPUT_STATE: u16 = 6;
+
+pub const STATUS_OK: u16 = 0;
+pub const STATUS_UNKNOWN_COMMAND: u16 = 1;
+pub const STATUS_VERSION: u16 = 2;
+pub const STATUS_BAD_DESCRIPTOR: u16 = 3;
+pub const STATUS_BOUNDS: u16 = 4;
+pub const STATUS_DISPLAY_MODE: u16 = 5;
+pub const STATUS_INPUT_OVERFLOW: u16 = 6;
+pub const STATUS_PENDING: u16 = 0x8000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyTransition {
+    pub key: u16,
+    pub down: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyEvent {
+    pub key: u16,
+    pub down: bool,
+    pub tick: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PresentFrame {
+    pub width: u16,
+    pub height: u16,
+    pub pixels: Vec<u16>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ScheduledKeyEvent {
+    tick: u64,
+    transition: KeyTransition,
+}
+
+/// An ordered replay. Same-tick transitions retain their file order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InputScript {
+    events: Vec<ScheduledKeyEvent>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ScriptKey {
+    Name(String),
+    Number(u16),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScriptEvent {
+    tick: u64,
+    key: ScriptKey,
+    down: bool,
+}
+
+impl InputScript {
+    pub fn from_json(json: &str) -> Result<Self, String> {
+        let entries: Vec<ScriptEvent> =
+            serde_json::from_str(json).map_err(|error| format!("invalid input script: {error}"))?;
+        let mut events = Vec::with_capacity(entries.len());
+        let mut last_tick = 0;
+        for (index, entry) in entries.into_iter().enumerate() {
+            if entry.tick == 0 || entry.tick < last_tick {
+                return Err(format!(
+                    "input script event {} must have a positive, nondecreasing tick",
+                    index + 1
+                ));
+            }
+            let key = match entry.key {
+                ScriptKey::Name(name) => key_code(&name).ok_or_else(|| {
+                    format!("unknown key {name:?} at input script event {}", index + 1)
+                })?,
+                ScriptKey::Number(number) if usize::from(number) < KEY_COUNT => number,
+                ScriptKey::Number(number) => {
+                    return Err(format!("key {number} is outside the 0..255 key range"));
+                }
+            };
+            last_tick = entry.tick;
+            events.push(ScheduledKeyEvent {
+                tick: entry.tick,
+                transition: KeyTransition {
+                    key,
+                    down: entry.down,
+                },
+            });
+        }
+        Ok(Self { events })
+    }
+
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, String> {
+        let path = path.as_ref();
+        let json = std::fs::read_to_string(path)
+            .map_err(|error| format!("cannot read input script {}: {error}", path.display()))?;
+        Self::from_json(&json)
+    }
+}
+
+/// Stable key IDs follow USB HID keyboard usage IDs, independent of host APIs.
+/// A key denotes a physical key; modifiers are separate keys, not text input.
+pub fn key_code(name: &str) -> Option<u16> {
+    if name.trim() == "-" {
+        return Some(45);
+    }
+    let normalized = name
+        .trim()
+        .to_ascii_uppercase()
+        .replace(['_', '-', ' '], "");
+    let bytes = normalized.as_bytes();
+    if bytes.len() == 1 {
+        return match bytes[0] {
+            b'A'..=b'Z' => Some(u16::from(bytes[0] - b'A') + 4),
+            b'1'..=b'9' => Some(u16::from(bytes[0] - b'1') + 30),
+            b'0' => Some(39),
+            b'=' => Some(46),
+            b'[' => Some(47),
+            b']' => Some(48),
+            b'\\' => Some(49),
+            b';' => Some(51),
+            b'\'' => Some(52),
+            b'`' => Some(53),
+            b',' => Some(54),
+            b'.' => Some(55),
+            b'/' => Some(56),
+            _ => None,
+        };
+    }
+    if let Some(number) = normalized
+        .strip_prefix('F')
+        .and_then(|value| value.parse::<u16>().ok())
+    {
+        return match number {
+            1..=12 => Some(57 + number),
+            13..=24 => Some(91 + number),
+            _ => None,
+        };
+    }
+    Some(match normalized.as_str() {
+        "ENTER" | "RETURN" => 40,
+        "ESC" | "ESCAPE" => 41,
+        "BACKSPACE" => 42,
+        "TAB" => 43,
+        "SPACE" | "SPACEBAR" => 44,
+        "MINUS" => 45,
+        "EQUAL" | "EQUALS" => 46,
+        "LEFTBRACKET" | "LBRACKET" => 47,
+        "RIGHTBRACKET" | "RBRACKET" => 48,
+        "BACKSLASH" => 49,
+        "NONUSHASH" => 50,
+        "SEMICOLON" => 51,
+        "APOSTROPHE" | "QUOTE" => 52,
+        "GRAVE" | "BACKTICK" => 53,
+        "COMMA" => 54,
+        "PERIOD" | "DOT" => 55,
+        "SLASH" => 56,
+        "CAPSLOCK" => 57,
+        "PRINTSCREEN" | "SYSRQ" => 70,
+        "SCROLLLOCK" => 71,
+        "PAUSE" | "BREAK" => 72,
+        "INSERT" => 73,
+        "HOME" => 74,
+        "PAGEUP" | "PGUP" => 75,
+        "DELETE" | "DEL" => 76,
+        "END" => 77,
+        "PAGEDOWN" | "PGDOWN" | "PGDN" => 78,
+        "RIGHT" | "ARROWRIGHT" => 79,
+        "LEFT" | "ARROWLEFT" => 80,
+        "DOWN" | "ARROWDOWN" => 81,
+        "UP" | "ARROWUP" => 82,
+        "NUMLOCK" => 83,
+        "KPDIVIDE" | "NUMPADDIVIDE" => 84,
+        "KPMULTIPLY" | "NUMPADMULTIPLY" => 85,
+        "KPSUBTRACT" | "NUMPADSUBTRACT" | "KPMINUS" => 86,
+        "KPADD" | "NUMPADADD" | "KPPLUS" => 87,
+        "KPENTER" | "NUMPADENTER" => 88,
+        "KP1" | "NUMPAD1" => 89,
+        "KP2" | "NUMPAD2" => 90,
+        "KP3" | "NUMPAD3" => 91,
+        "KP4" | "NUMPAD4" => 92,
+        "KP5" | "NUMPAD5" => 93,
+        "KP6" | "NUMPAD6" => 94,
+        "KP7" | "NUMPAD7" => 95,
+        "KP8" | "NUMPAD8" => 96,
+        "KP9" | "NUMPAD9" => 97,
+        "KP0" | "NUMPAD0" => 98,
+        "KPDECIMAL" | "KPPERIOD" | "NUMPADDECIMAL" | "NUMPADPERIOD" => 99,
+        "NONUSBACKSLASH" => 100,
+        "APPLICATION" | "MENU" | "CONTEXTMENU" => 101,
+        "POWER" => 102,
+        "KPEQUAL" | "NUMPADEQUAL" => 103,
+        "EXECUTE" => 116,
+        "HELP" => 117,
+        "SELECT" => 119,
+        "STOP" => 120,
+        "AGAIN" => 121,
+        "UNDO" => 122,
+        "CUT" => 123,
+        "COPY" => 124,
+        "PASTE" => 125,
+        "FIND" => 126,
+        "MUTE" => 127,
+        "VOLUMEUP" => 128,
+        "VOLUMEDOWN" => 129,
+        "LEFTCTRL" | "LCTRL" | "LEFTCONTROL" | "CTRL" | "CONTROL" => 224,
+        "LEFTSHIFT" | "LSHIFT" | "SHIFT" => 225,
+        "LEFTALT" | "LALT" | "ALT" => 226,
+        "LEFTGUI" | "LGUI" | "LEFTMETA" | "LEFTSUPER" | "META" | "SUPER" | "COMMAND" => 227,
+        "RIGHTCTRL" | "RCTRL" | "RIGHTCONTROL" => 228,
+        "RIGHTSHIFT" | "RSHIFT" => 229,
+        "RIGHTALT" | "RALT" | "ALTGR" => 230,
+        "RIGHTGUI" | "RGUI" | "RIGHTMETA" | "RIGHTSUPER" => 231,
+        _ => return None,
+    })
+}
+
+/// Validate a contiguous cell span, including bank crossings, in ordinary RAM.
+pub fn guest_range(
+    memory_len: usize,
+    bank_size: u16,
+    bank: u16,
+    offset: u16,
+    length: usize,
+) -> Result<Range<usize>, u16> {
+    let bank_size = usize::from(bank_size);
+    if bank_size == 0 || usize::from(offset) >= bank_size {
+        return Err(STATUS_BOUNDS);
+    }
+    let start = usize::from(bank)
+        .checked_mul(bank_size)
+        .and_then(|base| base.checked_add(usize::from(offset)))
+        .ok_or(STATUS_BOUNDS)?;
+    let end = start.checked_add(length).ok_or(STATUS_BOUNDS)?;
+    let address_limit = bank_size.checked_mul(65536).ok_or(STATUS_BOUNDS)?;
+    if start < 32 || end > memory_len || end > address_limit {
+        return Err(STATUS_BOUNDS);
+    }
+    Ok(start..end)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DescriptorPointer {
+    bank: u16,
+    offset: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeviceState {
+    descriptor: DescriptorPointer,
+    command: u16,
+    status: u16,
+    pending_tick: Option<DescriptorPointer>,
+    tick_hz: u16,
+    tick: u64,
+    held: [u16; KEY_COUNT / 16],
+    events: VecDeque<KeyEvent>,
+    input_overflow: bool,
+    overflow_seen: bool,
+    script: InputScript,
+    script_position: usize,
+}
+
+impl Default for DeviceState {
+    fn default() -> Self {
+        Self::new(35).expect("the default tick rate is nonzero")
+    }
+}
+
+impl DeviceState {
+    pub fn new(tick_hz: u16) -> Result<Self, String> {
+        if tick_hz == 0 {
+            return Err("virtual tick rate must be greater than zero".to_string());
+        }
+        Ok(Self {
+            descriptor: DescriptorPointer { bank: 0, offset: 0 },
+            command: 0,
+            status: STATUS_OK,
+            pending_tick: None,
+            tick_hz,
+            tick: 0,
+            held: [0; KEY_COUNT / 16],
+            events: VecDeque::new(),
+            input_overflow: false,
+            overflow_seen: false,
+            script: InputScript::default(),
+            script_position: 0,
+        })
+    }
+
+    pub fn reset(&mut self) {
+        let script = self.script.clone();
+        *self = Self::new(self.tick_hz).expect("an initialized tick rate is nonzero");
+        self.script = script;
+    }
+
+    pub fn set_tick_hz(&mut self, tick_hz: u16) -> Result<(), String> {
+        if tick_hz == 0 {
+            return Err("virtual tick rate must be greater than zero".to_string());
+        }
+        if self.tick != 0 || self.has_pending_tick() {
+            return Err("virtual tick rate cannot change after the clock starts".to_string());
+        }
+        self.tick_hz = tick_hz;
+        Ok(())
+    }
+
+    pub fn set_script(&mut self, script: InputScript) -> Result<(), String> {
+        if script
+            .events
+            .first()
+            .is_some_and(|event| event.tick <= self.tick)
+        {
+            return Err("input script contains an event at or before the current tick".to_string());
+        }
+        self.script = script;
+        self.script_position = 0;
+        Ok(())
+    }
+
+    pub fn tick_hz(&self) -> u16 {
+        self.tick_hz
+    }
+    pub fn tick(&self) -> u64 {
+        self.tick
+    }
+    pub fn millis(&self) -> u32 {
+        ((u128::from(self.tick) * 1000) / u128::from(self.tick_hz)) as u32
+    }
+    pub fn status(&self) -> u16 {
+        self.status
+    }
+    pub fn has_pending_tick(&self) -> bool {
+        self.pending_tick.is_some()
+    }
+    pub fn input_overflowed(&self) -> bool {
+        self.input_overflow
+    }
+    pub fn overflow_seen(&self) -> bool {
+        self.overflow_seen
+    }
+    pub fn held(&self, key: u16) -> bool {
+        usize::from(key) < KEY_COUNT && self.held[usize::from(key) / 16] & (1 << (key % 16)) != 0
+    }
+
+    pub fn mark_input_overflow(&mut self) {
+        self.input_overflow = true;
+        self.overflow_seen = true;
+    }
+
+    pub fn read_register(&self, address: usize) -> Option<u16> {
+        match address {
+            REGISTER_DESCRIPTOR_BANK => Some(self.descriptor.bank),
+            REGISTER_DESCRIPTOR_OFFSET => Some(self.descriptor.offset),
+            REGISTER_COMMAND => Some(self.command),
+            REGISTER_STATUS => Some(self.status),
+            REGISTER_VERSION => Some(ABI_VERSION),
+            _ => None,
+        }
+    }
+
+    /// Start a command. Errors are reported in STATUS and never partially write
+    /// a descriptor or present a frame. STATUS and VERSION are read-only.
+    pub fn write_register(
+        &mut self,
+        address: usize,
+        value: u16,
+        memory: &mut [u16],
+        bank_size: u16,
+        display_mode: u16,
+    ) -> Option<PresentFrame> {
+        match address {
+            REGISTER_DESCRIPTOR_BANK => self.descriptor.bank = value,
+            REGISTER_DESCRIPTOR_OFFSET => self.descriptor.offset = value,
+            REGISTER_COMMAND => {
+                if self.has_pending_tick() {
+                    self.status = STATUS_PENDING;
+                    return None;
+                }
+                self.command = value;
+                match self.execute_command(value, memory, bank_size, display_mode) {
+                    Ok(frame) => return frame,
+                    Err(status) => self.status = status,
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
+    fn descriptor_range(
+        pointer: DescriptorPointer,
+        memory: &[u16],
+        bank_size: u16,
+        length: usize,
+    ) -> Result<Range<usize>, u16> {
+        let header = guest_range(memory.len(), bank_size, pointer.bank, pointer.offset, 2)?;
+        if memory[header.start] != ABI_VERSION {
+            return Err(STATUS_VERSION);
+        }
+        if usize::from(memory[header.start + 1]) != length {
+            return Err(STATUS_BAD_DESCRIPTOR);
+        }
+        guest_range(
+            memory.len(),
+            bank_size,
+            pointer.bank,
+            pointer.offset,
+            length,
+        )
+    }
+
+    fn execute_command(
+        &mut self,
+        command: u16,
+        memory: &mut [u16],
+        bank_size: u16,
+        display_mode: u16,
+    ) -> Result<Option<PresentFrame>, u16> {
+        let length = match command {
+            COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME | COMMAND_INPUT_POP => 8,
+            COMMAND_CAPABILITIES => 4,
+            COMMAND_INPUT_STATE => 19,
+            _ => return Err(STATUS_UNKNOWN_COMMAND),
+        };
+        let range = Self::descriptor_range(self.descriptor, memory, bank_size, length)?;
+        self.status = STATUS_OK;
+        match command {
+            COMMAND_PRESENT => {
+                if display_mode != DISPLAY_MODE_EXTENDED {
+                    return Err(STATUS_DISPLAY_MODE);
+                }
+                let descriptor = &memory[range];
+                let width = descriptor[2];
+                let height = descriptor[3];
+                let stride = descriptor[4];
+                if width == 0 || height == 0 || stride < width || descriptor[7] != 0 {
+                    return Err(STATUS_BAD_DESCRIPTOR);
+                }
+                let span = usize::from(height - 1)
+                    .checked_mul(usize::from(stride))
+                    .and_then(|rows| rows.checked_add(usize::from(width)))
+                    .ok_or(STATUS_BOUNDS)?;
+                let buffer =
+                    guest_range(memory.len(), bank_size, descriptor[5], descriptor[6], span)?;
+                let size = usize::from(width)
+                    .checked_mul(usize::from(height))
+                    .ok_or(STATUS_BOUNDS)?;
+                let mut pixels = Vec::new();
+                pixels.try_reserve_exact(size).map_err(|_| STATUS_BOUNDS)?;
+                for row in 0..usize::from(height) {
+                    let start = buffer.start + row * usize::from(stride);
+                    pixels.extend_from_slice(&memory[start..start + usize::from(width)]);
+                }
+                return Ok(Some(PresentFrame {
+                    width,
+                    height,
+                    pixels,
+                }));
+            }
+            COMMAND_CAPABILITIES => {
+                memory[range.start + 2] = CAPABILITIES;
+                memory[range.start + 3] = KEY_COUNT as u16;
+            }
+            COMMAND_NEXT_TICK => {
+                self.pending_tick = Some(self.descriptor);
+                self.status = STATUS_PENDING;
+            }
+            COMMAND_GET_TIME => self.write_time(&mut memory[range]),
+            COMMAND_INPUT_POP => {
+                let descriptor = &mut memory[range];
+                descriptor[2..].fill(0);
+                if let Some(event) = self.events.pop_front() {
+                    descriptor[2] = 1;
+                    descriptor[3] = event.key;
+                    descriptor[4] = u16::from(event.down);
+                    descriptor[5] = event.tick as u16;
+                    descriptor[6] = (event.tick >> 16) as u16;
+                }
+                descriptor[7] = u16::from(self.input_overflow);
+            }
+            COMMAND_INPUT_STATE => {
+                let descriptor = &mut memory[range];
+                descriptor[2] = u16::from(self.input_overflow);
+                descriptor[3..].copy_from_slice(&self.held);
+                // A snapshot acknowledges lost transitions. Any older queued
+                // events must not overwrite the authoritative state just read.
+                if self.input_overflow {
+                    self.events.clear();
+                }
+                self.input_overflow = false;
+            }
+            _ => unreachable!("command was validated above"),
+        }
+        Ok(None)
+    }
+
+    fn write_time(&self, descriptor: &mut [u16]) {
+        let millis = self.millis();
+        descriptor[2] = self.tick as u16;
+        descriptor[3] = (self.tick >> 16) as u16;
+        descriptor[4] = millis as u16;
+        descriptor[5] = (millis >> 16) as u16;
+        descriptor[6] = self.tick_hz;
+        descriptor[7] = 0;
+    }
+
+    fn apply_transition(&mut self, transition: KeyTransition) {
+        if usize::from(transition.key) >= KEY_COUNT {
+            return;
+        }
+        if self.held(transition.key) == transition.down {
+            return;
+        }
+        let word = &mut self.held[usize::from(transition.key) / 16];
+        let mask = 1 << (transition.key % 16);
+        if transition.down {
+            *word |= mask;
+        } else {
+            *word &= !mask;
+        }
+        if self.events.len() == INPUT_QUEUE_CAPACITY {
+            self.mark_input_overflow();
+        } else {
+            self.events.push_back(KeyEvent {
+                key: transition.key,
+                down: transition.down,
+                tick: self.tick,
+            });
+        }
+    }
+
+    /// Grant one pending tick, apply scripted events and then ordered live
+    /// events, and atomically return the new clock value to the waiting guest.
+    /// Calling without a pending command has no effect.
+    pub fn complete_tick(
+        &mut self,
+        memory: &mut [u16],
+        bank_size: u16,
+        live_events: &[KeyTransition],
+    ) -> Result<(), String> {
+        let Some(pointer) = self.pending_tick.take() else {
+            return Ok(());
+        };
+        let range = Self::descriptor_range(pointer, memory, bank_size, 8).map_err(|status| {
+            self.status = status;
+            format!("NEXT_TICK descriptor became invalid (device status {status})")
+        })?;
+        self.tick = self.tick.checked_add(1).ok_or_else(|| {
+            self.status = STATUS_BAD_DESCRIPTOR;
+            "virtual tick counter exhausted".to_string()
+        })?;
+        while let Some(event) = self.script.events.get(self.script_position) {
+            if event.tick > self.tick {
+                break;
+            }
+            let transition = event.transition;
+            self.script_position += 1;
+            self.apply_transition(transition);
+        }
+        for &transition in live_events {
+            self.apply_transition(transition);
+        }
+        self.write_time(&mut memory[range]);
+        self.status = if self.input_overflow {
+            STATUS_INPUT_OVERFLOW
+        } else {
+            STATUS_OK
+        };
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command(
+        device: &mut DeviceState,
+        memory: &mut [u16],
+        command: u16,
+        length: u16,
+    ) -> Option<PresentFrame> {
+        memory[40] = ABI_VERSION;
+        memory[41] = length;
+        device.write_register(
+            REGISTER_DESCRIPTOR_OFFSET,
+            40,
+            memory,
+            64,
+            DISPLAY_MODE_EXTENDED,
+        );
+        device.write_register(REGISTER_COMMAND, command, memory, 64, DISPLAY_MODE_EXTENDED)
+    }
+
+    fn tick(device: &mut DeviceState, memory: &mut [u16], events: &[KeyTransition]) {
+        command(device, memory, COMMAND_NEXT_TICK, 8);
+        assert_eq!(device.status(), STATUS_PENDING);
+        device.complete_tick(memory, 64, events).unwrap();
+    }
+
+    #[test]
+    fn ranges_cross_banks_but_never_address_mmio_or_wrap() {
+        assert_eq!(guest_range(256, 64, 1, 60, 8), Ok(124..132));
+        assert_eq!(guest_range(256, 64, 0, 31, 2), Err(STATUS_BOUNDS));
+        assert_eq!(guest_range(256, 64, 1, 64, 1), Err(STATUS_BOUNDS));
+        assert_eq!(guest_range(256, 64, 3, 60, 8), Err(STATUS_BOUNDS));
+        assert_eq!(
+            guest_range(usize::MAX, 64, u16::MAX, 63, 2),
+            Err(STATUS_BOUNDS)
+        );
+        assert_eq!(guest_range(256, 0, 1, 0, 1), Err(STATUS_BOUNDS));
+        assert_eq!(guest_range(256, 64, 1, 0, usize::MAX), Err(STATUS_BOUNDS));
+    }
+
+    #[test]
+    fn present_snapshots_strided_bank_spanning_ram() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 256];
+        memory[42..48].copy_from_slice(&[3, 2, 5, 1, 62, 0]);
+        memory[126..134].copy_from_slice(&[1, 2, 3, 90, 91, 4, 5, 6]);
+        let frame = command(&mut device, &mut memory, COMMAND_PRESENT, 8).unwrap();
+        assert_eq!((frame.width, frame.height), (3, 2));
+        assert_eq!(frame.pixels, [1, 2, 3, 4, 5, 6]);
+        memory[126] = 99;
+        assert_eq!(frame.pixels[0], 1);
+        assert_eq!(device.tick(), 0);
+    }
+
+    #[test]
+    fn descriptors_may_cross_a_bank_boundary() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 128];
+        memory[63..67].copy_from_slice(&[1, 4, 0, 0]);
+        device.write_register(REGISTER_DESCRIPTOR_OFFSET, 63, &mut memory, 64, 4);
+        device.write_register(REGISTER_COMMAND, COMMAND_CAPABILITIES, &mut memory, 64, 4);
+        assert_eq!(device.status(), STATUS_OK);
+        assert_eq!(&memory[65..67], &[CAPABILITIES, 256]);
+    }
+
+    #[test]
+    fn failed_present_does_not_change_guest_memory() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 256];
+        command(&mut device, &mut memory, COMMAND_PRESENT, 8);
+        assert_eq!(device.status(), STATUS_BAD_DESCRIPTOR);
+        memory[42..48].copy_from_slice(&[3, 2, 3, 3, 62, 0]);
+        let before = memory.clone();
+        assert!(command(&mut device, &mut memory, COMMAND_PRESENT, 8).is_none());
+        assert_eq!(device.status(), STATUS_BOUNDS);
+        assert_eq!(memory, before);
+        memory[42..48].copy_from_slice(&[3, 2, 3, 1, 0, 1]);
+        assert!(command(&mut device, &mut memory, COMMAND_PRESENT, 8).is_none());
+        assert_eq!(device.status(), STATUS_BAD_DESCRIPTOR);
+        memory[47] = 0;
+        device.write_register(REGISTER_COMMAND, COMMAND_PRESENT, &mut memory, 64, 3);
+        assert_eq!(device.status(), STATUS_DISPLAY_MODE);
+    }
+
+    #[test]
+    fn malformed_commands_have_specific_status_and_readonly_registers() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 128];
+        command(&mut device, &mut memory, 99, 4);
+        assert_eq!(device.status(), STATUS_UNKNOWN_COMMAND);
+        command(&mut device, &mut memory, COMMAND_CAPABILITIES, 3);
+        assert_eq!(device.status(), STATUS_BAD_DESCRIPTOR);
+        memory[40] = 2;
+        device.write_register(REGISTER_COMMAND, COMMAND_CAPABILITIES, &mut memory, 64, 4);
+        assert_eq!(device.status(), STATUS_VERSION);
+        device.write_register(REGISTER_STATUS, 0, &mut memory, 64, 4);
+        device.write_register(REGISTER_VERSION, 5, &mut memory, 64, 4);
+        assert_eq!(device.read_register(REGISTER_STATUS), Some(STATUS_VERSION));
+        assert_eq!(device.read_register(REGISTER_VERSION), Some(1));
+    }
+
+    #[test]
+    fn logical_clock_only_advances_on_completed_ticks_without_drift() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 128];
+        for _ in 0..35 {
+            let before = device.tick();
+            command(&mut device, &mut memory, COMMAND_GET_TIME, 8);
+            command(&mut device, &mut memory, COMMAND_GET_TIME, 8);
+            assert_eq!(device.tick(), before);
+            command(&mut device, &mut memory, COMMAND_NEXT_TICK, 8);
+            assert_eq!(device.tick(), before);
+            device.complete_tick(&mut memory, 64, &[]).unwrap();
+            device.complete_tick(&mut memory, 64, &[]).unwrap();
+            assert_eq!(device.tick(), before + 1);
+        }
+        assert_eq!(device.millis(), 1000);
+        assert_eq!(&memory[42..48], &[35, 0, 1000, 0, 35, 0]);
+        assert!(device.set_tick_hz(70).is_err());
+        assert!(DeviceState::new(0).is_err());
+    }
+
+    #[test]
+    fn clock_words_wrap_independently_without_arithmetic_overflow() {
+        let mut device = DeviceState::new(1000).unwrap();
+        let mut memory = vec![0; 128];
+        device.tick = u64::from(u32::MAX);
+        tick(&mut device, &mut memory, &[]);
+        assert_eq!(device.tick(), 1u64 << 32);
+        assert_eq!(device.millis(), 0);
+        assert_eq!(&memory[42..46], &[0, 0, 0, 0]);
+        device.tick = u64::MAX - 1;
+        tick(&mut device, &mut memory, &[]);
+        assert_eq!(device.millis(), u32::MAX);
+    }
+
+    #[test]
+    fn pending_tick_remembers_its_descriptor_and_rejects_invalidated_memory() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 128];
+        command(&mut device, &mut memory, COMMAND_NEXT_TICK, 8);
+        device.write_register(REGISTER_DESCRIPTOR_OFFSET, 60, &mut memory, 64, 4);
+        device.complete_tick(&mut memory, 64, &[]).unwrap();
+        assert_eq!(memory[42], 1);
+        assert_eq!(memory[62], 0);
+
+        command(&mut device, &mut memory, COMMAND_NEXT_TICK, 8);
+        memory[40] = 2;
+        assert!(device.complete_tick(&mut memory, 64, &[]).is_err());
+        assert_eq!(device.status(), STATUS_VERSION);
+        assert_eq!(device.tick(), 1);
+        assert!(!device.has_pending_tick());
+    }
+
+    #[test]
+    fn script_order_is_preserved_and_duplicate_transitions_are_suppressed() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 128];
+        let script = InputScript::from_json(
+            r#"[
+            {"tick":1,"key":"ENTER","down":true},
+            {"tick":1,"key":"ENTER","down":true},
+            {"tick":1,"key":"ENTER","down":false},
+            {"tick":2,"key":4,"down":true}
+        ]"#,
+        )
+        .unwrap();
+        device.set_script(script).unwrap();
+        tick(
+            &mut device,
+            &mut memory,
+            &[KeyTransition {
+                key: 82,
+                down: true,
+            }],
+        );
+        assert_eq!(
+            device
+                .events
+                .iter()
+                .map(|event| (event.key, event.down, event.tick))
+                .collect::<Vec<_>>(),
+            [(40, true, 1), (40, false, 1), (82, true, 1)]
+        );
+        assert!(!device.held(40));
+        assert!(device.held(82));
+        assert!(!device.held(4));
+        tick(&mut device, &mut memory, &[]);
+        assert!(device.held(4));
+        command(&mut device, &mut memory, COMMAND_INPUT_POP, 8);
+        assert_eq!(&memory[42..48], &[1, 40, 1, 1, 0, 0]);
+        device.reset();
+        assert_eq!(device.tick(), 0);
+        assert!(device.events.is_empty());
+        tick(&mut device, &mut memory, &[]);
+        assert_eq!(device.events.len(), 2);
+    }
+
+    #[test]
+    fn overflow_preserves_authoritative_held_state_and_lifetime_evidence() {
+        let mut device = DeviceState::default();
+        let mut memory = vec![0; 128];
+        let mut events: Vec<_> = (0..256)
+            .map(|key| KeyTransition { key, down: true })
+            .collect();
+        events.push(KeyTransition {
+            key: 82,
+            down: false,
+        });
+        tick(&mut device, &mut memory, &events);
+        assert_eq!(device.events.len(), INPUT_QUEUE_CAPACITY);
+        assert_eq!(device.status(), STATUS_INPUT_OVERFLOW);
+        assert!(device.input_overflowed());
+        assert!(device.overflow_seen());
+        assert!(!device.held(82));
+        command(&mut device, &mut memory, COMMAND_INPUT_STATE, 19);
+        assert_eq!(memory[42], 1);
+        assert_eq!(memory[43 + 82 / 16] & (1 << (82 % 16)), 0);
+        assert!(!device.input_overflowed());
+        assert!(device.overflow_seen());
+        assert!(device.events.is_empty());
+        assert_eq!(device.status(), STATUS_OK);
+
+        tick(
+            &mut device,
+            &mut memory,
+            &[KeyTransition {
+                key: 82,
+                down: true,
+            }],
+        );
+        command(&mut device, &mut memory, COMMAND_INPUT_STATE, 19);
+        assert_eq!(memory[42], 0);
+        assert_eq!(device.events.len(), 1);
+        command(&mut device, &mut memory, COMMAND_INPUT_POP, 8);
+        assert_eq!(&memory[42..48], &[1, 82, 1, 2, 0, 0]);
+    }
+
+    #[test]
+    fn invalid_scripts_and_names_fail_early() {
+        for json in [
+            r#"[{"tick":0,"key":"A","down":true}]"#,
+            r#"[{"tick":2,"key":"A","down":true},{"tick":1,"key":"A","down":false}]"#,
+            r#"[{"tick":1,"key":"DOES_NOT_EXIST","down":true}]"#,
+            r#"[{"tick":1,"key":256,"down":true}]"#,
+            r#"[{"tick":1,"key":"A","down":true,"typo":2}]"#,
+        ] {
+            assert!(InputScript::from_json(json).is_err(), "{json}");
+        }
+        assert_eq!(key_code("left_shift"), Some(225));
+        assert_eq!(key_code("F24"), Some(115));
+        assert_eq!(key_code("F25"), None);
+        assert_eq!(key_code("0"), Some(39));
+        assert_eq!(key_code("-"), Some(45));
+        assert_eq!(key_code("num-pad-9"), Some(97));
+    }
+}

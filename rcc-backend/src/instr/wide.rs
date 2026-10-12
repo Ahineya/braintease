@@ -626,7 +626,12 @@ fn shift_amt_reg(
     }
 }
 
-fn emit_i32_shl(
+/// Allocate every scratch before branching. Allocating inside one emitted path
+/// can spill an unrelated live value there, then reload that uninitialized spill
+/// after another path reaches the join. Keep these scratch registers pinned and
+/// emit no allocator operations until all paths have joined.
+fn emit_i32_shift(
+    op: IrBinaryOp,
     result_lo: Reg,
     result_hi: Reg,
     a_lo: Reg,
@@ -636,176 +641,83 @@ fn emit_i32_shl(
     naming: &mut NameGenerator,
 ) -> Vec<AsmInst> {
     let mut insts = Vec::new();
-    let ge32 = naming.i32_label("shl_ge32");
-    let ge16 = naming.i32_label("shl_ge16");
-    let lt16 = naming.i32_label("shl_lt16");
-    let done = naming.i32_label("shl_done");
-
-    let c32 = new_temp(mgr, naming, &mut insts, "shl", "c32");
-    em_li(mgr, &mut insts, Src::N(&c32), 32);
-    let c16 = new_temp(mgr, naming, &mut insts, "shl", "c16");
-    em_li(mgr, &mut insts, Src::N(&c16), 16);
-    let tmp = new_temp(mgr, naming, &mut insts, "shl", "cmp");
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c32), AsmInst::Sltu);
-    em2(mgr, &mut insts, Src::N(&tmp), Src::R(Reg::R0), |a, b| AsmInst::Beq(a, b, ge32.clone()));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c16), AsmInst::Sltu);
-    em2(mgr, &mut insts, Src::N(&tmp), Src::R(Reg::R0), |a, b| AsmInst::Beq(a, b, ge16.clone()));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, lt16.clone()));
-
-    insts.push(AsmInst::Label(ge32));
-    insts.push(AsmInst::Li(result_lo, 0));
-    insts.push(AsmInst::Li(result_hi, 0));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
-
-    insts.push(AsmInst::Label(ge16));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c16), AsmInst::Sub);
-    em3(mgr, &mut insts, Src::R(result_hi), Src::R(a_lo), Src::N(&tmp), AsmInst::Sll);
-    insts.push(AsmInst::Li(result_lo, 0));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
-
-    insts.push(AsmInst::Label(lt16));
-    insts.push(AsmInst::Add(result_lo, a_lo, Reg::R0));
-    insts.push(AsmInst::Add(result_hi, a_hi, Reg::R0));
-    insts.push(AsmInst::Beq(amt, Reg::R0, done.clone()));
-    insts.push(AsmInst::Sll(result_lo, a_lo, amt));
-    insts.push(AsmInst::Sll(result_hi, a_hi, amt));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::N(&c16), Src::R(amt), AsmInst::Sub);
-    let overlap = new_temp(mgr, naming, &mut insts, "shl", "ov");
-    em3(mgr, &mut insts, Src::N(&overlap), Src::R(a_lo), Src::N(&tmp), AsmInst::Srl);
-    em3(mgr, &mut insts, Src::R(result_hi), Src::R(result_hi), Src::N(&overlap), AsmInst::Or);
-    insts.push(AsmInst::Label(done));
-    insts
-}
-
-fn emit_i32_lshr(
-    result_lo: Reg,
-    result_hi: Reg,
-    a_lo: Reg,
-    a_hi: Reg,
-    amt: Reg,
-    mgr: &mut RegisterPressureManager,
-    naming: &mut NameGenerator,
-) -> Vec<AsmInst> {
-    let mut insts = Vec::new();
-    let ge32 = naming.i32_label("lshr_ge32");
-    let ge16 = naming.i32_label("lshr_ge16");
-    let lt16 = naming.i32_label("lshr_lt16");
-    let done = naming.i32_label("lshr_done");
-
-    let c32 = new_temp(mgr, naming, &mut insts, "lshr", "c32");
-    em_li(mgr, &mut insts, Src::N(&c32), 32);
-    let c16 = new_temp(mgr, naming, &mut insts, "lshr", "c16");
-    em_li(mgr, &mut insts, Src::N(&c16), 16);
-    let tmp = new_temp(mgr, naming, &mut insts, "lshr", "cmp");
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c32), AsmInst::Sltu);
-    em2(mgr, &mut insts, Src::N(&tmp), Src::R(Reg::R0), |a, b| AsmInst::Beq(a, b, ge32.clone()));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c16), AsmInst::Sltu);
-    em2(mgr, &mut insts, Src::N(&tmp), Src::R(Reg::R0), |a, b| AsmInst::Beq(a, b, ge16.clone()));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, lt16.clone()));
-
-    insts.push(AsmInst::Label(ge32));
-    insts.push(AsmInst::Li(result_lo, 0));
-    insts.push(AsmInst::Li(result_hi, 0));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
-
-    insts.push(AsmInst::Label(ge16));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c16), AsmInst::Sub);
-    em3(mgr, &mut insts, Src::R(result_lo), Src::R(a_hi), Src::N(&tmp), AsmInst::Srl);
-    insts.push(AsmInst::Li(result_hi, 0));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
-
-    insts.push(AsmInst::Label(lt16));
-    insts.push(AsmInst::Add(result_lo, a_lo, Reg::R0));
-    insts.push(AsmInst::Add(result_hi, a_hi, Reg::R0));
-    insts.push(AsmInst::Beq(amt, Reg::R0, done.clone()));
-    insts.push(AsmInst::Srl(result_lo, a_lo, amt));
-    insts.push(AsmInst::Srl(result_hi, a_hi, amt));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::N(&c16), Src::R(amt), AsmInst::Sub);
-    let overlap = new_temp(mgr, naming, &mut insts, "lshr", "ov");
-    em3(mgr, &mut insts, Src::N(&overlap), Src::R(a_hi), Src::N(&tmp), AsmInst::Sll);
-    em3(mgr, &mut insts, Src::R(result_lo), Src::R(result_lo), Src::N(&overlap), AsmInst::Or);
-    insts.push(AsmInst::Label(done));
-    insts
-}
-
-fn emit_ashr16(dst: Reg, src: Reg, amt: Reg, mgr: &mut RegisterPressureManager, naming: &mut NameGenerator) -> Vec<AsmInst> {
-    let mut insts = Vec::new();
-    insts.push(AsmInst::Srl(dst, src, amt));
-    let sign = new_temp(mgr, naming, &mut insts, "ashr", "sign");
-    em3(mgr, &mut insts, Src::N(&sign), Src::R(src), Src::R(Reg::R0), AsmInst::Slt);
-    let c16 = new_temp(mgr, naming, &mut insts, "ashr", "c16");
-    em_li(mgr, &mut insts, Src::N(&c16), 16);
-    let fill = new_temp(mgr, naming, &mut insts, "ashr", "fill");
-    em3(mgr, &mut insts, Src::N(&fill), Src::N(&c16), Src::R(amt), AsmInst::Sub);
-    let ones = new_temp(mgr, naming, &mut insts, "ashr", "ones");
-    em_li(mgr, &mut insts, Src::N(&ones), -1);
-    em3(mgr, &mut insts, Src::N(&ones), Src::N(&ones), Src::N(&fill), AsmInst::Sll);
-    let skip = naming.i32_label("ashr16_pos");
-    em2(mgr, &mut insts, Src::N(&sign), Src::R(Reg::R0), |a, b| AsmInst::Beq(a, b, skip.clone()));
-    em3(mgr, &mut insts, Src::R(dst), Src::R(dst), Src::N(&ones), AsmInst::Or);
-    insts.push(AsmInst::Label(skip));
-    insts
-}
-
-fn emit_i32_ashr(
-    result_lo: Reg,
-    result_hi: Reg,
-    a_lo: Reg,
-    a_hi: Reg,
-    amt: Reg,
-    mgr: &mut RegisterPressureManager,
-    naming: &mut NameGenerator,
-) -> Vec<AsmInst> {
-    let mut insts = Vec::new();
-    let ge32 = naming.i32_label("ashr_ge32");
-    let ge16 = naming.i32_label("ashr_ge16");
-    let lt16 = naming.i32_label("ashr_lt16");
-    let done = naming.i32_label("ashr_done");
-
-    let c32 = new_temp(mgr, naming, &mut insts, "ashr", "c32");
-    em_li(mgr, &mut insts, Src::N(&c32), 32);
-    let c16 = new_temp(mgr, naming, &mut insts, "ashr", "c16");
-    em_li(mgr, &mut insts, Src::N(&c16), 16);
-    let tmp = new_temp(mgr, naming, &mut insts, "ashr", "cmp");
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c32), AsmInst::Sltu);
-    em2(mgr, &mut insts, Src::N(&tmp), Src::R(Reg::R0), |a, b| AsmInst::Beq(a, b, ge32.clone()));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c16), AsmInst::Sltu);
-    em2(mgr, &mut insts, Src::N(&tmp), Src::R(Reg::R0), |a, b| AsmInst::Beq(a, b, ge16.clone()));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, lt16.clone()));
-
-    insts.push(AsmInst::Label(ge32));
-    let sh15 = new_temp(mgr, naming, &mut insts, "ashr", "sh15");
-    em_li(mgr, &mut insts, Src::N(&sh15), 15);
-    em3(mgr, &mut insts, Src::R(result_lo), Src::R(a_hi), Src::N(&sh15), AsmInst::Srl);
-    insts.push(AsmInst::Sub(result_lo, Reg::R0, result_lo));
-    insts.push(AsmInst::Add(result_hi, result_lo, Reg::R0));
-    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
-
-    insts.push(AsmInst::Label(ge16));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::R(amt), Src::N(&c16), AsmInst::Sub);
-    {
-        let mut unpin = Vec::new();
-        let t = materialize(mgr, &mut insts, Src::N(&tmp), &mut unpin);
-        insts.extend(emit_ashr16(result_lo, a_hi, t, mgr, naming));
-        finish_pins(mgr, unpin);
+    let mut scratch = Vec::new();
+    for suffix in ["c16", "tmp", "overlap", "sign"] {
+        let reg = mgr.get_register(naming.temp_with_context("i32_shift", suffix));
+        insts.extend(mgr.take_instructions());
+        mgr.pin_register(reg);
+        scratch.push(reg);
     }
-    let sh15b = new_temp(mgr, naming, &mut insts, "ashr", "sh15b");
-    em_li(mgr, &mut insts, Src::N(&sh15b), 15);
-    em3(mgr, &mut insts, Src::R(result_hi), Src::R(a_hi), Src::N(&sh15b), AsmInst::Srl);
-    insts.push(AsmInst::Sub(result_hi, Reg::R0, result_hi));
+    let (c16, tmp, overlap, sign) = (scratch[0], scratch[1], scratch[2], scratch[3]);
+    let ge32 = naming.i32_label("shift_ge32");
+    let ge16 = naming.i32_label("shift_ge16");
+    let lt16 = naming.i32_label("shift_lt16");
+    let done = naming.i32_label("shift_done");
+    let arithmetic = op == IrBinaryOp::AShr;
+
+    insts.push(AsmInst::Li(c16, 16));
+    if arithmetic {
+        insts.push(AsmInst::Slt(sign, a_hi, Reg::R0));
+        insts.push(AsmInst::Sub(sign, Reg::R0, sign));
+    } else {
+        insts.push(AsmInst::Li(sign, 0));
+    }
+    insts.push(AsmInst::Li(tmp, 32));
+    insts.push(AsmInst::Sltu(overlap, amt, tmp));
+    insts.push(AsmInst::Beq(overlap, Reg::R0, ge32.clone()));
+    insts.push(AsmInst::Sltu(overlap, amt, c16));
+    insts.push(AsmInst::Beq(overlap, Reg::R0, ge16.clone()));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, lt16.clone()));
+
+    insts.push(AsmInst::Label(ge32));
+    insts.push(AsmInst::Add(result_lo, sign, Reg::R0));
+    insts.push(AsmInst::Add(result_hi, sign, Reg::R0));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
+
+    insts.push(AsmInst::Label(ge16));
+    insts.push(AsmInst::Sub(tmp, amt, c16));
+    if op == IrBinaryOp::Shl {
+        insts.push(AsmInst::Sll(result_hi, a_lo, tmp));
+        insts.push(AsmInst::Li(result_lo, 0));
+    } else {
+        insts.push(AsmInst::Srl(result_lo, a_hi, tmp));
+        insts.push(AsmInst::Add(result_hi, sign, Reg::R0));
+        if arithmetic {
+            // A shift by 16 moves the high cell unchanged. Native shifts mask
+            // their count to 0..15, so do not synthesize a fill shift by 16.
+            insts.push(AsmInst::Beq(tmp, Reg::R0, done.clone()));
+            insts.push(AsmInst::Sub(tmp, c16, tmp));
+            insts.push(AsmInst::Sll(overlap, sign, tmp));
+            insts.push(AsmInst::Or(result_lo, result_lo, overlap));
+        }
+    }
     insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
 
     insts.push(AsmInst::Label(lt16));
     insts.push(AsmInst::Add(result_lo, a_lo, Reg::R0));
     insts.push(AsmInst::Add(result_hi, a_hi, Reg::R0));
     insts.push(AsmInst::Beq(amt, Reg::R0, done.clone()));
-    insts.push(AsmInst::Srl(result_lo, a_lo, amt));
-    insts.extend(emit_ashr16(result_hi, a_hi, amt, mgr, naming));
-    em3(mgr, &mut insts, Src::N(&tmp), Src::N(&c16), Src::R(amt), AsmInst::Sub);
-    let overlap = new_temp(mgr, naming, &mut insts, "ashr", "ov");
-    em3(mgr, &mut insts, Src::N(&overlap), Src::R(a_hi), Src::N(&tmp), AsmInst::Sll);
-    em3(mgr, &mut insts, Src::R(result_lo), Src::R(result_lo), Src::N(&overlap), AsmInst::Or);
+    insts.push(AsmInst::Sub(tmp, c16, amt));
+    if op == IrBinaryOp::Shl {
+        insts.push(AsmInst::Sll(result_lo, a_lo, amt));
+        insts.push(AsmInst::Sll(result_hi, a_hi, amt));
+        insts.push(AsmInst::Srl(overlap, a_lo, tmp));
+        insts.push(AsmInst::Or(result_hi, result_hi, overlap));
+    } else {
+        insts.push(AsmInst::Srl(result_lo, a_lo, amt));
+        insts.push(AsmInst::Srl(result_hi, a_hi, amt));
+        insts.push(AsmInst::Sll(overlap, a_hi, tmp));
+        insts.push(AsmInst::Or(result_lo, result_lo, overlap));
+        if arithmetic {
+            insts.push(AsmInst::Sll(overlap, sign, tmp));
+            insts.push(AsmInst::Or(result_hi, result_hi, overlap));
+        }
+    }
     insts.push(AsmInst::Label(done));
+    for reg in scratch {
+        mgr.unpin_register(reg);
+        mgr.free_register(reg);
+    }
     insts
 }
 
@@ -955,18 +867,7 @@ pub fn lower_i32_binary(
             let (amt, ai) = shift_amt_reg(mgr, naming, rhs);
             insts.extend(ai);
             mgr.pin_register(amt);
-            match op {
-                IrBinaryOp::Shl => {
-                    insts.extend(emit_i32_shl(result_lo, result_hi, a_lo, a_hi, amt, mgr, naming));
-                }
-                IrBinaryOp::LShr => {
-                    insts.extend(emit_i32_lshr(result_lo, result_hi, a_lo, a_hi, amt, mgr, naming));
-                }
-                IrBinaryOp::AShr => {
-                    insts.extend(emit_i32_ashr(result_lo, result_hi, a_lo, a_hi, amt, mgr, naming));
-                }
-                _ => unreachable!(),
-            }
+            insts.extend(emit_i32_shift(op, result_lo, result_hi, a_lo, a_hi, amt, mgr, naming));
             mgr.unpin_register(amt);
         }
         _ => panic!("unexpected I32 binary op {op:?}"),
@@ -1091,6 +992,78 @@ pub fn i32_to_cond_reg(
             let lo = crate::instr::helpers::get_value_register(mgr, naming, value);
             insts.extend(mgr.take_instructions());
             (lo, insts)
+        }
+    }
+}
+
+#[cfg(test)]
+mod shift_tests {
+    use super::*;
+    use crate::instr::tests::machine::Machine;
+    use crate::naming::new_function_naming;
+
+    fn seed(mgr: &mut RegisterPressureManager, name: String, value: u16, insts: &mut Vec<AsmInst>) -> Reg {
+        let reg = mgr.get_register(name);
+        insts.extend(mgr.take_instructions());
+        insts.push(AsmInst::Li(reg, value as i16));
+        reg
+    }
+
+    fn seed_pair(mgr: &mut RegisterPressureManager, naming: &NameGenerator, id: TempId,
+        value: u32, insts: &mut Vec<AsmInst>) {
+        let name = naming.temp_name(id);
+        let lo = seed(mgr, name.clone(), value as u16, insts);
+        mgr.pin_register(lo);
+        let hi = seed(mgr, naming.i32_high_name(&name), (value >> 16) as u16, insts);
+        bind_i32(mgr, naming, &name, lo, hi);
+        mgr.unpin_register(lo);
+    }
+
+    #[test]
+    fn shifts_preserve_live_values_on_all_paths_with_dirty_spill_slots() {
+        for op in [IrBinaryOp::Shl, IrBinaryOp::LShr, IrBinaryOp::AShr] {
+            for value in [0u32, 1, 0x12345678, 0x7fffffff, 0x80000000, 0x80000001, 0xffff0000, 0xffffffff] {
+                for count in 0..32 {
+                    for dynamic in [false, true] {
+                        let mut mgr = RegisterPressureManager::new(0);
+                        mgr.init();
+                        let mut naming = new_function_naming();
+                        let mut insts = Vec::new();
+                        // Populate registers before the two words that must
+                        // remain live across the shift's internal branches.
+                        for i in 0..12 { seed(&mut mgr, format!("pressure_{i}"), i, &mut insts); }
+                        seed_pair(&mut mgr, &naming, 1, 0x12345678, &mut insts);
+                        seed_pair(&mut mgr, &naming, 2, value, &mut insts);
+                        let amount = if dynamic {
+                            seed(&mut mgr, naming.temp_name(3), count, &mut insts);
+                            Value::Temp(3)
+                        } else { Value::Constant(count as i64) };
+                        insts.extend(lower_i32_binary(&mut mgr, &mut naming, op, &Value::Temp(2), &amount, 4));
+                        let (lo, hi, loads) = get_i32_pair(&mut mgr, &mut naming, &Value::Temp(4), false);
+                        insts.extend(loads);
+                        insts.push(AsmInst::Move(Reg::Rv0, lo));
+                        insts.push(AsmInst::Move(Reg::Rv1, hi));
+                        let (keep_lo, keep_hi, loads) = get_i32_pair(&mut mgr, &mut naming, &Value::Temp(1), false);
+                        insts.extend(loads);
+                        insts.push(AsmInst::Move(Reg::A0, keep_lo));
+                        insts.push(AsmInst::Move(Reg::A1, keep_hi));
+                        let mut machine = Machine::new(64000);
+                        for offset in 0..1024 { machine.memory.insert((2, offset), 0xabcd); }
+                        machine.run(&insts);
+                        let actual = machine.regs[Reg::Rv0 as usize] as u32 |
+                            ((machine.regs[Reg::Rv1 as usize] as u32) << 16);
+                        let expected = match op {
+                            IrBinaryOp::Shl => value << count,
+                            IrBinaryOp::LShr => value >> count,
+                            IrBinaryOp::AShr => ((value as i32) >> count) as u32,
+                            _ => unreachable!(),
+                        };
+                        assert_eq!(actual, expected, "{op:?} {value:08x} by {count}, dynamic={dynamic}");
+                        assert_eq!((machine.regs[Reg::A0 as usize], machine.regs[Reg::A1 as usize]),
+                            (0x5678, 0x1234), "live value after {op:?} by {count}, dynamic={dynamic}");
+                    }
+                }
+            }
         }
     }
 }

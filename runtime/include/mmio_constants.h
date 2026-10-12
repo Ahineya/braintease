@@ -38,6 +38,13 @@
 #define MMIO_IRQ_VECTOR_OFF   25
 #define MMIO_IRQ_CAUSE        26
 
+// Versioned host-device command mailbox (bank 0, words 27..31).
+#define MMIO_DEVICE_DESC_BANK 27
+#define MMIO_DEVICE_DESC_OFF  28
+#define MMIO_DEVICE_COMMAND   29
+#define MMIO_DEVICE_STATUS    30
+#define MMIO_DEVICE_VERSION   31
+
 // Software interrupt source (STATUS/ENABLE bit 0)
 #define IRQ_SW             (1 << 0)
 
@@ -55,6 +62,7 @@
 #define DISP_MODE_TTY    1
 #define DISP_MODE_TEXT40 2
 #define DISP_MODE_RGB565 3
+#define DISP_MODE_RGB565_EXT 4
 
 // Display control bits
 #define DISP_CTL_ENABLE (1 << 0)

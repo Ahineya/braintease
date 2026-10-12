@@ -1,0 +1,6 @@
+[
+  {"tick": 1, "key": "W", "down": true},
+  {"tick": 2, "key": "W", "down": false},
+  {"tick": 2, "key": "ENTER", "down": true},
+  {"tick": 3, "key": "ENTER", "down": false}
+]

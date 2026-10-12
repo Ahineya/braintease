@@ -16,7 +16,7 @@ The Ripple VM implements a memory-mapped I/O (MMIO) system with a dedicated 32-w
 | 3       | `HDR_TTY_IN_STATUS`   | R   | Input status (bit 0: has byte available)              |
 | 4       | `HDR_RNG`             | R   | Read next PRNG value (auto-advances)                  |
 | 5       | `HDR_RNG_SEED`        | R/W | RNG seed (low 16 bits)                                |
-| 6       | `HDR_DISP_MODE`       | R/W | Display mode (0=OFF, 1=TTY, 2=TEXT40, 3=RGB565)       |
+| 6       | `HDR_DISP_MODE`       | R/W | Display mode (0=OFF, 1=TTY, 2=TEXT40, 3=RGB565, 4=RGB565_EXT) |
 | 7       | `HDR_DISP_STATUS`     | R   | Display status (bit 0: ready, bit 1: flush done)      |
 | 8       | `HDR_DISP_CTL`        | R/W | Display control (bit 0: enable, bit 1: clear)         |
 | 9       | `HDR_DISP_FLUSH`      | W   | Trigger display flush (write non-zero)                |
@@ -37,7 +37,11 @@ The Ripple VM implements a memory-mapped I/O (MMIO) system with a dedicated 32-w
 | 24      | `HDR_IRQ_VECTOR_BANK` | R/W | Handler PCB                                           |
 | 25      | `HDR_IRQ_VECTOR_OFF`  | R/W | Handler PC                                            |
 | 26      | `HDR_IRQ_CAUSE`       | R   | 0=none, else 1 + bit index of in-service IRQ          |
-| 27-31   | Reserved              | -   | Reserved for future use (return 0 on read)            |
+| 27      | `MMIO_DEVICE_DESC_BANK` | R/W | Device descriptor bank                            |
+| 28      | `MMIO_DEVICE_DESC_OFF`  | R/W | Device descriptor cell offset                     |
+| 29      | `MMIO_DEVICE_COMMAND`   | W   | Submit device command                             |
+| 30      | `MMIO_DEVICE_STATUS`    | R   | Device command result                             |
+| 31      | `MMIO_DEVICE_VERSION`   | R   | Device ABI version (1)                            |
 
 ### TEXT40 VRAM (Bank 0, Words 32-1031)
 
@@ -200,6 +204,7 @@ handler:
   - 1: TTY passthrough mode
   - 2: TEXT40 mode (40x25 character display)
   - 3: RGB565 mode (graphics display)
+  - 4: RGB565_EXT mode (banked framebuffer via device command ABI)
 
 **Display Status (HDR_DISP_STATUS)**
 - Read-only register at address 7
@@ -215,11 +220,12 @@ handler:
 - Write-only register at address 9
 - Writing non-zero triggers display update
 - Sets flush_done flag when complete
-- In RGB565 mode, swaps the front and back framebuffers
+- In mode 3 (RGB565), swaps the front and back framebuffers
+- In mode 4 (RGB565_EXT), use the `PRESENT` command below
 
 **Display Resolution (HDR_DISP_RESOLUTION)**
 - Read/Write register at address 16
-- Used for RGB565 mode only
+- Used for legacy RGB565 mode 3 only
 - Format: high 8 bits = width, low 8 bits = height
 - Must be set BEFORE switching to RGB565 mode
 - Maximum resolution depends on bank size: `(bank_size - 32) / 2` pixels total
@@ -254,12 +260,127 @@ Bit:  15 14 13 12 11 | 10 9 8 7 6 5 | 4 3 2 1 0
 
 ## Implementation Details
 
+### Device command ABI version 1
+
+Addresses 27–31 form a versioned mailbox. A command descriptor is a contiguous
+sequence of 16-bit cells in guest data memory; descriptor and framebuffer pointers
+are `(bank, offset)` pairs. Crossing a bank boundary continues at offset zero in
+the next bank. Both lengths and strides count cells, not eight-bit octets. One
+descriptor cell is `sizeof(unsigned short) == 1` in Ripple C.
+
+To submit a command, write its descriptor bank to address 27, descriptor offset
+to 28, then command ID to 29. Read the result at address 30. The ABI version at
+address 31 is read-only and currently returns 1. Old hosts return zero at this
+previously reserved address; check it before using the interface.
+
+Every descriptor starts with version 1 and its exact length in cells; larger or
+smaller lengths are rejected. Version-1 layouts are listed below in cell order.
+Multiword integers use the low cell first.
+
+| Command | ID | Length | Descriptor cells |
+|---------|----|--------|------------------|
+| PRESENT | 1 | 8 | version, length, width, height, stride, buffer bank, buffer offset, flags=0 |
+| CAPS | 2 | 4 | version, length, capability bits (out), key count (out) |
+| NEXT_TICK | 3 | 8 | version, length, tick low (out), tick high (out), milliseconds low (out), milliseconds high (out), Hz (out), reserved=0 |
+| GET_TIME | 4 | 8 | same as NEXT_TICK |
+| INPUT_POP | 5 | 8 | version, length, available (out), key (out), down (out), tick low (out), tick high (out), overflow (out) |
+| INPUT_STATE | 6 | 19 | version, length, overflow (out), 16 held-key bitmap cells (out) |
+
+#### Status and capabilities
+
+| Status | Meaning |
+|--------|---------|
+| 0 | success |
+| 1 | unknown command |
+| 2 | unsupported descriptor version |
+| 3 | invalid descriptor or fields |
+| 4 | guest-memory bounds error |
+| 5 | wrong display mode |
+| 6 | input queue overflow during a tick grant |
+| 0x8000 | pending host tick grant |
+
+`CAPS` returns bits 0–3 set (15): extended RGB565, logical clock, input events,
+and held-key state. Key count is 256. Unknown future capability bits should be
+ignored. Error statuses must be checked before consuming output fields.
+
+#### Extended RGB565 presentation
+
+Select display mode 4, then submit `PRESENT` with positive width and height,
+`stride >= width`, and zero flags. Dimensions and stride are 16-bit values.
+Pixels are row-major RGB565 cells; row `y` begins at `buffer + y * stride`.
+The host validates the entire accessed range and copies the frame before the
+command completes. Thus the guest can immediately reuse or free the framebuffer.
+Stride padding is not displayed. The framebuffer may span banks, allowing
+320×200 output without changing the legacy bank-0 layout.
+
+Each successful `PRESENT` publishes exactly one frame. Mode 3 retains its existing
+double-buffer swap at `HDR_DISP_FLUSH`. Neither presentation path advances logical
+time. Screenshot capture observes the completed frame, rather than an arbitrary
+wall-clock instant or partially written back buffer.
+
+#### Logical clock
+
+`NEXT_TICK` requests exactly one simulation tick. The command can become pending
+while the host waits, but the host completes its descriptor and status before
+executing the next guest instruction. Guest code does not spin on status.
+`GET_TIME` only reads: repeated reads and framebuffer presentations cannot advance
+time. Tick and milliseconds are unsigned 32-bit values, with milliseconds derived
+from tick count and Hz. The default frequency is 35 Hz.
+
+Host policies can pace tick grants to real time, grant them immediately for fast
+tests, or wait for explicit steps. All policies expose the same guest clock.
+CPU frequency throttling is a separate host setting and does not define the
+simulation clock. A Doom port should request ticks in its game loop and implement
+its time callback using `GET_TIME`; rendering must not become the clock source.
+
+#### Keyboard events and state
+
+Keys use USB HID keyboard usage IDs in the range 0–255, rather than host library
+key codes or ASCII. Common IDs are A–Z = 4–29, 1–9 = 30–38, 0 = 39, Enter = 40,
+Escape = 41, Space = 44, right/left/down/up = 79/80/81/82, and left/right
+Ctrl/Shift/Alt/GUI = 224–231. `runtime/include/vm_devices.h` defines named keys.
+
+`INPUT_POP` returns one transition: `available=1`, key ID, `down=1` for press or
+0 for release, and the logical tick at which it was recorded. An empty queue
+returns `available=0`. Use `available` before reading the event's other fields.
+Held keys persist until release; host auto-repeat must not create extra presses.
+
+`INPUT_STATE` returns a bitmap: key `k` is bit `(k & 15)` of cell `(k >> 4)`.
+Queue overflow is sticky and reported by both input commands. Reading state
+returns and clears the overflow flag, so a guest that missed transitions can
+resynchronize its held-key state. State is maintained even if events overflow.
+When that flag was set, `INPUT_STATE` also discards the remaining queued events
+because the returned bitmap supersedes them. With no overflow it leaves the
+event queue intact.
+The queue holds 256 transitions. A tick grant that overflows it reports status 6;
+automated runs also fail on observed overflow rather than silently accepting an
+incomplete replay.
+
+The six legacy key registers remain available to existing guests. Extended
+input supports Doom's additional controls without adding per-key MMIO addresses.
+
+#### C interface and backend compatibility
+
+Include `<vm_devices.h>` and link the runtime. Its wrappers construct descriptors
+on the stack, extract the compiler's packed bank/offset pointer representation,
+submit commands, check status, and copy successful outputs into typed structs.
+Use `vm_devices_version()` for discovery, `vm_devices_caps()` for capabilities,
+`vm_present_rgb565()` for output, `vm_next_tick()` / `vm_get_time()` for time,
+and `vm_input_pop()` / `vm_input_state()` for keyboard input.
+
+The instruction set is unchanged. The Rust VM hosts these devices. The
+Brainfuck implementation still needs a host adapter for this ABI; guests using
+it do not automatically work on the existing Brainfuck backend. See
+[`docs/doom-platform.md`](../docs/doom-platform.md) for the current port boundary.
+
 ### MMIO Read Handling
 
-The VM intercepts reads to bank 0, addresses 0-1031:
-1. Addresses 0-31: MMIO header registers
-2. Addresses 32-1031: TEXT40 VRAM (direct memory access)
-3. Other banks or addresses > 1031: Regular memory access
+The VM routes memory reads in this order:
+1. Bank 0, addresses 0–31: MMIO header registers.
+2. In legacy RGB565 mode 3, bank-0 front/back framebuffer addresses: display
+   buffer reads, including addresses below the old TEXT40 boundary at 1032.
+3. All other addresses: regular guest memory. TEXT40 VRAM is ordinary bank-0
+   memory; mode 4 framebuffers are ordinary memory copied by `PRESENT`.
 
 ```rust
 fn handle_mmio_read(&mut self, addr: usize) -> Option<u16> {
@@ -286,7 +407,10 @@ fn handle_mmio_read(&mut self, addr: usize) -> Option<u16> {
 
 ### MMIO Write Handling
 
-The VM intercepts writes to bank 0, addresses 0-1031:
+Bank-0 addresses 0–31 are MMIO writes. In legacy RGB565 mode 3, writes in its
+framebuffer region go to the display device; addresses beyond the buffers fall
+back to ordinary RAM. Other banks, TEXT40 VRAM and mode 4 framebuffers are regular
+guest memory. The abbreviated handler below shows header registers only:
 
 ```rust
 fn handle_mmio_write(&mut self, addr: usize, value: u16) -> bool {
@@ -318,25 +442,10 @@ fn handle_mmio_write(&mut self, addr: usize, value: u16) -> bool {
 
 ### Memory Access Instructions
 
-LOAD and STORE instructions check for MMIO addresses:
-
-```rust
-// LOAD instruction (opcode 0x11)
-if bank_val == 0 && addr_val < TEXT40_LAST_WORD as u16 + 1 {
-    if let Some(value) = self.handle_mmio_read(addr_val as usize) {
-        self.registers[rd] = value;
-    } else {
-        self.registers[rd] = self.memory[addr_val as usize];
-    }
-}
-
-// STORE instruction (opcode 0x12)
-if bank_val == 0 && addr_val < TEXT40_LAST_WORD as u16 + 1 {
-    if !self.handle_mmio_write(addr_val as usize, value) {
-        self.memory[addr_val as usize] = value;
-    }
-}
-```
+LOAD and STORE retain their existing encodings. Their host memory routing checks
+the 32-cell MMIO header first, then any legacy RGB565 framebuffer mapping, then
+ordinary memory. Device descriptors and mode 4 framebuffers do not add an
+instruction or a special pixel-store operation.
 
 ## Usage Examples
 
@@ -511,7 +620,7 @@ irq_ack();  // write 1 to MMIO_IRQ_BUSY
 
 1. **Fixed Addresses**: All MMIO addresses are fixed at compile time, eliminating runtime discovery overhead
 2. **Bank 0 Only**: MMIO is only active in bank 0, simplifying implementation and preventing conflicts
-3. **Minimal Header**: 32-word header holds current devices plus 5 reserved words (27-31) for future expansion
+3. **Minimal Header**: the 32-word header includes a versioned device mailbox at words 27–31
 4. **Efficient Access**: Low addresses (0-31) are optimal for Brainfuck-generated code
 5. **Backward Compatible**: Legacy MMIO_OUT and MMIO_OUT_FLAG aliases maintained at addresses 0 and 1
 
@@ -546,6 +655,12 @@ pub const HDR_IRQ_BUSY: usize      = 23;
 pub const HDR_IRQ_VECTOR_BANK: usize = 24;
 pub const HDR_IRQ_VECTOR_OFF: usize  = 25;
 pub const HDR_IRQ_CAUSE: usize     = 26;
+// Device mailbox constants live in rvm/src/devices.rs.
+pub const REGISTER_DESCRIPTOR_BANK: usize   = 27;
+pub const REGISTER_DESCRIPTOR_OFFSET: usize = 28;
+pub const REGISTER_COMMAND: usize           = 29;
+pub const REGISTER_STATUS: usize            = 30;
+pub const REGISTER_VERSION: usize           = 31;
 
 pub const IRQ_SW: u16              = 0x0001;  // STATUS/ENABLE bit 0
 
@@ -567,6 +682,7 @@ pub const DISP_OFF: u16            = 0;
 pub const DISP_TTY: u16            = 1;
 pub const DISP_TEXT40: u16         = 2;
 pub const DISP_RGB565: u16         = 3;
+pub const DISPLAY_MODE_EXTENDED: u16 = 4; // rvm/src/devices.rs
 
 // Storage Control Bits
 pub const STORE_BUSY: u16          = 0x0001;  // bit0
@@ -577,12 +693,13 @@ pub const STORE_COMMIT_ALL: u16    = 0x0008;  // bit3
 
 ## Future Enhancements
 
-The reserved MMIO addresses (27-31) are available for future devices such as:
-- Timer/counter peripherals
-- Additional display modes
+Further device commands can extend the versioned mailbox without moving existing
+MMIO addresses. Possible future devices include:
 - Sound generation
 - Network I/O
 - DMA controllers
 - Serial communication ports
 
-These can be added without breaking existing code since the header layout is fixed.
+New commands must preserve existing descriptor versions and advertise their
+capabilities. A command's availability in the Rust VM does not imply support in
+the Brainfuck host adapter.

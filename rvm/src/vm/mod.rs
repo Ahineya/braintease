@@ -7,6 +7,7 @@ mod display;
 mod terminal;
 mod execution;
 mod storage;
+mod devices;
 
 pub use instruction::Instr;
 pub use state::{VMState, KeyboardState};
@@ -20,6 +21,12 @@ use crate::vm::storage::Storage;
 
 /// The Ripple Virtual Machine
 pub struct VM {
+    pub devices: crate::devices::DeviceState,
+    pub executed_instructions: u64,
+    pub presented_frames: u64,
+    pub device_error: Option<String>,
+    pub host_input_enabled: bool,
+
     // Program memory - stores instructions
     pub instructions: Vec<Instr>,
     
@@ -120,6 +127,11 @@ impl VM {
         };
         
         VM {
+            devices: crate::devices::DeviceState::default(),
+            executed_instructions: 0,
+            presented_frames: 0,
+            device_error: None,
+            host_input_enabled: true,
             instructions: Vec::new(),
             memory: vec![0; memory_size],
             registers: [0; 32],
@@ -325,6 +337,9 @@ impl VM {
         // Keyboard/TTY input is polled from MMIO reads (TTY_IN_STATUS / KEY_*),
         // not every instruction — crossterm event::poll is a syscall.
 
+        if self.devices.has_pending_tick() {
+            self.complete_tick(Vec::new())?;
+        }
         self.maybe_dispatch_irq();
 
         // Calculate instruction address
@@ -349,6 +364,7 @@ impl VM {
         
         // Execute instruction
         self.execute_instruction(instr)?;
+        self.executed_instructions += 1;
         
         // Increment PC unless instruction set the skip flag
         if !self.skip_pc_increment {
@@ -439,6 +455,10 @@ impl VM {
     }
     
     pub fn reset(&mut self) {
+        self.devices.reset();
+        self.executed_instructions = 0;
+        self.presented_frames = 0;
+        self.device_error = None;
         // Clear registers but preserve bank size
         self.registers = [0; 32];
         
@@ -469,7 +489,7 @@ impl VM {
             self.exit_tty_mode();
         } else if self.display_mode == DISP_TEXT40 && self.terminal_raw_mode {
             self.exit_text40_mode();
-        } else if self.display_mode == DISP_RGB565 {
+        } else if self.display_mode == DISP_RGB565 || self.display_mode == DISP_RGB565_EXT {
             if let Some(mut display) = self.rgb565_display.take() {
                 display.shutdown();
             }

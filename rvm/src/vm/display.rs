@@ -40,105 +40,42 @@ impl VM {
         }
     }
     
-    /// Check if data section will be affected by display mode change
-    pub(super) fn check_data_section_conflict(&self, new_mode: u16) -> bool {
+    /// Change devices without replacing the state shared with the window.
+    pub(super) fn handle_display_mode_change(&mut self, new_mode: u16) -> Result<(), String> {
+        if new_mode > DISP_RGB565_EXT {
+            return Err(format!("Unsupported display mode {new_mode}"));
+        }
         if new_mode == DISP_RGB565 {
-            let width = ((self.display_resolution >> 8) & 0xFF) as usize;
-            let height = (self.display_resolution & 0xFF) as usize;
-            
-            if width > 0 && height > 0 {
-                let pixels_per_buffer = width * height;
-                let total_framebuffer_words = pixels_per_buffer * 2;
-                let required_end = 32 + total_framebuffer_words;
-                
-                // Check if current data at word 1032 would conflict
-                if required_end > TEXT40_LAST_WORD + 1 {
-                    eprintln!("WARNING: RGB565 mode {}x{} requires {} words for framebuffers", 
-                             width, height, total_framebuffer_words);
-                    eprintln!("         This conflicts with data section at word {}", TEXT40_LAST_WORD + 1);
-                    eprintln!("         Data section should start at word {} or later", required_end);
-                    return true;
-                }
-            }
+            let display = self.rgb565_display.get_or_insert_with(RGB565Display::new);
+            display.init((self.display_resolution >> 8) as u8,
+                         self.display_resolution as u8, self.bank_size as usize)?;
         }
-        false
-    }
-    
-    /// Handle display mode changes
-    pub(super) fn handle_display_mode_change(&mut self, new_mode: u16) {
-        // Exit current mode
         match self.display_mode {
-            DISP_TTY if self.terminal_raw_mode => {
-                self.exit_tty_mode();
-            },
-            DISP_TEXT40 if self.terminal_raw_mode => {
-                self.exit_text40_mode();
-            },
-            DISP_RGB565 => {
-                // Shutdown RGB565 display
-                if let Some(mut display) = self.rgb565_display.take() {
-                    display.shutdown();
-                }
-            },
+            DISP_TTY if self.terminal_raw_mode => self.exit_tty_mode(),
+            DISP_TEXT40 if self.terminal_raw_mode => self.exit_text40_mode(),
             _ => {}
         }
-        
-        // Enter new mode
+        if new_mode != DISP_RGB565 {
+            if let Some(display) = self.rgb565_display.as_mut() { display.disable(); }
+        }
         match new_mode {
-            DISP_TTY if !self.terminal_raw_mode => {
-                self.enter_tty_mode();
-            },
-            DISP_TEXT40 if !self.terminal_raw_mode => {
-                self.enter_text40_mode();
-            },
-            DISP_RGB565 => {
-                // Initialize RGB565 display
-                let width = ((self.display_resolution >> 8) & 0xFF) as u8;
-                let height = (self.display_resolution & 0xFF) as u8;
-                
-                eprintln!("Setting RGB565 mode with resolution {}x{}", width, height);
-                
-                // Check for data section conflicts
-                if self.check_data_section_conflict(new_mode) {
-                    eprintln!("WARNING: Potential memory conflict with global data!");
-                }
-                
-                if width > 0 && height > 0 {
-                    // Use existing display if available, or create new one
-                    if self.rgb565_display.is_none() {
-                        self.rgb565_display = Some(RGB565Display::new());
-                    }
-                    
-                    if let Some(ref mut display) = self.rgb565_display {
-                        if let Err(e) = display.init(width, height, self.bank_size as usize) {
-                            eprintln!("Failed to initialize RGB565 display: {}", e);
-                            // Reset to OFF mode on failure
-                            self.display_mode = DISP_OFF;
-                            return;
-                        }
-                        eprintln!("RGB565 display initialized successfully: {}x{}", width, height);
-                    }
-                } else {
-                    eprintln!("Invalid display resolution: {}x{}", width, height);
-                    self.display_mode = DISP_OFF;
-                }
-            },
+            DISP_TTY => self.enter_tty_mode(),
+            DISP_TEXT40 => self.enter_text40_mode(),
+            DISP_RGB565_EXT => {
+                self.rgb565_display.get_or_insert_with(RGB565Display::new);
+            }
             _ => {}
         }
+        self.display_mode = new_mode;
+        Ok(())
     }
-    
-    /// Flush RGB565 display (swap buffers)
+
     pub(super) fn flush_rgb565_display(&mut self) {
-        if let Some(ref mut display) = self.rgb565_display {
-            display.flush();
-            if self.verbose {
-                eprintln!("RGB565: Flushed display");
-            }
-        } else {
-            eprintln!("Warning: flush_rgb565_display called but no display initialized");
+        if let Some(display) = self.rgb565_display.as_mut() {
+            if display.flush() { self.presented_frames += 1; }
         }
     }
-    
+
     /// Render TEXT40 display to terminal
     pub(super) fn flush_text40_display(&mut self) {
         if self.display_mode != DISP_TEXT40 || !self.display_enabled {

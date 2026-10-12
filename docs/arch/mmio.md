@@ -12,7 +12,7 @@ Bank 0, words **0–31** are the MMIO header. TEXT40 VRAM starts at word **32**.
 | 3 | TTY_IN_STATUS | R | bit 0 has byte |
 | 4 | RNG | R | next PRNG (advances) |
 | 5 | RNG_SEED | R/W | low 16 bits of seed |
-| 6 | DISP_MODE | R/W | 0=OFF 1=TTY 2=TEXT40 3=RGB565 |
+| 6 | DISP_MODE | R/W | 0=OFF 1=TTY 2=TEXT40 3=RGB565 4=RGB565_EXT |
 | 7 | DISP_STATUS | R | ready / flush_done |
 | 8 | DISP_CTL | R/W | enable / clear |
 | 9 | DISP_FLUSH | W | present frame |
@@ -25,9 +25,43 @@ Bank 0, words **0–31** are the MMIO header. TEXT40 VRAM starts at word **32**.
 | 24 | IRQ_VECTOR_BANK | R/W | handler PCB |
 | 25 | IRQ_VECTOR_OFF | R/W | handler PC |
 | 26 | IRQ_CAUSE | R | 0=none, else 1 + bit index |
-| 27–31 | reserved | | read 0, ignore writes |
+| 27 | DEVICE_DESC_BANK | R/W | command descriptor bank |
+| 28 | DEVICE_DESC_OFF | R/W | command descriptor cell offset |
+| 29 | DEVICE_COMMAND | W | submit device command |
+| 30 | DEVICE_STATUS | R | command result; 0=success, 0x8000=pending |
+| 31 | DEVICE_VERSION | R | device ABI version (1) |
 
 C helpers: `runtime/include/mmio.h` (`tty_*`, `rng_*`, `storage_*`, `irq_*`, TEXT40, keyboard).
+
+## Versioned device commands
+
+`runtime/include/vm_devices.h` provides framebuffer presentation, a logical
+simulation clock, keyboard events, and held-key state. The descriptor starts with
+`[version, length]`, followed by command-specific 16-bit cells. Lengths, offsets,
+and framebuffer strides count **cells**, matching the compiler's 16-bit C byte.
+The descriptor may cross a bank boundary. Set its bank/offset, write the command,
+then read status. `NEXT_TICK` yields execution until the host grants the next tick;
+it is complete before the next guest instruction. There is no polling loop.
+
+| Command | ID | Descriptor cells | Operation |
+|---------|----|------------------|-----------|
+| PRESENT | 1 | 8 | snapshot an RGB565 framebuffer in mode 4 |
+| CAPS | 2 | 4 | read capability bits and key count |
+| NEXT_TICK | 3 | 8 | request one simulation tick and read logical time |
+| GET_TIME | 4 | 8 | read logical time without advancing it |
+| INPUT_POP | 5 | 8 | pop one keyboard transition |
+| INPUT_STATE | 6 | 19 | read 256 held-key bits and clear sticky queue overflow |
+
+Mode 3 retains its bank-0 double-buffer layout, 8-bit dimensions, and flush
+register. Mode 4 accepts 16-bit width/height/stride and a banked framebuffer pointer
+through `PRESENT`; it does not reserve pixel storage in bank 0. Presentation and
+time reads never advance the clock. See the [full wire contract](../../rvm/mmio.md#device-command-abi-version-1)
+and [Doom platform guide](../doom-platform.md).
+
+These are host-device extensions; instruction encoding and CPU semantics are
+unchanged. The Rust VM implements them. The Brainfuck VM needs the corresponding
+host adapter before a guest using this ABI can run there; this is not an existing
+Brainfuck capability.
 
 ## Interrupts
 

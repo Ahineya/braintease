@@ -129,7 +129,7 @@ impl VM {
     /// Enter TTY mode (for simple stdin/stdout with raw input)
     pub(super) fn enter_tty_mode(&mut self) {
         // Only enter raw mode if not in verbose/debug mode
-        if self.verbose || self.debug_mode {
+        if self.verbose || self.debug_mode || !self.host_input_enabled {
             return; // Keep normal mode for debugging
         }
         
@@ -152,7 +152,7 @@ impl VM {
     /// Enter TEXT40 terminal mode
     pub(super) fn enter_text40_mode(&mut self) {
         // Only enter raw mode if not in verbose/debug mode
-        if self.verbose || self.debug_mode {
+        if self.verbose || self.debug_mode || !self.host_input_enabled {
             return; // Keep normal mode for debugging
         }
         

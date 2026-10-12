@@ -161,41 +161,7 @@ impl VM {
                     let bank_val = self.registers[bank_reg];
                     let addr_val = self.registers[addr_reg];
                     
-                    // Check if this is a bank 0 MMIO access
-                    if bank_val == 0 && addr_val < TEXT40_LAST_WORD as u16 + 1 {
-                        // Try MMIO read first
-                        if let Some(value) = self.handle_mmio_read(addr_val as usize) {
-                            self.registers[rd] = value;
-                        } else {
-                            // Regular memory read for VRAM and other bank 0 addresses
-                            self.registers[rd] = self.memory[addr_val as usize];
-                        }
-                    } else if bank_val == 0 && self.display_mode == DISP_RGB565 {
-                        // Check if this is RGB565 framebuffer access
-                        if let Some(ref display) = self.rgb565_display {
-                            if let Some(value) = display.read_memory(addr_val as usize) {
-                                self.registers[rd] = value;
-                            } else {
-                                // Regular memory access
-                                let mem_addr = addr_val as usize;
-                                if mem_addr < self.memory.len() {
-                                    self.registers[rd] = self.memory[mem_addr];
-                                } else {
-                                    return Err(format!("LOAD: memory address out of bounds: {mem_addr}"));
-                                }
-                            }
-                        } else {
-                            self.registers[rd] = 0;
-                        }
-                    } else {
-                        // Regular memory access for non-bank-0
-                        let mem_addr = (bank_val as usize * self.bank_size as usize) + addr_val as usize;
-                        if mem_addr < self.memory.len() {
-                            self.registers[rd] = self.memory[mem_addr];
-                        } else {
-                            return Err(format!("LOAD: memory address out of bounds: {mem_addr}"));
-                        }
-                    }
+                    self.registers[rd] = self.read_cell(bank_val, addr_val)?;
                 }
             },
             0x12 => { // STORE - memory[bank_reg][addr_reg] = rs
@@ -207,35 +173,7 @@ impl VM {
                     let addr_val = self.registers[addr_reg];
                     let value = self.registers[rs];
                     
-                    // Check if this is a bank 0 MMIO access
-                    if bank_val == 0 && addr_val < TEXT40_LAST_WORD as u16 + 1 {
-                        // Try MMIO write first
-                        if !self.handle_mmio_write(addr_val as usize, value) {
-                            // Regular memory write for VRAM and other bank 0 addresses
-                            self.memory[addr_val as usize] = value;
-                        }
-                    } else if bank_val == 0 && self.display_mode == DISP_RGB565 {
-                        // Check if this is RGB565 framebuffer access
-                        if let Some(ref mut display) = self.rgb565_display {
-                            display.write_memory(addr_val as usize, value);
-                        } else {
-                            // Regular memory write
-                            let mem_addr = addr_val as usize;
-                            if mem_addr < self.memory.len() {
-                                self.memory[mem_addr] = value;
-                            } else {
-                                return Err(format!("STORE: memory address out of bounds: {mem_addr}"));
-                            }
-                        }
-                    } else {
-                        // Regular memory access for non-bank-0
-                        let mem_addr = (bank_val as usize * self.bank_size as usize) + addr_val as usize;
-                        if mem_addr < self.memory.len() {
-                            self.memory[mem_addr] = value;
-                        } else {
-                            return Err(format!("STORE: memory address out of bounds: {mem_addr}"));
-                        }
-                    }
+                    self.write_cell(bank_val, addr_val, value)?;
                 }
             },
             

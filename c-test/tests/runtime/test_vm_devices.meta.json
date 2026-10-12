@@ -1,0 +1,6 @@
+{
+  "description": "Device ABI capabilities, pure clock reads, tick grants, input state and a bank-spanning 320x200 RGB565 presentation",
+  "expected": "vm devices ok\n",
+  "use_runtime": true,
+  "timeout_secs": 30
+}

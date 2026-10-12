@@ -18,10 +18,10 @@ impl VM {
             },
             HDR_TTY_IN_POP => {
                 // Enable TTY input mode on first access
-                if !self.tty_input_enabled && !self.debug_mode && !self.verbose {
+                if !self.tty_input_enabled && self.host_input_enabled && !self.debug_mode && !self.verbose {
                     self.enable_tty_input();
                 }
-                if !self.debug_mode && !self.verbose {
+                if self.host_input_enabled && !self.debug_mode && !self.verbose {
                     self.poll_stdin();
                 }
 
@@ -37,10 +37,10 @@ impl VM {
             },
             HDR_TTY_IN_STATUS => {
                 // Enable TTY input mode on first access
-                if !self.tty_input_enabled && !self.debug_mode && !self.verbose {
+                if !self.tty_input_enabled && self.host_input_enabled && !self.debug_mode && !self.verbose {
                     self.enable_tty_input();
                 }
-                if !self.debug_mode && !self.verbose {
+                if self.host_input_enabled && !self.debug_mode && !self.verbose {
                     self.poll_stdin();
                     if self.stdout_dirty {
                         let _ = std::io::Write::flush(&mut std::io::stdout());
@@ -84,7 +84,11 @@ impl VM {
             },
             HDR_DISP_FLUSH => Some(0), // Write-only, return 0
             HDR_KEY_UP | HDR_KEY_DOWN | HDR_KEY_LEFT | HDR_KEY_RIGHT | HDR_KEY_Z | HDR_KEY_X => {
-                let value = if self.display_mode == DISP_RGB565 {
+                let value = if self.display_mode == DISP_RGB565_EXT || !self.host_input_enabled {
+                    let key = match addr { HDR_KEY_UP => 82, HDR_KEY_DOWN => 81,
+                        HDR_KEY_LEFT => 80, HDR_KEY_RIGHT => 79, HDR_KEY_Z => 29, _ => 27 };
+                    u16::from(self.devices.held(key))
+                } else if self.display_mode == DISP_RGB565 {
                     // For RGB565 mode, read keyboard state from the display window
                     if let Some(ref display) = self.rgb565_display {
                         let state = display.get_state();
@@ -176,7 +180,7 @@ impl VM {
             HDR_IRQ_VECTOR_BANK => Some(self.irq_vector_bank),
             HDR_IRQ_VECTOR_OFF => Some(self.irq_vector_off),
             HDR_IRQ_CAUSE => Some(self.irq_cause),
-            27..=31 => Some(0), // Reserved addresses return 0
+            27..=31 => self.devices.read_register(addr),
             _ => None, // Not an MMIO address
         }
     }
@@ -229,12 +233,11 @@ impl VM {
                 true
             },
             HDR_DISP_MODE => {
-                let new_mode = value & 0x3; // Support 4 modes (0-3)
-                if new_mode != self.display_mode {
-                    // Mode change - handle terminal setup/teardown
-                    self.handle_display_mode_change(new_mode);
+                if value != self.display_mode {
+                    if let Err(error) = self.handle_display_mode_change(value) {
+                        self.device_error = Some(error);
+                    }
                 }
-                self.display_mode = new_mode;
                 true
             },
             HDR_DISP_STATUS => true, // Read-only, ignore write
@@ -340,7 +343,17 @@ impl VM {
                 true
             },
             HDR_IRQ_CAUSE => true, // Read-only
-            27..=31 => true, // Reserved addresses, ignore writes
+            27..=31 => {
+                if let Some(frame) = self.devices.write_register(addr, value, &mut self.memory,
+                                                                 self.bank_size, self.display_mode) {
+                    let display = self.rgb565_display.get_or_insert_with(crate::display_rgb565::RGB565Display::new);
+                    match display.present(frame.width, frame.height, frame.pixels) {
+                        Ok(()) => self.presented_frames += 1,
+                        Err(error) => self.device_error = Some(error),
+                    }
+                }
+                true
+            },
             _ => false, // Not an MMIO address
         }
     }
