@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "static address initializers ok\n",
+  "description": "Static address constants preserve symbols, scaled array/member addends, self-references, bank carry and signed borrow"
+}

@@ -53,35 +53,23 @@ fn type_initializer(
     type_env: &TypeEnvironment,
 ) -> Result<TypedExpr, TypeError> {
     let resolved = type_env.type_analyzer.borrow().resolve_type(expected_type);
+    if let Type::Array { element_type, size } = &resolved {
+        if let Some(text) = crate::semantic::expressions::initializers::character_array_string(init, element_type) {
+            let length = size.unwrap_or(text.len() as u64 + 1);
+            let mut elements: Vec<_> = text.bytes().take(length as usize).map(|value| {
+                TypedExpr::CharLiteral { value, expr_type: (**element_type).clone() }
+            }).collect();
+            elements.resize_with(length as usize, || TypedExpr::CharLiteral {
+                value: 0, expr_type: (**element_type).clone(),
+            });
+            return Ok(TypedExpr::ArrayInitializer {
+                elements,
+                expr_type: Type::Array { element_type: element_type.clone(), size: Some(length) },
+            });
+        }
+    }
     match &init.kind {
         InitializerKind::Expression(expr) => {
-            // Single expression initializer
-            // Special case: string literal initializing a char array
-            if let crate::ast::ExpressionKind::StringLiteral(s) = &expr.kind {
-                if let Type::Array { element_type, .. } = &resolved {
-                    if matches!(**element_type, Type::Char) {
-                        // Convert string to array of character literals
-                        let mut chars = Vec::new();
-                        for ch in s.bytes() {
-                            chars.push(TypedExpr::CharLiteral {
-                                value: ch,
-                                expr_type: Type::Char,
-                            });
-                        }
-                        // Add null terminator
-                        chars.push(TypedExpr::CharLiteral {
-                            value: 0,
-                            expr_type: Type::Char,
-                        });
-                        
-                        return Ok(TypedExpr::ArrayInitializer {
-                            elements: chars,
-                            expr_type: resolved,
-                        });
-                    }
-                }
-            }
-            
             // A scalar initializer for a union initializes the first member.
             if let Type::Union { fields, .. } = &resolved {
                 if !fields.is_empty() {
@@ -606,6 +594,17 @@ pub fn type_expression(
         }
         
         ExpressionKind::SizeofExpr(operand) => {
+            // String literals decay when used as values, but sizeof observes
+            // the original character array including its terminator.
+            if let ExpressionKind::StringLiteral(text) = &operand.kind {
+                return Ok(TypedExpr::SizeofType {
+                    target_type: Type::Array {
+                        element_type: Box::new(Type::Char),
+                        size: Some(text.len() as u64 + 1),
+                    },
+                    expr_type: Type::UnsignedLong,
+                });
+            }
             let operand_typed = type_expression(operand, type_env)?;
             
             Ok(TypedExpr::SizeofExpr {
@@ -632,6 +631,7 @@ pub fn type_expression(
                 // For -> operator, object should be a pointer to struct
                 match object_typed.get_type() {
                     Type::Pointer { target, .. } => target.as_ref(),
+                    Type::Array { element_type, .. } => element_type.as_ref(),
                     _ => return Err(TypeError::TypeMismatch(
                         format!("-> operator requires pointer to struct, got {:?}", object_typed.get_type())
                     ))
@@ -763,7 +763,7 @@ pub fn type_statement(
         }
         
         StatementKind::Declaration { declarations } => {
-            // Handle multiple declarations by creating a compound statement
+            // A declaration group shares its surrounding lexical scope.
             if declarations.is_empty() {
                 return Ok(TypedStmt::Empty);
             }
@@ -785,9 +785,10 @@ pub fn type_statement(
                     decl_type: resolved_type,
                     initializer: init,
                     symbol_id: decl.symbol_id,
+                    storage_class: decl.storage_class,
                 })
             } else {
-                // Multiple declarations - create a compound statement
+                // Preserve declaration order without introducing a new scope.
                 let mut typed_decls = Vec::new();
                 for decl in declarations {
                     let init = match decl.initializer.as_ref() {
@@ -804,10 +805,11 @@ pub fn type_statement(
                         decl_type: resolved_type,
                         initializer: init,
                         symbol_id: decl.symbol_id,
+                        storage_class: decl.storage_class,
                     });
                 }
                 
-                Ok(TypedStmt::Compound(typed_decls))
+                Ok(TypedStmt::DeclarationGroup(typed_decls))
             }
         }
         

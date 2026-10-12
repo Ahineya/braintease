@@ -1,0 +1,190 @@
+--- a/doomgeneric/z_zone.h
++++ b/doomgeneric/z_zone.h
+@@ -25,6 +25,7 @@
+ #define __Z_ZONE__
+ 
+ #include <stdio.h>
++#include <stddef.h>
+ 
+ //
+ // ZONE MEMORY
+@@ -51,7 +52,7 @@
+         
+ 
+ void	Z_Init (void);
+-void*	Z_Malloc (int size, int tag, void *ptr);
++void*	Z_Malloc (size_t size, int tag, void *ptr);
+ void    Z_Free (void *ptr);
+ void    Z_FreeTags (int lowtag, int hightag);
+ void    Z_DumpHeap (int lowtag, int hightag);
+@@ -59,8 +60,8 @@
+ void    Z_CheckHeap (void);
+ void    Z_ChangeTag2 (void *ptr, int tag, char *file, int line);
+ void    Z_ChangeUser(void *ptr, void **user);
+-int     Z_FreeMemory (void);
+-unsigned int Z_ZoneSize(void);
++size_t  Z_FreeMemory (void);
++size_t Z_ZoneSize(void);
+ 
+ //
+ // This is used to get the local FILE:LINE info from CPP
+--- a/doomgeneric/i_system.h
++++ b/doomgeneric/i_system.h
+@@ -20,6 +20,7 @@
+ #ifndef __I_SYSTEM__
+ #define __I_SYSTEM__
+ 
++#include <stddef.h>
+ #include "d_ticcmd.h"
+ #include "d_event.h"
+ 
+@@ -32,7 +33,7 @@
+ // Called by startup code
+ // to get the ammount of memory to malloc
+ // for the zone management.
+-byte*	I_ZoneBase (int *size);
++byte*	I_ZoneBase (size_t *size);
+ 
+ boolean I_ConsoleStdout(void);
+ 
+--- a/doomgeneric/z_zone.c
++++ b/doomgeneric/z_zone.c
+@@ -20,6 +20,7 @@
+ #include "z_zone.h"
+ #include "i_system.h"
+ #include "doomtype.h"
++#include <stdint.h>
+ 
+ 
+ //
+@@ -34,14 +35,14 @@
+ // 
+  
+ #define MEM_ALIGN sizeof(void *)
+-#define ZONEID	0x1d4a11
++#define ZONEID	UINT32_C(0x1d4a11)
+ 
+ typedef struct memblock_s
+ {
+-    int			size;	// including the header and possibly tiny fragments
++    size_t		size;	// including the header and possibly tiny fragments
+     void**		user;
+     int			tag;	// PU_FREE if this is free
+-    int			id;	// should be ZONEID
++    uint32_t		id;	// should be ZONEID
+     struct memblock_s*	next;
+     struct memblock_s*	prev;
+ } memblock_t;
+@@ -50,7 +51,7 @@
+ typedef struct
+ {
+     // total bytes malloced, including header
+-    int		size;
++    size_t	size;
+ 
+     // start / end cap for linked list
+     memblock_t	blocklist;
+@@ -97,9 +98,11 @@
+ void Z_Init (void)
+ {
+     memblock_t*	block;
+-    int		size;
++    size_t	size;
+ 
+     mainzone = (memzone_t *)I_ZoneBase (&size);
++    if (mainzone == NULL || size < sizeof(memzone_t) + sizeof(memblock_t))
++        I_Error("Z_Init: zone is too small");
+     mainzone->size = size;
+ 
+     // set the entire zone to one free block
+@@ -183,17 +186,19 @@
+ 
+ void*
+ Z_Malloc
+-( int		size,
++( size_t	size,
+   int		tag,
+   void*		user )
+ {
+-    int		extra;
++    size_t	extra;
+     memblock_t*	start;
+     memblock_t* rover;
+     memblock_t* newblock;
+     memblock_t*	base;
+     void *result;
+ 
++    if (size > SIZE_MAX - (MEM_ALIGN - 1) - sizeof(memblock_t))
++        I_Error("Z_Malloc: allocation size overflow");
+     size = (size + MEM_ALIGN - 1) & ~(MEM_ALIGN - 1);
+     
+     // scan through the block list,
+@@ -219,7 +224,7 @@
+         if (rover == start)
+         {
+             // scanned all the way around the list
+-            I_Error ("Z_Malloc: failed on allocation of %i bytes", size);
++            I_Error ("Z_Malloc: failed on allocation of %lu cells", (unsigned long) size);
+         }
+ 	
+         if (rover->tag != PU_FREE)
+@@ -331,8 +336,8 @@
+ {
+     memblock_t*	block;
+ 	
+-    printf ("zone size: %i  location: %p\n",
+-	    mainzone->size,mainzone);
++    printf ("zone size: %lu  location: %p\n",
++	    (unsigned long) mainzone->size,mainzone);
+     
+     printf ("tag range: %i to %i\n",
+ 	    lowtag, hightag);
+@@ -340,8 +345,8 @@
+     for (block = mainzone->blocklist.next ; ; block = block->next)
+     {
+ 	if (block->tag >= lowtag && block->tag <= hightag)
+-	    printf ("block:%p    size:%7i    user:%p    tag:%3i\n",
+-		    block, block->size, block->user, block->tag);
++	    printf ("block:%p    size:%7lu    user:%p    tag:%3i\n",
++		    block, (unsigned long) block->size, block->user, block->tag);
+ 		
+ 	if (block->next == &mainzone->blocklist)
+ 	{
+@@ -368,12 +373,12 @@
+ {
+     memblock_t*	block;
+ 	
+-    fprintf (f,"zone size: %i  location: %p\n",mainzone->size,mainzone);
++    fprintf (f,"zone size: %lu  location: %p\n",(unsigned long) mainzone->size,mainzone);
+ 	
+     for (block = mainzone->blocklist.next ; ; block = block->next)
+     {
+-	fprintf (f,"block:%p    size:%7i    user:%p    tag:%3i\n",
+-		 block, block->size, block->user, block->tag);
++	fprintf (f,"block:%p    size:%7lu    user:%p    tag:%3i\n",
++		 block, (unsigned long) block->size, block->user, block->tag);
+ 		
+ 	if (block->next == &mainzone->blocklist)
+ 	{
+@@ -463,10 +468,10 @@
+ //
+ // Z_FreeMemory
+ //
+-int Z_FreeMemory (void)
++size_t Z_FreeMemory (void)
+ {
+     memblock_t*		block;
+-    int			free;
++    size_t		free;
+ 	
+     free = 0;
+     
+@@ -481,7 +486,7 @@
+     return free;
+ }
+ 
+-unsigned int Z_ZoneSize(void)
++size_t Z_ZoneSize(void)
+ {
+     return mainzone->size;
+ }

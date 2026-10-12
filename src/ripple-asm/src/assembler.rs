@@ -330,7 +330,15 @@ impl RippleAssembler {
                                 } else {
                                     // For absolute references, use the instruction index
                                     let inst_idx = label.absolute_address / 4;
-                                    modified_operands[i] = inst_idx.to_string();
+                                    if opcode == Opcode::Jal && inst_idx > self.options.max_immediate.min(u16::MAX as u32) {
+                                        // A translation unit can contain several code banks.
+                                        // Keep its wide local target symbolic until the linker
+                                        // packs whole functions and knows the final bank/offset.
+                                        has_label_ref = true;
+                                        modified_operands[i] = "0".to_string();
+                                    } else {
+                                        modified_operands[i] = inst_idx.to_string();
+                                    }
                                 }
                             } else if state.data_labels.contains_key(operand) {
                                 // Data label - will be resolved by linker
@@ -388,13 +396,14 @@ impl RippleAssembler {
                 || operand.starts_with("0b") || operand.starts_with("0B");
             
             if !is_register && !is_number {
-                // Local code labels are already patched in second_pass.
+                // Local branches and small absolute targets were patched in
+                // second_pass. Wide JAL targets still need linker relocation.
                 // Local data labels must stay unresolved so the linker can add
                 // this object's data-section base after concatenation.
                 let is_local_label = state.labels.contains_key(operand);
                 let is_local_data = state.data_labels.contains_key(operand);
 
-                if !is_local_label {
+                if !is_local_label || opcode == Opcode::Jal {
                     let projection = operand.strip_prefix("%bank(").and_then(|s| s.strip_suffix(')'))
                         .map(|s| (s.to_string(), ReferenceType::CodeBank))
                         .or_else(|| operand.strip_prefix("%offset(").and_then(|s| s.strip_suffix(')'))
@@ -423,6 +432,9 @@ impl RippleAssembler {
 
     pub fn assemble_to_binary(&self, source: &str) -> Result<Vec<u8>, Vec<String>> {
         let obj = self.assemble(source)?;
+        if !obj.unresolved_references.is_empty() {
+            return Err(vec!["binary assembly has unresolved references; assemble an object and link it with rlink".to_string()]);
+        }
         
         // Convert to binary format
         let mut binary = Vec::new();

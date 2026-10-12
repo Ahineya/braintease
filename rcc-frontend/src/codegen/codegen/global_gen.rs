@@ -9,6 +9,19 @@ use crate::codegen::CodegenError;
 use super::super::{VarInfo, expressions::TypedExpressionGenerator, types::complete_type_from_initializer};
 use super::utils::convert_type_default;
 
+/// An incomplete extern array reserves no storage, but its element type is
+/// enough to form addresses. A later definition supplies its actual extent.
+pub(crate) fn declaration_ir_type(ty: &Type, storage_class: crate::StorageClass) -> Result<crate::ir::IrType, CompilerError> {
+    if storage_class == crate::StorageClass::Extern {
+        if let Type::Array { element_type, size: None } = ty {
+            return Ok(crate::ir::IrType::Array {
+                element_type: Box::new(convert_type_default(element_type)?), size: 0,
+            });
+        }
+    }
+    convert_type_default(ty)
+}
+
 /// Generate IR for a global variable
 pub fn generate_global_variable(
     builder: &mut IrBuilder,
@@ -44,7 +57,7 @@ pub fn generate_global_variable(
                     // Allow FatPtr for pointer initializers (e.g., string literals)
                     // But only if the address is a constant or global
                     match fp.addr.as_ref() {
-                        Value::Global(_) | Value::Constant(_) | Value::Function(_) => Some(value),
+                        Value::Global(_) | Value::Constant(_) | Value::Function(_) | Value::AddressOffset { .. } => Some(value),
                         _ => {
                             return Err(CodegenError::UnsupportedConstruct {
                                 construct: format!("Non-constant pointer initializer for global variable '{}'", name),
@@ -69,7 +82,7 @@ pub fn generate_global_variable(
     
     // Use the general helper to complete incomplete types
     let completed_type = complete_type_from_initializer(var_type, initializer);
-    let ir_type = convert_type_default(&completed_type)?;
+    let ir_type = declaration_ir_type(&completed_type, storage_class)?;
     
     let linkage = match storage_class {
         crate::StorageClass::Static => Linkage::Internal,
@@ -137,6 +150,8 @@ fn generate_constant_initializer(
     expr: &TypedExpr,
 ) -> Result<Value, CompilerError> {
     if let Some(value) = scalar_initializer_constant(expr) { return Ok(Value::Constant(value)); }
+    if let Some(bits) = super::constant_float::initializer_bits(expr) { return Ok(Value::Constant(bits)); }
+    if let Some(value) = super::constant_address::generate(gen, expr)? { return Ok(value); }
     match expr {
         TypedExpr::Cast { operand, target_type: Type::Pointer { .. }, .. }
             if matches!(operand.get_type(), Type::Pointer { .. } | Type::Function { .. }) => {
@@ -153,7 +168,7 @@ fn generate_constant_initializer(
     }
 }
 
-fn scalar_initializer_constant(expr: &TypedExpr) -> Option<i64> {
+pub(super) fn scalar_initializer_constant(expr: &TypedExpr) -> Option<i64> {
     use crate::ast::{BinaryOp as B, UnaryOp as U};
     let value = match expr {
         TypedExpr::IntLiteral { value, .. } => *value,
@@ -162,7 +177,13 @@ fn scalar_initializer_constant(expr: &TypedExpr) -> Option<i64> {
             let v = scalar_initializer_constant(operand)?;
             match op { U::Plus => v, U::Minus => v.wrapping_neg(), U::BitNot => !v, U::LogicalNot => (v == 0) as i64, _ => return None }
         }
-        TypedExpr::Cast { operand, target_type, .. } if target_type.is_integer() => scalar_initializer_constant(operand)?,
+        TypedExpr::Cast { operand, target_type, .. } if target_type.is_integer() => {
+            if operand.get_type().is_floating() {
+                super::constant_float::cast_integer(operand, target_type)?
+            } else {
+                scalar_initializer_constant(operand)?
+            }
+        }
         TypedExpr::SizeofExpr { operand, .. } => operand.get_type().size_in_bytes()? as i64,
         TypedExpr::SizeofType { target_type, .. } => target_type.size_in_bytes()? as i64,
         TypedExpr::Conditional { condition, then_expr, else_expr, .. } => {

@@ -6,6 +6,88 @@ mod tests {
     use crate::ir::{Value, IrType};
     use crate::typed_ast::type_translation_unit;
     use crate::codegen::TypedCodeGenerator;
+
+    #[test]
+    fn floating_constants_cast_to_static_integer_values() {
+        let module = Frontend::compile_to_ir(r#"
+            long triangle = (long)(-.867 * 65536L);
+            long initial_scale = (long)(.2 * 65536L);
+            long rounded = (long)(-16777216.0f + 16777217L);
+            unsigned long high = (unsigned long)(2147483648.0 + 256.0);
+            long negative = (long)-2147483648.0;
+            int truncated = (int)(-7.75 / 2.0);
+            float gain = 1.0f + .5f;
+            double offset = -3.5;
+        "#, "float_static").unwrap();
+        for (name, expected) in [
+            ("triangle", -56819), ("initial_scale", 13107), ("rounded", 0),
+            ("high", 2147483904), ("negative", -2147483648), ("truncated", -3),
+            ("gain", 1.5f32.to_bits() as i64), ("offset", (-3.5f64).to_bits() as i64),
+        ] {
+            let global = module.globals.iter().find(|global| global.name == name).unwrap();
+            assert!(matches!(global.initializer, Some(Value::Constant(value)) if value == expected), "{name}: {:?}", global.initializer);
+        }
+    }
+
+    #[test]
+    fn function_parameters_do_not_erase_global_array_bindings() {
+        Frontend::compile_to_ir(r#"
+            struct Item { int width; };
+            struct Item *p[2];
+            int hide(int p) { int first = p, second = first + 1; return second; }
+            int read(void) { return p[0]->width; }
+            unsigned long address(void) { return (unsigned long)p; }
+            void callback(int value) {}
+            void call(void *routine) { ((void (*)(int))routine)(42); }
+            void invoke(void) { call(callback); }
+        "#, "name_scopes").unwrap();
+    }
+
+    #[test]
+    fn static_locals_become_distinct_internal_globals() {
+        let module = Frontend::compile_to_ir(r#"
+            struct Node { long value; struct Node *next; };
+            long first(void) { static long count = 10; return ++count; }
+            long second(void) { static long count; return ++count; }
+            struct Node *list(void) {
+                static struct Node head = {7L, &head};
+                static struct Node *saved = &head;
+                return saved;
+            }
+        "#, "static_locals").unwrap();
+        assert_eq!(module.globals.len(), 4);
+        assert!(module.globals.iter().all(|g| g.linkage == crate::ir::Linkage::Internal));
+        let names: std::collections::HashSet<_> = module.globals.iter().map(|g| &g.name).collect();
+        assert_eq!(names.len(), 4);
+        let head = module.globals.iter().find(|g| g.name.ends_with("_head")).unwrap();
+        let saved = module.globals.iter().find(|g| g.name.ends_with("_saved")).unwrap();
+        assert!(matches!(&saved.initializer, Some(Value::FatPtr(pointer))
+            if matches!(pointer.addr.as_ref(), Value::Global(name) if name == &head.name)));
+        assert!(module.functions.iter().all(|f| f.blocks.iter().all(|b|
+            b.instructions.iter().all(|instruction| !matches!(instruction,
+                crate::ir::Instruction::Alloca { .. })))));
+    }
+
+    #[test]
+    fn block_externs_refer_to_global_storage() {
+        let module = Frontend::compile_to_ir(r#"
+            int shared = 4;
+            int update(void) {
+                extern int shared;
+                extern int entries[];
+                shared++;
+                entries[2] = shared;
+                return shared;
+            }
+            int entries[3];
+        "#, "block_externs").unwrap();
+        assert_eq!(module.globals.len(), 2);
+        assert!(module.functions[0].blocks.iter().all(|b| b.instructions.iter().all(|instruction|
+            !matches!(instruction, crate::ir::Instruction::Alloca { .. }))));
+        let entries = module.globals.iter().find(|g| g.name == "entries").unwrap();
+        assert_eq!(entries.var_type.size_in_words(), Some(3));
+        assert_eq!(entries.linkage, crate::ir::Linkage::External);
+    }
     
     #[test]
     fn test_global_variable_codegen() {

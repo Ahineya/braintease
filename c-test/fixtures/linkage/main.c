@@ -8,7 +8,10 @@ extern callback_t remote_callback;
 extern int remote(int);
 extern int first_static(void);
 extern int second_static(void);
+extern int first_local(void);
+extern int second_local(void);
 extern int callbacks(void);
+extern int address_constants(void);
 extern callback_t get_callback(void);
 extern int invoke(callback_t, int);
 
@@ -30,9 +33,13 @@ int main(void) {
     if (result) return result;
     result = callbacks();
     if (result) return result;
+    result = address_constants();
+    if (result) return result;
     fp = get_callback();
     if ((*fp)(8) != 11) return 20;
     if (invoke(remote, 2) != 44) return 21;
     if (remote_callback(3) != 45) return 22;
+    if (first_local() != 31 || second_local() != 71) return 23;
+    if (first_local() != 32 || second_local() != 72) return 24;
     return 0;
 }

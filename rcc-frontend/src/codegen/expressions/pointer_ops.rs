@@ -2,9 +2,9 @@
 
 use super::{TypedExpressionGenerator, convert_type_default};
 use crate::ast::BinaryOp;
-use crate::ir::{IrBinaryOp, IrUnaryOp, IrType, Value};
+use crate::ir::{FatPointer, IrBinaryOp, IrUnaryOp, IrType, Value};
 use crate::typed_ast::TypedExpr;
-use crate::types::Type;
+use crate::types::{BankTag, Type};
 use crate::codegen::CodegenError;
 use crate::CompilerError;
 
@@ -108,7 +108,14 @@ pub fn generate_array_index(
     } else {
         let elem_ir_type = convert_type_default(elem_type)?;
         let result = gen.builder.build_load(elem_ptr, elem_ir_type)?;
-        Ok(Value::Temp(result))
+        if matches!(elem_type, Type::Pointer { .. }) {
+            Ok(Value::FatPtr(FatPointer {
+                addr: Box::new(Value::Temp(result)),
+                bank: BankTag::Mixed,
+            }))
+        } else {
+            Ok(Value::Temp(result))
+        }
     }
 }
 
@@ -125,7 +132,13 @@ pub fn generate_pointer_compound_assignment(
     let lhs_val = {
         let ir_type = convert_type_default(lhs.get_type())?;
         let temp = gen.builder.build_load(lhs_addr.clone(), ir_type)?;
-        Value::Temp(temp)
+        // A pointer load carries both runtime components. Preserve that value
+        // shape for GEP just as identifier loads and pointer increments do;
+        // the bank of the lvalue's storage is not the pointee's bank.
+        Value::FatPtr(FatPointer {
+            addr: Box::new(Value::Temp(temp)),
+            bank: BankTag::Mixed,
+        })
     };
     let raw_rhs = gen.generate(rhs)?;
     let rhs_val = widen_index(gen, raw_rhs, rhs.get_type())?;

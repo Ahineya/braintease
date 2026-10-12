@@ -63,13 +63,13 @@ pub fn generate_function(
     parameter_variables.clear();
     
     // Restore globals
-    for (k, v) in globals {
-        variables.insert(k, v);
+    for (k, v) in &globals {
+        variables.insert(k.clone(), v.clone());
     }
     
     // Restore global arrays
-    for name in global_arrays {
-        array_variables.insert(name);
+    for name in &global_arrays {
+        array_variables.insert(name.clone());
     }
     
     // Convert return type
@@ -129,6 +129,7 @@ pub fn generate_function(
             bank: Some(BankTag::Stack),
         };
         variables.insert(param_name.clone(), var_info);
+        array_variables.remove(param_name);
         parameter_variables.insert(param_name.clone());
     }
     
@@ -177,6 +178,14 @@ pub fn generate_function(
     if let Some(final_function) = builder.finish_function() {
         module.add_function(final_function);
     }
+
+    // Parameters and locals may hide file-scope objects. Restore their original
+    // bindings before generating the next top-level declaration or function.
+    variables.clear();
+    variables.extend(globals);
+    array_variables.clear();
+    array_variables.extend(global_arrays);
+    parameter_variables.clear();
     
     Ok(())
 }

@@ -1,0 +1,129 @@
+--- a/doomgeneric/d_loop.c
++++ b/doomgeneric/d_loop.c
+@@ -23,6 +23,7 @@
+ 
+ #include "d_event.h"
+ #include "d_loop.h"
++#include "doom_port.h"
+ #include "d_ticcmd.h"
+ 
+ #include "i_system.h"
+@@ -713,6 +714,10 @@
+     int	availabletics;
+     int	counts;
+ 
++    /* Exactly one host grant for each engine simulation step, including boot. */
++    Doom_NextTick();
++    singletics = true;
++
+     // get real tics
+     entertic = I_GetTime() / ticdup;
+     realtics = entertic - oldentertics;
+--- a/doomgeneric/d_main.c
++++ b/doomgeneric/d_main.c
+@@ -199,7 +199,7 @@
+     if (gamestate != wipegamestate)
+ 		{
+ 		wipe = true;
+-		wipe_StartScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
++		/* The initial port presents state changes immediately. */
+     }
+     else
+     	wipe = false;
+@@ -298,34 +298,10 @@
+     NetUpdate ();         // send out any new accumulation
+ 
+ 
+-    // normal update
+-    if (!wipe)
+-    {
+-	I_FinishUpdate ();              // page flip or blit buffer
+-	return;
+-    }
+-    
+-    // wipe update
+-    wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
+-
+-    wipestart = I_GetTime () - 1;
+-
+-    do
+-    {
+-	do
+-	{
+-	    nowtime = I_GetTime ();
+-	    tics = nowtime - wipestart;
+-            I_Sleep(1);
+-	} while (tics <= 0);
+-        
+-	wipestart = nowtime;
+-	done = wipe_ScreenWipe(wipe_Melt
+-			       , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
+-	I_UpdateNoBlit ();
+-	M_Drawer ();                            // menu is drawn even on top of wipes
+-	I_FinishUpdate ();                      // page flip or blit buffer
+-    } while (!done);
++    /* A blocking wall-clock melt cannot run on a host-granted logical clock.
++     * Keep the changed-state redraw above; present the completed frame once. */
++    I_FinishUpdate();
++
+ }
+ 
+ //
+--- a/doomgeneric/i_video.h
++++ b/doomgeneric/i_video.h
+@@ -139,10 +139,10 @@
+ void I_EndRead (void);
+ 
+ struct color {
+-    uint32_t b:8;
+-    uint32_t g:8;
+-    uint32_t r:8;
+-    uint32_t a:8;
++    byte b;
++    byte g;
++    byte r;
++    byte a;
+ };
+ 
+ 
+--- a/doomgeneric/m_misc.c
++++ b/doomgeneric/m_misc.c
+@@ -44,6 +44,7 @@
+ #include "i_system.h"
+ #include "i_video.h"
+ #include "m_misc.h"
++#include "doom_build_config.h"
+ #include "v_video.h"
+ #include "w_wad.h"
+ #include "z_zone.h"
+@@ -67,6 +68,7 @@
+ {
+     FILE *fstream;
+ 
++    if (strcmp(filename, DOOM_WAD_PATH) == 0 || strcmp(filename, "doom1.wad") == 0) return true;
+     fstream = fopen(filename, "r");
+ 
+     if (fstream != NULL)
+--- a/doomgeneric/doomtype.h
++++ b/doomgeneric/doomtype.h
+@@ -20,6 +20,8 @@
+ 
+ #ifndef __DOOMTYPE__
+ #define __DOOMTYPE__
++
++#include <stddef.h>
+ 
+ // #define macros to provide functions missing in Windows.
+ // Outside Windows, we use strings.h for str[n]casecmp.
+--- a/doomgeneric/d_net.c
++++ b/doomgeneric/d_net.c
+@@ -201,7 +201,8 @@
+ 
+     // Read checksums of our WAD directory and dehacked information
+ 
+-    W_Checksum(connect_data->wad_sha1sum);
++    /* Multiplayer is excluded from this first single-player port profile. */
++    memset(connect_data->wad_sha1sum, 0, sizeof(connect_data->wad_sha1sum));
+ 
+ #if ORIGCODE
+     DEH_Checksum(connect_data->deh_sha1sum);

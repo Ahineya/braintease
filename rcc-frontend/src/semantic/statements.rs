@@ -149,6 +149,7 @@ impl StatementAnalyzer {
                     
                     // Check return type compatibility with typedef awareness
                     if let Some(expected_return_type) = &self.current_function {
+                        analyzer.type_analyzer.borrow().convert_null_pointer_constant(expected_return_type, expr);
                         if let Some(expr_type) = &expr.expr_type {
                             // Use typedef-aware type compatibility checking
                             if !analyzer.type_analyzer.borrow().is_assignable(expected_return_type, expr_type) {
@@ -288,9 +289,7 @@ impl StatementAnalyzer {
         self.expression_analyzer.borrow().type_analyzer.borrow().symbol_types.borrow_mut().insert(symbol_id, decl.decl_type.clone());
         
         // Analyze initializer if present
-        if let Some(initializer) = &mut decl.initializer {
-            self.initializer_analyzer.borrow().analyze(initializer, &decl.decl_type)?;
-        }
+        self.initializer_analyzer.borrow().analyze_declaration(decl)?;
         
         Ok(())
     }

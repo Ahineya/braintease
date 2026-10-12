@@ -1,0 +1,5 @@
+{
+  "description": "Enum constants and arithmetic in global, local, struct, and pointer-to-array bounds with block shadowing",
+  "use_runtime": true,
+  "expected": "YYYYYY\n"
+}

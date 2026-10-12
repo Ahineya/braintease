@@ -1,0 +1,236 @@
+--- a/doomgeneric/doomtype.h
++++ b/doomgeneric/doomtype.h
+@@ -80,7 +80,8 @@
+ 
+ #endif
+ 
+-typedef uint8_t byte;
++/* Ripple C bytes are cells. Doom byte values remain constrained to 0..255. */
++typedef unsigned char byte;
+ 
+ #include <limits.h>
+ 
+--- a/doomgeneric/m_fixed.h
++++ b/doomgeneric/m_fixed.h
+@@ -20,6 +20,8 @@
+ #ifndef __M_FIXED__
+ #define __M_FIXED__
+ 
++#include <stdint.h>
++
+ 
+ 
+ 
+@@ -27,9 +29,9 @@
+ // Fixed point, 32bit as 16.16.
+ //
+ #define FRACBITS		16
+-#define FRACUNIT		(1<<FRACBITS)
++#define FRACUNIT		INT32_C(65536)
+ 
+-typedef int fixed_t;
++typedef int32_t fixed_t;
+ 
+ fixed_t FixedMul	(fixed_t a, fixed_t b);
+ fixed_t FixedDiv	(fixed_t a, fixed_t b);
+--- a/doomgeneric/m_fixed.c
++++ b/doomgeneric/m_fixed.c
+@@ -18,45 +18,39 @@
+ 
+ 
+ 
+-#include "stdlib.h"
+-
+ #include "doomtype.h"
+-#include "i_system.h"
+-
+ #include "m_fixed.h"
+ 
+-
+-
+-
+-// Fixme. __USE_C_FIXED__ or something.
+-
+-fixed_t
+-FixedMul
+-( fixed_t	a,
+-  fixed_t	b )
++/* Convert modulo-2^32 bits without an out-of-range signed cast. */
++static int32_t SignedBits(uint32_t bits)
+ {
+-    return ((int64_t) a * (int64_t) b) >> FRACBITS;
++    if (bits <= (uint32_t) INT32_MAX)
++        return (int32_t) bits;
++    return -INT32_C(1) - (int32_t) (UINT32_MAX - bits);
+ }
+ 
++static uint32_t Magnitude(fixed_t value)
++{
++    uint32_t bits = (uint32_t) value;
++    return value < 0 ? UINT32_C(0) - bits : bits;
++}
+ 
+-
+-//
+-// FixedDiv, C version.
+-//
++fixed_t FixedMul(fixed_t a, fixed_t b)
++{
++    /* Signed multiplication fits in 64 bits. Unsigned shifting then narrowing
++     * preserves vanilla's low 32 result bits, including negative products. */
++    int64_t product = (int64_t) a * (int64_t) b;
++    uint32_t bits = (uint32_t) ((uint64_t) product >> FRACBITS);
++    return SignedBits(bits);
++}
+ 
+ fixed_t FixedDiv(fixed_t a, fixed_t b)
+ {
+-    if ((abs(a) >> 14) >= abs(b))
+-    {
+-	return (a^b) < 0 ? INT_MIN : INT_MAX;
+-    }
+-    else
+-    {
+-	int64_t result;
++    /* Keep Doom's conservative overflow guard, including divide-by-zero
++     * saturation. Unsigned magnitude also defines the INT32_MIN case. */
++    if ((Magnitude(a) >> 14) >= Magnitude(b))
++        return (a < 0) != (b < 0) ? INT32_MIN : INT32_MAX;
+ 
+-	result = ((int64_t) a << 16) / b;
+-
+-	return (fixed_t) result;
+-    }
++    /* Multiplication avoids undefined left shifts of negative operands. */
++    return (fixed_t) (((int64_t) a * INT64_C(65536)) / (int64_t) b);
+ }
+-
+--- a/doomgeneric/tables.h
++++ b/doomgeneric/tables.h
+@@ -46,25 +46,33 @@
+ #define ANGLETOFINESHIFT	19		
+ 
+ // Effective size is 10240.
++#ifdef DOOM_GENERATED_TABLES
++extern const fixed_t *finesine;
++#else
+ extern const fixed_t finesine[5*FINEANGLES/4];
++#endif
+ 
+ // Re-use data, is just PI/2 pahse shift.
+ extern const fixed_t *finecosine;
+ 
+ 
+ // Effective size is 4096.
++#ifdef DOOM_GENERATED_TABLES
++extern const fixed_t *finetangent;
++#else
+ extern const fixed_t finetangent[FINEANGLES/2];
++#endif
+ 
+ // Gamma correction tables.
+ extern const byte gammatable[5][256];
+ 
+ // Binary Angle Measument, BAM.
+ 
+-#define ANG45           0x20000000
+-#define ANG90           0x40000000
+-#define ANG180          0x80000000
+-#define ANG270          0xc0000000
+-#define ANG_MAX         0xffffffff
++#define ANG45           UINT32_C(0x20000000)
++#define ANG90           UINT32_C(0x40000000)
++#define ANG180          UINT32_C(0x80000000)
++#define ANG270          UINT32_C(0xc0000000)
++#define ANG_MAX         UINT32_C(0xffffffff)
+ 
+ #define ANG1            (ANG45 / 45)
+ #define ANG60           (ANG180 / 3)
+@@ -72,24 +80,31 @@
+ // Heretic code uses this definition as though it represents one 
+ // degree, but it is not!  This is actually ~1.40 degrees.
+ 
+-#define ANG1_X          0x01000000
++#define ANG1_X          UINT32_C(0x01000000)
+ 
+ #define SLOPERANGE		2048
+ #define SLOPEBITS		11
+ #define DBITS			(FRACBITS-SLOPEBITS)
+ 
+-typedef unsigned angle_t;
++typedef uint32_t angle_t;
+ 
+ 
+ // Effective size is 2049;
+ // The +1 size is to handle the case when x==y
+ //  without additional checking.
++#ifdef DOOM_GENERATED_TABLES
++extern const angle_t *tantoangle;
++/* Generated helpers initialize heap tables without a bank-sized initializer. */
++int Doom_InitTables(void);
++void Doom_FreeTables(void);
++#else
+ extern const angle_t tantoangle[SLOPERANGE+1];
++#endif
+ 
+ 
+ // Utility function,
+ //  called by R_PointToAngle.
+-int SlopeDiv(unsigned int num, unsigned int den);
++int SlopeDiv(uint32_t num, uint32_t den);
+ 
+ 
+ #endif
+--- a/doomgeneric/tables.c
++++ b/doomgeneric/tables.c
+@@ -38,9 +38,9 @@
+ // which is looked up in the tantoangle[] table.  The +1 size is to handle
+ // the case when x==y without additional checking.
+ 
+-int SlopeDiv(unsigned int num, unsigned int den)
++int SlopeDiv(uint32_t num, uint32_t den)
+ {
+-    unsigned ans;
++    uint32_t ans;
+     
+     if (den < 512)
+     {
+@@ -52,7 +52,7 @@
+ 
+         if (ans <= SLOPERANGE)
+         {
+-            return ans;
++            return (int) ans;
+         }
+         else
+         {
+@@ -61,7 +61,10 @@
+     }
+ }
+ 
+-const int finetangent[4096] =
++/* Keep the canonical literals available to the generator and native oracle.
++ * Ripple builds use heap tables populated by bounded generated functions. */
++#ifndef DOOM_GENERATED_TABLES
++const fixed_t finetangent[4096] =
+ {
+     -170910304,-56965752,-34178904,-24413316,-18988036,-15535599,-13145455,-11392683,
+     -10052327,-8994149,-8137527,-7429880,-6835455,-6329090,-5892567,-5512368,
+@@ -578,7 +581,7 @@
+ };
+ 
+ 
+-const int finesine[10240] =
++const fixed_t finesine[10240] =
+ {
+     25,75,125,175,226,276,326,376,
+     427,477,527,578,628,678,728,779,
+@@ -2126,6 +2129,8 @@
+ };
+ 
+ // Now where did these came from?
++#endif /* !DOOM_GENERATED_TABLES */
++
+ const byte gammatable[5][256] =
+ {
+     {

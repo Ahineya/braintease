@@ -17,6 +17,8 @@ pub struct TypedAsmOperand {
 /// Typed statement - produced by semantic analysis
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TypedStmt {
+    /// Comma-separated declarators in the current lexical scope.
+    DeclarationGroup(Vec<TypedStmt>),
     /// Expression statement
     Expression(TypedExpr),
     
@@ -29,6 +31,7 @@ pub enum TypedStmt {
         decl_type: Type,
         initializer: Option<TypedExpr>,
         symbol_id: Option<SymbolId>,
+        storage_class: crate::StorageClass,
     },
     
     /// If statement

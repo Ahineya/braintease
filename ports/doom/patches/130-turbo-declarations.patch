@@ -1,0 +1,13 @@
+--- a/doomgeneric/d_main.c
++++ b/doomgeneric/d_main.c
+@@ -1333,8 +1333,8 @@
+     if ( (p=M_CheckParm ("-turbo")) )
+     {
+ 	int     scale = 200;
+-	extern int forwardmove[2];
+-	extern int sidemove[2];
++	extern fixed_t forwardmove[2];
++	extern fixed_t sidemove[2];
+ 	
+ 	if (p<myargc-1)
+ 	    scale = atoi (myargv[p+1]);

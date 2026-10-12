@@ -1,0 +1,5 @@
+{
+  "description": "Fold floating arithmetic into integer static initializers with truncation and binary32 intermediate rounding",
+  "use_runtime": true,
+  "expected": "YYYYY\n"
+}

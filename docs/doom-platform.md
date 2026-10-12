@@ -174,16 +174,155 @@ presentation boundaries. The first milestone can stop after one frame; it need
 not offer playable speed. Device handling must remain outside guest CPU
 instruction semantics so that the port's platform adapter can be reused.
 
-## Source import and first port milestone
+## Pinned source checkouts
 
-Keep imported upstream code separate from the Ripple platform adapter, pin its
-source revision, and retain its license. Use doomgeneric as the main integration
-candidate and a 16-bit Doom port as a reference for integer widths and memory
-organization. Importing a reference does not require adopting its hardware layer.
+The source imports are present locally and ignored by the parent repository:
 
-Before enabling gameplay, establish a reproducible build, WAD octet-reading
-helpers, explicit 16/32-bit game types, a memory budget for globals and the zone
-allocator, and a deterministic first rendered frame. Existing compiler tests
-reduce risk but cannot establish that an uncompiled upstream codebase is fully
-supported. Resolve compiler or runtime gaps exposed by the actual source in
-small regression-backed changes.
+| Source | Checkout | Pinned revision | Intended use |
+| --- | --- | --- | --- |
+| [ozkl/doomgeneric](https://github.com/ozkl/doomgeneric) | `vendor/doomgeneric` | `e257a09527062bfb986b6e5e0780839b6cbd5b71` | Main port candidate |
+| [FrenkelS/Doom8088](https://github.com/FrenkelS/Doom8088) | `vendor/doom8088` | `b3073a2eb2811cd14caba6549694fc3bfcd6dd29` | 16-bit implementation reference |
+
+The tracked [`vendor/doom-sources.json`](../vendor/doom-sources.json) is the source
+lock. Recreate missing checkouts with `scripts/fetch-doom-sources.py`; verify
+existing copies without network access with `scripts/fetch-doom-sources.py --check`.
+The helper fetches exact commits, preserves upstream license files, and refuses
+to overwrite a dirty checkout or a checkout at another revision. It never pulls
+a moving branch into an existing source tree.
+
+Keep these imports pristine. Adapter files, build rules and ordered
+patches live in the tracked [`ports/doom/`](../ports/doom/README.md) directory; create the patched working
+source under an ignored build directory. Do not leave the only copy of a port
+change inside ignored vendor sources. WAD assets are separate from source
+fetching; use the existing local shareware WAD as the first fixture and record
+its hash. No additional game data is downloaded by the fetch helper.
+
+## Recommended port scope
+
+Use Doomgeneric as the main base. Doom8088 still assumes 8-bit C bytes, uses DOS
+segment/EMS/XMS mechanisms, requires a transformed IWAD, and removes features
+such as textured floors/ceilings and diminishing lighting. Those compromises
+are not necessary consequences of Ripple's 16-bit instruction set. Borrow its
+explicit-width arithmetic and selected memory optimizations only after testing
+that they preserve the behavior we want. See its [README](../vendor/doom8088/README.md)
+and [allocator](../vendor/doom8088/z_zone.c).
+
+The first playable scope should be shareware E1M1, 320×200 RGB565, single player,
+keyboard input, and silent audio stubs. Initially defer save/load, networking,
+PWADs, mouse support and melt wipes. These are staged omissions, not a decision
+to remove full Doom's rendering or simulation features. Keep the current CPU
+ISA and 16-bit C-byte model. The existing cross-bank pointers and software
+32-bit arithmetic are the starting point; no VM extender is proposed.
+
+## Findings that determine the order
+
+The following audit established the porting order. Implementation, launch
+commands and milestone checks now live in [the port guide](../ports/doom/README.md).
+These findings describe the constraints behind that work; the milestone tests
+are the source of evidence about what has passed.
+
+- **Widths and serialized data:** Doomgeneric uses `int` for `fixed_t`, sizes,
+  offsets, time and some flags. `FRACUNIT` is `1 << 16`; changing one typedef
+  does not repair intermediate expressions, `abs`, limits or format strings.
+  Our target has no exact-width `uint8_t`. Use a port-local octet representation
+  with values constrained to 0..255 and explicit little-endian decoding. Audit
+  WAD headers/directories, map records, texture definitions, patches, palettes,
+  blockmaps and demo records. Disk record sizes must be constants in octets,
+  never target `sizeof(struct)`. Entry points include
+  [m_fixed.h](../vendor/doomgeneric/doomgeneric/m_fixed.h),
+  [w_wad.c](../vendor/doomgeneric/doomgeneric/w_wad.c), and
+  [p_setup.c](../vendor/doomgeneric/doomgeneric/p_setup.c).
+- **Global and initialization limits:** The linker currently requires all globals
+  together to fit one 64,000-cell GP bank. At 320 pixels, `visplanes[128]` alone
+  exceeds that; move large mutable arrays to the bank-spanning heap. Large
+  initialized tables also become executable stores: a correctly widened
+  `finesine[10240]` needs roughly 81,920 initialization instructions, beyond one
+  function's code bank. Measure these before full linking. Prefer explicit heap
+  allocation and a build-generated, bounded table-initialization/loading path;
+  evaluate any generally useful compiler data-emission change as a separate,
+  regression-tested task. Relevant code:
+  [r_plane.c](../vendor/doomgeneric/doomgeneric/r_plane.c),
+  [tables.c](../vendor/doomgeneric/doomgeneric/tables.c),
+  [globals.rs](../rcc-backend/src/globals.rs), and
+  [linker.rs](../src/ripple-asm/src/linker.rs).
+- **Heap and stack:** Widen zone sizes and arithmetic. Specify the arena in C
+  cells and derive host memory allocation separately. Ripple malloc can use
+  banks 5..255; enabling that entire range requires at least 256 banks of VM
+  memory (16,384,000 cells at bank size 64,000). A smaller test memory allocation
+  needs a correspondingly bounded arena. Keep large local arrays off the
+  single stack bank and report stack/frame limits with the memory budget.
+- **Time and startup:** `doomgeneric_Create()` enters engine startup, which
+  already runs tics before returning. `I_GetTime()` must return the VM's logical
+  tick directly: tick 1 gives 28 ms, but converting that back yields tic 0.
+  Adapt startup and the game loop to one grant per simulation tic, and drain
+  the full input batch at that boundary. Wipe loops currently wait internally;
+  disable them initially, then restore them as nonblocking tick-driven state.
+  Clock reads must remain pure. See
+  [d_main.c](../vendor/doomgeneric/doomgeneric/d_main.c),
+  [d_loop.c](../vendor/doomgeneric/doomgeneric/d_loop.c),
+  [i_timer.c](../vendor/doomgeneric/doomgeneric/i_timer.c), and
+  [i_input.c](../vendor/doomgeneric/doomgeneric/i_input.c).
+- **Video and host APIs:** Retain indexed-color rendering and convert the palette
+  into a typed RGB565 buffer. Existing byte-pointer increments of two/four per
+  pixel and hardcoded allocation `width * height * 4` do not match our C model.
+  Use checked wide cell counts. Implement a small read-only WAD storage backend
+  and the utility functions actually needed by the selected engine build;
+  avoid making full filesystem support a prerequisite for the first frame.
+
+## Proposed milestones and acceptance gates
+
+Complete and keep each gate green before expanding to the next. A compiler or
+runtime bug discovered along the way gets a minimal regression before engine
+work continues. Existing `scripts/test-visual-smoke.sh` remains the platform
+regression suite throughout.
+
+| Milestone | Runnable deliverable | Automated acceptance | Manual acceptance |
+| --- | --- | --- | --- |
+| 1. Port foundation and reference | Tracked patch/build layout, native host reference, and a Ripple diagnostic binary using actual engine primitives | Width/literal audit; FixedMul/FixedDiv/SlopeDiv vectors and table endpoints against host results; module compile inventory; global, function/initializer and stack-size report; representative large table links within limits | Run the diagnostic and inspect its WAD identity, size units, memory budget and feature summary; launch the native reference |
+| 2. WAD, zone and asset path | Engine-backed resource diagnostic/viewer using the new storage and decoding layer | WAD directory/lump checksums against an independent host reader; decoded map/texture/patch fields; bounds/truncation rejection; zone allocate/free/cache reload across banks | View the palette, full-size TITLEPIC, a texture and a sprite through the new loaders |
+| 3. Real engine title and menu | Doomgeneric boots through D_DoomMain on the Rust VM with the explicit tic driver | Deterministic title/menu snapshots; exact logical ticks 1, 2 and 35; no hidden startup grants or clock polling deadlocks; scripted press/release batches; complete engine link with measured memory use | Navigate the real menu with Escape/arrows/Enter; verify releases and held keys |
+| 4. First real world frame | E1M1 loads and renders a frozen, known starting view at a specified game tic, initially with monsters disabled | Map counts/start position match reference; GS_LEVEL reached; real R_RenderPlayerView completes; RGB565 frame and canonical camera/world checkpoint match native reference | Inspect walls, textured floor/ceiling, lighting, weapon, sprites and status bar side by side |
+| 5. Deterministic world progression | Short scripted walkthrough driven by logical ticks | Turn, move, collide with a wall, use a door, fire and collect a pickup; compare player/world state and selected frames; identical results under stepped and unthrottled scheduling | Watch the replay, then perform the same actions with keyboard input |
+| 6. Playable Rust slice | Keyboard-controlled E1M1 with enemies, combat, death/restart and level exit | Longer replay and repeated map loads; no memory growth; paced/unthrottled state equivalence; measured instruction cost, peak memory and achieved tic/frame rates | Play a complete short session, pause/use menus, die/restart and exit the level; assess responsiveness |
+| 7. Broaden and optimize | Additional Episode 1 levels and a supported-feature list | Level/asset corpus; transition and nonblocking wipe tests; performance/memory budgets set from measurements; every optimization preserves replay and frame results | Play several maps and transitions; verify any newly enabled features such as saves or audio separately |
+
+The first world-frame milestone is the first major port achievement. TITLEPIC
+and the menu are valuable checkpoints, but their captures must not accidentally
+satisfy the level-rendering gate. A normal title/menu boot already initializes
+many renderer and asset subsystems, so the resource viewer provides useful
+partial deliverables while those are being integrated.
+
+For now, performance is measured rather than promised. Keep simulation at 35
+logical tics per game second; if Rust cannot sustain 35 wall-clock tics per
+second, profile before choosing optimizations or a lower display resolution.
+Rendering may later run less frequently than simulation without changing the
+recorded game-tic sequence.
+
+## Test artifacts and reference policy
+
+Every milestone should provide one automatic runner and one documented manual
+launcher. Their exact commands are to be added with that milestone; the current
+fetch and device smoke commands above already exist.
+
+Store a compact bundle with the upstream revisions, patch identity, compiler
+and binary identity, WAD hash, seed, resolution, clock policy, memory budget,
+engine phase, map, skill, game tic, and presentation number. Include the PNG,
+canonical raw RGB565 pixels, JSON result, and expected/actual/difference images
+on mismatch. Frame number alone cannot identify a gameplay milestone because
+startup, menus and wipes may all present frames first.
+
+Build the native reference from the same pinned engine and relevant portability
+patches, with the same deterministic scheduler, input script and RGB565
+conversion. Compare logical state field by field (position, angle, health,
+ammo, RNG index and selected world entities), not raw structures or pointer
+addresses, since host and target layouts differ. Use an independent host WAD
+reader to check serialization separately. Do not accept a new golden image
+merely because a test failed; establish why the image changed and inspect it.
+
+## Later Brainfuck gate
+
+BF execution remains outside the Rust port milestones. Once a real level frame
+works in Rust, the separate BF feasibility gate must cover both the device host
+adapter and the linker's existing multi-code-bank export restriction (see
+[linker_main.rs](../src/ripple-asm/src/linker_main.rs)). Only then attempt a
+bounded first-level-frame run. Playable BF speed is not an acceptance criterion.

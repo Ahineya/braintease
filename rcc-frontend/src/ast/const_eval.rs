@@ -1,8 +1,7 @@
 //! Integer constant expressions (C99 6.6).
 //!
 //! Used for case labels, array sizes, enum values, and designator indices.
-//! Identifiers (including enum constants) are not folded here; those need
-//! semantic analysis.
+//! Callers may supply visible enumeration constants when folding during parsing.
 
 use super::{BinaryOp, Expression, ExpressionKind, UnaryOp};
 
@@ -10,15 +9,25 @@ use super::{BinaryOp, Expression, ExpressionKind, UnaryOp};
 pub struct ConstEvalError(pub String);
 
 pub fn eval_integer_constant(expr: &Expression) -> Result<i64, ConstEvalError> {
+    eval_integer_constant_with(expr, &|_| None)
+}
+
+pub fn eval_integer_constant_with(
+    expr: &Expression,
+    lookup: &impl Fn(&str) -> Option<i64>,
+) -> Result<i64, ConstEvalError> {
     match &expr.kind {
         ExpressionKind::IntLiteral { value, .. } => Ok(*value),
+        ExpressionKind::Identifier { name, .. } => lookup(name).ok_or_else(|| {
+            ConstEvalError(format!("'{name}' is not an integer constant"))
+        }),
         ExpressionKind::CharLiteral(v) => Ok(*v as i64),
         ExpressionKind::SizeofType(ty) => ty
             .size_in_bytes()
             .map(|s| s as i64)
             .ok_or_else(|| ConstEvalError("sizeof of incomplete type is not a constant".to_string())),
         ExpressionKind::Unary { op, operand } => {
-            let v = eval_integer_constant(operand)?;
+            let v = eval_integer_constant_with(operand, lookup)?;
             match op {
                 UnaryOp::Plus => Ok(v),
                 UnaryOp::Minus => Ok(v.wrapping_neg()),
@@ -29,21 +38,21 @@ pub fn eval_integer_constant(expr: &Expression) -> Result<i64, ConstEvalError> {
                 )),
             }
         }
-        ExpressionKind::Cast { operand, .. } => eval_integer_constant(operand),
+        ExpressionKind::Cast { operand, .. } => eval_integer_constant_with(operand, lookup),
         ExpressionKind::Conditional {
             condition,
             then_expr,
             else_expr,
         } => {
             // Both arms must be ICEs even if unused.
-            let c = eval_integer_constant(condition)?;
-            let t = eval_integer_constant(then_expr)?;
-            let e = eval_integer_constant(else_expr)?;
+            let c = eval_integer_constant_with(condition, lookup)?;
+            let t = eval_integer_constant_with(then_expr, lookup)?;
+            let e = eval_integer_constant_with(else_expr, lookup)?;
             Ok(if c != 0 { t } else { e })
         }
         ExpressionKind::Binary { op, left, right } => {
-            let l = eval_integer_constant(left)?;
-            let r = eval_integer_constant(right)?;
+            let l = eval_integer_constant_with(left, lookup)?;
+            let r = eval_integer_constant_with(right, lookup)?;
             match op {
                 BinaryOp::Add => Ok(l.wrapping_add(r)),
                 BinaryOp::Sub => Ok(l.wrapping_sub(r)),

@@ -1341,10 +1341,10 @@ L_text40_puts_24:
     ADD T3, SB, R0
     LI T2, -1536
     ADDI T4, T4, 1
-    BNE T4, T2, L_i32_memory_next_word_d57dd5dd_24_0
+    BNE T4, T2, L_i32_memory_next_word_b4329be16b824d80aef3cfa152595c0f_24_0
     LI T4, 0
     ADDI T3, T3, 1
-L_i32_memory_next_word_d57dd5dd_24_0:
+L_i32_memory_next_word_b4329be16b824d80aef3cfa152595c0f_24_0:
     STORE S0, T3, T4
     ADD T1, FP, R0
     ADDI T1, T1, 4
@@ -1401,10 +1401,10 @@ L_text40_puts_25:
     ADD S1, SB, R0
     LI S0, -1536
     ADDI T6, T6, 1
-    BNE T6, S0, L_i32_memory_next_word_d57dd5dd_24_1
+    BNE T6, S0, L_i32_memory_next_word_b4329be16b824d80aef3cfa152595c0f_24_1
     LI T6, 0
     ADDI S1, S1, 1
-L_i32_memory_next_word_d57dd5dd_24_1:
+L_i32_memory_next_word_b4329be16b824d80aef3cfa152595c0f_24_1:
     LOAD T5, S1, T6
 ; Bank value in T5 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
@@ -1421,31 +1421,31 @@ L_i32_memory_next_word_d57dd5dd_24_1:
     ADD T2, T0, R0
     ADD T6, T1, R0
     LI S0, -1
-    BEQ T5, S0, L_bc_208d0c4e_use_global
-    LI T4, -2
-    BEQ T5, T4, L_bc_208d0c4e_use_stack
+    BEQ T5, S0, L_bc_b4329be16b824d80aef3cfa152595c0f_24_2_use_global
+    LI S0, -2
+    BEQ T5, S0, L_bc_b4329be16b824d80aef3cfa152595c0f_24_2_use_stack
     ADD S1, T5, R0
-    BEQ R0, R0, L_bc_208d0c4e_done
-L_bc_208d0c4e_use_global:
+    BEQ R0, R0, L_bc_b4329be16b824d80aef3cfa152595c0f_24_2_done
+L_bc_b4329be16b824d80aef3cfa152595c0f_24_2_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_208d0c4e_done
-L_bc_208d0c4e_use_stack:
+    BEQ R0, R0, L_bc_b4329be16b824d80aef3cfa152595c0f_24_2_done
+L_bc_b4329be16b824d80aef3cfa152595c0f_24_2_use_stack:
     ADD S1, SB, R0
-L_bc_208d0c4e_done:
-    ADD S0, S2, R0
-    ADD T4, S1, R0
+L_bc_b4329be16b824d80aef3cfa152595c0f_24_2_done:
+    ADD T4, S2, R0
+    ADD S0, S1, R0
     LI T3, -3
-    BNE T4, T3, L_i32_pointer_nonnull_d57dd5dd_24_2
-    LI S0, 0
+    BNE S0, T3, L_i32_pointer_nonnull_b4329be16b824d80aef3cfa152595c0f_24_3
     LI T4, 0
-L_i32_pointer_nonnull_d57dd5dd_24_2:
-    ADD S3, S0, R0
+    LI S0, 0
+L_i32_pointer_nonnull_b4329be16b824d80aef3cfa152595c0f_24_3:
+    ADD S3, T4, R0
     LI T7, 0
 ; Spill t12 to slot 6
     ADD SC, FP, R0
     ADDI SC, SC, 22
     STORE T0, SB, SC
-    ADD T0, T4, R0
+    ADD T0, S0, R0
 ; Spill i32_sext_24_f24_op26 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 23
@@ -1478,21 +1478,21 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     ADDI SC, SC, 29
     STORE S1, SB, SC
     LI S1, 255
-; Spill pointer_addr_copy_24_f24_op31 to slot 14
+; Spill pointer_addr_copy_24_f24_op30 to slot 14
     ADD SC, FP, R0
     ADDI SC, SC, 30
-    STORE S0, SB, SC
-    LI S0, 8
-; Spill pointer_bank_copy_24_f24_op32 to slot 15
+    STORE T4, SB, SC
+    LI T4, 8
+; Spill pointer_bank_copy_24_f24_op31 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 31
-    STORE T4, SB, SC
-    AND T4, T0, S1
-; Spill pointer_null_tag_24_f24_op33 to slot 16
+    STORE S0, SB, SC
+    AND S0, T0, S1
+; Spill pointer_null_tag_24_f24_op32 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 32
     STORE T3, SB, SC
-    SRL T3, T0, S0
+    SRL T3, T0, T4
 ; Spill t4294967293 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 33
@@ -1502,117 +1502,117 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE T7, SB, SC
-    SRL T7, T2, S0
-; Spill mul_a0_24_f24_op40 to slot 19
+    SRL T7, T2, T4
+; Spill mul_a0_24_f24_op39 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 35
-    STORE T4, SB, SC
-; Spill mul_a1_24_f24_op41 to slot 20
+    STORE S0, SB, SC
+; Spill mul_a1_24_f24_op40 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T3, SB, SC
-; Reload mul_a0_24_f24_op40 from slot 19
+; Reload mul_a0_24_f24_op39 from slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 35
     LOAD T3, SB, SC
-    MUL T4, T3, S3
-; Spill mul_mask_24_f24_op38 to slot 21
+    MUL S0, T3, S3
+; Spill mul_mask_24_f24_op37 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 37
     STORE S1, SB, SC
     MUL S1, T3, T7
-; Spill mul_sh8_24_f24_op39 to slot 22
+; Spill mul_sh8_24_f24_op38 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 38
-    STORE S0, SB, SC
-; Spill mul_p00_24_f24_op44 to slot 23
+    STORE T4, SB, SC
+; Spill mul_p00_24_f24_op43 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    STORE T4, SB, SC
-; Reload mul_a1_24_f24_op41 from slot 20
+    STORE S0, SB, SC
+; Reload mul_a1_24_f24_op40 from slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    LOAD T4, SB, SC
-    MUL S0, T4, S3
-    MUL T5, T4, T7
-; Spill mul_p01_24_f24_op45 to slot 24
+    LOAD S0, SB, SC
+    MUL T4, S0, S3
+    MUL T5, S0, T7
+; Spill mul_p01_24_f24_op44 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
-; Spill mul_a0_24_f24_op40 to slot 19
+; Spill mul_a0_24_f24_op39 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 35
     STORE T3, SB, SC
-; Reload mul_p01_24_f24_op45 from slot 24
+; Reload mul_p01_24_f24_op44 from slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
     LOAD T3, SB, SC
-    ADD S1, T3, S0
-; Spill mul_b0_24_f24_op42 to slot 25
+    ADD S1, T3, T4
+; Spill mul_b0_24_f24_op41 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE S3, SB, SC
     SLTU S3, S1, T3
-; Spill mul_a1_24_f24_op41 to slot 20
+; Spill mul_a1_24_f24_op40 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    STORE T4, SB, SC
-; Spill mul_b1_24_f24_op43 to slot 26
+    STORE S0, SB, SC
+; Spill mul_b1_24_f24_op42 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE T7, SB, SC
-; Reload mul_mask_24_f24_op38 from slot 21
+; Reload mul_mask_24_f24_op37 from slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 37
     LOAD T7, SB, SC
-    AND T4, S1, T7
-; Spill mul_p10_24_f24_op46 to slot 27
+    AND S0, S1, T7
+; Spill mul_p10_24_f24_op45 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 43
-    STORE S0, SB, SC
-; Reload mul_sh8_24_f24_op39 from slot 22
+    STORE T4, SB, SC
+; Reload mul_sh8_24_f24_op38 from slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 38
-    LOAD S0, SB, SC
-    SLL T4, T4, S0
-; Spill mul_midc_24_f24_op48 to slot 28
+    LOAD T4, SB, SC
+    SLL S0, S0, T4
+; Spill mul_midc_24_f24_op47 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 44
     STORE S3, SB, SC
-; Reload mul_p00_24_f24_op44 from slot 23
+; Reload mul_p00_24_f24_op43 from slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 39
     LOAD S3, SB, SC
-    ADD S2, S3, T4
-; Spill mul_p01_24_f24_op45 to slot 24
+    ADD S2, S3, S0
+; Spill mul_p01_24_f24_op44 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE T3, SB, SC
     SLTU T3, S2, S3
-    SRL S1, S1, S0
+    SRL S1, S1, T4
     ADD T5, T5, S1
-; Spill mul_mask_24_f24_op38 to slot 21
+; Spill mul_mask_24_f24_op37 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 37
     STORE T7, SB, SC
-; Reload mul_midc_24_f24_op48 from slot 28
+; Reload mul_midc_24_f24_op47 from slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 44
     LOAD T7, SB, SC
-    SLL T7, T7, S0
+    SLL T7, T7, T4
     ADD T5, T5, T7
     ADD T5, T5, T3
-; Spill mul_midlo_24_f24_op49 to slot 29
+; Spill mul_midlo_24_f24_op48 to slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 45
-    STORE T4, SB, SC
-    MUL T4, T0, T6
-; Spill mul_p00_24_f24_op44 to slot 23
+    STORE S0, SB, SC
+    MUL S0, T0, T6
+; Spill mul_p00_24_f24_op43 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 39
     STORE S3, SB, SC
     MUL S3, T1, T2
-    ADD T5, T5, T4
+    ADD T5, T5, S0
     ADD T5, T5, S3
 ; Spill t4294967292 to slot 30
     ADD SC, FP, R0
@@ -1630,15 +1630,15 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     ADD SC, FP, R0
     ADDI SC, SC, 34
     LOAD T1, SB, SC
-; Spill const_f24_op36_64000 to slot 32
+; Spill const_f24_op35_64000 to slot 32
     ADD SC, FP, R0
     ADDI SC, SC, 48
     STORE T2, SB, SC
-; Spill i32_const_hi_24_f24_op37 to slot 33
+; Spill i32_const_hi_24_f24_op36 to slot 33
     ADD SC, FP, R0
     ADDI SC, SC, 49
     STORE T6, SB, SC
-; Spill mul_mid_24_f24_op47 to slot 34
+; Spill mul_mid_24_f24_op46 to slot 34
     ADD SC, FP, R0
     ADDI SC, SC, 50
     STORE S1, SB, SC
@@ -1646,15 +1646,15 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     SLTU S1, T2, S2
     ADD T6, T5, T1
     ADD T6, T6, S1
-; Spill mul_sh8_24_f24_op39 to slot 22
+; Spill mul_sh8_24_f24_op38 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 38
-    STORE S0, SB, SC
+    STORE T4, SB, SC
 ; Reload t13 from slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
-    LOAD S0, SB, SC
-; Spill mul_midc_24_f24_op48 to slot 28
+    LOAD T4, SB, SC
+; Spill mul_midc_24_f24_op47 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 44
     STORE T7, SB, SC
@@ -1662,22 +1662,22 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     ADD SC, FP, R0
     ADDI SC, SC, 25
     LOAD T7, SB, SC
-; Spill mul_c_24_f24_op50 to slot 35
+; Spill mul_c_24_f24_op49 to slot 35
     ADD SC, FP, R0
     ADDI SC, SC, 51
     STORE T3, SB, SC
-; Spill mul32_x1_24_f24_op51 to slot 36
+; Spill mul32_x1_24_f24_op50 to slot 36
     ADD SC, FP, R0
     ADDI SC, SC, 52
-    STORE T4, SB, SC
-; Spill mul32_x2_24_f24_op52 to slot 37
+    STORE S0, SB, SC
+; Spill mul32_x2_24_f24_op51 to slot 37
     ADD SC, FP, R0
     ADDI SC, SC, 53
     STORE S3, SB, SC
-    ADD T3, T2, S0
+    ADD T3, T2, T4
     SLTU S3, T3, T2
-    ADD T4, T6, T7
-    ADD T4, T4, S3
+    ADD S0, T6, T7
+    ADD S0, S0, S3
 ; Spill t4294967291 to slot 38
     ADD SC, FP, R0
     ADDI SC, SC, 54
@@ -1697,7 +1697,7 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     ADDI SC, SC, 34
     STORE T1, SB, SC
 ; i32 unsigned div/rem (restoring)
-; Spill i32_carry_24_f24_op53 to slot 40
+; Spill i32_carry_24_f24_op52 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 56
     STORE S1, SB, SC
@@ -1706,7 +1706,7 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     ADD SC, FP, R0
     ADDI SC, SC, 57
     STORE T2, SB, SC
-    ADD T2, T4, R0
+    ADD T2, S0, R0
 ; Spill t4294967295__hi to slot 42
     ADD SC, FP, R0
     ADDI SC, SC, 58
@@ -1715,8 +1715,8 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
 ; Spill t13 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 24
-    STORE S0, SB, SC
-    LI S0, 0
+    STORE T4, SB, SC
+    LI T4, 0
     LI T0, 0
     LI T1, 0
 ; Spill t13__hi to slot 9
@@ -1724,7 +1724,7 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
     ADDI SC, SC, 25
     STORE T7, SB, SC
     LI T7, 32
-; Spill i32_carry_24_f24_op54 to slot 43
+; Spill i32_carry_24_f24_op53 to slot 43
     ADD SC, FP, R0
     ADDI SC, SC, 59
     STORE S3, SB, SC
@@ -1736,195 +1736,195 @@ L_i32_pointer_nonnull_d57dd5dd_24_2:
 ; Spill t4294967290__hi to slot 45
     ADD SC, FP, R0
     ADDI SC, SC, 61
-    STORE T4, SB, SC
-L_i32_udiv_loop_d57dd5dd_24_3:
+    STORE S0, SB, SC
+L_i32_udiv_loop_b4329be16b824d80aef3cfa152595c0f_24_4:
     SLT T3, T2, R0
-    SLT T4, T6, R0
+    SLT S0, T6, R0
     ADD T6, T6, T6
     OR T6, T6, T3
-    ADD S0, S0, S0
-    OR S0, S0, T4
-    SLT T4, S1, R0
+    ADD T4, T4, T4
+    OR T4, T4, S0
+    SLT S0, S1, R0
     ADD S1, S1, S1
     ADD T2, T2, T2
-    OR T2, T2, T4
-    SLT T4, T0, R0
+    OR T2, T2, S0
+    SLT S0, T0, R0
     ADD T0, T0, T0
     ADD T1, T1, T1
-    OR T1, T1, T4
-    XOR T3, S0, T5
-    BNE T3, R0, L_i32_ult_hine_d57dd5dd_24_7
+    OR T1, T1, S0
+    XOR T3, T4, T5
+    BNE T3, R0, L_i32_ult_hine_b4329be16b824d80aef3cfa152595c0f_24_8
     SLTU T3, T6, S2
-    BEQ R0, R0, L_i32_ult_done_d57dd5dd_24_8
-L_i32_ult_hine_d57dd5dd_24_7:
-    SLTU T3, S0, T5
-L_i32_ult_done_d57dd5dd_24_8:
-    BNE T3, R0, L_i32_udiv_next_d57dd5dd_24_5
-    BEQ R0, R0, L_i32_udiv_ge_d57dd5dd_24_4
-L_i32_udiv_ge_d57dd5dd_24_4:
+    BEQ R0, R0, L_i32_ult_done_b4329be16b824d80aef3cfa152595c0f_24_9
+L_i32_ult_hine_b4329be16b824d80aef3cfa152595c0f_24_8:
+    SLTU T3, T4, T5
+L_i32_ult_done_b4329be16b824d80aef3cfa152595c0f_24_9:
+    BNE T3, R0, L_i32_udiv_next_b4329be16b824d80aef3cfa152595c0f_24_6
+    BEQ R0, R0, L_i32_udiv_ge_b4329be16b824d80aef3cfa152595c0f_24_5
+L_i32_udiv_ge_b4329be16b824d80aef3cfa152595c0f_24_5:
     SLTU T3, T6, S2
     SUB T6, T6, S2
-    SUB S0, S0, T5
-    SUB S0, S0, T3
+    SUB T4, T4, T5
+    SUB T4, T4, T3
     OR T0, T0, S3
-L_i32_udiv_next_d57dd5dd_24_5:
+L_i32_udiv_next_b4329be16b824d80aef3cfa152595c0f_24_6:
     SUB T7, T7, S3
-    BEQ T7, R0, L_i32_udiv_done_d57dd5dd_24_6
-    BEQ R0, R0, L_i32_udiv_loop_d57dd5dd_24_3
-L_i32_udiv_done_d57dd5dd_24_6:
-; Spill const_f24_op55_64000 to slot 46
+    BEQ T7, R0, L_i32_udiv_done_b4329be16b824d80aef3cfa152595c0f_24_7
+    BEQ R0, R0, L_i32_udiv_loop_b4329be16b824d80aef3cfa152595c0f_24_4
+L_i32_udiv_done_b4329be16b824d80aef3cfa152595c0f_24_7:
+; Spill const_f24_op54_64000 to slot 46
     ADD SC, FP, R0
     ADDI SC, SC, 62
     STORE S2, SB, SC
     LI S2, -1536
-; Spill i32_const_hi_24_f24_op56 to slot 47
+; Spill i32_const_hi_24_f24_op55 to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 63
     STORE T5, SB, SC
     LI T5, 0
-; Spill div_nlo_24_f24_op57 to slot 48
+; Spill div_nlo_24_f24_op56 to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 64
     STORE S1, SB, SC
-; Spill div_nhi_24_f24_op58 to slot 49
+; Spill div_nhi_24_f24_op57 to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 65
     STORE T2, SB, SC
-; Spill div_rlo_24_f24_op59 to slot 50
+; Spill div_rlo_24_f24_op58 to slot 50
     ADD SC, FP, R0
     ADDI SC, SC, 66
     STORE T6, SB, SC
     LI T6, 255
-; Spill div_rhi_24_f24_op60 to slot 51
+; Spill div_rhi_24_f24_op59 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 67
-    STORE S0, SB, SC
-    LI S0, 8
-; Spill div_bits_24_f24_op61 to slot 52
+    STORE T4, SB, SC
+    LI T4, 8
+; Spill div_bits_24_f24_op60 to slot 52
     ADD SC, FP, R0
     ADDI SC, SC, 68
     STORE T7, SB, SC
     AND T7, T0, T6
-; Spill div_one_24_f24_op62 to slot 53
+; Spill div_one_24_f24_op61 to slot 53
     ADD SC, FP, R0
     ADDI SC, SC, 69
     STORE S3, SB, SC
-    SRL S3, T0, S0
-; Spill div_scr_24_f24_op63 to slot 54
+    SRL S3, T0, T4
+; Spill div_scr_24_f24_op62 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 70
     STORE T3, SB, SC
     AND T3, S2, T6
-; Spill div_scr2_24_f24_op64 to slot 55
+; Spill div_scr2_24_f24_op63 to slot 55
     ADD SC, FP, R0
     ADDI SC, SC, 71
-    STORE T4, SB, SC
-    SRL T4, S2, S0
-; Spill mul_a0_24_f24_op69 to slot 56
+    STORE S0, SB, SC
+    SRL S0, S2, T4
+; Spill mul_a0_24_f24_op68 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 72
     STORE T7, SB, SC
-; Spill mul_a1_24_f24_op70 to slot 57
+; Spill mul_a1_24_f24_op69 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE S3, SB, SC
-; Reload mul_a0_24_f24_op69 from slot 56
+; Reload mul_a0_24_f24_op68 from slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 72
     LOAD S3, SB, SC
     MUL T7, S3, T3
-; Spill mul_mask_24_f24_op67 to slot 58
+; Spill mul_mask_24_f24_op66 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T6, SB, SC
-    MUL T6, S3, T4
-; Spill mul_sh8_24_f24_op68 to slot 59
+    MUL T6, S3, S0
+; Spill mul_sh8_24_f24_op67 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    STORE S0, SB, SC
-; Spill mul_p00_24_f24_op73 to slot 60
+    STORE T4, SB, SC
+; Spill mul_p00_24_f24_op72 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 76
     STORE T7, SB, SC
-; Reload mul_a1_24_f24_op70 from slot 57
+; Reload mul_a1_24_f24_op69 from slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 73
     LOAD T7, SB, SC
-    MUL S0, T7, T3
-    MUL T2, T7, T4
-; Spill mul_p01_24_f24_op74 to slot 61
+    MUL T4, T7, T3
+    MUL T2, T7, S0
+; Spill mul_p01_24_f24_op73 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 77
     STORE T6, SB, SC
-; Spill mul_a0_24_f24_op69 to slot 56
+; Spill mul_a0_24_f24_op68 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 72
     STORE S3, SB, SC
-; Reload mul_p01_24_f24_op74 from slot 61
+; Reload mul_p01_24_f24_op73 from slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 77
     LOAD S3, SB, SC
-    ADD T6, S3, S0
-; Spill mul_b0_24_f24_op71 to slot 62
+    ADD T6, S3, T4
+; Spill mul_b0_24_f24_op70 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE T3, SB, SC
     SLTU T3, T6, S3
-; Spill mul_a1_24_f24_op70 to slot 57
+; Spill mul_a1_24_f24_op69 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE T7, SB, SC
-; Spill mul_b1_24_f24_op72 to slot 63
+; Spill mul_b1_24_f24_op71 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 79
-    STORE T4, SB, SC
-; Reload mul_mask_24_f24_op67 from slot 58
+    STORE S0, SB, SC
+; Reload mul_mask_24_f24_op66 from slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 74
-    LOAD T4, SB, SC
-    AND T7, T6, T4
-; Spill mul_p10_24_f24_op75 to slot 64
+    LOAD S0, SB, SC
+    AND T7, T6, S0
+; Spill mul_p10_24_f24_op74 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 80
-    STORE S0, SB, SC
-; Reload mul_sh8_24_f24_op68 from slot 59
+    STORE T4, SB, SC
+; Reload mul_sh8_24_f24_op67 from slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    LOAD S0, SB, SC
-    SLL T7, T7, S0
-; Spill mul_midc_24_f24_op77 to slot 65
+    LOAD T4, SB, SC
+    SLL T7, T7, T4
+; Spill mul_midc_24_f24_op76 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 81
     STORE T3, SB, SC
-; Reload mul_p00_24_f24_op73 from slot 60
+; Reload mul_p00_24_f24_op72 from slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 76
     LOAD T3, SB, SC
     ADD S1, T3, T7
-; Spill mul_p01_24_f24_op74 to slot 61
+; Spill mul_p01_24_f24_op73 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 77
     STORE S3, SB, SC
     SLTU S3, S1, T3
-    SRL T6, T6, S0
+    SRL T6, T6, T4
     ADD T2, T2, T6
-; Spill mul_mask_24_f24_op67 to slot 58
+; Spill mul_mask_24_f24_op66 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 74
-    STORE T4, SB, SC
-; Reload mul_midc_24_f24_op77 from slot 65
+    STORE S0, SB, SC
+; Reload mul_midc_24_f24_op76 from slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 81
-    LOAD T4, SB, SC
-    SLL T4, T4, S0
-    ADD T2, T2, T4
+    LOAD S0, SB, SC
+    SLL S0, S0, T4
+    ADD T2, T2, S0
     ADD T2, T2, S3
-; Spill mul_midlo_24_f24_op78 to slot 66
+; Spill mul_midlo_24_f24_op77 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 82
     STORE T7, SB, SC
     MUL T7, T0, T5
-; Spill mul_p00_24_f24_op73 to slot 60
+; Spill mul_p00_24_f24_op72 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 76
     STORE T3, SB, SC
@@ -1947,15 +1947,15 @@ L_i32_udiv_done_d57dd5dd_24_6:
     ADD SC, FP, R0
     ADDI SC, SC, 61
     LOAD T1, SB, SC
-; Spill const_f24_op65_64000 to slot 69
+; Spill const_f24_op64_64000 to slot 69
     ADD SC, FP, R0
     ADDI SC, SC, 85
     STORE S2, SB, SC
-; Spill i32_const_hi_24_f24_op66 to slot 70
+; Spill i32_const_hi_24_f24_op65 to slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 86
     STORE T5, SB, SC
-; Spill mul_mid_24_f24_op76 to slot 71
+; Spill mul_mid_24_f24_op75 to slot 71
     ADD SC, FP, R0
     ADDI SC, SC, 87
     STORE T6, SB, SC
@@ -1966,45 +1966,45 @@ L_i32_udiv_done_d57dd5dd_24_6:
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; LOAD: Pointer t14 has bank info: Dynamic("t4294967289")
-; Spill mul_sh8_24_f24_op68 to slot 59
+; Spill mul_sh8_24_f24_op67 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    STORE S0, SB, SC
+    STORE T4, SB, SC
 ; Reload t4294967289 from slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 83
-    LOAD S0, SB, SC
-; Spill mul_midc_24_f24_op77 to slot 65
+    LOAD T4, SB, SC
+; Spill mul_midc_24_f24_op76 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 81
-    STORE T4, SB, SC
-; Spill mul_c_24_f24_op79 to slot 72
+    STORE S0, SB, SC
+; Spill mul_c_24_f24_op78 to slot 72
     ADD SC, FP, R0
     ADDI SC, SC, 88
     STORE S3, SB, SC
     LI S3, -1
-    BEQ S0, S3, L_bc_133d9d03_use_global
-; Spill mul32_x1_24_f24_op80 to slot 73
+    BEQ T4, S3, L_bc_b4329be16b824d80aef3cfa152595c0f_24_10_use_global
+    LI S3, -2
+    BEQ T4, S3, L_bc_b4329be16b824d80aef3cfa152595c0f_24_10_use_stack
+    ADD S0, T4, R0
+    BEQ R0, R0, L_bc_b4329be16b824d80aef3cfa152595c0f_24_10_done
+L_bc_b4329be16b824d80aef3cfa152595c0f_24_10_use_global:
+    ADD S0, GP, R0
+    BEQ R0, R0, L_bc_b4329be16b824d80aef3cfa152595c0f_24_10_done
+L_bc_b4329be16b824d80aef3cfa152595c0f_24_10_use_stack:
+    ADD S0, SB, R0
+L_bc_b4329be16b824d80aef3cfa152595c0f_24_10_done:
+; LOAD: Using bank register S0 for load
+    LOAD S3, S0, S2
+; Spill mul32_x1_24_f24_op79 to slot 73
     ADD SC, FP, R0
     ADDI SC, SC, 89
     STORE T7, SB, SC
-    LI T7, -2
-    BEQ S0, T7, L_bc_133d9d03_use_stack
-    ADD T4, S0, R0
-    BEQ R0, R0, L_bc_133d9d03_done
-L_bc_133d9d03_use_global:
-    ADD T4, GP, R0
-    BEQ R0, R0, L_bc_133d9d03_done
-L_bc_133d9d03_use_stack:
-    ADD T4, SB, R0
-L_bc_133d9d03_done:
-; LOAD: Using bank register T4 for load
-    LOAD S3, T4, S2
 ; Recompute alloca t9 at FP+6
     ADD T7, FP, R0
     ADDI T7, T7, 6
     STORE S3, SB, T7
-; Spill mul32_x2_24_f24_op81 to slot 74
+; Spill mul32_x2_24_f24_op80 to slot 74
     ADD SC, FP, R0
     ADDI SC, SC, 90
     STORE T3, SB, SC
@@ -2032,7 +2032,7 @@ L_bc_133d9d03_done:
     ADD SC, FP, R0
     ADDI SC, SC, 92
     STORE T2, SB, SC
-; Spill i32_borrow_24_f24_op82 to slot 77
+; Spill i32_borrow_24_f24_op81 to slot 77
     ADD SC, FP, R0
     ADDI SC, SC, 93
     STORE T6, SB, SC
@@ -2047,15 +2047,15 @@ L_bc_133d9d03_done:
 ; Spill t4294967289 to slot 80
     ADD SC, FP, R0
     ADDI SC, SC, 96
-    STORE S0, SB, SC
+    STORE T4, SB, SC
 ; Spill t4294967289 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 83
-    STORE S0, SB, SC
-; Spill load_f24_op83_t15_resolved_bank_24_f24_op84 to slot 81
+    STORE T4, SB, SC
+; Spill load_f24_op82_t15_resolved_bank_24_f24_op83 to slot 81
     ADD SC, FP, R0
     ADDI SC, SC, 97
-    STORE T4, SB, SC
+    STORE S0, SB, SC
 ; Spill t17 to slot 82
     ADD SC, FP, R0
     ADDI SC, SC, 98
@@ -2074,7 +2074,7 @@ L_text40_puts_28:
 ; Recompute alloca t6 at FP+4
     ADD T3, FP, R0
     ADDI T3, T3, 4
-; LOAD: Pointer load_src_ptr_f24_op92_t18 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f24_op90_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T0, SB, T3
     LI S1, 40
@@ -2094,11 +2094,11 @@ L_text40_puts_28:
     BEQ R0, R0, L_text40_puts_30
 ; Unconditional branch to L_text40_puts_30
 L_text40_puts_29:
-    LI S0, 0
+    LI T4, 0
 ; Recompute alloca t10 at FP+7
-    ADD T4, FP, R0
-    ADDI T4, T4, 7
-    STORE S0, SB, T4
+    ADD S0, FP, R0
+    ADDI S0, S0, 7
+    STORE T4, SB, S0
     BEQ R0, R0, L_text40_puts_30
 ; Unconditional branch to L_text40_puts_30
 L_text40_puts_30:
@@ -2107,7 +2107,7 @@ L_text40_puts_30:
 ; Recompute alloca t10 at FP+7
     ADD T7, FP, R0
     ADDI T7, T7, 7
-; LOAD: Pointer load_src_ptr_f24_op99_t21 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f24_op97_t21 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S3, SB, T7
     LI T1, 0
@@ -2132,7 +2132,7 @@ L_text40_puts_26:
 ; Recompute alloca t6 at FP+4
     ADD T2, FP, R0
     ADDI T2, T2, 4
-; LOAD: Pointer load_src_ptr_f24_op103_t23 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f24_op101_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T3, SB, T2
 ; Load instruction: t24 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
@@ -2140,22 +2140,22 @@ L_text40_puts_26:
 ; Recompute alloca t4 at FP+1
     ADD T0, FP, R0
     ADDI T0, T0, 1
-; LOAD: Pointer load_src_ptr_f24_op105_t24 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f24_op103_t24 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S2, SB, T0
 ; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; Recompute alloca t9 at FP+6
-    ADD S0, FP, R0
-    ADDI S0, S0, 6
-; LOAD: Pointer load_src_ptr_f24_op107_t25 has bank info: Stack
+    ADD T4, FP, R0
+    ADDI T4, T4, 6
+; LOAD: Pointer load_src_ptr_f24_op105_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, S0
+    LOAD S0, SB, T4
     LI S1, 255
-    AND T4, T4, S1
+    AND S0, S0, S1
     ADD A0, T3, R0
     ADD A1, S2, R0
-    ADD A2, T4, R0
+    ADD A2, S0, R0
 ; Spill live registers before call
 ; Spill t23 to slot 85
     ADD SC, FP, R0
@@ -2168,7 +2168,7 @@ L_text40_puts_26:
 ; Spill t26 to slot 87
     ADD SC, FP, R0
     ADDI SC, SC, 103
-    STORE T4, SB, SC
+    STORE S0, SB, SC
 ; Set SP = FP+106 so callee frame is above spills
     ADDI SP, FP, 106
 ; Setting up 3 register arguments
@@ -2182,7 +2182,7 @@ L_text40_puts_26:
 ; Recompute alloca t6 at FP+4
     ADD T6, FP, R0
     ADDI T6, T6, 4
-; LOAD: Pointer load_src_ptr_f24_op109_t27 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f24_op107_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T1, SB, T6
     LI T7, 1
@@ -2193,7 +2193,7 @@ L_text40_puts_26:
 ; Recompute alloca t8 at FP+5
     ADD S3, FP, R0
     ADDI S3, S3, 5
-; LOAD: Pointer load_src_ptr_f24_op112_t29 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f24_op110_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T5, SB, S3
     LI S1, 1
@@ -3092,10 +3092,10 @@ L_text40_puts_color_57:
     ADD T1, SB, R0
     LI T0, -1536
     ADDI T2, T2, 1
-    BNE T2, T0, L_i32_memory_next_word_561dd49_30_0
+    BNE T2, T0, L_i32_memory_next_word_6b63d54a221403a8fd63e5fd01eeaff_30_0
     LI T2, 0
     ADDI T1, T1, 1
-L_i32_memory_next_word_561dd49_30_0:
+L_i32_memory_next_word_6b63d54a221403a8fd63e5fd01eeaff_30_0:
     STORE S0, T1, T2
     ADD T2, FP, R0
     ADDI T2, T2, 4
@@ -3166,10 +3166,10 @@ L_text40_puts_color_58:
     ADD T2, SB, R0
     LI T6, -1536
     ADDI T7, T7, 1
-    BNE T7, T6, L_i32_memory_next_word_561dd49_30_1
+    BNE T7, T6, L_i32_memory_next_word_6b63d54a221403a8fd63e5fd01eeaff_30_1
     LI T7, 0
     ADDI T2, T2, 1
-L_i32_memory_next_word_561dd49_30_1:
+L_i32_memory_next_word_6b63d54a221403a8fd63e5fd01eeaff_30_1:
     LOAD T1, T2, T7
 ; Bank value in T1 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
@@ -3186,31 +3186,31 @@ L_i32_memory_next_word_561dd49_30_1:
     ADD T4, S3, R0
     ADD T7, T0, R0
     LI T6, -1
-    BEQ T1, T6, L_bc_00fb567d_use_global
-    LI S2, -2
-    BEQ T1, S2, L_bc_00fb567d_use_stack
+    BEQ T1, T6, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_2_use_global
+    LI T6, -2
+    BEQ T1, T6, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_2_use_stack
     ADD T2, T1, R0
-    BEQ R0, R0, L_bc_00fb567d_done
-L_bc_00fb567d_use_global:
+    BEQ R0, R0, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_2_done
+L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_2_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_00fb567d_done
-L_bc_00fb567d_use_stack:
+    BEQ R0, R0, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_2_done
+L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_2_use_stack:
     ADD T2, SB, R0
-L_bc_00fb567d_done:
-    ADD T6, T3, R0
-    ADD S2, T2, R0
+L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_2_done:
+    ADD S2, T3, R0
+    ADD T6, T2, R0
     LI S1, -3
-    BNE S2, S1, L_i32_pointer_nonnull_561dd49_30_2
-    LI T6, 0
+    BNE T6, S1, L_i32_pointer_nonnull_6b63d54a221403a8fd63e5fd01eeaff_30_3
     LI S2, 0
-L_i32_pointer_nonnull_561dd49_30_2:
-    ADD S0, T6, R0
+    LI T6, 0
+L_i32_pointer_nonnull_6b63d54a221403a8fd63e5fd01eeaff_30_3:
+    ADD S0, S2, R0
     LI T5, 0
 ; Spill t16 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 26
     STORE S3, SB, SC
-    ADD S3, S2, R0
+    ADD S3, T6, R0
 ; Spill i32_sext_30_f30_op30 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 27
@@ -3243,21 +3243,21 @@ L_i32_pointer_nonnull_561dd49_30_2:
     ADDI SC, SC, 33
     STORE T2, SB, SC
     LI T2, 255
-; Spill pointer_addr_copy_30_f30_op35 to slot 16
+; Spill pointer_addr_copy_30_f30_op34 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 34
-    STORE T6, SB, SC
-    LI T6, 8
-; Spill pointer_bank_copy_30_f30_op36 to slot 17
+    STORE S2, SB, SC
+    LI S2, 8
+; Spill pointer_bank_copy_30_f30_op35 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 35
-    STORE S2, SB, SC
-    AND S2, S3, T2
-; Spill pointer_null_tag_30_f30_op37 to slot 18
+    STORE T6, SB, SC
+    AND T6, S3, T2
+; Spill pointer_null_tag_30_f30_op36 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE S1, SB, SC
-    SRL S1, S3, T6
+    SRL S1, S3, S2
 ; Spill t4294967293 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 37
@@ -3267,117 +3267,117 @@ L_i32_pointer_nonnull_561dd49_30_2:
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE T5, SB, SC
-    SRL T5, T4, T6
-; Spill mul_a0_30_f30_op44 to slot 21
+    SRL T5, T4, S2
+; Spill mul_a0_30_f30_op43 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    STORE S2, SB, SC
-; Spill mul_a1_30_f30_op45 to slot 22
+    STORE T6, SB, SC
+; Spill mul_a1_30_f30_op44 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE S1, SB, SC
-; Reload mul_a0_30_f30_op44 from slot 21
+; Reload mul_a0_30_f30_op43 from slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 39
     LOAD S1, SB, SC
-    MUL S2, S1, S0
-; Spill mul_mask_30_f30_op42 to slot 23
+    MUL T6, S1, S0
+; Spill mul_mask_30_f30_op41 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE T2, SB, SC
     MUL T2, S1, T5
-; Spill mul_sh8_30_f30_op43 to slot 24
+; Spill mul_sh8_30_f30_op42 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 42
-    STORE T6, SB, SC
-; Spill mul_p00_30_f30_op48 to slot 25
+    STORE S2, SB, SC
+; Spill mul_p00_30_f30_op47 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 43
-    STORE S2, SB, SC
-; Reload mul_a1_30_f30_op45 from slot 22
+    STORE T6, SB, SC
+; Reload mul_a1_30_f30_op44 from slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    LOAD S2, SB, SC
-    MUL T6, S2, S0
-    MUL T1, S2, T5
-; Spill mul_p01_30_f30_op49 to slot 26
+    LOAD T6, SB, SC
+    MUL S2, T6, S0
+    MUL T1, T6, T5
+; Spill mul_p01_30_f30_op48 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 44
     STORE T2, SB, SC
-; Spill mul_a0_30_f30_op44 to slot 21
+; Spill mul_a0_30_f30_op43 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 39
     STORE S1, SB, SC
-; Reload mul_p01_30_f30_op49 from slot 26
+; Reload mul_p01_30_f30_op48 from slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 44
     LOAD S1, SB, SC
-    ADD T2, S1, T6
-; Spill mul_b0_30_f30_op46 to slot 27
+    ADD T2, S1, S2
+; Spill mul_b0_30_f30_op45 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 45
     STORE S0, SB, SC
     SLTU S0, T2, S1
-; Spill mul_a1_30_f30_op45 to slot 22
+; Spill mul_a1_30_f30_op44 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    STORE S2, SB, SC
-; Spill mul_b1_30_f30_op47 to slot 28
+    STORE T6, SB, SC
+; Spill mul_b1_30_f30_op46 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 46
     STORE T5, SB, SC
-; Reload mul_mask_30_f30_op42 from slot 23
+; Reload mul_mask_30_f30_op41 from slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 41
     LOAD T5, SB, SC
-    AND S2, T2, T5
-; Spill mul_p10_30_f30_op50 to slot 29
+    AND T6, T2, T5
+; Spill mul_p10_30_f30_op49 to slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 47
-    STORE T6, SB, SC
-; Reload mul_sh8_30_f30_op43 from slot 24
+    STORE S2, SB, SC
+; Reload mul_sh8_30_f30_op42 from slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 42
-    LOAD T6, SB, SC
-    SLL S2, S2, T6
-; Spill mul_midc_30_f30_op52 to slot 30
+    LOAD S2, SB, SC
+    SLL T6, T6, S2
+; Spill mul_midc_30_f30_op51 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 48
     STORE S0, SB, SC
-; Reload mul_p00_30_f30_op48 from slot 25
+; Reload mul_p00_30_f30_op47 from slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 43
     LOAD S0, SB, SC
-    ADD T3, S0, S2
-; Spill mul_p01_30_f30_op49 to slot 26
+    ADD T3, S0, T6
+; Spill mul_p01_30_f30_op48 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 44
     STORE S1, SB, SC
     SLTU S1, T3, S0
-    SRL T2, T2, T6
+    SRL T2, T2, S2
     ADD T1, T1, T2
-; Spill mul_mask_30_f30_op42 to slot 23
+; Spill mul_mask_30_f30_op41 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE T5, SB, SC
-; Reload mul_midc_30_f30_op52 from slot 30
+; Reload mul_midc_30_f30_op51 from slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 48
     LOAD T5, SB, SC
-    SLL T5, T5, T6
+    SLL T5, T5, S2
     ADD T1, T1, T5
     ADD T1, T1, S1
-; Spill mul_midlo_30_f30_op53 to slot 31
+; Spill mul_midlo_30_f30_op52 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 49
-    STORE S2, SB, SC
-    MUL S2, S3, T7
-; Spill mul_p00_30_f30_op48 to slot 25
+    STORE T6, SB, SC
+    MUL T6, S3, T7
+; Spill mul_p00_30_f30_op47 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE S0, SB, SC
     MUL S0, T0, T4
-    ADD T1, T1, S2
+    ADD T1, T1, T6
     ADD T1, T1, S0
 ; Spill t4294967292 to slot 32
     ADD SC, FP, R0
@@ -3395,15 +3395,15 @@ L_i32_pointer_nonnull_561dd49_30_2:
     ADD SC, FP, R0
     ADDI SC, SC, 38
     LOAD T0, SB, SC
-; Spill const_f30_op40_64000 to slot 34
+; Spill const_f30_op39_64000 to slot 34
     ADD SC, FP, R0
     ADDI SC, SC, 52
     STORE T4, SB, SC
-; Spill i32_const_hi_30_f30_op41 to slot 35
+; Spill i32_const_hi_30_f30_op40 to slot 35
     ADD SC, FP, R0
     ADDI SC, SC, 53
     STORE T7, SB, SC
-; Spill mul_mid_30_f30_op51 to slot 36
+; Spill mul_mid_30_f30_op50 to slot 36
     ADD SC, FP, R0
     ADDI SC, SC, 54
     STORE T2, SB, SC
@@ -3411,15 +3411,15 @@ L_i32_pointer_nonnull_561dd49_30_2:
     SLTU T2, T4, T3
     ADD T7, T1, T0
     ADD T7, T7, T2
-; Spill mul_sh8_30_f30_op43 to slot 24
+; Spill mul_sh8_30_f30_op42 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 42
-    STORE T6, SB, SC
+    STORE S2, SB, SC
 ; Reload t17 from slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 28
-    LOAD T6, SB, SC
-; Spill mul_midc_30_f30_op52 to slot 30
+    LOAD S2, SB, SC
+; Spill mul_midc_30_f30_op51 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 48
     STORE T5, SB, SC
@@ -3427,22 +3427,22 @@ L_i32_pointer_nonnull_561dd49_30_2:
     ADD SC, FP, R0
     ADDI SC, SC, 29
     LOAD T5, SB, SC
-; Spill mul_c_30_f30_op54 to slot 37
+; Spill mul_c_30_f30_op53 to slot 37
     ADD SC, FP, R0
     ADDI SC, SC, 55
     STORE S1, SB, SC
-; Spill mul32_x1_30_f30_op55 to slot 38
+; Spill mul32_x1_30_f30_op54 to slot 38
     ADD SC, FP, R0
     ADDI SC, SC, 56
-    STORE S2, SB, SC
-; Spill mul32_x2_30_f30_op56 to slot 39
+    STORE T6, SB, SC
+; Spill mul32_x2_30_f30_op55 to slot 39
     ADD SC, FP, R0
     ADDI SC, SC, 57
     STORE S0, SB, SC
-    ADD S1, T4, T6
+    ADD S1, T4, S2
     SLTU S0, S1, T4
-    ADD S2, T7, T5
-    ADD S2, S2, S0
+    ADD T6, T7, T5
+    ADD T6, T6, S0
 ; Spill t4294967291 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 58
@@ -3462,7 +3462,7 @@ L_i32_pointer_nonnull_561dd49_30_2:
     ADDI SC, SC, 38
     STORE T0, SB, SC
 ; i32 unsigned div/rem (restoring)
-; Spill i32_carry_30_f30_op57 to slot 42
+; Spill i32_carry_30_f30_op56 to slot 42
     ADD SC, FP, R0
     ADDI SC, SC, 60
     STORE T2, SB, SC
@@ -3471,7 +3471,7 @@ L_i32_pointer_nonnull_561dd49_30_2:
     ADD SC, FP, R0
     ADDI SC, SC, 61
     STORE T4, SB, SC
-    ADD T4, S2, R0
+    ADD T4, T6, R0
 ; Spill t4294967295__hi to slot 44
     ADD SC, FP, R0
     ADDI SC, SC, 62
@@ -3480,8 +3480,8 @@ L_i32_pointer_nonnull_561dd49_30_2:
 ; Spill t17 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 28
-    STORE T6, SB, SC
-    LI T6, 0
+    STORE S2, SB, SC
+    LI S2, 0
     LI S3, 0
     LI T0, 0
 ; Spill t17__hi to slot 11
@@ -3489,7 +3489,7 @@ L_i32_pointer_nonnull_561dd49_30_2:
     ADDI SC, SC, 29
     STORE T5, SB, SC
     LI T5, 32
-; Spill i32_carry_30_f30_op58 to slot 45
+; Spill i32_carry_30_f30_op57 to slot 45
     ADD SC, FP, R0
     ADDI SC, SC, 63
     STORE S0, SB, SC
@@ -3501,195 +3501,195 @@ L_i32_pointer_nonnull_561dd49_30_2:
 ; Spill t4294967290__hi to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 65
-    STORE S2, SB, SC
-L_i32_udiv_loop_561dd49_30_3:
+    STORE T6, SB, SC
+L_i32_udiv_loop_6b63d54a221403a8fd63e5fd01eeaff_30_4:
     SLT S1, T4, R0
-    SLT S2, T7, R0
+    SLT T6, T7, R0
     ADD T7, T7, T7
     OR T7, T7, S1
-    ADD T6, T6, T6
-    OR T6, T6, S2
-    SLT S2, T2, R0
+    ADD S2, S2, S2
+    OR S2, S2, T6
+    SLT T6, T2, R0
     ADD T2, T2, T2
     ADD T4, T4, T4
-    OR T4, T4, S2
-    SLT S2, S3, R0
+    OR T4, T4, T6
+    SLT T6, S3, R0
     ADD S3, S3, S3
     ADD T0, T0, T0
-    OR T0, T0, S2
-    XOR S1, T6, T1
-    BNE S1, R0, L_i32_ult_hine_561dd49_30_7
+    OR T0, T0, T6
+    XOR S1, S2, T1
+    BNE S1, R0, L_i32_ult_hine_6b63d54a221403a8fd63e5fd01eeaff_30_8
     SLTU S1, T7, T3
-    BEQ R0, R0, L_i32_ult_done_561dd49_30_8
-L_i32_ult_hine_561dd49_30_7:
-    SLTU S1, T6, T1
-L_i32_ult_done_561dd49_30_8:
-    BNE S1, R0, L_i32_udiv_next_561dd49_30_5
-    BEQ R0, R0, L_i32_udiv_ge_561dd49_30_4
-L_i32_udiv_ge_561dd49_30_4:
+    BEQ R0, R0, L_i32_ult_done_6b63d54a221403a8fd63e5fd01eeaff_30_9
+L_i32_ult_hine_6b63d54a221403a8fd63e5fd01eeaff_30_8:
+    SLTU S1, S2, T1
+L_i32_ult_done_6b63d54a221403a8fd63e5fd01eeaff_30_9:
+    BNE S1, R0, L_i32_udiv_next_6b63d54a221403a8fd63e5fd01eeaff_30_6
+    BEQ R0, R0, L_i32_udiv_ge_6b63d54a221403a8fd63e5fd01eeaff_30_5
+L_i32_udiv_ge_6b63d54a221403a8fd63e5fd01eeaff_30_5:
     SLTU S1, T7, T3
     SUB T7, T7, T3
-    SUB T6, T6, T1
-    SUB T6, T6, S1
+    SUB S2, S2, T1
+    SUB S2, S2, S1
     OR S3, S3, S0
-L_i32_udiv_next_561dd49_30_5:
+L_i32_udiv_next_6b63d54a221403a8fd63e5fd01eeaff_30_6:
     SUB T5, T5, S0
-    BEQ T5, R0, L_i32_udiv_done_561dd49_30_6
-    BEQ R0, R0, L_i32_udiv_loop_561dd49_30_3
-L_i32_udiv_done_561dd49_30_6:
-; Spill const_f30_op59_64000 to slot 48
+    BEQ T5, R0, L_i32_udiv_done_6b63d54a221403a8fd63e5fd01eeaff_30_7
+    BEQ R0, R0, L_i32_udiv_loop_6b63d54a221403a8fd63e5fd01eeaff_30_4
+L_i32_udiv_done_6b63d54a221403a8fd63e5fd01eeaff_30_7:
+; Spill const_f30_op58_64000 to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 66
     STORE T3, SB, SC
     LI T3, -1536
-; Spill i32_const_hi_30_f30_op60 to slot 49
+; Spill i32_const_hi_30_f30_op59 to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 67
     STORE T1, SB, SC
     LI T1, 0
-; Spill div_nlo_30_f30_op61 to slot 50
+; Spill div_nlo_30_f30_op60 to slot 50
     ADD SC, FP, R0
     ADDI SC, SC, 68
     STORE T2, SB, SC
-; Spill div_nhi_30_f30_op62 to slot 51
+; Spill div_nhi_30_f30_op61 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 69
     STORE T4, SB, SC
-; Spill div_rlo_30_f30_op63 to slot 52
+; Spill div_rlo_30_f30_op62 to slot 52
     ADD SC, FP, R0
     ADDI SC, SC, 70
     STORE T7, SB, SC
     LI T7, 255
-; Spill div_rhi_30_f30_op64 to slot 53
+; Spill div_rhi_30_f30_op63 to slot 53
     ADD SC, FP, R0
     ADDI SC, SC, 71
-    STORE T6, SB, SC
-    LI T6, 8
-; Spill div_bits_30_f30_op65 to slot 54
+    STORE S2, SB, SC
+    LI S2, 8
+; Spill div_bits_30_f30_op64 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 72
     STORE T5, SB, SC
     AND T5, S3, T7
-; Spill div_one_30_f30_op66 to slot 55
+; Spill div_one_30_f30_op65 to slot 55
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE S0, SB, SC
-    SRL S0, S3, T6
-; Spill div_scr_30_f30_op67 to slot 56
+    SRL S0, S3, S2
+; Spill div_scr_30_f30_op66 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE S1, SB, SC
     AND S1, T3, T7
-; Spill div_scr2_30_f30_op68 to slot 57
+; Spill div_scr2_30_f30_op67 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    STORE S2, SB, SC
-    SRL S2, T3, T6
-; Spill mul_a0_30_f30_op73 to slot 58
+    STORE T6, SB, SC
+    SRL T6, T3, S2
+; Spill mul_a0_30_f30_op72 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 76
     STORE T5, SB, SC
-; Spill mul_a1_30_f30_op74 to slot 59
+; Spill mul_a1_30_f30_op73 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 77
     STORE S0, SB, SC
-; Reload mul_a0_30_f30_op73 from slot 58
+; Reload mul_a0_30_f30_op72 from slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 76
     LOAD S0, SB, SC
     MUL T5, S0, S1
-; Spill mul_mask_30_f30_op71 to slot 60
+; Spill mul_mask_30_f30_op70 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE T7, SB, SC
-    MUL T7, S0, S2
-; Spill mul_sh8_30_f30_op72 to slot 61
+    MUL T7, S0, T6
+; Spill mul_sh8_30_f30_op71 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 79
-    STORE T6, SB, SC
-; Spill mul_p00_30_f30_op77 to slot 62
+    STORE S2, SB, SC
+; Spill mul_p00_30_f30_op76 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 80
     STORE T5, SB, SC
-; Reload mul_a1_30_f30_op74 from slot 59
+; Reload mul_a1_30_f30_op73 from slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 77
     LOAD T5, SB, SC
-    MUL T6, T5, S1
-    MUL T4, T5, S2
-; Spill mul_p01_30_f30_op78 to slot 63
+    MUL S2, T5, S1
+    MUL T4, T5, T6
+; Spill mul_p01_30_f30_op77 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 81
     STORE T7, SB, SC
-; Spill mul_a0_30_f30_op73 to slot 58
+; Spill mul_a0_30_f30_op72 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 76
     STORE S0, SB, SC
-; Reload mul_p01_30_f30_op78 from slot 63
+; Reload mul_p01_30_f30_op77 from slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 81
     LOAD S0, SB, SC
-    ADD T7, S0, T6
-; Spill mul_b0_30_f30_op75 to slot 64
+    ADD T7, S0, S2
+; Spill mul_b0_30_f30_op74 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 82
     STORE S1, SB, SC
     SLTU S1, T7, S0
-; Spill mul_a1_30_f30_op74 to slot 59
+; Spill mul_a1_30_f30_op73 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 77
     STORE T5, SB, SC
-; Spill mul_b1_30_f30_op76 to slot 65
+; Spill mul_b1_30_f30_op75 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 83
-    STORE S2, SB, SC
-; Reload mul_mask_30_f30_op71 from slot 60
+    STORE T6, SB, SC
+; Reload mul_mask_30_f30_op70 from slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 78
-    LOAD S2, SB, SC
-    AND T5, T7, S2
-; Spill mul_p10_30_f30_op79 to slot 66
+    LOAD T6, SB, SC
+    AND T5, T7, T6
+; Spill mul_p10_30_f30_op78 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 84
-    STORE T6, SB, SC
-; Reload mul_sh8_30_f30_op72 from slot 61
+    STORE S2, SB, SC
+; Reload mul_sh8_30_f30_op71 from slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 79
-    LOAD T6, SB, SC
-    SLL T5, T5, T6
-; Spill mul_midc_30_f30_op81 to slot 67
+    LOAD S2, SB, SC
+    SLL T5, T5, S2
+; Spill mul_midc_30_f30_op80 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 85
     STORE S1, SB, SC
-; Reload mul_p00_30_f30_op77 from slot 62
+; Reload mul_p00_30_f30_op76 from slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 80
     LOAD S1, SB, SC
     ADD T2, S1, T5
-; Spill mul_p01_30_f30_op78 to slot 63
+; Spill mul_p01_30_f30_op77 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 81
     STORE S0, SB, SC
     SLTU S0, T2, S1
-    SRL T7, T7, T6
+    SRL T7, T7, S2
     ADD T4, T4, T7
-; Spill mul_mask_30_f30_op71 to slot 60
+; Spill mul_mask_30_f30_op70 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 78
-    STORE S2, SB, SC
-; Reload mul_midc_30_f30_op81 from slot 67
+    STORE T6, SB, SC
+; Reload mul_midc_30_f30_op80 from slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 85
-    LOAD S2, SB, SC
-    SLL S2, S2, T6
-    ADD T4, T4, S2
+    LOAD T6, SB, SC
+    SLL T6, T6, S2
+    ADD T4, T4, T6
     ADD T4, T4, S0
-; Spill mul_midlo_30_f30_op82 to slot 68
+; Spill mul_midlo_30_f30_op81 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 86
     STORE T5, SB, SC
     MUL T5, S3, T1
-; Spill mul_p00_30_f30_op77 to slot 62
+; Spill mul_p00_30_f30_op76 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 80
     STORE S1, SB, SC
@@ -3712,15 +3712,15 @@ L_i32_udiv_done_561dd49_30_6:
     ADD SC, FP, R0
     ADDI SC, SC, 65
     LOAD T0, SB, SC
-; Spill const_f30_op69_64000 to slot 71
+; Spill const_f30_op68_64000 to slot 71
     ADD SC, FP, R0
     ADDI SC, SC, 89
     STORE T3, SB, SC
-; Spill i32_const_hi_30_f30_op70 to slot 72
+; Spill i32_const_hi_30_f30_op69 to slot 72
     ADD SC, FP, R0
     ADDI SC, SC, 90
     STORE T1, SB, SC
-; Spill mul_mid_30_f30_op80 to slot 73
+; Spill mul_mid_30_f30_op79 to slot 73
     ADD SC, FP, R0
     ADDI SC, SC, 91
     STORE T7, SB, SC
@@ -3731,45 +3731,45 @@ L_i32_udiv_done_561dd49_30_6:
 ; Load instruction: t19 = load FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; LOAD: Pointer t18 has bank info: Dynamic("t4294967289")
-; Spill mul_sh8_30_f30_op72 to slot 61
+; Spill mul_sh8_30_f30_op71 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 79
-    STORE T6, SB, SC
+    STORE S2, SB, SC
 ; Reload t4294967289 from slot 69
     ADD SC, FP, R0
     ADDI SC, SC, 87
-    LOAD T6, SB, SC
-; Spill mul_midc_30_f30_op81 to slot 67
+    LOAD S2, SB, SC
+; Spill mul_midc_30_f30_op80 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 85
-    STORE S2, SB, SC
-; Spill mul_c_30_f30_op83 to slot 74
+    STORE T6, SB, SC
+; Spill mul_c_30_f30_op82 to slot 74
     ADD SC, FP, R0
     ADDI SC, SC, 92
     STORE S0, SB, SC
     LI S0, -1
-    BEQ T6, S0, L_bc_53889892_use_global
-; Spill mul32_x1_30_f30_op84 to slot 75
+    BEQ S2, S0, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_10_use_global
+    LI S0, -2
+    BEQ S2, S0, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_10_use_stack
+    ADD T6, S2, R0
+    BEQ R0, R0, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_10_done
+L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_10_use_global:
+    ADD T6, GP, R0
+    BEQ R0, R0, L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_10_done
+L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_10_use_stack:
+    ADD T6, SB, R0
+L_bc_06b63d54a221403a8fd63e5fd01eeaff_30_10_done:
+; LOAD: Using bank register T6 for load
+    LOAD S0, T6, T3
+; Spill mul32_x1_30_f30_op83 to slot 75
     ADD SC, FP, R0
     ADDI SC, SC, 93
     STORE T5, SB, SC
-    LI T5, -2
-    BEQ T6, T5, L_bc_53889892_use_stack
-    ADD S2, T6, R0
-    BEQ R0, R0, L_bc_53889892_done
-L_bc_53889892_use_global:
-    ADD S2, GP, R0
-    BEQ R0, R0, L_bc_53889892_done
-L_bc_53889892_use_stack:
-    ADD S2, SB, R0
-L_bc_53889892_done:
-; LOAD: Using bank register S2 for load
-    LOAD S0, S2, T3
 ; Recompute alloca t13 at FP+8
     ADD T5, FP, R0
     ADDI T5, T5, 8
     STORE S0, SB, T5
-; Spill mul32_x2_30_f30_op85 to slot 76
+; Spill mul32_x2_30_f30_op84 to slot 76
     ADD SC, FP, R0
     ADDI SC, SC, 94
     STORE S1, SB, SC
@@ -3797,7 +3797,7 @@ L_bc_53889892_done:
     ADD SC, FP, R0
     ADDI SC, SC, 96
     STORE T4, SB, SC
-; Spill i32_borrow_30_f30_op86 to slot 79
+; Spill i32_borrow_30_f30_op85 to slot 79
     ADD SC, FP, R0
     ADDI SC, SC, 97
     STORE T7, SB, SC
@@ -3812,15 +3812,15 @@ L_bc_53889892_done:
 ; Spill t4294967289 to slot 82
     ADD SC, FP, R0
     ADDI SC, SC, 100
-    STORE T6, SB, SC
+    STORE S2, SB, SC
 ; Spill t4294967289 to slot 69
     ADD SC, FP, R0
     ADDI SC, SC, 87
-    STORE T6, SB, SC
-; Spill load_f30_op87_t19_resolved_bank_30_f30_op88 to slot 83
+    STORE S2, SB, SC
+; Spill load_f30_op86_t19_resolved_bank_30_f30_op87 to slot 83
     ADD SC, FP, R0
     ADDI SC, SC, 101
-    STORE S2, SB, SC
+    STORE T6, SB, SC
 ; Spill t21 to slot 84
     ADD SC, FP, R0
     ADDI SC, SC, 102
@@ -3839,7 +3839,7 @@ L_text40_puts_color_61:
 ; Recompute alloca t10 at FP+6
     ADD S1, FP, R0
     ADDI S1, S1, 6
-; LOAD: Pointer load_src_ptr_f30_op96_t22 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op94_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S3, SB, S1
     LI T2, 40
@@ -3859,11 +3859,11 @@ L_text40_puts_color_61:
     BEQ R0, R0, L_text40_puts_color_63
 ; Unconditional branch to L_text40_puts_color_63
 L_text40_puts_color_62:
-    LI T6, 0
+    LI S2, 0
 ; Recompute alloca t14 at FP+9
-    ADD S2, FP, R0
-    ADDI S2, S2, 9
-    STORE T6, SB, S2
+    ADD T6, FP, R0
+    ADDI T6, T6, 9
+    STORE S2, SB, T6
     BEQ R0, R0, L_text40_puts_color_63
 ; Unconditional branch to L_text40_puts_color_63
 L_text40_puts_color_63:
@@ -3872,7 +3872,7 @@ L_text40_puts_color_63:
 ; Recompute alloca t14 at FP+9
     ADD T5, FP, R0
     ADDI T5, T5, 9
-; LOAD: Pointer load_src_ptr_f30_op103_t25 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op101_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S0, SB, T5
     LI T0, 0
@@ -3897,7 +3897,7 @@ L_text40_puts_color_59:
 ; Recompute alloca t10 at FP+6
     ADD T4, FP, R0
     ADDI T4, T4, 6
-; LOAD: Pointer load_src_ptr_f30_op107_t27 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op105_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, T4
 ; Load instruction: t28 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
@@ -3905,25 +3905,25 @@ L_text40_puts_color_59:
 ; Recompute alloca t6 at FP+1
     ADD S3, FP, R0
     ADDI S3, S3, 1
-; LOAD: Pointer load_src_ptr_f30_op109_t28 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op107_t28 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T3, SB, S3
 ; Load instruction: t29 = load FatPtr(FatPointer { addr: Temp(13), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(13), bank: Stack })
 ; Recompute alloca t13 at FP+8
-    ADD T6, FP, R0
-    ADDI T6, T6, 8
-; LOAD: Pointer load_src_ptr_f30_op111_t29 has bank info: Stack
+    ADD S2, FP, R0
+    ADDI S2, S2, 8
+; LOAD: Pointer load_src_ptr_f30_op109_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S2, SB, T6
+    LOAD T6, SB, S2
     LI T2, 255
-    AND S2, S2, T2
+    AND T6, T6, T2
 ; Load instruction: t31 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+4
     ADD T7, FP, R0
     ADDI T7, T7, 4
-; LOAD: Pointer load_src_ptr_f30_op113_t31 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op111_t31 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T0, SB, T7
 ; Load instruction: t32 = load FatPtr(FatPointer { addr: Temp(9), bank: Stack })
@@ -3931,12 +3931,12 @@ L_text40_puts_color_59:
 ; Recompute alloca t9 at FP+5
     ADD T5, FP, R0
     ADDI T5, T5, 5
-; LOAD: Pointer load_src_ptr_f30_op115_t32 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op113_t32 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S0, SB, T5
     ADD A0, S1, R0
     ADD A1, T3, R0
-    ADD A2, S2, R0
+    ADD A2, T6, R0
     ADD A3, T0, R0
 ; Spill live registers before call
 ; Spill t27 to slot 87
@@ -3950,7 +3950,7 @@ L_text40_puts_color_59:
 ; Spill t30 to slot 89
     ADD SC, FP, R0
     ADDI SC, SC, 107
-    STORE S2, SB, SC
+    STORE T6, SB, SC
 ; Spill t31 to slot 90
     ADD SC, FP, R0
     ADDI SC, SC, 108
@@ -3977,7 +3977,7 @@ L_text40_puts_color_59:
 ; Recompute alloca t10 at FP+6
     ADD T1, FP, R0
     ADDI T1, T1, 6
-; LOAD: Pointer load_src_ptr_f30_op117_t33 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op115_t33 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T2, SB, T1
     LI T4, 1
@@ -3988,12 +3988,12 @@ L_text40_puts_color_59:
 ; Recompute alloca t12 at FP+7
     ADD S3, FP, R0
     ADDI S3, S3, 7
-; LOAD: Pointer load_src_ptr_f30_op120_t35 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f30_op118_t35 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T6, SB, S3
+    LOAD S2, SB, S3
     LI T7, 1
-    ADD T6, T6, T7
-    STORE T6, SB, S3
+    ADD S2, S2, T7
+    STORE S2, SB, S3
 ; Spill t34 to slot 91
     ADD SC, FP, R0
     ADDI SC, SC, 109
@@ -4001,7 +4001,7 @@ L_text40_puts_color_59:
 ; Spill t36 to slot 92
     ADD SC, FP, R0
     ADDI SC, SC, 110
-    STORE T6, SB, SC
+    STORE S2, SB, SC
     BEQ R0, R0, L_text40_puts_color_58
 ; Unconditional branch to L_text40_puts_color_58
 L_text40_puts_color_60:
@@ -4081,10 +4081,10 @@ L_text40_puts_attr_64:
     ADD T2, SB, R0
     LI T1, -1536
     ADDI T3, T3, 1
-    BNE T3, T1, L_i32_memory_next_word_bdd27595_32_0
+    BNE T3, T1, L_i32_memory_next_word_5eb7a616e3af4ab6a3891427ef25de5a_32_0
     LI T3, 0
     ADDI T2, T2, 1
-L_i32_memory_next_word_bdd27595_32_0:
+L_i32_memory_next_word_5eb7a616e3af4ab6a3891427ef25de5a_32_0:
     STORE S0, T2, T3
     ADD T0, FP, R0
     ADDI T0, T0, 4
@@ -4148,10 +4148,10 @@ L_text40_puts_attr_65:
     ADD T4, SB, R0
     LI T7, -1536
     ADDI S0, S0, 1
-    BNE S0, T7, L_i32_memory_next_word_bdd27595_32_1
+    BNE S0, T7, L_i32_memory_next_word_5eb7a616e3af4ab6a3891427ef25de5a_32_1
     LI S0, 0
     ADDI T4, T4, 1
-L_i32_memory_next_word_bdd27595_32_1:
+L_i32_memory_next_word_5eb7a616e3af4ab6a3891427ef25de5a_32_1:
     LOAD T0, T4, S0
 ; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t14 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
@@ -4168,31 +4168,31 @@ L_i32_memory_next_word_bdd27595_32_1:
     ADD S3, T2, R0
     ADD S0, T3, R0
     LI T7, -1
-    BEQ T0, T7, L_bc_c911d176_use_global
-    LI T1, -2
-    BEQ T0, T1, L_bc_c911d176_use_stack
+    BEQ T0, T7, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_2_use_global
+    LI T7, -2
+    BEQ T0, T7, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_2_use_stack
     ADD T4, T0, R0
-    BEQ R0, R0, L_bc_c911d176_done
-L_bc_c911d176_use_global:
+    BEQ R0, R0, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_2_done
+L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_2_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_c911d176_done
-L_bc_c911d176_use_stack:
+    BEQ R0, R0, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_2_done
+L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_2_use_stack:
     ADD T4, SB, R0
-L_bc_c911d176_done:
-    ADD T7, S1, R0
-    ADD T1, T4, R0
+L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_2_done:
+    ADD T1, S1, R0
+    ADD T7, T4, R0
     LI S2, -3
-    BNE T1, S2, L_i32_pointer_nonnull_bdd27595_32_2
-    LI T7, 0
+    BNE T7, S2, L_i32_pointer_nonnull_5eb7a616e3af4ab6a3891427ef25de5a_32_3
     LI T1, 0
-L_i32_pointer_nonnull_bdd27595_32_2:
-    ADD T5, T7, R0
+    LI T7, 0
+L_i32_pointer_nonnull_5eb7a616e3af4ab6a3891427ef25de5a_32_3:
+    ADD T5, T1, R0
     LI T6, 0
 ; Spill t14 to slot 7
     ADD SC, FP, R0
     ADDI SC, SC, 24
     STORE T2, SB, SC
-    ADD T2, T1, R0
+    ADD T2, T7, R0
 ; Spill i32_sext_32_f32_op28 to slot 8
     ADD SC, FP, R0
     ADDI SC, SC, 25
@@ -4225,21 +4225,21 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     ADDI SC, SC, 31
     STORE T4, SB, SC
     LI T4, 255
-; Spill pointer_addr_copy_32_f32_op33 to slot 15
+; Spill pointer_addr_copy_32_f32_op32 to slot 15
     ADD SC, FP, R0
     ADDI SC, SC, 32
-    STORE T7, SB, SC
-    LI T7, 8
-; Spill pointer_bank_copy_32_f32_op34 to slot 16
+    STORE T1, SB, SC
+    LI T1, 8
+; Spill pointer_bank_copy_32_f32_op33 to slot 16
     ADD SC, FP, R0
     ADDI SC, SC, 33
-    STORE T1, SB, SC
-    AND T1, T2, T4
-; Spill pointer_null_tag_32_f32_op35 to slot 17
+    STORE T7, SB, SC
+    AND T7, T2, T4
+; Spill pointer_null_tag_32_f32_op34 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 34
     STORE S2, SB, SC
-    SRL S2, T2, T7
+    SRL S2, T2, T1
 ; Spill t4294967293 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 35
@@ -4249,117 +4249,117 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     ADD SC, FP, R0
     ADDI SC, SC, 36
     STORE T6, SB, SC
-    SRL T6, S3, T7
-; Spill mul_a0_32_f32_op42 to slot 20
+    SRL T6, S3, T1
+; Spill mul_a0_32_f32_op41 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    STORE T1, SB, SC
-; Spill mul_a1_32_f32_op43 to slot 21
+    STORE T7, SB, SC
+; Spill mul_a1_32_f32_op42 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE S2, SB, SC
-; Reload mul_a0_32_f32_op42 from slot 20
+; Reload mul_a0_32_f32_op41 from slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 37
     LOAD S2, SB, SC
-    MUL T1, S2, T5
-; Spill mul_mask_32_f32_op40 to slot 22
+    MUL T7, S2, T5
+; Spill mul_mask_32_f32_op39 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 39
     STORE T4, SB, SC
     MUL T4, S2, T6
-; Spill mul_sh8_32_f32_op41 to slot 23
+; Spill mul_sh8_32_f32_op40 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    STORE T7, SB, SC
-; Spill mul_p00_32_f32_op46 to slot 24
+    STORE T1, SB, SC
+; Spill mul_p00_32_f32_op45 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 41
-    STORE T1, SB, SC
-; Reload mul_a1_32_f32_op43 from slot 21
+    STORE T7, SB, SC
+; Reload mul_a1_32_f32_op42 from slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 38
-    LOAD T1, SB, SC
-    MUL T7, T1, T5
-    MUL T0, T1, T6
-; Spill mul_p01_32_f32_op47 to slot 25
+    LOAD T7, SB, SC
+    MUL T1, T7, T5
+    MUL T0, T7, T6
+; Spill mul_p01_32_f32_op46 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE T4, SB, SC
-; Spill mul_a0_32_f32_op42 to slot 20
+; Spill mul_a0_32_f32_op41 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 37
     STORE S2, SB, SC
-; Reload mul_p01_32_f32_op47 from slot 25
+; Reload mul_p01_32_f32_op46 from slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 42
     LOAD S2, SB, SC
-    ADD T4, S2, T7
-; Spill mul_b0_32_f32_op44 to slot 26
+    ADD T4, S2, T1
+; Spill mul_b0_32_f32_op43 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T5, SB, SC
     SLTU T5, T4, S2
-; Spill mul_a1_32_f32_op43 to slot 21
+; Spill mul_a1_32_f32_op42 to slot 21
     ADD SC, FP, R0
     ADDI SC, SC, 38
-    STORE T1, SB, SC
-; Spill mul_b1_32_f32_op45 to slot 27
+    STORE T7, SB, SC
+; Spill mul_b1_32_f32_op44 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 44
     STORE T6, SB, SC
-; Reload mul_mask_32_f32_op40 from slot 22
+; Reload mul_mask_32_f32_op39 from slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 39
     LOAD T6, SB, SC
-    AND T1, T4, T6
-; Spill mul_p10_32_f32_op48 to slot 28
+    AND T7, T4, T6
+; Spill mul_p10_32_f32_op47 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 45
-    STORE T7, SB, SC
-; Reload mul_sh8_32_f32_op41 from slot 23
+    STORE T1, SB, SC
+; Reload mul_sh8_32_f32_op40 from slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    LOAD T7, SB, SC
-    SLL T1, T1, T7
-; Spill mul_midc_32_f32_op50 to slot 29
+    LOAD T1, SB, SC
+    SLL T7, T7, T1
+; Spill mul_midc_32_f32_op49 to slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 46
     STORE T5, SB, SC
-; Reload mul_p00_32_f32_op46 from slot 24
+; Reload mul_p00_32_f32_op45 from slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 41
     LOAD T5, SB, SC
-    ADD S1, T5, T1
-; Spill mul_p01_32_f32_op47 to slot 25
+    ADD S1, T5, T7
+; Spill mul_p01_32_f32_op46 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE S2, SB, SC
     SLTU S2, S1, T5
-    SRL T4, T4, T7
+    SRL T4, T4, T1
     ADD T0, T0, T4
-; Spill mul_mask_32_f32_op40 to slot 22
+; Spill mul_mask_32_f32_op39 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 39
     STORE T6, SB, SC
-; Reload mul_midc_32_f32_op50 from slot 29
+; Reload mul_midc_32_f32_op49 from slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 46
     LOAD T6, SB, SC
-    SLL T6, T6, T7
+    SLL T6, T6, T1
     ADD T0, T0, T6
     ADD T0, T0, S2
-; Spill mul_midlo_32_f32_op51 to slot 30
+; Spill mul_midlo_32_f32_op50 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 47
-    STORE T1, SB, SC
-    MUL T1, T2, S0
-; Spill mul_p00_32_f32_op46 to slot 24
+    STORE T7, SB, SC
+    MUL T7, T2, S0
+; Spill mul_p00_32_f32_op45 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE T5, SB, SC
     MUL T5, T3, S3
-    ADD T0, T0, T1
+    ADD T0, T0, T7
     ADD T0, T0, T5
 ; Spill t4294967292 to slot 31
     ADD SC, FP, R0
@@ -4377,15 +4377,15 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     ADD SC, FP, R0
     ADDI SC, SC, 36
     LOAD T3, SB, SC
-; Spill const_f32_op38_64000 to slot 33
+; Spill const_f32_op37_64000 to slot 33
     ADD SC, FP, R0
     ADDI SC, SC, 50
     STORE S3, SB, SC
-; Spill i32_const_hi_32_f32_op39 to slot 34
+; Spill i32_const_hi_32_f32_op38 to slot 34
     ADD SC, FP, R0
     ADDI SC, SC, 51
     STORE S0, SB, SC
-; Spill mul_mid_32_f32_op49 to slot 35
+; Spill mul_mid_32_f32_op48 to slot 35
     ADD SC, FP, R0
     ADDI SC, SC, 52
     STORE T4, SB, SC
@@ -4393,15 +4393,15 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     SLTU T4, S3, S1
     ADD S0, T0, T3
     ADD S0, S0, T4
-; Spill mul_sh8_32_f32_op41 to slot 23
+; Spill mul_sh8_32_f32_op40 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    STORE T7, SB, SC
+    STORE T1, SB, SC
 ; Reload t15 from slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 26
-    LOAD T7, SB, SC
-; Spill mul_midc_32_f32_op50 to slot 29
+    LOAD T1, SB, SC
+; Spill mul_midc_32_f32_op49 to slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 46
     STORE T6, SB, SC
@@ -4409,22 +4409,22 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     ADD SC, FP, R0
     ADDI SC, SC, 27
     LOAD T6, SB, SC
-; Spill mul_c_32_f32_op52 to slot 36
+; Spill mul_c_32_f32_op51 to slot 36
     ADD SC, FP, R0
     ADDI SC, SC, 53
     STORE S2, SB, SC
-; Spill mul32_x1_32_f32_op53 to slot 37
+; Spill mul32_x1_32_f32_op52 to slot 37
     ADD SC, FP, R0
     ADDI SC, SC, 54
-    STORE T1, SB, SC
-; Spill mul32_x2_32_f32_op54 to slot 38
+    STORE T7, SB, SC
+; Spill mul32_x2_32_f32_op53 to slot 38
     ADD SC, FP, R0
     ADDI SC, SC, 55
     STORE T5, SB, SC
-    ADD S2, S3, T7
+    ADD S2, S3, T1
     SLTU T5, S2, S3
-    ADD T1, S0, T6
-    ADD T1, T1, T5
+    ADD T7, S0, T6
+    ADD T7, T7, T5
 ; Spill t4294967291 to slot 39
     ADD SC, FP, R0
     ADDI SC, SC, 56
@@ -4444,7 +4444,7 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     ADDI SC, SC, 36
     STORE T3, SB, SC
 ; i32 unsigned div/rem (restoring)
-; Spill i32_carry_32_f32_op55 to slot 41
+; Spill i32_carry_32_f32_op54 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 58
     STORE T4, SB, SC
@@ -4453,7 +4453,7 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     ADD SC, FP, R0
     ADDI SC, SC, 59
     STORE S3, SB, SC
-    ADD S3, T1, R0
+    ADD S3, T7, R0
 ; Spill t4294967295__hi to slot 43
     ADD SC, FP, R0
     ADDI SC, SC, 60
@@ -4462,8 +4462,8 @@ L_i32_pointer_nonnull_bdd27595_32_2:
 ; Spill t15 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 26
-    STORE T7, SB, SC
-    LI T7, 0
+    STORE T1, SB, SC
+    LI T1, 0
     LI T2, 0
     LI T3, 0
 ; Spill t15__hi to slot 10
@@ -4471,7 +4471,7 @@ L_i32_pointer_nonnull_bdd27595_32_2:
     ADDI SC, SC, 27
     STORE T6, SB, SC
     LI T6, 32
-; Spill i32_carry_32_f32_op56 to slot 44
+; Spill i32_carry_32_f32_op55 to slot 44
     ADD SC, FP, R0
     ADDI SC, SC, 61
     STORE T5, SB, SC
@@ -4483,195 +4483,195 @@ L_i32_pointer_nonnull_bdd27595_32_2:
 ; Spill t4294967290__hi to slot 46
     ADD SC, FP, R0
     ADDI SC, SC, 63
-    STORE T1, SB, SC
-L_i32_udiv_loop_bdd27595_32_3:
+    STORE T7, SB, SC
+L_i32_udiv_loop_5eb7a616e3af4ab6a3891427ef25de5a_32_4:
     SLT S2, S3, R0
-    SLT T1, S0, R0
+    SLT T7, S0, R0
     ADD S0, S0, S0
     OR S0, S0, S2
-    ADD T7, T7, T7
-    OR T7, T7, T1
-    SLT T1, T4, R0
+    ADD T1, T1, T1
+    OR T1, T1, T7
+    SLT T7, T4, R0
     ADD T4, T4, T4
     ADD S3, S3, S3
-    OR S3, S3, T1
-    SLT T1, T2, R0
+    OR S3, S3, T7
+    SLT T7, T2, R0
     ADD T2, T2, T2
     ADD T3, T3, T3
-    OR T3, T3, T1
-    XOR S2, T7, T0
-    BNE S2, R0, L_i32_ult_hine_bdd27595_32_7
+    OR T3, T3, T7
+    XOR S2, T1, T0
+    BNE S2, R0, L_i32_ult_hine_5eb7a616e3af4ab6a3891427ef25de5a_32_8
     SLTU S2, S0, S1
-    BEQ R0, R0, L_i32_ult_done_bdd27595_32_8
-L_i32_ult_hine_bdd27595_32_7:
-    SLTU S2, T7, T0
-L_i32_ult_done_bdd27595_32_8:
-    BNE S2, R0, L_i32_udiv_next_bdd27595_32_5
-    BEQ R0, R0, L_i32_udiv_ge_bdd27595_32_4
-L_i32_udiv_ge_bdd27595_32_4:
+    BEQ R0, R0, L_i32_ult_done_5eb7a616e3af4ab6a3891427ef25de5a_32_9
+L_i32_ult_hine_5eb7a616e3af4ab6a3891427ef25de5a_32_8:
+    SLTU S2, T1, T0
+L_i32_ult_done_5eb7a616e3af4ab6a3891427ef25de5a_32_9:
+    BNE S2, R0, L_i32_udiv_next_5eb7a616e3af4ab6a3891427ef25de5a_32_6
+    BEQ R0, R0, L_i32_udiv_ge_5eb7a616e3af4ab6a3891427ef25de5a_32_5
+L_i32_udiv_ge_5eb7a616e3af4ab6a3891427ef25de5a_32_5:
     SLTU S2, S0, S1
     SUB S0, S0, S1
-    SUB T7, T7, T0
-    SUB T7, T7, S2
+    SUB T1, T1, T0
+    SUB T1, T1, S2
     OR T2, T2, T5
-L_i32_udiv_next_bdd27595_32_5:
+L_i32_udiv_next_5eb7a616e3af4ab6a3891427ef25de5a_32_6:
     SUB T6, T6, T5
-    BEQ T6, R0, L_i32_udiv_done_bdd27595_32_6
-    BEQ R0, R0, L_i32_udiv_loop_bdd27595_32_3
-L_i32_udiv_done_bdd27595_32_6:
-; Spill const_f32_op57_64000 to slot 47
+    BEQ T6, R0, L_i32_udiv_done_5eb7a616e3af4ab6a3891427ef25de5a_32_7
+    BEQ R0, R0, L_i32_udiv_loop_5eb7a616e3af4ab6a3891427ef25de5a_32_4
+L_i32_udiv_done_5eb7a616e3af4ab6a3891427ef25de5a_32_7:
+; Spill const_f32_op56_64000 to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 64
     STORE S1, SB, SC
     LI S1, -1536
-; Spill i32_const_hi_32_f32_op58 to slot 48
+; Spill i32_const_hi_32_f32_op57 to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 65
     STORE T0, SB, SC
     LI T0, 0
-; Spill div_nlo_32_f32_op59 to slot 49
+; Spill div_nlo_32_f32_op58 to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 66
     STORE T4, SB, SC
-; Spill div_nhi_32_f32_op60 to slot 50
+; Spill div_nhi_32_f32_op59 to slot 50
     ADD SC, FP, R0
     ADDI SC, SC, 67
     STORE S3, SB, SC
-; Spill div_rlo_32_f32_op61 to slot 51
+; Spill div_rlo_32_f32_op60 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 68
     STORE S0, SB, SC
     LI S0, 255
-; Spill div_rhi_32_f32_op62 to slot 52
+; Spill div_rhi_32_f32_op61 to slot 52
     ADD SC, FP, R0
     ADDI SC, SC, 69
-    STORE T7, SB, SC
-    LI T7, 8
-; Spill div_bits_32_f32_op63 to slot 53
+    STORE T1, SB, SC
+    LI T1, 8
+; Spill div_bits_32_f32_op62 to slot 53
     ADD SC, FP, R0
     ADDI SC, SC, 70
     STORE T6, SB, SC
     AND T6, T2, S0
-; Spill div_one_32_f32_op64 to slot 54
+; Spill div_one_32_f32_op63 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 71
     STORE T5, SB, SC
-    SRL T5, T2, T7
-; Spill div_scr_32_f32_op65 to slot 55
+    SRL T5, T2, T1
+; Spill div_scr_32_f32_op64 to slot 55
     ADD SC, FP, R0
     ADDI SC, SC, 72
     STORE S2, SB, SC
     AND S2, S1, S0
-; Spill div_scr2_32_f32_op66 to slot 56
+; Spill div_scr2_32_f32_op65 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 73
-    STORE T1, SB, SC
-    SRL T1, S1, T7
-; Spill mul_a0_32_f32_op71 to slot 57
+    STORE T7, SB, SC
+    SRL T7, S1, T1
+; Spill mul_a0_32_f32_op70 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T6, SB, SC
-; Spill mul_a1_32_f32_op72 to slot 58
+; Spill mul_a1_32_f32_op71 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 75
     STORE T5, SB, SC
-; Reload mul_a0_32_f32_op71 from slot 57
+; Reload mul_a0_32_f32_op70 from slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 74
     LOAD T5, SB, SC
     MUL T6, T5, S2
-; Spill mul_mask_32_f32_op69 to slot 59
+; Spill mul_mask_32_f32_op68 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 76
     STORE S0, SB, SC
-    MUL S0, T5, T1
-; Spill mul_sh8_32_f32_op70 to slot 60
+    MUL S0, T5, T7
+; Spill mul_sh8_32_f32_op69 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 77
-    STORE T7, SB, SC
-; Spill mul_p00_32_f32_op75 to slot 61
+    STORE T1, SB, SC
+; Spill mul_p00_32_f32_op74 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE T6, SB, SC
-; Reload mul_a1_32_f32_op72 from slot 58
+; Reload mul_a1_32_f32_op71 from slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 75
     LOAD T6, SB, SC
-    MUL T7, T6, S2
-    MUL S3, T6, T1
-; Spill mul_p01_32_f32_op76 to slot 62
+    MUL T1, T6, S2
+    MUL S3, T6, T7
+; Spill mul_p01_32_f32_op75 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 79
     STORE S0, SB, SC
-; Spill mul_a0_32_f32_op71 to slot 57
+; Spill mul_a0_32_f32_op70 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T5, SB, SC
-; Reload mul_p01_32_f32_op76 from slot 62
+; Reload mul_p01_32_f32_op75 from slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 79
     LOAD T5, SB, SC
-    ADD S0, T5, T7
-; Spill mul_b0_32_f32_op73 to slot 63
+    ADD S0, T5, T1
+; Spill mul_b0_32_f32_op72 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 80
     STORE S2, SB, SC
     SLTU S2, S0, T5
-; Spill mul_a1_32_f32_op72 to slot 58
+; Spill mul_a1_32_f32_op71 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 75
     STORE T6, SB, SC
-; Spill mul_b1_32_f32_op74 to slot 64
+; Spill mul_b1_32_f32_op73 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 81
-    STORE T1, SB, SC
-; Reload mul_mask_32_f32_op69 from slot 59
+    STORE T7, SB, SC
+; Reload mul_mask_32_f32_op68 from slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    LOAD T1, SB, SC
-    AND T6, S0, T1
-; Spill mul_p10_32_f32_op77 to slot 65
+    LOAD T7, SB, SC
+    AND T6, S0, T7
+; Spill mul_p10_32_f32_op76 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 82
-    STORE T7, SB, SC
-; Reload mul_sh8_32_f32_op70 from slot 60
+    STORE T1, SB, SC
+; Reload mul_sh8_32_f32_op69 from slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 77
-    LOAD T7, SB, SC
-    SLL T6, T6, T7
-; Spill mul_midc_32_f32_op79 to slot 66
+    LOAD T1, SB, SC
+    SLL T6, T6, T1
+; Spill mul_midc_32_f32_op78 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 83
     STORE S2, SB, SC
-; Reload mul_p00_32_f32_op75 from slot 61
+; Reload mul_p00_32_f32_op74 from slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 78
     LOAD S2, SB, SC
     ADD T4, S2, T6
-; Spill mul_p01_32_f32_op76 to slot 62
+; Spill mul_p01_32_f32_op75 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 79
     STORE T5, SB, SC
     SLTU T5, T4, S2
-    SRL S0, S0, T7
+    SRL S0, S0, T1
     ADD S3, S3, S0
-; Spill mul_mask_32_f32_op69 to slot 59
+; Spill mul_mask_32_f32_op68 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    STORE T1, SB, SC
-; Reload mul_midc_32_f32_op79 from slot 66
+    STORE T7, SB, SC
+; Reload mul_midc_32_f32_op78 from slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 83
-    LOAD T1, SB, SC
-    SLL T1, T1, T7
-    ADD S3, S3, T1
+    LOAD T7, SB, SC
+    SLL T7, T7, T1
+    ADD S3, S3, T7
     ADD S3, S3, T5
-; Spill mul_midlo_32_f32_op80 to slot 67
+; Spill mul_midlo_32_f32_op79 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 84
     STORE T6, SB, SC
     MUL T6, T2, T0
-; Spill mul_p00_32_f32_op75 to slot 61
+; Spill mul_p00_32_f32_op74 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE S2, SB, SC
@@ -4694,15 +4694,15 @@ L_i32_udiv_done_bdd27595_32_6:
     ADD SC, FP, R0
     ADDI SC, SC, 63
     LOAD T3, SB, SC
-; Spill const_f32_op67_64000 to slot 70
+; Spill const_f32_op66_64000 to slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 87
     STORE S1, SB, SC
-; Spill i32_const_hi_32_f32_op68 to slot 71
+; Spill i32_const_hi_32_f32_op67 to slot 71
     ADD SC, FP, R0
     ADDI SC, SC, 88
     STORE T0, SB, SC
-; Spill mul_mid_32_f32_op78 to slot 72
+; Spill mul_mid_32_f32_op77 to slot 72
     ADD SC, FP, R0
     ADDI SC, SC, 89
     STORE S0, SB, SC
@@ -4713,45 +4713,45 @@ L_i32_udiv_done_bdd27595_32_6:
 ; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(16), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Mixed })
 ; LOAD: Pointer t16 has bank info: Dynamic("t4294967289")
-; Spill mul_sh8_32_f32_op70 to slot 60
+; Spill mul_sh8_32_f32_op69 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 77
-    STORE T7, SB, SC
+    STORE T1, SB, SC
 ; Reload t4294967289 from slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 85
-    LOAD T7, SB, SC
-; Spill mul_midc_32_f32_op79 to slot 66
+    LOAD T1, SB, SC
+; Spill mul_midc_32_f32_op78 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 83
-    STORE T1, SB, SC
-; Spill mul_c_32_f32_op81 to slot 73
+    STORE T7, SB, SC
+; Spill mul_c_32_f32_op80 to slot 73
     ADD SC, FP, R0
     ADDI SC, SC, 90
     STORE T5, SB, SC
     LI T5, -1
-    BEQ T7, T5, L_bc_1f874b84_use_global
-; Spill mul32_x1_32_f32_op82 to slot 74
+    BEQ T1, T5, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_10_use_global
+    LI T5, -2
+    BEQ T1, T5, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_10_use_stack
+    ADD T7, T1, R0
+    BEQ R0, R0, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_10_done
+L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_10_use_global:
+    ADD T7, GP, R0
+    BEQ R0, R0, L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_10_done
+L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_10_use_stack:
+    ADD T7, SB, R0
+L_bc_5eb7a616e3af4ab6a3891427ef25de5a_32_10_done:
+; LOAD: Using bank register T7 for load
+    LOAD T5, T7, S1
+; Spill mul32_x1_32_f32_op81 to slot 74
     ADD SC, FP, R0
     ADDI SC, SC, 91
     STORE T6, SB, SC
-    LI T6, -2
-    BEQ T7, T6, L_bc_1f874b84_use_stack
-    ADD T1, T7, R0
-    BEQ R0, R0, L_bc_1f874b84_done
-L_bc_1f874b84_use_global:
-    ADD T1, GP, R0
-    BEQ R0, R0, L_bc_1f874b84_done
-L_bc_1f874b84_use_stack:
-    ADD T1, SB, R0
-L_bc_1f874b84_done:
-; LOAD: Using bank register T1 for load
-    LOAD T5, T1, S1
 ; Recompute alloca t11 at FP+7
     ADD T6, FP, R0
     ADDI T6, T6, 7
     STORE T5, SB, T6
-; Spill mul32_x2_32_f32_op83 to slot 75
+; Spill mul32_x2_32_f32_op82 to slot 75
     ADD SC, FP, R0
     ADDI SC, SC, 92
     STORE S2, SB, SC
@@ -4779,7 +4779,7 @@ L_bc_1f874b84_done:
     ADD SC, FP, R0
     ADDI SC, SC, 94
     STORE S3, SB, SC
-; Spill i32_borrow_32_f32_op84 to slot 78
+; Spill i32_borrow_32_f32_op83 to slot 78
     ADD SC, FP, R0
     ADDI SC, SC, 95
     STORE S0, SB, SC
@@ -4794,15 +4794,15 @@ L_bc_1f874b84_done:
 ; Spill t4294967289 to slot 81
     ADD SC, FP, R0
     ADDI SC, SC, 98
-    STORE T7, SB, SC
+    STORE T1, SB, SC
 ; Spill t4294967289 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 85
-    STORE T7, SB, SC
-; Spill load_f32_op85_t17_resolved_bank_32_f32_op86 to slot 82
+    STORE T1, SB, SC
+; Spill load_f32_op84_t17_resolved_bank_32_f32_op85 to slot 82
     ADD SC, FP, R0
     ADDI SC, SC, 99
-    STORE T1, SB, SC
+    STORE T7, SB, SC
 ; Spill t19 to slot 83
     ADD SC, FP, R0
     ADDI SC, SC, 100
@@ -4821,7 +4821,7 @@ L_text40_puts_attr_68:
 ; Recompute alloca t8 at FP+5
     ADD S2, FP, R0
     ADDI S2, S2, 5
-; LOAD: Pointer load_src_ptr_f32_op94_t20 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f32_op92_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T2, SB, S2
     LI T4, 40
@@ -4841,11 +4841,11 @@ L_text40_puts_attr_68:
     BEQ R0, R0, L_text40_puts_attr_70
 ; Unconditional branch to L_text40_puts_attr_70
 L_text40_puts_attr_69:
-    LI T7, 0
+    LI T1, 0
 ; Recompute alloca t12 at FP+8
-    ADD T1, FP, R0
-    ADDI T1, T1, 8
-    STORE T7, SB, T1
+    ADD T7, FP, R0
+    ADDI T7, T7, 8
+    STORE T1, SB, T7
     BEQ R0, R0, L_text40_puts_attr_70
 ; Unconditional branch to L_text40_puts_attr_70
 L_text40_puts_attr_70:
@@ -4854,7 +4854,7 @@ L_text40_puts_attr_70:
 ; Recompute alloca t12 at FP+8
     ADD T6, FP, R0
     ADDI T6, T6, 8
-; LOAD: Pointer load_src_ptr_f32_op101_t23 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f32_op99_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T5, SB, T6
     LI T3, 0
@@ -4879,7 +4879,7 @@ L_text40_puts_attr_66:
 ; Recompute alloca t8 at FP+5
     ADD S3, FP, R0
     ADDI S3, S3, 5
-; LOAD: Pointer load_src_ptr_f32_op105_t25 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f32_op103_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S2, SB, S3
 ; Load instruction: t26 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
@@ -4887,30 +4887,30 @@ L_text40_puts_attr_66:
 ; Recompute alloca t5 at FP+1
     ADD T2, FP, R0
     ADDI T2, T2, 1
-; LOAD: Pointer load_src_ptr_f32_op107_t26 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f32_op105_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S1, SB, T2
 ; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(11), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(11), bank: Stack })
 ; Recompute alloca t11 at FP+7
-    ADD T7, FP, R0
-    ADDI T7, T7, 7
-; LOAD: Pointer load_src_ptr_f32_op109_t27 has bank info: Stack
+    ADD T1, FP, R0
+    ADDI T1, T1, 7
+; LOAD: Pointer load_src_ptr_f32_op107_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T1, SB, T7
+    LOAD T7, SB, T1
     LI T4, 255
-    AND T1, T1, T4
+    AND T7, T7, T4
 ; Load instruction: t29 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Recompute alloca t7 at FP+4
     ADD S0, FP, R0
     ADDI S0, S0, 4
-; LOAD: Pointer load_src_ptr_f32_op111_t29 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f32_op109_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T3, SB, S0
     ADD A0, S2, R0
     ADD A1, S1, R0
-    ADD A2, T1, R0
+    ADD A2, T7, R0
     ADD A3, T3, R0
 ; Spill live registers before call
 ; Spill t25 to slot 86
@@ -4924,7 +4924,7 @@ L_text40_puts_attr_66:
 ; Spill t28 to slot 88
     ADD SC, FP, R0
     ADDI SC, SC, 105
-    STORE T1, SB, SC
+    STORE T7, SB, SC
 ; Spill t29 to slot 89
     ADD SC, FP, R0
     ADDI SC, SC, 106
@@ -4943,7 +4943,7 @@ L_text40_puts_attr_66:
 ; Recompute alloca t8 at FP+5
     ADD T6, FP, R0
     ADDI T6, T6, 5
-; LOAD: Pointer load_src_ptr_f32_op113_t30 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f32_op111_t30 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T5, SB, T6
     LI T0, 1
@@ -4954,7 +4954,7 @@ L_text40_puts_attr_66:
 ; Recompute alloca t10 at FP+6
     ADD T4, FP, R0
     ADDI T4, T4, 6
-; LOAD: Pointer load_src_ptr_f32_op116_t32 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f32_op114_t32 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD S3, SB, T4
     LI T2, 1
@@ -8237,10 +8237,10 @@ L_storage_write_buffer_139:
     ADD T2, SB, R0
     LI T1, -1536
     ADDI T3, T3, 1
-    BNE T3, T1, L_i32_memory_next_word_2e681174_82_0
+    BNE T3, T1, L_i32_memory_next_word_e648d7915bbb4e88bafda0d7316660ab_82_0
     LI T3, 0
     ADDI T2, T2, 1
-L_i32_memory_next_word_2e681174_82_0:
+L_i32_memory_next_word_e648d7915bbb4e88bafda0d7316660ab_82_0:
     STORE S0, T2, T3
     ADD T0, FP, R0
     ADDI T0, T0, 4
@@ -8359,10 +8359,10 @@ L_storage_write_buffer_141:
     ADD S3, SB, R0
     LI T4, -1536
     ADDI S2, S2, 1
-    BNE S2, T4, L_i32_memory_next_word_2e681174_82_1
+    BNE S2, T4, L_i32_memory_next_word_e648d7915bbb4e88bafda0d7316660ab_82_1
     LI S2, 0
     ADDI S3, S3, 1
-L_i32_memory_next_word_2e681174_82_1:
+L_i32_memory_next_word_e648d7915bbb4e88bafda0d7316660ab_82_1:
     LOAD T0, S3, S2
 ; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
@@ -8377,31 +8377,31 @@ L_i32_memory_next_word_2e681174_82_1:
     ADD S0, T7, R0
     ADD S1, T5, R0
     LI S2, -1
-    BEQ T0, S2, L_bc_69f8a2fd_use_global
-    LI S3, -2
-    BEQ T0, S3, L_bc_69f8a2fd_use_stack
+    BEQ T0, S2, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_2_use_global
+    LI S2, -2
+    BEQ T0, S2, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_2_use_stack
     ADD T3, T0, R0
-    BEQ R0, R0, L_bc_69f8a2fd_done
-L_bc_69f8a2fd_use_global:
+    BEQ R0, R0, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_2_done
+L_bc_e648d7915bbb4e88bafda0d7316660ab_82_2_use_global:
     ADD T3, GP, R0
-    BEQ R0, R0, L_bc_69f8a2fd_done
-L_bc_69f8a2fd_use_stack:
+    BEQ R0, R0, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_2_done
+L_bc_e648d7915bbb4e88bafda0d7316660ab_82_2_use_stack:
     ADD T3, SB, R0
-L_bc_69f8a2fd_done:
-    ADD T4, T1, R0
-    ADD S2, T3, R0
-    LI S3, -3
-    BNE S2, S3, L_i32_pointer_nonnull_2e681174_82_2
+L_bc_e648d7915bbb4e88bafda0d7316660ab_82_2_done:
+    ADD S3, T1, R0
+    ADD T4, T3, R0
+    LI S2, -3
+    BNE T4, S2, L_i32_pointer_nonnull_e648d7915bbb4e88bafda0d7316660ab_82_3
+    LI S3, 0
     LI T4, 0
-    LI S2, 0
-L_i32_pointer_nonnull_2e681174_82_2:
-    ADD T2, T4, R0
+L_i32_pointer_nonnull_e648d7915bbb4e88bafda0d7316660ab_82_3:
+    ADD T2, S3, R0
     LI T6, 0
 ; Spill t16 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 23
     STORE T7, SB, SC
-    ADD T7, S2, R0
+    ADD T7, T4, R0
 ; Spill i32_zext_82_f82_op35 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -8434,21 +8434,21 @@ L_i32_pointer_nonnull_2e681174_82_2:
     ADDI SC, SC, 30
     STORE T3, SB, SC
     LI T3, 255
-; Spill pointer_addr_copy_82_f82_op39 to slot 17
+; Spill pointer_addr_copy_82_f82_op38 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 31
-    STORE T4, SB, SC
-    LI T4, 8
-; Spill pointer_bank_copy_82_f82_op40 to slot 18
+    STORE S3, SB, SC
+    LI S3, 8
+; Spill pointer_bank_copy_82_f82_op39 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 32
-    STORE S2, SB, SC
-    AND S2, T7, T3
-; Spill pointer_null_tag_82_f82_op41 to slot 19
+    STORE T4, SB, SC
+    AND T4, T7, T3
+; Spill pointer_null_tag_82_f82_op40 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 33
-    STORE S3, SB, SC
-    SRL S3, T7, T4
+    STORE S2, SB, SC
+    SRL S2, T7, S3
 ; Spill t4294967293 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 34
@@ -8458,117 +8458,117 @@ L_i32_pointer_nonnull_2e681174_82_2:
     ADD SC, FP, R0
     ADDI SC, SC, 35
     STORE T6, SB, SC
-    SRL T6, S0, T4
-; Spill mul_a0_82_f82_op48 to slot 22
+    SRL T6, S0, S3
+; Spill mul_a0_82_f82_op47 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    STORE S2, SB, SC
-; Spill mul_a1_82_f82_op49 to slot 23
+    STORE T4, SB, SC
+; Spill mul_a1_82_f82_op48 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    STORE S3, SB, SC
-; Reload mul_a0_82_f82_op48 from slot 22
+    STORE S2, SB, SC
+; Reload mul_a0_82_f82_op47 from slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    LOAD S3, SB, SC
-    MUL S2, S3, T2
-; Spill mul_mask_82_f82_op46 to slot 24
+    LOAD S2, SB, SC
+    MUL T4, S2, T2
+; Spill mul_mask_82_f82_op45 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE T3, SB, SC
-    MUL T3, S3, T6
-; Spill mul_sh8_82_f82_op47 to slot 25
+    MUL T3, S2, T6
+; Spill mul_sh8_82_f82_op46 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    STORE T4, SB, SC
-; Spill mul_p00_82_f82_op52 to slot 26
+    STORE S3, SB, SC
+; Spill mul_p00_82_f82_op51 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    STORE S2, SB, SC
-; Reload mul_a1_82_f82_op49 from slot 23
+    STORE T4, SB, SC
+; Reload mul_a1_82_f82_op48 from slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    LOAD S2, SB, SC
-    MUL T4, S2, T2
-    MUL T0, S2, T6
-; Spill mul_p01_82_f82_op53 to slot 27
+    LOAD T4, SB, SC
+    MUL S3, T4, T2
+    MUL T0, T4, T6
+; Spill mul_p01_82_f82_op52 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE T3, SB, SC
-; Spill mul_a0_82_f82_op48 to slot 22
+; Spill mul_a0_82_f82_op47 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    STORE S3, SB, SC
-; Reload mul_p01_82_f82_op53 from slot 27
+    STORE S2, SB, SC
+; Reload mul_p01_82_f82_op52 from slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 41
-    LOAD S3, SB, SC
-    ADD T3, S3, T4
-; Spill mul_b0_82_f82_op50 to slot 28
+    LOAD S2, SB, SC
+    ADD T3, S2, S3
+; Spill mul_b0_82_f82_op49 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE T2, SB, SC
-    SLTU T2, T3, S3
-; Spill mul_a1_82_f82_op49 to slot 23
+    SLTU T2, T3, S2
+; Spill mul_a1_82_f82_op48 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    STORE S2, SB, SC
-; Spill mul_b1_82_f82_op51 to slot 29
+    STORE T4, SB, SC
+; Spill mul_b1_82_f82_op50 to slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T6, SB, SC
-; Reload mul_mask_82_f82_op46 from slot 24
+; Reload mul_mask_82_f82_op45 from slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 38
     LOAD T6, SB, SC
-    AND S2, T3, T6
-; Spill mul_p10_82_f82_op54 to slot 30
+    AND T4, T3, T6
+; Spill mul_p10_82_f82_op53 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 44
-    STORE T4, SB, SC
-; Reload mul_sh8_82_f82_op47 from slot 25
+    STORE S3, SB, SC
+; Reload mul_sh8_82_f82_op46 from slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    LOAD T4, SB, SC
-    SLL S2, S2, T4
-; Spill mul_midc_82_f82_op56 to slot 31
+    LOAD S3, SB, SC
+    SLL T4, T4, S3
+; Spill mul_midc_82_f82_op55 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 45
     STORE T2, SB, SC
-; Reload mul_p00_82_f82_op52 from slot 26
+; Reload mul_p00_82_f82_op51 from slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 40
     LOAD T2, SB, SC
-    ADD T1, T2, S2
-; Spill mul_p01_82_f82_op53 to slot 27
+    ADD T1, T2, T4
+; Spill mul_p01_82_f82_op52 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 41
-    STORE S3, SB, SC
-    SLTU S3, T1, T2
-    SRL T3, T3, T4
+    STORE S2, SB, SC
+    SLTU S2, T1, T2
+    SRL T3, T3, S3
     ADD T0, T0, T3
-; Spill mul_mask_82_f82_op46 to slot 24
+; Spill mul_mask_82_f82_op45 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE T6, SB, SC
-; Reload mul_midc_82_f82_op56 from slot 31
+; Reload mul_midc_82_f82_op55 from slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 45
     LOAD T6, SB, SC
-    SLL T6, T6, T4
+    SLL T6, T6, S3
     ADD T0, T0, T6
-    ADD T0, T0, S3
-; Spill mul_midlo_82_f82_op57 to slot 32
+    ADD T0, T0, S2
+; Spill mul_midlo_82_f82_op56 to slot 32
     ADD SC, FP, R0
     ADDI SC, SC, 46
-    STORE S2, SB, SC
-    MUL S2, T7, S1
-; Spill mul_p00_82_f82_op52 to slot 26
+    STORE T4, SB, SC
+    MUL T4, T7, S1
+; Spill mul_p00_82_f82_op51 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE T2, SB, SC
     MUL T2, T5, S0
-    ADD T0, T0, S2
+    ADD T0, T0, T4
     ADD T0, T0, T2
 ; Spill t4294967292 to slot 33
     ADD SC, FP, R0
@@ -8586,15 +8586,15 @@ L_i32_pointer_nonnull_2e681174_82_2:
     ADD SC, FP, R0
     ADDI SC, SC, 35
     LOAD T5, SB, SC
-; Spill const_f82_op44_64000 to slot 35
+; Spill const_f82_op43_64000 to slot 35
     ADD SC, FP, R0
     ADDI SC, SC, 49
     STORE S0, SB, SC
-; Spill i32_const_hi_82_f82_op45 to slot 36
+; Spill i32_const_hi_82_f82_op44 to slot 36
     ADD SC, FP, R0
     ADDI SC, SC, 50
     STORE S1, SB, SC
-; Spill mul_mid_82_f82_op55 to slot 37
+; Spill mul_mid_82_f82_op54 to slot 37
     ADD SC, FP, R0
     ADDI SC, SC, 51
     STORE T3, SB, SC
@@ -8602,15 +8602,15 @@ L_i32_pointer_nonnull_2e681174_82_2:
     SLTU T3, S0, T1
     ADD S1, T0, T5
     ADD S1, S1, T3
-; Spill mul_sh8_82_f82_op47 to slot 25
+; Spill mul_sh8_82_f82_op46 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    STORE T4, SB, SC
+    STORE S3, SB, SC
 ; Reload t17 from slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    LOAD T4, SB, SC
-; Spill mul_midc_82_f82_op56 to slot 31
+    LOAD S3, SB, SC
+; Spill mul_midc_82_f82_op55 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 45
     STORE T6, SB, SC
@@ -8618,22 +8618,22 @@ L_i32_pointer_nonnull_2e681174_82_2:
     ADD SC, FP, R0
     ADDI SC, SC, 26
     LOAD T6, SB, SC
-; Spill mul_c_82_f82_op58 to slot 38
+; Spill mul_c_82_f82_op57 to slot 38
     ADD SC, FP, R0
     ADDI SC, SC, 52
-    STORE S3, SB, SC
-; Spill mul32_x1_82_f82_op59 to slot 39
+    STORE S2, SB, SC
+; Spill mul32_x1_82_f82_op58 to slot 39
     ADD SC, FP, R0
     ADDI SC, SC, 53
-    STORE S2, SB, SC
-; Spill mul32_x2_82_f82_op60 to slot 40
+    STORE T4, SB, SC
+; Spill mul32_x2_82_f82_op59 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 54
     STORE T2, SB, SC
-    ADD S3, S0, T4
-    SLTU T2, S3, S0
-    ADD S2, S1, T6
-    ADD S2, S2, T2
+    ADD S2, S0, S3
+    SLTU T2, S2, S0
+    ADD T4, S1, T6
+    ADD T4, T4, T2
 ; Spill t4294967291 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 55
@@ -8653,16 +8653,16 @@ L_i32_pointer_nonnull_2e681174_82_2:
     ADDI SC, SC, 35
     STORE T5, SB, SC
 ; i32 unsigned div/rem (restoring)
-; Spill i32_carry_82_f82_op61 to slot 43
+; Spill i32_carry_82_f82_op60 to slot 43
     ADD SC, FP, R0
     ADDI SC, SC, 57
     STORE T3, SB, SC
-    ADD T3, S3, R0
+    ADD T3, S2, R0
 ; Spill t4294967295 to slot 44
     ADD SC, FP, R0
     ADDI SC, SC, 58
     STORE S0, SB, SC
-    ADD S0, S2, R0
+    ADD S0, T4, R0
 ; Spill t4294967295__hi to slot 45
     ADD SC, FP, R0
     ADDI SC, SC, 59
@@ -8671,8 +8671,8 @@ L_i32_pointer_nonnull_2e681174_82_2:
 ; Spill t17 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    STORE T4, SB, SC
-    LI T4, 0
+    STORE S3, SB, SC
+    LI S3, 0
     LI T7, 0
     LI T5, 0
 ; Spill t17__hi to slot 12
@@ -8680,7 +8680,7 @@ L_i32_pointer_nonnull_2e681174_82_2:
     ADDI SC, SC, 26
     STORE T6, SB, SC
     LI T6, 32
-; Spill i32_carry_82_f82_op62 to slot 46
+; Spill i32_carry_82_f82_op61 to slot 46
     ADD SC, FP, R0
     ADDI SC, SC, 60
     STORE T2, SB, SC
@@ -8688,205 +8688,205 @@ L_i32_pointer_nonnull_2e681174_82_2:
 ; Spill t4294967290 to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 61
-    STORE S3, SB, SC
+    STORE S2, SB, SC
 ; Spill t4294967290__hi to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 62
-    STORE S2, SB, SC
-L_i32_udiv_loop_2e681174_82_3:
-    SLT S3, S0, R0
-    SLT S2, S1, R0
+    STORE T4, SB, SC
+L_i32_udiv_loop_e648d7915bbb4e88bafda0d7316660ab_82_4:
+    SLT S2, S0, R0
+    SLT T4, S1, R0
     ADD S1, S1, S1
-    OR S1, S1, S3
-    ADD T4, T4, T4
-    OR T4, T4, S2
-    SLT S2, T3, R0
+    OR S1, S1, S2
+    ADD S3, S3, S3
+    OR S3, S3, T4
+    SLT T4, T3, R0
     ADD T3, T3, T3
     ADD S0, S0, S0
-    OR S0, S0, S2
-    SLT S2, T7, R0
+    OR S0, S0, T4
+    SLT T4, T7, R0
     ADD T7, T7, T7
     ADD T5, T5, T5
-    OR T5, T5, S2
-    XOR S3, T4, T0
-    BNE S3, R0, L_i32_ult_hine_2e681174_82_7
-    SLTU S3, S1, T1
-    BEQ R0, R0, L_i32_ult_done_2e681174_82_8
-L_i32_ult_hine_2e681174_82_7:
-    SLTU S3, T4, T0
-L_i32_ult_done_2e681174_82_8:
-    BNE S3, R0, L_i32_udiv_next_2e681174_82_5
-    BEQ R0, R0, L_i32_udiv_ge_2e681174_82_4
-L_i32_udiv_ge_2e681174_82_4:
-    SLTU S3, S1, T1
+    OR T5, T5, T4
+    XOR S2, S3, T0
+    BNE S2, R0, L_i32_ult_hine_e648d7915bbb4e88bafda0d7316660ab_82_8
+    SLTU S2, S1, T1
+    BEQ R0, R0, L_i32_ult_done_e648d7915bbb4e88bafda0d7316660ab_82_9
+L_i32_ult_hine_e648d7915bbb4e88bafda0d7316660ab_82_8:
+    SLTU S2, S3, T0
+L_i32_ult_done_e648d7915bbb4e88bafda0d7316660ab_82_9:
+    BNE S2, R0, L_i32_udiv_next_e648d7915bbb4e88bafda0d7316660ab_82_6
+    BEQ R0, R0, L_i32_udiv_ge_e648d7915bbb4e88bafda0d7316660ab_82_5
+L_i32_udiv_ge_e648d7915bbb4e88bafda0d7316660ab_82_5:
+    SLTU S2, S1, T1
     SUB S1, S1, T1
-    SUB T4, T4, T0
-    SUB T4, T4, S3
+    SUB S3, S3, T0
+    SUB S3, S3, S2
     OR T7, T7, T2
-L_i32_udiv_next_2e681174_82_5:
+L_i32_udiv_next_e648d7915bbb4e88bafda0d7316660ab_82_6:
     SUB T6, T6, T2
-    BEQ T6, R0, L_i32_udiv_done_2e681174_82_6
-    BEQ R0, R0, L_i32_udiv_loop_2e681174_82_3
-L_i32_udiv_done_2e681174_82_6:
-; Spill const_f82_op63_64000 to slot 49
+    BEQ T6, R0, L_i32_udiv_done_e648d7915bbb4e88bafda0d7316660ab_82_7
+    BEQ R0, R0, L_i32_udiv_loop_e648d7915bbb4e88bafda0d7316660ab_82_4
+L_i32_udiv_done_e648d7915bbb4e88bafda0d7316660ab_82_7:
+; Spill const_f82_op62_64000 to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 63
     STORE T1, SB, SC
     LI T1, -1536
-; Spill i32_const_hi_82_f82_op64 to slot 50
+; Spill i32_const_hi_82_f82_op63 to slot 50
     ADD SC, FP, R0
     ADDI SC, SC, 64
     STORE T0, SB, SC
     LI T0, 0
-; Spill div_nlo_82_f82_op65 to slot 51
+; Spill div_nlo_82_f82_op64 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 65
     STORE T3, SB, SC
-; Spill div_nhi_82_f82_op66 to slot 52
+; Spill div_nhi_82_f82_op65 to slot 52
     ADD SC, FP, R0
     ADDI SC, SC, 66
     STORE S0, SB, SC
-; Spill div_rlo_82_f82_op67 to slot 53
+; Spill div_rlo_82_f82_op66 to slot 53
     ADD SC, FP, R0
     ADDI SC, SC, 67
     STORE S1, SB, SC
     LI S1, 255
-; Spill div_rhi_82_f82_op68 to slot 54
+; Spill div_rhi_82_f82_op67 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 68
-    STORE T4, SB, SC
-    LI T4, 8
-; Spill div_bits_82_f82_op69 to slot 55
+    STORE S3, SB, SC
+    LI S3, 8
+; Spill div_bits_82_f82_op68 to slot 55
     ADD SC, FP, R0
     ADDI SC, SC, 69
     STORE T6, SB, SC
     AND T6, T7, S1
-; Spill div_one_82_f82_op70 to slot 56
+; Spill div_one_82_f82_op69 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 70
     STORE T2, SB, SC
-    SRL T2, T7, T4
-; Spill div_scr_82_f82_op71 to slot 57
+    SRL T2, T7, S3
+; Spill div_scr_82_f82_op70 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 71
-    STORE S3, SB, SC
-    AND S3, T1, S1
-; Spill div_scr2_82_f82_op72 to slot 58
+    STORE S2, SB, SC
+    AND S2, T1, S1
+; Spill div_scr2_82_f82_op71 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 72
-    STORE S2, SB, SC
-    SRL S2, T1, T4
-; Spill mul_a0_82_f82_op77 to slot 59
+    STORE T4, SB, SC
+    SRL T4, T1, S3
+; Spill mul_a0_82_f82_op76 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE T6, SB, SC
-; Spill mul_a1_82_f82_op78 to slot 60
+; Spill mul_a1_82_f82_op77 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T2, SB, SC
-; Reload mul_a0_82_f82_op77 from slot 59
+; Reload mul_a0_82_f82_op76 from slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 73
     LOAD T2, SB, SC
-    MUL T6, T2, S3
-; Spill mul_mask_82_f82_op75 to slot 61
+    MUL T6, T2, S2
+; Spill mul_mask_82_f82_op74 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 75
     STORE S1, SB, SC
-    MUL S1, T2, S2
-; Spill mul_sh8_82_f82_op76 to slot 62
+    MUL S1, T2, T4
+; Spill mul_sh8_82_f82_op75 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    STORE T4, SB, SC
-; Spill mul_p00_82_f82_op81 to slot 63
+    STORE S3, SB, SC
+; Spill mul_p00_82_f82_op80 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 77
     STORE T6, SB, SC
-; Reload mul_a1_82_f82_op78 from slot 60
+; Reload mul_a1_82_f82_op77 from slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 74
     LOAD T6, SB, SC
-    MUL T4, T6, S3
-    MUL S0, T6, S2
-; Spill mul_p01_82_f82_op82 to slot 64
+    MUL S3, T6, S2
+    MUL S0, T6, T4
+; Spill mul_p01_82_f82_op81 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE S1, SB, SC
-; Spill mul_a0_82_f82_op77 to slot 59
+; Spill mul_a0_82_f82_op76 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE T2, SB, SC
-; Reload mul_p01_82_f82_op82 from slot 64
+; Reload mul_p01_82_f82_op81 from slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 78
     LOAD T2, SB, SC
-    ADD S1, T2, T4
-; Spill mul_b0_82_f82_op79 to slot 65
+    ADD S1, T2, S3
+; Spill mul_b0_82_f82_op78 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 79
-    STORE S3, SB, SC
-    SLTU S3, S1, T2
-; Spill mul_a1_82_f82_op78 to slot 60
+    STORE S2, SB, SC
+    SLTU S2, S1, T2
+; Spill mul_a1_82_f82_op77 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T6, SB, SC
-; Spill mul_b1_82_f82_op80 to slot 66
+; Spill mul_b1_82_f82_op79 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 80
-    STORE S2, SB, SC
-; Reload mul_mask_82_f82_op75 from slot 61
+    STORE T4, SB, SC
+; Reload mul_mask_82_f82_op74 from slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    LOAD S2, SB, SC
-    AND T6, S1, S2
-; Spill mul_p10_82_f82_op83 to slot 67
+    LOAD T4, SB, SC
+    AND T6, S1, T4
+; Spill mul_p10_82_f82_op82 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 81
-    STORE T4, SB, SC
-; Reload mul_sh8_82_f82_op76 from slot 62
+    STORE S3, SB, SC
+; Reload mul_sh8_82_f82_op75 from slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    LOAD T4, SB, SC
-    SLL T6, T6, T4
-; Spill mul_midc_82_f82_op85 to slot 68
+    LOAD S3, SB, SC
+    SLL T6, T6, S3
+; Spill mul_midc_82_f82_op84 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 82
-    STORE S3, SB, SC
-; Reload mul_p00_82_f82_op81 from slot 63
+    STORE S2, SB, SC
+; Reload mul_p00_82_f82_op80 from slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 77
-    LOAD S3, SB, SC
-    ADD T3, S3, T6
-; Spill mul_p01_82_f82_op82 to slot 64
+    LOAD S2, SB, SC
+    ADD T3, S2, T6
+; Spill mul_p01_82_f82_op81 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE T2, SB, SC
-    SLTU T2, T3, S3
-    SRL S1, S1, T4
+    SLTU T2, T3, S2
+    SRL S1, S1, S3
     ADD S0, S0, S1
-; Spill mul_mask_82_f82_op75 to slot 61
+; Spill mul_mask_82_f82_op74 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    STORE S2, SB, SC
-; Reload mul_midc_82_f82_op85 from slot 68
+    STORE T4, SB, SC
+; Reload mul_midc_82_f82_op84 from slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 82
-    LOAD S2, SB, SC
-    SLL S2, S2, T4
-    ADD S0, S0, S2
+    LOAD T4, SB, SC
+    SLL T4, T4, S3
+    ADD S0, S0, T4
     ADD S0, S0, T2
-; Spill mul_midlo_82_f82_op86 to slot 69
+; Spill mul_midlo_82_f82_op85 to slot 69
     ADD SC, FP, R0
     ADDI SC, SC, 83
     STORE T6, SB, SC
     MUL T6, T7, T0
-; Spill mul_p00_82_f82_op81 to slot 63
+; Spill mul_p00_82_f82_op80 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 77
-    STORE S3, SB, SC
-    MUL S3, T5, T1
+    STORE S2, SB, SC
+    MUL S2, T5, T1
     ADD S0, S0, T6
-    ADD S0, S0, S3
+    ADD S0, S0, S2
 ; Spill t4294967289 to slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 84
@@ -8903,15 +8903,15 @@ L_i32_udiv_done_2e681174_82_6:
     ADD SC, FP, R0
     ADDI SC, SC, 62
     LOAD T5, SB, SC
-; Spill const_f82_op73_64000 to slot 72
+; Spill const_f82_op72_64000 to slot 72
     ADD SC, FP, R0
     ADDI SC, SC, 86
     STORE T1, SB, SC
-; Spill i32_const_hi_82_f82_op74 to slot 73
+; Spill i32_const_hi_82_f82_op73 to slot 73
     ADD SC, FP, R0
     ADDI SC, SC, 87
     STORE T0, SB, SC
-; Spill mul_mid_82_f82_op84 to slot 74
+; Spill mul_mid_82_f82_op83 to slot 74
     ADD SC, FP, R0
     ADDI SC, SC, 88
     STORE S1, SB, SC
@@ -8922,46 +8922,46 @@ L_i32_udiv_done_2e681174_82_6:
 ; Load instruction: t19 = load FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; LOAD: Pointer t18 has bank info: Dynamic("t4294967289")
-; Spill mul_sh8_82_f82_op76 to slot 62
+; Spill mul_sh8_82_f82_op75 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    STORE T4, SB, SC
+    STORE S3, SB, SC
 ; Reload t4294967289 from slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 84
-    LOAD T4, SB, SC
-; Spill mul_midc_82_f82_op85 to slot 68
+    LOAD S3, SB, SC
+; Spill mul_midc_82_f82_op84 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 82
-    STORE S2, SB, SC
-; Spill mul_c_82_f82_op87 to slot 75
+    STORE T4, SB, SC
+; Spill mul_c_82_f82_op86 to slot 75
     ADD SC, FP, R0
     ADDI SC, SC, 89
     STORE T2, SB, SC
     LI T2, -1
-    BEQ T4, T2, L_bc_93f7cf63_use_global
-; Spill mul32_x1_82_f82_op88 to slot 76
+    BEQ S3, T2, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_10_use_global
+    LI T2, -2
+    BEQ S3, T2, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_10_use_stack
+    ADD T4, S3, R0
+    BEQ R0, R0, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_10_done
+L_bc_e648d7915bbb4e88bafda0d7316660ab_82_10_use_global:
+    ADD T4, GP, R0
+    BEQ R0, R0, L_bc_e648d7915bbb4e88bafda0d7316660ab_82_10_done
+L_bc_e648d7915bbb4e88bafda0d7316660ab_82_10_use_stack:
+    ADD T4, SB, R0
+L_bc_e648d7915bbb4e88bafda0d7316660ab_82_10_done:
+; LOAD: Using bank register T4 for load
+    LOAD T2, T4, T1
+    ADD A0, T2, R0
+; Spill live registers before call
+; Spill mul32_x1_82_f82_op87 to slot 76
     ADD SC, FP, R0
     ADDI SC, SC, 90
     STORE T6, SB, SC
-    LI T6, -2
-    BEQ T4, T6, L_bc_93f7cf63_use_stack
-    ADD S2, T4, R0
-    BEQ R0, R0, L_bc_93f7cf63_done
-L_bc_93f7cf63_use_global:
-    ADD S2, GP, R0
-    BEQ R0, R0, L_bc_93f7cf63_done
-L_bc_93f7cf63_use_stack:
-    ADD S2, SB, R0
-L_bc_93f7cf63_done:
-; LOAD: Using bank register S2 for load
-    LOAD T2, S2, T1
-    ADD A0, T2, R0
-; Spill live registers before call
-; Spill mul32_x2_82_f82_op89 to slot 77
+; Spill mul32_x2_82_f82_op88 to slot 77
     ADD SC, FP, R0
     ADDI SC, SC, 91
-    STORE S3, SB, SC
+    STORE S2, SB, SC
 ; Spill t4294967290 to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 61
@@ -8978,7 +8978,7 @@ L_bc_93f7cf63_done:
     ADD SC, FP, R0
     ADDI SC, SC, 93
     STORE S0, SB, SC
-; Spill i32_borrow_82_f82_op90 to slot 80
+; Spill i32_borrow_82_f82_op89 to slot 80
     ADD SC, FP, R0
     ADDI SC, SC, 94
     STORE S1, SB, SC
@@ -8993,15 +8993,15 @@ L_bc_93f7cf63_done:
 ; Spill t4294967289 to slot 83
     ADD SC, FP, R0
     ADDI SC, SC, 97
-    STORE T4, SB, SC
+    STORE S3, SB, SC
 ; Spill t4294967289 to slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 84
-    STORE T4, SB, SC
-; Spill load_f82_op91_t19_resolved_bank_82_f82_op92 to slot 84
+    STORE S3, SB, SC
+; Spill load_f82_op90_t19_resolved_bank_82_f82_op91 to slot 84
     ADD SC, FP, R0
     ADDI SC, SC, 98
-    STORE S2, SB, SC
+    STORE T4, SB, SC
 ; Spill t19 to slot 85
     ADD SC, FP, R0
     ADDI SC, SC, 99
@@ -9020,14 +9020,14 @@ L_storage_write_buffer_142:
 ; Recompute alloca t10 at FP+5
     ADD T6, FP, R0
     ADDI T6, T6, 5
-; LOAD: Pointer load_src_ptr_f82_op95_t20 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f82_op93_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S3, SB, T6
+    LOAD S2, SB, T6
     LI T7, 0
-    ADD S3, S3, T7
+    ADD S2, S2, T7
 ; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
-; LOAD: Pointer load_src_ptr_f82_op97_t22 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f82_op95_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
     LOAD T5, SB, T6
     LI T3, 1
@@ -9036,7 +9036,7 @@ L_storage_write_buffer_142:
 ; Spill t21 to slot 86
     ADD SC, FP, R0
     ADDI SC, SC, 100
-    STORE S3, SB, SC
+    STORE S2, SB, SC
 ; Spill t23 to slot 87
     ADD SC, FP, R0
     ADDI SC, SC, 101
@@ -9120,10 +9120,10 @@ L_storage_read_buffer_144:
     ADD T2, SB, R0
     LI T1, -1536
     ADDI T3, T3, 1
-    BNE T3, T1, L_i32_memory_next_word_6de164b7_84_0
+    BNE T3, T1, L_i32_memory_next_word_4fec7bf682ef430483d39db0d4cfa2f5_84_0
     LI T3, 0
     ADDI T2, T2, 1
-L_i32_memory_next_word_6de164b7_84_0:
+L_i32_memory_next_word_4fec7bf682ef430483d39db0d4cfa2f5_84_0:
     STORE S0, T2, T3
     ADD T0, FP, R0
     ADDI T0, T0, 4
@@ -9242,10 +9242,10 @@ L_storage_read_buffer_146:
     ADD S3, SB, R0
     LI T4, -1536
     ADDI S2, S2, 1
-    BNE S2, T4, L_i32_memory_next_word_6de164b7_84_1
+    BNE S2, T4, L_i32_memory_next_word_4fec7bf682ef430483d39db0d4cfa2f5_84_1
     LI S2, 0
     ADDI S3, S3, 1
-L_i32_memory_next_word_6de164b7_84_1:
+L_i32_memory_next_word_4fec7bf682ef430483d39db0d4cfa2f5_84_1:
     LOAD T0, S3, S2
 ; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
@@ -9260,31 +9260,31 @@ L_i32_memory_next_word_6de164b7_84_1:
     ADD S0, T7, R0
     ADD S1, T5, R0
     LI S2, -1
-    BEQ T0, S2, L_bc_ba4fc2ab_use_global
-    LI S3, -2
-    BEQ T0, S3, L_bc_ba4fc2ab_use_stack
+    BEQ T0, S2, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_2_use_global
+    LI S2, -2
+    BEQ T0, S2, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_2_use_stack
     ADD T3, T0, R0
-    BEQ R0, R0, L_bc_ba4fc2ab_done
-L_bc_ba4fc2ab_use_global:
+    BEQ R0, R0, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_2_done
+L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_2_use_global:
     ADD T3, GP, R0
-    BEQ R0, R0, L_bc_ba4fc2ab_done
-L_bc_ba4fc2ab_use_stack:
+    BEQ R0, R0, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_2_done
+L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_2_use_stack:
     ADD T3, SB, R0
-L_bc_ba4fc2ab_done:
-    ADD T4, T1, R0
-    ADD S2, T3, R0
-    LI S3, -3
-    BNE S2, S3, L_i32_pointer_nonnull_6de164b7_84_2
+L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_2_done:
+    ADD S3, T1, R0
+    ADD T4, T3, R0
+    LI S2, -3
+    BNE T4, S2, L_i32_pointer_nonnull_4fec7bf682ef430483d39db0d4cfa2f5_84_3
+    LI S3, 0
     LI T4, 0
-    LI S2, 0
-L_i32_pointer_nonnull_6de164b7_84_2:
-    ADD T2, T4, R0
+L_i32_pointer_nonnull_4fec7bf682ef430483d39db0d4cfa2f5_84_3:
+    ADD T2, S3, R0
     LI T6, 0
 ; Spill t16 to slot 9
     ADD SC, FP, R0
     ADDI SC, SC, 23
     STORE T7, SB, SC
-    ADD T7, S2, R0
+    ADD T7, T4, R0
 ; Spill i32_zext_84_f84_op35 to slot 10
     ADD SC, FP, R0
     ADDI SC, SC, 24
@@ -9317,21 +9317,21 @@ L_i32_pointer_nonnull_6de164b7_84_2:
     ADDI SC, SC, 30
     STORE T3, SB, SC
     LI T3, 255
-; Spill pointer_addr_copy_84_f84_op39 to slot 17
+; Spill pointer_addr_copy_84_f84_op38 to slot 17
     ADD SC, FP, R0
     ADDI SC, SC, 31
-    STORE T4, SB, SC
-    LI T4, 8
-; Spill pointer_bank_copy_84_f84_op40 to slot 18
+    STORE S3, SB, SC
+    LI S3, 8
+; Spill pointer_bank_copy_84_f84_op39 to slot 18
     ADD SC, FP, R0
     ADDI SC, SC, 32
-    STORE S2, SB, SC
-    AND S2, T7, T3
-; Spill pointer_null_tag_84_f84_op41 to slot 19
+    STORE T4, SB, SC
+    AND T4, T7, T3
+; Spill pointer_null_tag_84_f84_op40 to slot 19
     ADD SC, FP, R0
     ADDI SC, SC, 33
-    STORE S3, SB, SC
-    SRL S3, T7, T4
+    STORE S2, SB, SC
+    SRL S2, T7, S3
 ; Spill t4294967293 to slot 20
     ADD SC, FP, R0
     ADDI SC, SC, 34
@@ -9341,117 +9341,117 @@ L_i32_pointer_nonnull_6de164b7_84_2:
     ADD SC, FP, R0
     ADDI SC, SC, 35
     STORE T6, SB, SC
-    SRL T6, S0, T4
-; Spill mul_a0_84_f84_op48 to slot 22
+    SRL T6, S0, S3
+; Spill mul_a0_84_f84_op47 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    STORE S2, SB, SC
-; Spill mul_a1_84_f84_op49 to slot 23
+    STORE T4, SB, SC
+; Spill mul_a1_84_f84_op48 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    STORE S3, SB, SC
-; Reload mul_a0_84_f84_op48 from slot 22
+    STORE S2, SB, SC
+; Reload mul_a0_84_f84_op47 from slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    LOAD S3, SB, SC
-    MUL S2, S3, T2
-; Spill mul_mask_84_f84_op46 to slot 24
+    LOAD S2, SB, SC
+    MUL T4, S2, T2
+; Spill mul_mask_84_f84_op45 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE T3, SB, SC
-    MUL T3, S3, T6
-; Spill mul_sh8_84_f84_op47 to slot 25
+    MUL T3, S2, T6
+; Spill mul_sh8_84_f84_op46 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    STORE T4, SB, SC
-; Spill mul_p00_84_f84_op52 to slot 26
+    STORE S3, SB, SC
+; Spill mul_p00_84_f84_op51 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 40
-    STORE S2, SB, SC
-; Reload mul_a1_84_f84_op49 from slot 23
+    STORE T4, SB, SC
+; Reload mul_a1_84_f84_op48 from slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    LOAD S2, SB, SC
-    MUL T4, S2, T2
-    MUL T0, S2, T6
-; Spill mul_p01_84_f84_op53 to slot 27
+    LOAD T4, SB, SC
+    MUL S3, T4, T2
+    MUL T0, T4, T6
+; Spill mul_p01_84_f84_op52 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 41
     STORE T3, SB, SC
-; Spill mul_a0_84_f84_op48 to slot 22
+; Spill mul_a0_84_f84_op47 to slot 22
     ADD SC, FP, R0
     ADDI SC, SC, 36
-    STORE S3, SB, SC
-; Reload mul_p01_84_f84_op53 from slot 27
+    STORE S2, SB, SC
+; Reload mul_p01_84_f84_op52 from slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 41
-    LOAD S3, SB, SC
-    ADD T3, S3, T4
-; Spill mul_b0_84_f84_op50 to slot 28
+    LOAD S2, SB, SC
+    ADD T3, S2, S3
+; Spill mul_b0_84_f84_op49 to slot 28
     ADD SC, FP, R0
     ADDI SC, SC, 42
     STORE T2, SB, SC
-    SLTU T2, T3, S3
-; Spill mul_a1_84_f84_op49 to slot 23
+    SLTU T2, T3, S2
+; Spill mul_a1_84_f84_op48 to slot 23
     ADD SC, FP, R0
     ADDI SC, SC, 37
-    STORE S2, SB, SC
-; Spill mul_b1_84_f84_op51 to slot 29
+    STORE T4, SB, SC
+; Spill mul_b1_84_f84_op50 to slot 29
     ADD SC, FP, R0
     ADDI SC, SC, 43
     STORE T6, SB, SC
-; Reload mul_mask_84_f84_op46 from slot 24
+; Reload mul_mask_84_f84_op45 from slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 38
     LOAD T6, SB, SC
-    AND S2, T3, T6
-; Spill mul_p10_84_f84_op54 to slot 30
+    AND T4, T3, T6
+; Spill mul_p10_84_f84_op53 to slot 30
     ADD SC, FP, R0
     ADDI SC, SC, 44
-    STORE T4, SB, SC
-; Reload mul_sh8_84_f84_op47 from slot 25
+    STORE S3, SB, SC
+; Reload mul_sh8_84_f84_op46 from slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    LOAD T4, SB, SC
-    SLL S2, S2, T4
-; Spill mul_midc_84_f84_op56 to slot 31
+    LOAD S3, SB, SC
+    SLL T4, T4, S3
+; Spill mul_midc_84_f84_op55 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 45
     STORE T2, SB, SC
-; Reload mul_p00_84_f84_op52 from slot 26
+; Reload mul_p00_84_f84_op51 from slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 40
     LOAD T2, SB, SC
-    ADD T1, T2, S2
-; Spill mul_p01_84_f84_op53 to slot 27
+    ADD T1, T2, T4
+; Spill mul_p01_84_f84_op52 to slot 27
     ADD SC, FP, R0
     ADDI SC, SC, 41
-    STORE S3, SB, SC
-    SLTU S3, T1, T2
-    SRL T3, T3, T4
+    STORE S2, SB, SC
+    SLTU S2, T1, T2
+    SRL T3, T3, S3
     ADD T0, T0, T3
-; Spill mul_mask_84_f84_op46 to slot 24
+; Spill mul_mask_84_f84_op45 to slot 24
     ADD SC, FP, R0
     ADDI SC, SC, 38
     STORE T6, SB, SC
-; Reload mul_midc_84_f84_op56 from slot 31
+; Reload mul_midc_84_f84_op55 from slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 45
     LOAD T6, SB, SC
-    SLL T6, T6, T4
+    SLL T6, T6, S3
     ADD T0, T0, T6
-    ADD T0, T0, S3
-; Spill mul_midlo_84_f84_op57 to slot 32
+    ADD T0, T0, S2
+; Spill mul_midlo_84_f84_op56 to slot 32
     ADD SC, FP, R0
     ADDI SC, SC, 46
-    STORE S2, SB, SC
-    MUL S2, T7, S1
-; Spill mul_p00_84_f84_op52 to slot 26
+    STORE T4, SB, SC
+    MUL T4, T7, S1
+; Spill mul_p00_84_f84_op51 to slot 26
     ADD SC, FP, R0
     ADDI SC, SC, 40
     STORE T2, SB, SC
     MUL T2, T5, S0
-    ADD T0, T0, S2
+    ADD T0, T0, T4
     ADD T0, T0, T2
 ; Spill t4294967292 to slot 33
     ADD SC, FP, R0
@@ -9469,15 +9469,15 @@ L_i32_pointer_nonnull_6de164b7_84_2:
     ADD SC, FP, R0
     ADDI SC, SC, 35
     LOAD T5, SB, SC
-; Spill const_f84_op44_64000 to slot 35
+; Spill const_f84_op43_64000 to slot 35
     ADD SC, FP, R0
     ADDI SC, SC, 49
     STORE S0, SB, SC
-; Spill i32_const_hi_84_f84_op45 to slot 36
+; Spill i32_const_hi_84_f84_op44 to slot 36
     ADD SC, FP, R0
     ADDI SC, SC, 50
     STORE S1, SB, SC
-; Spill mul_mid_84_f84_op55 to slot 37
+; Spill mul_mid_84_f84_op54 to slot 37
     ADD SC, FP, R0
     ADDI SC, SC, 51
     STORE T3, SB, SC
@@ -9485,15 +9485,15 @@ L_i32_pointer_nonnull_6de164b7_84_2:
     SLTU T3, S0, T1
     ADD S1, T0, T5
     ADD S1, S1, T3
-; Spill mul_sh8_84_f84_op47 to slot 25
+; Spill mul_sh8_84_f84_op46 to slot 25
     ADD SC, FP, R0
     ADDI SC, SC, 39
-    STORE T4, SB, SC
+    STORE S3, SB, SC
 ; Reload t17 from slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    LOAD T4, SB, SC
-; Spill mul_midc_84_f84_op56 to slot 31
+    LOAD S3, SB, SC
+; Spill mul_midc_84_f84_op55 to slot 31
     ADD SC, FP, R0
     ADDI SC, SC, 45
     STORE T6, SB, SC
@@ -9501,22 +9501,22 @@ L_i32_pointer_nonnull_6de164b7_84_2:
     ADD SC, FP, R0
     ADDI SC, SC, 26
     LOAD T6, SB, SC
-; Spill mul_c_84_f84_op58 to slot 38
+; Spill mul_c_84_f84_op57 to slot 38
     ADD SC, FP, R0
     ADDI SC, SC, 52
-    STORE S3, SB, SC
-; Spill mul32_x1_84_f84_op59 to slot 39
+    STORE S2, SB, SC
+; Spill mul32_x1_84_f84_op58 to slot 39
     ADD SC, FP, R0
     ADDI SC, SC, 53
-    STORE S2, SB, SC
-; Spill mul32_x2_84_f84_op60 to slot 40
+    STORE T4, SB, SC
+; Spill mul32_x2_84_f84_op59 to slot 40
     ADD SC, FP, R0
     ADDI SC, SC, 54
     STORE T2, SB, SC
-    ADD S3, S0, T4
-    SLTU T2, S3, S0
-    ADD S2, S1, T6
-    ADD S2, S2, T2
+    ADD S2, S0, S3
+    SLTU T2, S2, S0
+    ADD T4, S1, T6
+    ADD T4, T4, T2
 ; Spill t4294967291 to slot 41
     ADD SC, FP, R0
     ADDI SC, SC, 55
@@ -9536,16 +9536,16 @@ L_i32_pointer_nonnull_6de164b7_84_2:
     ADDI SC, SC, 35
     STORE T5, SB, SC
 ; i32 unsigned div/rem (restoring)
-; Spill i32_carry_84_f84_op61 to slot 43
+; Spill i32_carry_84_f84_op60 to slot 43
     ADD SC, FP, R0
     ADDI SC, SC, 57
     STORE T3, SB, SC
-    ADD T3, S3, R0
+    ADD T3, S2, R0
 ; Spill t4294967295 to slot 44
     ADD SC, FP, R0
     ADDI SC, SC, 58
     STORE S0, SB, SC
-    ADD S0, S2, R0
+    ADD S0, T4, R0
 ; Spill t4294967295__hi to slot 45
     ADD SC, FP, R0
     ADDI SC, SC, 59
@@ -9554,8 +9554,8 @@ L_i32_pointer_nonnull_6de164b7_84_2:
 ; Spill t17 to slot 11
     ADD SC, FP, R0
     ADDI SC, SC, 25
-    STORE T4, SB, SC
-    LI T4, 0
+    STORE S3, SB, SC
+    LI S3, 0
     LI T7, 0
     LI T5, 0
 ; Spill t17__hi to slot 12
@@ -9563,7 +9563,7 @@ L_i32_pointer_nonnull_6de164b7_84_2:
     ADDI SC, SC, 26
     STORE T6, SB, SC
     LI T6, 32
-; Spill i32_carry_84_f84_op62 to slot 46
+; Spill i32_carry_84_f84_op61 to slot 46
     ADD SC, FP, R0
     ADDI SC, SC, 60
     STORE T2, SB, SC
@@ -9571,205 +9571,205 @@ L_i32_pointer_nonnull_6de164b7_84_2:
 ; Spill t4294967290 to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 61
-    STORE S3, SB, SC
+    STORE S2, SB, SC
 ; Spill t4294967290__hi to slot 48
     ADD SC, FP, R0
     ADDI SC, SC, 62
-    STORE S2, SB, SC
-L_i32_udiv_loop_6de164b7_84_3:
-    SLT S3, S0, R0
-    SLT S2, S1, R0
+    STORE T4, SB, SC
+L_i32_udiv_loop_4fec7bf682ef430483d39db0d4cfa2f5_84_4:
+    SLT S2, S0, R0
+    SLT T4, S1, R0
     ADD S1, S1, S1
-    OR S1, S1, S3
-    ADD T4, T4, T4
-    OR T4, T4, S2
-    SLT S2, T3, R0
+    OR S1, S1, S2
+    ADD S3, S3, S3
+    OR S3, S3, T4
+    SLT T4, T3, R0
     ADD T3, T3, T3
     ADD S0, S0, S0
-    OR S0, S0, S2
-    SLT S2, T7, R0
+    OR S0, S0, T4
+    SLT T4, T7, R0
     ADD T7, T7, T7
     ADD T5, T5, T5
-    OR T5, T5, S2
-    XOR S3, T4, T0
-    BNE S3, R0, L_i32_ult_hine_6de164b7_84_7
-    SLTU S3, S1, T1
-    BEQ R0, R0, L_i32_ult_done_6de164b7_84_8
-L_i32_ult_hine_6de164b7_84_7:
-    SLTU S3, T4, T0
-L_i32_ult_done_6de164b7_84_8:
-    BNE S3, R0, L_i32_udiv_next_6de164b7_84_5
-    BEQ R0, R0, L_i32_udiv_ge_6de164b7_84_4
-L_i32_udiv_ge_6de164b7_84_4:
-    SLTU S3, S1, T1
+    OR T5, T5, T4
+    XOR S2, S3, T0
+    BNE S2, R0, L_i32_ult_hine_4fec7bf682ef430483d39db0d4cfa2f5_84_8
+    SLTU S2, S1, T1
+    BEQ R0, R0, L_i32_ult_done_4fec7bf682ef430483d39db0d4cfa2f5_84_9
+L_i32_ult_hine_4fec7bf682ef430483d39db0d4cfa2f5_84_8:
+    SLTU S2, S3, T0
+L_i32_ult_done_4fec7bf682ef430483d39db0d4cfa2f5_84_9:
+    BNE S2, R0, L_i32_udiv_next_4fec7bf682ef430483d39db0d4cfa2f5_84_6
+    BEQ R0, R0, L_i32_udiv_ge_4fec7bf682ef430483d39db0d4cfa2f5_84_5
+L_i32_udiv_ge_4fec7bf682ef430483d39db0d4cfa2f5_84_5:
+    SLTU S2, S1, T1
     SUB S1, S1, T1
-    SUB T4, T4, T0
-    SUB T4, T4, S3
+    SUB S3, S3, T0
+    SUB S3, S3, S2
     OR T7, T7, T2
-L_i32_udiv_next_6de164b7_84_5:
+L_i32_udiv_next_4fec7bf682ef430483d39db0d4cfa2f5_84_6:
     SUB T6, T6, T2
-    BEQ T6, R0, L_i32_udiv_done_6de164b7_84_6
-    BEQ R0, R0, L_i32_udiv_loop_6de164b7_84_3
-L_i32_udiv_done_6de164b7_84_6:
-; Spill const_f84_op63_64000 to slot 49
+    BEQ T6, R0, L_i32_udiv_done_4fec7bf682ef430483d39db0d4cfa2f5_84_7
+    BEQ R0, R0, L_i32_udiv_loop_4fec7bf682ef430483d39db0d4cfa2f5_84_4
+L_i32_udiv_done_4fec7bf682ef430483d39db0d4cfa2f5_84_7:
+; Spill const_f84_op62_64000 to slot 49
     ADD SC, FP, R0
     ADDI SC, SC, 63
     STORE T1, SB, SC
     LI T1, -1536
-; Spill i32_const_hi_84_f84_op64 to slot 50
+; Spill i32_const_hi_84_f84_op63 to slot 50
     ADD SC, FP, R0
     ADDI SC, SC, 64
     STORE T0, SB, SC
     LI T0, 0
-; Spill div_nlo_84_f84_op65 to slot 51
+; Spill div_nlo_84_f84_op64 to slot 51
     ADD SC, FP, R0
     ADDI SC, SC, 65
     STORE T3, SB, SC
-; Spill div_nhi_84_f84_op66 to slot 52
+; Spill div_nhi_84_f84_op65 to slot 52
     ADD SC, FP, R0
     ADDI SC, SC, 66
     STORE S0, SB, SC
-; Spill div_rlo_84_f84_op67 to slot 53
+; Spill div_rlo_84_f84_op66 to slot 53
     ADD SC, FP, R0
     ADDI SC, SC, 67
     STORE S1, SB, SC
     LI S1, 255
-; Spill div_rhi_84_f84_op68 to slot 54
+; Spill div_rhi_84_f84_op67 to slot 54
     ADD SC, FP, R0
     ADDI SC, SC, 68
-    STORE T4, SB, SC
-    LI T4, 8
-; Spill div_bits_84_f84_op69 to slot 55
+    STORE S3, SB, SC
+    LI S3, 8
+; Spill div_bits_84_f84_op68 to slot 55
     ADD SC, FP, R0
     ADDI SC, SC, 69
     STORE T6, SB, SC
     AND T6, T7, S1
-; Spill div_one_84_f84_op70 to slot 56
+; Spill div_one_84_f84_op69 to slot 56
     ADD SC, FP, R0
     ADDI SC, SC, 70
     STORE T2, SB, SC
-    SRL T2, T7, T4
-; Spill div_scr_84_f84_op71 to slot 57
+    SRL T2, T7, S3
+; Spill div_scr_84_f84_op70 to slot 57
     ADD SC, FP, R0
     ADDI SC, SC, 71
-    STORE S3, SB, SC
-    AND S3, T1, S1
-; Spill div_scr2_84_f84_op72 to slot 58
+    STORE S2, SB, SC
+    AND S2, T1, S1
+; Spill div_scr2_84_f84_op71 to slot 58
     ADD SC, FP, R0
     ADDI SC, SC, 72
-    STORE S2, SB, SC
-    SRL S2, T1, T4
-; Spill mul_a0_84_f84_op77 to slot 59
+    STORE T4, SB, SC
+    SRL T4, T1, S3
+; Spill mul_a0_84_f84_op76 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE T6, SB, SC
-; Spill mul_a1_84_f84_op78 to slot 60
+; Spill mul_a1_84_f84_op77 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T2, SB, SC
-; Reload mul_a0_84_f84_op77 from slot 59
+; Reload mul_a0_84_f84_op76 from slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 73
     LOAD T2, SB, SC
-    MUL T6, T2, S3
-; Spill mul_mask_84_f84_op75 to slot 61
+    MUL T6, T2, S2
+; Spill mul_mask_84_f84_op74 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 75
     STORE S1, SB, SC
-    MUL S1, T2, S2
-; Spill mul_sh8_84_f84_op76 to slot 62
+    MUL S1, T2, T4
+; Spill mul_sh8_84_f84_op75 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    STORE T4, SB, SC
-; Spill mul_p00_84_f84_op81 to slot 63
+    STORE S3, SB, SC
+; Spill mul_p00_84_f84_op80 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 77
     STORE T6, SB, SC
-; Reload mul_a1_84_f84_op78 from slot 60
+; Reload mul_a1_84_f84_op77 from slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 74
     LOAD T6, SB, SC
-    MUL T4, T6, S3
-    MUL S0, T6, S2
-; Spill mul_p01_84_f84_op82 to slot 64
+    MUL S3, T6, S2
+    MUL S0, T6, T4
+; Spill mul_p01_84_f84_op81 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE S1, SB, SC
-; Spill mul_a0_84_f84_op77 to slot 59
+; Spill mul_a0_84_f84_op76 to slot 59
     ADD SC, FP, R0
     ADDI SC, SC, 73
     STORE T2, SB, SC
-; Reload mul_p01_84_f84_op82 from slot 64
+; Reload mul_p01_84_f84_op81 from slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 78
     LOAD T2, SB, SC
-    ADD S1, T2, T4
-; Spill mul_b0_84_f84_op79 to slot 65
+    ADD S1, T2, S3
+; Spill mul_b0_84_f84_op78 to slot 65
     ADD SC, FP, R0
     ADDI SC, SC, 79
-    STORE S3, SB, SC
-    SLTU S3, S1, T2
-; Spill mul_a1_84_f84_op78 to slot 60
+    STORE S2, SB, SC
+    SLTU S2, S1, T2
+; Spill mul_a1_84_f84_op77 to slot 60
     ADD SC, FP, R0
     ADDI SC, SC, 74
     STORE T6, SB, SC
-; Spill mul_b1_84_f84_op80 to slot 66
+; Spill mul_b1_84_f84_op79 to slot 66
     ADD SC, FP, R0
     ADDI SC, SC, 80
-    STORE S2, SB, SC
-; Reload mul_mask_84_f84_op75 from slot 61
+    STORE T4, SB, SC
+; Reload mul_mask_84_f84_op74 from slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    LOAD S2, SB, SC
-    AND T6, S1, S2
-; Spill mul_p10_84_f84_op83 to slot 67
+    LOAD T4, SB, SC
+    AND T6, S1, T4
+; Spill mul_p10_84_f84_op82 to slot 67
     ADD SC, FP, R0
     ADDI SC, SC, 81
-    STORE T4, SB, SC
-; Reload mul_sh8_84_f84_op76 from slot 62
+    STORE S3, SB, SC
+; Reload mul_sh8_84_f84_op75 from slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    LOAD T4, SB, SC
-    SLL T6, T6, T4
-; Spill mul_midc_84_f84_op85 to slot 68
+    LOAD S3, SB, SC
+    SLL T6, T6, S3
+; Spill mul_midc_84_f84_op84 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 82
-    STORE S3, SB, SC
-; Reload mul_p00_84_f84_op81 from slot 63
+    STORE S2, SB, SC
+; Reload mul_p00_84_f84_op80 from slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 77
-    LOAD S3, SB, SC
-    ADD T3, S3, T6
-; Spill mul_p01_84_f84_op82 to slot 64
+    LOAD S2, SB, SC
+    ADD T3, S2, T6
+; Spill mul_p01_84_f84_op81 to slot 64
     ADD SC, FP, R0
     ADDI SC, SC, 78
     STORE T2, SB, SC
-    SLTU T2, T3, S3
-    SRL S1, S1, T4
+    SLTU T2, T3, S2
+    SRL S1, S1, S3
     ADD S0, S0, S1
-; Spill mul_mask_84_f84_op75 to slot 61
+; Spill mul_mask_84_f84_op74 to slot 61
     ADD SC, FP, R0
     ADDI SC, SC, 75
-    STORE S2, SB, SC
-; Reload mul_midc_84_f84_op85 from slot 68
+    STORE T4, SB, SC
+; Reload mul_midc_84_f84_op84 from slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 82
-    LOAD S2, SB, SC
-    SLL S2, S2, T4
-    ADD S0, S0, S2
+    LOAD T4, SB, SC
+    SLL T4, T4, S3
+    ADD S0, S0, T4
     ADD S0, S0, T2
-; Spill mul_midlo_84_f84_op86 to slot 69
+; Spill mul_midlo_84_f84_op85 to slot 69
     ADD SC, FP, R0
     ADDI SC, SC, 83
     STORE T6, SB, SC
     MUL T6, T7, T0
-; Spill mul_p00_84_f84_op81 to slot 63
+; Spill mul_p00_84_f84_op80 to slot 63
     ADD SC, FP, R0
     ADDI SC, SC, 77
-    STORE S3, SB, SC
-    MUL S3, T5, T1
+    STORE S2, SB, SC
+    MUL S2, T5, T1
     ADD S0, S0, T6
-    ADD S0, S0, S3
+    ADD S0, S0, S2
 ; Spill t4294967289 to slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 84
@@ -9786,15 +9786,15 @@ L_i32_udiv_done_6de164b7_84_6:
     ADD SC, FP, R0
     ADDI SC, SC, 62
     LOAD T5, SB, SC
-; Spill const_f84_op73_64000 to slot 72
+; Spill const_f84_op72_64000 to slot 72
     ADD SC, FP, R0
     ADDI SC, SC, 86
     STORE T1, SB, SC
-; Spill i32_const_hi_84_f84_op74 to slot 73
+; Spill i32_const_hi_84_f84_op73 to slot 73
     ADD SC, FP, R0
     ADDI SC, SC, 87
     STORE T0, SB, SC
-; Spill mul_mid_84_f84_op84 to slot 74
+; Spill mul_mid_84_f84_op83 to slot 74
     ADD SC, FP, R0
     ADDI SC, SC, 88
     STORE S1, SB, SC
@@ -9803,26 +9803,26 @@ L_i32_udiv_done_6de164b7_84_6:
     SUB T0, T5, S0
     SUB T0, T0, S1
 ; Spill live registers before call
-; Spill mul_sh8_84_f84_op76 to slot 62
+; Spill mul_sh8_84_f84_op75 to slot 62
     ADD SC, FP, R0
     ADDI SC, SC, 76
-    STORE T4, SB, SC
-; Spill mul_midc_84_f84_op85 to slot 68
+    STORE S3, SB, SC
+; Spill mul_midc_84_f84_op84 to slot 68
     ADD SC, FP, R0
     ADDI SC, SC, 82
-    STORE S2, SB, SC
-; Spill mul_c_84_f84_op87 to slot 75
+    STORE T4, SB, SC
+; Spill mul_c_84_f84_op86 to slot 75
     ADD SC, FP, R0
     ADDI SC, SC, 89
     STORE T2, SB, SC
-; Spill mul32_x1_84_f84_op88 to slot 76
+; Spill mul32_x1_84_f84_op87 to slot 76
     ADD SC, FP, R0
     ADDI SC, SC, 90
     STORE T6, SB, SC
-; Spill mul32_x2_84_f84_op89 to slot 77
+; Spill mul32_x2_84_f84_op88 to slot 77
     ADD SC, FP, R0
     ADDI SC, SC, 91
-    STORE S3, SB, SC
+    STORE S2, SB, SC
 ; Spill t4294967290 to slot 47
     ADD SC, FP, R0
     ADDI SC, SC, 61
@@ -9839,7 +9839,7 @@ L_i32_udiv_done_6de164b7_84_6:
     ADD SC, FP, R0
     ADDI SC, SC, 93
     STORE S0, SB, SC
-; Spill i32_borrow_84_f84_op90 to slot 80
+; Spill i32_borrow_84_f84_op89 to slot 80
     ADD SC, FP, R0
     ADDI SC, SC, 94
     STORE S1, SB, SC
@@ -9856,37 +9856,37 @@ L_i32_udiv_done_6de164b7_84_6:
 ; Call function storage_read
     CALL storage_read
 ; Scalar return value for t19
-; Copy Rv0 to allocatable T4
-    ADD T4, RV0, R0
+; Copy Rv0 to allocatable S3
+    ADD S3, RV0, R0
 ; Reload t18 from slot 82
     ADD SC, FP, R0
     ADDI SC, SC, 96
-    LOAD S2, SB, SC
+    LOAD T4, SB, SC
 ; Reload t4294967289 from slot 70
     ADD SC, FP, R0
     ADDI SC, SC, 84
     LOAD T2, SB, SC
-    LI S3, -1
-    BEQ T2, S3, L_bc_902426b2_use_global
-    LI T7, -2
-    BEQ T2, T7, L_bc_902426b2_use_stack
+    LI S2, -1
+    BEQ T2, S2, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_10_use_global
+    LI S2, -2
+    BEQ T2, S2, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_10_use_stack
     ADD T6, T2, R0
-    BEQ R0, R0, L_bc_902426b2_done
-L_bc_902426b2_use_global:
+    BEQ R0, R0, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_10_done
+L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_10_use_global:
     ADD T6, GP, R0
-    BEQ R0, R0, L_bc_902426b2_done
-L_bc_902426b2_use_stack:
+    BEQ R0, R0, L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_10_done
+L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_10_use_stack:
     ADD T6, SB, R0
-L_bc_902426b2_done:
-    STORE T4, T6, S2
+L_bc_4fec7bf682ef430483d39db0d4cfa2f5_84_10_done:
+    STORE S3, T6, T4
 ; Spill t19 to slot 83
     ADD SC, FP, R0
     ADDI SC, SC, 97
-    STORE T4, SB, SC
+    STORE S3, SB, SC
 ; Spill t18 to slot 82
     ADD SC, FP, R0
     ADDI SC, SC, 96
-    STORE S2, SB, SC
+    STORE T4, SB, SC
 ; Spill t4294967289 to slot 84
     ADD SC, FP, R0
     ADDI SC, SC, 98
@@ -9895,7 +9895,7 @@ L_bc_902426b2_done:
     ADD SC, FP, R0
     ADDI SC, SC, 84
     STORE T2, SB, SC
-; Spill store_f84_op91_resolved_bank_84_f84_op92 to slot 85
+; Spill store_f84_op90_resolved_bank_84_f84_op91 to slot 85
     ADD SC, FP, R0
     ADDI SC, SC, 99
     STORE T6, SB, SC
@@ -9905,29 +9905,29 @@ L_storage_read_buffer_147:
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+5
-    ADD T5, FP, R0
-    ADDI T5, T5, 5
-; LOAD: Pointer load_src_ptr_f84_op95_t20 has bank info: Stack
+    ADD T7, FP, R0
+    ADDI T7, T7, 5
+; LOAD: Pointer load_src_ptr_f84_op93_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T5
-    LI S0, 0
-    ADD T3, T3, S0
+    LOAD T5, SB, T7
+    LI T3, 0
+    ADD T5, T5, T3
 ; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
-; LOAD: Pointer load_src_ptr_f84_op97_t22 has bank info: Stack
+; LOAD: Pointer load_src_ptr_f84_op95_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S1, SB, T5
-    LI T0, 1
-    ADD S1, S1, T0
-    STORE S1, SB, T5
+    LOAD S0, SB, T7
+    LI S1, 1
+    ADD S0, S0, S1
+    STORE S0, SB, T7
 ; Spill t21 to slot 86
     ADD SC, FP, R0
     ADDI SC, SC, 100
-    STORE T3, SB, SC
+    STORE T5, SB, SC
 ; Spill t23 to slot 87
     ADD SC, FP, R0
     ADDI SC, SC, 101
-    STORE S1, SB, SC
+    STORE S0, SB, SC
     BEQ R0, R0, L_storage_read_buffer_145
 ; Unconditional branch to L_storage_read_buffer_145
 L_storage_read_buffer_148:

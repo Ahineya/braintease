@@ -1,0 +1,52 @@
+--- a/doomgeneric/info.c
++++ b/doomgeneric/info.c
+@@ -124,6 +124,7 @@
+ void A_BrainExplode();
+ 
+ 
++#ifndef DOOM_GENERATED_INFO
+ state_t	states[NUMSTATES] = {
+     {SPR_TROO,0,-1,{NULL},S_NULL,0,0},	// S_NULL
+     {SPR_SHTG,4,0,{A_Light0},S_NULL,0,0},	// S_LIGHTDONE
+@@ -4660,3 +4661,5 @@
+     }
+ };
+ 
++
++#endif /* !DOOM_GENERATED_INFO */
+--- a/doomgeneric/info.h
++++ b/doomgeneric/info.h
+@@ -1154,7 +1154,13 @@
+     int misc2;
+ } state_t;
+ 
++#ifdef DOOM_GENERATED_INFO
++extern state_t *states;
++int Doom_InitInfo(void);
++void Doom_FreeInfo(void);
++#else
+ extern state_t	states[NUMSTATES];
++#endif
+ extern char *sprnames[];
+ 
+ typedef enum {
+@@ -1319,7 +1325,7 @@
+     int32_t speed;
+     int32_t radius;
+     int32_t height;
+-    int	mass;
++    int32_t mass;
+     int	damage;
+     int	activesound;
+     uint32_t flags;
+@@ -1327,6 +1333,10 @@
+ 
+ } mobjinfo_t;
+ 
++#ifdef DOOM_GENERATED_INFO
++extern mobjinfo_t *mobjinfo;
++#else
+ extern mobjinfo_t mobjinfo[NUMMOBJTYPES];
++#endif
+ 
+ #endif

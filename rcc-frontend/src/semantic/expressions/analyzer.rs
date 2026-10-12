@@ -119,21 +119,6 @@ impl ExpressionAnalyzer {
         &self,
         expr: &mut Expression,
     ) -> Result<(), CompilerError> {
-        let enum_val = if let ExpressionKind::Identifier { name, .. } = &expr.kind {
-            self.type_analyzer.borrow().lookup_enum_constant(name)
-        } else {
-            None
-        };
-        if let Some(val) = enum_val {
-            expr.kind = ExpressionKind::IntLiteral {
-                value: val,
-                suffix: crate::lexer::IntegerSuffix::None,
-                hex: false,
-            };
-            expr.expr_type = Some(Type::Int);
-            return Ok(());
-        }
-
         let expr_type = match &mut expr.kind {
             ExpressionKind::IntLiteral { value: v, suffix, hex } => {
                 // C99 6.4.4.1 on this ILP16 / 32-bit long / 64-bit long long target.
@@ -144,9 +129,9 @@ impl ExpressionAnalyzer {
                 crate::lexer::FloatSuffix::None | crate::lexer::FloatSuffix::LongDouble => Type::Double,
             },
             ExpressionKind::CharLiteral(_) => Type::Char,
-            ExpressionKind::StringLiteral(_) => Type::Array {
+            ExpressionKind::StringLiteral(text) => Type::Array {
                 element_type: Box::new(Type::Char),
-                size: None, // TODO: Calculate string length
+                size: Some(text.len() as u64 + 1),
             },
 
             ExpressionKind::Identifier { name, symbol_id } => {
@@ -167,6 +152,11 @@ impl ExpressionAnalyzer {
             ExpressionKind::Binary { op, left, right } => {
                 self.analyze(left)?;
                 self.analyze(right)?;
+                if matches!(op, BinaryOp::Assign) {
+                    if let Some(target) = &left.expr_type {
+                        self.type_analyzer.borrow().convert_null_pointer_constant(target, right);
+                    }
+                }
 
                 let binary_analyzer = BinaryOperationAnalyzer::new(Rc::clone(&self.type_analyzer));
                 binary_analyzer.analyze(*op, left, right)?
@@ -225,7 +215,8 @@ impl ExpressionAnalyzer {
                             }
 
                             // Check argument types with typedef awareness (named params only)
-                            for (arg, param_type) in arguments.iter().zip(parameters.iter()) {
+                            for (arg, param_type) in arguments.iter_mut().zip(parameters.iter()) {
+                                self.type_analyzer.borrow().convert_null_pointer_constant(param_type, arg);
                                 if let Some(arg_type) = &arg.expr_type {
                                     
                                     if !self.type_analyzer.borrow().is_assignable(param_type, arg_type) {

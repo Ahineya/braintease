@@ -113,9 +113,7 @@ impl SemanticAnalyzer {
                                 // Note: Auto at file scope should be treated as Extern
                                 self.type_analyzer.borrow_mut().declare_global_variable(decl)?;
                                 
-                                if let Some(initializer) = &mut decl.initializer {
-                                    self.initializer_analyzer.borrow().analyze(initializer, &decl.decl_type)?;
-                                }
+                                self.initializer_analyzer.borrow().analyze_declaration(decl)?;
                             }
                         }
                     }
@@ -146,6 +144,7 @@ impl SemanticAnalyzer {
         
         // Set current function context
         self.current_function = Some(func.return_type.clone());
+        self.statement_analyzer.borrow_mut().current_function = Some(func.return_type.clone());
         
         // Enter function scope
         self.type_analyzer.borrow().symbol_table.borrow_mut().push_scope();
@@ -165,6 +164,7 @@ impl SemanticAnalyzer {
         // Exit function scope
         self.type_analyzer.borrow().symbol_table.borrow_mut().pop_scope();
         self.current_function = None;
+        self.statement_analyzer.borrow_mut().current_function = None;
         
         Ok(())
     }

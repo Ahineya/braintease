@@ -141,6 +141,8 @@ pub fn generate_for(
     body: &TypedStmt,
 ) -> Result<(), CompilerError> {
     // Initialization
+    let outer_variables = gen.variables.clone();
+    let outer_arrays = gen.array_variables.clone();
     if let Some(init_stmt) = init {
         gen.generate(init_stmt)?;
     }
@@ -190,6 +192,9 @@ pub fn generate_for(
     // Clean up break/continue targets
     gen.break_labels.pop();
     gen.continue_labels.pop();
+
+    *gen.variables = outer_variables;
+    *gen.array_variables = outer_arrays;
     
     Ok(())
 }
@@ -225,7 +230,7 @@ fn collect_switch_labels(
             *default = Some(builder.new_label());
             collect_switch_labels(statement, cases, default, builder)
         }
-        TypedStmt::Compound(stmts) => {
+        TypedStmt::Compound(stmts) | TypedStmt::DeclarationGroup(stmts) => {
             for s in stmts {
                 collect_switch_labels(s, cases, default, builder)?;
             }

@@ -17,6 +17,24 @@ enum DeclSuffix {
 }
 
 impl Parser {
+    /// A parenthesized declarator is parsed with Void as a hole for the
+    /// surrounding base and suffixes. Preserve every pointer/array layer.
+    fn replace_declarator_base(ty: Type, replacement: Type) -> Type {
+        match ty {
+            Type::Void => replacement,
+            Type::Pointer { target, bank } => Type::Pointer {
+                target: Box::new(Self::replace_declarator_base(*target, replacement)), bank,
+            },
+            Type::Array { element_type, size } => Type::Array {
+                element_type: Box::new(Self::replace_declarator_base(*element_type, replacement)), size,
+            },
+            Type::Function { return_type, parameters, is_variadic } => Type::Function {
+                return_type: Box::new(Self::replace_declarator_base(*return_type, replacement)),
+                parameters, is_variadic,
+            },
+            other => other,
+        }
+    }
     /// C99 6.7.6.3p7: a parameter declared as an array of T is adjusted to a
     /// pointer to T.  (`char a[11]` in a parameter list is `char *`.)
     /// Pointer-to-array types such as `char (*p)[11]` are left alone.
@@ -30,8 +48,8 @@ impl Parser {
         }
     }
 
-    fn fold_positive_ice(expr: &Expression, what: &str) -> Result<u64, CompilerError> {
-        match crate::ast::const_eval::eval_integer_constant(expr) {
+    fn fold_positive_ice(&self, expr: &Expression, what: &str) -> Result<u64, CompilerError> {
+        match self.eval_parser_constant(expr) {
             Ok(n) if n >= 0 => Ok(n as u64),
             Ok(_) => Err(ParseError::InvalidExpression {
                 message: format!("{what} must be non-negative"),
@@ -193,7 +211,11 @@ impl Parser {
             Some(TokenType::Void) => { self.advance(); Ok(Type::Void) }
             Some(TokenType::Bool) => { self.advance(); Ok(Type::Bool) }
             Some(TokenType::Char) => { self.advance(); Ok(Type::Char) }
-            Some(TokenType::Short) => { self.advance(); Ok(Type::Short) }
+            Some(TokenType::Short) => {
+                self.advance();
+                self.consume_optional_int();
+                Ok(Type::Short)
+            }
             Some(TokenType::Int) => { self.advance(); Ok(Type::Int) }
             Some(TokenType::Long) => { self.advance(); Ok(self.parse_long_type(false)?) }
             Some(TokenType::Float) => { self.advance(); Ok(Type::Float) }
@@ -213,7 +235,7 @@ impl Parser {
                         self.advance();
                         Ok(self.parse_long_type(false)?)
                     }
-                    Some(TokenType::Int) | None => Ok(Type::Int), // "signed" defaults to int
+                    Some(TokenType::Int) => { self.advance(); Ok(Type::Int) }
                     _ => Ok(Type::Int),
                 }
             }
@@ -267,6 +289,7 @@ impl Parser {
     fn parse_parameter_list_contents(
         &mut self,
     ) -> Result<(Vec<Type>, Vec<(Option<String>, Type, SourceSpan)>, bool), CompilerError> {
+        self.constant_scopes.push(Default::default());
         let mut parameter_types = Vec::new();
         let mut parameter_info = Vec::new();
         let mut is_variadic = false;
@@ -295,6 +318,9 @@ impl Parser {
 
                 // Parameters may use abstract declarators (`char *`, `int (*)(void)`).
                 let (name, full_param_type) = self.parse_declarator(param_type)?;
+                if !name.is_empty() {
+                    self.declare_constant_name(name.clone(), None);
+                }
                 let param_name = if name.is_empty() { None } else { Some(name) };
                 let full_param_type = Self::adjust_parameter_type(full_param_type);
 
@@ -321,6 +347,7 @@ impl Parser {
             }
         }
 
+        self.constant_scopes.pop();
         Ok((parameter_types, parameter_info, is_variadic))
     }
     
@@ -431,7 +458,7 @@ impl Parser {
                 
                 let value = if self.match_token(&TokenType::Equal) {
                     let expr = self.parse_conditional_expression()?;
-                    match crate::ast::const_eval::eval_integer_constant(&expr) {
+                    match self.eval_parser_constant(&expr) {
                         Ok(val) => {
                             current_value = val;
                             val
@@ -447,6 +474,7 @@ impl Parser {
                     current_value
                 };
                 
+                self.declare_constant_name(variant_name.clone(), Some(value));
                 variants.push(EnumVariant {
                     name: variant_name,
                     value,
@@ -537,7 +565,7 @@ impl Parser {
                             None
                         } else {
                             let size_expr = self.parse_assignment_expression()?;
-                            Some(Self::fold_positive_ice(&size_expr, "Array size")?)
+                            Some(self.fold_positive_ice(&size_expr, "Array size")?)
                         };
                         
                         self.expect(TokenType::RightBracket, "array declarator")?;
@@ -586,17 +614,8 @@ impl Parser {
                 // - final_type should be Array[4] of int
                 // - Result: Pointer to Array[4] of int
                 
-                if matches!(inner_ptr_type, Type::Pointer { .. }) {
-                    // Apply the pointer to the final type
-                    let result_type = Type::Pointer {
-                        target: Box::new(final_type),
-                        bank: None,
-                    };
-                    log::debug!("Parenthesized declarator: name={}, result_type={:?}", name, result_type);
-                    return Ok((name, result_type));
-                } else {
-                    return Ok((name, final_type));
-                }
+                let result_type = Self::replace_declarator_base(inner_ptr_type, final_type);
+                return Ok((name, result_type));
             }
         }
         
@@ -622,7 +641,7 @@ impl Parser {
                     None // Incomplete array type
                 } else {
                     let size_expr = self.parse_assignment_expression()?;
-                    Some(Self::fold_positive_ice(&size_expr, "Array size")?)
+                    Some(self.fold_positive_ice(&size_expr, "Array size")?)
                 };
                 
                 self.expect(TokenType::RightBracket, "array declarator")?;
@@ -726,16 +745,17 @@ impl Parser {
     
     /// Parse an abstract declarator (pointer/array/function types without identifier)
     pub fn parse_abstract_declarator(&mut self, base_type: Type) -> Result<Type, CompilerError> {
-        self.skip_ignored_specifiers();
-        // Parse pointer prefix
-        let mut current_type = base_type;
-        while self.match_token(&TokenType::Star) {
-            self.skip_ignored_specifiers();
-            current_type = Type::Pointer { target: Box::new(current_type), bank: None };
+        // The declarator parser already supports unnamed parameters, including
+        // nested pointer/function/array types. Use that same composition for
+        // casts and sizeof instead of a separate array-only subset.
+        let (name, ty) = self.parse_declarator(base_type)?;
+        if !name.is_empty() {
+            return Err(ParseError::InvalidType {
+                message: "An abstract declarator cannot contain an identifier".to_string(),
+                location: self.current_location(),
+            }.into());
         }
-        
-        // Parse direct abstract declarator (arrays, function types)
-        self.parse_direct_abstract_declarator(current_type)
+        Ok(ty)
     }
     
     /// Parse direct abstract declarator
@@ -750,7 +770,7 @@ impl Parser {
                     None
                 } else {
                     let size_expr = self.parse_assignment_expression()?;
-                    Some(Self::fold_positive_ice(&size_expr, "Array size")?)
+                    Some(self.fold_positive_ice(&size_expr, "Array size")?)
                 };
                 
                 self.expect(TokenType::RightBracket, "array declarator")?;

@@ -31,7 +31,13 @@ impl Parser {
                 ExpressionKind::StringLiteral(value)
             }
             Some(Token { token_type: TokenType::Identifier(name), .. }) => {
-                ExpressionKind::Identifier { name, symbol_id: None }
+                if let Some(value) = self.lookup_parser_constant(&name) {
+                    ExpressionKind::IntLiteral {
+                        value, suffix: crate::lexer::IntegerSuffix::None, hex: false,
+                    }
+                } else {
+                    ExpressionKind::Identifier { name, symbol_id: None }
+                }
             }
             Some(Token { token_type: TokenType::LeftParen, .. }) => {
                 // Could be cast expression, compound literal, or parenthesized expression

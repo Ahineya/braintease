@@ -1,0 +1,5 @@
+{
+  "description": "Static locals initialize once, retain zero-initialized/array state, escape through pointers and preserve identity across functions, blocks and recursive calls",
+  "use_runtime": true,
+  "expected": "YYYYYYYY\n"
+}

@@ -1,0 +1,178 @@
+--- a/doomgeneric/g_game.c
++++ b/doomgeneric/g_game.c
+@@ -37,6 +37,7 @@
+ #include "m_random.h"
+ #include "i_system.h"
+ #include "i_timer.h"
++#include "doom_demo.h"
+ #include "i_video.h"
+ 
+ #include "p_setup.h"
+@@ -1895,31 +1896,21 @@
+ #define DEMOMARKER		0x80
+ 
+ 
+-void G_ReadDemoTiccmd (ticcmd_t* cmd) 
+-{ 
+-    if (*demo_p == DEMOMARKER) 
+-    {
+-	// end of demo data stream 
+-	G_CheckDemoStatus (); 
+-	return; 
+-    } 
+-    cmd->forwardmove = ((signed char)*demo_p++); 
+-    cmd->sidemove = ((signed char)*demo_p++); 
+-
+-    // If this is a longtics demo, read back in higher resolution
+-
+-    if (longtics)
+-    {
+-        cmd->angleturn = *demo_p++;
+-        cmd->angleturn |= (*demo_p++) << 8;
+-    }
+-    else
+-    {
+-        cmd->angleturn = ((unsigned char) *demo_p++)<<8; 
+-    }
+-
+-    cmd->buttons = (unsigned char)*demo_p++; 
+-} 
++void G_ReadDemoTiccmd (ticcmd_t* cmd)
++{
++    uint32_t cursor = (uint32_t) (demo_p - demobuffer);
++    int result = Doom_DemoDecodeTic(demobuffer,
++                                    (uint32_t) (demoend - demobuffer),
++                                    &cursor, longtics, cmd);
++    if (result == DOOM_DEMO_END)
++    {
++        G_CheckDemoStatus();
++        return;
++    }
++    if (result != DOOM_DEMO_TIC)
++        I_Error("Truncated demo command at octet %lu", (unsigned long) cursor);
++    demo_p = demobuffer + cursor;
++}
+ 
+ // Increase the size of the demo buffer to allow unlimited demos
+ 
+@@ -2110,92 +2101,35 @@
+     gameaction = ga_playdemo; 
+ } 
+ 
+-// Generate a string describing a demo version
+-
+-static char *DemoVersionDescription(int version)
++void G_DoPlayDemo (void)
+ {
+-    static char resultbuf[16];
+-
+-    switch (version)
+-    {
+-        case 104:
+-            return "v1.4";
+-        case 105:
+-            return "v1.5";
+-        case 106:
+-            return "v1.6/v1.666";
+-        case 107:
+-            return "v1.7/v1.7a";
+-        case 108:
+-            return "v1.8";
+-        case 109:
+-            return "v1.9";
+-        default:
+-            break;
+-    }
+-
+-    // Unknown version.  Perhaps this is a pre-v1.4 IWAD?  If the version
+-    // byte is in the range 0-4 then it can be a v1.0-v1.2 demo.
+-
+-    if (version >= 0 && version <= 4)
+-    {
+-        return "v1.0/v1.1/v1.2";
+-    }
+-    else
+-    {
+-        M_snprintf(resultbuf, sizeof(resultbuf),
+-                   "%i.%i (unknown)", version / 100, version % 100);
+-        return resultbuf;
+-    }
+-}
+-
+-void G_DoPlayDemo (void) 
+-{ 
+-    skill_t skill; 
+-    int             i, episode, map; 
+-    int demoversion;
+-	 
+-    gameaction = ga_nothing; 
+-    demobuffer = demo_p = W_CacheLumpName (defdemoname, PU_STATIC); 
+-
+-    demoversion = *demo_p++;
+-
+-    if (demoversion == G_VanillaVersionCode())
+-    {
+-        longtics = false;
+-    }
+-    else if (demoversion == DOOM_191_VERSION)
+-    {
+-        // demo recorded with cph's modified "v1.91" doom exe
+-        longtics = true;
+-    }
+-    else
+-    {
+-        char *message = "Demo is from a different game version!\n"
+-                        "(read %i, should be %i)\n"
+-                        "\n"
+-                        "*** You may need to upgrade your version "
+-                            "of Doom to v1.9. ***\n"
+-                        "    See: https://www.doomworld.com/classicdoom"
+-                                  "/info/patches.php\n"
+-                        "    This appears to be %s.";
+-
+-        //I_Error(message, demoversion, G_VanillaVersionCode(),
+-        printf(message, demoversion, G_VanillaVersionCode(),
+-                         DemoVersionDescription(demoversion));
+-    }
+-    
+-    skill = *demo_p++; 
+-    episode = *demo_p++; 
+-    map = *demo_p++; 
+-    deathmatch = *demo_p++;
+-    respawnparm = *demo_p++;
+-    fastparm = *demo_p++;
+-    nomonsters = *demo_p++;
+-    consoleplayer = *demo_p++;
+-	
+-    for (i=0 ; i<MAXPLAYERS ; i++) 
+-	playeringame[i] = *demo_p++; 
++    skill_t skill;
++    int i, episode, map;
++    int lump;
++    uint32_t length;
++    DoomDemoHeader header;
++    const char *error;
++
++    gameaction = ga_nothing;
++    lump = W_GetNumForName(defdemoname);
++    length = W_LumpLength(lump);
++    demobuffer = W_CacheLumpNum(lump, PU_STATIC);
++    error = Doom_DemoDecodeHeader(demobuffer, length,
++                                  G_VanillaVersionCode(), &header);
++    if (error != NULL) I_Error("%s: %s", defdemoname, error);
++    demoend = demobuffer + length;
++    demo_p = demobuffer + DOOM_DEMO_HEADER_OCTETS;
++    longtics = header.longtics;
++    skill = header.skill;
++    episode = header.episode;
++    map = header.map;
++    deathmatch = header.deathmatch;
++    respawnparm = header.respawn;
++    fastparm = header.fast;
++    nomonsters = header.nomonsters;
++    consoleplayer = header.consoleplayer;
++    for (i = 0; i < MAXPLAYERS; ++i)
++        playeringame[i] = header.playeringame[i];
+ 
+     if (playeringame[1] || M_CheckParm("-solo-net") > 0
+                         || M_CheckParm("-netdemo") > 0)

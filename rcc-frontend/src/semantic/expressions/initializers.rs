@@ -23,6 +23,56 @@ impl InitializerAnalyzer {
             type_analyzer
         }
     }
+
+    /// Complete an object's inferred array bound before later expressions look
+    /// up its type (in particular sizeof, which must not decay the array).
+    pub fn analyze_declaration(&self, decl: &mut Declaration) -> Result<(), CompilerError> {
+        let Some(init) = &mut decl.initializer else { return Ok(()); };
+        self.analyze(init, &decl.decl_type)?;
+        let resolved = self.type_analyzer.borrow().resolve_type(&decl.decl_type);
+        let Type::Array { element_type, size: None } = resolved else { return Ok(()); };
+        let size = if let Some(text) = character_array_string(init, &element_type) {
+            text.len() as u64 + 1
+        } else if let InitializerKind::List(items) = &init.kind {
+            let mut next = 0u64;
+            let mut length = 0u64;
+            for item in items {
+                if let InitializerKind::Designated { designator: Designator::Index(expr), .. } = &item.kind {
+                    let index = crate::ast::const_eval::eval_integer_constant(expr).map_err(|error| {
+                        CompilerError::semantic_error(error.0, expr.span.start.clone())
+                    })?;
+                    if index < 0 {
+                        return Err(CompilerError::semantic_error(
+                            "Array designator index must be non-negative".to_string(),
+                            expr.span.start.clone(),
+                        ));
+                    }
+                    next = index as u64;
+                }
+                next += 1;
+                length = length.max(next);
+            }
+            length
+        } else {
+            return Ok(());
+        };
+        let complete = Type::Array { element_type, size: Some(size) };
+        if let Some(id) = decl.symbol_id {
+            let analyzer = self.type_analyzer.borrow();
+            let previous = analyzer.symbol_types.borrow().get(&id).cloned();
+            if let Some(previous) = previous {
+                if !analyzer.types_compatible_for_object_redeclaration(&previous, &complete) {
+                    return Err(CompilerError::semantic_error(
+                        format!("Incompatible inferred array bound for '{}'", decl.name),
+                        decl.span.start.clone(),
+                    ));
+                }
+            }
+            analyzer.symbol_types.borrow_mut().insert(id, complete.clone());
+        }
+        decl.decl_type = complete;
+        Ok(())
+    }
     
     /// Analyze an initializer
     pub fn analyze(
@@ -33,9 +83,28 @@ impl InitializerAnalyzer {
     {
         let resolved = self.type_analyzer.borrow().resolve_type(expected_type);
 
+        // A string (optionally enclosed in braces) initializes the complete
+        // character array, rather than its first scalar element.
+        if let Type::Array { element_type, size } = &resolved {
+            if let Some(text) = character_array_string(init, element_type) {
+                if size.is_some_and(|bound| bound < text.len() as u64) {
+                    return Err(CompilerError::semantic_error(
+                        "String initializer is too long for the character array".to_string(),
+                        init.span.start.clone(),
+                    ));
+                }
+                return Ok(());
+            }
+        }
+
         match &mut init.kind {
             InitializerKind::Expression(expr) => {
                 self.expression_analyzer.borrow().analyze(expr)?;
+                let target = match &resolved {
+                    Type::Union { fields, .. } => fields.first().map(|f| &f.field_type).unwrap_or(&resolved),
+                    _ => &resolved,
+                };
+                self.type_analyzer.borrow().convert_null_pointer_constant(target, expr);
         
                 // Check type compatibility with typedef awareness
                 if let Some(expr_type) = &expr.expr_type {
@@ -134,6 +203,9 @@ impl InitializerAnalyzer {
             }
         
             InitializerKind::Designated { designator, initializer } => {
+                if let Designator::Index(expr) = designator {
+                    self.expression_analyzer.borrow().analyze(expr)?;
+                }
                 let designator = designator.clone();
                 match (&resolved, &designator) {
                     (Type::Struct { fields, name, .. } | Type::Union { fields, name, .. }, Designator::Member(member)) => {
@@ -162,5 +234,26 @@ impl InitializerAnalyzer {
                 }
             }
         }
+    }
+}
+
+/// C permits a character array's string initializer with or without braces.
+pub(crate) fn character_array_string<'a>(init: &'a Initializer, element_type: &Type) -> Option<&'a str> {
+    if !matches!(element_type, Type::Char | Type::SignedChar | Type::UnsignedChar) {
+        return None;
+    }
+    match &init.kind {
+        InitializerKind::Expression(expr) => match &expr.kind {
+            ExpressionKind::StringLiteral(text) => Some(text),
+            _ => None,
+        },
+        InitializerKind::List(items) if items.len() == 1 => match &items[0].kind {
+            InitializerKind::Expression(expr) => match &expr.kind {
+                ExpressionKind::StringLiteral(text) => Some(text),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
     }
 }

@@ -275,7 +275,8 @@ impl Parser {
                 let token = self.peek();
                 match &token.token_type {
                     TokenType::Comment(_) => {
-                        // Skip comments - they should not be part of macro body
+                        // Translation phase 3 replaces each comment with space.
+                        body.push(' ');
                         self.advance();
                     }
                     _ => {
@@ -389,7 +390,12 @@ impl Parser {
         self.skip_whitespace();
         
         while !self.is_at_end() && !self.check(&TokenType::Newline) {
-            line.push_str(&self.advance().text);
+            let token = self.advance();
+            if matches!(token.token_type, TokenType::Comment(_)) {
+                line.push(' ');
+            } else {
+                line.push_str(&token.text);
+            }
         }
         
         Ok(line.trim().to_string())

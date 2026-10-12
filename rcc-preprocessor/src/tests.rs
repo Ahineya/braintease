@@ -25,6 +25,31 @@ mod tests {
     }
 
     #[test]
+    fn test_macro_names_inside_literals_are_not_expanded() {
+        let source = concat!(
+            "#define true 1\n#define NIGHTMARE \"prompt\"\n",
+            "#define MESSAGE \"true NIGHTMARE __LINE__ $money\"\n",
+            "#define F(x) \"x F(x)\" x\n",
+            "MESSAGE F(7) 'true' \"F(4) \\\"true\\\"\" true\n");
+        let output = preprocess(source).unwrap();
+        assert_eq!(output.trim(), "\"true NIGHTMARE __LINE__ $money\" \"x F(x)\" 7 'true' \"F(4) \\\"true\\\"\" 1");
+    }
+
+    #[test]
+    fn test_nested_function_macros_and_rescan() {
+        let source = "#define ADD(x) ((x)+1)\n#define WRAP(x) ADD(x)\nWRAP(ADD(2))\n";
+        assert_eq!(preprocess(source).unwrap().trim(), "((((2)+1))+1)");
+    }
+
+    #[test]
+    fn test_directive_comments_are_whitespace() {
+        let source = "#define VALUE 1/**/+2\n#if 0 // UNUSED\nwrong\n#elif VALUE == 3 /* accepted */\nright\n#endif\n";
+        assert_eq!(preprocess(source).unwrap().trim(), "right");
+        let tokens = preprocess("#define DECL unsigned/**/long\nDECL value;\n").unwrap();
+        assert_eq!(tokens.trim(), "unsigned long value;");
+    }
+
+    #[test]
     fn test_command_line_define_survives_inactive_fallback() {
         let input = "#ifndef BANK_SIZE\n#define BANK_SIZE 64000\n#endif\nBANK_SIZE\n";
         assert_eq!(preprocess_with_defines(input, vec![("BANK_SIZE", "4096")]).unwrap().trim(), "4096");

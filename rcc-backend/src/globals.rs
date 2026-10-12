@@ -26,6 +26,7 @@ pub struct GlobalManager {
     /// Sanitized module name used to uniquify the GP base label
     module_name: String,
     definitions: Vec<(String, u16)>,
+    bank_size: u16,
 }
 
 fn sanitize_module_name(name: &str) -> String {
@@ -47,11 +48,17 @@ impl GlobalManager {
 
     /// Create a manager whose GP base label is unique to this translation unit
     pub fn with_module(module_name: &str) -> Self {
+        Self::with_module_and_bank_size(module_name, 64000)
+    }
+
+    pub fn with_module_and_bank_size(module_name: &str, bank_size: u16) -> Self {
+        assert_ne!(bank_size, 0, "bank size must be nonzero");
         Self {
             allocations: HashMap::new(),
             next_address: 0,
             module_name: format!("{}_{}", sanitize_module_name(module_name), uuid::Uuid::new_v4().simple()),
             definitions: Vec::new(),
+            bank_size,
         }
     }
 
@@ -198,7 +205,7 @@ impl GlobalManager {
             Value::Constant(val) => {
                 // Handle different sizes
                 match &global.var_type {
-                    IrType::I64 => {
+                    IrType::I64 | IrType::F64 => {
                         let parts = crate::instr::i64::split_const64(*val);
                         for i in 0..4 {
                             insts.push(AsmInst::Li(Reg::T0, parts[i]));
@@ -206,7 +213,7 @@ impl GlobalManager {
                             insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
                         }
                     }
-                    IrType::I32 => {
+                    IrType::I32 | IrType::F32 => {
                         // 32-bit values need two stores
                         let low = (*val & 0xFFFF) as i16;
                         let high = ((*val >> 16) & 0xFFFF) as i16;
@@ -233,6 +240,9 @@ impl GlobalManager {
                 // For FatPtr initializers (e.g., pointer to string literal)
                 // Store the address component
                 match fp.addr.as_ref() {
+                    Value::AddressOffset { base, cells } => {
+                        insts.extend(self.lower_address_pointer_init(base, fp.bank, *cells, address));
+                    }
                     Value::Function(name) => {
                         insts.extend(self.lower_function_pointer_init(name, address));
                     }
@@ -357,6 +367,50 @@ impl GlobalManager {
         insts.push(AsmInst::LiLabel(Reg::T0, format!("%bank({name})")));
         insts.extend(self.emit_gp_addr(Reg::T1, address + 1));
         insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        insts
+    }
+
+    /// Relocate the base first, then add the displacement to the complete fat
+    /// pointer. A 16-bit addition alone loses both bank-size and CPU-word carry.
+    fn lower_address_pointer_init(&self, base: &Value, bank: rcc_frontend::BankTag, cells: i64, address: u16) -> Vec<AsmInst> {
+        use rcc_frontend::BankTag;
+        let mut insts = match base {
+            Value::Global(name) => vec![AsmInst::LiLabel(Reg::T0, name.clone())],
+            Value::Constant(offset) if bank == BankTag::Global => self.emit_gp_addr(Reg::T0, *offset as u16),
+            Value::Constant(offset) => vec![AsmInst::Li(Reg::T0, *offset as i16)],
+            _ => panic!("invalid static address base: {base:?}"),
+        };
+        insts.push(match bank {
+            BankTag::Global => AsmInst::Add(Reg::T2, Reg::Gp, Reg::R0),
+            BankTag::Stack => AsmInst::Add(Reg::T2, Reg::Sb, Reg::R0),
+            BankTag::Heap(bank) => AsmInst::Li(Reg::T2, bank as i16),
+            BankTag::Null => AsmInst::Li(Reg::T2, crate::regmgmt::BankTagValue::NULL),
+            _ => panic!("invalid static address bank: {bank:?}"),
+        });
+        let quotient = cells.div_euclid(i64::from(self.bank_size));
+        let remainder = cells.rem_euclid(i64::from(self.bank_size)) as u16;
+        if quotient != 0 {
+            insts.push(AsmInst::AddI(Reg::T2, Reg::T2, quotient as i16));
+        }
+        if remainder != 0 {
+            let adjust = format!("L_address_{}_{}_adjust", self.unit_tag(), address);
+            let done = format!("L_address_{}_{}_done", self.unit_tag(), address);
+            insts.push(AsmInst::AddI(Reg::T3, Reg::T0, remainder as i16));
+            insts.push(AsmInst::Sltu(Reg::T4, Reg::T3, Reg::T0));
+            insts.push(AsmInst::Li(Reg::T5, self.bank_size as i16));
+            insts.push(AsmInst::Bne(Reg::T4, Reg::R0, adjust.clone()));
+            insts.push(AsmInst::Sltu(Reg::T4, Reg::T3, Reg::T5));
+            insts.push(AsmInst::Bne(Reg::T4, Reg::R0, done.clone()));
+            insts.push(AsmInst::Label(adjust));
+            insts.push(AsmInst::Sub(Reg::T3, Reg::T3, Reg::T5));
+            insts.push(AsmInst::AddI(Reg::T2, Reg::T2, 1));
+            insts.push(AsmInst::Label(done));
+            insts.push(AsmInst::Add(Reg::T0, Reg::T3, Reg::R0));
+        }
+        insts.extend(self.emit_gp_addr(Reg::T1, address));
+        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        insts.extend(self.emit_gp_addr(Reg::T1, address + 1));
+        insts.push(AsmInst::Store(Reg::T2, Reg::Gp, Reg::T1));
         insts
     }
 

@@ -1,0 +1,373 @@
+--- a/doomgeneric/d_loop.c
++++ b/doomgeneric/d_loop.c
+@@ -62,15 +62,15 @@
+ 
+ // The index of the next tic to be made (with a call to BuildTiccmd).
+ 
+-static int maketic;
++static int32_t maketic;
+ 
+ // The number of complete tics received from the server so far.
+ 
+-static int recvtic;
++static int32_t recvtic;
+ 
+ // The number of tics that have been run (using RunTic) so far.
+ 
+-int gametic;
++int32_t gametic;
+ 
+ // When set to true, a single tic is run each time TryRunTics() is called.
+ // This is used for -timedemo mode.
+@@ -83,7 +83,7 @@
+ 
+ // Used for original sync code.
+ 
+-static int      skiptics = 0;
++static int32_t      skiptics = 0;
+ 
+ // Reduce the bandwidth needed by sampling game input less and transmitting
+ // less.  If ticdup is 2, sample half normal, 3 = one third normal, etc.
+@@ -117,9 +117,13 @@
+ 
+ // 35 fps clock adjusted by offsetms milliseconds
+ 
+-static int GetAdjustedTime(void)
+-{
+-    int time_ms;
++static int32_t GetAdjustedTime(void)
++{
++#ifdef DOOM_PORT
++    /* A pure read: only Doom_NextTick grants simulation progress. */
++    return I_GetTime();
++#else
++    int32_t time_ms;
+ 
+     time_ms = I_GetTimeMS();
+ 
+@@ -131,12 +135,13 @@
+         time_ms += (offsetms / FRACUNIT);
+     }
+ 
+-    return (time_ms * TICRATE) / 1000;
++    return (int32_t) (((int64_t) time_ms * TICRATE) / 1000);
++#endif
+ }
+ 
+ static boolean BuildNewTic(void)
+ {
+-    int	gameticdiv;
++    int32_t	gameticdiv;
+     ticcmd_t cmd;
+ 
+     gameticdiv = gametic/ticdup;
+@@ -199,13 +204,13 @@
+ // Builds ticcmds for console player,
+ // sends out a packet
+ //
+-int      lasttime;
++int32_t      lasttime;
+ 
+ void NetUpdate (void)
+ {
+-    int nowtime;
+-    int newtics;
+-    int	i;
++    int32_t nowtime;
++    int32_t newtics;
++    int32_t i;
+ 
+     // If we are running with singletics (timing a demo), this
+     // is all done separately.
+@@ -566,9 +571,9 @@
+ #endif
+ }
+ 
+-static int GetLowTic(void)
+-{
+-    int lowtic;
++static int32_t GetLowTic(void)
++{
++    int32_t lowtic;
+ 
+     lowtic = maketic;
+ 
+@@ -585,9 +590,9 @@
+     return lowtic;
+ }
+ 
+-static int frameon;
++static int32_t frameon;
+ static int frameskip[4];
+-static int oldnettics;
++static int32_t oldnettics;
+ 
+ static void OldNetSync(void)
+ {
+@@ -707,12 +712,12 @@
+ void TryRunTics (void)
+ {
+     int	i;
+-    int	lowtic;
+-    int	entertic;
+-    static int oldentertics;
+-    int realtics;
+-    int	availabletics;
+-    int	counts;
++    int32_t	lowtic;
++    int32_t	entertic;
++    static int32_t oldentertics;
++    int32_t realtics;
++    int32_t	availabletics;
++    int32_t	counts;
+ 
+     /* Exactly one host grant for each engine simulation step, including boot. */
+     Doom_NextTick();
+--- a/doomgeneric/d_loop.h
++++ b/doomgeneric/d_loop.h
+@@ -37,7 +37,7 @@
+     // Given the current input state, fill in the fields of the specified
+     // ticcmd_t structure with data for a new tic.
+ 
+-    void (*BuildTiccmd)(ticcmd_t *cmd, int maketic);
++    void (*BuildTiccmd)(ticcmd_t *cmd, int32_t maketic);
+ 
+     // Advance the game forward one tic, using the specified player input.
+ 
+@@ -75,7 +75,8 @@
+                     netgame_startup_callback_t callback);
+ 
+ extern boolean singletics;
+-extern int gametic, ticdup;
++extern int32_t gametic;
++extern int ticdup;
+ 
+ #endif
+ 
+--- a/doomgeneric/d_player.h
++++ b/doomgeneric/d_player.h
+@@ -100,7 +100,7 @@
+     int			armortype;	
+ 
+     // Power ups. invinc and invis are tic counters.
+-    int			powers[NUMPOWERS];
++    int32_t			powers[NUMPOWERS];
+     boolean		cards[NUMCARDS];
+     boolean		backpack;
+     
+@@ -173,7 +173,7 @@
+     int		skills;
+     int		sitems;
+     int		ssecret;
+-    int		stime; 
++    int32_t		stime; 
+     int		frags[4];
+     int		score;	// current score on entry, modified on return
+   
+@@ -196,7 +196,7 @@
+     int		maxfrags;
+ 
+     // the par time
+-    int		partime;
++    int32_t		partime;
+     
+     // index of this player in game
+     int		pnum;	
+--- a/doomgeneric/doomstat.h
++++ b/doomgeneric/doomstat.h
+@@ -174,7 +174,7 @@
+ extern	int	totalsecret;
+ 
+ // Timer, for scores.
+-extern  int	levelstarttic;	// gametic at level start
++extern  int32_t	levelstarttic;	// gametic at level start
+ extern  int32_t	leveltime;	// tics in game play for par
+ 
+ 
+--- a/doomgeneric/g_game.c
++++ b/doomgeneric/g_game.c
+@@ -111,7 +111,7 @@
+  
+ boolean         timingdemo;             // if true, exit with report on completion 
+ boolean         nodrawers;              // for comparative timing purposes 
+-int             starttime;          	// for comparative timing purposes  	 
++int32_t             starttime;          	// for comparative timing purposes  	 
+  
+ boolean         viewactive; 
+  
+@@ -124,7 +124,7 @@
+  
+ int             consoleplayer;          // player taking events and displaying 
+ int             displayplayer;          // view being displayed 
+-int             levelstarttic;          // gametic at level start 
++int32_t             levelstarttic;          // gametic at level start 
+ int             totalkills, totalitems, totalsecret;    // for intermission 
+  
+ char           *demoname;
+@@ -319,7 +319,7 @@
+ // or reads it from the demo buffer. 
+ // If recording a demo, write it out 
+ // 
+-void G_BuildTiccmd (ticcmd_t* cmd, int maketic) 
++void G_BuildTiccmd (ticcmd_t* cmd, int32_t maketic) 
+ { 
+     int		i; 
+     boolean	strafe;
+@@ -1547,7 +1547,7 @@
+ 
+ void G_DoLoadGame (void) 
+ {
+-    int savedleveltime;
++    int32_t savedleveltime;
+ 	 
+     gameaction = ga_nothing; 
+ 	 
+@@ -2247,12 +2247,12 @@
+  
+ boolean G_CheckDemoStatus (void) 
+ { 
+-    int             endtime; 
++    int32_t             endtime; 
+ 	 
+     if (timingdemo) 
+     { 
+         float fps;
+-        int realtics;
++        int32_t realtics;
+ 
+ 	endtime = I_GetTime (); 
+         realtics = endtime - starttime;
+@@ -2262,8 +2262,8 @@
+         timingdemo = false;
+         demoplayback = false;
+ 
+-	I_Error ("timed %i gametics in %i realtics (%f fps)",
+-                 gametic, realtics, fps);
++	I_Error ("timed %ld gametics in %ld realtics (%f fps)",
++                 (long) gametic, (long) realtics, fps);
+     } 
+ 	 
+     if (demoplayback) 
+--- a/doomgeneric/g_game.h
++++ b/doomgeneric/g_game.h
+@@ -64,7 +64,7 @@
+ 
+ // Read current data from inputs and build a player movement command.
+ 
+-void G_BuildTiccmd (ticcmd_t *cmd, int maketic); 
++void G_BuildTiccmd (ticcmd_t *cmd, int32_t maketic); 
+ 
+ void G_Ticker (void);
+ boolean G_Responder (event_t*	ev);
+--- a/doomgeneric/i_timer.c
++++ b/doomgeneric/i_timer.c
+@@ -35,12 +35,12 @@
+ static uint32_t basetime = 0;
+ 
+ 
+-int I_GetTicks(void)
++uint32_t I_GetTicks(void)
+ {
+ 	return DG_GetTicksMs();
+ }
+ 
+-int  I_GetTime (void)
++int32_t I_GetTime (void)
+ {
+     uint32_t ticks;
+ 
+@@ -51,7 +51,8 @@
+ 
+     ticks -= basetime;
+ 
+-    return (ticks * TICRATE) / 1000;
++    return (int32_t) (ticks / 1000 * TICRATE
++                    + ticks % 1000 * TICRATE / 1000);
+ }
+ 
+ 
+@@ -59,7 +60,7 @@
+ // Same as I_GetTime, but returns time in milliseconds
+ //
+ 
+-int I_GetTimeMS(void)
++int32_t I_GetTimeMS(void)
+ {
+     uint32_t ticks;
+ 
+--- a/doomgeneric/i_timer.h
++++ b/doomgeneric/i_timer.h
+@@ -20,14 +20,16 @@
+ #ifndef __I_TIMER__
+ #define __I_TIMER__
+ 
++#include <stdint.h>
++
+ #define TICRATE 35
+ 
+ // Called by D_DoomLoop,
+ // returns current time in tics.
+-int I_GetTime (void);
++int32_t I_GetTime (void);
+ 
+ // returns current time in ms
+-int I_GetTimeMS (void);
++int32_t I_GetTimeMS (void);
+ 
+ // Pause for a specified number of ms
+ void I_Sleep(int ms);
+--- a/doomgeneric/m_menu.c
++++ b/doomgeneric/m_menu.c
+@@ -1419,8 +1419,8 @@
+     int             ch;
+     int             key;
+     int             i;
+-    static  int     joywait = 0;
+-    static  int     mousewait = 0;
++    static  int32_t     joywait = 0;
++    static  int32_t     mousewait = 0;
+     static  int     mousey = 0;
+     static  int     lasty = 0;
+     static  int     mousex = 0;
+--- a/doomgeneric/p_spec.c
++++ b/doomgeneric/p_spec.c
+@@ -1088,7 +1088,7 @@
+ // Animate planes, scroll walls, etc.
+ //
+ boolean		levelTimer;
+-int		levelTimeCount;
++int32_t		levelTimeCount;
+ 
+ void P_UpdateSpecials (void)
+ {
+@@ -1383,7 +1383,7 @@
+     if (timelimit > 0 && deathmatch)
+     {
+         levelTimer = true;
+-        levelTimeCount = timelimit * 60 * TICRATE;
++        levelTimeCount = (int32_t) timelimit * 60 * TICRATE;
+     }
+     else
+     {
+--- a/doomgeneric/p_spec.h
++++ b/doomgeneric/p_spec.h
+@@ -28,7 +28,7 @@
+ // End-level timer (-TIMER option)
+ //
+ extern	boolean levelTimer;
+-extern	int	levelTimeCount;
++extern	int32_t	levelTimeCount;
+ 
+ 
+ //      Define values for map objects
+--- a/doomgeneric/st_stuff.c
++++ b/doomgeneric/st_stuff.c
+@@ -273,7 +273,7 @@
+ static int		lu_palette;
+ 
+ // used for timing
+-static unsigned int	st_clock;
++static uint32_t	st_clock;
+ 
+ // used for making messages go away
+ static int		st_msgcounter=0;

@@ -19,6 +19,11 @@ pub enum Value {
     
     /// Global symbol reference
     Global(String),
+
+    /// Static pointer initializer displacement, in VM cells. The base is a
+    /// global symbol or a constant offset; the enclosing FatPtr supplies its
+    /// bank. Keep the symbol separate so the linker can relocate it normally.
+    AddressOffset { base: Box<Value>, cells: i64 },
     
     /// Function reference
     Function(String),
@@ -42,6 +47,7 @@ impl fmt::Display for Value {
             Value::Temp(id) => write!(f, "%{id}"),
             Value::Constant(val) => write!(f, "{val}"),
             Value::Global(name) => write!(f, "@{name}"),
+            Value::AddressOffset { base, cells } => write!(f, "address({base}, {cells:+} cells)"),
             Value::Function(name) => write!(f, "@{name}"),
             Value::FatPtr(ptr) => write!(f, "{{addr: {}, bank: {:?}}}", ptr.addr, ptr.bank),
             Value::ConstantAggregate(values) => {

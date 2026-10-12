@@ -5,7 +5,9 @@
 
 mod utils;
 mod function_gen;
-mod global_gen;
+pub(crate) mod global_gen;
+mod constant_float;
+mod constant_address;
 
 use std::collections::{HashMap, HashSet};
 use crate::ir::{Module, IrBuilder};

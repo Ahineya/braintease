@@ -138,7 +138,17 @@ impl<'a> TypedExpressionGenerator<'a> {
             } => {
                 // Generate code for the operand
                 let operand_val = self.generate(operand)?;
-                let source_type = operand.get_type();
+                // Cast operands are value contexts: arrays and functions first
+                // decay, including casts to integer pointer representations.
+                let source_type = match operand.get_type() {
+                    Type::Array { element_type, .. } => Type::Pointer {
+                        target: element_type.clone(), bank: None,
+                    },
+                    function @ Type::Function { .. } => Type::Pointer {
+                        target: Box::new(function.clone()), bank: None,
+                    },
+                    other => other.clone(),
+                };
                 
                 // Handle different cast scenarios
                 match (&source_type, target_type) {
@@ -158,7 +168,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                         let id = self.builder.build_unary(crate::ir::IrUnaryOp::IntToPtr, wide, convert_type_default(target_type)?)?;
                         Ok(Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(id)), bank: BankTag::Mixed }))
                     }
-                    (Type::Pointer { .. }, Type::Bool) => conversions::convert_to_bool(self, operand_val, source_type),
+                    (Type::Pointer { .. }, Type::Bool) => conversions::convert_to_bool(self, operand_val, &source_type),
                     (Type::Pointer { .. }, target) if is_integer_type(target) => {
                         let wide = pointer_ops::pointer_integer(self, operand_val)?;
                         conversions::convert_integer(self, wide, &Type::UnsignedLong, target)
@@ -184,12 +194,6 @@ impl<'a> TypedExpressionGenerator<'a> {
                         // Cast to void means discard the value
                         // Return a dummy value since void has no representation
                         Ok(Value::Constant(0))
-                    }
-                    
-                    // Array decay followed by an explicit pointer cast keeps
-                    // the same address and bank, including character views.
-                    (Type::Array { .. }, Type::Pointer { .. }) => {
-                        Ok(operand_val)
                     }
                     
                     _ => {
@@ -278,6 +282,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                     // For -> operator, object type is Pointer<Struct>
                     match object.get_type() {
                         Type::Pointer { target, .. } => &**target,
+                        Type::Array { element_type, .. } => &**element_type,
                         _ => object.get_type(), // Shouldn't happen, but fallback
                     }
                 } else {
@@ -453,7 +458,14 @@ impl<'a> TypedExpressionGenerator<'a> {
                             message: format!("Failed to load result: {e}"),
                             location: rcc_common::SourceLocation::new_simple(0, 0),
                         })?;
-                    Ok(Value::Temp(result))
+                    if matches!(value_type, Type::Pointer { .. }) {
+                        Ok(Value::FatPtr(FatPointer {
+                            addr: Box::new(Value::Temp(result)),
+                            bank: BankTag::Mixed,
+                        }))
+                    } else {
+                        Ok(Value::Temp(result))
+                    }
                 }
             }
 

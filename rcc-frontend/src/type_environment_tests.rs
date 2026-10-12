@@ -5,6 +5,68 @@ mod tests {
     use crate::{Frontend, SemanticAnalyzer};
     use crate::typed_ast::type_translation_unit;
     use crate::types::Type;
+
+    #[test]
+    fn inferred_array_bounds_reach_declarations_and_symbols() {
+        let source = r#"
+            typedef struct { long x; int y; } Pair;
+            extern Pair values[];
+            Pair values[] = {{70000L, 1}, {90000L, 2}};
+            enum { LAST = 5 };
+            int sparse[] = {[LAST] = 3, 4, [1] = 2};
+            char text[] = "abc";
+            unsigned char braced[] = {"hi"};
+            int main(void) {
+                Pair local[] = {{1L, 2}, {3L, 4}, {5L, 6}};
+                return sizeof(values) + sizeof(sparse) + sizeof(local) + sizeof(text);
+            }
+        "#;
+        let mut ast = Frontend::parse_source(source).unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&mut ast).unwrap();
+        let types = analyzer.into_type_info();
+        let types = types.borrow();
+        for (name, count) in [("values", 2), ("sparse", 7), ("text", 4), ("braced", 3)] {
+            let id = types.symbol_table.borrow().lookup(name).unwrap();
+            assert!(matches!(types.symbol_types.borrow().get(&id), Some(Type::Array { size: Some(n), .. }) if *n == count));
+            for item in &ast.items {
+                if let crate::TopLevelItem::Declarations(decls) = item {
+                    for decl in decls.iter().filter(|decl| decl.name == name && decl.initializer.is_some()) {
+                        assert!(matches!(&decl.decl_type, Type::Array { size: Some(n), .. } if *n == count));
+                    }
+                }
+            }
+        }
+        Frontend::compile_to_ir(source, "inferred_arrays").unwrap();
+    }
+
+    #[test]
+    fn complete_redeclaration_supplies_array_bound() {
+        Frontend::compile_to_ir(
+            "extern int a[]; int a[4]; extern int a[]; int main(void) { return sizeof(a); }",
+            "completed_extern",
+        ).unwrap();
+        assert!(Frontend::analyze_source("extern int a[3]; int a[] = {1, 2};").is_err());
+        assert!(Frontend::analyze_source("int a[] = {[-1] = 2};").is_err());
+        assert!(Frontend::analyze_source("char a[2] = \"abc\";").is_err());
+    }
+
+    #[test]
+    fn null_pointer_constants_get_contextual_pointer_types() {
+        Frontend::compile_to_ir(r#"
+            int *global = 1 - 1;
+            int *zero(void) { return 0; }
+            int accept(int *p, int marker) { return p == 0 && marker == 42; }
+            int main(void) {
+                int *p = 0;
+                int **owner = &p;
+                *owner = 2 - 2;
+                return accept(0, 42) && zero() == 0;
+            }
+        "#, "null_pointer_contexts").unwrap();
+        assert!(Frontend::analyze_source("void f(void) { int *p; p = 1; }").is_err());
+        assert!(Frontend::analyze_source("int *f(void) { return 1; }").is_err());
+    }
     
     #[test]
     fn test_basic_variable_type_lookup() {

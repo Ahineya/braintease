@@ -44,6 +44,7 @@ impl Parser {
         // Parse first declarator (name and type modifications like pointers, arrays, functions)
         let (name, full_type) = self.parse_declarator(base_type.clone())?;
         self.require_named_declarator(&name)?;
+        self.declare_constant_name(name.clone(), None);
         
         // Check if this is a function definition (has a body)
         if let Type::Function { .. } = full_type {
@@ -84,6 +85,7 @@ impl Parser {
             loop {
                 let (name, full_type) = self.parse_declarator(base_type.clone())?;
                 self.require_named_declarator(&name)?;
+                self.declare_constant_name(name.clone(), None);
                 
                 // If this is a typedef, register the name
                 if storage_class == StorageClass::Typedef {
@@ -138,7 +140,7 @@ impl Parser {
         };
         
         // Use the stored parameter information if available
-        let parameters = if let Some(param_info) = self.last_function_params.take() {
+        let parameters: Vec<Parameter> = if let Some(param_info) = self.last_function_params.take() {
             param_info.into_iter().map(|(name, param_type, span)| Parameter {
                 node_id: self.node_id_gen.next(),
                 name,
@@ -150,8 +152,15 @@ impl Parser {
             Vec::new()
         };
         
-        // Parse function body
+        // Parameters hide outer enumeration constants throughout the body.
+        self.constant_scopes.push(Default::default());
+        for parameter in &parameters {
+            if let Some(name) = &parameter.name {
+                self.declare_constant_name(name.clone(), None);
+            }
+        }
         let body = self.parse_compound_statement()?;
+        self.constant_scopes.pop();
         
         let end_location = self.current_location();
         
@@ -177,6 +186,7 @@ impl Parser {
     ) -> Result<Declaration, CompilerError> {
         let start_location = self.current_location();
         
+        self.declare_constant_name(name.clone(), None);
         // If this is a typedef declaration, register the name
         if storage_class == StorageClass::Typedef {
             self.intern_typedef(name.clone(), decl_type.clone());
@@ -236,6 +246,7 @@ impl Parser {
         // Parse first declarator
         let (name, full_type) = self.parse_declarator(base_type.clone())?;
         self.require_named_declarator(&name)?;
+        self.declare_constant_name(name.clone(), None);
         
         // If this is a typedef, register the name
         if storage_class == StorageClass::Typedef {
@@ -262,6 +273,7 @@ impl Parser {
         while self.match_token(&TokenType::Comma) {
             let (name, full_type) = self.parse_declarator(base_type.clone())?;
             self.require_named_declarator(&name)?;
+            self.declare_constant_name(name.clone(), None);
             
             // If this is a typedef, register the name
             if storage_class == StorageClass::Typedef {

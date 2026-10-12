@@ -219,8 +219,9 @@ impl TypeAnalyzer {
         }
     }
 
-    /// Unwrap typedefs and named struct/union references without expanding
-    /// complete aggregate fields (avoids infinite recursion on self-referential pointers).
+    /// Resolve aliases in aggregate fields. Pointer edges to named aggregates
+    /// retain only their tag; resolving their fields here would recurse forever
+    /// for lists such as `struct node { struct node *next; }`.
     fn unwrap_typedefs_shallow(&self, ty: &Type) -> Type {
         match ty {
             Type::Typedef(name) => {
@@ -231,7 +232,7 @@ impl TypeAnalyzer {
                 }
             }
             Type::Pointer { target, bank } => Type::Pointer {
-                target: Box::new(self.unwrap_typedefs_shallow(target)),
+                target: Box::new(self.resolve_aggregate_field_pointee(target)),
                 bank: *bank,
             },
             Type::Array { element_type, size } => Type::Array {
@@ -239,12 +240,52 @@ impl TypeAnalyzer {
                 size: *size,
             },
             Type::Struct { name: Some(name), fields } if fields.is_empty() => {
-                self.type_definitions.borrow().get(name).cloned().unwrap_or_else(|| ty.clone())
+                let complete = self.type_definitions.borrow().get(name).cloned();
+                match complete {
+                    Some(Type::Struct { fields, .. }) if !fields.is_empty() => self.unwrap_typedefs_shallow(&Type::Struct { name: Some(name.clone()), fields }),
+                    _ => ty.clone(),
+                }
             }
             Type::Union { name: Some(name), fields } if fields.is_empty() => {
-                self.type_definitions.borrow().get(name).cloned().unwrap_or_else(|| ty.clone())
+                let complete = self.type_definitions.borrow().get(name).cloned();
+                match complete {
+                    Some(Type::Union { fields, .. }) if !fields.is_empty() => self.unwrap_typedefs_shallow(&Type::Union { name: Some(name.clone()), fields }),
+                    _ => ty.clone(),
+                }
             }
+            Type::Struct { name, fields } => Type::Struct {
+                name: name.clone(),
+                fields: fields.iter().map(|field| crate::types::StructField {
+                    name: field.name.clone(),
+                    field_type: self.unwrap_typedefs_shallow(&field.field_type),
+                    offset: field.offset,
+                }).collect(),
+            },
+            Type::Union { name, fields } => Type::Union {
+                name: name.clone(),
+                fields: fields.iter().map(|field| crate::types::StructField {
+                    name: field.name.clone(),
+                    field_type: self.unwrap_typedefs_shallow(&field.field_type),
+                    offset: field.offset,
+                }).collect(),
+            },
             _ => ty.clone(),
+        }
+    }
+
+    fn resolve_aggregate_field_pointee(&self, ty: &Type) -> Type {
+        match ty {
+            Type::Typedef(name) => {
+                let actual = self.type_definitions.borrow().get(name).cloned();
+                actual.map(|ty| self.resolve_aggregate_field_pointee(&ty)).unwrap_or_else(|| ty.clone())
+            }
+            Type::Struct { name: Some(name), .. } => Type::Struct {
+                name: Some(name.clone()), fields: Vec::new(),
+            },
+            Type::Union { name: Some(name), .. } => Type::Union {
+                name: Some(name.clone()), fields: Vec::new(),
+            },
+            _ => self.unwrap_typedefs_shallow(ty),
         }
     }
     
@@ -359,6 +400,29 @@ impl TypeAnalyzer {
         }
     }
     
+    /// Insert the contextual conversion for C's integer null-pointer constants.
+    /// Keeping it explicit ensures calls and stores use both pointer ABI cells.
+    pub fn convert_null_pointer_constant(&self, target: &Type, expr: &mut Expression) {
+        let target = self.resolve_type(target);
+        if !matches!(target, Type::Pointer { .. })
+            || !expr.expr_type.as_ref().is_some_and(|ty| self.is_integer(ty))
+            || crate::ast::const_eval::eval_integer_constant(expr).ok() != Some(0)
+        {
+            return;
+        }
+        // The expression is an ICE already proven equal to zero. Canonicalize
+        // it so global initializers need no executable arithmetic to form NULL.
+        let mut operand = Box::new(expr.clone());
+        operand.kind = ExpressionKind::IntLiteral {
+            value: 0,
+            suffix: crate::lexer::IntegerSuffix::None,
+            hex: false,
+        };
+        operand.expr_type = Some(Type::Int);
+        expr.kind = ExpressionKind::Cast { target_type: target.clone(), operand };
+        expr.expr_type = Some(target);
+    }
+
     /// Check if two types are compatible for assignment
     pub fn is_assignable(&self, to: &Type, from: &Type) -> bool {
         // Special cases first
@@ -418,7 +482,9 @@ impl TypeAnalyzer {
             
             // Function to function pointer decay
             (Type::Pointer { target, .. }, func @ Type::Function { .. }) => {
-                target.as_ref() == func
+                // Match the existing pointer-to-void conversion policy after
+                // applying the implicit decay of a function designator.
+                matches!(target.as_ref(), Type::Void) || target.as_ref() == func
             }
             
             _ => false,
@@ -724,6 +790,12 @@ impl TypeAnalyzer {
                 if let Some(existing_type) = existing_type {
                     if self.types_compatible_for_object_redeclaration(&existing_type, &decl.decl_type) {
                         decl.symbol_id = Some(existing_symbol_id);
+                        // A later complete array declaration supplies the bound
+                        // for an earlier extern declaration. An incomplete
+                        // redeclaration must not discard an already known bound.
+                        if matches!(self.resolve_type(&decl.decl_type), Type::Array { size: Some(_), .. }) {
+                            self.symbol_types.borrow_mut().insert(existing_symbol_id, self.resolve_type(&decl.decl_type));
+                        }
                         return Ok(());
                     }
                     return Err(CompilerError::semantic_error(

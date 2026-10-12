@@ -37,3 +37,7 @@ public/downloads
 c-test/vendor/result.txt
 # Runtime build configuration stamp
 /runtime/.bank-size
+
+# Pristine, pinned Doom reference checkouts (see vendor/doom-sources.json).
+/vendor/doomgeneric/
+/vendor/doom8088/

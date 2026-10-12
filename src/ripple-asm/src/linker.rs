@@ -735,6 +735,38 @@ func:
     }
 
     #[test]
+    fn test_local_call_beyond_16_bit_object_offset() {
+        let mut options = AssemblerOptions::default();
+        options.bank_size = 64000;
+        options.max_immediate = 65535;
+        let assembler = RippleAssembler::new(options);
+        let prefix = assembler.assemble("prefix:\nNOP\nNOP\nNOP\n").unwrap();
+        let mut source = String::from("start:\nCALL late\n");
+        source.push_str(&"NOP\n".repeat(39999));
+        source.push_str("middle:\n");
+        source.push_str(&"NOP\n".repeat(30000));
+        source.push_str("late:\nCALL start\nRET\n");
+        let object = assembler.assemble(&source).unwrap();
+        assert_eq!(object.labels["late"].absolute_address / 4, 70000);
+        assert_eq!(object.unresolved_references[&0].label, "late");
+        assert_eq!(object.unresolved_references[&0].ref_type, "absolute");
+        assert!(assembler.assemble_to_binary(&source).unwrap_err()[0].contains("rlink"));
+
+        let mut linked = Linker::new(64000).link(vec![prefix, object]).unwrap();
+        let start = (linked.labels["start"].absolute_address / 4) as usize;
+        let late = (linked.labels["late"].absolute_address / 4) as usize;
+        assert_eq!(start, 3);
+        assert_eq!(late, 94000);
+        let forward = &linked.instructions[start];
+        assert_eq!((forward.word2, forward.word3), (1, 30000));
+        let backward = &linked.instructions[late];
+        assert_eq!((backward.word2, backward.word3), (0, 3));
+        linked.apply_code_bank_base(7);
+        assert_eq!(linked.instructions[start].word2, 8);
+        assert_eq!(linked.instructions[late].word2, 7);
+    }
+
+    #[test]
     fn test_link_relocates_data_labels_across_objects() {
         let mut options = AssemblerOptions::default();
         options.memory_offset = 0;

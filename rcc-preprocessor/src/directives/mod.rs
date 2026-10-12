@@ -132,15 +132,15 @@ impl Preprocessor {
                     let pattern = format!(r"\b{}\b", regex::escape(name));
                     let re = Regex::new(&pattern)?;
                     
-                    if re.is_match(&result) {
-                        let body = apply_object_like_body(&macro_def.body);
-                        result = re.replace_all(&result, body.as_str()).to_string();
-                        expanded = true;
-                    }
+                    let body = apply_object_like_body(&macro_def.body);
+                    let next = replace_unquoted(&result, &re, |_| body.clone());
+                    expanded |= next != result;
+                    result = next;
                 } else {
                     // Function-like macro
-                    result = self.expand_function_macro(&result, name, macro_def)?;
-                    // TODO: Track if expansion occurred
+                    let next = self.expand_function_macro(&result, name, macro_def)?;
+                    expanded |= next != result;
+                    result = next;
                 }
             }
         }
@@ -163,19 +163,16 @@ impl Preprocessor {
             None => "\"\"".to_string(),
         };
         let re_file = Regex::new(r"\b__FILE__\b")?;
-        let with_file = re_file.replace_all(text, file.as_str()).into_owned();
+        let with_file = replace_unquoted(text, &re_file, |_| file.clone());
 
         let re_line = Regex::new(r"\b__LINE__\b")?;
         if !re_line.is_match(&with_file) {
             return Ok(with_file);
         }
 
-        let mut out = String::new();
-        for (i, line) in with_file.split_inclusive('\n').enumerate() {
-            let n = self.current_line + i;
-            out.push_str(&re_line.replace_all(line, n.to_string()));
-        }
-        Ok(out)
+        Ok(replace_unquoted(&with_file, &re_line, |offset| {
+            (self.current_line + with_file[..offset].bytes().filter(|&b| b == b'\n').count()).to_string()
+        }))
     }
     
     /// Expand function-like macro
@@ -189,7 +186,11 @@ impl Preprocessor {
         let mut result = String::new();
         let mut last_end = 0;
         
-        for mat in re.find_iter(text) {
+        let searchable = mask_literals(text);
+        for mat in re.find_iter(&searchable) {
+            // An outer invocation consumes its nested arguments; those are
+            // expanded by substitute_function_macro_body, not a second match.
+            if mat.start() < last_end { continue; }
             result.push_str(&text[last_end..mat.start()]);
             
             // Parse arguments
@@ -373,6 +374,44 @@ impl Preprocessor {
     }
 }
 
+// Keep byte positions stable while hiding string/character literals from macro
+// matching. Replacements always use the original slices, preserving escapes,
+// UTF-8, and literal '$' characters in replacement bodies.
+fn mask_literals(text: &str) -> String {
+    let mut bytes = text.as_bytes().to_vec();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' || bytes[i] == b'\'' {
+            let quote = bytes[i];
+            bytes[i] = b' ';
+            i += 1;
+            while i < bytes.len() {
+                let ch = bytes[i];
+                bytes[i] = b' ';
+                i += 1;
+                if ch == b'\\' && i < bytes.len() {
+                    bytes[i] = b' ';
+                    i += 1;
+                } else if ch == quote { break; }
+            }
+        } else { i += 1; }
+    }
+    String::from_utf8(bytes).expect("masking whole literals preserves UTF-8")
+}
+
+fn replace_unquoted(text: &str, pattern: &Regex, replacement: impl Fn(usize) -> String) -> String {
+    let searchable = mask_literals(text);
+    let mut out = String::new();
+    let mut end = 0;
+    for found in pattern.find_iter(&searchable) {
+        out.push_str(&text[end..found.start()]);
+        out.push_str(&replacement(found.start()));
+        end = found.end();
+    }
+    out.push_str(&text[end..]);
+    out
+}
+
 fn replace_defined(condition: &str, is_defined: impl Fn(&str) -> bool) -> String {
     let re_paren = Regex::new(r"defined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)").unwrap();
     let re_space = Regex::new(r"defined\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
@@ -397,7 +436,18 @@ fn tokenize_macro_body(body: &str) -> Vec<BodyTok> {
     let mut i = 0;
     let mut toks = Vec::new();
     while i < chars.len() {
-        if chars[i] == '#' {
+        if chars[i] == '"' || chars[i] == '\'' {
+            let quote = chars[i];
+            let start = i;
+            i += 1;
+            while i < chars.len() {
+                let ch = chars[i];
+                i += 1;
+                if ch == '\\' && i < chars.len() { i += 1; }
+                else if ch == quote { break; }
+            }
+            toks.push(BodyTok::Other(chars[start..i].iter().collect()));
+        } else if chars[i] == '#' {
             if i + 1 < chars.len() && chars[i + 1] == '#' {
                 toks.push(BodyTok::Paste);
                 i += 2;

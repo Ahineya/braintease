@@ -143,10 +143,10 @@ L_labs_4:
     ADD T7, SB, R0
     LI T6, -1536
     ADDI S0, S0, 1
-    BNE S0, T6, L_i32_memory_next_word_d8e66595_2_0
+    BNE S0, T6, L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_0
     LI S0, 0
     ADDI T7, T7, 1
-L_i32_memory_next_word_d8e66595_2_0:
+L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_0:
     STORE S2, T7, S0
 ; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
@@ -157,20 +157,20 @@ L_i32_memory_next_word_d8e66595_2_0:
     ADD T3, SB, R0
     LI T2, -1536
     ADDI T4, T4, 1
-    BNE T4, T2, L_i32_memory_next_word_d8e66595_2_1
+    BNE T4, T2, L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_1
     LI T4, 0
     ADDI T3, T3, 1
-L_i32_memory_next_word_d8e66595_2_1:
+L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_1:
     LOAD T1, T3, T4
     LI T0, 0
     LI S0, 0
     XOR T7, T1, S0
-    BNE T7, R0, L_i32_slt_hine_d8e66595_2_2
+    BNE T7, R0, L_i32_slt_hine_a068a297ad38469ca250db233f64dacf_2_2
     SLTU T7, T5, T0
-    BEQ R0, R0, L_i32_slt_done_d8e66595_2_3
-L_i32_slt_hine_d8e66595_2_2:
+    BEQ R0, R0, L_i32_slt_done_a068a297ad38469ca250db233f64dacf_2_3
+L_i32_slt_hine_a068a297ad38469ca250db233f64dacf_2_2:
     SLT T7, T1, S0
-L_i32_slt_done_d8e66595_2_3:
+L_i32_slt_done_a068a297ad38469ca250db233f64dacf_2_3:
     LI T6, 0
     XOR T4, T7, T6
     LI T3, 0
@@ -223,10 +223,10 @@ L_labs_5:
     ADD S3, SB, R0
     LI S2, -1536
     ADDI T6, T6, 1
-    BNE T6, S2, L_i32_memory_next_word_d8e66595_2_4
+    BNE T6, S2, L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_4
     LI T6, 0
     ADDI S3, S3, 1
-L_i32_memory_next_word_d8e66595_2_4:
+L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_4:
     LOAD S1, S3, T6
     LI T5, 0
     LI T1, 0
@@ -250,10 +250,10 @@ L_labs_7:
     ADD S2, SB, R0
     LI S1, -1536
     ADDI S3, S3, 1
-    BNE S3, S1, L_i32_memory_next_word_d8e66595_2_5
+    BNE S3, S1, L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_5
     LI S3, 0
     ADDI S2, S2, 1
-L_i32_memory_next_word_d8e66595_2_5:
+L_i32_memory_next_word_a068a297ad38469ca250db233f64dacf_2_5:
     LOAD S0, S2, S3
     MOVE RV0, T6
     MOVE RV1, S0
@@ -322,22 +322,22 @@ L_llabs_8:
     ADD T5, SB, R0
     LI T4, -1536
     ADDI T6, T6, 1
-    BNE T6, T4, L_i32_memory_next_word_1606bf91_4_0
+    BNE T6, T4, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_0
     LI T6, 0
     ADDI T5, T5, 1
-L_i32_memory_next_word_1606bf91_4_0:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_0:
     STORE S2, T5, T6
     ADDI T6, T6, 1
-    BNE T6, T4, L_i32_memory_next_word_1606bf91_4_1
+    BNE T6, T4, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_1
     LI T6, 0
     ADDI T5, T5, 1
-L_i32_memory_next_word_1606bf91_4_1:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_1:
     STORE S1, T5, T6
     ADDI T6, T6, 1
-    BNE T6, T4, L_i32_memory_next_word_1606bf91_4_2
+    BNE T6, T4, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_2
     LI T6, 0
     ADDI T5, T5, 1
-L_i32_memory_next_word_1606bf91_4_2:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_2:
     STORE S0, T5, T6
 ; Load instruction: t2 = load FatPtr(FatPointer { addr: Temp(1), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(1), bank: Stack })
@@ -348,22 +348,22 @@ L_i32_memory_next_word_1606bf91_4_2:
     ADD T1, SB, R0
     LI T0, -1536
     ADDI T2, T2, 1
-    BNE T2, T0, L_i32_memory_next_word_1606bf91_4_3
+    BNE T2, T0, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_3
     LI T2, 0
     ADDI T1, T1, 1
-L_i32_memory_next_word_1606bf91_4_3:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_3:
     LOAD T6, T1, T2
     ADDI T2, T2, 1
-    BNE T2, T0, L_i32_memory_next_word_1606bf91_4_4
+    BNE T2, T0, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_4
     LI T2, 0
     ADDI T1, T1, 1
-L_i32_memory_next_word_1606bf91_4_4:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_4:
     LOAD T5, T1, T2
     ADDI T2, T2, 1
-    BNE T2, T0, L_i32_memory_next_word_1606bf91_4_5
+    BNE T2, T0, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_5
     LI T2, 0
     ADDI T1, T1, 1
-L_i32_memory_next_word_1606bf91_4_5:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_5:
     LOAD T4, T1, T2
     LI T2, 0
     LI T1, 0
@@ -394,22 +394,22 @@ L_i32_memory_next_word_1606bf91_4_5:
     ADDI SC, SC, 16
     STORE T2, SB, SC
     XOR T2, T4, T7
-    BNE T2, R0, L_i64_slt_w3ne_1606bf91_4_6
+    BNE T2, R0, L_i64_slt_w3ne_5736478a8f324b07a35bd52226937431_4_6
     XOR T2, T5, S0
-    BNE T2, R0, L_i64_slt_w2ne_1606bf91_4_7
+    BNE T2, R0, L_i64_slt_w2ne_5736478a8f324b07a35bd52226937431_4_7
     XOR T2, T6, S1
-    BNE T2, R0, L_i64_slt_w1ne_1606bf91_4_8
+    BNE T2, R0, L_i64_slt_w1ne_5736478a8f324b07a35bd52226937431_4_8
     SLTU T2, T3, S2
-    BEQ R0, R0, L_i64_slt_done_1606bf91_4_9
-L_i64_slt_w3ne_1606bf91_4_6:
+    BEQ R0, R0, L_i64_slt_done_5736478a8f324b07a35bd52226937431_4_9
+L_i64_slt_w3ne_5736478a8f324b07a35bd52226937431_4_6:
     SLT T2, T4, T7
-    BEQ R0, R0, L_i64_slt_done_1606bf91_4_9
-L_i64_slt_w2ne_1606bf91_4_7:
+    BEQ R0, R0, L_i64_slt_done_5736478a8f324b07a35bd52226937431_4_9
+L_i64_slt_w2ne_5736478a8f324b07a35bd52226937431_4_7:
     SLTU T2, T5, S0
-    BEQ R0, R0, L_i64_slt_done_1606bf91_4_9
-L_i64_slt_w1ne_1606bf91_4_8:
+    BEQ R0, R0, L_i64_slt_done_5736478a8f324b07a35bd52226937431_4_9
+L_i64_slt_w1ne_5736478a8f324b07a35bd52226937431_4_8:
     SLTU T2, T6, S1
-L_i64_slt_done_1606bf91_4_9:
+L_i64_slt_done_5736478a8f324b07a35bd52226937431_4_9:
 ; Spill i64_c1_4_f4_op12 to slot 5
     ADD SC, FP, R0
     ADDI SC, SC, 17
@@ -482,22 +482,22 @@ L_llabs_9:
     ADD T6, SB, R0
     LI T5, -1536
     ADDI T3, T3, 1
-    BNE T3, T5, L_i32_memory_next_word_1606bf91_4_10
+    BNE T3, T5, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_10
     LI T3, 0
     ADDI T6, T6, 1
-L_i32_memory_next_word_1606bf91_4_10:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_10:
     LOAD T4, T6, T3
     ADDI T3, T3, 1
-    BNE T3, T5, L_i32_memory_next_word_1606bf91_4_11
+    BNE T3, T5, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_11
     LI T3, 0
     ADDI T6, T6, 1
-L_i32_memory_next_word_1606bf91_4_11:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_11:
     LOAD S2, T6, T3
     ADDI T3, T3, 1
-    BNE T3, T5, L_i32_memory_next_word_1606bf91_4_12
+    BNE T3, T5, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_12
     LI T3, 0
     ADDI T6, T6, 1
-L_i32_memory_next_word_1606bf91_4_12:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_12:
     LOAD S1, T6, T3
     LI S0, 0
     LI T7, 0
@@ -550,22 +550,22 @@ L_llabs_11:
     ADD S0, SB, R0
     LI T7, -1536
     ADDI S1, S1, 1
-    BNE S1, T7, L_i32_memory_next_word_1606bf91_4_13
+    BNE S1, T7, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_13
     LI S1, 0
     ADDI S0, S0, 1
-L_i32_memory_next_word_1606bf91_4_13:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_13:
     LOAD T6, S0, S1
     ADDI S1, S1, 1
-    BNE S1, T7, L_i32_memory_next_word_1606bf91_4_14
+    BNE S1, T7, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_14
     LI S1, 0
     ADDI S0, S0, 1
-L_i32_memory_next_word_1606bf91_4_14:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_14:
     LOAD T5, S0, S1
     ADDI S1, S1, 1
-    BNE S1, T7, L_i32_memory_next_word_1606bf91_4_15
+    BNE S1, T7, L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_15
     LI S1, 0
     ADDI S0, S0, 1
-L_i32_memory_next_word_1606bf91_4_15:
+L_i32_memory_next_word_5736478a8f324b07a35bd52226937431_4_15:
     LOAD T4, S0, S1
     MOVE RV0, S2
     MOVE RV1, T6

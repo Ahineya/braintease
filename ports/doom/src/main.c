@@ -1,0 +1,40 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "doom_build_config.h"
+#include "doom_port.h"
+#include "doomstat.h"
+#include "m_argv.h"
+#include "tables.h"
+#include "info.h"
+#include "i_system.h"
+
+void D_DoomMain(void);
+void doomgeneric_Tick(void);
+
+int main(int argc, char **argv)
+{
+    static char *engine_args[7] = {"doom-ripple", "-iwad", DOOM_WAD_PATH, "-warp", "1", "1", NULL};
+    int start_map = 0;
+#ifdef DOOM_START_MAP
+    start_map = 1;
+#endif
+#ifndef RIPPLE
+    if (argc < 2) {
+        fprintf(stderr, "Usage: engine OUTPUT.rgb565 [FRAME] [title|map] [INPUT.txt]\n");
+        return 1;
+    }
+    Doom_ConfigureCapture(argv[1], argc > 2 ? strtoul(argv[2], NULL, 10) : 1UL,
+                          argc > 4 ? argv[4] : NULL);
+    if (argc > 3) start_map = strcmp(argv[3], "map") == 0;
+#endif
+    if (!Doom_InitTables()) I_Error("Doom numeric table allocation failed");
+    if (!Doom_InitInfo()) I_Error("Doom state table allocation failed");
+    myargc = start_map ? 6 : 3;
+    myargv = engine_args;
+    singletics = true;
+    printf("DOOM PORT WAD %s\n", DOOM_WAD_SHA256);
+    D_DoomMain();
+    for (;;) doomgeneric_Tick();
+    return 0;
+}

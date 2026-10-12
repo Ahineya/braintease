@@ -58,7 +58,7 @@ pub fn get_value_register(
             // The bank component is handled separately when needed
             get_value_register(mgr, naming, &fp.addr)
         }
-        Value::ConstantArray(_) | Value::ConstantAggregate(_) => {
+        Value::ConstantArray(_) | Value::ConstantAggregate(_) | Value::AddressOffset { .. } => {
             panic!("Cannot load constant array into register - arrays should be initialized separately");
         }
         Value::Undef => {
@@ -80,7 +80,7 @@ pub fn get_value_register(
 pub fn calculate_value_need(value: &Value) -> usize {
     match value {
         Value::Constant(_) => 1,    // Need to load into register
-        Value::ConstantArray(_) | Value::ConstantAggregate(_) => 0, // Arrays don't go in registers
+        Value::ConstantArray(_) | Value::ConstantAggregate(_) | Value::AddressOffset { .. } => 0, // Static initializers don't go in registers
         Value::Temp(_) => 1,         // Temps need a register
         Value::Global(_) => panic!("Value::Global should be resolved in lower.rs {value:?}"), // Should be resolved to FatPtr
         Value::FatPtr(_) => 2,       // Fat pointers need 2 registers (addr + bank)
@@ -166,6 +166,7 @@ fn get_bank_register_with_runtime_check(
             // Get the register containing the bank value (might be a tag)
             let bank_val_reg = mgr.get_register(name.clone());
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(bank_val_reg);
             
             // We need to check if this is a tag and convert to the actual register
             // Generate unique labels using the naming module
@@ -175,20 +176,24 @@ fn get_bank_register_with_runtime_check(
             let result_name = naming.temp_with_context(context, "resolved_bank");
             let result_reg = mgr.get_register(result_name);
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(result_reg);
             
-            // Check if bank_val_reg == GLOBAL tag (-1)
+            // Allocate every scratch before branching. A spill emitted only
+            // on the non-global path leaves an uninitialized spill slot when
+            // the global path joins and later code reloads that live value.
+            // One scratch suffices because the tag tests are sequential.
             let global_tag_name = naming.temp_with_context(context, "global_tag");
             let global_tag_reg = mgr.get_register(global_tag_name);
             insts.extend(mgr.take_instructions());
+            mgr.pin_register(global_tag_reg);
+
+            // Check if bank_val_reg == GLOBAL tag (-1)
             insts.push(AsmInst::Li(global_tag_reg, BankTagValue::GLOBAL));
             insts.push(AsmInst::Beq(bank_val_reg, global_tag_reg, use_global_label.clone()));
             
             // Check if bank_val_reg == STACK tag (-2)
-            let stack_tag_name = naming.temp_with_context(context, "stack_tag");
-            let stack_tag_reg = mgr.get_register(stack_tag_name);
-            insts.extend(mgr.take_instructions());
-            insts.push(AsmInst::Li(stack_tag_reg, BankTagValue::STACK));
-            insts.push(AsmInst::Beq(bank_val_reg, stack_tag_reg, use_stack_label.clone()));
+            insts.push(AsmInst::Li(global_tag_reg, BankTagValue::STACK));
+            insts.push(AsmInst::Beq(bank_val_reg, global_tag_reg, use_stack_label.clone()));
             
             // Not a tag - use the value as-is (it's a dynamic bank address)
             insts.push(AsmInst::Add(result_reg, bank_val_reg, Reg::R0));
@@ -207,8 +212,10 @@ fn get_bank_register_with_runtime_check(
             insts.push(AsmInst::Label(done_label));
             
             // Free the temporary registers
+            mgr.unpin_register(bank_val_reg);
+            mgr.unpin_register(result_reg);
+            mgr.unpin_register(global_tag_reg);
             mgr.free_register(global_tag_reg);
-            mgr.free_register(stack_tag_reg);
             
             (result_reg, insts)
         }
@@ -523,5 +530,30 @@ pub fn canonicalize_value(
             _ => Ok(value.clone()),
         },
         _ => Ok(value.clone()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bank_resolution_spills_before_any_path_can_skip_them() {
+        let mut mgr = RegisterPressureManager::new(0);
+        let mut naming = NameGenerator::new(0);
+        for index in 0..12 {
+            mgr.get_register(format!("live_{index}"));
+        }
+        mgr.take_instructions();
+        let (result, instructions) = get_bank_register_with_runtime_check_safe(
+            &BankInfo::Dynamic("live_11".into()), &mut mgr, &mut naming, "pressure_test",
+        );
+        let first_branch = instructions.iter().position(|inst| matches!(inst, AsmInst::Beq(..))).unwrap();
+        assert!(instructions[..first_branch].iter().any(|inst| matches!(inst, AsmInst::Store(..))),
+            "the fixture must exercise register spills");
+        assert!(instructions[first_branch..].iter().all(|inst| !matches!(inst,
+            AsmInst::Store(..) | AsmInst::Load(..))),
+            "branch-local spilling can leave later reloads uninitialized: {instructions:?}");
+        assert_ne!(result, mgr.get_register("live_11".into()), "bank input must survive scratch allocation");
     }
 }

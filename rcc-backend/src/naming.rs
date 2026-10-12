@@ -28,7 +28,7 @@ pub struct NameGenerator {
     next_label_id: u32,
 
     /// Per-instance tag so I32 labels do not collide across object files.
-    unit_tag: u32,
+    unit_tag: u128,
     next_internal_temp: u32,
 }
 
@@ -39,7 +39,7 @@ impl NameGenerator {
             function_id,
             next_op_id: 0,
             next_label_id: 0,
-            unit_tag: Uuid::new_v4().as_u128() as u32,
+            unit_tag: Uuid::new_v4().as_u128(),
             next_internal_temp: u32::MAX,
         }
     }
@@ -480,13 +480,14 @@ impl NameGenerator {
     /// Generate labels for bank check operations (use_global, use_stack, done)
     /// Returns a tuple of (use_global_label, use_stack_label, done_label)
     pub fn bank_check_labels(&mut self, _context: &str) -> (String, String, String) {
-        // Use UUID for truly unique labels across all compilation units
-        let unique_id = Uuid::new_v4().simple().to_string();
-        let short_id = &unique_id[0..8]; // Use first 8 chars for shorter labels
-        
-        let use_global = format!("L_bc_{}_use_global", short_id);
-        let use_stack = format!("L_bc_{}_use_stack", short_id);
-        let done = format!("L_bc_{}_done", short_id);
+        // A large program contains enough bank checks for random 32-bit tags
+        // to collide. Retain the full namespace and use a monotonic operation
+        // suffix, just as the wide-arithmetic labels do.
+        let label_id = self.next_label_id();
+        let stem = format!("L_bc_{:032x}_{}_{}", self.unit_tag, self.function_id, label_id);
+        let use_global = format!("{stem}_use_global");
+        let use_stack = format!("{stem}_use_stack");
+        let done = format!("{stem}_done");
         (use_global, use_stack, done)
     }
 }
@@ -509,6 +510,28 @@ pub fn get_translation_unit_id() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn label_namespaces_preserve_high_bits_and_unique_operations() {
+        let mut first = NameGenerator::new(7);
+        let mut second = NameGenerator::new(7);
+        // Two compilation namespaces whose low 32 bits are identical.
+        first.unit_tag = 1_u128 << 96 | 42;
+        second.unit_tag = 2_u128 << 96 | 42;
+        assert_ne!(first.i32_label("add"), second.i32_label("add"));
+        assert_ne!(first.i64_label("mul"), second.i64_label("mul"));
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..10000 {
+            for naming in [&mut first, &mut second] {
+                let labels = naming.bank_check_labels("same pointer operation");
+                let namespace = format!("{:032x}", naming.unit_tag);
+                for label in [labels.0, labels.1, labels.2] {
+                    assert!(label.contains(&namespace));
+                    assert!(seen.insert(label), "bank-check labels must never repeat");
+                }
+            }
+        }
+    }
     
     #[test]
     fn test_unique_operation_ids() {

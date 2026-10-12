@@ -1,0 +1,5 @@
+{
+  "description": "Block extern declarations bind global data across scalar/array forms and lexical shadows; block prototypes and typedefs allocate no objects",
+  "use_runtime": true,
+  "expected": "YYYY\n"
+}

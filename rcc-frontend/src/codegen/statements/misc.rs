@@ -21,9 +21,13 @@ pub fn generate_compound(
     gen: &mut TypedStatementGenerator,
     statements: &[TypedStmt],
 ) -> Result<(), CompilerError> {
+    let outer_variables = gen.variables.clone();
+    let outer_arrays = gen.array_variables.clone();
     for stmt in statements {
         gen.generate(stmt)?;
     }
+    *gen.variables = outer_variables;
+    *gen.array_variables = outer_arrays;
     Ok(())
 }
 

@@ -22,6 +22,8 @@ pub struct Parser {
     pub(crate) tokens: VecDeque<Token>,
     pub(crate) node_id_gen: NodeIdGenerator,
     pub(crate) last_function_params: Option<Vec<(Option<String>, Type, SourceSpan)>>, // Temporary storage for function parameters
+    // None marks an ordinary identifier hiding an outer enumeration constant.
+    pub(crate) constant_scopes: Vec<HashMap<String, Option<i64>>>,
     pub(crate) typedef_names: HashMap<String, Type>, // Typedef name -> type, for parsing and sizeof
 }
 
@@ -43,9 +45,22 @@ impl Parser {
             node_id_gen: NodeIdGenerator::new(),
             last_function_params: None,
             typedef_names: HashMap::new(),
+            constant_scopes: vec![HashMap::new()],
         }
     }
     
+    pub(crate) fn declare_constant_name(&mut self, name: String, value: Option<i64>) {
+        self.constant_scopes.last_mut().unwrap().insert(name, value);
+    }
+
+    pub(crate) fn eval_parser_constant(&self, expr: &Expression) -> Result<i64, crate::ast::const_eval::ConstEvalError> {
+        crate::ast::const_eval::eval_integer_constant_with(expr, &|name| self.lookup_parser_constant(name))
+    }
+
+    pub(crate) fn lookup_parser_constant(&self, name: &str) -> Option<i64> {
+        self.constant_scopes.iter().rev().find_map(|scope| scope.get(name)).copied().flatten()
+    }
+
     /// Peek at current token without consuming
     pub(crate) fn peek(&self) -> Option<&Token> {
         self.tokens.front()
@@ -134,6 +149,37 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
+
+    #[test]
+    fn enum_constants_complete_array_bounds() {
+        let source = "enum { BASE = 2, COUNT = BASE * 3, NEXT }; int values[COUNT + 1]; int (*rows)[NEXT];";
+        let ast = crate::Frontend::parse_source(source).unwrap();
+        match &ast.items[1] {
+            TopLevelItem::Declarations(decls) => assert!(matches!(decls[0].decl_type, Type::Array { size: Some(7), .. })),
+            _ => panic!("expected array declaration"),
+        }
+        match &ast.items[2] {
+            TopLevelItem::Declarations(decls) => match &decls[0].decl_type {
+                Type::Pointer { target, .. } => assert!(matches!(target.as_ref(), Type::Array { size: Some(7), .. })),
+                _ => panic!("expected pointer to array"),
+            },
+            _ => panic!("expected declaration"),
+        }
+    }
+
+    #[test]
+    fn enum_bound_lookup_respects_scopes_and_shadowing() {
+        crate::Frontend::parse_source("enum { N=3 }; void f(void) { { enum { N=5 }; int a[N]; } int b[N]; } int c[N];").unwrap();
+        crate::Frontend::parse_source("enum { N=3 }; void f(void) { for (int N=0; N<1; ++N) {} int a[N]; }").unwrap();
+        for source in [
+            "enum { N=3 }; void f(void) { int N=4; int a[N]; }",
+            "enum { N=3 }; void f(int N) { int a[N]; }",
+            "enum { N=3 }; void f(int N, int a[N]);",
+            "void f(void) { enum { N=3 }; } int a[N];",
+        ] {
+            assert!(crate::Frontend::parse_source(source).is_err(), "unexpected constant bound in {source}");
+        }
+    }
 
     fn parse_expression_from_str(input: &str) -> Result<Expression, CompilerError> {
         let mut lexer = Lexer::new(input);

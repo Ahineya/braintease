@@ -1,9 +1,15 @@
 typedef int (*callback_t)(int);
 extern int remote(int);
+extern long wide_values[2];
+static long *last_wide = &wide_values[1];
+static long *first_wide = &wide_values[1] - 1;
 static int state = 11;
+static int values[3] = {2, 11, 8};
+static int *focus = &values[1];
 static int helper(void) { return state; }
-int second_static(void) { char *s = "second"; return helper() + s[0] - 's'; }
+int second_static(void) { char *s = "second"; return helper() + s[0] - 's' + *focus - 11; }
 int plus_three(int n) { return n + 3; }
+int second_local(void) { static int counter = 70; return ++counter; }
 callback_t remote_callback = (callback_t)&remote;
 callback_t table[2] = { plus_three, remote };
 struct action { int number; callback_t run; };
@@ -19,5 +25,10 @@ int callbacks(void) {
     if (actions[0].run(actions[0].number) != 9) return 13;
     if (actions[1].run(actions[1].number) != 49) return 14;
     if (invoke(plus_three, 2) != 5) return 15;
+    return 0;
+}
+int address_constants(void) {
+    if (last_wide != &wide_values[1] || *last_wide != -2L) return 16;
+    if (first_wide != wide_values || *first_wide != 0x12345678L) return 17;
     return 0;
 }

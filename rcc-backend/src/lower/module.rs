@@ -17,7 +17,7 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
     let mut all_instructions = Vec::new();
     
     // Create a global manager to handle global variable allocation
-    let mut global_manager = GlobalManager::with_module(&module.name);
+    let mut global_manager = GlobalManager::with_module_and_bank_size(&module.name, bank_size);
     
     // First pass: allocate addresses for all globals
     let total_words: u64 = module.globals.iter()

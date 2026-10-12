@@ -35,7 +35,14 @@ pub fn generate_unary_operation(
                 // Regular dereference - load the value
                 let ir_type = convert_type_default(result_type)?;
                 let result = gen.builder.build_load(ptr, ir_type)?;
-                Ok(Value::Temp(result))
+                if matches!(result_type, Type::Pointer { .. }) {
+                    Ok(Value::FatPtr(FatPointer {
+                        addr: Box::new(Value::Temp(result)),
+                        bank: BankTag::Mixed,
+                    }))
+                } else {
+                    Ok(Value::Temp(result))
+                }
             }
         }
         UnaryOp::LogicalNot => {
@@ -349,6 +356,7 @@ pub fn generate_lvalue_address(
                 // For -> operator, object type is Pointer<Struct>
                 match object.get_type() {
                     Type::Pointer { target, .. } => &**target,
+                    Type::Array { element_type, .. } => &**element_type,
                     _ => object.get_type(), // Shouldn't happen, but fallback
                 }
             } else {

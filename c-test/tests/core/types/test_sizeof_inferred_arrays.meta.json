@@ -1,0 +1,5 @@
+{
+  "description": "Complete inferred array bounds in semantic types for globals, locals, designators and character strings",
+  "use_runtime": true,
+  "expected": "YYYYYYYYY\n"
+}

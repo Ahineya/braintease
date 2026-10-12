@@ -41,12 +41,18 @@ impl<'a> TypedStatementGenerator<'a> {
     /// Generate IR for a typed statement
     pub fn generate(&mut self, stmt: &TypedStmt) -> Result<(), CompilerError> {
         match stmt {
+            TypedStmt::DeclarationGroup(declarations) => {
+                for declaration in declarations {
+                    self.generate(declaration)?;
+                }
+                Ok(())
+            }
             TypedStmt::Expression(expr) => {
                 misc::generate_expression_stmt(self, expr)
             }
             
-            TypedStmt::Declaration { name, decl_type, initializer, symbol_id: _ } => {
-                declarations::generate_declaration(self, name, decl_type, initializer.as_ref())
+            TypedStmt::Declaration { name, decl_type, initializer, symbol_id, storage_class } => {
+                declarations::generate_declaration(self, name, decl_type, initializer.as_ref(), *symbol_id, *storage_class)
             }
             
             TypedStmt::Compound(statements) => {
