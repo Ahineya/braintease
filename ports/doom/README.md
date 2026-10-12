@@ -16,7 +16,9 @@ reference. Gameplay replays extend the comparison to movement, turning, firing,
 use and the automap. These checks run `D_DoomMain` and the real world renderer.
 Hot rendering, memory and fixed-point operations now have small guest assembly
 implementations using the existing instruction set and C calling convention.
-Both VM implementations and the device interface remain unchanged.
+The ISA and device interface remain unchanged. The Rust runner also batches
+execution and shares immutable frames with its display window; the Brainfuck
+implementation is unchanged.
 See [compiler optimizations](../../rcc-backend/OPTIMIZATIONS.md) for the passes,
 validation and earlier measurement details.
 
@@ -168,6 +170,43 @@ Those historical timing runs exercised movement and turning; Control/Space
 events were present but their engine action bindings were missing. The current
 port binds them explicitly and checks the actual movement, attack and use
 commands in the `keyboard_controls` regression, in addition to pixel parity.
+
+### Runner batching and spill cleanup
+
+The Rust runner now batches execution between host/device boundaries. The
+window converts only changed frames and does so outside the shared display
+lock. Compiler spill addresses take one fewer instruction, and conditional
+branches avoid spilling and immediately reloading their predicate. These are
+general VM/compiler changes; the ISA and device interface are unchanged.
+
+A paired high-detail E1M1 measurement used two 32-frame replays, rotating the
+execution order of three VM instances at every frame. Startup frames are
+excluded. The reference uses the retained single-step runner from the current
+VM library with the saved pre-cleanup guest binary:
+
+| Execution | Median guest instructions/frame | Median paired speedup |
+| --- | ---: | ---: |
+| Single-step reference, original guest | 9,354,466 | 1.00× |
+| Batched runner, identical guest | 9,354,466 | 1.40× |
+| Batched runner, recompiled guest | 8,482,426 | 1.55× |
+
+The compiler reduces this workload's guest instruction count by 9.32%. Both
+rounds measured about 1.40× for batching and 1.55× combined. Every captured
+frame and tick matches across variants; the VM-only pair also has identical
+registers and full RAM at each frame. These are headless comparisons against
+the current reference path, not a promise of windowed FPS or a comparison
+against the old VM executable. Separate whole-process before/after timings
+varied substantially with host load and are retained as raw observations.
+
+Local evidence is under `build/batching-perf/`: `paired/results.json` records
+the paired measurements and hashes, `paired.rs` is the driver, and
+`comparison.json` contains the separate whole-process runs. The 180-frame
+gameplay replay, 32-frame detail-toggle replay, and title/menu/map smoke checks
+match native C exactly. A real window run captures the same pixels as native
+frame 32. Validation passes all 60 Rust VM tests and 224
+backend tests. Of 365 C regressions, 362 pass; the saved pre-change tools
+reproduce the same two Forth assembler `sp` name collisions and keyboard
+CRLF expectation failure (`forth-baseline-check/` and `baseline-failures/`).
 
 ## Source layout and memory model
 

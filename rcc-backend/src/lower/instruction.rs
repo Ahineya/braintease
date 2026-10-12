@@ -456,6 +456,14 @@ pub fn lower_instruction(
             // Get register for condition value (I32: OR both words)
             let (cond_reg, cond_insts) = crate::instr::wide::i32_to_cond_reg(mgr, naming, condition);
             insts.extend(cond_insts);
+
+            // Materialize before flushing: a condition used only by this
+            // branch needs no spill/reload round trip. Live successor values
+            // (including the original condition if reused) still get saved.
+            // The flush only writes SC, preserving the captured physical reg.
+            debug_assert_ne!(cond_reg, Reg::Sc);
+            mgr.spill_live_for_branch();
+            insts.extend(mgr.take_instructions());
             
             // Branch if condition is zero (false) to false_label
             insts.push(AsmInst::Beq(cond_reg, Reg::R0, false_label_name.clone()));

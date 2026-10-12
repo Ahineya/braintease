@@ -111,7 +111,7 @@ fn mode_switches_preserve_window_connection_and_frame_sequence() {
     vm.write_cell(0, HDR_DISP_FLUSH as u16, 1).unwrap();
     vm.mode(DISP_OFF);
     assert!(!connection.lock().unwrap().initialized);
-    assert!(!connection.lock().unwrap().should_quit);
+    assert!(!connection.lock().unwrap().should_quit());
     vm.mode(DISP_RGB565_EXT);
     assert!(Arc::ptr_eq(
         &connection,
@@ -123,7 +123,7 @@ fn mode_switches_preserve_window_connection_and_frame_sequence() {
     assert_eq!(snapshot.sequence, 2);
     assert_eq!(snapshot.pixels, [0x001f]);
     assert_eq!(vm.presented_frames, 2);
-    assert!(!connection.lock().unwrap().should_quit);
+    assert!(!connection.lock().unwrap().should_quit());
 }
 
 #[test]

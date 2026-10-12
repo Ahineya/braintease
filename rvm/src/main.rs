@@ -184,7 +184,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let result = runner::run(&mut vm, &options);
             report.finish(&vm, &result);
             if capture_requested || result.is_err() {
-                worker_state.lock().unwrap().should_quit = true;
+                worker_state.lock().unwrap().request_shutdown();
             }
             if let Some(path) = report_path {
                 report.write(&path)?;
@@ -197,7 +197,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
         });
         let window_result = display_rgb565::run_rgb565_display(display_state.clone());
-        display_state.lock().unwrap().should_quit = true;
+        display_state.lock().unwrap().request_shutdown();
         let status = vm_thread.join().map_err(|_| "VM worker panicked")??;
         window_result?;
         if propagate_exit_code && status != 0 {

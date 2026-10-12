@@ -84,6 +84,6 @@ impl VM {
     pub fn window_closed(&self) -> bool {
         self.rgb565_display
             .as_ref()
-            .is_some_and(|d| d.get_state().lock().unwrap().should_quit)
+            .is_some_and(|d| d.is_window_closed())
     }
 }

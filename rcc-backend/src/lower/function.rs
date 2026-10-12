@@ -376,7 +376,7 @@ fn lower_basic_block(
             }
             
             _ => {
-                if matches!(instruction, Instruction::Branch(_) | Instruction::BranchCond { .. }) {
+                if matches!(instruction, Instruction::Branch(_)) {
                     mgr.spill_all();
                     builder.add_instructions(mgr.take_instructions());
                 }
@@ -515,7 +515,190 @@ pub fn lower_function_v2(
 #[cfg(test)]
 mod lifetime_tests {
     use super::*;
-    use rcc_frontend::ir::{BasicBlock, IrBinaryOp};
+    use rcc_frontend::ir::{BasicBlock, IrBinaryOp, IrUnaryOp};
+    use crate::instr::tests::machine::Machine;
+
+    fn lower_for_execution(function: &Function) -> (Vec<AsmInst>, RegisterPressureManager) {
+        let mut manager = RegisterPressureManager::new(calculate_local_slots(function));
+        manager.init();
+        let mut assembly = lower_function_v2(function, &mut manager,
+            &mut NameGenerator::new(0), &GlobalManager::new(), 64000).unwrap();
+        // Falling off the test interpreter is equivalent to returning to its caller.
+        assert!(matches!(assembly.pop(), Some(AsmInst::Jalr(..))));
+        (assembly, manager)
+    }
+
+    fn execute(assembly: &[AsmInst], args: &[u16]) -> Machine {
+        let mut machine = Machine::new(64000);
+        machine.regs[Reg::Sp as usize] = 1000;
+        machine.regs[Reg::Fp as usize] = 700;
+        for (reg, arg) in [Reg::A0, Reg::A1, Reg::A2, Reg::A3].iter().zip(args) {
+            machine.regs[*reg as usize] = *arg;
+        }
+        machine.run(assembly);
+        assert_eq!(machine.regs[Reg::Sp as usize], 1000);
+        assert_eq!(machine.regs[Reg::Fp as usize], 700);
+        machine
+    }
+
+    fn block(id: u32, instructions: Vec<Instruction>) -> BasicBlock {
+        let mut block = BasicBlock::new(id);
+        block.instructions = instructions;
+        block
+    }
+
+    #[test]
+    fn dead_branch_predicate_needs_no_stack_round_trip() {
+        let mut function = Function::new("dead_predicate".into(), IrType::I16);
+        function.add_parameter(0, IrType::I16);
+        function.blocks = vec![
+            block(0, vec![Instruction::BranchCond {
+                condition: Value::Temp(0), true_label: 1, false_label: 2,
+            }]),
+            block(1, vec![Instruction::Return(Some(Value::Constant(11)))]),
+            block(2, vec![Instruction::Return(Some(Value::Constant(22)))]),
+        ];
+        let (assembly, manager) = lower_for_execution(&function);
+        assert_eq!(manager.get_spill_count(), 0, "dead predicate must never be spilled");
+        for (condition, expected) in [(0, 22), (1, 11), (32768, 11), (65535, 11)] {
+            assert_eq!(execute(&assembly, &[condition]).regs[Reg::Rv0 as usize], expected);
+        }
+    }
+
+    #[test]
+    fn wide_branch_predicate_survives_both_successors_under_pressure() {
+        for ty in [IrType::I32, IrType::I64] {
+            let mut function = Function::new("wide_predicate".into(), ty.clone());
+            function.add_parameter(0, ty.clone());
+            let mut entry = Vec::new();
+            // Every value crosses the branch; there are more live words than registers.
+            for temp in 1..=20 {
+                entry.push(Instruction::Binary { result: temp, op: IrBinaryOp::Add,
+                    lhs: Value::Constant(temp as i64), rhs: Value::Constant(100),
+                    result_type: IrType::I16 });
+            }
+            entry.push(Instruction::BranchCond {
+                condition: Value::Temp(0), true_label: 1, false_label: 2,
+            });
+            function.blocks.push(block(0, entry));
+            for arm in [1, 2] {
+                let mut instructions = Vec::new();
+                let mut previous = 0;
+                for temp in 1..=20 {
+                    let result = 100 * arm + temp;
+                    instructions.push(Instruction::Binary { result, op: IrBinaryOp::Add,
+                        lhs: Value::Temp(previous), rhs: Value::Temp(temp), result_type: ty.clone() });
+                    previous = result;
+                }
+                // Distinguish paths even when all original predicate words are zero.
+                instructions.push(Instruction::Binary { result: 300 + arm, op: IrBinaryOp::Add,
+                    lhs: Value::Temp(previous), rhs: Value::Constant(arm as i64), result_type: ty.clone() });
+                instructions.push(Instruction::Return(Some(Value::Temp(300 + arm))));
+                function.blocks.push(block(arm, instructions));
+            }
+            let (assembly, manager) = lower_for_execution(&function);
+            assert!(manager.get_spill_count() > 12);
+            let values = if ty == IrType::I32 {
+                vec![0u64, 1, 0x10000, 0x80000000, 0xffffffff]
+            } else {
+                vec![0u64, 1, 0x10000, 0x100000000, 0x8000000000000000, u64::MAX]
+            };
+            for value in values {
+                let args: Vec<_> = (0..ty.abi_slots()).map(|word| (value >> (16 * word)) as u16).collect();
+                let machine = execute(&assembly, &args);
+                let expected = value.wrapping_add(2210 + if value == 0 { 2 } else { 1 });
+                for (word, reg) in [Reg::Rv0, Reg::Rv1, Reg::X0, Reg::X1].iter().take(ty.abi_slots()).enumerate() {
+                    assert_eq!(machine.regs[*reg as usize], (expected >> (16 * word)) as u16,
+                        "{ty:?} input {value:#x}, word {word}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn pointer_bank_survives_a_branch_and_alternative_successor_emission() {
+        let pointer = IrType::FatPtr(Box::new(IrType::I16));
+        let mut function = Function::new("pointer_predicate".into(), pointer.clone());
+        function.add_parameter(0, pointer);
+        // Pointer conditions have already been normalized by the frontend.
+        function.add_parameter(1, IrType::I16);
+        function.blocks = vec![
+            block(0, vec![Instruction::BranchCond {
+                condition: Value::Temp(1), true_label: 1, false_label: 2,
+            }]),
+            block(1, vec![Instruction::Branch(3)]),
+            block(2, vec![Instruction::Branch(3)]),
+            block(3, vec![Instruction::Return(Some(Value::Temp(0)))]),
+        ];
+        let (assembly, _) = lower_for_execution(&function);
+        for addr in [0, 1, 63999] {
+            for bank in [0, 1, 41] {
+                for condition in [0, 1] {
+                    let machine = execute(&assembly, &[addr, bank, condition]);
+                    assert_eq!(machine.regs[Reg::Rv0 as usize], addr);
+                    assert_eq!(machine.regs[Reg::Rv1 as usize], bank);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normalized_pointer_truth_keeps_bank_only_nonnull_values() {
+        let mut function = Function::new("pointer_truth".into(), IrType::I32);
+        function.add_parameter(0, IrType::FatPtr(Box::new(IrType::I16)));
+        function.blocks = vec![
+            block(0, vec![
+                Instruction::Unary { result: 1, op: IrUnaryOp::PtrToInt,
+                    operand: Value::Temp(0), result_type: IrType::I32 },
+                Instruction::Binary { result: 2, op: IrBinaryOp::Ne,
+                    lhs: Value::Temp(1), rhs: Value::Constant(0), result_type: IrType::I16 },
+                Instruction::BranchCond { condition: Value::Temp(2), true_label: 1, false_label: 2 },
+            ]),
+            block(1, vec![
+                Instruction::Unary { result: 3, op: IrUnaryOp::PtrToInt,
+                    operand: Value::Temp(0), result_type: IrType::I32 },
+                Instruction::Return(Some(Value::Temp(3))),
+            ]),
+            block(2, vec![Instruction::Return(Some(Value::Constant(77)))]),
+        ];
+        let (assembly, _) = lower_for_execution(&function);
+        for (addr, bank, expected) in [(0, 0, 77u32), (0, 41, 41 << 16), (63999, 41, (41 << 16) | 63999)] {
+            let machine = execute(&assembly, &[addr, bank]);
+            assert_eq!(machine.regs[Reg::Rv0 as usize], expected as u16);
+            assert_eq!(machine.regs[Reg::Rv1 as usize], (expected >> 16) as u16);
+        }
+    }
+
+    #[test]
+    fn branch_predicate_reused_on_loop_backedges_is_preserved() {
+        let mut function = Function::new("loop_predicate".into(), IrType::I16);
+        function.add_parameter(0, IrType::I16);
+        function.blocks = vec![
+            block(0, vec![
+                Instruction::Alloca { result: 1, alloc_type: IrType::I16, count: None,
+                    result_type: IrType::FatPtr(Box::new(IrType::I16)) },
+                Instruction::Store { value: Value::Temp(0), ptr: Value::Temp(1),
+                    value_type: IrType::I16, volatile: false },
+                Instruction::Branch(1),
+            ]),
+            block(1, vec![
+                Instruction::Load { result: 2, ptr: Value::Temp(1), result_type: IrType::I16, volatile: false },
+                Instruction::BranchCond { condition: Value::Temp(2), true_label: 2, false_label: 3 },
+            ]),
+            block(2, vec![
+                Instruction::Binary { result: 3, op: IrBinaryOp::Sub,
+                    lhs: Value::Temp(2), rhs: Value::Constant(1), result_type: IrType::I16 },
+                Instruction::Store { value: Value::Temp(3), ptr: Value::Temp(1),
+                    value_type: IrType::I16, volatile: false },
+                Instruction::Branch(1),
+            ]),
+            block(3, vec![Instruction::Return(Some(Value::Temp(2)))]),
+        ];
+        let (assembly, _) = lower_for_execution(&function);
+        for count in [0, 1, 2, 19] {
+            assert_eq!(execute(&assembly, &[count]).regs[Reg::Rv0 as usize], 0);
+        }
+    }
 
     #[test]
     fn lowering_reclaims_dead_ir_results_before_they_fill_registers() {

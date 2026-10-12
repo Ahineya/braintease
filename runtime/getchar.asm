@@ -28,8 +28,7 @@ getchar:
     ADDI SP, SP, 20
     LI S3, 1
 ; Spill t3 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1
@@ -38,8 +37,7 @@ L_getchar_1:
     ADD A0, S2, R0
 ; Spill live registers before call
 ; Spill const_f0_op0_3 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S2, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -51,21 +49,18 @@ L_getchar_1:
 ; Copy Rv0 to allocatable S1
     ADD S1, RV0, R0
 ; Spill t1 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S1, SB, SC
     BEQ R0, R0, L_getchar_2
 ; Unconditional branch to L_getchar_2
 L_getchar_2:
 ; Reload t1 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     LOAD S0, SB, SC
     LI T7, 0
     ADD S0, S0, T7
 ; Reload t3 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     LOAD T6, SB, SC
     AND S0, S0, T6
     LI T5, 0
@@ -77,29 +72,19 @@ L_getchar_2:
     LI T0, 0
     SLTU S0, T0, T1
 ; Spill t3 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE T6, SB, SC
-; Spill t6 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE S0, SB, SC
-; Reload t6 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD S3, SB, SC
-    BEQ S3, R0, L_getchar_3
+    BEQ S0, R0, L_getchar_3
 ; Branch to L_getchar_3 if condition is false
     BEQ R0, R0, L_getchar_1
 ; Unconditional branch to L_getchar_1 (condition was true)
 L_getchar_3:
-    LI S2, 2
-    ADD A0, S2, R0
+    LI S3, 2
+    ADD A0, S3, R0
 ; Spill live registers before call
-; Spill const_f0_op5_2 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    STORE S2, SB, SC
+; Spill const_f0_op5_2 to slot 3
+    ADDI SC, FP, 11
+    STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
 ; Setting up 1 register arguments
@@ -107,9 +92,9 @@ L_getchar_3:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t7
-; Copy Rv0 to allocatable S1
-    ADD S1, RV0, R0
-    MOVE RV0, S1
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
+    MOVE RV0, S2
 ; Jump to epilogue
     BEQ R0, R0, L_getchar_99999
 L_getchar_99999:

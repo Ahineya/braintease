@@ -37,41 +37,30 @@ abs:
     LI T5, 0
     SLTU S1, T5, T6
 ; Spill t0 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
-; Spill t4 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
-    STORE S1, SB, SC
-; Reload t4 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
-    LOAD T4, SB, SC
-    BEQ T4, R0, L_abs_3
+    BEQ S1, R0, L_abs_3
 ; Branch to L_abs_3 if condition is false
     BEQ R0, R0, L_abs_1
 ; Unconditional branch to L_abs_1 (condition was true)
 L_abs_1:
 ; Reload t0 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
-    LOAD T3, SB, SC
+    ADDI SC, FP, 8
+    LOAD T4, SB, SC
+    LI T3, 0
+    ADD T4, T4, T3
     LI T2, 0
-    ADD T3, T3, T2
-    LI T1, 0
-    SUB T1, T1, T3
-    MOVE RV0, T1
+    SUB T2, T2, T4
+    MOVE RV0, T2
 ; Jump to epilogue
     BEQ R0, R0, L_abs_99999
 L_abs_3:
 ; Reload t0 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
-    LOAD T0, SB, SC
-    LI S2, 0
-    ADD T0, T0, S2
-    MOVE RV0, T0
+    ADDI SC, FP, 8
+    LOAD T1, SB, SC
+    LI T0, 0
+    ADD T1, T1, T0
+    MOVE RV0, T1
 ; Jump to epilogue
     BEQ R0, R0, L_abs_99999
 L_abs_99999:
@@ -139,78 +128,64 @@ L_labs_4:
     LI T4, 0
     LI T3, 0
     XOR T2, T6, T3
-    BNE T2, R0, L_i32_slt_hine_f2e19602a7ad43e1b90c9be8a57a5eca_2_0
+    BNE T2, R0, L_i32_slt_hine_52911ae6e0774d7ab7f548b1bf180e86_2_0
     SLTU T2, T7, T4
-    BEQ R0, R0, L_i32_slt_done_f2e19602a7ad43e1b90c9be8a57a5eca_2_1
-L_i32_slt_hine_f2e19602a7ad43e1b90c9be8a57a5eca_2_0:
+    BEQ R0, R0, L_i32_slt_done_52911ae6e0774d7ab7f548b1bf180e86_2_1
+L_i32_slt_hine_52911ae6e0774d7ab7f548b1bf180e86_2_0:
     SLT T2, T6, T3
-L_i32_slt_done_f2e19602a7ad43e1b90c9be8a57a5eca_2_1:
+L_i32_slt_done_52911ae6e0774d7ab7f548b1bf180e86_2_1:
     LI T1, 0
     XOR T0, T2, T1
     LI T5, 0
     SLTU T2, T5, T0
 ; Spill t0 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Spill t0__hi to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S2, SB, SC
-; Spill t5 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
-    STORE T2, SB, SC
-; Reload t5 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
-    LOAD S0, SB, SC
-    BEQ S0, R0, L_labs_7
+    BEQ T2, R0, L_labs_7
 ; Branch to L_labs_7 if condition is false
     BEQ R0, R0, L_labs_5
 ; Unconditional branch to L_labs_5 (condition was true)
 L_labs_5:
 ; Reload t0 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
-    LOAD S1, SB, SC
+    ADDI SC, FP, 8
+    LOAD S0, SB, SC
 ; Reload t0__hi from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
-    LOAD T3, SB, SC
+    ADDI SC, FP, 9
+    LOAD S1, SB, SC
+    LI T3, 0
     LI T4, 0
-    LI T6, 0
+    ADD T6, S0, T3
+    SLTU T0, T6, S0
     ADD T7, S1, T4
-    SLTU T5, T7, S1
-    ADD T0, T3, T6
-    ADD T0, T0, T5
+    ADD T7, T7, T0
+    LI T5, 0
     LI T1, 0
-    LI S3, 0
-    SLTU S0, T1, T7
-    SUB S2, T1, T7
-    SUB T2, S3, T0
-    SUB T2, T2, S0
-    MOVE RV0, S2
-    MOVE RV1, T2
+    SLTU S2, T5, T6
+    SUB T2, T5, T6
+    SUB S3, T1, T7
+    SUB S3, S3, S2
+    MOVE RV0, T2
+    MOVE RV1, S3
 ; Jump to epilogue
     BEQ R0, R0, L_labs_99999
 L_labs_7:
 ; Reload t0 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
-    LOAD T3, SB, SC
+    ADDI SC, FP, 8
+    LOAD T0, SB, SC
 ; Reload t0__hi from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
-    LOAD T4, SB, SC
-    LI T5, 0
-    LI T6, 0
-    ADD S1, T3, T5
-    SLTU T1, S1, T3
-    ADD T0, T4, T6
-    ADD T0, T0, T1
+    ADDI SC, FP, 9
+    LOAD T3, SB, SC
+    LI T4, 0
+    LI S0, 0
+    ADD S1, T0, T4
+    SLTU T5, S1, T0
+    ADD T1, T3, S0
+    ADD T1, T1, T5
     MOVE RV0, S1
-    MOVE RV1, T0
+    MOVE RV1, T1
 ; Jump to epilogue
     BEQ R0, R0, L_labs_99999
 L_labs_99999:
@@ -308,120 +283,104 @@ L_llabs_8:
     LI T6, 0
     LI T7, 0
 ; Spill t0 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
     ADD S3, T4, R0
 ; Spill t0__w1 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S2, SB, SC
     ADD S2, T5, R0
 ; Spill t0__w2 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S1, SB, SC
     ADD S1, T6, R0
 ; Spill t0__w3 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S0, SB, SC
     ADD S0, T7, R0
     XOR T4, T0, S0
-    BNE T4, R0, L_i64_slt_w3ne_7b93064743e5454ba5d9d81364ffd1c1_4_0
+    BNE T4, R0, L_i64_slt_w3ne_3ba4305d293e4009b6abd3406e4c4d8d_4_0
     XOR T4, T1, S1
-    BNE T4, R0, L_i64_slt_w2ne_7b93064743e5454ba5d9d81364ffd1c1_4_1
+    BNE T4, R0, L_i64_slt_w2ne_3ba4305d293e4009b6abd3406e4c4d8d_4_1
     XOR T4, T2, S2
-    BNE T4, R0, L_i64_slt_w1ne_7b93064743e5454ba5d9d81364ffd1c1_4_2
+    BNE T4, R0, L_i64_slt_w1ne_3ba4305d293e4009b6abd3406e4c4d8d_4_2
     SLTU T4, T3, S3
-    BEQ R0, R0, L_i64_slt_done_7b93064743e5454ba5d9d81364ffd1c1_4_3
-L_i64_slt_w3ne_7b93064743e5454ba5d9d81364ffd1c1_4_0:
+    BEQ R0, R0, L_i64_slt_done_3ba4305d293e4009b6abd3406e4c4d8d_4_3
+L_i64_slt_w3ne_3ba4305d293e4009b6abd3406e4c4d8d_4_0:
     SLT T4, T0, S0
-    BEQ R0, R0, L_i64_slt_done_7b93064743e5454ba5d9d81364ffd1c1_4_3
-L_i64_slt_w2ne_7b93064743e5454ba5d9d81364ffd1c1_4_1:
+    BEQ R0, R0, L_i64_slt_done_3ba4305d293e4009b6abd3406e4c4d8d_4_3
+L_i64_slt_w2ne_3ba4305d293e4009b6abd3406e4c4d8d_4_1:
     SLTU T4, T1, S1
-    BEQ R0, R0, L_i64_slt_done_7b93064743e5454ba5d9d81364ffd1c1_4_3
-L_i64_slt_w1ne_7b93064743e5454ba5d9d81364ffd1c1_4_2:
+    BEQ R0, R0, L_i64_slt_done_3ba4305d293e4009b6abd3406e4c4d8d_4_3
+L_i64_slt_w1ne_3ba4305d293e4009b6abd3406e4c4d8d_4_2:
     SLTU T4, T2, S2
-L_i64_slt_done_7b93064743e5454ba5d9d81364ffd1c1_4_3:
+L_i64_slt_done_3ba4305d293e4009b6abd3406e4c4d8d_4_3:
     LI T5, 0
     XOR T6, T4, T5
     LI T7, 0
     SLTU T4, T7, T6
-; Spill t5 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    STORE T4, SB, SC
-; Reload t5 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    LOAD T0, SB, SC
-    BEQ T0, R0, L_llabs_11
+    BEQ T4, R0, L_llabs_11
 ; Branch to L_llabs_11 if condition is false
     BEQ R0, R0, L_llabs_9
 ; Unconditional branch to L_llabs_9 (condition was true)
 L_llabs_9:
 ; Reload t0 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
-    LOAD T1, SB, SC
+    ADDI SC, FP, 8
+    LOAD T0, SB, SC
 ; Reload t0__w1 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
-    LOAD T2, SB, SC
+    ADDI SC, FP, 9
+    LOAD T1, SB, SC
 ; Reload t0__w2 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
-    LOAD T3, SB, SC
+    ADDI SC, FP, 10
+    LOAD T2, SB, SC
 ; Reload t0__w3 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD S0, SB, SC
+    ADDI SC, FP, 11
+    LOAD T3, SB, SC
+    LI S0, 0
     LI S1, 0
     LI S2, 0
     LI S3, 0
-    LI T6, 0
-    ADD RV0, T1, R0
-    ADD RV1, T2, R0
-    ADD X0, T3, R0
-    ADD X1, S0, R0
-    ADD A0, S1, R0
-    ADD A1, S2, R0
-    ADD A2, S3, R0
-    ADD A3, T6, R0
+    ADD RV0, T0, R0
+    ADD RV1, T1, R0
+    ADD X0, T2, R0
+    ADD X1, T3, R0
+    ADD A0, S0, R0
+    ADD A1, S1, R0
+    ADD A2, S2, R0
+    ADD A3, S3, R0
     LI SC, 0
     ADD X3, RV0, A0
     SLTU X2, X3, RV0
-    ADD T7, X3, SC
-    SLTU SC, T7, X3
+    ADD T6, X3, SC
+    SLTU SC, T6, X3
     OR SC, SC, X2
     ADD X3, RV1, A1
     SLTU X2, X3, RV1
-    ADD T5, X3, SC
-    SLTU SC, T5, X3
+    ADD T7, X3, SC
+    SLTU SC, T7, X3
     OR SC, SC, X2
     ADD X3, X0, A2
     SLTU X2, X3, X0
-    ADD T4, X3, SC
-    SLTU SC, T4, X3
+    ADD T5, X3, SC
+    SLTU SC, T5, X3
     OR SC, SC, X2
     ADD X3, X1, A3
     SLTU X2, X3, X1
-    ADD T0, X3, SC
-    SLTU SC, T0, X3
+    ADD T4, X3, SC
+    SLTU SC, T4, X3
     OR SC, SC, X2
+    LI T0, 0
     LI T1, 0
     LI T2, 0
     LI T3, 0
-    LI T6, 0
-    ADD RV0, T1, R0
-    ADD RV1, T2, R0
-    ADD X0, T3, R0
-    ADD X1, T6, R0
-    ADD A0, T7, R0
-    ADD A1, T5, R0
-    ADD A2, T4, R0
-    ADD A3, T0, R0
+    ADD RV0, T0, R0
+    ADD RV1, T1, R0
+    ADD X0, T2, R0
+    ADD X1, T3, R0
+    ADD A0, T6, R0
+    ADD A1, T7, R0
+    ADD A2, T5, R0
+    ADD A3, T4, R0
     LI SC, 0
     SLTU X2, RV0, A0
     SUB X3, RV0, A0
@@ -451,20 +410,16 @@ L_llabs_9:
     BEQ R0, R0, L_llabs_99999
 L_llabs_11:
 ; Reload t0 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     LOAD T0, SB, SC
 ; Reload t0__w1 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     LOAD T1, SB, SC
 ; Reload t0__w2 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     LOAD T2, SB, SC
 ; Reload t0__w3 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD T3, SB, SC
     LI T4, 0
     LI T5, 0
@@ -617,8 +572,7 @@ L_abort_13:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f8_op0_97 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -630,8 +584,7 @@ L_abort_13:
     ADD A0, S2, R0
 ; Spill live registers before call
 ; Spill const_f8_op1_98 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S2, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -643,8 +596,7 @@ L_abort_13:
     ADD A0, S1, R0
 ; Spill live registers before call
 ; Spill const_f8_op2_111 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S1, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -656,8 +608,7 @@ L_abort_13:
     ADD A0, S0, R0
 ; Spill live registers before call
 ; Spill const_f8_op3_114 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S0, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -669,8 +620,7 @@ L_abort_13:
     ADD A0, T7, R0
 ; Spill live registers before call
 ; Spill const_f8_op4_116 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE T7, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -682,8 +632,7 @@ L_abort_13:
     ADD A0, T6, R0
 ; Spill live registers before call
 ; Spill const_f8_op5_10 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE T6, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28

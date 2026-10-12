@@ -439,8 +439,7 @@ impl RegisterPressureManager {
             
             // Generate reload instructions
             self.instructions.push(AsmInst::Comment(format!("Reload {for_value} from slot {slot}")));
-            self.instructions.push(AsmInst::Add(Reg::Sc, Reg::Fp, Reg::R0));
-            self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Sc, self.local_count + slot));
+            self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + slot));
             self.instructions.push(AsmInst::Load(reg, Reg::Sb, Reg::Sc));
             
             // Check if this value has an associated bank that was spilled
@@ -454,8 +453,7 @@ impl RegisterPressureManager {
                         
                         // Reload the bank value
                         self.instructions.push(AsmInst::Comment(format!("Reload {bank_name} from slot {bank_slot}")));
-                        self.instructions.push(AsmInst::Add(Reg::Sc, Reg::Fp, Reg::R0));
-                        self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Sc, self.local_count + bank_slot));
+                        self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + bank_slot));
                         self.instructions.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
                         
                         debug!("  Reloaded bank '{}' into {:?} from slot {}", bank_name, bank_reg, bank_slot);
@@ -527,8 +525,7 @@ impl RegisterPressureManager {
             
             // Generate spill instructions using Sc scratch
             self.instructions.push(AsmInst::Comment(format!("Spill {value} to slot {slot}")));
-            self.instructions.push(AsmInst::Add(Reg::Sc, Reg::Fp, Reg::R0));
-            self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Sc, self.local_count + slot));
+            self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + slot));
             self.instructions.push(AsmInst::Store(reg, Reg::Sb, Reg::Sc));
             
             // Check if this value has associated bank info that needs spilling
@@ -550,8 +547,7 @@ impl RegisterPressureManager {
                         
                         // Spill the bank register
                         self.instructions.push(AsmInst::Comment(format!("Spill {bank_name} to slot {bank_slot}")));
-                        self.instructions.push(AsmInst::Add(Reg::Sc, Reg::Fp, Reg::R0));
-                        self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Sc, self.local_count + bank_slot));
+                        self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + bank_slot));
                         self.instructions.push(AsmInst::Store(bank_reg, Reg::Sb, Reg::Sc));
                         
                         debug!("  Spilled bank '{}' from {:?} to slot {} (FP+{})", 
@@ -604,8 +600,7 @@ impl RegisterPressureManager {
             
             // Generate reload instructions
             self.instructions.push(AsmInst::Comment(format!("Reload {value} from slot {slot}")));
-            self.instructions.push(AsmInst::Add(Reg::Sc, Reg::Fp, Reg::R0));
-            self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Sc, self.local_count + slot));
+            self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + slot));
             self.instructions.push(AsmInst::Load(reg, Reg::Sb, Reg::Sc));
             
             debug!("Reloaded '{}' into {:?} from slot {} (FP+{})", value, reg, slot, self.local_count + slot);
@@ -799,6 +794,17 @@ impl RegisterPressureManager {
         }
         debug!("Unpinned registers spilled, {} slots used, {} still pinned",
                self.next_spill_slot, self.pinned_registers.len());
+    }
+
+    /// Flush the values needed on successor edges after materializing a branch
+    /// condition. Spilling uses only SC as scratch and leaves every allocatable
+    /// register's physical contents intact, so the branch can consume its
+    /// captured condition even after its allocator binding is discarded.
+    pub(crate) fn spill_live_for_branch(&mut self) {
+        if let Some(live) = self.live_after.clone() {
+            self.retain_live_registers(&live);
+        }
+        self.spill_all();
     }
 
     /// Save pinned call operands that remain live after the call. Their physical
@@ -1131,6 +1137,42 @@ impl RegisterPressureManager {
 #[cfg(test)]
 mod lifetime_reclamation_tests {
     use super::*;
+    use crate::instr::tests::machine::Machine;
+
+    #[test]
+    fn spills_and_reloads_use_one_address_instruction_and_preserve_pointer_banks() {
+        for locals in [0, 17, 32760] {
+            let mut manager = RegisterPressureManager::new(locals);
+            manager.init();
+            let pointer = manager.get_register("t1".into());
+            manager.emit(AsmInst::Li(pointer, 63999u16 as i16));
+            let bank = manager.get_register("bank".into());
+            manager.emit(AsmInst::Li(bank, 41));
+            manager.set_pointer_bank("t1".into(), BankInfo::Dynamic("bank".into()));
+            manager.spill_all();
+            let pointer = manager.get_register("t1".into());
+            manager.emit(AsmInst::Move(Reg::Rv0, pointer));
+            let bank = manager.reload_value("bank".into());
+            manager.emit(AsmInst::Move(Reg::Rv1, bank));
+            let instructions = manager.take_instructions();
+            let code: Vec<_> = instructions.iter().filter(|i| !matches!(i, AsmInst::Comment(_))).collect();
+            let mut accesses = 0;
+            for (index, inst) in code.iter().enumerate() {
+                if matches!(inst, AsmInst::Load(_, Reg::Sb, Reg::Sc) | AsmInst::Store(_, Reg::Sb, Reg::Sc)) {
+                    accesses += 1;
+                    assert!(matches!(code[index - 1], AsmInst::AddI(Reg::Sc, Reg::Fp, _)));
+                }
+            }
+            assert!(accesses >= 4);
+            assert!(!code.iter().any(|inst| matches!(inst, AsmInst::Add(Reg::Sc, Reg::Fp, Reg::R0))));
+            let mut machine = Machine::new(64000);
+            machine.regs[Reg::Fp as usize] = 1000;
+            machine.run(&instructions);
+            assert_eq!(machine.regs[Reg::Rv0 as usize], 63999);
+            assert_eq!(machine.regs[Reg::Rv1 as usize], 41);
+            assert_eq!(machine.regs[Reg::Fp as usize], 1000);
+        }
+    }
 
     #[test]
     fn dead_helpers_do_not_spill_at_instruction_or_call_boundaries() {

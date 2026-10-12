@@ -342,6 +342,47 @@ impl VM {
         }
         self.maybe_dispatch_irq();
 
+        self.execute_one::<false>().map(|_| ())
+    }
+
+    /// Execute at most `budget` instructions without granting device ticks.
+    ///
+    /// Return to the host immediately after a bank-zero MMIO write, HALT or
+    /// BRK. Those are the instructions that can publish frames, request time,
+    /// change execution state, or record device errors. Reads retain all their
+    /// normal side effects. Every instruction is fetched again, including after
+    /// STORC, and IRQ dispatch retains its ordinary instruction boundary.
+    ///
+    /// The caller owns host polling and tick/capture/limit policies. A pending
+    /// tick or device error leaves the VM untouched, as do HALT and breakpoints.
+    pub fn run_batch(&mut self, budget: u64) -> Result<u64, String> {
+        if budget == 0 {
+            return Ok(0);
+        }
+        match &self.state {
+            VMState::Running => {},
+            VMState::Setup => return Err("VM not initialized".into()),
+            VMState::Error(error) => return Err(error.clone()),
+            VMState::Halted | VMState::Breakpoint => return Ok(0),
+        }
+        if self.devices.has_pending_tick() || self.device_error.is_some() {
+            return Ok(0);
+        }
+        let before = self.executed_instructions;
+        for _ in 0..budget {
+            self.maybe_dispatch_irq();
+            if self.execute_one::<true>()? {
+                break;
+            }
+        }
+        Ok(self.executed_instructions - before)
+    }
+
+    // Keep the single-step oracle and batched execution on the same opcode and
+    // PC/PCB implementation. The reference specialization omits batch checks.
+    #[inline]
+    fn execute_one<const BATCH: bool>(&mut self) -> Result<bool, String> {
+
         // Calculate instruction address
         let pc = self.registers[Register::Pc as usize];
         let pcb = self.registers[Register::Pcb as usize];
@@ -355,6 +396,15 @@ impl VM {
         
         let instr = self.instructions[instr_idx];
         self.skip_pc_increment = false;
+
+        // R0 reads as zero even if an external debugger wrote the register.
+        // Inspect STORE operands before execution/PC advancement: PC and PCB
+        // themselves are legal source registers.
+        let boundary = BATCH && (matches!(instr.opcode, 0x00 | 0x19)
+            || (instr.opcode == 0x12
+                && instr.word1 < 32 && instr.word2 < 32 && instr.word3 < 32
+                && (instr.word2 == 0 || self.registers[instr.word2 as usize] == 0)
+                && (instr.word3 == 0 || self.registers[instr.word3 as usize] < TEXT40_BASE_WORD as u16)));
         
         // Print instruction in verbose mode
         if self.verbose {
@@ -380,7 +430,7 @@ impl VM {
             self.registers[Register::Pcb as usize] = (new_pcb & 0xFFFF) as u16;
         }
         
-        Ok(())
+        Ok(boundary)
     }
     
     pub fn run(&mut self) -> Result<(), String> {

@@ -18,6 +18,32 @@ A reference implementation of the Ripple VM architecture that executes programs 
 cargo build --release
 ```
 
+## Execution and display performance
+
+Normal CLI execution batches up to the next 1,024-instruction host-poll boundary.
+The batch stops earlier at a bank-zero MMIO write, HALT, BRK, execution error,
+or the exact instruction budget. Tick grants and frame capture remain controlled
+by the runner. Instructions are still fetched individually, so `STORC` changes
+take effect immediately; IRQ dispatch still occurs before each instruction.
+The ISA, binary format, guest instruction counts, and device interface are unchanged.
+
+Debugging, verbose traces, and instruction-frequency throttling use single-step
+execution. Library users can compare `runner::run` with `runner::run_reference`
+using the same `RunOptions` and binary. `VM::run_batch` is a lower-level operation:
+its caller must handle pending ticks, capture, host polling, and limits.
+
+The RGB565 window shares immutable completed frames with the VM. It converts a
+frame only after a presentation or layout change, outside the display mutex;
+expose and window-resize events can redraw the cached image. Window-close polling
+uses an atomic flag. Both the legacy double buffer and extended display keep
+completed frames independent of later guest writes.
+
+Run the execution-boundary and device regressions with `cargo test -p rvm`.
+For application measurements, `ports/doom/tools/benchmark.py` records headless
+production-runner times and checks every frame against native C. Compare the
+same guest binary to isolate VM gains; compare guest instruction counts to
+measure compiler gains. Headless timings do not measure window contention.
+
 ## Usage
 
 ```bash

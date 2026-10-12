@@ -32,13 +32,11 @@ mmio_read:
     ADD S3, S3, S2
 ; === Begin inline assembly ===
 ; Spill t4 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Setup: Load inputs
 ; Reload t4 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     LOAD S0, SB, SC
 ; Inline assembly code
     LOAD S1, R0, S0
@@ -112,21 +110,17 @@ L_mmio_write_1:
     ADD S3, S3, S0
 ; === Begin inline assembly ===
 ; Spill t4 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill t5 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Setup: Load inputs
 ; Reload t4 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     LOAD T7, SB, SC
 ; Reload t5 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     LOAD T6, SB, SC
 ; Inline assembly code
     STORE T7, R0, T6
@@ -194,12 +188,10 @@ L_tty_putchar_2:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f4_op1_0 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -265,8 +257,7 @@ L_rng_get_3:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f6_op0_4 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -336,8 +327,7 @@ L_rng_get_seed_4:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f8_op0_5 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -412,12 +402,10 @@ L_rng_set_seed_5:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f10_op1_5 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -488,12 +476,10 @@ L_display_set_mode_6:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f12_op1_6 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -573,12 +559,10 @@ L_display_set_resolution_7:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f14_op2_16 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE T5, SB, SC
 ; Spill t9 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -646,12 +630,10 @@ L_display_enable_8:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f16_op0_8 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill t0 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -719,12 +701,10 @@ L_display_clear_9:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f18_op0_8 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -792,12 +772,10 @@ L_display_flush_10:
     ADD A1, S2, R0
 ; Spill live registers before call
 ; Spill const_f20_op0_9 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Spill const_f20_op1_1 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S2, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -881,236 +859,190 @@ L_text40_putchar_11:
     LI T2, 0
     SLTU T4, T2, T5
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE S1, SB, SC
 ; Spill t0 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S3, SB, SC
-; Spill t11 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T4, SB, SC
-; Reload t11 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD T1, SB, SC
-    BEQ T1, R0, L_text40_putchar_13
+    BEQ T4, R0, L_text40_putchar_13
 ; Branch to L_text40_putchar_13 if condition is false
     BEQ R0, R0, L_text40_putchar_12
 ; Unconditional branch to L_text40_putchar_12 (condition was true)
 L_text40_putchar_12:
 ; Reload t0 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T3, SB, SC
-    LI T5, 0
-    ADD T2, T3, T5
-    LI T0, 40
-    SLT T2, T2, T0
+    ADDI SC, FP, 13
+    LOAD T1, SB, SC
+    LI T3, 0
+    ADD T5, T1, T3
+    LI T2, 40
+    SLT T5, T5, T2
+    LI T0, 0
+    XOR T4, T5, T0
     LI S2, 0
-    XOR S1, T2, S2
-    LI S0, 0
-    SLTU T2, S0, S1
+    SLTU T5, S2, T4
 ; Recompute alloca t8 at FP+2
-    ADD T7, FP, R0
-    ADDI T7, T7, 2
-    STORE T2, SB, T7
+    ADD S1, FP, R0
+    ADDI S1, S1, 2
+    STORE T5, SB, S1
 ; Spill t0 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T3, SB, SC
+    ADDI SC, FP, 13
+    STORE T1, SB, SC
     BEQ R0, R0, L_text40_putchar_14
 ; Unconditional branch to L_text40_putchar_14
 L_text40_putchar_13:
-    LI T6, 0
+    LI S0, 0
 ; Recompute alloca t8 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
-    STORE T6, SB, S3
+    ADD T7, FP, R0
+    ADDI T7, T7, 2
+    STORE S0, SB, T7
     BEQ R0, R0, L_text40_putchar_14
 ; Unconditional branch to L_text40_putchar_14
 L_text40_putchar_14:
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+2
-    ADD T4, FP, R0
-    ADDI T4, T4, 2
+    ADD T6, FP, R0
+    ADDI T6, T6, 2
 ; LOAD: Pointer load_src_ptr_f22_op12_t15 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T1, SB, T4
-    LI T5, 0
-    XOR T0, T1, T5
-    LI S1, 0
-    SLTU T1, S1, T0
-; Spill t16 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    STORE T1, SB, SC
-; Reload t16 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD S0, SB, SC
-    BEQ S0, R0, L_text40_putchar_16
+    LOAD S3, SB, T6
+    LI T3, 0
+    XOR T2, S3, T3
+    LI T4, 0
+    SLTU S3, T4, T2
+    BEQ S3, R0, L_text40_putchar_16
 ; Branch to L_text40_putchar_16 if condition is false
     BEQ R0, R0, L_text40_putchar_15
 ; Unconditional branch to L_text40_putchar_15 (condition was true)
 L_text40_putchar_15:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD S2, SB, SC
-    LI T2, 0
-    ADD T3, S2, T2
+    LI T0, 0
+    ADD T5, S2, T0
+    LI T1, 0
+    SLT S1, T5, T1
+    LI S0, 1
+    SUB T5, S0, S1
     LI T7, 0
-    SLT T6, T3, T7
-    LI S3, 1
-    SUB T3, S3, T6
-    LI T4, 0
-    XOR T0, T3, T4
-    LI S1, 0
-    SLTU T3, S1, T0
+    XOR T6, T5, T7
+    LI T2, 0
+    SLTU T5, T2, T6
 ; Recompute alloca t7 at FP+1
-    ADD T5, FP, R0
-    ADDI T5, T5, 1
-    STORE T3, SB, T5
+    ADD T4, FP, R0
+    ADDI T4, T4, 1
+    STORE T5, SB, T4
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
     BEQ R0, R0, L_text40_putchar_17
 ; Unconditional branch to L_text40_putchar_17
 L_text40_putchar_16:
-    LI T1, 0
+    LI T3, 0
 ; Recompute alloca t7 at FP+1
-    ADD S0, FP, R0
-    ADDI S0, S0, 1
-    STORE T1, SB, S0
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    STORE T3, SB, S3
     BEQ R0, R0, L_text40_putchar_17
 ; Unconditional branch to L_text40_putchar_17
 L_text40_putchar_17:
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Recompute alloca t7 at FP+1
-    ADD T2, FP, R0
-    ADDI T2, T2, 1
+    ADD T0, FP, R0
+    ADDI T0, T0, 1
 ; LOAD: Pointer load_src_ptr_f22_op23_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T6, SB, T2
-    LI S3, 0
-    XOR T7, T6, S3
-    LI T0, 0
-    SLTU T6, T0, T7
-; Spill t21 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE T6, SB, SC
-; Reload t21 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD S1, SB, SC
+    LOAD S1, SB, T0
+    LI S0, 0
+    XOR T1, S1, S0
+    LI T6, 0
+    SLTU S1, T6, T1
     BEQ S1, R0, L_text40_putchar_19
 ; Branch to L_text40_putchar_19 if condition is false
     BEQ R0, R0, L_text40_putchar_18
 ; Unconditional branch to L_text40_putchar_18 (condition was true)
 L_text40_putchar_18:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T4, SB, SC
-    LI T3, 0
-    ADD S2, T4, T3
-    LI T5, 25
-    SLT S2, S2, T5
-    LI T1, 0
-    XOR S0, S2, T1
-    LI T2, 0
-    SLTU S2, T2, S0
+    ADDI SC, FP, 11
+    LOAD T2, SB, SC
+    LI T7, 0
+    ADD T5, T2, T7
+    LI S2, 25
+    SLT T5, T5, S2
+    LI T4, 0
+    XOR T3, T5, T4
+    LI S3, 0
+    SLTU T5, S3, T3
 ; Recompute alloca t6 at FP+0
-    ADD T7, FP, R0
-    STORE S2, SB, T7
+    ADD T0, FP, R0
+    STORE T5, SB, T0
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T4, SB, SC
+    ADDI SC, FP, 11
+    STORE T2, SB, SC
     BEQ R0, R0, L_text40_putchar_20
 ; Unconditional branch to L_text40_putchar_20
 L_text40_putchar_19:
-    LI T0, 0
+    LI T1, 0
 ; Recompute alloca t6 at FP+0
-    ADD S3, FP, R0
-    STORE T0, SB, S3
+    ADD T6, FP, R0
+    STORE T1, SB, T6
     BEQ R0, R0, L_text40_putchar_20
 ; Unconditional branch to L_text40_putchar_20
 L_text40_putchar_20:
 ; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+0
-    ADD T6, FP, R0
+    ADD S0, FP, R0
 ; LOAD: Pointer load_src_ptr_f22_op32_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S1, SB, T6
+    LOAD S1, SB, S0
+    LI T7, 0
+    XOR S2, S1, T7
     LI T3, 0
-    XOR T5, S1, T3
-    LI S0, 0
-    SLTU S1, S0, T5
-; Spill t26 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE S1, SB, SC
-; Reload t26 from slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    LOAD T2, SB, SC
-    BEQ T2, R0, L_text40_putchar_23
+    SLTU S1, T3, S2
+    BEQ S1, R0, L_text40_putchar_23
 ; Branch to L_text40_putchar_23 if condition is false
     BEQ R0, R0, L_text40_putchar_21
 ; Unconditional branch to L_text40_putchar_21 (condition was true)
 L_text40_putchar_21:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T1, SB, SC
-    LI S2, 0
-    ADD T1, T1, S2
-    LI T4, 40
-    MUL T1, T1, T4
-    LI T7, 32
-    ADD T7, T7, T1
+    ADDI SC, FP, 11
+    LOAD S3, SB, SC
+    LI T4, 0
+    ADD S3, S3, T4
+    LI T5, 40
+    MUL S3, S3, T5
+    LI T2, 32
+    ADD T2, T2, S3
 ; Reload t0 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     LOAD T0, SB, SC
-    LI S3, 0
-    ADD T0, T0, S3
-    ADD T7, T7, T0
+    LI T1, 0
+    ADD T0, T0, T1
+    ADD T2, T2, T0
 ; Reload t2 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     LOAD T6, SB, SC
-    LI T5, 0
-    ADD T6, T6, T5
-    LI S0, 255
-    AND T6, T6, S0
+    LI S0, 0
+    ADD T6, T6, S0
+    LI S2, 255
+    AND T6, T6, S2
     LI T3, 0
-    ADD T7, T7, T3
-    LI S1, 0
-    ADD T6, T6, S1
-    ADD A0, T7, R0
+    ADD T2, T2, T3
+    LI T7, 0
+    ADD T6, T6, T7
+    ADD A0, T2, R0
     ADD A1, T6, R0
 ; Spill live registers before call
-; Spill t36 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE T7, SB, SC
-; Spill t37 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
+; Spill t36 to slot 3
+    ADDI SC, FP, 14
+    STORE T2, SB, SC
+; Spill t37 to slot 4
+    ADDI SC, FP, 15
     STORE T6, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -1189,10 +1121,10 @@ L_text40_puts_24:
     ADD T5, SB, R0
     LI T4, -1536
     ADDI T6, T6, 1
-    BNE T6, T4, L_i32_memory_next_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_0
+    BNE T6, T4, L_i32_memory_next_word_f07897532bd243b5a97482f1634b01ff_24_0
     LI T6, 0
     ADDI T5, T5, 1
-L_i32_memory_next_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_0:
+L_i32_memory_next_word_f07897532bd243b5a97482f1634b01ff_24_0:
     STORE S0, T5, T6
     ADD T3, FP, R0
     ADDI T3, T3, 2
@@ -1206,8 +1138,7 @@ L_i32_memory_next_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_0:
     LI T6, 0
     ADD S2, S2, T6
 ; Spill t24 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S2, SB, SC
     BEQ R0, R0, L_text40_puts_25
 ; Unconditional branch to L_text40_puts_25
@@ -1225,10 +1156,10 @@ L_text40_puts_25:
     ADD T2, SB, R0
     LI S3, -1536
     ADDI S1, S1, 1
-    BNE S1, S3, L_i32_memory_next_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_1
+    BNE S1, S3, L_i32_memory_next_word_f07897532bd243b5a97482f1634b01ff_24_1
     LI S1, 0
     ADDI T2, T2, 1
-L_i32_memory_next_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_1:
+L_i32_memory_next_word_f07897532bd243b5a97482f1634b01ff_24_1:
     LOAD T0, T2, S1
 ; Bank value in T0 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t12 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
@@ -1246,93 +1177,87 @@ L_i32_memory_next_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_1:
     ADD S1, T3, R0
 ; GEP: native narrow displacement, wide fallback
     LI S3, -1
-    BEQ T0, S3, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_2_use_global
+    BEQ T0, S3, L_bc_f07897532bd243b5a97482f1634b01ff_24_2_use_global
     LI S3, -2
-    BEQ T0, S3, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_2_use_stack
+    BEQ T0, S3, L_bc_f07897532bd243b5a97482f1634b01ff_24_2_use_stack
     ADD T2, T0, R0
-    BEQ R0, R0, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_2_done
-L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_2_use_global:
+    BEQ R0, R0, L_bc_f07897532bd243b5a97482f1634b01ff_24_2_done
+L_bc_f07897532bd243b5a97482f1634b01ff_24_2_use_global:
     ADD T2, GP, R0
-    BEQ R0, R0, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_2_done
-L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_2_use_stack:
+    BEQ R0, R0, L_bc_f07897532bd243b5a97482f1634b01ff_24_2_done
+L_bc_f07897532bd243b5a97482f1634b01ff_24_2_use_stack:
     ADD T2, SB, R0
-L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_2_done:
+L_bc_f07897532bd243b5a97482f1634b01ff_24_2_done:
     ADD T1, S0, R0
     ADD T3, T2, R0
     LI T7, -3
-    BNE T3, T7, L_i32_pointer_nonnull_e41c86c4f3f740aa8550ecbfa18ab31e_24_3
+    BNE T3, T7, L_i32_pointer_nonnull_f07897532bd243b5a97482f1634b01ff_24_3
     LI T1, 0
     LI T3, 0
-L_i32_pointer_nonnull_e41c86c4f3f740aa8550ecbfa18ab31e_24_3:
+L_i32_pointer_nonnull_f07897532bd243b5a97482f1634b01ff_24_3:
     MOVE S3, S2
     MOVE T5, S1
 ; Spill t11 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE S0, SB, SC
 ; Spill load_f24_op19_t11_bank_val to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE T0, SB, SC
 ; Spill load_f24_op19_t11_bank_val to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
+    ADDI SC, FP, 16
     STORE T0, SB, SC
 ; Spill pointer_value_resolved_bank_24_f24_op24 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
+    ADDI SC, FP, 17
     STORE T2, SB, SC
 ; Spill pointer_null_tag_24_f24_op28 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
+    ADDI SC, FP, 18
     STORE T7, SB, SC
 ; Spill t13 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
+    ADDI SC, FP, 19
     STORE S2, SB, SC
     LI S2, -1536
     SLTU T7, T1, S2
-    BEQ T7, R0, L_i32_gep_wide_offset_e41c86c4f3f740aa8550ecbfa18ab31e_24_9
-    BEQ T5, R0, L_i32_gep_positive_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_4
+    BEQ T7, R0, L_i32_gep_wide_offset_f07897532bd243b5a97482f1634b01ff_24_9
+    BEQ T5, R0, L_i32_gep_positive_word_f07897532bd243b5a97482f1634b01ff_24_4
     LI T7, -1
-    BEQ T5, T7, L_i32_gep_negative_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_5
-    BEQ R0, R0, L_i32_gep_wide_offset_e41c86c4f3f740aa8550ecbfa18ab31e_24_9
-L_i32_gep_positive_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_4:
+    BEQ T5, T7, L_i32_gep_negative_word_f07897532bd243b5a97482f1634b01ff_24_5
+    BEQ R0, R0, L_i32_gep_wide_offset_f07897532bd243b5a97482f1634b01ff_24_9
+L_i32_gep_positive_word_f07897532bd243b5a97482f1634b01ff_24_4:
     SLTU T7, S3, S2
-    BNE T7, R0, L_i32_gep_native_add_e41c86c4f3f740aa8550ecbfa18ab31e_24_6
+    BNE T7, R0, L_i32_gep_native_add_f07897532bd243b5a97482f1634b01ff_24_6
     DIV T7, S3, S2
     ADD T3, T3, T7
     MOD S3, S3, S2
-L_i32_gep_native_add_e41c86c4f3f740aa8550ecbfa18ab31e_24_6:
+L_i32_gep_native_add_f07897532bd243b5a97482f1634b01ff_24_6:
     ADD T7, T1, S3
     SLTU T2, T7, T1
     MOVE T1, T7
-    BNE T2, R0, L_i32_gep_native_carry_e41c86c4f3f740aa8550ecbfa18ab31e_24_7
+    BNE T2, R0, L_i32_gep_native_carry_f07897532bd243b5a97482f1634b01ff_24_7
     SLTU T7, T1, S2
-    BNE T7, R0, L_i32_gep_offset_done_e41c86c4f3f740aa8550ecbfa18ab31e_24_14
-L_i32_gep_native_carry_e41c86c4f3f740aa8550ecbfa18ab31e_24_7:
+    BNE T7, R0, L_i32_gep_offset_done_f07897532bd243b5a97482f1634b01ff_24_14
+L_i32_gep_native_carry_f07897532bd243b5a97482f1634b01ff_24_7:
     SUB T1, T1, S2
     ADDI T3, T3, 1
-    BEQ R0, R0, L_i32_gep_offset_done_e41c86c4f3f740aa8550ecbfa18ab31e_24_14
-L_i32_gep_negative_word_e41c86c4f3f740aa8550ecbfa18ab31e_24_5:
-    BEQ S3, R0, L_i32_gep_wide_offset_e41c86c4f3f740aa8550ecbfa18ab31e_24_9
+    BEQ R0, R0, L_i32_gep_offset_done_f07897532bd243b5a97482f1634b01ff_24_14
+L_i32_gep_negative_word_f07897532bd243b5a97482f1634b01ff_24_5:
+    BEQ S3, R0, L_i32_gep_wide_offset_f07897532bd243b5a97482f1634b01ff_24_9
     LI T7, 2
     SLTU T7, T3, T7
-    BNE T7, R0, L_i32_gep_wide_offset_e41c86c4f3f740aa8550ecbfa18ab31e_24_9
+    BNE T7, R0, L_i32_gep_wide_offset_f07897532bd243b5a97482f1634b01ff_24_9
     SUB S3, R0, S3
     SLTU T7, S3, S2
-    BNE T7, R0, L_i32_gep_native_subtract_e41c86c4f3f740aa8550ecbfa18ab31e_24_8
+    BNE T7, R0, L_i32_gep_native_subtract_f07897532bd243b5a97482f1634b01ff_24_8
     DIV T7, S3, S2
     SUB T3, T3, T7
     MOD S3, S3, S2
-L_i32_gep_native_subtract_e41c86c4f3f740aa8550ecbfa18ab31e_24_8:
+L_i32_gep_native_subtract_f07897532bd243b5a97482f1634b01ff_24_8:
     SLTU T2, T1, S3
     SUB T1, T1, S3
-    BEQ T2, R0, L_i32_gep_offset_done_e41c86c4f3f740aa8550ecbfa18ab31e_24_14
+    BEQ T2, R0, L_i32_gep_offset_done_f07897532bd243b5a97482f1634b01ff_24_14
     ADD T1, T1, S2
     ADDI T3, T3, -1
-    BEQ R0, R0, L_i32_gep_offset_done_e41c86c4f3f740aa8550ecbfa18ab31e_24_14
-L_i32_gep_wide_offset_e41c86c4f3f740aa8550ecbfa18ab31e_24_9:
+    BEQ R0, R0, L_i32_gep_offset_done_f07897532bd243b5a97482f1634b01ff_24_14
+L_i32_gep_wide_offset_f07897532bd243b5a97482f1634b01ff_24_9:
     ADD T7, S3, T1
     SLTU T2, T7, S3
     MOVE S3, T7
@@ -1396,7 +1321,7 @@ L_i32_gep_wide_offset_e41c86c4f3f740aa8550ecbfa18ab31e_24_9:
     LI T6, 0
     LI S0, 32
     LI T0, 1
-L_i32_gep_divide_e41c86c4f3f740aa8550ecbfa18ab31e_24_10:
+L_i32_gep_divide_f07897532bd243b5a97482f1634b01ff_24_10:
     SLT T7, T5, R0
     SLT T2, T4, R0
     ADD T4, T4, T4
@@ -1408,37 +1333,37 @@ L_i32_gep_divide_e41c86c4f3f740aa8550ecbfa18ab31e_24_10:
     ADD T5, T5, T5
     OR T5, T5, T2
     ADD T1, T1, T1
-    BNE T6, R0, L_i32_gep_divide_ge_e41c86c4f3f740aa8550ecbfa18ab31e_24_11
+    BNE T6, R0, L_i32_gep_divide_ge_f07897532bd243b5a97482f1634b01ff_24_11
     SLTU T2, T4, S2
-    BNE T2, R0, L_i32_gep_divide_next_e41c86c4f3f740aa8550ecbfa18ab31e_24_12
-L_i32_gep_divide_ge_e41c86c4f3f740aa8550ecbfa18ab31e_24_11:
+    BNE T2, R0, L_i32_gep_divide_next_f07897532bd243b5a97482f1634b01ff_24_12
+L_i32_gep_divide_ge_f07897532bd243b5a97482f1634b01ff_24_11:
     SLTU T2, T4, S2
     SUB T4, T4, S2
     SUB T6, T6, T2
     OR T1, T1, T0
-L_i32_gep_divide_next_e41c86c4f3f740aa8550ecbfa18ab31e_24_12:
+L_i32_gep_divide_next_f07897532bd243b5a97482f1634b01ff_24_12:
     SUB S0, S0, T0
-    BEQ S0, R0, L_i32_gep_divide_done_e41c86c4f3f740aa8550ecbfa18ab31e_24_13
-    BEQ R0, R0, L_i32_gep_divide_e41c86c4f3f740aa8550ecbfa18ab31e_24_10
-L_i32_gep_divide_done_e41c86c4f3f740aa8550ecbfa18ab31e_24_13:
+    BEQ S0, R0, L_i32_gep_divide_done_f07897532bd243b5a97482f1634b01ff_24_13
+    BEQ R0, R0, L_i32_gep_divide_f07897532bd243b5a97482f1634b01ff_24_10
+L_i32_gep_divide_done_f07897532bd243b5a97482f1634b01ff_24_13:
     MOVE T3, T1
     MOVE T1, T4
-L_i32_gep_offset_done_e41c86c4f3f740aa8550ecbfa18ab31e_24_14:
+L_i32_gep_offset_done_f07897532bd243b5a97482f1634b01ff_24_14:
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(14), bank: Mixed })
 ; LOAD: Pointer t14 has bank info: Dynamic("pointer_offset_bank_24_f24_op38")
     LI T5, -1
-    BEQ T3, T5, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_use_global
+    BEQ T3, T5, L_bc_f07897532bd243b5a97482f1634b01ff_24_15_use_global
     LI T5, -2
-    BEQ T3, T5, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_use_stack
+    BEQ T3, T5, L_bc_f07897532bd243b5a97482f1634b01ff_24_15_use_stack
     ADD S3, T3, R0
-    BEQ R0, R0, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_done
-L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_use_global:
+    BEQ R0, R0, L_bc_f07897532bd243b5a97482f1634b01ff_24_15_done
+L_bc_f07897532bd243b5a97482f1634b01ff_24_15_use_global:
     ADD S3, GP, R0
-    BEQ R0, R0, L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_done
-L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_use_stack:
+    BEQ R0, R0, L_bc_f07897532bd243b5a97482f1634b01ff_24_15_done
+L_bc_f07897532bd243b5a97482f1634b01ff_24_15_use_stack:
     ADD S3, SB, R0
-L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_done:
+L_bc_f07897532bd243b5a97482f1634b01ff_24_15_done:
 ; LOAD: Using bank register S3 for load
     LOAD T4, S3, T1
     LI T6, 0
@@ -1450,18 +1375,9 @@ L_bc_e41c86c4f3f740aa8550ecbfa18ab31e_24_15_done:
     LI S1, 0
     SLTU S0, S1, S2
 ; Spill t15 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
+    ADDI SC, FP, 20
     STORE T4, SB, SC
-; Spill t17 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
-    STORE S0, SB, SC
-; Reload t17 from slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
-    LOAD T5, SB, SC
-    BEQ T5, R0, L_text40_puts_29
+    BEQ S0, R0, L_text40_puts_29
 ; Branch to L_text40_puts_29 if condition is false
     BEQ R0, R0, L_text40_puts_28
 ; Unconditional branch to L_text40_puts_28 (condition was true)
@@ -1469,53 +1385,45 @@ L_text40_puts_28:
 ; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+2
-    ADD T1, FP, R0
-    ADDI T1, T1, 2
+    ADD T5, FP, R0
+    ADDI T5, T5, 2
 ; LOAD: Pointer load_src_ptr_f24_op46_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T1
-    LI S3, 40
-    SLT T3, T3, S3
-    LI T0, 0
-    XOR T2, T3, T0
-    LI T6, 0
-    SLTU T3, T6, T2
+    LOAD T1, SB, T5
+    LI T3, 40
+    SLT T1, T1, T3
+    LI S3, 0
+    XOR T0, T1, S3
+    LI T2, 0
+    SLTU T1, T2, T0
 ; Recompute alloca t10 at FP+4
-    ADD S2, FP, R0
-    ADDI S2, S2, 4
-    STORE T3, SB, S2
+    ADD T6, FP, R0
+    ADDI T6, T6, 4
+    STORE T1, SB, T6
     BEQ R0, R0, L_text40_puts_30
 ; Unconditional branch to L_text40_puts_30
 L_text40_puts_29:
-    LI S1, 0
+    LI S2, 0
 ; Recompute alloca t10 at FP+4
-    ADD T7, FP, R0
-    ADDI T7, T7, 4
-    STORE S1, SB, T7
+    ADD S1, FP, R0
+    ADDI S1, S1, 4
+    STORE S2, SB, S1
     BEQ R0, R0, L_text40_puts_30
 ; Unconditional branch to L_text40_puts_30
 L_text40_puts_30:
 ; Load instruction: t21 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+4
-    ADD T4, FP, R0
-    ADDI T4, T4, 4
+    ADD T7, FP, R0
+    ADDI T7, T7, 4
 ; LOAD: Pointer load_src_ptr_f24_op53_t21 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S0, SB, T4
-    LI T5, 0
-    XOR S3, S0, T5
-    LI T2, 0
-    SLTU S0, T2, S3
-; Spill t22 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
-    STORE S0, SB, SC
-; Reload t22 from slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
-    LOAD T6, SB, SC
-    BEQ T6, R0, L_text40_puts_27
+    LOAD S0, SB, T7
+    LI T4, 0
+    XOR T3, S0, T4
+    LI T0, 0
+    SLTU S0, T0, T3
+    BEQ S0, R0, L_text40_puts_27
 ; Branch to L_text40_puts_27 if condition is false
     BEQ R0, R0, L_text40_puts_26
 ; Unconditional branch to L_text40_puts_26 (condition was true)
@@ -1523,38 +1431,33 @@ L_text40_puts_26:
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+2
-    ADD T0, FP, R0
-    ADDI T0, T0, 2
+    ADD T2, FP, R0
+    ADDI T2, T2, 2
 ; LOAD: Pointer load_src_ptr_f24_op57_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T0
+    LOAD S3, SB, T2
 ; Reload t15 from slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
+    ADDI SC, FP, 20
     LOAD T1, SB, SC
-    LI S2, 0
-    ADD T1, T1, S2
-    LI S1, 255
-    AND T1, T1, S1
-    ADD A0, T3, R0
+    LI T5, 0
+    ADD T1, T1, T5
+    LI T6, 255
+    AND T1, T1, T6
+    ADD A0, S3, R0
 ; Reload t24 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T7, SB, SC
-    ADD A1, T7, R0
+    ADDI SC, FP, 13
+    LOAD S2, SB, SC
+    ADD A1, S2, R0
     ADD A2, T1, R0
 ; Spill live registers before call
-; Spill t23 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T3, SB, SC
+; Spill t23 to slot 8
+    ADDI SC, FP, 21
+    STORE S3, SB, SC
 ; Spill t24 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T7, SB, SC
-; Spill t26 to slot 11
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
+    ADDI SC, FP, 13
+    STORE S2, SB, SC
+; Spill t26 to slot 9
+    ADDI SC, FP, 22
     STORE T1, SB, SC
 ; Set SP = FP+33 so callee frame is above spills
     ADDI SP, FP, 33
@@ -1567,25 +1470,25 @@ L_text40_puts_26:
 ; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+2
-    ADD T4, FP, R0
-    ADDI T4, T4, 2
+    ADD S1, FP, R0
+    ADDI S1, S1, 2
 ; LOAD: Pointer load_src_ptr_f24_op59_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S3, SB, T4
-    LI T2, 1
-    ADD S3, S3, T2
-    STORE S3, SB, T4
+    LOAD T7, SB, S1
+    LI T3, 1
+    ADD T7, T7, T3
+    STORE T7, SB, S1
 ; Load instruction: t29 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+3
-    ADD T5, FP, R0
-    ADDI T5, T5, 3
+    ADD T0, FP, R0
+    ADDI T0, T0, 3
 ; LOAD: Pointer load_src_ptr_f24_op62_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S0, SB, T5
-    LI T6, 1
-    ADD S0, S0, T6
-    STORE S0, SB, T5
+    LOAD T4, SB, T0
+    LI S0, 1
+    ADD T4, T4, S0
+    STORE T4, SB, T0
     BEQ R0, R0, L_text40_puts_25
 ; Unconditional branch to L_text40_puts_25
 L_text40_puts_27:
@@ -1669,124 +1572,99 @@ L_text40_putchar_color_31:
     LI T1, 0
     SLTU T2, T1, T3
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE S1, SB, SC
 ; Spill t3 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S0, SB, SC
 ; Spill t4 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE T7, SB, SC
 ; Spill t0 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE S3, SB, SC
-; Spill t15 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE T2, SB, SC
-; Reload t15 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD T3, SB, SC
-    BEQ T3, R0, L_text40_putchar_color_33
+    BEQ T2, R0, L_text40_putchar_color_33
 ; Branch to L_text40_putchar_color_33 if condition is false
     BEQ R0, R0, L_text40_putchar_color_32
 ; Unconditional branch to L_text40_putchar_color_32 (condition was true)
 L_text40_putchar_color_32:
 ; Reload t0 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD T1, SB, SC
-    LI T0, 0
-    ADD S2, T1, T0
-    LI S1, 40
-    SLT S2, S2, S1
+    ADDI SC, FP, 15
+    LOAD T3, SB, SC
+    LI T1, 0
+    ADD T0, T3, T1
+    LI T2, 40
+    SLT T0, T0, T2
+    LI S2, 0
+    XOR S1, T0, S2
     LI S0, 0
-    XOR T7, S2, S0
-    LI T6, 0
-    SLTU S2, T6, T7
+    SLTU T0, S0, S1
 ; Recompute alloca t12 at FP+2
-    ADD T5, FP, R0
-    ADDI T5, T5, 2
-    STORE S2, SB, T5
+    ADD T7, FP, R0
+    ADDI T7, T7, 2
+    STORE T0, SB, T7
 ; Spill t0 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    STORE T1, SB, SC
+    ADDI SC, FP, 15
+    STORE T3, SB, SC
     BEQ R0, R0, L_text40_putchar_color_34
 ; Unconditional branch to L_text40_putchar_color_34
 L_text40_putchar_color_33:
-    LI T4, 0
+    LI T6, 0
 ; Recompute alloca t12 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
-    STORE T4, SB, S3
+    ADD T5, FP, R0
+    ADDI T5, T5, 2
+    STORE T6, SB, T5
     BEQ R0, R0, L_text40_putchar_color_34
 ; Unconditional branch to L_text40_putchar_color_34
 L_text40_putchar_color_34:
 ; Load instruction: t19 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Recompute alloca t12 at FP+2
-    ADD T2, FP, R0
-    ADDI T2, T2, 2
+    ADD T4, FP, R0
+    ADDI T4, T4, 2
 ; LOAD: Pointer load_src_ptr_f26_op14_t19 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T2
-    LI T0, 0
-    XOR S1, T3, T0
-    LI T7, 0
-    SLTU T3, T7, S1
-; Spill t20 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE T3, SB, SC
-; Reload t20 from slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    LOAD T6, SB, SC
-    BEQ T6, R0, L_text40_putchar_color_36
+    LOAD S3, SB, T4
+    LI T1, 0
+    XOR T2, S3, T1
+    LI S1, 0
+    SLTU S3, S1, T2
+    BEQ S3, R0, L_text40_putchar_color_36
 ; Branch to L_text40_putchar_color_36 if condition is false
     BEQ R0, R0, L_text40_putchar_color_35
 ; Unconditional branch to L_text40_putchar_color_35 (condition was true)
 L_text40_putchar_color_35:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD S0, SB, SC
     LI S2, 0
-    ADD T1, S0, S2
+    ADD T0, S0, S2
+    LI T3, 0
+    SLT T7, T0, T3
+    LI T6, 1
+    SUB T0, T6, T7
     LI T5, 0
-    SLT T4, T1, T5
-    LI S3, 1
-    SUB T1, S3, T4
+    XOR T4, T0, T5
     LI T2, 0
-    XOR S1, T1, T2
-    LI T7, 0
-    SLTU T1, T7, S1
+    SLTU T0, T2, T4
 ; Recompute alloca t11 at FP+1
-    ADD T0, FP, R0
-    ADDI T0, T0, 1
-    STORE T1, SB, T0
+    ADD S1, FP, R0
+    ADDI S1, S1, 1
+    STORE T0, SB, S1
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S0, SB, SC
     BEQ R0, R0, L_text40_putchar_color_37
 ; Unconditional branch to L_text40_putchar_color_37
 L_text40_putchar_color_36:
-    LI T3, 0
+    LI T1, 0
 ; Recompute alloca t11 at FP+1
-    ADD T6, FP, R0
-    ADDI T6, T6, 1
-    STORE T3, SB, T6
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    STORE T1, SB, S3
     BEQ R0, R0, L_text40_putchar_color_37
 ; Unconditional branch to L_text40_putchar_color_37
 L_text40_putchar_color_37:
@@ -1797,142 +1675,117 @@ L_text40_putchar_color_37:
     ADDI S2, S2, 1
 ; LOAD: Pointer load_src_ptr_f26_op25_t24 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, S2
-    LI S3, 0
-    XOR T5, T4, S3
-    LI S1, 0
-    SLTU T4, S1, T5
-; Spill t25 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE T4, SB, SC
-; Reload t25 from slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    LOAD T7, SB, SC
+    LOAD T7, SB, S2
+    LI T6, 0
+    XOR T3, T7, T6
+    LI T4, 0
+    SLTU T7, T4, T3
     BEQ T7, R0, L_text40_putchar_color_39
 ; Branch to L_text40_putchar_color_39 if condition is false
     BEQ R0, R0, L_text40_putchar_color_38
 ; Unconditional branch to L_text40_putchar_color_38 (condition was true)
 L_text40_putchar_color_38:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD T2, SB, SC
-    LI T1, 0
-    ADD S0, T2, T1
-    LI T0, 25
-    SLT S0, S0, T0
-    LI T3, 0
-    XOR T6, S0, T3
-    LI S2, 0
-    SLTU S0, S2, T6
+    LI T5, 0
+    ADD T0, T2, T5
+    LI S0, 25
+    SLT T0, T0, S0
+    LI S1, 0
+    XOR T1, T0, S1
+    LI S3, 0
+    SLTU T0, S3, T1
 ; Recompute alloca t10 at FP+0
-    ADD T5, FP, R0
-    STORE S0, SB, T5
+    ADD S2, FP, R0
+    STORE T0, SB, S2
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE T2, SB, SC
     BEQ R0, R0, L_text40_putchar_color_40
 ; Unconditional branch to L_text40_putchar_color_40
 L_text40_putchar_color_39:
-    LI S1, 0
+    LI T3, 0
 ; Recompute alloca t10 at FP+0
-    ADD S3, FP, R0
-    STORE S1, SB, S3
+    ADD T4, FP, R0
+    STORE T3, SB, T4
     BEQ R0, R0, L_text40_putchar_color_40
 ; Unconditional branch to L_text40_putchar_color_40
 L_text40_putchar_color_40:
 ; Load instruction: t29 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+0
-    ADD T4, FP, R0
+    ADD T6, FP, R0
 ; LOAD: Pointer load_src_ptr_f26_op34_t29 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, T4
+    LOAD T7, SB, T6
+    LI T5, 0
+    XOR S0, T7, T5
     LI T1, 0
-    XOR T0, T7, T1
-    LI T6, 0
-    SLTU T7, T6, T0
-; Spill t30 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T7, SB, SC
-; Reload t30 from slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    LOAD S2, SB, SC
-    BEQ S2, R0, L_text40_putchar_color_43
+    SLTU T7, T1, S0
+    BEQ T7, R0, L_text40_putchar_color_43
 ; Branch to L_text40_putchar_color_43 if condition is false
     BEQ R0, R0, L_text40_putchar_color_41
 ; Unconditional branch to L_text40_putchar_color_41 (condition was true)
 L_text40_putchar_color_41:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T3, SB, SC
-    LI S0, 0
-    ADD T3, T3, S0
-    LI T2, 40
-    MUL T3, T3, T2
-    LI T5, 32
-    ADD T5, T5, T3
+    ADDI SC, FP, 11
+    LOAD S3, SB, SC
+    LI S1, 0
+    ADD S3, S3, S1
+    LI T0, 40
+    MUL S3, S3, T0
+    LI T2, 32
+    ADD T2, T2, S3
 ; Reload t0 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD S1, SB, SC
-    LI S3, 0
-    ADD S1, S1, S3
-    ADD T5, T5, S1
+    ADDI SC, FP, 15
+    LOAD S2, SB, SC
+    LI T3, 0
+    ADD S2, S2, T3
+    ADD T2, T2, S2
 ; Reload t4 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     LOAD T4, SB, SC
-    LI T0, 0
-    ADD T4, T4, T0
-    LI T6, 15
-    AND T4, T4, T6
+    LI T6, 0
+    ADD T4, T4, T6
+    LI S0, 15
+    AND T4, T4, S0
     LI T1, 4
     SLL T4, T4, T1
 ; Reload t3 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T7, SB, SC
-    LI S2, 0
-    ADD T7, T7, S2
-    LI S0, 15
-    AND T7, T7, S0
-    OR T4, T4, T7
-    LI T2, 0
-    ADD T4, T4, T2
-    LI T3, 255
-    AND T4, T4, T3
-    LI S3, 8
-    SLL T4, T4, S3
-; Reload t2 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    LOAD S1, SB, SC
+    ADDI SC, FP, 13
+    LOAD T5, SB, SC
+    LI T7, 0
+    ADD T5, T5, T7
+    LI S1, 15
+    AND T5, T5, S1
+    OR T4, T4, T5
     LI T0, 0
-    ADD S1, S1, T0
-    LI T6, 255
-    AND S1, S1, T6
-    OR T4, T4, S1
+    ADD T4, T4, T0
+    LI S3, 255
+    AND T4, T4, S3
+    LI T3, 8
+    SLL T4, T4, T3
+; Reload t2 from slot 1
+    ADDI SC, FP, 12
+    LOAD S2, SB, SC
+    LI T6, 0
+    ADD S2, S2, T6
+    LI S0, 255
+    AND S2, S2, S0
+    OR T4, T4, S2
     LI T1, 0
-    ADD T5, T5, T1
-    LI S2, 0
-    ADD T4, T4, S2
-    ADD A0, T5, R0
+    ADD T2, T2, T1
+    LI T7, 0
+    ADD T4, T4, T7
+    ADD A0, T2, R0
     ADD A1, T4, R0
 ; Spill live registers before call
-; Spill t51 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
-    STORE T5, SB, SC
-; Spill t52 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
+; Spill t51 to slot 5
+    ADDI SC, FP, 16
+    STORE T2, SB, SC
+; Spill t52 to slot 6
+    ADDI SC, FP, 17
     STORE T4, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -2021,251 +1874,203 @@ L_text40_putchar_attr_44:
     LI T0, 0
     SLTU T3, T0, T1
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE S1, SB, SC
 ; Spill t3 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S0, SB, SC
 ; Spill t0 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE S3, SB, SC
-; Spill t13 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    STORE T3, SB, SC
-; Reload t13 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD T2, SB, SC
-    BEQ T2, R0, L_text40_putchar_attr_46
+    BEQ T3, R0, L_text40_putchar_attr_46
 ; Branch to L_text40_putchar_attr_46 if condition is false
     BEQ R0, R0, L_text40_putchar_attr_45
 ; Unconditional branch to L_text40_putchar_attr_45 (condition was true)
 L_text40_putchar_attr_45:
 ; Reload t0 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD T1, SB, SC
-    LI T0, 0
-    ADD T4, T1, T0
-    LI S2, 40
-    SLT T4, T4, S2
+    ADDI SC, FP, 14
+    LOAD T2, SB, SC
+    LI T1, 0
+    ADD T0, T2, T1
+    LI T4, 40
+    SLT T0, T0, T4
+    LI T3, 0
+    XOR S2, T0, T3
     LI S1, 0
-    XOR S0, T4, S1
-    LI T7, 0
-    SLTU T4, T7, S0
+    SLTU T0, S1, S2
 ; Recompute alloca t10 at FP+2
-    ADD T6, FP, R0
-    ADDI T6, T6, 2
-    STORE T4, SB, T6
+    ADD S0, FP, R0
+    ADDI S0, S0, 2
+    STORE T0, SB, S0
 ; Spill t0 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T1, SB, SC
+    ADDI SC, FP, 14
+    STORE T2, SB, SC
     BEQ R0, R0, L_text40_putchar_attr_47
 ; Unconditional branch to L_text40_putchar_attr_47
 L_text40_putchar_attr_46:
-    LI T5, 0
+    LI T7, 0
 ; Recompute alloca t10 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
-    STORE T5, SB, S3
+    ADD T6, FP, R0
+    ADDI T6, T6, 2
+    STORE T7, SB, T6
     BEQ R0, R0, L_text40_putchar_attr_47
 ; Unconditional branch to L_text40_putchar_attr_47
 L_text40_putchar_attr_47:
 ; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD T3, FP, R0
-    ADDI T3, T3, 2
+    ADD T5, FP, R0
+    ADDI T5, T5, 2
 ; LOAD: Pointer load_src_ptr_f28_op13_t17 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T2, SB, T3
-    LI T0, 0
-    XOR S2, T2, T0
-    LI S0, 0
-    SLTU T2, S0, S2
-; Spill t18 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE T2, SB, SC
-; Reload t18 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD T7, SB, SC
-    BEQ T7, R0, L_text40_putchar_attr_49
+    LOAD S3, SB, T5
+    LI T1, 0
+    XOR T4, S3, T1
+    LI S2, 0
+    SLTU S3, S2, T4
+    BEQ S3, R0, L_text40_putchar_attr_49
 ; Branch to L_text40_putchar_attr_49 if condition is false
     BEQ R0, R0, L_text40_putchar_attr_48
 ; Unconditional branch to L_text40_putchar_attr_48 (condition was true)
 L_text40_putchar_attr_48:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD S1, SB, SC
-    LI T4, 0
-    ADD T1, S1, T4
-    LI T6, 0
-    SLT T5, T1, T6
-    LI S3, 1
-    SUB T1, S3, T5
     LI T3, 0
-    XOR S2, T1, T3
-    LI S0, 0
-    SLTU T1, S0, S2
+    ADD T0, S1, T3
+    LI T2, 0
+    SLT S0, T0, T2
+    LI T7, 1
+    SUB T0, T7, S0
+    LI T6, 0
+    XOR T5, T0, T6
+    LI T4, 0
+    SLTU T0, T4, T5
 ; Recompute alloca t9 at FP+1
-    ADD T0, FP, R0
-    ADDI T0, T0, 1
-    STORE T1, SB, T0
+    ADD S2, FP, R0
+    ADDI S2, S2, 1
+    STORE T0, SB, S2
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S1, SB, SC
     BEQ R0, R0, L_text40_putchar_attr_50
 ; Unconditional branch to L_text40_putchar_attr_50
 L_text40_putchar_attr_49:
-    LI T2, 0
+    LI T1, 0
 ; Recompute alloca t9 at FP+1
-    ADD T7, FP, R0
-    ADDI T7, T7, 1
-    STORE T2, SB, T7
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    STORE T1, SB, S3
     BEQ R0, R0, L_text40_putchar_attr_50
 ; Unconditional branch to L_text40_putchar_attr_50
 L_text40_putchar_attr_50:
 ; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(9), bank: Stack })
 ; Recompute alloca t9 at FP+1
-    ADD T4, FP, R0
-    ADDI T4, T4, 1
+    ADD T3, FP, R0
+    ADDI T3, T3, 1
 ; LOAD: Pointer load_src_ptr_f28_op24_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T5, SB, T4
-    LI S3, 0
-    XOR T6, T5, S3
-    LI S2, 0
-    SLTU T5, S2, T6
-; Spill t23 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE T5, SB, SC
-; Reload t23 from slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    LOAD S0, SB, SC
+    LOAD S0, SB, T3
+    LI T7, 0
+    XOR T2, S0, T7
+    LI T5, 0
+    SLTU S0, T5, T2
     BEQ S0, R0, L_text40_putchar_attr_52
 ; Branch to L_text40_putchar_attr_52 if condition is false
     BEQ R0, R0, L_text40_putchar_attr_51
 ; Unconditional branch to L_text40_putchar_attr_51 (condition was true)
 L_text40_putchar_attr_51:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T3, SB, SC
-    LI T1, 0
-    ADD S1, T3, T1
-    LI T0, 25
-    SLT S1, S1, T0
-    LI T2, 0
-    XOR T7, S1, T2
-    LI T4, 0
-    SLTU S1, T4, T7
+    ADDI SC, FP, 11
+    LOAD T4, SB, SC
+    LI T6, 0
+    ADD T0, T4, T6
+    LI S1, 25
+    SLT T0, T0, S1
+    LI S2, 0
+    XOR T1, T0, S2
+    LI S3, 0
+    SLTU T0, S3, T1
 ; Recompute alloca t8 at FP+0
-    ADD T6, FP, R0
-    STORE S1, SB, T6
+    ADD T3, FP, R0
+    STORE T0, SB, T3
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T3, SB, SC
+    ADDI SC, FP, 11
+    STORE T4, SB, SC
     BEQ R0, R0, L_text40_putchar_attr_53
 ; Unconditional branch to L_text40_putchar_attr_53
 L_text40_putchar_attr_52:
-    LI S2, 0
+    LI T2, 0
 ; Recompute alloca t8 at FP+0
-    ADD S3, FP, R0
-    STORE S2, SB, S3
+    ADD T5, FP, R0
+    STORE T2, SB, T5
     BEQ R0, R0, L_text40_putchar_attr_53
 ; Unconditional branch to L_text40_putchar_attr_53
 L_text40_putchar_attr_53:
 ; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+0
-    ADD T5, FP, R0
+    ADD T7, FP, R0
 ; LOAD: Pointer load_src_ptr_f28_op33_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S0, SB, T5
+    LOAD S0, SB, T7
+    LI T6, 0
+    XOR S1, S0, T6
     LI T1, 0
-    XOR T0, S0, T1
-    LI T7, 0
-    SLTU S0, T7, T0
-; Spill t28 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE S0, SB, SC
-; Reload t28 from slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    LOAD T4, SB, SC
-    BEQ T4, R0, L_text40_putchar_attr_56
+    SLTU S0, T1, S1
+    BEQ S0, R0, L_text40_putchar_attr_56
 ; Branch to L_text40_putchar_attr_56 if condition is false
     BEQ R0, R0, L_text40_putchar_attr_54
 ; Unconditional branch to L_text40_putchar_attr_54 (condition was true)
 L_text40_putchar_attr_54:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T2, SB, SC
-    LI S1, 0
-    ADD T2, T2, S1
-    LI T3, 40
-    MUL T2, T2, T3
-    LI T6, 32
-    ADD T6, T6, T2
+    ADDI SC, FP, 11
+    LOAD S3, SB, SC
+    LI S2, 0
+    ADD S3, S3, S2
+    LI T0, 40
+    MUL S3, S3, T0
+    LI T4, 32
+    ADD T4, T4, S3
 ; Reload t0 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD S2, SB, SC
-    LI S3, 0
-    ADD S2, S2, S3
-    ADD T6, T6, S2
+    ADDI SC, FP, 14
+    LOAD T3, SB, SC
+    LI T2, 0
+    ADD T3, T3, T2
+    ADD T4, T4, T3
 ; Reload t3 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     LOAD T5, SB, SC
-    LI T0, 0
-    ADD T5, T5, T0
-    LI T7, 255
-    AND T5, T5, T7
+    LI T7, 0
+    ADD T5, T5, T7
+    LI S1, 255
+    AND T5, T5, S1
     LI T1, 8
     SLL T5, T5, T1
 ; Reload t2 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    LOAD S0, SB, SC
-    LI T4, 0
-    ADD S0, S0, T4
-    LI S1, 255
-    AND S0, S0, S1
-    OR T5, T5, S0
-    LI T3, 0
-    ADD T6, T6, T3
-    LI T2, 0
-    ADD T5, T5, T2
-    ADD A0, T6, R0
+    ADDI SC, FP, 12
+    LOAD T6, SB, SC
+    LI S0, 0
+    ADD T6, T6, S0
+    LI S2, 255
+    AND T6, T6, S2
+    OR T5, T5, T6
+    LI T0, 0
+    ADD T4, T4, T0
+    LI S3, 0
+    ADD T5, T5, S3
+    ADD A0, T4, R0
     ADD A1, T5, R0
 ; Spill live registers before call
-; Spill t42 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T6, SB, SC
-; Spill t43 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
+; Spill t42 to slot 4
+    ADDI SC, FP, 15
+    STORE T4, SB, SC
+; Spill t43 to slot 5
+    ADDI SC, FP, 16
     STORE T5, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -2350,10 +2155,10 @@ L_text40_puts_color_57:
     ADD T3, SB, R0
     LI T2, -1536
     ADDI T4, T4, 1
-    BNE T4, T2, L_i32_memory_next_word_d99f652a113c413ea78f211b77e45820_30_0
+    BNE T4, T2, L_i32_memory_next_word_926364dd478541a5b9980f27e6f7beb8_30_0
     LI T4, 0
     ADDI T3, T3, 1
-L_i32_memory_next_word_d99f652a113c413ea78f211b77e45820_30_0:
+L_i32_memory_next_word_926364dd478541a5b9980f27e6f7beb8_30_0:
     STORE S0, T3, T4
     ADD T1, FP, R0
     ADDI T1, T1, 2
@@ -2371,16 +2176,13 @@ L_i32_memory_next_word_d99f652a113c413ea78f211b77e45820_30_0:
     LI S1, 0
     ADD T6, T6, S1
 ; Spill t28 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S2, SB, SC
 ; Spill t31 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE T7, SB, SC
 ; Spill t32 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE T6, SB, SC
     BEQ R0, R0, L_text40_puts_color_58
 ; Unconditional branch to L_text40_puts_color_58
@@ -2398,10 +2200,10 @@ L_text40_puts_color_58:
     ADD S0, SB, R0
     LI S1, -1536
     ADDI T2, T2, 1
-    BNE T2, S1, L_i32_memory_next_word_d99f652a113c413ea78f211b77e45820_30_1
+    BNE T2, S1, L_i32_memory_next_word_926364dd478541a5b9980f27e6f7beb8_30_1
     LI T2, 0
     ADDI S0, S0, 1
-L_i32_memory_next_word_d99f652a113c413ea78f211b77e45820_30_1:
+L_i32_memory_next_word_926364dd478541a5b9980f27e6f7beb8_30_1:
     LOAD T5, S0, T2
 ; Bank value in T5 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
@@ -2419,93 +2221,87 @@ L_i32_memory_next_word_d99f652a113c413ea78f211b77e45820_30_1:
     ADD T2, S2, R0
 ; GEP: native narrow displacement, wide fallback
     LI S1, -1
-    BEQ T5, S1, L_bc_d99f652a113c413ea78f211b77e45820_30_2_use_global
+    BEQ T5, S1, L_bc_926364dd478541a5b9980f27e6f7beb8_30_2_use_global
     LI S1, -2
-    BEQ T5, S1, L_bc_d99f652a113c413ea78f211b77e45820_30_2_use_stack
+    BEQ T5, S1, L_bc_926364dd478541a5b9980f27e6f7beb8_30_2_use_stack
     ADD S0, T5, R0
-    BEQ R0, R0, L_bc_d99f652a113c413ea78f211b77e45820_30_2_done
-L_bc_d99f652a113c413ea78f211b77e45820_30_2_use_global:
+    BEQ R0, R0, L_bc_926364dd478541a5b9980f27e6f7beb8_30_2_done
+L_bc_926364dd478541a5b9980f27e6f7beb8_30_2_use_global:
     ADD S0, GP, R0
-    BEQ R0, R0, L_bc_d99f652a113c413ea78f211b77e45820_30_2_done
-L_bc_d99f652a113c413ea78f211b77e45820_30_2_use_stack:
+    BEQ R0, R0, L_bc_926364dd478541a5b9980f27e6f7beb8_30_2_done
+L_bc_926364dd478541a5b9980f27e6f7beb8_30_2_use_stack:
     ADD S0, SB, R0
-L_bc_d99f652a113c413ea78f211b77e45820_30_2_done:
+L_bc_926364dd478541a5b9980f27e6f7beb8_30_2_done:
     ADD T7, T3, R0
     ADD T4, S0, R0
     LI S2, -3
-    BNE T4, S2, L_i32_pointer_nonnull_d99f652a113c413ea78f211b77e45820_30_3
+    BNE T4, S2, L_i32_pointer_nonnull_926364dd478541a5b9980f27e6f7beb8_30_3
     LI T7, 0
     LI T4, 0
-L_i32_pointer_nonnull_d99f652a113c413ea78f211b77e45820_30_3:
+L_i32_pointer_nonnull_926364dd478541a5b9980f27e6f7beb8_30_3:
     MOVE S1, T6
     MOVE T0, T2
 ; Spill t15 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
+    ADDI SC, FP, 16
     STORE T3, SB, SC
 ; Spill load_f30_op21_t15_bank_val to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
+    ADDI SC, FP, 17
     STORE T5, SB, SC
 ; Spill load_f30_op21_t15_bank_val to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
+    ADDI SC, FP, 18
     STORE T5, SB, SC
 ; Spill pointer_value_resolved_bank_30_f30_op26 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
+    ADDI SC, FP, 19
     STORE S0, SB, SC
 ; Spill pointer_null_tag_30_f30_op30 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
+    ADDI SC, FP, 20
     STORE S2, SB, SC
 ; Spill t17 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
+    ADDI SC, FP, 21
     STORE T6, SB, SC
     LI T6, -1536
     SLTU S2, T7, T6
-    BEQ S2, R0, L_i32_gep_wide_offset_d99f652a113c413ea78f211b77e45820_30_9
-    BEQ T0, R0, L_i32_gep_positive_word_d99f652a113c413ea78f211b77e45820_30_4
+    BEQ S2, R0, L_i32_gep_wide_offset_926364dd478541a5b9980f27e6f7beb8_30_9
+    BEQ T0, R0, L_i32_gep_positive_word_926364dd478541a5b9980f27e6f7beb8_30_4
     LI S2, -1
-    BEQ T0, S2, L_i32_gep_negative_word_d99f652a113c413ea78f211b77e45820_30_5
-    BEQ R0, R0, L_i32_gep_wide_offset_d99f652a113c413ea78f211b77e45820_30_9
-L_i32_gep_positive_word_d99f652a113c413ea78f211b77e45820_30_4:
+    BEQ T0, S2, L_i32_gep_negative_word_926364dd478541a5b9980f27e6f7beb8_30_5
+    BEQ R0, R0, L_i32_gep_wide_offset_926364dd478541a5b9980f27e6f7beb8_30_9
+L_i32_gep_positive_word_926364dd478541a5b9980f27e6f7beb8_30_4:
     SLTU S2, S1, T6
-    BNE S2, R0, L_i32_gep_native_add_d99f652a113c413ea78f211b77e45820_30_6
+    BNE S2, R0, L_i32_gep_native_add_926364dd478541a5b9980f27e6f7beb8_30_6
     DIV S2, S1, T6
     ADD T4, T4, S2
     MOD S1, S1, T6
-L_i32_gep_native_add_d99f652a113c413ea78f211b77e45820_30_6:
+L_i32_gep_native_add_926364dd478541a5b9980f27e6f7beb8_30_6:
     ADD S2, T7, S1
     SLTU S0, S2, T7
     MOVE T7, S2
-    BNE S0, R0, L_i32_gep_native_carry_d99f652a113c413ea78f211b77e45820_30_7
+    BNE S0, R0, L_i32_gep_native_carry_926364dd478541a5b9980f27e6f7beb8_30_7
     SLTU S2, T7, T6
-    BNE S2, R0, L_i32_gep_offset_done_d99f652a113c413ea78f211b77e45820_30_14
-L_i32_gep_native_carry_d99f652a113c413ea78f211b77e45820_30_7:
+    BNE S2, R0, L_i32_gep_offset_done_926364dd478541a5b9980f27e6f7beb8_30_14
+L_i32_gep_native_carry_926364dd478541a5b9980f27e6f7beb8_30_7:
     SUB T7, T7, T6
     ADDI T4, T4, 1
-    BEQ R0, R0, L_i32_gep_offset_done_d99f652a113c413ea78f211b77e45820_30_14
-L_i32_gep_negative_word_d99f652a113c413ea78f211b77e45820_30_5:
-    BEQ S1, R0, L_i32_gep_wide_offset_d99f652a113c413ea78f211b77e45820_30_9
+    BEQ R0, R0, L_i32_gep_offset_done_926364dd478541a5b9980f27e6f7beb8_30_14
+L_i32_gep_negative_word_926364dd478541a5b9980f27e6f7beb8_30_5:
+    BEQ S1, R0, L_i32_gep_wide_offset_926364dd478541a5b9980f27e6f7beb8_30_9
     LI S2, 2
     SLTU S2, T4, S2
-    BNE S2, R0, L_i32_gep_wide_offset_d99f652a113c413ea78f211b77e45820_30_9
+    BNE S2, R0, L_i32_gep_wide_offset_926364dd478541a5b9980f27e6f7beb8_30_9
     SUB S1, R0, S1
     SLTU S2, S1, T6
-    BNE S2, R0, L_i32_gep_native_subtract_d99f652a113c413ea78f211b77e45820_30_8
+    BNE S2, R0, L_i32_gep_native_subtract_926364dd478541a5b9980f27e6f7beb8_30_8
     DIV S2, S1, T6
     SUB T4, T4, S2
     MOD S1, S1, T6
-L_i32_gep_native_subtract_d99f652a113c413ea78f211b77e45820_30_8:
+L_i32_gep_native_subtract_926364dd478541a5b9980f27e6f7beb8_30_8:
     SLTU S0, T7, S1
     SUB T7, T7, S1
-    BEQ S0, R0, L_i32_gep_offset_done_d99f652a113c413ea78f211b77e45820_30_14
+    BEQ S0, R0, L_i32_gep_offset_done_926364dd478541a5b9980f27e6f7beb8_30_14
     ADD T7, T7, T6
     ADDI T4, T4, -1
-    BEQ R0, R0, L_i32_gep_offset_done_d99f652a113c413ea78f211b77e45820_30_14
-L_i32_gep_wide_offset_d99f652a113c413ea78f211b77e45820_30_9:
+    BEQ R0, R0, L_i32_gep_offset_done_926364dd478541a5b9980f27e6f7beb8_30_14
+L_i32_gep_wide_offset_926364dd478541a5b9980f27e6f7beb8_30_9:
     ADD S2, S1, T7
     SLTU S0, S2, S1
     MOVE S1, S2
@@ -2569,7 +2365,7 @@ L_i32_gep_wide_offset_d99f652a113c413ea78f211b77e45820_30_9:
     LI T1, 0
     LI T3, 32
     LI T5, 1
-L_i32_gep_divide_d99f652a113c413ea78f211b77e45820_30_10:
+L_i32_gep_divide_926364dd478541a5b9980f27e6f7beb8_30_10:
     SLT S2, T0, R0
     SLT S0, S3, R0
     ADD S3, S3, S3
@@ -2581,37 +2377,37 @@ L_i32_gep_divide_d99f652a113c413ea78f211b77e45820_30_10:
     ADD T0, T0, T0
     OR T0, T0, S0
     ADD T7, T7, T7
-    BNE T1, R0, L_i32_gep_divide_ge_d99f652a113c413ea78f211b77e45820_30_11
+    BNE T1, R0, L_i32_gep_divide_ge_926364dd478541a5b9980f27e6f7beb8_30_11
     SLTU S0, S3, T6
-    BNE S0, R0, L_i32_gep_divide_next_d99f652a113c413ea78f211b77e45820_30_12
-L_i32_gep_divide_ge_d99f652a113c413ea78f211b77e45820_30_11:
+    BNE S0, R0, L_i32_gep_divide_next_926364dd478541a5b9980f27e6f7beb8_30_12
+L_i32_gep_divide_ge_926364dd478541a5b9980f27e6f7beb8_30_11:
     SLTU S0, S3, T6
     SUB S3, S3, T6
     SUB T1, T1, S0
     OR T7, T7, T5
-L_i32_gep_divide_next_d99f652a113c413ea78f211b77e45820_30_12:
+L_i32_gep_divide_next_926364dd478541a5b9980f27e6f7beb8_30_12:
     SUB T3, T3, T5
-    BEQ T3, R0, L_i32_gep_divide_done_d99f652a113c413ea78f211b77e45820_30_13
-    BEQ R0, R0, L_i32_gep_divide_d99f652a113c413ea78f211b77e45820_30_10
-L_i32_gep_divide_done_d99f652a113c413ea78f211b77e45820_30_13:
+    BEQ T3, R0, L_i32_gep_divide_done_926364dd478541a5b9980f27e6f7beb8_30_13
+    BEQ R0, R0, L_i32_gep_divide_926364dd478541a5b9980f27e6f7beb8_30_10
+L_i32_gep_divide_done_926364dd478541a5b9980f27e6f7beb8_30_13:
     MOVE T4, T7
     MOVE T7, S3
-L_i32_gep_offset_done_d99f652a113c413ea78f211b77e45820_30_14:
+L_i32_gep_offset_done_926364dd478541a5b9980f27e6f7beb8_30_14:
 ; Load instruction: t19 = load FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; LOAD: Pointer t18 has bank info: Dynamic("pointer_offset_bank_30_f30_op40")
     LI T0, -1
-    BEQ T4, T0, L_bc_d99f652a113c413ea78f211b77e45820_30_15_use_global
+    BEQ T4, T0, L_bc_926364dd478541a5b9980f27e6f7beb8_30_15_use_global
     LI T0, -2
-    BEQ T4, T0, L_bc_d99f652a113c413ea78f211b77e45820_30_15_use_stack
+    BEQ T4, T0, L_bc_926364dd478541a5b9980f27e6f7beb8_30_15_use_stack
     ADD S1, T4, R0
-    BEQ R0, R0, L_bc_d99f652a113c413ea78f211b77e45820_30_15_done
-L_bc_d99f652a113c413ea78f211b77e45820_30_15_use_global:
+    BEQ R0, R0, L_bc_926364dd478541a5b9980f27e6f7beb8_30_15_done
+L_bc_926364dd478541a5b9980f27e6f7beb8_30_15_use_global:
     ADD S1, GP, R0
-    BEQ R0, R0, L_bc_d99f652a113c413ea78f211b77e45820_30_15_done
-L_bc_d99f652a113c413ea78f211b77e45820_30_15_use_stack:
+    BEQ R0, R0, L_bc_926364dd478541a5b9980f27e6f7beb8_30_15_done
+L_bc_926364dd478541a5b9980f27e6f7beb8_30_15_use_stack:
     ADD S1, SB, R0
-L_bc_d99f652a113c413ea78f211b77e45820_30_15_done:
+L_bc_926364dd478541a5b9980f27e6f7beb8_30_15_done:
 ; LOAD: Using bank register S1 for load
     LOAD S3, S1, T7
     LI T1, 0
@@ -2623,18 +2419,9 @@ L_bc_d99f652a113c413ea78f211b77e45820_30_15_done:
     LI T2, 0
     SLTU T3, T2, T6
 ; Spill t19 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
+    ADDI SC, FP, 22
     STORE S3, SB, SC
-; Spill t21 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T3, SB, SC
-; Reload t21 from slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    LOAD T0, SB, SC
-    BEQ T0, R0, L_text40_puts_color_62
+    BEQ T3, R0, L_text40_puts_color_62
 ; Branch to L_text40_puts_color_62 if condition is false
     BEQ R0, R0, L_text40_puts_color_61
 ; Unconditional branch to L_text40_puts_color_61 (condition was true)
@@ -2642,53 +2429,45 @@ L_text40_puts_color_61:
 ; Load instruction: t22 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD T4, FP, R0
-    ADDI T4, T4, 2
+    ADD T0, FP, R0
+    ADDI T0, T0, 2
 ; LOAD: Pointer load_src_ptr_f30_op48_t22 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, T4
-    LI S1, 40
-    SLT T7, T7, S1
-    LI T5, 0
-    XOR S0, T7, T5
-    LI T1, 0
-    SLTU T7, T1, S0
+    LOAD T4, SB, T0
+    LI T7, 40
+    SLT T4, T4, T7
+    LI S1, 0
+    XOR T5, T4, S1
+    LI S0, 0
+    SLTU T4, S0, T5
 ; Recompute alloca t14 at FP+4
-    ADD T6, FP, R0
-    ADDI T6, T6, 4
-    STORE T7, SB, T6
+    ADD T1, FP, R0
+    ADDI T1, T1, 4
+    STORE T4, SB, T1
     BEQ R0, R0, L_text40_puts_color_63
 ; Unconditional branch to L_text40_puts_color_63
 L_text40_puts_color_62:
-    LI T2, 0
+    LI T6, 0
 ; Recompute alloca t14 at FP+4
-    ADD S2, FP, R0
-    ADDI S2, S2, 4
-    STORE T2, SB, S2
+    ADD T2, FP, R0
+    ADDI T2, T2, 4
+    STORE T6, SB, T2
     BEQ R0, R0, L_text40_puts_color_63
 ; Unconditional branch to L_text40_puts_color_63
 L_text40_puts_color_63:
 ; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(14), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(14), bank: Stack })
 ; Recompute alloca t14 at FP+4
-    ADD S3, FP, R0
-    ADDI S3, S3, 4
+    ADD S2, FP, R0
+    ADDI S2, S2, 4
 ; LOAD: Pointer load_src_ptr_f30_op55_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, S3
-    LI T0, 0
-    XOR S1, T3, T0
-    LI S0, 0
-    SLTU T3, S0, S1
-; Spill t26 to slot 11
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    STORE T3, SB, SC
-; Reload t26 from slot 11
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    LOAD T1, SB, SC
-    BEQ T1, R0, L_text40_puts_color_60
+    LOAD T3, SB, S2
+    LI S3, 0
+    XOR T7, T3, S3
+    LI T5, 0
+    SLTU T3, T5, T7
+    BEQ T3, R0, L_text40_puts_color_60
 ; Branch to L_text40_puts_color_60 if condition is false
     BEQ R0, R0, L_text40_puts_color_59
 ; Unconditional branch to L_text40_puts_color_59 (condition was true)
@@ -2696,61 +2475,52 @@ L_text40_puts_color_59:
 ; Load instruction: t27 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD T5, FP, R0
-    ADDI T5, T5, 2
+    ADD S0, FP, R0
+    ADDI S0, S0, 2
 ; LOAD: Pointer load_src_ptr_f30_op59_t27 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, T5
+    LOAD S1, SB, S0
 ; Reload t19 from slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
+    ADDI SC, FP, 22
     LOAD T4, SB, SC
-    LI T6, 0
-    ADD T4, T4, T6
-    LI T2, 255
-    AND T4, T4, T2
-    ADD A0, T7, R0
+    LI T0, 0
+    ADD T4, T4, T0
+    LI T1, 255
+    AND T4, T4, T1
+    ADD A0, S1, R0
 ; Reload t28 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD S2, SB, SC
-    ADD A1, S2, R0
+    ADDI SC, FP, 13
+    LOAD T6, SB, SC
+    ADD A1, T6, R0
     ADD A2, T4, R0
 ; Reload t31 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD S3, SB, SC
-    ADD A3, S3, R0
+    ADDI SC, FP, 14
+    LOAD T2, SB, SC
+    ADD A3, T2, R0
 ; Reload t32 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD S1, SB, SC
+    ADDI SC, FP, 15
+    LOAD S2, SB, SC
 ; Spill live registers before call
 ; Spill t32 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    STORE S1, SB, SC
-; Spill t27 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 25
-    STORE T7, SB, SC
-; Spill t28 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 15
     STORE S2, SB, SC
-; Spill t30 to slot 13
-    ADD SC, FP, R0
-    ADDI SC, SC, 26
+; Spill t27 to slot 10
+    ADDI SC, FP, 23
+    STORE S1, SB, SC
+; Spill t28 to slot 0
+    ADDI SC, FP, 13
+    STORE T6, SB, SC
+; Spill t30 to slot 11
+    ADDI SC, FP, 24
     STORE T4, SB, SC
 ; Spill t31 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE S3, SB, SC
+    ADDI SC, FP, 14
+    STORE T2, SB, SC
 ; Set SP = FP+33 so callee frame is above spills
     ADDI SP, FP, 33
 ; Pushing 1 arguments to stack
 ; Push arg 4 (scalar) to stack
-    STORE S1, SB, SP
+    STORE S2, SB, SP
     ADDI SP, SP, 1
 ; Setting up 4 register arguments
 ; Arg 0 (scalar) to A0
@@ -2766,25 +2536,25 @@ L_text40_puts_color_59:
 ; Load instruction: t33 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD S0, FP, R0
-    ADDI S0, S0, 2
+    ADD T7, FP, R0
+    ADDI T7, T7, 2
 ; LOAD: Pointer load_src_ptr_f30_op61_t33 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T0, SB, S0
-    LI T3, 1
-    ADD T0, T0, T3
-    STORE T0, SB, S0
+    LOAD T5, SB, T7
+    LI S3, 1
+    ADD T5, T5, S3
+    STORE T5, SB, T7
 ; Load instruction: t35 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Recompute alloca t12 at FP+3
-    ADD T1, FP, R0
-    ADDI T1, T1, 3
+    ADD T3, FP, R0
+    ADDI T3, T3, 3
 ; LOAD: Pointer load_src_ptr_f30_op64_t35 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T6, SB, T1
-    LI T2, 1
-    ADD T6, T6, T2
-    STORE T6, SB, T1
+    LOAD T0, SB, T3
+    LI T1, 1
+    ADD T0, T0, T1
+    STORE T0, SB, T3
     BEQ R0, R0, L_text40_puts_color_58
 ; Unconditional branch to L_text40_puts_color_58
 L_text40_puts_color_60:
@@ -2858,10 +2628,10 @@ L_text40_puts_attr_64:
     ADD T4, SB, R0
     LI T3, -1536
     ADDI T5, T5, 1
-    BNE T5, T3, L_i32_memory_next_word_a4bfed805744cf2880b6c52eff724b7_32_0
+    BNE T5, T3, L_i32_memory_next_word_bc7de0fe7b4402d92b0e13b374448ab_32_0
     LI T5, 0
     ADDI T4, T4, 1
-L_i32_memory_next_word_a4bfed805744cf2880b6c52eff724b7_32_0:
+L_i32_memory_next_word_bc7de0fe7b4402d92b0e13b374448ab_32_0:
     STORE S0, T4, T5
     ADD T2, FP, R0
     ADDI T2, T2, 2
@@ -2877,12 +2647,10 @@ L_i32_memory_next_word_a4bfed805744cf2880b6c52eff724b7_32_0:
     LI T3, 0
     ADD T7, T7, T3
 ; Spill t26 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S2, SB, SC
 ; Spill t29 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE T7, SB, SC
     BEQ R0, R0, L_text40_puts_attr_65
 ; Unconditional branch to L_text40_puts_attr_65
@@ -2900,10 +2668,10 @@ L_text40_puts_attr_65:
     ADD T5, SB, R0
     LI T4, -1536
     ADDI S3, S3, 1
-    BNE S3, T4, L_i32_memory_next_word_a4bfed805744cf2880b6c52eff724b7_32_1
+    BNE S3, T4, L_i32_memory_next_word_bc7de0fe7b4402d92b0e13b374448ab_32_1
     LI S3, 0
     ADDI T5, T5, 1
-L_i32_memory_next_word_a4bfed805744cf2880b6c52eff724b7_32_1:
+L_i32_memory_next_word_bc7de0fe7b4402d92b0e13b374448ab_32_1:
     LOAD T3, T5, S3
 ; Bank value in T3 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t14 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
@@ -2921,93 +2689,87 @@ L_i32_memory_next_word_a4bfed805744cf2880b6c52eff724b7_32_1:
     ADD S3, T0, R0
 ; GEP: native narrow displacement, wide fallback
     LI T4, -1
-    BEQ T3, T4, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_2_use_global
+    BEQ T3, T4, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_2_use_global
     LI T4, -2
-    BEQ T3, T4, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_2_use_stack
+    BEQ T3, T4, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_2_use_stack
     ADD T5, T3, R0
-    BEQ R0, R0, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_2_done
-L_bc_0a4bfed805744cf2880b6c52eff724b7_32_2_use_global:
+    BEQ R0, R0, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_2_done
+L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_2_use_global:
     ADD T5, GP, R0
-    BEQ R0, R0, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_2_done
-L_bc_0a4bfed805744cf2880b6c52eff724b7_32_2_use_stack:
+    BEQ R0, R0, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_2_done
+L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_2_use_stack:
     ADD T5, SB, R0
-L_bc_0a4bfed805744cf2880b6c52eff724b7_32_2_done:
+L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_2_done:
     ADD S2, T1, R0
     ADD T0, T5, R0
     LI T2, -3
-    BNE T0, T2, L_i32_pointer_nonnull_a4bfed805744cf2880b6c52eff724b7_32_3
+    BNE T0, T2, L_i32_pointer_nonnull_bc7de0fe7b4402d92b0e13b374448ab_32_3
     LI S2, 0
     LI T0, 0
-L_i32_pointer_nonnull_a4bfed805744cf2880b6c52eff724b7_32_3:
+L_i32_pointer_nonnull_bc7de0fe7b4402d92b0e13b374448ab_32_3:
     MOVE T4, T7
     MOVE S0, S3
 ; Spill t13 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE T1, SB, SC
 ; Spill load_f32_op20_t13_bank_val to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
+    ADDI SC, FP, 16
     STORE T3, SB, SC
 ; Spill load_f32_op20_t13_bank_val to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
+    ADDI SC, FP, 17
     STORE T3, SB, SC
 ; Spill pointer_value_resolved_bank_32_f32_op25 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
+    ADDI SC, FP, 18
     STORE T5, SB, SC
 ; Spill pointer_null_tag_32_f32_op29 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
+    ADDI SC, FP, 19
     STORE T2, SB, SC
 ; Spill t15 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
+    ADDI SC, FP, 20
     STORE T7, SB, SC
     LI T7, -1536
     SLTU T2, S2, T7
-    BEQ T2, R0, L_i32_gep_wide_offset_a4bfed805744cf2880b6c52eff724b7_32_9
-    BEQ S0, R0, L_i32_gep_positive_word_a4bfed805744cf2880b6c52eff724b7_32_4
+    BEQ T2, R0, L_i32_gep_wide_offset_bc7de0fe7b4402d92b0e13b374448ab_32_9
+    BEQ S0, R0, L_i32_gep_positive_word_bc7de0fe7b4402d92b0e13b374448ab_32_4
     LI T2, -1
-    BEQ S0, T2, L_i32_gep_negative_word_a4bfed805744cf2880b6c52eff724b7_32_5
-    BEQ R0, R0, L_i32_gep_wide_offset_a4bfed805744cf2880b6c52eff724b7_32_9
-L_i32_gep_positive_word_a4bfed805744cf2880b6c52eff724b7_32_4:
+    BEQ S0, T2, L_i32_gep_negative_word_bc7de0fe7b4402d92b0e13b374448ab_32_5
+    BEQ R0, R0, L_i32_gep_wide_offset_bc7de0fe7b4402d92b0e13b374448ab_32_9
+L_i32_gep_positive_word_bc7de0fe7b4402d92b0e13b374448ab_32_4:
     SLTU T2, T4, T7
-    BNE T2, R0, L_i32_gep_native_add_a4bfed805744cf2880b6c52eff724b7_32_6
+    BNE T2, R0, L_i32_gep_native_add_bc7de0fe7b4402d92b0e13b374448ab_32_6
     DIV T2, T4, T7
     ADD T0, T0, T2
     MOD T4, T4, T7
-L_i32_gep_native_add_a4bfed805744cf2880b6c52eff724b7_32_6:
+L_i32_gep_native_add_bc7de0fe7b4402d92b0e13b374448ab_32_6:
     ADD T2, S2, T4
     SLTU T5, T2, S2
     MOVE S2, T2
-    BNE T5, R0, L_i32_gep_native_carry_a4bfed805744cf2880b6c52eff724b7_32_7
+    BNE T5, R0, L_i32_gep_native_carry_bc7de0fe7b4402d92b0e13b374448ab_32_7
     SLTU T2, S2, T7
-    BNE T2, R0, L_i32_gep_offset_done_a4bfed805744cf2880b6c52eff724b7_32_14
-L_i32_gep_native_carry_a4bfed805744cf2880b6c52eff724b7_32_7:
+    BNE T2, R0, L_i32_gep_offset_done_bc7de0fe7b4402d92b0e13b374448ab_32_14
+L_i32_gep_native_carry_bc7de0fe7b4402d92b0e13b374448ab_32_7:
     SUB S2, S2, T7
     ADDI T0, T0, 1
-    BEQ R0, R0, L_i32_gep_offset_done_a4bfed805744cf2880b6c52eff724b7_32_14
-L_i32_gep_negative_word_a4bfed805744cf2880b6c52eff724b7_32_5:
-    BEQ T4, R0, L_i32_gep_wide_offset_a4bfed805744cf2880b6c52eff724b7_32_9
+    BEQ R0, R0, L_i32_gep_offset_done_bc7de0fe7b4402d92b0e13b374448ab_32_14
+L_i32_gep_negative_word_bc7de0fe7b4402d92b0e13b374448ab_32_5:
+    BEQ T4, R0, L_i32_gep_wide_offset_bc7de0fe7b4402d92b0e13b374448ab_32_9
     LI T2, 2
     SLTU T2, T0, T2
-    BNE T2, R0, L_i32_gep_wide_offset_a4bfed805744cf2880b6c52eff724b7_32_9
+    BNE T2, R0, L_i32_gep_wide_offset_bc7de0fe7b4402d92b0e13b374448ab_32_9
     SUB T4, R0, T4
     SLTU T2, T4, T7
-    BNE T2, R0, L_i32_gep_native_subtract_a4bfed805744cf2880b6c52eff724b7_32_8
+    BNE T2, R0, L_i32_gep_native_subtract_bc7de0fe7b4402d92b0e13b374448ab_32_8
     DIV T2, T4, T7
     SUB T0, T0, T2
     MOD T4, T4, T7
-L_i32_gep_native_subtract_a4bfed805744cf2880b6c52eff724b7_32_8:
+L_i32_gep_native_subtract_bc7de0fe7b4402d92b0e13b374448ab_32_8:
     SLTU T5, S2, T4
     SUB S2, S2, T4
-    BEQ T5, R0, L_i32_gep_offset_done_a4bfed805744cf2880b6c52eff724b7_32_14
+    BEQ T5, R0, L_i32_gep_offset_done_bc7de0fe7b4402d92b0e13b374448ab_32_14
     ADD S2, S2, T7
     ADDI T0, T0, -1
-    BEQ R0, R0, L_i32_gep_offset_done_a4bfed805744cf2880b6c52eff724b7_32_14
-L_i32_gep_wide_offset_a4bfed805744cf2880b6c52eff724b7_32_9:
+    BEQ R0, R0, L_i32_gep_offset_done_bc7de0fe7b4402d92b0e13b374448ab_32_14
+L_i32_gep_wide_offset_bc7de0fe7b4402d92b0e13b374448ab_32_9:
     ADD T2, T4, S2
     SLTU T5, T2, T4
     MOVE T4, T2
@@ -3071,7 +2833,7 @@ L_i32_gep_wide_offset_a4bfed805744cf2880b6c52eff724b7_32_9:
     LI T6, 0
     LI T1, 32
     LI T3, 1
-L_i32_gep_divide_a4bfed805744cf2880b6c52eff724b7_32_10:
+L_i32_gep_divide_bc7de0fe7b4402d92b0e13b374448ab_32_10:
     SLT T2, S0, R0
     SLT T5, S1, R0
     ADD S1, S1, S1
@@ -3083,37 +2845,37 @@ L_i32_gep_divide_a4bfed805744cf2880b6c52eff724b7_32_10:
     ADD S0, S0, S0
     OR S0, S0, T5
     ADD S2, S2, S2
-    BNE T6, R0, L_i32_gep_divide_ge_a4bfed805744cf2880b6c52eff724b7_32_11
+    BNE T6, R0, L_i32_gep_divide_ge_bc7de0fe7b4402d92b0e13b374448ab_32_11
     SLTU T5, S1, T7
-    BNE T5, R0, L_i32_gep_divide_next_a4bfed805744cf2880b6c52eff724b7_32_12
-L_i32_gep_divide_ge_a4bfed805744cf2880b6c52eff724b7_32_11:
+    BNE T5, R0, L_i32_gep_divide_next_bc7de0fe7b4402d92b0e13b374448ab_32_12
+L_i32_gep_divide_ge_bc7de0fe7b4402d92b0e13b374448ab_32_11:
     SLTU T5, S1, T7
     SUB S1, S1, T7
     SUB T6, T6, T5
     OR S2, S2, T3
-L_i32_gep_divide_next_a4bfed805744cf2880b6c52eff724b7_32_12:
+L_i32_gep_divide_next_bc7de0fe7b4402d92b0e13b374448ab_32_12:
     SUB T1, T1, T3
-    BEQ T1, R0, L_i32_gep_divide_done_a4bfed805744cf2880b6c52eff724b7_32_13
-    BEQ R0, R0, L_i32_gep_divide_a4bfed805744cf2880b6c52eff724b7_32_10
-L_i32_gep_divide_done_a4bfed805744cf2880b6c52eff724b7_32_13:
+    BEQ T1, R0, L_i32_gep_divide_done_bc7de0fe7b4402d92b0e13b374448ab_32_13
+    BEQ R0, R0, L_i32_gep_divide_bc7de0fe7b4402d92b0e13b374448ab_32_10
+L_i32_gep_divide_done_bc7de0fe7b4402d92b0e13b374448ab_32_13:
     MOVE T0, S2
     MOVE S2, S1
-L_i32_gep_offset_done_a4bfed805744cf2880b6c52eff724b7_32_14:
+L_i32_gep_offset_done_bc7de0fe7b4402d92b0e13b374448ab_32_14:
 ; Load instruction: t17 = load FatPtr(FatPointer { addr: Temp(16), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(16), bank: Mixed })
 ; LOAD: Pointer t16 has bank info: Dynamic("pointer_offset_bank_32_f32_op39")
     LI S0, -1
-    BEQ T0, S0, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_use_global
+    BEQ T0, S0, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_15_use_global
     LI S0, -2
-    BEQ T0, S0, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_use_stack
+    BEQ T0, S0, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_15_use_stack
     ADD T4, T0, R0
-    BEQ R0, R0, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_done
-L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_use_global:
+    BEQ R0, R0, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_15_done
+L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_15_use_global:
     ADD T4, GP, R0
-    BEQ R0, R0, L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_done
-L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_use_stack:
+    BEQ R0, R0, L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_15_done
+L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_15_use_stack:
     ADD T4, SB, R0
-L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_done:
+L_bc_0bc7de0fe7b4402d92b0e13b374448ab_32_15_done:
 ; LOAD: Using bank register T4 for load
     LOAD S1, T4, S2
     LI T6, 0
@@ -3125,18 +2887,9 @@ L_bc_0a4bfed805744cf2880b6c52eff724b7_32_15_done:
     LI S3, 0
     SLTU T1, S3, T7
 ; Spill t17 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
+    ADDI SC, FP, 21
     STORE S1, SB, SC
-; Spill t19 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
-    STORE T1, SB, SC
-; Reload t19 from slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
-    LOAD S0, SB, SC
-    BEQ S0, R0, L_text40_puts_attr_69
+    BEQ T1, R0, L_text40_puts_attr_69
 ; Branch to L_text40_puts_attr_69 if condition is false
     BEQ R0, R0, L_text40_puts_attr_68
 ; Unconditional branch to L_text40_puts_attr_68 (condition was true)
@@ -3144,53 +2897,45 @@ L_text40_puts_attr_68:
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+2
-    ADD T0, FP, R0
-    ADDI T0, T0, 2
+    ADD S0, FP, R0
+    ADDI S0, S0, 2
 ; LOAD: Pointer load_src_ptr_f32_op47_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, T0
-    LI S2, 40
-    SLT T4, T4, S2
-    LI T3, 0
-    XOR T5, T4, T3
-    LI T6, 0
-    SLTU T4, T6, T5
+    LOAD T0, SB, S0
+    LI T4, 40
+    SLT T0, T0, T4
+    LI S2, 0
+    XOR T3, T0, S2
+    LI T5, 0
+    SLTU T0, T5, T3
 ; Recompute alloca t12 at FP+4
-    ADD T7, FP, R0
-    ADDI T7, T7, 4
-    STORE T4, SB, T7
+    ADD T6, FP, R0
+    ADDI T6, T6, 4
+    STORE T0, SB, T6
     BEQ R0, R0, L_text40_puts_attr_70
 ; Unconditional branch to L_text40_puts_attr_70
 L_text40_puts_attr_69:
-    LI S3, 0
+    LI T7, 0
 ; Recompute alloca t12 at FP+4
-    ADD T2, FP, R0
-    ADDI T2, T2, 4
-    STORE S3, SB, T2
+    ADD S3, FP, R0
+    ADDI S3, S3, 4
+    STORE T7, SB, S3
     BEQ R0, R0, L_text40_puts_attr_70
 ; Unconditional branch to L_text40_puts_attr_70
 L_text40_puts_attr_70:
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Recompute alloca t12 at FP+4
-    ADD S1, FP, R0
-    ADDI S1, S1, 4
+    ADD T2, FP, R0
+    ADDI T2, T2, 4
 ; LOAD: Pointer load_src_ptr_f32_op54_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T1, SB, S1
-    LI S0, 0
-    XOR S2, T1, S0
-    LI T5, 0
-    SLTU T1, T5, S2
-; Spill t24 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T1, SB, SC
-; Reload t24 from slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    LOAD T6, SB, SC
-    BEQ T6, R0, L_text40_puts_attr_67
+    LOAD T1, SB, T2
+    LI S1, 0
+    XOR T4, T1, S1
+    LI T3, 0
+    SLTU T1, T3, T4
+    BEQ T1, R0, L_text40_puts_attr_67
 ; Branch to L_text40_puts_attr_67 if condition is false
     BEQ R0, R0, L_text40_puts_attr_66
 ; Unconditional branch to L_text40_puts_attr_66 (condition was true)
@@ -3198,48 +2943,41 @@ L_text40_puts_attr_66:
 ; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+2
-    ADD T3, FP, R0
-    ADDI T3, T3, 2
+    ADD T5, FP, R0
+    ADDI T5, T5, 2
 ; LOAD: Pointer load_src_ptr_f32_op58_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, T3
+    LOAD S2, SB, T5
 ; Reload t17 from slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
+    ADDI SC, FP, 21
     LOAD T0, SB, SC
-    LI T7, 0
-    ADD T0, T0, T7
-    LI S3, 255
-    AND T0, T0, S3
-    ADD A0, T4, R0
+    LI S0, 0
+    ADD T0, T0, S0
+    LI T6, 255
+    AND T0, T0, T6
+    ADD A0, S2, R0
 ; Reload t26 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T2, SB, SC
-    ADD A1, T2, R0
+    ADDI SC, FP, 13
+    LOAD T7, SB, SC
+    ADD A1, T7, R0
     ADD A2, T0, R0
 ; Reload t29 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD S1, SB, SC
-    ADD A3, S1, R0
+    ADDI SC, FP, 14
+    LOAD S3, SB, SC
+    ADD A3, S3, R0
 ; Spill live registers before call
-; Spill t25 to slot 11
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    STORE T4, SB, SC
+; Spill t25 to slot 9
+    ADDI SC, FP, 22
+    STORE S2, SB, SC
 ; Spill t26 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T2, SB, SC
-; Spill t28 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 25
+    ADDI SC, FP, 13
+    STORE T7, SB, SC
+; Spill t28 to slot 10
+    ADDI SC, FP, 23
     STORE T0, SB, SC
 ; Spill t29 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE S1, SB, SC
+    ADDI SC, FP, 14
+    STORE S3, SB, SC
 ; Set SP = FP+33 so callee frame is above spills
     ADDI SP, FP, 33
 ; Setting up 4 register arguments
@@ -3252,25 +2990,25 @@ L_text40_puts_attr_66:
 ; Load instruction: t30 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+2
-    ADD S2, FP, R0
-    ADDI S2, S2, 2
+    ADD T2, FP, R0
+    ADDI T2, T2, 2
 ; LOAD: Pointer load_src_ptr_f32_op60_t30 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T5, SB, S2
-    LI S0, 1
-    ADD T5, T5, S0
-    STORE T5, SB, S2
+    LOAD T4, SB, T2
+    LI T3, 1
+    ADD T4, T4, T3
+    STORE T4, SB, T2
 ; Load instruction: t32 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+3
-    ADD T1, FP, R0
-    ADDI T1, T1, 3
+    ADD S1, FP, R0
+    ADDI S1, S1, 3
 ; LOAD: Pointer load_src_ptr_f32_op63_t32 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T6, SB, T1
-    LI T7, 1
-    ADD T6, T6, T7
-    STORE T6, SB, T1
+    LOAD T1, SB, S1
+    LI S0, 1
+    ADD T1, T1, S0
+    STORE T1, SB, S1
     BEQ R0, R0, L_text40_puts_attr_65
 ; Unconditional branch to L_text40_puts_attr_65
 L_text40_puts_attr_67:
@@ -3349,226 +3087,181 @@ L_text40_set_attr_71:
     LI T2, 0
     SLTU T4, T2, T5
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE S1, SB, SC
 ; Spill t0 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S3, SB, SC
-; Spill t11 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T4, SB, SC
-; Reload t11 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD T1, SB, SC
-    BEQ T1, R0, L_text40_set_attr_73
+    BEQ T4, R0, L_text40_set_attr_73
 ; Branch to L_text40_set_attr_73 if condition is false
     BEQ R0, R0, L_text40_set_attr_72
 ; Unconditional branch to L_text40_set_attr_72 (condition was true)
 L_text40_set_attr_72:
 ; Reload t0 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T3, SB, SC
-    LI T5, 0
-    ADD T2, T3, T5
-    LI T0, 40
-    SLT T2, T2, T0
+    ADDI SC, FP, 13
+    LOAD T1, SB, SC
+    LI T3, 0
+    ADD T5, T1, T3
+    LI T2, 40
+    SLT T5, T5, T2
+    LI T0, 0
+    XOR T4, T5, T0
     LI S2, 0
-    XOR S1, T2, S2
-    LI S0, 0
-    SLTU T2, S0, S1
+    SLTU T5, S2, T4
 ; Recompute alloca t8 at FP+2
-    ADD T7, FP, R0
-    ADDI T7, T7, 2
-    STORE T2, SB, T7
+    ADD S1, FP, R0
+    ADDI S1, S1, 2
+    STORE T5, SB, S1
 ; Spill t0 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T3, SB, SC
+    ADDI SC, FP, 13
+    STORE T1, SB, SC
     BEQ R0, R0, L_text40_set_attr_74
 ; Unconditional branch to L_text40_set_attr_74
 L_text40_set_attr_73:
-    LI T6, 0
+    LI S0, 0
 ; Recompute alloca t8 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
-    STORE T6, SB, S3
+    ADD T7, FP, R0
+    ADDI T7, T7, 2
+    STORE S0, SB, T7
     BEQ R0, R0, L_text40_set_attr_74
 ; Unconditional branch to L_text40_set_attr_74
 L_text40_set_attr_74:
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(8), bank: Stack })
 ; Recompute alloca t8 at FP+2
-    ADD T4, FP, R0
-    ADDI T4, T4, 2
+    ADD T6, FP, R0
+    ADDI T6, T6, 2
 ; LOAD: Pointer load_src_ptr_f34_op12_t15 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T1, SB, T4
-    LI T5, 0
-    XOR T0, T1, T5
-    LI S1, 0
-    SLTU T1, S1, T0
-; Spill t16 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    STORE T1, SB, SC
-; Reload t16 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD S0, SB, SC
-    BEQ S0, R0, L_text40_set_attr_76
+    LOAD S3, SB, T6
+    LI T3, 0
+    XOR T2, S3, T3
+    LI T4, 0
+    SLTU S3, T4, T2
+    BEQ S3, R0, L_text40_set_attr_76
 ; Branch to L_text40_set_attr_76 if condition is false
     BEQ R0, R0, L_text40_set_attr_75
 ; Unconditional branch to L_text40_set_attr_75 (condition was true)
 L_text40_set_attr_75:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD S2, SB, SC
-    LI T2, 0
-    ADD T3, S2, T2
+    LI T0, 0
+    ADD T5, S2, T0
+    LI T1, 0
+    SLT S1, T5, T1
+    LI S0, 1
+    SUB T5, S0, S1
     LI T7, 0
-    SLT T6, T3, T7
-    LI S3, 1
-    SUB T3, S3, T6
-    LI T4, 0
-    XOR T0, T3, T4
-    LI S1, 0
-    SLTU T3, S1, T0
+    XOR T6, T5, T7
+    LI T2, 0
+    SLTU T5, T2, T6
 ; Recompute alloca t7 at FP+1
-    ADD T5, FP, R0
-    ADDI T5, T5, 1
-    STORE T3, SB, T5
+    ADD T4, FP, R0
+    ADDI T4, T4, 1
+    STORE T5, SB, T4
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
     BEQ R0, R0, L_text40_set_attr_77
 ; Unconditional branch to L_text40_set_attr_77
 L_text40_set_attr_76:
-    LI T1, 0
+    LI T3, 0
 ; Recompute alloca t7 at FP+1
-    ADD S0, FP, R0
-    ADDI S0, S0, 1
-    STORE T1, SB, S0
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    STORE T3, SB, S3
     BEQ R0, R0, L_text40_set_attr_77
 ; Unconditional branch to L_text40_set_attr_77
 L_text40_set_attr_77:
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(7), bank: Stack })
 ; Recompute alloca t7 at FP+1
-    ADD T2, FP, R0
-    ADDI T2, T2, 1
+    ADD T0, FP, R0
+    ADDI T0, T0, 1
 ; LOAD: Pointer load_src_ptr_f34_op23_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T6, SB, T2
-    LI S3, 0
-    XOR T7, T6, S3
-    LI T0, 0
-    SLTU T6, T0, T7
-; Spill t21 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE T6, SB, SC
-; Reload t21 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD S1, SB, SC
+    LOAD S1, SB, T0
+    LI S0, 0
+    XOR T1, S1, S0
+    LI T6, 0
+    SLTU S1, T6, T1
     BEQ S1, R0, L_text40_set_attr_79
 ; Branch to L_text40_set_attr_79 if condition is false
     BEQ R0, R0, L_text40_set_attr_78
 ; Unconditional branch to L_text40_set_attr_78 (condition was true)
 L_text40_set_attr_78:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T4, SB, SC
-    LI T3, 0
-    ADD S2, T4, T3
-    LI T5, 25
-    SLT S2, S2, T5
-    LI T1, 0
-    XOR S0, S2, T1
-    LI T2, 0
-    SLTU S2, T2, S0
+    ADDI SC, FP, 11
+    LOAD T2, SB, SC
+    LI T7, 0
+    ADD T5, T2, T7
+    LI S2, 25
+    SLT T5, T5, S2
+    LI T4, 0
+    XOR T3, T5, T4
+    LI S3, 0
+    SLTU T5, S3, T3
 ; Recompute alloca t6 at FP+0
-    ADD T7, FP, R0
-    STORE S2, SB, T7
+    ADD T0, FP, R0
+    STORE T5, SB, T0
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T4, SB, SC
+    ADDI SC, FP, 11
+    STORE T2, SB, SC
     BEQ R0, R0, L_text40_set_attr_80
 ; Unconditional branch to L_text40_set_attr_80
 L_text40_set_attr_79:
-    LI T0, 0
+    LI T1, 0
 ; Recompute alloca t6 at FP+0
-    ADD S3, FP, R0
-    STORE T0, SB, S3
+    ADD T6, FP, R0
+    STORE T1, SB, T6
     BEQ R0, R0, L_text40_set_attr_80
 ; Unconditional branch to L_text40_set_attr_80
 L_text40_set_attr_80:
 ; Load instruction: t25 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+0
-    ADD T6, FP, R0
+    ADD S0, FP, R0
 ; LOAD: Pointer load_src_ptr_f34_op32_t25 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S1, SB, T6
+    LOAD S1, SB, S0
+    LI T7, 0
+    XOR S2, S1, T7
     LI T3, 0
-    XOR T5, S1, T3
-    LI S0, 0
-    SLTU S1, S0, T5
-; Spill t26 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE S1, SB, SC
-; Reload t26 from slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    LOAD T2, SB, SC
-    BEQ T2, R0, L_text40_set_attr_83
+    SLTU S1, T3, S2
+    BEQ S1, R0, L_text40_set_attr_83
 ; Branch to L_text40_set_attr_83 if condition is false
     BEQ R0, R0, L_text40_set_attr_81
 ; Unconditional branch to L_text40_set_attr_81 (condition was true)
 L_text40_set_attr_81:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T1, SB, SC
-    LI S2, 0
-    ADD T1, T1, S2
-    LI T4, 40
-    MUL T1, T1, T4
-    LI T7, 32
-    ADD T7, T7, T1
+    ADDI SC, FP, 11
+    LOAD S3, SB, SC
+    LI T4, 0
+    ADD S3, S3, T4
+    LI T5, 40
+    MUL S3, S3, T5
+    LI T2, 32
+    ADD T2, T2, S3
 ; Reload t0 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     LOAD T0, SB, SC
-    LI S3, 0
-    ADD T0, T0, S3
-    ADD T7, T7, T0
+    LI T1, 0
+    ADD T0, T0, T1
+    ADD T2, T2, T0
     LI T6, 0
-    ADD T5, T7, T6
-    ADD A0, T5, R0
+    ADD S0, T2, T6
+    ADD A0, S0, R0
 ; Spill live registers before call
-; Spill t32 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE T7, SB, SC
-; Spill t34 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T5, SB, SC
+; Spill t32 to slot 3
+    ADDI SC, FP, 14
+    STORE T2, SB, SC
+; Spill t34 to slot 4
+    ADDI SC, FP, 15
+    STORE S0, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
@@ -3576,41 +3269,37 @@ L_text40_set_attr_81:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t35
-; Copy Rv0 to allocatable S0
-    ADD S0, RV0, R0
+; Copy Rv0 to allocatable S2
+    ADD S2, RV0, R0
 ; Reload t2 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     LOAD T3, SB, SC
-    LI S1, 0
-    ADD T3, T3, S1
-    LI T2, 255
-    AND T3, T3, T2
-    LI S2, 8
-    SLL T3, T3, S2
-    LI T4, 0
-    ADD S0, S0, T4
-    LI T1, 255
-    AND S0, S0, T1
-    OR T3, T3, S0
-; Reload t32 from slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    LOAD S3, SB, SC
+    LI T7, 0
+    ADD T3, T3, T7
+    LI S1, 255
+    AND T3, T3, S1
+    LI T4, 8
+    SLL T3, T3, T4
+    LI T5, 0
+    ADD S2, S2, T5
+    LI S3, 255
+    AND S2, S2, S3
+    OR T3, T3, S2
+; Reload t32 from slot 3
+    ADDI SC, FP, 14
+    LOAD T1, SB, SC
     LI T0, 0
-    ADD S3, S3, T0
+    ADD T1, T1, T0
     LI T6, 0
     ADD T3, T3, T6
-    ADD A0, S3, R0
+    ADD A0, T1, R0
     ADD A1, T3, R0
 ; Spill live registers before call
-; Spill t43 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
-    STORE S3, SB, SC
-; Spill t44 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
+; Spill t43 to slot 5
+    ADDI SC, FP, 16
+    STORE T1, SB, SC
+; Spill t44 to slot 6
+    ADDI SC, FP, 17
     STORE T3, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -3695,218 +3384,175 @@ L_text40_get_char_84:
     LI T6, 0
     SLTU T5, T6, T0
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t0 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE S3, SB, SC
-; Spill t9 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T5, SB, SC
-; Reload t9 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T3, SB, SC
-    BEQ T3, R0, L_text40_get_char_86
+    BEQ T5, R0, L_text40_get_char_86
 ; Branch to L_text40_get_char_86 if condition is false
     BEQ R0, R0, L_text40_get_char_85
 ; Unconditional branch to L_text40_get_char_85 (condition was true)
 L_text40_get_char_85:
 ; Reload t0 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    LOAD T2, SB, SC
-    LI T4, 0
-    ADD T0, T2, T4
-    LI T6, 40
-    SLT T0, T0, T6
-    LI T1, 0
-    XOR S2, T0, T1
-    LI S1, 0
-    SLTU T0, S1, S2
+    ADDI SC, FP, 12
+    LOAD T3, SB, SC
+    LI T2, 0
+    ADD T4, T3, T2
+    LI T0, 40
+    SLT T4, T4, T0
+    LI T6, 0
+    XOR T1, T4, T6
+    LI T5, 0
+    SLTU T4, T5, T1
 ; Recompute alloca t6 at FP+2
-    ADD S0, FP, R0
-    ADDI S0, S0, 2
-    STORE T0, SB, S0
+    ADD S2, FP, R0
+    ADDI S2, S2, 2
+    STORE T4, SB, S2
 ; Spill t0 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    STORE T2, SB, SC
+    ADDI SC, FP, 12
+    STORE T3, SB, SC
     BEQ R0, R0, L_text40_get_char_87
 ; Unconditional branch to L_text40_get_char_87
 L_text40_get_char_86:
-    LI T7, 0
+    LI S1, 0
 ; Recompute alloca t6 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
-    STORE T7, SB, S3
+    ADD S0, FP, R0
+    ADDI S0, S0, 2
+    STORE S1, SB, S0
     BEQ R0, R0, L_text40_get_char_87
 ; Unconditional branch to L_text40_get_char_87
 L_text40_get_char_87:
 ; Load instruction: t13 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+2
-    ADD T5, FP, R0
-    ADDI T5, T5, 2
+    ADD T7, FP, R0
+    ADDI T7, T7, 2
 ; LOAD: Pointer load_src_ptr_f36_op11_t13 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T5
-    LI T4, 0
-    XOR T6, T3, T4
-    LI S2, 0
-    SLTU T3, S2, T6
-; Spill t14 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T3, SB, SC
-; Reload t14 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD S1, SB, SC
-    BEQ S1, R0, L_text40_get_char_89
+    LOAD S3, SB, T7
+    LI T2, 0
+    XOR T0, S3, T2
+    LI T1, 0
+    SLTU S3, T1, T0
+    BEQ S3, R0, L_text40_get_char_89
 ; Branch to L_text40_get_char_89 if condition is false
     BEQ R0, R0, L_text40_get_char_88
 ; Unconditional branch to L_text40_get_char_88 (condition was true)
 L_text40_get_char_88:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T1, SB, SC
-    LI T0, 0
-    ADD T2, T1, T0
+    ADDI SC, FP, 11
+    LOAD T5, SB, SC
+    LI T6, 0
+    ADD T4, T5, T6
+    LI T3, 0
+    SLT S2, T4, T3
+    LI S1, 1
+    SUB T4, S1, S2
     LI S0, 0
-    SLT T7, T2, S0
-    LI S3, 1
-    SUB T2, S3, T7
-    LI T5, 0
-    XOR T6, T2, T5
-    LI S2, 0
-    SLTU T2, S2, T6
+    XOR T7, T4, S0
+    LI T0, 0
+    SLTU T4, T0, T7
 ; Recompute alloca t5 at FP+1
-    ADD T4, FP, R0
-    ADDI T4, T4, 1
-    STORE T2, SB, T4
+    ADD T1, FP, R0
+    ADDI T1, T1, 1
+    STORE T4, SB, T1
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T1, SB, SC
+    ADDI SC, FP, 11
+    STORE T5, SB, SC
     BEQ R0, R0, L_text40_get_char_90
 ; Unconditional branch to L_text40_get_char_90
 L_text40_get_char_89:
-    LI T3, 0
+    LI T2, 0
 ; Recompute alloca t5 at FP+1
-    ADD S1, FP, R0
-    ADDI S1, S1, 1
-    STORE T3, SB, S1
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    STORE T2, SB, S3
     BEQ R0, R0, L_text40_get_char_90
 ; Unconditional branch to L_text40_get_char_90
 L_text40_get_char_90:
 ; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Recompute alloca t5 at FP+1
-    ADD T0, FP, R0
-    ADDI T0, T0, 1
+    ADD T6, FP, R0
+    ADDI T6, T6, 1
 ; LOAD: Pointer load_src_ptr_f36_op22_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, T0
-    LI S3, 0
-    XOR S0, T7, S3
-    LI T6, 0
-    SLTU T7, T6, S0
-; Spill t19 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    STORE T7, SB, SC
-; Reload t19 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD S2, SB, SC
+    LOAD S2, SB, T6
+    LI S1, 0
+    XOR T3, S2, S1
+    LI T7, 0
+    SLTU S2, T7, T3
     BEQ S2, R0, L_text40_get_char_92
 ; Branch to L_text40_get_char_92 if condition is false
     BEQ R0, R0, L_text40_get_char_91
 ; Unconditional branch to L_text40_get_char_91 (condition was true)
 L_text40_get_char_91:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T5, SB, SC
-    LI T2, 0
-    ADD T1, T5, T2
-    LI T4, 25
-    SLT T1, T1, T4
-    LI T3, 0
-    XOR S1, T1, T3
-    LI T0, 0
-    SLTU T1, T0, S1
+    ADDI SC, FP, 11
+    LOAD T0, SB, SC
+    LI S0, 0
+    ADD T4, T0, S0
+    LI T5, 25
+    SLT T4, T4, T5
+    LI T1, 0
+    XOR T2, T4, T1
+    LI S3, 0
+    SLTU T4, S3, T2
 ; Recompute alloca t4 at FP+0
-    ADD S0, FP, R0
-    STORE T1, SB, S0
+    ADD T6, FP, R0
+    STORE T4, SB, T6
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T5, SB, SC
+    ADDI SC, FP, 11
+    STORE T0, SB, SC
     BEQ R0, R0, L_text40_get_char_93
 ; Unconditional branch to L_text40_get_char_93
 L_text40_get_char_92:
-    LI T6, 0
+    LI T3, 0
 ; Recompute alloca t4 at FP+0
-    ADD S3, FP, R0
-    STORE T6, SB, S3
+    ADD T7, FP, R0
+    STORE T3, SB, T7
     BEQ R0, R0, L_text40_get_char_93
 ; Unconditional branch to L_text40_get_char_93
 L_text40_get_char_93:
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Recompute alloca t4 at FP+0
-    ADD T7, FP, R0
+    ADD S1, FP, R0
 ; LOAD: Pointer load_src_ptr_f36_op31_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S2, SB, T7
+    LOAD S2, SB, S1
+    LI S0, 0
+    XOR T5, S2, S0
     LI T2, 0
-    XOR T4, S2, T2
-    LI S1, 0
-    SLTU S2, S1, T4
-; Spill t24 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE S2, SB, SC
-; Reload t24 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD T0, SB, SC
-    BEQ T0, R0, L_text40_get_char_96
+    SLTU S2, T2, T5
+    BEQ S2, R0, L_text40_get_char_96
 ; Branch to L_text40_get_char_96 if condition is false
     BEQ R0, R0, L_text40_get_char_94
 ; Unconditional branch to L_text40_get_char_94 (condition was true)
 L_text40_get_char_94:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T3, SB, SC
+    ADDI SC, FP, 11
+    LOAD S3, SB, SC
     LI T1, 0
-    ADD T3, T3, T1
-    LI T5, 40
-    MUL T3, T3, T5
-    LI S0, 32
-    ADD S0, S0, T3
+    ADD S3, S3, T1
+    LI T4, 40
+    MUL S3, S3, T4
+    LI T0, 32
+    ADD T0, T0, S3
 ; Reload t0 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     LOAD T6, SB, SC
-    LI S3, 0
-    ADD T6, T6, S3
-    ADD S0, S0, T6
+    LI T3, 0
+    ADD T6, T6, T3
+    ADD T0, T0, T6
     LI T7, 0
-    ADD S0, S0, T7
-    ADD A0, S0, R0
+    ADD T0, T0, T7
+    ADD A0, T0, R0
 ; Spill live registers before call
-; Spill t32 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE S0, SB, SC
+; Spill t32 to slot 2
+    ADDI SC, FP, 13
+    STORE T0, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
@@ -3914,13 +3560,13 @@ L_text40_get_char_94:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t33
-; Copy Rv0 to allocatable T4
-    ADD T4, RV0, R0
-    LI S1, 0
-    ADD T4, T4, S1
+; Copy Rv0 to allocatable S1
+    ADD S1, RV0, R0
+    LI T5, 0
+    ADD S1, S1, T5
     LI T2, 255
-    AND T4, T4, T2
-    MOVE RV0, T4
+    AND S1, S1, T2
+    MOVE RV0, S1
 ; Jump to epilogue
     BEQ R0, R0, L_text40_get_char_99999
 L_text40_get_char_96:
@@ -3999,218 +3645,175 @@ L_text40_get_attr_97:
     LI T6, 0
     SLTU T5, T6, T0
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t0 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE S3, SB, SC
-; Spill t9 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T5, SB, SC
-; Reload t9 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T3, SB, SC
-    BEQ T3, R0, L_text40_get_attr_99
+    BEQ T5, R0, L_text40_get_attr_99
 ; Branch to L_text40_get_attr_99 if condition is false
     BEQ R0, R0, L_text40_get_attr_98
 ; Unconditional branch to L_text40_get_attr_98 (condition was true)
 L_text40_get_attr_98:
 ; Reload t0 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    LOAD T2, SB, SC
-    LI T4, 0
-    ADD T0, T2, T4
-    LI T6, 40
-    SLT T0, T0, T6
-    LI T1, 0
-    XOR S2, T0, T1
-    LI S1, 0
-    SLTU T0, S1, S2
+    ADDI SC, FP, 12
+    LOAD T3, SB, SC
+    LI T2, 0
+    ADD T4, T3, T2
+    LI T0, 40
+    SLT T4, T4, T0
+    LI T6, 0
+    XOR T1, T4, T6
+    LI T5, 0
+    SLTU T4, T5, T1
 ; Recompute alloca t6 at FP+2
-    ADD S0, FP, R0
-    ADDI S0, S0, 2
-    STORE T0, SB, S0
+    ADD S2, FP, R0
+    ADDI S2, S2, 2
+    STORE T4, SB, S2
 ; Spill t0 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    STORE T2, SB, SC
+    ADDI SC, FP, 12
+    STORE T3, SB, SC
     BEQ R0, R0, L_text40_get_attr_100
 ; Unconditional branch to L_text40_get_attr_100
 L_text40_get_attr_99:
-    LI T7, 0
+    LI S1, 0
 ; Recompute alloca t6 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
-    STORE T7, SB, S3
+    ADD S0, FP, R0
+    ADDI S0, S0, 2
+    STORE S1, SB, S0
     BEQ R0, R0, L_text40_get_attr_100
 ; Unconditional branch to L_text40_get_attr_100
 L_text40_get_attr_100:
 ; Load instruction: t13 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+2
-    ADD T5, FP, R0
-    ADDI T5, T5, 2
+    ADD T7, FP, R0
+    ADDI T7, T7, 2
 ; LOAD: Pointer load_src_ptr_f38_op11_t13 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T3, SB, T5
-    LI T4, 0
-    XOR T6, T3, T4
-    LI S2, 0
-    SLTU T3, S2, T6
-; Spill t14 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE T3, SB, SC
-; Reload t14 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD S1, SB, SC
-    BEQ S1, R0, L_text40_get_attr_102
+    LOAD S3, SB, T7
+    LI T2, 0
+    XOR T0, S3, T2
+    LI T1, 0
+    SLTU S3, T1, T0
+    BEQ S3, R0, L_text40_get_attr_102
 ; Branch to L_text40_get_attr_102 if condition is false
     BEQ R0, R0, L_text40_get_attr_101
 ; Unconditional branch to L_text40_get_attr_101 (condition was true)
 L_text40_get_attr_101:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T1, SB, SC
-    LI T0, 0
-    ADD T2, T1, T0
+    ADDI SC, FP, 11
+    LOAD T5, SB, SC
+    LI T6, 0
+    ADD T4, T5, T6
+    LI T3, 0
+    SLT S2, T4, T3
+    LI S1, 1
+    SUB T4, S1, S2
     LI S0, 0
-    SLT T7, T2, S0
-    LI S3, 1
-    SUB T2, S3, T7
-    LI T5, 0
-    XOR T6, T2, T5
-    LI S2, 0
-    SLTU T2, S2, T6
+    XOR T7, T4, S0
+    LI T0, 0
+    SLTU T4, T0, T7
 ; Recompute alloca t5 at FP+1
-    ADD T4, FP, R0
-    ADDI T4, T4, 1
-    STORE T2, SB, T4
+    ADD T1, FP, R0
+    ADDI T1, T1, 1
+    STORE T4, SB, T1
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T1, SB, SC
+    ADDI SC, FP, 11
+    STORE T5, SB, SC
     BEQ R0, R0, L_text40_get_attr_103
 ; Unconditional branch to L_text40_get_attr_103
 L_text40_get_attr_102:
-    LI T3, 0
+    LI T2, 0
 ; Recompute alloca t5 at FP+1
-    ADD S1, FP, R0
-    ADDI S1, S1, 1
-    STORE T3, SB, S1
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
+    STORE T2, SB, S3
     BEQ R0, R0, L_text40_get_attr_103
 ; Unconditional branch to L_text40_get_attr_103
 L_text40_get_attr_103:
 ; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(5), bank: Stack })
 ; Recompute alloca t5 at FP+1
-    ADD T0, FP, R0
-    ADDI T0, T0, 1
+    ADD T6, FP, R0
+    ADDI T6, T6, 1
 ; LOAD: Pointer load_src_ptr_f38_op22_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, T0
-    LI S3, 0
-    XOR S0, T7, S3
-    LI T6, 0
-    SLTU T7, T6, S0
-; Spill t19 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    STORE T7, SB, SC
-; Reload t19 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
-    LOAD S2, SB, SC
+    LOAD S2, SB, T6
+    LI S1, 0
+    XOR T3, S2, S1
+    LI T7, 0
+    SLTU S2, T7, T3
     BEQ S2, R0, L_text40_get_attr_105
 ; Branch to L_text40_get_attr_105 if condition is false
     BEQ R0, R0, L_text40_get_attr_104
 ; Unconditional branch to L_text40_get_attr_104 (condition was true)
 L_text40_get_attr_104:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T5, SB, SC
-    LI T2, 0
-    ADD T1, T5, T2
-    LI T4, 25
-    SLT T1, T1, T4
-    LI T3, 0
-    XOR S1, T1, T3
-    LI T0, 0
-    SLTU T1, T0, S1
+    ADDI SC, FP, 11
+    LOAD T0, SB, SC
+    LI S0, 0
+    ADD T4, T0, S0
+    LI T5, 25
+    SLT T4, T4, T5
+    LI T1, 0
+    XOR T2, T4, T1
+    LI S3, 0
+    SLTU T4, S3, T2
 ; Recompute alloca t4 at FP+0
-    ADD S0, FP, R0
-    STORE T1, SB, S0
+    ADD T6, FP, R0
+    STORE T4, SB, T6
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T5, SB, SC
+    ADDI SC, FP, 11
+    STORE T0, SB, SC
     BEQ R0, R0, L_text40_get_attr_106
 ; Unconditional branch to L_text40_get_attr_106
 L_text40_get_attr_105:
-    LI T6, 0
+    LI T3, 0
 ; Recompute alloca t4 at FP+0
-    ADD S3, FP, R0
-    STORE T6, SB, S3
+    ADD T7, FP, R0
+    STORE T3, SB, T7
     BEQ R0, R0, L_text40_get_attr_106
 ; Unconditional branch to L_text40_get_attr_106
 L_text40_get_attr_106:
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(4), bank: Stack })
 ; Recompute alloca t4 at FP+0
-    ADD T7, FP, R0
+    ADD S1, FP, R0
 ; LOAD: Pointer load_src_ptr_f38_op31_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD S2, SB, T7
+    LOAD S2, SB, S1
+    LI S0, 0
+    XOR T5, S2, S0
     LI T2, 0
-    XOR T4, S2, T2
-    LI S1, 0
-    SLTU S2, S1, T4
-; Spill t24 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE S2, SB, SC
-; Reload t24 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD T0, SB, SC
-    BEQ T0, R0, L_text40_get_attr_109
+    SLTU S2, T2, T5
+    BEQ S2, R0, L_text40_get_attr_109
 ; Branch to L_text40_get_attr_109 if condition is false
     BEQ R0, R0, L_text40_get_attr_107
 ; Unconditional branch to L_text40_get_attr_107 (condition was true)
 L_text40_get_attr_107:
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T3, SB, SC
+    ADDI SC, FP, 11
+    LOAD S3, SB, SC
     LI T1, 0
-    ADD T3, T3, T1
-    LI T5, 40
-    MUL T3, T3, T5
-    LI S0, 32
-    ADD S0, S0, T3
+    ADD S3, S3, T1
+    LI T4, 40
+    MUL S3, S3, T4
+    LI T0, 32
+    ADD T0, T0, S3
 ; Reload t0 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     LOAD T6, SB, SC
-    LI S3, 0
-    ADD T6, T6, S3
-    ADD S0, S0, T6
+    LI T3, 0
+    ADD T6, T6, T3
+    ADD T0, T0, T6
     LI T7, 0
-    ADD S0, S0, T7
-    ADD A0, S0, R0
+    ADD T0, T0, T7
+    ADD A0, T0, R0
 ; Spill live registers before call
-; Spill t32 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE S0, SB, SC
+; Spill t32 to slot 2
+    ADDI SC, FP, 13
+    STORE T0, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
@@ -4218,15 +3821,15 @@ L_text40_get_attr_107:
 ; Call function mmio_read
     CALL mmio_read
 ; Scalar return value for t33
-; Copy Rv0 to allocatable T4
-    ADD T4, RV0, R0
-    LI S1, 0
-    ADD T4, T4, S1
+; Copy Rv0 to allocatable S1
+    ADD S1, RV0, R0
+    LI T5, 0
+    ADD S1, S1, T5
     LI T2, 8
-    SRL T4, T4, T2
-    LI S2, 255
-    AND T4, T4, S2
-    MOVE RV0, T4
+    SRL S1, S1, T2
+    LI S0, 255
+    AND S1, S1, S0
+    MOVE RV0, S1
 ; Jump to epilogue
     BEQ R0, R0, L_text40_get_attr_99999
 L_text40_get_attr_109:
@@ -4292,8 +3895,7 @@ L_key_pressed_110:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill t2 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -4369,8 +3971,7 @@ L_key_up_pressed_111:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f42_op0_10 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -4440,8 +4041,7 @@ L_key_down_pressed_112:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f44_op0_11 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -4511,8 +4111,7 @@ L_key_left_pressed_113:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f46_op0_12 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -4582,8 +4181,7 @@ L_key_right_pressed_114:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f48_op0_13 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -4653,8 +4251,7 @@ L_key_z_pressed_115:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f50_op0_14 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -4724,8 +4321,7 @@ L_key_x_pressed_116:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f52_op0_15 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -4916,12 +4512,10 @@ L_rgb565_set_pixel_118:
     ADD A1, S1, R0
 ; Spill live registers before call
 ; Spill t21 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE T2, SB, SC
 ; Spill t22 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S1, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5013,28 +4607,22 @@ L_rgb565_fill_rect_119:
     LI T3, 0
     ADD T6, T6, T3
 ; Spill t14 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S0, SB, SC
 ; Spill t19 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S1, SB, SC
 ; Spill t22 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE S3, SB, SC
 ; Spill t25 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S2, SB, SC
 ; Spill t28 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE T7, SB, SC
 ; Spill t29 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE T6, SB, SC
     BEQ R0, R0, L_rgb565_fill_rect_120
 ; Unconditional branch to L_rgb565_fill_rect_120
@@ -5047,8 +4635,7 @@ L_rgb565_fill_rect_120:
 ; LOAD: Using bank register Sb for load
     LOAD T1, SB, T2
 ; Reload t14 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     LOAD T0, SB, SC
     SLTU T1, T1, T0
     LI T4, 0
@@ -5056,59 +4643,40 @@ L_rgb565_fill_rect_120:
     LI T5, 0
     SLTU T1, T5, T3
 ; Spill t14 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE T0, SB, SC
-; Spill t16 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE T1, SB, SC
-; Reload t16 from slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD S0, SB, SC
-    BEQ S0, R0, L_rgb565_fill_rect_123
+    BEQ T1, R0, L_rgb565_fill_rect_123
 ; Branch to L_rgb565_fill_rect_123 if condition is false
     BEQ R0, R0, L_rgb565_fill_rect_121
 ; Unconditional branch to L_rgb565_fill_rect_121 (condition was true)
 L_rgb565_fill_rect_121:
-    ADD S1, FP, R0
-    ADDI S1, S1, 1
-    LI S3, 0
-    STORE S3, SB, S1
+    ADD S0, FP, R0
+    ADDI S0, S0, 1
+    LI S1, 0
+    STORE S1, SB, S0
     BEQ R0, R0, L_rgb565_fill_rect_124
 ; Unconditional branch to L_rgb565_fill_rect_124
 L_rgb565_fill_rect_124:
 ; Load instruction: t18 = load FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; Recompute alloca t17 at FP+1
-    ADD S2, FP, R0
-    ADDI S2, S2, 1
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
 ; LOAD: Pointer load_src_ptr_f58_op14_t18 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, S2
+    LOAD S2, SB, S3
 ; Reload t19 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    LOAD T6, SB, SC
-    SLTU T7, T7, T6
-    LI T3, 0
-    XOR T5, T7, T3
-    LI T4, 0
-    SLTU T7, T4, T5
+    ADDI SC, FP, 11
+    LOAD T7, SB, SC
+    SLTU S2, S2, T7
+    LI T6, 0
+    XOR T3, S2, T6
+    LI T5, 0
+    SLTU S2, T5, T3
 ; Spill t19 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
-    STORE T6, SB, SC
-; Spill t21 to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
+    ADDI SC, FP, 11
     STORE T7, SB, SC
-; Reload t21 from slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    LOAD T2, SB, SC
-    BEQ T2, R0, L_rgb565_fill_rect_127
+    BEQ S2, R0, L_rgb565_fill_rect_127
 ; Branch to L_rgb565_fill_rect_127 if condition is false
     BEQ R0, R0, L_rgb565_fill_rect_125
 ; Unconditional branch to L_rgb565_fill_rect_125 (condition was true)
@@ -5116,65 +4684,55 @@ L_rgb565_fill_rect_125:
 ; Load instruction: t23 = load FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; Recompute alloca t17 at FP+1
-    ADD T0, FP, R0
-    ADDI T0, T0, 1
+    ADD T4, FP, R0
+    ADDI T4, T4, 1
 ; LOAD: Pointer load_src_ptr_f58_op18_t23 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T1, SB, T0
+    LOAD T1, SB, T4
 ; Reload t22 from slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    LOAD S0, SB, SC
-    ADD S3, S0, T1
+    ADDI SC, FP, 12
+    LOAD T2, SB, SC
+    ADD T0, T2, T1
 ; Load instruction: t26 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Recompute alloca t12 at FP+0
     ADD S1, FP, R0
 ; LOAD: Pointer load_src_ptr_f58_op20_t26 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T5, SB, S1
+    LOAD S0, SB, S1
 ; Reload t25 from slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    LOAD T4, SB, SC
-    ADD T3, T4, T5
-    ADD A0, S3, R0
-    ADD A1, T3, R0
+    ADDI SC, FP, 13
+    LOAD T3, SB, SC
+    ADD T5, T3, S0
+    ADD A0, T0, R0
+    ADD A1, T5, R0
 ; Reload t28 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    LOAD S2, SB, SC
-    ADD A2, S2, R0
-; Reload t29 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 14
     LOAD T6, SB, SC
-    ADD A3, T6, R0
+    ADD A2, T6, R0
+; Reload t29 from slot 5
+    ADDI SC, FP, 15
+    LOAD S2, SB, SC
+    ADD A3, S2, R0
 ; Spill live registers before call
 ; Spill t22 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
-    STORE S0, SB, SC
+    ADDI SC, FP, 12
+    STORE T2, SB, SC
 ; Spill t25 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
-    STORE T4, SB, SC
-; Spill t24 to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE S3, SB, SC
-; Spill t27 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
+    ADDI SC, FP, 13
     STORE T3, SB, SC
+; Spill t24 to slot 6
+    ADDI SC, FP, 16
+    STORE T0, SB, SC
+; Spill t27 to slot 7
+    ADDI SC, FP, 17
+    STORE T5, SB, SC
 ; Spill t28 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
-    STORE S2, SB, SC
-; Spill t29 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 14
     STORE T6, SB, SC
+; Spill t29 to slot 5
+    ADDI SC, FP, 15
+    STORE S2, SB, SC
 ; Set SP = FP+30 so callee frame is above spills
     ADDI SP, FP, 30
 ; Setting up 4 register arguments
@@ -5190,14 +4748,14 @@ L_rgb565_fill_rect_126:
 ; Load instruction: t30 = load FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(17), bank: Stack })
 ; Recompute alloca t17 at FP+1
-    ADD T7, FP, R0
-    ADDI T7, T7, 1
+    ADD S3, FP, R0
+    ADDI S3, S3, 1
 ; LOAD: Pointer load_src_ptr_f58_op22_t30 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T2, SB, T7
+    LOAD T7, SB, S3
     LI T1, 1
-    ADD T2, T2, T1
-    STORE T2, SB, T7
+    ADD T7, T7, T1
+    STORE T7, SB, S3
     BEQ R0, R0, L_rgb565_fill_rect_124
 ; Unconditional branch to L_rgb565_fill_rect_124
 L_rgb565_fill_rect_127:
@@ -5207,13 +4765,13 @@ L_rgb565_fill_rect_122:
 ; Load instruction: t33 = load FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(12), bank: Stack })
 ; Recompute alloca t12 at FP+0
-    ADD T5, FP, R0
+    ADD S0, FP, R0
 ; LOAD: Pointer load_src_ptr_f58_op25_t33 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T0, SB, T5
-    LI S0, 1
-    ADD T0, T0, S0
-    STORE T0, SB, T5
+    LOAD T4, SB, S0
+    LI T2, 1
+    ADD T4, T4, T2
+    STORE T4, SB, S0
     BEQ R0, R0, L_rgb565_fill_rect_120
 ; Unconditional branch to L_rgb565_fill_rect_120
 L_rgb565_fill_rect_123:
@@ -5279,12 +4837,10 @@ L_storage_set_block_128:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f60_op1_17 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5355,12 +4911,10 @@ L_storage_set_addr_129:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f62_op1_18 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5426,8 +4980,7 @@ L_storage_read_130:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f64_op0_19 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5502,12 +5055,10 @@ L_storage_write_131:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f66_op1_19 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5573,8 +5124,7 @@ L_storage_get_status_132:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f68_op0_20 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5646,12 +5196,10 @@ L_storage_commit_133:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f70_op0_20 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill t0 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5719,12 +5267,10 @@ L_storage_commit_all_134:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f72_op0_20 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill t0 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5935,16 +5481,13 @@ L_storage_write_at_137:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S1, SB, SC
 ; Spill t6 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5953,16 +5496,14 @@ L_storage_write_at_137:
 ; Call function storage_set_block
     CALL storage_set_block
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     LOAD T7, SB, SC
     LI T6, 0
     ADD T7, T7, T6
     ADD A0, T7, R0
 ; Spill live registers before call
 ; Spill t7 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE T7, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -5971,16 +5512,14 @@ L_storage_write_at_137:
 ; Call function storage_set_addr
     CALL storage_set_addr
 ; Reload t2 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     LOAD T5, SB, SC
     LI T4, 0
     ADD T5, T5, T4
     ADD A0, T5, R0
 ; Spill live registers before call
 ; Spill t8 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE T5, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -6050,12 +5589,10 @@ L_storage_read_at_138:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill t4 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -6064,16 +5601,14 @@ L_storage_read_at_138:
 ; Call function storage_set_block
     CALL storage_set_block
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     LOAD S0, SB, SC
     LI T7, 0
     ADD S0, S0, T7
     ADD A0, S0, R0
 ; Spill live registers before call
 ; Spill t5 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S0, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -6161,26 +5696,23 @@ L_storage_write_buffer_139:
     ADD T4, SB, R0
     LI T3, -1536
     ADDI T5, T5, 1
-    BNE T5, T3, L_i32_memory_next_word_be2d665cb79142bcbc39d595c760a946_82_0
+    BNE T5, T3, L_i32_memory_next_word_8da831952a1248bfa43f9a95e3e2ae8a_82_0
     LI T5, 0
     ADDI T4, T4, 1
-L_i32_memory_next_word_be2d665cb79142bcbc39d595c760a946_82_0:
+L_i32_memory_next_word_8da831952a1248bfa43f9a95e3e2ae8a_82_0:
     STORE S0, T4, T5
     LI T2, 0
     ADD S3, S3, T2
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t3 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE T7, SB, SC
 ; Spill t8 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S3, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -6189,16 +5721,14 @@ L_i32_memory_next_word_be2d665cb79142bcbc39d595c760a946_82_0:
 ; Call function storage_set_block
     CALL storage_set_block
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD T1, SB, SC
     LI T0, 0
     ADD T1, T1, T0
     ADD A0, T1, R0
 ; Spill live registers before call
 ; Spill t9 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE T1, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -6211,14 +5741,12 @@ L_i32_memory_next_word_be2d665cb79142bcbc39d595c760a946_82_0:
     LI T4, 0
     STORE T4, SB, T5
 ; Reload t3 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     LOAD T3, SB, SC
     LI S0, 0
     ADD T3, T3, S0
 ; Spill t12 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE T3, SB, SC
     BEQ R0, R0, L_storage_write_buffer_140
 ; Unconditional branch to L_storage_write_buffer_140
@@ -6232,8 +5760,7 @@ L_storage_write_buffer_140:
 ; LOAD: Using bank register Sb for load
     LOAD T2, SB, S1
 ; Reload t12 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     LOAD S2, SB, SC
     SLTU T2, T2, S2
     LI T7, 0
@@ -6241,18 +5768,9 @@ L_storage_write_buffer_140:
     LI S3, 0
     SLTU T2, S3, T6
 ; Spill t12 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE S2, SB, SC
-; Spill t14 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE T2, SB, SC
-; Reload t14 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD T0, SB, SC
-    BEQ T0, R0, L_storage_write_buffer_143
+    BEQ T2, R0, L_storage_write_buffer_143
 ; Branch to L_storage_write_buffer_143 if condition is false
     BEQ R0, R0, L_storage_write_buffer_141
 ; Unconditional branch to L_storage_write_buffer_141 (condition was true)
@@ -6260,234 +5778,94 @@ L_storage_write_buffer_141:
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+0
-    ADD T1, FP, R0
+    ADD T0, FP, R0
 ; LOAD: Pointer load_src_ptr_f82_op18_t15 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, T1
-    ADD S0, T1, R0
-    ADD T5, SB, R0
-    LI T3, -1536
+    LOAD T1, SB, T0
+    ADD T4, T0, R0
+    ADD S0, SB, R0
+    LI T5, -1536
+    ADDI T4, T4, 1
+    BNE T4, T5, L_i32_memory_next_word_8da831952a1248bfa43f9a95e3e2ae8a_82_1
+    LI T4, 0
     ADDI S0, S0, 1
-    BNE S0, T3, L_i32_memory_next_word_be2d665cb79142bcbc39d595c760a946_82_1
-    LI S0, 0
-    ADDI T5, T5, 1
-L_i32_memory_next_word_be2d665cb79142bcbc39d595c760a946_82_1:
-    LOAD T6, T5, S0
-; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
+L_i32_memory_next_word_8da831952a1248bfa43f9a95e3e2ae8a_82_1:
+    LOAD T3, S0, T4
+; Bank value in T3 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
+    ADD T6, FP, R0
+    ADDI T6, T6, 2
 ; LOAD: Pointer load_src_ptr_f82_op24_t16 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, S3
-    LI S1, 0
+    LOAD S3, SB, T6
+; GEP: zero-extended native displacement
+    LI T2, -1
+    BEQ T3, T2, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_2_use_global
+    LI T2, -2
+    BEQ T3, T2, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_2_use_stack
+    ADD T7, T3, R0
+    BEQ R0, R0, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_2_done
+L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_2_use_global:
+    ADD T7, GP, R0
+    BEQ R0, R0, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_2_done
+L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_2_use_stack:
+    ADD T7, SB, R0
+L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_2_done:
+    ADD S1, T1, R0
     ADD S2, T7, R0
-    ADD T2, S1, R0
-; GEP: native narrow displacement, wide fallback
-    LI S0, -1
-    BEQ T6, S0, L_bc_be2d665cb79142bcbc39d595c760a946_82_2_use_global
-    LI S0, -2
-    BEQ T6, S0, L_bc_be2d665cb79142bcbc39d595c760a946_82_2_use_stack
-    ADD T0, T6, R0
-    BEQ R0, R0, L_bc_be2d665cb79142bcbc39d595c760a946_82_2_done
-L_bc_be2d665cb79142bcbc39d595c760a946_82_2_use_global:
-    ADD T0, GP, R0
-    BEQ R0, R0, L_bc_be2d665cb79142bcbc39d595c760a946_82_2_done
-L_bc_be2d665cb79142bcbc39d595c760a946_82_2_use_stack:
-    ADD T0, SB, R0
-L_bc_be2d665cb79142bcbc39d595c760a946_82_2_done:
-    ADD T5, T4, R0
-    ADD T3, T0, R0
-    LI T7, -3
-    BNE T3, T7, L_i32_pointer_nonnull_be2d665cb79142bcbc39d595c760a946_82_3
-    LI T5, 0
-    LI T3, 0
-L_i32_pointer_nonnull_be2d665cb79142bcbc39d595c760a946_82_3:
-    MOVE S1, S2
-    MOVE S0, T2
-; Spill t15 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE T4, SB, SC
-; Spill load_f82_op23_t15_bank_val to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE T6, SB, SC
-; Spill load_f82_op23_t15_bank_val to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T6, SB, SC
-; Spill pointer_value_resolved_bank_82_f82_op27 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
-    STORE T0, SB, SC
-; Spill pointer_null_tag_82_f82_op31 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
-    STORE T7, SB, SC
-; Spill t17 to slot 11
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
-    STORE S2, SB, SC
-    LI S2, -1536
-    SLTU T7, T5, S2
-    BEQ T7, R0, L_i32_gep_wide_offset_be2d665cb79142bcbc39d595c760a946_82_9
-    BEQ S0, R0, L_i32_gep_positive_word_be2d665cb79142bcbc39d595c760a946_82_4
-    LI T7, -1
-    BEQ S0, T7, L_i32_gep_negative_word_be2d665cb79142bcbc39d595c760a946_82_5
-    BEQ R0, R0, L_i32_gep_wide_offset_be2d665cb79142bcbc39d595c760a946_82_9
-L_i32_gep_positive_word_be2d665cb79142bcbc39d595c760a946_82_4:
-    SLTU T7, S1, S2
-    BNE T7, R0, L_i32_gep_native_add_be2d665cb79142bcbc39d595c760a946_82_6
-    DIV T7, S1, S2
-    ADD T3, T3, T7
-    MOD S1, S1, S2
-L_i32_gep_native_add_be2d665cb79142bcbc39d595c760a946_82_6:
-    ADD T7, T5, S1
-    SLTU T0, T7, T5
-    MOVE T5, T7
-    BNE T0, R0, L_i32_gep_native_carry_be2d665cb79142bcbc39d595c760a946_82_7
-    SLTU T7, T5, S2
-    BNE T7, R0, L_i32_gep_offset_done_be2d665cb79142bcbc39d595c760a946_82_14
-L_i32_gep_native_carry_be2d665cb79142bcbc39d595c760a946_82_7:
-    SUB T5, T5, S2
-    ADDI T3, T3, 1
-    BEQ R0, R0, L_i32_gep_offset_done_be2d665cb79142bcbc39d595c760a946_82_14
-L_i32_gep_negative_word_be2d665cb79142bcbc39d595c760a946_82_5:
-    BEQ S1, R0, L_i32_gep_wide_offset_be2d665cb79142bcbc39d595c760a946_82_9
-    LI T7, 2
-    SLTU T7, T3, T7
-    BNE T7, R0, L_i32_gep_wide_offset_be2d665cb79142bcbc39d595c760a946_82_9
-    SUB S1, R0, S1
-    SLTU T7, S1, S2
-    BNE T7, R0, L_i32_gep_native_subtract_be2d665cb79142bcbc39d595c760a946_82_8
-    DIV T7, S1, S2
-    SUB T3, T3, T7
-    MOD S1, S1, S2
-L_i32_gep_native_subtract_be2d665cb79142bcbc39d595c760a946_82_8:
-    SLTU T0, T5, S1
-    SUB T5, T5, S1
-    BEQ T0, R0, L_i32_gep_offset_done_be2d665cb79142bcbc39d595c760a946_82_14
-    ADD T5, T5, S2
-    ADDI T3, T3, -1
-    BEQ R0, R0, L_i32_gep_offset_done_be2d665cb79142bcbc39d595c760a946_82_14
-L_i32_gep_wide_offset_be2d665cb79142bcbc39d595c760a946_82_9:
-    ADD T7, S1, T5
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, T0
-    LI T4, 9
-    SLL T1, T3, T4
-    LI T4, 7
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 11
-    SLL T1, T3, T4
-    LI T4, 5
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 12
-    SLL T1, T3, T4
-    LI T4, 4
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 13
-    SLL T1, T3, T4
-    LI T4, 3
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 14
-    SLL T1, T3, T4
-    LI T4, 2
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 15
-    SLL T1, T3, T4
-    LI T4, 1
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T5, 0
-    LI T1, 0
-    LI S3, 0
-    LI T4, 32
-    LI T6, 1
-L_i32_gep_divide_be2d665cb79142bcbc39d595c760a946_82_10:
-    SLT T7, S0, R0
-    SLT T0, T1, R0
-    ADD T1, T1, T1
-    OR T1, T1, T7
-    ADD S3, S3, S3
-    OR S3, S3, T0
-    SLT T0, S1, R0
-    ADD S1, S1, S1
-    ADD S0, S0, S0
-    OR S0, S0, T0
-    ADD T5, T5, T5
-    BNE S3, R0, L_i32_gep_divide_ge_be2d665cb79142bcbc39d595c760a946_82_11
-    SLTU T0, T1, S2
-    BNE T0, R0, L_i32_gep_divide_next_be2d665cb79142bcbc39d595c760a946_82_12
-L_i32_gep_divide_ge_be2d665cb79142bcbc39d595c760a946_82_11:
-    SLTU T0, T1, S2
-    SUB T1, T1, S2
-    SUB S3, S3, T0
-    OR T5, T5, T6
-L_i32_gep_divide_next_be2d665cb79142bcbc39d595c760a946_82_12:
-    SUB T4, T4, T6
-    BEQ T4, R0, L_i32_gep_divide_done_be2d665cb79142bcbc39d595c760a946_82_13
-    BEQ R0, R0, L_i32_gep_divide_be2d665cb79142bcbc39d595c760a946_82_10
-L_i32_gep_divide_done_be2d665cb79142bcbc39d595c760a946_82_13:
-    MOVE T3, T5
-    MOVE T5, T1
-L_i32_gep_offset_done_be2d665cb79142bcbc39d595c760a946_82_14:
+    LI T4, -3
+    BNE S2, T4, L_i32_pointer_nonnull_8da831952a1248bfa43f9a95e3e2ae8a_82_3
+    LI S1, 0
+    LI S2, 0
+L_i32_pointer_nonnull_8da831952a1248bfa43f9a95e3e2ae8a_82_3:
+    MOVE S0, S3
+    LI T5, -1536
+    SLTU T2, S1, T5
+    BNE T2, R0, L_i32_gep_word_normalized_8da831952a1248bfa43f9a95e3e2ae8a_82_4
+    DIV T2, S1, T5
+    ADD S2, S2, T2
+    MOD S1, S1, T5
+L_i32_gep_word_normalized_8da831952a1248bfa43f9a95e3e2ae8a_82_4:
+    SLTU T2, S0, T5
+    BNE T2, R0, L_i32_gep_word_normalized_8da831952a1248bfa43f9a95e3e2ae8a_82_5
+    DIV T2, S0, T5
+    ADD S2, S2, T2
+    MOD S0, S0, T5
+L_i32_gep_word_normalized_8da831952a1248bfa43f9a95e3e2ae8a_82_5:
+    ADD T2, S1, S0
+    SLTU T0, T2, S1
+    MOVE S1, T2
+    BNE T0, R0, L_i32_gep_word_adjust_8da831952a1248bfa43f9a95e3e2ae8a_82_6
+    SLTU T2, S1, T5
+    BNE T2, R0, L_i32_gep_word_done_8da831952a1248bfa43f9a95e3e2ae8a_82_7
+L_i32_gep_word_adjust_8da831952a1248bfa43f9a95e3e2ae8a_82_6:
+    SUB S1, S1, T5
+    ADDI S2, S2, 1
+L_i32_gep_word_done_8da831952a1248bfa43f9a95e3e2ae8a_82_7:
 ; Load instruction: t19 = load FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(18), bank: Mixed })
-; LOAD: Pointer t18 has bank info: Dynamic("pointer_offset_bank_82_f82_op41")
-    LI S0, -1
-    BEQ T3, S0, L_bc_be2d665cb79142bcbc39d595c760a946_82_15_use_global
-    LI S0, -2
-    BEQ T3, S0, L_bc_be2d665cb79142bcbc39d595c760a946_82_15_use_stack
-    ADD S1, T3, R0
-    BEQ R0, R0, L_bc_be2d665cb79142bcbc39d595c760a946_82_15_done
-L_bc_be2d665cb79142bcbc39d595c760a946_82_15_use_global:
-    ADD S1, GP, R0
-    BEQ R0, R0, L_bc_be2d665cb79142bcbc39d595c760a946_82_15_done
-L_bc_be2d665cb79142bcbc39d595c760a946_82_15_use_stack:
-    ADD S1, SB, R0
-L_bc_be2d665cb79142bcbc39d595c760a946_82_15_done:
-; LOAD: Using bank register S1 for load
-    LOAD T1, S1, T5
-    ADD A0, T1, R0
+; LOAD: Pointer t18 has bank info: Dynamic("pointer_word_offset_bank_82_f82_op35")
+    LI T5, -1
+    BEQ S2, T5, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_8_use_global
+    LI T5, -2
+    BEQ S2, T5, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_8_use_stack
+    ADD S0, S2, R0
+    BEQ R0, R0, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_8_done
+L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_8_use_global:
+    ADD S0, GP, R0
+    BEQ R0, R0, L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_8_done
+L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_8_use_stack:
+    ADD S0, SB, R0
+L_bc_8da831952a1248bfa43f9a95e3e2ae8a_82_8_done:
+; LOAD: Using bank register S0 for load
+    LOAD T2, S0, S1
+    ADD A0, T2, R0
 ; Spill live registers before call
-; Spill t19 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T1, SB, SC
+; Spill t19 to slot 5
+    ADDI SC, FP, 16
+    STORE T2, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Setting up 1 register arguments
@@ -6500,14 +5878,14 @@ L_storage_write_buffer_142:
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
-; LOAD: Pointer load_src_ptr_f82_op45_t20 has bank info: Stack
+    ADD T0, FP, R0
+    ADDI T0, T0, 2
+; LOAD: Pointer load_src_ptr_f82_op39_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, S3
-    LI T6, 1
-    ADD T4, T4, T6
-    STORE T4, SB, S3
+    LOAD T1, SB, T0
+    LI T3, 1
+    ADD T1, T1, T3
+    STORE T1, SB, T0
     BEQ R0, R0, L_storage_write_buffer_140
 ; Unconditional branch to L_storage_write_buffer_140
 L_storage_write_buffer_143:
@@ -6581,26 +5959,23 @@ L_storage_read_buffer_144:
     ADD T4, SB, R0
     LI T3, -1536
     ADDI T5, T5, 1
-    BNE T5, T3, L_i32_memory_next_word_cceda1250bbf488d944e66206135afe8_84_0
+    BNE T5, T3, L_i32_memory_next_word_9728cbeb5c91469895e17afad2904818_84_0
     LI T5, 0
     ADDI T4, T4, 1
-L_i32_memory_next_word_cceda1250bbf488d944e66206135afe8_84_0:
+L_i32_memory_next_word_9728cbeb5c91469895e17afad2904818_84_0:
     STORE S0, T4, T5
     LI T2, 0
     ADD S3, S3, T2
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE S2, SB, SC
 ; Spill t3 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE T7, SB, SC
 ; Spill t8 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 13
+    ADDI SC, FP, 13
     STORE S3, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -6609,16 +5984,14 @@ L_i32_memory_next_word_cceda1250bbf488d944e66206135afe8_84_0:
 ; Call function storage_set_block
     CALL storage_set_block
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     LOAD T1, SB, SC
     LI T0, 0
     ADD T1, T1, T0
     ADD A0, T1, R0
 ; Spill live registers before call
 ; Spill t9 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 14
+    ADDI SC, FP, 14
     STORE T1, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
@@ -6631,14 +6004,12 @@ L_i32_memory_next_word_cceda1250bbf488d944e66206135afe8_84_0:
     LI T4, 0
     STORE T4, SB, T5
 ; Reload t3 from slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     LOAD T3, SB, SC
     LI S0, 0
     ADD T3, T3, S0
 ; Spill t12 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE T3, SB, SC
     BEQ R0, R0, L_storage_read_buffer_145
 ; Unconditional branch to L_storage_read_buffer_145
@@ -6652,8 +6023,7 @@ L_storage_read_buffer_145:
 ; LOAD: Using bank register Sb for load
     LOAD T2, SB, S1
 ; Reload t12 from slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     LOAD S2, SB, SC
     SLTU T2, T2, S2
     LI T7, 0
@@ -6661,18 +6031,9 @@ L_storage_read_buffer_145:
     LI S3, 0
     SLTU T2, S3, T6
 ; Spill t12 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 15
+    ADDI SC, FP, 15
     STORE S2, SB, SC
-; Spill t14 to slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    STORE T2, SB, SC
-; Reload t14 from slot 5
-    ADD SC, FP, R0
-    ADDI SC, SC, 16
-    LOAD T0, SB, SC
-    BEQ T0, R0, L_storage_read_buffer_148
+    BEQ T2, R0, L_storage_read_buffer_148
 ; Branch to L_storage_read_buffer_148 if condition is false
     BEQ R0, R0, L_storage_read_buffer_146
 ; Unconditional branch to L_storage_read_buffer_146 (condition was true)
@@ -6680,262 +6041,119 @@ L_storage_read_buffer_146:
 ; Load instruction: t15 = load FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(6), bank: Stack })
 ; Recompute alloca t6 at FP+0
-    ADD T1, FP, R0
+    ADD T0, FP, R0
 ; LOAD: Pointer load_src_ptr_f84_op18_t15 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T4, SB, T1
-    ADD S0, T1, R0
-    ADD T5, SB, R0
-    LI T3, -1536
+    LOAD T1, SB, T0
+    ADD T4, T0, R0
+    ADD S0, SB, R0
+    LI T5, -1536
+    ADDI T4, T4, 1
+    BNE T4, T5, L_i32_memory_next_word_9728cbeb5c91469895e17afad2904818_84_1
+    LI T4, 0
     ADDI S0, S0, 1
-    BNE S0, T3, L_i32_memory_next_word_cceda1250bbf488d944e66206135afe8_84_1
-    LI S0, 0
-    ADDI T5, T5, 1
-L_i32_memory_next_word_cceda1250bbf488d944e66206135afe8_84_1:
-    LOAD T6, T5, S0
-; Bank value in T6 - tags: -1 = Global, -2 = Stack, positive = dynamic
+L_i32_memory_next_word_9728cbeb5c91469895e17afad2904818_84_1:
+    LOAD T3, S0, T4
+; Bank value in T3 - tags: -1 = Global, -2 = Stack, positive = dynamic
 ; Load instruction: t16 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD S3, FP, R0
-    ADDI S3, S3, 2
+    ADD T6, FP, R0
+    ADDI T6, T6, 2
 ; LOAD: Pointer load_src_ptr_f84_op24_t16 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T7, SB, S3
-    LI S1, 0
+    LOAD S3, SB, T6
+; GEP: zero-extended native displacement
+    LI T2, -1
+    BEQ T3, T2, L_bc_9728cbeb5c91469895e17afad2904818_84_2_use_global
+    LI T2, -2
+    BEQ T3, T2, L_bc_9728cbeb5c91469895e17afad2904818_84_2_use_stack
+    ADD T7, T3, R0
+    BEQ R0, R0, L_bc_9728cbeb5c91469895e17afad2904818_84_2_done
+L_bc_9728cbeb5c91469895e17afad2904818_84_2_use_global:
+    ADD T7, GP, R0
+    BEQ R0, R0, L_bc_9728cbeb5c91469895e17afad2904818_84_2_done
+L_bc_9728cbeb5c91469895e17afad2904818_84_2_use_stack:
+    ADD T7, SB, R0
+L_bc_9728cbeb5c91469895e17afad2904818_84_2_done:
+    ADD S1, T1, R0
     ADD S2, T7, R0
-    ADD T2, S1, R0
-; GEP: native narrow displacement, wide fallback
-    LI S0, -1
-    BEQ T6, S0, L_bc_cceda1250bbf488d944e66206135afe8_84_2_use_global
-    LI S0, -2
-    BEQ T6, S0, L_bc_cceda1250bbf488d944e66206135afe8_84_2_use_stack
-    ADD T0, T6, R0
-    BEQ R0, R0, L_bc_cceda1250bbf488d944e66206135afe8_84_2_done
-L_bc_cceda1250bbf488d944e66206135afe8_84_2_use_global:
-    ADD T0, GP, R0
-    BEQ R0, R0, L_bc_cceda1250bbf488d944e66206135afe8_84_2_done
-L_bc_cceda1250bbf488d944e66206135afe8_84_2_use_stack:
-    ADD T0, SB, R0
-L_bc_cceda1250bbf488d944e66206135afe8_84_2_done:
-    ADD T5, T4, R0
-    ADD T3, T0, R0
-    LI T7, -3
-    BNE T3, T7, L_i32_pointer_nonnull_cceda1250bbf488d944e66206135afe8_84_3
-    LI T5, 0
-    LI T3, 0
-L_i32_pointer_nonnull_cceda1250bbf488d944e66206135afe8_84_3:
-    MOVE S1, S2
-    MOVE S0, T2
-; Spill t15 to slot 6
-    ADD SC, FP, R0
-    ADDI SC, SC, 17
-    STORE T4, SB, SC
-; Spill load_f84_op23_t15_bank_val to slot 7
-    ADD SC, FP, R0
-    ADDI SC, SC, 18
-    STORE T6, SB, SC
-; Spill load_f84_op23_t15_bank_val to slot 8
-    ADD SC, FP, R0
-    ADDI SC, SC, 19
-    STORE T6, SB, SC
-; Spill pointer_value_resolved_bank_84_f84_op27 to slot 9
-    ADD SC, FP, R0
-    ADDI SC, SC, 20
-    STORE T0, SB, SC
-; Spill pointer_null_tag_84_f84_op31 to slot 10
-    ADD SC, FP, R0
-    ADDI SC, SC, 21
-    STORE T7, SB, SC
-; Spill t17 to slot 11
-    ADD SC, FP, R0
-    ADDI SC, SC, 22
-    STORE S2, SB, SC
-    LI S2, -1536
-    SLTU T7, T5, S2
-    BEQ T7, R0, L_i32_gep_wide_offset_cceda1250bbf488d944e66206135afe8_84_9
-    BEQ S0, R0, L_i32_gep_positive_word_cceda1250bbf488d944e66206135afe8_84_4
-    LI T7, -1
-    BEQ S0, T7, L_i32_gep_negative_word_cceda1250bbf488d944e66206135afe8_84_5
-    BEQ R0, R0, L_i32_gep_wide_offset_cceda1250bbf488d944e66206135afe8_84_9
-L_i32_gep_positive_word_cceda1250bbf488d944e66206135afe8_84_4:
-    SLTU T7, S1, S2
-    BNE T7, R0, L_i32_gep_native_add_cceda1250bbf488d944e66206135afe8_84_6
-    DIV T7, S1, S2
-    ADD T3, T3, T7
-    MOD S1, S1, S2
-L_i32_gep_native_add_cceda1250bbf488d944e66206135afe8_84_6:
-    ADD T7, T5, S1
-    SLTU T0, T7, T5
-    MOVE T5, T7
-    BNE T0, R0, L_i32_gep_native_carry_cceda1250bbf488d944e66206135afe8_84_7
-    SLTU T7, T5, S2
-    BNE T7, R0, L_i32_gep_offset_done_cceda1250bbf488d944e66206135afe8_84_14
-L_i32_gep_native_carry_cceda1250bbf488d944e66206135afe8_84_7:
-    SUB T5, T5, S2
-    ADDI T3, T3, 1
-    BEQ R0, R0, L_i32_gep_offset_done_cceda1250bbf488d944e66206135afe8_84_14
-L_i32_gep_negative_word_cceda1250bbf488d944e66206135afe8_84_5:
-    BEQ S1, R0, L_i32_gep_wide_offset_cceda1250bbf488d944e66206135afe8_84_9
-    LI T7, 2
-    SLTU T7, T3, T7
-    BNE T7, R0, L_i32_gep_wide_offset_cceda1250bbf488d944e66206135afe8_84_9
-    SUB S1, R0, S1
-    SLTU T7, S1, S2
-    BNE T7, R0, L_i32_gep_native_subtract_cceda1250bbf488d944e66206135afe8_84_8
-    DIV T7, S1, S2
-    SUB T3, T3, T7
-    MOD S1, S1, S2
-L_i32_gep_native_subtract_cceda1250bbf488d944e66206135afe8_84_8:
-    SLTU T0, T5, S1
-    SUB T5, T5, S1
-    BEQ T0, R0, L_i32_gep_offset_done_cceda1250bbf488d944e66206135afe8_84_14
-    ADD T5, T5, S2
-    ADDI T3, T3, -1
-    BEQ R0, R0, L_i32_gep_offset_done_cceda1250bbf488d944e66206135afe8_84_14
-L_i32_gep_wide_offset_cceda1250bbf488d944e66206135afe8_84_9:
-    ADD T7, S1, T5
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, T0
-    LI T4, 9
-    SLL T1, T3, T4
-    LI T4, 7
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 11
-    SLL T1, T3, T4
-    LI T4, 5
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 12
-    SLL T1, T3, T4
-    LI T4, 4
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 13
-    SLL T1, T3, T4
-    LI T4, 3
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 14
-    SLL T1, T3, T4
-    LI T4, 2
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T4, 15
-    SLL T1, T3, T4
-    LI T4, 1
-    SRL S3, T3, T4
-    ADD T7, S1, T1
-    SLTU T0, T7, S1
-    MOVE S1, T7
-    ADD S0, S0, S3
-    ADD S0, S0, T0
-    LI T5, 0
-    LI T1, 0
-    LI S3, 0
-    LI T4, 32
-    LI T6, 1
-L_i32_gep_divide_cceda1250bbf488d944e66206135afe8_84_10:
-    SLT T7, S0, R0
-    SLT T0, T1, R0
-    ADD T1, T1, T1
-    OR T1, T1, T7
-    ADD S3, S3, S3
-    OR S3, S3, T0
-    SLT T0, S1, R0
-    ADD S1, S1, S1
-    ADD S0, S0, S0
-    OR S0, S0, T0
-    ADD T5, T5, T5
-    BNE S3, R0, L_i32_gep_divide_ge_cceda1250bbf488d944e66206135afe8_84_11
-    SLTU T0, T1, S2
-    BNE T0, R0, L_i32_gep_divide_next_cceda1250bbf488d944e66206135afe8_84_12
-L_i32_gep_divide_ge_cceda1250bbf488d944e66206135afe8_84_11:
-    SLTU T0, T1, S2
-    SUB T1, T1, S2
-    SUB S3, S3, T0
-    OR T5, T5, T6
-L_i32_gep_divide_next_cceda1250bbf488d944e66206135afe8_84_12:
-    SUB T4, T4, T6
-    BEQ T4, R0, L_i32_gep_divide_done_cceda1250bbf488d944e66206135afe8_84_13
-    BEQ R0, R0, L_i32_gep_divide_cceda1250bbf488d944e66206135afe8_84_10
-L_i32_gep_divide_done_cceda1250bbf488d944e66206135afe8_84_13:
-    MOVE T3, T5
-    MOVE T5, T1
-L_i32_gep_offset_done_cceda1250bbf488d944e66206135afe8_84_14:
+    LI T4, -3
+    BNE S2, T4, L_i32_pointer_nonnull_9728cbeb5c91469895e17afad2904818_84_3
+    LI S1, 0
+    LI S2, 0
+L_i32_pointer_nonnull_9728cbeb5c91469895e17afad2904818_84_3:
+    MOVE S0, S3
+    LI T5, -1536
+    SLTU T2, S1, T5
+    BNE T2, R0, L_i32_gep_word_normalized_9728cbeb5c91469895e17afad2904818_84_4
+    DIV T2, S1, T5
+    ADD S2, S2, T2
+    MOD S1, S1, T5
+L_i32_gep_word_normalized_9728cbeb5c91469895e17afad2904818_84_4:
+    SLTU T2, S0, T5
+    BNE T2, R0, L_i32_gep_word_normalized_9728cbeb5c91469895e17afad2904818_84_5
+    DIV T2, S0, T5
+    ADD S2, S2, T2
+    MOD S0, S0, T5
+L_i32_gep_word_normalized_9728cbeb5c91469895e17afad2904818_84_5:
+    ADD T2, S1, S0
+    SLTU T0, T2, S1
+    MOVE S1, T2
+    BNE T0, R0, L_i32_gep_word_adjust_9728cbeb5c91469895e17afad2904818_84_6
+    SLTU T2, S1, T5
+    BNE T2, R0, L_i32_gep_word_done_9728cbeb5c91469895e17afad2904818_84_7
+L_i32_gep_word_adjust_9728cbeb5c91469895e17afad2904818_84_6:
+    SUB S1, S1, T5
+    ADDI S2, S2, 1
+L_i32_gep_word_done_9728cbeb5c91469895e17afad2904818_84_7:
 ; Spill live registers before call
-; Spill pointer_offset_bank_84_f84_op41 to slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    STORE T3, SB, SC
-; Spill t18 to slot 13
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    STORE T5, SB, SC
+; Spill pointer_word_offset_bank_84_f84_op35 to slot 5
+    ADDI SC, FP, 16
+    STORE S2, SB, SC
+; Spill t18 to slot 6
+    ADDI SC, FP, 17
+    STORE S1, SB, SC
 ; Set SP = FP+31 so callee frame is above spills
     ADDI SP, FP, 31
 ; Call function storage_read
     CALL storage_read
 ; Scalar return value for t19
-; Copy Rv0 to allocatable S1
-    ADD S1, RV0, R0
-; Reload t18 from slot 13
-    ADD SC, FP, R0
-    ADDI SC, SC, 24
-    LOAD S0, SB, SC
-; Reload pointer_offset_bank_84_f84_op41 from slot 12
-    ADD SC, FP, R0
-    ADDI SC, SC, 23
-    LOAD T1, SB, SC
-    LI T4, -1
-    BEQ T1, T4, L_bc_cceda1250bbf488d944e66206135afe8_84_15_use_global
-    LI T4, -2
-    BEQ T1, T4, L_bc_cceda1250bbf488d944e66206135afe8_84_15_use_stack
-    ADD S3, T1, R0
-    BEQ R0, R0, L_bc_cceda1250bbf488d944e66206135afe8_84_15_done
-L_bc_cceda1250bbf488d944e66206135afe8_84_15_use_global:
-    ADD S3, GP, R0
-    BEQ R0, R0, L_bc_cceda1250bbf488d944e66206135afe8_84_15_done
-L_bc_cceda1250bbf488d944e66206135afe8_84_15_use_stack:
-    ADD S3, SB, R0
-L_bc_cceda1250bbf488d944e66206135afe8_84_15_done:
-    STORE S1, S3, S0
+; Copy Rv0 to allocatable S0
+    ADD S0, RV0, R0
+; Reload t18 from slot 6
+    ADDI SC, FP, 17
+    LOAD T5, SB, SC
+; Reload pointer_word_offset_bank_84_f84_op35 from slot 5
+    ADDI SC, FP, 16
+    LOAD T2, SB, SC
+    LI T1, -1
+    BEQ T2, T1, L_bc_9728cbeb5c91469895e17afad2904818_84_8_use_global
+    LI T1, -2
+    BEQ T2, T1, L_bc_9728cbeb5c91469895e17afad2904818_84_8_use_stack
+    ADD T0, T2, R0
+    BEQ R0, R0, L_bc_9728cbeb5c91469895e17afad2904818_84_8_done
+L_bc_9728cbeb5c91469895e17afad2904818_84_8_use_global:
+    ADD T0, GP, R0
+    BEQ R0, R0, L_bc_9728cbeb5c91469895e17afad2904818_84_8_done
+L_bc_9728cbeb5c91469895e17afad2904818_84_8_use_stack:
+    ADD T0, SB, R0
+L_bc_9728cbeb5c91469895e17afad2904818_84_8_done:
+    STORE S0, T0, T5
     BEQ R0, R0, L_storage_read_buffer_147
 ; Unconditional branch to L_storage_read_buffer_147
 L_storage_read_buffer_147:
 ; Load instruction: t20 = load FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Canonicalizing fat pointer: FatPtr(FatPointer { addr: Temp(10), bank: Stack })
 ; Recompute alloca t10 at FP+2
-    ADD T6, FP, R0
-    ADDI T6, T6, 2
-; LOAD: Pointer load_src_ptr_f84_op45_t20 has bank info: Stack
+    ADD T3, FP, R0
+    ADDI T3, T3, 2
+; LOAD: Pointer load_src_ptr_f84_op39_t20 has bank info: Stack
 ; LOAD: Using bank register Sb for load
-    LOAD T0, SB, T6
+    LOAD T4, SB, T3
     LI T7, 1
-    ADD T0, T0, T7
-    STORE T0, SB, T6
+    ADD T4, T4, T7
+    STORE T4, SB, T3
     BEQ R0, R0, L_storage_read_buffer_145
 ; Unconditional branch to L_storage_read_buffer_145
 L_storage_read_buffer_148:
@@ -6996,8 +6214,7 @@ L_irq_get_status_149:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f86_op0_21 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7072,12 +6289,10 @@ L_irq_raise_150:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f88_op1_21 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7143,8 +6358,7 @@ L_irq_get_enable_151:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f90_op0_22 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7219,12 +6433,10 @@ L_irq_set_enable_152:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill const_f92_op1_22 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7290,8 +6502,7 @@ L_irq_is_busy_153:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f94_op0_23 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7367,12 +6578,10 @@ L_irq_ack_154:
     ADD A1, S2, R0
 ; Spill live registers before call
 ; Spill const_f96_op0_23 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Spill const_f96_op1_1 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S2, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7445,16 +6654,13 @@ L_irq_set_vector_155:
     ADD A1, S3, R0
 ; Spill live registers before call
 ; Spill t1 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S2, SB, SC
 ; Spill const_f98_op2_24 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S0, SB, SC
 ; Spill t4 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7464,8 +6670,7 @@ L_irq_set_vector_155:
 ; Call function mmio_write
     CALL mmio_write
 ; Reload t1 from slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     LOAD T7, SB, SC
     LI T6, 0
     ADD T7, T7, T6
@@ -7474,12 +6679,10 @@ L_irq_set_vector_155:
     ADD A1, T7, R0
 ; Spill live registers before call
 ; Spill const_f98_op3_25 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE T5, SB, SC
 ; Spill t5 to slot 4
-    ADD SC, FP, R0
-    ADDI SC, SC, 12
+    ADDI SC, FP, 12
     STORE T7, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28
@@ -7545,8 +6748,7 @@ L_irq_get_cause_156:
     ADD A0, S3, R0
 ; Spill live registers before call
 ; Spill const_f100_op0_26 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S3, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28

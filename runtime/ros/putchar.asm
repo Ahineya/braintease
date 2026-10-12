@@ -39,20 +39,16 @@ putchar:
     ADD A3, T7, R0
 ; Spill live registers before call
 ; Spill const_f0_op1_2 to slot 0
-    ADD SC, FP, R0
-    ADDI SC, SC, 8
+    ADDI SC, FP, 8
     STORE S1, SB, SC
 ; Spill t2 to slot 1
-    ADD SC, FP, R0
-    ADDI SC, SC, 9
+    ADDI SC, FP, 9
     STORE S3, SB, SC
 ; Spill const_f0_op2_0 to slot 2
-    ADD SC, FP, R0
-    ADDI SC, SC, 10
+    ADDI SC, FP, 10
     STORE S0, SB, SC
 ; Spill const_f0_op3_0 to slot 3
-    ADD SC, FP, R0
-    ADDI SC, SC, 11
+    ADDI SC, FP, 11
     STORE T7, SB, SC
 ; Set SP = FP+28 so callee frame is above spills
     ADDI SP, FP, 28

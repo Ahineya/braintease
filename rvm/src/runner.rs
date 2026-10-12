@@ -178,6 +178,16 @@ impl Controller {
 }
 
 pub fn run(vm: &mut VM, options: &RunOptions) -> Result<String, String> {
+    run_with_execution(vm, options, true)
+}
+
+/// The original instruction-at-a-time runner, retained as an execution oracle
+/// and for A/B measurements with the same guest binary and host policies.
+pub fn run_reference(vm: &mut VM, options: &RunOptions) -> Result<String, String> {
+    run_with_execution(vm, options, false)
+}
+
+fn run_with_execution(vm: &mut VM, options: &RunOptions, batched: bool) -> Result<String, String> {
     let capture_requested = options.screenshot.is_some() || options.raw_frame.is_some();
     if capture_requested && options.capture_frame == 0 {
         return Err("Capture frame must be at least 1".into());
@@ -330,7 +340,18 @@ pub fn run(vm: &mut VM, options: &RunOptions) -> Result<String, String> {
             next_tick = Instant::now() + tick_period;
             continue;
         }
-        vm.step()?;
+        if batched && !vm.debug_mode && !vm.verbose && options.frequency.is_none() {
+            // Preserve the existing host/control polling cadence exactly,
+            // including when a run resumes partway through a polling interval.
+            // MMIO, frames, ticks and execution errors may end a batch sooner.
+            let mut budget = 1024 - vm.executed_instructions % 1024;
+            if let Some(limit) = options.max_instructions {
+                budget = budget.min(limit - vm.executed_instructions);
+            }
+            vm.run_batch(budget)?;
+        } else {
+            vm.step()?;
+        }
         if let Some(frequency) = options.frequency {
             frequency_count += 1;
             let batch = (frequency / 100).max(1);

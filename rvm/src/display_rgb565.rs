@@ -1,5 +1,8 @@
 use pixels::{Pixels, SurfaceTexture};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
@@ -32,10 +35,10 @@ pub struct RGB565State {
     pub width: u16,
     pub height: u16,
     pub initialized: bool,
-    pub front_buffer: Vec<u16>,
+    pub front_buffer: Arc<Vec<u16>>,
     pub back_buffer: Vec<u16>,
     pub sequence: u64,
-    pub should_quit: bool,
+    shutdown: Arc<AtomicBool>,
     pub key_up: bool,
     pub key_down: bool,
     pub key_left: bool,
@@ -48,6 +51,9 @@ pub struct RGB565State {
     /// The VM must resynchronize from keys_held if this is set.
     pub key_overflow: bool,
     legacy_layout: bool,
+    // Initialization and mode changes can replace pixels without presenting a
+    // frame, so sequence alone is not enough to invalidate the window cache.
+    layout_revision: u64,
 }
 
 impl Default for RGB565State {
@@ -62,10 +68,10 @@ impl RGB565State {
             width: 0,
             height: 0,
             initialized: false,
-            front_buffer: Vec::new(),
+            front_buffer: Arc::new(Vec::new()),
             back_buffer: Vec::new(),
             sequence: 0,
-            should_quit: false,
+            shutdown: Arc::new(AtomicBool::new(false)),
             key_up: false,
             key_down: false,
             key_left: false,
@@ -76,6 +82,7 @@ impl RGB565State {
             keys_held: [false; 256],
             key_overflow: false,
             legacy_layout: false,
+            layout_revision: 0,
         }
     }
 
@@ -93,10 +100,11 @@ impl RGB565State {
         }
         self.width = width as u16;
         self.height = height as u16;
-        self.front_buffer = vec![0; pixels_needed];
+        self.front_buffer = Arc::new(vec![0; pixels_needed]);
         self.back_buffer = vec![0; pixels_needed];
         self.initialized = true;
         self.legacy_layout = true;
+        self.layout_revision = self.layout_revision.wrapping_add(1);
         Ok(())
     }
 
@@ -107,7 +115,12 @@ impl RGB565State {
         let Some(next_sequence) = self.sequence.checked_add(1) else {
             return false;
         };
-        std::mem::swap(&mut self.front_buffer, &mut self.back_buffer);
+        let next_front = Arc::new(std::mem::take(&mut self.back_buffer));
+        let previous_front = std::mem::replace(&mut self.front_buffer, next_front);
+        // Usually the window has finished reading the old front by now. If it
+        // has not, preserve its immutable view before reusing this as guest RAM.
+        self.back_buffer =
+            Arc::try_unwrap(previous_front).unwrap_or_else(|shared| shared.as_ref().clone());
         self.sequence = next_sequence;
         true
     }
@@ -139,10 +152,76 @@ impl RGB565State {
             self.set_key(key, false);
         }
     }
+
+    pub fn request_shutdown(&self) {
+        self.shutdown.store(true, Ordering::Release);
+    }
+
+    pub fn should_quit(&self) -> bool {
+        self.shutdown.load(Ordering::Acquire)
+    }
+
+    fn frame_update(&self, previous: Option<FrameVersion>) -> Option<FrameUpdate> {
+        let version = FrameVersion {
+            sequence: self.sequence,
+            layout_revision: self.layout_revision,
+        };
+        if previous == Some(version) {
+            return None;
+        }
+        Some(FrameUpdate {
+            version,
+            frame: self.initialized.then(|| SharedFrame {
+                width: self.width,
+                height: self.height,
+                pixels: Arc::clone(&self.front_buffer),
+            }),
+        })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct FrameVersion {
+    sequence: u64,
+    layout_revision: u64,
+}
+
+struct SharedFrame {
+    width: u16,
+    height: u16,
+    pixels: Arc<Vec<u16>>,
+}
+
+struct FrameUpdate {
+    version: FrameVersion,
+    frame: Option<SharedFrame>,
+}
+
+impl FrameUpdate {
+    fn write_rgba(&self, output: &mut [u8], width: u32) {
+        if let Some(frame) = &self.frame {
+            for (output, color) in output.chunks_exact_mut(4).zip(frame.pixels.iter()) {
+                let [r, g, b] = rgb565_to_rgb888(*color);
+                output.copy_from_slice(&[r, g, b, 255]);
+            }
+        } else {
+            for (index, pixel) in output.chunks_exact_mut(4).enumerate() {
+                let x = index as u32 % width;
+                let y = index as u32 / width;
+                let color = if ((x / 16) + (y / 16)) % 2 == 0 {
+                    64
+                } else {
+                    32
+                };
+                pixel.copy_from_slice(&[color, color, color, 255]);
+            }
+        }
+    }
 }
 
 pub struct RGB565Display {
     state: Arc<Mutex<RGB565State>>,
+    shutdown: Arc<AtomicBool>,
 }
 
 impl Default for RGB565Display {
@@ -153,13 +232,20 @@ impl Default for RGB565Display {
 
 impl RGB565Display {
     pub fn new() -> Self {
+        let state = RGB565State::new();
+        let shutdown = Arc::clone(&state.shutdown);
         Self {
-            state: Arc::new(Mutex::new(RGB565State::new())),
+            state: Arc::new(Mutex::new(state)),
+            shutdown,
         }
     }
 
     pub fn get_state(&self) -> Arc<Mutex<RGB565State>> {
         Arc::clone(&self.state)
+    }
+
+    pub fn is_window_closed(&self) -> bool {
+        self.shutdown.load(Ordering::Acquire)
     }
 
     pub fn init(&mut self, width: u8, height: u8, bank_size: usize) -> Result<(), String> {
@@ -215,7 +301,8 @@ impl RGB565Display {
             .ok_or_else(|| "Frame sequence overflow".to_string())?;
         state.width = width;
         state.height = height;
-        state.front_buffer = pixels;
+        // Arc<Vec<_>> moves the existing allocation; it does not copy pixels.
+        state.front_buffer = Arc::new(pixels);
         state.back_buffer.clear();
         state.initialized = true;
         state.legacy_layout = false;
@@ -232,7 +319,7 @@ impl RGB565Display {
             width: state.width,
             height: state.height,
             sequence: state.sequence,
-            pixels: state.front_buffer.clone(),
+            pixels: state.front_buffer.as_ref().clone(),
         })
     }
 
@@ -243,12 +330,13 @@ impl RGB565Display {
         state.legacy_layout = false;
         state.width = 0;
         state.height = 0;
-        state.front_buffer.clear();
+        state.front_buffer = Arc::new(Vec::new());
         state.back_buffer.clear();
+        state.layout_revision = state.layout_revision.wrapping_add(1);
     }
 
     pub fn shutdown(&mut self) {
-        self.state.lock().unwrap().should_quit = true;
+        self.shutdown.store(true, Ordering::Release);
     }
 }
 
@@ -386,15 +474,14 @@ pub fn run_rgb565_display(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Also stop the guest when window/GPU initialization returns an error.
     // Keep this guard outside the event-loop closure so unwinding releases it.
-    struct StopGuest(Arc<Mutex<RGB565State>>);
+    struct StopGuest(Arc<AtomicBool>);
     impl Drop for StopGuest {
         fn drop(&mut self) {
-            if let Ok(mut state) = self.0.lock() {
-                state.should_quit = true;
-            }
+            self.0.store(true, Ordering::Release);
         }
     }
-    let _stop_guest = StopGuest(Arc::clone(&state));
+    let shutdown = Arc::clone(&state.lock().unwrap().shutdown);
+    let _stop_guest = StopGuest(Arc::clone(&shutdown));
     let mut event_loop = EventLoopBuilder::new().build();
     let window = WindowBuilder::new()
         .with_title("Ripple VM - RGB565 Display")
@@ -413,13 +500,14 @@ pub fn run_rgb565_display(
         SurfaceTexture::new(surface_width, surface_height, &window),
     )?;
     let mut dimensions = (256u32, 256u32);
+    let mut rendered_version = None;
     let mut render_error = None;
 
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(16),
         );
-        if state.lock().unwrap().should_quit {
+        if shutdown.load(Ordering::Acquire) {
             *control_flow = ControlFlow::Exit;
             return;
         }
@@ -430,7 +518,7 @@ pub fn run_rgb565_display(
             } => {
                 let mut shared = state.lock().unwrap();
                 shared.release_keys();
-                shared.should_quit = true;
+                shared.request_shutdown();
                 *control_flow = ControlFlow::Exit;
             }
             Event::WindowEvent {
@@ -480,39 +568,28 @@ pub fn run_rgb565_display(
                 if !surface_visible {
                     return;
                 }
-                let shared = state.lock().unwrap();
-                if shared.initialized {
-                    let requested = (shared.width as u32, shared.height as u32);
-                    if requested != dimensions {
-                        if let Err(error) = pixels.resize_buffer(requested.0, requested.1) {
-                            render_error = Some(error.to_string());
-                            *control_flow = ControlFlow::Exit;
-                            return;
+                // Clone just the immutable frame handle while locked. Color
+                // conversion and resizing cannot block guest input/publication.
+                let update = state.lock().unwrap().frame_update(rendered_version);
+                if let Some(update) = update {
+                    if let Some(frame) = &update.frame {
+                        let requested = (frame.width as u32, frame.height as u32);
+                        if requested != dimensions {
+                            if let Err(error) = pixels.resize_buffer(requested.0, requested.1) {
+                                render_error = Some(error.to_string());
+                                *control_flow = ControlFlow::Exit;
+                                return;
+                            }
+                            dimensions = requested;
+                            window
+                                .set_inner_size(LogicalSize::new(requested.0 * 2, requested.1 * 2));
                         }
-                        dimensions = requested;
-                        window.set_inner_size(LogicalSize::new(requested.0 * 2, requested.1 * 2));
                     }
-                    for (output, color) in pixels
-                        .frame_mut()
-                        .chunks_exact_mut(4)
-                        .zip(&shared.front_buffer)
-                    {
-                        let [r, g, b] = rgb565_to_rgb888(*color);
-                        output.copy_from_slice(&[r, g, b, 255]);
-                    }
-                } else {
-                    for (index, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
-                        let x = index as u32 % dimensions.0;
-                        let y = index as u32 / dimensions.0;
-                        let color = if ((x / 16) + (y / 16)) % 2 == 0 {
-                            64
-                        } else {
-                            32
-                        };
-                        pixel.copy_from_slice(&[color, color, color, 255]);
-                    }
+                    update.write_rgba(pixels.frame_mut(), dimensions.0);
+                    rendered_version = Some(update.version);
                 }
-                drop(shared);
+                // Expose and surface-resize events still redraw the cached RGBA
+                // image even when the guest has not presented another frame.
                 if let Err(error) = pixels.render() {
                     render_error = Some(error.to_string());
                     *control_flow = ControlFlow::Exit;
@@ -522,7 +599,7 @@ pub fn run_rgb565_display(
             _ => {}
         }
     });
-    state.lock().unwrap().should_quit = true;
+    state.lock().unwrap().request_shutdown();
     if let Some(error) = render_error {
         return Err(error.into());
     }
@@ -581,7 +658,7 @@ mod tests {
         assert!(!display.flush());
         display.disable();
         assert!(display.snapshot().is_none());
-        assert!(!state.lock().unwrap().should_quit);
+        assert!(!state.lock().unwrap().should_quit());
         display.init(1, 1, 34).unwrap();
         display.flush();
         assert_eq!(display.snapshot().unwrap().sequence, 2);
@@ -596,6 +673,150 @@ mod tests {
         assert!(display.present(2, 2, vec![0; 3]).is_err());
         assert!(display.present(0, 0, Vec::new()).is_err());
         assert!(display.snapshot().is_none());
+    }
+
+    #[test]
+    fn rendered_frames_share_publication_and_skip_unchanged_pixels() {
+        let mut display = RGB565Display::new();
+        let pixels = vec![0xf800, 0x07e0, 0x001f, 0xffff];
+        let allocation = pixels.as_ptr();
+        display.present(2, 2, pixels).unwrap();
+        let state = display.get_state();
+        let update = state.lock().unwrap().frame_update(None).unwrap();
+        assert_eq!(update.frame.as_ref().unwrap().pixels.as_ptr(), allocation);
+        let mut rgba = vec![0; 16];
+        update.write_rgba(&mut rgba, 2);
+        assert_eq!(
+            rgba,
+            [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255]
+        );
+        assert!(state
+            .lock()
+            .unwrap()
+            .frame_update(Some(update.version))
+            .is_none());
+
+        display.present(1, 1, vec![0]).unwrap();
+        let next = state
+            .lock()
+            .unwrap()
+            .frame_update(Some(update.version))
+            .unwrap();
+        assert_eq!(next.frame.as_ref().unwrap().width, 1);
+        assert_eq!(next.frame.as_ref().unwrap().height, 1);
+        assert_eq!(next.version.sequence, 2);
+        // The old view remains immutable while the guest publishes its next frame.
+        update.write_rgba(&mut rgba, 2);
+        assert_eq!(&rgba[..4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn mode_changes_invalidate_render_cache_without_presenting() {
+        let mut display = RGB565Display::new();
+        let state = display.get_state();
+        let disabled = state.lock().unwrap().frame_update(None).unwrap();
+        assert!(disabled.frame.is_none());
+        assert!(state
+            .lock()
+            .unwrap()
+            .frame_update(Some(disabled.version))
+            .is_none());
+
+        display.init(1, 1, 34).unwrap();
+        let initialized = state
+            .lock()
+            .unwrap()
+            .frame_update(Some(disabled.version))
+            .unwrap();
+        assert_eq!(initialized.version.sequence, 0);
+        let mut rgba = [255; 4];
+        initialized.write_rgba(&mut rgba, 1);
+        assert_eq!(rgba, [0, 0, 0, 255]);
+
+        // Reinitializing the same size also resets its visible front buffer.
+        display.init(1, 1, 34).unwrap();
+        let reinitialized = state
+            .lock()
+            .unwrap()
+            .frame_update(Some(initialized.version))
+            .unwrap();
+        assert_eq!(reinitialized.version.sequence, 0);
+        display.disable();
+        let disabled = state
+            .lock()
+            .unwrap()
+            .frame_update(Some(reinitialized.version))
+            .unwrap();
+        assert_eq!(disabled.version.sequence, 0);
+        assert!(disabled.frame.is_none());
+        disabled.write_rgba(&mut rgba, 1);
+        assert_eq!(rgba, [64, 64, 64, 255]);
+        assert!(!display.is_window_closed());
+    }
+
+    #[test]
+    fn legacy_flush_preserves_a_frame_being_converted() {
+        let mut display = RGB565Display::new();
+        display.init(2, 1, 64).unwrap();
+        display.write_memory(34, 0xf800);
+        display.write_memory(35, 0x07e0);
+        display.flush();
+        let state = display.get_state();
+        let previous = state.lock().unwrap().frame_update(None).unwrap();
+        display.write_memory(34, 0x001f);
+        // Back-buffer writes do not make a new frame visible.
+        assert!(state
+            .lock()
+            .unwrap()
+            .frame_update(Some(previous.version))
+            .is_none());
+        display.flush();
+        let next = state
+            .lock()
+            .unwrap()
+            .frame_update(Some(previous.version))
+            .unwrap();
+        assert_eq!(next.frame.as_ref().unwrap().pixels.as_slice(), &[0x001f, 0]);
+        assert_eq!(display.read_memory(34), Some(0xf800));
+        // Reusing the old front as guest back RAM must not change its UI view.
+        display.write_memory(34, 0xffff);
+        assert_eq!(
+            previous.frame.as_ref().unwrap().pixels.as_slice(),
+            &[0xf800, 0x07e0]
+        );
+        let mut rgba = [0; 8];
+        previous.write_rgba(&mut rgba, 2);
+        assert_eq!(rgba, [255, 0, 0, 255, 0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn shutdown_poll_does_not_acquire_the_frame_mutex() {
+        let mut display = RGB565Display::new();
+        let state = display.get_state();
+        let locked = state.lock().unwrap();
+        assert!(!display.is_window_closed());
+        locked.request_shutdown();
+        assert!(locked.should_quit());
+        assert!(display.is_window_closed());
+        // Shutdown and Drop also remain safe while another owner has the lock.
+        display.shutdown();
+        drop(display);
+        assert!(locked.should_quit());
+    }
+
+    #[test]
+    fn shutdown_and_drop_signal_the_shared_connection() {
+        let mut display = RGB565Display::new();
+        let state = display.get_state();
+        display.shutdown();
+        assert!(display.is_window_closed());
+        assert!(state.lock().unwrap().should_quit());
+        let display = RGB565Display::new();
+        let state = display.get_state();
+        drop(display);
+        let state = state.lock().unwrap();
+        assert!(state.should_quit());
+        assert!(state.shutdown.load(Ordering::Acquire));
     }
 
     #[test]

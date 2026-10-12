@@ -37,6 +37,15 @@ Spill locations remain available for alternate control-flow paths.
 Call argument materialization emits any required spill before overwriting its
 register; pinned arguments that are still live after a call are saved too.
 
+Spill and reload addresses use `ADDI SC, FP, offset` directly, rather than
+copying FP and adding the offset separately. Conditional branches materialize
+their predicate before flushing live successor values. A predicate used only
+by the branch stays in its physical register without a stack round trip;
+predicates reused in successors still receive a spill slot. The flush uses
+reserved scratch registers and preserves the condition until the branch.
+Execution tests cover wide conditions, register pressure, pointer banks,
+alternative successor paths, and loop backedges.
+
 Dynamic pointer arithmetic first scales the displacement with fixed-register
 shifts/additions. Positive or negative one-word displacements use native
 carry/borrow and bank adjustment. Other displacements use a 32-bit fallback.
