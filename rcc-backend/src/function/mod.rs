@@ -15,6 +15,7 @@
 mod internal;  // Internal implementation for FunctionBuilder (was lowering.rs)
 mod calling_convention;  // Calling convention logic (private to this module)
 mod builder;  // Public API for building functions
+pub(crate) mod frame;
 
 // Public exports - ONLY the safe API
 pub use builder::{FunctionBuilder, CallArg, CallTarget};  // All function-related operations go through FunctionBuilder

@@ -22,7 +22,9 @@ fn gep_keeps_native_zero_extended_indices_but_not_signed_or_wide_ones() {
         (T::I16, U::ZExt, 0),
         (T::I8, U::ZExt, 0),
         (T::I16, U::SExt, 1),
-        (T::I32, U::ZExt, 1),
+        // The same-width extension aliases the original I32 parameter; its
+        // full width remains visible to GEP lowering.
+        (T::I32, U::ZExt, 0),
     ] {
         let mut f = Function::new("index".into(), T::FatPtr(Box::new(T::I16)));
         f.add_parameter(0, source_type);
@@ -112,7 +114,8 @@ fn literal_extension_does_not_guess_source_width_from_value() {
             vec![extend.clone(), Instruction::Return(Some(Value::Temp(0)))],
         ));
         optimize_function(&mut f);
-        assert_eq!(f.blocks[0].instructions[0], extend);
+        assert_eq!(f.blocks[0].instructions[0], binary(0, B::Add,
+            Value::Constant(value), Value::Constant(0), T::I64));
     }
 }
 
@@ -359,7 +362,7 @@ fn promotes_non_escaping_single_store_local_and_hoists_its_expression() {
         .any(|i| matches!(i, Instruction::Alloca { .. } | Instruction::Load { .. })));
     assert!(matches!(
         f.blocks[0].instructions[0],
-        Instruction::Binary { result: 11, .. }
+        Instruction::Binary { result: 2, lhs: Value::Temp(0), .. }
     ));
     assert_eq!(f.blocks[2].instructions.len(), 2); // store output and backedge
 }

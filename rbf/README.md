@@ -25,8 +25,10 @@ prefix. `BANK_SIZE` defaults to 64000 and `MEMORY_BANKS` to 16; the helper keeps
 the runtime/compiler/assembler/linker bank sizes consistent. Extra arguments
 after the output prefix are additional object files. For libc calls, build and
 pass the needed runtime objects (for example `runtime/putchar.pobj`). The linker
-currently pulls whole archives. Linking only needed objects reduces expansion
-size and initialization work.
+reads whole archives, then removes unreachable functions and global initializer
+code from current compiler objects. Legacy assembly objects remain intact.
+Unused C global storage reservations remain to preserve compiled GP offsets.
+Linking only needed objects can still reduce memory requirements.
 
 The smoke checks use 512-cell banks to keep real BF memory seeking small.
 64,000-cell banks are supported but the BF CPU's bank-seeking algorithms can
@@ -83,13 +85,15 @@ examples perform much more guest work and are unsuitable for checking that the
 BF display works promptly.
 
 In particular, the 64×64 `rgb565_interactive_simple.c` demo clears 4096 pixels
-through nested `clear_screen` → `set_pixel` → `mmio_write` calls before its first
-flush. Its 16,384-cell bank layout also places the C stack in bank 2, requiring
-BF seeks to guest addresses above 32,768. Each pixel performs many guest
-instructions for those calls, including expensive BF register copies as well
-as RAM accesses. A bounded 40-second trace reached only
-28 of those background writes and no flush, so the black window did not indicate
-a failed display. This assembly demo avoids that startup work.
+before its first flush. Its 16,384-cell bank layout also places the C stack in
+bank 2, requiring BF seeks to guest addresses above 32,768. Before compiler
+inlining, frame reduction and pointer optimizations, a bounded 40-second trace
+reached only 28 background writes and no flush. The black window did not indicate
+a failed display. The compiler now removes much of that overhead, but the larger
+frame and bank layout still make this a heavier workload than the assembly demo.
+The same 40-second local check after those changes reached 487 background writes
+without flushing a frame. Use the small compiled-C checks below for bounded,
+exact-pixel verification; the larger demo still has a long startup in BF.
 
 ## Ordinary Brainfuck interpreters
 
@@ -232,6 +236,7 @@ cargo test --manifest-path src/rust-bf/Cargo.toml --lib engine
 cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_host
 cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_multibank
 scripts/test-bf-host.sh
+node scripts/test-bf-compiler.mjs
 ```
 
 The smoke script runs small assembly fixtures and a compiled C program. It
@@ -246,6 +251,14 @@ Artifacts are written to `build/bf-smoke`; set `BF_SMOKE_OUT` to override it.
 The interpreter tests compare full state and events against an independent
 literal BF oracle. Shared device tests compare flat and strided RAM.
 No check builds or executes Doom.
+
+The compiler check builds ordinary C graphics-API and direct-pointer examples,
+then compares exact 4×2 and 8×2 RGB565 frames on RVM and BF. It also checks guest
+instruction ceilings; wall time is recorded but never used as a pass/fail limit
+apart from a generous execution timeout. Run it after building the release tools
+listed above. `--rvm-only` skips BF execution. Reports, tool hashes, reproduction
+commands and captures go to `build/bf-compiler-regression`; `BF_COMPILER_OUT`
+overrides that directory. No runtime rebuild or Doom source is involved.
 
 ## Remaining BF CPU limits
 

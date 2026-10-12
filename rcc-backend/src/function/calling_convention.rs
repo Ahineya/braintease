@@ -149,6 +149,10 @@ impl CallingConvention {
         // This prevents source registers from being clobbered during argument setup
         debug!("  Spilling all live registers before call");
         insts.push(AsmInst::Comment("Spill live registers before call".to_string()));
+        // Register arguments have already been parked in A0-A3. Their source
+        // temporaries need a spill only if the caller uses them again. Pinned
+        // stack arguments and indirect targets remain available for setup.
+        pressure_manager.retain_live_after();
         pressure_manager.spill_live_pinned_for_call();
         pressure_manager.spill_all();
         let spill_insts = pressure_manager.take_instructions();

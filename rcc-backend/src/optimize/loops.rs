@@ -6,19 +6,17 @@ use std::collections::{HashMap, HashSet};
 /// Existing dedicated preheaders suffice for frontend-generated C loops. Skip
 /// irreducible loops and loops requiring edge splitting/phi repair.
 pub(super) fn hoist_invariants(function: &mut Function) {
+    if super::cfg::Cfg::new(function).is_err() { return; }
     let n = function.blocks.len();
     // Frontend C blocks have explicit terminators. Do not infer a natural
     // loop from incomplete CFG edges in hand-written/fallthrough IR.
     if function.blocks.iter().any(|b| !b.has_terminator()) {
         return;
     }
-    if n < 2
-        || function
-            .blocks
-            .iter()
-            .flat_map(|b| &b.instructions)
-            .any(|i| matches!(i, Instruction::Phi { .. }))
-    {
+    // Phi results are ordinary definitions for invariance: loop-carried values
+    // are defined inside the loop, so neither they nor their dependents move.
+    // Phi instructions themselves are never speculatable.
+    if n < 2 {
         return;
     }
     let ids: HashMap<_, _> = function

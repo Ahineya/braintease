@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYY\n",
+  "description": "Leaf, wide, stack, recursive, and variadic calls preserve the common ABI",
+  "use_runtime": true
+}

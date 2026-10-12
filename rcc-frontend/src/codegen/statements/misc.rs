@@ -48,7 +48,7 @@ pub fn generate_inline_asm_extended(
 ) -> Result<(), CompilerError> {
     
     // If no operands, use simple version
-    if outputs.is_empty() && inputs.is_empty() {
+    if outputs.is_empty() && inputs.is_empty() && clobbers.is_empty() {
         return generate_inline_asm(gen, assembly);
     }
     

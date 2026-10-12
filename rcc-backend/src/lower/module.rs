@@ -14,12 +14,17 @@ use super::function::lower_function_v2;
 /// Lower an entire module using the V2 backend
 pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Result<Vec<AsmInst>, String> {
     let mut optimized = module.clone();
+    crate::optimize::optimize_module(&mut optimized);
     for function in &mut optimized.functions {
-        crate::optimize::optimize_function(function);
+        crate::optimize::preserve_pointer_banks(function, bank_size);
+        crate::optimize::destroy_phis(function)?;
     }
     let module = &optimized;
     info!("V2: Lowering module '{}' with bank_size {}", module.name, bank_size);
     let mut all_instructions = Vec::new();
+    let mut link_symbols = std::collections::BTreeMap::<String, Vec<String>>::new();
+    let mut link_code = Vec::new();
+    let mut link_roots = Vec::new();
     
     // Create a global manager to handle global variable allocation
     let mut global_manager = GlobalManager::with_module_and_bank_size(&module.name, bank_size);
@@ -39,16 +44,31 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
     // across separately compiled objects instead of every object starting at 0.
     all_instructions.extend(global_manager.emit_data_section());
     
-    // Each object contributes an initializer; the linker constructs the dispatcher.
+    // Independent initializer entries let the linker retain exactly the globals
+    // referenced by reachable functions (including pointers to other globals).
+    // Keep the TU marker so old tools still recognize its GP data reservation.
     if module.globals.iter().any(|g| g.linkage != Linkage::Declaration) {
-        all_instructions.push(AsmInst::Label(format!("__rcc_init_{}", global_manager.unit_tag())));
-        for global in &module.globals {
+        let marker = format!("__rcc_init_{}", global_manager.unit_tag());
+        all_instructions.push(AsmInst::Label(marker.clone()));
+        all_instructions.push(AsmInst::Ret);
+        link_code.push(marker.clone());
+        link_roots.push(marker);
+        for (index, global) in module.globals.iter().enumerate() {
             if global.linkage == Linkage::Declaration { continue; }
+            let init = format!("__rcc_init_{}_g{index}", global_manager.unit_tag());
+            link_code.push(init.clone());
+            let mut references = std::collections::BTreeSet::new();
+            if let Some(value) = &global.initializer {
+                crate::optimize::value_symbols(value, &mut references);
+            }
+            link_symbols.insert(global.name.clone(), vec![init.clone()]);
+            link_symbols.insert(init.clone(), references.into_iter().collect());
+            all_instructions.push(AsmInst::Label(init));
             if let Some(info) = global_manager.get_global_info(&global.name) {
                 all_instructions.extend(global_manager.lower_global_init(global, info));
             }
+            all_instructions.push(AsmInst::Ret);
         }
-        all_instructions.push(AsmInst::Ret);
     }
 
     // Lower each function
@@ -99,6 +119,15 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
         let mut naming = new_function_naming();
         
         let function_asm = lower_function_v2(function, &mut mgr, &mut naming, &global_manager, bank_size)?;
+        link_code.push(function.name.clone());
+        let mut references = crate::optimize::function_symbols(function);
+        if crate::optimize::function_has_opaque_asm(function) {
+            // Opaque assembly can use GP offsets or hidden function addresses.
+            // Retain this translation unit's symbols when such a body is live.
+            references.extend(module.globals.iter().map(|g| g.name.clone()));
+            references.extend(module.functions.iter().filter(|f| !f.is_external).map(|f| f.name.clone()));
+        }
+        link_symbols.insert(function.name.clone(), references.into_iter().collect());
         all_instructions.extend(function_asm);
     }
     
@@ -123,6 +152,19 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
             }
         }
     }
+    let rename = |name: &str| {
+        if internal.iter().any(|n| n == name) {
+            format!("__rcc_local_{}_{}", global_manager.unit_tag(), name)
+        } else { name.to_string() }
+    };
+    let symbols: std::collections::BTreeMap<_, _> = link_symbols.into_iter()
+        .map(|(name, refs)| (rename(&name), refs.iter().map(|n| rename(n)).collect::<Vec<_>>())).collect();
+    let metadata = serde_json::json!({
+        "symbols": symbols,
+        "code": link_code.iter().map(|n| rename(n)).collect::<Vec<_>>(),
+        "roots": link_roots,
+    });
+    all_instructions.insert(0, AsmInst::Comment(format!("rcc-link-v1 {metadata}")));
     info!("V2: Module lowering complete, generated {} instructions", all_instructions.len());
     Ok(all_instructions)
 }

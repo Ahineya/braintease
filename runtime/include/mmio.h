@@ -10,6 +10,22 @@
 unsigned short mmio_read(unsigned short addr);
 void mmio_write(unsigned short addr, unsigned short value);
 
+// Keep the external entry points for address-taking and old object files, while
+// making tiny direct-call bodies visible to the compiler in every translation
+// unit. Function-like macros leave `&mmio_read` / `&mmio_write` unchanged.
+#ifndef RIPPLE_MMIO_NO_INLINE
+static inline unsigned short __ripple_mmio_read(unsigned short addr) {
+    unsigned short value;
+    __asm__("LOAD %0, R0, %1" : "=r"(value) : "r"(addr));
+    return value;
+}
+static inline void __ripple_mmio_write(unsigned short addr, unsigned short value) {
+    __asm__("STORE %0, R0, %1" : : "r"(value), "r"(addr));
+}
+#define mmio_read(addr) __ripple_mmio_read((addr))
+#define mmio_write(addr, value) __ripple_mmio_write((addr), (value))
+#endif
+
 // TTY functions
 void tty_putchar(unsigned char c);
 

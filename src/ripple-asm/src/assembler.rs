@@ -26,6 +26,14 @@ impl RippleAssembler {
     }
 
     pub fn assemble(&self, source: &str) -> Result<ObjectFile, Vec<String>> {
+        let mut rcc = None;
+        for line in source.lines() {
+            if let Some(json) = line.trim().strip_prefix("; rcc-link-v1 ") {
+                if rcc.is_some() { return Err(vec!["duplicate RCC link metadata".into()]); }
+                rcc = Some(serde_json::from_str::<CompilerMetadata>(json)
+                    .map_err(|e| vec![format!("invalid RCC link metadata: {e}")])?);
+            }
+        }
         let mut state = AssemblerState {
             current_bank: self.options.start_bank,
             current_offset: 0,
@@ -87,6 +95,7 @@ impl RippleAssembler {
             data_labels: state.data_labels,
             unresolved_references,
             entry_point,
+            rcc,
         })
     }
 
@@ -314,7 +323,10 @@ impl RippleAssembler {
                         // Check if operand is likely a label (not a register or immediate)
                         // Be case-insensitive for register checks
                         let upper_op = operand.to_uppercase();
-                        let is_register = Register::from_str(&upper_op).is_some();
+                        // LI's second operand is an immediate/symbol, never a
+                        // register. C globals named sp, gp, r0, etc. are legal.
+                        let is_register = Register::from_str(&upper_op).is_some()
+                            && !(opcode == Opcode::Li && i == 1);
                         let is_number = operand.parse::<i32>().is_ok()
                             || operand.starts_with("0x") || operand.starts_with("0X")
                             || operand.starts_with("0b") || operand.starts_with("0B");
@@ -387,10 +399,11 @@ impl RippleAssembler {
         state: &mut AssemblerState,
         opcode: Opcode,
     ) {
-        for operand in operands {
+        for (i, operand) in operands.iter().enumerate() {
             // Check if operand looks like a label (not a register or immediate)
             let upper_op = operand.to_uppercase();
-            let is_register = Register::from_str(&upper_op).is_some();
+            let is_register = Register::from_str(&upper_op).is_some()
+                && !(opcode == Opcode::Li && i == 1);
             let is_number = operand.parse::<i32>().is_ok()
                 || operand.starts_with("0x") || operand.starts_with("0X")
                 || operand.starts_with("0b") || operand.starts_with("0B");
@@ -470,6 +483,16 @@ impl RippleAssembler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn immediate_labels_can_share_register_names() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let object = assembler.assemble(".data\nsp: .space 1\nr0: .space 1\n.code\nstart:\nLI T0, sp\nLI T1, r0\nADD T2, SP, R0\nHALT\n").unwrap();
+        assert_eq!(object.unresolved_references[&0].label, "sp");
+        assert_eq!(object.unresolved_references[&1].label, "r0");
+        assert_eq!(object.instructions[2].word2, Register::Sp as u16);
+        assert_eq!(object.instructions[2].word3, Register::R0 as u16);
+    }
 
     #[test]
     fn test_assemble_nop() {

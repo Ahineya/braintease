@@ -5,5 +5,5 @@
 //! better maintainability.
 
 pub mod module;
-mod function;
+pub(crate) mod function;
 mod instruction;

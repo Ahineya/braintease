@@ -1,0 +1,5 @@
+{
+  "expected": "YYYY\n",
+  "use_runtime": true,
+  "description": "Pruned SSA locals: loop-carried swap cycles, wide values, nested break/continue, escaped volatile storage"
+}

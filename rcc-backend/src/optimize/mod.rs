@@ -2,9 +2,15 @@
 //! their order; a pure expression is never a license to speculate a load.
 
 mod constants;
+mod inline;
 mod locals;
 mod loops;
 mod narrow;
+mod pointers;
+pub(crate) mod cfg;
+mod ssa;
+mod phi;
+mod reachability;
 #[cfg(test)]
 mod tests;
 
@@ -13,6 +19,18 @@ use rcc_frontend::ir::{Function, Instruction, Value};
 use std::collections::{HashMap, HashSet};
 
 pub use constants::fold_binary;
+pub use pointers::preserve_pointer_banks;
+pub use phi::destroy_phis;
+pub use reachability::{function_symbols, function_has_opaque_asm, value_symbols};
+
+pub fn optimize_module(module: &mut rcc_frontend::ir::Module) {
+    for function in &mut module.functions { optimize_function(function); }
+    inline::inline_small_functions(module);
+    for function in &mut module.functions {
+        ssa::promote_integer_locals(function);
+        optimize_function(function);
+    }
+}
 
 pub fn optimize_function(function: &mut Function) {
     if function.is_external {

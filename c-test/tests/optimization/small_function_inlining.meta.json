@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Small helper inlining preserves wide arguments, branches, side effects, recursion and pointers",
+  "expected": "YYYYYYY\n"
+}

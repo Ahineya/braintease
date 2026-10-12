@@ -11,6 +11,7 @@ use rcc_frontend::ir::{Function, Instruction, Value};
 
 #[derive(Default)]
 pub(crate) struct FunctionLiveness {
+    pub(crate) live_in: Vec<BTreeSet<TempId>>,
     pub(crate) before: Vec<Vec<BTreeSet<TempId>>>,
     pub(crate) after: Vec<Vec<BTreeSet<TempId>>>,
 }
@@ -157,7 +158,7 @@ impl FunctionLiveness {
             }
             if !changed { break; }
         }
-        let mut result = Self::default();
+        let mut result = Self { live_in, ..Self::default() };
         for (index, instructions) in instruction_operands.iter().enumerate() {
             let mut live = live_out[index].clone();
             let mut before = vec![BTreeSet::new(); instructions.len()];

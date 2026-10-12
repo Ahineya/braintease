@@ -30,6 +30,7 @@ impl Linker {
     }
 
     pub fn link(&self, mut object_files: Vec<ObjectFile>) -> Result<LinkedProgram, Vec<String>> {
+        crate::reachability::collect(&mut object_files)?;
         // Startup has always called _init_globals. Build one ordinary ISA routine
         // that visits every separately compiled object's initializer.
         if !object_files.iter().any(|obj| obj.labels.contains_key("_init_globals")) {

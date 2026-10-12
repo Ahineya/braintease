@@ -31,15 +31,16 @@ int main() {
     up = key_up_pressed();
     down = key_down_pressed();
     
-    if (up == 0 && down == 0) {
+    // Sample in TEXT40, then report outside raw terminal mode so the host's
+    // intentional LF-to-CRLF presentation does not affect this keyboard test.
+    int idle = up == 0 && down == 0;
+    display_set_mode(DISP_MODE_OFF);
+    if (idle) {
         putchar('Y'); // Yes, still working
     } else {
         putchar('N'); // No, unexpected values
     }
     putchar('\n');
-    
-    // Return to normal mode
-    display_set_mode(DISP_MODE_OFF);
     
     return 0;
 }

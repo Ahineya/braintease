@@ -62,7 +62,7 @@ for frame in 1 3 4 19; do
 done
 
 # Real compiled C exercises startup, separate stack/global banks, and multiple code banks.
-BANK_SIZE=128 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/tiny.c" "$OUT/tiny" > "$OUT/tiny-build.log" 2>&1 || { cat "$OUT/tiny-build.log" >&2; exit 1; }
+BANK_SIZE=64 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/tiny.c" "$OUT/tiny" > "$OUT/tiny-build.log" 2>&1 || { cat "$OUT/tiny-build.log" >&2; exit 1; }
 "$RBF" "$OUT/tiny.bf" --headless --exit-code --report "$OUT/tiny.json" \
     --max-dispatches 1000000000 --timeout 30 > "$OUT/tiny.stdout"
 [[ "$(cat "$OUT/tiny.stdout")" == Y ]] || { echo "C assertions failed" >&2; exit 1; }
@@ -81,7 +81,8 @@ for (const clock of ['unthrottled','stepped']) {
 }
 const tiny=JSON.parse(fs.readFileSync(path.join(out,'tiny.json')));
 assert.equal(tiny.success,true); assert.equal(tiny.stop_reason,'halted'); assert.equal(tiny.guest_result,0);
-assert.ok(tiny.layout.instructions > tiny.layout.bank_size);
+assert.ok(tiny.layout.instructions > tiny.layout.bank_size,
+    'Keep the compiled C fixture spanning code banks as compiler output shrinks');
 const multibank=JSON.parse(fs.readFileSync(path.join(out,'multibank.json')));
 assert.equal(multibank.success,true); assert.equal(multibank.guest_result,0);
 assert.ok(multibank.layout.entry >= multibank.layout.bank_size);

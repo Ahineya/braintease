@@ -3,6 +3,7 @@ pub mod parser;
 pub mod encoder;
 pub mod assembler;
 pub mod linker;
+mod reachability;
 pub mod macro_formatter;
 pub mod virtual_instructions;
 pub mod disassembler;

@@ -39,13 +39,13 @@ pub fn lower_instruction(
     match instruction {
         Instruction::Binary { result, op, lhs, rhs, result_type } => {
             debug!("V2: Binary: t{result} = {lhs:?} {op:?} {rhs:?}");
+            let comparison = matches!(op, rcc_frontend::ir::IrBinaryOp::Eq | rcc_frontend::ir::IrBinaryOp::Ne
+                | rcc_frontend::ir::IrBinaryOp::Slt | rcc_frontend::ir::IrBinaryOp::Sle
+                | rcc_frontend::ir::IrBinaryOp::Sgt | rcc_frontend::ir::IrBinaryOp::Sge
+                | rcc_frontend::ir::IrBinaryOp::Ult | rcc_frontend::ir::IrBinaryOp::Ule
+                | rcc_frontend::ir::IrBinaryOp::Ugt | rcc_frontend::ir::IrBinaryOp::Uge);
             if let (Value::Constant(a), Value::Constant(b)) = (lhs, rhs) {
                 if let Some(value) = crate::optimize::fold_binary(*op, *a, *b, result_type) {
-                    let comparison = matches!(op, rcc_frontend::ir::IrBinaryOp::Eq | rcc_frontend::ir::IrBinaryOp::Ne
-                        | rcc_frontend::ir::IrBinaryOp::Slt | rcc_frontend::ir::IrBinaryOp::Sle
-                        | rcc_frontend::ir::IrBinaryOp::Sgt | rcc_frontend::ir::IrBinaryOp::Sge
-                        | rcc_frontend::ir::IrBinaryOp::Ult | rcc_frontend::ir::IrBinaryOp::Ule
-                        | rcc_frontend::ir::IrBinaryOp::Ugt | rcc_frontend::ir::IrBinaryOp::Uge);
                     let words = if comparison { 1 } else { result_type.abi_slots() };
                     let name = naming.temp_name(*result);
                     let mut regs = [Reg::R0; 4];
@@ -64,12 +64,16 @@ pub fn lower_instruction(
                     return Ok(insts);
                 }
             }
-            let use_i64 = result_type.is_i64()
-                || crate::instr::i64::value_is_i64(mgr, naming, lhs)
-                || crate::instr::i64::value_is_i64(mgr, naming, rhs);
-            let use_i32 = result_type.is_wide()
-                || crate::instr::wide::value_is_i32(mgr, naming, lhs)
-                || crate::instr::wide::value_is_i32(mgr, naming, rhs);
+            // Arithmetic has the width declared by the IR. A native unsigned
+            // literal such as 32768 must not create an I32 result merely because
+            // it exceeds i16::MAX. Comparisons are different: their boolean
+            // result can be narrower than the values being compared.
+            let use_i64 = result_type.is_i64() || (comparison
+                && (crate::instr::i64::value_is_i64(mgr, naming, lhs)
+                    || crate::instr::i64::value_is_i64(mgr, naming, rhs)));
+            let use_i32 = result_type.is_wide() || (comparison
+                && (crate::instr::wide::value_is_i32(mgr, naming, lhs)
+                    || crate::instr::wide::value_is_i32(mgr, naming, rhs)));
             if result_type.is_fp() {
                 return Err(format!(
                     "COMPILER BUG: floating Binary {op:?} should have been lowered to a soft-float call"
@@ -477,30 +481,10 @@ pub fn lower_instruction(
             mgr.free_register(cond_reg);
         }
         
-        Instruction::Phi { result, incoming, .. } => {
-            debug!("V2: Phi: t{} with {} incoming", result, incoming.len());
-            // Phi nodes require SSA deconstruction - simplified for now
-            warn!("V2: Phi nodes not fully implemented - using first value");
-            if let Some((value, _label)) = incoming.first() {
-                match value {
-                    Value::Temp(t) => {
-                        let src_name = naming.temp_name(*t);
-                        let dst_name = naming.temp_name(*result);
-                        let src_reg = mgr.get_register(src_name);
-                        let dst_reg = mgr.get_register(dst_name);
-                        insts.extend(mgr.take_instructions());
-                        insts.push(AsmInst::Move(dst_reg, src_reg));
-                        mgr.free_register(src_reg);
-                    }
-                    Value::Constant(c) => {
-                        let dst_name = naming.temp_name(*result);
-                        let dst_reg = mgr.get_register(dst_name);
-                        insts.extend(mgr.take_instructions());
-                        insts.push(AsmInst::Li(dst_reg, *c as i16));
-                    }
-                    _ => {}
-                }
-            }
+        Instruction::Phi { result, .. } => {
+            return Err(format!(
+                "COMPILER BUG: Phi t{result} reached instruction lowering before SSA destruction"
+            ));
         }
         
         Instruction::Select { result, condition, true_value, false_value, .. } => {

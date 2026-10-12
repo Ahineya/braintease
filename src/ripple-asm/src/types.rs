@@ -515,6 +515,17 @@ pub struct ObjectFile {
     pub data_labels: HashMap<String, u32>,
     pub unresolved_references: HashMap<usize, UnresolvedReference>,
     pub entry_point: Option<String>,
+    /// Optional compiler reachability information. Legacy assembly objects are
+    /// retained whole. This is link-time metadata, never part of a VM image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rcc: Option<CompilerMetadata>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CompilerMetadata {
+    pub symbols: HashMap<String, Vec<String>>,
+    pub code: Vec<String>,
+    pub roots: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

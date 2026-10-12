@@ -41,12 +41,14 @@ pub fn components(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     insts.push(AsmInst::Add(lo, addr, Reg::R0));
     insts.push(AsmInst::Add(hi, bank, Reg::R0));
     mgr.unpin_register(addr); mgr.unpin_register(bank);
-    let tag = reg(mgr, naming, insts, "null_tag");
-    insts.push(AsmInst::Li(tag, BankTagValue::NULL));
-    let done = naming.i32_label("pointer_nonnull");
-    insts.push(AsmInst::Bne(hi, tag, done.clone()));
-    insts.push(AsmInst::Li(lo, 0)); insts.push(AsmInst::Li(hi, 0));
-    insts.push(AsmInst::Label(done));
+    if !matches!(bank_info, BankInfo::Heap(n) if n != BankTagValue::NULL as u16) {
+        let tag = reg(mgr, naming, insts, "null_tag");
+        insts.push(AsmInst::Li(tag, BankTagValue::NULL));
+        let done = naming.i32_label("pointer_nonnull");
+        insts.push(AsmInst::Bne(hi, tag, done.clone()));
+        insts.push(AsmInst::Li(lo, 0)); insts.push(AsmInst::Li(hi, 0));
+        insts.push(AsmInst::Label(done));
+    }
     (lo, hi)
 }
 

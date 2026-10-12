@@ -155,9 +155,10 @@ fn evaluate(
                 U::Not => !value,
                 U::Neg => value.wrapping_neg(),
                 U::Trunc => value,
-                // Untyped literals do not record their source width. For
-                // example 65535L is positive I32, not negative I16. Retain
-                // normal lowering unless a typed SSA operand proves width.
+                // Literal extensions already carry their mathematical value;
+                // lower_i32_extend likewise splits the literal directly. Never
+                // infer a narrower signed source width for 65535L.
+                U::ZExt | U::SExt if matches!(operand, Value::Constant(_)) => value,
                 U::ZExt if matches!(operand, Value::Temp(_)) => {
                     (value as u64 & mask(value_width(operand, types)?)) as i64
                 }
@@ -180,7 +181,7 @@ fn evaluate(
     }
 }
 
-pub(super) fn simplify(function: &mut Function) {
+pub(super) fn integer_facts(function: &Function) -> (HashMap<TempId, i64>, HashMap<TempId, IrType>) {
     let mut types: HashMap<_, _> = function.parameters.iter().cloned().collect();
     for inst in function.blocks.iter().flat_map(|b| &b.instructions) {
         let ty = match inst {
@@ -220,6 +221,11 @@ pub(super) fn simplify(function: &mut Function) {
             break;
         }
     }
+    (known, types)
+}
+
+pub(super) fn simplify(function: &mut Function) {
+    let (known, types) = integer_facts(function);
     for inst in function.blocks.iter_mut().flat_map(|b| &mut b.instructions) {
         if let Some((c, ty)) = evaluate(inst, &known, &types) {
             // Keep the typed temporary: replacing a long call argument with a
@@ -280,5 +286,131 @@ pub(super) fn simplify(function: &mut Function) {
             }
             _ => {}
         }
+    }
+    eliminate_identity_copies(function, &types);
+}
+
+/// Alias only typed SSA temporaries. Replacing a multiword copy by an untyped
+/// literal would change argument width; replacing a narrowing copy would lose
+/// its truncation. Neither is an algebraic identity in this IR.
+fn eliminate_identity_copies(function: &mut Function, types: &HashMap<TempId, IrType>) {
+    use std::collections::HashSet;
+    let mut booleans: HashSet<_> = types.iter().filter_map(|(&id, ty)| (*ty == IrType::I1).then_some(id)).collect();
+    let mut aliases = HashMap::<TempId, TempId>::new();
+    let resolve = |mut id: TempId, aliases: &HashMap<TempId, TempId>| {
+        while let Some(&next) = aliases.get(&id) { if next == id { break; } id = next; }
+        id
+    };
+    loop {
+        let before = (aliases.len(), booleans.len());
+        for inst in function.blocks.iter().flat_map(|b| &b.instructions) {
+            let Some(result) = super::result(inst) else { continue; };
+            let is_boolean = |value: &Value| match value {
+                Value::Constant(0 | 1) => true,
+                Value::Temp(id) => booleans.contains(&resolve(*id, &aliases)),
+                _ => false,
+            };
+            let boolean = match inst {
+                Instruction::Binary { op, .. } => comparison(*op),
+                Instruction::Phi { incoming, .. } => !incoming.is_empty() && incoming.iter().all(|(v, _)| is_boolean(v)),
+                Instruction::Select { true_value, false_value, .. } => is_boolean(true_value) && is_boolean(false_value),
+                _ => false,
+            };
+            if boolean { booleans.insert(result); }
+            let candidate = match inst {
+                Instruction::Binary { op, lhs: Value::Temp(input), rhs: Value::Constant(c), result_type, .. }
+                    if types.get(input) == Some(result_type) => {
+                    let id = resolve(*input, &aliases);
+                    let identity = (*c == 0 && matches!(op, B::Add | B::Sub | B::Or | B::Xor | B::Shl | B::LShr | B::AShr))
+                        || (*c == 1 && matches!(op, B::Mul | B::UDiv | B::SDiv))
+                        || (*op == B::And && width(result_type).is_some_and(|bits| *c as u64 & mask(bits) == mask(bits)))
+                        || (*op == B::Ne && *c == 0 && booleans.contains(&id));
+                    identity.then_some(id)
+                }
+                Instruction::Unary { op: U::Trunc | U::ZExt | U::SExt, operand: Value::Temp(input), result_type, .. }
+                    if types.get(input) == Some(result_type) => Some(resolve(*input, &aliases)),
+                _ => None,
+            };
+            if let Some(input) = candidate {
+                if input != result { aliases.insert(result, input); }
+                if booleans.contains(&input) { booleans.insert(result); }
+            }
+        }
+        if before == (aliases.len(), booleans.len()) { break; }
+    }
+    if aliases.is_empty() { return; }
+    fn rewrite(value: &mut Value, aliases: &HashMap<TempId, TempId>) {
+        match value {
+            Value::Temp(id) => { while let Some(&next) = aliases.get(id) { *id = next; } }
+            Value::FatPtr(pointer) => rewrite(&mut pointer.addr, aliases),
+            Value::AddressOffset { base, .. } => rewrite(base, aliases),
+            Value::ConstantAggregate(values) => for value in values { rewrite(value, aliases); },
+            _ => {},
+        }
+    }
+    for block in &mut function.blocks {
+        block.instructions.retain(|inst| super::result(inst).is_none_or(|id| !aliases.contains_key(&id)));
+        for inst in &mut block.instructions {
+            let value = |v: &mut Value| rewrite(v, &aliases);
+            match inst {
+                Instruction::Binary { lhs, rhs, .. } => { value(lhs); value(rhs); }
+                Instruction::Unary { operand, .. } => value(operand),
+                Instruction::Load { ptr, .. } => value(ptr),
+                Instruction::Store { ptr, value: stored, .. } => { value(ptr); value(stored); }
+                Instruction::GetElementPtr { ptr, indices, .. } => { value(ptr); for v in indices { value(v); } }
+                Instruction::Alloca { count, .. } | Instruction::Return(count) => { if let Some(v) = count { value(v); } }
+                Instruction::Call { function, args, .. } => { value(function); for v in args { value(v); } }
+                Instruction::Intrinsic { args, .. } => for v in args { value(v); },
+                Instruction::BranchCond { condition, .. } => value(condition),
+                Instruction::Phi { incoming, .. } => for (v, _) in incoming { value(v); },
+                Instruction::Cast { value: v, .. } => value(v),
+                Instruction::Select { condition, true_value, false_value, .. } => { value(condition); value(true_value); value(false_value); }
+                Instruction::InlineAsm { inputs, .. } => for input in inputs { value(&mut input.value); },
+                _ => {},
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+    use rcc_frontend::ir::BasicBlock;
+
+    #[test]
+    fn typed_aliases_keep_wide_arguments_and_remove_boolean_rechecks() {
+        let mut f = Function::new("aliases".into(), IrType::I32);
+        f.add_parameter(0, IrType::I32);
+        let mut block = BasicBlock::new(0);
+        block.instructions = vec![
+            Instruction::Binary { result: 1, op: B::Add, lhs: Value::Temp(0), rhs: Value::Constant(0), result_type: IrType::I32 },
+            Instruction::Binary { result: 2, op: B::Ne, lhs: Value::Temp(1), rhs: Value::Constant(0), result_type: IrType::I16 },
+            Instruction::Binary { result: 3, op: B::Ne, lhs: Value::Temp(2), rhs: Value::Constant(0), result_type: IrType::I16 },
+            Instruction::Call { result: None, function: Value::Function("observe".into()), args: vec![Value::Temp(1),Value::Temp(3)], result_type: IrType::Void, stack_args_from: None },
+            Instruction::Return(Some(Value::Temp(1))),
+        ];
+        f.blocks.push(block);
+        simplify(&mut f);
+        assert_eq!(f.blocks[0].instructions.len(),3);
+        assert!(matches!(&f.blocks[0].instructions[0],Instruction::Binary { result: 2,lhs: Value::Temp(0),.. }));
+        assert!(matches!(&f.blocks[0].instructions[1],Instruction::Call {args,..} if args == &vec![Value::Temp(0),Value::Temp(2)]));
+        assert!(matches!(&f.blocks[0].instructions[2],Instruction::Return(Some(Value::Temp(0)))));
+    }
+
+    #[test]
+    fn narrowing_and_untyped_wide_constants_are_not_identity_aliases() {
+        let mut f = Function::new("narrow".into(), IrType::I16);
+        f.add_parameter(0, IrType::I32);
+        let mut block = BasicBlock::new(0);
+        block.instructions = vec![
+            Instruction::Binary { result: 1, op: B::Add, lhs: Value::Temp(0), rhs: Value::Constant(0), result_type: IrType::I16 },
+            Instruction::Binary { result: 2, op: B::Add, lhs: Value::Constant(1), rhs: Value::Constant(0), result_type: IrType::I32 },
+            Instruction::Call { result: None,function: Value::Function("wide".into()),args: vec![Value::Temp(2)],result_type: IrType::Void,stack_args_from: None },
+            Instruction::Return(Some(Value::Temp(1))),
+        ];
+        f.blocks.push(block);
+        simplify(&mut f);
+        assert_eq!(f.blocks[0].instructions.len(),4);
+        assert!(matches!(&f.blocks[0].instructions[2],Instruction::Call {args,..} if args == &vec![Value::Temp(2)]));
     }
 }

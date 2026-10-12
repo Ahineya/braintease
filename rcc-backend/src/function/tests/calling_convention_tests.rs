@@ -512,3 +512,17 @@ fn test_all_register_types_mixed() {
     assert!(insts.iter().any(|i| matches!(i, AsmInst::Add(Reg::A3, Reg::T1, Reg::R0))),
             "T1 should be moved to A3");
 }
+
+#[test]
+fn parked_arguments_are_not_spilled_when_dead_after_the_call() {
+    use std::collections::BTreeSet;
+    let cc=CallingConvention::new();
+    let mut pm=RegisterPressureManager::new(0);
+    pm.init();
+    pm.get_register("t1".into());
+    pm.get_register("t2".into());
+    pm.set_live_after(&BTreeSet::from([2]));
+    let code=cc.setup_call_args(&mut pm,&mut new_function_naming(),vec![CallArg::Scalar(Reg::A0)],None);
+    assert_eq!(code.iter().filter(|i| matches!(i,AsmInst::Store(..))).count(),1);
+    assert_eq!(pm.get_spill_count(),1);
+}

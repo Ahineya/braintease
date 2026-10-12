@@ -29,6 +29,7 @@ struct Candidate {
 }
 
 pub(super) fn promote_single_store_locals(function: &mut Function) {
+    if super::cfg::Cfg::new(function).is_err() { return; }
     let mut candidates = HashMap::new();
     for (bi, block) in function.blocks.iter().enumerate() {
         for (ii, inst) in block.instructions.iter().enumerate() {

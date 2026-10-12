@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Inlining gives each inline-assembly output its own fresh SSA temporary",
+  "expected": "YYY\n"
+}

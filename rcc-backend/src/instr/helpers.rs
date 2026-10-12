@@ -154,6 +154,7 @@ fn get_bank_register_with_runtime_check(
         BankInfo::Global => (Reg::Gp, insts),
         BankInfo::Stack => (Reg::Sb, insts),
         BankInfo::Register(reg) => (*reg, insts),
+        BankInfo::Heap(0) => (Reg::R0, insts),
         BankInfo::Heap(bank) => {
             // For heap banks, we need to allocate a register and load the bank number
             let result_name = naming.temp_with_context(context, "heap_bank");

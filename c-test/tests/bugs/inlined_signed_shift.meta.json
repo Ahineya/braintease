@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n",
+  "description": "Inlined signed shifts preserve negative operands across loop iterations",
+  "use_runtime": true
+}

@@ -106,6 +106,12 @@ pub struct RegisterPressureManager {
     /// IR roots needed after the instruction currently being lowered. Older
     /// standalone lowering tests may omit this; whole functions always set it.
     live_after: Option<BTreeSet<TempId>>,
+
+    /// When the next emitted block has this block as its sole predecessor,
+    /// keep its physical registers and save only values used on other edges.
+    /// None retains the conservative flush used for joins and backedges.
+    branch_spill_roots: Option<BTreeSet<TempId>>,
+    prefer_caller_saved: bool,
 }
 
 impl RegisterPressureManager {
@@ -138,6 +144,8 @@ impl RegisterPressureManager {
             gp_base_label: None,
             memory_bank_size: 64000,
             live_after: None,
+            branch_spill_roots: None,
+            prefer_caller_saved: false,
         }
     }
     
@@ -182,6 +190,42 @@ impl RegisterPressureManager {
                 trace!("Unpinning register {reg:?} (was not pinned)");
             }
         }
+    }
+
+    /// Prefer caller-saved registers in leaves, which need no saved-register
+    /// frame until real pressure exhausts the eight temporary registers.
+    pub(crate) fn prefer_caller_saved(&mut self) {
+        self.prefer_caller_saved = true;
+    }
+
+    fn take_free_register(&mut self) -> Option<Reg> {
+        // Freed temporaries are appended to the queue. Sorting only once would
+        // eventually choose every S register in a low-pressure leaf anyway.
+        if self.prefer_caller_saved {
+            if let Some(index) = self.free_list.iter().position(|reg| {
+                !self.pinned_registers.contains_key(reg)
+                    && !matches!(reg, Reg::S0 | Reg::S1 | Reg::S2 | Reg::S3)
+            }) { return self.free_list.remove(index); }
+        }
+        let index = self.free_list.iter()
+            .position(|reg| !self.pinned_registers.contains_key(reg))?;
+        self.free_list.remove(index)
+    }
+
+    /// Keep instruction operands pinned, but discard unpinned values which
+    /// have no use after the current IR instruction (e.g. parked call args).
+    pub(crate) fn retain_live_after(&mut self) {
+        if let Some(live) = self.live_after.clone() {
+            self.retain_live_registers(&live);
+        }
+    }
+
+    /// Move a declared assembly clobber's current value to its spill home.
+    /// Pinning the now-empty register excludes it from operand allocation.
+    pub(crate) fn reserve_clobber(&mut self, register: Reg) {
+        self.spill_register(register);
+        self.forget_registers(&[register]);
+        self.pin_register(register);
     }
 
     /// Take the LRU unpinned register as a spill victim.
@@ -394,7 +438,7 @@ impl RegisterPressureManager {
             debug!("  '{for_value}' is an alloca at FP+{fp_offset}, recomputing address");
             
             // Get a register for the recomputed address
-            let reg = if let Some(free_reg) = self.free_list.pop_front() {
+            let reg = if let Some(free_reg) = self.take_free_register() {
                 free_reg
             } else {
                 // Need to spill to make room
@@ -424,7 +468,7 @@ impl RegisterPressureManager {
             debug!("  '{for_value}' was spilled to slot {slot}, reloading");
             
             // Get a register for the reload (might trigger another spill)
-            let reg = if let Some(free_reg) = self.free_list.pop_front() {
+            let reg = if let Some(free_reg) = self.take_free_register() {
                 free_reg
             } else {
                 // Need to spill to make room
@@ -470,7 +514,7 @@ impl RegisterPressureManager {
         }
         
         // Try to get a free register
-        if let Some(reg) = self.free_list.pop_front() {
+        if let Some(reg) = self.take_free_register() {
             self.reg_contents.insert(reg, for_value.clone());
             self.lru_queue.push_back(reg);
             debug!("Allocated {reg:?} for '{for_value}' (was free)");
@@ -804,7 +848,23 @@ impl RegisterPressureManager {
         if let Some(live) = self.live_after.clone() {
             self.retain_live_registers(&live);
         }
-        self.spill_all();
+        if let Some(roots) = &self.branch_spill_roots {
+            let names = self.live_value_names(roots, false);
+            let saved: Vec<_> = self.reg_contents.iter()
+                .filter(|(_, value)| names.contains(*value))
+                .map(|(&reg, value)| (reg, value.clone())).collect();
+            for (reg, _) in &saved { self.spill_register(*reg); }
+            // spill_register writes only SC and forgets its binding. Restore
+            // tracking directly: bind_value_to_register would wrongly discard
+            // the saved home needed by the alternative successor.
+            for (reg, value) in saved { self.reg_contents.insert(reg, value); }
+        } else {
+            self.spill_all();
+        }
+    }
+
+    pub(crate) fn set_branch_spill_roots(&mut self, roots: Option<BTreeSet<TempId>>) {
+        self.branch_spill_roots = roots;
     }
 
     /// Save pinned call operands that remain live after the call. Their physical
@@ -1138,6 +1198,29 @@ impl RegisterPressureManager {
 mod lifetime_reclamation_tests {
     use super::*;
     use crate::instr::tests::machine::Machine;
+
+    #[test]
+    fn leaf_preference_survives_repeated_register_reclamation() {
+        let mut manager = RegisterPressureManager::new(0);
+        manager.prefer_caller_saved();
+        for index in 0..100 {
+            let reg = manager.get_register(format!("helper{index}"));
+            assert!(!matches!(reg, Reg::S0 | Reg::S1 | Reg::S2 | Reg::S3));
+            manager.free_register(reg);
+        }
+        // Preference must still respect pinning and allow actual pressure to
+        // use saved registers once every temporary register is occupied.
+        let mut temps = Vec::new();
+        for index in 0..8 {
+            let reg = manager.get_register(format!("live{index}"));
+            assert!(!matches!(reg, Reg::S0 | Reg::S1 | Reg::S2 | Reg::S3));
+            manager.pin_register(reg);
+            temps.push(reg);
+        }
+        let saved = manager.get_register("overflow".into());
+        assert!(matches!(saved, Reg::S0 | Reg::S1 | Reg::S2 | Reg::S3));
+        for reg in temps { manager.unpin_register(reg); }
+    }
 
     #[test]
     fn spills_and_reloads_use_one_address_instruction_and_preserve_pointer_banks() {

@@ -59,8 +59,8 @@ pub fn calculate_local_slots(function: &Function) -> i16 {
         }
     }
     
-    // Add some buffer for temporaries
-    slots + 8
+    // Register spills are assigned separately and included in the final frame.
+    slots
 }
 
 /// Setup function builder with proper parameter types
@@ -334,16 +334,17 @@ fn lower_basic_block(
     bank_size: u16,
     vararg_fp_offset: Option<i16>,
     liveness: &FunctionLiveness,
+    preserve_incoming_registers: bool,
 ) -> Result<Vec<(Option<(Reg, Option<Reg>)>, usize)>, String> {
     debug!("Lowering block {} (index {}) [loop_condition={}]", block.id, block_idx, block.is_loop_condition);
     
     // A register assignment from the previous *emitted* block need not be
     // valid along the executed control-flow edge. Values are spilled before
     // branches; enter each successor with an empty physical-register cache.
-    if block_idx != 0 {
+    if block_idx != 0 && !preserve_incoming_registers {
         mgr.forget_all_registers();
     }
-    mgr.invalidate_alloca_bindings();
+    if !preserve_incoming_registers { mgr.invalidate_alloca_bindings(); }
     builder.add_instructions(mgr.take_instructions());
 
     // Add label for the block (except for entry block which is implicit)
@@ -377,7 +378,7 @@ fn lower_basic_block(
             
             _ => {
                 if matches!(instruction, Instruction::Branch(_)) {
-                    mgr.spill_all();
+                    mgr.spill_live_for_branch();
                     builder.add_instructions(mgr.take_instructions());
                 }
                 // Use the existing lower_instruction for other instructions
@@ -437,9 +438,25 @@ pub fn lower_function_v2(
     let local_slots = mgr.local_count();
     let alloca_offsets = compute_alloca_offsets(function);
     let liveness = FunctionLiveness::analyze(function);
+    // Legacy frontend goto blocks can contain unreachable instructions after
+    // a terminator. They can still be emitted literally, but cannot authorize
+    // CFG-based register reuse until the IR producer normalizes them.
+    let cfg = crate::optimize::cfg::Cfg::new(function).ok();
+    // Only a unique incoming edge from the immediately previous emitted block
+    // authorizes register reuse. Joins, backedges and reordered blocks retain
+    // the established stack-home contract.
+    let preserve: Vec<_> = (0..function.blocks.len()).map(|i| {
+        i > 0 && cfg.as_ref().is_some_and(|cfg| cfg.predecessors[i] == [i - 1]
+            && cfg.successors[i - 1].contains(&i))
+    }).collect();
     
     // Begin the function (this will emit the prologue)
     builder.begin_function(local_slots);
+
+    if !function.blocks.iter().flat_map(|b| &b.instructions)
+        .any(|i| matches!(i, Instruction::Call { .. })) {
+        mgr.prefer_caller_saved();
+    }
 
     // Bind function parameters
     bind_function_parameters(function, &mut builder, mgr, naming);
@@ -462,6 +479,14 @@ pub fn lower_function_v2(
     
     // Lower each basic block
     for (block_idx, block) in function.blocks.iter().enumerate() {
+        let branch_spills = if preserve.get(block_idx + 1) == Some(&true) {
+            // The following block retains bindings. Every other successor must
+            // still find each live scalar, pointer bank and wide word at home.
+            Some(cfg.as_ref().unwrap().successors[block_idx].iter().filter(|&&s| s != block_idx + 1)
+                .flat_map(|&s| liveness.live_in[s].iter().copied())
+                .collect())
+        } else { None };
+        mgr.set_branch_spill_roots(branch_spills);
         let return_values = lower_basic_block(
             block,
             block_idx,
@@ -476,6 +501,7 @@ pub fn lower_function_v2(
             bank_size,
             vararg_fp_offset,
             &liveness,
+            preserve[block_idx],
         )?;
         
         if !return_values.is_empty() {
@@ -492,7 +518,7 @@ pub fn lower_function_v2(
     // Calls must use the final frame extent, including spills first allocated
     // after that call. Otherwise copying a returned aggregate can spill into
     // the just-returned callee's object before its contents have been copied.
-    let frame_top = mgr.frame_high_water().max(local_slots + 20);
+    let frame_top = mgr.frame_high_water();
     if frame_top < 0 || frame_top as u32 + 8 >= bank_size as u32 {
         return Err(format!("function '{}' stack frame exceeds one stack bank ({bank_size} cells)", function.name));
     }
@@ -508,7 +534,7 @@ pub fn lower_function_v2(
             builder_instructions[index + 1] = AsmInst::AddI(Reg::Sp, Reg::Fp, frame_top);
         }
     }
-    instructions.append(&mut builder_instructions);
+    instructions.extend(crate::function::frame::finalize(builder_instructions, frame_top));
     Ok(instructions)
 }
 
@@ -697,6 +723,51 @@ mod lifetime_tests {
         let (assembly, _) = lower_for_execution(&function);
         for count in [0, 1, 2, 19] {
             assert_eq!(execute(&assembly, &[count]).regs[Reg::Rv0 as usize], 0);
+        }
+    }
+
+    #[test]
+    fn unique_adjacent_successor_reuses_registers_without_spilling() {
+        let mut function = Function::new("adjacent_edge".into(), IrType::I16);
+        function.add_parameter(0, IrType::I16);
+        function.add_parameter(1, IrType::I16);
+        function.blocks = vec![
+            block(0, vec![Instruction::BranchCond { condition: Value::Temp(0), true_label: 1, false_label: 2 }]),
+            block(1, vec![Instruction::Binary { result: 2, op: IrBinaryOp::Add,
+                lhs: Value::Temp(1), rhs: Value::Temp(0), result_type: IrType::I16 },
+                Instruction::Return(Some(Value::Temp(2)))]),
+            block(2, vec![Instruction::Return(Some(Value::Constant(77)))]),
+        ];
+        let (assembly, manager) = lower_for_execution(&function);
+        assert_eq!(manager.get_spill_count(), 0, "sole incoming edge keeps both value and predicate registers");
+        for condition in [0, 1, 9, 65535] {
+            assert_eq!(execute(&assembly, &[condition, 123]).regs[Reg::Rv0 as usize],
+                if condition == 0 { 77 } else { 123u16.wrapping_add(condition) });
+        }
+    }
+
+    #[test]
+    fn adjacent_edge_spills_values_needed_through_an_empty_alternative() {
+        let mut function = Function::new("empty_alternative".into(), IrType::I32);
+        function.add_parameter(0, IrType::I32);
+        function.add_parameter(1, IrType::I16);
+        function.blocks = vec![
+            block(0, vec![Instruction::BranchCond { condition: Value::Temp(1), true_label: 1, false_label: 2 }]),
+            block(1, vec![Instruction::Binary { result: 2, op: IrBinaryOp::Add,
+                lhs: Value::Temp(0), rhs: Value::Constant(65537), result_type: IrType::I32 },
+                Instruction::Return(Some(Value::Temp(2)))]),
+            block(2, vec![]),
+            block(3, vec![Instruction::Return(Some(Value::Temp(0)))]),
+        ];
+        let (assembly, manager) = lower_for_execution(&function);
+        assert!(manager.get_spill_count() >= 2, "both words need homes before taking the alternative");
+        for value in [0u32, 0x1234ffff, u32::MAX] {
+            for condition in [0, 1] {
+                let result = execute(&assembly, &[value as u16, (value >> 16) as u16, condition]);
+                let expected = if condition == 0 { value } else { value.wrapping_add(65537) };
+                assert_eq!(result.regs[Reg::Rv0 as usize], expected as u16);
+                assert_eq!(result.regs[Reg::Rv1 as usize], (expected >> 16) as u16);
+            }
         }
     }
 

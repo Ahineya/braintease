@@ -11,7 +11,7 @@ use rcc_codegen::{AsmInst, Reg};
 use rcc_common::{CompilerError, SourceLocation};
 use crate::naming::NameGenerator;
 use log::{debug, warn};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, BTreeSet};
 use crate::regmgmt::RegisterPressureManager;
 
 /// Parsed constraint information
@@ -71,20 +71,31 @@ fn parse_constraint(constraint_str: &str) -> ParsedConstraint {
 }
 
 /// Get a set of clobbered registers from string names
-#[allow(dead_code)]
-fn parse_clobbers(clobbers: &[String]) -> HashSet<Reg> {
-    let mut clobbered = HashSet::new();
+fn parse_clobbers(clobbers: &[String]) -> Result<BTreeSet<Reg>, CompilerError> {
+    let mut clobbered = BTreeSet::new();
     
     for clobber in clobbers {
         // Use the built-in from_str method from ripple_asm::Register
-        if let Some(reg) = Reg::from_str(clobber) {
+        if matches!(clobber.as_str(), "memory" | "cc") {
+            // Memory is already a barrier to the IR optimizer. Ripple has no
+            // condition-code register; comparisons write ordinary registers.
+            continue;
+        }
+        if let Some(reg) = Reg::from_str(&clobber.to_uppercase()) {
+            if matches!(reg, Reg::R0 | Reg::Pc | Reg::Pcb | Reg::Sp | Reg::Fp | Reg::Sb | Reg::Gp) {
+                return Err(asm_error(format!("Inline assembly cannot clobber reserved register {reg}")));
+            }
             clobbered.insert(reg);
         } else {
-            warn!("Unknown clobber register: {clobber}");
+            return Err(asm_error(format!("Unknown inline assembly clobber '{clobber}'")));
         }
     }
     
-    clobbered
+    Ok(clobbered)
+}
+
+fn asm_error(message: String) -> CompilerError {
+    CompilerError::codegen_error(message, SourceLocation::new_simple(0, 0))
 }
 
 /// Allocate registers for operands based on constraints
@@ -121,6 +132,7 @@ fn allocate_operand_registers(
             
             // Get a register from the manager
             let reg = mgr.get_register(value_name.clone());
+            mgr.pin_register(reg);
             register_map.insert(idx, reg);
             
             allocated_outputs.push(AllocatedOperand {
@@ -153,6 +165,7 @@ fn allocate_operand_registers(
             }
             
             let output_reg = allocated_outputs[output_idx].register;
+            mgr.pin_register(output_reg);
             let value_name = match &input.value {
                 Value::Temp(t) => naming.temp_name(*t),
                 _ => format!("asm_input_{idx}"),
@@ -177,6 +190,7 @@ fn allocate_operand_registers(
                 
                 // Get a register from the manager
                 let reg = mgr.get_register(value_name.clone());
+                mgr.pin_register(reg);
                 
                 allocated_inputs.push(AllocatedOperand {
                     operand: input.clone(),
@@ -216,20 +230,10 @@ fn substitute_placeholders(
 ) -> String {
     let mut result = assembly.to_string();
     
-    // Replace %0, %1, %2, etc. with register names
-    // Outputs come first in the numbering, then inputs
-    
-    // Process outputs
-    for (idx, op) in allocated_outputs.iter().enumerate() {
+    // Highest numbered operands first: replacing %1 must not corrupt %10.
+    let operands: Vec<_> = allocated_outputs.iter().chain(allocated_inputs).collect();
+    for (idx, op) in operands.into_iter().enumerate().rev() {
         let placeholder = format!("%{idx}");
-        let reg_name = format!("{:?}", op.register);
-        result = result.replace(&placeholder, &reg_name);
-    }
-    
-    // Process inputs (continuing the numbering after outputs)
-    let output_count = allocated_outputs.len();
-    for (idx, op) in allocated_inputs.iter().enumerate() {
-        let placeholder = format!("%{}", output_count + idx);
         let reg_name = format!("{:?}", op.register);
         result = result.replace(&placeholder, &reg_name);
     }
@@ -338,18 +342,18 @@ pub fn lower_inline_asm_extended(
 
     let mut insts = Vec::new();
 
-    if outputs.is_empty() && inputs.is_empty() {
-        for part in assembly.split([';', '\n']) {
-            let t = part.trim();
-            if !t.is_empty() { insts.push(AsmInst::Raw(t.to_string())); }
-        }
-        return Ok(insts);
-    }
-
     insts.push(AsmInst::Comment("=== Begin inline assembly ===".to_string()));
-
-    // Conservative but correct baseline:
-    mgr.spill_all();
+    let clobbered = parse_clobbers(clobbers)?;
+    let allocatable = [Reg::T0, Reg::T1, Reg::T2, Reg::T3, Reg::T4, Reg::T5,
+        Reg::T6, Reg::T7, Reg::S0, Reg::S1, Reg::S2, Reg::S3];
+    let available = allocatable.iter().filter(|r| !clobbered.contains(r)).count();
+    let required = outputs.len() + inputs.iter().filter(|op| op.tied_to.is_none()).count();
+    if required > available {
+        return Err(asm_error(format!("Inline assembly needs {required} operand registers but only {available} are available after clobbers")));
+    }
+    // Ordinary inputs stay in place. Only declared clobbers need spill homes;
+    // reserving their physical registers also prevents operand overlap.
+    for &register in &clobbered { mgr.reserve_clobber(register); }
     insts.extend(mgr.take_instructions());
 
     // Allocate regs for operands (keep only 'r' for now)
@@ -366,7 +370,7 @@ pub fn lower_inline_asm_extended(
     insts.push(AsmInst::Comment("Inline assembly code".to_string()));
     for part in substituted.split([';', '\n']) {
         let t = part.trim();
-        if !t.is_empty() { insts.push(AsmInst::Raw(t.to_string())); }
+            if !t.is_empty() { insts.push(structured_memory_instruction(t)); }
     }
 
     // Bind outputs to temps (no stores)
@@ -374,8 +378,31 @@ pub fn lower_inline_asm_extended(
     insts.extend(generate_teardown_code(mgr, naming, &allocated_outputs)?);
     insts.extend(mgr.take_instructions());
 
+    for operand in allocated_outputs.iter().chain(&allocated_inputs) {
+        mgr.unpin_register(operand.register);
+    }
+    for register in clobbered { mgr.unpin_register(register); }
+
     insts.push(AsmInst::Comment("=== End inline assembly ===".to_string()));
     Ok(insts)
+}
+
+// Keep the memory operations used by runtime wrappers visible to frame
+// analysis. Other assembly remains opaque and receives conservative saves.
+fn structured_memory_instruction(text: &str) -> AsmInst {
+    let words: Vec<_> = text.split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|s| !s.is_empty()).collect();
+    if words.len() == 4 {
+        if let (Some(a), Some(b), Some(c)) = (Reg::from_str(words[1]),
+            Reg::from_str(words[2]), Reg::from_str(words[3])) {
+            match words[0].to_uppercase().as_str() {
+                "LOAD" => return AsmInst::Load(a, b, c),
+                "STORE" => return AsmInst::Store(a, b, c),
+                _ => {}
+            }
+        }
+    }
+    AsmInst::Raw(text.to_string())
 }
 
 /// Lower basic inline assembly (no operands)
@@ -391,4 +418,56 @@ pub fn lower_inline_asm_basic(assembly: &str) -> Vec<AsmInst> {
     }
     
     insts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::instr::tests::machine::Machine;
+
+    fn input(id:u32) -> AsmOperandIR {
+        AsmOperandIR {constraint:"r".into(),value:Value::Temp(id),tied_to:None}
+    }
+
+    #[test]
+    fn store_operands_stay_in_registers_and_execute_exactly_once() {
+        let mut mgr=RegisterPressureManager::new(0);
+        mgr.init();
+        let value=mgr.get_register("t1".into());
+        let addr=mgr.get_register("t2".into());
+        let code=lower_inline_asm_extended(&mut mgr,&mut NameGenerator::new(0),"STORE %0, R0, %1",&[],&[input(1),input(2)],&[]).unwrap();
+        assert_eq!(code.iter().filter(|i| matches!(i,AsmInst::Store(..))).count(),1);
+        assert!(!code.iter().any(|i| matches!(i,AsmInst::Load(..))));
+        let mut machine=Machine::new(64000);
+        machine.regs[value as usize]=0xf81f;
+        machine.regs[addr as usize]=512;
+        machine.run(&code);
+        assert_eq!(machine.memory[&(0,512)],0xf81f);
+    }
+
+    #[test]
+    fn declared_clobber_is_saved_and_excluded_from_operands() {
+        let mut mgr=RegisterPressureManager::new(0);
+        mgr.init();
+        let value=mgr.get_register("t1".into());
+        assert_eq!(value,Reg::S3);
+        let addr=mgr.get_register("t2".into());
+        let code=lower_inline_asm_extended(&mut mgr,&mut NameGenerator::new(0),"STORE %0, R0, %1",&[],&[input(1),input(2)],&["s3".into()]).unwrap();
+        assert!(code.iter().any(|i| matches!(i,AsmInst::Store(Reg::S3,Reg::Sb,Reg::Sc))));
+        assert!(code.iter().any(|i| matches!(i,AsmInst::Store(src,Reg::R0,dst) if *src!=Reg::S3 && *dst!=Reg::S3)));
+        let mut machine=Machine::new(64000);
+        machine.regs[Reg::Fp as usize]=100;
+        machine.regs[value as usize]=0xffff;
+        machine.regs[addr as usize]=512;
+        machine.run(&code);
+        assert_eq!(machine.memory[&(0,512)],0xffff);
+    }
+
+    #[test]
+    fn invalid_clobbers_fail_explicitly() {
+        for clobber in ["bogus", "sp", "sb", "fp", "pc", "gp"] {
+            assert!(parse_clobbers(&[clobber.into()]).is_err());
+        }
+        assert!(parse_clobbers(&["memory".into(),"cc".into(),"t0".into()]).is_ok());
+    }
 }
