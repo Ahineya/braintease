@@ -1,6 +1,6 @@
 use crate::{
     devices::BfDevices,
-    image::{Layout, StridedMemory},
+    image::{Layout, MachineMemory},
     telemetry::{Progress, Snapshot},
 };
 use bf_wasm::engine::{Machine, Program, Stop};
@@ -404,7 +404,7 @@ impl Host {
                     controller.credits -= 1;
                 }
                 let mut memory =
-                    StridedMemory::new(self.machine.tape_mut(), self.layout.memory_cells());
+                    MachineMemory::new(&mut self.machine, self.layout.memory_cells());
                 self.devices
                     .complete_tick(&mut memory, std::mem::take(&mut controller.events))?;
                 if let Some(observation) = observation {
@@ -452,7 +452,7 @@ impl Host {
                         if kind == b'?' { observation.last_load = Some(address); }
                         else { observation.last_store = Some(address); }
                     }
-                    let mut memory = StridedMemory::new(self.machine.tape_mut(), self.layout.memory_cells());
+                    let mut memory = MachineMemory::new(&mut self.machine, self.layout.memory_cells());
                     if kind == b'?' {
                         let value = self.devices.read_mmio(address, &mut memory)?;
                         memory.write(address, value);

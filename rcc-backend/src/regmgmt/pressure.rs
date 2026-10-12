@@ -59,6 +59,11 @@ pub struct RegisterPressureManager {
     
     /// Map from value to spill slot (for reloading)
     value_to_slot: BTreeMap<String, i16>,
+
+    /// A scalar register reloaded from its current private spill home is clean.
+    /// This is a physical-register fact, discarded at CFG cache resets; the
+    /// existence of a slot alone does not prove a store ran on every path.
+    clean_spills: BTreeMap<Reg, (String, i16)>,
     
     /// Next available spill slot
     next_spill_slot: i16,
@@ -129,6 +134,7 @@ impl RegisterPressureManager {
             reg_contents: BTreeMap::new(),
             reg_to_slot: BTreeMap::new(),
             value_to_slot: BTreeMap::new(),
+            clean_spills: BTreeMap::new(),
             next_spill_slot: 0,
             lifetimes: BTreeMap::new(),
             instructions: Vec::new(),
@@ -485,6 +491,7 @@ impl RegisterPressureManager {
             self.instructions.push(AsmInst::Comment(format!("Reload {for_value} from slot {slot}")));
             self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + slot));
             self.instructions.push(AsmInst::Load(reg, Reg::Sb, Reg::Sc));
+            self.clean_spills.insert(reg, (for_value.clone(), slot));
             
             // Check if this value has an associated bank that was spilled
             if let Some(&bank_slot) = self.fat_ptr_bank_slots.get(&for_value) {
@@ -567,10 +574,17 @@ impl RegisterPressureManager {
                     s
                 });
             
-            // Generate spill instructions using Sc scratch
-            self.instructions.push(AsmInst::Comment(format!("Spill {value} to slot {slot}")));
-            self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + slot));
-            self.instructions.push(AsmInst::Store(reg, Reg::Sb, Reg::Sc));
+            // Only scalar SSA values participate. Pointer banks and wide
+            // companions keep the established coordinated spilling path.
+            let clean = self.clean_spills.get(&reg) == Some(&(value.clone(), slot))
+                && value.strip_prefix('t').is_some_and(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+                && self.get_pointer_bank(&value).is_none()
+                && !self.i32_high.contains_key(&value) && !self.i64_words.contains_key(&value);
+            if !clean {
+                self.instructions.push(AsmInst::Comment(format!("Spill {value} to slot {slot}")));
+                self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + slot));
+                self.instructions.push(AsmInst::Store(reg, Reg::Sb, Reg::Sc));
+            }
             
             // Check if this value has associated bank info that needs spilling
             if let Some(bank_info) = self.get_pointer_bank(&value) {
@@ -661,6 +675,7 @@ impl RegisterPressureManager {
         // Operand lowerers used to assume a temporary had only one use. SSA
         // promotion and LICM deliberately share values between instructions.
         if self.register_is_live_after(reg) { return; }
+        self.clean_spills.remove(&reg);
         trace!("free_register({reg:?})");
         if let Some(value) = self.reg_contents.get(&reg) {
             debug!("Freeing {reg:?} containing '{value}'");
@@ -739,6 +754,7 @@ impl RegisterPressureManager {
     /// This is used when we know a value is in a specific register (like Rv0 after a call)
     pub fn bind_value_to_register(&mut self, value: String, reg: Reg) {
         debug!("Binding '{value}' to {reg:?}");
+        self.clean_spills.remove(&reg);
 
         // ABI registers (Rv/A/X/…) must not enter the LRU. I64 div parks the
         // quotient in Rv0/Rv1/X0/X1 because they are not allocatable; if a
@@ -796,6 +812,7 @@ impl RegisterPressureManager {
     /// This is used when we need to force recomputation of a value
     /// (e.g., GEP bank values in loops)
     pub fn clear_value_binding(&mut self, value: &str) {
+        self.clean_spills.retain(|_, (name, _)| name != value);
         self.instructions.push(AsmInst::Comment(format!("Clearing binding for '{value}'")));
         
         // Find if this value is in any register
@@ -893,6 +910,7 @@ impl RegisterPressureManager {
 
     pub fn forget_registers(&mut self, regs: &[Reg]) {
         for &reg in regs {
+            self.clean_spills.remove(&reg);
             if !ALLOCATABLE_REGISTERS.contains(&reg) {
                 continue;
             }
@@ -918,6 +936,17 @@ impl RegisterPressureManager {
     pub fn register_alloca(&mut self, temp_name: String, fp_offset: i16) {
         debug!("Registering alloca '{temp_name}' at FP+{fp_offset}");
         self.alloca_offsets.insert(temp_name, fp_offset);
+    }
+
+    /// Definition emission may write directly into a previously allocated
+    /// register; its old spill contents must no longer be treated as current.
+    pub(crate) fn mark_ir_definition(&mut self, id: TempId) {
+        let name = format!("t{id}");
+        self.clean_spills.retain(|_, (value, _)| value != &name);
+    }
+
+    pub(crate) fn invalidate_clean_spills(&mut self) {
+        self.clean_spills.clear();
     }
     
     /// Get register for a Value
@@ -1198,6 +1227,53 @@ impl RegisterPressureManager {
 mod lifetime_reclamation_tests {
     use super::*;
     use crate::instr::tests::machine::Machine;
+
+    #[test]
+    fn unchanged_scalar_reload_needs_no_second_store_but_redefinition_does() {
+        let mut manager = RegisterPressureManager::new(0);
+        manager.init();
+        let reg = manager.get_register("t1".into());
+        manager.emit(AsmInst::Li(reg, 1234));
+        manager.spill_all();
+        let mut instructions = manager.take_instructions();
+        manager.get_register("t1".into());
+        manager.spill_all();
+        let unchanged = manager.take_instructions();
+        assert!(unchanged.iter().any(|i| matches!(i, AsmInst::Load(..))));
+        assert!(!unchanged.iter().any(|i| matches!(i, AsmInst::Store(..))));
+        instructions.extend(unchanged);
+        let reg = manager.get_register("t1".into());
+        manager.emit(AsmInst::Li(reg, 4321));
+        manager.mark_ir_definition(1);
+        manager.spill_all();
+        let changed = manager.take_instructions();
+        assert!(changed.iter().any(|i| matches!(i, AsmInst::Store(..))));
+        instructions.extend(changed);
+        let result = manager.get_register("t1".into());
+        manager.emit(AsmInst::Move(Reg::Rv0, result));
+        instructions.extend(manager.take_instructions());
+        let mut machine = Machine::new(64000);
+        machine.regs[Reg::Fp as usize] = 100;
+        machine.run(&instructions);
+        assert_eq!(machine.regs[Reg::Rv0 as usize], 4321);
+    }
+
+    #[test]
+    fn clean_spill_facts_do_not_cross_register_resets_or_memory_barriers() {
+        let mut manager = RegisterPressureManager::new(0);
+        manager.init();
+        manager.get_register("t1".into());
+        manager.spill_all();
+        manager.get_register("t1".into());
+        assert!(!manager.clean_spills.is_empty());
+        manager.forget_all_registers();
+        assert!(manager.clean_spills.is_empty());
+        manager.get_register("t1".into());
+        manager.invalidate_clean_spills();
+        manager.take_instructions();
+        manager.spill_all();
+        assert!(manager.take_instructions().iter().any(|i| matches!(i, AsmInst::Store(..))));
+    }
 
     #[test]
     fn leaf_preference_survives_repeated_register_reclamation() {

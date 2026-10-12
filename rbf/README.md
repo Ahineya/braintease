@@ -95,6 +95,31 @@ The same 40-second local check after those changes reached 487 background writes
 without flushing a frame. Use the small compiled-C checks below for bounded,
 exact-pixel verification; the larger demo still has a long startup in BF.
 
+To rebuild and run that original C demo with progress reporting:
+
+```sh
+scripts/run-bf-rgb565-c.sh --telemetry
+```
+
+This checks tool freshness and recompiles the demo plus its graphics and MMIO
+libraries on every run. It replaces `build/bf/rgb565-demo.bf`, keeping intermediate
+files and a matching `.bin` for RVM comparisons alongside it. It uses 16,384-cell
+banks and three RAM banks, sufficient for the display, C globals and stack.
+Runtime objects under `runtime/` are untouched. Set `BF_RGB565_C_OUT` to choose
+another output directory, or use `--build-only` to prepare the image without
+running it. Arrow keys move the red square once frames are being presented.
+
+For a bounded headless first-frame capture:
+
+```sh
+scripts/run-bf-rgb565-c.sh --headless --telemetry --capture-frame 1 \
+  --screenshot build/bf/rgb565-demo.png --raw-frame build/bf/rgb565-demo.rgb565 \
+  --report build/bf/rgb565-demo.json --timeout 600
+```
+
+The timeout is a safety bound, not a promised completion time. Missing a
+requested frame returns a nonzero status and still leaves a diagnostic report.
+
 ## Ordinary Brainfuck interpreters
 
 The portable CPU remains standard Brainfuck with 16-bit wrapping cells. Build
@@ -217,9 +242,14 @@ with headless or visual runs; it cannot share the TEXT40 terminal screen.
 The reusable core is [`src/rust-bf/src/engine.rs`](../src/rust-bf/src/engine.rs).
 It uses a flat instruction stream with resolved jumps, offset arithmetic blocks,
 multi-target affine-loop reduction (including odd control-cell deltas), and
-bounded scan loops. Safe, checked fallback execution preserves tape-boundary
-behavior. Device and byte-I/O hooks are optimization barriers. The host accesses
-the RAM lane directly through `GuestMemory`; it does not copy the full tape.
+cached tape scans. Guarded folds handle transfers through invariant scan routes
+and counted loops that fill successive zero cells. Fills use bounded batches
+and preserve every actual tape write. These optimizations inspect BF operations and tape cells,
+with no knowledge of Ripple opcodes or register layouts. Checked fallback
+execution preserves tape-boundary behavior. Device and byte-I/O hooks are
+optimization barriers. The host accesses the RAM lane directly through
+`GuestMemory`; individual device writes invalidate only affected scan-cache
+entries instead of clearing the cache on every memory access.
 Frame publication reuses the existing immutable display buffers.
 
 `--no-optimize` disables the loop/block optimizations for comparison. It still

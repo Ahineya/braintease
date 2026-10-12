@@ -666,3 +666,27 @@ fn moving_marker_writes_invalidate_previously_cached_nonzero_cells() {
         false,
     );
 }
+
+#[test]
+fn isolated_host_writes_preserve_unrelated_scan_facts_and_observe_new_zeros() {
+    let cells = 32769;
+    let source = format!(">[>]${}[>]$", "<".repeat(cells - 2));
+    let program = Program::parse(&source, true, true).unwrap();
+    for zero in [false, true] {
+        let mut machine = Machine::new(cells).unwrap();
+        machine.tape_mut().fill(1);
+        machine.write_cell(0, 0);
+        machine.write_cell(cells - 1, 0);
+        assert_eq!(event(&mut machine, &program).unwrap(), Stop::Hook(b'$'));
+        let before = machine.dispatches();
+        machine.write_cell(16384, if zero { 0 } else { 65535 });
+        assert_eq!(event(&mut machine, &program).unwrap(), Stop::Hook(b'$'));
+        assert_eq!(machine.pointer(), if zero { 16384 } else { cells - 1 });
+        if !zero {
+            assert!(
+                machine.dispatches() - before <= 4,
+                "unrelated cached facts were discarded"
+            );
+        }
+    }
+}

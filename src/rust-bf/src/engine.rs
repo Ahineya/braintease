@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+mod routed;
 mod scan;
 mod search;
 
@@ -85,6 +86,7 @@ struct Arithmetic {
 #[derive(Debug)]
 enum FastOp {
     Search(search::Search),
+    Routed(routed::Routed),
     Block {
         arithmetic: Arithmetic,
         next: usize,
@@ -248,6 +250,17 @@ impl Program {
                 self.install(at, FastOp::Search(search))?;
                 continue;
             }
+            if let Some(routed) = routed::Routed::parse(self, at) {
+                let resumes = routed.resumes();
+                self.install(at, FastOp::Routed(routed))?;
+                // BF backedges enter the body, bypassing `[`. At `]` the
+                // current predicate decides whether to execute another body,
+                // so the same bounded loop executor can resume there too.
+                if resumes {
+                    self.fast_at[next - 1] = self.fast_at[at];
+                }
+                continue;
+            }
             let end = next - 1;
             let Some(mut arithmetic) = self.arithmetic(at + 1, end) else {
                 continue;
@@ -387,8 +400,11 @@ impl Machine {
         Ok(())
     }
 
+    /// Write one tape cell, preserving cached facts about all other cells.
+    /// Prefer this to `tape_mut()` for isolated host responses. Panics if
+    /// `index` is outside the allocated tape, like indexing `tape_mut()`.
     #[inline]
-    fn write_cell(&mut self, index: usize, value: u16) {
+    pub fn write_cell(&mut self, index: usize, value: u16) {
         // Cached runs assert only nonzero-ness, not a particular cell value.
         if value == 0 && self.tape[index] != 0 {
             self.scan_cache.zero(index);
@@ -418,6 +434,7 @@ impl Machine {
     fn fast(&mut self, operation: &FastOp) -> bool {
         match operation {
             FastOp::Search(search) => return search.execute(self),
+            FastOp::Routed(routed) => return routed.execute(self),
             FastOp::Block { arithmetic, next } => {
                 if !self.range_fits(arithmetic.minimum, arithmetic.maximum) {
                     return false;
@@ -473,10 +490,12 @@ impl Machine {
     }
 
     /// Execute at most `budget` IR dispatches. Each optimized operation performs
-    /// bounded work (at most 128 arithmetic instructions, 256 scan probes,
-    /// 256 moving-marker iterations, or 256 combined moving-loop iterations
-    /// and cell updates). A scan probe can skip a previously verified nonzero
-    /// run in constant time.
+    /// bounded work: basic summaries cover at most 128 arithmetic instructions,
+    /// 256 scan probes, 256 moving-marker iterations, or 256 combined moving-loop
+    /// iterations and cell updates. Routed loops inspect at most 128 parts per
+    /// proof, with at most two proofs of 256 scan probes and bounded predicate
+    /// checks; a counted fill writes at most 128 markers. A scan probe can skip
+    /// a previously verified nonzero run in constant time.
     /// An input stop repeats until `provide_input` is called, without consuming
     /// another dispatch. Output and hooks have already advanced past the marker.
     pub fn run(&mut self, program: &Program, budget: u64) -> Result<Stop, Error> {

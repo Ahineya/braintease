@@ -2,8 +2,9 @@
 
 `bf_wasm::engine` provides the reusable 16-bit Brainfuck core. `Program::parse`
 validates brackets and optionally enables arithmetic blocks, affine loops with
-multiple destinations, cached scans, moving-marker searches, and moving update
-loops. It parses once; machines hold independent tape and execution state.
+multiple destinations, cached scans, moving-marker searches, moving update
+loops, and guarded loops containing arithmetic and scans. It parses once;
+machines hold independent tape and execution state.
 The core uses safe Rust and
 wraps cells modulo 65536. Both the native `bf` CLI and Ripple's `rbf` host use it.
 
@@ -19,6 +20,8 @@ to 32 residue classes for the most recently used stride, independently of tape
 size. A BF write that creates a zero trims the affected run; taking `tape_mut()`
 discards all cached facts. The exit cell is always checked again. Cached skips
 also check intermediate pointer excursions, including bodies such as `[>><]`.
+Hosts that change individual cells can use `write_cell(index, value)` to preserve
+unrelated cached facts while invalidating every newly zero cell correctly.
 
 The nested loop `[>[<-]<[->+<]>]` is a different search: it moves a temporary one
 through empty cells until it encounters a nonzero cell. The engine recognizes
@@ -32,6 +35,23 @@ per dispatch. Each iteration still applies its writes before testing the next
 cell, so updates that create or remove a future stopping point retain their BF
 meaning. Both iteration count and total cell updates are bounded. This speeds up
 generic marker cleanup.
+
+Arithmetic loops can also route through nested scans. For example,
+`[->>[>]>+<<[<]<]` transfers a value into a destination found by zero sentinels.
+The engine first resolves the route without changing the tape, then verifies
+that the pointer returns and that no write touches any scan predicate, including
+its exit cell. Only then can it fold the entire wrapping affine transfer.
+Cancelled writes remain part of this proof, because their intermediate values
+could affect a scan.
+
+Counted first-zero fills such as `[->>[>]+[<]<]` deliberately change their scan
+predicates. A separate guard proves that the loop decrements its original
+control, fills a zero, and returns over the growing run. The changing scans must
+have equal and opposite strides; all other scan predicates must remain disjoint
+from the counter and every new marker. Batches check actual zeros, pointer
+excursions, and existing holes, and write every marker physically to the tape.
+They resume at the closing bracket, so a host mutation after a budget yield is
+observed by the next proof. Failed proofs retain the original BF instructions.
 
 These optimizations recognize BF algorithms, without Ripple opcodes, register
 numbers, memory banks, or CPU lane constants. They do not change exported BF or
@@ -69,6 +89,9 @@ previously verified run in constant time, regardless of its
 length. Long uncached scans and infinite loops yield to the caller; an exhausted
 budget preserves resumable state. A zero budget does no work. Dispatch counts
 can change when optimizations improve, and are not a stable virtual clock.
+Routed loops examine at most 128 parts per proof, perform at most two proofs of
+256 scan probes plus bounded predicate checks, and fill at most 128 cells in a
+dispatch. This work also stays independent of tape size and counter value.
 
 The native `bf` CLI uses this core for its default wrapping 16-bit configuration
 and writes raw output bytes. Other cell sizes, saturating cells and clamped tape

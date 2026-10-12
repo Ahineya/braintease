@@ -66,9 +66,10 @@ for (const width of [4, 8]) for (const kind of ['graphics', 'direct']) {
     const expected = Buffer.alloc(width * 2 * 2);
     for (let i = 0; i < width * 2; i++) expected.writeUInt16LE(0x0843, i * 2);
     fs.writeFileSync(`${prefix}.expected.rgb565`, expected);
-    // Below the pre-optimization 4x2 baselines: API3151, direct581 guest
-    // instructions. Keep margin for allocator changes; never assert wall time.
-    const ceiling = kind === 'graphics' ? (width === 4 ? 2300 : 4000) : (width === 4 ? 400 : 700);
+    // Current 4x2/8x2 counts: API338/474, direct141/245. Allow allocator
+    // variation while catching lost bounds/global-load optimizations (the
+    // previous API counts were711/1247). Never assert wall time.
+    const ceiling = kind === 'graphics' ? (width === 4 ? 550 : 850) : (width === 4 ? 220 : 380);
     run('rlink', [...objects, '-f', 'binary', '--bank-size', String(bank), '-o', `${prefix}.bin`], `${name}-link`);
     run('rvm', [`${prefix}.bin`, '--bank-size', String(bank), '--memory', String(bank * memoryBanks),
         '--headless', '--clock', 'unthrottled', '--capture-frame', '1', '--screenshot', `${prefix}.png`, '--raw-frame', `${prefix}.rvm.rgb565`,

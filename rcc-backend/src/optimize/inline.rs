@@ -235,7 +235,7 @@ fn typed_copy(result: u32, value: Value, ty: &IrType, next_temp: &mut u32) -> Ve
     }
 }
 
-fn merge_linear_blocks(f: &mut Function) {
+pub(super) fn merge_linear_blocks(f: &mut Function) {
     // The frontend can retain unreachable instructions after a terminator.
     // Such blocks cannot be merged using only their final instruction's edges.
     if super::cfg::Cfg::new(f).is_err() {

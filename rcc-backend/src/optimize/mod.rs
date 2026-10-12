@@ -11,6 +11,7 @@ pub(crate) mod cfg;
 mod ssa;
 mod phi;
 mod reachability;
+mod redundancy;
 #[cfg(test)]
 mod tests;
 
@@ -28,6 +29,7 @@ pub fn optimize_module(module: &mut rcc_frontend::ir::Module) {
     inline::inline_small_functions(module);
     for function in &mut module.functions {
         ssa::promote_integer_locals(function);
+        redundancy::eliminate_redundancy(function);
         optimize_function(function);
     }
 }
@@ -43,7 +45,7 @@ pub fn optimize_function(function: &mut Function) {
     loops::hoist_invariants(function);
 }
 
-fn result(inst: &Instruction) -> Option<TempId> {
+pub(crate) fn result(inst: &Instruction) -> Option<TempId> {
     match inst {
         Instruction::Binary { result, .. }
         | Instruction::Unary { result, .. }

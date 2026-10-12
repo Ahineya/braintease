@@ -267,10 +267,11 @@ fn generate_setup_code(
                         "Load input {} into {:?}", op.value_name, op.register
                     )));
                     insts.push(AsmInst::Move(op.register, src_reg));
+                    mgr.bind_value_to_register(temp_name, op.register);
                 }
-                // CRUCIAL: Don’t free src_reg; this temp may still be live.
-                // Also, tell the manager that op.register now ALSO contains that value.
-                mgr.bind_value_to_register(temp_name, op.register);
+                // An input already in its assigned register is unchanged.
+                // Rebinding it would discard its still-valid spill home.
+                // Do not free src_reg: the input may remain live afterwards.
             }
             Value::Constant(c) => {
                 insts.push(AsmInst::Comment(format!(
@@ -443,6 +444,23 @@ mod tests {
         machine.regs[addr as usize]=512;
         machine.run(&code);
         assert_eq!(machine.memory[&(0,512)],0xf81f);
+    }
+
+    #[test]
+    fn unchanged_asm_inputs_keep_their_existing_spill_homes() {
+        let mut mgr = RegisterPressureManager::new(0);
+        mgr.init();
+        mgr.get_register("t1".into());
+        mgr.get_register("t2".into());
+        mgr.spill_all();
+        let homes = mgr.get_spill_count();
+        mgr.take_instructions();
+        let code = lower_inline_asm_extended(&mut mgr, &mut NameGenerator::new(0),
+            "STORE %0, R0, %1", &[], &[input(1), input(2)], &[]).unwrap();
+        assert_eq!(code.iter().filter(|i| matches!(i, AsmInst::Load(..))).count(), 2);
+        mgr.spill_all();
+        assert_eq!(mgr.get_spill_count(), homes);
+        assert!(!mgr.take_instructions().iter().any(|i| matches!(i, AsmInst::Store(..))));
     }
 
     #[test]

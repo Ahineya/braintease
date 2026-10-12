@@ -114,6 +114,63 @@ impl Cache {
 }
 
 impl Machine {
+    /// Resolve a scan without changing the pointer or tape. Used while proving
+    /// a larger arithmetic loop; its caller bounds the total probes over every
+    /// scan and rejects the proof if it cannot reach a sentinel within them.
+    pub(super) fn trace_scan(
+        &mut self,
+        mut pointer: usize,
+        stride: isize,
+        minimum: isize,
+        maximum: isize,
+        probes: &mut usize,
+    ) -> Option<usize> {
+        let step = stride.unsigned_abs();
+        let (slot, known) = self.scan_cache.prepare(step, pointer);
+        let first = pointer;
+        let mut last = None;
+        let result = loop {
+            if *probes == 0 {
+                break None;
+            }
+            *probes -= 1;
+            if self.tape[pointer] == 0 {
+                break Some(pointer);
+            }
+            last = Some(pointer);
+            if minimum.unsigned_abs() > pointer || maximum as usize >= self.tape.len() - pointer {
+                break None;
+            }
+            if known.contains(pointer) {
+                let (known_steps, safe_steps) = if stride > 0 {
+                    (
+                        (known.high - pointer) / step + 1,
+                        (self.tape.len() - 1 - pointer - maximum as usize) / step + 1,
+                    )
+                } else {
+                    (
+                        (pointer - known.low) / step + 1,
+                        (pointer - minimum.unsigned_abs()) / step + 1,
+                    )
+                };
+                let count = known_steps.min(safe_steps);
+                if stride > 0 {
+                    last = Some(pointer + (count - 1) * step);
+                    pointer += count * step;
+                } else {
+                    last = Some(pointer - (count - 1) * step);
+                    pointer -= count * step;
+                }
+            } else {
+                pointer = (pointer as isize + stride) as usize;
+            }
+        };
+        if let Some(last) = last {
+            self.scan_cache.remember(slot, first, last);
+        }
+        result
+    }
+
     pub(super) fn scan(
         &mut self,
         stride: isize,

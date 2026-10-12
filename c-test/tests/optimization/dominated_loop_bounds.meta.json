@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYY\n",
+  "use_runtime": true,
+  "description": "Readonly global loop bounds, redundant inlined checks, mutable aliases and volatile/call barriers"
+}

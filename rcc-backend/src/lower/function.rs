@@ -386,6 +386,12 @@ fn lower_basic_block(
                 builder.add_instructions(insts);
             }
         }
+        if let Some(result) = crate::optimize::result(instruction) {
+            mgr.mark_ir_definition(result);
+        }
+        if let Instruction::InlineAsm { clobbers, .. } = instruction {
+            if clobbers.iter().any(|c| c == "memory") { mgr.invalidate_clean_spills(); }
+        }
         mgr.retain_live_registers(&liveness.after[block_idx][instruction_index]);
     }
     

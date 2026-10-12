@@ -1,4 +1,5 @@
 //! Versioned transport emitted by `rlink --bf-host` and preserved by `bfm`.
+use bf_wasm::engine::Machine;
 use rvm::devices::GuestMemory;
 use serde::Serialize;
 
@@ -159,6 +160,37 @@ impl GuestMemory for StridedMemory<'_> {
     }
 }
 
+/// Device access that tells the generic interpreter exactly which cells change.
+/// Borrowing its entire mutable tape would invalidate every cached scan, even
+/// for a read that returns the existing value. Both views use the same RAM lane.
+pub struct MachineMemory<'a> {
+    machine: &'a mut Machine,
+    cells: usize,
+}
+
+impl<'a> MachineMemory<'a> {
+    pub fn new(machine: &'a mut Machine, cells: usize) -> Self {
+        let length = machine.tape().len();
+        assert!(length >= ORIGIN && cells <= (length - ORIGIN) / LANES);
+        Self { machine, cells }
+    }
+}
+
+impl GuestMemory for MachineMemory<'_> {
+    fn len(&self) -> usize {
+        self.cells
+    }
+    fn read(&self, index: usize) -> u16 {
+        assert!(index < self.cells);
+        self.machine.tape()[ORIGIN + index * LANES + RAM_LANE]
+    }
+    fn write(&mut self, index: usize, value: u16) {
+        assert!(index < self.cells);
+        self.machine
+            .write_cell(ORIGIN + index * LANES + RAM_LANE, value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +228,23 @@ mod tests {
         assert_eq!(memory.read(255), 42);
         assert_eq!(tape[ORIGIN + 2043], 91);
         assert_eq!(tape[ORIGIN + 2045], 91);
+    }
+
+    #[test]
+    fn precise_device_memory_matches_the_slice_view() {
+        let mut tape = vec![91; 2312];
+        let mut machine = Machine::new(tape.len()).unwrap();
+        machine.tape_mut().copy_from_slice(&tape);
+        let mut slice = StridedMemory::new(&mut tape, 256);
+        let mut precise = MachineMemory::new(&mut machine, 256);
+        for index in [0, 1, 31, 32, 64, 255] {
+            for value in [0, 65535, 0, 1234] {
+                slice.write(index, value);
+                precise.write(index, value);
+                assert_eq!(slice.read(index), precise.read(index));
+            }
+        }
+        assert_eq!(machine.tape(), tape);
     }
 
     #[test]

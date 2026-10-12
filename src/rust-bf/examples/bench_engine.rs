@@ -87,4 +87,8 @@ fn main() {
     let mut tape = vec![1; 8193];
     tape[8192] = 0;
     benchmark("stride_scan", "[>>>>>>>>]", &tape, 1000);
+    benchmark("routed_transfer", "[->>[>]>+<<[<]<]", &[20_000, 0, 1, 2, 3, 0, 0], 20);
+    let mut fill_tape = vec![0; 1027];
+    fill_tape[0] = 1024;
+    benchmark("counted_scan_fill", "[->>[>]+[<]<]", &fill_tape, 20);
 }
