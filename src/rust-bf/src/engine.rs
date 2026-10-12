@@ -8,6 +8,9 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+mod scan;
+mod search;
+
 const NO_FAST_OP: u32 = u32::MAX;
 const BLOCK_LIMIT: usize = 128;
 const SCAN_LIMIT: usize = 256;
@@ -81,6 +84,7 @@ struct Arithmetic {
 
 #[derive(Debug)]
 enum FastOp {
+    Search(search::Search),
     Block {
         arithmetic: Arithmetic,
         next: usize,
@@ -94,6 +98,10 @@ enum FastOp {
         stride: isize,
         minimum: isize,
         maximum: isize,
+        next: usize,
+    },
+    Walk {
+        arithmetic: Arithmetic,
         next: usize,
     },
 }
@@ -236,6 +244,10 @@ impl Program {
             let Op::Open(next) = self.code[at].op else {
                 continue;
             };
+            if let Some(search) = search::Search::parse(self, at) {
+                self.install(at, FastOp::Search(search))?;
+                continue;
+            }
             let end = next - 1;
             let Some(mut arithmetic) = self.arithmetic(at + 1, end) else {
                 continue;
@@ -250,7 +262,9 @@ impl Program {
                         next,
                     },
                 )?;
-            } else if arithmetic.advance == 0 {
+            } else if arithmetic.advance != 0 {
+                self.install(at, FastOp::Walk { arithmetic, next })?;
+            } else {
                 let delta = arithmetic
                     .changes
                     .iter()
@@ -315,6 +329,7 @@ pub struct Machine {
     dispatches: u64,
     pending_input: bool,
     wrapping_tape: bool,
+    scan_cache: scan::Cache,
 }
 
 impl Machine {
@@ -344,6 +359,7 @@ impl Machine {
             dispatches: 0,
             pending_input: false,
             wrapping_tape,
+            scan_cache: scan::Cache::default(),
         })
     }
 
@@ -351,6 +367,8 @@ impl Machine {
         &self.tape
     }
     pub fn tape_mut(&mut self) -> &mut [u16] {
+        // The caller can change any cell, including a cached scan destination.
+        self.scan_cache.reset();
         &mut self.tape
     }
     pub fn pointer(&self) -> usize {
@@ -364,9 +382,18 @@ impl Machine {
         if !self.pending_input {
             return Err(Error::NoPendingInput);
         }
-        self.tape[self.pointer] = u16::from(value);
+        self.write_cell(self.pointer, u16::from(value));
         self.pending_input = false;
         Ok(())
+    }
+
+    #[inline]
+    fn write_cell(&mut self, index: usize, value: u16) {
+        // Cached runs assert only nonzero-ness, not a particular cell value.
+        if value == 0 && self.tape[index] != 0 {
+            self.scan_cache.zero(index);
+        }
+        self.tape[index] = value;
     }
 
     #[inline]
@@ -380,13 +407,17 @@ impl Machine {
     fn apply(&mut self, arithmetic: &Arithmetic, multiplier: u16) {
         for &(offset, delta) in &arithmetic.changes {
             let target = (self.pointer as isize + offset) as usize;
-            self.tape[target] = self.tape[target].wrapping_add(delta.wrapping_mul(multiplier));
+            self.write_cell(
+                target,
+                self.tape[target].wrapping_add(delta.wrapping_mul(multiplier)),
+            );
         }
         self.pointer = (self.pointer as isize + arithmetic.advance) as usize;
     }
 
     fn fast(&mut self, operation: &FastOp) -> bool {
         match operation {
+            FastOp::Search(search) => return search.execute(self),
             FastOp::Block { arithmetic, next } => {
                 if !self.range_fits(arithmetic.minimum, arithmetic.maximum) {
                     return false;
@@ -406,7 +437,7 @@ impl Machine {
                     }
                     let iterations = value.wrapping_neg().wrapping_mul(*inverse);
                     self.apply(arithmetic, iterations);
-                    self.tape[self.pointer] = 0;
+                    self.write_cell(self.pointer, 0);
                 }
                 self.pc = *next;
             }
@@ -416,17 +447,23 @@ impl Machine {
                 maximum,
                 next,
             } => {
-                for _ in 0..SCAN_LIMIT {
+                return self.scan(*stride, *minimum, *maximum, *next);
+            }
+            FastOp::Walk { arithmetic, next } => {
+                // Moving arithmetic loops can change their next predicate.
+                // Execute complete bodies in order, including all writes;
+                // only the per-iteration interpreter dispatch is removed.
+                // Bound both the number of bodies and the total cell updates.
+                for _ in 0..SCAN_LIMIT / (arithmetic.changes.len() + 1) {
                     if self.tape[self.pointer] == 0 {
                         self.pc = *next;
                         return true;
                     }
-                    if !self.range_fits(*minimum, *maximum) {
+                    if !self.range_fits(arithmetic.minimum, arithmetic.maximum) {
                         return false;
                     }
-                    self.pointer = (self.pointer as isize + *stride) as usize;
+                    self.apply(arithmetic, 1);
                 }
-                // Retain this instruction to continue a long scan next time.
                 if self.tape[self.pointer] == 0 {
                     self.pc = *next;
                 }
@@ -436,7 +473,10 @@ impl Machine {
     }
 
     /// Execute at most `budget` IR dispatches. Each optimized operation performs
-    /// bounded work (at most 128 arithmetic instructions or 256 scan steps).
+    /// bounded work (at most 128 arithmetic instructions, 256 scan probes,
+    /// 256 moving-marker iterations, or 256 combined moving-loop iterations
+    /// and cell updates). A scan probe can skip a previously verified nonzero
+    /// run in constant time.
     /// An input stop repeats until `provide_input` is called, without consuming
     /// another dispatch. Output and hooks have already advanced past the marker.
     pub fn run(&mut self, program: &Program, budget: u64) -> Result<Stop, Error> {
@@ -463,7 +503,7 @@ impl Machine {
             let instruction = program.code[self.pc];
             match instruction.op {
                 Op::Add(delta) => {
-                    self.tape[self.pointer] = self.tape[self.pointer].wrapping_add(delta);
+                    self.write_cell(self.pointer, self.tape[self.pointer].wrapping_add(delta));
                     self.pc += 1;
                 }
                 Op::Move(delta) => {
@@ -517,3 +557,6 @@ impl Machine {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod walk_tests;
