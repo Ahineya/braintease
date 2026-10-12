@@ -63,10 +63,13 @@ impl Search {
         if machine.tape[behind] != 0 {
             return false;
         }
+        let original = machine.pointer;
         for _ in 0..SCAN_LIMIT {
             if !machine.range_fits(self.minimum, self.maximum) {
                 // Previous iterations are complete BF loop iterations, with
-                // the marker still materialized and PC still at the opening.
+                // the marker materialized before falling back to literal BF.
+                machine.write_cell(original, 0);
+                machine.write_cell(machine.pointer, 1);
                 return false;
             }
             let current = machine.pointer;
@@ -75,16 +78,20 @@ impl Search {
                 // The literal loop consumes its marker, leaves the found cell
                 // unchanged, and exits one stride before that cell. Any final
                 // pointer movement following the loop remains ordinary code.
-                machine.write_cell(current, 0);
+                machine.write_cell(original, 0);
                 machine.pc = self.next;
                 return true;
             }
-            machine.write_cell(current, 0);
-            machine.write_cell(target, 1);
+            // Every intermediate target is an original zero and the path is
+            // monotonic/in bounds. Its temporary one is consumed by the next
+            // iteration before BF can observe it. Delay those cancelling
+            // writes, retaining only the marker at a budget or bounds stop.
             machine.pointer = target;
         }
         // This is exactly the loop-head state after SCAN_LIMIT iterations.
         // Leave PC unchanged so a long search can resume in the next dispatch.
+        machine.write_cell(original, 0);
+        machine.write_cell(machine.pointer, 1);
         true
     }
 }
@@ -227,5 +234,56 @@ mod tests {
             let program = Program::parse(&altered, false, true).unwrap();
             assert!(Search::parse(&program, 0).is_none());
         }
+    }
+
+    #[test]
+    fn deferred_marker_is_materialized_on_a_partial_bounds_fallback() {
+        for stride in [-3, -1, 1, 3] {
+            let program = Program::parse(&pattern(stride), false, false).unwrap();
+            let search = Search::parse(&program, 0).unwrap();
+            let mut machine = Machine::new(100).unwrap();
+            let start = if stride < 0 { 96 } else { 3 };
+            machine.pointer = start;
+            machine.write_cell(start, 1);
+            assert!(!search.execute(&mut machine));
+            assert_eq!(machine.pc, 0);
+            assert_ne!(machine.pointer, start);
+            assert_eq!(machine.tape[machine.pointer], 1);
+            assert_eq!(machine.tape.iter().filter(|&&v| v != 0).count(), 1);
+            let mut expected = Machine::new(100).unwrap();
+            expected.pointer = start;
+            expected.write_cell(start, 1);
+            // The optimized rejection is a complete loop-head state. Resuming
+            // both paths must produce the same literal partial-error state.
+            assert_eq!(
+                finish(&mut machine, &program),
+                finish(&mut expected, &program)
+            );
+            assert_eq!(machine.pointer, expected.pointer);
+            assert_eq!(machine.tape, expected.tape);
+        }
+    }
+
+    #[test]
+    fn deferred_search_writes_match_literal_across_budget_mutations() {
+        let source = format!("{}>!", pattern(1));
+        let optimized = Program::parse(&source, true, true).unwrap();
+        let literal = Program::parse(&source, false, true).unwrap();
+        let mut machine = Machine::new(2000).unwrap();
+        machine.pointer = 8;
+        machine.write_cell(8, 1);
+        machine.write_cell(1500, 13);
+        assert_eq!(machine.run(&optimized, 1).unwrap(), Stop::Budget);
+        assert_eq!(machine.pointer, 8 + SCAN_LIMIT);
+        machine.write_cell(machine.pointer + 7, 65535);
+        let mut expected = Machine::new(2000).unwrap();
+        expected.pointer = machine.pointer;
+        expected.tape.copy_from_slice(machine.tape());
+        assert_eq!(
+            finish(&mut machine, &optimized),
+            finish(&mut expected, &literal)
+        );
+        assert_eq!(machine.pointer, expected.pointer);
+        assert_eq!(machine.tape, expected.tape);
     }
 }

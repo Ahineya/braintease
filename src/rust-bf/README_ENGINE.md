@@ -29,6 +29,9 @@ the same structure with any fixed stride or direction. It folds the loop only
 when the marker is one, the cell behind it is zero, and the complete pointer
 range fits. It preserves the found value and leaves the loop's exact final tape
 and pointer state. Other states use the original BF instructions.
+Intermediate markers cross only verified zero cells and cancel before any event,
+so the engine writes only the original cell and the final marker. Budget yields
+and bounds fallbacks still materialize the exact literal marker state.
 
 Moving update loops such as `[-<<<<<<<<]` execute several complete iterations
 per dispatch. Each iteration still applies its writes before testing the next

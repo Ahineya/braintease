@@ -103,11 +103,18 @@ scripts/run-bf-rgb565-c.sh --telemetry
 
 This checks tool freshness and recompiles the demo plus its graphics and MMIO
 libraries on every run. It replaces `build/bf/rgb565-demo.bf`, keeping intermediate
-files and a matching `.bin` for RVM comparisons alongside it. It uses 16,384-cell
-banks and three RAM banks, sufficient for the display, C globals and stack.
+files and a matching `.bin` for RVM comparisons alongside it. It defaults to
+16,384-cell banks and uses three RAM banks for the display, C globals and stack.
 Runtime objects under `runtime/` are untouched. Set `BF_RGB565_C_OUT` to choose
 another output directory, or use `--build-only` to prepare the image without
 running it. Arrow keys move the red square once frames are being presented.
+
+`BF_RGB565_C_BANK_SIZE` can select a smaller bank, for example
+`BF_RGB565_C_BANK_SIZE=8320 scripts/run-bf-rgb565-c.sh --telemetry`. Smaller banks
+place the globals and stack closer to the beginning of the BF tape. The accepted
+range is 8,224–65,535 cells; 8,224 is exactly the 32 MMIO cells plus two 64×64
+framebuffers. Banks need not be powers of two. All objects are rebuilt with the
+selected bank size.
 
 For a bounded headless first-frame capture:
 
