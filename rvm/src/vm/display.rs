@@ -1,12 +1,8 @@
 use crate::constants::*;
 use crate::display_rgb565::RGB565Display;
 use super::VM;
-use crossterm::{
-    cursor,
-    style::{Color, SetForegroundColor, SetBackgroundColor, ResetColor},
-    ExecutableCommand,
-};
-use std::io::{self, Write};
+use crate::display_text40::Text40Snapshot;
+use std::io;
 
 impl VM {
     /// Calculate the data section offset based on display mode and resolution
@@ -86,62 +82,10 @@ impl VM {
             // Render to actual terminal in TEXT40 mode
             let mut stderr = io::stderr();
             
-            // Move to top-left
-            let _ = stderr.execute(cursor::MoveTo(0, 0));
-            
-            // Render the 40x25 display
-            for row in 0..25 {
-                for col in 0..40 {
-                    let addr = TEXT40_BASE_WORD + row * 40 + col;
-                    if addr < self.memory.len() {
-                        let cell = self.memory[addr];
-                        let ch = (cell & 0xFF) as u8;
-                        let attr = ((cell >> 8) & 0xFF) as u8;
-                        
-                        // Extract foreground and background colors from attribute byte
-                        // Lower 4 bits: foreground color (0-15)
-                        // Upper 4 bits: background color (0-15)
-                        let fg_color = (attr & 0x0F) as usize;
-                        let bg_color = ((attr >> 4) & 0x0F) as usize;
-                        
-                        // Convert theme color index to terminal Color
-                        let theme_to_terminal = |color_idx: usize| -> Color {
-                            if color_idx < THEME_COLORS.len() {
-                                let (r, g, b) = THEME_COLORS[color_idx];
-                                Color::Rgb { r, g, b }
-                            } else {
-                                // Default to light gray for invalid indices
-                                let (r, g, b) = THEME_COLORS[6];
-                                Color::Rgb { r, g, b }
-                            }
-                        };
-                        
-                        // Set colors
-                        let _ = stderr.execute(SetForegroundColor(theme_to_terminal(fg_color)));
-                        let _ = stderr.execute(SetBackgroundColor(theme_to_terminal(bg_color)));
-                        
-                        // Print character
-                        if (32..127).contains(&ch) {
-                            let _ = stderr.write(&[ch]);
-                        } else if ch == 0 {
-                            let _ = stderr.write(b" ");
-                        } else {
-                            let _ = stderr.write(b".");
-                        }
-                        
-                        // Reset colors after each character to prevent color bleeding
-                        let _ = stderr.execute(ResetColor);
-                    } else {
-                        let _ = stderr.write(b" ");
-                    }
-                }
-                // Move to next line
-                if row < 24 {
-                    let _ = stderr.write(b"\r\n");
-                }
+            let snapshot = Text40Snapshot::from_memory(&self.memory, self.presented_frames);
+            if let Err(error) = snapshot.render(&mut stderr) {
+                self.device_error = Some(format!("Rendering TEXT40: {error}"));
             }
-            
-            let _ = stderr.flush();
         } else if self.verbose {
             // Fallback to debug output
             eprintln!("\n=== TEXT40 Display (40x25) ===");

@@ -26,8 +26,11 @@ struct Cli {
     /// Expanded output from rlink --bf-host followed by bfm expand
     program: PathBuf,
     /// Open the RGB565 window with live keyboard input
-    #[arg(long, conflicts_with = "headless")]
+    #[arg(long, conflicts_with_all = ["headless", "terminal"])]
     visual: bool,
+    /// Render TEXT40 in the terminal, with live arrows/Z/X and TTY input
+    #[arg(long, conflicts_with_all = ["visual", "headless", "tty_stdin", "control_stdin"])]
+    terminal: bool,
     /// Deterministic execution without a window or live input (default)
     #[arg(long)]
     headless: bool,
@@ -54,6 +57,9 @@ struct Cli {
     screenshot: Option<PathBuf>,
     #[arg(long)]
     raw_frame: Option<PathBuf>,
+    /// Capture 1000 little-endian TEXT40 character/attribute words
+    #[arg(long, conflicts_with_all = ["screenshot", "raw_frame", "expect_frame"])]
+    text_frame: Option<PathBuf>,
     #[arg(long)]
     expect_frame: Option<PathBuf>,
     #[arg(long, default_value_t = 1)]
@@ -92,7 +98,17 @@ fn main() {
     }
 }
 
+fn deterministic_input(cli: &Cli) -> bool {
+    (!cli.visual && !cli.terminal)
+        || cli.input_script.is_some()
+        || cli.control_stdin
+        || cli.screenshot.is_some()
+        || cli.raw_frame.is_some()
+        || cli.text_frame.is_some()
+}
+
 fn execute(cli: Cli) -> Result<i32, String> {
+    let deterministic = deterministic_input(&cli);
     if (cli.clock == ClockPolicy::Stepped) != cli.control_stdin {
         return Err("--clock stepped and --control-stdin must be used together".into());
     }
@@ -117,12 +133,13 @@ fn execute(cli: Cli) -> Result<i32, String> {
     if let Some(text) = &cli.input {
         devices.push_input(text.as_bytes());
     }
-    let deterministic = !cli.visual
-        || cli.input_script.is_some()
-        || cli.control_stdin
-        || cli.screenshot.is_some()
-        || cli.raw_frame.is_some();
     devices.host_input_enabled = !deterministic;
+    devices
+        .text_display
+        .set_interactive(cli.terminal && !deterministic);
+    if cli.terminal && !deterministic {
+        rvm::vm::install_terminal_cleanup_hook();
+    }
     let cancelled = Arc::new(AtomicBool::new(false));
     for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
         signal_hook::flag::register(signal, Arc::clone(&cancelled)).map_err(|e| e.to_string())?;
@@ -131,6 +148,7 @@ fn execute(cli: Cli) -> Result<i32, String> {
         clock: cli.clock,
         screenshot: cli.screenshot,
         raw_frame: cli.raw_frame,
+        text_frame: cli.text_frame,
         expect_frame: cli.expect_frame,
         capture_frame: cli.capture_frame,
         max_dispatches: cli.max_dispatches,
@@ -186,7 +204,11 @@ fn execute(cli: Cli) -> Result<i32, String> {
         if let Some(frame) = host.devices.display.snapshot() {
             report.width = Some(frame.width);
             report.height = Some(frame.height);
+        } else if host.devices.text_display.snapshot().is_some() {
+            report.width = Some(40);
+            report.height = Some(25);
         }
+        host.devices.text_display.leave();
         worker_state.lock().unwrap().request_shutdown();
         (report, result)
     };
@@ -238,4 +260,40 @@ fn stdin_bytes() -> mpsc::Receiver<Result<Vec<u8>, String>> {
         }
     });
     rx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_capture_never_takes_over_terminal_or_live_stdin() {
+        let cli = Cli::try_parse_from(["rbf", "program.bf", "--terminal"]).unwrap();
+        assert!(!deterministic_input(&cli));
+        let cli = Cli::try_parse_from([
+            "rbf",
+            "program.bf",
+            "--terminal",
+            "--text-frame",
+            "screen.text40",
+        ])
+        .unwrap();
+        assert!(deterministic_input(&cli));
+        for incompatible in ["--tty-stdin", "--control-stdin", "--headless", "--visual"] {
+            assert!(
+                Cli::try_parse_from(["rbf", "program.bf", "--terminal", incompatible]).is_err()
+            );
+        }
+        for capture in ["--raw-frame", "--screenshot", "--expect-frame"] {
+            assert!(Cli::try_parse_from([
+                "rbf",
+                "program.bf",
+                "--text-frame",
+                "screen.text40",
+                capture,
+                "pixels"
+            ])
+            .is_err());
+        }
+    }
 }

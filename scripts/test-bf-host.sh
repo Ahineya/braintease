@@ -15,6 +15,8 @@ done
 for fixture in devices legacy io; do
     BANK_SIZE=512 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/$fixture.asm" "$OUT/$fixture" > "$OUT/$fixture-build.log" 2>&1 || { cat "$OUT/$fixture-build.log" >&2; exit 1; }
 done
+BANK_SIZE=37 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/multibank.asm" "$OUT/multibank" > "$OUT/multibank-build.log" 2>&1 || { cat "$OUT/multibank-build.log" >&2; exit 1; }
+BANK_SIZE=2048 MEMORY_BANKS=1 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/text40.asm" "$OUT/text40" > "$OUT/text40-build.log" 2>&1 || { cat "$OUT/text40-build.log" >&2; exit 1; }
 node --input-type=module - "$OUT" <<'JS'
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,9 +45,14 @@ done
     --exit-code --report "$OUT/io.json" --max-dispatches 1000000000 \
     --max-instructions 1000 --timeout 15 > "$OUT/io.stdout"
 [[ "$(cat "$OUT/io.stdout")" == Y ]] || { echo "I/O assertions failed" >&2; exit 1; }
+"$RBF" "$OUT/multibank.bf" --headless --exit-code --report "$OUT/multibank.json" \
+    --max-dispatches 1000000000 --max-instructions 1000 --timeout 30 > "$OUT/multibank.stdout"
+[[ "$(cat "$OUT/multibank.stdout")" == Y ]] || { echo "Code-bank assertions failed" >&2; exit 1; }
+"$RBF" "$OUT/text40.bf" --headless --text-frame "$OUT/text40.cells" \
+    --report "$OUT/text40.json" --max-dispatches 1000000000 --max-instructions 1000 --timeout 30
 
-# A real compiled C program uses the normal runtime startup and separate stack/global banks.
-BANK_SIZE=512 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/tiny.c" "$OUT/tiny" > "$OUT/tiny-build.log" 2>&1 || { cat "$OUT/tiny-build.log" >&2; exit 1; }
+# Real compiled C exercises startup, separate stack/global banks, and multiple code banks.
+BANK_SIZE=128 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/tiny.c" "$OUT/tiny" > "$OUT/tiny-build.log" 2>&1 || { cat "$OUT/tiny-build.log" >&2; exit 1; }
 "$RBF" "$OUT/tiny.bf" --headless --exit-code --report "$OUT/tiny.json" \
     --max-dispatches 1000000000 --timeout 30 > "$OUT/tiny.stdout"
 [[ "$(cat "$OUT/tiny.stdout")" == Y ]] || { echo "C assertions failed" >&2; exit 1; }
@@ -64,5 +71,18 @@ for (const clock of ['unthrottled','stepped']) {
 }
 const tiny=JSON.parse(fs.readFileSync(path.join(out,'tiny.json')));
 assert.equal(tiny.success,true); assert.equal(tiny.stop_reason,'halted'); assert.equal(tiny.guest_result,0);
+assert.ok(tiny.layout.instructions > tiny.layout.bank_size);
+const multibank=JSON.parse(fs.readFileSync(path.join(out,'multibank.json')));
+assert.equal(multibank.success,true); assert.equal(multibank.guest_result,0);
+assert.ok(multibank.layout.entry >= multibank.layout.bank_size);
+const text=JSON.parse(fs.readFileSync(path.join(out,'text40.json')));
+assert.equal(text.success,true); assert.equal(text.frames,1);
+assert.equal(text.width,40); assert.equal(text.height,25);
+const cells=fs.readFileSync(path.join(out,'text40.cells'));
+assert.equal(cells.length,2000);
+for (let index=0; index<1000; index++) {
+    const expected=index===0 ? 0x1e41 : index===1 ? 0x2f42 : index===999 ? 0x4f5a : 0;
+    assert.equal(cells.readUInt16LE(index*2),expected,`TEXT40 cell ${index}`);
+}
 JS
 echo "Brainfuck host smoke checks passed. Artifacts: $OUT"

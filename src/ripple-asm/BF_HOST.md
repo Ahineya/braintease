@@ -44,6 +44,12 @@ For origin `O`, the tape layout is:
 | Instruction `i` opcode | `O + 8*(40+4*i) + 3` |
 | Instruction operands 1, 2, 3 | opcode cell minus 8, 16, 24 |
 
+Instruction index `i` is `PCB*B+PC`; the code lane stores all banks consecutively.
+`ENTRY` is an absolute instruction index, so startup sets `PC=ENTRY%B` and
+`PCB=ENTRY/B` while positioning the tape at the complete entry index. At `$`, the
+pointer is `O+8*(40+4*(PCB*B+PC))`. The host validates this position and the image
+bounds; it does not choose or execute the next guest instruction.
+
 `N` is the declared RAM limit, not a prediction of every address a program can
 compute. Its default is 16. The host must reject accesses outside this limit,
 even when the physical tape contains additional cells for code or scratch work.
@@ -70,26 +76,45 @@ The host uses the existing bank-zero MMIO addresses and device ABI 1. No guest
 instruction encodings or C pointer representations change. Raw Brainfuck runners
 that ignore these annotations cannot supply the host devices.
 
-Current limits are explicit export errors: multiple code banks, LOADC/STORC,
+Current host limits are explicit export errors: LOADC/STORC,
 bank sizes below the 32-cell MMIO header, zero RAM banks, invalid entry points,
 and legacy `.data` sections (which overlap MMIO at bank-zero offset 2).
 RCC also emits zero-filled `.space` data to reserve global addresses. The linker
 recognizes these separately, per object, from matching `__gp_TAG` and
 `__rcc_init_TAG` labels. Host export omits these allocation-only bytes; generated
 initialization code fills GP bank 1. Mixing in a legacy data object is rejected.
-Nonzero entry points within the single code bank are supported. A code bank holds
-`B` instructions; each instruction occupies four tape words in the code lane.
+Both plain and host exports support multiple code banks and nonzero entry points
+in any bank. A code bank holds `B` instructions; each instruction occupies four
+tape words in the code lane. Bank seeks use nested Brainfuck loops, avoiding a
+16-bit intermediate product for the full tape address. The image plus its
+implicit final HALT must fit the 16-bit PC/PCB address space (`I < B*65536`).
+
+Control flow preserves the Rust VM's existing register semantics. Calls save
+the raw `(PC+1, PCB)` link pair; jumps and taken branches can leave `PC>=B`.
+Fetch still uses `PCB*B+PC`. An ordinary advance increments PC when `PC+1<B`,
+otherwise resets PC to zero and increments PCB. In particular, returning from a
+call in the last slot of a bank gives raw `PC=B` in the original bank; the next
+ordinary advance normalizes the pair. The tests retain this edge behavior
+rather than changing the ISA. Interrupt delivery and code-memory LOADC/STORC
+remain outside the BF CPU's supported device/instruction set.
 
 The CPU now preserves R0, honors the JAL/JALR link destination (including
 non-linking R0 jumps), and compares signed BLT/BGE operands correctly. This is
 not an exhaustive ISA parity certification: shift counts outside 0..15 and
 division/modulo by zero remain unverified against RVM. Small positive arithmetic
 and bitwise operations, normal calls, memory access and branches are covered.
+General ALU/LOAD writes directly to PC/PCB still do not reliably reposition the
+physical BF instruction pointer; the bank support covers branches, JAL/JALR,
+startup and sequential advance.
 
-`cargo test --offline --manifest-path src/ripple-asm/Cargo.toml --test bf_host`
+`cargo test --offline --manifest-path src/ripple-asm/Cargo.toml`
 expands and executes tiny CPU programs with an independent bounded interpreter.
 It checks RAM-bank separation, hook atomicity and repeated writes, host-supplied
 LOAD values, strict tape bounds, nonzero entry, backward and signed branches,
 JAL/JALR link behavior, R0, arithmetic and bitwise operations, BRK behavior, GP
-reservation classification, and rejection of unsupported images. These tests do
-not run Doom.
+reservation classification, and rejection of unsupported images. The multi-bank
+tests cover non-power-of-two banks, later-bank entry, nested calls, aliased JALR
+operands, raw boundary return addresses, maximum-PC rollover, branches at bank
+edges, and sequential fallthrough. Plain-mode runs check the same CPU without
+host hooks, using 16-bit wrapping cells and a circular tape. These tests do not
+run Doom.

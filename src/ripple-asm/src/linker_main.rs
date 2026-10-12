@@ -151,14 +151,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("✓ Linked to text {}", output_path.display());
                 }
                 "macro" => {
-                    if program.code_bank_count() > 1 {
-                        eprintln!("Error: BF CPU cannot seek code banks yet");
-                        eprintln!(
-                            "  Linked program needs {} code banks (bank size {})",
-                            program.code_bank_count(),
-                            program.bank_size
-                        );
-                        std::process::exit(1);
+                    if program.instructions.len() >= usize::from(program.bank_size.max(1)) * 65536 {
+                        return Err("BF code image and final HALT must fit the 16-bit PC/PCB address space".into());
                     }
                     let formatter = MacroFormatter::new();
                     let macro_output = if cli.bf_host {

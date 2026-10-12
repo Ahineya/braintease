@@ -157,10 +157,10 @@ fn instruction_limit_stops_before_instruction_body() {
 }
 
 #[test]
-fn instruction_hooks_validate_single_bank_and_physical_layout() {
+fn instruction_hooks_validate_code_extent_and_physical_layout() {
     for (bank, pc, pointer, message) in [
-        (1, 0, ORIGIN + 8 * 40, "outside its single code bank"),
-        (0, 2, ORIGIN + 8 * 48, "outside its single code bank"),
+        (1, 0, ORIGIN + 8 * 40, "outside its code image"),
+        (0, 2, ORIGIN + 8 * 48, "outside its code image"),
         (0, 0, 0, "declared BF CPU layout"),
     ] {
         let mut host = host();
@@ -179,6 +179,31 @@ fn instruction_hooks_validate_single_bank_and_physical_layout() {
         "halted"
     );
     assert_eq!(host.instructions, 1);
+}
+
+#[test]
+fn instruction_hooks_accept_banks_and_raw_return_offsets() {
+    let header = "BFHOST 1 BANK_SIZE 64 MEMORY_BANKS 4 INSTRUCTIONS 129 ENTRY 128 ORIGIN 8 TAPE_CELLS 5000 END_BFHOST $?!";
+    for (bank, pc, index) in [(1, 0, 64), (0, 64, 64), (2, 0, 128), (2, 1, 129)] {
+        let (layout, _) = Layout::parse(header, 5000).unwrap();
+        let devices = BfDevices::new(64, 35, 1, None).unwrap();
+        let mut host = Host::new(layout, devices).unwrap();
+        host.machine.tape_mut()[ORIGIN + 25] = bank;
+        host.machine.tape_mut()[ORIGIN + 17] = pc;
+        let source = format!("{}$", ">".repeat(ORIGIN + 8 * (40 + 4 * index)));
+        assert_eq!(
+            run(&mut host, &source, &limits(), &mut Vec::new()).unwrap(),
+            "halted"
+        );
+        assert_eq!(host.instructions, 1);
+    }
+    // A physical pointer in bank zero cannot masquerade as an instruction in bank one.
+    let (layout, _) = Layout::parse(header, 5000).unwrap();
+    let mut host = Host::new(layout, BfDevices::new(64, 35, 1, None).unwrap()).unwrap();
+    host.machine.tape_mut()[ORIGIN + 25] = 1;
+    let source = format!("{}$", ">".repeat(ORIGIN + 8 * 40));
+    let error = run(&mut host, &source, &limits(), &mut Vec::new()).unwrap_err();
+    assert!(error.contains("declared BF CPU layout"), "{error}");
 }
 
 #[test]
@@ -327,6 +352,93 @@ fn present_one_pixel() -> TapeProgram {
     program.store(33, 0xf800);
     program.store(HDR_DISP_FLUSH, 1);
     program
+}
+
+fn text_host() -> Host {
+    let header = "BFHOST 1 BANK_SIZE 2048 MEMORY_BANKS 1 INSTRUCTIONS 1 ENTRY 0 ORIGIN 8 TAPE_CELLS 16648 END_BFHOST $?!";
+    let (layout, _) = Layout::parse(header, 16648).unwrap();
+    let mut devices = BfDevices::new(2048, 35, 1, None).unwrap();
+    devices.host_input_enabled = false;
+    Host::new(layout, devices).unwrap()
+}
+
+fn present_text() -> TapeProgram {
+    let mut program = TapeProgram::default();
+    program.store(HDR_DISP_MODE, DISP_TEXT40);
+    program.store(HDR_DISP_CTL, DISP_ENABLE | DISP_CLEAR);
+    program.store(TEXT40_BASE_WORD, 0x1741);
+    program.store(TEXT40_LAST_WORD, 0xf842);
+    program.store(HDR_DISP_FLUSH, 1);
+    program
+}
+
+#[test]
+fn text_capture_preserves_cells_and_stops_at_requested_flush() {
+    let directory = Directory::new();
+    let raw = directory.0.join("frame.text40");
+    let options = RunOptions {
+        text_frame: Some(raw.clone()),
+        ..limits()
+    };
+    let mut source = present_text();
+    source.at(0);
+    source.source.push('?'); // Capture must stop before this later invalid hook.
+    assert_eq!(
+        run(&mut text_host(), &source.source, &options, &mut Vec::new()).unwrap(),
+        "captured_frame"
+    );
+    let bytes = std::fs::read(raw).unwrap();
+    assert_eq!(bytes.len(), TEXT40_WORDS * 2);
+    assert_eq!(&bytes[..2], &[0x41, 0x17]);
+    assert_eq!(&bytes[bytes.len() - 2..], &[0x42, 0xf8]);
+    assert!(bytes[2..bytes.len() - 2].iter().all(|&byte| byte == 0));
+}
+
+#[test]
+fn text_capture_rejects_wrong_frame_type_missing_frame_and_mixed_formats() {
+    let directory = Directory::new();
+    let raw = directory.0.join("frame.text40");
+    let mut options = RunOptions {
+        text_frame: Some(raw.clone()),
+        ..limits()
+    };
+    let error = run(
+        &mut host(),
+        &present_one_pixel().source,
+        &options,
+        &mut Vec::new(),
+    )
+    .unwrap_err();
+    assert!(error.contains("not a presented TEXT40 frame"), "{error}");
+    options.capture_frame = 2;
+    let error = run(
+        &mut text_host(),
+        &present_text().source,
+        &options,
+        &mut Vec::new(),
+    )
+    .unwrap_err();
+    assert!(error.contains("halted before frame 2"), "{error}");
+    options.raw_frame = Some(directory.0.join("rgb.rgb565"));
+    let error = run(
+        &mut text_host(),
+        &present_text().source,
+        &options,
+        &mut Vec::new(),
+    )
+    .unwrap_err();
+    assert!(error.contains("cannot be combined"), "{error}");
+    assert!(!raw.exists());
+    options.text_frame = None;
+    options.capture_frame = 1;
+    let error = run(
+        &mut text_host(),
+        &present_text().source,
+        &options,
+        &mut Vec::new(),
+    )
+    .unwrap_err();
+    assert!(error.contains("No presented RGB565 frame"), "{error}");
 }
 
 #[test]

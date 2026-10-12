@@ -25,6 +25,7 @@ pub struct RunOptions {
     pub clock: ClockPolicy,
     pub screenshot: Option<PathBuf>,
     pub raw_frame: Option<PathBuf>,
+    pub text_frame: Option<PathBuf>,
     pub expect_frame: Option<PathBuf>,
     pub capture_frame: u64,
     pub max_dispatches: Option<u64>,
@@ -43,6 +44,7 @@ impl Default for RunOptions {
             clock: ClockPolicy::Unthrottled,
             screenshot: None,
             raw_frame: None,
+            text_frame: None,
             expect_frame: None,
             capture_frame: 1,
             max_dispatches: None,
@@ -145,11 +147,17 @@ impl Host {
         options: &RunOptions,
         output: &mut impl Write,
     ) -> Result<String, String> {
-        let capture = options.screenshot.is_some() || options.raw_frame.is_some();
+        let rgb_capture = options.screenshot.is_some() || options.raw_frame.is_some();
+        let capture = rgb_capture || options.text_frame.is_some();
+        if options.text_frame.is_some() && (rgb_capture || options.expect_frame.is_some()) {
+            return Err(
+                "TEXT40 capture cannot be combined with RGB565 capture or comparison".into(),
+            );
+        }
         if capture && options.capture_frame == 0 {
             return Err("Capture frame must be positive".into());
         }
-        if options.expect_frame.is_some() && !capture {
+        if options.expect_frame.is_some() && !rgb_capture {
             return Err("--expect-frame requires --screenshot or --raw-frame".into());
         }
         if options.clock == ClockPolicy::Stepped && options.control.is_none() {
@@ -179,9 +187,10 @@ impl Host {
                 poll_at = self.machine.dispatches().saturating_add(4096);
                 self.check_host(options, started)?;
                 controller.poll(&options.control)?;
+                self.devices.poll_host_input()?;
                 if controller.quit
                     || options.cancelled.load(Ordering::Relaxed)
-                    || self.devices.display.is_window_closed()
+                    || self.devices.window_closed()
                 {
                     return if capture {
                         Err("Stopped before requested frame".into())
@@ -209,6 +218,16 @@ impl Host {
                 return Err("Input overflow during deterministic execution".into());
             }
             if capture && self.devices.presented_frames >= options.capture_frame {
+                if let Some(path) = &options.text_frame {
+                    let frame = self
+                        .devices
+                        .text_display
+                        .snapshot()
+                        .filter(|frame| frame.sequence == self.devices.presented_frames)
+                        .ok_or("Requested frame is not a presented TEXT40 frame")?;
+                    frame.write_raw(path)?;
+                    return Ok("captured_frame".into());
+                }
                 let frame = self
                     .devices
                     .display
@@ -267,9 +286,10 @@ impl Host {
                     }
                     self.check_host(options, started)?;
                     controller.poll(&options.control)?;
+                    self.devices.poll_host_input()?;
                     if controller.quit
                         || options.cancelled.load(Ordering::Relaxed)
-                        || self.devices.display.is_window_closed()
+                        || self.devices.window_closed()
                     {
                         return if capture {
                             Err("Stopped before requested frame".into())
@@ -311,13 +331,16 @@ impl Host {
                 Stop::Hook(b'$') => {
                     if options.max_instructions.is_some_and(|limit| self.instructions >= limit) { return Err("Ripple instruction limit exceeded".into()); }
                     let pc = usize::from(self.machine.tape()[self.layout.origin + 17]);
-                    let bank = self.machine.tape()[self.layout.origin + 25];
+                    let bank = usize::from(self.machine.tape()[self.layout.origin + 25]);
                     // Inspect published CPU state, never decode or execute an
-                    // instruction. I is the template's implicit final HALT.
-                    if bank != 0 || pc > self.layout.instructions {
-                        return Err(format!("BF CPU target {bank}:{pc} is outside its single code bank"));
+                    // instruction. Raw jump/return offsets may exceed a bank;
+                    // RVM fetch uses the same flattened address. I is the
+                    // template's implicit final HALT.
+                    let index = bank * usize::from(self.layout.bank_size) + pc;
+                    if index > self.layout.instructions {
+                        return Err(format!("BF CPU target {bank}:{pc} is outside its code image"));
                     }
-                    if self.machine.pointer() != self.layout.origin + 8 * (40 + 4 * pc) {
+                    if self.machine.pointer() != self.layout.origin + 8 * (40 + 4 * index) {
                         return Err("Instruction hook does not match the declared BF CPU layout".into());
                     }
                     self.instructions = self.instructions.checked_add(1).ok_or("Instruction counter overflow")?;

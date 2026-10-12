@@ -332,8 +332,8 @@ impl MacroFormatter {
         if !program.bf_host_gp_data_only {
             return Err("BF host does not support legacy .data overlapping MMIO; use C global initializers".into());
         }
-        if program.code_bank_count() > 1 {
-            return Err("BF CPU cannot seek code banks yet".into());
+        if program.instructions.len() >= usize::from(program.bank_size) * 65536 {
+            return Err("BF code image and final HALT must fit the 16-bit PC/PCB address space".into());
         }
         if program.entry_point % 4 != 0 || program.entry_point as usize / 4 >= program.instructions.len() {
             return Err("BF host entry point is outside the instruction image".into());
@@ -364,7 +364,9 @@ impl MacroFormatter {
         } else {
             CPU_HEADER.to_string()
         };
-        header = header.replace("#define ENTRY_POINT 0", &format!("#define ENTRY_POINT {entry}"));
+        let bank_size = usize::from(program.bank_size.max(1));
+        header = header.replace("#define ENTRY_POINT 0", &format!("#define ENTRY_POINT {}", entry % bank_size));
+        header = header.replace("#define ENTRY_BANK 0", &format!("#define ENTRY_BANK {}", entry / bank_size));
         header = header.replace("#define PROGRAM_WORDS 0", &format!("#define PROGRAM_WORDS {}", 40 + 4 * program.instructions.len()));
         if memory_banks.is_some() {
             header = header.replace("#define HOST_MODE 0", "#define HOST_MODE 1")

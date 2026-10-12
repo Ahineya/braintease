@@ -90,16 +90,26 @@ impl Layout {
         if !(1..=65536).contains(&self.memory_banks) {
             return Err("MEMORY_BANKS must be in 1..65536".into());
         }
+        // Reserve a representable PC/PCB pair for the appended implicit HALT.
+        let code_capacity = usize::from(self.bank_size)
+            .checked_mul(65536)
+            .ok_or("Code capacity overflow")?;
         if self.instructions == 0
-            || self.instructions > usize::from(self.bank_size)
+            || self.instructions >= code_capacity
             || self.entry >= self.instructions
         {
-            return Err(
-                "BFHOST currently supports one nonempty code bank and an entry within it".into(),
-            );
+            return Err("BFHOST requires a nonempty code image, an entry within it, and space for the implicit HALT in 16-bit code banks".into());
         }
-        let min_tape = (self.memory_cells().max(40 + 4 * self.instructions + 36) + 33)
-            .checked_mul(LANES)
+        let code_words = self
+            .instructions
+            .checked_mul(4)
+            .and_then(|words| words.checked_add(76))
+            .ok_or("Code tape size overflow")?;
+        let min_tape = self
+            .memory_cells()
+            .max(code_words)
+            .checked_add(33)
+            .and_then(|words| words.checked_mul(LANES))
             .ok_or("Tape size overflow")?;
         if self.tape_cells < min_tape || self.tape_cells > max_tape_cells {
             return Err(format!("TAPE_CELLS {} must be at least {min_tape} and at most {max_tape_cells}; adjust --max-tape-cells for larger images", self.tape_cells));
@@ -186,5 +196,21 @@ mod tests {
         assert_eq!(memory.read(255), 42);
         assert_eq!(tape[ORIGIN + 2043], 91);
         assert_eq!(tape[ORIGIN + 2045], 91);
+    }
+
+    #[test]
+    fn multiple_code_banks_and_later_entry_are_valid() {
+        let header = "BFHOST 1 BANK_SIZE 64 MEMORY_BANKS 4 INSTRUCTIONS 129 ENTRY 128 ORIGIN 8 TAPE_CELLS 5000 END_BFHOST $?!";
+        let (layout, _) = Layout::parse(header, 5000).unwrap();
+        assert_eq!(layout.instructions, 129);
+        assert_eq!(layout.entry, 128);
+        assert!(Layout::parse(&header.replace("CELLS 5000", "CELLS 4999"), 5000).is_err());
+        for count in [64 * 65536, usize::MAX] {
+            assert!(Layout::parse(
+                &header.replace("INSTRUCTIONS 129", &format!("INSTRUCTIONS {count}")),
+                usize::MAX
+            )
+            .is_err());
+        }
     }
 }

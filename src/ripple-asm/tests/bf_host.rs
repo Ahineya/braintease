@@ -132,8 +132,9 @@ fn run(source: &str) -> ResultState {
             Op::Close(start) if result.tape[ptr] != 0 => pc = start,
             Op::Clear => result.tape[ptr] = 0,
             Op::Hook(b'$') => {
-                assert_eq!(result.tape[8 + 25], 0, "single code bank");
-                assert_eq!(ptr, 8 + 8 * (40 + 4 * usize::from(result.tape[8 + 17])));
+                let instruction =
+                    usize::from(result.tape[8 + 25]) * 64 + usize::from(result.tape[8 + 17]);
+                assert_eq!(ptr, 8 + 8 * (40 + 4 * instruction));
                 result.boundaries += 1;
             }
             Op::Hook(marker) => {
@@ -259,8 +260,27 @@ fn unsupported_images_fail_before_expansion() {
     assert!(expand("HALT\n.data\nvalue: .byte 1", 64, 4)
         .unwrap_err()
         .contains("legacy .data"));
-    let source = format!("start:\n{}HALT\nother:\nHALT\n", "NOP\n".repeat(63));
-    assert!(expand(&source, 64, 4).unwrap_err().contains("code banks"));
+}
+
+#[test]
+fn multiple_code_banks_execute_calls_in_brainfuck() {
+    let source = format!(
+        "start:\nCALL far\nSTORE A0, R0, R0\nHALT\n{}far:\nLI A0, 65\nRET\n",
+        "NOP\n".repeat(61)
+    );
+    assert_eq!(run(&source).writes, [(0, 65)]);
+    assert_eq!(run_plain(&source).0, b"A");
+}
+
+#[test]
+fn maximum_raw_pc_rolls_into_the_next_code_bank() {
+    // RVM advances in wider arithmetic: 65535+1 must roll PCB, not merely
+    // wrap PC to zero while leaving the bank unchanged.
+    let source = format!(
+        "start:\nLI PC, -1\nHALT\n{}next_bank:\nLI A0, 65\nSTORE A0, R0, R0\nHALT\n",
+        "NOP\n".repeat(62)
+    );
+    assert_eq!(run(&source).writes, [(0, 65)]);
 }
 
 #[test]

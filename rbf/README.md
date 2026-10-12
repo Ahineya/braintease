@@ -25,14 +25,15 @@ prefix. `BANK_SIZE` defaults to 64000 and `MEMORY_BANKS` to 16; the helper keeps
 the runtime/compiler/assembler/linker bank sizes consistent. Extra arguments
 after the output prefix are additional object files. For libc calls, build and
 pass the needed runtime objects (for example `runtime/putchar.pobj`). The linker
-currently pulls whole archives; the complete runtime archive can exceed the BF
-CPU's single code-bank limit even for a small application.
+currently pulls whole archives. Linking only needed objects reduces expansion
+size and initialization work.
 
 The smoke checks use 512-cell banks to keep real BF memory seeking small.
 64,000-cell banks are supported but the BF CPU's bank-seeking algorithms can
 take much longer even for a tiny C program; interpreter dispatch speed alone
 does not remove that guest work. Choose banks large enough for both the code
-and each program's stack/data needs.
+and each program's stack/data needs. Code can span banks; the linker still
+requires each individual function to fit within one bank.
 
 For an already linked set of objects:
 
@@ -79,8 +80,8 @@ the interpreter's cell count, not a byte count or the guest's bank size.
 Without a host, text output works, but MMIO input, keyboard events, disk, RNG,
 graphics and logical clocks are unavailable. The CPU does not translate input
 MMIO into `,`; an interpreter's EOF option cannot supply those services. Guest
-code that waits for a device response may wait indefinitely. The existing
-single-code-bank limit applies in both modes.
+code that waits for a device response may wait indefinitely. Multiple code
+banks work in both plain and host exports, with all bank seeking done in BF.
 
 ## Devices and automation
 
@@ -90,6 +91,8 @@ Supported devices use the same guest interface as `rvm`:
 - Word-addressed block storage, explicitly selected with `--disk image.img`.
   The image is writable and changes are committed on shutdown. No default user
   disk is opened. Host I/O failures are reported.
+- TEXT40 (mode 2): 40×25 character/attribute cells, the shared terminal color
+  palette, display enable/clear/flush, and legacy arrow/Z/X key registers.
 - Legacy bank-zero RGB565 double buffering (mode 3).
 - RGB565_EXT (mode 4), including strided framebuffers and descriptors crossing banks.
 - Device ABI 1: capabilities, PRESENT, NEXT_TICK, GET_TIME, input transitions
@@ -99,6 +102,27 @@ Execution is headless by default. `--visual` opens the shared RGB565 window and
 accepts live keys. `--input TEXT` queues TTY bytes; `--tty-stdin` streams TTY input
 from stdin. The latter is separate from the keyboard device and cannot share
 stdin with the JSON controller. EOF produces an empty input queue.
+
+For TEXT40, `--terminal` uses an alternate terminal screen and accepts live
+keys. It requires terminal stdin/stderr and cannot share input with
+`--tty-stdin` or `--control-stdin`, or be combined with `--visual`/`--headless`.
+Terminal key state follows RVM's existing short pulse convention because a
+terminal does not reliably deliver key-release events. Deterministic replay
+continues to use logical tick grants.
+
+```sh
+BANK_SIZE=2048 MEMORY_BANKS=1 scripts/build-bf.sh rbf/tests/fixtures/text40.asm
+target/release/rbf build/bf/text40.bf --terminal --timeout 30 # Press Z to exit
+# Exact headless snapshot, including foreground/background attributes:
+target/release/rbf build/bf/text40.bf --headless --text-frame build/text40.cells --timeout 30
+```
+
+`--text-frame` captures the requested completed TEXT40 flush and stops. It
+writes 1000 little-endian 16-bit cells in row order (2000 bytes): low octet is
+the character, high octet is the attribute. Attribute low/high nibbles select
+foreground/background colors. It shares `--capture-frame` with RGB captures
+but cannot be combined with `--screenshot`, `--raw-frame`, or `--expect-frame`.
+Reports record 40×25 dimensions for TEXT40; PNG capture remains for RGB modes.
 
 Logical time advances only when the guest requests NEXT_TICK. `--clock
 unthrottled` grants immediately, `paced` waits at most one tick interval, and
@@ -149,6 +173,7 @@ default 16-bit wrapping configuration. The browser/WASM API is unchanged.
 cargo test -p rbf
 cargo test --manifest-path src/rust-bf/Cargo.toml --lib engine
 cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_host
+cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_multibank
 scripts/test-bf-host.sh
 ```
 
@@ -156,6 +181,8 @@ The smoke script runs small assembly fixtures and a compiled C program. It
 checks repeated commands, logical clock purity, scripted input, bank-crossing
 RGB565 pixels, legacy buffer swapping, TTY input, RNG, disk reads/commit and
 separate C stack/global banks.
+It also checks TEXT40 character/attribute snapshots and code-bank transitions,
+including entry in a later bank and calls/returns across a boundary.
 Artifacts are written to `build/bf-smoke`; set `BF_SMOKE_OUT` to override it.
 The interpreter tests compare full state and events against an independent
 literal BF oracle. Shared device tests compare flat and strided RAM.
@@ -163,15 +190,18 @@ No check builds or executes Doom.
 
 ## Remaining BF CPU limits
 
-The host does not remove the BF CPU's **single code-bank restriction**. Multiple
-RAM banks work, but a large program such as the full Doom port still needs
-multi-bank instruction fetching in the BF CPU before export. LOADC/STORC,
+Multiple code and RAM banks are supported. Fetch uses `PCB*BANK_SIZE+PC`,
+matching RVM even for raw jump/return offsets beyond a bank's size. Sequential
+rollover, cross-bank calls/returns, and nonzero-bank entry execute in BF.
+The linker's one-bank-per-function limit still applies. LOADC/STORC,
 legacy assembler `.data` placement, and invalid entry/layout configurations
 are rejected explicitly. C globals initialized through GP-bank stores work.
 The BF CPU's supported arithmetic/call subset has regression coverage; shift
 counts outside 0..15 and division/modulo by zero remain unverified against RVM.
+General ALU/LOAD writes directly to PC/PCB still do not reliably reposition the
+BF instruction pointer; control flow should use branches, JAL and JALR.
 
-TEXT40 terminal rendering and CPU interrupts are not implemented by this host.
+CPU interrupts are not implemented by this host.
 Nonzero IRQ configuration fails explicitly; IRQ reads report no pending state.
 BRK is a no-op in the non-debug BF host. These limitations do not change the
 Rust VM or its instruction set. Full Doom BF execution remains a separate

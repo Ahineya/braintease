@@ -11,6 +11,7 @@
 #define HOST_TTY @print
 #define HOST_BREAK $
 #define ENTRY_POINT 0
+#define ENTRY_BANK 0
 #define PROGRAM_WORDS 0
 
 #define PROGRAM {

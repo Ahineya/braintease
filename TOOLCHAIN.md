@@ -2,7 +2,7 @@
 
 Architecture (registers, ISA, C ABI, banks): [`docs/arch/`](docs/arch/README.md).
 
-C99 source is compiled to Ripple assembly, assembled, linked with startup code and a runtime library, then executed. The **primary target is the Ripple VM** (`rvm`). The [Brainfuck host](rbf/README.md) (`rbf`) runs the BF CPU with graphics, input, clock and storage devices, subject to the BF CPU's single code-bank limit.
+C99 source is compiled to Ripple assembly, assembled, linked with startup code and a runtime library, then executed. The **primary target is the Ripple VM** (`rvm`). The [Brainfuck host](rbf/README.md) (`rbf`) runs the BF CPU across code banks with TEXT40, RGB565, input, clock and storage devices.
 
 ```
 C  →  rcc  →  .asm  →  rasm  →  .pobj  →  rlink (+ crt0 + libruntime)  →  .bin  →  rvm
@@ -63,7 +63,9 @@ Display modes:
 - **RGB565** (pixel window) — pass `--visual`
 
 `rct --backend bf` remains the legacy console BF path. For device-enabled BF
-programs use `scripts/build-bf.sh` and `rbf`; TEXT40 and IRQ programs still need RVM.
+programs use `scripts/build-bf.sh` and `rbf`. Use `rbf --terminal` for interactive
+TEXT40, or `--headless --text-frame frame.cells` for a text snapshot. IRQ
+programs still need RVM.
 
 ## Toolchain components
 
@@ -180,7 +182,7 @@ target/release/rbf program.bf --headless --timeout 30
 
 Pass any runtime object files the program calls (for example `runtime/putchar.pobj`).
 The linker currently includes whole archives, so adding the entire runtime can
-exceed the BF CPU's single code-bank limit. The [BF host guide](rbf/README.md)
+unnecessarily enlarge the BF image. The [BF host guide](rbf/README.md)
 includes a bounded small-bank C example and device smoke checks.
 
 ## Building a multi-file program

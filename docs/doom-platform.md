@@ -171,9 +171,9 @@ open between steps.
 The [`rbf` host](../rbf/README.md) implements ABI 1 over the BF CPU's strided RAM,
 using explicit LOAD/STORE hooks. It reuses the Rust VM's descriptor handling,
 logical clock, input replay, RGB565 display and capture code. All guest CPU work
-continues to execute in Brainfuck. Small bounded tests cover both display modes,
-bank crossings and logical tick/input behavior. The remaining single-code-bank
-export restriction must be lifted in the BF CPU before attempting full Doom.
+continues to execute in Brainfuck. Small bounded tests cover RGB565, TEXT40,
+code/RAM bank crossings and logical tick/input behavior. Multiple code banks
+are supported by the BF CPU itself, including in ordinary-interpreter exports.
 
 ## Current Doom port
 
@@ -211,7 +211,7 @@ merely because a test failed; establish why the image changed and inspect it.
 ## Later Brainfuck gate
 
 Full Doom BF execution remains outside the Rust port milestones. The device
-host now has its own small checks; the next BF feasibility gate must address
-the linker's existing multi-code-bank export restriction (see
-[linker_main.rs](../src/ripple-asm/src/linker_main.rs)). Only then attempt a
-bounded first-level-frame run. Playable BF speed is not an acceptance criterion.
+host and multi-code-bank CPU now have their own small checks. A bounded
+first-level-frame run remains a separate, explicitly requested feasibility
+gate; passing small tests does not certify the full Doom workload. Playable BF
+speed is not an acceptance criterion.

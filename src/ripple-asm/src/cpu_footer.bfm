@@ -297,34 +297,56 @@
   @prevword
   @goto_start
   @lane(@L_SA,
+    // A taken branch already positioned the fast lane and PC. Consume its
+    // no-increment flag without temporarily decrementing/wrapping PC.
+    >+< @times(>-<) >
     @if
-      @lane_end(@L_SA)
-      @lane(@L_REG,
-          @nextwords(2) @dec(1) @prevwords(2) // PC
-      )
-
-      @nextword
-      @goto_ip_word
-      @fl(@prevword
-        - @prevword
-        - @prevword
-        - @prevword
-        - @prevword
-      )
-      @goto_start
-      @lane_start(@L_SA)
+      @lane_end(@L_SB)
+      @advance_pc_and_ip
+      @goto_start @lane_start(@L_SB)
     @endif
+    <
   )
+  @nextword @goto_ip_word @prevword
+}
 
-  @nextword
-  @goto_ip_word
-
-  @fl( {repeat(@CMD_SIZE, +@nextword)} ) @prevword
-  @goto_PC @inc(1) @lane_end(@L_REG)
-  // TODO: IF INCREMENT WRAPPED PC, NEED TO INC PCB!!!
-  @goto_ip_word
-  @prevword
-
+// RVM permits raw PC >= BANK_SIZE after jumps/branches. An ordinary advance
+// resets PC and increments PCB whenever old PC + 1 >= BANK_SIZE. Compare before
+// incrementing so PC=65535 also rolls over correctly with 16-bit BF cells.
+#define advance_pc_and_ip {
+  @goto_PC @lane_reg_end @copy_reg_to_A_via_B
+  @prevword @lane(@L_SA, @set(@BANK_SIZE) -) @nextword
+  @lane(@L_SA,
+    // lt internally increments both operands, so its maximum x would wrap.
+    // PC=65535 is unconditionally an overflow. For other values, retain the
+    // comparison result in the now-clear state flag while leaving this loop.
+    +[
+      - @lt
+      @move_to(@prevwords(2), @nextwords(2)) @nextwords(2)
+    ]
+    @prevword @clear @prevword
+    @move_to(@nextwords(2), @prevwords(2))
+    >+<
+    @if
+      // PC < BANK_SIZE-1: the next instruction is physically adjacent.
+      >-< @lane_end(@L_SA)
+      @lane(@L_REG, +)
+      @goto_ip_word @fl({repeat(@CMD_SIZE, +@nextword)})
+      @prevword @goto_PC @lane_reg_end @lane_start(@L_SA)
+    @endif
+    >
+    @if
+      // Re-seek even if the raw PC was already beyond this bank. Advancing
+      // only the physical marker would disagree with the register pair.
+      @lane_end(@L_SB)
+      @lane(@L_REG, @clear @nextword + @prevword)
+      @goto_ip_word
+      @copy_register_to_ip_B(@goto_PCB, @prevwords(2))
+      @_jump_to_bank_addr
+      @prevword @goto_PC @lane_reg_end @lane_start(@L_SB)
+    @endif
+    <
+  )
 }
 
 // MARK: -- PTR ops
@@ -820,14 +842,21 @@
   @nextword
   @goto_ptr_end
 
-  @prevword
-  @lane(@L_SA, @set(@BANK_SIZE))
-  @lane(@L_SB, @set(@CMD_SIZE))
-
-  @prevword
-  @lane(@L_SB, // Now we are at a new bank. @nextword has @CMD_SIZE, @nextword < has @BANK_SIZE
-    @nop // MARK: HERE WE CAN SWITCH TO ANOTHER BANK, DO WHEN NEEDED!
-    @nextword @clear < @clear > @prevword // Now let's just clear the fuck out
+  @prevwords(2)
+  @lane(@L_SB,
+    // Do not multiply PCB*BANK_SIZE*CMD_SIZE in a 16-bit cell: the result
+    // can exceed 65535. Nested loops extend the physical fast lane instead.
+    @times(
+      {repeat(@CMD_SIZE,
+        @nextword @set(@BANK_SIZE)
+        @times(
+          @lane_end(@L_SB) @goto_ptr_start
+          @nextword @fl(@goto_zero_right_lane + @goto_zero_left_lane)
+          @nextword @goto_ptr_end @prevword @lane_start(@L_SB)
+        )
+        @prevword
+      )}
+    )
   )
 
   @prevword
@@ -896,7 +925,8 @@
 
 #define link_return_address {
   // Snapshot PCB before writing rd: rd itself may be PCB or RAB.
-  @copy_register_to_ip_B(@goto_PCB, @prevword)
+  // word[-1].SB is used while marking rd; word[-4].SB stays untouched.
+  @copy_register_to_ip_B(@goto_PCB, @prevwords(4))
   @copy_register_to_ip_B(@goto_PC, @nop)
   @lane(@L_SB, +)
   @clear_and_mark_destination_register
@@ -905,15 +935,15 @@
 
   // The link pair is (rd, RAB), with the saved PCB winning if rd == RAB.
   @prevword @goto_PCB @nextwords(2) @clear @lane_reg_end
-  @goto_ip_word @prevword
+  @goto_ip_word @prevwords(4)
   @lane(@L_SB,
     @times(
       @lane_end(@L_SB)
       @goto_PCB @nextwords(2) + @lane_reg_end
-      @goto_ip_word @prevword @lane_start(@L_SB)
+      @goto_ip_word @prevwords(4) @lane_start(@L_SB)
     )
   )
-  @nextword
+  @nextwords(4)
 }
 
 #define ins_jal {
@@ -1558,7 +1588,7 @@
 // MARK: -- Set registers
 @nextword
 @nextword
-#define REG_VALUES {#ENTRY_POINT,0}
+#define REG_VALUES {#ENTRY_POINT,#ENTRY_BANK}
 @lane(#L_REG,
   {for(v in #REG_VALUES, @set(v) @nextword)}
 )

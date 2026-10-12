@@ -264,6 +264,16 @@ impl RippleAssembler {
         bytes_added
     }
 
+    fn advance_code_address(&self, state: &mut AssemblerState) {
+        // Object labels use four address units per instruction. Carry the
+        // remainder when a bank boundary cuts through those units; dropping it
+        // makes later labels and branch displacements depend on bank alignment.
+        let bank_size = u32::from(self.options.bank_size.max(1));
+        let next = u32::from(state.current_offset) + u32::from(INSTRUCTION_SIZE);
+        state.current_bank = state.current_bank.wrapping_add((next / bank_size) as u16);
+        state.current_offset = (next % bank_size) as u16;
+    }
+
     fn first_pass(&self, lines: &[ParsedLine], state: &mut AssemblerState) {
         for line in lines {
             // Handle labels
@@ -281,13 +291,7 @@ impl RippleAssembler {
 
             // Count instruction size
             if line.mnemonic.is_some() {
-                state.current_offset += INSTRUCTION_SIZE;
-                
-                // Check for bank overflow
-                if state.current_offset >= self.options.bank_size {
-                    state.current_bank += 1;
-                    state.current_offset = 0;
-                }
+                self.advance_code_address(state);
             }
         }
     }
@@ -371,11 +375,7 @@ impl RippleAssembler {
                     ));
                 }
 
-                state.current_offset += INSTRUCTION_SIZE;
-                if state.current_offset >= self.options.bank_size {
-                    state.current_bank += 1;
-                    state.current_offset = 0;
-                }
+                self.advance_code_address(state);
             }
         }
     }
@@ -620,6 +620,29 @@ start:
         assert_eq!(result.instructions[1].opcode, Opcode::Storc as u8);
         assert_eq!(result.instructions[1].word2, Register::R0 as u16);
         assert_eq!(result.instructions[1].word3, Register::T0 as u16);
+    }
+
+    #[test]
+    fn non_aligned_bank_size_preserves_absolute_labels_and_branches() {
+        let mut options = AssemblerOptions::default();
+        options.bank_size = 37;
+        options.max_immediate = 65535;
+        let assembler = RippleAssembler::new(options);
+        let source = format!("start:\n{}tail:\nBNE R0, R0, start\nCALL start\n", "NOP\n".repeat(37));
+        let object = assembler.assemble(&source).unwrap();
+        assert_eq!(object.labels["tail"].absolute_address, 37 * 4);
+        assert_eq!(object.instructions[37].word3, (-37i16) as u16);
+        assert_eq!(object.instructions[38].word3, 0);
+    }
+
+    #[test]
+    fn full_width_bank_size_does_not_overflow_offset_counter() {
+        let mut options = AssemblerOptions::default();
+        options.bank_size = u16::MAX;
+        let source = format!("{}tail:\nHALT\n", "NOP\n".repeat(16384));
+        let object = RippleAssembler::new(options).assemble(&source).unwrap();
+        assert_eq!(object.labels["tail"].absolute_address, 65536);
+        assert_eq!(object.labels["tail"].offset, 1);
     }
 
     #[test]

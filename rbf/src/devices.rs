@@ -4,6 +4,7 @@ use rvm::{
     constants::*,
     devices::{DeviceState, GuestMemory, KeyTransition},
     display_rgb565::RGB565Display,
+    display_text40::Text40Display,
     vm::Storage,
 };
 use std::collections::VecDeque;
@@ -11,6 +12,7 @@ use std::collections::VecDeque;
 pub struct BfDevices {
     pub devices: DeviceState,
     pub display: RGB565Display,
+    pub text_display: Text40Display,
     pub presented_frames: u64,
     pub host_input_enabled: bool,
     bank_size: u16,
@@ -36,6 +38,7 @@ impl BfDevices {
         Ok(Self {
             devices: DeviceState::new(tick_hz)?,
             display: RGB565Display::new(),
+            text_display: Text40Display::default(),
             presented_frames: 0,
             host_input_enabled: true,
             bank_size,
@@ -62,7 +65,14 @@ impl BfDevices {
         std::mem::take(&mut self.output)
     }
     pub fn window_closed(&self) -> bool {
-        self.display.is_window_closed()
+        self.display.is_window_closed() || self.text_display.should_quit()
+    }
+    pub fn poll_host_input(&mut self) -> Result<(), String> {
+        if self.host_input_enabled && self.display_mode == DISP_TEXT40 {
+            self.text_display.poll_input()?;
+            self.input.extend(self.text_display.take_input());
+        }
+        Ok(())
     }
     pub fn flush_storage(&mut self) -> Result<(), String> {
         if let Some(storage) = &mut self.storage {
@@ -139,6 +149,8 @@ impl BfDevices {
                     self.devices.held(key)
                 } else if self.display_mode == DISP_RGB565 {
                     self.display.get_state().lock().unwrap().keys_held[usize::from(key)]
+                } else if self.display_mode == DISP_TEXT40 {
+                    self.text_display.read_key(key)?
                 } else {
                     false
                 };
@@ -210,6 +222,13 @@ impl BfDevices {
             HDR_DISP_FLUSH => {
                 if value != 0 && self.display_mode == DISP_RGB565 && self.display.flush() {
                     self.presented_frames += 1;
+                } else if value != 0 && self.display_mode == DISP_TEXT40 && self.display_enabled {
+                    let sequence = self
+                        .presented_frames
+                        .checked_add(1)
+                        .ok_or("Frame counter overflow")?;
+                    self.text_display.present(memory, sequence)?;
+                    self.presented_frames = sequence;
                 }
             }
             HDR_DISP_RESOLUTION => self.display_resolution = value,
@@ -273,9 +292,13 @@ impl BfDevices {
                 usize::from(self.bank_size),
             )?,
             DISP_TEXT40 => {
-                return Err("TEXT40 terminal rendering is unsupported by the Brainfuck host".into())
+                self.text_display.enter()?;
+                self.display.disable();
             }
             _ => return Err(format!("Unsupported display mode {mode}")),
+        }
+        if mode != DISP_TEXT40 {
+            self.text_display.leave();
         }
         self.display_mode = mode;
         Ok(())
@@ -370,9 +393,7 @@ mod tests {
             assert!(host.write_mmio(address, 0, &mut memory).is_ok());
             assert!(host.write_mmio(address, 1, &mut memory).is_err());
         }
-        assert!(host
-            .write_mmio(HDR_DISP_MODE, DISP_TEXT40, &mut memory)
-            .is_err());
+        assert!(host.write_mmio(HDR_DISP_MODE, 5, &mut memory).is_err());
         assert_eq!(host.display_mode(), DISP_OFF);
         assert!(host.read_mmio(256, &mut memory).is_err());
         assert!(host.write_mmio(256, 1, &mut memory).is_err());
