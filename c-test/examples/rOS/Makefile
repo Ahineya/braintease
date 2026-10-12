@@ -13,6 +13,7 @@ RCC       := $(ROOT)/target/release/rcc
 RASM      := $(ROOT)/src/ripple-asm/target/release/rasm
 RLINK     := $(ROOT)/src/ripple-asm/target/release/rlink
 RVM       := $(ROOT)/target/release/rvm
+NODE      ?= node
 
 BANK_SIZE ?= 64000
 MAX_IMM   := 65535
@@ -58,7 +59,7 @@ CMD_RT_OBJS := \
 	$(RUNTIME)/softfloat.pobj
 
 .PHONY: all runtime bios io kernel command disk run \
-	test-bios test-io test-kernel hello clean
+	test-bios test-io test-kernel test-disk-image hello clean
 .PRECIOUS: $(BUILD)/%.asm $(BUILD)/%.pobj
 
 all: disk
@@ -142,7 +143,7 @@ $(HELLO_RXE): runtime $(CRT0_ROS) $(LIBROS) $(BUILD)/hello.pobj
 		-f rxe --bank-size $(BANK_SIZE) -o $@
 
 disk: $(BIOS_BIN) $(IO_SYS) $(KERNEL_SYS) $(COMMAND_COM) $(HELLO_RXE)
-	python3 $(SRC)/mkfat16.py -o $(DISK) \
+	$(NODE) $(SRC)/mkfat16.mjs -o $(DISK) \
 		$(IO_SYS):IO.SYS \
 		$(KERNEL_SYS):KERNEL.SYS \
 		$(COMMAND_COM):COMMAND.COM \
@@ -153,17 +154,20 @@ run: disk
 	$(RVM) $(BIOS_BIN) --disk $(DISK) $(if $(INPUT),--input "$(INPUT)",)
 
 test-bios: runtime $(BIOS_BIN) $(STUB_IO)
-	python3 $(SRC)/mkfat16.py -o $(BUILD)/test_bios.img $(STUB_IO):IO.SYS
+	$(NODE) $(SRC)/mkfat16.mjs -o $(BUILD)/test_bios.img $(STUB_IO):IO.SYS
 	$(RVM) $(BIOS_BIN) --disk $(BUILD)/test_bios.img
 
 test-io: runtime $(BIOS_BIN) $(IO_SYS) $(STUB_KERNEL)
-	python3 $(SRC)/mkfat16.py -o $(BUILD)/test_io.img $(IO_SYS):IO.SYS $(STUB_KERNEL):KERNEL.SYS
+	$(NODE) $(SRC)/mkfat16.mjs -o $(BUILD)/test_io.img $(IO_SYS):IO.SYS $(STUB_KERNEL):KERNEL.SYS
 	$(RVM) $(BIOS_BIN) --disk $(BUILD)/test_io.img
 
 test-kernel: runtime $(BIOS_BIN) $(IO_SYS) $(KERNEL_SYS) $(STUB_COMMAND)
-	python3 $(SRC)/mkfat16.py -o $(BUILD)/test_kernel.img \
+	$(NODE) $(SRC)/mkfat16.mjs -o $(BUILD)/test_kernel.img \
 		$(IO_SYS):IO.SYS $(KERNEL_SYS):KERNEL.SYS $(STUB_COMMAND):COMMAND.COM
 	$(RVM) $(BIOS_BIN) --disk $(BUILD)/test_kernel.img
+
+test-disk-image:
+	$(NODE) --test $(SRC)/mkfat16.test.mjs
 
 clean:
 	rm -rf $(BUILD)

@@ -27,6 +27,7 @@ echo
 # Build the VM first
 echo "Building VM..."
 cargo build --release --quiet || exit 1
+mkdir -p tests/bin || exit 1
 echo
 
 # Function to run a single test

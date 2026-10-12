@@ -1,269 +1,261 @@
 # Doom on Ripple C
 
-This is the real pinned Doomgeneric engine, adapted to 16-bit C bytes and the
-existing Rust VM device interface. It uses the repository's shareware
-`c-test/examples/doom/doom1.wad`; it does not download game data. Doom8088 is a
-reference checkout, not the engine being built.
+The DoomGeneric engine adapted to Ripple's 16-bit C bytes, banked pointers and
+existing VM instruction set. This directory contains the engine, platform code,
+build rules, shareware WAD and regression fixtures. No external Doom checkout,
+patch application, Python installation or source-fetch step is required.
 
-The first port profile is single-player, 320×200 RGB565, keyboard controls,
-35 Hz logical simulation ticks and silent audio. The CPU instruction set and
-Brainfuck implementation are unchanged. Development and smoke tests use only
-the Rust VM.
+Current scope: single-player Doom at 320×200 RGB565, keyboard controls, 35 Hz
+logical simulation ticks and silent audio. Development and tests use the Rust
+VM. The Brainfuck CPU implementation is unchanged and is not run by these tests.
 
-The title screen, scripted menu-to-E1M1 startup, and direct E1M1 startup produce
-exactly the same RGB565 pixels and frame/tick/game-state logs as the native
-reference. Gameplay replays extend the comparison to movement, turning, firing,
-use and the automap. These checks run `D_DoomMain` and the real world renderer.
-Hot rendering, memory and fixed-point operations now have small guest assembly
-implementations using the existing instruction set and C calling convention.
-The ISA and device interface remain unchanged. The Rust runner also batches
-execution and shares immutable frames with its display window; the Brainfuck
-implementation is unchanged.
-See [compiler optimizations](../../rcc-backend/OPTIMIZATIONS.md) for the passes,
-validation and earlier measurement details.
+## Build and play
 
-## Build and launch
+Requirements: the repository's Rust toolchain, GNU Make, Bash and Node.js 18+
+(no npm dependencies for this port). A host C compiler such as Clang or GCC is
+also required for native reference tests. macOS and Linux are the supported
+build environments; set `CC=gcc` when using GCC. Building the Rust workspace may require the platform
+libraries described by its crates.
 
-From the repository root, build the tools once:
+From the repository root:
 
 ```sh
 cargo build --release
 cargo build --release --manifest-path src/ripple-asm/Cargo.toml
-python3 scripts/fetch-doom-sources.py
+ports/doom/run.sh
 ```
 
-The launcher builds the engine, copies the WAD to protect the source fixture,
-and opens the VM display:
+The launcher builds the engine, stages a copy of the WAD and starts the Rust VM.
+It never opens the source WAD as a writable VM disk.
 
 ```sh
-python3 ports/doom/run.py
-# Skip the title/menu and start E1M1 directly:
-python3 ports/doom/run.py --scene e1m1
-# Start with Doom's faster low-detail world rendering:
-python3 ports/doom/run.py --scene e1m1 --low-detail
-# Capture one frame and stop:
-python3 ports/doom/run.py --scene e1m1 --headless
+ports/doom/run.sh --scene e1m1              # start directly in the first level
+ports/doom/run.sh --scene e1m1 --low-detail # half-width world rendering
+ports/doom/run.sh --scene e1m1 --headless   # capture one frame and stop
+ports/doom/run.sh --build-only
 ```
 
-Use Escape/Enter/arrows in menus. In game use Up/Down or W/S to move forward/back,
-Left/Right to turn, and A/D or comma/period to strafe. Control fires, Space uses
-doors/switches, Shift runs, Alt plus Left/Right strafes, Tab opens the automap,
-and number keys select weapons. Either left or right modifier works. On macOS,
-fire uses Control (⌃), not Command (⌘). F5 toggles Doom's stock high/low detail
-setting during play. Minus/equal shrink/enlarge the view for another speed and
-quality tradeoff. Close the window to quit.
+For direct builds:
 
-High detail remains the default. Low detail draws the world at half horizontal
-resolution and duplicates adjacent pixels; the display stays 320×200 RGB565.
-Menus and the status bar retain their normal resolution. `--low-detail` selects
-the initial setting without changing the VM's display mode or memory layout.
+```sh
+make -C ports/doom -j4              # Ripple engine
+make -C ports/doom -j4 native       # host reference engine
+make -C ports/doom -j4 both START_MAP=1 LOW_DETAIL=1
+make -C ports/doom clean
+```
 
-The launcher defaults to paced time for a window and unthrottled logical time
-for captures. `--input-script FILE.json` supplies deterministic keyboard events;
-`--clock stepped` accepts the VM's JSON control protocol on standard input.
-See [the platform guide](../../docs/doom-platform.md#input-replay-and-stepping).
-`--build-only` stops after linking. `--wad PATH` selects an existing local IWAD;
-the automated expectations are specifically for the bundled shareware WAD.
+Outputs are under `build/ripple/engine/` and `build/native/engine/`. Set
+`BUILD=/absolute/output/directory` to use a separate build tree, or
+`WAD=/path/to/DOOM1.WAD` to build for another local IWAD. The launcher accepts
+`--wad PATH`. Automated asset expectations use the bundled shareware WAD.
+Set `DOOM_BUILD=/absolute/output/directory` when launching or invoking the Node
+test tools directly. Build settings and tool/source changes invalidate the
+affected outputs.
 
-Headless runs write a PNG, raw RGB565, build manifest and JSON execution report under
-`ports/doom/build/run/`. `--output DIR`, `--frame N`, `--timeout SECONDS`, and
-`--max-instructions N` control artifacts and bounds. Hitting a limit before
-the requested frame is a failure.
+The normal launcher uses paced time for a window and unthrottled logical time
+for headless captures. `--clock stepped` accepts the VM's JSON control protocol
+on standard input. `--input-script FILE.json` supplies deterministic keyboard
+events. See [the device guide](../../docs/doom-platform.md).
+Headless output includes a PNG, raw RGB565, build manifest and execution report
+under `build/run/`. Use `--output DIR`, `--frame N`, `--timeout SECONDS` and
+`--max-instructions N` to set capture paths and limits. Reaching a limit before
+the requested frame is a failure. Run `ports/doom/run.sh --help` for all options.
+
+### Controls
+
+| Action | Keys |
+| --- | --- |
+| Menus | Escape, Enter, arrows |
+| Forward / backward | Up / Down or W / S |
+| Turn | Left / Right |
+| Strafe | A / D, comma / period, or Alt + Left / Right |
+| Fire | Control (⌃ on macOS, not Command) |
+| Use door / switch | Space |
+| Run | Shift |
+| Automap | Tab |
+| Select weapon | Number keys |
+| Toggle high / low detail | F5 |
+| Shrink / enlarge view | Minus / equal |
+
+Both left and right modifiers work. Close the window to quit. High detail is
+the default. Low detail draws adjacent world pixels in pairs; the display,
+menus and status bar remain 320×200.
+
+## Where the code comes from
+
+The sole engine base is [ozkl/doomgeneric](https://github.com/ozkl/doomgeneric),
+revision `e257a09527062bfb986b6e5e0780839b6cbd5b71`. Doom8088 contributes no
+code and is no longer a dependency or reference checkout. See
+[`upstream.json`](upstream.json) for the revision and original file hashes,
+[`LICENSE`](LICENSE) for the upstream license, and each source's copyright
+notice. The WAD is separate game data: see [`assets/README.md`](assets/README.md).
+
+We compile **69 of the 81 C files** selected by DoomGeneric's default Makefile,
+plus our adapter and generated initializers. This retains the real game loop,
+menus, automap, player movement, monsters, combat, collision, BSP world renderer,
+textures, sprites, lighting, status bar, intermissions, resource manager and zone
+allocator. It is the Doom engine, not a replacement renderer or game simulation.
+
+At consolidation, 27 of those 69 files are byte-for-byte upstream; 42 contain
+port changes. A line comparison retains 48,434 of 49,787 original lines (97.3%).
+This is a source-line measure including comments and inactive table definitions,
+not a claim that 97.3% of every upstream feature is enabled.
+
+The 12 omitted source files are `doomgeneric.c`, `doomgeneric_xlib.c`,
+`i_input.c`, `i_scale.c`, `i_system.c`, `i_timer.c`, `i_video.c`, `m_config.c`,
+`w_file_stdc.c`, `f_wipe.c`, `sha1.c` and `w_checksum.c`. Host-specific services
+are supplied below; wipes and WAD checksumming are omitted in this profile.
+The convenience `doomgeneric_Create` / `DG_*` wrapper is not compiled.
+Our entry point calls `D_DoomMain` and the retained `doomgeneric_Tick` function
+in `d_main.c`, while implementing the engine's lower-level `I_*` platform API.
+
+The former 24 patch files have been folded into `engine/`. Edit the engine
+sources directly; do not recreate an ignored patched source tree.
+
+## Port architecture
+
+```text
+assets/doom1.wad       engine/                       src/main.c
+      |               Doom gameplay + renderer <---- initializes tables,
+      |                       |                      enters D_DoomMain
+      v                       v
+wad_io.c +            platform.c + config_port.c + patch_cache.c
+w_file_port.c         clock, keyboard, indexed frame -> RGB565
+      |                       |
+      +-------- runtime C device/storage API --------+
+                              |
+                        unchanged Ripple ISA
+                              |
+                       Rust VM host devices
+                       window / capture / disk
+```
+
+| Code | Responsibility |
+| --- | --- |
+| `engine/` | Adapted DoomGeneric C sources and headers; explicit arithmetic widths, safe serialized decoding, heap-backed large arrays and renderer cache improvements |
+| `src/main.c` | Initialize canonical tables and state/object definitions, select startup mode, enter the real engine |
+| `src/platform.c` | System hooks, Doom zone allocation, logical time, keyboard translation, palette and RGB565 output; deterministic native capture path |
+| `src/config_port.c` | Explicit control bindings and defaults without persistent host configuration |
+| `src/wad_io.c`, `src/w_file_port.c` | Checked octet reads from the configured IWAD and a Doom file-backend adapter |
+| `src/doom_decode.h`, `src/patch_cache.c` | Explicit WAD structure decoding and cached decoded pictures |
+| `src/compat_libc.c`, `include/` | Missing guest C library functions and target-compatible headers; unsupported persistent file operations fail explicitly |
+| `src/*_fast.asm` | Four guest assembly modules for fixed-point arithmetic, raster loops, patch/palette operations and memory copies; ordinary Ripple instructions |
+| `tools/generate-data.mjs` | Turn canonical trig tables, 967 states and 137 object definitions into bounded heap-initializer functions |
+| `tests/`, `tools/` | Native/VM comparisons, independent asset and kernel oracles, captures and profiling |
+| `tests/titlepic/` | Earlier C/BFM title-screen fixtures; neither is the full game |
+
+The build uses Make for compilation, assembly and linking, Bash for launching,
+and dependency-free Node helpers for deterministic data generation, WAD staging
+and test orchestration. Generated code, logs, objects, binaries and screenshots
+stay under ignored `build/`.
+
+### The 16-bit memory model
+
+A Ripple C byte is a 16-bit cell. `sizeof`, allocation and memory functions count
+cells. A serialized WAD byte is an **8-bit octet**, represented as a cell with a
+value in 0..255. File record lengths and offsets count octets. The port explicitly
+decodes little-endian fields and never treats disk records as native C structs.
+The legacy `uint8_t` alias in the private headers is not an exact 8-bit C type.
+
+Doom's `fixed_t`, angles and wide arithmetic use software 32-bit operations.
+Pointers contain a bank and an offset. Large renderer arrays and the
+8,388,608-cell Doom zone are on the banked heap. The indexed screen and RGB565
+output each occupy 64,000 cells. The VM is provisioned with 256 banks of 64,000
+cells, or 16,384,000 cells total. There is no 32-bit VM extender.
+
+Each function and the combined static-data area must fit their respective bank
+limits. Canonical data therefore becomes 59 generated C units containing small
+initializer functions, rather than oversized static arrays or one enormous
+startup function. Values and state action callbacks are preserved.
+
+The assembly helpers assume this port's 64,000-cell banks, 320-cell screen rows,
+normalized pointers and decoded texture samples. They use the existing ISA and
+C calling convention. Native builds use corresponding C implementations, which
+are checked against the guest kernels. The compiler's general pointer paths
+remain independent of these port-specific assumptions.
+
+### Time, input and rendering
+
+The loop requests one logical tick grant, processes the input batch and advances
+Doom. Clock reads do not advance time. The host can pace at 35 Hz, grant ticks as
+fast as execution allows, or wait for automation to grant them. A slow backend
+therefore progresses through the same game ticks without having to catch up
+with an ever-growing wall-clock backlog.
+
+Input arrives as USB HID transitions and held-key state, translated into real
+Doom events. Doom renders its indexed-color image; the adapter converts through
+the current palette and presents RGB565 via `RGB565_EXT`. Capture sees the same
+completed frame as the display window. The Rust VM has no Doom-specific opcodes
+or execution shortcuts.
+
+### What is librvm?
+
+`target/release/librvm.rlib` is Cargo's **host-side Rust library** for the `rvm`
+crate. It exposes the interpreter, runner, devices and capture APIs. The `rvm`
+executable and the port's Rust test/profiling drivers use it.
+
+It is not guest code and is not linked into Doom. The guest instead links
+`runtime/crt0.pobj` and `runtime/libruntime.par`: the startup code and C runtime
+compiled into Ripple instructions. `librvm.rlib` runs those instructions on the
+host. Both libraries are generated build products.
 
 ## Automatic checks
 
 ```sh
-python3 ports/doom/test.py --stage foundations
-python3 ports/doom/test.py --stage portability
-python3 ports/doom/test.py --stage engine --max-instructions 100000000000 --timeout 300
-python3 ports/doom/test.py --stage kernels --timeout 300
-python3 ports/doom/test.py --stage gameplay --timeout 300
+make -C ports/doom test
+make -C ports/doom test-fixtures
+make -C ports/doom test-kernels
+make -C ports/doom test-gameplay
 ```
 
-Choose a separate `--artifacts DIR` to retain results from each stage.
+The default `make test` compares title, menu-to-E1M1 and direct E1M1 output with
+the native reference. Foundations cover numeric tables, libc, WAD/zone/cache
+operations, malformed data, controls and an independent WAD/image oracle.
+Portability covers isolated map/world arithmetic and 66,000 logical tick grants.
+Kernel checks use independent Rust oracles for arithmetic, pixels, memory,
+bank crossings, guards and the calling convention. Gameplay compares 180 frames
+of movement/combat/automap plus arrow-key and F5-toggle replays with native C.
+For direct invocation, use `node ports/doom/tools/test.mjs fixtures` (or
+`smoke`, `kernels`, `gameplay`). Add `--output DIR` to retain a separate run;
+`--help` lists limits and options.
 
-| Stage | Evidence |
-| --- | --- |
-| Foundations | Native/Rust arithmetic and complete trig-table hashes; target libc; actual WAD/zone/hash lookup through the final disk block; decoded graphics cache and malformed patches; independent Python WAD/geometry/texture oracle; exact 320×200 TITLEPIC pixels |
-| Portability | Native isolated engine tests for map parsing and malformed records, world/rendering arithmetic, and 66,000 consecutive logical tick grants |
-| Engine | Native/Rust exact pixels and matching frame/tick/game-state logs for title, scripted menu-to-E1M1 startup, and direct E1M1 startup |
-| Kernels | Independent Rust-VM oracles for RGB565 conversion, patch copying, high/low-detail columns and spans, cell-based memory operations, and signed fixed-point arithmetic; bank crossings, pointer tags, ABI preservation, guards and instruction budgets |
-| Gameplay | 180 E1M1 frames with movement, turning, firing, use, running and automap toggles, plus 32-frame arrow-key and F5-toggle replays; every frame and frame/tick/game-state record compared with native C |
+Test manifests identify the source WAD, padded disk image, executable and replay.
+The staging helper pads a **copy** to 65,536-octet storage blocks while preserving
+the logical WAD length. Mismatches retain captures and logs. The native reference
+shares the adapted engine, so independent asset and kernel checks remain useful
+in addition to pixel equality.
 
-Engine and foundation runs use bank size 64,000, 256 memory banks, RNG seed 1, and a copied
-WAD padded with zeros to a 65,536-octet storage-block boundary. The current VM
-storage reader needs complete blocks; the logical WAD length remains unchanged.
-Reports record source WAD and padded disk-image identities separately, along
-with executable/replay hashes, bounds and termination reason.
-Engine smoke-test image differences retain expected, actual and difference
-PNGs; gameplay failures retain raw frames, logs and the first differing frame
-in `results.json`. Native reference captures alone do not demonstrate that the
-target engine works.
+The small platform suite remains `scripts/test-visual-smoke.sh`; pass a WAD to
+include the older TITLEPIC fixture. Existing `scripts/run-doom-c.sh` and
+`scripts/run-bfm-doom.sh` still launch those fixtures. Use `ports/doom/run.sh`
+for the complete game.
 
-## Performance workflow
-
-Rendering helpers convert the indexed frame to RGB565, copy patch columns and
-draw textured columns/spans without repeated compiler-generated address and
-spill work inside each pixel loop. Memory helpers preserve the target's 16-bit
-C byte semantics and banked pointers. `FixedMul` and `FixedDiv` calculate the
-same signed 16.16 results as the native C reference, including Doom's division
-saturation guard. These routines execute ordinary Ripple instructions on the
-Rust VM; they are also representable by the unchanged Brainfuck CPU.
-
-Build both engines with the same initial detail setting, then measure an E1M1
-replay and compare every frame against native C:
+## Performance measurements
 
 ```sh
-python3 ports/doom/build.py engine --target both --start-map
-python3 ports/doom/tools/benchmark.py \
-  --output ports/doom/build/perf-high \
-  --profile-frame 20 --archive runtime/libruntime.par
-
-python3 ports/doom/build.py engine --target both --start-map --low-detail
-python3 ports/doom/tools/benchmark.py \
-  --output ports/doom/build/perf-low \
+make -C ports/doom -j4 both START_MAP=1
+node ports/doom/tools/benchmark.mjs --output ports/doom/build/perf-high \
   --profile-frame 20 --archive runtime/libruntime.par
 ```
 
-The default replay is `tests/gameplay.json`, with 32 frames of movement,
-turning and firing. For the longer workload, add
-`--input ports/doom/tests/gameplay-long.json --frames 180`. The benchmark uses
-already-built engines and never rebuilds them. Its native executable must
-match the guest's initial scene and detail setting. Low-detail output is
-compared with native low-detail output, not with high-detail pixels.
+The benchmark uses already-built engines with matching scene/detail settings,
+compares every frame, records production-runner wall times and guest instruction
+counts, and profiles separately when requested. Add `LOW_DETAIL=1` to the build
+for low-detail comparisons. Add `--input ports/doom/tests/gameplay-long.json
+--frames 180` to measure the longer replay. Avoid concurrent builds when
+comparing wall time; instruction counts are deterministic.
 
-`results.json` records per-frame guest instruction counts, production-runner
-wall times, exact native comparisons and artifact hashes. Steady statistics
-exclude the startup frame. Optional `--profile-frame N` measurements run in a
-separate replay, so PC-counting overhead is excluded from reported timings.
-The analyzer recovers static function boundaries from matching `.pobj` labels;
-omitted symbols are not silently charged to the preceding public function.
-Keep the corresponding object files and runtime archive when retaining a
-profile for later analysis. Avoid concurrent builds or benchmarks when
-comparing wall times; guest instruction counts are independent of host load.
-
-Consecutive local 32-frame E1M1 replay measurements (frames 2–32), recorded
-before the keyboard-binding correction below:
-
-| Build | Median instructions/frame | Median frame time | Frames/second |
-| --- | ---: | ---: | ---: |
-| Before guest-kernel optimization | 48,973,057 | 347.0 ms | 2.88 |
-| Optimized high detail | 10,537,063 | 75.1 ms | 13.32 |
-| Optimized low detail | 6,743,326 | 47.6 ms | 21.01 |
-
-These runs used the same production VM driver and input script, sequentially,
-with no concurrent agent builds. Other host activity was not controlled.
-The measured speedups were 4.62× and 7.29×; the corresponding guest instruction
-reductions were 4.65× and 7.26×. Timings vary considerably with host load and
-are not a guarantee of windowed frame rate. Normal detail remains below Doom's
-35 Hz target in this measurement. Artifacts and hashes are under
-`build/playable-perf/verified-timing/`, with exact native comparisons in its
-`high/` and `low/` subdirectories. The earlier binary predates the correctness
-fixes below; both optimized binaries include them. The separate
-`long-high-fixed/` and `long-low-fixed/` replays each match all 180 native frames,
-and `detail-toggle-fixed/` matches all 32 F5-toggle frames. The final validation
-also passes 12 foundations, title/menu/map smoke checks, four kernel suites,
-414 compiler Rust tests and 199 C regressions (with a focused IRQ fixture rerun
-after removing its obsolete reserved-mailbox check).
-
-Those historical timing runs exercised movement and turning; Control/Space
-events were present but their engine action bindings were missing. The current
-port binds them explicitly and checks the actual movement, attack and use
-commands in the `keyboard_controls` regression, in addition to pixel parity.
-
-### Runner batching and spill cleanup
-
-The Rust runner now batches execution between host/device boundaries. The
-window converts only changed frames and does so outside the shared display
-lock. Compiler spill addresses take one fewer instruction, and conditional
-branches avoid spilling and immediately reloading their predicate. These are
-general VM/compiler changes; the ISA and device interface are unchanged.
-
-A paired high-detail E1M1 measurement used two 32-frame replays, rotating the
-execution order of three VM instances at every frame. Startup frames are
-excluded. The reference uses the retained single-step runner from the current
-VM library with the saved pre-cleanup guest binary:
-
-| Execution | Median guest instructions/frame | Median paired speedup |
-| --- | ---: | ---: |
-| Single-step reference, original guest | 9,354,466 | 1.00× |
-| Batched runner, identical guest | 9,354,466 | 1.40× |
-| Batched runner, recompiled guest | 8,482,426 | 1.55× |
-
-The compiler reduces this workload's guest instruction count by 9.32%. Both
-rounds measured about 1.40× for batching and 1.55× combined. Every captured
-frame and tick matches across variants; the VM-only pair also has identical
-registers and full RAM at each frame. These are headless comparisons against
-the current reference path, not a promise of windowed FPS or a comparison
-against the old VM executable. Separate whole-process before/after timings
-varied substantially with host load and are retained as raw observations.
-
-Local evidence is under `build/batching-perf/`: `paired/results.json` records
-the paired measurements and hashes, `paired.rs` is the driver, and
-`comparison.json` contains the separate whole-process runs. The 180-frame
-gameplay replay, 32-frame detail-toggle replay, and title/menu/map smoke checks
-match native C exactly. A real window run captures the same pixels as native
-frame 32. Validation passes all 60 Rust VM tests and 224
-backend tests. Of 365 C regressions, 362 pass; the saved pre-change tools
-reproduce the same two Forth assembler `sp` name collisions and keyboard
-CRLF expectation failure (`forth-baseline-check/` and `baseline-failures/`).
-
-## Source layout and memory model
-
-`vendor/doom-sources.json` pins pristine ignored checkouts. `build.py` verifies
-them, applies the tracked `patches/*.patch` in filename order to an ignored
-working copy, then builds native and/or Ripple binaries. All port changes belong
-in patches or `src/`, never only in `vendor/` or `build/upstream/`.
-
-- `src/` supplies the VM adapter, explicit WAD/patch decoders, private libc and
-  existing-ISA assembly helpers. Native builds use the C reference paths.
-- `include/` is only used by the Ripple build. Its legacy `uint8_t` spelling is
-  a 16-bit cell containing an octet value, not an exact eight-bit C type.
-- `tools/generate_tables.py` preserves upstream table values while splitting
-  initialization into bounded functions and allocating tables on the heap.
-- `tools/generate_info.py` does the same for all 967 animation states and 137
-  object definitions, preserving action callbacks.
-- `tests/` and `tools/check_assets.py` provide independent numeric, structural,
-  malformed-input and image checks.
-
-Ordinary C sizes count cells. Serialized WAD positions and record sizes count
-eight-bit octets and are explicitly decoded. `fixed_t`/angles use 32-bit types;
-large renderer arrays and the 8,388,608-cell Doom zone live on the banked heap.
-The indexed screen and RGB565 output each occupy 64,000 target cells. Function
-code can span multiple banks, while each function and the combined static data
-must fit their respective 64,000-cell limits.
-
-The assembly helpers are specific to this port profile: 64,000-cell banks,
-320-cell framebuffer rows, normalized C pointers, and decoded texture samples
-in `0..255`. Low detail relies on adjacent framebuffer columns. The wall-loop
-cache relies on the stock drawing callbacks not inspecting `rw_x` or clipping
-arrays during a column draw. Changing those contracts requires updating the
-helpers and their oracles. The compiler's general pointer paths continue to
-support other bank sizes.
-
-Movement tests also caught two target-width bugs. The sky texture midpoint
-uses `fixed_t`; storing `100 * FRACUNIT` in the
-target's 16-bit `int` previously truncated it to zero. The movement replay and
-`sky_widths` fixture cover the exposed sky rows that revealed this width bug.
-Automap notifications use a 32-bit event field and explicit 32-bit message
-constants, so entering/leaving the map refreshes the status bar correctly;
-`event_widths` covers queue copying and discrimination from normal key events.
-
-Short composite textures have a full 128-row sampling window, filled by
-repeating their completed columns. Uncovered composite cells start at zero.
-The original STEP6 cache had only 16 rows, allowing projection rounding to read
-past its final column into heap metadata. Both builds now use defined texture
-data at that boundary. `texture_columns` tests the actual cache routines with
-short/tall textures, allocation guards, holes and unchanged masked posts.
-The existing 65,536-cell composite-cache limit also applies to padded columns.
+For historical context, a paired high-detail 32-frame E1M1 run measured 1.40×
+from runner batching with identical guest instructions, and 1.55× including
+compiler spill cleanup. Median instructions fell from 9,354,466 to 8,482,426
+per steady frame. These headless measurements are not a windowed FPS guarantee.
+Local evidence remains in ignored `build/batching-perf/`; compiler details are
+in [the optimization notes](../../rcc-backend/OPTIMIZATIONS.md).
 
 ## Remaining scope
 
-Save/load, demo recording, multiplayer, sound, mouse, host configuration files,
-PWADs and melt wipes are deferred. Persistent file operations return errors;
-they do not pretend to write saves. The bounded E1M1 replays provide repeatable
-control and rendering coverage. Longer sessions, other maps, demo playback and
-compatibility overflow cases still need broader validation.
-
-No Brainfuck execution is part of these commands. Its device adapter and
-multi-bank code export remain separate future milestones.
+Save/load, demo recording, multiplayer, sound, mouse input, persistent host
+configuration, PWADs and melt wipes are deferred. Longer sessions, additional
+maps and demo playback need broader validation beyond the bounded E1M1 replays.
+The Brainfuck host's device adapter and multi-bank code export remain separate
+future work; no Brainfuck execution is part of these build/test commands.

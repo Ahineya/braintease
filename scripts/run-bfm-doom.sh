@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and run the BFM Doom titlepic demo (c-test/examples/doom/bfm-doom.bfm).
+# Build and run the BFM Doom titlepic demo (ports/doom/tests/titlepic/bfm-doom.bfm).
 #
 # This is Ripple assembly written in the Brainfuck macro language, not C.
 # It expands to .asm, assembles, and links standalone (its own crt0 — no C runtime).
@@ -19,8 +19,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$ROOT/c-test/examples/doom/bfm-doom.bfm"
-BUILD="$ROOT/c-test/build"
+SRC="$ROOT/ports/doom/tests/titlepic/bfm-doom.bfm"
+BUILD="$ROOT/ports/doom/build/titlepic"
 BANK_SIZE=64000
 
 BFM="$ROOT/src/bf-macro-expander/target/release/bfm"
@@ -41,7 +41,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [--build-only] [--frequency HZ] [WAD]
 
-Build and run c-test/examples/doom/bfm-doom.bfm on rvm.
+Build and run ports/doom/tests/titlepic/bfm-doom.bfm on rvm.
 
   --build-only       Expand/assemble/link only; do not run
   --frequency HZ     Throttle the VM (e.g. 2MHz, 500KHz)

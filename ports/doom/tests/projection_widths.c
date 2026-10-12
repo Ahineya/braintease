@@ -1,7 +1,8 @@
-/* Shared native/Ripple test of the actual R_RenderSegLoop. Before compiling,
- * run tools/extract_projection_fixture.py prepared/r_segs.c generated.
- * Sources: this file and prepared/m_fixed.c. Define DOOM_GENERATED_TABLES=1.
- * Headers: generated plus prepared engine (and port/runtime for Ripple).
+/* Shared native/Ripple test of the actual R_RenderSegLoop.
+ * Run from the repository root:
+ *   node ports/doom/tools/test.mjs fixtures --program projection_widths
+ * The Make rule extracts engine/r_segs.c with tools/fixtures.mjs and links
+ * engine/m_fixed.c, using the same headers and definitions as the full port.
  */
 #include <stdio.h>
 #include <stdlib.h>

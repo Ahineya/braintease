@@ -88,7 +88,7 @@ $(LIBROS): $(LIBROS_OBJ) $(RLINK)
 
 # Clean generated files (but not hand-written .asm)
 clean:
-	rm -f $(ASM_FILES) $(ROS_C_ASM) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
+	rm -f $(ASM_FILES) $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
 	@echo "Cleaned runtime directory"
 
 # Test target - build a test program with runtime

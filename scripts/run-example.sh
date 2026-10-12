@@ -142,7 +142,7 @@ example_names() {
 }
 
 each_meta() {
-  find "$EXAMPLES" -name '*.meta.json' -print | LC_ALL=C sort
+  find "$EXAMPLES" "$ROOT/ports/doom/tests/titlepic" -name '*.meta.json' -print | LC_ALL=C sort
 }
 
 # --- listing / matching ----------------------------------------------------
@@ -384,8 +384,8 @@ default_disk() {
     printf '%s' "$DOOM_WAD"
     return 0
   fi
-  if [[ -f "$EXAMPLES/doom/doom1.wad" ]]; then
-    printf '%s' "$EXAMPLES/doom/doom1.wad"
+  if [[ -f "$ROOT/ports/doom/assets/doom1.wad" ]]; then
+    printf '%s' "$ROOT/ports/doom/assets/doom1.wad"
     return 0
   fi
 }

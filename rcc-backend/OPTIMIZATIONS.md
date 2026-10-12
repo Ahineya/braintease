@@ -94,8 +94,8 @@ this was caught by the first E1M1 snapshot after enabling scalar promotion.
 Run the fixtures with the Rust VM backend.
 `test_native_unsigned_gep` additionally checks native unsigned displacements,
 noncanonical pointer offsets, and preservation of signed and wider indices.
-`ports/doom/test.py --stage engine` compares title/menu/E1M1 screenshots
-against the native build; the foundations stage checks arithmetic and assets.
+`make -C ports/doom test` compares title/menu/E1M1 screenshots
+against the native build; the fixtures stage checks arithmetic and assets.
 
 The frontend IR dump precedes these backend passes. Unit tests in
 `src/optimize/tests.rs` inspect the optimized IR directly. No Brainfuck execution

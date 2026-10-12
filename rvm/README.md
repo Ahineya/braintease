@@ -39,7 +39,7 @@ uses an atomic flag. Both the legacy double buffer and extended display keep
 completed frames independent of later guest writes.
 
 Run the execution-boundary and device regressions with `cargo test -p rvm`.
-For application measurements, `ports/doom/tools/benchmark.py` records headless
+For application measurements, `ports/doom/tools/benchmark.mjs` records headless
 production-runner times and checks every frame against native C. Compare the
 same guest binary to isolate VM gains; compare guest instruction counts to
 measure compiler gains. Headless timings do not measure window contention.

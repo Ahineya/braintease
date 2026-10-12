@@ -1,21 +1,12 @@
-/* Native parser regression harness. Include the patched loader so its private
+/* Native parser regression harness. Include the engine loader so its private
  * REJECT decoder is tested too. Link with dead-section elimination: gameplay
  * bootstrap is deliberately outside this parser test. The real engine retains
  * its normal implementations of these services.
  *
- * From the repository root, first prepare a fresh patched engine:
- *   python3 ports/doom/build.py prepare
- * Then compile this isolated native test (Linux example):
- *   cc -std=c99 -O1 -fwrapv -ffunction-sections -fdata-sections \
- *      -Iports/doom/build/upstream/doomgeneric -Iports/doom/src \
- *      ports/doom/tests/map_decode.c \
- *      ports/doom/build/upstream/doomgeneric/m_fixed.c \
- *      -Wl,--gc-sections -o /tmp/doom-map-decode
- *   /tmp/doom-map-decode c-test/examples/doom/doom1.wad
- * On macOS use -Wl,-dead_strip instead of -Wl,--gc-sections and select a
- * matching compiler/SDK pair. For the Command Line Tools installation:
- *   /Library/Developer/CommandLineTools/usr/bin/clang \
- *      -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk ...
+ * From the repository root:
+ *   node ports/doom/tools/test.mjs fixtures --program map_decode
+ * This builds the native fixture with the platform's dead-section linker flag
+ * and runs it against ports/doom/assets/doom1.wad.
  * Expected: E1M1 loaded; 8 malformed inputs rejected. The REJECT padding
  * warning is an intentional malformed-input test, not a test failure. */
 #include <assert.h>

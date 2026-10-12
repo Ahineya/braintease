@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and run the C Doom TITLEPIC demo (c-test/examples/doom).
+# Build and run the C Doom TITLEPIC demo (ports/doom/tests/titlepic).
 #
 # Multi-file C: wad.c, mem.c, picture.c, doom-fixed.c compiled separately
 # and linked with the C runtime (crt0 + libruntime), unlike the BFM demo.
@@ -9,13 +9,13 @@
 #   scripts/run-doom-c.sh --build-only
 #   scripts/run-doom-c.sh --frequency 2MHz ~/games/DOOM1.WAD
 #
-# Default WAD: c-test/examples/doom/doom1.wad (or $DOOM_WAD).
+# Default WAD: ports/doom/assets/doom1.wad (or $DOOM_WAD).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$ROOT/c-test/examples/doom"
-DEFAULT_WAD="$SRC/doom1.wad"
+SRC="$ROOT/ports/doom/tests/titlepic"
+DEFAULT_WAD="$ROOT/ports/doom/assets/doom1.wad"
 
 build_only=0
 frequency=""

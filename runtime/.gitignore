@@ -1,0 +1,29 @@
+# Assembly generated from runtime C sources. Keep handwritten startup/IRQ code tracked.
+/__char_patch.asm
+/putchar.asm
+/puts.asm
+/getchar.asm
+/mmio.asm
+/vm_devices.asm
+/rand.asm
+/graphics.asm
+/string.asm
+/malloc.asm
+/printf.asm
+/ctype.asm
+/stdlib.asm
+/softfloat.asm
+/scanf.asm
+/qfixed.asm
+/ros/putchar.asm
+/ros/getchar.asm
+
+# Older standalone string builds and the Makefile smoke target.
+/memcpy.asm
+/memset.asm
+/test_main.asm
+/test_standalone.bf
+
+# Linker archives built by make all.
+/libruntime.par
+/libros.par
