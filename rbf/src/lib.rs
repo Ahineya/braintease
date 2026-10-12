@@ -2,3 +2,4 @@
 pub mod devices;
 pub mod image;
 pub mod runner;
+pub mod telemetry;

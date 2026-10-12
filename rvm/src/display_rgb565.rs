@@ -581,8 +581,8 @@ pub fn run_rgb565_display(
                                 return;
                             }
                             dimensions = requested;
-                            window
-                                .set_inner_size(LogicalSize::new(requested.0 * 2, requested.1 * 2));
+                            let (width, height) = initial_window_size(frame.width, frame.height);
+                            window.set_inner_size(LogicalSize::new(width, height));
                         }
                     }
                     update.write_rgba(pixels.frame_mut(), dimensions.0);
@@ -610,6 +610,16 @@ fn backing_surface_size(width: u32, height: u32) -> (u32, u32) {
     (width.max(1), height.max(1))
 }
 
+/// Keep tiny framebuffers readable while retaining an integer pixel scale.
+/// Ordinary-sized frames keep the existing two-times default window size.
+fn initial_window_size(width: u16, height: u16) -> (u32, u32) {
+    let width = u32::from(width);
+    let height = u32::from(height);
+    let short_edge = width.min(height).max(1);
+    let scale = 2.max(240u32.div_ceil(short_edge));
+    (width * scale, height * scale)
+}
+
 impl Drop for RGB565Display {
     fn drop(&mut self) {
         self.shutdown();
@@ -626,6 +636,17 @@ mod tests {
         assert_eq!(backing_surface_size(512, 0), (512, 1));
         assert_eq!(backing_surface_size(0, 512), (1, 512));
         assert_eq!(backing_surface_size(640, 400), (640, 400));
+    }
+
+    #[test]
+    fn small_frames_open_at_a_readable_integer_scale() {
+        assert_eq!(initial_window_size(16, 12), (320, 240));
+        assert_eq!(initial_window_size(12, 16), (240, 320));
+        assert_eq!(initial_window_size(64, 64), (256, 256));
+        assert_eq!(initial_window_size(1, 1), (240, 240));
+        assert_eq!(initial_window_size(160, 100), (480, 300));
+        assert_eq!(initial_window_size(320, 200), (640, 400));
+        assert_eq!(initial_window_size(256, 256), (512, 512));
     }
 
     #[test]

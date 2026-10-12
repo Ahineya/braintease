@@ -17,6 +17,7 @@ for fixture in devices legacy io; do
 done
 BANK_SIZE=37 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/multibank.asm" "$OUT/multibank" > "$OUT/multibank-build.log" 2>&1 || { cat "$OUT/multibank-build.log" >&2; exit 1; }
 BANK_SIZE=2048 MEMORY_BANKS=1 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/text40.asm" "$OUT/text40" > "$OUT/text40-build.log" 2>&1 || { cat "$OUT/text40-build.log" >&2; exit 1; }
+BANK_SIZE=512 MEMORY_BANKS=1 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/examples/rgb565.asm" "$OUT/rgb565" > "$OUT/rgb565-build.log" 2>&1 || { cat "$OUT/rgb565-build.log" >&2; exit 1; }
 node --input-type=module - "$OUT" <<'JS'
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,6 +52,15 @@ done
 "$RBF" "$OUT/text40.bf" --headless --text-frame "$OUT/text40.cells" \
     --report "$OUT/text40.json" --max-dispatches 1000000000 --max-instructions 1000 --timeout 30
 
+# The public animation must show a complete first frame, then move the marker
+# without stale pixels after swapping buffers and wrapping around the screen.
+for frame in 1 3 4 19; do
+    "$RBF" "$OUT/rgb565.bf" --headless --clock unthrottled --capture-frame "$frame" \
+        --screenshot "$OUT/rgb565-$frame.png" --raw-frame "$OUT/rgb565-$frame.rgb565" \
+        --report "$OUT/rgb565-$frame.json" --max-dispatches 1000000000 \
+        --max-instructions 10000 --timeout 30
+done
+
 # Real compiled C exercises startup, separate stack/global banks, and multiple code banks.
 BANK_SIZE=128 MEMORY_BANKS=4 "$ROOT/scripts/build-bf.sh" "$ROOT/rbf/tests/fixtures/tiny.c" "$OUT/tiny" > "$OUT/tiny-build.log" 2>&1 || { cat "$OUT/tiny-build.log" >&2; exit 1; }
 "$RBF" "$OUT/tiny.bf" --headless --exit-code --report "$OUT/tiny.json" \
@@ -83,6 +93,18 @@ assert.equal(cells.length,2000);
 for (let index=0; index<1000; index++) {
     const expected=index===0 ? 0x1e41 : index===1 ? 0x2f42 : index===999 ? 0x4f5a : 0;
     assert.equal(cells.readUInt16LE(index*2),expected,`TEXT40 cell ${index}`);
+}
+for (const frame of [1,3,4,19]) {
+    const report=JSON.parse(fs.readFileSync(path.join(out,`rgb565-${frame}.json`)));
+    assert.equal(report.success,true); assert.equal(report.frames,frame);
+    assert.equal(report.width,16); assert.equal(report.height,12);
+    const pixels=fs.readFileSync(path.join(out,`rgb565-${frame}.rgb565`));
+    assert.equal(pixels.length,16*12*2);
+    for (let y=0; y<12; y++) for (let x=0; x<16; x++) {
+        let expected=y<4 ? 0xf800 : y<8 ? 0x07e0 : 0x001f;
+        if (frame>=3 && x===(frame-3)%16 && (y===5 || y===6)) expected=0xffff;
+        assert.equal(pixels.readUInt16LE((y*16+x)*2),expected,`RGB565 frame ${frame} pixel ${x},${y}`);
+    }
 }
 JS
 echo "Brainfuck host smoke checks passed. Artifacts: $OUT"

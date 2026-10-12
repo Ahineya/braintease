@@ -4,6 +4,7 @@ use rbf::{
     devices::BfDevices,
     image::Layout,
     runner::{Host, RunOptions, RunReport},
+    telemetry::{parse_interval, Telemetry},
 };
 use rvm::{
     devices::InputScript,
@@ -66,6 +67,12 @@ struct Cli {
     capture_frame: u64,
     #[arg(long)]
     report: Option<PathBuf>,
+    /// Print periodic progress to stderr without changing guest stdout
+    #[arg(long, conflicts_with = "terminal")]
+    telemetry: bool,
+    /// Progress interval in seconds (0.01..3600; default 1)
+    #[arg(long, requires = "telemetry", value_parser = parse_interval)]
+    telemetry_interval: Option<Duration>,
     /// Limit optimized BF dispatches (not literal BF characters)
     #[arg(long)]
     max_dispatches: Option<u64>,
@@ -112,9 +119,31 @@ fn execute(cli: Cli) -> Result<i32, String> {
     if (cli.clock == ClockPolicy::Stepped) != cli.control_stdin {
         return Err("--clock stepped and --control-stdin must be used together".into());
     }
+    let mut telemetry = if cli.telemetry {
+        Some(Telemetry::new(
+            io::stderr(),
+            cli.telemetry_interval.unwrap_or(Duration::from_secs(1)),
+        )?)
+    } else {
+        None
+    };
+    if let Some(telemetry) = &mut telemetry {
+        telemetry.phase("loading", &format!("program={}", cli.program.display()))?;
+    }
     let source =
         fs::read_to_string(&cli.program).map_err(|e| format!("{}: {e}", cli.program.display()))?;
     let (layout, body) = Layout::parse(&source, cli.max_tape_cells)?;
+    if let Some(telemetry) = &mut telemetry {
+        telemetry.phase(
+            "parsing",
+            &format!(
+                "source_bytes={} tape_cells={} guest_instructions={}",
+                source.len(),
+                layout.tape_cells,
+                layout.instructions
+            ),
+        )?;
+    }
     let program = Program::parse(body, !cli.no_optimize, true).map_err(|e| e.to_string())?;
     let disk_hash = cli
         .disk
@@ -161,6 +190,16 @@ fn execute(cli: Cli) -> Result<i32, String> {
         cancelled,
     };
     let mut host = Host::new(layout.clone(), devices)?;
+    if let Some(telemetry) = &mut telemetry {
+        telemetry.phase(
+            "ready",
+            &format!(
+                "bf_ir={} optimized_regions={}",
+                program.instruction_count(),
+                program.optimization_count()
+            ),
+        )?;
+    }
     let state = host.devices.display.get_state();
     let mut report = RunReport {
         report_version: 1,
@@ -192,7 +231,11 @@ fn execute(cli: Cli) -> Result<i32, String> {
     let worker_state = Arc::clone(&state);
     let work = move || {
         let start = Instant::now();
-        let result = host.run(&program, &options, &mut io::stdout().lock());
+        let result = if let Some(telemetry) = &mut telemetry {
+            host.run_with_telemetry(&program, &options, &mut io::stdout().lock(), telemetry)
+        } else {
+            host.run(&program, &options, &mut io::stdout().lock())
+        };
         report.elapsed_seconds = start.elapsed().as_secs_f64();
         report.bf_dispatches = host.machine.dispatches();
         report.ripple_instructions = host.instructions;
@@ -265,6 +308,34 @@ fn stdin_bytes() -> mpsc::Receiver<Result<Vec<u8>, String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn telemetry_is_opt_in_validated_and_separate_from_terminal_mode() {
+        let plain = Cli::try_parse_from(["rbf", "program.bf"]).unwrap();
+        assert!(!plain.telemetry);
+        assert!(plain.telemetry_interval.is_none());
+        let enabled = Cli::try_parse_from([
+            "rbf",
+            "program.bf",
+            "--telemetry",
+            "--telemetry-interval",
+            "0.25",
+        ])
+        .unwrap();
+        assert_eq!(enabled.telemetry_interval, Some(Duration::from_millis(250)));
+        assert!(Cli::try_parse_from(["rbf", "program.bf", "--telemetry-interval", "1"]).is_err());
+        assert!(Cli::try_parse_from(["rbf", "program.bf", "--telemetry", "--terminal"]).is_err());
+        for interval in ["0", "-1", "NaN", "inf", "3601"] {
+            assert!(Cli::try_parse_from([
+                "rbf",
+                "program.bf",
+                "--telemetry",
+                "--telemetry-interval",
+                interval
+            ])
+            .is_err());
+        }
+    }
 
     #[test]
     fn text_capture_never_takes_over_terminal_or_live_stdin() {

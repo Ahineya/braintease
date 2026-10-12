@@ -1,10 +1,12 @@
 use crate::{
     devices::BfDevices,
     image::{Layout, StridedMemory},
+    telemetry::{Progress, Snapshot},
 };
 use bf_wasm::engine::{Machine, Program, Stop};
 use rvm::{
     capture,
+    constants::{DISP_RGB565, HDR_DISP_MODE},
     devices::GuestMemory,
     runner::{ClockPolicy, ControlCommand, Controller},
 };
@@ -106,6 +108,47 @@ pub struct Host {
     pub instructions: u64,
 }
 
+#[derive(Default)]
+struct Observation {
+    pc: Option<(u16, u16)>,
+    last_load: Option<usize>,
+    last_store: Option<usize>,
+    legacy_back: Option<std::ops::Range<usize>>,
+    framebuffer_writes: u64,
+    last_framebuffer_store: Option<usize>,
+    waiting: bool,
+}
+
+impl Observation {
+    fn display_mode(&mut self, host: &Host) {
+        self.legacy_back = if host.devices.display_mode() == DISP_RGB565 {
+            let shared = host.devices.display.get_state();
+            let state = shared.lock().unwrap();
+            let pixels = usize::from(state.width) * usize::from(state.height);
+            Some(32 + pixels..32 + 2 * pixels)
+        } else {
+            None
+        };
+    }
+
+    fn snapshot(&self, host: &Host, options: &RunOptions) -> Snapshot {
+        Snapshot {
+            dispatches: host.machine.dispatches(),
+            instructions: host.instructions,
+            pc: self.pc,
+            frames: host.devices.presented_frames,
+            tick: host.devices.devices.tick(),
+            clock: options.clock,
+            waiting_for_tick: self.waiting,
+            last_load: self.last_load,
+            last_store: self.last_store,
+            framebuffer_writes: self.framebuffer_writes,
+            last_framebuffer_store: self.last_framebuffer_store,
+            bank_size: host.layout.bank_size,
+        }
+    }
+}
+
 impl Host {
     pub fn new(layout: Layout, devices: BfDevices) -> Result<Self, String> {
         layout.validate(layout.tape_cells)?;
@@ -127,18 +170,66 @@ impl Host {
         options: &RunOptions,
         output: &mut impl Write,
     ) -> Result<String, String> {
-        let result = self.execute(program, options, output);
+        self.run_observed(program, options, output, None)
+    }
+
+    /// Progress has its own writer; guest output and existing callers are unchanged.
+    pub fn run_with_telemetry(
+        &mut self,
+        program: &Program,
+        options: &RunOptions,
+        output: &mut impl Write,
+        progress: &mut dyn Progress,
+    ) -> Result<String, String> {
+        self.run_observed(program, options, output, Some(progress))
+    }
+
+    fn run_observed(
+        &mut self,
+        program: &Program,
+        options: &RunOptions,
+        output: &mut impl Write,
+        mut progress: Option<&mut dyn Progress>,
+    ) -> Result<String, String> {
+        let mut observation = progress.as_ref().map(|_| {
+            let mut observation = Observation::default();
+            observation.display_mode(self);
+            observation
+        });
+        let result = if let (Some(progress), Some(observation)) =
+            (progress.as_deref_mut(), observation.as_ref())
+        {
+            progress.update(observation.snapshot(self, options), Some("started"))
+        } else {
+            Ok(())
+        };
+        let result = result
+            .and_then(|()| self.execute(program, options, output, &mut progress, &mut observation));
         let bytes = self.devices.take_output();
         let write_result = output
             .write_all(&bytes)
             .and_then(|()| output.flush())
             .map_err(|e| format!("Guest output: {e}"));
         let disk_result = self.devices.flush_storage();
-        result.and_then(|reason| {
+        let result = result.and_then(|reason| {
             write_result?;
             disk_result?;
             Ok(reason)
-        })
+        });
+        if let (Some(progress), Some(observation)) = (progress, observation) {
+            let status = match &result {
+                Ok(reason) => reason.clone(),
+                Err(reason) => format!("error: {reason}"),
+            };
+            if let Err(error) = progress.update(observation.snapshot(self, options), Some(&status))
+            {
+                return Err(match result {
+                    Err(original) => format!("{original}; {error}"),
+                    Ok(_) => error,
+                });
+            }
+        }
+        result
     }
 
     fn execute(
@@ -146,6 +237,8 @@ impl Host {
         program: &Program,
         options: &RunOptions,
         output: &mut impl Write,
+        progress: &mut Option<&mut dyn Progress>,
+        observation: &mut Option<Observation>,
     ) -> Result<String, String> {
         let rgb_capture = options.screenshot.is_some() || options.raw_frame.is_some();
         let capture = rgb_capture || options.text_frame.is_some();
@@ -185,6 +278,7 @@ impl Host {
             // the guest has initialized its tape or reached any device hook.
             if self.machine.dispatches() >= poll_at || self.devices.devices.has_pending_tick() {
                 poll_at = self.machine.dispatches().saturating_add(4096);
+                self.poll_progress(options, progress, observation, false)?;
                 self.check_host(options, started)?;
                 controller.poll(&options.control)?;
                 self.devices.poll_host_input()?;
@@ -284,6 +378,7 @@ impl Host {
                     if !waiting {
                         break;
                     }
+                    self.poll_progress(options, progress, observation, true)?;
                     self.check_host(options, started)?;
                     controller.poll(&options.control)?;
                     self.devices.poll_host_input()?;
@@ -312,6 +407,9 @@ impl Host {
                     StridedMemory::new(self.machine.tape_mut(), self.layout.memory_cells());
                 self.devices
                     .complete_tick(&mut memory, std::mem::take(&mut controller.events))?;
+                if let Some(observation) = observation {
+                    observation.waiting = false;
+                }
                 // A slow BF guest accrues no wall-clock debt or catch-up ticks.
                 next_tick = Instant::now() + tick_period;
                 continue;
@@ -344,9 +442,16 @@ impl Host {
                         return Err("Instruction hook does not match the declared BF CPU layout".into());
                     }
                     self.instructions = self.instructions.checked_add(1).ok_or("Instruction counter overflow")?;
+                    if let Some(observation) = observation {
+                        observation.pc = Some((bank as u16, pc as u16));
+                    }
                 },
                 Stop::Hook(kind @ (b'?' | b'!')) => {
                     let address = self.layout.ram_address(self.machine.pointer())?;
+                    if let Some(observation) = observation {
+                        if kind == b'?' { observation.last_load = Some(address); }
+                        else { observation.last_store = Some(address); }
+                    }
                     let mut memory = StridedMemory::new(self.machine.tape_mut(), self.layout.memory_cells());
                     if kind == b'?' {
                         let value = self.devices.read_mmio(address, &mut memory)?;
@@ -355,10 +460,34 @@ impl Host {
                         let value = memory.read(address);
                         self.devices.write_mmio(address, value, &mut memory)?;
                     }
+                    if kind == b'!' {
+                        if let Some(observation) = observation {
+                            if address == HDR_DISP_MODE { observation.display_mode(self); }
+                            if observation.legacy_back.as_ref().is_some_and(|range| range.contains(&address)) {
+                                observation.framebuffer_writes = observation.framebuffer_writes.checked_add(1).ok_or("Telemetry framebuffer counter overflow")?;
+                                observation.last_framebuffer_store = Some(address);
+                            }
+                        }
+                    }
                 },
                 Stop::Hook(other) => return Err(format!("Unknown BF host hook {other}")),
             }
         }
+    }
+
+    fn poll_progress(
+        &self,
+        options: &RunOptions,
+        progress: &mut Option<&mut dyn Progress>,
+        observation: &mut Option<Observation>,
+        waiting: bool,
+    ) -> Result<(), String> {
+        if let (Some(progress), Some(observation)) = (progress.as_deref_mut(), observation.as_mut())
+        {
+            observation.waiting = waiting;
+            progress.update(observation.snapshot(self, options), None)?;
+        }
+        Ok(())
     }
 
     fn check_host(&self, options: &RunOptions, started: Instant) -> Result<(), String> {

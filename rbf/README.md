@@ -51,6 +51,46 @@ An ordinary BF interpreter ignores them and cannot provide these peripherals.
 `rbf` deliberately requires the header instead of guessing a tape layout.
 See [the export contract](../src/ripple-asm/BF_HOST.md) for exact positions.
 
+## Small RGB565 demo
+
+```sh
+scripts/run-bf-rgb565.sh
+```
+
+This builds a self-contained 16×12 assembly demo and opens its RGB565 window.
+Red, green and blue bands appear first, followed by a white marker moving across
+the middle band. The window opens at 320×240 so its pixels are easy to see.
+Close the window or press Ctrl-C to stop. It uses 512-cell banks
+and has no C runtime or disk dependency. All guest instructions still execute in
+the Brainfuck CPU. Cargo rebuilds tools only when their sources have changed.
+
+Both buffers are initialized during the first two frames; subsequent frames
+need just four pixel writes. The demo requests one logical tick per animated
+frame and defaults to paced, eight-tick-per-second operation. Rendering can run
+slower than that rate without skipping animation steps.
+
+For a bounded headless capture of the first moving frame:
+
+```sh
+scripts/run-bf-rgb565.sh --headless --clock unthrottled --capture-frame 3 \
+  --screenshot build/bf-rgb565/frame3.png --raw-frame build/bf-rgb565/frame3.rgb565 \
+  --report build/bf-rgb565/frame3.json --timeout 30
+```
+
+`--build-only` prepares `build/bf-rgb565/rgb565.bf` without launching it.
+Set `BF_RGB565_OUT` to change that output directory. The larger C graphics
+examples perform much more guest work and are unsuitable for checking that the
+BF display works promptly.
+
+In particular, the 64×64 `rgb565_interactive_simple.c` demo clears 4096 pixels
+through nested `clear_screen` → `set_pixel` → `mmio_write` calls before its first
+flush. Its 16,384-cell bank layout also places the C stack in bank 2, requiring
+BF seeks to guest addresses above 32,768. Each pixel performs many guest
+instructions for those calls, including expensive BF register copies as well
+as RAM accesses. A bounded 40-second trace reached only
+28 of those background writes and no flush, so the black window did not indicate
+a failed display. This assembly demo avoids that startup work.
+
 ## Ordinary Brainfuck interpreters
 
 The portable CPU remains standard Brainfuck with 16-bit wrapping cells. Build
@@ -151,6 +191,23 @@ literal BF characters. `--max-instructions`, `--max-dispatches`, `--max-ticks`
 and `--timeout` allow bounded runs. Ctrl-C, window close and timeout are polled
 even during tape initialization and long BF loops, before any device hook.
 
+Add `--telemetry` for progress on stderr while a run is still in flight:
+
+```sh
+scripts/run-bf-rgb565.sh --telemetry --telemetry-interval 1
+```
+
+Telemetry reports loading/parsing/startup, elapsed time, BF and guest instruction
+counts/rates, the last validated guest program counter, frame/tick counts,
+clock waits and recent memory accesses. In legacy RGB565 mode it also reports
+back-buffer writes, which helps distinguish drawing from waiting for a flush.
+That write count includes repeated stores; it is not a count of unique pixels.
+The sampled idle durations and rates describe observed work, not completion
+percentages or predicted finishing times. Telemetry is off by default and works
+with headless or visual runs; it cannot share the TEXT40 terminal screen.
+`--telemetry-interval` requires `--telemetry` and accepts 0.01–3600 seconds
+(default 1). Guest TTY output remains on stdout.
+
 ## Execution engine
 
 The reusable core is [`src/rust-bf/src/engine.rs`](../src/rust-bf/src/engine.rs).
@@ -183,6 +240,8 @@ RGB565 pixels, legacy buffer swapping, TTY input, RNG, disk reads/commit and
 separate C stack/global banks.
 It also checks TEXT40 character/attribute snapshots and code-bank transitions,
 including entry in a later bank and calls/returns across a boundary.
+The public RGB565 demo is checked pixel-for-pixel at frames 1, 3, 4 and 19,
+covering its first flush, both buffers and marker wraparound.
 Artifacts are written to `build/bf-smoke`; set `BF_SMOKE_OUT` to override it.
 The interpreter tests compare full state and events against an independent
 literal BF oracle. Shared device tests compare flat and strided RAM.
