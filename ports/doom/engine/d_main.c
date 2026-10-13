@@ -312,6 +312,7 @@ void D_Display (void)
 void D_BindVariables(void)
 {
     int i;
+    char chat_name[] = "chatmacro0";
 
     M_ApplyPlatformDefaults();
 
@@ -349,10 +350,10 @@ void D_BindVariables(void)
 
     for (i=0; i<10; ++i)
     {
-        char buf[12];
-
-        M_snprintf(buf, sizeof(buf), "chatmacro%i", i);
-        M_BindVariable(buf, &chat_macros[i]);
+        // The names differ only in their final digit. Avoid running the
+        // general formatter for each fixed configuration key.
+        chat_name[9] = '0' + i;
+        M_BindVariable(chat_name, &chat_macros[i]);
     }
 }
 

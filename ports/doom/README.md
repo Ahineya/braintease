@@ -193,6 +193,31 @@ E1M1 captures matched. A separate 180-second full BF run printed the startup
 banner through `M_LoadDefaults` and reached 1,129,699 instructions, timing out
 before directory loading; it does not validate a completed BF WAD load or frame.
 
+A subsequent trace separated two apparent I/O stalls. Before WAD loading,
+formatting 24 numbered configuration names consumed almost the entire binding
+phase. Constructing those suffixes directly preserves all bindings and defaults
+while reducing `D_BindVariables` from 314,289 to 5,032 guest instructions.
+The general formatter also batches literal, string and padding runs; a small
+literal-format BF fixture fell from 0.98 to 0.63 seconds with identical output.
+
+After six disk words (the WAD header), the sampled `30:14260..14266` loop was
+clearing 22,752 cells in RAM bank 136. The directory decoder now initializes
+each field without clearing the allocation first, eliminating 20,228 store
+instructions overall. This matters more than the modest change in guest count:
+each far store builds and clears roughly 8.7 million BF marker cells. A local
+256-store benchmark took 3.20 seconds; larger interpreter batches offered little
+benefit or regressed. Both loops are already recognized by generic optimizers.
+The interpreter, CPU, ISA and bank sizes are unchanged in this pass. Tests cover
+nonzero reused allocations, configuration names/targets/defaults, formatter
+truncation and wide counts, and matching native/Rust VM title, menu and E1M1.
+
+The rebuilt image's 180-second execution test printed `W_Init` at approximately
+73 seconds on the telemetry clock and stopped at 1,047,257 guest instructions
+with 646 packed disk words read. Directory batches were advancing beyond the
+header, but WAD loading and the first frame had not completed. The additional
+five- to tenfold host-rate drops reported in longer runs were not reproduced
+locally; these changes do not establish their cause.
+
 ### Controls
 
 | Action | Keys |

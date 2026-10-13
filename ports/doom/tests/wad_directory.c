@@ -130,7 +130,15 @@ static void check_lookup(unsigned int count)
 static void directory_case(unsigned int count)
 {
     unsigned int i;
+    size_t bytes = (size_t)count * sizeof(lumpinfo_t);
+    void *dirty;
     prepare(count);
+    /* Reuse nonzero heap storage, so omitted field initialization cannot hide
+     * behind the VM's initially zero tape. No allocation occurs in W_OpenFile. */
+    dirty = malloc(bytes);
+    check(dirty != NULL, "poison allocation");
+    memset(dirty, 0x5a, bytes);
+    free(dirty);
     check(W_AddFile("synthetic") == &file && numlumps == count, "directory count");
     check(read_offsets[0] == 0UL && read_lengths[0] == 12UL, "header read");
     check(read_offsets[1] == 12UL, "directory start");

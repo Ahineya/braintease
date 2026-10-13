@@ -73,6 +73,42 @@ int main(void) {
     if (!check(snprintf(buffer, sizeof(buffer), "%p", (void *)0) == 3 && strcmp(buffer, "0x0") == 0, 20)) return 20;
 #endif
     if (!check(fabs(-2.5) == 2.5 && fabs(2.5) == 2.5 && fabs(0.0) == 0.0, 21)) return 21;
-    puts("LIBC validation_ok 1");
+    buffer[0] = 'x';
+    if (!check(snprintf(buffer, sizeof(buffer), "") == 0 && buffer[0] == 0 &&
+               snprintf(NULL, 0UL, "") == 0, 22)) return 22;
+    buffer[0] = 'x';
+    if (!check(snprintf(buffer, 0UL, "literal run") == 11 && buffer[0] == 'x', 23)) return 23;
+    result = snprintf(buffer, sizeof(buffer), "left:%s:%d:%%:right", "ab", 7);
+    if (!check(result == 17 && strcmp(buffer, "left:ab:7:%:right") == 0, 24)) return 24;
+    result = snprintf(guarded.text, sizeof(guarded.text), "abc%sTAIL", "de");
+    if (!check(result == 9 && strcmp(guarded.text, "abcde") == 0 &&
+               guarded.before == 'A' && guarded.after == 'Z', 25)) return 25;
+    if (!check(snprintf(NULL, 0UL, "before:%8.3s:%-5d:after", "abcdef", 7) == 27, 26)) return 26;
+    result = snprintf(guarded.text, sizeof(guarded.text), "%8s-tail", "x");
+    if (!check(result == 13 && strcmp(guarded.text, "     ") == 0 &&
+               guarded.before == 'A' && guarded.after == 'Z', 27)) return 27;
+    if (!check(snprintf(buffer, sizeof(buffer), "%cX", 0) == 2 &&
+               buffer[0] == 0 && buffer[1] == 'X' && buffer[2] == 0, 28)) return 28;
+#ifdef RIPPLE
+    errno = 0;
+    if (!check(snprintf(buffer, sizeof(buffer), "prefix%") == -1 && errno == EINVAL &&
+               strcmp(buffer, "prefix") == 0, 29)) return 29;
+    result = 123;
+    if (!check(snprintf(guarded.text, sizeof(guarded.text), "abc%sTAIL%n", "de", &result) == -1 &&
+               errno == EINVAL && result == 123 && strcmp(guarded.text, "abcde") == 0 &&
+               guarded.before == 'A' && guarded.after == 'Z', 30)) return 30;
+    {
+        char text[4] = {'A', (char)0x1234, 'B', 0};
+        if (!check(snprintf(buffer, sizeof(buffer), text) == 3 && buffer[0] == 'A' &&
+                   buffer[1] == (char)0x1234 && buffer[2] == 'B' && buffer[3] == 0, 31)) return 31;
+    }
+    if (!check(snprintf(NULL, 0UL, "%32767s", "") == INT_MAX, 32)) return 32;
+    errno = 0;
+    if (!check(snprintf(NULL, 0UL, "%32767sX", "") == -1 && errno == EOVERFLOW, 33)) return 33;
+    errno = 0;
+    if (!check(snprintf(NULL, 0UL, "%32767s%32767sXX", "", "") == -1 &&
+               errno == EOVERFLOW, 34)) return 34;
+#endif
+    if (fprintf(stdout, "LIBC %-14s%d\n", "validation_ok", 1) != 21) return 35;
     return 0;
 }

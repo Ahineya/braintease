@@ -82,8 +82,8 @@ static void ExtendLumpInfo(int newnumlumps)
     {
 	I_Error ("Couldn't realloc lumpinfo");
     }
-    // Use the port's bank-aware memset instead of calloc's generic C loop.
-    memset(newlumpinfo, 0, bytes);
+    // W_AddFile initializes every field as it decodes each new entry. Clearing
+    // this distant heap array first would write the entire directory twice.
 
     // Copy over lumpinfo_t structures from the old array. If any of
     // these lumps have been cached, we need to update the user
@@ -172,6 +172,7 @@ wad_file_t *W_AddFile (char *filename)
                 I_Error("IWAD lump lies outside configured file");
             lump->wad_file = wad_file;
             lump->cache = NULL;
+            lump->next = NULL;
             memcpy(lump->name, record + 8, 8);
             record += 16;
             ++lump;

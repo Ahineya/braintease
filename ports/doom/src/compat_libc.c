@@ -59,28 +59,51 @@ int mkdir(const char *path, mode_t mode) { errno = ENOSYS; return -1; }
 int stat(const char *path, struct stat *info) { errno = ENOENT; return -1; }
 
 typedef struct {
-    char *buffer;
-    size_t capacity;
+    char *buffer; /* Next writable cell, including the reserved terminator. */
+    size_t capacity; /* Remaining cells; used counts even truncated output. */
     size_t used;
     int console;
 } FormatOutput;
 
 static void output_char(FormatOutput *out, char ch) {
     if (out->console) putchar(ch);
-    if (out->buffer && out->capacity && out->used < out->capacity - 1UL)
-        out->buffer[out->used] = ch;
+    if (out->buffer && out->capacity > 1UL) {
+        *out->buffer++ = ch;
+        --out->capacity;
+    }
     ++out->used;
 }
 
 static void output_repeat(FormatOutput *out, char ch, size_t count) {
-    while (count) { output_char(out, ch); --count; }
+    if (!count) return;
+    out->used += count;
+    if (out->console) {
+        while (count) { putchar(ch); --count; }
+    } else if (out->buffer && out->capacity > 1UL) {
+        char *destination = out->buffer;
+        if (count >= out->capacity) count = out->capacity - 1UL;
+        out->capacity -= count;
+        while (count) { *destination++ = ch; --count; }
+        out->buffer = destination;
+    }
+}
+
+static void output_text(FormatOutput *out, const char *text, size_t count) {
+    if (!count) return;
+    out->used += count;
+    if (out->console) {
+        while (count) { putchar(*text++); --count; }
+    } else if (out->buffer && out->capacity > 1UL) {
+        char *destination = out->buffer;
+        if (count >= out->capacity) count = out->capacity - 1UL;
+        out->capacity -= count;
+        while (count) { *destination++ = *text++; --count; }
+        out->buffer = destination;
+    }
 }
 
 static int output_finish(FormatOutput *out, int error) {
-    if (out->buffer && out->capacity) {
-        size_t end = out->used < out->capacity ? out->used : out->capacity - 1UL;
-        out->buffer[end] = 0;
-    }
+    if (out->buffer && out->capacity) *out->buffer = 0;
     if (error) { errno = error; return -1; }
     if (out->used > INT_MAX) { errno = EOVERFLOW; return -1; }
     return (int)out->used;
@@ -88,6 +111,15 @@ static int output_finish(FormatOutput *out, int error) {
 
 static int format_output(FormatOutput *out, const char *format, va_list args) {
     while (*format) {
+        /* Literal runs need neither conversion state nor argument decoding. */
+        if (*format != '%') {
+            const char *text = format;
+            size_t count = 0;
+            do { ++count; ++format; }
+            while (*format && *format != '%');
+            output_text(out, text, count);
+            continue;
+        }
         int left = 0;
         int plus = 0;
         int space = 0;
@@ -97,7 +129,6 @@ static int format_output(FormatOutput *out, const char *format, va_list args) {
         int precision = -1;
         int length = 0; /* 0=int, 1=long, 2=size_t, 3=short, 4=char */
         char conversion;
-        if (*format != '%') { output_char(out, *format++); continue; }
         ++format;
         for (;;) {
             if (*format == '-') left = 1;
@@ -146,7 +177,6 @@ static int format_output(FormatOutput *out, const char *format, va_list args) {
             char one;
             size_t count = 0;
             size_t padding;
-            size_t i;
             if (length) return output_finish(out, EINVAL);
             if (conversion == 's') {
                 text = va_arg(args, const char *);
@@ -159,7 +189,7 @@ static int format_output(FormatOutput *out, const char *format, va_list args) {
             }
             padding = (size_t)width > count ? (size_t)width - count : 0;
             if (!left) output_repeat(out, ' ', padding);
-            for (i = 0; i < count; ++i) output_char(out, text[i]);
+            output_text(out, text, count);
             if (left) output_repeat(out, ' ', padding);
         } else if (conversion == 'd' || conversion == 'i' || conversion == 'u' ||
                    conversion == 'o' || conversion == 'x' || conversion == 'X' || conversion == 'p') {

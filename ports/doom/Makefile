@@ -71,6 +71,7 @@ FIXTURE_STAMP := $(if $(GENERATE_$(PROGRAM)),$(GENERATED)/$(PROGRAM).fixture-sta
 FIXTURE_FILES_projection_widths := projection_loop.inc
 FIXTURE_FILES_texture_columns := texture_cache.inc
 FIXTURE_FILES_keyboard_controls := input_commands.inc controls_defaults.inc platform_keyboard.inc
+FIXTURE_FILES_config_bindings := config_bindings.inc
 FIXTURE_OUTPUTS := $(addprefix $(GENERATED)/,$(FIXTURE_FILES_$(PROGRAM)))
 
 .PHONY: all ripple bf native both prepare runtime run clean help test test-fixtures test-kernels test-gameplay test-assets FORCE _ripple _bf _native

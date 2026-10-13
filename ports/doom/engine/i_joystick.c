@@ -339,6 +339,11 @@ void I_UpdateJoystick(void)
 void I_BindJoystickVariables(void)
 {
     int i;
+    char name[] = "joystick_physical_button0";
+
+#if NUM_VIRTUAL_BUTTONS > 10
+#error Joystick configuration names require a wider numeric suffix
+#endif
 
     M_BindVariable("use_joystick",          &usejoystick);
     M_BindVariable("joystick_index",        &joystick_index);
@@ -351,8 +356,7 @@ void I_BindJoystickVariables(void)
 
     for (i = 0; i < NUM_VIRTUAL_BUTTONS; ++i)
     {
-        char name[32];
-        M_snprintf(name, sizeof(name), "joystick_physical_button%i", i);
+        name[sizeof(name) - 2] = '0' + i;
         M_BindVariable(name, &joystick_physical_buttons[i]);
     }
 }

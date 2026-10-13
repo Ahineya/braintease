@@ -24,6 +24,7 @@ const EXPECTED = {
   event_widths: 'EVENT WIDTHS OK packed automap messages, queue copy, keyboard discrimination\n',
   texture_columns: 'TEXTURE OK: short/tall composites, last-column guard, holes, masked posts\n',
   keyboard_controls: 'INPUT OK: arrows/WASD, Control fire, Space use, Shift/Alt, aliases and releases\n',
+  config_bindings: 'CONFIG BINDINGS OK 24 numbered names, 97 fixed names, targets and player defaults\n',
 };
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   wad: { type: 'string', default: WAD }, output: { type: 'string' },

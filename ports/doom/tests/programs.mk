@@ -1,6 +1,6 @@
 # Small regressions compile the same engine sources as the complete port.
 NATIVE_FIXTURES := map_decode world_widths clock_widths
-FIXTURE_PROGRAMS := numeric libc wad_lookup wad_directory wad_read wad_read_small graphics_cache demo_playback stat_storage info_storage projection_widths sky_widths event_widths texture_columns keyboard_controls assets render_kernels raster_kernels memory_kernels $(NATIVE_FIXTURES)
+FIXTURE_PROGRAMS := numeric libc wad_lookup wad_directory wad_read wad_read_small graphics_cache demo_playback stat_storage info_storage projection_widths sky_widths event_widths texture_columns keyboard_controls config_bindings assets render_kernels raster_kernels memory_kernels $(NATIVE_FIXTURES)
 
 SOURCES_numeric = tests/numeric.c engine/m_fixed.c engine/tables.c $(TABLE_SOURCES)
 SOURCES_libc := tests/compat_libc.c
@@ -19,6 +19,7 @@ SOURCES_sky_widths := tests/sky_widths.c engine/r_sky.c
 SOURCES_event_widths := tests/event_widths.c
 SOURCES_texture_columns := tests/texture_columns.c
 SOURCES_keyboard_controls := tests/input_commands.c src/config_port.c
+SOURCES_config_bindings := tests/config_bindings.c engine/m_controls.c engine/i_joystick.c
 SOURCES_assets := tests/assets.c src/wad_io.c
 SOURCES_render_kernels := tests/render_kernels.c src/render_fast.asm
 SOURCES_raster_kernels := tests/raster_kernels.c src/raster_fast.asm
@@ -30,3 +31,4 @@ SOURCES_clock_widths := tests/clock_widths.c
 GENERATE_projection_widths = node tools/fixtures.mjs projection_widths $(GENERATED)
 GENERATE_texture_columns = node tools/fixtures.mjs texture_columns $(GENERATED)
 GENERATE_keyboard_controls = node tools/fixtures.mjs keyboard_controls $(GENERATED)
+GENERATE_config_bindings = node tools/fixtures.mjs config_bindings $(GENERATED)
