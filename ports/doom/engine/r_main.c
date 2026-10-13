@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 
 #include "doomdef.h"
@@ -35,6 +36,8 @@
 #include "r_local.h"
 #include "r_sky.h"
 #include "i_system.h"
+#include "doom_build_config.h"
+#include "patch_cache.h"
 
 
 
@@ -576,9 +579,11 @@ void R_InitTextureMapping (void)
     // Scan viewangletox[] to generate xtoviewangle[]:
     //  xtoviewangle will give the smallest view angle
     //  that maps to x.	
-    for (x=0;x<=viewwidth;x++)
+    // The mapping decreases monotonically. Visit x in reverse order so the
+    // search cursor advances once instead of rescanning from zero per pixel.
+    i = 0;
+    for (x=viewwidth;x>=0;x--)
     {
-	i = 0;
 	while (viewangletox[i]>x)
 	    i++;
 	xtoviewangle[x] = ((angle_t)i<<ANGLETOFINESHIFT)-ANG90;
@@ -587,9 +592,6 @@ void R_InitTextureMapping (void)
     // Take out the fencepost cases from viewangletox.
     for (i=0 ; i<FINEANGLES/2 ; i++)
     {
-	t = FixedMul (finetangent[i], focallength);
-	t = centerx - t;
-	
 	if (viewangletox[i] == -1)
 	    viewangletox[i] = 0;
 	else if (viewangletox[i] == viewwidth+1)
@@ -608,6 +610,100 @@ void R_InitTextureMapping (void)
 //
 #define DISTMAP		2
 
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+/* The build validates every serialized value against the source tables before
+ * publishing the cooked image. Runtime work is contiguous reads and relocation
+ * of light-level indices into the current colormap allocation. */
+static uint32_t renderer_depth_offset;
+static int renderer_checked;
+static int renderer_view = -1;
+extern int setblocks, setdetail;
+
+static void R_CheckCookedRenderer(void)
+{
+    uint16_t header[16];
+    if (renderer_checked) return;
+    if (sizeof(int) != 1 || sizeof(fixed_t) != 2 || sizeof(angle_t) != 2
+        || sizeof(void *) != 2 || SCREENWIDTH != 320 || SCREENHEIGHT != 200
+        || FINEANGLES != 8192 || LIGHTLEVELS != 16 || MAXLIGHTZ != 128
+        || MAXLIGHTSCALE != 48 || NUMCOLORMAPS != 32
+        || DOOM_ASSET_RENDERER_WORDS < 2352UL
+        || DOOM_ASSET_RENDERER_WORD > DOOM_ASSET_TOTAL_WORDS
+        || DOOM_ASSET_RENDERER_WORDS > DOOM_ASSET_TOTAL_WORDS - DOOM_ASSET_RENDERER_WORD)
+        I_Error("Cooked renderer tables do not match the target ABI");
+    W_ReadAssetWords(DOOM_ASSET_RENDERER_WORD, header, 16UL);
+    if (header[0] != 0x5256U || header[1] != 0x5442U || header[2] != 1U
+        || header[3] != 18U || header[4] != 304U || header[5] != 0U
+        || header[6] != 2048U)
+        I_Error("Invalid cooked renderer header");
+    renderer_depth_offset = DOOM_ASSET_RENDERER_WORD + 304UL;
+    renderer_checked = 1;
+}
+
+static void R_ReadCookedRenderer(uint32_t offset, uint16_t *dest, uint32_t count)
+{
+    if (offset > DOOM_ASSET_RENDERER_WORDS || count > DOOM_ASSET_RENDERER_WORDS - offset)
+        I_Error("Cooked renderer table lies outside its section");
+    W_ReadAssetWords(DOOM_ASSET_RENDERER_WORD + offset, dest, count);
+}
+
+static void R_RelocateLightTable(uint32_t offset, lighttable_t **output, unsigned int count)
+{
+    uint16_t indices[32];
+    lighttable_t *pointers[32];
+    lighttable_t *colors[32];
+    lighttable_t *color = colormaps;
+    int n;
+    for (n = 0; n < 32; ++n) {
+        colors[n] = color;
+        color += 256;
+    }
+    while (count != 0) {
+        unsigned int batch = count < 32U ? count : 32U;
+        W_ReadAssetWords(offset, indices, (uint32_t)batch);
+        for (n = 0; n < batch; ++n) {
+#if DOOM_ASSET_STRICT
+            if (indices[n] >= 32U) I_Error("Invalid cooked light level");
+#endif
+            pointers[n] = colors[indices[n]];
+        }
+        memcpy(output, pointers, (size_t)batch * sizeof(*output));
+        output += batch;
+        offset += batch;
+        count -= batch;
+    }
+}
+
+static int R_LoadCookedViewTables(void)
+{
+    uint16_t record[16];
+    uint32_t offsets[5];
+    int view, n;
+    if (setblocks < 3 || setblocks > 11 || setdetail < 0 || setdetail > 1)
+        I_Error("Unsupported cooked renderer view size");
+    view = (setblocks - 3) * 2 + setdetail;
+    if (renderer_view == view) return 1;
+    R_CheckCookedRenderer();
+    W_ReadAssetWords(DOOM_ASSET_RENDERER_WORD + 16UL + (uint32_t)view * 16UL,
+                     record, 16UL);
+    if (record[0] != setblocks || record[1] != setdetail
+        || record[2] != scaledviewwidth || record[3] != viewheight || record[4] != viewwidth)
+        I_Error("Cooked renderer view does not match requested dimensions");
+    for (n = 0; n < 5; ++n)
+        offsets[n] = (uint32_t)record[6 + n * 2] + ((uint32_t)record[7 + n * 2] << 16);
+    R_ReadCookedRenderer(offsets[0], (uint16_t *)viewangletox, 4096UL);
+    R_ReadCookedRenderer(offsets[1], (uint16_t *)xtoviewangle, ((uint32_t)viewwidth + 1UL) * 2UL);
+    R_ReadCookedRenderer(offsets[2], (uint16_t *)yslope, (uint32_t)viewheight * 2UL);
+    R_ReadCookedRenderer(offsets[3], (uint16_t *)distscale, (uint32_t)viewwidth * 2UL);
+    if (offsets[4] > DOOM_ASSET_RENDERER_WORDS || 768UL > DOOM_ASSET_RENDERER_WORDS - offsets[4])
+        I_Error("Cooked scale lights lie outside their section");
+    R_RelocateLightTable(DOOM_ASSET_RENDERER_WORD + offsets[4], &scalelight[0][0], 768U);
+    clipangle = xtoviewangle[0];
+    renderer_view = view;
+    return 1;
+}
+#endif
+
 void R_InitLightTables (void)
 {
     int		i;
@@ -615,6 +711,12 @@ void R_InitLightTables (void)
     int		level;
     int		startmap; 	
     fixed_t scale;
+
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+    R_CheckCookedRenderer();
+    R_RelocateLightTable(renderer_depth_offset, &zlight[0][0], 2048U);
+    return;
+#endif
     
     // Calculate the light levels to use
     //  for each level / distance combination.
@@ -673,6 +775,7 @@ void R_ExecuteSetViewSize (void)
     int		j;
     int		level;
     int		startmap; 	
+    int prepared = 0;
 
     setsizeneeded = false;
 
@@ -713,7 +816,10 @@ void R_ExecuteSetViewSize (void)
 
     R_InitBuffer (scaledviewwidth, viewheight);
 	
-    R_InitTextureMapping ();
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+    prepared = R_LoadCookedViewTables();
+#endif
+    if (!prepared) R_InitTextureMapping ();
     
     // psprite scales
     pspritescale = FRACUNIT*viewwidth/SCREENWIDTH;
@@ -722,6 +828,8 @@ void R_ExecuteSetViewSize (void)
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)
 	screenheightarray[i] = viewheight;
+
+    if (prepared) return;
     
     // planes
     for (i=0 ; i<viewheight ; i++)
@@ -770,7 +878,7 @@ void R_ExecuteSetViewSize (void)
  * storage bytes (16-bit cells on Ripple), never WAD file octet counts. */
 static size_t renderer_storage_bytes;
 
-void *R_AllocateStorage(size_t count, size_t size)
+static void *R_AllocateStorageKind(size_t count, size_t size, int zeroed)
 {
     void *storage;
     size_t bytes;
@@ -785,9 +893,9 @@ void *R_AllocateStorage(size_t count, size_t size)
     if (bytes > (size_t)-1 - renderer_storage_bytes)
         I_Error("Renderer storage accounting overflow");
 #if defined(RIPPLE) && defined(DOOM_FAST_MEMORY)
-    storage = Doom_AllocZeroed(bytes);
+    storage = zeroed ? Doom_AllocZeroed(bytes) : malloc(bytes);
 #else
-    storage = calloc(count, size);
+    storage = zeroed ? calloc(count, size) : malloc(bytes);
 #endif
     if (storage == NULL)
         I_Error("Unable to allocate renderer storage");
@@ -795,20 +903,40 @@ void *R_AllocateStorage(size_t count, size_t size)
     return storage;
 }
 
+void *R_AllocateStorage(size_t count, size_t size)
+{
+    return R_AllocateStorageKind(count, size, 1);
+}
+
 size_t R_StorageBytes(void)
 {
     return renderer_storage_bytes;
 }
 
+/* These tables have the same permanent lifetime. A typed slab preserves each
+ * member's native alignment and avoids five separate first-fit heap scans. */
+typedef struct
+{
+    int angle_to_x[FINEANGLES / 2];
+    angle_t x_to_angle[SCREENWIDTH + 1];
+    lighttable_t *scale[LIGHTLEVELS][MAXLIGHTSCALE];
+    lighttable_t *fixed[MAXLIGHTSCALE];
+    lighttable_t *depth[LIGHTLEVELS][MAXLIGHTZ];
+} renderer_view_storage_t;
+
 static void R_InitViewStorage(void)
 {
+    renderer_view_storage_t *storage;
     if (viewangletox != NULL)
         return;
-    viewangletox = R_AllocateStorage(FINEANGLES / 2, sizeof(*viewangletox));
-    xtoviewangle = R_AllocateStorage(SCREENWIDTH + 1, sizeof(*xtoviewangle));
-    scalelight = R_AllocateStorage(LIGHTLEVELS, sizeof(*scalelight));
-    scalelightfixed = R_AllocateStorage(MAXLIGHTSCALE, sizeof(*scalelightfixed));
-    zlight = R_AllocateStorage(LIGHTLEVELS, sizeof(*zlight));
+    storage = R_AllocateStorageKind(1, sizeof(*storage), 0);
+    viewangletox = storage->angle_to_x;
+    xtoviewangle = storage->x_to_angle;
+    scalelight = storage->scale;
+    scalelightfixed = storage->fixed;
+    zlight = storage->depth;
+    /* The other tables are completely written before their first read. */
+    memset(scalelightfixed, 0, sizeof(storage->fixed));
 }
 
 void R_Init (void)

@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { WAD_MODES, checkMode, packAssets, cachedAssets, hasCurrentAssetValidation, assertSeparateFile, writeAtomic } from './assets-pack.mjs';
+import { assetGeneratorHash, assetValidatorHash } from './assets-identity.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function write(file, content) {
@@ -26,7 +27,7 @@ function sourceIdentity() {
     for (const entry of fs.readdirSync(path.join(port, directory), { withFileTypes: true })) {
       const relative = `${directory}/${entry.name}`;
       if (entry.isDirectory()) walk(relative);
-      else if (/\.(?:c|h|asm|mjs|sh|rs)$/.test(entry.name)) files.push(relative);
+      else if (/\.(?:c|h|asm|mjs|sh|rs|inc)$/.test(entry.name)) files.push(relative);
     }
   }
   for (const directory of ['engine', 'src', 'include', 'tools', 'tests']) walk(directory);
@@ -45,8 +46,8 @@ try {
     // header's mtime. Include the generator so layout changes invalidate old
     // consumers even when the original WAD is unchanged.
     process.stdout.write(`${sha(json({ wad, source: sha(fs.readFileSync(wad)), mode, bank, generated: path.resolve(generated), asset_validation: assetValidation,
-      generator: sha(fs.readFileSync(fileURLToPath(new URL('./assets-pack.mjs', import.meta.url)))),
-      validator: sha(fs.readFileSync(new URL('./assets-validate.mjs', import.meta.url))),
+      generator: assetGeneratorHash(),
+      validator: assetValidatorHash(),
       config: sha(fs.readFileSync(fileURLToPath(import.meta.url))) }))}\n`);
   } else if (action === 'config-stamp') {
     const [file, key] = args;
@@ -61,7 +62,7 @@ try {
     checkValidation(assetValidation);
     const asset = cachedAssets(wad, path.join(path.dirname(manifest), 'assets', `doom-${wadMode}.img`), wadMode);
     const validation = asset.validation ?? null;
-    write(path.join(generated, 'doom_build_config.h'), `/* Generated: WAD lengths count octets; asset offsets count 16-bit disk words. */\n#ifndef DOOM_BUILD_CONFIG_H\n#define DOOM_BUILD_CONFIG_H\n#define DOOM_WAD_LENGTH ${bytes.length}UL\n#define DOOM_WAD_PATH ${JSON.stringify(wad)}\n#define DOOM_WAD_SHA256 ${JSON.stringify(sha(bytes))}\n#define DOOM_WAD_MODE ${WAD_MODES[wadMode]}\n#define DOOM_ASSET_PATH ${JSON.stringify(asset.path)}\n#define DOOM_ASSET_VERSION ${asset.format_version}U\n#define DOOM_ASSET_HEADER_WORD ${asset.header_word}UL\n#define DOOM_ASSET_INDEX_WORD ${asset.index_word}UL\n#define DOOM_ASSET_DIRECTORY_WORD ${asset.directory_word}UL\n#define DOOM_ASSET_HASH_HEADS_WORD ${asset.hash_heads_word}UL\n#define DOOM_ASSET_PNAMES_WORD ${asset.pnames_word}UL\n#define DOOM_ASSET_PNAMES_COUNT ${asset.pnames_count}UL\n#define DOOM_ASSET_PNAMES_LUMP ${asset.pnames_lump}UL\n#define DOOM_ASSET_TEXTURE_WORD ${asset.texture_word}UL\n#define DOOM_ASSET_TEXTURE_WORDS ${asset.texture_words}UL\n#define DOOM_ASSET_TEXTURE_COUNT ${asset.texture_count}UL\n#define DOOM_ASSET_TEXTURE_COLUMNS ${asset.texture_columns}UL\n#define DOOM_ASSET_TEXTURE_DEFINITION_WORDS ${asset.texture_definition_words}UL\n#define DOOM_ASSET_METADATA_ABI ${asset.metadata_abi}U\n#define DOOM_ASSET_DIRECTORY_RECORD_WORDS ${asset.directory_record_words}U\n#define DOOM_ASSET_HASH_ENTRY_WORDS ${asset.hash_entry_words}U\n#define DOOM_ASSET_PNAMES_ENTRY_WORDS ${asset.pnames_entry_words}U\n#define DOOM_ASSET_TOTAL_WORDS ${asset.total_words}UL\n#define DOOM_ASSET_LUMP_COUNT ${asset.lump_count}UL\n#define DOOM_ASSET_FINGERPRINT_LO ${asset.fingerprint_lo}U\n#define DOOM_ASSET_FINGERPRINT_HI ${asset.fingerprint_hi}U\n#endif\n`);
+    write(path.join(generated, 'doom_build_config.h'), `/* Generated: WAD lengths count octets; asset offsets count 16-bit disk words. */\n#ifndef DOOM_BUILD_CONFIG_H\n#define DOOM_BUILD_CONFIG_H\n#define DOOM_WAD_LENGTH ${bytes.length}UL\n#define DOOM_WAD_PATH ${JSON.stringify(wad)}\n#define DOOM_WAD_SHA256 ${JSON.stringify(sha(bytes))}\n#define DOOM_WAD_MODE ${WAD_MODES[wadMode]}\n#define DOOM_ASSET_PATH ${JSON.stringify(asset.path)}\n#define DOOM_ASSET_VERSION ${asset.format_version}U\n#define DOOM_ASSET_HEADER_WORD ${asset.header_word}UL\n#define DOOM_ASSET_INDEX_WORD ${asset.index_word}UL\n#define DOOM_ASSET_DIRECTORY_WORD ${asset.directory_word}UL\n#define DOOM_ASSET_HASH_HEADS_WORD ${asset.hash_heads_word}UL\n#define DOOM_ASSET_PNAMES_WORD ${asset.pnames_word}UL\n#define DOOM_ASSET_PNAMES_COUNT ${asset.pnames_count}UL\n#define DOOM_ASSET_PNAMES_LUMP ${asset.pnames_lump}UL\n#define DOOM_ASSET_TEXTURE_WORD ${asset.texture_word}UL\n#define DOOM_ASSET_TEXTURE_WORDS ${asset.texture_words}UL\n#define DOOM_ASSET_TEXTURE_COUNT ${asset.texture_count}UL\n#define DOOM_ASSET_TEXTURE_COLUMNS ${asset.texture_columns}UL\n#define DOOM_ASSET_TEXTURE_DEFINITION_WORDS ${asset.texture_definition_words}UL\n#define DOOM_ASSET_SPRITE_WORD ${asset.sprite_word}UL\n#define DOOM_ASSET_SPRITE_WORDS ${asset.sprite_words}UL\n#define DOOM_ASSET_SPRITE_COUNT ${asset.sprite_count}UL\n#define DOOM_ASSET_SPRITE_FRAMES ${asset.sprite_frames}UL\n#define DOOM_ASSET_SPRITE_FIRST_LUMP ${asset.sprite_first_lump}UL\n#define DOOM_ASSET_SPRITE_LAST_LUMP ${asset.sprite_last_lump}UL\n#define DOOM_ASSET_SPRITE_NAMES_LO ${asset.sprite_names_lo}UL\n#define DOOM_ASSET_SPRITE_NAMES_HI ${asset.sprite_names_hi}UL\n#define DOOM_ASSET_RENDERER_WORD ${asset.renderer_word}UL\n#define DOOM_ASSET_RENDERER_WORDS ${asset.renderer_words}UL\n#define DOOM_ASSET_SPRITE_METRICS_WORD ${asset.sprite_metrics_word}UL\n#define DOOM_ASSET_SPRITE_METRICS_WORDS ${asset.sprite_metrics_words}UL\n#define DOOM_ASSET_METADATA_ABI ${asset.metadata_abi}U\n#define DOOM_ASSET_DIRECTORY_RECORD_WORDS ${asset.directory_record_words}U\n#define DOOM_ASSET_HASH_ENTRY_WORDS ${asset.hash_entry_words}U\n#define DOOM_ASSET_PNAMES_ENTRY_WORDS ${asset.pnames_entry_words}U\n#define DOOM_ASSET_TOTAL_WORDS ${asset.total_words}UL\n#define DOOM_ASSET_LUMP_COUNT ${asset.lump_count}UL\n#define DOOM_ASSET_FINGERPRINT_LO ${asset.fingerprint_lo}U\n#define DOOM_ASSET_FINGERPRINT_HI ${asset.fingerprint_hi}U\n#endif\n`);
     const upstream = JSON.parse(fs.readFileSync(path.join(port, 'upstream.json')));
     write(manifest, json({ source_model: 'maintained engine/ sources', upstream: { project: upstream.project, repository: upstream.repository, revision: upstream.revision },
       sources: sourceIdentity(), settings: { program, start_map: startMap === '1', low_detail: lowDetail === '1', wad_mode: wadMode, asset_validation: assetValidation, defines, ripple_flags: rippleFlags, cc, cflags, cppflags, ldflags },

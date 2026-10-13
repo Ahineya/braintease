@@ -846,6 +846,65 @@ void R_InitFlats (void)
 }
 
 
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+static int R_LoadCookedSpriteMetrics(void)
+{
+    uint16_t header[16];
+    uint32_t array_words, payload_words;
+    unsigned int i;
+    fixed_t *slab;
+
+    if (modifiedgame) return 0;
+    if (sizeof(uint16_t) != 1 || sizeof(fixed_t) != 2 || FRACBITS != 16)
+        I_Error("Cooked sprite metrics do not match the target C ABI");
+    if (numspritelumps < 0 || DOOM_ASSET_SPRITE_METRICS_WORDS < 16UL
+        || DOOM_ASSET_SPRITE_METRICS_WORD > DOOM_ASSET_TOTAL_WORDS
+        || DOOM_ASSET_SPRITE_METRICS_WORDS > DOOM_ASSET_TOTAL_WORDS - DOOM_ASSET_SPRITE_METRICS_WORD)
+        I_Error("Invalid cooked sprite metrics bounds");
+    array_words = (uint32_t)numspritelumps * 2UL;
+    payload_words = array_words * 3UL;
+    if (DOOM_ASSET_SPRITE_METRICS_WORDS != 16UL + payload_words
+        || payload_words > (uint32_t)SIZE_MAX)
+        I_Error("Invalid cooked sprite metrics layout");
+    W_ReadAssetWords(DOOM_ASSET_SPRITE_METRICS_WORD, header, 16UL);
+    if (header[0] != 0x534dU || header[1] != 1U
+        || header[2] != (unsigned int)numspritelumps
+        || header[3] != (unsigned int)firstspritelump
+        || header[4] != (unsigned int)lastspritelump || header[5] != 2U
+        || header[6] != (unsigned int)array_words || header[7] != 0)
+        I_Error("Cooked sprite metrics do not match the WAD");
+    for (i = 8; i < 16; ++i)
+        if (header[i] != 0) I_Error("Invalid cooked sprite metrics padding");
+    if (!numspritelumps) {
+        spritewidth = NULL;
+        spriteoffset = NULL;
+        spritetopoffset = NULL;
+        return 1;
+    }
+    /* Final native arrays share one permanent block. No patch-index searches,
+     * tiny header reads, fixed-point conversions, or per-array allocations. */
+    slab = Z_Malloc((size_t)payload_words, PU_STATIC, NULL);
+    spritewidth = slab;
+    spriteoffset = slab + numspritelumps;
+    spritetopoffset = spriteoffset + numspritelumps;
+    W_ReadAssetWords(DOOM_ASSET_SPRITE_METRICS_WORD + 16UL,
+                    (uint16_t *)slab, payload_words);
+#if DOOM_ASSET_STRICT
+    for (i = 0; i < (unsigned int)numspritelumps; ++i) {
+        uint16_t *width = (uint16_t *)(spritewidth + i);
+        uint16_t *left = (uint16_t *)(spriteoffset + i);
+        uint16_t *top = (uint16_t *)(spritetopoffset + i);
+        if (width[0] != 0 || width[1] == 0 || width[1] > 32767U
+            || left[0] != 0 || top[0] != 0)
+            I_Error("Invalid cooked sprite metric value");
+    }
+#endif
+    /* Keep Doom's existing progress dots, now after the bulk transfer. */
+    for (i = 0; i < (unsigned int)numspritelumps; i += 64U) printf(".");
+    return 1;
+}
+#endif
+
 //
 // R_InitSpriteLumps
 // Finds the width and hoffset of all sprites in the wad,
@@ -861,6 +920,9 @@ void R_InitSpriteLumps (void)
     lastspritelump = W_GetNumForName (DEH_String("S_END")) - 1;
     
     numspritelumps = lastspritelump - firstspritelump + 1;
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+    if (R_LoadCookedSpriteMetrics()) return;
+#endif
     spritewidth = Z_Malloc (numspritelumps*sizeof(*spritewidth), PU_STATIC, 0);
     spriteoffset = Z_Malloc (numspritelumps*sizeof(*spriteoffset), PU_STATIC, 0);
     spritetopoffset = Z_Malloc (numspritelumps*sizeof(*spritetopoffset), PU_STATIC, 0);

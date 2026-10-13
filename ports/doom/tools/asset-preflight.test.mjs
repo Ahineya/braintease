@@ -8,6 +8,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { assetValidatorHash } from './assets-identity.mjs';
 
 const port = fileURLToPath(new URL('../', import.meta.url));
 const source = path.join(port, 'assets/doom1.wad');
@@ -37,7 +38,7 @@ test('configuration and staging reuse the exact artifact checked by the packer',
   assert.equal(build.settings.asset_validation, 'preflight');
   assert.equal(build.asset_preflight.image_sha256, build.asset_image.sha256);
   assert.equal(build.asset_preflight.validator_sha256,
-    sha(fs.readFileSync(new URL('./assets-validate.mjs', import.meta.url))));
+    assetValidatorHash());
   assert.equal(build.asset_preflight.textures, 125);
   const modified = fs.statSync(build.asset_image.path).mtimeMs;
   result = config(directory);

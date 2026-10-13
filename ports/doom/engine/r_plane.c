@@ -85,6 +85,25 @@ fixed_t *cacheddistance;
 fixed_t *cachedxstep;
 fixed_t *cachedystep;
 
+/* All plane buffers survive for the whole renderer lifetime. A typed slab
+ * supplies correct alignment on every target and needs only one heap scan.
+ * sizeof remains a size_t: this group spans multiple Ripple memory banks. */
+typedef struct
+{
+    visplane_t planes[MAXVISPLANES];
+    short openings[MAXOPENINGS];
+    short floorclip[SCREENWIDTH];
+    short ceilingclip[SCREENWIDTH];
+    int spanstart[SCREENHEIGHT];
+    int spanstop[SCREENHEIGHT];
+    fixed_t yslope[SCREENHEIGHT];
+    fixed_t distscale[SCREENWIDTH];
+    fixed_t cachedheight[SCREENHEIGHT];
+    fixed_t cacheddistance[SCREENHEIGHT];
+    fixed_t cachedxstep[SCREENHEIGHT];
+    fixed_t cachedystep[SCREENHEIGHT];
+} renderer_plane_storage_t;
+
 
 
 //
@@ -93,20 +112,22 @@ fixed_t *cachedystep;
 //
 void R_InitPlanes (void)
 {
+    renderer_plane_storage_t *storage;
     if (visplanes != NULL)
         return;
-    visplanes = R_AllocateStorage(MAXVISPLANES, sizeof(*visplanes));
-    openings = R_AllocateStorage(MAXOPENINGS, sizeof(*openings));
-    floorclip = R_AllocateStorage(SCREENWIDTH, sizeof(*floorclip));
-    ceilingclip = R_AllocateStorage(SCREENWIDTH, sizeof(*ceilingclip));
-    spanstart = R_AllocateStorage(SCREENHEIGHT, sizeof(*spanstart));
-    spanstop = R_AllocateStorage(SCREENHEIGHT, sizeof(*spanstop));
-    yslope = R_AllocateStorage(SCREENHEIGHT, sizeof(*yslope));
-    distscale = R_AllocateStorage(SCREENWIDTH, sizeof(*distscale));
-    cachedheight = R_AllocateStorage(SCREENHEIGHT, sizeof(*cachedheight));
-    cacheddistance = R_AllocateStorage(SCREENHEIGHT, sizeof(*cacheddistance));
-    cachedxstep = R_AllocateStorage(SCREENHEIGHT, sizeof(*cachedxstep));
-    cachedystep = R_AllocateStorage(SCREENHEIGHT, sizeof(*cachedystep));
+    storage = R_AllocateStorage(1, sizeof(*storage));
+    visplanes = storage->planes;
+    openings = storage->openings;
+    floorclip = storage->floorclip;
+    ceilingclip = storage->ceilingclip;
+    spanstart = storage->spanstart;
+    spanstop = storage->spanstop;
+    yslope = storage->yslope;
+    distscale = storage->distscale;
+    cachedheight = storage->cachedheight;
+    cacheddistance = storage->cacheddistance;
+    cachedxstep = storage->cachedxstep;
+    cachedystep = storage->cachedystep;
 }
 
 

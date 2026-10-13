@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Wide zero comparisons and truthiness preserve high words, booleans, live predicates and far pointers",
+  "expected": "YYYYYYYYYYYY\n"
+}

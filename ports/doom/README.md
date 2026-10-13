@@ -60,11 +60,11 @@ one serialized octet per 16-bit disk word, then appends prepared directory,
 name-lookup and graphics data in Ripple's in-memory layout. Reading those cells requires no byte
 unpacking; cached pictures need no second allocation and conversion pass.
 Texture initialization loads prepared definitions and column mappings into one
-permanent zone allocation. Sprite initialization reads only dimensions and
-origin offsets. Pixel posts and texture composites still load or render when
-the renderer needs them.
+permanent zone allocation. Sprite image initialization loads final fixed-point dimensions and origin offsets
+in one bulk read; final frame/rotation definitions are also prepared offline.
+Pixel posts and texture composites still load or render when the renderer needs them.
 
-Cooked format v3 includes all directory records, hash bucket heads and chains,
+Cooked format v5 includes all directory records, hash bucket heads and chains,
 and the resolved `PNAMES` patch IDs. Preparation preserves case-insensitive
 lookup, last-duplicate priority and missing unused patch names. The guest reads
 bounded batches, checks ranges and indices, relocates pointers and copies the
@@ -83,12 +83,31 @@ contiguous span. It skips raw `TEXTURE1`/`TEXTURE2` decoding,
 per-texture allocations and `R_GenerateLookup`. The shareware section contains
 125 textures, 598 patch references and 10,776 columns in 36,638 disk words.
 
+The sprite section stores the final frame counts, rotation flags, lump IDs and
+flip flags in engine order. The guest reads one slab and resolves its pointers,
+replacing the scan of every sprite name against every sprite lump in `P_Init`.
+The shareware section contains 138 definitions and 261 frames in 4,867 words.
+Changed sprite name lists and modified games retain the original resolver.
+A separate 2,914-word section stores the final widths and signed origins for all
+483 sprite lumps, including names unused by the game. It replaces per-sprite
+patch-index lookups, header reads and fixed-point conversions with one allocation
+and one contiguous payload read.
+
+The renderer section stores projection, inverse projection, plane slopes,
+distance scales and lighting indices for all 18 view-size/detail combinations.
+Only the requested view's arrays are loaded. Light indices become pointers into
+the guest's colormap allocation; requesting the current view again avoids disk
+reads. The section occupies 106,004 words. The original-WAD fallback also uses
+a single advancing inverse-projection scan and omits unused fixed-point multiplies.
+
 Detailed validation happens **when producing the repacked image**. An independent
 Node readback validator checks the serialized directory, hashes, PNAMES, every
-cooked patch and all texture tables against the embedded original WAD before
-the packer publishes the image. Its sidecar records the exact image, metadata
+cooked patch, texture, sprite definition and sprite metric against the embedded original WAD,
+and renderer tables against the maintained source tables, before the packer
+publishes the image. Its sidecar records the exact image, metadata
 and validator identities. An unchanged build reuses that checked artifact;
-changing the source, packer, validator or cached bytes triggers regeneration.
+changing the source, preparation modules, engine tables, fixed arithmetic,
+validator or cached bytes triggers regeneration.
 Staging retains the existing image identity check against the build manifest,
 without repeating semantic validation. Neither `rbf` nor `rvm` knows anything
 about Doom asset formats or validation.
@@ -112,7 +131,10 @@ Changing that policy invalidates existing objects and binary/BF exports.
 Every Doom `calloc` now uses the existing fast clearing routine on Ripple,
 including renderer buffers, patch-cache slots and tic data. Allocation sizes
 are checked with full-width products without generic 32-bit division; renderer
-allocation shares that check instead of calculating it twice.
+allocation shares that check instead of calculating it twice. View and plane
+arrays each share a typed permanent allocation, reducing those groups from 17
+allocations to two. Required zeroing is preserved, including dirty reused memory;
+arrays overwritten before their first read are left uninitialized.
 
 The directory also lives near the start of Doom's zone instead of beyond the
 entire reserved 8-million-cell arena. It uses 22,752 cells plus one allocator
@@ -141,8 +163,8 @@ composites or rendering: those still run inside Doom. The larger disk image
 trades host storage for less guest work without changing the ISA, CPU, bank
 sizes or generic BF interpreter.
 
-With the bundled WAD, the v3 cooked image contains 968 validated patches and is
-12,845,056 padded host bytes. A three-sample v1 BF benchmark copying 4,096 texture
+With the bundled WAD, the v5 cooked image contains 968 validated patches and is
+13,041,664 padded host bytes. A three-sample v1 BF benchmark copying 4,096 texture
 octets into RAM bank 136 measured:
 
 | Storage mode | Read interval | Complete fixture |
@@ -248,6 +270,77 @@ limit with the usual bank and memory sizes. No full Doom BF run was needed for
 this change; allocation, pointer relocation, lazy pixel composites and later
 game initialization still execute in the guest.
 
+The v4 sprite and renderer preparation removes most of the remaining startup
+work, with the same WAD, high detail and title-start settings:
+
+| Stage | Prepared v3 instructions | Prepared v4 instructions |
+| --- | ---: | ---: |
+| Depth lighting tables | 2,366,377 | 364,356 |
+| Complete `R_Init` | 4,549,057 | 2,522,146 |
+| Sprite definitions | 27,029,359 | 66,540 |
+| Complete `P_Init` | 27,267,504 | 304,685 |
+| First view setup | 50,396,812 | 268,846 |
+| Startup through first title frame | 89,299,153 | 10,183,279 |
+
+This removes 88.6% of the guest work to the first title frame. Cumulative
+milestones are approximately 1.98 million instructions entering `R_Init`,
+4.50 million leaving it, 4.81 million leaving `P_Init`, 7.67 million entering
+`D_DoomLoop`, and 10.18 million presenting the title. Disk reads rise from
+214,977 to 228,414 words because the guest loads prepared results. These are
+instruction counts, not a measured full-BF speedup or first-frame ETA.
+
+Every renderer value matches frozen original native C for all 18 settings.
+Forward and reverse view changes, unchanged-view reuse, and buffers whose first
+wide value crosses a RAM bank are checked in the Rust VM. Sprite tables match
+native C for shareware, an empty set and 4,002 synthetic frames spanning banks.
+A one-frame sprite fixture also halts successfully in BF with identical native
+and Rust VM output: 173,296 guest instructions in 20.20 seconds under a
+90-second limit, using the usual 64,000-cell banks and 256 RAM banks.
+A small prepared-view/lighting BF fixture also passes its native sampled
+checksums and memory guards: 610,458 instructions in 67.67 seconds under a
+120-second limit. Title/menu/E1M1 pixels and all 244 gameplay replay frames
+match native C. These bounded fixtures do not establish a full Doom BF boot.
+
+The v5 follow-up removes per-sprite header lookups, groups the permanent view
+and plane allocations, and uses the compiler's direct wide comparisons:
+
+| Stage | Prepared v4 instructions | Prepared v5 instructions |
+| --- | ---: | ---: |
+| Sprite dimensions/origins | 1,157,694 | 23,985 |
+| Plane-buffer allocation | 319,436 | 272,461 |
+| Complete `R_Init` | 2,522,146 | 1,322,182 |
+| Complete `P_Init` | 304,685 | 294,866 |
+| Startup through first title frame | 10,183,279 | 8,947,245 |
+
+Sprite metrics require 97.9% fewer guest instructions; complete `R_Init` needs
+47.6% fewer. Calls to the general heap allocator during `R_Init` fall from 26
+to 10. The remaining plane cost includes clearing its 107,360 cells.
+The compiler replaces late XOR/OR copies of proven zero operands and compares
+wide values word by word. Through the first title frame, executed XOR/OR
+instructions fall from 210,735 to 134,546, including the removal of all 41,546
+XOR/OR-with-zero copies. This changes BF cost beyond the 12.1% overall reduction
+in guest instructions; these counts do not establish a full-BF elapsed time.
+
+Cumulative milestones for this build are 1,969,985 entering `R_Init`,
+3,292,167 leaving it, 3,591,354 leaving `P_Init`, 6,441,897 entering
+`D_DoomLoop`, and 8,947,245 presenting the title. The title requires 229,400
+disk words overall. Sprite setup itself now reads 2,914 words in a contiguous
+section instead of 6,988 words across an index and hundreds of small reads;
+the patch index loads later when a picture first needs it.
+
+A small compiler regression with unchanged 64,000-cell banks and 256 RAM banks
+reduced BF interpreter dispatches from 19,237,091 to 295,608, despite only
+reducing guest instructions from 731 to 700. All six alternating runs halted
+with the same output under explicit timeouts. Median execution time was
+0.156 seconds before and 0.00865 seconds after; this tiny fixture isolates the
+cost of bitwise operations and is not a Doom-wide speed estimate.
+Title/menu/E1M1 pixels and all 244 gameplay replay frames match native C.
+Sprite metrics match original native decoding for shareware, signed-extreme
+origins, an empty namespace, and 11,001 sprites spanning memory banks. The
+six-sprite fixture also halts with identical native output in the BF host under
+a 120-second limit (273,572 guest instructions). Full Doom BF is exported but
+not executed for this pass.
+
 To reproduce the bounded reader comparison:
 
 ```sh
@@ -256,16 +349,25 @@ node ports/doom/tools/benchmark-wad-read.mjs --timeout 60 --samples 3
 
 `make -C ports/doom test-assets` checks serialized artifact validation, packing,
 validation-policy changes and incremental storage-mode changes,
-all 32 header words and 15 malformed metadata cases in the guest, as well as
+all 44 header words and 15 malformed metadata cases in the guest, as well as
 the original-WAD texture oracle in both fast and checked guest builds,
 37 malformed texture metadata cases rejected by the native validator and
 checked guest loader, and the
-independent asset oracle. The texture oracle checks every texture field, patch
-reference, column mapping and hash lookup using the original WAD. For a separate
+independent asset oracle. It also compares prepared sprite definitions against
+the original engine and all renderer tables against frozen original routines.
+Sprite metric checks compare every value with native decoding, including signed
+origins, empty namespaces and slabs crossing memory banks. The renderer-storage
+fixture checks allocation counts, disjoint ranges, alignment and dirty zeroing.
+The texture oracle checks every texture field, patch reference, column mapping
+and hash lookup using the original WAD. For separate
 80,000-column fixture spanning several banks, run:
 
 ```sh
 DOOM_BUILD=build/doom-texture-banks node ports/doom/tools/texture-metadata-validate.mjs --synthetic
+DOOM_BUILD=build/doom-sprite-banks node ports/doom/tools/sprite-metadata-validate.mjs --synthetic
+DOOM_BUILD=build/doom-renderer-tables node ports/doom/tools/renderer-metadata-validate.mjs
+DOOM_BUILD=build/doom-sprite-metrics node ports/doom/tools/sprite-metrics-validate.mjs --large
+node ports/doom/tools/test.mjs fixtures --program renderer_storage
 ```
 
 `make -C ports/doom test-kernels` also
@@ -545,6 +647,7 @@ w_file_port.c         clock, keyboard, indexed frame -> RGB565
 | `tools/generate-data.mjs` | Turn canonical trig tables, 967 states and 137 object definitions into bounded heap-initializer functions |
 | `tools/assets-pack.mjs` | Validate the source WAD and generate expanded/cooked disk images and their manifests |
 | `tools/assets-validate.mjs` | Independently read back cooked assets before publication; compare serialized metadata and pictures with the original WAD |
+| `tools/sprite-metadata.mjs`, `tools/sprite-metrics.mjs`, `tools/renderer-tables*.mjs` | Prepare final sprite definitions, dimensions/origins and immutable renderer tables; validate their serialized values before publication |
 | `tests/`, `tools/` | Native/VM comparisons, independent asset and kernel oracles, captures and profiling |
 | `tests/titlepic/` | Earlier C/BFM title-screen fixtures; neither is the full game |
 

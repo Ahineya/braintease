@@ -25,7 +25,10 @@ function write(name, content) {
   if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8') !== content)
     fs.writeFileSync(target, content);
 }
-if (program === 'projection_widths') {
+if (program === 'renderer_tables') {
+  write('renderer_tables.inc', before(from(read('r_main.c'), 'void R_InitTextureMapping (void)'),
+    '//\n// R_Init\n//'));
+} else if (program === 'projection_widths') {
   const source = read('r_segs.c');
   write('projection_loop.inc', before(source, '//\n// R_RenderMaskedSegRange')
     + before(from(source, '#define HEIGHTBITS'), '//\n// R_StoreWallRange'));

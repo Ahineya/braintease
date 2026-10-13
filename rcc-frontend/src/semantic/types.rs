@@ -19,6 +19,31 @@ pub struct TypeAnalyzer {
     pub type_definitions: Rc<RefCell<HashMap<String, Type>>>,
 }
 
+#[cfg(test)]
+mod bool_assignment_tests {
+    use super::*;
+
+    #[test]
+    fn pointer_to_bool_assignment_is_not_a_general_pointer_integer_conversion() {
+        let analyzer = TypeAnalyzer::new(
+            Rc::new(RefCell::new(SymbolTable::new())),
+            Rc::new(RefCell::new(HashMap::new())),
+            Rc::new(RefCell::new(HashMap::new())),
+            Rc::new(RefCell::new(HashMap::new())),
+        );
+        let pointer = Type::Pointer { target: Box::new(Type::Int), bank: None };
+        assert!(analyzer.is_assignable(&Type::Bool, &pointer));
+        assert!(analyzer.is_assignable(&Type::Bool.with_volatile(), &pointer.clone().with_volatile()));
+        assert!(analyzer.is_assignable(&Type::Bool,
+            &Type::Array { element_type: Box::new(Type::Int), size: Some(2) }));
+        assert!(!analyzer.is_assignable(&Type::Int, &pointer));
+        assert!(!analyzer.is_assignable(&pointer, &Type::Bool));
+        assert!(!analyzer.is_assignable(&Type::Bool, &Type::Void));
+        assert!(!analyzer.is_assignable(&Type::Bool,
+            &Type::Struct { name: None, fields: Vec::new() }));
+    }
+}
+
 impl TypeAnalyzer {
     pub fn new(
         symbol_table: Rc<RefCell<SymbolTable>>,
@@ -473,6 +498,11 @@ impl TypeAnalyzer {
             (a, b) if self.is_floating(a) && self.is_floating(b) => true,
             (a, b) if self.is_floating(a) && self.is_integer(b) => true,
             (a, b) if self.is_integer(a) && self.is_floating(b) => true,
+
+            // C99 6.5.16.1 permits a pointer as the RHS of _Bool assignment.
+            // Codegen already normalizes both far-pointer words to 0/1; an
+            // array expression follows the same conversion after decay.
+            (Type::Bool, Type::Pointer { .. } | Type::Array { .. }) => true,
             
             // Pointer conversions
             (Type::Pointer { target: a, .. }, Type::Pointer { target: b, .. }) => {

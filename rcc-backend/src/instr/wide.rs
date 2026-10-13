@@ -4,6 +4,9 @@
 //! synthesized with SLTU (Ripple has no ADC). 16-bit MUL/SLL/SRL only produce
 //! or shift 16 bits (SLL/SRL mask the count to 0–15).
 
+#[cfg(test)]
+mod zero_tests;
+
 use rcc_frontend::ir::{IrBinaryOp, IrUnaryOp, Value};
 use rcc_common::TempId;
 use crate::regmgmt::RegisterPressureManager;
@@ -807,6 +810,27 @@ fn emit_i32_shift_const(
     insts
 }
 
+/// Compare words directly instead of converting them to bit arrays with XOR
+/// and OR. All inputs and the distinct destination must be allocated before
+/// these branches: allocator spills on a skipped path would corrupt its model
+/// of the register contents after the join.
+fn emit_word_equality(
+    result: Reg,
+    words: &[(Reg, Reg)],
+    equal: bool,
+    naming: &mut NameGenerator,
+) -> Vec<AsmInst> {
+    debug_assert!(words.iter().all(|&(a, b)| result != a && result != b));
+    let done = naming.i32_label("word_equality_done");
+    let mut insts = vec![AsmInst::Li(result, i16::from(!equal))];
+    for &(a, b) in words {
+        insts.push(AsmInst::Bne(a, b, done.clone()));
+    }
+    insts.push(AsmInst::Li(result, i16::from(equal)));
+    insts.push(AsmInst::Label(done));
+    insts
+}
+
 pub fn lower_i32_binary(
     mgr: &mut RegisterPressureManager,
     naming: &mut NameGenerator,
@@ -818,6 +842,26 @@ pub fn lower_i32_binary(
     debug!("lower_i32_binary: {op:?} t{result_temp}");
     let mut insts = Vec::new();
     let result_name = naming.temp_name(result_temp);
+    if matches!(op, IrBinaryOp::Eq | IrBinaryOp::Ne) {
+        let source = match (lhs, rhs) {
+            (Value::Constant(0), value) | (value, Value::Constant(0)) => Some(value),
+            _ => None,
+        };
+        if let Some(source) = source {
+            let (lo, hi, setup) = get_i32_pair(mgr, naming, source, false);
+            insts.extend(setup);
+            mgr.pin_register(lo);
+            mgr.pin_register(hi);
+            let result = mgr.get_register(result_name.clone());
+            insts.extend(mgr.take_instructions());
+            insts.extend(emit_word_equality(result, &[(lo, Reg::R0), (hi, Reg::R0)],
+                op == IrBinaryOp::Eq, naming));
+            mgr.bind_value_to_register(result_name, result);
+            mgr.unpin_register(lo);
+            mgr.unpin_register(hi);
+            return insts;
+        }
+    }
     let sign = matches!(
         op,
         IrBinaryOp::SDiv | IrBinaryOp::SRem | IrBinaryOp::AShr
@@ -853,23 +897,9 @@ pub fn lower_i32_binary(
 
     if is_cmp {
         match op {
-            IrBinaryOp::Eq => {
-                let xlo = new_temp(mgr, naming, &mut insts, "eq", "xlo");
-                em3(mgr, &mut insts, Src::N(&xlo), Src::R(a_lo), Src::R(b_lo), AsmInst::Xor);
-                let xhi = new_temp(mgr, naming, &mut insts, "eq", "xhi");
-                em3(mgr, &mut insts, Src::N(&xhi), Src::R(a_hi), Src::R(b_hi), AsmInst::Xor);
-                em3(mgr, &mut insts, Src::N(&xlo), Src::N(&xlo), Src::N(&xhi), AsmInst::Or);
-                let one = new_temp(mgr, naming, &mut insts, "eq", "one");
-                em_li(mgr, &mut insts, Src::N(&one), 1);
-                em3(mgr, &mut insts, Src::R(result_lo), Src::N(&xlo), Src::N(&one), AsmInst::Sltu);
-            }
-            IrBinaryOp::Ne => {
-                let xlo = new_temp(mgr, naming, &mut insts, "ne", "xlo");
-                em3(mgr, &mut insts, Src::N(&xlo), Src::R(a_lo), Src::R(b_lo), AsmInst::Xor);
-                let xhi = new_temp(mgr, naming, &mut insts, "ne", "xhi");
-                em3(mgr, &mut insts, Src::N(&xhi), Src::R(a_hi), Src::R(b_hi), AsmInst::Xor);
-                em3(mgr, &mut insts, Src::N(&xlo), Src::N(&xlo), Src::N(&xhi), AsmInst::Or);
-                em3(mgr, &mut insts, Src::R(result_lo), Src::R(Reg::R0), Src::N(&xlo), AsmInst::Sltu);
+            IrBinaryOp::Eq | IrBinaryOp::Ne => {
+                insts.extend(emit_word_equality(result_lo, &[(a_lo, b_lo), (a_hi, b_hi)],
+                    op == IrBinaryOp::Eq, naming));
             }
             IrBinaryOp::Ult => {
                 insts.extend(emit_i32_ult(result_lo, a_lo, a_hi, b_lo, b_hi, mgr, naming));
@@ -1026,7 +1056,7 @@ pub fn lower_i32_extend(
     insts
 }
 
-/// OR both halves of an I32 temp (or the full constant) into a register for truthiness.
+/// Materialize wide truthiness without bitwise operations on the input words.
 pub fn i32_to_cond_reg(
     mgr: &mut RegisterPressureManager,
     naming: &mut NameGenerator,
@@ -1045,38 +1075,25 @@ pub fn i32_to_cond_reg(
             let lo_name = naming.temp_name(*t);
             let lo = mgr.get_register(lo_name.clone());
             insts.extend(mgr.take_instructions());
-            if let Some(hi_name) = mgr.get_i32_high(&lo_name) {
+            let extra = if let Some(words) = mgr.get_i64_words(&lo_name) {
+                words.to_vec()
+            } else {
+                mgr.get_i32_high(&lo_name).into_iter().collect()
+            };
+            if !extra.is_empty() {
                 mgr.pin_register(lo);
-                let hi = mgr.get_register(hi_name);
-                insts.extend(mgr.take_instructions());
-                mgr.pin_register(hi);
-                let or_name = new_temp(mgr, naming, &mut insts, "cond", "or");
-                em3(mgr, &mut insts, Src::N(&or_name), Src::R(lo), Src::R(hi), AsmInst::Or);
-                if let Some(extra) = mgr.get_i64_words(&lo_name) {
-                    for w in extra {
-                        let wr = mgr.get_register(w);
-                        insts.extend(mgr.take_instructions());
-                        em3(mgr, &mut insts, Src::N(&or_name), Src::N(&or_name), Src::R(wr), AsmInst::Or);
-                    }
-                }
-                mgr.unpin_register(hi);
-                mgr.unpin_register(lo);
-                let or_reg = mgr.get_register(or_name);
-                insts.extend(mgr.take_instructions());
-                (or_reg, insts)
-            } else if let Some(extra) = mgr.get_i64_words(&lo_name) {
-                mgr.pin_register(lo);
-                let or_name = new_temp(mgr, naming, &mut insts, "cond", "or");
-                em3(mgr, &mut insts, Src::N(&or_name), Src::R(lo), Src::R(Reg::R0), AsmInst::Add);
-                for w in extra {
-                    let wr = mgr.get_register(w);
+                let mut words = vec![(lo, Reg::R0)];
+                for name in extra {
+                    let word = mgr.get_register(name);
                     insts.extend(mgr.take_instructions());
-                    em3(mgr, &mut insts, Src::N(&or_name), Src::N(&or_name), Src::R(wr), AsmInst::Or);
+                    mgr.pin_register(word);
+                    words.push((word, Reg::R0));
                 }
-                mgr.unpin_register(lo);
-                let or_reg = mgr.get_register(or_name);
+                let result = mgr.get_register(naming.temp_with_context("cond", "nonzero"));
                 insts.extend(mgr.take_instructions());
-                (or_reg, insts)
+                insts.extend(emit_word_equality(result, &words, false, naming));
+                for (word, _) in words { mgr.unpin_register(word); }
+                (result, insts)
             } else {
                 (lo, insts)
             }

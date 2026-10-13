@@ -956,3 +956,59 @@ fn cached_argument_and_temporary_sources_do_not_need_per_iteration_copies() {
         );
     }
 }
+
+#[test]
+fn zero_bitwise_copies_disappear_without_a_promoted_loop() {
+    let source = framed(vec![
+        A::Xor(Reg::T0, Reg::A0, Reg::R0),
+        A::Or(Reg::T1, Reg::R0, Reg::T0),
+        A::Move(Reg::Rv0, Reg::T1),
+    ]);
+    let mut optimized = source.clone();
+    promote(&mut optimized, &function(), &HashMap::new(), 0, 0);
+    assert!(!optimized.iter().any(|i| matches!(i, A::Xor(..) | A::Or(..))));
+    for value in [0, 1, 32768, 65535] {
+        assert_eq!(run(&optimized, value, 0).regs[Reg::Rv0 as usize], value);
+    }
+}
+
+#[test]
+fn zero_bitwise_copies_keep_old_sources_at_unequal_joins() {
+    let code = vec![
+        A::Xor(Reg::T0, Reg::R0, Reg::A0),
+        A::Beq(Reg::A2, Reg::R0, "join".into()),
+        A::Or(Reg::T0, Reg::A1, Reg::R0),
+        A::Label("join".into()),
+        A::Or(Reg::Rv0, Reg::R0, Reg::T0),
+        A::Xor(Reg::A0, Reg::A0, Reg::R0),
+        A::Or(Reg::R0, Reg::A1, Reg::R0),
+        A::Xor(Reg::Rv1, Reg::A0, Reg::R0),
+    ];
+    for flag in [0, 1] {
+        let optimized = compare_cleanup(&code, &[(Reg::A0, 65535), (Reg::A1, 1), (Reg::A2, flag)]);
+        assert!(!optimized.iter().any(|i| matches!(i, A::Xor(..) | A::Or(..))));
+    }
+}
+
+#[test]
+fn zero_bitwise_copies_use_only_current_proven_zero_operands() {
+    let code = vec![
+        A::Li(Reg::T0, 0),
+        A::Move(Reg::T1, Reg::T0),
+        A::Xor(Reg::T2, Reg::A0, Reg::T1),
+        A::Li(Reg::T1, 1),
+        A::Or(Reg::Rv0, Reg::T2, Reg::T1),
+        A::Or(Reg::Rv1, Reg::A0, Reg::A1),
+    ];
+    for (a, b) in [(0, 0), (65535, 1), (32768, 32768)] {
+        let optimized = compare_cleanup(&code, &[(Reg::A0, a), (Reg::A1, b)]);
+        assert!(!optimized.iter().any(|i| matches!(i, A::Xor(..))));
+        assert_eq!(optimized.iter().filter(|i| matches!(i, A::Or(..))).count(), 2);
+    }
+    for barrier in [A::Call("callee".into()), A::Raw("opaque".into())] {
+        let mut code = vec![A::Li(Reg::T0, 0), barrier, A::Or(Reg::Rv0, Reg::A0, Reg::T0)];
+        let cfg = Cfg::new(&code).unwrap();
+        assert!(!fold_zero_bitwise_copies(&mut code, &cfg));
+        assert!(matches!(code[2], A::Or(..)));
+    }
+}

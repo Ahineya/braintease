@@ -114,8 +114,8 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
     require(expected && nativeOutput.includes('TEXTURE METADATA INITIALIZED'), 'native original-WAD oracle failed');
     const disk = path.join(out, 'valid.img');
     const asset = prepareDisk(source, disk, { wadMode: 'cooked', manifest: path.join(BUILD, 'manifest.json') });
-    require(asset.format_version === 3 && asset.texture_words > 16 && asset.texture_count > 0,
-      'texture validation requires cooked v3 textures');
+    require(asset.format_version === 5 && asset.texture_words > 16 && asset.texture_count > 0,
+      'texture validation requires cooked v5 textures');
     const original = fs.readFileSync(disk);
     const working = assertSeparateFile(path.join(out, 'mutant.img'), [source, asset.prepared_path, disk, binary, strictBinary, native]);
     result.binary = { path: binary, sha256: binaryHash, asset_validation: 'preflight' };

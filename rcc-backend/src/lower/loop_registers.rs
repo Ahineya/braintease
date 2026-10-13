@@ -448,7 +448,8 @@ pub(super) fn promote(
         if let Some(range) = body_range(code) {
             let mut body = code[range.clone()].to_vec();
             if let Some(cfg) = Cfg::new(&body) {
-                if fuse_comparison_branches(&mut body, &cfg) {
+                let copies = fold_zero_bitwise_copies(&mut body, &cfg);
+                if fuse_comparison_branches(&mut body, &cfg) || copies {
                     cleanup_private(&mut body, &BTreeSet::new());
                     code.splice(range, body);
                 }
@@ -923,10 +924,49 @@ fn copied_register(inst: &A) -> Option<(Reg, Reg)> {
         | A::SubI(d, s, 0)
         | A::Add(d, s, Reg::R0)
         | A::Add(d, Reg::R0, s)
-        | A::Sub(d, s, Reg::R0) => Some((d, s)),
+        | A::Sub(d, s, Reg::R0)
+        | A::Xor(d, s, Reg::R0)
+        | A::Xor(d, Reg::R0, s)
+        | A::Or(d, s, Reg::R0)
+        | A::Or(d, Reg::R0, s) => Some((d, s)),
         A::Li(d, 0) => Some((d, Reg::R0)),
         _ => None,
     }
+}
+
+/// Lowering introduces identities (notably wide comparisons) after the IR
+/// simplifier has run. Canonicalize these real copies before register cleanup.
+/// Only proven zero operands qualify: adding arbitrary words instead of ORing
+/// them could turn two nonzero halves into zero through wraparound.
+fn fold_zero_bitwise_copies(code: &mut [A], cfg: &Cfg) -> bool {
+    let mut changed = false;
+    for block in &cfg.blocks {
+        let mut constants = [None; 32];
+        constants[Reg::R0 as usize] = Some(0);
+        for inst in &mut code[block.start..block.end] {
+            if let A::Xor(d, a, b) | A::Or(d, a, b) = *inst {
+                let source = if constants[b as usize] == Some(0) { Some(a) }
+                    else if constants[a as usize] == Some(0) { Some(b) }
+                    else { None };
+                if let Some(source) = source {
+                    *inst = A::Move(d, source);
+                    changed = true;
+                }
+            }
+            let constant = match *inst {
+                A::Li(d, value) => Some((d, Some(value))),
+                _ => copied_register(inst).map(|(d, s)| (d, constants[s as usize])),
+            };
+            let defs = effects(inst).1 & !bit(Reg::R0);
+            for (r, value) in constants.iter_mut().enumerate() {
+                if defs & (1 << r) != 0 { *value = None; }
+            }
+            if let Some((dest, value)) = constant {
+                if dest != Reg::R0 { constants[dest as usize] = value; }
+            }
+        }
+    }
+    changed
 }
 
 fn transfer_equalities(inst: &A, equal: &mut Equalities) {
@@ -1119,6 +1159,7 @@ fn cleanup_private(code: &mut Vec<A>, private: &BTreeSet<i16>) {
             return;
         };
         propagate_copies(code, &cfg);
+        fold_zero_bitwise_copies(code, &cfg);
         let (_, live_out, _) = cfg.liveness(code);
         for (b, block) in cfg.blocks.iter().enumerate() {
             let mut aliases = std::array::from_fn(|i| Reg::from_u8(i as u8).unwrap());

@@ -94,7 +94,7 @@ function resignalSource(image, originalMetadata) {
 test('readback accepts complete metadata without modifying the image or manifest', () => {
   const f = fixture(), before = Buffer.from(f.image), metadata = Object.freeze({ ...f.metadata });
   assert.deepEqual(validateCookedAssets(f.image, metadata), {
-    lumps: 7, patches: 2, textures: 3, texture_columns: 7, total_words: metadata.total_words,
+    lumps: 7, patches: 2, textures: 3, texture_columns: 7, sprites: 0, sprite_frames: 0, renderer_views: 18, total_words: metadata.total_words,
   });
   assert.deepEqual(f.image, before); assert.deepEqual(metadata, f.metadata);
   // The final direct column is a legal marker-relative offset length+2.
@@ -117,7 +117,7 @@ test('minimal images allow absent textures, absent PNAMES and unresolved unused 
 
 test('all outer and texture header words are independently checked', () => {
   const f = fixture();
-  for (const [start, count] of [[f.metadata.header_word, 32], [f.metadata.texture_word, 16]])
+  for (const [start, count] of [[f.metadata.header_word, 44], [f.metadata.texture_word, 16]])
     for (let i = 0; i < count; ++i) {
       const at = start + i;
       change(f, [[at, (f.image.readUInt16LE(at * 2) + 1) & 65535]], /header/);
@@ -184,7 +184,9 @@ test('source identity, prefix octets, image padding and finite metadata are mand
   rejected(f.image.subarray(0, -1), f.metadata, /image length/);
   for (const value of [null, undefined, {}, [], { ...f.metadata, mode: 'expanded' }]) rejected(f.image, value);
   for (const field of ['total_words', 'source_octets', 'header_word', 'lump_count', 'texture_count',
-    'texture_columns', 'texture_definition_words', 'pnames_lump', 'fingerprint_hi'])
+    'texture_columns', 'texture_definition_words', 'pnames_lump', 'fingerprint_hi',
+    'sprite_word', 'sprite_words', 'sprite_count', 'sprite_frames', 'sprite_first_lump',
+    'sprite_last_lump', 'sprite_names_lo', 'sprite_names_hi', 'renderer_word', 'renderer_words', 'sprite_metrics_word', 'sprite_metrics_words'])
     for (const value of [-1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER])
       rejected(f.image, { ...f.metadata, [field]: value });
   rejected('not a buffer', f.metadata);
@@ -220,6 +222,29 @@ test('shareware image readback validates every prepared patch and texture', () =
   const source = fs.readFileSync(new URL('../assets/doom1.wad', import.meta.url));
   const { image, metadata } = packAssets(source);
   assert.deepEqual(validateCookedAssets(image, metadata), {
-    lumps: 1264, patches: 968, textures: 125, texture_columns: 10776, total_words: metadata.total_words,
+    lumps: 1264, patches: 968, textures: 125, texture_columns: 10776, sprites: 138, sprite_frames: 261, renderer_views: 18, total_words: metadata.total_words,
   });
+});
+
+test('sprite and renderer sections are included in the complete artifact validation', () => {
+  const source = fs.readFileSync(new URL('../assets/doom1.wad', import.meta.url));
+  const f = packAssets(source), m = f.metadata;
+  assert.equal(m.sprite_word, m.texture_word + m.texture_words);
+  assert.equal(m.sprite_metrics_word, m.sprite_word + m.sprite_words);
+  assert.equal(m.renderer_word, m.sprite_metrics_word + m.sprite_metrics_words);
+  assert.equal(m.sprite_metrics_words, 16 + 483 * 6);
+  for (const offset of [0, 2, 4, 6, 15, 16, 17, 16 + 483 * 2, 16 + 483 * 4 + 1]) {
+    const at = m.sprite_metrics_word + offset;
+    change(f, [[at, (f.image.readUInt16LE(at * 2) + 1) & 65535]], /sprite metrics/i);
+  }
+  assert.ok(m.renderer_words > 64000, 'renderer section crosses storage blocks');
+  const frames = m.sprite_word + 16 + m.sprite_count * 3;
+  for (const at of [m.sprite_word, m.sprite_word + 16, frames, frames + 1, frames + 9])
+    change(f, [[at, (f.image.readUInt16LE(at * 2) + 1) & 65535]], /sprite/i);
+  const view = m.renderer_word + 16;
+  const angles = m.renderer_word + f.image.readUInt32LE((view + 6) * 2);
+  for (const at of [m.renderer_word, view, angles, m.renderer_word + 304])
+    change(f, [[at, (f.image.readUInt16LE(at * 2) + 1) & 65535]], /renderer/i);
+  for (const field of ['sprite_count', 'sprite_frames', 'sprite_names_lo', 'renderer_words'])
+    rejected(f.image, { ...m, [field]: m[field] + 1 });
 });

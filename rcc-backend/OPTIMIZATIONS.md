@@ -102,6 +102,20 @@ registers. Tests execute all 32 defined counts for left, unsigned right and
 signed right shifts under register pressure, and limit the emitted instruction
 count to prevent the dispatch overhead from returning.
 
+Two-word equality and inequality compare the words with direct branches,
+instead of computing two XORs and ORing their results. Comparisons against
+literal zero also avoid materializing a zero pair. Wide condition lowering
+tests each of the two or four words directly and produces a normalized 0/1
+result. Input words and the destination are allocated before any branch, so
+spills cannot occur only on a skipped path. The words are never added together:
+for example, the nonzero value `0x0001ffffUL` has halves whose sum wraps to zero.
+
+Machine cleanup recognizes XOR/OR with a proven zero operand as register
+copies, including identities introduced after IR optimization. Copy propagation
+and liveness then remove redundant moves. The cleanup also runs in functions
+without promoted loops. Zero facts are local to a basic block and are discarded
+on redefinition, calls and unknown effects; arbitrary bitwise operations remain.
+
 ## Volatile memory
 
 The frontend retains `volatile` on the correct type layer, including typedefs,
@@ -137,6 +151,12 @@ before returning a heap pointer, including the path that skips the store.
 `test_mutable_pointer_promotion` covers repeated cursor updates, stack/global/far
 pointers, bank crossings, zero-trip null cursors, branches, early returns,
 escaped locals and volatile pointer objects.
+`wide_zero_tests` checks zero, low-word-only, high-word-only, cancellation and
+signed-boundary values, materialized booleans, branches and pointer truthiness.
+`pointer_bool_assignment` covers the frontend's pointer-to-`_Bool` assignment
+conversion. Backend tests additionally reject bitwise conversion in generated
+wide comparisons and conditions, execute both branches with dirty spill homes,
+check every I64 word, and preserve register copies across unequal joins.
 `make -C ports/doom test` compares title/menu/E1M1 screenshots
 against the native build; the fixtures stage checks arithmetic and assets.
 

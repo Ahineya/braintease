@@ -184,7 +184,7 @@ test('cooked WAD retains original offsets and deterministic versioned index', ()
   const { image, metadata } = packAssets(source, 'cooked');
   assert.deepEqual(packAssets(source, 'cooked').image, image);
   for (let i = 0; i < source.length; ++i) assert.equal(image.readUInt16LE(i * 2), source[i]);
-  const h = source.length * 2, index = (source.length + 32) * 2;
+  const h = source.length * 2, index = (source.length + 44) * 2;
   assert.deepEqual(Array.from({ length: 4 }, (_, i) => image.readUInt16LE(h + i * 2)), [0x5257, 0x4144, ASSET_VERSION, 1]);
   assert.equal(image.readUInt32LE(h + 8), source.length);
   assert.equal(image.readUInt32LE(h + 12), 2);
@@ -197,12 +197,17 @@ test('cooked WAD retains original offsets and deterministic versioned index', ()
   assert.equal(image.readUInt32LE(h + 40), 0);
   assert.equal(image.readUInt32LE(h + 44), 0xffffffff);
   assert.deepEqual(Array.from({ length: 8 }, (_, i) => image.readUInt16LE(h + 48 + i * 2)), [1, 18, 1, 1, 0, 0, 0, 0]);
-  assert.equal(metadata.index_word, metadata.header_word + 32);
+  assert.equal(metadata.index_word, metadata.header_word + 44);
   assert.equal(metadata.directory_word, metadata.index_word + 4 * metadata.lump_count);
   assert.equal(metadata.hash_heads_word, metadata.directory_word + 18 * metadata.lump_count);
   assert.equal(metadata.pnames_word, metadata.hash_heads_word + metadata.lump_count);
+  assert.equal(image.readUInt32LE(h + 64), 0);
+  assert.equal(image.readUInt32LE(h + 68), 0);
+  assert.equal(image.readUInt32LE(h + 72), metadata.renderer_word);
+  assert.equal(image.readUInt32LE(h + 76), metadata.renderer_words);
+  assert.equal(metadata.renderer_word, metadata.pnames_word);
   const start = image.readUInt32LE(index), count = image.readUInt32LE(index + 4);
-  assert.equal(start, metadata.pnames_word);
+  assert.equal(start, metadata.renderer_word + metadata.renderer_words);
   assert.deepEqual(image.subarray(start * 2, (start + count) * 2), cookPatch(rawPatch));
   assert.equal(image.readBigUInt64LE(index + 8), 0n);
   assert.equal(metadata.cooked_patches, 1);
@@ -329,7 +334,7 @@ test('PNAMES metadata chooses final table and final matching lump, retaining unr
   assert.deepEqual(Array.from({ length: 4 }, (_, i) => image.readUInt16LE((metadata.pnames_word + i) * 2)),
     [2, 0xffff, 3, 4]);
   assert.equal(metadata.texture_word, metadata.pnames_word + 4);
-  assert.equal(image.readUInt32LE((metadata.index_word + 2 * 4) * 2), metadata.texture_word + metadata.texture_words);
+  assert.equal(image.readUInt32LE((metadata.index_word + 2 * 4) * 2), metadata.renderer_word + metadata.renderer_words);
 });
 
 test('texture metadata preserves definitions, clips negative origins and uses cooked column offsets', () => {
@@ -469,7 +474,8 @@ test('metadata counts fit signed guest lump IDs and bounded PNAMES storage', () 
   const { image, metadata } = packAssets(wad([{ name: 'PNAMES', data: pnames([]) }]));
   assert.equal(metadata.pnames_count, 0);
   assert.equal(metadata.pnames_lump, 0);
-  assert.equal(metadata.pnames_word, metadata.total_words);
+  assert.equal(metadata.pnames_word, metadata.renderer_word);
+  assert.equal(metadata.renderer_word + metadata.renderer_words, metadata.total_words);
   assert.equal(image.readUInt32LE(metadata.header_word * 2 + 44), 0);
 });
 
@@ -511,6 +517,12 @@ test('config and staging select matching image, preserve source and reject misma
       ['TEXTURE_WORD', 'texture_word', 'UL'], ['TEXTURE_WORDS', 'texture_words', 'UL'],
       ['TEXTURE_COUNT', 'texture_count', 'UL'], ['TEXTURE_COLUMNS', 'texture_columns', 'UL'],
       ['TEXTURE_DEFINITION_WORDS', 'texture_definition_words', 'UL'],
+      ['SPRITE_METRICS_WORD', 'sprite_metrics_word', 'UL'], ['SPRITE_METRICS_WORDS', 'sprite_metrics_words', 'UL'],
+      ['SPRITE_WORD', 'sprite_word', 'UL'], ['SPRITE_WORDS', 'sprite_words', 'UL'],
+      ['SPRITE_COUNT', 'sprite_count', 'UL'], ['SPRITE_FRAMES', 'sprite_frames', 'UL'],
+      ['SPRITE_FIRST_LUMP', 'sprite_first_lump', 'UL'], ['SPRITE_LAST_LUMP', 'sprite_last_lump', 'UL'],
+      ['SPRITE_NAMES_LO', 'sprite_names_lo', 'UL'], ['SPRITE_NAMES_HI', 'sprite_names_hi', 'UL'],
+      ['RENDERER_WORD', 'renderer_word', 'UL'], ['RENDERER_WORDS', 'renderer_words', 'UL'],
       ['METADATA_ABI', 'metadata_abi', 'U'], ['DIRECTORY_RECORD_WORDS', 'directory_record_words', 'U'],
       ['HASH_ENTRY_WORDS', 'hash_entry_words', 'U'], ['PNAMES_ENTRY_WORDS', 'pnames_entry_words', 'U'],
     ]) assert.ok(header.includes(`#define DOOM_ASSET_${macro} ${build.asset_image[field]}${suffix}\n`));

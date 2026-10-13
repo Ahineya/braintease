@@ -186,12 +186,12 @@ int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_leng
 #endif
 #if defined(RIPPLE) && DOOM_WAD_MODE == 2
     {
-        uint16_t header[32];
+        uint16_t header[44];
         if (expected_octet_length != DOOM_WAD_LENGTH)
             return wad_fail(wad, "asset source length mismatch");
-        if (!wad_read_words(wad, DOOM_ASSET_HEADER_WORD, header, 32UL)) return 0;
+        if (!wad_read_words(wad, DOOM_ASSET_HEADER_WORD, header, 44UL)) return 0;
         if (header[0] != 0x5257U || header[1] != 0x4144U
-            || header[2] != 3U || header[3] != 1U
+            || header[2] != 5U || header[3] != 1U
             || header[4] != (uint16_t)DOOM_WAD_LENGTH
             || header[5] != (uint16_t)(DOOM_WAD_LENGTH >> 16)
             || header[6] != (uint16_t)DOOM_ASSET_LUMP_COUNT
@@ -217,7 +217,19 @@ int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_leng
             || header[28] != (uint16_t)DOOM_ASSET_TEXTURE_WORD
             || header[29] != (uint16_t)(DOOM_ASSET_TEXTURE_WORD >> 16)
             || header[30] != (uint16_t)DOOM_ASSET_TEXTURE_WORDS
-            || header[31] != (uint16_t)(DOOM_ASSET_TEXTURE_WORDS >> 16)) {
+            || header[31] != (uint16_t)(DOOM_ASSET_TEXTURE_WORDS >> 16)
+            || header[32] != (uint16_t)DOOM_ASSET_SPRITE_WORD
+            || header[33] != (uint16_t)(DOOM_ASSET_SPRITE_WORD >> 16)
+            || header[34] != (uint16_t)DOOM_ASSET_SPRITE_WORDS
+            || header[35] != (uint16_t)(DOOM_ASSET_SPRITE_WORDS >> 16)
+            || header[36] != (uint16_t)DOOM_ASSET_RENDERER_WORD
+            || header[37] != (uint16_t)(DOOM_ASSET_RENDERER_WORD >> 16)
+            || header[38] != (uint16_t)DOOM_ASSET_RENDERER_WORDS
+            || header[39] != (uint16_t)(DOOM_ASSET_RENDERER_WORDS >> 16)
+            || header[40] != (uint16_t)DOOM_ASSET_SPRITE_METRICS_WORD
+            || header[41] != (uint16_t)(DOOM_ASSET_SPRITE_METRICS_WORD >> 16)
+            || header[42] != (uint16_t)DOOM_ASSET_SPRITE_METRICS_WORDS
+            || header[43] != (uint16_t)(DOOM_ASSET_SPRITE_METRICS_WORDS >> 16)) {
             wad_close(wad);
             return wad_fail(wad, "cooked asset version or source mismatch");
         }
@@ -225,7 +237,7 @@ int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_leng
          * Check spans before any metadata can become guest pointers. */
         if (DOOM_ASSET_LUMP_COUNT == 0UL || DOOM_ASSET_LUMP_COUNT > 32767UL
             || DOOM_ASSET_PNAMES_COUNT > 32767UL
-            || DOOM_ASSET_INDEX_WORD != DOOM_ASSET_HEADER_WORD + 32UL
+            || DOOM_ASSET_INDEX_WORD != DOOM_ASSET_HEADER_WORD + 44UL
             || DOOM_ASSET_DIRECTORY_WORD != DOOM_ASSET_INDEX_WORD + DOOM_ASSET_LUMP_COUNT * 4UL
             || DOOM_ASSET_HASH_HEADS_WORD != DOOM_ASSET_DIRECTORY_WORD + DOOM_ASSET_LUMP_COUNT * 18UL
             || DOOM_ASSET_PNAMES_WORD != DOOM_ASSET_HASH_HEADS_WORD + DOOM_ASSET_LUMP_COUNT
@@ -239,7 +251,22 @@ int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_leng
                 && (DOOM_ASSET_TEXTURE_WORD != DOOM_ASSET_PNAMES_WORD + DOOM_ASSET_PNAMES_COUNT
                     || DOOM_ASSET_TEXTURE_COUNT == 0UL || DOOM_ASSET_TEXTURE_COUNT > 32767UL
                     || DOOM_ASSET_TEXTURE_WORDS < 16UL
-                    || !wad_range(DOOM_ASSET_TOTAL_WORDS, DOOM_ASSET_TEXTURE_WORD, DOOM_ASSET_TEXTURE_WORDS)))) {
+                    || !wad_range(DOOM_ASSET_TOTAL_WORDS, DOOM_ASSET_TEXTURE_WORD, DOOM_ASSET_TEXTURE_WORDS)))
+            || (DOOM_ASSET_SPRITE_WORDS == 0UL && DOOM_ASSET_SPRITE_WORD != 0UL)
+            || (DOOM_ASSET_SPRITE_WORDS != 0UL
+                && (DOOM_ASSET_SPRITE_WORD != DOOM_ASSET_PNAMES_WORD + DOOM_ASSET_PNAMES_COUNT + DOOM_ASSET_TEXTURE_WORDS
+                    || !wad_range(DOOM_ASSET_TOTAL_WORDS, DOOM_ASSET_SPRITE_WORD, DOOM_ASSET_SPRITE_WORDS)))
+            || (DOOM_ASSET_SPRITE_METRICS_WORDS == 0UL && DOOM_ASSET_SPRITE_METRICS_WORD != 0UL)
+            || (DOOM_ASSET_SPRITE_METRICS_WORDS != 0UL
+                && (DOOM_ASSET_SPRITE_METRICS_WORD != DOOM_ASSET_PNAMES_WORD + DOOM_ASSET_PNAMES_COUNT
+                                                    + DOOM_ASSET_TEXTURE_WORDS + DOOM_ASSET_SPRITE_WORDS
+                    || DOOM_ASSET_SPRITE_METRICS_WORDS < 16UL
+                    || !wad_range(DOOM_ASSET_TOTAL_WORDS, DOOM_ASSET_SPRITE_METRICS_WORD, DOOM_ASSET_SPRITE_METRICS_WORDS)))
+            || DOOM_ASSET_RENDERER_WORD != DOOM_ASSET_PNAMES_WORD + DOOM_ASSET_PNAMES_COUNT
+                                           + DOOM_ASSET_TEXTURE_WORDS + DOOM_ASSET_SPRITE_WORDS
+                                           + DOOM_ASSET_SPRITE_METRICS_WORDS
+            || DOOM_ASSET_RENDERER_WORDS < 16UL
+            || !wad_range(DOOM_ASSET_TOTAL_WORDS, DOOM_ASSET_RENDERER_WORD, DOOM_ASSET_RENDERER_WORDS)) {
             wad_close(wad);
             return wad_fail(wad, "invalid cooked metadata layout");
         }

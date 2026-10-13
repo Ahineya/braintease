@@ -2,6 +2,9 @@
 // runs when packing assets, not in either VM or on every launch. Read the image against its
 // embedded original WAD; do not trust the packer's transient parsed objects.
 import { createHash } from 'node:crypto';
+import { validateSpriteMetadata } from './sprite-metadata.mjs';
+import { validateSpriteMetrics } from './sprite-metrics.mjs';
+import { validateRendererTables } from './renderer-tables-validate.mjs';
 
 const fail = message => { throw new Error('Invalid cooked assets: ' + message); };
 const check = (condition, message) => { if (!condition) fail(message); };
@@ -34,7 +37,7 @@ function rawReaders(bytes, label) {
 export function validateCookedAssets(image, metadata) {
   check(Buffer.isBuffer(image), 'image must be a Buffer');
   check(metadata && typeof metadata === 'object', 'metadata is missing');
-  check(metadata.mode === 'cooked' && metadata.format_version === 3, 'expected cooked format version 3');
+  check(metadata.mode === 'cooked' && metadata.format_version === 5, 'expected cooked format version 5');
   integer(metadata.total_words, 0x80000000, 'total words');
   integer(metadata.source_octets, metadata.total_words, 'source octets');
   check(metadata.source_octets >= 12, 'source WAD header is truncated');
@@ -44,9 +47,13 @@ export function validateCookedAssets(image, metadata) {
     'image length or padding metadata differs');
   check(image.subarray(metadata.total_words * 2).every(octet => octet === 0), 'nonzero image padding');
   for (const field of ['header_word', 'index_word', 'directory_word', 'hash_heads_word', 'pnames_word',
-    'texture_word', 'texture_words', 'texture_columns', 'texture_definition_words'])
+    'texture_word', 'texture_words', 'texture_columns', 'texture_definition_words',
+    'sprite_word', 'sprite_words', 'sprite_frames', 'renderer_word', 'renderer_words',
+    'sprite_metrics_word', 'sprite_metrics_words'])
     integer(metadata[field], metadata.total_words, field);
-  for (const field of ['lump_count', 'pnames_count', 'texture_count']) integer(metadata[field], 32767, field);
+  for (const field of ['lump_count', 'pnames_count', 'texture_count', 'sprite_count']) integer(metadata[field], 32767, field);
+  for (const field of ['sprite_first_lump', 'sprite_last_lump', 'sprite_names_lo', 'sprite_names_hi'])
+    integer(metadata[field], 65535, field);
   check(metadata.lump_count > 0, 'empty lump directory');
   integer(metadata.cooked_patches, metadata.lump_count, 'cooked patches');
   integer(metadata.pnames_lump, 0xffffffff, 'PNAMES lump');
@@ -62,12 +69,12 @@ export function validateCookedAssets(image, metadata) {
   const words = metadata.total_words;
   const u16 = (word, label = 'word') => { span(words, word, 1, label); return image.readUInt16LE(word * 2); };
   const u32 = (word, label = 'word pair') => { span(words, word, 2, label); return image.readUInt32LE(word * 2); };
-  check(metadata.header_word === metadata.source_octets && metadata.index_word === metadata.header_word + 32
+  check(metadata.header_word === metadata.source_octets && metadata.index_word === metadata.header_word + 44
     && metadata.directory_word === metadata.index_word + metadata.lump_count * 4
     && metadata.hash_heads_word === metadata.directory_word + metadata.lump_count * 18
     && metadata.pnames_word === metadata.hash_heads_word + metadata.lump_count,
   'noncanonical metadata section layout');
-  span(words, metadata.header_word, 32, 'outer header');
+  span(words, metadata.header_word, 44, 'outer header');
   span(words, metadata.pnames_word, metadata.pnames_count, 'PNAMES section');
   let patchStart = metadata.pnames_word + metadata.pnames_count;
   if (metadata.texture_words === 0) {
@@ -79,14 +86,37 @@ export function validateCookedAssets(image, metadata) {
     span(words, metadata.texture_word, metadata.texture_words, 'texture section');
     patchStart += metadata.texture_words;
   }
+  if (metadata.sprite_words === 0) {
+    check(['sprite_word', 'sprite_count', 'sprite_frames', 'sprite_first_lump', 'sprite_last_lump',
+      'sprite_names_lo', 'sprite_names_hi'].every(field => metadata[field] === 0),
+    'absent sprite section has nonzero metadata');
+  } else {
+    check(metadata.sprite_word === patchStart && metadata.sprite_words >= 16, 'invalid sprite section layout');
+    span(words, metadata.sprite_word, metadata.sprite_words, 'sprite section');
+    patchStart += metadata.sprite_words;
+  }
+  if (metadata.sprite_metrics_words === 0) {
+    check(metadata.sprite_metrics_word === 0, 'absent sprite metrics have nonzero offset');
+  } else {
+    check(metadata.sprite_metrics_word === patchStart && metadata.sprite_metrics_words >= 16,
+      'invalid sprite metrics section layout');
+    span(words, metadata.sprite_metrics_word, metadata.sprite_metrics_words, 'sprite metrics section');
+    patchStart += metadata.sprite_metrics_words;
+  }
+  check(metadata.renderer_word === patchStart && metadata.renderer_words >= 16, 'invalid renderer section layout');
+  span(words, metadata.renderer_word, metadata.renderer_words, 'renderer section');
+  patchStart += metadata.renderer_words;
   const h = metadata.header_word;
-  for (const [offset, value] of [[0, 0x5257], [1, 0x4144], [2, 3], [3, 1],
+  for (const [offset, value] of [[0, 0x5257], [1, 0x4144], [2, 5], [3, 1],
     [24, 1], [25, 18], [26, 1], [27, 1]])
     check(u16(h + offset) === value, 'outer header word ' + offset + ' differs');
   for (const [offset, value] of [[4, metadata.source_octets], [6, metadata.lump_count],
     [8, metadata.index_word], [10, words], [12, fingerprint], [14, metadata.directory_word],
     [16, metadata.hash_heads_word], [18, metadata.pnames_word], [20, metadata.pnames_count],
-    [22, metadata.pnames_lump], [28, metadata.texture_word], [30, metadata.texture_words]])
+    [22, metadata.pnames_lump], [28, metadata.texture_word], [30, metadata.texture_words],
+    [32, metadata.sprite_word], [34, metadata.sprite_words],
+    [36, metadata.renderer_word], [38, metadata.renderer_words],
+    [40, metadata.sprite_metrics_word], [42, metadata.sprite_metrics_words]])
     check(u32(h + offset) === value, 'outer header pair ' + offset + ' differs');
 
   const source = Buffer.alloc(metadata.source_octets);
@@ -114,7 +144,7 @@ export function validateCookedAssets(image, metadata) {
     const bucket = nameHash(name) % metadata.lump_count;
     check(u16(record + 16) === heads[bucket], 'directory hash link differs at lump ' + i);
     heads[bucket] = i;
-    entries.push({ index: i, name, bytes: source.subarray(offset, offset + length) });
+    entries.push({ index: i, name, nameBytes, offset, length, bytes: source.subarray(offset, offset + length) });
     byName.set(name, i);
   }
   for (let i = 0; i < heads.length; ++i)
@@ -131,6 +161,23 @@ export function validateCookedAssets(image, metadata) {
   } else check(metadata.pnames_count === 0, 'missing source PNAMES has entries');
   for (let i = 0; i < patchNames.length; ++i)
     check(u16(metadata.pnames_word + i) === (byName.get(patchNames[i]) ?? 65535), 'PNAMES patch ID differs at ' + i);
+
+  try {
+    validateSpriteMetadata(metadata.sprite_words === 0 ? null
+      : image.subarray(metadata.sprite_word * 2, (metadata.sprite_word + metadata.sprite_words) * 2), entries);
+    validateSpriteMetrics(metadata.sprite_metrics_words === 0 ? null
+      : image.subarray(metadata.sprite_metrics_word * 2,
+        (metadata.sprite_metrics_word + metadata.sprite_metrics_words) * 2), source, entries);
+    validateRendererTables(image.subarray(metadata.renderer_word * 2,
+      (metadata.renderer_word + metadata.renderer_words) * 2));
+  } catch (error) { fail(error.message); }
+  if (metadata.sprite_words !== 0) {
+    const s = metadata.sprite_word;
+    for (const [offset, field] of [[2, 'sprite_count'], [6, 'sprite_first_lump'], [7, 'sprite_last_lump'],
+      [8, 'sprite_names_lo'], [9, 'sprite_names_hi']])
+      check(u16(s + offset) === metadata[field], 'sprite metadata differs: ' + field);
+    check(u32(s + 4) === metadata.sprite_frames, 'sprite frame count differs');
+  }
 
   const patches = new Map();
   let patchCursor = patchStart;
@@ -262,5 +309,6 @@ export function validateCookedAssets(image, metadata) {
     check(at === lumpBase && columnAt === columns, 'texture decoder did not consume its sections');
   }
   return { lumps: entries.length, patches: patches.size, textures: textures.length,
-    texture_columns: metadata.texture_columns, total_words: words };
+    texture_columns: metadata.texture_columns, sprites: metadata.sprite_count,
+    sprite_frames: metadata.sprite_frames, renderer_views: 18, total_words: words };
 }

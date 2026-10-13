@@ -8,10 +8,14 @@ import { constants as bufferConstants } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { validateCookedAssets } from './assets-validate.mjs';
+import { assetGeneratorHash, assetValidatorHash } from './assets-identity.mjs';
+import { cookSpriteMetadata } from './sprite-metadata.mjs';
+import { cookSpriteMetrics } from './sprite-metrics.mjs';
+import { packRendererTables } from './renderer-tables.mjs';
 
-export const ASSET_VERSION = 3;
+export const ASSET_VERSION = 5;
 export const WAD_MODES = Object.freeze({ packed: 0, expanded: 1, cooked: 2 });
-const HEADER_WORDS = 32;
+const HEADER_WORDS = 44;
 const METADATA_ABI = 1;
 const DIRECTORY_RECORD_WORDS = 18;
 const HASH_ENTRY_WORDS = 1;
@@ -23,7 +27,7 @@ const TEXTURE_PATCH_WORDS = 3;
 const SECTOR_OCTETS = 65536;
 const MAX_DISK_WORDS = 0x80000000; // 65536 blocks, each containing 32768 words.
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-const validatorHash = () => hash(fs.readFileSync(new URL('./assets-validate.mjs', import.meta.url)));
+const validatorHash = assetValidatorHash;
 function metadataHash(metadata) {
   // Paths and generator bookkeeping are added only when the artifact is saved.
   const fields = Object.keys(metadata).filter(key => !['validation', 'path', 'generator_sha256'].includes(key)).sort();
@@ -268,12 +272,16 @@ export function packAssets(source, mode = 'cooked') {
     source_octets: source.length, header_word: 0, index_word: 0, total_words: 0,
     directory_word: 0, hash_heads_word: 0, pnames_word: 0, pnames_count: 0,
     texture_word: 0, texture_words: 0, texture_count: 0, texture_columns: 0, texture_definition_words: 0,
+    sprite_word: 0, sprite_words: 0, sprite_count: 0, sprite_frames: 0,
+    sprite_first_lump: 0, sprite_last_lump: 0, sprite_names_lo: 0, sprite_names_hi: 0,
+    renderer_word: 0, renderer_words: 0,
+    sprite_metrics_word: 0, sprite_metrics_words: 0,
     pnames_lump: 0xffffffff, metadata_abi: METADATA_ABI,
     directory_record_words: DIRECTORY_RECORD_WORDS, hash_entry_words: HASH_ENTRY_WORDS,
     pnames_entry_words: PNAMES_ENTRY_WORDS,
     lump_count: 0, cooked_patches: 0, fingerprint_lo: 0, fingerprint_hi: 0 };
   const patches = [];
-  let entries, pnames, textureMetadata;
+  let entries, pnames, textureMetadata, spriteMetadata, spriteMetrics, rendererMetadata;
   let words = mode === 'packed' ? Math.ceil(source.length / 2) : source.length;
   if (mode === 'cooked') {
     entries = wadDirectory(source);
@@ -306,6 +314,23 @@ export function packAssets(source, mode = 'cooked') {
         texture_definition_words: textureMetadata.definitionWords });
       words += metadata.texture_words;
     }
+    spriteMetadata = cookSpriteMetadata(entries);
+    if (spriteMetadata) {
+      const data = spriteMetadata.data;
+      Object.assign(metadata, { sprite_word: words, sprite_words: data.length / 2,
+        sprite_count: data.readUInt16LE(4), sprite_frames: data.readUInt32LE(8),
+        sprite_first_lump: data.readUInt16LE(12), sprite_last_lump: data.readUInt16LE(14),
+        sprite_names_lo: data.readUInt16LE(16), sprite_names_hi: data.readUInt16LE(18) });
+      words += metadata.sprite_words;
+    }
+    spriteMetrics = cookSpriteMetrics(source, entries);
+    if (spriteMetrics) {
+      Object.assign(metadata, { sprite_metrics_word: words, sprite_metrics_words: spriteMetrics.data.length / 2 });
+      words += metadata.sprite_metrics_words;
+    }
+    rendererMetadata = packRendererTables();
+    Object.assign(metadata, { renderer_word: words, renderer_words: rendererMetadata.words });
+    words += metadata.renderer_words;
     for (const patch of patches) { patch.word = words; words += patch.data.length / 2; }
     metadata.cooked_patches = patches.length;
     // Fingerprint is SHA-256 bytes 0..3 interpreted as a little-endian u32.
@@ -334,6 +359,12 @@ export function packAssets(source, mode = 'cooked') {
       image.writeUInt16LE(value, header + 48 + i * 2);
     image.writeUInt32LE(metadata.texture_word, header + 56);
     image.writeUInt32LE(metadata.texture_words, header + 60);
+    image.writeUInt32LE(metadata.sprite_word, header + 64);
+    image.writeUInt32LE(metadata.sprite_words, header + 68);
+    image.writeUInt32LE(metadata.renderer_word, header + 72);
+    image.writeUInt32LE(metadata.renderer_words, header + 76);
+    image.writeUInt32LE(metadata.sprite_metrics_word, header + 80);
+    image.writeUInt32LE(metadata.sprite_metrics_words, header + 84);
     const heads = new Uint16Array(entries.length).fill(0xffff);
     for (const entry of entries) {
       const record = (metadata.directory_word + entry.index * DIRECTORY_RECORD_WORDS) * 2;
@@ -350,6 +381,9 @@ export function packAssets(source, mode = 'cooked') {
     const byName = new Map(entries.map(entry => [entry.name, entry.index]));
     pnames.names.forEach((name, i) => image.writeUInt16LE(byName.get(name) ?? 0xffff, (metadata.pnames_word + i) * 2));
     if (textureMetadata) textureMetadata.data.copy(image, metadata.texture_word * 2);
+    if (spriteMetadata) spriteMetadata.data.copy(image, metadata.sprite_word * 2);
+    if (spriteMetrics) spriteMetrics.data.copy(image, metadata.sprite_metrics_word * 2);
+    rendererMetadata.buffer.copy(image, metadata.renderer_word * 2);
     for (const patch of patches) {
       const index = metadata.index_word * 2 + patch.index * 8;
       image.writeUInt32LE(patch.word, index);
@@ -400,7 +434,7 @@ export function writeAtomic(file, bytes) {
 export function cachedAssets(sourcePath, destination, mode = 'cooked') {
   checkMode(mode);
   const source = fs.readFileSync(sourcePath), sourceHash = hash(source);
-  const generatorHash = hash(fs.readFileSync(fileURLToPath(import.meta.url)));
+  const generatorHash = assetGeneratorHash();
   const file = assertSeparateFile(destination, [sourcePath]), sidecar = `${file}.json`;
   // Reject source aliases at both outputs, including symlinks and hard links.
   assertSeparateFile(sidecar, [sourcePath]);

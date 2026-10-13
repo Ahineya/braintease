@@ -31,10 +31,15 @@
 #include "z_zone.h"
 #include "w_wad.h"
 #include "patch_cache.h"
+#include "doom_build_config.h"
 
 #include "r_local.h"
 
 #include "doomstat.h"
+
+#ifndef DOOM_ASSET_STRICT
+#define DOOM_ASSET_STRICT 1
+#endif
 
 
 
@@ -169,6 +174,95 @@ R_InstallSpriteLump
 //  letter/number appended.
 // The rotation character can be 0 to signify no rotations.
 //
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+static int R_LoadCookedSpriteDefs(char **namelist)
+{
+    uint16_t header[16];
+    uint16_t *slab;
+    spritedef_t *definition;
+    spriteframe_t *frames;
+    uint32_t frame_count, remaining, payload_words;
+    unsigned int count, i;
+
+    /* A different namelist or a patched WAD needs the original name resolver.
+     * The prepared section is tied to the maintained sprnames build input. */
+    if (namelist != sprnames || modifiedgame)
+        return 0;
+    if (sizeof(char) != 1 || sizeof(short) != 1 || sizeof(int) != 1
+        || sizeof(void *) != 2 || sizeof(uint32_t) != 2 || sizeof(size_t) != 2
+        || sizeof(spriteframe_t) != 17 || sizeof(spritedef_t) != 3
+        || offsetof(spriteframe_t, lump) != 1 || offsetof(spriteframe_t, flip) != 9
+        || offsetof(spritedef_t, spriteframes) != 1)
+        I_Error("Cooked sprites do not match the target C ABI");
+    if (DOOM_ASSET_SPRITE_COUNT == 0UL || DOOM_ASSET_SPRITE_COUNT > 32767UL
+        || DOOM_ASSET_SPRITE_WORDS < 16UL
+        || DOOM_ASSET_SPRITE_WORD > DOOM_ASSET_TOTAL_WORDS
+        || DOOM_ASSET_SPRITE_WORDS > DOOM_ASSET_TOTAL_WORDS - DOOM_ASSET_SPRITE_WORD)
+        I_Error("Invalid cooked sprite section bounds");
+    W_ReadAssetWords(DOOM_ASSET_SPRITE_WORD, header, 16UL);
+    count = (unsigned int)DOOM_ASSET_SPRITE_COUNT;
+    memcpy(&frame_count, header + 4, sizeof(frame_count));
+    if (header[0] != 0x5350U || header[1] != 1U || header[2] != count
+        || header[3] != 17U || frame_count != DOOM_ASSET_SPRITE_FRAMES
+        || header[6] != (unsigned int)firstspritelump
+        || header[7] != (unsigned int)lastspritelump
+        || header[6] != DOOM_ASSET_SPRITE_FIRST_LUMP
+        || header[7] != DOOM_ASSET_SPRITE_LAST_LUMP
+        || header[8] != DOOM_ASSET_SPRITE_NAMES_LO
+        || header[9] != DOOM_ASSET_SPRITE_NAMES_HI || header[10] != 3U)
+        I_Error("Cooked sprite header does not match the WAD");
+    for (i = 11; i < 16; ++i)
+        if (header[i] != 0) I_Error("Invalid cooked sprite header padding");
+    payload_words = DOOM_ASSET_SPRITE_WORDS - 16UL;
+    if (frame_count > (uint32_t)count * 29UL
+        || payload_words != (uint32_t)count * 3UL + frame_count * 17UL
+        || payload_words > (uint32_t)SIZE_MAX)
+        I_Error("Invalid cooked sprite section layout");
+
+    slab = Z_Malloc((size_t)payload_words, PU_STATIC, NULL);
+    W_ReadAssetWords(DOOM_ASSET_SPRITE_WORD + 16UL, slab, payload_words);
+    sprites = (spritedef_t *)slab;
+    numsprites = count;
+    frames = (spriteframe_t *)(slab + (size_t)count * 3U);
+    definition = sprites;
+    remaining = frame_count;
+    for (i = 0; i < count; ++i, ++definition)
+    {
+        int length = definition->numframes;
+        if (length < 0 || length > 29 || (uint32_t)length > remaining)
+            I_Error("Invalid cooked sprite frame count");
+#if DOOM_ASSET_STRICT
+        {
+            uint16_t *record = (uint16_t *)definition;
+            int frame, rotation;
+            if (record[1] != 0 || record[2] != 0)
+                I_Error("Invalid cooked sprite pointer placeholder");
+            for (frame = 0; frame < length; ++frame)
+            {
+                spriteframe_t *entry = frames + frame;
+                if (entry->rotate != false && entry->rotate != true)
+                    I_Error("Invalid cooked sprite rotation flag");
+                for (rotation = 0; rotation < 8; ++rotation)
+                {
+                    if (entry->lump[rotation] < 0 || entry->lump[rotation] >= numspritelumps
+                        || entry->flip[rotation] > 1)
+                        I_Error("Invalid cooked sprite rotation mapping");
+                    if (!entry->rotate && (entry->lump[rotation] != entry->lump[0]
+                        || entry->flip[rotation] != entry->flip[0]))
+                        I_Error("Inconsistent cooked sprite rotation-zero frame");
+                }
+            }
+        }
+#endif
+        definition->spriteframes = length ? frames : NULL;
+        frames += length;
+        remaining -= length;
+    }
+    if (remaining != 0) I_Error("Unused cooked sprite frame records");
+    return 1;
+}
+#endif
+
 void R_InitSpriteDefs (char** namelist) 
 { 
     char**	check;
@@ -179,6 +273,10 @@ void R_InitSpriteDefs (char** namelist)
     int		start;
     int		end;
     int		patched;
+
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+    if (R_LoadCookedSpriteDefs(namelist)) return;
+#endif
 		
     // count the number of sprite names
     check = namelist;
@@ -991,6 +1089,5 @@ void R_DrawMasked (void)
     if (!viewangleoffset)		
 	R_DrawPlayerSprites ();
 }
-
 
 

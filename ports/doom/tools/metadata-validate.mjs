@@ -11,7 +11,7 @@ import { ROOT, BUILD, WAD, RVM, BANK, MEMORY, commands, build, digest, hash,
   json, mkdir, prepareDisk, require, writeJSON } from './test-support.mjs';
 
 const EXPECTED = 'WAD LOOKUP OK 1264 lumps, 350 names, 598 references, final block\n';
-const HEADER_WORDS = 32;
+const HEADER_WORDS = 44;
 
 export function validateMetadata({ wad = WAD, output, timeout = 30,
   maxInstructions = 100000000, skipBuild = false } = {}) {
@@ -32,9 +32,9 @@ export function validateMetadata({ wad = WAD, output, timeout = 30,
     const binaryHash = digest(binary);
     const disk = path.join(out, 'valid.img');
     const asset = prepareDisk(source, disk, { wadMode: 'cooked', manifest: path.join(BUILD, 'manifest.json') });
-    require(asset.format_version === 3 && asset.directory_record_words === 18
+    require(asset.format_version === 5 && asset.directory_record_words === 18
       && asset.hash_entry_words === 1 && asset.pnames_entry_words === 1,
-    'metadata validation requires the cooked v3 layout');
+    'metadata validation requires the cooked v5 layout');
     require(asset.lump_count > 0 && asset.lump_count < 32767 && asset.pnames_count > 0,
       'wad_lookup metadata validation requires the shareware WAD with PNAMES');
     const original = fs.readFileSync(disk);
@@ -127,7 +127,7 @@ export function validateMetadata({ wad = WAD, output, timeout = 30,
         [[at, (original.readUInt16LE(at * 2) + 1) & 65535]],
         'cooked asset version or source mismatch');
     }
-    console.log('PASS cooked metadata: all 32 header words rejected when changed');
+    console.log('PASS cooked metadata: all 44 header words rejected when changed');
 
     const directory = asset.directory_word;
     const directoryError = 'Invalid cooked directory link at lump 0';

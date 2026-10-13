@@ -9,6 +9,7 @@ import { inspectAssets, selfTestAssets, checkAssetLog } from './assets-oracle.mj
 import { benchmark } from './benchmark.mjs';
 
 const EXPECTED = {
+  renderer_storage: 'RENDERER STORAGE OK grouped allocations, dirty zeroing, disjoint ranges, alignment and bank crossings\n',
   alloc_fast: 'ALLOC FAST OK zero sizes, overflow, reused cells, wide products and bank crossings\n',
   numeric: 'NUMERIC OK 6e970016 d440d0e1 1c93684a\n',
   libc: 'LIBC validation_ok 1\n',

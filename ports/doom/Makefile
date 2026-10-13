@@ -12,6 +12,7 @@ PROGRAM ?= engine
 TARGET ?= ripple
 START_MAP ?= 0
 LOW_DETAIL ?= 0
+RENDERER_BF_SMOKE ?= 0
 WAD ?= $(CURDIR)/assets/doom1.wad
 WAD_MODE ?= cooked
 ASSET_VALIDATION ?= preflight
@@ -51,7 +52,7 @@ SOURCES := $(SOURCES_$(PROGRAM))
 RIPPLE_SOURCES := $(SOURCES) $(if $(filter engine/m_fixed.c,$(SOURCES)),src/fixed_fast.asm) \
  $(if $(filter src/wad_io.c,$(SOURCES)),src/word_read_fast.asm) \
  $(if $(filter src/asset_metadata.c,$(SOURCES)),src/metadata_validate_fast.asm) \
- $(if $(filter engine libc wad_lookup wad_directory texture_metadata,$(PROGRAM)),src/compat_libc.c)
+ $(if $(filter engine libc wad_lookup wad_directory texture_metadata sprite_metadata sprite_metrics renderer_tables,$(PROGRAM)),src/compat_libc.c)
 NATIVE_SOURCES := $(filter %.c,$(SOURCES))
 ROUT := $(BUILD)/ripple/$(PROGRAM)
 NOUT := $(BUILD)/native/$(PROGRAM)
@@ -78,11 +79,12 @@ source_stem = $(if $(filter tests/%,$(1)),test_)$(basename $(notdir $(1)))
 OBJECTS := $(foreach source,$(RIPPLE_SOURCES),$(ROUT)/$(call source_stem,$(source)).pobj)
 INCLUDES := -Isrc -I$(GENERATED) -Iengine
 DEFINES := -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -DDOOM_PORT=1 \
- $(if $(filter engine info_storage,$(PROGRAM)),-DDOOM_GENERATED_INFO=1)
+ $(if $(filter engine info_storage,$(PROGRAM)),-DDOOM_GENERATED_INFO=1) \
+ $(if $(filter renderer_tables,$(PROGRAM)),$(if $(filter 1,$(RENDERER_BF_SMOKE)),-DDOOM_RENDERER_BF_SMOKE=1))
 SCENE_DEFINES := $(if $(filter 1,$(START_MAP)),-DDOOM_START_MAP=1) $(if $(filter 1,$(LOW_DETAIL)),-DDOOM_LOW_DETAIL=1)
 RIPPLE_FLAGS := -Iinclude $(INCLUDES) -I$(ROOT)/runtime/include $(DEFINES) -DRIPPLE=1 -DBANK_SIZE=$(BANK_SIZE) \
  -DDOOM_ASSET_STRICT=$(if $(filter guest,$(ASSET_VALIDATION)),1,0) \
- $(if $(filter engine memory_kernels alloc_fast texture_metadata,$(PROGRAM)),-DDOOM_FAST_MEMORY=1)
+ $(if $(filter engine memory_kernels alloc_fast texture_metadata sprite_metadata sprite_metrics renderer_tables renderer_storage,$(PROGRAM)),-DDOOM_FAST_MEMORY=1)
 NATIVE_SDK_FLAGS = $(if $(findstring sysroot,$(CFLAGS)),,$(shell node tools/build-support.mjs native-flags "$(CC)"))
 comma := ,
 # Evaluate after comma is defined, including on older GNU make shipped by macOS.
@@ -95,6 +97,10 @@ FIXTURE_STAMP := $(if $(GENERATE_$(PROGRAM)),$(GENERATED)/$(PROGRAM).fixture-sta
 FIXTURE_FILES_projection_widths := projection_loop.inc
 FIXTURE_FILES_texture_columns := texture_cache.inc
 FIXTURE_FILES_texture_metadata := texture_metadata.inc
+FIXTURE_FILES_sprite_metadata := sprite_metadata.inc sprite_names.inc
+FIXTURE_FILES_sprite_metrics := sprite_metrics.inc
+FIXTURE_FILES_renderer_tables := renderer_tables.inc
+FIXTURE_FILES_renderer_storage := renderer_storage.inc
 FIXTURE_FILES_keyboard_controls := input_commands.inc controls_defaults.inc platform_keyboard.inc
 FIXTURE_FILES_config_bindings := config_bindings.inc
 FIXTURE_OUTPUTS := $(addprefix $(GENERATED)/,$(FIXTURE_FILES_$(PROGRAM)))
@@ -110,7 +116,7 @@ FORCE:
 invalidate-ripple-config:
 	@node tools/build-support.mjs config-invalidate "$(ROUT)/.asset-config"
 
-$(GENERATED)/doom_build_config.h: FORCE tools/build-support.mjs tools/assets-pack.mjs tools/assets-validate.mjs
+$(GENERATED)/doom_build_config.h: FORCE tools/build-support.mjs tools/assets-pack.mjs tools/assets-validate.mjs tools/assets-identity.mjs tools/sprite-metadata.mjs tools/sprite-metrics.mjs tools/renderer-tables.mjs tools/renderer-tables-validate.mjs
 	@node tools/build-support.mjs config "$(WAD)" "$(GENERATED)" "$(BUILD)/manifest.json" "$(BANK_SIZE)" "$(PROGRAM)" "$(START_MAP)" "$(LOW_DETAIL)" "$(DEFINES)" "$(RIPPLE_FLAGS)" "$(CC)" "$(CFLAGS)" "$(CPPFLAGS)" "$(LDFLAGS)" "$(WAD_MODE)" "$(ASSET_VALIDATION)"
 
 # Recover a removed generated file without requiring deletion of all build data.
@@ -118,7 +124,7 @@ $(TABLE_SOURCES) $(INFO_SOURCES) $(GENERATED)/info_actions.h $(GENERATED)/info_t
 	@test -f "$@" || node tools/generate-data.mjs engine "$(GENERATED)"
 
 ifneq ($(FIXTURE_STAMP),)
-$(FIXTURE_STAMP): tools/fixtures.mjs $(wildcard engine/*.c src/*.c tests/*.c)
+$(FIXTURE_STAMP): tools/fixtures.mjs tools/sprite-fixture.mjs tools/sprite-metrics-fixture.mjs tools/renderer-storage-fixture.mjs $(wildcard engine/*.c src/*.c tests/*.c tests/*.inc)
 	@$(GENERATE_$(PROGRAM))
 	@touch "$@"
 $(FIXTURE_OUTPUTS): $(FIXTURE_STAMP)
@@ -202,9 +208,12 @@ test-kernels:
 test-gameplay:
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs gameplay --wad "$(WAD)"
 test-assets:
-	+@DOOM_BUILD="$(abspath $(BUILD))" node --test tools/assets-pack.test.mjs tools/assets-validate.test.mjs tools/asset-preflight.test.mjs tools/asset-policy.test.mjs
+	+@DOOM_BUILD="$(abspath $(BUILD))" node --test tools/assets-pack.test.mjs tools/assets-validate.test.mjs tools/asset-preflight.test.mjs tools/asset-policy.test.mjs tools/assets-identity.test.mjs tools/sprite-metadata.test.mjs tools/sprite-metrics.test.mjs tools/renderer-tables-validate.test.mjs
 	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/metadata-validate.mjs --wad "$(WAD)"
 	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/texture-metadata-validate.mjs --wad "$(WAD)"
+	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/sprite-metadata-validate.mjs --wad "$(WAD)"
+	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/sprite-metrics-validate.mjs --wad "$(WAD)"
+	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/renderer-metadata-validate.mjs --wad "$(WAD)"
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs assets --wad "$(WAD)"
 clean:
 	rm -rf "$(BUILD)/ripple" "$(BUILD)/native" "$(BUILD)/assets" "$(GENERATED)"
