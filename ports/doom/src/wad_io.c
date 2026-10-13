@@ -20,8 +20,9 @@ int wad_u16(const WadOctet *bytes, uint32_t length, uint32_t offset, uint16_t *o
     uint16_t lo;
     uint16_t hi;
     if (!wad_range(length, offset, 2UL)) return 0;
-    lo = (uint16_t)bytes[offset] & 255U;
-    hi = (uint16_t)bytes[offset + 1UL] & 255U;
+    bytes += offset;
+    lo = (uint16_t)*bytes++ & 255U;
+    hi = (uint16_t)*bytes & 255U;
     *out = lo | (hi << 8);
     return 1;
 }
@@ -30,8 +31,13 @@ int wad_u32(const WadOctet *bytes, uint32_t length, uint32_t offset, uint32_t *o
     uint16_t lo;
     uint16_t hi;
     if (!wad_range(length, offset, 4UL)) return 0;
-    if (!wad_u16(bytes, length, offset, &lo)) return 0;
-    if (!wad_u16(bytes, length, offset + 2UL, &hi)) return 0;
+    /* Check the complete field once, then walk its four cells. This avoids
+     * nested calls and repeated 32-bit indexing on the 16-bit guest. */
+    bytes += offset;
+    lo = (uint16_t)*bytes++ & 255U;
+    lo |= ((uint16_t)*bytes++ & 255U) << 8;
+    hi = (uint16_t)*bytes++ & 255U;
+    hi |= ((uint16_t)*bytes & 255U) << 8;
     *out = (uint32_t)lo | ((uint32_t)hi << 16);
     return 1;
 }
@@ -46,25 +52,29 @@ int wad_read(WadFile *wad, uint32_t offset, WadOctet *dest, uint32_t count) {
      * Reprogram at every block boundary rather than relying on wrap behavior. */
     while (count != 0) {
         uint16_t within = (uint16_t)offset;
-        uint32_t chunk = 65536UL - (uint32_t)within;
+        uint16_t chunk = 32768U;
         uint16_t word;
-        if (chunk > count) chunk = count;
-        storage_set_block((uint16_t)(offset >> 16));
-        storage_set_addr(within >> 1);
+        /* Bound the inner loop to one 16-bit counter and one disk block.
+         * Direct MMIO keeps the cursor and destination in registers instead
+         * of spilling them around a function call for every packed word. */
+        if (within > 32768U) chunk = (uint16_t)(0U - within);
+        if ((uint32_t)chunk > count) chunk = (uint16_t)count;
+        mmio_write(MMIO_STORE_BLOCK, (uint16_t)(offset >> 16));
+        mmio_write(MMIO_STORE_ADDR, within >> 1);
         offset += chunk;
         count -= chunk;
         if (within & 1U) {
-            word = storage_read();
+            word = mmio_read(MMIO_STORE_DATA);
             *dest++ = (WadOctet)((word >> 8) & 255U);
             --chunk;
         }
-        while (chunk >= 2UL) {
-            word = storage_read();
+        while (chunk >= 2U) {
+            word = mmio_read(MMIO_STORE_DATA);
             *dest++ = (WadOctet)(word & 255U);
             *dest++ = (WadOctet)((word >> 8) & 255U);
-            chunk -= 2UL;
+            chunk -= 2U;
         }
-        if (chunk != 0) *dest++ = (WadOctet)(storage_read() & 255U);
+        if (chunk != 0) *dest++ = (WadOctet)(mmio_read(MMIO_STORE_DATA) & 255U);
     }
 #else
     if (!wad->host_file) return wad_fail(wad, "WAD is not open");
@@ -95,15 +105,7 @@ void wad_close(WadFile *wad) {
     wad->directory_offset = 0;
 }
 
-int wad_open(WadFile *wad, const char *path, uint32_t expected_octet_length) {
-    WadOctet header[12];
-    WadOctet record[16];
-    WadLump *lump;
-    uint32_t count;
-    uint32_t directory;
-    uint32_t pos;
-    uint32_t i;
-    uint16_t j;
+int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_length) {
     wad->host_file = NULL;
     wad->lumps = NULL;
     wad->length = expected_octet_length;
@@ -128,6 +130,19 @@ int wad_open(WadFile *wad, const char *path, uint32_t expected_octet_length) {
         }
     }
 #endif
+    return 1;
+}
+
+int wad_open(WadFile *wad, const char *path, uint32_t expected_octet_length) {
+    WadOctet header[12];
+    WadOctet record[16];
+    WadLump *lump;
+    uint32_t count;
+    uint32_t directory;
+    uint32_t pos;
+    uint32_t i;
+    uint16_t j;
+    if (!wad_open_stream(wad, path, expected_octet_length)) return 0;
     if (!wad_read(wad, 0UL, header, 12UL)) { wad_close(wad); return 0; }
     if (!((header[0] == 'I' || header[0] == 'P') && header[1] == 'W' &&
           header[2] == 'A' && header[3] == 'D')) {

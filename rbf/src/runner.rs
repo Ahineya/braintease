@@ -6,7 +6,7 @@ use crate::{
 use bf_wasm::engine::{Machine, Profile, Program, Stop};
 use rvm::{
     capture,
-    constants::{DISP_RGB565, HDR_DISP_MODE},
+    constants::{DISP_RGB565, HDR_DISP_MODE, HDR_STORE_DATA},
     devices::GuestMemory,
     runner::{ClockPolicy, ControlCommand, Controller},
 };
@@ -118,6 +118,9 @@ struct Observation {
     legacy_back: Option<std::ops::Range<usize>>,
     framebuffer_writes: u64,
     last_framebuffer_store: Option<usize>,
+    disk_read_words: u64,
+    disk_write_words: u64,
+    last_disk_read: Option<(u16, u16)>,
     waiting: bool,
 }
 
@@ -147,6 +150,10 @@ impl Observation {
             framebuffer_writes: self.framebuffer_writes,
             last_framebuffer_store: self.last_framebuffer_store,
             bank_size: host.layout.bank_size,
+            disk_read_words: self.disk_read_words,
+            disk_write_words: self.disk_write_words,
+            last_disk_read: self.last_disk_read,
+            disk_position: host.devices.storage_position(),
         }
     }
 }
@@ -457,6 +464,12 @@ impl Host {
                 },
                 Stop::Hook(kind @ (b'?' | b'!')) => {
                     let address = self.layout.ram_address(self.machine.pointer())?;
+                    // Capture the pre-access position: successful disk reads and
+                    // writes auto-increment it. No counters or extra device
+                    // observations are performed when telemetry is disabled.
+                    let disk_position = if observation.is_some() && address == HDR_STORE_DATA {
+                        self.devices.storage_position()
+                    } else { None };
                     if let Some(observation) = observation {
                         if kind == b'?' { observation.last_load = Some(address); }
                         else { observation.last_store = Some(address); }
@@ -468,6 +481,14 @@ impl Host {
                     } else {
                         let value = memory.read(address);
                         self.devices.write_mmio(address, value, &mut memory)?;
+                    }
+                    if let (Some(observation), Some(position)) = (observation.as_mut(), disk_position) {
+                        if kind == b'?' {
+                            observation.disk_read_words = observation.disk_read_words.checked_add(1).ok_or("Telemetry disk read counter overflow")?;
+                            observation.last_disk_read = Some(position);
+                        } else {
+                            observation.disk_write_words = observation.disk_write_words.checked_add(1).ok_or("Telemetry disk write counter overflow")?;
+                        }
                     }
                     if kind == b'!' {
                         if let Some(observation) = observation {

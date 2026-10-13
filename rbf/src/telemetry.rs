@@ -20,6 +20,12 @@ pub struct Snapshot {
     pub framebuffer_writes: u64,
     pub last_framebuffer_store: Option<usize>,
     pub bank_size: u16,
+    /// Successful storage data-port transfers, counted in 16-bit disk words.
+    pub disk_read_words: u64,
+    pub disk_write_words: u64,
+    /// Disk block and word addresses use the storage geometry, not RAM banks.
+    pub last_disk_read: Option<(u16, u16)>,
+    pub disk_position: Option<(u16, u16)>,
 }
 
 /// Optional runner observer. A forced status is emitted even between intervals.
@@ -48,6 +54,10 @@ pub struct Telemetry<W> {
     observed_frames: u64,
     instruction_at: Option<Duration>,
     frame_at: Option<Duration>,
+    emitted_disk_reads: u64,
+    observed_disk_reads: u64,
+    observed_disk_writes: u64,
+    disk_at: Option<Duration>,
 }
 
 impl<W: Write> Telemetry<W> {
@@ -75,6 +85,10 @@ impl<W: Write> Telemetry<W> {
             observed_frames: 0,
             instruction_at: None,
             frame_at: None,
+            emitted_disk_reads: 0,
+            observed_disk_reads: 0,
+            observed_disk_writes: 0,
+            disk_at: None,
         })
     }
 
@@ -111,6 +125,10 @@ fn address(value: Option<usize>, bank_size: u16) -> String {
     )
 }
 
+fn disk_address(value: Option<(u16, u16)>) -> String {
+    value.map_or_else(|| "none".into(), |(block, word)| format!("{block}:{word}"))
+}
+
 impl<W: Write> Progress for Telemetry<W> {
     fn update(&mut self, snapshot: Snapshot, status: Option<&str>) -> Result<(), String> {
         let now = (self.clock)();
@@ -121,6 +139,13 @@ impl<W: Write> Progress for Telemetry<W> {
         if snapshot.frames != self.observed_frames {
             self.observed_frames = snapshot.frames;
             self.frame_at = Some(now);
+        }
+        if snapshot.disk_read_words != self.observed_disk_reads
+            || snapshot.disk_write_words != self.observed_disk_writes
+        {
+            self.observed_disk_reads = snapshot.disk_read_words;
+            self.observed_disk_writes = snapshot.disk_write_words;
+            self.disk_at = Some(now);
         }
         let elapsed = now.saturating_sub(self.emitted_at);
         if status.is_none() && elapsed < self.interval {
@@ -152,17 +177,21 @@ impl<W: Write> Progress for Telemetry<W> {
             .pc
             .map_or_else(|| "none".into(), |(bank, pc)| format!("{bank}:{pc}"));
         writeln!(self.writer,
-            "rbf telemetry elapsed={:.3}s phase={phase} status={} bf={} bf/s={:.0} guest={} guest/s={:.1} pc={pc} guest_idle~={} frames={} frame_idle~={} tick={} clock={clock} load={} store={} legacy_fb_writes={} last_legacy_fb_store={}",
+            "rbf telemetry elapsed={:.3}s phase={phase} status={} bf={} bf/s={:.0} guest={} guest/s={:.1} pc={pc} guest_idle~={} frames={} frame_idle~={} tick={} clock={clock} load={} store={} legacy_fb_writes={} last_legacy_fb_store={} disk_read_words={} disk_read_words/s={:.1} disk_write_words={} disk_last_read={} disk_pos={} disk_idle~={}",
             now.as_secs_f64(), status.unwrap_or("running"), snapshot.dispatches,
             rate(snapshot.dispatches.saturating_sub(self.emitted_dispatches)), snapshot.instructions,
             rate(snapshot.instructions.saturating_sub(self.emitted_instructions)), age(now, self.instruction_at),
             snapshot.frames, age(now, self.frame_at), snapshot.tick,
             address(snapshot.last_load, snapshot.bank_size), address(snapshot.last_store, snapshot.bank_size),
-            snapshot.framebuffer_writes, address(snapshot.last_framebuffer_store, snapshot.bank_size))
+            snapshot.framebuffer_writes, address(snapshot.last_framebuffer_store, snapshot.bank_size),
+            snapshot.disk_read_words,
+            rate(snapshot.disk_read_words.saturating_sub(self.emitted_disk_reads)), snapshot.disk_write_words,
+            disk_address(snapshot.last_disk_read), disk_address(snapshot.disk_position), age(now, self.disk_at))
             .and_then(|()| self.writer.flush()).map_err(|e| format!("Telemetry output: {e}"))?;
         self.emitted_at = now;
         self.emitted_dispatches = snapshot.dispatches;
         self.emitted_instructions = snapshot.instructions;
+        self.emitted_disk_reads = snapshot.disk_read_words;
         Ok(())
     }
 }
@@ -189,6 +218,10 @@ mod tests {
             framebuffer_writes: 0,
             last_framebuffer_store: None,
             bank_size: 64,
+            disk_read_words: 0,
+            disk_write_words: 0,
+            last_disk_read: None,
+            disk_position: None,
         }
     }
 
@@ -211,6 +244,9 @@ mod tests {
         state.instructions = 2;
         state.pc = Some((1, 3));
         state.last_load = Some(65);
+        state.disk_read_words = 8;
+        state.last_disk_read = Some((63, 32767));
+        state.disk_position = Some((63, 32768));
         telemetry.update(state, None).unwrap();
         time.store(2500, Ordering::Relaxed);
         state.waiting_for_tick = true;
@@ -218,12 +254,16 @@ mod tests {
         telemetry.update(state, None).unwrap();
         time.store(2600, Ordering::Relaxed);
         state.frames = 1;
+        state.disk_write_words = 1;
         telemetry.update(state, Some("halted")).unwrap();
         let output = String::from_utf8(telemetry.into_inner()).unwrap();
         assert_eq!(output.lines().count(), 5);
         assert!(output.contains("phase=cpu-init"));
         assert!(output.contains("bf=200 bf/s=200 guest=2 guest/s=2.0 pc=1:3"));
         assert!(output.contains("load=1:1"));
+        assert!(output.contains("disk_read_words=8 disk_read_words/s=8.0 disk_write_words=0 disk_last_read=63:32767 disk_pos=63:32768 disk_idle~=0.000s"));
+        assert!(output.contains("disk_read_words=8 disk_read_words/s=0.0 disk_write_words=0 disk_last_read=63:32767 disk_pos=63:32768 disk_idle~=1.500s"));
+        assert!(output.contains("disk_read_words=8 disk_read_words/s=0.0 disk_write_words=1 disk_last_read=63:32767 disk_pos=63:32768 disk_idle~=0.000s"));
         assert!(output.contains("phase=waiting-clock"));
         assert!(output.contains("guest_idle~=1.500s"));
         assert!(output.contains("status=halted"));

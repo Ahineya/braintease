@@ -75,12 +75,15 @@ static void ExtendLumpInfo(int newnumlumps)
     lumpinfo_t *newlumpinfo;
     unsigned int i;
 
-    newlumpinfo = calloc(newnumlumps, sizeof(lumpinfo_t));
+    size_t bytes = (size_t)newnumlumps * sizeof(lumpinfo_t);
+    newlumpinfo = malloc(bytes);
 
     if (newlumpinfo == NULL)
     {
 	I_Error ("Couldn't realloc lumpinfo");
     }
+    // Use the port's bank-aware memset instead of calloc's generic C loop.
+    memset(newlumpinfo, 0, bytes);
 
     // Copy over lumpinfo_t structures from the old array. If any of
     // these lumps have been cached, we need to update the user
@@ -125,13 +128,13 @@ static void ExtendLumpInfo(int newnumlumps)
 wad_file_t *W_AddFile (char *filename)
 {
     WadOctet header[12];
-    WadOctet record[16];
+    WadOctet records[256];
     wad_file_t *wad_file;
+    lumpinfo_t *lump;
     uint32_t count;
     uint32_t directory;
     uint32_t offset;
-    uint32_t i;
-    unsigned int j;
+    unsigned int remaining;
 
     if (numlumps != 0)
         I_Error("Additional WADs are not supported by this port");
@@ -148,19 +151,32 @@ wad_file_t *W_AddFile (char *filename)
         I_Error("IWAD directory is invalid or has too many lump IDs");
     ExtendLumpInfo((int)count);
     offset = directory;
-    for (i = 0; i < count; ++i)
+    remaining = (unsigned int)count;
+    lump = lumpinfo;
+    while (remaining != 0)
     {
-        lumpinfo_t *lump = &lumpinfo[i];
-        if (W_Read(wad_file, offset, record, 16UL) != 16UL)
+        unsigned int batch = remaining < 16U ? remaining : 16U;
+        uint32_t bytes = (uint32_t)batch * 16UL;
+        WadOctet *record = records;
+        if (W_Read(wad_file, offset, records, bytes) != bytes)
             I_Error("Truncated IWAD directory record");
-        wad_u32(record, 16UL, 0UL, &lump->position);
-        wad_u32(record, 16UL, 4UL, &lump->size);
-        if (!wad_range(wad_file->length, lump->position, lump->size))
-            I_Error("IWAD lump lies outside configured file");
-        lump->wad_file = wad_file;
-        lump->cache = NULL;
-        for (j = 0; j < 8; ++j) lump->name[j] = (char)record[8 + j];
-        offset += 16UL;
+        offset += bytes;
+        remaining -= batch;
+        // Bound each read, then walk both arrays. This avoids a file-class call
+        // and a wide indexed address calculation for every directory entry.
+        while (batch != 0)
+        {
+            wad_u32(record, 16UL, 0UL, &lump->position);
+            wad_u32(record, 16UL, 4UL, &lump->size);
+            if (!wad_range(wad_file->length, lump->position, lump->size))
+                I_Error("IWAD lump lies outside configured file");
+            lump->wad_file = wad_file;
+            lump->cache = NULL;
+            memcpy(lump->name, record + 8, 8);
+            record += 16;
+            ++lump;
+            --batch;
+        }
     }
     if (lumphash != NULL)
     {

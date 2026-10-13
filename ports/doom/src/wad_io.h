@@ -26,6 +26,10 @@ typedef struct WadFile {
 /* Returns 1 on success, 0 on failure. The supplied length is mandatory: the
  * storage MMIO has no file-size query. Host builds also verify this length. */
 int wad_open(WadFile *wad, const char *path, uint32_t expected_octet_length);
+/* Open only the bounded byte stream, without reading or indexing its directory.
+ * The caller must validate the WAD header and entries (Doom's W_AddFile does).
+ * Use wad_open instead when wad_find/wad_lump_at are needed. */
+int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_length);
 void wad_close(WadFile *wad);
 int wad_read(WadFile *wad, uint32_t offset, WadOctet *dest, uint32_t count);
 int wad_read_lump(WadFile *wad, const WadLump *lump, uint32_t offset,

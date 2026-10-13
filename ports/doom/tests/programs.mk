@@ -1,10 +1,15 @@
 # Small regressions compile the same engine sources as the complete port.
 NATIVE_FIXTURES := map_decode world_widths clock_widths
-FIXTURE_PROGRAMS := numeric libc wad_lookup graphics_cache demo_playback stat_storage info_storage projection_widths sky_widths event_widths texture_columns keyboard_controls assets render_kernels raster_kernels memory_kernels $(NATIVE_FIXTURES)
+FIXTURE_PROGRAMS := numeric libc wad_lookup wad_directory wad_read wad_read_small graphics_cache demo_playback stat_storage info_storage projection_widths sky_widths event_widths texture_columns keyboard_controls assets render_kernels raster_kernels memory_kernels $(NATIVE_FIXTURES)
 
 SOURCES_numeric = tests/numeric.c engine/m_fixed.c engine/tables.c $(TABLE_SOURCES)
 SOURCES_libc := tests/compat_libc.c
 SOURCES_wad_lookup := tests/wad_lookup.c engine/w_wad.c engine/w_file.c engine/z_zone.c src/wad_io.c src/w_file_port.c
+SOURCES_wad_directory := tests/wad_directory.c engine/w_wad.c engine/z_zone.c src/wad_io.c
+SOURCES_wad_read := tests/wad_read.c src/wad_io.c
+SOURCES_wad_read_small := tests/wad_read_small.c src/wad_io.c
+# The short fixture includes the full fixture with its bulk reads disabled.
+$(BUILD)/ripple/wad_read_small/test_wad_read_small.asm $(BUILD)/native/wad_read_small/wad_read_small: tests/wad_read.c
 SOURCES_graphics_cache := tests/graphics_cache.c src/patch_cache.c src/wad_io.c
 SOURCES_demo_playback := tests/demo_playback.c src/wad_io.c
 SOURCES_stat_storage := tests/stat_storage.c

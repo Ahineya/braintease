@@ -162,6 +162,37 @@ and calls/returns for another 20, identifying the next optimization targets.
 Post-banner PC samples landed in string/number formatting and allocator pointer
 normalization. Diagnostic and production timings are separate measurements.
 
+The WAD startup follow-up traced the long PC `30:6318..10507` region to the
+port's directory reader. It was building an unused private index before Doom
+read the same directory again. The file adapter now opens a bounded stream;
+`W_AddFile` remains responsible for validating the header and every lump. It
+reads 16 records per batch and uses the existing fast memory helpers. The
+reader uses bounded 16-bit chunks, direct storage MMIO and single-check field
+decoding. The standalone asset reader still supports `wad_open` with an index.
+
+The existing name hash is now built before IWAD identification: six missing
+optional names previously caused six complete directory scans. With the bundled
+WAD, bounded Rust VM traces measured `W_AddFile` at 2,436,781 instructions,
+down from 11,092,867 (78.0% fewer), and `DOOM Shareware` at instruction 5,711,683,
+down from 16,991,548 (66.4% fewer overall). Directory disk reads halved from
+20,236 to 10,118 packed words. These are guest-work measurements, not BF
+wall-time or full-boot speedup claims. The ISA, CPU and bank sizes are unchanged.
+
+`--telemetry` now includes `disk_read_words`, its per-second rate,
+`disk_last_read`, `disk_pos` and `disk_idle~`. Positions are **disk block:word**,
+not RAM bank:cell. Increasing reads show storage progress; a stationary read
+counter with advancing guest instructions can indicate subsequent indexing or
+other computation. The host caches 64 KiB disk blocks, so it does not perform
+a file seek for every guest read. Diagnostics remain on stderr and are optional.
+
+Validation covers odd offsets, 65,540-cell reads crossing disk and RAM banks,
+decoder masks, bounds rejection, partial directory batches and duplicate-name
+precedence. The small reader also passed in BF in 2.15 seconds with 52,433
+guest instructions and 69 disk-word reads. Full native/Rust VM title, menu and
+E1M1 captures matched. A separate 180-second full BF run printed the startup
+banner through `M_LoadDefaults` and reached 1,129,699 instructions, timing out
+before directory loading; it does not validate a completed BF WAD load or frame.
+
 ### Controls
 
 | Action | Keys |

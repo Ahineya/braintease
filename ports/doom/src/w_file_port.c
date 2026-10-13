@@ -25,7 +25,9 @@ static wad_file_t *port_open(char *path) {
         I_Error("WAD path is not the configured fixture: %s", path ? path : "(null)");
     file = malloc(sizeof(port_wad_file_t));
     if (!file) I_Error("No memory for WAD file handle");
-    if (!wad_open(&file->input, DOOM_WAD_PATH, DOOM_WAD_LENGTH)) {
+    /* W_AddFile validates and builds Doom's directory. Do not build a second,
+     * unused WadLump index here before the engine reads the same records. */
+    if (!wad_open_stream(&file->input, DOOM_WAD_PATH, DOOM_WAD_LENGTH)) {
         const char *error = file->input.error;
         free(file);
         I_Error("Cannot open configured WAD: %s", error);

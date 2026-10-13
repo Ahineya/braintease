@@ -301,6 +301,15 @@ counts/rates, the last validated guest program counter, frame/tick counts,
 clock waits and recent memory accesses. In legacy RGB565 mode it also reports
 back-buffer writes, which helps distinguish drawing from waiting for a flush.
 That write count includes repeated stores; it is not a count of unique pixels.
+Storage progress adds cumulative `disk_read_words` and `disk_write_words`, a
+per-interval `disk_read_words/s` rate, the last successful read's `disk_last_read`
+position, the currently selected `disk_pos`, and sampled `disk_idle~` time since
+the last read or write. Disk positions are `block:word`, with 32,768 16-bit
+words per block; they are independent of RAM bank size. These count successful
+device transfers, including repeated reads and defined out-of-range zero reads,
+not unique WAD bytes or actual host disk reads. Blocks are cached after their
+first access. Address-selection writes do not count as data progress, and no
+disk counters are collected when telemetry is disabled.
 The sampled idle durations and rates describe observed work, not completion
 percentages or predicted finishing times. Telemetry is off by default and works
 with headless or visual runs; it cannot share the TEXT40 terminal screen.

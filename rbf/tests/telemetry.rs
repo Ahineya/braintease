@@ -11,13 +11,18 @@ use rvm::{
     constants::*,
     devices::GuestMemory,
     runner::{ClockPolicy, ControlCommand},
+    vm::Storage,
 };
 use std::{io, sync::mpsc, time::Duration};
 
 fn host() -> Host {
+    host_with_storage(None)
+}
+
+fn host_with_storage(storage: Option<Storage>) -> Host {
     let header = "BFHOST 1 BANK_SIZE 64 MEMORY_BANKS 4 INSTRUCTIONS 1 ENTRY 0 ORIGIN 8 TAPE_CELLS 2312 END_BFHOST $?!";
     let (layout, _) = Layout::parse(header, 2312).unwrap();
-    let mut devices = BfDevices::new(64, 35, 1, None).unwrap();
+    let mut devices = BfDevices::new(64, 35, 1, storage).unwrap();
     devices.host_input_enabled = false;
     Host::new(layout, devices).unwrap()
 }
@@ -75,6 +80,75 @@ impl Source {
         self.value(value);
         self.text.push('!');
     }
+    fn read(&mut self, address: usize) {
+        self.at(ORIGIN + address * LANES + RAM_LANE);
+        self.text.push('?');
+    }
+}
+
+#[test]
+fn disk_progress_observes_successful_transfers_without_changing_guest_state() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_DISK: AtomicU64 = AtomicU64::new(0);
+    struct Disk(std::path::PathBuf);
+    impl Disk {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "rbf-telemetry-disk-{}-{}.img", std::process::id(),
+                NEXT_DISK.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::write(&path, [0x34, 0x12, 0x56]).unwrap();
+            Self(path)
+        }
+        fn storage(&self) -> Storage { Storage::with_path(self.0.clone()).unwrap() }
+    }
+    impl Drop for Disk {
+        fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+    }
+    let actual_disk = Disk::new();
+    let plain_disk = Disk::new();
+    let mut actual = host_with_storage(Some(actual_disk.storage()));
+    let mut plain = host_with_storage(Some(plain_disk.storage()));
+    let mut source = Source::default();
+    source.read(HDR_STORE_DATA);
+    source.store(HDR_STORE_BLOCK, 1);
+    source.store(HDR_STORE_ADDR, 32767);
+    source.read(HDR_STORE_DATA);
+    source.read(HDR_STORE_DATA); // Out-of-range word still completes a device read.
+    source.store(HDR_STORE_ADDR, 65535);
+    source.read(HDR_STORE_DATA); // Auto-increment wraps to word zero in block one.
+    source.store(HDR_STORE_DATA, 0xabcd);
+    source.read(HDR_STORE_DATA);
+    source.store(64 + HDR_STORE_DATA, 11); // Ordinary RAM in another bank.
+    source.read(64 + HDR_STORE_DATA);
+    source.store(HDR_TTY_OUT, 89);
+    let program = Program::parse(&source.text, true, true).unwrap();
+    let mut progress = Capture::default();
+    let mut output = Vec::new();
+    let mut plain_output = Vec::new();
+    assert_eq!(
+        actual.run_with_telemetry(&program, &options(), &mut output, &mut progress),
+        plain.run(&program, &options(), &mut plain_output)
+    );
+    assert_eq!(output, b"Y");
+    assert_eq!(output, plain_output);
+    assert_eq!(actual.machine.tape(), plain.machine.tape());
+    assert_eq!(actual.machine.dispatches(), plain.machine.dispatches());
+    assert_eq!(std::fs::read(&actual_disk.0).unwrap(), std::fs::read(&plain_disk.0).unwrap());
+    let state = progress.updates.last().unwrap().0;
+    assert_eq!(state.disk_read_words, 5);
+    assert_eq!(state.disk_write_words, 1);
+    assert_eq!(state.last_disk_read, Some((1, 1)));
+    assert_eq!(state.disk_position, Some((1, 2)));
+
+    let mut absent = host();
+    let mut progress = Capture::default();
+    absent.run_with_telemetry(&program, &options(), &mut Vec::new(), &mut progress).unwrap();
+    let state = progress.updates.last().unwrap().0;
+    assert_eq!(state.disk_read_words, 0);
+    assert_eq!(state.disk_write_words, 0);
+    assert_eq!(state.last_disk_read, None);
+    assert_eq!(state.disk_position, None);
 }
 
 #[test]

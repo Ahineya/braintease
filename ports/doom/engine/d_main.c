@@ -1354,6 +1354,9 @@ void D_DoomMain (void)
 
     DEH_printf("W_Init: Init WADfiles.\n");
     D_AddFile(iwadfile);
+    // This port accepts one IWAD only. Build its index before identification
+    // so missing optional lumps do not each scan the entire directory.
+    W_GenerateHashTable();
 #if ORIGCODE
     numiwadlumps = numlumps;
 #endif
@@ -1488,9 +1491,6 @@ void D_DoomMain (void)
     }
 
     I_AtExit((atexit_func_t) G_CheckDemoStatus, true);
-
-    // Generate the WAD hash table.  Speed things up a bit.
-    W_GenerateHashTable();
 
     // Load DEHACKED lumps from WAD files - but only if we give the right
     // command line parameter.

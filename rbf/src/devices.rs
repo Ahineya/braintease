@@ -58,6 +58,13 @@ impl BfDevices {
     pub fn display_mode(&self) -> u16 {
         self.display_mode
     }
+    /// Selected disk block and word address, for optional host progress reports.
+    /// This observes the device without issuing a read or loading a block.
+    pub fn storage_position(&self) -> Option<(u16, u16)> {
+        self.storage
+            .as_ref()
+            .map(|storage| (storage.get_block(), storage.get_addr()))
+    }
     pub fn push_input(&mut self, bytes: &[u8]) {
         self.input.extend(bytes);
     }

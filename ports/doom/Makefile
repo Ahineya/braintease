@@ -44,7 +44,7 @@ include tests/programs.mk
 
 SOURCES := $(SOURCES_$(PROGRAM))
 RIPPLE_SOURCES := $(SOURCES) $(if $(filter engine/m_fixed.c,$(SOURCES)),src/fixed_fast.asm) \
- $(if $(filter engine libc wad_lookup,$(PROGRAM)),src/compat_libc.c)
+ $(if $(filter engine libc wad_lookup wad_directory,$(PROGRAM)),src/compat_libc.c)
 NATIVE_SOURCES := $(filter %.c,$(SOURCES))
 ROUT := $(BUILD)/ripple/$(PROGRAM)
 NOUT := $(BUILD)/native/$(PROGRAM)
