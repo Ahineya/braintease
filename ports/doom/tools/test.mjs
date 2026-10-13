@@ -3,18 +3,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { PORT, ROOT, BUILD, WAD, RVM, RLIB, BANK, MEMORY, commands, digest, json, mkdir,
+import { PORT, ROOT, BUILD, WAD, WAD_MODES, RVM, RLIB, BANK, MEMORY, commands, digest, json, mkdir,
   require, writeJSON, run, build, prepareDisk, compileRust, frameRows, nativeInput } from './test-support.mjs';
 import { inspectAssets, selfTestAssets, checkAssetLog } from './assets-oracle.mjs';
 import { benchmark } from './benchmark.mjs';
 
 const EXPECTED = {
+  alloc_fast: 'ALLOC FAST OK zero sizes, overflow, reused cells, wide products and bank crossings\n',
   numeric: 'NUMERIC OK 6e970016 d440d0e1 1c93684a\n',
   libc: 'LIBC validation_ok 1\n',
   wad_lookup: 'WAD LOOKUP OK 1264 lumps, 350 names, 598 references, final block\n',
   wad_directory: 'WAD DIRECTORY OK 1/17 entries, batch tail, full names, EOF marker, duplicate lookup\n',
   wad_read: 'WAD READ OK odd octets, storage/RAM boundaries, bounds, decoder masks\n',
   wad_read_small: 'WAD READ SMALL OK odd octets, storage boundaries, bounds, decoder masks\n',
+  wad_read_perf: 'WAD READ PERF begin\nWAD READ PERF copied\nWAD READ PERF OK 4096 texture octets, far heap, checksum 368674\n',
+  asset_words: 'ASSET WORDS OK storage modes, destinations, bank boundaries, full words, bounds\n',
   graphics_cache: 'GRAPHICS OK decoded widths 1/9, bank-crossing offsets, cache purge/reload, 12 malformed cases\n',
   demo_playback: 'DEMO OK signed octets, bounded records, DEMO1 5026 9ca0bb8e\n',
   stat_storage: 'STAT STORAGE OK 32 retained snapshots, lazy allocation, wide times\n',
@@ -27,7 +30,7 @@ const EXPECTED = {
   config_bindings: 'CONFIG BINDINGS OK 24 numbered names, 97 fixed names, targets and player defaults\n',
 };
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  wad: { type: 'string', default: WAD }, output: { type: 'string' },
+  wad: { type: 'string', default: WAD }, 'wad-mode': { type: 'string', default: process.env.DOOM_WAD_MODE || 'cooked' }, output: { type: 'string' },
   timeout: { type: 'string', default: '120' }, 'max-instructions': { type: 'string', default: '2000000000' },
   program: { type: 'string', multiple: true }, 'skip-build': { type: 'boolean', default: false },
   'low-detail': { type: 'boolean', default: false }, help: { type: 'boolean' },
@@ -36,12 +39,14 @@ const stage = positionals[0] || 'smoke';
 const stages = ['smoke', 'fixtures', 'kernels', 'gameplay', 'assets', 'all'];
 if (values.help) {
   console.log('Usage: node tools/test.mjs [' + stages.join('|') + ']\n'
-    + '  [--wad FILE] [--output DIRECTORY] [--timeout SECONDS] [--max-instructions N]\n'
+    + '  [--wad FILE] [--wad-mode packed|expanded|cooked] [--output DIRECTORY] [--timeout SECONDS] [--max-instructions N]\n'
     + '  [--program NAME ...] [--skip-build] [--low-detail]\n'
     + 'The default smoke stage compares title, menu navigation and E1M1 pixels with native C.');
   process.exit(0);
 }
 require(positionals.length <= 1 && stages.includes(stage), 'unknown test stage: ' + stage);
+const wadMode = values['wad-mode'];
+require(WAD_MODES.includes(wadMode), 'unknown WAD storage mode: ' + wadMode);
 require(!values['skip-build'] || !['smoke', 'all'].includes(stage),
   'smoke/all must rebuild the engine for both startup modes; omit --skip-build');
 const timeout = Number(values.timeout), maxInstructions = Number(values['max-instructions']);
@@ -49,14 +54,19 @@ require(Number.isSafeInteger(timeout) && timeout > 0 && Number.isSafeInteger(max
   'test limits must be positive integers');
 const out = path.resolve(values.output || path.join(BUILD, 'tests', stage)); mkdir(out);
 const wad = path.resolve(values.wad), sourceHash = digest(wad);
-const disk = path.join(out, 'fixture-disk.wad'), diskMetadata = prepareDisk(wad, disk);
-const result = { format_version: 1, stage, success: false, checks: [], commands,
-  wad: { path: wad, sha256: sourceHash }, disk_image: diskMetadata,
+const disk = path.join(out, 'fixture-disk.img');
+let diskMetadata;
+const result = { format_version: 2, stage, success: false, checks: [], commands,
+  wad: { path: wad, sha256: sourceHash }, wad_mode: wadMode,
   limits: { instructions: maxInstructions, seconds: timeout }, bank_size: BANK, memory_cells: MEMORY };
 const binary = program => path.join(BUILD, 'ripple', program, program + '.bin');
 const native = program => path.join(BUILD, 'native', program, program);
 function buildProgram(program, target = 'both', startMap = false) {
-  if (!values['skip-build']) build(program, out, { wad, target, startMap, lowDetail: values['low-detail'] });
+  if (!values['skip-build']) build(program, out, { wad, wadMode, target, startMap, lowDetail: values['low-detail'] });
+  if (target !== 'native') {
+    diskMetadata = prepareDisk(wad, disk, { wadMode, manifest: path.join(BUILD, 'manifest.json') });
+    result.disk_image = diskMetadata;
+  }
 }
 function guest(label, program, { expected, frame = 1, script } = {}) {
   const reportPath = path.join(out, label + '.report.json'); fs.rmSync(reportPath, { force: true });
@@ -172,18 +182,39 @@ function kernels() {
       assembly_sha256: digest(path.join(PORT, 'src', kind + '_fast.asm')), vm_library_sha256: digest(RLIB) });
     console.log('PASS ' + kind + ' kernels: independent oracle, bank boundaries, guards and C ABI');
   }
+  for (const kind of ['word_read', 'metadata_validate']) {
+    const label = kind.replaceAll('_', '-');
+    const target = path.join(out, kind);
+    mkdir(target);
+    const source = path.join(PORT, 'src', kind + '_fast.asm');
+    const object = path.join(target, kind + '_test.pobj');
+    const image = path.join(target, kind + '_test.bin');
+    run(label + '-assemble', [path.join(ROOT, 'src/ripple-asm/target/release/rasm'),
+      'assemble', source, '-o', object, '-b', BANK], out, 60);
+    run(label + '-link', [path.join(ROOT, 'src/ripple-asm/target/release/rlink'),
+      object, '-o', image, '-b', BANK], out, 60);
+    const driverSource = path.join(PORT, 'tests', kind + '_kernels.rs');
+    const driver = path.join(target, 'verify-' + label);
+    compileRust(driverSource, driver, out);
+    run(label + '-kernels', [driver, target], out, 60);
+    const kernelReport = json(path.join(target, label + '-kernel-results.json'));
+    require(kernelReport.success === true, label + ' kernel report failed');
+    result.checks.push({ label: label + '-kernels', report: kernelReport,
+      oracle_sha256: digest(driverSource), assembly_sha256: digest(source), vm_library_sha256: digest(RLIB) });
+    console.log('PASS ' + label + ' kernel: independent oracle, bank edges, pointer tags and saved registers');
+  }
 }
 function gameplay() {
   buildProgram('engine', 'both', true);
   for (const [label, frames] of [['gameplay-long', 180], ['arrow-controls', 32], ['detail-toggle', 32]]) {
-    const report = benchmark({ wad, input: path.join(PORT, 'tests', label + '.json'), frames, output: path.join(out, label) });
+    const report = benchmark({ wad, wadMode, input: path.join(PORT, 'tests', label + '.json'), frames, output: path.join(out, label) });
     result.checks.push({ label, report });
   }
 }
 try {
   if (stage === 'all') { fixtures(); kernels(); smoke(); gameplay(); }
   else ({ smoke, fixtures, kernels, gameplay, assets })[stage]();
-  require(digest(wad) === sourceHash && digest(disk) === diskMetadata.sha256, 'WAD changed during tests');
+  require(digest(wad) === sourceHash && (!diskMetadata || digest(disk) === diskMetadata.sha256), 'WAD changed during tests');
   result.success = true;
   console.log('All ' + stage + ' tests passed; ' + path.join(out, 'results.json'));
 } catch (error) {

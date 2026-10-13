@@ -774,12 +774,21 @@ void *R_AllocateStorage(size_t count, size_t size)
 {
     void *storage;
     size_t bytes;
+#if defined(RIPPLE) && defined(DOOM_FAST_MEMORY)
+    if (!Doom_AllocationSize(count, size, &bytes))
+        I_Error("Renderer allocation size overflow");
+#else
     if (count && size > (size_t)-1 / count)
         I_Error("Renderer allocation size overflow");
     bytes = count * size;
+#endif
     if (bytes > (size_t)-1 - renderer_storage_bytes)
         I_Error("Renderer storage accounting overflow");
+#if defined(RIPPLE) && defined(DOOM_FAST_MEMORY)
+    storage = Doom_AllocZeroed(bytes);
+#else
     storage = calloc(count, size);
+#endif
     if (storage == NULL)
         I_Error("Unable to allocate renderer storage");
     renderer_storage_bytes += bytes;

@@ -56,6 +56,11 @@ patch_t *W_CachePatchNum(int lump, int tag)
     return test_patches[lump];
 }
 
+patch_t *W_CachePatchHeaderNum(int lump, int tag)
+{
+    return W_CachePatchNum(lump, tag);
+}
+
 static void make_patch(int which, int width, int height, int top)
 {
     int x, y;

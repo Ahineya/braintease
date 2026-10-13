@@ -260,8 +260,17 @@ pub fn generate_switch(
 ) -> Result<(), CompilerError> {
     let mut expr_gen = gen.create_expression_generator();
     let switch_val = expr_gen.generate(expression)?;
-    let switch_ptr = gen.builder.build_alloca(IrType::I16, None)?;
-    gen.builder.build_store(switch_val, switch_ptr.clone(), IrType::I16)?;
+    // Integer promotion preserves long/long long controls. Keeping the saved
+    // selector in one cell silently discarded their upper words before dispatch.
+    let switch_type = expression.get_type().integer_promoted();
+    let switch_ir_type = crate::codegen::types::convert_type(
+        &switch_type, rcc_common::SourceLocation::new_simple(0, 0),
+    )?;
+    let switch_val = crate::codegen::expressions::convert_integer(
+        &mut expr_gen, switch_val, expression.get_type(), &switch_type,
+    )?;
+    let switch_ptr = gen.builder.build_alloca(switch_ir_type.clone(), None)?;
+    gen.builder.build_store(switch_val, switch_ptr.clone(), switch_ir_type.clone())?;
 
     let mut cases = HashMap::new();
     let mut default_label = None;
@@ -278,7 +287,7 @@ pub fn generate_switch(
     let mut case_list: Vec<(i64, LabelId)> = cases.into_iter().collect();
     case_list.sort_by_key(|(v, _)| *v);
     for (value, label) in case_list {
-        let loaded = gen.builder.build_load(switch_ptr.clone(), IrType::I16)?;
+        let loaded = gen.builder.build_load(switch_ptr.clone(), switch_ir_type.clone())?;
         let eq = gen.builder.build_binary(
             IrBinaryOp::Eq,
             Value::Temp(loaded),

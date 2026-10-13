@@ -1,8 +1,12 @@
 #include "wad_io.h"
+#include "doom_build_config.h"
 #include <stdlib.h>
 
 #ifdef RIPPLE
 #include <mmio.h>
+/* The leaf copies an already selected disk span and returns the advanced
+ * canonical destination. It retains the cursor across all words in registers. */
+extern uint16_t *Doom_ReadStorageWords(uint16_t *dest, uint16_t count);
 #else
 #include <stdio.h>
 #endif
@@ -42,11 +46,57 @@ int wad_u32(const WadOctet *bytes, uint32_t length, uint32_t offset, uint32_t *o
     return 1;
 }
 
+int wad_read_words(WadFile *wad, uint32_t offset, uint16_t *dest, uint32_t count) {
+#if DOOM_WAD_MODE != 0
+    if (!wad_range(DOOM_ASSET_TOTAL_WORDS, offset, count))
+        return wad_fail(wad, "read outside asset image");
+    if (count == 0) return 1;
+    if (!dest) return wad_fail(wad, "null asset destination");
+#ifdef RIPPLE
+    /* Disk addresses count words. Split at each 32,768-word block boundary;
+     * the leaf handles RAM boundaries without any per-word bit operations. */
+    while (count != 0) {
+        uint16_t within = (uint16_t)offset & 32767U;
+        uint16_t chunk = 32768U - within;
+        if ((uint32_t)chunk > count) chunk = (uint16_t)count;
+        mmio_write(MMIO_STORE_BLOCK, (uint16_t)(offset >> 15));
+        mmio_write(MMIO_STORE_ADDR, within);
+        dest = Doom_ReadStorageWords(dest, chunk);
+        offset += chunk;
+        count -= chunk;
+    }
+#else
+    if (!wad->asset_file) {
+        wad->asset_file = fopen(DOOM_ASSET_PATH, "rb");
+        if (!wad->asset_file) return wad_fail(wad, "cannot open asset image");
+    }
+    /* Host C bytes are octets; do not cast serialized words to host structs. */
+    if (fseek((FILE *)wad->asset_file, (long)((unsigned long)offset * 2UL), SEEK_SET))
+        return wad_fail(wad, "asset seek failed");
+    while (count != 0) {
+        int lo = fgetc((FILE *)wad->asset_file);
+        int hi = fgetc((FILE *)wad->asset_file);
+        if (lo == EOF || hi == EOF) return wad_fail(wad, "short asset read");
+        *dest++ = (uint16_t)((unsigned int)lo | ((unsigned int)hi << 8));
+        --count;
+    }
+#endif
+    return 1;
+#else
+    return wad_fail(wad, "word reads require expanded asset storage");
+#endif
+}
+
 int wad_read(WadFile *wad, uint32_t offset, WadOctet *dest, uint32_t count) {
     if (!wad_range(wad->length, offset, count)) return wad_fail(wad, "read outside WAD");
     if (count == 0) return 1;
     if (!dest) return wad_fail(wad, "null read destination");
 #ifdef RIPPLE
+#if DOOM_WAD_MODE != 0
+    /* Each serialized octet already occupies a complete disk word, exactly
+     * matching a Ripple C byte. Native validation still reads the source WAD. */
+    return wad_read_words(wad, offset, (uint16_t *)dest, count);
+#else
     /* A storage block contains 65,536 octets / 32,768 little-endian words.
      * MMIO's address register selects a word; it auto-increments per read.
      * Reprogram at every block boundary rather than relying on wrap behavior. */
@@ -76,6 +126,7 @@ int wad_read(WadFile *wad, uint32_t offset, WadOctet *dest, uint32_t count) {
         }
         if (chunk != 0) *dest++ = (WadOctet)(mmio_read(MMIO_STORE_DATA) & 255U);
     }
+#endif
 #else
     if (!wad->host_file) return wad_fail(wad, "WAD is not open");
     if (fseek((FILE *)wad->host_file, (long)offset, SEEK_SET) != 0)
@@ -98,8 +149,10 @@ void wad_close(WadFile *wad) {
     wad->lumps = NULL;
 #ifndef RIPPLE
     if (wad->host_file) fclose((FILE *)wad->host_file);
+    if (wad->asset_file) fclose((FILE *)wad->asset_file);
 #endif
     wad->host_file = NULL;
+    wad->asset_file = NULL;
     wad->length = 0;
     wad->lump_count = 0;
     wad->directory_offset = 0;
@@ -107,6 +160,7 @@ void wad_close(WadFile *wad) {
 
 int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_length) {
     wad->host_file = NULL;
+    wad->asset_file = NULL;
     wad->lumps = NULL;
     wad->length = expected_octet_length;
     wad->lump_count = 0;
@@ -127,6 +181,57 @@ int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_leng
         if (length < 0 || (unsigned long)length != (unsigned long)expected_octet_length) {
             wad_close(wad);
             return wad_fail(wad, "WAD length differs from fixture manifest");
+        }
+    }
+#endif
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+    {
+        uint16_t header[32];
+        if (expected_octet_length != DOOM_WAD_LENGTH)
+            return wad_fail(wad, "asset source length mismatch");
+        if (!wad_read_words(wad, DOOM_ASSET_HEADER_WORD, header, 32UL)) return 0;
+        if (header[0] != 0x5257U || header[1] != 0x4144U
+            || header[2] != 2U || header[3] != 1U
+            || header[4] != (uint16_t)DOOM_WAD_LENGTH
+            || header[5] != (uint16_t)(DOOM_WAD_LENGTH >> 16)
+            || header[6] != (uint16_t)DOOM_ASSET_LUMP_COUNT
+            || header[7] != (uint16_t)(DOOM_ASSET_LUMP_COUNT >> 16)
+            || header[8] != (uint16_t)DOOM_ASSET_INDEX_WORD
+            || header[9] != (uint16_t)(DOOM_ASSET_INDEX_WORD >> 16)
+            || header[10] != (uint16_t)DOOM_ASSET_TOTAL_WORDS
+            || header[11] != (uint16_t)(DOOM_ASSET_TOTAL_WORDS >> 16)
+            || header[12] != DOOM_ASSET_FINGERPRINT_LO
+            || header[13] != DOOM_ASSET_FINGERPRINT_HI
+            || header[14] != (uint16_t)DOOM_ASSET_DIRECTORY_WORD
+            || header[15] != (uint16_t)(DOOM_ASSET_DIRECTORY_WORD >> 16)
+            || header[16] != (uint16_t)DOOM_ASSET_HASH_HEADS_WORD
+            || header[17] != (uint16_t)(DOOM_ASSET_HASH_HEADS_WORD >> 16)
+            || header[18] != (uint16_t)DOOM_ASSET_PNAMES_WORD
+            || header[19] != (uint16_t)(DOOM_ASSET_PNAMES_WORD >> 16)
+            || header[20] != (uint16_t)DOOM_ASSET_PNAMES_COUNT
+            || header[21] != (uint16_t)(DOOM_ASSET_PNAMES_COUNT >> 16)
+            || header[22] != (uint16_t)DOOM_ASSET_PNAMES_LUMP
+            || header[23] != (uint16_t)(DOOM_ASSET_PNAMES_LUMP >> 16)
+            || header[24] != 1U || header[25] != 18U
+            || header[26] != 1U || header[27] != 1U
+            || header[28] != 0U || header[29] != 0U
+            || header[30] != 0U || header[31] != 0U) {
+            wad_close(wad);
+            return wad_fail(wad, "cooked asset version or source mismatch");
+        }
+        /* The compiled manifest fixes the complete non-overlapping layout.
+         * Check spans before any metadata can become guest pointers. */
+        if (DOOM_ASSET_LUMP_COUNT == 0UL || DOOM_ASSET_LUMP_COUNT > 32767UL
+            || DOOM_ASSET_PNAMES_COUNT > 32767UL
+            || DOOM_ASSET_INDEX_WORD != DOOM_ASSET_HEADER_WORD + 32UL
+            || DOOM_ASSET_DIRECTORY_WORD != DOOM_ASSET_INDEX_WORD + DOOM_ASSET_LUMP_COUNT * 4UL
+            || DOOM_ASSET_HASH_HEADS_WORD != DOOM_ASSET_DIRECTORY_WORD + DOOM_ASSET_LUMP_COUNT * 18UL
+            || DOOM_ASSET_PNAMES_WORD != DOOM_ASSET_HASH_HEADS_WORD + DOOM_ASSET_LUMP_COUNT
+            || !wad_range(DOOM_ASSET_TOTAL_WORDS, DOOM_ASSET_PNAMES_WORD, DOOM_ASSET_PNAMES_COUNT)
+            || (DOOM_ASSET_PNAMES_LUMP != UINT32_MAX && DOOM_ASSET_PNAMES_LUMP >= DOOM_ASSET_LUMP_COUNT)
+            || (DOOM_ASSET_PNAMES_LUMP == UINT32_MAX && DOOM_ASSET_PNAMES_COUNT != 0UL)) {
+            wad_close(wad);
+            return wad_fail(wad, "invalid cooked metadata layout");
         }
     }
 #endif

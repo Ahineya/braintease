@@ -11,6 +11,7 @@
 #include "i_system.h"
 #include "w_wad.h"
 #include "z_zone.h"
+#include "asset_metadata.h"
 
 void I_Error(char *format, ...)
 {
@@ -62,6 +63,33 @@ static void check_directory(void)
     check(W_CheckNumForName("ABSENT") == -1, "absent name");
 }
 
+static void check_original_directory(wad_file_t *file)
+{
+    byte header[12], record[16];
+    uint32_t offset;
+    unsigned int i, j;
+    int found;
+    char name[9];
+    check(W_Read(file, 0UL, header, 12UL) == 12UL, "reference header");
+    offset = DoomReadLE32(header + 8);
+    for (i = 0; i < numlumps; ++i, offset += 16UL) {
+        check(W_Read(file, offset, record, 16UL) == 16UL, "reference record");
+        check(lumpinfo[i].position == DoomReadLE32(record) &&
+              lumpinfo[i].size == DoomReadLE32(record + 4), "decoded directory fields");
+        check(lumpinfo[i].wad_file == file && lumpinfo[i].cache == NULL,
+              "relocated directory pointers");
+        for (j = 0; j < 8; ++j)
+            check(lumpinfo[i].name[j] == record[8 + j], "original directory name");
+        DoomReadName8(record + 8, name);
+        /* Every occurrence must resolve to itself or a later equal name.
+         * Checking all occurrences proves last-duplicate priority without a
+         * quadratic guest-side reference search. */
+        found = W_CheckNumForName(name);
+        check(found >= (int)i && found < (int)numlumps &&
+              !strncasecmp(lumpinfo[found].name, name, 8), "prepared hash lookup");
+    }
+}
+
 int main(void)
 {
     byte *names, *data;
@@ -70,13 +98,18 @@ int main(void)
     unsigned int missing = 0;
     int lump;
     int *lookup;
+    int *prepared;
+    uint32_t prepared_count;
+    wad_file_t *file;
     char name[9];
 
     Z_Init();
-    check(W_AddFile(DOOM_WAD_PATH) != NULL, "open configured WAD");
+    file = W_AddFile(DOOM_WAD_PATH);
+    check(file != NULL, "open configured WAD");
     check_directory();
     W_GenerateHashTable();
     check_directory();
+    check_original_directory(file);
 
     lump = W_GetNumForName("PNAMES");
     names_length = W_LumpLength(lump);
@@ -94,6 +127,15 @@ int main(void)
     /* Shareware retains unused registered-game names; only texture
      * references require a corresponding patch lump. */
     check(missing == 187, "unused PNAMES entries");
+    prepared = W_LoadPatchNames(lump, &prepared_count);
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+    check(prepared != NULL && prepared_count == count, "prepared PNAMES count");
+    for (n = 0; n < count; ++n)
+        check(prepared[n] == lookup[n], "prepared PNAMES reference lookup");
+    Z_Free(prepared);
+#else
+    check(prepared == NULL, "raw PNAMES path");
+#endif
     W_ReleaseLumpNum(lump);
 
     lump = W_GetNumForName("TEXTURE1");

@@ -10,6 +10,16 @@
 #include "w_wad.h"
 #include "wad_io.h"
 #include "z_zone.h"
+#include "asset_metadata.h"
+
+/* Synthetic raw records deliberately exercise the portable decoder. The
+ * cooked directory is checked against the original WAD in wad_lookup. */
+int W_LoadAssetDirectory(wad_file_t *wad, lumpinfo_t *dest, unsigned int count)
+{
+    (void)wad; (void)dest; (void)count;
+    return 0;
+}
+int W_LoadAssetHash(lumpinfo_t **heads) { (void)heads; return 0; }
 
 static WadOctet image[284];
 static wad_file_t file;
@@ -152,12 +162,20 @@ static void directory_case(unsigned int count)
     size_t bytes = (size_t)count * sizeof(lumpinfo_t);
     void *dirty;
     prepare(count);
-    /* Reuse nonzero heap storage, so omitted field initialization cannot hide
-     * behind the VM's initially zero tape. No allocation occurs in W_OpenFile. */
+    /* Reuse nonzero storage from the directory's allocator, so omitted field
+     * initialization cannot hide behind initially zero tape. */
+#ifdef RIPPLE
+    dirty = Z_Malloc(bytes, PU_STATIC, NULL);
+#else
     dirty = malloc(bytes);
+#endif
     check(dirty != NULL, "poison allocation");
     memset(dirty, 0x5a, bytes);
+#ifdef RIPPLE
+    Z_Free(dirty);
+#else
     free(dirty);
+#endif
     check(W_AddFile("synthetic") == &file && numlumps == count, "directory count");
     check(read_offsets[0] == 0UL && read_lengths[0] == 12UL, "header read");
     check(read_offsets[1] == 12UL, "directory start");
@@ -188,11 +206,19 @@ int main(void)
     directory_case(1);
     /* W_AddFile deliberately supports one input. Reset its public directory
      * state between independent fixtures; it releases the old hash itself. */
+#ifdef RIPPLE
+    Z_Free(lumpinfo);
+#else
     free(lumpinfo);
+#endif
     lumpinfo = NULL;
     numlumps = 0;
     directory_case(17);
+#ifdef RIPPLE
+    Z_Free(lumpinfo);
+#else
     free(lumpinfo);
+#endif
     lumpinfo = NULL;
     numlumps = 0;
     prepare(1);

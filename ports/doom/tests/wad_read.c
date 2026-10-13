@@ -15,6 +15,12 @@ static const WadOctet first_boundary[] = {
     0, 32, 0, 0, 0, 26, 0, 0, 0, 25, 0, 0,
     0, 25, 0, 0, 0, 25, 0, 0, 0, 2, 0, 2
 };
+/* Expanded images reach their next 65,536-octet disk block at logical
+ * WAD offset 32,768. Packed images still use the original byte boundary. */
+static const WadOctet expanded_boundary[] = {
+    0, 206, 0, 251, 0, 252, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
 static const WadOctet second_boundary[] = {
     0, 0, 0, 0, 0, 214, 1, 255, 255, 99, 1, 32, 1, 1, 0, 0
 };
@@ -78,6 +84,7 @@ static void bulk_case(WadFile *wad, uint32_t offset,
     uint32_t i;
     uint32_t sum = 0;
     uint32_t weighted = 0;
+    uint16_t seen[256] = {0};
     check(allocation != NULL, "bulk allocation");
     data = allocation + 1;
     allocation[0] = 195;
@@ -89,11 +96,14 @@ static void bulk_case(WadFile *wad, uint32_t offset,
     check(allocation[0] == 195 && data[count] == 195, "bulk guards");
     for (i = 0; i < count; ++i) {
         check(data[i] <= 255U, "bulk octet width");
+        seen[data[i]] = 1;
         sum += (uint32_t)data[i];
         weighted += (uint32_t)data[i] * ((i & 255UL) + 1UL);
     }
     check(sum == expected_sum && weighted == expected_weighted,
           "bulk independent checksums");
+    for (i = 0; i < 256UL; ++i)
+        check(seen[i] == 1, "bulk covers every octet value");
     free(allocation);
 }
 #endif
@@ -118,6 +128,8 @@ int main(void)
     read_case(&wad, 1UL, header + 1, 10);
     read_case(&wad, 4UL, header + 4, 1);
     read_case(&wad, 5UL, header + 5, 1);
+    read_case(&wad, 32760UL, expanded_boundary, 24);
+    read_case(&wad, 32767UL, expanded_boundary + 7, 2);
     read_case(&wad, 65528UL, first_boundary, 24);
     read_case(&wad, 65535UL, first_boundary + 7, 2);
     read_case(&wad, 65535UL, first_boundary + 7, 1);

@@ -38,6 +38,7 @@
 
 #include "wad_io.h"
 #include "doom_decode.h"
+#include "asset_metadata.h"
 
 //
 // GLOBALS
@@ -77,14 +78,22 @@ static void ExtendLumpInfo(int newnumlumps)
     unsigned int i;
 
     size_t bytes = (size_t)newnumlumps * sizeof(lumpinfo_t);
+#ifdef RIPPLE
+    /* The runtime heap has already reserved the entire 8 Mi-cell Doom zone.
+     * A later malloc places this frequently accessed directory beyond it.
+     * Keep permanent entries near the start of the zone instead, shortening
+     * the BF tape traversal for both loading and subsequent name lookups. */
+    newlumpinfo = Z_Malloc(bytes, PU_STATIC, NULL);
+#else
     newlumpinfo = malloc(bytes);
+#endif
 
     if (newlumpinfo == NULL)
     {
 	I_Error ("Couldn't realloc lumpinfo");
     }
     // W_AddFile initializes every field as it decodes each new entry. Clearing
-    // this distant heap array first would write the entire directory twice.
+    // the array first would write the entire directory twice.
 
     // Copy over lumpinfo_t structures from the old array. If any of
     // these lumps have been cached, we need to update the user
@@ -108,7 +117,11 @@ static void ExtendLumpInfo(int newnumlumps)
     }
 
     // All done.
+#ifdef RIPPLE
+    if (lumpinfo != NULL) Z_Free(lumpinfo);
+#else
     free(lumpinfo);
+#endif
     lumpinfo = newlumpinfo;
     numlumps = newnumlumps;
 }
@@ -155,38 +168,41 @@ wad_file_t *W_AddFile (char *filename)
         directory > file_length || count * 16UL > file_length - directory)
         I_Error("IWAD directory is invalid or has too many lump IDs");
     ExtendLumpInfo((int)count);
-    offset = directory;
-    remaining = (unsigned int)count;
-    lump = lumpinfo;
-    while (remaining != 0)
+    if (!W_LoadAssetDirectory(wad_file, lumpinfo, (unsigned int)count))
     {
-        unsigned int batch = remaining < 16U ? remaining : 16U;
-        uint32_t bytes = (uint32_t)batch * 16UL;
-        WadOctet *record = records;
-        if (W_Read(wad_file, offset, records, bytes) != bytes)
-            I_Error("Truncated IWAD directory record");
-        offset += bytes;
-        remaining -= batch;
-        // Bound each read, then walk both arrays. This avoids a file-class call
-        // and a wide indexed address calculation for every directory entry.
-        while (batch != 0)
+        offset = directory;
+        remaining = (unsigned int)count;
+        lump = lumpinfo;
+        while (remaining != 0)
         {
-            uint32_t position = DoomReadLE32(record);
-            uint32_t size = DoomReadLE32(record + 4);
-            // Validate local decoded values before publishing the entry.
-            // Reading them back from a distant heap bank costs far more on
-            // the Brainfuck CPU than checking the stack-resident record.
-            if (position > file_length || size > file_length - position)
-                I_Error("IWAD lump lies outside configured file");
-            lump->position = position;
-            lump->size = size;
-            lump->wad_file = wad_file;
-            lump->cache = NULL;
-            lump->next = NULL;
-            memcpy(lump->name, record + 8, 8);
-            record += 16;
-            ++lump;
-            --batch;
+            unsigned int batch = remaining < 16U ? remaining : 16U;
+            uint32_t bytes = (uint32_t)batch * 16UL;
+            WadOctet *record = records;
+            if (W_Read(wad_file, offset, records, bytes) != bytes)
+                I_Error("Truncated IWAD directory record");
+            offset += bytes;
+            remaining -= batch;
+            // Bound each read, then walk both arrays. This avoids a file-class call
+            // and a wide indexed address calculation for every directory entry.
+            while (batch != 0)
+            {
+                uint32_t position = DoomReadLE32(record);
+                uint32_t size = DoomReadLE32(record + 4);
+                // Validate local decoded values before publishing the entry.
+                // Reading them back from a distant heap bank costs far more on
+                // the Brainfuck CPU than checking the stack-resident record.
+                if (position > file_length || size > file_length - position)
+                    I_Error("IWAD lump lies outside configured file");
+                lump->position = position;
+                lump->size = size;
+                lump->wad_file = wad_file;
+                lump->cache = NULL;
+                lump->next = NULL;
+                memcpy(lump->name, record + 8, 8);
+                record += 16;
+                ++lump;
+                --batch;
+            }
         }
     }
     if (lumphash != NULL)
@@ -510,6 +526,7 @@ void W_GenerateHashTable(void)
     if (numlumps > 0)
     {
         lumphash = Z_Malloc(sizeof(lumpinfo_t *) * numlumps, PU_STATIC, NULL);
+        if (W_LoadAssetHash(lumphash)) return;
         memset(lumphash, 0, sizeof(lumpinfo_t *) * numlumps);
 
         for (i=0; i<numlumps; ++i)
@@ -568,4 +585,3 @@ void W_CheckCorrectIWAD(GameMission_t mission)
         }
     }
 }
-

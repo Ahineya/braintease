@@ -6,6 +6,7 @@ ROOT="$(cd "$PORT/../.." && pwd)"
 scene=title
 detail=high
 wad="${DOOM_WAD:-$PORT/assets/doom1.wad}"
+wad_mode="${DOOM_WAD_MODE:-${WAD_MODE:-cooked}}"
 build="${DOOM_BUILD:-$PORT/build}"
 case "$build" in /*) ;; *) build="$PWD/$build";; esac
 out="$build/run"
@@ -23,6 +24,7 @@ Usage: ports/doom/run.sh [options]
   --scene title|e1m1       Initial scene (default: title)
   --low-detail            Faster, coarser world rendering; F5 also toggles it
   --wad FILE              Shareware WAD (default: assets/doom1.wad)
+  --wad-mode MODE         packed, expanded or cooked (default: cooked)
   --build-only            Build without opening the VM
   --headless              Capture a frame without a window
   --frame N               Presentation to capture (default: 1)
@@ -41,6 +43,7 @@ while [[ $# -gt 0 ]]; do
     --scene) value "$@"; scene="$2"; shift 2;;
     --low-detail) detail=low; shift;;
     --wad) value "$@"; wad="$2"; shift 2;;
+    --wad-mode) value "$@"; wad_mode="$2"; shift 2;;
     --build-only) build_only=1; shift;;
     --headless) headless=1; shift;;
     --frame) value "$@"; frame="$2"; shift 2;;
@@ -55,6 +58,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$scene" == title || "$scene" == e1m1 ]] || fail 'scene must be title or e1m1'
+[[ "$wad_mode" == packed || "$wad_mode" == expanded || "$wad_mode" == cooked ]] || fail 'WAD mode must be packed, expanded or cooked'
 [[ -z "$clock" || "$clock" == paced || "$clock" == unthrottled || "$clock" == stepped ]] || fail 'clock must be paced, unthrottled or stepped'
 for numeric in "$frame" "$instructions" "$timeout" "$jobs"; do
   [[ "$numeric" =~ ^[1-9][0-9]*$ ]] || fail 'frame, instruction limit, timeout and jobs must be positive integers'
@@ -72,11 +76,11 @@ start_map=0
 low_detail=0
 [[ "$scene" == e1m1 ]] && start_map=1
 [[ "$detail" == low ]] && low_detail=1
-make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=ripple "BUILD=$build" "WAD=$wad" "START_MAP=$start_map" "LOW_DETAIL=$low_detail"
+make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=ripple "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "START_MAP=$start_map" "LOW_DETAIL=$low_detail"
 [[ "$build_only" == 0 ]] || exit 0
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
-node "$PORT/tools/build-support.mjs" disk "$wad" "$out/doom1.wad" > "$out/disk-image.json"
+node "$PORT/tools/build-support.mjs" disk "$wad" "$out/doom1.wad" "$wad_mode" "$build/manifest.json" > "$out/disk-image.json"
 if [[ -z "$clock" ]]; then
   if [[ "$headless" == 1 ]]; then clock=unthrottled; else clock=paced; fi
 fi

@@ -6,6 +6,7 @@ ROOT="$(cd "$PORT/../.." && pwd)"
 build="${DOOM_BUILD:-$PORT/build}"
 case "$build" in /*) ;; *) build="$PWD/$build";; esac
 wad="${DOOM_WAD:-$PORT/assets/doom1.wad}"
+wad_mode="${DOOM_WAD_MODE:-${WAD_MODE:-cooked}}"
 out="$build/run-bf"
 scene=title
 detail=high
@@ -28,6 +29,7 @@ There is no default timeout. Close the window or press Ctrl-C to stop.
   --scene title|e1m1  Initial scene (default: title)
   --low-detail       Start with coarser world rendering
   --wad FILE         IWAD (default: bundled shareware WAD)
+  --wad-mode MODE    packed, expanded or cooked (default: cooked)
   --output DIRECTORY Disk copy, manifest and default report (default: build/run-bf)
   --report FILE      Override the execution report path
   --jobs N           Parallel compiler jobs (default: 4)
@@ -41,7 +43,8 @@ Use rbf --help for their syntax. Its default clock is unthrottled logical time.
 
 Cargo checks release tool freshness, then Make reuses current engine objects.
 The image is ports/doom/build/ripple/engine/engine.bf. DOOM_BUILD and DOOM_WAD
-override the build directory and WAD. A padded COPY of the WAD is mounted;
+override the build directory and WAD. DOOM_WAD_MODE selects the asset format.
+A copy of the matching generated disk image is mounted; the WAD stays intact.
 --disk and --max-tape-cells are configured by this launcher.
 
 This keeps Doom's 64,000-cell banks and 256 RAM banks. Tape alone needs over
@@ -59,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --scene) value "$@"; scene="$2"; shift 2;;
     --low-detail) detail=low; shift;;
     --wad) value "$@"; wad="$2"; shift 2;;
+    --wad-mode) value "$@"; wad_mode="$2"; shift 2;;
     --output) value "$@"; out="$2"; shift 2;;
     --report) value "$@"; report="$2"; shift 2;;
     --report=*) report="${1#*=}"; [[ -n "$report" ]] || fail '--report requires a value'; shift;;
@@ -69,6 +73,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$scene" == title || "$scene" == e1m1 ]] || fail 'scene must be title or e1m1'
+[[ "$wad_mode" == packed || "$wad_mode" == expanded || "$wad_mode" == cooked ]] || fail 'WAD mode must be packed, expanded or cooked'
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || fail 'jobs must be a positive integer'
 [[ -f "$wad" ]] || fail "WAD not found: $wad"
 wad="$(cd "$(dirname "$wad")" && pwd)/$(basename "$wad")"
@@ -82,7 +87,7 @@ low_detail=0
 [[ "$scene" == e1m1 ]] && start_map=1
 [[ "$detail" == low ]] && low_detail=1
 make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=bf "BUILD=$build" "WAD=$wad" \
-  "START_MAP=$start_map" "LOW_DETAIL=$low_detail"
+  "WAD_MODE=$wad_mode" "START_MAP=$start_map" "LOW_DETAIL=$low_detail"
 [[ "$build_only" == 0 ]] || exit 0
 
 image="$build/ripple/engine/engine.bf"
@@ -97,7 +102,7 @@ if [[ ${#args[@]} -gt 0 ]]; then
   done
 fi
 if [[ -z "$report" && "$forwarded_report" == 0 ]]; then report="$out/$scene.json"; fi
-node "$PORT/tools/build-support.mjs" disk "$wad" "$out/doom1.wad" > "$out/disk-image.json"
+node "$PORT/tools/build-support.mjs" disk "$wad" "$out/doom1.wad" "$wad_mode" "$build/manifest.json" > "$out/disk-image.json"
 command=("$ROOT/target/release/rbf" "$image" "$mode" --disk "$out/doom1.wad"
   --max-tape-cells "$tape_cells")
 [[ -z "$report" ]] || command+=(--report "$report")

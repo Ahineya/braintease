@@ -48,25 +48,50 @@ export function run(label, command, out, timeout = 120) {
   }
   return fs.readFileSync(stdout, 'utf8');
 }
-export function prepareDisk(wad, disk) {
+export const WAD_MODES = ['packed', 'expanded', 'cooked'];
+export function prepareDisk(wad, disk, { wadMode = 'packed', manifest } = {}) {
+  require(WAD_MODES.includes(wadMode), 'unknown WAD storage mode: ' + wadMode);
   const source = fs.realpathSync(wad);
   const destination = fs.existsSync(disk) ? fs.realpathSync(disk) : path.resolve(disk);
   require(source !== destination, 'VM disk must differ from source WAD');
+  if (fs.existsSync(disk)) {
+    const a = fs.statSync(source), b = fs.statSync(disk);
+    require(a.dev !== b.dev || a.ino !== b.ino, 'VM disk must not be a hard link to source WAD');
+  }
   const data = fs.readFileSync(source);
+  if (manifest) {
+    const built = json(manifest), asset = built.asset_image;
+    require(built.wad?.sha256 === hash(data) && built.settings?.wad_mode === wadMode,
+      'build manifest does not match requested WAD or storage mode; rebuild before testing');
+    require(asset && asset.mode === wadMode && asset.source_sha256 === hash(data),
+      'build manifest has no matching prebuilt asset image');
+    const assetPath = fs.realpathSync(asset.path), image = fs.readFileSync(assetPath);
+    require(image.length === asset.octets && hash(image) === asset.sha256,
+      'prebuilt asset image differs from build manifest');
+    require(destination !== assetPath, 'test disk must differ from prebuilt asset image');
+    if (fs.existsSync(disk)) {
+      const a = fs.statSync(assetPath), b = fs.statSync(disk);
+      require(a.dev !== b.dev || a.ino !== b.ino, 'test disk must not be a hard link to asset image');
+    }
+    mkdir(path.dirname(disk)); fs.writeFileSync(disk, image);
+    return { ...asset, path: disk, prepared_path: assetPath, build_manifest: path.resolve(manifest) };
+  }
+  require(wadMode === 'packed', 'expanded/cooked tests require a matching build manifest');
   const image = Buffer.alloc(Math.ceil(data.length / 65536) * 65536);
   data.copy(image);
   mkdir(path.dirname(disk));
   fs.writeFileSync(disk, image);
-  return { path: disk, octets: image.length, padding_octets: image.length - data.length, sha256: hash(image) };
+  return { path: disk, mode: wadMode, octets: image.length, padding_octets: image.length - data.length, sha256: hash(image) };
 }
-export function build(program, out, { wad = WAD, target = 'both', startMap = false, lowDetail = false } = {}) {
+export function build(program, out, { wad = WAD, wadMode = process.env.DOOM_WAD_MODE || 'cooked', target = 'both', startMap = false, lowDetail = false } = {}) {
+  require(WAD_MODES.includes(wadMode), 'unknown WAD storage mode: ' + wadMode);
   console.log('Building ' + program + ' (' + target + ')');
   run('build-' + program + (startMap ? '-map' : '-title'), ['make', '-C', PORT,
-    'PROGRAM=' + program, 'TARGET=' + target, 'WAD=' + path.resolve(wad), 'BUILD=' + BUILD,
+    'PROGRAM=' + program, 'TARGET=' + target, 'WAD=' + path.resolve(wad), 'WAD_MODE=' + wadMode, 'BUILD=' + BUILD,
     'START_MAP=' + Number(startMap), 'LOW_DETAIL=' + Number(lowDetail), 'all'], out, 900);
 }
 export function compileRust(source, output, out) {
-  run('build-' + path.basename(output), ['rustc', '--edition=2021', '-O', source,
+  run('build-' + path.basename(output), ['rustc', '--edition=2021', '-O', '-C', 'lto=thin', source,
     '--extern', 'rvm=' + RLIB, '-L', 'dependency=' + path.join(ROOT, 'target/release/deps'), '-o', output], out, 180);
 }
 export function frameRows(output) {

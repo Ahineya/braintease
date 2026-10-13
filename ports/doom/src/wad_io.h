@@ -16,6 +16,7 @@ typedef struct WadLump {
 
 typedef struct WadFile {
     void *host_file;
+    void *asset_file;
     uint32_t length;
     uint32_t directory_offset;
     uint32_t lump_count;
@@ -32,6 +33,9 @@ int wad_open(WadFile *wad, const char *path, uint32_t expected_octet_length);
 int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_length);
 void wad_close(WadFile *wad);
 int wad_read(WadFile *wad, uint32_t offset, WadOctet *dest, uint32_t count);
+/* Read physical 16-bit words from the configured expanded/cooked image. Word
+ * offsets are deliberately distinct from logical WAD octet offsets. */
+int wad_read_words(WadFile *wad, uint32_t word_offset, uint16_t *dest, uint32_t count);
 int wad_read_lump(WadFile *wad, const WadLump *lump, uint32_t offset,
                   WadOctet *dest, uint32_t count);
 /* Last matching name wins, as in Doom. Names are at most eight ASCII chars. */

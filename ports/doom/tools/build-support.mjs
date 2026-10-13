@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { WAD_MODES, checkMode, packAssets, cachedAssets, assertSeparateFile, writeAtomic } from './assets-pack.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function write(file, content) {
@@ -31,31 +32,58 @@ function sourceIdentity() {
 
 try {
   const [action, ...args] = process.argv.slice(2);
-  if (action === 'config') {
-    const [source, generated, manifest, bank = '64000', program = 'engine', startMap = '0', lowDetail = '0', defines = '', rippleFlags = '', cc = 'clang', cflags = '', cppflags = '', ldflags = ''] = args;
+  if (action === 'config-key') {
+    const [source, mode = 'cooked', bank = '64000', generated = ''] = args;
+    checkMode(mode);
+    const wad = fs.realpathSync(source);
+    // Make compares this content key per program, independent of the shared
+    // header's mtime. Include the generator so layout changes invalidate old
+    // consumers even when the original WAD is unchanged.
+    process.stdout.write(`${sha(json({ wad, source: sha(fs.readFileSync(wad)), mode, bank, generated: path.resolve(generated),
+      generator: sha(fs.readFileSync(fileURLToPath(new URL('./assets-pack.mjs', import.meta.url)))),
+      config: sha(fs.readFileSync(fileURLToPath(import.meta.url))) }))}\n`);
+  } else if (action === 'config-stamp') {
+    const [file, key] = args;
+    if (!/^[0-9a-f]{64}$/.test(key || '')) throw new Error('invalid build configuration key');
+    write(file, `${key}\n`);
+  } else if (action === 'config-invalidate') {
+    for (const file of args) fs.rmSync(file, { force: true });
+  } else if (action === 'config') {
+    const [source, generated, manifest, bank = '64000', program = 'engine', startMap = '0', lowDetail = '0', defines = '', rippleFlags = '', cc = 'clang', cflags = '', cppflags = '', ldflags = '', wadMode = 'cooked'] = args;
     const wad = fs.realpathSync(source), bytes = fs.readFileSync(wad);
-    write(path.join(generated, 'doom_build_config.h'), `/* Generated: lengths are serialized octets, not sizeof units. */\n#ifndef DOOM_BUILD_CONFIG_H\n#define DOOM_BUILD_CONFIG_H\n#define DOOM_WAD_LENGTH ${bytes.length}UL\n#define DOOM_WAD_PATH ${JSON.stringify(wad)}\n#define DOOM_WAD_SHA256 ${JSON.stringify(sha(bytes))}\n#endif\n`);
+    checkMode(wadMode);
+    const asset = cachedAssets(wad, path.join(path.dirname(manifest), 'assets', `doom-${wadMode}.img`), wadMode);
+    write(path.join(generated, 'doom_build_config.h'), `/* Generated: WAD lengths count octets; asset offsets count 16-bit disk words. */\n#ifndef DOOM_BUILD_CONFIG_H\n#define DOOM_BUILD_CONFIG_H\n#define DOOM_WAD_LENGTH ${bytes.length}UL\n#define DOOM_WAD_PATH ${JSON.stringify(wad)}\n#define DOOM_WAD_SHA256 ${JSON.stringify(sha(bytes))}\n#define DOOM_WAD_MODE ${WAD_MODES[wadMode]}\n#define DOOM_ASSET_PATH ${JSON.stringify(asset.path)}\n#define DOOM_ASSET_VERSION ${asset.format_version}U\n#define DOOM_ASSET_HEADER_WORD ${asset.header_word}UL\n#define DOOM_ASSET_INDEX_WORD ${asset.index_word}UL\n#define DOOM_ASSET_DIRECTORY_WORD ${asset.directory_word}UL\n#define DOOM_ASSET_HASH_HEADS_WORD ${asset.hash_heads_word}UL\n#define DOOM_ASSET_PNAMES_WORD ${asset.pnames_word}UL\n#define DOOM_ASSET_PNAMES_COUNT ${asset.pnames_count}UL\n#define DOOM_ASSET_PNAMES_LUMP ${asset.pnames_lump}UL\n#define DOOM_ASSET_METADATA_ABI ${asset.metadata_abi}U\n#define DOOM_ASSET_DIRECTORY_RECORD_WORDS ${asset.directory_record_words}U\n#define DOOM_ASSET_HASH_ENTRY_WORDS ${asset.hash_entry_words}U\n#define DOOM_ASSET_PNAMES_ENTRY_WORDS ${asset.pnames_entry_words}U\n#define DOOM_ASSET_TOTAL_WORDS ${asset.total_words}UL\n#define DOOM_ASSET_LUMP_COUNT ${asset.lump_count}UL\n#define DOOM_ASSET_FINGERPRINT_LO ${asset.fingerprint_lo}U\n#define DOOM_ASSET_FINGERPRINT_HI ${asset.fingerprint_hi}U\n#endif\n`);
     const upstream = JSON.parse(fs.readFileSync(path.join(port, 'upstream.json')));
     write(manifest, json({ source_model: 'maintained engine/ sources', upstream: { project: upstream.project, repository: upstream.repository, revision: upstream.revision },
-      sources: sourceIdentity(), settings: { program, start_map: startMap === '1', low_detail: lowDetail === '1', defines, ripple_flags: rippleFlags, cc, cflags, cppflags, ldflags },
-      wad: { path: wad, octets: bytes.length, sha256: sha(bytes) }, bank_size: Number(bank), memory_cells: 256 * Number(bank) }));
+      sources: sourceIdentity(), settings: { program, start_map: startMap === '1', low_detail: lowDetail === '1', wad_mode: wadMode, defines, ripple_flags: rippleFlags, cc, cflags, cppflags, ldflags },
+      wad: { path: wad, octets: bytes.length, sha256: sha(bytes) }, asset_image: asset, bank_size: Number(bank), memory_cells: 256 * Number(bank) }));
   } else if (action === 'stamp') {
     write(args[0], json(args.slice(1)));
   } else if (action === 'disk') {
-    const [source, destination] = args;
+    // Two arguments remain packed for existing standalone fixtures. Launchers
+    // pass mode and build manifest so disk bytes match the compiled program.
+    const [source, destination, mode = 'packed', manifest] = args;
+    checkMode(mode);
     const wad = fs.realpathSync(source);
-    const disk = fs.existsSync(destination) ? fs.realpathSync(destination) : path.resolve(destination);
-    if (wad === disk) throw new Error('the VM disk image must differ from the source WAD');
-    if (fs.existsSync(disk)) {
-      const sourceStat = fs.statSync(wad), diskStat = fs.statSync(disk);
-      if (sourceStat.dev === diskStat.dev && sourceStat.ino === diskStat.ino)
-        throw new Error('the VM disk image must not be a hard link to the source WAD');
-    }
     const bytes = fs.readFileSync(wad);
-    const image = Buffer.alloc(Math.ceil(bytes.length / 65536) * 65536);
-    bytes.copy(image);
-    fs.mkdirSync(path.dirname(disk), { recursive: true }); fs.writeFileSync(disk, image);
-    process.stdout.write(json({ path: disk, octets: image.length, padding_octets: image.length - bytes.length, sha256: sha(image) }));
+    let image, metadata, disk;
+    if (manifest) {
+      const build = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+      metadata = build.asset_image;
+      if (!metadata || build.settings?.wad_mode !== mode || metadata.mode !== mode
+          || build.wad?.sha256 !== sha(bytes) || metadata.source_sha256 !== sha(bytes))
+        throw new Error('build manifest WAD or asset mode does not match the requested disk');
+      disk = assertSeparateFile(destination, [wad, metadata.path]);
+      image = fs.readFileSync(metadata.path);
+      if (sha(image) !== metadata.sha256 || image.length !== metadata.octets)
+        throw new Error('cached asset image differs from build manifest; rebuild before running');
+    } else {
+      disk = assertSeparateFile(destination, [wad]);
+      ({ image, metadata } = packAssets(bytes, mode));
+    }
+    writeAtomic(disk, image);
+    process.stdout.write(json({ ...metadata, path: disk }));
   } else if (action === 'bf-tape-cells') {
     // Only read the small layout header; expanded Doom BF can be very large.
     const fd = fs.openSync(args[0], 'r');
@@ -81,5 +109,5 @@ try {
         directory = path.dirname(directory);
       }
     }
-  } else throw new Error('expected config, stamp, disk, bf-tape-cells, run-manifest or native-flags');
+  } else throw new Error('expected config, config-key, config-stamp, config-invalidate, stamp, disk, bf-tape-cells, run-manifest or native-flags');
 } catch (error) { console.error(`error: ${error.message}`); process.exitCode = 1; }

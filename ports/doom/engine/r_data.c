@@ -39,6 +39,7 @@
 #include "r_data.h"
 #include "patch_cache.h"
 #include "doom_decode.h"
+#include "asset_metadata.h"
 
 //
 // Graphics.
@@ -348,7 +349,7 @@ void R_GenerateLookup (int texnum)
 	 i<texture->patchcount;
 	 i++, patch++)
     {
-	realpatch = W_CachePatchNum (patch->patch, PU_CACHE);
+	realpatch = W_CachePatchHeaderNum (patch->patch, PU_CACHE);
 	x1 = patch->originx;
 	x2 = x1 + SHORT(realpatch->width);
 	
@@ -485,18 +486,22 @@ void R_InitTextures(void)
     int mask;
 
     lump = W_GetNumForName("PNAMES");
-    names_len = W_LumpLength(lump);
-    names = W_CacheLumpNum(lump, PU_STATIC);
-    if (names_len < 4UL) I_Error("Truncated PNAMES");
-    count = DoomReadLE32(names);
-    if (count > 32767UL || count > (names_len - 4UL) / 8UL)
-        I_Error("Invalid PNAMES count");
-    lookup = Z_Malloc((size_t)count * sizeof(*lookup), PU_STATIC, NULL);
-    for (n = 0; n < count; ++n) {
-        DoomReadName8(names + 4UL + n * 8UL, name);
-        lookup[n] = W_CheckNumForName(name);
+    lookup = W_LoadPatchNames(lump, &count);
+    if (lookup == NULL)
+    {
+        names_len = W_LumpLength(lump);
+        names = W_CacheLumpNum(lump, PU_STATIC);
+        if (names_len < 4UL) I_Error("Truncated PNAMES");
+        count = DoomReadLE32(names);
+        if (count > 32767UL || count > (names_len - 4UL) / 8UL)
+            I_Error("Invalid PNAMES count");
+        lookup = Z_Malloc((size_t)count * sizeof(*lookup), PU_STATIC, NULL);
+        for (n = 0; n < count; ++n) {
+            DoomReadName8(names + 4UL + n * 8UL, name);
+            lookup[n] = W_CheckNumForName(name);
+        }
+        W_ReleaseLumpNum(lump);
     }
-    W_ReleaseLumpNum(lump);
     texture_lumps[0] = W_GetNumForName("TEXTURE1");
     texture_lumps[1] = W_CheckNumForName("TEXTURE2");
     numtextures = 0;
@@ -592,7 +597,7 @@ void R_InitFlats (void)
 void R_InitSpriteLumps (void)
 {
     int		i;
-    patch_t	*patch;
+    DoomPatchInfo patch;
 	
     firstspritelump = W_GetNumForName (DEH_String("S_START")) + 1;
     lastspritelump = W_GetNumForName (DEH_String("S_END")) - 1;
@@ -607,10 +612,10 @@ void R_InitSpriteLumps (void)
 	if (!(i&63))
 	    printf (".");
 
-	patch = W_CachePatchNum (firstspritelump+i, PU_CACHE);
-	spritewidth[i] = (fixed_t)patch->width * FRACUNIT;
-	spriteoffset[i] = (fixed_t)patch->leftoffset * FRACUNIT;
-	spritetopoffset[i] = (fixed_t)patch->topoffset * FRACUNIT;
+	W_ReadPatchInfoNum (firstspritelump+i, &patch);
+	spritewidth[i] = (fixed_t)patch.width * FRACUNIT;
+	spriteoffset[i] = (fixed_t)patch.leftoffset * FRACUNIT;
+	spritetopoffset[i] = (fixed_t)patch.topoffset * FRACUNIT;
     }
 }
 
@@ -807,7 +812,7 @@ void R_PrecacheLevel (void)
 	{
 	    lump = texture->patches[j].patch;
 	    texturememory += lumpinfo[lump].size;
-	    W_CacheLumpNum(lump , PU_CACHE);
+	    W_CachePatchNum(lump , PU_CACHE);
 	}
     }
 
@@ -836,14 +841,11 @@ void R_PrecacheLevel (void)
 	    {
 		lump = firstspritelump + sf->lump[k];
 		spritememory += lumpinfo[lump].size;
-		W_CacheLumpNum(lump , PU_CACHE);
+		W_CachePatchNum(lump , PU_CACHE);
 	    }
 	}
     }
 
     Z_Free(spritepresent);
 }
-
-
-
 

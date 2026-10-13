@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { PORT, BUILD, WAD, RLIB, BANK, MEMORY, digest, json, mkdir, require,
+import { PORT, BUILD, WAD, WAD_MODES, RLIB, BANK, MEMORY, digest, json, mkdir, require,
   writeJSON, run, prepareDisk, compileRust, frameRows, nativeInput } from './test-support.mjs';
 
 const OPCODES = ['HALT', 'ADD', 'SUB', 'AND', 'OR', 'XOR', 'SLL', 'SRL', 'SLT', 'SLTU',
@@ -120,11 +120,12 @@ export function benchmark(options = {}) {
   const settings = { binary: path.join(BUILD, 'ripple/engine/engine.bin'),
     native: path.join(BUILD, 'native/engine/engine'), objects: path.join(BUILD, 'ripple/engine'),
     wad: WAD, input: path.join(PORT, 'tests/gameplay.json'), output: path.join(BUILD, 'gameplay-benchmark'),
-    frames: 32, mode: 'map', profiles: [], archives: [], ...options };
+    frames: 32, mode: 'map', wadMode: process.env.DOOM_WAD_MODE || 'cooked', manifest: path.join(BUILD, 'manifest.json'), profiles: [], archives: [], ...options };
   require(Number.isSafeInteger(settings.frames) && settings.frames >= 2, 'benchmark needs at least two frames');
   require(settings.profiles.every(frame => Number.isSafeInteger(frame) && frame >= 1 && frame <= settings.frames),
     'profile frames must be inside benchmark range');
   require(['map', 'title'].includes(settings.mode), 'invalid native start mode');
+  require(WAD_MODES.includes(settings.wadMode), 'invalid WAD storage mode');
   const out = path.resolve(settings.output); mkdir(out);
   const result = { success: false };
   try {
@@ -135,7 +136,8 @@ export function benchmark(options = {}) {
     if (path.resolve(settings.binary) !== binary) fs.copyFileSync(settings.binary, binary);
     if (path.resolve(settings.native) !== native) fs.copyFileSync(settings.native, native);
     fs.chmodSync(native, fs.statSync(settings.native).mode);
-    const disk = path.join(out, 'disk.wad'), diskMetadata = prepareDisk(settings.wad, disk);
+    const disk = path.join(out, 'disk.img'), diskMetadata = prepareDisk(settings.wad, disk,
+      { wadMode: settings.wadMode, manifest: settings.manifest });
     const wadHash = digest(settings.wad), driver = path.join(out, 'profile_vm');
     compileRust(path.join(PORT, 'tools/profile_vm.rs'), driver, out);
     console.log('Measuring ' + settings.frames + ' frames with the production Rust VM runner');
@@ -145,7 +147,7 @@ export function benchmark(options = {}) {
     require(rows.length === settings.frames && guestFrames.length === settings.frames, 'missing guest frame records');
     Object.assign(result, { frames: rows, checks: [], binary_sha256: digest(binary), native_sha256: digest(native),
       script_sha256: digest(script), vm_library_sha256: digest(RLIB), disk_image: diskMetadata,
-      bank_size: BANK, memory_cells: MEMORY, seed: 1 });
+      wad_mode: settings.wadMode, bank_size: BANK, memory_cells: MEMORY, seed: 1 });
     for (let frame = 1; frame <= settings.frames; frame++) {
       const raw = path.join(out, 'native-' + frame + '.rgb565');
       fs.rmSync(raw, { force: true });
@@ -192,13 +194,13 @@ export function benchmark(options = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { values } = parseArgs({ options: Object.fromEntries(
-    ['binary', 'native', 'objects', 'wad', 'input', 'output', 'frames', 'mode', 'profile-frame', 'archive', 'help']
+    ['binary', 'native', 'objects', 'wad', 'wad-mode', 'manifest', 'input', 'output', 'frames', 'mode', 'profile-frame', 'archive', 'help']
       .map(name => [name, { type: name === 'help' ? 'boolean' : 'string', multiple: ['profile-frame', 'archive'].includes(name) }])) });
   if (values.help) console.log('Usage: node tools/benchmark.mjs [--frames 32] [--input tests/gameplay.json]\n'
-    + '  [--binary FILE] [--native FILE] [--wad FILE] [--mode map|title]\n'
+    + '  [--binary FILE] [--native FILE] [--wad FILE] [--wad-mode packed|expanded|cooked] [--manifest FILE] [--mode map|title]\n'
     + '  [--output DIRECTORY] [--profile-frame N ...] [--objects DIRECTORY] [--archive FILE ...]');
   else try {
-    benchmark({ ...values, frames: Number(values.frames ?? 32), profiles: (values['profile-frame'] || []).map(Number),
+    benchmark({ ...values, wadMode: values['wad-mode'] ?? (process.env.DOOM_WAD_MODE || 'cooked'), frames: Number(values.frames ?? 32), profiles: (values['profile-frame'] || []).map(Number),
       archives: values.archive || [] });
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
