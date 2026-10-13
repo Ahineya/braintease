@@ -32,6 +32,7 @@ There is no default timeout. Close the window or press Ctrl-C to stop.
   --report FILE      Override the execution report path
   --jobs N           Parallel compiler jobs (default: 4)
   --telemetry        Report progress on stderr (forwarded to rbf)
+  --profile FILE     Write generic BF operation timings on exit (adds overhead)
   --timeout SECONDS  Optional execution time limit (forwarded to rbf)
 
 Other rbf options, including --capture-frame, --screenshot, --raw-frame,

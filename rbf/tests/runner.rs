@@ -1,7 +1,7 @@
 //! Host-policy regressions use tiny BF transport programs, without running a
 //! Ripple interpreter or a Doom workload. Every potentially looping case has
 //! independent dispatch and wall-time limits.
-use bf_wasm::engine::Program;
+use bf_wasm::engine::{Profile, Program};
 use rbf::{
     devices::BfDevices,
     image::{Layout, StridedMemory, LANES, ORIGIN, RAM_LANE},
@@ -114,6 +114,31 @@ fn dispatch_limit_stops_a_loop_before_any_cpu_hook() {
     assert_eq!(host.machine.dispatches(), 17);
     assert_eq!(host.instructions, 0);
     assert_eq!(host.machine.tape()[0], 1);
+}
+
+#[test]
+fn profiling_preserves_output_tape_and_limits() {
+    let mut plain = host();
+    let mut profiled = host();
+    profiled.profile = Some(Profile::default());
+    let mut program = TapeProgram::default();
+    program.store(HDR_TTY_OUT, 65);
+    program.at(0);
+    program.source.push_str("+[]");
+    let options = RunOptions { max_dispatches: Some(100), ..limits() };
+    let mut plain_output = Vec::new();
+    let mut profiled_output = Vec::new();
+    let plain_result = run(&mut plain, &program.source, &options, &mut plain_output);
+    let profiled_result = run(&mut profiled, &program.source, &options, &mut profiled_output);
+    assert_eq!(plain_result, profiled_result);
+    assert!(plain_result.unwrap_err().contains("dispatch limit"));
+    assert_eq!(plain_output, b"A");
+    assert_eq!(profiled_output, plain_output);
+    assert_eq!(plain.machine.tape(), profiled.machine.tape());
+    assert_eq!(plain.machine.pointer(), profiled.machine.pointer());
+    let report = profiled.profile.unwrap().report();
+    assert_eq!(report.dispatches, 100);
+    assert!(report.operations.iter().any(|operation| operation.attempts > 0));
 }
 
 #[test]

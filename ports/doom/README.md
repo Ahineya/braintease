@@ -93,6 +93,11 @@ a nonzero status and writes the execution report. `--timeout` bounds execution,
 including BF tape initialization; compilation, export, source parsing and host
 setup happen before that budget starts.
 
+Add `--profile build/run-bf/profile.json` to write an optional breakdown of
+generic BF operation timings and hot navigation-loop source offsets, including
+when the run times out. Profiling adds overhead; use ordinary runs for speed
+comparisons. See [profiling details](../../rbf/README.md#devices-and-automation).
+
 The image is `build/ripple/engine/engine.bf` within this port. The linker writes
 compact ordinary BF initializers directly, avoiding an enormous macro expansion
 for millions of guest instructions. The guest ISA is unchanged; the CPU still

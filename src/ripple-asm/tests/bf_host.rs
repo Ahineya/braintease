@@ -189,6 +189,78 @@ fn memory_banks_and_atomic_host_hooks() {
 }
 
 #[test]
+fn loads_preserve_ram_with_repeated_reads_and_aliased_destinations() {
+    // Include bank edges and RAM sharing an instruction's physical word.
+    // Both evaluators execute literal BF, without the optimized host engine.
+    for (bank, offset, value) in [(3, 63, 0), (2, 0, 1), (0, 56, 32768), (1, 0, 65535)] {
+        let source = format!(
+            "start:\nLI T0, {offset}\nLI T1, {bank}\nLI A0, {value}\n\
+             STORE A0, T1, T0\nLOAD S0, T1, T0\nLOAD S1, T1, T0\n\
+             LOAD R0, T1, T0\nLOAD T0, T1, T0\nMOVE S2, T0\nLI T0, {offset}\n\
+             LOAD T1, T1, T0\nHALT\n"
+        );
+        let address = bank * 64 + offset;
+        let hosted = run_with_fuel(&source, 1_000_000_000);
+        let (output, plain) = run_plain_with_fuel(&source, 1_000_000_000);
+        assert!(output.is_empty(), "unexpected TTY output at {bank}:{offset}: {output:?}");
+        assert_eq!(hosted.reads, [address; 5]);
+        assert_eq!(hosted.writes, [(address, value)]);
+        assert_eq!(hosted.boundaries, 12);
+        for (tape, origin) in [(&hosted.tape, 8), (&plain, 0)] {
+            for register in 0..32 {
+                let expected = match register {
+                    1 => 12,
+                    7 | 16 | 23 | 24 | 25 => value,
+                    15 => offset as u16,
+                    _ => 0,
+                };
+                assert_eq!(tape[origin + 8 * (register + 1) + 1], expected);
+            }
+            for (word, cells) in tape[origin..].chunks_exact(8).enumerate() {
+                assert_eq!(cells[4], if word == address { value } else { 0 },
+                    "LOAD must preserve RAM: bank={bank}, offset={offset}, word={word}");
+                assert_eq!((cells[2], cells[5], cells[6]), (0, 0, 0),
+                    "LOAD must clear pointer/scratch lanes: word={word}");
+            }
+        }
+    }
+}
+
+#[test]
+fn load_can_share_its_destination_bank_and_address_register() {
+    let source = "start:\nLI T0, 2\nLI A0, 53\nSTORE A0, T0, T0\n\
+                  LOAD T0, T0, T0\nLI T1, 2\nLOAD S0, T1, T1\nHALT\n";
+    let hosted = run(source);
+    let (output, plain) = run_plain(source);
+    assert!(output.is_empty());
+    assert_eq!(hosted.reads, [130, 130]);
+    assert_eq!(hosted.writes, [(130, 53)]);
+    for (tape, origin) in [(&hosted.tape, 8), (&plain, 0)] {
+        assert_eq!(tape[origin + 8 * (15 + 1) + 1], 53);
+        assert_eq!(tape[origin + 8 * (23 + 1) + 1], 53);
+        assert_eq!(tape[origin + 8 * 130 + 4], 53);
+    }
+}
+
+#[test]
+fn stores_at_zero_offsets_in_other_banks_do_not_trigger_tty() {
+    let source = "start:\nLI A0, 65\nLI T0, 1\nSTORE A0, T0, R0\n\
+                  LI T0, 2\nSTORE A0, T0, R0\nLI T0, 7\n\
+                  STORE A0, R0, T0\nHALT\n";
+    let hosted = run(source);
+    let (output, plain) = run_plain(source);
+    assert!(output.is_empty(), "only bank 0 offset 0 is TTY: {output:?}");
+    assert_eq!(hosted.writes, [(64, 65), (128, 65), (7, 65)]);
+    for (tape, origin) in [(&hosted.tape, 8), (&plain, 0)] {
+        assert_eq!(tape[origin + 4], 0, "TTY value must remain untouched");
+        assert_eq!(tape[origin + 8 + 4], 0, "TTY flag must remain untouched");
+        for address in [64, 128, 7] {
+            assert_eq!(tape[origin + 8 * address + 4], 65);
+        }
+    }
+}
+
+#[test]
 fn nonzero_entry_and_branches_execute_in_bf() {
     let state = run("HALT\nstart:\nLI T0, 3\nLI A0, 0\nloop:\nADDI A0, A0, 1\nADDI T0, T0, -1\nBNE T0, R0, loop\nSTORE A0, R0, R0\nBRK\nHALT\n");
     assert_eq!(state.writes, [(0, 3)]);

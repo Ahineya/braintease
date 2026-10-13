@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "use_runtime": true,
+  "description": "Bank companions keep one canonical spill home across conditional pointer stores"
+}

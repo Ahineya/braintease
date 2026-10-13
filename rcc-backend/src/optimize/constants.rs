@@ -181,7 +181,7 @@ fn evaluate(
     }
 }
 
-pub(super) fn integer_facts(function: &Function) -> (HashMap<TempId, i64>, HashMap<TempId, IrType>) {
+pub(super) fn value_types(function: &Function) -> HashMap<TempId, IrType> {
     let mut types: HashMap<_, _> = function.parameters.iter().cloned().collect();
     for inst in function.blocks.iter().flat_map(|b| &b.instructions) {
         let ty = match inst {
@@ -197,6 +197,7 @@ pub(super) fn integer_facts(function: &Function) -> (HashMap<TempId, i64>, HashM
             | Instruction::Call { result_type, .. }
             | Instruction::Phi { result_type, .. }
             | Instruction::Select { result_type, .. }
+            | Instruction::GetElementPtr { result_type, .. }
             | Instruction::Intrinsic { result_type, .. } => Some(result_type.clone()),
             Instruction::Cast { target_type, .. } => Some(target_type.clone()),
             _ => None,
@@ -205,6 +206,11 @@ pub(super) fn integer_facts(function: &Function) -> (HashMap<TempId, i64>, HashM
             types.insert(id, ty);
         }
     }
+    types
+}
+
+pub(super) fn integer_facts(function: &Function) -> (HashMap<TempId, i64>, HashMap<TempId, IrType>) {
+    let types = value_types(function);
     // IR temporaries are single-assignment. A bounded fixed point also handles
     // block layouts where a dominating definition is emitted after its use.
     let mut known = HashMap::new();
@@ -338,6 +344,12 @@ fn eliminate_identity_copies(function: &mut Function, types: &HashMap<TempId, Ir
         }
         if before == (aliases.len(), booleans.len()) { break; }
     }
+    substitute_temp_aliases(function, &aliases);
+}
+
+/// Replace exact, typed SSA aliases, including both components of fat pointers.
+/// The alias map must be acyclic and each source must dominate its destination.
+pub(super) fn substitute_temp_aliases(function: &mut Function, aliases: &HashMap<TempId, TempId>) {
     if aliases.is_empty() { return; }
     fn rewrite(value: &mut Value, aliases: &HashMap<TempId, TempId>) {
         match value {

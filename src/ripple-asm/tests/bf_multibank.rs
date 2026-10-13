@@ -264,6 +264,127 @@ fn backward_branch_near_bank_start_uses_wrapping_signed_displacement() {
     assert_eq!(state.register(7), 0);
 }
 
+// Exercise the positioning helper without spending the test on CPU fetches
+// across 65,536 instructions. The independent evaluator knows only BF; its
+// sole extra shortcut folds single-destination decrement/transfer loops.
+// That keeps the full 16-bit wrap cases bounded while checking every cell.
+fn branch_helper_ops() -> Vec<Op> {
+    let (header, _) = include_str!("../src/cpu_header.bfm")
+        .split_once("#define PROGRAM {")
+        .unwrap();
+    let (_, definitions) = include_str!("../src/cpu_footer.bfm")
+        .split_once("// MARK: ----------- CODE END ----------")
+        .unwrap();
+    let (definitions, _) = definitions
+        .split_once("// MARK: ------------ MAIN ---------------")
+        .unwrap();
+    let expanded = MacroExpander::new().expand(
+        &format!("{header}\n{definitions}\n@_branch_to_same_bank\n"),
+        MacroExpanderOptions {
+            strip_comments: true,
+            ..Default::default()
+        },
+    );
+    assert!(expanded.errors.is_empty(), "{:?}", expanded.errors);
+    parse(&expanded.expanded)
+}
+
+#[test]
+fn relative_branch_helper_preserves_all_lanes_at_full_pc_and_wrapping_edges() {
+    let ops = branch_helper_ops();
+    for (old, target) in [
+        (0u16, 0u16),
+        (0, 1),
+        (3, 0),
+        (3, 2),
+        (3, 17),
+        (32768, 32768),
+        (65535, 65535),
+        (65535, 65534),
+        (65534, 65535),
+        (65535, 0),
+        (0, 65535),
+        (32768, 0),
+        (0, 32768),
+    ] {
+        for host in [false, true] {
+            let origin = if host { ORIGIN } else { 0 };
+            // A nonzero physical code bank also tests preservation of its
+            // complete prefix when moving backward to raw PC zero.
+            let bank = 3usize;
+            let prefix = 40 + 4 * bank * 37;
+            let from = prefix + 4 * usize::from(old);
+            let to = prefix + 4 * usize::from(target);
+            let words = from.max(to) + 40;
+            let mut expected = vec![0u16; origin + words * LANES];
+            for word in 0..words {
+                for lane in [0, 1, 3, 4] {
+                    expected[origin + word * LANES + lane] =
+                        (word as u16).wrapping_mul(4051).wrapping_add(lane as u16);
+                }
+                expected[origin + word * LANES + 7] = u16::from(word > 0 && word < to);
+            }
+            expected[origin + 2 * LANES + 1] = target;
+            expected[origin + 3 * LANES + 1] = bank as u16;
+            let mut tape = expected.clone();
+            for word in 0..words {
+                tape[origin + word * LANES + 7] = u16::from(word > 0 && word < from);
+            }
+            tape[origin + (from - 4) * LANES + 5] = old;
+            tape[origin + (from - 3) * LANES + 6] = target;
+            let (mut pc, mut pointer, mut fuel) = (0, origin + from * LANES, 20_000_000u64);
+            while pc < ops.len() {
+                assert!(fuel > 0, "branch helper stalled: {old} -> {target}");
+                fuel -= 1;
+                match ops[pc] {
+                    Op::Add(delta) => tape[pointer] = tape[pointer].wrapping_add(delta),
+                    Op::Move(delta) => {
+                        let next = pointer as isize + delta;
+                        pointer = if host {
+                            usize::try_from(next).unwrap()
+                        } else {
+                            next.rem_euclid(tape.len() as isize) as usize
+                        };
+                        assert!(pointer < tape.len());
+                    }
+                    Op::Clear => tape[pointer] = 0,
+                    Op::Open(end) if tape[pointer] == 0 => pc = end,
+                    Op::Open(end) => {
+                        if let [Op::Add(u16::MAX), Op::Move(delta), Op::Add(scale), Op::Move(back)] =
+                            &ops[pc + 1..end]
+                        {
+                            if *delta != 0 && *back == -*delta {
+                                let next = pointer as isize + delta;
+                                let destination = if host {
+                                    usize::try_from(next).unwrap()
+                                } else {
+                                    next.rem_euclid(tape.len() as isize) as usize
+                                };
+                                assert!(destination < tape.len() && destination != pointer);
+                                tape[destination] = tape[destination]
+                                    .wrapping_add(tape[pointer].wrapping_mul(*scale));
+                                tape[pointer] = 0;
+                                pc = end;
+                            }
+                        }
+                    }
+                    Op::Close(start) if tape[pointer] != 0 => pc = start,
+                    Op::Output | Op::Hook(_) => panic!("branch helper must be ordinary BF"),
+                    _ => {}
+                }
+                pc += 1;
+            }
+            assert_eq!(pointer, origin + to * LANES, "branch {old} -> {target}");
+            if let Some(index) = tape.iter().zip(&expected).position(|(a, b)| a != b) {
+                panic!(
+                    "branch {old} -> {target}, host={host}: cell {index} is {}, expected {}",
+                    tape[index], expected[index]
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn cross_bank_jalr_snapshots_aliased_target_and_preserves_nonlinking_return() {
     for destination in [15, 16] {

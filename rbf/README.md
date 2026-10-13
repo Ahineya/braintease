@@ -307,6 +307,24 @@ with headless or visual runs; it cannot share the TEXT40 terminal screen.
 `--telemetry-interval` requires `--telemetry` and accepts 0.01–3600 seconds
 (default 1). Guest TTY output remains on stdout.
 
+For diagnosing execution costs, add `--profile FILE`:
+
+```sh
+scripts/run-bf-doom.sh --headless --telemetry --timeout 60 \
+  --profile ports/doom/build/run-bf/profile.json
+```
+
+The JSON report is written on completion, cancellation or an execution error,
+including a timeout. It records attempts, successful summaries, fallbacks and
+time for generic BF operations (arithmetic, scans, moving updates and routed
+loops), plus a bounded table of navigation-loop source offsets. Offsets are
+zero-based bytes in the expanded `.bf` file, including its header. Site eviction
+and omitted-attempt counts are explicit; operation totals remain complete.
+The profiler does not decode guest instructions. Profiling adds overhead and
+its operation times exclude host callbacks and profiler bookkeeping, so use
+ordinary runs for before/after performance measurements. Normal execution does
+not collect these timings.
+
 ## Execution engine
 
 The reusable core is [`src/rust-bf/src/engine.rs`](../src/rust-bf/src/engine.rs).

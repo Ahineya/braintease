@@ -3,7 +3,7 @@ use crate::{
     image::{Layout, MachineMemory},
     telemetry::{Progress, Snapshot},
 };
-use bf_wasm::engine::{Machine, Program, Stop};
+use bf_wasm::engine::{Machine, Profile, Program, Stop};
 use rvm::{
     capture,
     constants::{DISP_RGB565, HDR_DISP_MODE},
@@ -106,6 +106,8 @@ pub struct Host {
     pub machine: Machine,
     pub devices: BfDevices,
     pub instructions: u64,
+    /// Opt-in generic BF diagnostics; normal execution does not collect timings.
+    pub profile: Option<Profile>,
 }
 
 #[derive(Default)]
@@ -161,6 +163,7 @@ impl Host {
             machine,
             devices,
             instructions: 0,
+            profile: None,
         })
     }
 
@@ -421,7 +424,13 @@ impl Host {
                 }
                 budget = budget.min(limit - self.machine.dispatches());
             }
-            match self.machine.run(program, budget).map_err(|e| e.to_string())? {
+            let stop = if let Some(profile) = &mut self.profile {
+                self.machine.run_profiled(program, budget, profile)
+            } else {
+                self.machine.run(program, budget)
+            }
+            .map_err(|e| e.to_string())?;
+            match stop {
                 Stop::Halted => halted = true,
                 Stop::Budget => {},
                 Stop::Input => return Err("Unexpected BF input opcode in Ripple host image".into()),

@@ -64,6 +64,10 @@ pub struct RegisterPressureManager {
     /// This is a physical-register fact, discarded at CFG cache resets; the
     /// existence of a slot alone does not prove a store ran on every path.
     clean_spills: BTreeMap<Reg, (String, i16)>,
+
+    /// Block-local resolved copies of immutable dynamic bank tags. The original
+    /// tagged word remains the ABI value; only memory-address checks reuse this.
+    resolved_banks: BTreeMap<String, String>,
     
     /// Next available spill slot
     next_spill_slot: i16,
@@ -135,6 +139,7 @@ impl RegisterPressureManager {
             reg_to_slot: BTreeMap::new(),
             value_to_slot: BTreeMap::new(),
             clean_spills: BTreeMap::new(),
+            resolved_banks: BTreeMap::new(),
             next_spill_slot: 0,
             lifetimes: BTreeMap::new(),
             instructions: Vec::new(),
@@ -302,6 +307,18 @@ impl RegisterPressureManager {
     /// Get pointer bank information
     pub fn get_pointer_bank(&self, ptr_value: &str) -> Option<BankInfo> {
         self.allocator.pointer_banks.get(ptr_value).cloned()
+    }
+
+    pub(crate) fn cached_resolved_bank(&self, value: &str) -> Option<String> {
+        self.resolved_banks.get(value).cloned()
+    }
+
+    pub(crate) fn cache_resolved_bank(&mut self, value: String, resolved: String) {
+        self.resolved_banks.insert(value, resolved);
+    }
+
+    pub(crate) fn invalidate_resolved_banks(&mut self) {
+        self.resolved_banks.clear();
     }
 
     /// Record that `lo_name`'s high 16 bits live in the named value `hi_name`
@@ -494,20 +511,13 @@ impl RegisterPressureManager {
             self.clean_spills.insert(reg, (for_value.clone(), slot));
             
             // Check if this value has an associated bank that was spilled
-            if let Some(&bank_slot) = self.fat_ptr_bank_slots.get(&for_value) {
+            if self.fat_ptr_bank_slots.contains_key(&for_value) {
                 if let Some(bank_info) = self.get_pointer_bank(&for_value) {
                     if let BankInfo::Dynamic(bank_name) = bank_info {
-                        debug!("  '{for_value}' has spilled bank '{bank_name}' in slot {bank_slot}, reloading");
-                        
-                        // Get a register for the bank
-                        let bank_reg = self.get_register(bank_name.clone());
-                        
-                        // Reload the bank value
-                        self.instructions.push(AsmInst::Comment(format!("Reload {bank_name} from slot {bank_slot}")));
-                        self.instructions.push(AsmInst::AddI(Reg::Sc, Reg::Fp, self.local_count + bank_slot));
-                        self.instructions.push(AsmInst::Load(bank_reg, Reg::Sb, Reg::Sc));
-                        
-                        debug!("  Reloaded bank '{}' into {:?} from slot {}", bank_name, bank_reg, bank_slot);
+                        // Its named value owns the canonical home. A second
+                        // pointer-private reload can read a slot initialized
+                        // on only one predecessor and overwrite the good bank.
+                        self.get_register(bank_name);
                     }
                 }
             }
@@ -594,14 +604,16 @@ impl RegisterPressureManager {
                     // Check if bank value is in a register
                     if let Some((&bank_reg, _)) = self.reg_contents.iter().find(|(_, v)| *v == bank_name) {
                         // Allocate a slot for the bank if not already allocated
-                        let bank_slot = self.fat_ptr_bank_slots.get(&value).copied()
+                        let bank_slot = self.value_to_slot.get(bank_name).copied()
                             .unwrap_or_else(|| {
                                 let s = self.next_spill_slot;
                                 self.next_spill_slot += 1;
-                                self.fat_ptr_bank_slots.insert(value.clone(), s);
+                                self.value_to_slot.insert(bank_name.clone(), s);
+                                self.reg_to_slot.insert(bank_reg, s);
                                 trace!("  Allocated bank spill slot {s} for '{value}'");
                                 s
                             });
+                        self.fat_ptr_bank_slots.insert(value.clone(), bank_slot);
                         
                         // Spill the bank register
                         self.instructions.push(AsmInst::Comment(format!("Spill {bank_name} to slot {bank_slot}")));
@@ -679,6 +691,7 @@ impl RegisterPressureManager {
         trace!("free_register({reg:?})");
         if let Some(value) = self.reg_contents.get(&reg) {
             debug!("Freeing {reg:?} containing '{value}'");
+            self.resolved_banks.retain(|_, resolved| resolved != value);
         }
         if let Some(pos) = self.lru_queue.iter().position(|&r| r == reg) {
             self.lru_queue.remove(pos);
@@ -722,6 +735,9 @@ impl RegisterPressureManager {
             if let Some(words) = self.i64_words.get(&value) {
                 dependencies.extend(words.iter().cloned());
             }
+            if let Some(resolved) = self.resolved_banks.get(&value) {
+                dependencies.push(resolved.clone());
+            }
             match self.allocator.pointer_banks.get(&value) {
                 Some(BankInfo::Dynamic(name)) => dependencies.push(name.clone()),
                 Some(BankInfo::Register(register)) => {
@@ -755,6 +771,7 @@ impl RegisterPressureManager {
     pub fn bind_value_to_register(&mut self, value: String, reg: Reg) {
         debug!("Binding '{value}' to {reg:?}");
         self.clean_spills.remove(&reg);
+        self.resolved_banks.retain(|source, resolved| source != &value && resolved != &value);
 
         // ABI registers (Rv/A/X/…) must not enter the LRU. I64 div parks the
         // quotient in Rv0/Rv1/X0/X1 because they are not allocatable; if a
@@ -813,6 +830,7 @@ impl RegisterPressureManager {
     /// (e.g., GEP bank values in loops)
     pub fn clear_value_binding(&mut self, value: &str) {
         self.clean_spills.retain(|_, (name, _)| name != value);
+        self.resolved_banks.retain(|source, resolved| source != value && resolved != value);
         self.instructions.push(AsmInst::Comment(format!("Clearing binding for '{value}'")));
         
         // Find if this value is in any register
@@ -843,6 +861,7 @@ impl RegisterPressureManager {
     /// Pinned regs hold live call arguments and must stay put until they are
     /// copied to A0-A3 or stored to the outgoing argument area.
     pub fn spill_all(&mut self) {
+        self.invalidate_resolved_banks();
         debug!("Spilling all unpinned registers (e.g., for function call)");
         trace!("  Current LRU queue: {:?}", self.lru_queue);
         trace!("  Current contents: {:?}", self.reg_contents);
@@ -881,6 +900,9 @@ impl RegisterPressureManager {
     }
 
     pub(crate) fn set_branch_spill_roots(&mut self, roots: Option<BTreeSet<TempId>>) {
+        // This is installed at every basic-block entry, including blocks whose
+        // ordinary registers survive a uniquely entered fallthrough edge.
+        self.invalidate_resolved_banks();
         self.branch_spill_roots = roots;
     }
 
@@ -909,6 +931,7 @@ impl RegisterPressureManager {
     }
 
     pub fn forget_registers(&mut self, regs: &[Reg]) {
+        self.invalidate_resolved_banks();
         for &reg in regs {
             self.clean_spills.remove(&reg);
             if !ALLOCATABLE_REGISTERS.contains(&reg) {
@@ -943,6 +966,7 @@ impl RegisterPressureManager {
     pub(crate) fn mark_ir_definition(&mut self, id: TempId) {
         let name = format!("t{id}");
         self.clean_spills.retain(|_, (value, _)| value != &name);
+        self.resolved_banks.retain(|source, resolved| source != &name && resolved != &name);
     }
 
     pub(crate) fn invalidate_clean_spills(&mut self) {
@@ -1227,6 +1251,32 @@ impl RegisterPressureManager {
 mod lifetime_reclamation_tests {
     use super::*;
     use crate::instr::tests::machine::Machine;
+
+    #[test]
+    fn pointer_bank_spill_home_does_not_depend_on_predecessor_spill_order() {
+        let mut manager = RegisterPressureManager::new(0);
+        manager.init();
+        let pointer = manager.get_register("t1".into());
+        let bank = manager.get_register("bank".into());
+        manager.set_pointer_bank("t1".into(), BankInfo::Dynamic("bank".into()));
+        // One predecessor spills the bank before the address.
+        manager.spill_register(bank);
+        manager.spill_register(pointer);
+        let canonical_home = manager.value_to_slot["bank"];
+        // Another spills the same live pair in the opposite order.
+        let pointer = manager.get_register("t1".into());
+        let bank = manager.get_register("bank".into());
+        manager.spill_register(pointer);
+        manager.spill_register(bank);
+        assert_eq!(manager.fat_ptr_bank_slots["t1"], canonical_home);
+        assert_eq!(manager.next_spill_slot, 2, "one home per word, independent of path");
+        manager.forget_all_registers();
+        manager.take_instructions();
+        manager.get_register("t1".into());
+        let reloads = manager.take_instructions();
+        assert_eq!(reloads.iter().filter(|i| matches!(i, AsmInst::Load(..))).count(), 2,
+            "reload each word once from its canonical home");
+    }
 
     #[test]
     fn unchanged_scalar_reload_needs_no_second_store_but_redefinition_does() {

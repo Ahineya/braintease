@@ -164,6 +164,10 @@ fn get_bank_register_with_runtime_check(
             (result_reg, insts)
         }
         BankInfo::Dynamic(name) => {
+            if let Some(resolved) = mgr.cached_resolved_bank(name) {
+                let register = mgr.get_register(resolved);
+                return (register, mgr.take_instructions());
+            }
             // Get the register containing the bank value (might be a tag)
             let bank_val_reg = mgr.get_register(name.clone());
             insts.extend(mgr.take_instructions());
@@ -175,7 +179,7 @@ fn get_bank_register_with_runtime_check(
             
             // Allocate a result register that will hold the final bank
             let result_name = naming.temp_with_context(context, "resolved_bank");
-            let result_reg = mgr.get_register(result_name);
+            let result_reg = mgr.get_register(result_name.clone());
             insts.extend(mgr.take_instructions());
             mgr.pin_register(result_reg);
             
@@ -217,6 +221,7 @@ fn get_bank_register_with_runtime_check(
             mgr.unpin_register(result_reg);
             mgr.unpin_register(global_tag_reg);
             mgr.free_register(global_tag_reg);
+            mgr.cache_resolved_bank(name.clone(), result_name);
             
             (result_reg, insts)
         }
@@ -537,6 +542,89 @@ pub fn canonicalize_value(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+    use crate::instr::tests::machine::Machine;
+
+    #[test]
+    fn repeated_bank_checks_reuse_a_live_resolved_copy_even_after_spilling() {
+        for (tag, expected) in [(0, 0), (41, 41), (-1, 1), (-2, 2), (-3, 65533)] {
+            let mut mgr = RegisterPressureManager::new(0);
+            let mut naming = NameGenerator::new(0);
+            mgr.init();
+            mgr.get_register("t1".into());
+            let source = mgr.get_register("bank".into());
+            mgr.set_pointer_bank("t1".into(), BankInfo::Dynamic("bank".into()));
+            mgr.set_live_after(&BTreeSet::from([1]));
+            let mut code = mgr.take_instructions();
+            code.push(AsmInst::Li(source, tag));
+            let (first, checks) = get_bank_register_with_runtime_check_safe(
+                &BankInfo::Dynamic("bank".into()), &mut mgr, &mut naming, "first");
+            assert!(checks.iter().any(|i| matches!(i, AsmInst::Beq(..))));
+            code.extend(checks);
+            code.push(AsmInst::Move(Reg::X0, first));
+            mgr.retain_live_registers(&BTreeSet::from([1]));
+            for index in 0..24 {
+                let register = mgr.get_register(format!("pressure{index}"));
+                code.extend(mgr.take_instructions());
+                code.push(AsmInst::Li(register, index));
+            }
+            mgr.retain_live_registers(&BTreeSet::from([1]));
+            let (second, checks) = get_bank_register_with_runtime_check_safe(
+                &BankInfo::Dynamic("bank".into()), &mut mgr, &mut naming, "second");
+            assert!(checks.iter().any(|i| matches!(i, AsmInst::Load(..))), "fixture must reload the resolved copy");
+            assert!(!checks.iter().any(|i| matches!(i, AsmInst::Beq(..) | AsmInst::Bne(..))));
+            code.extend(checks);
+            code.push(AsmInst::Move(Reg::X1, second));
+            let (original, raw) = get_bank_value_for_argument(
+                &BankInfo::Dynamic("bank".into()), &mut mgr, &mut naming, "argument");
+            code.extend(raw);
+            code.push(AsmInst::Move(Reg::X2, original));
+            let mut machine = Machine::new(64000);
+            machine.regs[Reg::Fp as usize] = 100;
+            machine.run(&code);
+            assert_eq!(machine.regs[Reg::X0 as usize], expected);
+            assert_eq!(machine.regs[Reg::X1 as usize], expected);
+            assert_eq!(machine.regs[Reg::X2 as usize], tag as u16, "ABI tag must remain intact");
+        }
+    }
+
+    #[test]
+    fn bank_cache_is_invalidated_at_blocks_calls_assembly_and_redefinitions() {
+        for barrier in 0..5 {
+            let mut mgr = RegisterPressureManager::new(0);
+            let mut naming = NameGenerator::new(0);
+            mgr.init();
+            let source = mgr.get_register("bank".into());
+            let mut code = mgr.take_instructions();
+            code.push(AsmInst::Li(source, -1));
+            let (first, checks) = get_bank_register_with_runtime_check_safe(
+                &BankInfo::Dynamic("bank".into()), &mut mgr, &mut naming, "before");
+            code.extend(checks);
+            code.push(AsmInst::Move(Reg::X0, first));
+            match barrier {
+                0 => mgr.set_branch_spill_roots(None),
+                1 => mgr.spill_all(),
+                2 => {
+                    code.extend(crate::instr::lower_inline_asm_extended(
+                        &mut mgr, &mut naming, "", &[], &[], &[]).unwrap());
+                }
+                3 => mgr.bind_value_to_register("bank".into(), source),
+                _ => { mgr.spill_all(); mgr.forget_all_registers(); }
+            }
+            code.extend(mgr.take_instructions());
+            code.push(AsmInst::Li(Reg::Gp, 5));
+            let (second, checks) = get_bank_register_with_runtime_check_safe(
+                &BankInfo::Dynamic("bank".into()), &mut mgr, &mut naming, "after");
+            assert!(checks.iter().any(|i| matches!(i, AsmInst::Beq(..))), "barrier {barrier}");
+            code.extend(checks);
+            code.push(AsmInst::Move(Reg::X1, second));
+            let mut machine = Machine::new(64000);
+            machine.regs[Reg::Fp as usize] = 100;
+            machine.run(&code);
+            assert_eq!(machine.regs[Reg::X0 as usize], 1);
+            assert_eq!(machine.regs[Reg::X1 as usize], 5, "barrier {barrier}");
+        }
+    }
 
     #[test]
     fn bank_resolution_spills_before_any_path_can_skip_them() {

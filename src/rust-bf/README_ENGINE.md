@@ -114,6 +114,17 @@ output stop has advanced past its marker; the caller can mutate the tape before
 resuming. Input stops repeat until `provide_input` is called. No host logic or
 Ripple opcode execution lives in the core.
 
+For opt-in execution diagnostics, pass a `Profile` to
+`Machine::run_profiled(&program, budget, &mut profile)` and inspect
+`profile.report()`. It reports operation timings and attempt/completion/fallback
+counts for generic BF operations, plus a bounded table of expensive navigation
+loop source offsets. The table tracks searches, routed loops, scans and walks;
+category totals also cover arithmetic and literal instructions. Site eviction
+and omission counters make incomplete site coverage explicit. Timings include
+clock-query overhead and profiling slows execution, so use them to locate costs
+and measure actual speed separately with ordinary `run`. The ordinary executor
+uses a separate compile-time specialization without timers or profile counters.
+
 Budgets and `dispatches()` count **IR dispatches**, not original BF characters or
 Ripple instructions. One dispatch performs at most 128 summarized arithmetic
 instructions, 256 scan or moving-marker search probes, or 256

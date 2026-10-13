@@ -6,10 +6,12 @@ and preserve the 16-bit C byte and two-cell banked pointer ABI.
 
 ## Pass order
 
-1. **Single-store scalar promotion.** A scalar stack object can become a typed
+1. **Single-store scalar promotion.** An integer or pointer stack object can become a typed
    value when its address never escapes, its only store dominates every load,
-   and all accesses are nonvolatile. Arrays, pointers, aliased objects and
-   multiply assigned locals retain their memory representation.
+   and all accesses are nonvolatile. Pointer promotion aliases an existing SSA
+   value of exactly the same pointer type, preserving its address and bank
+   together. Explicit-bank initializers, arrays, aliased objects and multiply
+   assigned locals retain their memory representation.
 2. **Constant propagation and folding.** Arithmetic uses the target integer
    width, including unsigned comparisons, shifts and 32-/64-bit wraparound.
    Typed materializers preserve multiword arguments at calls. Literal extension
@@ -34,8 +36,18 @@ During lowering, CFG liveness reclaims dead registers and instruction-local
 scratch values. Live pointer bank metadata and all companion words survive
 branches and calls. Operand registers are reused only after their last use.
 Spill locations remain available for alternate control-flow paths.
+Each pointer bank has one canonical named spill home, shared with the pointer's
+coordinated spill. Different predecessor spill orders cannot create a second
+home that is uninitialized on one path through a join.
 Call argument materialization emits any required spill before overwriting its
 register; pinned arguments that are still live after a call are saved too.
+
+Repeated dynamic bank-tag checks reuse a resolved copy within one basic block.
+The original tagged word remains available for pointer stores and call arguments;
+the resolved copy participates in liveness and spilling like other companions.
+Block entries, calls, inline assembly and value redefinitions invalidate the
+cache. This removes repeated bank dispatch from constant-index initialization
+without assuming that adjacent elements occupy the same bank.
 
 Spill and reload addresses use `ADDI SC, FP, offset` directly, rather than
 copying FP and adding the offset separately. Conditional branches materialize
@@ -107,6 +119,12 @@ this was caught by the first E1M1 snapshot after enabling scalar promotion.
 Run the fixtures with the Rust VM backend.
 `test_native_unsigned_gep` additionally checks native unsigned displacements,
 noncanonical pointer offsets, and preservation of signed and wider indices.
+`test_single_store_pointer_promotion` checks repeated wide stores through global,
+stack and heap pointers, including a word straddling the 64,000-cell boundary,
+pointer returns, escaped locals and volatile pointer objects. Backend tests
+exercise resolved-bank reuse under register pressure and each cache barrier.
+`pointer_bank_spill_join` covers both successors of a conditional pointer store
+before returning a heap pointer, including the path that skips the store.
 `make -C ports/doom test` compares title/menu/E1M1 screenshots
 against the native build; the fixtures stage checks arithmetic and assets.
 

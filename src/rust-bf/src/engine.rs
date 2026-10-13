@@ -8,9 +8,12 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+mod profile;
 mod routed;
 mod scan;
 mod search;
+
+pub use profile::{OperationProfile, Profile, ProfileReport, SiteProfile};
 
 const NO_FAST_OP: u32 = u32::MAX;
 const BLOCK_LIMIT: usize = 128;
@@ -633,6 +636,26 @@ impl Machine {
     /// An input stop repeats until `provide_input` is called, without consuming
     /// another dispatch. Output and hooks have already advanced past the marker.
     pub fn run(&mut self, program: &Program, budget: u64) -> Result<Stop, Error> {
+        self.run_impl::<false>(program, budget, None)
+    }
+
+    /// Execute with opt-in timings of generic BF operations. Timing calls and
+    /// counters compile out of the ordinary `run` specialization.
+    pub fn run_profiled(
+        &mut self,
+        program: &Program,
+        budget: u64,
+        profile: &mut Profile,
+    ) -> Result<Stop, Error> {
+        self.run_impl::<true>(program, budget, Some(profile))
+    }
+
+    fn run_impl<const PROFILE: bool>(
+        &mut self,
+        program: &Program,
+        budget: u64,
+        mut profile: Option<&mut Profile>,
+    ) -> Result<Stop, Error> {
         if self.pending_input {
             return Ok(Stop::Input);
         }
@@ -649,62 +672,97 @@ impl Machine {
                 .checked_add(1)
                 .ok_or(Error::DispatchOverflow)?;
             remaining -= 1;
+            if PROFILE {
+                profile.as_deref_mut().unwrap().dispatch();
+            }
             let fast = program.fast_at[self.pc];
-            if fast != NO_FAST_OP && self.fast(&program.fast[fast as usize]) {
-                continue;
+            if fast != NO_FAST_OP {
+                let operation = &program.fast[fast as usize];
+                let offset = program.code[self.pc].offset;
+                let started = PROFILE.then(std::time::Instant::now);
+                let completed = self.fast(operation);
+                if PROFILE {
+                    profile.as_deref_mut().unwrap().record(
+                        profile::Kind::fast(operation),
+                        offset,
+                        started.unwrap().elapsed(),
+                        completed,
+                    );
+                }
+                if completed {
+                    continue;
+                }
             }
             let instruction = program.code[self.pc];
-            match instruction.op {
-                Op::Add(delta) => {
-                    self.write_cell(self.pointer, self.tape[self.pointer].wrapping_add(delta));
-                    self.pc += 1;
-                }
-                Op::Move(delta) => {
-                    let next = self.pointer as i128 + delta as i128;
-                    if next >= 0 && next < self.tape.len() as i128 {
-                        self.pointer = next as usize;
-                    } else if self.wrapping_tape {
-                        self.pointer = next.rem_euclid(self.tape.len() as i128) as usize;
-                    } else {
-                        // A collapsed monotonic move traps at the same edge as
-                        // individual BF moves, after all preceding valid moves.
-                        self.pointer = if delta < 0 { 0 } else { self.tape.len() - 1 };
-                        return Err(Error::TapeBounds {
-                            offset: instruction.offset,
-                            pointer: self.pointer,
-                        });
-                    }
-                    self.pc += 1;
-                }
-                Op::Open(next) => {
-                    self.pc = if self.tape[self.pointer] == 0 {
-                        next
-                    } else {
-                        self.pc + 1
-                    }
-                }
-                Op::Close(next) => {
-                    self.pc = if self.tape[self.pointer] != 0 {
-                        next
-                    } else {
-                        self.pc + 1
-                    }
-                }
-                Op::Input => {
-                    self.pc += 1;
-                    self.pending_input = true;
-                    return Ok(Stop::Input);
-                }
-                Op::Output => {
-                    self.pc += 1;
-                    return Ok(Stop::Output(self.tape[self.pointer] as u8));
-                }
-                Op::Hook(marker) => {
-                    self.pc += 1;
-                    return Ok(Stop::Hook(marker));
-                }
+            let started = PROFILE.then(std::time::Instant::now);
+            let result = self.literal(instruction);
+            if PROFILE {
+                profile.as_deref_mut().unwrap().record(
+                    profile::Kind::literal(instruction.op),
+                    instruction.offset,
+                    started.unwrap().elapsed(),
+                    true,
+                );
+            }
+            if let Some(stop) = result? {
+                return Ok(stop);
             }
         }
+    }
+
+    #[inline]
+    fn literal(&mut self, instruction: Instruction) -> Result<Option<Stop>, Error> {
+        match instruction.op {
+            Op::Add(delta) => {
+                self.write_cell(self.pointer, self.tape[self.pointer].wrapping_add(delta));
+                self.pc += 1;
+            }
+            Op::Move(delta) => {
+                let next = self.pointer as i128 + delta as i128;
+                if next >= 0 && next < self.tape.len() as i128 {
+                    self.pointer = next as usize;
+                } else if self.wrapping_tape {
+                    self.pointer = next.rem_euclid(self.tape.len() as i128) as usize;
+                } else {
+                    // A collapsed monotonic move traps at the same edge as
+                    // individual BF moves, after all preceding valid moves.
+                    self.pointer = if delta < 0 { 0 } else { self.tape.len() - 1 };
+                    return Err(Error::TapeBounds {
+                        offset: instruction.offset,
+                        pointer: self.pointer,
+                    });
+                }
+                self.pc += 1;
+            }
+            Op::Open(next) => {
+                self.pc = if self.tape[self.pointer] == 0 {
+                    next
+                } else {
+                    self.pc + 1
+                }
+            }
+            Op::Close(next) => {
+                self.pc = if self.tape[self.pointer] != 0 {
+                    next
+                } else {
+                    self.pc + 1
+                }
+            }
+            Op::Input => {
+                self.pc += 1;
+                self.pending_input = true;
+                return Ok(Some(Stop::Input));
+            }
+            Op::Output => {
+                self.pc += 1;
+                return Ok(Some(Stop::Output(self.tape[self.pointer] as u8)));
+            }
+            Op::Hook(marker) => {
+                self.pc += 1;
+                return Ok(Some(Stop::Hook(marker)));
+            }
+        }
+        Ok(None)
     }
 }
 

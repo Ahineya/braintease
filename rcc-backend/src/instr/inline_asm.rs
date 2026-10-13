@@ -336,6 +336,8 @@ pub fn lower_inline_asm_extended(
     clobbers: &[String],
 ) -> Result<Vec<AsmInst>, CompilerError> {
     debug!("Lowering extended inline assembly:");
+    // Raw assembly may modify machine state outside its explicit operands.
+    mgr.invalidate_resolved_banks();
     debug!("  Assembly: {assembly}");
     debug!("  Outputs: {outputs:?}");
     debug!("  Inputs: {inputs:?}");
@@ -384,6 +386,7 @@ pub fn lower_inline_asm_extended(
     }
     for register in clobbered { mgr.unpin_register(register); }
 
+    mgr.invalidate_resolved_banks();
     insts.push(AsmInst::Comment("=== End inline assembly ===".to_string()));
     Ok(insts)
 }

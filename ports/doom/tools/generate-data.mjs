@@ -118,11 +118,15 @@ function info(sourceFile, output) {
       const symbol = `Doom_Fill_${name}_${number(index / chunk)}`;
       prototypes.push(`${type} *${symbol}(${type} *out);`);
       const body = [`${type} *${symbol}(${type} *out)`, '{'];
-      for (const record of records.slice(index, index + chunk)) {
-        fields.forEach((field, n) => body.push(`    out->${field} = ${record[n]};`));
-        body.push('    ++out;');
-      }
-      body.push('    return out;', '}', '');
+      const batch = records.slice(index, index + chunk);
+      // Keep the same base pointer for every field in this bounded chunk,
+      // and compute each record address once. Only advance the returned cursor.
+      batch.forEach((record, item) => {
+        body.push('    {', `        ${type} *entry = &out[${item}];`);
+        fields.forEach((field, n) => body.push(`        entry->${field} = ${record[n]};`));
+        body.push('    }');
+      });
+      body.push(`    return out + ${batch.length};`, '}', '');
       functions.push(body.join('\n'));
       calls[name].push(`    cursor = ${symbol}(cursor);`);
     }

@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYY\n",
+  "use_runtime": true,
+  "description": "Preserve fat-pointer ABI and bank crossing when promoting invariant pointer locals"
+}

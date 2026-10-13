@@ -925,6 +925,59 @@
   @fl(@clear) // We need 0 in the last fastlane pos
 }
 
+// Move a branch's fast-lane boundary by a count of instructions carried in
+// the pointer lane. Every iteration consumes one instruction and transfers
+// the remaining count to the next boundary; all pointer cells end at zero.
+// Unlike a full bank seek, only the changed suffix of the fast lane is touched.
+#define _branch_forward {
+  [
+    -
+    @next(5) + @nextword + @nextword + @nextword + @nextword @prev(5)
+    @prevwords(4) [-@nextwords(4)+@prevwords(4)] @nextwords(4)
+  ]
+}
+
+#define _branch_backward {
+  [
+    -
+    @next(5) @prevword @clear @prevword @clear @prevword @clear @prevword @clear @prev(5)
+    @nextwords(4) [-@prevwords(4)+@nextwords(4)] @prevwords(4)
+  ]
+}
+
+// A conditional branch preserves PCB, including when its signed displacement
+// wraps the raw 16-bit PC or leaves PC >= BANK_SIZE. Compare old/new raw PCs
+// to choose physical direction; their unsigned difference is at most 65535.
+// Inputs: old PC in word[-4].SA, target PC in word[-3].SB; architectural PC
+// is already updated. PCB is unchanged and need not be fetched or copied.
+#define _branch_to_same_bank {
+  @prevwords(3) @lane_start(@L_SB)
+  // Consume target into comparison operand and wrapping delta accumulator.
+  [-@prevwords(2)<+>@prevword+@nextwords(3)]
+  @prevword <
+  // Retain old PC while subtracting it from delta, using word[-3].SA.
+  [-@prevwords(2)>-<@nextwords(3)+@prevword]
+  @nextword [-@prevword+@nextword] @prevword
+  @lt
+  >+<
+  @if
+    >-< @lane_end(@L_SA) @nextwords(4)
+    @prevwords(6) @lane_start(@L_SB)
+    [-@nextwords(6)<<<<+>>>>@prevwords(6)] @nextwords(6) <<<<
+    @_branch_forward
+    @lane_end(@L_PTR) @prevwords(4) @lane_start(@L_SA)
+  @endif
+  >
+  @if
+    @lane_end(@L_SB) @nextwords(4)
+    @prevwords(6) @lane_start(@L_SB)
+    [-@nextwords(6)<<<<->>>>@prevwords(6)] @nextwords(6) <<<<
+    @_branch_backward
+    @lane_end(@L_PTR) @prevwords(4) @lane_start(@L_SB)
+  @endif
+  < @lane_end(@L_SA) @nextwords(4)
+}
+
 // Preserve a register in an unused scratch-B cell at the current instruction.
 // goto_reg must finish in L_REG; offs selects a word relative to the opcode.
 #define copy_register_to_ip_B(goto_reg, offs) {
@@ -1064,33 +1117,6 @@
   @if
     @lane_end(@L_SA)
 
-    // Copy from PCB to word[-1][sA], extract and reuse for other branch commands
-    @goto_PCB
-    @lane_reg_end
-    @copy_reg_to_A_via_B
-
-    @lane(@L_SA,
-      @times(
-        @lane_end(@L_SA)
-        @goto_ip_word
-        @prevword
-        @lane(@L_SA, +)
-        @goto_PCB
-        @lane_reg_end
-        @lane_start(@L_SA)
-      )
-    )
-    @goto_ip_word // word[-1][sA] LOADED from PCB
-
-    // move it to word[-2]
-    @prevword
-
-    @lane(@L_SA,
-      @move_to(@prevword >, < @nextword) <
-    )
-
-    @nextwords(2)
-
     @prevword
     @goto_PC
     @lane_reg_end
@@ -1116,6 +1142,9 @@
 
 
     @lane(@L_SA,
+      // Preserve old PC for a relative physical branch after PC is updated.
+      [-@prevwords(3)+@prevword+@nextwords(4)]
+      @prevwords(4) [-@nextwords(4)+@prevwords(4)] @nextwords(4)
       @move_to(@prevwords(2) >, < @nextwords(2)) < // Very important! calculating addr by PC + imm
     )
 
@@ -1142,7 +1171,7 @@
 
     @set_noinc_pc_flag
 
-    @_jump_to_bank_addr // ?
+    @_branch_to_same_bank
 
   @endif
 }
@@ -1189,24 +1218,29 @@
 
   @prevwords(2)
 
-  // Before all this shit we want to possibly mo mmapped shit
-  // If we are writing to @OUT, then we want to twinkle twinkle
+  // Snapshot the bank and offset for the TTY check. The scratch-A operands
+  // remain intact for the memory address calculation below.
 
   @lane(@L_SA,
     // copy via sB prevword
     [->+@prevword+@nextword<] >@prevword [-@nextword<+>@prevword] @nextword <
   )
 
-  // if @L_SB is not zero, then poop
-  // if zero, then check addr
-
-  // memory mapped io subroutine
+  // Native TTY output is mapped only at bank 0, offset 0.
   @prevword
     @lane(@L_SA,
       [->+@prevword+@nextword<] >@prevword [-@nextword<+>@prevword] @nextword <
     )
 
     @lane(@L_SB,
+      // A nonzero bank makes this a RAM store, even when the offset is zero.
+      // Consume the bank copy and force the copied offset nonzero in that
+      // case. Do not add them: two nonzero 16-bit values could wrap to zero.
+      @nextword
+      @if
+        @prevword @set(1) @nextword
+      @endif
+      @prevword
       @eq(@nextword, @prevword)
       [-@prevword+@prevword+@nextword @nextword] @prevword @prevword [-@nextword @nextword+ @prevword @prevword] @nextword @nextword
 
@@ -1301,7 +1335,9 @@
 
   @lane(@L_RAM,
     @HOST_LOAD
-    [->+>+<<] >> [-<<+>>] << // Copy ram value to sA via sB
+    // Duplicate RAM into scratch A/B, then restore RAM from B. Only the
+    // scratch-A copy is consumed below; repeated LOADs preserve the source.
+    [->+>+<<] >> [-<<+>>] <<
   )
 
   @lane(@L_SA,
@@ -1553,7 +1589,8 @@
 #define sli  @ophandler(@one_register_op(@alu_sl))
 #define sri  @ophandler(@one_register_op(@alu_sr))
 
-#define load @ophandler(@two_registers_op(@ins_load)) // TODO: SHOULD FUCKING COPY THE VALUE
+// Fetch both address operands before overwriting a possibly aliased destination.
+#define load @ophandler(@two_registers_op(@ins_load))
 #define stor @ophandler(@two_registers_op_no_set(@ins_stor))
 
 #define jal  @ophandler(@no_register_imm2_op(@ins_jal))

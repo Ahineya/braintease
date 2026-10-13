@@ -1,4 +1,4 @@
-//! Promote scalar locals whose address never escapes and whose sole store
+//! Promote integer/pointer locals whose address never escapes and whose sole store
 //! dominates every read. This exposes ordinary C parameters and invariant local
 //! expressions to LICM without speculating or reordering any memory accesses.
 
@@ -8,6 +8,9 @@ use rcc_frontend::{
     BankTag,
 };
 use std::collections::{HashMap, HashSet};
+
+#[cfg(test)]
+mod tests;
 
 fn address(value: &Value) -> Option<TempId> {
     match value {
@@ -30,6 +33,7 @@ struct Candidate {
 
 pub(super) fn promote_single_store_locals(function: &mut Function) {
     if super::cfg::Cfg::new(function).is_err() { return; }
+    let types = super::constants::value_types(function);
     let mut candidates = HashMap::new();
     for (bi, block) in function.blocks.iter().enumerate() {
         for (ii, inst) in block.instructions.iter().enumerate() {
@@ -40,7 +44,8 @@ pub(super) fn promote_single_store_locals(function: &mut Function) {
                 ..
             } = inst
             {
-                if alloc_type.is_integer() && matches!(count, None | Some(Value::Constant(1))) {
+                if (alloc_type.is_integer() || alloc_type.is_pointer())
+                    && matches!(count, None | Some(Value::Constant(1))) {
                     candidates.insert(
                         *result,
                         Candidate {
@@ -182,6 +187,7 @@ pub(super) fn promote_single_store_locals(function: &mut Function) {
             }
     };
     let mut remove = HashSet::new();
+    let mut pointer_aliases = HashMap::new();
     for candidate in candidates.into_values() {
         let (bi, ii, value) = candidate.store.unwrap();
         if !dominates(candidate.allocation, (bi, ii))
@@ -189,8 +195,35 @@ pub(super) fn promote_single_store_locals(function: &mut Function) {
         {
             continue;
         }
+        // A pointer is an address plus a bank tag, not an integer Add(0).
+        // Alias only an existing SSA value of exactly the stored type. Other
+        // pointer forms keep their memory copy until their provenance and ABI
+        // can be preserved as reliably as a typed temporary's two components.
+        let pointer_source = if candidate.ty.is_pointer() {
+            let source = match &value {
+                Value::Temp(source) => Some(*source),
+                Value::FatPtr(pointer) if pointer.bank == BankTag::Mixed => {
+                    match pointer.addr.as_ref() {
+                        Value::Temp(source) => Some(*source),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            match source {
+                Some(source) if types.get(&source) == Some(&candidate.ty) => Some(source),
+                _ => continue,
+            }
+        } else {
+            None
+        };
         for (lb, li) in candidate.loads {
             let result = super::result(&function.blocks[lb].instructions[li]).unwrap();
+            if let Some(source) = pointer_source {
+                pointer_aliases.insert(result, source);
+                remove.insert((lb, li));
+                continue;
+            }
             // A typed copy preserves multiword call arguments and conversions.
             function.blocks[lb].instructions[li] = Instruction::Binary {
                 result,
@@ -211,4 +244,5 @@ pub(super) fn promote_single_store_locals(function: &mut Function) {
             keep
         });
     }
+    super::constants::substitute_temp_aliases(function, &pointer_aliases);
 }

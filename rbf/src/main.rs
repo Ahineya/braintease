@@ -1,4 +1,4 @@
-use bf_wasm::engine::Program;
+use bf_wasm::engine::{Profile, Program};
 use clap::Parser;
 use rbf::{
     devices::BfDevices,
@@ -67,6 +67,9 @@ struct Cli {
     capture_frame: u64,
     #[arg(long)]
     report: Option<PathBuf>,
+    /// Write generic BF operation timings to JSON, including on timeout (adds overhead)
+    #[arg(long)]
+    profile: Option<PathBuf>,
     /// Print periodic progress to stderr without changing guest stdout
     #[arg(long, conflicts_with = "terminal")]
     telemetry: bool,
@@ -133,6 +136,7 @@ fn execute(cli: Cli) -> Result<i32, String> {
     let source =
         fs::read_to_string(&cli.program).map_err(|e| format!("{}: {e}", cli.program.display()))?;
     let (layout, body) = Layout::parse(&source, cli.max_tape_cells)?;
+    let body_offset = source.len() - body.len();
     if let Some(telemetry) = &mut telemetry {
         telemetry.phase(
             "parsing",
@@ -190,6 +194,9 @@ fn execute(cli: Cli) -> Result<i32, String> {
         cancelled,
     };
     let mut host = Host::new(layout.clone(), devices)?;
+    if cli.profile.is_some() {
+        host.profile = Some(Profile::default());
+    }
     if let Some(telemetry) = &mut telemetry {
         telemetry.phase(
             "ready",
@@ -253,17 +260,17 @@ fn execute(cli: Cli) -> Result<i32, String> {
         }
         host.devices.text_display.leave();
         worker_state.lock().unwrap().request_shutdown();
-        (report, result)
+        (report, result, host.profile)
     };
-    let (mut report, result) = if cli.visual {
+    let (mut report, result, profile) = if cli.visual {
         let worker = thread::spawn(work);
         let window =
             display_rgb565::run_rgb565_display(Arc::clone(&state)).map_err(|e| e.to_string());
         state.lock().unwrap().request_shutdown();
-        let (report, result) = worker.join().map_err(|_| "Brainfuck worker panicked")?;
+        let (report, result, profile) = worker.join().map_err(|_| "Brainfuck worker panicked")?;
         // A window/GPU failure is a failed run even if shutdown made the guest
         // worker return an otherwise successful host_stop.
-        (report, window.and(result))
+        (report, window.and(result), profile)
     } else {
         work()
     };
@@ -271,6 +278,9 @@ fn execute(cli: Cli) -> Result<i32, String> {
     report.stop_reason = match &result {
         Ok(reason) | Err(reason) => reason.clone(),
     };
+    if let (Some(path), Some(profile)) = (cli.profile, profile) {
+        rbf::profile::write(&path, &profile, &report, body_offset)?;
+    }
     if let Some(path) = cli.report {
         report.write(&path)?;
     }
