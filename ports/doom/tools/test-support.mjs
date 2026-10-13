@@ -88,14 +88,16 @@ export function prepareDisk(wad, disk, { wadMode = 'packed', manifest } = {}) {
   return { path: disk, mode: wadMode, octets: image.length, padding_octets: image.length - data.length, sha256: hash(image) };
 }
 export function build(program, out, { wad = WAD, wadMode = process.env.DOOM_WAD_MODE || 'cooked', target = 'both',
-  startMap = false, lowDetail = false, assetValidation = 'preflight', buildDir = BUILD } = {}) {
+  startMap = false, startDemo = false, lowDetail = false, resolutionScale = 1, assetValidation = 'preflight', buildDir = BUILD } = {}) {
   require(WAD_MODES.includes(wadMode), 'unknown WAD storage mode: ' + wadMode);
   require(ASSET_VALIDATIONS.includes(assetValidation), 'unknown asset validation mode: ' + assetValidation);
+  require([1, 2, 4].includes(resolutionScale), 'resolution scale must be 1, 2 or 4');
   console.log('Building ' + program + ' (' + target + ')');
   run('build-' + program + (startMap ? '-map' : '-title'), ['make', '-C', PORT,
     'PROGRAM=' + program, 'TARGET=' + target, 'WAD=' + path.resolve(wad), 'WAD_MODE=' + wadMode,
     'ASSET_VALIDATION=' + assetValidation, 'BUILD=' + path.resolve(buildDir),
-    'START_MAP=' + Number(startMap), 'LOW_DETAIL=' + Number(lowDetail), 'all'], out, 900);
+    'START_MAP=' + Number(startMap), 'START_DEMO=' + Number(startDemo), 'LOW_DETAIL=' + Number(lowDetail),
+    'RESOLUTION_SCALE=' + resolutionScale, 'all'], out, 900);
 }
 export function compileRust(source, output, out) {
   run('build-' + path.basename(output), ['rustc', '--edition=2021', '-O', '-C', 'lto=thin', source,

@@ -35,22 +35,25 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   wad: { type: 'string', default: WAD }, 'wad-mode': { type: 'string', default: process.env.DOOM_WAD_MODE || 'cooked' }, output: { type: 'string' },
   timeout: { type: 'string', default: '120' }, 'max-instructions': { type: 'string', default: '2000000000' },
   program: { type: 'string', multiple: true }, 'skip-build': { type: 'boolean', default: false },
-  'low-detail': { type: 'boolean', default: false }, help: { type: 'boolean' },
+  'low-detail': { type: 'boolean', default: false }, 'resolution-scale': { type: 'string', default: '1' }, help: { type: 'boolean' },
 } });
 const stage = positionals[0] || 'smoke';
-const stages = ['smoke', 'fixtures', 'kernels', 'gameplay', 'assets', 'all'];
+const stages = ['smoke', 'fixtures', 'kernels', 'gameplay', 'presentation', 'resolution', 'assets', 'all'];
 if (values.help) {
   console.log('Usage: node tools/test.mjs [' + stages.join('|') + ']\n'
     + '  [--wad FILE] [--wad-mode packed|expanded|cooked] [--output DIRECTORY] [--timeout SECONDS] [--max-instructions N]\n'
-    + '  [--program NAME ...] [--skip-build] [--low-detail]\n'
+    + '  [--program NAME ...] [--skip-build] [--low-detail] [--resolution-scale 1|2|4 (kernels only)]\n'
     + 'The default smoke stage compares title, menu navigation and E1M1 pixels with native C.');
   process.exit(0);
 }
 require(positionals.length <= 1 && stages.includes(stage), 'unknown test stage: ' + stage);
 const wadMode = values['wad-mode'];
 require(WAD_MODES.includes(wadMode), 'unknown WAD storage mode: ' + wadMode);
-require(!values['skip-build'] || !['smoke', 'all'].includes(stage),
-  'smoke/all must rebuild the engine for both startup modes; omit --skip-build');
+const resolutionScale = Number(values['resolution-scale']);
+require(['1', '2', '4'].includes(values['resolution-scale']), 'resolution scale must be 1, 2 or 4');
+require(resolutionScale === 1 || stage === 'kernels', '--resolution-scale is only supported by kernels; resolution tests exercise all scales');
+require(!values['skip-build'] || !['smoke', 'presentation', 'resolution', 'all'].includes(stage),
+  'smoke/presentation/resolution/all must rebuild the engine for startup modes; omit --skip-build');
 const timeout = Number(values.timeout), maxInstructions = Number(values['max-instructions']);
 require(Number.isSafeInteger(timeout) && timeout > 0 && Number.isSafeInteger(maxInstructions) && maxInstructions > 0,
   'test limits must be positive integers');
@@ -59,12 +62,12 @@ const wad = path.resolve(values.wad), sourceHash = digest(wad);
 const disk = path.join(out, 'fixture-disk.img');
 let diskMetadata;
 const result = { format_version: 2, stage, success: false, checks: [], commands,
-  wad: { path: wad, sha256: sourceHash }, wad_mode: wadMode,
+  wad: { path: wad, sha256: sourceHash }, wad_mode: wadMode, resolution_scale: resolutionScale,
   limits: { instructions: maxInstructions, seconds: timeout }, bank_size: BANK, memory_cells: MEMORY };
 const binary = program => path.join(BUILD, 'ripple', program, program + '.bin');
 const native = program => path.join(BUILD, 'native', program, program);
 function buildProgram(program, target = 'both', startMap = false) {
-  if (!values['skip-build']) build(program, out, { wad, wadMode, target, startMap, lowDetail: values['low-detail'] });
+  if (!values['skip-build']) build(program, out, { wad, wadMode, target, startMap, lowDetail: values['low-detail'], resolutionScale });
   if (target !== 'native') {
     diskMetadata = prepareDisk(wad, disk, { wadMode, manifest: path.join(BUILD, 'manifest.json') });
     result.disk_image = diskMetadata;
@@ -213,9 +216,68 @@ function gameplay() {
     result.checks.push({ label, report });
   }
 }
+function presentation() {
+  buildProgram('engine');
+  const empty = path.join(out, 'empty-input.json'); writeJSON(empty, []);
+  for (const [label, input, frames] of [
+    ['title-repeat', empty, 8],
+    ['menu-open', path.join(PORT, 'tests/menu-open.json'), 2],
+    ['menu-repeat', path.join(PORT, 'tests/menu-repeat.json'), 20],
+    ['page-invalidation', path.join(PORT, 'tests/page-invalidation.json'), 26],
+  ]) {
+    const report = benchmark({ wad, wadMode, input, mode: 'title', frames, output: path.join(out, label) });
+    if (label === 'title-repeat') require(report.frames.slice(1).every(row => row.instructions < 100000),
+      'unchanged title repeats should not redraw or reconvert 64000 pixels');
+    result.checks.push({ label, report });
+  }
+  build('engine', out, { wad, wadMode, startDemo: true });
+  const report = benchmark({ wad, wadMode, input: empty, mode: 'demo1', frames: 3,
+    output: path.join(out, 'demo-immediate') });
+  require(report.checks.every(row => row.state[2] === 0), 'DEMO1 must enter a level from the first presentation');
+  result.checks.push({ label: 'demo-immediate', report });
+  buildProgram('engine');
+}
+function resolution() {
+  // Preserve the normal build and use one full-resolution native oracle for all
+  // scales. A reduced native build would share sampling bugs with the guest.
+  const referenceBuild = path.join(out, 'reference-build');
+  build('engine', out, { wad, wadMode, target: 'native', buildDir: referenceBuild, resolutionScale: 1 });
+  const reference = path.join(referenceBuild, 'native/engine/engine');
+  const empty = path.join(out, 'empty-input.json'); writeJSON(empty, []);
+  const reports = new Map();
+  for (const scale of [1, 2, 4]) {
+    const buildDir = path.join(out, 'scale-' + scale + '-build');
+    const common = { wad, wadMode, native: reference, sampleScale: scale,
+      binary: path.join(buildDir, 'ripple/engine/engine.bin'),
+      objects: path.join(buildDir, 'ripple/engine'), manifest: path.join(buildDir, 'manifest.json') };
+    build('engine', out, { wad, wadMode, target: 'ripple', buildDir, resolutionScale: scale });
+    for (const [label, input, frames] of [
+      ['title-menu', path.join(PORT, 'tests/menu-repeat.json'), 20],
+      ['page-invalidation', path.join(PORT, 'tests/page-invalidation.json'), 26],
+    ]) {
+      const report = benchmark({ ...common, input, mode: 'title', frames,
+        output: path.join(out, 'scale-' + scale, label) });
+      result.checks.push({ label: 'scale-' + scale + '-' + label, report });
+    }
+    build('engine', out, { wad, wadMode, target: 'ripple', buildDir, resolutionScale: scale, startMap: true });
+    const world = benchmark({ ...common, input: path.join(PORT, 'tests/resolution-world.json'), mode: 'map', frames: 22,
+      output: path.join(out, 'scale-' + scale, 'world') });
+    result.checks.push({ label: 'scale-' + scale + '-world', report: world });
+    reports.set(scale, world);
+    build('engine', out, { wad, wadMode, target: 'ripple', buildDir, resolutionScale: scale, startDemo: true });
+    const demo = benchmark({ ...common, input: empty, mode: 'demo1', frames: 3,
+      output: path.join(out, 'scale-' + scale, 'demo') });
+    result.checks.push({ label: 'scale-' + scale + '-demo', report: demo });
+  }
+  result.resolution_instruction_counts = Object.fromEntries([...reports].map(([scale, report]) => [scale,
+    { steady_median: report.steady_median_instructions, per_frame: report.frames.map(frame => frame.instructions) }]));
+  for (const scale of [2, 4]) require(reports.get(scale).frames.slice(1, 5).every((row, index) =>
+    row.instructions < reports.get(1).frames[index + 1].instructions),
+    'reduced world rendering must execute fewer guest instructions, not only resize the output');
+}
 try {
-  if (stage === 'all') { fixtures(); kernels(); smoke(); gameplay(); }
-  else ({ smoke, fixtures, kernels, gameplay, assets })[stage]();
+  if (stage === 'all') { fixtures(); kernels(); smoke(); gameplay(); presentation(); resolution(); }
+  else ({ smoke, fixtures, kernels, gameplay, presentation, resolution, assets })[stage]();
   require(digest(wad) === sourceHash && (!diskMetadata || digest(disk) === diskMetadata.sha256), 'WAD changed during tests');
   result.success = true;
   console.log('All ' + stage + ' tests passed; ' + path.join(out, 'results.json'));

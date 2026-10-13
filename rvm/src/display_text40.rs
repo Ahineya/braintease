@@ -1,5 +1,6 @@
 //! TEXT40 terminal presentation, shared by the native and Brainfuck CPU hosts.
 use crate::{constants::*, devices::GuestMemory};
+use serde::{Deserialize, Serialize};
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
@@ -136,7 +137,53 @@ pub struct Text40Display {
     quit: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Text40Checkpoint {
+    frame: Option<(u64, Vec<u16>)>,
+    key: Option<u16>,
+    key_reads: u8,
+    input: Vec<u8>,
+}
+
 impl Text40Display {
+    pub fn checkpoint(&self) -> Text40Checkpoint {
+        Text40Checkpoint {
+            frame: self.snapshot.as_ref().map(|frame| (frame.sequence, frame.cells.to_vec())),
+            key: self.keys.key, key_reads: self.keys.reads, input: self.input.clone(),
+        }
+    }
+
+    pub fn restore_checkpoint(snapshot: Text40Checkpoint) -> Result<Self, String> {
+        if snapshot.frame.as_ref().is_some_and(|(_, cells)| cells.len() != TEXT40_WORDS)
+            || snapshot.key.is_some_and(|key| ![82, 81, 80, 79, 29, 27].contains(&key))
+            || snapshot.key.is_some() && snapshot.key_reads > 10
+        {
+            return Err("invalid TEXT40 checkpoint".into());
+        }
+        Ok(Self {
+            snapshot: snapshot.frame.map(|(sequence, cells)| Text40Snapshot {
+                sequence, cells: cells.try_into().expect("frame length checked above"),
+            }),
+            keys: Text40Keys { key: snapshot.key, reads: snapshot.key_reads },
+            input: snapshot.input,
+            ..Self::default()
+        })
+    }
+
+    /// Reopen the host terminal after loading without resetting guest-visible
+    /// frame, queued input, or the remaining reads of a legacy key pulse.
+    pub fn resume_interactive(&mut self) -> Result<(), String> {
+        self.acquire_terminal()?;
+        if self.active {
+            if let Some(frame) = &self.snapshot {
+                frame.render(&mut io::stderr().lock())
+                    .map_err(|error| format!("Restoring TEXT40: {error}"))?;
+            }
+        }
+        Ok(())
+    }
+
     /// Set before entering display mode. Deterministic runs leave this false.
     pub fn set_interactive(&mut self, interactive: bool) {
         self.interactive = interactive;
@@ -147,6 +194,10 @@ impl Text40Display {
         self.snapshot = None;
         self.input.clear();
         self.quit = false;
+        self.acquire_terminal()
+    }
+
+    fn acquire_terminal(&mut self) -> Result<(), String> {
         if !self.interactive || self.active {
             return Ok(());
         }
@@ -213,9 +264,6 @@ impl Text40Display {
     }
 
     pub fn read_key(&mut self, key: u16) -> Result<bool, String> {
-        if !self.active {
-            return Ok(false);
-        }
         self.poll_input()?;
         Ok(self.keys.read(key))
     }
@@ -280,6 +328,26 @@ impl Drop for Text40Display {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkpoint_restores_text_frame_buffered_input_and_remaining_key_pulse() {
+        let mut display = Text40Display::default();
+        display.accept_event(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
+        for _ in 0..4 { assert!(display.read_key(29).unwrap()); }
+        let mut memory = vec![0; TEXT40_LAST_WORD + 1];
+        memory[TEXT40_BASE_WORD] = 0x1241;
+        display.present(&memory, 9).unwrap();
+        let encoded = serde_json::to_vec(&display.checkpoint()).unwrap();
+        let mut restored = Text40Display::restore_checkpoint(serde_json::from_slice(&encoded).unwrap()).unwrap();
+        restored.resume_interactive().unwrap(); // Headless restoration opens nothing.
+        assert_eq!(restored.snapshot(), display.snapshot());
+        assert_eq!(restored.take_input(), display.take_input());
+        for _ in 0..8 { assert_eq!(restored.read_key(29).unwrap(), display.read_key(29).unwrap()); }
+        assert!(!restored.active);
+        let mut corrupt = display.checkpoint();
+        corrupt.frame.as_mut().unwrap().1.pop();
+        assert!(Text40Display::restore_checkpoint(corrupt).is_err());
+    }
 
     #[test]
     fn renderer_preserves_attributes_and_printable_character_policy() {

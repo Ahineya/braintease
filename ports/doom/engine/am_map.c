@@ -36,6 +36,7 @@
 
 // Needs access to LFB.
 #include "v_video.h"
+#include "doom_resolution.h"
 
 // State.
 #include "doomstat.h"
@@ -835,7 +836,12 @@ void AM_Ticker (void)
 //
 void AM_clearFB(int color)
 {
+#if DOOM_RESOLUTION_SCALE > 1
+    // Keep the original line geometry; discard unsampled cells before stores.
+    V_DrawFilledBox(f_x, f_y, f_w, f_h, color);
+#else
     memset(fb, color, (size_t)f_w*f_h);
+#endif
 }
 
 
@@ -1009,7 +1015,14 @@ AM_drawFline
 	return;
     }
 
+#if DOOM_RESOLUTION_SCALE > 1
+#define PUTDOT(xx,yy,cc) do { \
+    if (!(((xx) | (yy)) & (DOOM_RESOLUTION_SCALE - 1))) \
+        fb[(size_t)(yy)*f_w+(xx)]=(cc); \
+} while (0)
+#else
 #define PUTDOT(xx,yy,cc) fb[(size_t)(yy)*f_w+(xx)]=(cc)
+#endif
 
     dx = fl->b.x - fl->a.x;
     ax = 2 * (dx<0 ? -dx : dx);
@@ -1333,6 +1346,11 @@ void AM_drawMarks(void)
 
 void AM_drawCrosshair(int color)
 {
+#if DOOM_RESOLUTION_SCALE > 1
+    size_t offset = ((size_t)f_w * (f_h + 1)) / 2;
+    if (((offset / f_w) | (offset % f_w)) & (DOOM_RESOLUTION_SCALE - 1))
+        return;
+#endif
     fb[((size_t)f_w*(f_h+1))/2] = color; // single point for now
 
 }

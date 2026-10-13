@@ -169,6 +169,19 @@ fn timeout_and_cancellation_work_before_cpu_initialization_or_hooks() {
 }
 
 #[test]
+fn timeout_does_not_hide_a_failed_final_output_flush() {
+    struct FailedFlush;
+    impl Write for FailedFlush {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> { Ok(bytes.len()) }
+        fn flush(&mut self) -> io::Result<()> { Err(io::Error::other("lost output")) }
+    }
+    let options = RunOptions { timeout: Some(Duration::ZERO), ..limits() };
+    let error = run(&mut host(), "+[]", &options, &mut FailedFlush).unwrap_err();
+    assert!(error.contains("Wall-time limit exceeded"));
+    assert!(error.contains("Guest output: lost output"));
+}
+
+#[test]
 fn instruction_limit_stops_before_instruction_body() {
     let mut host = host();
     let options = RunOptions {

@@ -1949,6 +1949,20 @@ static void M_DrawOPLDev(void)
 // Called after the view has been rendered,
 // but before it has been blitted.
 //
+int M_StaticPageMenu(void)
+{
+    int kind;
+    if (messageToPrint || saveStringEnter) return -1;
+    if (!menuactive) return 0;
+    if (currentMenu == &MainDef) kind = 0;
+    else if (currentMenu == &EpiDef) kind = 1;
+    else if (currentMenu == &NewDef) kind = 2;
+    else return -1;
+    /* These three menus draw only fixed patches and the selected skull.
+     * Options, messages, save text and help screens deliberately fall back. */
+    return 1 + kind * 32 + itemOn * 2 + whichSkull;
+}
+
 void M_Drawer (void)
 {
     static short	x;
@@ -2123,4 +2137,3 @@ void M_Init (void)
 
     //opldev = M_CheckParm("-opldev") > 0;
 }
-

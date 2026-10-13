@@ -11,7 +11,15 @@ GENERATED := $(BUILD)/generated
 PROGRAM ?= engine
 TARGET ?= ripple
 START_MAP ?= 0
+START_DEMO ?= 0
 LOW_DETAIL ?= 0
+RESOLUTION_SCALE ?= 1
+ifneq ($(words $(RESOLUTION_SCALE)),1)
+$(error RESOLUTION_SCALE must be 1, 2 or 4)
+endif
+ifeq ($(filter $(RESOLUTION_SCALE),1 2 4),)
+$(error RESOLUTION_SCALE must be 1, 2 or 4)
+endif
 RENDERER_BF_SMOKE ?= 0
 WAD ?= $(CURDIR)/assets/doom1.wad
 WAD_MODE ?= cooked
@@ -65,7 +73,7 @@ NATIVE_BINARY := $(NOUT)/$(PROGRAM)
 # content per program and record it only after a successful link. Each export
 # needs its own stamp: building BF must not bless an older binary, or vice versa.
 ifeq ($(filter clean help,$(MAKECMDGOALS)),)
-ASSET_CONFIG_KEY := $(shell node tools/build-support.mjs config-key "$(WAD)" "$(WAD_MODE)" "$(BANK_SIZE)" "$(GENERATED)" "$(ASSET_VALIDATION)")
+ASSET_CONFIG_KEY := $(shell node tools/build-support.mjs config-key "$(WAD)" "$(WAD_MODE)" "$(BANK_SIZE)" "$(GENERATED)" "$(ASSET_VALIDATION)" "$(RESOLUTION_SCALE)")
 ifeq ($(ASSET_CONFIG_KEY),)
 $(error Unable to determine WAD build configuration)
 endif
@@ -78,10 +86,10 @@ endif
 source_stem = $(if $(filter tests/%,$(1)),test_)$(basename $(notdir $(1)))
 OBJECTS := $(foreach source,$(RIPPLE_SOURCES),$(ROUT)/$(call source_stem,$(source)).pobj)
 INCLUDES := -Isrc -I$(GENERATED) -Iengine
-DEFINES := -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -DDOOM_PORT=1 \
+DEFINES := -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -DDOOM_PORT=1 -DDOOM_RESOLUTION_SCALE=$(RESOLUTION_SCALE) \
  $(if $(filter engine info_storage,$(PROGRAM)),-DDOOM_GENERATED_INFO=1) \
  $(if $(filter renderer_tables,$(PROGRAM)),$(if $(filter 1,$(RENDERER_BF_SMOKE)),-DDOOM_RENDERER_BF_SMOKE=1))
-SCENE_DEFINES := $(if $(filter 1,$(START_MAP)),-DDOOM_START_MAP=1) $(if $(filter 1,$(LOW_DETAIL)),-DDOOM_LOW_DETAIL=1)
+SCENE_DEFINES := $(if $(filter 1,$(START_MAP)),-DDOOM_START_MAP=1) $(if $(filter 1,$(START_DEMO)),-DDOOM_START_DEMO=1) $(if $(filter 1,$(LOW_DETAIL)),-DDOOM_LOW_DETAIL=1)
 RIPPLE_FLAGS := -Iinclude $(INCLUDES) -I$(ROOT)/runtime/include $(DEFINES) -DRIPPLE=1 -DBANK_SIZE=$(BANK_SIZE) \
  -DDOOM_ASSET_STRICT=$(if $(filter guest,$(ASSET_VALIDATION)),1,0) \
  $(if $(filter engine memory_kernels alloc_fast texture_metadata sprite_metadata sprite_metrics renderer_tables renderer_storage,$(PROGRAM)),-DDOOM_FAST_MEMORY=1)
@@ -105,7 +113,7 @@ FIXTURE_FILES_keyboard_controls := input_commands.inc controls_defaults.inc plat
 FIXTURE_FILES_config_bindings := config_bindings.inc
 FIXTURE_OUTPUTS := $(addprefix $(GENERATED)/,$(FIXTURE_FILES_$(PROGRAM)))
 
-.PHONY: all ripple bf native both prepare runtime run clean help test test-fixtures test-kernels test-gameplay test-assets FORCE _ripple _bf _native invalidate-ripple-config
+.PHONY: all ripple bf native both prepare runtime run clean help test test-fixtures test-kernels test-gameplay test-presentation test-resolution test-assets FORCE _ripple _bf _native invalidate-ripple-config
 all: $(TARGET)
 both: native ripple
 prepare: $(GENERATED)/sources.mk $(GENERATED)/doom_build_config.h $(FIXTURE_STAMP)
@@ -117,7 +125,7 @@ invalidate-ripple-config:
 	@node tools/build-support.mjs config-invalidate "$(ROUT)/.asset-config"
 
 $(GENERATED)/doom_build_config.h: FORCE tools/build-support.mjs tools/assets-pack.mjs tools/assets-validate.mjs tools/assets-identity.mjs tools/sprite-metadata.mjs tools/sprite-metrics.mjs tools/renderer-tables.mjs tools/renderer-tables-validate.mjs
-	@node tools/build-support.mjs config "$(WAD)" "$(GENERATED)" "$(BUILD)/manifest.json" "$(BANK_SIZE)" "$(PROGRAM)" "$(START_MAP)" "$(LOW_DETAIL)" "$(DEFINES)" "$(RIPPLE_FLAGS)" "$(CC)" "$(CFLAGS)" "$(CPPFLAGS)" "$(LDFLAGS)" "$(WAD_MODE)" "$(ASSET_VALIDATION)"
+	@node tools/build-support.mjs config "$(WAD)" "$(GENERATED)" "$(BUILD)/manifest.json" "$(BANK_SIZE)" "$(PROGRAM)" "$(START_MAP)" "$(LOW_DETAIL)" "$(DEFINES)" "$(RIPPLE_FLAGS)" "$(CC)" "$(CFLAGS)" "$(CPPFLAGS)" "$(LDFLAGS)" "$(WAD_MODE)" "$(ASSET_VALIDATION)" "$(START_DEMO)" "$(RESOLUTION_SCALE)"
 
 # Recover a removed generated file without requiring deletion of all build data.
 $(TABLE_SOURCES) $(INFO_SOURCES) $(GENERATED)/info_actions.h $(GENERATED)/info_test_actions.h: $(GENERATED)/sources.mk
@@ -198,7 +206,7 @@ $(NATIVE_BINARY): $(NATIVE_SOURCES) $(HEADERS) $(NOUT)/.flags $(FIXTURE_STAMP) $
 	@printf '%s\n' "$@"
 
 run:
-	+@DOOM_BUILD="$(BUILD)" DOOM_WAD="$(WAD)" DOOM_WAD_MODE="$(WAD_MODE)" DOOM_ASSET_VALIDATION="$(ASSET_VALIDATION)" ./run.sh $(if $(filter 1,$(START_MAP)),--scene e1m1) $(if $(filter 1,$(LOW_DETAIL)),--low-detail) $(RUN_ARGS)
+	+@DOOM_BUILD="$(BUILD)" DOOM_WAD="$(WAD)" DOOM_WAD_MODE="$(WAD_MODE)" DOOM_ASSET_VALIDATION="$(ASSET_VALIDATION)" ./run.sh $(if $(filter 1,$(START_MAP)),--scene e1m1) $(if $(filter 1,$(START_DEMO)),--scene demo1) $(if $(filter 1,$(LOW_DETAIL)),--low-detail) $(if $(filter 2,$(RESOLUTION_SCALE)),--half-resolution) $(if $(filter 4,$(RESOLUTION_SCALE)),--quarter-resolution) $(RUN_ARGS)
 test:
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs smoke --wad "$(WAD)"
 test-fixtures:
@@ -207,6 +215,11 @@ test-kernels:
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs kernels --wad "$(WAD)"
 test-gameplay:
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs gameplay --wad "$(WAD)"
+test-presentation:
+	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs presentation --wad "$(WAD)"
+test-resolution:
+	+@node --test tools/resolution.test.mjs
+	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs resolution --wad "$(WAD)"
 test-assets:
 	+@DOOM_BUILD="$(abspath $(BUILD))" node --test tools/assets-pack.test.mjs tools/assets-validate.test.mjs tools/asset-preflight.test.mjs tools/asset-policy.test.mjs tools/assets-identity.test.mjs tools/sprite-metadata.test.mjs tools/sprite-metrics.test.mjs tools/renderer-tables-validate.test.mjs
 	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/metadata-validate.mjs --wad "$(WAD)"
@@ -218,7 +231,7 @@ test-assets:
 clean:
 	rm -rf "$(BUILD)/ripple" "$(BUILD)/native" "$(BUILD)/assets" "$(GENERATED)"
 help:
-	@printf '%s\n' 'make -j4 [TARGET=ripple|bf|native|both] [WAD_MODE=packed|expanded|cooked] [START_MAP=1] [LOW_DETAIL=1]' \
+	@printf '%s\n' 'make -j4 [TARGET=ripple|bf|native|both] [WAD_MODE=packed|expanded|cooked] [START_MAP=1|START_DEMO=1] [LOW_DETAIL=1] [RESOLUTION_SCALE=1|2|4]' \
 	 'ASSET_VALIDATION=preflight (default) uses assets checked when packed; guest also enables detailed guest checks.' \
-	 'make PROGRAM=numeric TARGET=both' 'make test | test-fixtures | test-kernels | test-gameplay | test-assets' \
+	 'make PROGRAM=numeric TARGET=both' 'make test | test-fixtures | test-kernels | test-gameplay | test-presentation | test-resolution | test-assets' \
 	 './run.sh --scene e1m1 --low-detail' './run-bf.sh --telemetry' 'WAD=/path/to/doom1.wad and BUILD=build may be overridden.'

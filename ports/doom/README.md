@@ -31,6 +31,8 @@ It never opens the source WAD as a writable VM disk.
 
 ```sh
 ports/doom/run.sh --scene e1m1              # start directly in the first level
+ports/doom/run.sh --scene menu              # show the main menu using a short input replay
+ports/doom/run.sh --scene demo1             # play the IWAD's first demo immediately
 ports/doom/run.sh --scene e1m1 --low-detail # half-width world rendering
 ports/doom/run.sh --scene e1m1 --headless   # capture one frame and stop
 ports/doom/run.sh --build-only
@@ -421,6 +423,78 @@ a nonzero status and writes the execution report. `--timeout` bounds execution,
 including BF tape initialization; compilation, export, source parsing and host
 setup happen before that budget starts.
 
+#### Boot once, then resume
+
+Save a checkpoint after the first menu frame:
+
+```sh
+scripts/run-bf-doom.sh --scene menu --telemetry-lite \
+  --save-state ports/doom/build/run-bf/menu.state --save-at-frame 1
+scripts/run-bf-doom.sh --telemetry-lite \
+  --load-state ports/doom/build/run-bf/menu.state
+```
+
+The second command resumes with live keyboard input and the saved framebuffer
+already visible. `--scene menu` uses a deterministic Escape-key replay; saving
+and resuming without a replacement replay enables live input again. To save
+the title instead, omit `--scene menu`. To open the menu from an existing title
+checkpoint, add `--scene menu` to the resume command; its Escape press is relative
+to the saved tick. For immediate recorded gameplay on a fresh boot, use
+`--scene demo1`; this avoids waiting through the title sequence, but level setup
+and rendering still run in the guest.
+
+`--save-state FILE` alone saves on Ctrl-C, window close or an execution limit,
+including during startup. Frame numbers and instruction limits remain cumulative
+after restore. For example, capture frame 2 after loading a frame-1 checkpoint.
+Timeouts retain their nonzero exit status even when a checkpoint is saved.
+
+A checkpoint contains the exact logical BF tape and execution position, counters,
+device state, clock, RNG, pending input and display buffers. Sparse tape encoding
+avoids storing every zero cell. Saving uses a temporary file and atomic replacement;
+checksums reject damaged snapshots, mismatched BF images and changed disks.
+Derived interpreter caches are rebuilt on resume. This supports host optimization
+work while the parsed BF program stays compatible; it cannot carry state across
+a recompiled Doom image or a changed interpreter IR.
+
+Keep the original `DOOM_BUILD` and `--output` directory. On `--load-state`, the
+launcher rebuilds only the host and preserves the existing BF image and mounted
+disk. Keep copies of both alongside valuable checkpoints before rebuilding Doom.
+The disk is external, not embedded in the snapshot; a writable guest disk must
+be preserved at its checkpoint contents. An older running host cannot save a
+checkpoint retroactively. See [the host guide](../../rbf/README.md#save-and-resume-execution)
+for replacement input scripts and compatibility details.
+
+#### Repeated title and menu frames
+
+The guest now reuses unchanged title/menu pixels while continuing Doom's tick,
+input and presentation work. Menu selection, skull animation, page changes,
+help screens and view changes still redraw. Palette changes reconvert the saved
+indexed pixels. The normal converter also uses the engine's already-decoded
+0..255 palette indices directly, removing 64,000 redundant bitwise masks per
+full frame. The general masked converter remains available for unrestricted cells.
+
+With the bundled WAD, an unchanged title frame fell from approximately 1,405,550
+to 37,830 guest instructions (37.2× less work). Unchanged menu frames take about
+38,000–44,000 instructions; selection/skull changes still take around two million.
+These are guest-work counts, not a measured full-Doom BF frame-time improvement.
+The first title frame takes 8,884,746 instructions in this build; the optimization
+primarily improves later unchanged frames. Moving gameplay still needs the real
+world renderer.
+
+The presentation suite compares every pixel and logical frame record with native
+C across title repeats, menu navigation/animation, gamma, help and view changes,
+and three frames of immediate DEMO1 playback (59 frames total). Native C retains
+the full redraw path. All 244 movement/combat/automap, arrow-control and detail-toggle
+replay frames also match native C, as does entering E1M1 through the menu.
+A small actual BF converter comparison processes 68,608 pixels with 64,000-cell
+banks: interpreter dispatches fall from 781,763,807 to 174,780,495 (77.6% fewer),
+with identical output pixels. Three alternating pairs measured median execution
+times of 14.53 versus 9.39 seconds under variable shared CPU load. This isolates
+the conversion loop with nearby buffers, not full Doom or far-memory frame time.
+Checkpoint validation uses separate processes and a small
+animated BF demo: restoring frame 3 and advancing to frame 4 produces the exact
+uninterrupted frame. No full Doom BF boot was run for this change.
+
 Add `--profile build/run-bf/profile.json` to write an optional breakdown of
 generic BF operation timings and hot navigation-loop source offsets, including
 when the run times out. Profiling adds overhead; use ordinary runs for speed
@@ -722,6 +796,7 @@ make -C ports/doom test
 make -C ports/doom test-fixtures
 make -C ports/doom test-kernels
 make -C ports/doom test-gameplay
+make -C ports/doom test-presentation
 ```
 
 The default `make test` compares title, menu-to-E1M1 and direct E1M1 output with
@@ -735,7 +810,7 @@ This caught a compiler bug that truncated wide `switch` selectors and prevented
 the automap's status-bar refresh. The selector now retains its promoted width;
 `./rct switch_wide_control` covers signed 32-bit and unsigned 32/64-bit dispatch.
 For direct invocation, use `node ports/doom/tools/test.mjs fixtures` (or
-`smoke`, `kernels`, `gameplay`). Add `--output DIR` to retain a separate run;
+`smoke`, `kernels`, `gameplay`, `presentation`). Add `--output DIR` to retain a separate run;
 `--help` lists limits and options.
 
 Test manifests identify the source WAD, storage mode, padded disk image,
@@ -775,7 +850,7 @@ in [the optimization notes](../../rcc-backend/OPTIMIZATIONS.md).
 
 ## Remaining scope
 
-Save/load, demo recording, multiplayer, sound, mouse input, persistent host
+Doom savegames, demo recording, multiplayer, sound, mouse input, persistent host
 configuration, PWADs and melt wipes are deferred. Longer sessions, additional
 maps and demo playback need broader validation beyond the bounded E1M1 replays.
 The Brainfuck host supports the device interface and multi-bank export. Its

@@ -30,6 +30,8 @@ pub struct RunOptions {
     pub text_frame: Option<PathBuf>,
     pub expect_frame: Option<PathBuf>,
     pub capture_frame: u64,
+    /// Stop immediately after this absolute presentation count, for checkpointing.
+    pub stop_at_frame: Option<u64>,
     pub max_dispatches: Option<u64>,
     pub max_instructions: Option<u64>,
     pub max_ticks: Option<u64>,
@@ -49,6 +51,7 @@ impl Default for RunOptions {
             text_frame: None,
             expect_frame: None,
             capture_frame: 1,
+            stop_at_frame: None,
             max_dispatches: None,
             max_instructions: None,
             max_ticks: None,
@@ -108,6 +111,8 @@ pub struct Host {
     pub instructions: u64,
     /// Opt-in generic BF diagnostics; normal execution does not collect timings.
     pub profile: Option<Profile>,
+    /// Accepted controller work survives a checkpoint; external connections do not.
+    pub(crate) controller: Controller,
 }
 
 #[derive(Default)]
@@ -171,6 +176,7 @@ impl Host {
             devices,
             instructions: 0,
             profile: None,
+            controller: Controller::default(),
         })
     }
 
@@ -221,11 +227,17 @@ impl Host {
             .and_then(|()| output.flush())
             .map_err(|e| format!("Guest output: {e}"));
         let disk_result = self.devices.flush_storage();
-        let result = result.and_then(|reason| {
-            write_result?;
-            disk_result?;
-            Ok(reason)
-        });
+        // A timeout/limit must not hide a failed output or disk flush: callers
+        // may checkpoint a safe pause, but never a partially failed device step.
+        let mut result = result;
+        for cleanup in [write_result, disk_result] {
+            if let Err(error) = cleanup {
+                result = Err(match result {
+                    Ok(_) => error,
+                    Err(original) => format!("{original}; {error}"),
+                });
+            }
+        }
         if let (Some(progress), Some(observation)) = (progress, observation) {
             let status = match &result {
                 Ok(reason) => reason.clone(),
@@ -260,6 +272,9 @@ impl Host {
         if capture && options.capture_frame == 0 {
             return Err("Capture frame must be positive".into());
         }
+        if options.stop_at_frame == Some(0) {
+            return Err("Checkpoint frame must be positive".into());
+        }
         if options.expect_frame.is_some() && !rgb_capture {
             return Err("--expect-frame requires --screenshot or --raw-frame".into());
         }
@@ -280,7 +295,6 @@ impl Host {
         let started = Instant::now();
         let tick_period = Duration::from_secs_f64(1.0 / f64::from(self.devices.devices.tick_hz()));
         let mut next_tick = started + tick_period;
-        let mut controller = Controller::default();
         let mut halted = false;
         let mut poll_at = 0;
         loop {
@@ -290,9 +304,9 @@ impl Host {
                 poll_at = self.machine.dispatches().saturating_add(4096);
                 self.poll_progress(options, progress, observation, false)?;
                 self.check_host(options, started)?;
-                controller.poll(&options.control)?;
+                self.controller.poll(&options.control)?;
                 self.devices.poll_host_input()?;
-                if controller.quit
+                if self.controller.quit
                     || options.cancelled.load(Ordering::Relaxed)
                     || self.devices.window_closed()
                 {
@@ -358,12 +372,20 @@ impl Host {
                 }
                 return Ok("captured_frame".into());
             }
+            if options
+                .stop_at_frame
+                .is_some_and(|frame| self.devices.presented_frames >= frame)
+            {
+                return Ok("checkpoint_frame".into());
+            }
             if halted {
                 return if capture {
                     Err(format!(
                         "Guest halted before frame {}",
                         options.capture_frame
                     ))
+                } else if let Some(frame) = options.stop_at_frame {
+                    Err(format!("Guest halted before checkpoint frame {frame}"))
                 } else {
                     Ok("halted".into())
                 };
@@ -383,16 +405,16 @@ impl Host {
                     let waiting = match options.clock {
                         ClockPolicy::Unthrottled => false,
                         ClockPolicy::Paced => Instant::now() < next_tick,
-                        ClockPolicy::Stepped => controller.credits == 0,
+                        ClockPolicy::Stepped => self.controller.credits == 0,
                     };
                     if !waiting {
                         break;
                     }
                     self.poll_progress(options, progress, observation, true)?;
                     self.check_host(options, started)?;
-                    controller.poll(&options.control)?;
+                    self.controller.poll(&options.control)?;
                     self.devices.poll_host_input()?;
-                    if controller.quit
+                    if self.controller.quit
                         || options.cancelled.load(Ordering::Relaxed)
                         || self.devices.window_closed()
                     {
@@ -403,20 +425,19 @@ impl Host {
                         };
                     }
                     if options.clock == ClockPolicy::Stepped
-                        && controller.closed
-                        && controller.credits == 0
+                        && self.controller.closed
+                        && self.controller.credits == 0
                     {
                         return Err("Step controller closed while waiting for a tick".into());
                     }
                     thread::sleep(Duration::from_millis(1));
                 }
                 if options.clock == ClockPolicy::Stepped {
-                    controller.credits -= 1;
+                    self.controller.credits -= 1;
                 }
-                let mut memory =
-                    MachineMemory::new(&mut self.machine, self.layout.memory_cells());
+                let mut memory = MachineMemory::new(&mut self.machine, self.layout.memory_cells());
                 self.devices
-                    .complete_tick(&mut memory, std::mem::take(&mut controller.events))?;
+                    .complete_tick(&mut memory, std::mem::take(&mut self.controller.events))?;
                 if let Some(observation) = observation {
                     observation.waiting = false;
                 }
@@ -425,6 +446,12 @@ impl Host {
                 continue;
             }
             let mut budget = 4096;
+            if options
+                .max_instructions
+                .is_some_and(|limit| self.instructions >= limit)
+            {
+                return Err("Ripple instruction limit exceeded".into());
+            }
             if let Some(limit) = options.max_dispatches {
                 if self.machine.dispatches() >= limit {
                     return Err("Brainfuck dispatch limit exceeded".into());
@@ -443,7 +470,6 @@ impl Host {
                 Stop::Input => return Err("Unexpected BF input opcode in Ripple host image".into()),
                 Stop::Output(_) => return Err("Unexpected BF output opcode; rebuild with --bf-host to avoid duplicate TTY output".into()),
                 Stop::Hook(b'$') => {
-                    if options.max_instructions.is_some_and(|limit| self.instructions >= limit) { return Err("Ripple instruction limit exceeded".into()); }
                     let pc = usize::from(self.machine.read_cell(self.layout.origin + 17));
                     let bank = usize::from(self.machine.read_cell(self.layout.origin + 25));
                     // Inspect published CPU state, never decode or execute an

@@ -19,6 +19,18 @@ const median = rows => {
   return (rows[Math.floor(rows.length / 2)] + rows[Math.floor((rows.length - 1) / 2)]) / 2;
 };
 
+// The oracle always renders the original 320x200 image. Sample that completed
+// image independently; the reduced guest must skip these pixels while drawing.
+export function sampleReference(raw, scale) {
+  require([1, 2, 4].includes(scale), 'reference sample scale must be 1, 2 or 4');
+  require(raw.length === 320 * 200 * 2, 'native reference must be a full 320x200 RGB565 image');
+  if (scale === 1) return raw;
+  const result = Buffer.alloc(320 / scale * (200 / scale) * 2);
+  for (let y = 0; y < 200 / scale; y++) for (let x = 0; x < 320 / scale; x++)
+    result.writeUInt16LE(raw.readUInt16LE(((y * scale) * 320 + x * scale) * 2), (y * (320 / scale) + x) * 2);
+  return result;
+}
+
 // Object labels recover static function boundaries omitted from binary DEBUG.
 // Reject stale objects rather than attributing samples to invented boundaries.
 export function analyzeProfile(binary, hitPath, objectDir, archives = []) {
@@ -120,12 +132,13 @@ export function benchmark(options = {}) {
   const settings = { binary: path.join(BUILD, 'ripple/engine/engine.bin'),
     native: path.join(BUILD, 'native/engine/engine'), objects: path.join(BUILD, 'ripple/engine'),
     wad: WAD, input: path.join(PORT, 'tests/gameplay.json'), output: path.join(BUILD, 'gameplay-benchmark'),
-    frames: 32, mode: 'map', wadMode: process.env.DOOM_WAD_MODE || 'cooked', manifest: path.join(BUILD, 'manifest.json'), profiles: [], archives: [], ...options };
+    frames: 32, mode: 'map', sampleScale: 1, wadMode: process.env.DOOM_WAD_MODE || 'cooked', manifest: path.join(BUILD, 'manifest.json'), profiles: [], archives: [], ...options };
   require(Number.isSafeInteger(settings.frames) && settings.frames >= 2, 'benchmark needs at least two frames');
   require(settings.profiles.every(frame => Number.isSafeInteger(frame) && frame >= 1 && frame <= settings.frames),
     'profile frames must be inside benchmark range');
-  require(['map', 'title'].includes(settings.mode), 'invalid native start mode');
+  require(['map', 'title', 'demo1'].includes(settings.mode), 'invalid native start mode');
   require(WAD_MODES.includes(settings.wadMode), 'invalid WAD storage mode');
+  require([1, 2, 4].includes(settings.sampleScale), 'reference sample scale must be 1, 2 or 4');
   const out = path.resolve(settings.output); mkdir(out);
   const result = { success: false };
   try {
@@ -147,23 +160,26 @@ export function benchmark(options = {}) {
     require(rows.length === settings.frames && guestFrames.length === settings.frames, 'missing guest frame records');
     Object.assign(result, { frames: rows, checks: [], binary_sha256: digest(binary), native_sha256: digest(native),
       script_sha256: digest(script), vm_library_sha256: digest(RLIB), disk_image: diskMetadata,
-      wad_mode: settings.wadMode, bank_size: BANK, memory_cells: MEMORY, seed: 1 });
+      wad_mode: settings.wadMode, bank_size: BANK, memory_cells: MEMORY, seed: 1,
+      resolution_scale: settings.sampleScale, width: 320 / settings.sampleScale, height: 200 / settings.sampleScale });
     for (let frame = 1; frame <= settings.frames; frame++) {
       const raw = path.join(out, 'native-' + frame + '.rgb565');
       fs.rmSync(raw, { force: true });
       const log = run('native-' + frame, [native, raw, frame, settings.mode, nativeScript], out, 180);
       const referenceFrames = frameRows(log), actual = path.join(out, 'timing/frame-' + frame + '.rgb565');
-      const expectedBytes = fs.readFileSync(raw), actualBytes = fs.readFileSync(actual);
+      const expectedBytes = sampleReference(fs.readFileSync(raw), settings.sampleScale), actualBytes = fs.readFileSync(actual);
+      const sampled = settings.sampleScale === 1 ? raw : path.join(out, 'sampled-native-' + frame + '.rgb565');
+      if (sampled !== raw) fs.writeFileSync(sampled, expectedBytes);
       const stateMatches = JSON.stringify(referenceFrames) === JSON.stringify(guestFrames.slice(0, frame));
       if (!expectedBytes.equals(actualBytes) || !stateMatches) {
         let differing = 0;
         for (let offset = 0; offset < Math.max(expectedBytes.length, actualBytes.length); offset += 2)
           if (!expectedBytes.subarray(offset, offset + 2).equals(actualBytes.subarray(offset, offset + 2))) differing++;
         Object.assign(result, { failed_frame: frame, differing_pixels: differing,
-          expected_raw: raw, actual_raw: actual, state_matches: stateMatches });
+          expected_raw: sampled, actual_raw: actual, state_matches: stateMatches });
         throw new Error('frame ' + frame + ': native pixels or state records differ');
       }
-      result.checks.push({ frame, raw_sha256: digest(raw), state: referenceFrames.at(-1) });
+      result.checks.push({ frame, raw_sha256: digest(actual), full_reference_sha256: digest(raw), state: referenceFrames.at(-1) });
     }
     result.profiles = [];
     if (settings.profiles.length) {
@@ -182,8 +198,9 @@ export function benchmark(options = {}) {
     const seconds = median(rows.slice(1).map(row => row.seconds));
     Object.assign(result, { success: true, steady_median_seconds: seconds, steady_fps: 1 / seconds,
       steady_median_instructions: median(rows.slice(1).map(row => row.instructions)),
-      measurement: 'Production runner; unthrottled logical clock; every presented frame compared with native C; startup excluded.' });
-    console.log('PASS ' + settings.frames + ' exact native frames; median ' + seconds.toFixed(4)
+      measurement: 'Production runner; unthrottled logical clock; every presented frame compared with full native C' +
+        (settings.sampleScale === 1 ? '' : ' top-left samples at scale ' + settings.sampleScale) + '; startup excluded.' });
+    console.log('PASS ' + settings.frames + ' exact native' + (settings.sampleScale === 1 ? '' : ' sampled') + ' frames; median ' + seconds.toFixed(4)
       + 's (' + (1 / seconds).toFixed(2) + ' fps), ' + result.steady_median_instructions.toLocaleString() + ' instructions');
     return result;
   } catch (error) {
@@ -194,13 +211,14 @@ export function benchmark(options = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { values } = parseArgs({ options: Object.fromEntries(
-    ['binary', 'native', 'objects', 'wad', 'wad-mode', 'manifest', 'input', 'output', 'frames', 'mode', 'profile-frame', 'archive', 'help']
+    ['binary', 'native', 'objects', 'wad', 'wad-mode', 'manifest', 'input', 'output', 'frames', 'mode', 'sample-scale', 'profile-frame', 'archive', 'help']
       .map(name => [name, { type: name === 'help' ? 'boolean' : 'string', multiple: ['profile-frame', 'archive'].includes(name) }])) });
   if (values.help) console.log('Usage: node tools/benchmark.mjs [--frames 32] [--input tests/gameplay.json]\n'
-    + '  [--binary FILE] [--native FILE] [--wad FILE] [--wad-mode packed|expanded|cooked] [--manifest FILE] [--mode map|title]\n'
-    + '  [--output DIRECTORY] [--profile-frame N ...] [--objects DIRECTORY] [--archive FILE ...]');
+    + '  [--binary FILE] [--native FILE] [--wad FILE] [--wad-mode packed|expanded|cooked] [--manifest FILE] [--mode map|title|demo1]\n'
+    + '  [--output DIRECTORY] [--sample-scale 1|2|4] [--profile-frame N ...] [--objects DIRECTORY] [--archive FILE ...]\n'
+    + 'The native reference must use full resolution; --sample-scale selects top-left samples for a reduced guest.');
   else try {
-    benchmark({ ...values, wadMode: values['wad-mode'] ?? (process.env.DOOM_WAD_MODE || 'cooked'), frames: Number(values.frames ?? 32), profiles: (values['profile-frame'] || []).map(Number),
+    benchmark({ ...values, sampleScale: Number(values['sample-scale'] ?? 1), wadMode: values['wad-mode'] ?? (process.env.DOOM_WAD_MODE || 'cooked'), frames: Number(values.frames ?? 32), profiles: (values['profile-frame'] || []).map(Number),
       archives: values.archive || [] });
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

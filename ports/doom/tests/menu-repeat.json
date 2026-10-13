@@ -1,0 +1,10 @@
+[
+  {"tick": 1, "key": 41, "down": true},
+  {"tick": 2, "key": 41, "down": false},
+  {"tick": 4, "key": 81, "down": true},
+  {"tick": 5, "key": 81, "down": false},
+  {"tick": 6, "key": 82, "down": true},
+  {"tick": 7, "key": 82, "down": false},
+  {"tick": 14, "key": 81, "down": true},
+  {"tick": 15, "key": 81, "down": false}
+]

@@ -8,12 +8,14 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+mod checkpoint;
 mod profile;
 mod routed;
 mod scan;
 mod search;
 mod tape;
 
+pub use checkpoint::CheckpointError;
 pub use profile::{OperationProfile, Profile, ProfileReport, SiteProfile};
 
 const NO_FAST_OP: u32 = u32::MAX;
@@ -116,6 +118,8 @@ enum FastOp {
 /// Immutable parsed code; a program can be shared by independent machines.
 #[derive(Debug)]
 pub struct Program {
+    optimize_enabled: bool,
+    host_hooks_enabled: bool,
     code: Vec<Instruction>,
     fast_at: Vec<u32>,
     fast: Vec<FastOp>,
@@ -183,6 +187,8 @@ impl Program {
             });
         }
         let mut program = Self {
+            optimize_enabled: optimize,
+            host_hooks_enabled: host_hooks,
             fast_at: vec![NO_FAST_OP; code.len()],
             code,
             fast: Vec::new(),

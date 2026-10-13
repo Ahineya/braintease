@@ -359,6 +359,66 @@ its operation times exclude host callbacks and profiler bookkeeping, so use
 ordinary runs for before/after performance measurements. Normal execution does
 not collect these timings.
 
+## Save and resume execution
+
+Save a booted Doom session once, then resume it without repeating startup:
+
+```sh
+scripts/run-bf-doom.sh --telemetry-lite \
+  --save-state ports/doom/build/run-bf/boot.state --save-at-frame 1
+scripts/run-bf-doom.sh --telemetry-lite \
+  --load-state ports/doom/build/run-bf/boot.state
+```
+
+`--save-state FILE` saves on normal exit, Ctrl-C, window close, or an execution
+limit. `--save-at-frame N` additionally stops immediately after presentation N;
+it requires `--save-state` and does not require a screenshot. Without that flag,
+closing the window saves wherever execution has reached. A guest/device/output
+error does not overwrite a good checkpoint. Saving uses an atomic replacement
+and a checksum so a partial file cannot be mistaken for a valid save.
+
+The checkpoint includes the logical BF tape, pointer and execution position,
+BF/guest counters, clock and pending tick, RNG, keyboard queues and held keys,
+script position, TTY queues, display buffers, and storage position/cache state.
+The sparse binary tape encoding avoids writing every zero cell. Native windows,
+terminal handles and external input connections are recreated. Accepted input
+and controller credits are preserved; unread future stdin is not a recording.
+Previously printed output is not replayed. Diagnostic profile/telemetry samples
+start fresh; execution counters, ticks and frame numbers remain cumulative.
+
+The original **unchanged BF image and disk are required**. Their identities and
+the parsed BF program are checked on restore. A guest/compiler rebuild generally
+requires a new checkpoint; interpreter execution improvements remain compatible
+when the parsed program and state format are unchanged. The Doom launcher skips
+its guest build and disk restaging when `--load-state` is supplied, while still
+checking the release host build. Keep the checkpoint together with its image
+and staged disk. A running process started without checkpoint support cannot be
+saved retroactively.
+The disk is external rather than embedded in the checkpoint; preserve a copy at
+the checkpoint's contents if the guest may write to it. Interpreter caches start
+cold, so future optimized BF dispatch counts may differ from an uninterrupted
+run even though logical guest execution is identical.
+
+For a bounded profile starting at the saved frame:
+
+```sh
+scripts/run-bf-doom.sh --headless --load-state ports/doom/build/run-bf/boot.state \
+  --timeout 30 --profile ports/doom/build/run-bf/after-boot-profile.json
+```
+
+`--timeout` starts fresh after restore. Instruction/dispatch/tick limits and
+capture/save frame numbers are absolute cumulative limits. To capture the next
+frame from a frame-1 checkpoint, use `--capture-frame 2`. The saved tick rate and
+RNG state are retained; `--seed` and `--tick-hz` cannot be supplied with restore.
+The clock pacing policy and profiling/telemetry options may be changed.
+
+By default the saved input script resumes at its saved position. Supplying
+`--input-script FILE` explicitly replaces it; events must be later than the
+current tick. Add `--input-script-relative` to interpret tick 1 as the first
+tick after restore. This makes a short Escape press reusable for opening the
+menu from any boot checkpoint. Framebuffer/device semantics and the BF CPU/ISA
+are unchanged.
+
 ## Execution engine
 
 The reusable core is [`src/rust-bf/src/engine.rs`](../src/rust-bf/src/engine.rs).

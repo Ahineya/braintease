@@ -30,6 +30,7 @@
 #include "doomstat.h"
 
 #include "r_local.h"
+#include "doom_resolution.h"
 #include "r_sky.h"
 
 
@@ -128,6 +129,10 @@ R_RenderMaskedSegRange
 
     maskedtexturecol = ds->maskedtexturecol;
 
+#if DOOM_RESOLUTION_SCALE > 1
+    x1 += ((-(viewwindowx + (x1 << detailshift)))
+           & (DOOM_RESOLUTION_SCALE - 1)) >> detailshift;
+#endif
     rw_scalestep = ds->scalestep;		
     spryscale = ds->scale1 + (x1 - ds->x1)*rw_scalestep;
     mfloorclip = ds->sprbottomclip;
@@ -152,7 +157,7 @@ R_RenderMaskedSegRange
 	dc_colormap = fixedcolormap;
     
     // draw the columns
-    for (dc_x = x1 ; dc_x <= x2 ; dc_x++)
+    for (dc_x = x1 ; dc_x <= x2 ; dc_x += DOOM_RESOLUTION_SCALE > 1 ? DOOM_RESOLUTION_SCALE >> detailshift : 1)
     {
 	// calculate lighting
 	if (maskedtexturecol[dc_x] != SHRT_MAX)
@@ -177,7 +182,11 @@ R_RenderMaskedSegRange
 	    R_DrawMaskedColumn (col);
 	    maskedtexturecol[dc_x] = SHRT_MAX;
 	}
+#if DOOM_RESOLUTION_SCALE > 1
+        spryscale = (uint32_t)spryscale + (uint32_t)rw_scalestep * (DOOM_RESOLUTION_SCALE >> detailshift);
+#else
 	spryscale += rw_scalestep;
+#endif
     }
 	
 }
@@ -220,9 +229,15 @@ void R_RenderSegLoop (void)
     short *floor_at;
     short ceiling;
     short floor;
+#if DOOM_RESOLUTION_SCALE > 1
+    int sampled;
+#endif
 
     for ( ; x < stop ; x++)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        sampled = !((viewwindowx + (x << detailshift)) & (DOOM_RESOLUTION_SCALE - 1));
+#endif
         ceiling_at = ceilingclip + x;
         floor_at = floorclip + x;
         ceiling = *ceiling_at;
@@ -268,7 +283,11 @@ void R_RenderSegLoop (void)
 	}
 	
 	// texturecolumn and lighting are independent of wall tiers
-	if (segtextured)
+	if (segtextured
+#if DOOM_RESOLUTION_SCALE > 1
+            && sampled
+#endif
+        )
 	{
 	    // calculate texture offset
 	    angle = (rw_centerangle + xtoviewangle[x])>>ANGLETOFINESHIFT;
@@ -299,11 +318,18 @@ void R_RenderSegLoop (void)
              * The column drawer would discard them; avoid narrowing first. */
             if (yl <= yh)
             {
+#if DOOM_RESOLUTION_SCALE > 1
+                if (sampled)
+                {
+#endif
                 dc_yl = yl;
                 dc_yh = yh;
                 dc_texturemid = rw_midtexturemid;
                 dc_source = R_GetColumn(midtexture,texturecolumn);
                 colfunc ();
+#if DOOM_RESOLUTION_SCALE > 1
+                }
+#endif
             }
 	    ceiling = viewheight;
 	    floor = -1;
@@ -322,11 +348,18 @@ void R_RenderSegLoop (void)
 
 		if (mid >= yl)
 		{
+#if DOOM_RESOLUTION_SCALE > 1
+                    if (sampled)
+                    {
+#endif
 		    dc_yl = yl;
 		    dc_yh = mid;
 		    dc_texturemid = rw_toptexturemid;
 		    dc_source = R_GetColumn(toptexture,texturecolumn);
 		    colfunc ();
+#if DOOM_RESOLUTION_SCALE > 1
+                    }
+#endif
 		    ceiling = mid;
 		}
 		else
@@ -351,12 +384,19 @@ void R_RenderSegLoop (void)
 		
 		if (mid <= yh)
 		{
+#if DOOM_RESOLUTION_SCALE > 1
+                    if (sampled)
+                    {
+#endif
 		    dc_yl = mid;
 		    dc_yh = yh;
 		    dc_texturemid = rw_bottomtexturemid;
 		    dc_source = R_GetColumn(bottomtexture,
 					    texturecolumn);
 		    colfunc ();
+#if DOOM_RESOLUTION_SCALE > 1
+                    }
+#endif
 		    floor = mid;
 		}
 		else
@@ -373,7 +413,11 @@ void R_RenderSegLoop (void)
 	    {
 		// save texturecol
 		//  for backdrawing of masked mid texture
+#if DOOM_RESOLUTION_SCALE > 1
+                maskedtexturecol[x] = sampled ? texturecolumn : SHRT_MAX;
+#else
 		maskedtexturecol[x] = texturecolumn;
+#endif
 	    }
 	}
 		

@@ -14,6 +14,15 @@
 .code
 
 Doom_DrawColumn:
+    LI RV1, 320
+    BEQ R0, R0, L_doom_raster_column_entry
+
+; Stride is the eighth stack word; position/step/count already select samples.
+; Maximum supported stride is 1280, so a canonical offset cannot wrap 16 bits.
+Doom_DrawColumnStrided:
+    ADDI SC, SP, -8
+    LOAD RV1, SB, SC
+L_doom_raster_column_entry:
     ADDI SC, SP, -7
     LOAD T6, SB, SC
     BEQ T6, R0, L_doom_raster_column_return
@@ -74,7 +83,7 @@ L_doom_raster_column_fast:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
-    ADDI A0, A0, 320
+    ADD A0, A0, RV1
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_column_fast_next
     SUB A0, A0, T7
@@ -113,7 +122,7 @@ L_doom_raster_column_map_loaded:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
-    ADDI A0, A0, 320
+    ADD A0, A0, RV1
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_column_split_next
     SUB A0, A0, T7
@@ -126,6 +135,15 @@ L_doom_raster_column_return:
     JALR R0, RAB, RA
 
 Doom_DrawSpan:
+    LI RV1, 1
+    BEQ R0, R0, L_doom_raster_span_entry
+
+; Stride is the eighth stack word; position/step/count already select samples.
+; Maximum supported stride is 1280, so a canonical offset cannot wrap 16 bits.
+Doom_DrawSpanStrided:
+    ADDI SC, SP, -8
+    LOAD RV1, SB, SC
+L_doom_raster_span_entry:
     ADDI SC, SP, -7
     LOAD T6, SB, SC
     BEQ T6, R0, L_doom_raster_span_return
@@ -189,7 +207,7 @@ L_doom_raster_span_fast:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
-    ADDI A0, A0, 1
+    ADD A0, A0, RV1
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_span_fast_next
     SUB A0, A0, T7
@@ -231,7 +249,7 @@ L_doom_raster_span_map_loaded:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
-    ADDI A0, A0, 1
+    ADD A0, A0, RV1
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_span_split_next
     SUB A0, A0, T7

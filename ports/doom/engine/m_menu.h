@@ -42,6 +42,8 @@ void M_Ticker (void);
 // Called by main loop,
 // draws the menus directly into the screen buffer.
 void M_Drawer (void);
+/* Stable pixel key for simple menus over attract pages; -1 needs a redraw. */
+int M_StaticPageMenu(void);
 
 // Called by D_DoomMain,
 // loads the config file.

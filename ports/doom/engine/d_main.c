@@ -74,6 +74,7 @@
 #include "statdump.h"
 
 #include "d_main.h"
+#include "doom_port.h"
 
 //
 // D-DoomLoop()
@@ -166,6 +167,7 @@ gamestate_t     wipegamestate = GS_DEMOSCREEN;
 extern  boolean setsizeneeded;
 extern  int             showMessages;
 void R_ExecuteSetViewSize (void);
+extern char *pagename;
 
 void D_Display (void)
 {
@@ -175,6 +177,12 @@ void D_Display (void)
     static  boolean		fullscreen = false;
     static  gamestate_t		oldgamestate = -1;
     static  int			borderdrawcount;
+#ifdef RIPPLE
+    static const char *unchanged_page;
+    static int unchanged_menu;
+    const char *current_page;
+    int current_menu;
+#endif
     int				nowtime;
     int				tics;
     int				wipestart;
@@ -185,6 +193,29 @@ void D_Display (void)
 
     if (nodrawers)
     	return;                    // for comparative timing / profiling
+
+#ifdef RIPPLE
+    /* An attract page and an unchanged simple menu have no new pixels.
+     * Keep every simulation tic,
+     * input poll and presentation, but reuse both buffers until something can
+     * draw over them. Closing a menu, changing pages or forcing a view/wipe
+     * always takes the ordinary redraw path. Palette changes are handled by
+     * Doom_RepeatFrame even when the indexed pixels stay unchanged. */
+    current_menu = M_StaticPageMenu();
+    current_page = gamestate == GS_DEMOSCREEN && current_menu >= 0
+                && !inhelpscreens && !paused && !testcontrols ? pagename : NULL;
+    if (current_page != NULL && current_page == unchanged_page
+        && current_menu == unchanged_menu
+        && oldgamestate == GS_DEMOSCREEN && wipegamestate == GS_DEMOSCREEN
+        && !setsizeneeded)
+    {
+        NetUpdate();
+        Doom_RepeatFrame();
+        return;
+    }
+    unchanged_page = current_page;
+    unchanged_menu = current_menu;
+#endif
 		
     redrawsbar = false;
     
@@ -1787,6 +1818,19 @@ void D_DoomMain (void)
 		autostart = true;
     }
 
+    /* The port mounts one IWAD, so a built-in demo must not attempt to open
+     * an additional demo1.lmp file. Playback itself remains Doom's normal
+     * G_DoPlayDemo path, including demo header and tic decoding. */
+    p = M_CheckParmWithArgs("-iwaddemo", 1);
+    if (p)
+    {
+        W_GetNumForName(myargv[p + 1]);
+        singledemo = true;
+        G_DeferedPlayDemo(myargv[p + 1]);
+        D_DoomLoop();
+        return;
+    }
+
     p = M_CheckParmWithArgs("-playdemo", 1);
     if (p)
     {
@@ -1820,4 +1864,3 @@ void D_DoomMain (void)
 
     D_DoomLoop ();
 }
-

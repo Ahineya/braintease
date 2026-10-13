@@ -5,6 +5,7 @@ PORT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$PORT/../.." && pwd)"
 scene=title
 detail=high
+resolution_scale=1
 wad="${DOOM_WAD:-$PORT/assets/doom1.wad}"
 wad_mode="${DOOM_WAD_MODE:-${WAD_MODE:-cooked}}"
 asset_validation="${DOOM_ASSET_VALIDATION:-preflight}"
@@ -22,8 +23,10 @@ build_only=0
 usage() {
   cat <<'EOF'
 Usage: ports/doom/run.sh [options]
-  --scene title|e1m1       Initial scene (default: title)
+  --scene SCENE            title (default), menu, e1m1, or demo1
   --low-detail            Faster, coarser world rendering; F5 also toggles it
+  --half-resolution       Render top-left samples only: 160x100 (2x2 blocks)
+  --quarter-resolution    Render top-left samples only: 80x50 (4x4 blocks)
   --wad FILE              Shareware WAD (default: assets/doom1.wad)
   --wad-mode MODE         packed, expanded or cooked (default: cooked)
   --asset-validation MODE preflight (default), or guest for extra guest checks
@@ -44,6 +47,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --scene) value "$@"; scene="$2"; shift 2;;
     --low-detail) detail=low; shift;;
+    --half-resolution) [[ "$resolution_scale" != 4 ]] || fail 'resolution flags cannot be combined'; resolution_scale=2; shift;;
+    --quarter-resolution) [[ "$resolution_scale" != 2 ]] || fail 'resolution flags cannot be combined'; resolution_scale=4; shift;;
     --wad) value "$@"; wad="$2"; shift 2;;
     --wad-mode) value "$@"; wad_mode="$2"; shift 2;;
     --asset-validation) value "$@"; asset_validation="$2"; shift 2;;
@@ -60,7 +65,7 @@ while [[ $# -gt 0 ]]; do
     *) fail "unknown option: $1";;
   esac
 done
-[[ "$scene" == title || "$scene" == e1m1 ]] || fail 'scene must be title or e1m1'
+[[ "$scene" == title || "$scene" == menu || "$scene" == e1m1 || "$scene" == demo1 ]] || fail 'scene must be title, menu, e1m1 or demo1'
 [[ "$wad_mode" == packed || "$wad_mode" == expanded || "$wad_mode" == cooked ]] || fail 'WAD mode must be packed, expanded or cooked'
 [[ "$asset_validation" == preflight || "$asset_validation" == guest ]] || fail 'asset validation must be preflight or guest'
 [[ -z "$clock" || "$clock" == paced || "$clock" == unthrottled || "$clock" == stepped ]] || fail 'clock must be paced, unthrottled or stepped'
@@ -69,6 +74,10 @@ for numeric in "$frame" "$instructions" "$timeout" "$jobs"; do
 done
 [[ -f "$wad" ]] || fail "WAD not found: $wad"
 wad="$(cd "$(dirname "$wad")" && pwd)/$(basename "$wad")"
+if [[ "$scene" == menu ]]; then
+  [[ -z "$input" ]] || fail '--scene menu supplies its own input script; use --scene title for a custom replay'
+  input="$PORT/tests/menu-open.json"
+fi
 if [[ -n "$input" ]]; then
   [[ -f "$input" ]] || fail "input script not found: $input"
   input="$(cd "$(dirname "$input")" && pwd)/$(basename "$input")"
@@ -77,10 +86,12 @@ if [[ "$build_only" == 0 && ! -x "$ROOT/target/release/rvm" ]]; then
   fail 'Rust VM missing; build the release toolchain from the repository root first'
 fi
 start_map=0
+start_demo=0
 low_detail=0
 [[ "$scene" == e1m1 ]] && start_map=1
+[[ "$scene" == demo1 ]] && start_demo=1
 [[ "$detail" == low ]] && low_detail=1
-make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=ripple "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "ASSET_VALIDATION=$asset_validation" "START_MAP=$start_map" "LOW_DETAIL=$low_detail"
+make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=ripple "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "ASSET_VALIDATION=$asset_validation" "START_MAP=$start_map" "START_DEMO=$start_demo" "LOW_DETAIL=$low_detail" "RESOLUTION_SCALE=$resolution_scale"
 [[ "$build_only" == 0 ]] || exit 0
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"

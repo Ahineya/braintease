@@ -4,7 +4,7 @@
 //! mailbox registers are the only new MMIO addresses. `NEXT_TICK` suspends the
 //! guest at an instruction boundary until its runner grants exactly one tick.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::path::Path;
@@ -36,13 +36,15 @@ pub const STATUS_DISPLAY_MODE: u16 = 5;
 pub const STATUS_INPUT_OVERFLOW: u16 = 6;
 pub const STATUS_PENDING: u16 = 0x8000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct KeyTransition {
     pub key: u16,
     pub down: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct KeyEvent {
     pub key: u16,
     pub down: bool,
@@ -56,14 +58,16 @@ pub struct PresentFrame {
     pub pixels: Vec<u16>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ScheduledKeyEvent {
     tick: u64,
     transition: KeyTransition,
 }
 
 /// An ordered replay. Same-tick transitions retain their file order.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InputScript {
     events: Vec<ScheduledKeyEvent>,
 }
@@ -84,6 +88,15 @@ struct ScriptEvent {
 }
 
 impl InputScript {
+    /// Interpret a replay's positive ticks relative to a restored clock.
+    pub fn relative_to(mut self, tick: u64) -> Result<Self, String> {
+        for event in &mut self.events {
+            event.tick = event.tick.checked_add(tick)
+                .ok_or("relative input script tick overflow")?;
+        }
+        Ok(self)
+    }
+
     pub fn from_json(json: &str) -> Result<Self, String> {
         let entries: Vec<ScriptEvent> =
             serde_json::from_str(json).map_err(|error| format!("invalid input script: {error}"))?;
@@ -290,13 +303,15 @@ pub fn guest_range(
     Ok(start..end)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DescriptorPointer {
     bank: u16,
     offset: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeviceState {
     descriptor: DescriptorPointer,
     command: u16,
@@ -319,6 +334,43 @@ impl Default for DeviceState {
 }
 
 impl DeviceState {
+    /// Persistent guest device state; no host handles or wall clocks are used.
+    pub fn checkpoint(&self) -> Self {
+        self.clone()
+    }
+
+    pub fn restore_checkpoint(snapshot: Self) -> Result<Self, String> {
+        if snapshot.tick_hz == 0 || snapshot.events.len() > INPUT_QUEUE_CAPACITY
+            || snapshot.script_position > snapshot.script.events.len()
+            || snapshot.input_overflow && !snapshot.overflow_seen
+            || !matches!(snapshot.status, 0..=6 | STATUS_PENDING)
+            || snapshot.pending_tick.is_some() != (snapshot.status == STATUS_PENDING)
+            || snapshot.pending_tick.is_some() && snapshot.command != COMMAND_NEXT_TICK
+        {
+            return Err("invalid device checkpoint state".into());
+        }
+        let mut previous = 0;
+        for event in &snapshot.events {
+            if usize::from(event.key) >= KEY_COUNT || event.tick == 0
+                || event.tick > snapshot.tick || event.tick < previous
+            {
+                return Err("invalid device checkpoint input queue".into());
+            }
+            previous = event.tick;
+        }
+        previous = 0;
+        for (index, event) in snapshot.script.events.iter().enumerate() {
+            if usize::from(event.transition.key) >= KEY_COUNT || event.tick == 0
+                || event.tick < previous
+                || (index < snapshot.script_position) != (event.tick <= snapshot.tick)
+            {
+                return Err("invalid device checkpoint input script/cursor".into());
+            }
+            previous = event.tick;
+        }
+        Ok(snapshot)
+    }
+
     pub fn new(tick_hz: u16) -> Result<Self, String> {
         if tick_hz == 0 {
             return Err("virtual tick rate must be greater than zero".to_string());
@@ -655,6 +707,35 @@ impl DeviceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn relative_scripts_preserve_order_and_reject_overflow() {
+        let script = InputScript::from_json(r#"[{"tick":1,"key":"A","down":true},{"tick":1,"key":"A","down":false},{"tick":3,"key":"B","down":true}]"#).unwrap();
+        let shifted = script.clone().relative_to(42).unwrap();
+        assert_eq!(shifted.events.iter().map(|event| event.tick).collect::<Vec<_>>(), [43, 43, 45]);
+        assert_eq!(shifted.events[1].transition, script.events[1].transition);
+        assert!(script.relative_to(u64::MAX - 2).is_err());
+        assert!(InputScript::default().relative_to(u64::MAX).is_ok());
+    }
+
+    #[test]
+    fn checkpoint_replays_pending_tick_and_script_cursor_exactly() {
+        let mut state = DeviceState::new(70).unwrap();
+        let mut memory = vec![0; 256];
+        state.set_script(InputScript::from_json(r#"[{"tick":1,"key":"A","down":true},{"tick":2,"key":"A","down":false}]"#).unwrap()).unwrap();
+        tick(&mut state, &mut memory, &[KeyTransition { key: 82, down: true }]);
+        command(&mut state, &mut memory, COMMAND_NEXT_TICK, 8);
+        let bytes = serde_json::to_vec(&state.checkpoint()).unwrap();
+        let mut restored = DeviceState::restore_checkpoint(serde_json::from_slice(&bytes).unwrap()).unwrap();
+        let mut copy = memory.clone();
+        state.complete_tick(&mut memory, 64, &[]).unwrap();
+        restored.complete_tick(&mut copy, 64, &[]).unwrap();
+        assert_eq!(memory, copy);
+        assert_eq!(serde_json::to_value(state).unwrap(), serde_json::to_value(restored).unwrap());
+        let mut corrupt: DeviceState = serde_json::from_slice(&bytes).unwrap();
+        corrupt.script_position = usize::MAX;
+        assert!(DeviceState::restore_checkpoint(corrupt).is_err());
+    }
 
     struct StridedMemory(Vec<u16>);
     impl GuestMemory for StridedMemory {

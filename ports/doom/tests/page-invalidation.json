@@ -1,0 +1,16 @@
+[
+  {"tick": 4, "key": 41, "down": true},
+  {"tick": 5, "key": 41, "down": false},
+  {"tick": 8, "key": 41, "down": true},
+  {"tick": 9, "key": 41, "down": false},
+  {"tick": 11, "key": 68, "down": true},
+  {"tick": 12, "key": 68, "down": false},
+  {"tick": 14, "key": 58, "down": true},
+  {"tick": 15, "key": 58, "down": false},
+  {"tick": 17, "key": 41, "down": true},
+  {"tick": 18, "key": 41, "down": false},
+  {"tick": 20, "key": 45, "down": true},
+  {"tick": 21, "key": 45, "down": false},
+  {"tick": 24, "key": 68, "down": true},
+  {"tick": 25, "key": 68, "down": false}
+]

@@ -26,6 +26,10 @@
 #include "i_swap.h"
 #include "z_zone.h"
 #include "v_video.h"
+#include "doom_resolution.h"
+#ifdef RIPPLE
+#include "render_fast.h"
+#endif
 #include "w_wad.h"
 #include "patch_cache.h"
 #include "s_sound.h"
@@ -241,6 +245,15 @@ void F_TextWrite (void)
     src = W_CacheLumpName ( finaleflat , PU_CACHE);
     dest = I_VideoBuffer;
 	
+#if DOOM_RESOLUTION_SCALE > 1
+    for (y = 0; y < SCREENHEIGHT; y += DOOM_RESOLUTION_SCALE)
+    {
+        byte *row = src + ((y & 63) << 6);
+        dest = I_VideoBuffer + (int32_t)y * SCREENWIDTH;
+        for (x = 0; x < SCREENWIDTH; x += DOOM_RESOLUTION_SCALE)
+            dest[x] = row[x & 63];
+    }
+#else
     for (y=0 ; y<SCREENHEIGHT ; y++)
     {
 	for (x=0 ; x<SCREENWIDTH/64 ; x++)
@@ -254,6 +267,7 @@ void F_TextWrite (void)
 	    dest += (SCREENWIDTH&63);
 	}
     }
+#endif
 
     V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
     
@@ -581,6 +595,10 @@ F_DrawPatchCol
     byte*	desttop;
     int32_t		count;
 	
+#if DOOM_RESOLUTION_SCALE > 1
+    if (x & (DOOM_RESOLUTION_SCALE - 1))
+        return;
+#endif
     column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
     desttop = I_VideoBuffer + x;
 
@@ -591,11 +609,33 @@ F_DrawPatchCol
 	dest = desttop + (int32_t)column->topdelta*SCREENWIDTH;
 	count = column->length;
 		
+#if DOOM_RESOLUTION_SCALE > 1
+        {
+            int skip = (-column->topdelta) & (DOOM_RESOLUTION_SCALE - 1);
+            if (skip < count)
+            {
+                dest += (int32_t)skip * SCREENWIDTH;
+                source += skip;
+                count = (count - skip + DOOM_RESOLUTION_SCALE - 1) / DOOM_RESOLUTION_SCALE;
+#ifdef RIPPLE
+                Doom_CopyPatchColumnSampled(dest, source, count, DOOM_RESOLUTION_SCALE);
+#else
+                while (count--)
+                {
+                    *dest = *source;
+                    source += DOOM_RESOLUTION_SCALE;
+                    dest += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+                }
+#endif
+            }
+        }
+#else
 	while (count--)
 	{
 	    *dest = *source++;
 	    dest += SCREENWIDTH;
 	}
+#endif
 	column = (column_t *)(  (byte *)column + column->length + 4 );
     }
 }
@@ -625,7 +665,7 @@ void F_BunnyScroll (void)
     if (scrolled < 0)
 	scrolled = 0;
 		
-    for ( x=0 ; x<SCREENWIDTH ; x++)
+    for ( x=0 ; x<SCREENWIDTH ; x+=DOOM_RESOLUTION_SCALE)
     {
 	if (x+scrolled < 320)
 	    F_DrawPatchCol (x, p1, x+scrolled);
@@ -715,5 +755,4 @@ void F_Drawer (void)
             break;
     }
 }
-
 

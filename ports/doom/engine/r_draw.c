@@ -30,6 +30,7 @@
 #include "z_zone.h"
 #include "w_wad.h"
 #include "patch_cache.h"
+#include "doom_resolution.h"
 #ifdef RIPPLE
 #include "render_fast.h"
 #endif
@@ -98,6 +99,45 @@ byte*			dc_source;
 // just for profiling 
 int			dccount;
 
+
+#if DOOM_RESOLUTION_SCALE > 1
+/* Keep the 320x200 projection and cooked lookup tables. Only absolute screen
+ * coordinates on the output lattice contain pixels; all other cells are
+ * deliberately left untouched. Low detail already combines two columns. */
+static int R_SampleColumnStart(int low)
+{
+    int x = viewwindowx + (dc_x << low);
+    int first;
+    if (x & (DOOM_RESOLUTION_SCALE - 1)) return dc_yh + 1;
+    first = dc_yl + ((-(dc_yl + viewwindowy)) & (DOOM_RESOLUTION_SCALE - 1));
+    return first;
+}
+
+static void R_DrawSampledColumn(int low)
+{
+    int first = R_SampleColumnStart(low);
+    unsigned int count;
+    uint32_t frac, step;
+    byte *dest;
+    if (first > dc_yh) return;
+    count = (dc_yh - first) / DOOM_RESOLUTION_SCALE + 1;
+    dest = ylookup[first] + columnofs[dc_x << low];
+    frac = (uint32_t)dc_texturemid + (uint32_t)(first - centery) * (uint32_t)dc_iscale;
+    step = (uint32_t)dc_iscale * DOOM_RESOLUTION_SCALE;
+#ifdef RIPPLE
+    Doom_DrawColumnStrided(dest, dc_source, dc_colormap, frac, step, count,
+                           SCREENWIDTH * DOOM_RESOLUTION_SCALE);
+#else
+    while (count--)
+    {
+        *dest = dc_colormap[dc_source[(frac >> FRACBITS) & 127]];
+        dest += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+        frac += step;
+    }
+#endif
+}
+#endif
+
 //
 // A column is a vertical slice/span from a wall texture that,
 //  given the DOOM style restrictions on the view orientation,
@@ -106,7 +146,10 @@ int			dccount;
 //  be used. It has also been used with Wolfenstein 3D.
 // 
 void R_DrawColumn (void) 
-{ 
+{
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledColumn(0);
+#else 
     int			count; 
     byte*		dest; 
     fixed_t		frac;
@@ -153,6 +196,7 @@ void R_DrawColumn (void)
 	frac += fracstep;
 	
     } while (count--); 
+#endif
 } 
 
 
@@ -217,7 +261,10 @@ void R_DrawColumn (void)
 
 
 void R_DrawColumnLow (void) 
-{ 
+{
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledColumn(1);
+#else 
     int			count; 
     byte*		dest; 
     byte*		dest2;
@@ -266,6 +313,7 @@ void R_DrawColumnLow (void)
 	frac += fracstep; 
 
     } while (count--);
+#endif
 }
 
 
@@ -289,6 +337,32 @@ int	fuzzoffset[FUZZTABLE] =
 
 int	fuzzpos = 0; 
 
+#if DOOM_RESOLUTION_SCALE > 1
+static void R_DrawSampledFuzzColumn(int low)
+{
+    int first, last, count;
+    byte *dest;
+    /* Fuzz depends on a neighboring pixel. Read a neighboring output row,
+     * never an uncomputed row. Its phase advances once per output sample,
+     * intentionally defining a coarser effect rather than full-size fuzz. */
+    first = R_SampleColumnStart(low);
+    if (first < DOOM_RESOLUTION_SCALE) first += DOOM_RESOLUTION_SCALE;
+    last = dc_yh < viewheight - DOOM_RESOLUTION_SCALE - 1
+         ? dc_yh : viewheight - DOOM_RESOLUTION_SCALE - 1;
+    if (first > last) return;
+    count = (last - first) / DOOM_RESOLUTION_SCALE + 1;
+    dest = ylookup[first] + columnofs[dc_x << low];
+    while (count--)
+    {
+        *dest = colormaps[6 * 256 + dest[fuzzoffset[fuzzpos] * DOOM_RESOLUTION_SCALE]];
+        if (++fuzzpos == FUZZTABLE) fuzzpos = 0;
+        dest += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+    }
+}
+#endif
+
+
+
 
 //
 // Framebuffer postprocessing.
@@ -299,7 +373,10 @@ int	fuzzpos = 0;
 //  i.e. spectres and invisible players.
 //
 void R_DrawFuzzColumn (void) 
-{ 
+{
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledFuzzColumn(0);
+#else 
     int			count; 
     byte*		dest; 
     fixed_t		frac;
@@ -353,12 +430,16 @@ void R_DrawFuzzColumn (void)
 
 	frac += fracstep; 
     } while (count--); 
+#endif
 } 
 
 // low detail mode version
  
 void R_DrawFuzzColumnLow (void) 
-{ 
+{
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledFuzzColumn(1);
+#else 
     int			count; 
     byte*		dest; 
     byte*		dest2; 
@@ -421,6 +502,7 @@ void R_DrawFuzzColumnLow (void)
 
 	frac += fracstep; 
     } while (count--); 
+#endif
 } 
  
   
@@ -439,8 +521,34 @@ void R_DrawFuzzColumnLow (void)
 byte*	dc_translation;
 byte*	translationtables;
 
+#if DOOM_RESOLUTION_SCALE > 1
+static void R_DrawSampledTranslatedColumn(int low)
+{
+    int first = R_SampleColumnStart(low);
+    unsigned int count;
+    uint32_t frac, step;
+    byte *dest;
+    if (first > dc_yh) return;
+    count = (dc_yh - first) / DOOM_RESOLUTION_SCALE + 1;
+    dest = ylookup[first] + columnofs[dc_x << low];
+    frac = (uint32_t)dc_texturemid + (uint32_t)(first - centery) * (uint32_t)dc_iscale;
+    step = (uint32_t)dc_iscale * DOOM_RESOLUTION_SCALE;
+    while (count--)
+    {
+        *dest = dc_colormap[dc_translation[dc_source[frac >> FRACBITS]]];
+        dest += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+        frac += step;
+    }
+}
+#endif
+
+
+
 void R_DrawTranslatedColumn (void) 
-{ 
+{
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledTranslatedColumn(0);
+#else 
     int			count; 
     byte*		dest; 
     fixed_t		frac;
@@ -481,10 +589,14 @@ void R_DrawTranslatedColumn (void)
 	
 	frac += fracstep; 
     } while (count--); 
+#endif
 } 
 
 void R_DrawTranslatedColumnLow (void) 
-{ 
+{
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledTranslatedColumn(1);
+#else 
     int			count; 
     byte*		dest; 
     byte*		dest2; 
@@ -533,6 +645,7 @@ void R_DrawTranslatedColumnLow (void)
 	
 	frac += fracstep; 
     } while (count--); 
+#endif
 } 
 
 
@@ -603,10 +716,51 @@ byte*			ds_source;
 int			dscount;
 
 
+
+#if DOOM_RESOLUTION_SCALE > 1
+static void R_DrawSampledSpan(int low)
+{
+    uint32_t position, step;
+    byte *dest;
+    unsigned int count, skip, increment;
+    int first;
+    if ((ds_y + viewwindowy) & (DOOM_RESOLUTION_SCALE - 1)) return;
+    skip = ((-(viewwindowx + (ds_x1 << low))) & (DOOM_RESOLUTION_SCALE - 1)) >> low;
+    first = ds_x1 + skip;
+    if (first > ds_x2) return;
+    increment = DOOM_RESOLUTION_SCALE >> low;
+    count = (ds_x2 - first) / increment + 1;
+    /* Offset the already packed position, preserving upstream carry and
+     * rounding. Repacking multiplied x/y steps changes selected texels. */
+    position = (((uint32_t)ds_xfrac << 10) & 0xffff0000UL)
+             | (((uint32_t)ds_yfrac >> 6) & 0xffffUL);
+    step = (((uint32_t)ds_xstep << 10) & 0xffff0000UL)
+         | (((uint32_t)ds_ystep >> 6) & 0xffffUL);
+    position += step * skip;
+    step *= increment;
+    dest = ylookup[ds_y] + columnofs[first << low];
+#ifdef RIPPLE
+    Doom_DrawSpanStrided(dest, ds_source, ds_colormap, position, step, count,
+                         DOOM_RESOLUTION_SCALE);
+#else
+    while (count--)
+    {
+        unsigned int spot = ((position >> 4) & 4032UL) | (position >> 26);
+        *dest = ds_colormap[ds_source[spot]];
+        dest += DOOM_RESOLUTION_SCALE;
+        position += step;
+    }
+#endif
+}
+#endif
+
 //
 // Draws the actual span.
 void R_DrawSpan (void) 
-{ 
+{
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledSpan(0);
+#else 
     uint32_t position, step;
     byte *dest;
     int count;
@@ -659,6 +813,7 @@ void R_DrawSpan (void)
         position += step;
 
     } while (count--);
+#endif
 }
 
 
@@ -741,6 +896,9 @@ void R_DrawSpan (void)
 //
 void R_DrawSpanLow (void)
 {
+#if DOOM_RESOLUTION_SCALE > 1
+    R_DrawSampledSpan(1);
+#else
     uint32_t position, step;
     uint32_t xtemp, ytemp;
     byte *dest;
@@ -792,6 +950,7 @@ void R_DrawSpanLow (void)
 	position += step;
 
     } while (count--);
+#endif
 }
 
 //
@@ -894,6 +1053,21 @@ void R_FillBackScreen (void)
     src = W_CacheLumpName(name, PU_CACHE); 
     dest = background_buffer;
 	 
+#if DOOM_RESOLUTION_SCALE > 1
+    for (y = 0; y < SCREENHEIGHT - SBARHEIGHT; y += DOOM_RESOLUTION_SCALE)
+    {
+        byte *row = background_buffer + (size_t)y * SCREENWIDTH;
+        byte *tile = src + ((y & 63) << 6);
+#ifdef RIPPLE
+        for (x = 0; x < SCREENWIDTH; x += 64)
+            Doom_CopySamples(row + x, tile, 64 / DOOM_RESOLUTION_SCALE,
+                             DOOM_RESOLUTION_SCALE);
+#else
+        for (x = 0; x < SCREENWIDTH; x += DOOM_RESOLUTION_SCALE)
+            row[x] = tile[x & 63];
+#endif
+    }
+#else
     for (y=0 ; y<SCREENHEIGHT-SBARHEIGHT ; y++) 
     { 
 	for (x=0 ; x<SCREENWIDTH/64 ; x++) 
@@ -909,6 +1083,8 @@ void R_FillBackScreen (void)
 	} 
     } 
      
+#endif
+
     // Draw screen and bezel; this is done to a separate screen buffer.
 
     V_UseBuffer(background_buffer);
@@ -967,7 +1143,38 @@ R_VideoErase
 
     if (background_buffer != NULL)
     {
-        memcpy(I_VideoBuffer + ofs, background_buffer + ofs, count); 
+#if DOOM_RESOLUTION_SCALE > 1
+        size_t end = ofs + count;
+        unsigned int y = ofs / SCREENWIDTH;
+        size_t row;
+        y += (-y) & (DOOM_RESOLUTION_SCALE - 1);
+        row = (size_t)y * SCREENWIDTH;
+        while (row < end)
+        {
+            size_t first = ofs > row ? ofs : row;
+            size_t rowend = row + SCREENWIDTH;
+            unsigned int samples;
+            first += (-(unsigned int)(first - row)) & (DOOM_RESOLUTION_SCALE - 1);
+            if (rowend > end) rowend = end;
+            if (first < rowend)
+            {
+                samples = (rowend - first + DOOM_RESOLUTION_SCALE - 1) / DOOM_RESOLUTION_SCALE;
+#ifdef RIPPLE
+                Doom_CopySamples(I_VideoBuffer + first, background_buffer + first,
+                                 samples, DOOM_RESOLUTION_SCALE);
+#else
+                while (samples--)
+                {
+                    I_VideoBuffer[first] = background_buffer[first];
+                    first += DOOM_RESOLUTION_SCALE;
+                }
+#endif
+            }
+            row += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+        }
+#else
+        memcpy(I_VideoBuffer + ofs, background_buffer + ofs, count);
+#endif 
     }
 } 
 

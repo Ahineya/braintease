@@ -30,6 +30,7 @@
 #include "doomstat.h"
 
 #include "r_local.h"
+#include "doom_resolution.h"
 #include "r_sky.h"
 
 
@@ -163,6 +164,14 @@ R_MapPlane
     {
 	I_Error ("R_MapPlane: %i, %i at %i",x1,x2,y);
     }
+#endif
+
+#if DOOM_RESOLUTION_SCALE > 1
+    /* Reject invisible output rows before any 32-bit perspective work. Keep
+     * the original span origin for packed-step rounding in the drawer. */
+    if ((y + viewwindowy) & (DOOM_RESOLUTION_SCALE - 1)) return;
+    if (x1 + (((-(viewwindowx + (x1 << detailshift)))
+                & (DOOM_RESOLUTION_SCALE - 1)) >> detailshift) > x2) return;
 #endif
 
     if (planeheight != cachedheight[y])
@@ -433,6 +442,10 @@ void R_DrawPlanes (void)
 	    dc_texturemid = skytexturemid;
 	    for (x=pl->minx ; x <= pl->maxx ; x++)
 	    {
+#if DOOM_RESOLUTION_SCALE > 1
+                if ((viewwindowx + (x << detailshift)) & (DOOM_RESOLUTION_SCALE - 1))
+                    continue;
+#endif
 		dc_yl = pl->top[x];
 		dc_yh = pl->bottom[x];
 

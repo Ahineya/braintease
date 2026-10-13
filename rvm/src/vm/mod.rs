@@ -12,7 +12,7 @@ mod devices;
 pub use instruction::Instr;
 pub use state::{VMState, KeyboardState};
 pub use terminal::install_terminal_cleanup_hook;
-pub use storage::Storage;
+pub use storage::{Storage, StorageCheckpoint};
 
 use std::collections::{VecDeque, HashMap};
 use ripple_asm::Register;

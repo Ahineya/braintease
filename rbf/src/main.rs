@@ -1,6 +1,7 @@
 use bf_wasm::engine::{Profile, Program};
 use clap::Parser;
 use rbf::{
+    checkpoint::Provenance,
     devices::BfDevices,
     image::Layout,
     runner::{Host, RunOptions, RunReport},
@@ -12,6 +13,7 @@ use rvm::{
     runner::{self, ClockPolicy},
     vm::Storage,
 };
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{self, Read},
@@ -46,6 +48,9 @@ struct Cli {
     clock: ClockPolicy,
     #[arg(long)]
     input_script: Option<PathBuf>,
+    /// Interpret replacement script ticks relative to the restored guest tick
+    #[arg(long, requires_all = ["input_script", "load_state"])]
+    input_script_relative: bool,
     #[arg(long)]
     control_stdin: bool,
     /// Read guest TTY bytes from stdin; unavailable with the JSON controller
@@ -67,6 +72,15 @@ struct Cli {
     capture_frame: u64,
     #[arg(long)]
     report: Option<PathBuf>,
+    /// Restore execution from a checkpoint of this exact BF image and disk
+    #[arg(long, conflicts_with_all = ["seed", "tick_hz"])]
+    load_state: Option<PathBuf>,
+    /// Atomically save execution state on normal exit, Ctrl-C, or an execution limit
+    #[arg(long)]
+    save_state: Option<PathBuf>,
+    /// Stop and save after this absolute frame number (no screenshot required)
+    #[arg(long, requires = "save_state", value_parser = clap::value_parser!(u64).range(1..))]
+    save_at_frame: Option<u64>,
     /// Write generic BF operation timings to JSON, including on timeout (adds overhead)
     #[arg(long)]
     profile: Option<PathBuf>,
@@ -125,6 +139,53 @@ fn execute(cli: Cli) -> Result<i32, String> {
     if (cli.clock == ClockPolicy::Stepped) != cli.control_stdin {
         return Err("--clock stepped and --control-stdin must be used together".into());
     }
+    if let Some(save) = &cli.save_state {
+        for input in [
+            Some(&cli.program),
+            cli.disk.as_ref(),
+            cli.input_script.as_ref(),
+            cli.report.as_ref(),
+            cli.profile.as_ref(),
+            cli.screenshot.as_ref(),
+            cli.raw_frame.as_ref(),
+            cli.text_frame.as_ref(),
+            cli.expect_frame.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if same_path(save, input) {
+                return Err("Checkpoint output must not overwrite the program, disk, script or another output".into());
+            }
+        }
+    }
+    if let Some(load) = &cli.load_state {
+        for output in [
+            cli.report.as_ref(),
+            cli.profile.as_ref(),
+            cli.screenshot.as_ref(),
+            cli.raw_frame.as_ref(),
+            cli.text_frame.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if same_path(load, output) {
+                return Err(
+                    "Checkpoint input must not be overwritten by a report or image capture".into(),
+                );
+            }
+        }
+    }
+    if cli
+        .save_at_frame
+        .is_some_and(|frame| frame != cli.capture_frame)
+        && (cli.screenshot.is_some() || cli.raw_frame.is_some() || cli.text_frame.is_some())
+    {
+        return Err(
+            "--save-at-frame and --capture-frame must match when capturing an image".into(),
+        );
+    }
     let mut telemetry = if cli.telemetry_lite {
         Some(Telemetry::new_lite(io::stderr())?)
     } else if cli.telemetry {
@@ -154,6 +215,8 @@ fn execute(cli: Cli) -> Result<i32, String> {
         )?;
     }
     let program = Program::parse(body, !cli.no_optimize, true).map_err(|e| e.to_string())?;
+    let source_sha256 = format!("{:x}", Sha256::digest(source.as_bytes()));
+    drop(source);
     let disk_hash = cli
         .disk
         .as_deref()
@@ -162,21 +225,59 @@ fn execute(cli: Cli) -> Result<i32, String> {
         .transpose()?;
     let storage = cli
         .disk
-        .map(|path| Storage::with_path(path).map_err(|e| e.to_string()))
+        .as_ref()
+        .map(|path| Storage::with_path(path.clone()).map_err(|e| e.to_string()))
         .transpose()?;
-    let mut devices = BfDevices::new(layout.bank_size, cli.tick_hz, cli.seed, storage)?;
+    let (mut host, mut provenance) = if let Some(path) = &cli.load_state {
+        let restored = Host::load_checkpoint(
+            path,
+            &program,
+            &layout,
+            &source_sha256,
+            !cli.no_optimize,
+            storage,
+        )?;
+        eprintln!(
+            "Restored {}: guest {}, frame {}, tick {}",
+            path.display(),
+            restored.0.instructions,
+            restored.0.devices.presented_frames,
+            restored.0.devices.devices.tick()
+        );
+        restored
+    } else {
+        let devices = BfDevices::new(layout.bank_size, cli.tick_hz, cli.seed, storage)?;
+        (
+            Host::new(layout.clone(), devices)?,
+            Provenance {
+                source_sha256,
+                optimized: !cli.no_optimize,
+                seed: cli.seed,
+                input_script_sha256: None,
+            },
+        )
+    };
     if let Some(path) = &cli.input_script {
-        devices.devices.set_script(InputScript::from_path(path)?)?;
+        let mut script = InputScript::from_path(path)?;
+        if cli.input_script_relative {
+            script = script.relative_to(host.devices.devices.tick())?;
+        }
+        host.devices.devices.set_script(script)?;
+        provenance.input_script_sha256 = Some(runner::sha256_file(path)?);
     }
     if let Some(text) = &cli.input {
-        devices.push_input(text.as_bytes());
+        host.devices.push_input(text.as_bytes());
     }
-    devices.host_input_enabled = !deterministic;
-    devices
+    host.devices.host_input_enabled = !deterministic;
+    host.devices
         .text_display
         .set_interactive(cli.terminal && !deterministic);
     if cli.terminal && !deterministic {
         rvm::vm::install_terminal_cleanup_hook();
+    }
+    if cli.terminal && !deterministic && host.devices.display_mode() == rvm::constants::DISP_TEXT40
+    {
+        host.devices.text_display.resume_interactive()?;
     }
     let cancelled = Arc::new(AtomicBool::new(false));
     for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
@@ -189,6 +290,7 @@ fn execute(cli: Cli) -> Result<i32, String> {
         text_frame: cli.text_frame,
         expect_frame: cli.expect_frame,
         capture_frame: cli.capture_frame,
+        stop_at_frame: cli.save_at_frame,
         max_dispatches: cli.max_dispatches,
         max_instructions: cli.max_instructions,
         max_ticks: cli.max_ticks,
@@ -198,7 +300,6 @@ fn execute(cli: Cli) -> Result<i32, String> {
         tty_input: cli.tty_stdin.then(stdin_bytes),
         cancelled,
     };
-    let mut host = Host::new(layout.clone(), devices)?;
     if cli.profile.is_some() {
         host.profile = Some(Profile::default());
     }
@@ -222,33 +323,50 @@ fn execute(cli: Cli) -> Result<i32, String> {
         ripple_instructions: 0,
         tick: 0,
         milliseconds: 0,
-        tick_hz: cli.tick_hz,
+        tick_hz: host.devices.devices.tick_hz(),
         clock: cli.clock,
         frames: 0,
         width: None,
         height: None,
         elapsed_seconds: 0.0,
         layout,
-        seed: cli.seed,
-        source_sha256: runner::sha256_file(&cli.program)?,
+        seed: provenance.seed,
+        source_sha256: provenance.source_sha256.clone(),
         disk_sha256: disk_hash,
-        input_script_sha256: cli
-            .input_script
-            .as_deref()
-            .map(runner::sha256_file)
-            .transpose()?,
+        input_script_sha256: provenance.input_script_sha256.clone(),
         input_overflow: false,
         guest_result: 0,
     };
     let worker_state = Arc::clone(&state);
     let work = move || {
         let start = Instant::now();
-        let result = if let Some(telemetry) = &mut telemetry {
+        let mut result = if let Some(telemetry) = &mut telemetry {
             host.run_with_telemetry(&program, &options, &mut io::stdout().lock(), telemetry)
         } else {
             host.run(&program, &options, &mut io::stdout().lock())
         };
         report.elapsed_seconds = start.elapsed().as_secs_f64();
+        if let Some(path) = &cli.save_state {
+            if checkpoint_safe(&result) {
+                match host.save_checkpoint(path, &program, &provenance) {
+                    Ok(()) => eprintln!(
+                        "Saved {}: guest {}, frame {}, tick {}",
+                        path.display(),
+                        host.instructions,
+                        host.devices.presented_frames,
+                        host.devices.devices.tick()
+                    ),
+                    Err(error) => {
+                        result = Err(match result {
+                            Ok(_) => error,
+                            Err(original) => format!("{original}; {error}"),
+                        })
+                    }
+                }
+            } else {
+                eprintln!("Checkpoint not saved after a guest/device/output error");
+            }
+        }
         report.bf_dispatches = host.machine.dispatches();
         report.ripple_instructions = host.instructions;
         report.tick = host.devices.devices.tick();
@@ -297,6 +415,47 @@ fn execute(cli: Cli) -> Result<i32, String> {
     })
 }
 
+fn checkpoint_safe(result: &Result<String, String>) -> bool {
+    match result {
+        Ok(_) => true,
+        Err(error) => {
+            [
+                "Guest halted before frame ",
+                "Guest halted before checkpoint frame ",
+            ]
+            .iter()
+            .any(|prefix| {
+                error
+                    .strip_prefix(prefix)
+                    .is_some_and(|frame| frame.parse::<u64>().is_ok())
+            }) || matches!(
+                error.as_str(),
+                "Wall-time limit exceeded"
+                    | "Brainfuck dispatch limit exceeded"
+                    | "Ripple instruction limit exceeded"
+                    | "Stopped before requested frame"
+                    | "Tick limit reached before requested frame"
+            )
+        }
+    }
+}
+
+fn same_path(a: &std::path::Path, b: &std::path::Path) -> bool {
+    fn normalized(path: &std::path::Path) -> Option<PathBuf> {
+        path.canonicalize().ok().or_else(|| {
+            let parent = path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new("."));
+            Some(parent.canonicalize().ok()?.join(path.file_name()?))
+        })
+    }
+    a == b
+        || normalized(a)
+            .zip(normalized(b))
+            .is_some_and(|(a, b)| a == b)
+}
+
 fn stdin_bytes() -> mpsc::Receiver<Result<Vec<u8>, String>> {
     let (tx, rx) = mpsc::sync_channel(64);
     thread::spawn(move || {
@@ -323,6 +482,20 @@ fn stdin_bytes() -> mpsc::Receiver<Result<Vec<u8>, String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkpoint_stops_do_not_hide_cleanup_failures() {
+        for reason in [
+            "Guest halted before frame 2",
+            "Guest halted before checkpoint frame 2",
+            "Wall-time limit exceeded",
+        ] {
+            assert!(checkpoint_safe(&Err(reason.into())));
+            assert!(!checkpoint_safe(&Err(format!(
+                "{reason}; output flush failed"
+            ))));
+        }
+    }
 
     #[test]
     fn telemetry_is_opt_in_validated_and_separate_from_terminal_mode() {
@@ -361,13 +534,19 @@ mod tests {
             assert!(!cli.telemetry);
         }
         for conflicting in ["--telemetry", "--terminal"] {
-            assert!(Cli::try_parse_from([
-                "rbf", "program.bf", "--telemetry-lite", conflicting,
-            ]).is_err());
+            assert!(
+                Cli::try_parse_from(["rbf", "program.bf", "--telemetry-lite", conflicting,])
+                    .is_err()
+            );
         }
         assert!(Cli::try_parse_from([
-            "rbf", "program.bf", "--telemetry-lite", "--telemetry-interval", "5",
-        ]).is_err());
+            "rbf",
+            "program.bf",
+            "--telemetry-lite",
+            "--telemetry-interval",
+            "5",
+        ])
+        .is_err());
     }
 
     #[test]

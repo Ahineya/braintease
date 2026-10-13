@@ -121,6 +121,28 @@ output stop has advanced past its marker; the caller can mutate the tape before
 resuming. Input stops repeat until `provide_input` is called. No host logic or
 Ripple opcode execution lives in the core.
 
+`Machine::write_checkpoint(&program, writer)` saves a resumable machine to any
+`std::io::Write`. `Machine::read_checkpoint(&program, reader, max_tape_cells)`
+restores it after checking the format version, parsed IR and allocation limit.
+Both return `CheckpointError`. The record includes every logical 16-bit cell,
+the pointer, literal instruction position, dispatch counter, pending input and
+pointer-wrapping policy. Input still waits for `provide_input`; already returned
+output and hooks are not replayed. The host must finish handling a returned
+event before saving its machine and matching host device state.
+
+Checkpoints use little-endian integers and compact tape pages: zero runs,
+repeating patterns, sparse bitmaps or raw dense data. Saving materializes
+deferred writes without executing BF; loading starts with empty derived scan
+caches. The saved dispatch counter is exact, but later budgets and dispatch
+counts can differ while caches warm up. BF events and logical state retain
+their meaning. The program fingerprint includes parse options and all optimized
+IR metadata, allowing execution-only performance improvements while rejecting
+incompatible optimizer changes. Checkpoints are versioned, not a permanent
+cross-version interchange guarantee. The host should checksum the complete
+container and separately save source identity, external I/O and device state;
+the generic core neither serializes devices nor authenticates files. Reading
+stops at the machine record boundary so a host can append those records.
+
 For opt-in execution diagnostics, pass a `Profile` to
 `Machine::run_profiled(&program, budget, &mut profile)` and inspect
 `profile.report()`. It reports operation timings and attempt/completion/fallback

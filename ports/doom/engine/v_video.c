@@ -37,6 +37,7 @@
 #include "z_zone.h"
 
 #include "config.h"
+#include "doom_resolution.h"
 #ifdef RIPPLE
 #include "render_fast.h"
 #endif
@@ -65,6 +66,55 @@ fixed_t dirtybox[4];
 // haleyjd 08/28/10: clipping callback function for patches.
 // This is needed for Chocolate Strife, which clips patches to the screen.
 static vpatchclipfunc_t patchclip_callback = NULL;
+
+#if DOOM_RESOLUTION_SCALE > 1
+// Screen and backing buffers retain their logical 320-cell row layout. Only
+// absolute coordinates on the sampling grid contain displayable pixels.
+static void V_CopySampledPost(byte *dest, const byte *source, int y, int count)
+{
+    int skip = (-y) & (DOOM_RESOLUTION_SCALE - 1);
+    if (skip >= count)
+        return;
+    dest += (int32_t)skip * SCREENWIDTH;
+    source += skip;
+    count = (count - skip + DOOM_RESOLUTION_SCALE - 1) / DOOM_RESOLUTION_SCALE;
+#ifdef RIPPLE
+    Doom_CopyPatchColumnSampled(dest, source, count, DOOM_RESOLUTION_SCALE);
+#else
+    while (count--)
+    {
+        *dest = *source;
+        source += DOOM_RESOLUTION_SCALE;
+        dest += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+    }
+#endif
+}
+
+// mode 0 is ordinary translucency, 1 is Strife's reversed table, and 2 is
+// the shadow itself. A shadow has its own sample phase because it is offset.
+static void V_BlendSampledPost(byte *dest, const byte *source,
+                              int y, int count, int mode)
+{
+    int skip = (-y) & (DOOM_RESOLUTION_SCALE - 1);
+    if (skip >= count)
+        return;
+    dest += (int32_t)skip * SCREENWIDTH;
+    source += skip;
+    count -= skip;
+    while (count > 0)
+    {
+        if (mode == 1)
+            *dest = xlatab[*dest + ((uint32_t)*source << 8)];
+        else if (mode == 2)
+            *dest = tinttable[(uint32_t)*dest << 8];
+        else
+            *dest = tinttable[((uint32_t)*dest << 8) + *source];
+        source += DOOM_RESOLUTION_SCALE;
+        dest += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+        count -= DOOM_RESOLUTION_SCALE;
+    }
+}
+#endif
 
 //
 // V_MarkRect 
@@ -107,6 +157,34 @@ void V_CopyRect(int srcx, int srcy, byte *source,
 #endif 
 
     V_MarkRect(destx, desty, width, height); 
+
+#if DOOM_RESOLUTION_SCALE > 1
+    {
+        int row, col;
+        int skipx = (-destx) & (DOOM_RESOLUTION_SCALE - 1);
+        int skipy = (-desty) & (DOOM_RESOLUTION_SCALE - 1);
+        // Existing callers restore status-bar pixels, translating by 168
+        // rows. Unaligned translations would read cells never rendered.
+        if (((srcx - destx) & (DOOM_RESOLUTION_SCALE - 1))
+         || ((srcy - desty) & (DOOM_RESOLUTION_SCALE - 1)))
+            I_Error("V_CopyRect: unaligned sampled screen copy");
+        for (row = skipy; row < height; row += DOOM_RESOLUTION_SCALE)
+        {
+            src = source + (int32_t)SCREENWIDTH * (srcy + row) + srcx;
+            dest = dest_screen + (int32_t)SCREENWIDTH * (desty + row) + destx;
+#ifdef RIPPLE
+            if (skipx < width)
+                Doom_CopySamples(dest + skipx, src + skipx,
+                    (width - skipx + DOOM_RESOLUTION_SCALE - 1) / DOOM_RESOLUTION_SCALE,
+                    DOOM_RESOLUTION_SCALE);
+#else
+            for (col = skipx; col < width; col += DOOM_RESOLUTION_SCALE)
+                dest[col] = src[col];
+#endif
+        }
+        return;
+    }
+#endif
  
     src = source + (int32_t)SCREENWIDTH * srcy + srcx; 
     dest = dest_screen + (int32_t)SCREENWIDTH * desty + destx; 
@@ -178,6 +256,10 @@ void V_DrawPatch(int x, int y, patch_t *patch)
 
     for ( ; col<w ; x++, col++, desttop++)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        if (x & (DOOM_RESOLUTION_SCALE - 1))
+            continue;
+#endif
         column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
 
         // step through the posts in a column
@@ -187,7 +269,9 @@ void V_DrawPatch(int x, int y, patch_t *patch)
             dest = desttop + column->topdelta* (int32_t)SCREENWIDTH;
             count = column->length;
 
-#ifdef RIPPLE
+#if DOOM_RESOLUTION_SCALE > 1
+            V_CopySampledPost(dest, source, y + column->topdelta, count);
+#elif defined(RIPPLE)
             Doom_CopyPatchColumn(dest, source, count);
 #else
             while (count--)
@@ -246,6 +330,10 @@ void V_DrawPatchFlipped(int x, int y, patch_t *patch)
 
     for ( ; col<w ; x++, col++, desttop++)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        if (x & (DOOM_RESOLUTION_SCALE - 1))
+            continue;
+#endif
         column = (column_t *)((byte *)patch + LONG(patch->columnofs[w-1-col]));
 
         // step through the posts in a column
@@ -255,7 +343,9 @@ void V_DrawPatchFlipped(int x, int y, patch_t *patch)
             dest = desttop + column->topdelta* (int32_t)SCREENWIDTH;
             count = column->length;
 
-#ifdef RIPPLE
+#if DOOM_RESOLUTION_SCALE > 1
+            V_CopySampledPost(dest, source, y + column->topdelta, count);
+#elif defined(RIPPLE)
             Doom_CopyPatchColumn(dest, source, count);
 #else
             while (count--)
@@ -311,6 +401,10 @@ void V_DrawTLPatch(int x, int y, patch_t * patch)
     w = SHORT(patch->width);
     for (; col < w; x++, col++, desttop++)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        if (x & (DOOM_RESOLUTION_SCALE - 1))
+            continue;
+#endif
         column = (column_t *) ((byte *) patch + LONG(patch->columnofs[col]));
 
         // step through the posts in a column
@@ -321,11 +415,15 @@ void V_DrawTLPatch(int x, int y, patch_t * patch)
             dest = desttop + column->topdelta * (int32_t)SCREENWIDTH;
             count = column->length;
 
+#if DOOM_RESOLUTION_SCALE > 1
+            V_BlendSampledPost(dest, source, y + column->topdelta, count, 0);
+#else
             while (count--)
             {
                 *dest = tinttable[((uint32_t)(*dest) << 8) + *source++];
                 dest += SCREENWIDTH;
             }
+#endif
             column = (column_t *) ((byte *) column + column->length + 4);
         }
     }
@@ -359,6 +457,10 @@ void V_DrawXlaPatch(int x, int y, patch_t * patch)
     w = SHORT(patch->width);
     for(; col < w; x++, col++, desttop++)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        if (x & (DOOM_RESOLUTION_SCALE - 1))
+            continue;
+#endif
         column = (column_t *) ((byte *) patch + LONG(patch->columnofs[col]));
 
         // step through the posts in a column
@@ -369,12 +471,16 @@ void V_DrawXlaPatch(int x, int y, patch_t * patch)
             dest = desttop + column->topdelta * (int32_t)SCREENWIDTH;
             count = column->length;
 
+#if DOOM_RESOLUTION_SCALE > 1
+            V_BlendSampledPost(dest, source, y + column->topdelta, count, 1);
+#else
             while(count--)
             {
                 *dest = xlatab[*dest + ((uint32_t)(*source) << 8)];
                 source++;
                 dest += SCREENWIDTH;
             }
+#endif
             column = (column_t *) ((byte *) column + column->length + 4);
         }
     }
@@ -410,6 +516,10 @@ void V_DrawAltTLPatch(int x, int y, patch_t * patch)
     w = SHORT(patch->width);
     for (; col < w; x++, col++, desttop++)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        if (x & (DOOM_RESOLUTION_SCALE - 1))
+            continue;
+#endif
         column = (column_t *) ((byte *) patch + LONG(patch->columnofs[col]));
 
         // step through the posts in a column
@@ -420,11 +530,15 @@ void V_DrawAltTLPatch(int x, int y, patch_t * patch)
             dest = desttop + column->topdelta * (int32_t)SCREENWIDTH;
             count = column->length;
 
+#if DOOM_RESOLUTION_SCALE > 1
+            V_BlendSampledPost(dest, source, y + column->topdelta, count, 0);
+#else
             while (count--)
             {
                 *dest = tinttable[((uint32_t)(*dest) << 8) + *source++];
                 dest += SCREENWIDTH;
             }
+#endif
             column = (column_t *) ((byte *) column + column->length + 4);
         }
     }
@@ -462,6 +576,11 @@ void V_DrawShadowedPatch(int x, int y, patch_t *patch)
     w = SHORT(patch->width);
     for (; col < w; x++, col++, desttop++, desttop2++)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        if ((x & (DOOM_RESOLUTION_SCALE - 1))
+         && ((x + 2) & (DOOM_RESOLUTION_SCALE - 1)))
+            continue;
+#endif
         column = (column_t *) ((byte *) patch + LONG(patch->columnofs[col]));
 
         // step through the posts in a column
@@ -473,6 +592,12 @@ void V_DrawShadowedPatch(int x, int y, patch_t *patch)
             dest2 = desttop2 + column->topdelta * (int32_t)SCREENWIDTH;
             count = column->length;
 
+#if DOOM_RESOLUTION_SCALE > 1
+            if (!((x + 2) & (DOOM_RESOLUTION_SCALE - 1)))
+                V_BlendSampledPost(dest2, source, y + column->topdelta + 2, count, 2);
+            if (!(x & (DOOM_RESOLUTION_SCALE - 1)))
+                V_CopySampledPost(dest, source, y + column->topdelta, count);
+#else
             while (count--)
             {
                 *dest2 = tinttable[((uint32_t)(*dest2) << 8)];
@@ -481,6 +606,7 @@ void V_DrawShadowedPatch(int x, int y, patch_t *patch)
                 dest += SCREENWIDTH;
 
             }
+#endif
             column = (column_t *) ((byte *) column + column->length + 4);
         }
     }
@@ -526,6 +652,29 @@ void V_DrawBlock(int x, int y, int width, int height, byte *src)
 #endif 
  
     V_MarkRect (x, y, width, height); 
+
+#if DOOM_RESOLUTION_SCALE > 1
+    {
+        int row, col;
+        int skipx = (-x) & (DOOM_RESOLUTION_SCALE - 1);
+        int skipy = (-y) & (DOOM_RESOLUTION_SCALE - 1);
+        for (row = skipy; row < height; row += DOOM_RESOLUTION_SCALE)
+        {
+            byte *source = src + (int32_t)row * width;
+            dest = dest_screen + (int32_t)(y + row) * SCREENWIDTH + x;
+#ifdef RIPPLE
+            if (skipx < width)
+                Doom_CopySamples(dest + skipx, source + skipx,
+                    (width - skipx + DOOM_RESOLUTION_SCALE - 1) / DOOM_RESOLUTION_SCALE,
+                    DOOM_RESOLUTION_SCALE);
+#else
+            for (col = skipx; col < width; col += DOOM_RESOLUTION_SCALE)
+                dest[col] = source[col];
+#endif
+        }
+        return;
+    }
+#endif
  
     dest = dest_screen + y * (int32_t)SCREENWIDTH + x; 
 
@@ -541,6 +690,16 @@ void V_DrawFilledBox(int x, int y, int w, int h, int c)
 {
     uint8_t *buf, *buf1;
     int x1, y1;
+
+#if DOOM_RESOLUTION_SCALE > 1
+    for (y1 = (-y) & (DOOM_RESOLUTION_SCALE - 1); y1 < h; y1 += DOOM_RESOLUTION_SCALE)
+    {
+        buf = I_VideoBuffer + (int32_t)SCREENWIDTH * (y + y1) + x;
+        for (x1 = (-x) & (DOOM_RESOLUTION_SCALE - 1); x1 < w; x1 += DOOM_RESOLUTION_SCALE)
+            buf[x1] = c;
+    }
+    return;
+#endif
 
     buf = I_VideoBuffer + (int32_t)SCREENWIDTH * y + x;
 
@@ -562,6 +721,15 @@ void V_DrawHorizLine(int x, int y, int w, int c)
     uint8_t *buf;
     int x1;
 
+#if DOOM_RESOLUTION_SCALE > 1
+    if (y & (DOOM_RESOLUTION_SCALE - 1))
+        return;
+    buf = I_VideoBuffer + (int32_t)SCREENWIDTH * y + x;
+    for (x1 = (-x) & (DOOM_RESOLUTION_SCALE - 1); x1 < w; x1 += DOOM_RESOLUTION_SCALE)
+        buf[x1] = c;
+    return;
+#endif
+
     buf = I_VideoBuffer + (int32_t)SCREENWIDTH * y + x;
 
     for (x1 = 0; x1 < w; ++x1)
@@ -574,6 +742,19 @@ void V_DrawVertLine(int x, int y, int h, int c)
 {
     uint8_t *buf;
     int y1;
+
+#if DOOM_RESOLUTION_SCALE > 1
+    if (x & (DOOM_RESOLUTION_SCALE - 1))
+        return;
+    y1 = (-y) & (DOOM_RESOLUTION_SCALE - 1);
+    buf = I_VideoBuffer + (int32_t)SCREENWIDTH * (y + y1) + x;
+    for (; y1 < h; y1 += DOOM_RESOLUTION_SCALE)
+    {
+        *buf = c;
+        buf += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+    }
+    return;
+#endif
 
     buf = I_VideoBuffer + (int32_t)SCREENWIDTH * y + x;
 
@@ -599,7 +780,11 @@ void V_DrawBox(int x, int y, int w, int h, int c)
  
 void V_DrawRawScreen(byte *raw)
 {
+#if DOOM_RESOLUTION_SCALE > 1
+    V_DrawBlock(0, 0, SCREENWIDTH, SCREENHEIGHT, raw);
+#else
     memcpy(dest_screen, raw, (int32_t)SCREENWIDTH * SCREENHEIGHT);
+#endif
 }
 
 //
@@ -804,6 +989,11 @@ void V_ScreenShot(char *format)
     int i;
     char lbmname[16]; // haleyjd 20110213: BUG FIX - 12 is too small!
     char *ext;
+
+#if DOOM_RESOLUTION_SCALE > 1
+    I_Error("Use host screenshots with reduced-resolution rendering");
+    return;
+#endif
     
     // find a file name to save it to
 
@@ -940,4 +1130,3 @@ void V_DrawMouseSpeedBox(int speed)
     V_DrawVertLine(box_x + redline_x, box_y + 1,
                  MOUSE_SPEED_BOX_HEIGHT - 2, red);
 }
-

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 const BLOCK_SIZE_WORDS: usize = 32768;  // 32K words per block
 const BLOCK_SIZE_BYTES: usize = BLOCK_SIZE_WORDS * 2;  // 64KB per block
@@ -32,6 +34,19 @@ pub struct Storage {
     
     /// Busy flag for operations
     busy: bool,
+}
+
+/// The disk is a separate checkpoint artifact. Dirty block flags are retained
+/// even though checkpointing flushes their data, so STORE_DIRTY is unchanged.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StorageCheckpoint {
+    current_block: u16,
+    current_addr: u16,
+    image_len: u64,
+    image_sha256: String,
+    cached_blocks: Vec<u16>,
+    dirty_blocks: Vec<u16>,
 }
 
 /// A single block of storage
@@ -81,6 +96,88 @@ impl Block {
 }
 
 impl Storage {
+    fn checkpoint_error(message: &str) -> io::Error {
+        io::Error::new(io::ErrorKind::InvalidData, message)
+    }
+
+    fn image_identity(&mut self) -> io::Result<(u64, String)> {
+        let file = self.backing_file.as_mut()
+            .ok_or_else(|| Self::checkpoint_error("checkpoint requires a disk file"))?;
+        let length = file.metadata()?.len();
+        file.seek(SeekFrom::Start(0))?;
+        let mut hash = Sha256::new();
+        let mut buffer = [0u8; BLOCK_SIZE_BYTES];
+        let mut read = 0u64;
+        loop {
+            let count = match file.read(&mut buffer) {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                other => other?,
+            };
+            if count == 0 { break; }
+            hash.update(&buffer[..count]); read += count as u64;
+        }
+        if read != length || file.metadata()?.len() != length {
+            return Err(Self::checkpoint_error("disk changed while checkpointing"));
+        }
+        Ok((length, format!("{:x}", hash.finalize())))
+    }
+
+    pub fn checkpoint(&mut self) -> io::Result<StorageCheckpoint> {
+        if self.busy {
+            return Err(Self::checkpoint_error("cannot checkpoint a busy storage operation"));
+        }
+        let mut cached_blocks: Vec<_> = self.blocks.keys().copied().collect();
+        cached_blocks.sort_unstable();
+        let dirty_blocks: Vec<_> = cached_blocks.iter().copied()
+            .filter(|id| self.blocks[id].dirty).collect();
+        self.flush_preserving_dirty()?;
+        if let Some(file) = &self.backing_file { file.sync_all()?; }
+        let (image_len, image_sha256) = self.image_identity()?;
+        // A clean cached block can differ only if an external writer changed
+        // the disk. Reject instead of silently restoring a different RAM cache.
+        for id in &cached_blocks {
+            let mut bytes = vec![0u8; BLOCK_SIZE_BYTES];
+            let file = self.backing_file.as_mut().unwrap();
+            file.seek(SeekFrom::Start(u64::from(*id) * BLOCK_SIZE_BYTES as u64))?;
+            let mut at = 0;
+            while at < bytes.len() {
+                match file.read(&mut bytes[at..]) {
+                    Ok(0) => break,
+                    Ok(count) => at += count,
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => return Err(error),
+                }
+            }
+            if Block::from_bytes(&bytes).data != self.blocks[id].data {
+                return Err(Self::checkpoint_error("disk cache differs from the checkpoint image"));
+            }
+        }
+        Ok(StorageCheckpoint { current_block: self.current_block, current_addr: self.current_addr,
+            image_len, image_sha256, cached_blocks, dirty_blocks })
+    }
+
+    /// Restore only into a freshly opened, explicitly selected disk. Its entire
+    /// byte identity is verified before any cached block or dirty flag changes.
+    pub fn restore_checkpoint(mut self, snapshot: StorageCheckpoint) -> io::Result<Self> {
+        if !self.blocks.is_empty() || self.busy
+            || snapshot.cached_blocks.len() > MAX_BLOCKS
+            || snapshot.cached_blocks.windows(2).any(|pair| pair[0] >= pair[1])
+            || snapshot.dirty_blocks.windows(2).any(|pair| pair[0] >= pair[1])
+            || snapshot.dirty_blocks.iter().any(|id| snapshot.cached_blocks.binary_search(id).is_err())
+            || snapshot.image_sha256.len() != 64
+            || !snapshot.image_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(Self::checkpoint_error("invalid storage checkpoint or nonempty destination cache"));
+        }
+        if self.image_identity()? != (snapshot.image_len, snapshot.image_sha256) {
+            return Err(Self::checkpoint_error("disk image does not match checkpoint identity"));
+        }
+        for id in snapshot.cached_blocks { self.load_block(id)?; }
+        for id in snapshot.dirty_blocks { self.blocks.get_mut(&id).unwrap().dirty = true; }
+        self.current_block = snapshot.current_block; self.current_addr = snapshot.current_addr;
+        Ok(self)
+    }
+
     /// Create a new storage subsystem with default path
     pub fn new() -> io::Result<Self> {
         // Determine the backing file path
@@ -311,6 +408,17 @@ impl Storage {
         }
         Ok(())
     }
+
+    /// Persist host-side cleanup without acknowledging a guest COMMIT. A host
+    /// may resume after a limit or checkpoint, so STORE_DIRTY must stay exact.
+    /// Restore flags after a partial failure as well as a successful flush.
+    pub fn flush_preserving_dirty(&mut self) -> io::Result<()> {
+        let dirty: Vec<u16> = self.blocks.iter()
+            .filter_map(|(&id, block)| block.dirty.then_some(id)).collect();
+        let result = self.flush_checked();
+        for id in dirty { self.blocks.get_mut(&id).unwrap().dirty = true; }
+        result
+    }
     
     /// Flush all changes to disk (called on shutdown)
     pub fn flush(&mut self) {
@@ -342,6 +450,43 @@ mod tests {
     }
     impl Drop for Disk {
         fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+    }
+
+    #[test]
+    fn checkpoint_retains_address_cache_and_uncommitted_flags() {
+        let disk = Disk::new(&[0x11, 0x22, 0x33]);
+        let mut original = Storage::with_path(disk.0.clone()).unwrap();
+        assert_eq!(original.read_word_checked().unwrap(), 0x2211);
+        original.set_block(2); original.write_word_checked(0xabcd).unwrap();
+        let snapshot = original.checkpoint().unwrap();
+        assert_eq!(original.get_control(), 2);
+        assert_eq!(original.get_addr(), 2);
+        let copy = Disk::new(&std::fs::read(&disk.0).unwrap());
+        let encoded = serde_json::to_vec(&snapshot).unwrap();
+        let mut restored = Storage::with_path(copy.0.clone()).unwrap()
+            .restore_checkpoint(serde_json::from_slice(&encoded).unwrap()).unwrap();
+        assert_eq!(restored.get_control(), 2);
+        assert_eq!(restored.get_block(), original.get_block());
+        assert_eq!(restored.get_addr(), original.get_addr());
+        for storage in [&mut original, &mut restored] {
+            storage.set_addr(1); assert_eq!(storage.read_word_checked().unwrap(), 0xabcd);
+            storage.set_control_checked(4).unwrap();
+            assert_eq!(storage.get_control(), 0);
+            storage.set_block(0); storage.set_addr(1);
+            assert_eq!(storage.read_word_checked().unwrap(), 0x33);
+        }
+        assert_eq!(std::fs::read(&disk.0).unwrap(), std::fs::read(&copy.0).unwrap());
+    }
+
+    #[test]
+    fn checkpoints_reject_changed_disk_and_stale_clean_caches() {
+        let disk = Disk::new(&[1, 2]);
+        let mut original = Storage::with_path(disk.0.clone()).unwrap();
+        original.read_word_checked().unwrap();
+        let snapshot = original.checkpoint().unwrap();
+        std::fs::write(&disk.0, [9, 2]).unwrap();
+        assert!(Storage::with_path(disk.0.clone()).unwrap().restore_checkpoint(snapshot).is_err());
+        assert!(original.checkpoint().is_err());
     }
 
     #[test]

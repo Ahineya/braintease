@@ -17,6 +17,7 @@
 #include "w_wad.h"
 #include "z_zone.h"
 #include "doom_port.h"
+#include "doom_resolution.h"
 #ifdef RIPPLE
 #include <mmio.h>
 #include <vm_devices.h>
@@ -31,12 +32,13 @@ int mouse_threshold = 10;
 int vanilla_keyboard_mapping = 1;
 int usegamma;
 int usemouse;
-int screen_width = 320, screen_height = 200, screen_bpp = 16;
+int screen_width = DOOM_OUTPUT_WIDTH, screen_height = DOOM_OUTPUT_HEIGHT, screen_bpp = 16;
 int fullscreen, aspect_ratio_correct, show_diskicon, diskicon_readbytes;
 char *video_driver = "ripple";
 
 static unsigned short *framebuffer;
 static uint16_t palette565[256];
+static int palette_changed = 1;
 static byte palette_rgb[768];
 static uint32_t logical_tick;
 static uint32_t presented;
@@ -175,9 +177,19 @@ void Doom_ConfigureCapture(const char *path, unsigned long frame, const char *in
 void I_InitGraphics(void)
 {
     I_VideoBuffer = Z_Malloc((size_t)SCREENWIDTH * SCREENHEIGHT, PU_STATIC, NULL);
-    framebuffer = malloc((size_t)SCREENWIDTH * SCREENHEIGHT * sizeof(*framebuffer));
+    framebuffer = malloc((size_t)DOOM_OUTPUT_WIDTH * DOOM_OUTPUT_HEIGHT * sizeof(*framebuffer));
     if (!framebuffer) I_Error("Cannot allocate RGB565 framebuffer");
+#if DOOM_RESOLUTION_SCALE == 1
     memset(I_VideoBuffer, 0, (size_t)SCREENWIDTH * SCREENHEIGHT);
+#else
+    {
+        unsigned int x, y;
+        for (y = 0; y < SCREENHEIGHT; y += DOOM_RESOLUTION_SCALE) {
+            byte *row = I_VideoBuffer + (size_t)y * SCREENWIDTH;
+            for (x = 0; x < SCREENWIDTH; x += DOOM_RESOLUTION_SCALE) row[x] = 0;
+        }
+    }
+#endif
 #ifdef RIPPLE
     VmDeviceCaps caps;
     if (vm_devices_caps(&caps) != VM_DEVICE_OK || (caps.bits & 15U) != 15U)
@@ -191,6 +203,7 @@ void I_InitGraphics(void)
 void I_SetPalette(byte *palette)
 {
     unsigned int i;
+    palette_changed = 1;
     for (i = 0; i < 256; ++i) {
         unsigned int r = gammatable[usegamma][palette[i * 3] & 255U];
         unsigned int g = gammatable[usegamma][palette[i * 3 + 1] & 255U];
@@ -216,28 +229,48 @@ int I_GetPaletteIndex(int r, int g, int b)
     return best;
 }
 
-void I_FinishUpdate(void)
+static void finish_update(int repeat)
 {
     size_t i;
 #ifdef RIPPLE
-    Doom_ConvertRGB565(framebuffer, I_VideoBuffer, palette565,
-                       SCREENWIDTH * (unsigned int)SCREENHEIGHT);
+    if (!repeat || palette_changed) {
+#if DOOM_RESOLUTION_SCALE == 1
+        Doom_ConvertRGB565Octets(framebuffer, I_VideoBuffer, palette565,
+                                SCREENWIDTH * (unsigned int)SCREENHEIGHT);
 #else
-    for (i = 0; i < (size_t)SCREENWIDTH * SCREENHEIGHT; ++i)
-        framebuffer[i] = palette565[I_VideoBuffer[i] & 255U];
+        unsigned int y;
+        unsigned short *dest = framebuffer;
+        const byte *source = I_VideoBuffer;
+        for (y = 0; y < DOOM_OUTPUT_HEIGHT; ++y) {
+            Doom_ConvertRGB565SampledRow(dest, source, palette565,
+                                        DOOM_OUTPUT_WIDTH, DOOM_RESOLUTION_SCALE);
+            dest += DOOM_OUTPUT_WIDTH;
+            if (y + 1U < DOOM_OUTPUT_HEIGHT) source += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+        }
 #endif
+    }
+#else
+    {
+        unsigned int x, y;
+        i = 0;
+        for (y = 0; y < SCREENHEIGHT; y += DOOM_RESOLUTION_SCALE)
+            for (x = 0; x < SCREENWIDTH; x += DOOM_RESOLUTION_SCALE)
+                framebuffer[i++] = palette565[I_VideoBuffer[(size_t)y * SCREENWIDTH + x] & 255U];
+    }
+#endif
+    palette_changed = 0;
     ++presented;
     printf("ENGINE frame %lu tick %lu state %d episode %d map %d\n",
            (unsigned long)presented, (unsigned long)logical_tick,
            (int)gamestate, gameepisode, gamemap);
 #ifdef RIPPLE
-    if (vm_present_rgb565(framebuffer, SCREENWIDTH, SCREENHEIGHT, SCREENWIDTH) != VM_DEVICE_OK)
+    if (vm_present_rgb565(framebuffer, DOOM_OUTPUT_WIDTH, DOOM_OUTPUT_HEIGHT, DOOM_OUTPUT_WIDTH) != VM_DEVICE_OK)
         I_Error("VM presentation failed");
 #else
     if (presented == capture_frame) {
         FILE *file = fopen(capture_path, "wb");
         if (!file) I_Error("Cannot write capture");
-        for (i = 0; i < (size_t)SCREENWIDTH * SCREENHEIGHT; ++i) {
+        for (i = 0; i < (size_t)DOOM_OUTPUT_WIDTH * DOOM_OUTPUT_HEIGHT; ++i) {
             fputc(framebuffer[i] & 255U, file);
             fputc(framebuffer[i] >> 8, file);
         }
@@ -246,6 +279,9 @@ void I_FinishUpdate(void)
     }
 #endif
 }
+
+void I_FinishUpdate(void) { finish_update(0); }
+void Doom_RepeatFrame(void) { finish_update(1); }
 
 void I_ReadScreen(byte *dest) { memcpy(dest, I_VideoBuffer, (size_t)SCREENWIDTH * SCREENHEIGHT); }
 void I_ShutdownGraphics(void) {}

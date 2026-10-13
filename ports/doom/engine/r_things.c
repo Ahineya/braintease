@@ -34,6 +34,7 @@
 #include "doom_build_config.h"
 
 #include "r_local.h"
+#include "doom_resolution.h"
 
 #include "doomstat.h"
 
@@ -532,7 +533,18 @@ R_DrawVisSprite
     spryscale = vis->scale;
     sprtopscreen = centeryfrac - FixedMul(dc_texturemid,spryscale);
 	
+#if DOOM_RESOLUTION_SCALE > 1
+    /* Align in screen coordinates, not patch coordinates: this also handles
+     * flipped sprites and subwindows without reading discarded posts. */
+    x1 = vis->x1 + (((-(viewwindowx + (vis->x1 << detailshift)))
+                    & (DOOM_RESOLUTION_SCALE - 1)) >> detailshift);
+    frac = (uint32_t)frac + (uint32_t)vis->xiscale * (x1 - vis->x1);
+    for (dc_x = x1; dc_x <= vis->x2;
+         dc_x += DOOM_RESOLUTION_SCALE >> detailshift,
+         frac = (uint32_t)frac + (uint32_t)vis->xiscale * (DOOM_RESOLUTION_SCALE >> detailshift))
+#else
     for (dc_x=vis->x1 ; dc_x<=vis->x2 ; dc_x++, frac += vis->xiscale)
+#endif
     {
 	texturecolumn = frac>>FRACBITS;
 #ifdef RANGECHECK

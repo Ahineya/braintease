@@ -55,6 +55,7 @@ fn main() {
     assert_eq!(vm.registers[5], 0, "compiled C ABI fixture");
     reports.push(format!("{{\"case\":\"compiled_c_abi\",\"instructions\":{}}}",vm.executed_instructions));
     let lengths = [0,1,2,3,4,5,7,19,255,256,999,1000,1001,63999,64000,65535];
+    for kernel in ["Doom_ConvertRGB565", "Doom_ConvertRGB565Octets"] {
     for (layout, (dst,src,palette)) in [
         ((0,7),(0,5),(80,3)),
         ((63000,7),(63999,5),(63744,3)),
@@ -71,15 +72,22 @@ fn main() {
             let p = physical(palette.0,palette.1);
             let colors: Vec<_> = (0u16..256).map(|v| v.wrapping_mul(257)^0xa5a5).collect();
             vm.memory[p..p+256].copy_from_slice(&colors);
-            for i in 0..count as usize { vm.memory[s+i] = (i.wrapping_mul(3571)^0xfe19) as u16; }
+            for i in 0..count as usize {
+                let value = (i.wrapping_mul(3571)^0xfe19) as u16;
+                vm.memory[s+i] = if kernel.ends_with("Octets") { value & 255 } else { value };
+            }
             vm.memory[d-1..d+count as usize+1].fill(SENTINEL);
             let expected: Vec<_> = (0..count as usize).map(|i| colors[(vm.memory[s+i]&255) as usize]).collect();
-            let steps = invoke(&mut vm,"Doom_ConvertRGB565",dst,src,&[palette.0,palette.1,count]);
+            let steps = invoke(&mut vm,kernel,dst,src,&[palette.0,palette.1,count]);
             assert_eq!(&vm.memory[d..d+count as usize],expected.as_slice(),"RGB layout {layout} count {count}");
             assert_eq!(vm.memory[d-1],SENTINEL); assert_eq!(vm.memory[d+count as usize],SENTINEL);
-            if count == 64000 && layout <= 1 { assert!(steps < 500_000, "RGB hot path regressed"); }
-            reports.push(format!("{{\"case\":\"rgb_{layout}_{count}\",\"pixels\":{count},\"instructions\":{steps}}}"));
+            if count == 64000 && layout <= 1 {
+                let limit = if kernel.ends_with("Octets") { 450_000 } else { 500_000 };
+                assert!(steps < limit, "RGB hot path regressed");
+            }
+            reports.push(format!("{{\"case\":\"{kernel}_{layout}_{count}\",\"pixels\":{count},\"instructions\":{steps}}}"));
         }
+    }
     }
     for (layout,(dst,src)) in [((100,7),(120,5)),((63900,7),(63999,5)),
                               ((63681,7),(63990,5)),((10000,65535),(5000,65534))].into_iter().enumerate() {

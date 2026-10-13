@@ -1,0 +1,22 @@
+[
+  {"tick": 2, "key": 26, "down": true},
+  {"tick": 4, "key": 79, "down": true},
+  {"tick": 6, "key": 79, "down": false},
+  {"tick": 6, "key": 62, "down": true},
+  {"tick": 7, "key": 62, "down": false},
+  {"tick": 8, "key": 45, "down": true},
+  {"tick": 9, "key": 45, "down": false},
+  {"tick": 10, "key": 26, "down": false},
+  {"tick": 10, "key": 43, "down": true},
+  {"tick": 11, "key": 43, "down": false},
+  {"tick": 12, "key": 43, "down": true},
+  {"tick": 13, "key": 43, "down": false},
+  {"tick": 14, "key": 46, "down": true},
+  {"tick": 15, "key": 46, "down": false},
+  {"tick": 16, "key": 62, "down": true},
+  {"tick": 17, "key": 62, "down": false},
+  {"tick": 18, "key": 41, "down": true},
+  {"tick": 19, "key": 41, "down": false},
+  {"tick": 20, "key": 81, "down": true},
+  {"tick": 21, "key": 81, "down": false}
+]

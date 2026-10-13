@@ -3,10 +3,11 @@
 use rvm::{
     constants::*,
     devices::{DeviceState, GuestMemory, KeyTransition},
-    display_rgb565::RGB565Display,
-    display_text40::Text40Display,
-    vm::Storage,
+    display_rgb565::{RGB565Checkpoint, RGB565Display},
+    display_text40::{Text40Checkpoint, Text40Display},
+    vm::{Storage, StorageCheckpoint},
 };
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 pub struct BfDevices {
@@ -25,7 +26,73 @@ pub struct BfDevices {
     storage: Option<Storage>,
 }
 
+/// Complete persistent device state. The BF tape/dispatch state belongs to the
+/// outer checkpoint, and native window/terminal/file handles are recreated.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BfDevicesSnapshot {
+    devices: DeviceState,
+    display: RGB565Checkpoint,
+    text_display: Text40Checkpoint,
+    presented_frames: u64,
+    host_input_enabled: bool,
+    bank_size: u16,
+    rng_state: u32,
+    display_mode: u16,
+    display_resolution: u16,
+    display_enabled: bool,
+    input: VecDeque<u8>,
+    output: Vec<u8>,
+    storage: Option<StorageCheckpoint>,
+}
+
+impl BfDevicesSnapshot {
+    pub fn bank_size(&self) -> u16 {
+        self.bank_size
+    }
+}
+
 impl BfDevices {
+    pub fn checkpoint(&mut self) -> Result<BfDevicesSnapshot, String> {
+        Ok(BfDevicesSnapshot {
+            devices: self.devices.checkpoint(), display: self.display.checkpoint()?,
+            text_display: self.text_display.checkpoint(), presented_frames: self.presented_frames,
+            host_input_enabled: self.host_input_enabled, bank_size: self.bank_size,
+            rng_state: self.rng_state, display_mode: self.display_mode,
+            display_resolution: self.display_resolution, display_enabled: self.display_enabled,
+            input: self.input.clone(), output: self.output.clone(),
+            storage: self.storage.as_mut().map(Storage::checkpoint).transpose()
+                .map_err(|error| format!("Checkpoint storage: {error}"))?,
+        })
+    }
+
+    pub fn restore_checkpoint(snapshot: BfDevicesSnapshot, storage: Option<Storage>) -> Result<Self, String> {
+        if snapshot.bank_size < 32 || !matches!(snapshot.display_mode,
+            DISP_OFF | DISP_TTY | DISP_TEXT40 | DISP_RGB565 | DISP_RGB565_EXT)
+            || snapshot.display.legacy_layout != (snapshot.display_mode == DISP_RGB565)
+            || snapshot.display_mode == DISP_RGB565 && !snapshot.display.initialized
+            || !matches!(snapshot.display_mode, DISP_RGB565 | DISP_RGB565_EXT) && snapshot.display.initialized
+        {
+            return Err("invalid BF device checkpoint configuration".into());
+        }
+        let devices = DeviceState::restore_checkpoint(snapshot.devices)?;
+        let display = RGB565Display::restore_checkpoint(snapshot.display, usize::from(snapshot.bank_size))?;
+        let text_display = Text40Display::restore_checkpoint(snapshot.text_display)?;
+        // Validate all other state before restoring dirty disk flags. A rejected
+        // checkpoint must never cause a supplied disk to acquire pending writes.
+        let storage = match (snapshot.storage, storage) {
+            (None, None) => None,
+            (Some(saved), Some(storage)) => Some(storage.restore_checkpoint(saved)
+                .map_err(|error| format!("Restore storage: {error}"))?),
+            _ => return Err("checkpoint disk presence differs from supplied disk".into()),
+        };
+        Ok(Self { devices, display, text_display, storage,
+            presented_frames: snapshot.presented_frames, host_input_enabled: snapshot.host_input_enabled,
+            bank_size: snapshot.bank_size, rng_state: snapshot.rng_state,
+            display_mode: snapshot.display_mode, display_resolution: snapshot.display_resolution,
+            display_enabled: snapshot.display_enabled, input: snapshot.input, output: snapshot.output })
+    }
+
     pub fn new(
         bank_size: u16,
         tick_hz: u16,
@@ -84,7 +151,7 @@ impl BfDevices {
     pub fn flush_storage(&mut self) -> Result<(), String> {
         if let Some(storage) = &mut self.storage {
             storage
-                .flush_checked()
+                .flush_preserving_dirty()
                 .map_err(|e| format!("Storage flush: {e}"))?;
         }
         Ok(())
@@ -354,6 +421,42 @@ mod tests {
     use super::*;
     use rvm::devices::*;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn device_checkpoint_matches_continuous_rng_tty_frame_and_pending_tick() {
+        let mut original = host();
+        let mut memory = vec![0; 256];
+        original.push_input(&[0, 255, b'A']);
+        store(&mut original, &mut memory, HDR_TTY_OUT, 65);
+        original.read_mmio(HDR_RNG, &mut memory).unwrap();
+        store(&mut original, &mut memory, HDR_DISP_RESOLUTION, 0x0201);
+        store(&mut original, &mut memory, HDR_DISP_MODE, DISP_RGB565);
+        store(&mut original, &mut memory, 34, 0xf800);
+        store(&mut original, &mut memory, HDR_DISP_FLUSH, 1);
+        store(&mut original, &mut memory, 35, 0x001f);
+        original.devices.set_script(InputScript::from_json(r#"[{"tick":1,"key":"A","down":true},{"tick":2,"key":"A","down":false}]"#).unwrap()).unwrap();
+        original.display.get_state().lock().unwrap().set_key(82, true);
+        command(&mut original, &mut memory, COMMAND_NEXT_TICK, 8);
+        let bytes = serde_json::to_vec(&original.checkpoint().unwrap()).unwrap();
+        let mut restored = BfDevices::restore_checkpoint(serde_json::from_slice(&bytes).unwrap(), None).unwrap();
+        let mut copy = memory.clone();
+        assert_eq!(original.take_output(), restored.take_output());
+        for address in [HDR_TTY_IN_STATUS, HDR_TTY_IN_POP, HDR_TTY_IN_POP, HDR_TTY_IN_POP, HDR_TTY_IN_STATUS, HDR_RNG, HDR_RNG] {
+            assert_eq!(original.read_mmio(address, &mut memory).unwrap(), restored.read_mmio(address, &mut copy).unwrap());
+        }
+        original.complete_tick(&mut memory, vec![]).unwrap();
+        restored.complete_tick(&mut copy, vec![]).unwrap();
+        for (host, ram) in [(&mut original, &mut memory), (&mut restored, &mut copy)] {
+            store(host, ram, HDR_DISP_FLUSH, 1);
+            command(host, ram, COMMAND_INPUT_POP, 8);
+            command(host, ram, COMMAND_NEXT_TICK, 8);
+            host.complete_tick(ram, vec![]).unwrap();
+        }
+        assert_eq!(memory, copy);
+        assert_eq!(original.display.snapshot(), restored.display.snapshot());
+        assert_eq!(serde_json::to_value(original.checkpoint().unwrap()).unwrap(),
+            serde_json::to_value(restored.checkpoint().unwrap()).unwrap());
+    }
 
     fn host() -> BfDevices {
         BfDevices::new(64, 35, 1, None).unwrap()

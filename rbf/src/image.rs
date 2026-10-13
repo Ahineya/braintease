@@ -1,13 +1,13 @@
 //! Versioned transport emitted by `rlink --bf-host` and preserved by `bfm`.
 use bf_wasm::engine::Machine;
 use rvm::devices::GuestMemory;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub const LANES: usize = 8;
 pub const RAM_LANE: usize = 4;
 pub const ORIGIN: usize = 8;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Layout {
     pub version: u16,
     pub bank_size: u16,
