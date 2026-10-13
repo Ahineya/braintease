@@ -64,6 +64,16 @@ impl Cache {
         }
     }
 
+    /// Query an existing fact without replacing a different stride's cache.
+    pub(super) fn known_run(&self, stride: usize, index: usize) -> Option<Run> {
+        if self.stride != stride || stride == 0 {
+            return None;
+        }
+        let residue = self.residue(index);
+        let run = self.runs[residue % SLOTS];
+        (run.residue == residue && run.contains(index)).then_some(run)
+    }
+
     pub(super) fn prepare(&mut self, stride: usize, index: usize) -> (usize, Run) {
         if self.stride != stride {
             self.stride = stride;
@@ -157,6 +167,23 @@ impl Cache {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readonly_lookup_checks_stride_residue_and_bounds_without_evicting() {
+        let mut cache = Cache::default();
+        assert!(cache.known_run(0, 0).is_none());
+        let (slot, _) = cache.prepare(65, 65);
+        cache.remember(slot, 65, 650);
+        assert!(cache.known_run(1, 65).is_none());
+        assert!(cache.known_run(65, 97).is_none()); // Same slot, different residue.
+        assert!(cache.known_run(65, 0).is_none());
+        assert!(cache.known_run(65, 715).is_none());
+        assert!(cache.known_run(65, 325).is_some());
+        cache.invalidate(325);
+        assert!(cache.known_run(65, 325).is_none());
+        cache.reset();
+        assert!(cache.known_run(65, 650).is_none());
+    }
 
     #[test]
     fn strided_invalidation_never_retains_changed_cells_or_discards_other_residues() {

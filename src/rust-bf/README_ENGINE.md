@@ -44,7 +44,10 @@ meaning. Both iteration count and total cell updates are bounded. This speeds up
 generic marker cleanup.
 When a moving loop updates only its own predicate, cache maintenance is batched
 over the changed progression. Completely cleared runs also become verified
-zero-run facts. The engine still checks each predicate and writes each cell.
+zero-run facts. A previously verified nonzero run allows a batch to replace
+per-cell predicate and bounds checks with one complete excursion check and
+strided updates. Every changed cell is still written physically; partial runs,
+host mutations and tape-edge crossings retain the ordinary fallback.
 
 Arithmetic loops can also route through nested scans. For example,
 `[->>[>]>+<<[<]<]` transfers a value into a destination found by zero sentinels.
@@ -80,6 +83,10 @@ control, fills a zero, and returns over the growing run. The changing scans must
 have equal and opposite strides; all other scan predicates must remain disjoint
 from the counter and every new marker. Batches check actual zeros, pointer
 excursions, and existing holes, and write every marker physically to the tape.
+Previously verified zero runs avoid rereading the same fill destinations.
+The remaining cells are checked normally, and a read-only cache lookup leaves
+facts about other strides intact. Uniform writes use a contiguous fill or a
+strided slice, with the same physical tape state in either BF direction.
 Invariant scan paths are excluded for the whole batch, and cache invalidation
 covers the written progression. The new nonzero cells become scan-cache facts,
 so returning through a long freshly filled run needs no second traversal.

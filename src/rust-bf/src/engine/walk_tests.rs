@@ -349,3 +349,90 @@ fn offset_walk_new_interior_stops_cannot_be_skipped_by_cached_runs() {
         assert_eq!(machine.tape()[104 * 8 + 1], old);
     }
 }
+
+#[test]
+fn cached_current_walks_preserve_values_excursions_and_partial_faults() {
+    for stride in [-7isize, -3, -1, 1, 3, 7] {
+        for delta in ["-", "+", "+++", "---"] {
+            for excursion in [0, 19, 900] {
+                let cells = 1025;
+                let start = if stride > 0 { 24 } else { 1000 };
+                let source = format!(
+                    "[{delta}{}{}{}]!",
+                    movement(excursion),
+                    movement(-excursion),
+                    movement(stride),
+                );
+                let fast = Program::parse(&source, true, true).unwrap();
+                let plain = Program::parse(&source, false, true).unwrap();
+                let mut actual = Machine::new(cells).unwrap();
+                actual.pointer = start;
+                let step = stride.unsigned_abs();
+                let residue = start % step;
+                let last = residue + (cells - 1 - residue) / step * step;
+                for (i, index) in (residue..=last).step_by(step).enumerate() {
+                    actual.write_cell(index, [1, 65535, 3, 32768][i % 4]);
+                }
+                let (slot, _) = actual.scan_cache.prepare(step, start);
+                actual.scan_cache.remember(slot, residue, last);
+                let mut expected = Machine::new(cells).unwrap();
+                expected.pointer = start;
+                expected.tape_mut().copy_from_slice(actual.tape());
+                let run = |machine: &mut Machine, program: &Program| loop {
+                    match machine.run(program, 100) {
+                        Ok(Stop::Budget) => {}
+                        result => break result,
+                    }
+                };
+                assert_eq!(run(&mut actual, &fast), run(&mut expected, &plain));
+                assert_eq!(actual.pointer(), expected.pointer());
+                assert_eq!(actual.tape(), expected.tape());
+            }
+        }
+    }
+}
+
+#[test]
+fn cached_current_walk_rechecks_host_created_stops_between_batches() {
+    let program = Program::parse("[->]!", true, true).unwrap();
+    for raw_mutation in [false, true] {
+        let mut machine = Machine::new(1025).unwrap();
+        machine.tape_mut()[..1024].fill(1);
+        let (slot, _) = machine.scan_cache.prepare(1, 0);
+        machine.scan_cache.remember(slot, 0, 1023);
+        assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
+        assert_eq!(machine.pointer(), SCAN_LIMIT / 2);
+        let stop = machine.pointer() + 3;
+        if raw_mutation {
+            machine.tape_mut()[stop] = 0;
+        } else {
+            machine.write_cell(stop, 0);
+        }
+        assert_eq!(machine.run(&program, 10).unwrap(), Stop::Hook(b'!'));
+        assert_eq!(machine.pointer(), stop);
+        assert!(machine.tape()[..=stop].iter().all(|&v| v == 0));
+        assert!(machine.tape()[stop + 1..1024].iter().all(|&v| v == 1));
+    }
+}
+
+#[test]
+fn cached_current_walk_falls_back_at_wrapping_edges() {
+    for source in ["[->]!", "[-<]!", "[->><]!", "[-<<>]!"] {
+        for start in [1, 127] {
+            let fast = Program::parse(source, true, true).unwrap();
+            let plain = Program::parse(source, false, true).unwrap();
+            let mut actual = Machine::with_wrapping_tape(129).unwrap();
+            actual.pointer = start;
+            actual.tape_mut().fill(1);
+            let (slot, _) = actual.scan_cache.prepare(1, start);
+            actual.scan_cache.remember(slot, 0, 128);
+            let mut expected = Machine::with_wrapping_tape(129).unwrap();
+            expected.pointer = start;
+            expected.tape_mut().fill(1);
+            assert_eq!(actual.run(&fast, 10000).unwrap(), Stop::Hook(b'!'));
+            assert_eq!(expected.run(&plain, 10000).unwrap(), Stop::Hook(b'!'));
+            assert_eq!(actual.pointer(), expected.pointer());
+            assert_eq!(actual.tape(), expected.tape());
+        }
+    }
+}

@@ -205,32 +205,39 @@ impl Fill {
         {
             limit = before_path(first, self.stride, limit, path);
         }
-        let mut filled = 0;
-        let mut current = first;
+        // A previous clearing walk or marker search may already have proved
+        // this progression zero. Its facts observe every tape mutation, so
+        // skip redundant reads of that prefix without omitting any writes.
+        let mut filled = machine
+            .zero_cache
+            .known_run(step, first)
+            .map_or(0, |known| known.steps_from(first, self.stride).min(limit));
         while filled < limit {
+            let current = if self.stride > 0 {
+                first + filled * step
+            } else {
+                first - filled * step
+            };
             if machine.tape[current] != 0 {
                 break;
             }
             filled += 1;
-            let Some(next) = current.checked_add_signed(self.stride) else {
-                break;
-            };
-            if next >= machine.tape.len() {
-                break;
-            }
-            current = next;
         }
         if filled == 0 {
             return false;
         }
         let last = (first as isize + (filled - 1) as isize * self.stride) as usize;
         machine.zero_cache.invalidate_run(first, last, step);
-        current = first;
-        for _ in 0..filled {
-            // Every old value was checked zero. Only zero-cache facts can be
-            // invalidated, and that exact progression was invalidated above.
-            machine.tape[current] = self.value;
-            current = (current as isize).wrapping_add(self.stride) as usize;
+        // Every old value was checked or proved zero. Only zero-cache facts
+        // can be invalidated, and that exact progression was invalidated above.
+        // Write the physical cells in ascending order for either BF direction.
+        let destinations = &mut machine.tape[first.min(last)..=first.max(last)];
+        if step == 1 {
+            destinations.fill(self.value);
+        } else {
+            for cell in destinations.iter_mut().step_by(step) {
+                *cell = self.value;
+            }
         }
         // The writes themselves prove a contiguous nonzero run on this
         // lattice. Reuse that fact when the next body returns through it.
@@ -339,6 +346,110 @@ mod tests {
                 );
             }
             assert!(machine.dispatches() <= 65);
+        }
+    }
+
+    #[test]
+    fn cached_zero_prefixes_preserve_holes_directions_and_literal_bounds_state() {
+        let movement = |delta: isize| {
+            if delta >= 0 {
+                ">".repeat(delta as usize)
+            } else {
+                "<".repeat(delta.unsigned_abs())
+            }
+        };
+        for stride in [-7isize, -3, -1, 1, 3, 7] {
+            let step = stride.unsigned_abs();
+            for markers in [0usize, 1, 7, 31] {
+                // The cancelled outward excursion deliberately exceeds the
+                // final scan stride; cached facts must not hide its bounds.
+                for excursion in [0isize, 2] {
+                    let direction = stride.signum();
+                    let scan = format!(
+                        "{}{}",
+                        movement(stride + direction * excursion),
+                        movement(-direction * excursion)
+                    );
+                    let reverse = format!(
+                        "{}{}",
+                        movement(-stride - direction * excursion),
+                        movement(direction * excursion)
+                    );
+                    let source = format!(
+                        "[-{}[{scan}]+++[{reverse}]{}]",
+                        movement(2 * stride),
+                        movement(-stride)
+                    );
+                    let optimized = Program::parse(&source, true, false).unwrap();
+                    let literal = Program::parse(&source, false, false).unwrap();
+                    let cells = (markers + 2) * step + 1;
+                    let start = if stride > 0 { 0 } else { cells - 1 };
+                    let first = (start as isize + 2 * stride) as usize;
+                    for hole in [None, Some(0usize), Some(markers / 2)] {
+                        let mut actual = Machine::new(cells).unwrap();
+                        actual.pointer = start;
+                        actual.write_cell(start, 19);
+                        if first < cells {
+                            let last = if stride > 0 { cells - 1 } else { 0 };
+                            let (slot, _) = actual.zero_cache.prepare(step, first);
+                            actual.zero_cache.remember(slot, first, last);
+                            if let Some(hole) = hole {
+                                if hole < markers {
+                                    actual.write_cell(
+                                        (first as isize + hole as isize * stride) as usize,
+                                        65535,
+                                    );
+                                }
+                            }
+                        }
+                        let mut expected = Machine::new(cells).unwrap();
+                        expected.pointer = start;
+                        expected.tape.copy_from_slice(actual.tape());
+                        let finish = |machine: &mut Machine, program: &Program| {
+                            for _ in 0..1000 {
+                                match machine.run(program, 1024) {
+                                    Ok(Stop::Budget) => {}
+                                    stop => return stop,
+                                }
+                            }
+                            panic!("bounded fill regression did not terminate")
+                        };
+                        assert_eq!(
+                            finish(&mut actual, &optimized),
+                            finish(&mut expected, &literal),
+                            "stride={stride}, markers={markers}, excursion={excursion}, hole={hole:?}"
+                        );
+                        assert_eq!(actual.pointer(), expected.pointer());
+                        assert_eq!(actual.tape(), expected.tape());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cached_fill_batches_recheck_host_writes_and_mutable_tape_access() {
+        for mutate_slice in [false, true] {
+            let program = Program::parse(SOURCE, true, false).unwrap();
+            let mut machine = Machine::new(3000).unwrap();
+            machine.write_cell(0, 2500);
+            let (slot, _) = machine.zero_cache.prepare(1, 2);
+            machine.zero_cache.remember(slot, 2, 2999);
+            assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
+            assert_eq!(machine.tape()[0], 2500 - FILL_LIMIT as u16);
+            let hole = FILL_LIMIT + 7;
+            if mutate_slice {
+                machine.tape_mut()[hole] = 65535;
+            } else {
+                machine.write_cell(hole, 65535);
+            }
+            while machine.run(&program, 1).unwrap() == Stop::Budget {}
+            assert_eq!(machine.pointer(), 0);
+            assert_eq!(machine.tape()[0], 0);
+            for at in 2..2503 {
+                assert_eq!(machine.tape()[at], if at == hole { 65535 } else { 1 });
+            }
+            assert_eq!(machine.tape()[2503], 0);
         }
     }
 

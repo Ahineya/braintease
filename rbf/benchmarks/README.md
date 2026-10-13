@@ -128,3 +128,35 @@ performance**. Submillisecond timings are especially sensitive to host noise.
 The saved binaries, input hashes, exact traces, and raw measurements for this
 run are under ignored `build/bf-optimizer-perf/`; their presence is not required
 to regenerate the fixtures or run the benchmark.
+
+### Cached marker fills and updates (2026-10-13)
+
+A later interpreter-only change reuses verified zero runs when filling markers
+and verified nonzero runs when updating a moving loop's current cells. Both
+paths still materialize every write and preserve the original bounds excursions,
+wraparound behavior and host-mutation barriers. No CPU, compiler or ISA change
+is included in this comparison.
+
+Two pairs, in before/after then after/before order, executed the same frozen
+Doom BF image through 300,000 guest instruction starts. Every run used 64,000-cell
+banks, 256 RAM banks, unthrottled headless mode, no profiler, and a 90-second
+timeout in addition to the instruction limit. Execution times include tape
+initialization and exclude source parsing and host setup:
+
+| Version | First run | Reversed-order run | Median |
+| --- | ---: | ---: | ---: |
+| Before | 23.950 s | 23.927 s | 23.938 s |
+| Cached fills/updates | 15.981 s | 16.221 s | 16.101 s |
+
+This prefix was **1.49× faster (32.7% less execution time)**. Both versions
+performed 262,862,555 BF dispatches, and every stable execution-report field
+matched. Reaching the requested instruction limit intentionally returns a
+nonzero status. The source SHA256 was
+`f265975aa96b03496d14e846a51b6f2a243184695b1fdfb9c72820d57fd9c86c`.
+The small late-code, far-RAM and cross-bank-call fixtures also produced identical
+full tape/event traces. A separate 300,000-instruction comparison against the
+Rust VM checked every register, ordinary RAM store and final RAM contents.
+The small fixtures' submillisecond-to-millisecond timings were noisy;
+the reported speedup is specific to the larger fixed startup prefix, not a
+general BF or full Doom boot estimate. Saved binaries, reports and traces are
+under ignored `build/bf-traversal-perf/`.

@@ -128,11 +128,39 @@ the compiler reuses global destination addresses; numeric table fillers keep
 one base pointer per chunk. The BF CPU loads immediates by copying instead of
 bitwise conversion, and the generic interpreter batches marker-loop cache
 maintenance. None of these changes executes guest instructions natively.
-Main still initializes the numeric/state tables before printing the banner;
-those functions remain expensive on BF. The subsequent 60-second production
-run reached 150,518 instructions, beyond entry to main at 124,766, but timed out
-inside table initialization with no banner or frame. A full boot is not yet
-validated. These bounded measurements are not a prediction of first-frame time.
+Main initializes the numeric/state tables before printing the banner. That
+initial pass's 60-second production run reached 150,518 instructions, beyond
+entry to main at 124,766, but timed out inside table initialization with no
+banner or frame.
+
+A follow-up profile identified marker writes as the main cost in this phase:
+nearby conditional branches rebuilt the entire code-tape prefix. Branches now
+adjust only the suffix between their old and new positions, preserving raw
+16-bit PC wrapping and PCB. A 100-iteration loop at instruction one million
+fell from a median 3.20 to 0.42 seconds with identical output and 204 guest
+instructions. This is a focused CPU measurement, not a Doom boot speedup.
+
+The compiler now promotes immutable pointer locals and reuses resolved banks
+within basic blocks. One 64-entry numeric filler shrank from 3,473 to 2,301
+instructions, with loads reduced from 135 to 5. Generated state/object fillers
+also retain a pointer per record; their combined code shrank by 34.4%. These
+changes reduced the full BF image from 250 to 198 MiB without reducing banks
+or memory. The follow-up production run sustained roughly 7,000–11,600 guest
+instructions per second through table filling and printed the Doom banner,
+`Z_Init`, `V_Init` and `M_LoadDefaults` within two minutes. It was stopped after
+150.46 seconds and 970,842 guest instructions, with no completed frame.
+Later initialization remained slower, around 2,000 guest instructions per
+second. Full boot is still unvalidated; these bounded measurements do not
+predict first-frame time. The BF interpreter remains generic, and all guest
+instructions still execute through the ordinary BF CPU.
+
+The final image also passed an 850,000-instruction comparison against the Rust
+VM: every register at instruction boundaries, every ordinary RAM store and
+final RAM contents matched. It reached `D_DoomMain` at instruction 841,552.
+That diagnostic run took 73.13 seconds; stores accounted for about 41 seconds
+and calls/returns for another 20, identifying the next optimization targets.
+Post-banner PC samples landed in string/number formatting and allocator pointer
+normalization. Diagnostic and production timings are separate measurements.
 
 ### Controls
 

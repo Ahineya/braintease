@@ -585,6 +585,52 @@ impl Machine {
     }
 
     fn walk_current(&mut self, arithmetic: &Arithmetic, delta: u16, next: usize) -> bool {
+        if let Some(known) = self
+            .scan_cache
+            .known_run(arithmetic.advance.unsigned_abs(), self.pointer)
+        {
+            if self.range_fits(arithmetic.minimum, arithmetic.maximum) {
+                let step = arithmetic.advance.unsigned_abs();
+                let safe_steps = if arithmetic.advance > 0 {
+                    (self.tape.len() - 1 - self.pointer - arithmetic.maximum as usize) / step + 1
+                } else {
+                    (self.pointer - arithmetic.minimum.unsigned_abs()) / step + 1
+                };
+                let count = (SCAN_LIMIT / 2)
+                    .min(safe_steps)
+                    .min(known.steps_from(self.pointer, arithmetic.advance));
+                let first = self.pointer;
+                let last = (first as isize + (count - 1) as isize * arithmetic.advance) as usize;
+                let mut any_zero = false;
+                let mut all_zero = true;
+                // Predicates in this verified run are nonzero. Each body
+                // changes only its own distinct cell, so the updates commute.
+                // A single checked slice preserves all pointer excursions and
+                // avoids rechecking bounds/predicates for every complete body.
+                for cell in self.tape[first.min(last)..=first.max(last)]
+                    .iter_mut()
+                    .step_by(step)
+                {
+                    *cell = cell.wrapping_add(delta);
+                    any_zero |= *cell == 0;
+                    all_zero &= *cell == 0;
+                }
+                self.pointer = (first as isize + count as isize * arithmetic.advance) as usize;
+                if any_zero {
+                    self.scan_cache.invalidate_run(first, last, step);
+                }
+                // Every previous value was nonzero: no zero-run fact became
+                // false, even if some updated values remain nonzero.
+                if all_zero {
+                    let (slot, _) = self.zero_cache.prepare(step, first);
+                    self.zero_cache.remember(slot, first, last);
+                }
+                if self.tape[self.pointer] == 0 {
+                    self.pc = next;
+                }
+                return true;
+            }
+        }
         let first = self.pointer;
         let mut last = None;
         let mut created_zero = false;
