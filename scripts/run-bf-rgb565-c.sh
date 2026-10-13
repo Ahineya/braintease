@@ -18,6 +18,7 @@ Use arrow keys to move the red square. Close its window or press Ctrl-C to stop.
   --build-only       Rebuild the BF image without starting it
   --headless         Run without a window (for captures)
   --visual           Open the graphics window (default)
+  --telemetry-lite   Dot every 5s; BF/guest counts and rates every 30s on stderr
   --telemetry        Report ongoing BF execution and drawing progress on stderr
 
 Other options, such as --timeout, --capture-frame, --screenshot, --raw-frame,

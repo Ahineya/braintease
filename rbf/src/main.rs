@@ -73,6 +73,9 @@ struct Cli {
     /// Print periodic progress to stderr without changing guest stdout
     #[arg(long, conflicts_with = "terminal")]
     telemetry: bool,
+    /// Print a dot every 5 seconds and compact counts/rates every 30 seconds to stderr
+    #[arg(long, conflicts_with_all = ["telemetry", "telemetry_interval", "terminal"])]
+    telemetry_lite: bool,
     /// Progress interval in seconds (0.01..3600; default 1)
     #[arg(long, requires = "telemetry", value_parser = parse_interval)]
     telemetry_interval: Option<Duration>,
@@ -122,7 +125,9 @@ fn execute(cli: Cli) -> Result<i32, String> {
     if (cli.clock == ClockPolicy::Stepped) != cli.control_stdin {
         return Err("--clock stepped and --control-stdin must be used together".into());
     }
-    let mut telemetry = if cli.telemetry {
+    let mut telemetry = if cli.telemetry_lite {
+        Some(Telemetry::new_lite(io::stderr())?)
+    } else if cli.telemetry {
         Some(Telemetry::new(
             io::stderr(),
             cli.telemetry_interval.unwrap_or(Duration::from_secs(1)),
@@ -323,6 +328,7 @@ mod tests {
     fn telemetry_is_opt_in_validated_and_separate_from_terminal_mode() {
         let plain = Cli::try_parse_from(["rbf", "program.bf"]).unwrap();
         assert!(!plain.telemetry);
+        assert!(!plain.telemetry_lite);
         assert!(plain.telemetry_interval.is_none());
         let enabled = Cli::try_parse_from([
             "rbf",
@@ -345,6 +351,23 @@ mod tests {
             ])
             .is_err());
         }
+    }
+
+    #[test]
+    fn lite_telemetry_has_a_fixed_cadence_and_supports_visual_or_headless_runs() {
+        for mode in ["--visual", "--headless"] {
+            let cli = Cli::try_parse_from(["rbf", "program.bf", "--telemetry-lite", mode]).unwrap();
+            assert!(cli.telemetry_lite);
+            assert!(!cli.telemetry);
+        }
+        for conflicting in ["--telemetry", "--terminal"] {
+            assert!(Cli::try_parse_from([
+                "rbf", "program.bf", "--telemetry-lite", conflicting,
+            ]).is_err());
+        }
+        assert!(Cli::try_parse_from([
+            "rbf", "program.bf", "--telemetry-lite", "--telemetry-interval", "5",
+        ]).is_err());
     }
 
     #[test]

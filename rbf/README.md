@@ -149,7 +149,7 @@ bank sizes are unchanged in this performance pass.
 ## Doom launcher
 
 ```sh
-scripts/run-bf-doom.sh --telemetry
+scripts/run-bf-doom.sh --telemetry-lite
 scripts/run-bf-doom.sh --build-only
 ```
 
@@ -161,8 +161,11 @@ engine, stages a writable WAD copy, and opens the graphics window. It retains
 the host supplies the existing devices. Logical ticks are unthrottled by default.
 
 There is **no default timeout**. Close the window or press Ctrl-C to stop.
-Startup may be very slow, and full Doom boot in BF remains unvalidated. Progress
-from `--telemetry` is useful before any frame appears. For a bounded attempt:
+A user-confirmed run reached Doom's first title frame after approximately
+2,500 seconds (42 minutes); subsequent frames remained slow. This is a manual
+milestone, not an automated full-Doom BF validation run. `--telemetry-lite`
+shows compact progress while waiting; `--telemetry` provides the detailed
+diagnostics. For a bounded attempt:
 
 ```sh
 scripts/run-bf-doom.sh --headless --telemetry --timeout 60 \
@@ -290,7 +293,29 @@ literal BF characters. `--max-instructions`, `--max-dispatches`, `--max-ticks`
 and `--timeout` allow bounded runs. Ctrl-C, window close and timeout are polled
 even during tape initialization and long BF loops, before any device hook.
 
-Add `--telemetry` for progress on stderr while a run is still in flight:
+For compact progress on stderr, add `--telemetry-lite`:
+
+```sh
+scripts/run-bf-doom.sh --telemetry-lite
+```
+
+It prints a dot every five seconds and a compact summary every thirty seconds:
+
+```text
+......
+[00:00:30] BF 1,234,567 (41,152/s) | Guest 50,000 (1,666.7/s)
+```
+
+The time is elapsed execution time (`HH:MM:SS`). Counts are cumulative; rates
+cover the interval since the previous summary. BF counts optimized interpreter
+dispatches, and Guest counts observed Ripple instruction starts. A final summary
+includes the stop status even when execution ends before thirty seconds.
+Compact mode omits detailed loading/parsing, program-counter, memory and disk
+diagnostics. Its fixed cadence cannot be combined with `--telemetry`,
+`--telemetry-interval` or the TEXT40 `--terminal` screen. Guest output stays on
+stdout; telemetry is off by default.
+
+For detailed progress, add `--telemetry`:
 
 ```sh
 scripts/run-bf-rgb565.sh --telemetry --telemetry-interval 1
@@ -465,5 +490,6 @@ BF instruction pointer; control flow should use branches, JAL and JALR.
 CPU interrupts are not implemented by this host.
 Nonzero IRQ configuration fails explicitly; IRQ reads report no pending state.
 BRK is a no-op in the non-debug BF host. These limitations do not change the
-Rust VM or its instruction set. Full Doom BF execution remains a separate
-milestone; only the small fixtures above are part of validation here.
+Rust VM or its instruction set. Doom's first title frame has been confirmed by
+a user; full BF gameplay remains outside automated validation. Only the small
+fixtures above are part of validation here.

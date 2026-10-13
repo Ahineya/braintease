@@ -311,3 +311,34 @@ fn telemetry_output_failure_is_an_explicit_run_error() {
     assert!(error.contains("progress pipe closed"));
     assert_eq!(host.machine.dispatches(), 0);
 }
+
+#[test]
+fn lite_progress_preserves_guest_stdout_counters_and_memory() {
+    let mut source = Source::default();
+    source.at(ORIGIN + 8 * 40);
+    source.text.push('$');
+    source.store(HDR_TTY_OUT, 89);
+    let program = Program::parse(&source.text, true, true).unwrap();
+    let mut actual = host();
+    let mut plain = host();
+    let mut seconds = 0;
+    let mut telemetry = Telemetry::with_lite_clock(Vec::new(), move || {
+        seconds += 5;
+        Duration::from_secs(seconds)
+    }).unwrap();
+    let mut output = Vec::new();
+    let mut expected_output = Vec::new();
+    assert_eq!(actual.run_with_telemetry(&program, &options(), &mut output, &mut telemetry),
+        plain.run(&program, &options(), &mut expected_output));
+    assert_eq!(output, b"Y");
+    assert_eq!(output, expected_output);
+    assert_eq!(actual.instructions, 1);
+    assert_eq!(actual.instructions, plain.instructions);
+    assert_eq!(actual.machine.dispatches(), plain.machine.dispatches());
+    assert_eq!(actual.machine.tape(), plain.machine.tape());
+    let text = String::from_utf8(telemetry.into_inner()).unwrap();
+    assert!(text.starts_with('.'));
+    assert!(text.contains(" | Guest 1 ("));
+    assert!(text.ends_with(" (halted)\n"));
+    assert!(!text.contains("phase="));
+}

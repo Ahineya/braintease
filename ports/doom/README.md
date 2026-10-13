@@ -185,7 +185,7 @@ guest instructions, and sprite metadata initialization from 69,514,839 to
 1,172,927. Reaching the title frame fell from 236,489,409 to 118,787,106 guest
 instructions. Title, menu-to-E1M1 and direct E1M1 pixels match the original-WAD
 native reference. These instruction counts measure guest work independently
-of host speed; full BF startup remains a separate validation milestone.
+of host speed; full BF startup had not been validated at that stage.
 A bounded full-launcher BF run printed the startup messages through `W_Init`
 and reached 1,315,145 guest instructions with 8,476 disk words read before its
 180-second execution limit. It was still processing the WAD directory and had
@@ -212,7 +212,7 @@ IDs. Missing-index checks use bounds comparisons instead of XOR against
 65535, and batch pointers advance linearly. Instruction counts alone do not
 predict BF time: bitwise operands and memory access patterns also matter.
 Title, menu-to-E1M1, direct E1M1 and the 180-frame gameplay replay match the
-native reference. Full BF first-frame validation remains outstanding.
+native reference. Those checks did not validate a full BF first frame.
 
 The final bounded BF launcher check completed directory loading and was reading
 the prepared hash table when its 300-second execution limit expired. It reached
@@ -386,7 +386,7 @@ the requested frame is a failure. Run `ports/doom/run.sh --help` for all options
 ### Brainfuck host
 
 ```sh
-scripts/run-bf-doom.sh --telemetry
+scripts/run-bf-doom.sh --telemetry-lite
 scripts/run-bf-doom.sh --build-only
 scripts/run-bf-doom.sh --scene e1m1 --low-detail --telemetry
 ```
@@ -399,9 +399,16 @@ and keyboard devices. Both RAM and code retain the port's 64,000-cell bank size,
 with 256 RAM banks. Logical ticks are unthrottled by default.
 
 The window is enabled by default. There is **no default timeout**; close the
-window or press Ctrl-C to stop. Startup and the first frame can take a long time,
-and a successful full Doom boot in BF is not yet a validated milestone.
-`--telemetry` reports ongoing execution on stderr. For a bounded capture attempt:
+window or press Ctrl-C to stop. A user-confirmed run reached the first Doom title
+frame after approximately 2,500 seconds (42 minutes); subsequent frames remained
+slow. This is a manual milestone, not an automated full-Doom BF validation run.
+
+`--telemetry-lite` prints a dot every five seconds and compact BF/guest counts
+and rates every thirty seconds on stderr, plus a final summary when stopped.
+BF counts optimized interpreter dispatches; guest counts observed Ripple
+instructions. Use `--telemetry` for detailed PC, memory and disk progress.
+The two modes cannot be combined; `--telemetry-interval` only applies to detailed
+telemetry. Guest output remains on stdout. For a bounded capture attempt:
 
 ```sh
 scripts/run-bf-doom.sh --headless --telemetry --timeout 60 \
@@ -471,7 +478,7 @@ instructions per second through table filling and printed the Doom banner,
 `Z_Init`, `V_Init` and `M_LoadDefaults` within two minutes. It was stopped after
 150.46 seconds and 970,842 guest instructions, with no completed frame.
 Later initialization remained slower, around 2,000 guest instructions per
-second. Full boot is still unvalidated; these bounded measurements do not
+second. That run did not validate a full boot; these bounded measurements do not
 predict first-frame time. The BF interpreter remains generic, and all guest
 instructions still execute through the ordinary BF CPU.
 
@@ -772,5 +779,6 @@ Save/load, demo recording, multiplayer, sound, mouse input, persistent host
 configuration, PWADs and melt wipes are deferred. Longer sessions, additional
 maps and demo playback need broader validation beyond the bounded E1M1 replays.
 The Brainfuck host supports the device interface and multi-bank export. Its
-experimental launcher is separate from the regular build/test commands; full
-Doom boot and gameplay on that backend remain to be validated.
+experimental launcher is separate from the regular build/test commands. A user
+has confirmed the first Doom title frame; full BF gameplay and an automated
+full-boot regression remain to be validated.

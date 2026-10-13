@@ -35,7 +35,8 @@ There is no default timeout. Close the window or press Ctrl-C to stop.
   --output DIRECTORY Disk copy, manifest and default report (default: build/run-bf)
   --report FILE      Override the execution report path
   --jobs N           Parallel compiler jobs (default: 4)
-  --telemetry        Report progress on stderr (forwarded to rbf)
+  --telemetry-lite   Dot every 5s; BF/guest counts and rates every 30s on stderr
+  --telemetry        Report detailed progress on stderr (forwarded to rbf)
   --profile FILE     Write generic BF operation timings on exit (adds overhead)
   --timeout SECONDS  Optional execution time limit (forwarded to rbf)
 
@@ -54,7 +55,8 @@ diagnostic guest checks. Neither VM host performs Doom asset validation.
 
 This keeps Doom's 64,000-cell banks and 256 RAM banks. Tape alone needs over
 250 MiB; code size determines the exact allocation. Startup and the first
-frame can take a long time. --telemetry makes progress visible.
+frame can take a long time. Use --telemetry-lite for compact progress or
+--telemetry for details; these modes cannot be combined.
 EOF
 }
 fail() { printf 'error: %s\n' "$*" >&2; exit 2; }

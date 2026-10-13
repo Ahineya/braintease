@@ -20,6 +20,8 @@ Close its window or press Ctrl-C to stop. No C runtime or disk is required.
   --headless         Run without a window (for captures)
   --clock POLICY     paced (default), unthrottled, or stepped
   --tick-hz HZ       Animation tick rate (default 8)
+  --telemetry-lite   Dot every 5s; BF/guest counts and rates every 30s on stderr
+  --telemetry        Report detailed BF execution and drawing progress on stderr
 
 Other options, such as --timeout, --capture-frame, --screenshot, --raw-frame,
 --report and --no-optimize, are passed to rbf. BF_RGB565_OUT selects the output
