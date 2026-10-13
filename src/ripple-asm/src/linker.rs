@@ -1,4 +1,4 @@
-use crate::types::{Instruction, Label, ObjectFile, Opcode, UnresolvedReference, Archive, ArchiveEntry};
+use crate::types::{Instruction, Label, ObjectFile, Opcode, Register, UnresolvedReference, Archive, ArchiveEntry};
 use std::collections::HashMap;
 use std::path::Path;
 use std::fs;
@@ -31,19 +31,27 @@ impl Linker {
 
     pub fn link(&self, mut object_files: Vec<ObjectFile>) -> Result<LinkedProgram, Vec<String>> {
         crate::reachability::collect(&mut object_files)?;
+        let mut dispatcher_index = None;
         // Startup has always called _init_globals. Build one ordinary ISA routine
         // that visits every separately compiled object's initializer.
         if !object_files.iter().any(|obj| obj.labels.contains_key("_init_globals")) {
-            let mut names: Vec<_> = object_files.iter().flat_map(|obj| obj.labels.keys())
-                .filter(|name| name.starts_with("__rcc_init_")).cloned().collect();
+            let mut names: Vec<_> = object_files.iter().flat_map(|obj| obj.labels.iter()
+                .filter(|(name, label)| name.starts_with("__rcc_init_")
+                    && !Self::returns_immediately(obj, label))
+                .map(|(name, _)| name.clone())).collect();
             names.sort();
             let needs_dispatcher = !names.is_empty() || object_files.iter().any(|obj|
                 obj.unresolved_references.values().any(|r| r.label == "_init_globals"));
             if needs_dispatcher {
-                let mut source = "_init_globals:\nSTORE RA, SB, SP\nADDI SP, SP, 1\nSTORE RAB, SB, SP\nADDI SP, SP, 1\n".to_string();
-                for name in names { source.push_str(&format!("CALL {name}\n")); }
-                source.push_str("ADDI SP, SP, -1\nLOAD RAB, SB, SP\nADDI SP, SP, -1\nLOAD RA, SB, SP\nRET\n");
+                let mut source = "_init_globals:\n".to_string();
+                if !names.is_empty() {
+                    source.push_str("STORE RA, SB, SP\nADDI SP, SP, 1\nSTORE RAB, SB, SP\nADDI SP, SP, 1\n");
+                    for name in names { source.push_str(&format!("CALL {name}\n")); }
+                    source.push_str("ADDI SP, SP, -1\nLOAD RAB, SB, SP\nADDI SP, SP, -1\nLOAD RA, SB, SP\n");
+                }
+                source.push_str("RET\n");
                 let assembler = crate::assembler::RippleAssembler::new(crate::types::AssemblerOptions::default());
+                dispatcher_index = Some(object_files.len());
                 object_files.push(assembler.assemble(&source)?);
             }
         }
@@ -54,41 +62,42 @@ impl Linker {
         // so instruction index = PCB * bank_size + PC. Pad unused bank tails
         // with NOP 0x42 (HALT is opcode 0x00).
         let mut packed_instructions = Vec::new();
-        let mut file_maps: Vec<Vec<usize>> = Vec::with_capacity(object_files.len());
-
-        for (file_idx, obj) in object_files.iter().enumerate() {
-            let mut local_map = vec![0usize; obj.instructions.len()];
-            if obj.instructions.is_empty() {
-                file_maps.push(local_map);
-                continue;
-            }
-
-            let segments = match self.segments_for_object(obj, bank_size) {
-                Ok(segs) => segs,
-                Err(e) => {
-                    errors.push(format!("File {}: {}", file_idx, e));
-                    file_maps.push(local_map);
-                    continue;
-                }
-            };
-
-            for segment in segments {
-                let len = segment.end - segment.start;
-                if !packed_instructions.is_empty() {
-                    let used = packed_instructions.len() % bank_size;
-                    let remainder = if used == 0 { bank_size } else { bank_size - used };
-                    if len > remainder {
-                        Self::pad_to_bank_end(&mut packed_instructions, bank_size);
+        let mut file_maps: Vec<Vec<usize>> = object_files.iter()
+            .map(|obj| vec![0; obj.instructions.len()]).collect();
+        let startup_layout = dispatcher_index.and_then(|index|
+            self.startup_layout(&object_files, index, bank_size));
+        let layout = match startup_layout {
+            Some(layout) => layout,
+            None => {
+                let mut layout = Vec::new();
+                for (file_idx, obj) in object_files.iter().enumerate() {
+                    if obj.instructions.is_empty() {
+                        continue;
+                    }
+                    match self.segments_for_object(obj, bank_size) {
+                        Ok(segments) => layout.extend(segments.into_iter()
+                            .map(|segment| (file_idx, segment))),
+                        Err(e) => errors.push(format!("File {}: {}", file_idx, e)),
                     }
                 }
-
-                for local_idx in segment.start..segment.end {
-                    local_map[local_idx] = packed_instructions.len();
-                    packed_instructions.push(obj.instructions[local_idx]);
+                layout
+            }
+        };
+        for (file_idx, segment) in layout {
+            let obj = &object_files[file_idx];
+            let len = segment.end - segment.start;
+            if !packed_instructions.is_empty() {
+                let used = packed_instructions.len() % bank_size;
+                let remainder = if used == 0 { bank_size } else { bank_size - used };
+                if len > remainder {
+                    Self::pad_to_bank_end(&mut packed_instructions, bank_size);
                 }
             }
 
-            file_maps.push(local_map);
+            for local_idx in segment.start..segment.end {
+                file_maps[file_idx][local_idx] = packed_instructions.len();
+                packed_instructions.push(obj.instructions[local_idx]);
+            }
         }
 
         // Concatenate data independently of code banking
@@ -241,6 +250,152 @@ impl Linker {
     fn encode_jal_target(instruction: &mut Instruction, inst_idx: usize, bank_size: usize) {
         instruction.word2 = (inst_idx / bank_size) as u16;
         instruction.word3 = (inst_idx % bank_size) as u16;
+    }
+
+    fn returns_immediately(obj: &ObjectFile, label: &Label) -> bool {
+        let index = label.absolute_address as usize / 4;
+        !obj.unresolved_references.contains_key(&index)
+            && obj.instructions.get(index).is_some_and(|inst|
+                inst.opcode == Opcode::Jalr as u8
+                    && inst.word1 == Register::R0 as u16
+                    && inst.word2 == Register::Rab as u16
+                    && inst.word3 == Register::Ra as u16)
+    }
+
+    fn cannot_fall_through(inst: &Instruction) -> bool {
+        match Opcode::from_u8(inst.opcode) {
+            Some(Opcode::Halt) => true,
+            Some(Opcode::Jalr) => inst.word1 == Register::R0 as u16,
+            Some(Opcode::Beq | Opcode::Bge) => inst.word1 == inst.word2,
+            _ => false,
+        }
+    }
+
+    fn has_opaque_jump(obj: &ObjectFile) -> bool {
+        obj.instructions.iter().enumerate().any(|(index, inst)| {
+            let reference = obj.unresolved_references.get(&index);
+            match Opcode::from_u8(inst.opcode) {
+                Some(Opcode::Jal) => reference.is_none()
+                    && (inst.word2 != 0 || inst.word3 as usize >= obj.instructions.len()),
+                Some(Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge) => {
+                    let target = match reference {
+                        Some(r) if r.ref_type == "branch" => obj.labels.get(&r.label)
+                            .map(|label| label.absolute_address as i64 / 4),
+                        Some(_) => None,
+                        None => Some(index as i64 + i64::from(inst.word3 as i16)),
+                    };
+                    !target.is_some_and(|target| target >= 0 && target < obj.instructions.len() as i64)
+                }
+                _ => false,
+            }
+        })
+    }
+
+    /// A compiler metadata boundary alone does not authorize moving code: old
+    /// or hand-written objects can still contain fallthrough and numeric jumps.
+    /// Only separate functions whose relative branches remain inside them.
+    fn movable_compiler_segments(obj: &ObjectFile) -> Option<Vec<CodeSegment>> {
+        let meta = obj.rcc.as_ref()?;
+        let mut starts: Vec<_> = meta.code.iter().map(|name|
+            obj.labels.get(name).map(|label|
+                (label.absolute_address as usize / 4, name.clone())))
+            .collect::<Option<_>>()?;
+        starts.sort();
+        if starts.first().map(|s| s.0) != Some(0)
+            || starts.windows(2).any(|pair| pair[0].0 == pair[1].0)
+            || starts.last()?.0 >= obj.instructions.len()
+        {
+            return None;
+        }
+        let mut segments = Vec::new();
+        for (i, (start, name)) in starts.iter().enumerate() {
+            let end = starts.get(i + 1).map(|s| s.0).unwrap_or(obj.instructions.len());
+            if !Self::cannot_fall_through(&obj.instructions[end - 1]) {
+                return None;
+            }
+            for index in *start..end {
+                let inst = &obj.instructions[index];
+                let reference = obj.unresolved_references.get(&index);
+                if matches!(Opcode::from_u8(inst.opcode),
+                    Some(Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge))
+                {
+                    let target = match reference {
+                        Some(r) if r.ref_type == "branch" =>
+                            obj.labels.get(&r.label)?.absolute_address as i64 / 4,
+                        Some(_) => return None,
+                        None => index as i64 + i64::from(inst.word3 as i16),
+                    };
+                    if target < *start as i64 || target >= end as i64 {
+                        return None;
+                    }
+                }
+                if inst.opcode == Opcode::Jal as u8 && reference.is_none()
+                    && (inst.word2 != 0 || inst.word3 as usize >= obj.instructions.len())
+                {
+                    return None;
+                }
+            }
+            segments.push(CodeSegment { start: *start, end, name: Some(name.clone()) });
+        }
+        Some(segments)
+    }
+
+    /// Keep the entry object at its original beginning, then place the generated
+    /// dispatcher and movable C initializers before ordinary functions. This
+    /// keeps startup jumps short on a linear BF tape. Data and object order are
+    /// untouched, so GP reservations and translation-unit offsets stay stable.
+    fn startup_layout(
+        &self,
+        objects: &[ObjectFile],
+        dispatcher: usize,
+        bank_size: usize,
+    ) -> Option<Vec<(usize, CodeSegment)>> {
+        if !objects.iter().any(|obj| obj.entry_point.is_some()) {
+            return None;
+        }
+        let first = objects.iter().position(|obj| !obj.instructions.is_empty())?;
+        // Inserting code between legacy objects must not change fallthrough or
+        // invalidate an absolute numeric target outside its defining object.
+        if objects.iter().any(|obj| Self::has_opaque_jump(obj)
+            || obj.instructions.last().is_some_and(|inst| !Self::cannot_fall_through(inst)))
+        {
+            return None;
+        }
+        let mut layout = Vec::new();
+        let mut initializers = Vec::new();
+        let mut ordinary = Vec::new();
+        for (file, obj) in objects.iter().enumerate() {
+            if obj.instructions.is_empty() {
+                continue;
+            }
+            if file == first || file == dispatcher {
+                let segments = self.segments_for_object(obj, bank_size).ok()?;
+                layout.extend(segments.into_iter().map(|segment| (file, segment)));
+            } else if let Some(segments) = Self::movable_compiler_segments(obj) {
+                for segment in segments {
+                    if segment.end - segment.start > bank_size {
+                        return None; // ordinary packing reports the precise error
+                    }
+                    if segment.name.as_ref().is_some_and(|n| n.starts_with("__rcc_init_")) {
+                        initializers.push((file, segment));
+                    } else {
+                        ordinary.push((file, segment));
+                    }
+                }
+            } else {
+                // An opaque object may have relative branches between
+                // function boundaries. Changing where its separately packed
+                // pieces cross banks would invalidate those branch offsets.
+                if obj.instructions.len() > bank_size {
+                    return None;
+                }
+                ordinary.extend(self.segments_for_object(obj, bank_size).ok()?
+                    .into_iter().map(|segment| (file, segment)));
+            }
+        }
+        layout.extend(initializers);
+        layout.extend(ordinary);
+        Some(layout)
     }
 
     fn segments_for_object(
@@ -611,7 +766,7 @@ mod tests {
     fn initializer_dispatch_uses_the_banked_stack_abi() {
         let assembler = RippleAssembler::new(AssemblerOptions::default());
         let start = assembler.assemble("start:\nCALL _init_globals\nHALT\n").unwrap();
-        let init = assembler.assemble("__rcc_init_one:\nRET\n").unwrap();
+        let init = assembler.assemble("__rcc_init_one:\nLI T0, 1\nRET\n").unwrap();
         let linked = Linker::new(16).link(vec![start, init]).unwrap();
         let index = (linked.labels["_init_globals"].absolute_address / 4) as usize;
         let save = linked.instructions[index];
@@ -619,6 +774,147 @@ mod tests {
         assert_eq!(save.word1, crate::types::Register::Ra as u16);
         assert_eq!(save.word2, crate::types::Register::Sb as u16);
         assert_eq!(save.word3, crate::types::Register::Sp as u16);
+    }
+
+    fn compiler_object(source: &str, code: &[&str]) -> ObjectFile {
+        let mut options = AssemblerOptions::default();
+        options.memory_offset = 0;
+        let mut obj = RippleAssembler::new(options).assemble(source).unwrap();
+        obj.rcc = Some(crate::types::CompilerMetadata {
+            code: code.iter().map(|s| s.to_string()).collect(),
+            // Keep every test function so this isolates layout from collection.
+            roots: code.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        });
+        obj
+    }
+
+    #[test]
+    fn empty_initializers_keep_labels_and_gp_reservations_without_calls() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let start = assembler.assemble("start:\nCALL _init_globals\nHALT\n").unwrap();
+        let init = compiler_object(
+            ".data\n__gp_empty:\n.space 7\n.code\n__rcc_init_empty:\nRET\n",
+            &["__rcc_init_empty"],
+        );
+        let linked = Linker::new(32).link(vec![start, init]).unwrap();
+        let dispatcher = linked.labels["_init_globals"].absolute_address as usize / 4;
+        assert_eq!(linked.instructions[dispatcher],
+            Instruction::new(Opcode::Jalr, 0, Register::Rab as u16, Register::Ra as u16));
+        assert_eq!(linked.instructions.iter().filter(|i| i.opcode == Opcode::Jal as u8).count(), 1);
+        assert!(linked.labels.contains_key("__rcc_init_empty"));
+        assert_eq!(linked.data_labels["__gp_empty"], 0);
+        assert_eq!(linked.data.len(), 7);
+        assert!(linked.bf_host_gp_data_only);
+    }
+
+    #[test]
+    fn startup_layout_relocates_calls_pointers_and_data_across_banks() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let entry = assembler.assemble("start:\nCALL _init_globals\nCALL main\nHALT\n").unwrap();
+        let padding = assembler.assemble(&format!("padding:\n{}RET\n", "NOP\n".repeat(31))).unwrap();
+        let body = compiler_object(
+            ".data\n__gp_tu:\n.space 5\n.code\n\
+             __rcc_init_empty:\nRET\n\
+             main:\nLI T0, %bank(helper)\nLI T1, %offset(helper)\nCALL helper\nRET\n\
+             __rcc_init_tu:\nLI T0, __gp_tu\nLI T1, 7\nSTORE T1, GP, T0\nRET\n\
+             helper:\nBEQ R0, R0, L_helper_skip\nNOP\nL_helper_skip:\nRET\n",
+            &["__rcc_init_empty", "main", "__rcc_init_tu", "helper"],
+        );
+        let other = compiler_object(
+            ".data\n__gp_other:\n.space 3\n.code\n__rcc_init_other:\nLI T0, __gp_other\nRET\n",
+            &["__rcc_init_other"],
+        );
+        let mut linked = Linker::new(32).link(vec![entry, padding, body, other]).unwrap();
+        let index = |name: &str| linked.labels[name].absolute_address as usize / 4;
+        let dispatcher = index("_init_globals");
+        let init = index("__rcc_init_tu");
+        let other = index("__rcc_init_other");
+        let main = index("main");
+        let helper = index("helper");
+        assert_eq!(dispatcher, 3);
+        assert!(init < 32 && other < 32);
+        assert!(main >= 64);
+        assert_eq!((linked.instructions[0].word2, linked.instructions[0].word3), (0, 3));
+        assert_eq!((linked.instructions[main + 2].word2, linked.instructions[main + 2].word3),
+            ((helper / 32) as u16, (helper % 32) as u16));
+        assert_eq!(linked.instructions[main].word2, (helper / 32) as u16);
+        assert_eq!(linked.instructions[main + 1].word2, (helper % 32) as u16);
+        assert_eq!(linked.instructions[helper].word3, 2);
+        assert_eq!(linked.labels["L_helper_skip"].absolute_address / 4, (helper + 2) as u32);
+        assert_eq!(linked.data_labels["__gp_tu"], 0);
+        assert_eq!(linked.data_labels["__gp_other"], 5);
+        assert_eq!(linked.instructions[init].word2, 0);
+        assert_eq!(linked.instructions[other].word2, 5);
+        assert!(linked.relocs.contains(&Reloc { kind: RelocKind::LiData, index: other as u32 }));
+        // Preserve sorted initializer invocation order while omitting only RETs.
+        assert_eq!(linked.instructions[dispatcher + 4].word3, other as u16);
+        assert_eq!(linked.instructions[dispatcher + 5].word3, init as u16);
+        linked.apply_code_bank_base(7);
+        assert_eq!(linked.instructions[main].word2, (helper / 32 + 7) as u16);
+        assert_eq!(linked.instructions[main + 1].word2, (helper % 32) as u16);
+        assert_eq!(linked.instructions[main + 2].word2, (helper / 32 + 7) as u16);
+    }
+
+    #[test]
+    fn startup_layout_preserves_opaque_or_fallthrough_compiler_objects() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        for source in [
+            "main:\nNOP\n__rcc_init_test:\nLI T0, 7\nRET\n",
+            "main:\nBEQ R0, R0, __rcc_init_test\nRET\n__rcc_init_test:\nLI T0, 7\nRET\n",
+            "main:\nJAL RA, 3, 100\nRET\n__rcc_init_test:\nLI T0, 7\nRET\n",
+        ] {
+            let entry = assembler.assemble("start:\nCALL _init_globals\nCALL main\nHALT\n").unwrap();
+            let body = compiler_object(source, &["main", "__rcc_init_test"]);
+            let original = body.instructions.clone();
+            let linked = Linker::new(64).link(vec![entry, body]).unwrap();
+            let main = linked.labels["main"].absolute_address as usize / 4;
+            assert_eq!(&linked.instructions[main..main + original.len()], &original);
+        }
+    }
+
+    #[test]
+    fn startup_layout_does_not_insert_code_into_legacy_fallthrough() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let entry = assembler.assemble("start:\nCALL _init_globals\nNOP\n").unwrap();
+        let body = compiler_object("main:\nHALT\n__rcc_init_test:\nLI T0, 7\nRET\n",
+            &["main", "__rcc_init_test"]);
+        let linked = Linker::new(32).link(vec![entry, body]).unwrap();
+        assert_eq!(linked.labels["main"].absolute_address / 4, 2);
+        assert_eq!(linked.instructions[2].opcode, Opcode::Halt as u8);
+        assert!(linked.labels["_init_globals"].absolute_address > linked.labels["__rcc_init_test"].absolute_address);
+    }
+
+    #[test]
+    fn startup_layout_keeps_bank_placement_of_opaque_oversized_compiler_objects() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let entry = assembler.assemble("start:\nCALL _init_globals\nCALL main\nHALT\n").unwrap();
+        let body = compiler_object(
+            &format!("main:\nBEQ R0, R0, __rcc_init_test\nRET\n\
+                __rcc_init_test:\n{}RET\nhelper:\n{}RET\n",
+                "NOP\n".repeat(4), "NOP\n".repeat(11)),
+            &["main", "__rcc_init_test", "helper"],
+        );
+        let linked = Linker::new(16).link(vec![entry, body]).unwrap();
+        // Moving the dispatcher before this object would put main at 13 and
+        // its relative branch target at 16, on a different code bank.
+        assert_eq!(linked.labels["main"].absolute_address / 4, 3);
+        assert_eq!(linked.labels["__rcc_init_test"].absolute_address / 4, 5);
+        assert_eq!(linked.instructions[3].word3, 2);
+        assert_eq!(linked.labels["helper"].absolute_address / 4, 16);
+    }
+
+    #[test]
+    fn custom_initializer_dispatcher_is_not_reordered_or_replaced() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let entry = assembler.assemble("start:\nCALL _init_globals\nHALT\n").unwrap();
+        let body = compiler_object("main:\nRET\n__rcc_init_test:\nLI T0, 7\nRET\n",
+            &["main", "__rcc_init_test"]);
+        let custom = assembler.assemble("_init_globals:\nLI T1, 9\nRET\n").unwrap();
+        let linked = Linker::new(32).link(vec![entry, body, custom]).unwrap();
+        assert_eq!(linked.labels["main"].absolute_address / 4, 2);
+        assert_eq!(linked.labels["_init_globals"].absolute_address / 4, 5);
+        assert_eq!(linked.instructions[5], Instruction::new(Opcode::Li, Register::T1 as u16, 9, 0));
     }
 
     #[test]

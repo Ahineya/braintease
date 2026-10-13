@@ -474,8 +474,12 @@ impl Machine {
                 return self.scan(*stride, *minimum, *maximum, *next);
             }
             FastOp::Walk { arithmetic, next } => {
-                if let [(0, delta)] = arithmetic.changes.as_slice() {
-                    return self.walk_current(arithmetic, *delta, *next);
+                if let [(offset, delta)] = arithmetic.changes.as_slice() {
+                    return if *offset == 0 {
+                        self.walk_current(arithmetic, *delta, *next)
+                    } else {
+                        self.walk_offset(arithmetic, *offset, *delta, *next)
+                    };
                 }
                 // Moving arithmetic loops can change their next predicate.
                 // Execute complete bodies in order, including all writes;
@@ -495,6 +499,84 @@ impl Machine {
                     self.pc = *next;
                 }
             }
+        }
+        true
+    }
+
+    fn walk_offset(
+        &mut self,
+        arithmetic: &Arithmetic,
+        offset: isize,
+        delta: u16,
+        next: usize,
+    ) -> bool {
+        if self.tape[self.pointer] == 0 {
+            self.pc = next;
+            return true;
+        }
+        if !self.range_fits(arithmetic.minimum, arithmetic.maximum) {
+            return false;
+        }
+        let step = arithmetic.advance.unsigned_abs();
+        // Include cancelled pointer excursions, not just the write and final
+        // pointer. Every complete body in this monotonic batch fits the tape.
+        let safe_steps = if arithmetic.advance > 0 {
+            (self.tape.len() - 1 - self.pointer - arithmetic.maximum as usize) / step + 1
+        } else {
+            (self.pointer - arithmetic.minimum.unsigned_abs()) / step + 1
+        };
+        let mut limit = (SCAN_LIMIT / 2).min(safe_steps);
+        let mut known_nonzero = false;
+        if offset.unsigned_abs() % step != 0 {
+            // The write and predicate use distinct residues. A cached run of
+            // nonzero predicates cannot change during this batch, so its
+            // interior needs no repeated reads. No layout or value is assumed.
+            let (_, known) = self.scan_cache.prepare(step, self.pointer);
+            if known.contains(self.pointer) {
+                limit = limit.min(known.steps_from(self.pointer, arithmetic.advance));
+                known_nonzero = true;
+            }
+        }
+        let first = (self.pointer as isize + offset) as usize;
+        let mut last = None;
+        let mut created_zero = false;
+        let mut created_nonzero = false;
+        let mut all_zero = true;
+        let mut all_nonzero = true;
+        for _ in 0..limit {
+            if !known_nonzero && self.tape[self.pointer] == 0 {
+                break;
+            }
+            let target = (self.pointer as isize + offset) as usize;
+            let old = self.tape[target];
+            let value = old.wrapping_add(delta);
+            self.tape[target] = value;
+            created_zero |= value == 0 && old != 0;
+            created_nonzero |= value != 0 && old == 0;
+            all_zero &= value == 0;
+            all_nonzero &= value != 0;
+            last = Some(target);
+            self.pointer = (self.pointer as isize + arithmetic.advance) as usize;
+        }
+        if let Some(last) = last {
+            // Destinations are distinct on an in-bounds monotonic walk. Keep
+            // every write while invalidating each cache only once per batch.
+            if created_zero {
+                self.scan_cache.invalidate_run(first, last, step);
+            }
+            if created_nonzero {
+                self.zero_cache.invalidate_run(first, last, step);
+            }
+            if all_zero {
+                let (slot, _) = self.zero_cache.prepare(step, first);
+                self.zero_cache.remember(slot, first, last);
+            } else if all_nonzero {
+                let (slot, _) = self.scan_cache.prepare(step, first);
+                self.scan_cache.remember(slot, first, last);
+            }
+        }
+        if self.tape[self.pointer] == 0 {
+            self.pc = next;
         }
         true
     }

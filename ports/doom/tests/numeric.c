@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "m_fixed.h"
 #include "tables.h"
 
@@ -90,6 +91,7 @@ int main(void)
     uint32_t tangent_hash;
     uint32_t angle_hash = UINT32_C(2166136261);
     const fixed_t *original;
+    void *bank_padding;
 
     expect("fixed width", (int32_t) (sizeof(fixed_t) * CHAR_BIT), 32);
     expect("angle width", (int32_t) (sizeof(angle_t) * CHAR_BIT), 32);
@@ -109,7 +111,10 @@ int main(void)
     expect("SlopeDiv wrap", SlopeDiv(UINT32_C(0x20000000), 4096), 0);
     expect("SlopeDiv maximum", SlopeDiv(UINT32_MAX, UINT32_MAX), 256);
 
-    if (!Doom_InitTables()) {
+    /* Start the tables near a bank boundary in Ripple. The full-table hashes
+     * below also check the indexed filler chunks that cross into the next bank. */
+    bank_padding = malloc(60000UL);
+    if (bank_padding == NULL || !Doom_InitTables()) {
         printf("FAIL table allocation\n");
         return 1;
     }
@@ -142,6 +147,7 @@ int main(void)
         ++failures;
     }
     Doom_FreeTables();
+    free(bank_padding);
     if (finesine != NULL || finecosine != NULL || finetangent != NULL || tantoangle != NULL) {
         printf("FAIL table teardown\n");
         ++failures;

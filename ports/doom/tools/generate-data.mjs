@@ -48,7 +48,10 @@ function tables(sourceFile, output) {
     for (let index = 0; index < count; index += 64) {
       const symbol = `Doom_Fill_${name}_${number(index / 64)}`;
       prototypes.push(`${type} *${symbol}(${type} *out);`);
-      functions.push([`${type} *${symbol}(${type} *out)`, '{', ...values.slice(index, index + 64).map(v => `    *out++ = ${literal(v)};`), '    return out;', '}', ''].join('\n'));
+      const chunk = values.slice(index, index + 64);
+      // Keep one base pointer for this bounded chunk. Reassigning out for every
+      // element creates repeated fat-pointer spills and bank normalization.
+      functions.push([`${type} *${symbol}(${type} *out)`, '{', ...chunk.map((v, n) => `    out[${n}] = ${literal(v)};`), `    return out + ${chunk.length};`, '}', ''].join('\n'));
       calls[name].push(`    cursor = ${symbol}(cursor);`);
     }
   }

@@ -46,6 +46,19 @@ reserved scratch registers and preserves the condition until the branch.
 Execution tests cover wide conditions, register pressure, pointer banks,
 alternative successor paths, and loop backedges.
 
+Global initializers reuse their relocated destination cursor between stores,
+advancing by the difference between local offsets instead of reloading the GP
+base for every cell. The proof is local to one initializer and is discarded at
+labels, branches, clobbers and unknown instructions. Memory writes retain their
+values, order and count. `global_init_cursor` covers arrays, multiword values,
+relocated data pointers and callable function pointers.
+
+The linker omits calls to proven RET-only initializers and places the startup
+dispatcher and safely movable compiler initializers near the image entry.
+Data reservations and initializer invocation order remain unchanged. Opaque
+control flow and functions that cannot safely be separated retain conservative
+layout; this optimization does not change the ISA or bank size.
+
 Dynamic pointer arithmetic first scales the displacement with fixed-register
 shifts/additions. Positive or negative one-word displacements use native
 carry/borrow and bank adjustment. Other displacements use a 32-bit fallback.

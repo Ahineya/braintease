@@ -579,12 +579,14 @@
     @reset_register_mark
 }
 
-#define no_register_imm1_op(op) {
-    // Load immediate
+#define ins_li {
+    // Preserve the code operand and move its copy directly into the result
+    // cell. LI needs no decimal/binary conversion or bitwise operation.
     @prevwords(2)
-    @copy_value_to_A
-    @nextwords(2)
-    op
+    @copy_value_to_B
+    @lane(@L_SB,
+      @move_to(@nextwords(2), @prevwords(2))
+    )
     @clear_and_mark_destination_register
     @move_result_to_destination_register
     @reset_register_mark
@@ -1547,7 +1549,7 @@
 #define andi @ophandler(@one_register_op(@alu_and))
 #define ori  @ophandler(@one_register_op(@alu_or))
 #define xori @ophandler(@one_register_op(@alu_xor))
-#define li   @ophandler(@no_register_imm1_op(@alu_or))
+#define li   @ophandler(@ins_li)
 #define sli  @ophandler(@one_register_op(@alu_sl))
 #define sri  @ophandler(@one_register_op(@alu_sr))
 

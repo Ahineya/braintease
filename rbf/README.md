@@ -179,7 +179,7 @@ Use `--scene e1m1`, `--low-detail`, `--wad FILE` and `--jobs N` for port setting
 Other `rbf` options pass through, including capture flags and optional limits.
 The image is `ports/doom/build/ripple/engine/engine.bf`. The linker's direct BF
 export emits compact ordinary BF initializers, avoiding a huge macro expansion
-for millions of guest instructions. The CPU template and guest ISA are unchanged.
+for millions of guest instructions. The guest ISA is unchanged.
 The default report and staged disk go under `ports/doom/build/run-bf/`; change
 that with `--output DIRECTORY`, or select a report using `--report FILE`.
 `DOOM_BUILD` and `DOOM_WAD` select another build tree and source WAD.
@@ -322,8 +322,11 @@ combines pointer moves while retaining their full boundary excursions, and
 precomputes the valid fills' excursion bounds. Fills check route exclusions once
 per bounded batch,
 invalidate cached runs together, and record the verified nonzero cells for
-subsequent scans. Moving loops that update only their current cell similarly
-batch cache maintenance. Every actual tape write remains present, and fallback
+subsequent scans. Moving loops with one updated cell per iteration also batch
+cache maintenance, including writes at an offset from the predicate cell.
+Cached predicate runs can skip repeated reads only when their stride residue
+is disjoint from the writes; dependent predicates are checked in order.
+Every actual tape write remains present, and fallback
 execution preserves partial bounds failures. These optimizations inspect BF
 operations and tape cells,
 with no knowledge of Ripple opcodes or register layouts. Checked fallback
@@ -368,6 +371,9 @@ The CPU comparison tests cover unsigned 65535 and signed 32767 in both host
 and ordinary standalone BF. The shared comparator guards its increment against
 maximum-value wraparound; a direct literal oracle checks all 8-bit operand
 pairs plus 16-bit boundary/sample pairs, including scratch cleanup.
+LI copies its immediate directly using ordinary BF; it no longer converts the
+value to bits just to OR it with zero. Literal-interpreter tests cover boundary
+values, overwrites, R0, other registers, scratch cleanup and preserved operands.
 No check builds or executes Doom.
 
 The compiler check builds ordinary C graphics-API and direct-pointer examples,

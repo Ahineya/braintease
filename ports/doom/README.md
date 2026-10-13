@@ -95,7 +95,8 @@ setup happen before that budget starts.
 
 The image is `build/ripple/engine/engine.bf` within this port. The linker writes
 compact ordinary BF initializers directly, avoiding an enormous macro expansion
-for millions of guest instructions. The CPU template and guest ISA are unchanged.
+for millions of guest instructions. The guest ISA is unchanged; the CPU still
+executes ordinary BF, including its direct-copy immediate-load implementation.
 `DOOM_BUILD` selects another build directory; `DOOM_WAD` or `--wad FILE` selects
 the source WAD. The disk copy and default `<scene>.json` report go under
 `build/run-bf/`; use `--output DIRECTORY` and `--report FILE` to override them.
@@ -109,10 +110,24 @@ The launcher reads the export's declared tape size and sets the host's tape
 allocation limit accordingly. Doom needs hundreds of megabytes for the tape
 alone; the expanded source and interpreter representation need additional memory.
 
-The 2026-10-13 development-machine startup probe built a 368 MiB image, completed
-BF initialization and executed 1,718 guest instructions before its requested
-10-second execution timeout. No frame had appeared. This verifies bounded
-startup, not a complete Doom boot or a prediction of time to the first frame.
+The 2026-10-13 startup optimization pass reduced the BF image from 368 to
+250 MiB without changing the bank size or RAM allocation. A bounded comparison
+of the first 70,000 instructions against the Rust VM dropped from 85.5 to
+5.3 seconds, including BF tape initialization but excluding parsing/setup.
+Both runs checked every register at each instruction boundary, every ordinary
+RAM store and final RAM contents. The compiler changes alter the instruction
+mix, so this measures a startup prefix, not a whole-boot speedup.
+
+The linker skips empty initializers and gathers startup code near the entry;
+the compiler reuses global destination addresses; numeric table fillers keep
+one base pointer per chunk. The BF CPU loads immediates by copying instead of
+bitwise conversion, and the generic interpreter batches marker-loop cache
+maintenance. None of these changes executes guest instructions natively.
+Main still initializes the numeric/state tables before printing the banner;
+those functions remain expensive on BF. The subsequent 60-second production
+run reached 150,518 instructions, beyond entry to main at 124,766, but timed out
+inside table initialization with no banner or frame. A full boot is not yet
+validated. These bounded measurements are not a prediction of first-frame time.
 
 ### Controls
 

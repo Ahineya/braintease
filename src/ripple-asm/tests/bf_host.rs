@@ -391,6 +391,54 @@ fn zero_register_ignores_writes() {
 }
 
 #[test]
+fn immediate_load_edges_overwrite_without_disturbing_registers_or_scratch() {
+    // Use the independent literal interpreter in both export modes: this must
+    // work without the optimized host recognizing any CPU-specific operation.
+    for immediate in [0, 1, 32768, 65535] {
+        let source = format!(
+            "start:\nLI A0, 23\nLI T0, 17\nLI T1, 29\nLI GP, 31\n\
+             LI T0, {immediate}\nLI R0, 65535\nHALT\n"
+        );
+        let hosted = run(&source);
+        let (output, plain) = run_plain(&source);
+        assert!(output.is_empty());
+        assert!(hosted.reads.is_empty());
+        assert!(hosted.writes.is_empty());
+        assert_eq!(hosted.boundaries, 7);
+        for register in 0..32 {
+            let expected = match register {
+                1 => 7, // PC advances after HALT too.
+                7 => 23,
+                15 => immediate,
+                16 => 29,
+                31 => 31,
+                _ => 0,
+            };
+            for (tape, origin) in [(&hosted.tape, 8), (&plain, 0)] {
+                assert_eq!(
+                    tape[origin + 8 * (register + 1) + 1],
+                    expected,
+                    "immediate={immediate}, register={register}, origin={origin}"
+                );
+            }
+        }
+        for (tape, origin) in [(&hosted.tape, 8), (&plain, 0)] {
+            for (index, word) in tape[origin..].chunks_exact(8).enumerate() {
+                assert_eq!(
+                    (word[2], word[5], word[6]),
+                    (0, 0, 0),
+                    "LI must clear pointer/scratch lanes: immediate={immediate}, word={index}"
+                );
+                assert_eq!(word[4], 0, "LI must not modify RAM");
+            }
+            // LI copies its operand; future visits to the instruction must see
+            // the same immediate, even when it is zero or the maximum cell.
+            assert_eq!(tape[origin + 8 * (40 + 4 * 4 - 2) + 3], immediate);
+        }
+    }
+}
+
+#[test]
 fn unsupported_images_fail_before_expansion() {
     for opcode in ["LOADC", "STORC"] {
         assert!(

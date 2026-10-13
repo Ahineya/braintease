@@ -153,9 +153,55 @@ impl GlobalManager {
             }
         }
         
-        insts
+        self.reuse_initializer_cursor(insts)
     }
     
+    /// Keep the destination cursor between stores in one initializer. Relocate
+    /// its base once, then advance by the difference between local offsets.
+    /// Control flow and unknown instructions discard the proof; this does not
+    /// move or remove any memory writes (including volatile initialization).
+    fn reuse_initializer_cursor(&self, insts: Vec<AsmInst>) -> Vec<AsmInst> {
+        let Some(base) = self.gp_base_label() else { return insts; };
+        let mut result = Vec::with_capacity(insts.len());
+        let mut cursor: Option<u16> = None;
+        let mut iter = insts.into_iter().peekable();
+        while let Some(inst) = iter.next() {
+            if matches!(&inst, AsmInst::LiLabel(Reg::T1, label) if *label == base) {
+                let offset = match iter.peek() {
+                    Some(AsmInst::AddI(Reg::T1, Reg::T1, offset)) => {
+                        let offset = *offset as u16;
+                        iter.next();
+                        offset
+                    }
+                    _ => 0,
+                };
+                if let Some(previous) = cursor {
+                    let delta = offset.wrapping_sub(previous);
+                    if delta != 0 {
+                        result.push(AsmInst::AddI(Reg::T1, Reg::T1, delta as i16));
+                    }
+                } else {
+                    result.push(inst);
+                    if offset != 0 {
+                        result.push(AsmInst::AddI(Reg::T1, Reg::T1, offset as i16));
+                    }
+                }
+                cursor = Some(offset);
+                continue;
+            }
+            let preserves_cursor = match &inst {
+                AsmInst::Comment(_) | AsmInst::Store(..) => true,
+                AsmInst::Li(dest, _) | AsmInst::LiLabel(dest, _)
+                | AsmInst::Add(dest, _, _) | AsmInst::AddI(dest, _, _)
+                | AsmInst::Sub(dest, _, _) | AsmInst::Sltu(dest, _, _) => *dest != Reg::T1,
+                _ => false,
+            };
+            if !preserves_cursor { cursor = None; }
+            result.push(inst);
+        }
+        result
+    }
+
     /// Lower array initialization
     fn lower_array_init(&self, global: &GlobalVariable, values: &[i64], address: u16) -> Vec<AsmInst> {
         let mut insts = Vec::new();
@@ -426,6 +472,64 @@ impl Default for GlobalManager {
 mod tests {
     use super::*;
     use rcc_frontend::ir::Linkage;
+
+    fn allocated_manager() -> GlobalManager {
+        let mut manager = GlobalManager::new();
+        manager.allocate_global(&GlobalVariable {
+            name: "data".into(), var_type: IrType::I16, is_constant: false,
+            initializer: None, linkage: Linkage::External, symbol_id: None,
+        });
+        manager
+    }
+
+    #[test]
+    fn initializer_cursor_reuses_relocated_base_and_wrapping_deltas() {
+        let manager = allocated_manager();
+        let base = manager.gp_base_label().unwrap();
+        let offsets = [0u16, 1, 1, 32768, 63999, 0, 40000];
+        let mut original = Vec::new();
+        for offset in offsets {
+            original.push(AsmInst::Li(Reg::T0, offset as i16));
+            original.extend(manager.emit_gp_addr(Reg::T1, offset));
+            original.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        }
+        let optimized = manager.reuse_initializer_cursor(original.clone());
+        assert_eq!(optimized.iter().filter(|i| matches!(i, AsmInst::LiLabel(Reg::T1, _))).count(), 1);
+        // An independent tiny evaluator checks every emitted store at several
+        // relocated bases, including carries through the 16-bit word boundary.
+        let stores = |code: &[AsmInst], relocated: u16| {
+            let (mut value, mut address) = (0u16, 0u16);
+            let mut writes = Vec::new();
+            for inst in code {
+                match inst {
+                    AsmInst::Li(Reg::T0, v) => value = *v as u16,
+                    AsmInst::LiLabel(Reg::T1, label) if label == &base => address = relocated,
+                    AsmInst::AddI(Reg::T1, Reg::T1, n) => address = address.wrapping_add(*n as u16),
+                    AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1) => writes.push((address, value)),
+                    other => panic!("unexpected fixture instruction: {other:?}"),
+                }
+            }
+            writes
+        };
+        for relocated in [0, 42, 32000, 65535] {
+            assert_eq!(stores(&original, relocated), stores(&optimized, relocated));
+        }
+    }
+
+    #[test]
+    fn initializer_cursor_forgets_clobbers_control_flow_and_unknown_code() {
+        let manager = allocated_manager();
+        for barrier in [
+            AsmInst::Li(Reg::T1, 123), AsmInst::AddI(Reg::T1, Reg::T1, 1),
+            AsmInst::Label("join".into()), AsmInst::Bne(Reg::T0, Reg::R0, "join".into()),
+            AsmInst::Call("other".into()), AsmInst::Raw("NOP".into()),
+        ] {
+            let mut original = manager.emit_gp_addr(Reg::T1, 10);
+            original.push(barrier);
+            original.extend(manager.emit_gp_addr(Reg::T1, 11));
+            assert_eq!(manager.reuse_initializer_cursor(original.clone()), original);
+        }
+    }
     
     #[test]
     fn test_global_allocation() {
