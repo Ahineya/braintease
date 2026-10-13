@@ -10,20 +10,23 @@ import { createHash } from 'node:crypto';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
-    console.log('Usage: node scripts/test-bf-compiler.mjs [--rvm-only] [--large-banks]\n' +
+    console.log('Usage: node scripts/test-bf-compiler.mjs [--rvm-only] [--large-banks | --demo]\n' +
         'Verify exact C RGB565 clear, pointer and clipped-rectangle frames and instruction ceilings.\n' +
         'Runs bounded BF captures sequentially unless --rvm-only is supplied.\n' +
         '--large-banks uses 64000-cell banks to exercise distant globals and stack.\n' +
+        '--demo checks the original 64x64 interactive C demo with its 16384-cell banks.\n' +
         'BF_COMPILER_OUT selects the output directory (default build/bf-compiler-regression[-large]).\n' +
         'Build current release tools first; elapsed time is reported, never asserted.');
     process.exit(0);
 }
-assert.ok(args.every(arg => ['--rvm-only', '--large-banks'].includes(arg)), `Unknown options: ${args}`);
+assert.ok(args.every(arg => ['--rvm-only', '--large-banks', '--demo'].includes(arg)), `Unknown options: ${args}`);
 const rvmOnly = args.includes('--rvm-only');
 const largeBanks = args.includes('--large-banks');
+const demo = args.includes('--demo');
+assert.ok(!(demo && largeBanks), '--demo keeps its original 16384-cell bank configuration');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.resolve(process.env.BF_COMPILER_OUT || path.join(root,
-    `build/bf-compiler-regression${largeBanks ? '-large' : ''}`));
+    `build/bf-compiler-regression${demo ? '-demo' : largeBanks ? '-large' : ''}`));
 fs.mkdirSync(out, { recursive: true });
 const tools = {
     rcc: path.join(root, 'target/release/rcc'),
@@ -47,7 +50,7 @@ function run(tool, argv, log) {
     fs.writeFileSync(logPath, (result.stdout || '') + (result.stderr || ''));
     assert.equal(result.status, 0, `${tool} failed; see ${logPath}\n${result.error || result.stderr || ''}`);
 }
-const bank = largeBanks ? 64000 : 2048, memoryBanks = 3;
+const bank = demo ? 16384 : largeBanks ? 64000 : 2048, memoryBanks = 3;
 function assemble(source, name) {
     const object = path.join(out, `${name}.pobj`);
     run('rasm', ['assemble', source, '-o', object, '--bank-size', String(bank), '--max-immediate', '65535'], `${name}-assemble`);
@@ -62,15 +65,25 @@ function compile(source, name, defines = []) {
 const startup = assemble(path.join(root, 'runtime/crt0.asm'), 'crt0');
 const libraries = ['graphics', 'mmio'].map(name => compile(path.join(root, `runtime/${name}.c`), name));
 const results = [];
-const cases = [4, 8].flatMap(width => ['graphics', 'direct'].map(kind => ({ width, height: 2, kind })));
-cases.push({ width: 12, height: 8, kind: 'rectangles' });
+const cases = demo ? [{ width: 64, height: 64, kind: 'interactive' }]
+    : [...[4, 8].flatMap(width => ['graphics', 'direct'].map(kind => ({ width, height: 2, kind }))),
+        { width: 12, height: 8, kind: 'rectangles' }];
 for (const { width, height, kind } of cases) {
     const name = `${kind}-${width * height}`, prefix = path.join(out, name);
-    const fixture = path.join(root, `rbf/tests/fixtures/rgb565-${kind}.c`);
+    const fixture = path.join(root, demo ? 'c-test/examples/rgb565_interactive_simple.c'
+        : `rbf/tests/fixtures/rgb565-${kind}.c`);
     const objects = [startup, compile(fixture, name, [`RENDER_WIDTH=${width}`, `RENDER_PIXELS=${width * height}`]), ...(kind !== 'direct' ? libraries : [])];
     const expected = Buffer.alloc(width * height * 2);
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
         let color = 0x0843;
+        if (demo) {
+            // Independent first-frame geometry with deterministic, unpressed keys.
+            if (x === 0 || y === 0 || x === 63 || y === 63) color = 0xffff;
+            if (((x >= 10 && x < 18) || (x >= 46 && x < 54))
+                && ((y >= 10 && y < 18) || (y >= 46 && y < 54))) color = 0x07e0;
+            if (x >= 29 && x < 35 && y >= 29 && y < 35) color = 0xffe0;
+            if (x >= 30 && x < 36 && y >= 30 && y < 36) color = 0xf800;
+        }
         if (kind === 'rectangles') {
             // Explicit visible regions, independent of the C clipping loops.
             color = 0;
@@ -86,7 +99,9 @@ for (const { width, height, kind } of cases) {
     // Current 4x2/8x2 counts: API260/308, direct101/165. Allow allocator
     // variation while catching lost bounds/global-load optimizations (the
     // previous API counts were711/1247). Never assert wall time.
-    const ceiling = kind === 'rectangles' ? 6000 : kind === 'graphics' ? (width === 4 ? 550 : 850) : (width === 4 ? 220 : 380);
+    // The original demo also catches missed safe-asm loop rotation and copies
+    // reintroduced by interactions between allocation and private-home cleanup.
+    const ceiling = demo ? 32000 : kind === 'rectangles' ? 6000 : kind === 'graphics' ? (width === 4 ? 550 : 850) : (width === 4 ? 220 : 380);
     run('rlink', [...objects, '-f', 'binary', '--bank-size', String(bank), '-o', `${prefix}.bin`], `${name}-link`);
     run('rvm', [`${prefix}.bin`, '--bank-size', String(bank), '--memory', String(bank * memoryBanks),
         '--headless', '--clock', 'unthrottled', '--capture-frame', '1', '--screenshot', `${prefix}.png`, '--raw-frame', `${prefix}.rvm.rgb565`,

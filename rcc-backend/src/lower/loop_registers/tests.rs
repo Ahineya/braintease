@@ -608,3 +608,351 @@ fn second_round_reuses_freed_registers_without_disturbing_first_cache_or_exits()
         }
     }
 }
+
+fn compare_private_cleanup(code: &[A], inputs: &[(Reg, u16)], private: &[i16]) -> Vec<A> {
+    let mut optimized = code.to_vec();
+    cleanup_private(&mut optimized, &private.iter().copied().collect());
+    let execute = |instructions: &[A]| {
+        let mut m = Machine::new(64000);
+        m.regs[Reg::Fp as usize] = 1000;
+        for &(reg, value) in inputs {
+            m.regs[reg as usize] = value;
+        }
+        m.run(instructions);
+        (
+            m.regs[Reg::Rv0 as usize],
+            m.regs[Reg::Rv1 as usize],
+            m.memory
+                .into_iter()
+                .filter(|((bank, address), _)| {
+                    *bank != 2 || !private.contains(&((*address as i16).wrapping_sub(1000)))
+                })
+                .collect::<BTreeMap<_, _>>(),
+        )
+    };
+    assert_eq!(execute(&optimized), execute(code));
+    optimized
+}
+
+#[test]
+fn private_preloads_definitely_overwritten_and_dead_flushes_disappear() {
+    let code = vec![
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Store(Reg::A0, Reg::Sb, Reg::Sc),
+        A::Load(Reg::T0, Reg::Sb, Reg::Sc),
+        A::Li(Reg::T0, 123),
+        A::Beq(Reg::A1, Reg::R0, "exit".into()),
+        A::AddI(Reg::T0, Reg::T0, 7),
+        A::Label("exit".into()),
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Store(Reg::T0, Reg::Sb, Reg::Sc),
+        A::Move(Reg::Rv0, Reg::T0),
+    ];
+    for flag in [0, 1] {
+        let optimized = compare_private_cleanup(&code, &[(Reg::A0, 51), (Reg::A1, flag)], &[0]);
+        assert!(!optimized
+            .iter()
+            .any(|i| matches!(i, A::Load(..) | A::Store(..))));
+    }
+}
+
+#[test]
+fn private_store_needed_on_one_path_survives_and_overwritten_store_dies() {
+    let code = vec![
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Store(Reg::A0, Reg::Sb, Reg::Sc),
+        A::Beq(Reg::A2, Reg::R0, "join".into()),
+        A::Store(Reg::A1, Reg::Sb, Reg::Sc),
+        A::Label("join".into()),
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Load(Reg::Rv0, Reg::Sb, Reg::Sc),
+        A::Store(Reg::A0, Reg::Sb, Reg::Sc),
+        A::Store(Reg::A1, Reg::Sb, Reg::Sc),
+        A::Load(Reg::Rv1, Reg::Sb, Reg::Sc),
+    ];
+    for flag in [0, 1] {
+        let optimized = compare_private_cleanup(
+            &code,
+            &[(Reg::A0, 12), (Reg::A1, 56), (Reg::A2, flag)],
+            &[0],
+        );
+        assert_eq!(
+            optimized
+                .iter()
+                .filter(|i| matches!(i, A::Store(..)))
+                .count(),
+            3
+        );
+    }
+}
+
+#[test]
+fn private_home_liveness_crosses_backedges_and_keeps_zero_trip_value() {
+    let code = vec![
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Store(Reg::A0, Reg::Sb, Reg::Sc),
+        A::Label("head".into()),
+        A::Beq(Reg::A1, Reg::R0, "exit".into()),
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Load(Reg::T0, Reg::Sb, Reg::Sc),
+        A::AddI(Reg::T0, Reg::T0, 9),
+        A::Store(Reg::T0, Reg::Sb, Reg::Sc),
+        A::AddI(Reg::A1, Reg::A1, -1),
+        A::Beq(Reg::R0, Reg::R0, "head".into()),
+        A::Label("exit".into()),
+        A::AddI(Reg::Sc, Reg::Fp, 0),
+        A::Load(Reg::Rv0, Reg::Sb, Reg::Sc),
+    ];
+    for count in [0, 1, 19] {
+        let optimized = compare_private_cleanup(&code, &[(Reg::A0, 33), (Reg::A1, count)], &[0]);
+        assert_eq!(
+            optimized
+                .iter()
+                .filter(|i| matches!(i, A::Store(..)))
+                .count(),
+            2
+        );
+    }
+}
+
+#[test]
+fn opaque_reads_calls_and_nonprivate_homes_keep_memory_effects() {
+    for barrier in [
+        A::Call("callee".into()),
+        A::Raw("opaque".into()),
+        A::Load(Reg::Rv0, Reg::A0, Reg::A1),
+        A::Load(Reg::Rv0, Reg::Sb, Reg::A1),
+    ] {
+        let mut code = vec![
+            A::AddI(Reg::Sc, Reg::Fp, 0),
+            A::Store(Reg::A2, Reg::Sb, Reg::Sc),
+            barrier,
+        ];
+        discard_dead_private_accesses(&mut code, &BTreeSet::from([0]));
+        assert!(matches!(code[1], A::Store(..)));
+    }
+    let code = vec![
+        A::AddI(Reg::Sc, Reg::Fp, 1),
+        A::Load(Reg::T0, Reg::Sb, Reg::Sc),
+        A::Store(Reg::A0, Reg::Sb, Reg::Sc),
+    ];
+    let mut optimized = code.clone();
+    discard_dead_private_accesses(&mut optimized, &BTreeSet::from([0]));
+    assert_eq!(
+        optimized, code,
+        "escaped and volatile homes are not private"
+    );
+}
+
+fn comparison_source(equal: bool, on_zero: bool, reused: bool) -> Vec<A> {
+    let mut code = vec![
+        A::Xor(Reg::T0, Reg::A0, Reg::A1),
+        A::Li(Reg::T1, if equal { 1 } else { 0 }),
+        if equal {
+            A::Sltu(Reg::T2, Reg::T0, Reg::T1)
+        } else {
+            A::Sltu(Reg::T2, Reg::T1, Reg::T0)
+        },
+        if on_zero {
+            A::Beq(Reg::T2, Reg::R0, "taken".into())
+        } else {
+            A::Bne(Reg::T2, Reg::R0, "taken".into())
+        },
+        A::Li(Reg::Rv0, 17),
+        A::Beq(Reg::R0, Reg::R0, "exit".into()),
+        A::Label("taken".into()),
+        A::Li(Reg::Rv0, 99),
+        A::Label("exit".into()),
+    ];
+    if reused {
+        code.push(A::Move(Reg::Rv1, Reg::T2));
+    }
+    code
+}
+
+#[test]
+fn equality_and_inequality_branches_avoid_boolean_materialization() {
+    for equal in [false, true] {
+        for on_zero in [false, true] {
+            let code = comparison_source(equal, on_zero, false);
+            for (a, b) in [(0, 0), (7, 7), (0, 65535), (32768, 32767)] {
+                let optimized = compare_cleanup(&code, &[(Reg::A0, a), (Reg::A1, b)]);
+                assert!(!optimized
+                    .iter()
+                    .any(|i| matches!(i, A::Xor(..) | A::Sltu(..))));
+                assert!(optimized.iter().any(|i| matches!(
+                    i,
+                    A::Beq(Reg::A0, Reg::A1, _) | A::Bne(Reg::A0, Reg::A1, _)
+                )));
+            }
+        }
+    }
+}
+
+#[test]
+fn direct_comparison_branches_do_not_require_a_promoted_loop() {
+    let source = framed(comparison_source(false, true, false));
+    let mut optimized = source.clone();
+    promote(&mut optimized, &function(), &HashMap::new(), 0, 0);
+    assert!(!optimized
+        .iter()
+        .any(|i| matches!(i, A::Xor(..) | A::Sltu(..))));
+    for (a, b) in [(5, 5), (5, 19)] {
+        assert_eq!(
+            run(&optimized, a, b).regs[Reg::Rv0 as usize],
+            run(&source, a, b).regs[Reg::Rv0 as usize]
+        );
+    }
+}
+
+#[test]
+fn equality_predicates_reused_after_branch_keep_their_value() {
+    for equal in [false, true] {
+        let code = comparison_source(equal, true, true);
+        for (a, b) in [(4, 4), (5, 7), (0, 65535)] {
+            let optimized = compare_cleanup(&code, &[(Reg::A0, a), (Reg::A1, b)]);
+            assert!(optimized.iter().any(|i| matches!(i, A::Sltu(..))));
+        }
+    }
+}
+
+#[test]
+fn equality_branch_fusion_rejects_changed_operands_and_opaque_barriers() {
+    for barrier in [
+        A::Li(Reg::A0, 123),
+        A::Call("callee".into()),
+        A::Raw("opaque".into()),
+    ] {
+        let mut code = comparison_source(false, true, false);
+        code.insert(3, barrier.clone());
+        if matches!(barrier, A::Li(..)) {
+            compare_cleanup(&code, &[(Reg::A0, 7), (Reg::A1, 7)]);
+        }
+        let cfg = Cfg::new(&code).unwrap();
+        fuse_comparison_branches(&mut code, &cfg);
+        assert!(matches!(code[4], A::Beq(Reg::T2, Reg::R0, _)));
+    }
+    let mut code = comparison_source(false, true, false);
+    code[0] = A::Xor(Reg::A0, Reg::A0, Reg::A1);
+    code[2] = A::Sltu(Reg::T2, Reg::T1, Reg::A0);
+    for (a, b) in [(7, 7), (123, 7)] {
+        compare_cleanup(&code, &[(Reg::A0, a), (Reg::A1, b)]);
+    }
+}
+
+#[test]
+fn equality_fusion_uses_preserved_copy_when_boolean_reuses_operand_register() {
+    for is_equal in [false, true] {
+        for reused in [false, true] {
+            let mut code = vec![
+                A::AddI(Reg::T2, Reg::A0, 1),
+                A::Move(Reg::S0, Reg::T2),
+                A::Xor(Reg::T7, Reg::T2, Reg::A1),
+                A::Li(Reg::T1, if is_equal { 1 } else { 0 }),
+                if is_equal {
+                    A::Sltu(Reg::T2, Reg::T7, Reg::T1)
+                } else {
+                    A::Sltu(Reg::T2, Reg::T1, Reg::T7)
+                },
+                A::Beq(Reg::T2, Reg::R0, "taken".into()),
+                A::AddI(Reg::Rv0, Reg::S0, 17),
+                A::Beq(Reg::R0, Reg::R0, "done".into()),
+                A::Label("taken".into()),
+                A::AddI(Reg::Rv0, Reg::S0, 99),
+                A::Label("done".into()),
+            ];
+            if reused {
+                code.push(A::Move(Reg::Rv1, Reg::T2));
+            }
+            let mut fused = code.clone();
+            let cfg = Cfg::new(&fused).unwrap();
+            fuse_comparison_branches(&mut fused, &cfg);
+            assert!(matches!(
+                fused[5],
+                A::Beq(Reg::S0, Reg::A1, _) | A::Bne(Reg::S0, Reg::A1, _)
+            ));
+            for (a, b) in [(7, 8), (7, 19), (65535, 0)] {
+                let optimized = compare_cleanup(&code, &[(Reg::A0, a), (Reg::A1, b)]);
+                assert!(
+                    optimized.iter().any(|inst| matches!(
+                        inst,
+                        A::Beq(Reg::S0, Reg::A1, _) | A::Bne(Reg::S0, Reg::A1, _)
+                    )),
+                    "equal={is_equal} reused={reused}: {optimized:#?}"
+                );
+                assert_eq!(optimized.iter().any(|i| matches!(i, A::Sltu(..))), reused);
+                if !reused {
+                    assert!(!optimized.iter().any(|i| matches!(i, A::Xor(..))));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn comparison_alias_must_survive_until_the_branch() {
+    for replacement in [
+        A::Li(Reg::S0, 55),
+        A::Call("callee".into()),
+        A::Raw("opaque".into()),
+    ] {
+        let mut code = vec![
+            A::Move(Reg::S0, Reg::A0),
+            A::Xor(Reg::T7, Reg::A0, Reg::A1),
+            A::Sltu(Reg::A0, Reg::R0, Reg::T7),
+            replacement.clone(),
+            A::Beq(Reg::A0, Reg::R0, "done".into()),
+            A::Li(Reg::Rv0, 19),
+            A::Label("done".into()),
+        ];
+        if matches!(replacement, A::Li(..)) {
+            for (a, b) in [(7, 7), (3, 55)] {
+                compare_cleanup(&code, &[(Reg::A0, a), (Reg::A1, b)]);
+            }
+        }
+        let cfg = Cfg::new(&code).unwrap();
+        fuse_comparison_branches(&mut code, &cfg);
+        assert!(matches!(code[4], A::Beq(Reg::A0, Reg::R0, _)));
+    }
+}
+
+#[test]
+fn cached_argument_and_temporary_sources_do_not_need_per_iteration_copies() {
+    let code = vec![
+        A::Li(Reg::T1, 100),
+        A::Li(Reg::S0, 0),
+        A::Label("head".into()),
+        A::Move(Reg::T2, Reg::A1),
+        A::Sltu(Reg::T4, Reg::S0, Reg::T2),
+        A::Beq(Reg::T4, Reg::R0, "exit".into()),
+        A::Move(Reg::T0, Reg::A0),
+        A::Add(Reg::S2, Reg::T0, Reg::S0),
+        A::Move(Reg::T5, Reg::T1),
+        A::Add(Reg::T3, Reg::T5, Reg::S2),
+        A::Move(Reg::T4, Reg::A2),
+        A::Store(Reg::T4, Reg::R0, Reg::T3),
+        A::AddI(Reg::T2, Reg::S0, 1),
+        A::Move(Reg::S0, Reg::T2),
+        A::Beq(Reg::R0, Reg::R0, "head".into()),
+        A::Label("exit".into()),
+        A::Move(Reg::Rv0, Reg::S0),
+    ];
+    for count in [0, 1, 19] {
+        let optimized =
+            compare_private_cleanup(&code, &[(Reg::A0, 5), (Reg::A1, count), (Reg::A2, 42)], &[]);
+        let start = optimized
+            .iter()
+            .position(|i| matches!(i, A::Label(s) if s == "head"))
+            .unwrap();
+        let end = optimized
+            .iter()
+            .position(|i| matches!(i, A::Label(s) if s == "exit"))
+            .unwrap();
+        assert!(
+            !optimized[start..end]
+                .iter()
+                .any(|i| matches!(i, A::Move(..))),
+            "{optimized:#?}"
+        );
+    }
+}

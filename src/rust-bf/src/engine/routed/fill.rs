@@ -13,6 +13,8 @@ pub(super) struct Fill {
     reverse: usize,
     stride: isize,
     value: u16,
+    minimum: isize,
+    maximum: isize,
 }
 
 impl Fill {
@@ -56,7 +58,39 @@ impl Fill {
             reverse,
             stride,
             value,
+            minimum: 0,
+            maximum: 0,
         })
+    }
+
+    /// Resolve all target-relative movement once. A fill must write at the
+    /// forward scan's zero and start its reverse scan at that same cell.
+    /// Nonzero static offsets can never meet those guards on an in-bounds
+    /// route, so they should not trigger a failed proof on every execution.
+    pub(super) fn compile(mut self, parts: &[Part]) -> Option<Self> {
+        for at in [self.forward, self.reverse] {
+            let Kind::Scan {
+                minimum, maximum, ..
+            } = parts[at].kind
+            else {
+                return None;
+            };
+            self.minimum = self.minimum.min(minimum);
+            self.maximum = self.maximum.max(maximum);
+        }
+        let mut offset = 0isize;
+        for part in &parts[self.forward + 1..self.reverse] {
+            match part.kind {
+                Kind::Move(motion) => {
+                    self.minimum = self.minimum.min(offset.checked_add(motion.minimum)?);
+                    self.maximum = self.maximum.max(offset.checked_add(motion.maximum)?);
+                    offset = offset.checked_add(motion.advance)?;
+                }
+                Kind::Add(_) if offset == 0 => {}
+                _ => return None,
+            }
+        }
+        (offset == 0).then_some(self)
     }
 
     pub(super) fn execute(&self, routed: &Routed, machine: &mut Machine) -> bool {
@@ -71,7 +105,6 @@ impl Fill {
         let mut paths = [Path::default(); BLOCK_LIMIT];
         let mut path_count = 0;
         let mut probes = SCAN_LIMIT;
-        let (mut minimum, mut maximum) = (0isize, 0isize);
         for (index, part) in routed.parts.iter().enumerate() {
             match part.kind {
                 Kind::Add(_) if index == 0 => {}
@@ -82,19 +115,11 @@ impl Fill {
                 }
                 Kind::Add(_) => return false,
                 Kind::Search(_) => return false,
-                Kind::Move(delta) => {
-                    let Some(next) = pointer.checked_add_signed(delta) else {
+                Kind::Move(motion) => {
+                    let Some(next) = motion.resolve(pointer, machine.tape.len()) else {
                         return false;
                     };
-                    if next >= machine.tape.len() {
-                        return false;
-                    }
                     pointer = next;
-                    if index > self.forward && index < self.reverse {
-                        let offset = pointer as isize - target.unwrap() as isize;
-                        minimum = minimum.min(offset);
-                        maximum = maximum.max(offset);
-                    }
                 }
                 Kind::Scan {
                     stride,
@@ -122,12 +147,8 @@ impl Fill {
                     pointer = last;
                     if index == self.forward {
                         target = Some(last);
-                        minimum = minimum.min(low);
-                        maximum = maximum.max(high);
                     }
                     if index == self.reverse {
-                        minimum = minimum.min(low);
-                        maximum = maximum.max(high);
                         let target = target.unwrap();
                         if (self.stride > 0 && last >= target)
                             || (self.stride < 0 && last <= target)
@@ -158,7 +179,9 @@ impl Fill {
         let Some(first) = target else {
             return false;
         };
-        if minimum.unsigned_abs() > first || maximum as usize >= machine.tape.len() - first {
+        if self.minimum.unsigned_abs() > first
+            || self.maximum as usize >= machine.tape.len() - first
+        {
             return false;
         }
         // The extreme starting pointer bounds every complete body's excursion.
@@ -166,9 +189,9 @@ impl Fill {
         // a divisibility check for every prospective marker and every path.
         let step = self.stride.unsigned_abs();
         let safe_steps = if self.stride > 0 {
-            (machine.tape.len() - 1 - first - maximum as usize) / step + 1
+            (machine.tape.len() - 1 - first - self.maximum as usize) / step + 1
         } else {
-            (first - minimum.unsigned_abs()) / step + 1
+            (first - self.minimum.unsigned_abs()) / step + 1
         };
         let mut limit = usize::from(count).min(FILL_LIMIT).min(safe_steps);
         for path in paths[..path_count]

@@ -17,6 +17,9 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
     crate::optimize::optimize_module(&mut optimized);
     for function in &mut optimized.functions {
         crate::optimize::preserve_pointer_banks(function, bank_size);
+        // Use ordering guards for bank proofs before rotating loops, then
+        // keep the new private counter home through ordinary Phi destruction.
+        crate::optimize::rotate_counted_loops(function);
         crate::optimize::destroy_phis(function)?;
     }
     let module = &optimized;

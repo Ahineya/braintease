@@ -15,13 +15,32 @@ mod fill;
 #[derive(Debug)]
 enum Kind {
     Add(u16),
-    Move(isize),
+    Move(Motion),
     Scan {
         stride: isize,
         minimum: isize,
         maximum: isize,
     },
     Search(Search),
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct Motion {
+    advance: isize,
+    minimum: isize,
+    maximum: isize,
+}
+
+impl Motion {
+    fn resolve(self, pointer: usize, cells: usize) -> Option<usize> {
+        // A cancelled move still has an excursion. Reject the whole readonly
+        // proof if any original move crosses an edge; literal fallback then
+        // preserves wrapping aliases or the exact partial state on a fault.
+        if self.minimum.unsigned_abs() > pointer || self.maximum as usize >= cells - pointer {
+            return None;
+        }
+        pointer.checked_add_signed(self.advance)
+    }
 }
 
 #[derive(Debug)]
@@ -35,6 +54,7 @@ pub(super) struct Routed {
     start: usize,
     next: usize,
     fill: Option<fill::Fill>,
+    retry: bool,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -73,7 +93,22 @@ impl Routed {
         while cursor < end {
             let kind = match program.code[cursor].op {
                 Op::Add(value) => Kind::Add(value),
-                Op::Move(delta) => Kind::Move(delta),
+                Op::Move(_) => {
+                    let mut motion = Motion::default();
+                    while cursor < end {
+                        let Op::Move(delta) = program.code[cursor].op else {
+                            break;
+                        };
+                        motion.advance = motion.advance.checked_add(delta)?;
+                        motion.minimum = motion.minimum.min(motion.advance);
+                        motion.maximum = motion.maximum.max(motion.advance);
+                        cursor += 1;
+                    }
+                    parts.push(Part {
+                        kind: Kind::Move(motion),
+                    });
+                    continue;
+                }
                 Op::Open(after) => {
                     if let Some(search) = Search::parse(program, cursor) {
                         cursor = search.next;
@@ -104,16 +139,21 @@ impl Routed {
             cursor += 1;
         }
         let fill = fill::Fill::parse(&parts);
+        // Even a statically impossible fill shape can benefit from retrying
+        // its affine route after the first literal body warms a scan cache.
+        let retry = fill.is_some() || parts.iter().any(|p| matches!(p.kind, Kind::Search(_)));
+        let fill = fill.and_then(|fill| fill.compile(&parts));
         (scans != 0).then_some(Self {
             parts,
             start: at,
             next,
             fill,
+            retry,
         })
     }
 
     pub(super) fn resumes(&self) -> bool {
-        self.fill.is_some() || self.parts.iter().any(|p| matches!(p.kind, Kind::Search(_)))
+        self.retry
     }
 
     pub(super) fn execute(&self, machine: &mut Machine) -> bool {
@@ -157,13 +197,10 @@ impl Routed {
                         change_count += 1;
                     }
                 }
-                Kind::Move(delta) => {
-                    let Some(target) = pointer.checked_add_signed(delta) else {
+                Kind::Move(motion) => {
+                    let Some(target) = motion.resolve(pointer, machine.tape.len()) else {
                         return false;
                     };
-                    if target >= machine.tape.len() {
-                        return false;
-                    }
                     pointer = target;
                 }
                 Kind::Scan {
@@ -379,6 +416,50 @@ mod tests {
     // Even cells route forward over nonzero values; odd cells route back over
     // zeros to a nonzero sentinel. The temporary marker cancels each body.
     const SEARCH_TRANSFER: &str = "[->>[>>]<<+>+[<<[>>-]>>[-<<+>>]<<]<<<]";
+
+    #[test]
+    fn impossible_fill_routes_skip_the_fill_proof_but_keep_affine_retries() {
+        for source in ["[->>[>]>+<<[<]<]", "[->>[>]+>[<]<<]"] {
+            let program = Program::parse(source, true, false).unwrap();
+            let route = Routed::parse(&program, 0).unwrap();
+            assert!(route.fill.is_none(), "static target mismatch: {source}");
+            assert!(route.resumes(), "the affine retry remains useful: {source}");
+            for initial in [vec![0], vec![3, 0, 1], vec![3, 0, 1, 1, 0, 0, 0]] {
+                compare(source, &initial, false, false);
+            }
+        }
+    }
+
+    #[test]
+    fn compiled_motions_retain_cancelled_excursions_and_literal_fault_state() {
+        let source = "[->>><[>]>><<+><[<]><<]";
+        let program = Program::parse(source, true, false).unwrap();
+        let route = Routed::parse(&program, 0).unwrap();
+        assert_eq!(route.parts.len(), 8, "combine consecutive pointer moves");
+        assert!(
+            route.fill.is_some(),
+            "cancelled excursions still allow fills"
+        );
+        for cells in 1..20 {
+            for count in [0, 1, 3, 12] {
+                let mut initial = vec![0; cells];
+                initial[0] = count;
+                compare(source, &initial, false, false);
+            }
+        }
+        compare(source, &[2, 0, 1, 0, 0], true, false);
+        compare(
+            &format!("{source}!"),
+            &[3, 0, 0, 0, 0, 0, 0, 0],
+            false,
+            true,
+        );
+        for barrier in ["?", "!", "$", ",", "."] {
+            let altered = source.replacen(">><<", &format!(">>{barrier}<<"), 1);
+            let program = Program::parse(&altered, true, true).unwrap();
+            assert!(Routed::parse(&program, 0).is_none());
+        }
+    }
 
     #[test]
     fn marker_searches_inside_affine_routes_fold_complete_transfers() {

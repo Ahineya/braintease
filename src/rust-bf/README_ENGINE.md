@@ -48,6 +48,11 @@ zero-run facts. The engine still checks each predicate and writes each cell.
 
 Arithmetic loops can also route through nested scans. For example,
 `[->>[>]>+<<[<]<]` transfers a value into a destination found by zero sentinels.
+Parsing combines consecutive pointer moves into one route step while retaining
+every intermediate excursion for bounds checks. Static fill-target mismatches
+are rejected at this stage, and valid fills keep precomputed excursion bounds.
+An impossible fill candidate can still retry its affine summary after a literal
+body, without repeating the rejected fill proof.
 The engine first resolves the route without changing the tape, then verifies
 that the pointer returns and every scan sees the same zero/nonzero predicates
 throughout the loop. Written predicates include their precise partial update

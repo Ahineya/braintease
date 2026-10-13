@@ -1,6 +1,6 @@
 //! Promote private stack cells across a natural inner loop. This is a bounded
 //! machine allocation pass: registers unused and dead through the selected loop
-//! are borrowed, and every entry/exit keeps the existing stack-home contract.
+//! are borrowed, and every entry/exit preserves observable stack-home values.
 use rcc_codegen::{AsmInst as A, Reg};
 use rcc_frontend::{
     ir::{Function, Instruction as I, Value},
@@ -441,6 +441,30 @@ pub(super) fn promote(
         // keep this second, bounded round on the same inner loop.
         promote_once(code, function, offsets, locals, top, Some(&header));
     }
+    // Equality branches are useful even when allocation found no eligible
+    // stack cells. Keep this independent cleanup inside the original body so
+    // frame construction and the prologue/epilogue markers remain intact.
+    if safe_ir(function) {
+        if let Some(range) = body_range(code) {
+            let mut body = code[range.clone()].to_vec();
+            if let Some(cfg) = Cfg::new(&body) {
+                if fuse_comparison_branches(&mut body, &cfg) {
+                    cleanup_private(&mut body, &BTreeSet::new());
+                    code.splice(range, body);
+                }
+            }
+        }
+    }
+}
+
+fn body_range(code: &[A]) -> Option<std::ops::Range<usize>> {
+    let begin = code.iter().position(|i| {
+        matches!(i, A::Comment(s) if s.starts_with("Reserve ") && s.ends_with(" spill slots above locals"))
+    })? + 2;
+    let end = code
+        .iter()
+        .position(|i| matches!(i,A::Comment(s)if s=="=== Function Epilogue ==="))?;
+    (begin <= end).then_some(begin..end)
 }
 
 fn promote_once(
@@ -454,17 +478,8 @@ fn promote_once(
     if !safe_ir(function) {
         return None;
     }
-    let Some(begin) = code.iter().position(|i| {
-        matches!(i, A::Comment(s) if s.starts_with("Reserve ") && s.ends_with(" spill slots above locals"))
-    }).map(|i| i + 2) else {
-        return None;
-    };
-    let Some(end) = code
-        .iter()
-        .position(|i| matches!(i,A::Comment(s)if s=="=== Function Epilogue ==="))
-    else {
-        return None;
-    };
+    let range = body_range(code)?;
+    let (begin, end) = (range.start, range.end);
     let body = &code[begin..end];
     if body
         .iter()
@@ -686,7 +701,7 @@ fn promote_once(
     if let Some(extra) = before.remove(&body.len()) {
         changed.extend(extra);
     }
-    cleanup(&mut changed);
+    cleanup_private(&mut changed, &private);
     code.splice(begin..end, changed);
     Some(header)
 }
@@ -772,6 +787,130 @@ fn set_dest(inst: &mut A, target: Reg) {
 }
 
 type Equalities = [u32; 32];
+
+#[derive(Clone, Copy)]
+struct ZeroTest {
+    left: Reg,
+    right: Reg,
+    // Whether the computed value is zero exactly when left == right.
+    zero_when_equal: bool,
+}
+
+fn preserve_test(test: ZeroTest, equal: &Equalities, defs: u32) -> Option<ZeroTest> {
+    let preserve = |reg: Reg| {
+        if defs & bit(reg) == 0 {
+            return Some(reg);
+        }
+        // The operand's old value may still exist in an unchanged copy. Only
+        // pre-instruction equality facts qualify; the new destination value
+        // must never be mistaken for the value used by the comparison.
+        let available = equal[reg as usize] & !defs;
+        (available != 0).then(|| {
+            let id = if available & bit(Reg::R0) != 0 {
+                Reg::R0 as u8
+            } else {
+                (31 - available.leading_zeros()) as u8
+            };
+            Reg::from_u8(id).unwrap()
+        })
+    };
+    Some(ZeroTest {
+        left: preserve(test.left)?,
+        right: preserve(test.right)?,
+        ..test
+    })
+}
+
+/// Fuse local equality tests without changing any register definitions. Dead
+/// boolean materialization is then removed by ordinary register liveness; a
+/// predicate also used after the branch keeps its original value and code.
+fn fuse_comparison_branches(code: &mut [A], cfg: &Cfg) -> bool {
+    let mut changed = false;
+    for block in &cfg.blocks {
+        let mut tests: [Option<ZeroTest>; 32] = [None; 32];
+        let mut equal = identity_equalities();
+        let mut constants = [None; 32];
+        constants[Reg::R0 as usize] = Some(0);
+        for inst in &mut code[block.start..block.end] {
+            let branch = match &*inst {
+                A::Beq(a, b, label) | A::Bne(a, b, label) => {
+                    let test = if constants[*b as usize] == Some(0) {
+                        tests[*a as usize]
+                    } else if constants[*a as usize] == Some(0) {
+                        tests[*b as usize]
+                    } else {
+                        None
+                    };
+                    test.map(|test| (test, label.clone(), matches!(inst, A::Beq(..))))
+                }
+                _ => None,
+            };
+            if let Some((test, label, branch_on_zero)) = branch {
+                changed = true;
+                *inst = if test.zero_when_equal == branch_on_zero {
+                    A::Beq(test.left, test.right, label)
+                } else {
+                    A::Bne(test.left, test.right, label)
+                };
+            }
+            let next = match *inst {
+                A::Xor(dest, left, right) => Some((
+                    dest,
+                    ZeroTest {
+                        left,
+                        right,
+                        zero_when_equal: true,
+                    },
+                )),
+                A::Sltu(dest, left, right) if constants[left as usize] == Some(0) => Some((
+                    dest,
+                    tests[right as usize].unwrap_or(ZeroTest {
+                        left: right,
+                        right: Reg::R0,
+                        zero_when_equal: true,
+                    }),
+                )),
+                A::Sltu(dest, left, right) if constants[right as usize] == Some(1) => {
+                    let mut test = tests[left as usize].unwrap_or(ZeroTest {
+                        left,
+                        right: Reg::R0,
+                        zero_when_equal: true,
+                    });
+                    test.zero_when_equal = !test.zero_when_equal;
+                    Some((dest, test))
+                }
+                _ => copied_register(inst).and_then(|(d, s)| tests[s as usize].map(|t| (d, t))),
+            };
+            let constant = match *inst {
+                A::Li(d, value) => Some((d, Some(value))),
+                _ => copied_register(inst).map(|(d, s)| (d, constants[s as usize])),
+            };
+            let defs = effects(inst).1 & !bit(Reg::R0);
+            for (r, test) in tests.iter_mut().enumerate() {
+                *test = if defs & (1 << r) != 0 {
+                    None
+                } else {
+                    test.and_then(|t| preserve_test(t, &equal, defs))
+                };
+                if defs & (1 << r) != 0 {
+                    constants[r] = None;
+                }
+            }
+            if let Some((dest, test)) = next {
+                if dest != Reg::R0 {
+                    tests[dest as usize] = preserve_test(test, &equal, defs);
+                }
+            }
+            transfer_equalities(inst, &mut equal);
+            if let Some((dest, value)) = constant {
+                if dest != Reg::R0 {
+                    constants[dest as usize] = value;
+                }
+            }
+        }
+    }
+    changed
+}
 
 fn identity_equalities() -> Equalities {
     std::array::from_fn(|r| 1 << r)
@@ -879,13 +1018,109 @@ fn propagate_copies(code: &mut [A], cfg: &Cfg) {
     }
 }
 
+/// Non-escaping, nonvolatile homes are observable only through their loads.
+/// Keep a store if any path reads its old value before a definite overwrite.
+/// Unknown reads and calls conservatively observe every home; unknown stores
+/// do not prove an overwrite. This also handles zero-trip and outer-loop paths.
+fn discard_dead_private_accesses(code: &mut [A], private: &BTreeSet<i16>) {
+    if private.is_empty() {
+        return;
+    }
+    let Some(cfg) = Cfg::new(code) else { return };
+    let slots = accesses(code, &cfg);
+    let (_, _, after) = cfg.liveness(code);
+    for i in 0..code.len() {
+        if let A::Load(dest, Reg::Sb, _) = code[i] {
+            if slots[i].is_some_and(|s| private.contains(&s))
+                && (dest == Reg::R0 || after[i] & bit(dest) == 0)
+            {
+                code[i] = A::Comment("Removed dead private stack load".into());
+            }
+        }
+    }
+    let transfer_live = |i: usize, live: &mut BTreeSet<i16>| {
+        match code[i] {
+            A::Load(..) => {
+                if let Some(slot) = slots[i] {
+                    if private.contains(&slot) {
+                        live.insert(slot);
+                    }
+                } else {
+                    live.extend(private);
+                }
+            }
+            A::Store(..) => {
+                if let Some(slot) = slots[i] {
+                    live.remove(&slot);
+                }
+            }
+            // Calls, raw asm, indirect control flow, and unrecognized opcodes
+            // can observe memory. In particular, don't extend a private-home
+            // lifetime proof across a callee's stack activity.
+            _ if effects(&code[i]) == (u32::MAX, u32::MAX) => {
+                live.extend(private);
+            }
+            _ => {}
+        }
+    };
+    let mut input = vec![BTreeSet::new(); cfg.blocks.len()];
+    let mut output = input.clone();
+    let mut pending = cfg.reachable.clone();
+    // Every useful update adds a cell to a block's live set. Bound the work
+    // and retain all stores if an unusually large graph exhausts this budget.
+    let mut remaining = cfg
+        .blocks
+        .len()
+        .saturating_mul(private.len() + 1)
+        .saturating_mul(2);
+    while let Some(b) = pending.pop_last() {
+        if remaining == 0 {
+            return;
+        }
+        remaining -= 1;
+        let mut live = BTreeSet::new();
+        for &next in &cfg.succs[b] {
+            live.extend(&input[next]);
+        }
+        output[b] = live.clone();
+        for i in (cfg.blocks[b].start..cfg.blocks[b].end).rev() {
+            transfer_live(i, &mut live);
+        }
+        if input[b] != live {
+            input[b] = live;
+            pending.extend(cfg.preds[b].iter().filter(|p| cfg.reachable.contains(p)));
+        }
+    }
+    let mut dead = vec![];
+    for &b in &cfg.reachable {
+        let mut live = output[b].clone();
+        for i in (cfg.blocks[b].start..cfg.blocks[b].end).rev() {
+            if matches!(code[i], A::Store(_, Reg::Sb, _))
+                && slots[i].is_some_and(|s| private.contains(&s) && !live.contains(&s))
+            {
+                dead.push(i);
+            }
+            transfer_live(i, &mut live);
+        }
+    }
+    for i in dead {
+        code[i] = A::Comment("Removed dead private stack store".into());
+    }
+}
+
+#[cfg(test)]
 fn cleanup(code: &mut Vec<A>) {
+    cleanup_private(code, &BTreeSet::new());
+}
+
+fn cleanup_private(code: &mut Vec<A>, private: &BTreeSet<i16>) {
     for _ in 0..4 {
         let Some(cfg) = Cfg::new(code) else {
             return;
         };
         propagate_copies(code, &cfg);
-        for block in &cfg.blocks {
+        let (_, live_out, _) = cfg.liveness(code);
+        for (b, block) in cfg.blocks.iter().enumerate() {
             let mut aliases = std::array::from_fn(|i| Reg::from_u8(i as u8).unwrap());
             let mut constants = [None; 32];
             constants[Reg::R0 as usize] = Some(0i16);
@@ -927,7 +1162,16 @@ fn cleanup(code: &mut Vec<A>) {
                 }
                 if let Some((d, a)) = new_alias {
                     if d != Reg::R0 {
-                        aliases[d as usize] = a;
+                        // A loop counter copied to its surviving register
+                        // should use that register immediately, so the update
+                        // and copy can coalesce. Otherwise use the source and
+                        // discard transient reload copies, including cached
+                        // argument registers whose numbers are lower than T's.
+                        if a != Reg::R0 && live_out[b] & bit(d) != 0 && live_out[b] & bit(a) == 0 {
+                            aliases[a as usize] = d;
+                        } else {
+                            aliases[d as usize] = a;
+                        }
                     }
                 }
                 if let Some((d, v)) = new_constant {
@@ -937,6 +1181,7 @@ fn cleanup(code: &mut Vec<A>) {
                 }
             }
         }
+        fuse_comparison_branches(code, &cfg);
         let Some(cfg) = Cfg::new(code) else {
             return;
         };
@@ -971,6 +1216,7 @@ fn cleanup(code: &mut Vec<A>) {
             i += 1;
             keep
         });
+        discard_dead_private_accesses(code, private);
     }
 }
 

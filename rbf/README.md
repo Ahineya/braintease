@@ -17,6 +17,11 @@ BANK_SIZE=512 MEMORY_BANKS=4 scripts/build-bf.sh rbf/tests/fixtures/tiny.c
 target/release/rbf build/bf/tiny.bf --headless --timeout 30 --exit-code
 ```
 
+The workspace release profile uses optimization level 3, ThinLTO across crate
+boundaries, and one code-generation unit per crate. This also optimizes the BF
+engine linked into `rbf`; the standalone interpreter's own release profile does
+not apply when it is built as a workspace dependency.
+
 The helper accepts C or assembly. C uses the ordinary compiler and runtime
 startup, assembled separately into the output directory. It writes `.asm`,
 `.pobj`, `.bfm` and expanded `.bf` under
@@ -117,23 +122,29 @@ scripts/run-bf-rgb565-c.sh --headless --telemetry --capture-frame 1 \
 The timeout is a safety bound, not a promised completion time. Missing a
 requested frame returns a nonzero status and still leaves a diagnostic report.
 
-On the development machine, the latest compiler/interpreter changes measured
-on 2026-10-13 reduced the first frame from 9.78 to 2.06 seconds, keeping the same
-16,384-cell banks and exact pixels. Reaching two frames took 27.77 seconds before
-and 4.13 seconds after. Compiler changes alone brought the first frame to 6.23
-seconds; interpreter changes alone brought it to 5.55 seconds. These are
-individual sequential release runs, including tape initialization but excluding
-build, parsing and host setup; they are not estimates for Doom.
+On the development machine, the latest changes measured on 2026-10-13 reduced
+the median first frame from 0.734 to 0.550 seconds, keeping the same 16,384-cell
+banks and exact pixels. Reaching two frames took 1.457 seconds before and 1.098
+seconds after. These are medians of five alternating, sequential release runs,
+including tape initialization but excluding build, parsing and host setup.
+Individual first-frame times ranged from 0.728–0.736 seconds before and
+0.549–0.551 seconds after; they are not estimates for Doom. The release-profile
+change alone was below 1% on this fixture; the algorithm changes account for
+the useful gain.
 
-First-frame work fell from 74,261 to 48,349 guest instructions. The next frame
-fell from 124,190 to 48,270. The compiler now reuses registers that are free
-within a loop, hoists repeated safe arithmetic out of short-circuit branches,
-and removes provably finite, unobservable loops, including the demo's empty
-delay. The rectangle loop uses 17 instructions per in-bounds pixel instead of
-66, with one stack load and no stack stores instead of 14 loads and seven stores.
-The screen-clear loop remains seven instructions per pixel. Demo source, CPU,
-ISA and bank sizes are unchanged. Some branch-related copies and row-base loads
-remain opportunities for further compiler work.
+First-frame work fell from 38,890 to 29,911 guest instructions. The next frame
+fell from 38,811 to 29,843. Proven native-word counted loops retain a zero-trip
+guard and use a direct equality branch at the bottom, reducing the screen-clear
+loop from six to four instructions per pixel. Rotation follows pointer-bank
+analysis so the existing range proofs survive. Private stack-home liveness
+removes dead preloads and stores around promoted loops; copy cleanup retains
+registers needed across branches and avoids per-pixel temporary moves.
+
+The generic BF interpreter rejects impossible fill candidates during parsing
+and precomputes static route work. On the frozen baseline image, a bounded
+diagnostic profile eliminated all 1.68 million failed fill attempts without
+changing its BF dispatch count or physical writes. Demo source, ISA, CPU and
+bank sizes are unchanged in this performance pass.
 
 ## Ordinary Brainfuck interpreters
 
@@ -262,11 +273,15 @@ by moving-marker searches. Guarded folds handle transfers through scan routes,
 including nested moving-marker return searches, while their predicates remain
 unchanged. They verify exact marker, zero-cell and sentinel conditions and stop
 before a changing boundary. Other folds handle counted loops that fill
-successive zero cells. Fills check route exclusions once per bounded batch,
+successive zero cells. Parsing rejects statically impossible fill routes,
+combines pointer moves while retaining their full boundary excursions, and
+precomputes the valid fills' excursion bounds. Fills check route exclusions once
+per bounded batch,
 invalidate cached runs together, and record the verified nonzero cells for
 subsequent scans. Moving loops that update only their current cell similarly
 batch cache maintenance. Every actual tape write remains present, and fallback
-execution preserves partial bounds failures. These optimizations inspect BF operations and tape cells,
+execution preserves partial bounds failures. These optimizations inspect BF
+operations and tape cells,
 with no knowledge of Ripple opcodes or register layouts. Checked fallback
 execution preserves tape-boundary behavior. Device and byte-I/O hooks are
 optimization barriers. The host accesses the RAM lane directly through
@@ -290,6 +305,7 @@ cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_multibank
 scripts/test-bf-host.sh
 node scripts/test-bf-compiler.mjs
 node scripts/test-bf-compiler.mjs --large-banks
+node scripts/test-bf-compiler.mjs --demo
 ```
 
 The smoke script runs small assembly fixtures and a compiled C program. It
@@ -312,7 +328,8 @@ No check builds or executes Doom.
 The compiler check builds ordinary C graphics-API and direct-pointer examples,
 then compares exact 4×2 and 8×2 RGB565 frames on RVM and BF. A 12×8 rectangle
 fixture covers overlap, clipping, empty dimensions, maximum dimensions and high
-unsigned coordinates outside the screen, including 65534 and 65535. It also checks guest
+unsigned coordinates outside the screen, including 65534 and 65535. It also
+checks guest
 instruction ceilings; wall time is recorded but never used as a pass/fail limit
 apart from a generous execution timeout. Run it after building the release tools
 listed above. `--rvm-only` skips BF execution. Reports, tool hashes, reproduction
@@ -321,6 +338,12 @@ overrides that directory. `--large-banks` runs the same checks with 64,000-cell
 banks and stores them in `build/bf-compiler-regression-large`, exercising distant
 globals and stack without changing the demo's bank size. No runtime rebuild or
 Doom source is involved.
+
+`--demo` checks the original 64×64 interactive C demo at its unchanged
+16,384-cell bank size. It compares the first frame with independent expected
+geometry and enforces a guest-instruction ceiling, covering the interaction of
+counted-loop rotation, safe graphics assembly and register-copy cleanup. This
+bounded check stops at the first frame; it does not need a window or key input.
 
 ## Remaining BF CPU limits
 

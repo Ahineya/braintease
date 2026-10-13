@@ -2,6 +2,7 @@
 //! their order; a pure expression is never a license to speculate a load.
 
 mod constants;
+mod counted_loops;
 mod dead_loops;
 mod inline;
 mod locals;
@@ -23,6 +24,7 @@ use std::collections::{HashMap, HashSet};
 pub use constants::fold_binary;
 pub use pointers::preserve_pointer_banks;
 pub use phi::destroy_phis;
+pub(crate) use counted_loops::rotate as rotate_counted_loops;
 pub use reachability::{function_symbols, function_has_opaque_asm, value_symbols};
 pub(crate) use inline::safe_asm;
 

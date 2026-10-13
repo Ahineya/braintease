@@ -31,3 +31,10 @@ rcc-frontend = { path = "rcc-frontend" }
 
 [workspace.lints.rust]
 warnings = "deny"
+
+# Profiles in dependency manifests do not apply to workspace binaries such as
+# rbf. Optimize across crate boundaries here, including its BF engine dependency.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
