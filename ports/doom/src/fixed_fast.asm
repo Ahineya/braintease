@@ -2,6 +2,10 @@
 ; A0/A1=a low/high, A2/A3=b low/high; RV0/RV1=result low/high.
 ; Computes bits16..47 of the signed64 product. No 64-bit result is needed.
 ; high16(x*y) is reconstructed exactly with four 8x8 native multiplications.
+; Decompose bytes as hi=x>>8, lo=x-(hi<<8), avoiding general bitwise masks.
+; For x0/x1 and y0/y1, the high word is x1*y1 plus
+; ((x0*y0>>8)+x0*y1+x1*y0)>>8. The first addition is <=65279;
+; only the second can carry. Its one-word carry contributes exactly 256.
 ; For general inputs the unsigned48 product is corrected by subtracting
 ; b.lo from result.hi when a<0, and a.lo when b<0. This implements two's
 ; complement signed extension, including INT32_MIN and overflowing results.
@@ -10,63 +14,60 @@
 FixedMul:
     BEQ A0, R0, L_doom_fixed_a_integer
     BEQ A2, R0, L_doom_fixed_b_integer
-    ANDI T5, A0, 255
     SRLI T6, A0, 8
-    ANDI T7, A2, 255
+    SLLI T5, T6, 8
+    SUB T5, A0, T5
     SRLI SC, A2, 8
+    SLLI T7, SC, 8
+    SUB T7, A2, T7
     MUL T0, T6, SC
     MUL RV0, T5, T7
     SRLI RV0, RV0, 8
     MUL T5, T5, SC
     MUL T6, T6, T7
-    ANDI T7, T5, 255
-    ADD RV0, RV0, T7
-    ANDI T7, T6, 255
-    ADD RV0, RV0, T7
+    ADD RV0, RV0, T5
+    ADD RV0, RV0, T6
+    SLTU T7, RV0, T6
     SRLI RV0, RV0, 8
-    SRLI T5, T5, 8
-    SRLI T6, T6, 8
-    ADD T0, T0, T5
-    ADD T0, T0, T6
+    SLLI T7, T7, 8
     ADD T0, T0, RV0
-    ANDI T5, A0, 255
+    ADD T0, T0, T7
     SRLI T6, A0, 8
-    ANDI T7, A3, 255
+    SLLI T5, T6, 8
+    SUB T5, A0, T5
     SRLI SC, A3, 8
+    SLLI T7, SC, 8
+    SUB T7, A3, T7
     MUL T2, T6, SC
     MUL RV0, T5, T7
     SRLI RV0, RV0, 8
     MUL T5, T5, SC
     MUL T6, T6, T7
-    ANDI T7, T5, 255
-    ADD RV0, RV0, T7
-    ANDI T7, T6, 255
-    ADD RV0, RV0, T7
+    ADD RV0, RV0, T5
+    ADD RV0, RV0, T6
+    SLTU T7, RV0, T6
     SRLI RV0, RV0, 8
-    SRLI T5, T5, 8
-    SRLI T6, T6, 8
-    ADD T2, T2, T5
-    ADD T2, T2, T6
+    SLLI T7, T7, 8
     ADD T2, T2, RV0
-    ANDI T5, A1, 255
+    ADD T2, T2, T7
     SRLI T6, A1, 8
-    ANDI T7, A2, 255
+    SLLI T5, T6, 8
+    SUB T5, A1, T5
     SRLI SC, A2, 8
+    SLLI T7, SC, 8
+    SUB T7, A2, T7
     MUL T4, T6, SC
     MUL RV0, T5, T7
     SRLI RV0, RV0, 8
     MUL T5, T5, SC
     MUL T6, T6, T7
-    ANDI T7, T5, 255
-    ADD RV0, RV0, T7
-    ANDI T7, T6, 255
-    ADD RV0, RV0, T7
+    ADD RV0, RV0, T5
+    ADD RV0, RV0, T6
+    SLTU T7, RV0, T6
     SRLI RV0, RV0, 8
-    SRLI T5, T5, 8
-    SRLI T6, T6, 8
-    ADD T4, T4, T5
-    ADD T4, T4, T6
+    SLLI T7, T7, 8
     ADD T4, T4, RV0
+    ADD T4, T4, T7
     MUL T1, A0, A3
     MUL T3, A1, A2
     MUL RV1, A1, A3
@@ -90,25 +91,24 @@ L_doom_fixed_return:
 
 L_doom_fixed_a_integer:
     BEQ A2, R0, L_doom_fixed_both_integer
-    ANDI T5, A1, 255
     SRLI T6, A1, 8
-    ANDI T7, A2, 255
+    SLLI T5, T6, 8
+    SUB T5, A1, T5
     SRLI SC, A2, 8
+    SLLI T7, SC, 8
+    SUB T7, A2, T7
     MUL T0, T6, SC
     MUL RV0, T5, T7
     SRLI RV0, RV0, 8
     MUL T5, T5, SC
     MUL T6, T6, T7
-    ANDI T7, T5, 255
-    ADD RV0, RV0, T7
-    ANDI T7, T6, 255
-    ADD RV0, RV0, T7
+    ADD RV0, RV0, T5
+    ADD RV0, RV0, T6
+    SLTU T7, RV0, T6
     SRLI RV0, RV0, 8
-    SRLI T5, T5, 8
-    SRLI T6, T6, 8
-    ADD T0, T0, T5
-    ADD T0, T0, T6
+    SLLI T7, T7, 8
     ADD T0, T0, RV0
+    ADD T0, T0, T7
     MUL RV0, A1, A2
     MUL RV1, A1, A3
     ADD RV1, RV1, T0
@@ -118,25 +118,24 @@ L_doom_fixed_a_integer:
     JALR R0, RAB, RA
 
 L_doom_fixed_b_integer:
-    ANDI T5, A0, 255
     SRLI T6, A0, 8
-    ANDI T7, A3, 255
+    SLLI T5, T6, 8
+    SUB T5, A0, T5
     SRLI SC, A3, 8
+    SLLI T7, SC, 8
+    SUB T7, A3, T7
     MUL T0, T6, SC
     MUL RV0, T5, T7
     SRLI RV0, RV0, 8
     MUL T5, T5, SC
     MUL T6, T6, T7
-    ANDI T7, T5, 255
-    ADD RV0, RV0, T7
-    ANDI T7, T6, 255
-    ADD RV0, RV0, T7
+    ADD RV0, RV0, T5
+    ADD RV0, RV0, T6
+    SLTU T7, RV0, T6
     SRLI RV0, RV0, 8
-    SRLI T5, T5, 8
-    SRLI T6, T6, 8
-    ADD T0, T0, T5
-    ADD T0, T0, T6
+    SLLI T7, T7, 8
     ADD T0, T0, RV0
+    ADD T0, T0, T7
     MUL RV0, A0, A3
     MUL RV1, A1, A3
     ADD RV1, RV1, T0
@@ -158,7 +157,10 @@ L_doom_fixed_both_integer:
 ; 16 one-word remainder steps remain. Remainders stay below abs(b)<=2^31;
 ; their left shifts therefore fit in the two-word representation.
 FixedDiv:
-    XOR T7, A1, A3
+    ; Only sign parity is needed, not the XOR of all operand bits.
+    SLT T7, A1, R0
+    SLT SC, A3, R0
+    SUB T7, T7, SC
     SLT SC, A1, R0
     BEQ SC, R0, L_doom_div_a_magnitude
     SLTU T0, R0, A0
@@ -173,9 +175,11 @@ L_doom_div_a_magnitude:
     SUB A3, R0, A3
     SUB A3, A3, T0
 L_doom_div_b_magnitude:
+    ; Every combined field below is disjoint: shifted words have a zero
+    ; low bit (two bits here), so ADD appends the extracted carry exactly.
     SRLI T0, A0, 14
     SLLI T1, A1, 2
-    OR T0, T0, T1
+    ADD T0, T0, T1
     SRLI T1, A1, 14
     SLTU SC, T1, A3
     BNE SC, R0, L_doom_div_calculate
@@ -193,9 +197,9 @@ L_doom_div_integer_loop:
     SLLI A0, A0, 1
     SRLI SC, T0, 15
     SLLI T1, T1, 1
-    OR T1, T1, SC
+    ADD T1, T1, SC
     SLLI T0, T0, 1
-    OR T0, T0, T2
+    ADD T0, T0, T2
     SLLI RV0, RV0, 1
     SLTU SC, T1, A3
     BNE SC, R0, L_doom_div_integer_next
@@ -207,7 +211,7 @@ L_doom_div_integer_subtract:
     SUB T0, T0, A2
     SUB T1, T1, A3
     SUB T1, T1, T2
-    ORI RV0, RV0, 1
+    ADDI RV0, RV0, 1
 L_doom_div_integer_next:
     ADDI T6, T6, -1
     BNE T6, R0, L_doom_div_integer_loop
@@ -215,11 +219,11 @@ L_doom_div_integer_next:
 L_doom_div_fraction_loop:
     SRLI SC, T0, 15
     SLLI T1, T1, 1
-    OR T1, T1, SC
+    ADD T1, T1, SC
     SLLI T0, T0, 1
     SRLI SC, RV0, 15
     SLLI RV1, RV1, 1
-    OR RV1, RV1, SC
+    ADD RV1, RV1, SC
     SLLI RV0, RV0, 1
     SLTU SC, T1, A3
     BNE SC, R0, L_doom_div_fraction_next
@@ -231,13 +235,12 @@ L_doom_div_fraction_subtract:
     SUB T0, T0, A2
     SUB T1, T1, A3
     SUB T1, T1, T2
-    ORI RV0, RV0, 1
+    ADDI RV0, RV0, 1
 L_doom_div_fraction_next:
     ADDI T6, T6, -1
     BNE T6, R0, L_doom_div_fraction_loop
 L_doom_div_apply_sign:
-    SLT SC, T7, R0
-    BEQ SC, R0, L_doom_div_return
+    BEQ T7, R0, L_doom_div_return
     SLTU SC, R0, RV0
     SUB RV0, R0, RV0
     SUB RV1, R0, RV1
@@ -254,19 +257,18 @@ L_doom_div_short_loop:
     SRLI SC, RV0, 15
     SLLI RV0, RV0, 1
     SLLI T0, T0, 1
-    OR T0, T0, SC
+    ADD T0, T0, SC
     SLTU SC, T0, A3
     BNE SC, R0, L_doom_div_short_next
     SUB T0, T0, A3
-    ORI RV0, RV0, 1
+    ADDI RV0, RV0, 1
 L_doom_div_short_next:
     ADDI T6, T6, -1
     BNE T6, R0, L_doom_div_short_loop
     BEQ R0, R0, L_doom_div_apply_sign
 
 L_doom_div_saturate:
-    SLT SC, T7, R0
-    BNE SC, R0, L_doom_div_saturate_negative
+    BNE T7, R0, L_doom_div_saturate_negative
     LI RV0, 65535
     LI RV1, 32767
     JALR R0, RAB, RA

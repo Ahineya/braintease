@@ -183,10 +183,15 @@ void I_InitGraphics(void)
     memset(I_VideoBuffer, 0, (size_t)SCREENWIDTH * SCREENHEIGHT);
 #else
     {
-        unsigned int x, y;
+        unsigned int y;
         for (y = 0; y < SCREENHEIGHT; y += DOOM_RESOLUTION_SCALE) {
             byte *row = I_VideoBuffer + (size_t)y * SCREENWIDTH;
+#ifdef RIPPLE
+            Doom_FillSamples(row, 0, DOOM_OUTPUT_WIDTH, DOOM_RESOLUTION_SCALE);
+#else
+            unsigned int x;
             for (x = 0; x < SCREENWIDTH; x += DOOM_RESOLUTION_SCALE) row[x] = 0;
+#endif
         }
     }
 #endif
@@ -211,7 +216,9 @@ void I_SetPalette(byte *palette)
         palette_rgb[i * 3] = r;
         palette_rgb[i * 3 + 1] = g;
         palette_rgb[i * 3 + 2] = b;
-        palette565[i] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+        /* The three fields are disjoint: addition avoids a bitwise merge on
+         * Ripple without changing the RGB565 value. */
+        palette565[i] = ((r >> 3) << 11) + ((g >> 2) << 5) + (b >> 3);
     }
 }
 

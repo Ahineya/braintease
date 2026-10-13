@@ -11,7 +11,18 @@
 #include "doom_resolution.h"
 
 byte *I_VideoBuffer;
+byte *colormaps;
+int centery;
 extern byte *xlatab;
+extern int dc_x, dc_yl, dc_yh, ds_x1, ds_x2, ds_y;
+void R_DrawColumn(void);
+void R_DrawColumnLow(void);
+void R_DrawTranslatedColumn(void);
+void R_DrawTranslatedColumnLow(void);
+void R_DrawFuzzColumn(void);
+void R_DrawFuzzColumnLow(void);
+void R_DrawSpan(void);
+void R_DrawSpanLow(void);
 void F_DrawPatchCol(int x, patch_t *patch, int col);
 
 static byte screen[320 * 200];
@@ -92,6 +103,25 @@ int main(int argc, char **argv)
         xla[i] = (byte)((i >> 8) * 7 + (i & 255) * 11);
     }
     reset();
+    if (argc == 3 && !strncmp(argv[2], "guard-", 6))
+    {
+        // Leave lookup/source pointers unset: malformed coordinates must
+        // fail before any framebuffer or texture address can be accessed.
+        dc_x = 0; dc_yl = 0; dc_yh = 1;
+        ds_x1 = 0; ds_x2 = 1; ds_y = 0;
+        if (!strcmp(argv[2], "guard-column-x")) { dc_x = -1; R_DrawColumn(); }
+        if (!strcmp(argv[2], "guard-column-y")) { dc_x = 1; dc_yh = 200; R_DrawColumn(); }
+        if (!strcmp(argv[2], "guard-column-low")) { dc_x = 160; R_DrawColumnLow(); }
+        if (!strcmp(argv[2], "guard-translated-y")) { dc_yl = -1; R_DrawTranslatedColumn(); }
+        if (!strcmp(argv[2], "guard-translated-low")) { dc_x = 160; R_DrawTranslatedColumnLow(); }
+        if (!strcmp(argv[2], "guard-fuzz-x")) { dc_x = 320; R_DrawFuzzColumn(); }
+        if (!strcmp(argv[2], "guard-fuzz-low")) { dc_x = 160; R_DrawFuzzColumnLow(); }
+        if (!strcmp(argv[2], "guard-span-x")) { ds_y = 1; ds_x2 = 320; R_DrawSpan(); }
+        if (!strcmp(argv[2], "guard-span-y")) { ds_y = 200; R_DrawSpan(); }
+        if (!strcmp(argv[2], "guard-span-low")) { ds_x2 = 160; R_DrawSpanLow(); }
+        if (!strcmp(argv[2], "guard-span-order")) { ds_x1 = 3; R_DrawSpan(); }
+        return 0;
+    }
     if (argc == 3 && !strcmp(argv[2], "unaligned"))
     {
         V_CopyRect(0, 0, backing, 4, 4, 1, 1);

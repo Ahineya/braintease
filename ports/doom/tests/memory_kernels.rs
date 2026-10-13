@@ -25,6 +25,9 @@ fn invoke(vm: &mut VM, name: &str, dst: (u16, u16), src: (u16, u16), args: &[u16
     let saved: Vec<_> = [3,4,23,24,25,26,28,29,30,31].into_iter().map(|r| (r,vm.registers[r])).collect();
     let before = vm.executed_instructions;
     while matches!(vm.state, VMState::Running) {
+        let pc = vm.registers[2] as usize * BANK + vm.registers[1] as usize;
+        assert!(!matches!(vm.instructions[pc].opcode, 3..=5 | 11..=13),
+            "memory kernel performs an avoidable bitwise operation at {pc}");
         vm.step().unwrap();
         assert!(vm.executed_instructions - before < 5_000_000, "kernel instruction budget");
     }

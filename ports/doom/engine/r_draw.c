@@ -106,8 +106,15 @@ int			dccount;
  * deliberately left untouched. Low detail already combines two columns. */
 static int R_SampleColumnStart(int low)
 {
-    int x = viewwindowx + (dc_x << low);
+    int x;
     int first;
+    if (dc_yh < dc_yl) return dc_yl;
+#ifdef RANGECHECK
+    if (dc_x < 0 || dc_x >= (SCREENWIDTH >> low)
+     || dc_yl < 0 || dc_yh >= SCREENHEIGHT)
+        I_Error("R_DrawSampledColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
+#endif
+    x = viewwindowx + (dc_x << low);
     if (x & (DOOM_RESOLUTION_SCALE - 1)) return dc_yh + 1;
     first = dc_yl + ((-(dc_yl + viewwindowy)) & (DOOM_RESOLUTION_SCALE - 1));
     return first;
@@ -724,6 +731,11 @@ static void R_DrawSampledSpan(int low)
     byte *dest;
     unsigned int count, skip, increment;
     int first;
+#ifdef RANGECHECK
+    if (ds_x2 < ds_x1 || ds_x1 < 0 || ds_x2 >= (SCREENWIDTH >> low)
+     || ds_y < 0 || ds_y >= SCREENHEIGHT)
+        I_Error("R_DrawSampledSpan: %i to %i at %i", ds_x1, ds_x2, ds_y);
+#endif
     if ((ds_y + viewwindowy) & (DOOM_RESOLUTION_SCALE - 1)) return;
     skip = ((-(viewwindowx + (ds_x1 << low))) & (DOOM_RESOLUTION_SCALE - 1)) >> low;
     first = ds_x1 + skip;

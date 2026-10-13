@@ -61,7 +61,9 @@ doom_rgb_dst_chunk:
 doom_rgb_src_chunk:
     SUB T2, T2, T4
     SRLI T5, T4, 2
-    ANDI T4, T4, 3
+    ; q=floor(count/4), so subtraction gives the 0..3 tail exactly.
+    SLLI RV0, T5, 2
+    SUB T4, T4, RV0
     BEQ T5, R0, doom_rgb_tail
 
 doom_rgb_four:
@@ -207,7 +209,9 @@ doom_rgb_octets_dst_chunk:
 doom_rgb_octets_src_chunk:
     SUB T2, T2, T4
     SRLI T5, T4, 2
-    ANDI T4, T4, 3
+    ; q=floor(count/4), so subtraction gives the 0..3 tail exactly.
+    SLLI RV0, T5, 2
+    SUB T4, T4, RV0
     BEQ T5, R0, doom_rgb_octets_tail
 
 doom_rgb_octets_four:
@@ -386,7 +390,9 @@ doom_rgb_sample_bounds:
     SLTU T5, T3, T5
     BNE T5, R0, doom_rgb_sample_split
     SRLI T5, T2, 2
-    ANDI T2, T2, 3
+    ; q=floor(count/4), so subtraction gives the 0..3 tail exactly.
+    SLLI RV0, T5, 2
+    SUB T2, T2, RV0
     BEQ T5, R0, doom_rgb_sample_tail
 
 doom_rgb_sample_four:
@@ -505,4 +511,63 @@ doom_copy_sample_dst_next:
     ADDI A1, A1, 1
     BEQ R0, R0, doom_copy_sample_pixel
 doom_copy_sample_done:
+    JALR R0, RAB, RA
+
+; Fill at most 320 retained cells in a sparse row. A0/A1=destination,
+; A2=value, A3=count; stack SP-1=scale (1/2/4). Gaps are never written.
+; The zero-count path deliberately does not read the stack or destination.
+Doom_FillSamples:
+    BEQ A3, R0, doom_fill_sample_done
+    ADDI SC, SP, -1
+    LOAD T0, SB, SC
+    LI T1, 64000
+    LI T2, 65535
+    BNE A1, T2, doom_fill_sample_dst_stack
+    ADD A1, GP, R0
+doom_fill_sample_dst_stack:
+    LI T2, 65534
+    BNE A1, T2, doom_fill_sample_bounds
+    ADD A1, SB, R0
+doom_fill_sample_bounds:
+    ; A canonical address plus at most 1280 cells cannot overflow a word.
+    ; Most rows stay within their bank, so avoid a check on every pixel.
+    MUL T2, A3, T0
+    ADD T2, T2, A0
+    SLTU T2, T1, T2
+    BNE T2, R0, doom_fill_sample_split
+    SRLI T2, A3, 2
+    ; q=floor(count/4), so subtraction gives the 0..3 tail exactly.
+    SLLI T3, T2, 2
+    SUB A3, A3, T3
+    BEQ T2, R0, doom_fill_sample_tail
+doom_fill_sample_four:
+    STORE A2, A1, A0
+    ADD A0, A0, T0
+    STORE A2, A1, A0
+    ADD A0, A0, T0
+    STORE A2, A1, A0
+    ADD A0, A0, T0
+    STORE A2, A1, A0
+    ADD A0, A0, T0
+    ADDI T2, T2, -1
+    BNE T2, R0, doom_fill_sample_four
+doom_fill_sample_tail:
+    BEQ A3, R0, doom_fill_sample_done
+doom_fill_sample_one:
+    STORE A2, A1, A0
+    ADD A0, A0, T0
+    ADDI A3, A3, -1
+    BNE A3, R0, doom_fill_sample_one
+    JALR R0, RAB, RA
+doom_fill_sample_split:
+    STORE A2, A1, A0
+    ADDI A3, A3, -1
+    BEQ A3, R0, doom_fill_sample_done
+    ADD A0, A0, T0
+    SLTU T2, A0, T1
+    BNE T2, R0, doom_fill_sample_split
+    SUB A0, A0, T1
+    ADDI A1, A1, 1
+    BEQ R0, R0, doom_fill_sample_split
+doom_fill_sample_done:
     JALR R0, RAB, RA

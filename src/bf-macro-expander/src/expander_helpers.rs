@@ -826,7 +826,7 @@ impl MacroExpander {
                 eprintln!("DEBUG collect_locals_from_content: Text = '{}'", text.value);
                 // Check if the text contains {local ...} patterns (can be multiple)
                 // This handles cases where {local} comes through macro expansion as text
-                let mut text_str = text.value.clone();
+                let text_str = text.value.clone();
                 let mut search_start = 0;
                 
                 // Keep looking for {local} patterns until we've found them all
@@ -967,7 +967,7 @@ impl MacroExpander {
         }
     }
     
-    fn expand_expression_to_string_with_locals(&mut self, expr: &ExpressionNode, context: &ExpansionContext) -> String {
+    fn _expand_expression_to_string_with_locals(&mut self, expr: &ExpressionNode, context: &ExpansionContext) -> String {
         let mut temp_context = ExpansionContext {
             source_map_builder: SourceMapBuilder::new(),
             current_source_position: context.current_source_position.clone(),
@@ -978,11 +978,11 @@ impl MacroExpander {
             current_expanded_column: 1,
         };
         
-        self.expand_expression_with_locals(expr, &mut temp_context, false);
+        self._expand_expression_with_locals(expr, &mut temp_context, false);
         temp_context.expanded_lines.join("\n").trim().to_string()
     }
     
-    fn expand_expression_with_locals(&mut self, expr: &ExpressionNode, context: &mut ExpansionContext, generate_source_map: bool) {
+    fn _expand_expression_with_locals(&mut self, expr: &ExpressionNode, context: &mut ExpansionContext, generate_source_map: bool) {
         match expr {
             ExpressionNode::Text(text) => {
                 // Check if it's a local variable reference

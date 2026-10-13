@@ -1307,7 +1307,7 @@ impl Parser {
         })
     }
     
-    fn parse_expression_list(&mut self) -> Option<ExpressionListNode> {
+    fn _parse_expression_list(&mut self) -> Option<ExpressionListNode> {
         let start_pos = self.peek().position.clone();
         let mut expressions = Vec::new();
         

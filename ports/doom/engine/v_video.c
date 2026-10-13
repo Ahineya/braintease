@@ -692,12 +692,32 @@ void V_DrawFilledBox(int x, int y, int w, int h, int c)
     int x1, y1;
 
 #if DOOM_RESOLUTION_SCALE > 1
+#ifdef RIPPLE
+    {
+        int count;
+        x1 = (-x) & (DOOM_RESOLUTION_SCALE - 1);
+        y1 = (-y) & (DOOM_RESOLUTION_SCALE - 1);
+        if (x1 >= w || y1 >= h)
+            return;
+        count = (w - x1 + DOOM_RESOLUTION_SCALE - 1) / DOOM_RESOLUTION_SCALE;
+        buf = I_VideoBuffer + (int32_t)SCREENWIDTH * (y + y1) + x + x1;
+        // Automap clears reach this path every frame. Avoid normalizing a far
+        // C pointer for each retained pixel; the leaf walks the sparse row.
+        for (; y1 < h; y1 += DOOM_RESOLUTION_SCALE)
+        {
+            Doom_FillSamples(buf, c, count, DOOM_RESOLUTION_SCALE);
+            if (y1 + DOOM_RESOLUTION_SCALE < h)
+                buf += SCREENWIDTH * DOOM_RESOLUTION_SCALE;
+        }
+    }
+#else
     for (y1 = (-y) & (DOOM_RESOLUTION_SCALE - 1); y1 < h; y1 += DOOM_RESOLUTION_SCALE)
     {
         buf = I_VideoBuffer + (int32_t)SCREENWIDTH * (y + y1) + x;
         for (x1 = (-x) & (DOOM_RESOLUTION_SCALE - 1); x1 < w; x1 += DOOM_RESOLUTION_SCALE)
             buf[x1] = c;
     }
+#endif
     return;
 #endif
 
@@ -725,8 +745,16 @@ void V_DrawHorizLine(int x, int y, int w, int c)
     if (y & (DOOM_RESOLUTION_SCALE - 1))
         return;
     buf = I_VideoBuffer + (int32_t)SCREENWIDTH * y + x;
+#ifdef RIPPLE
+    x1 = (-x) & (DOOM_RESOLUTION_SCALE - 1);
+    if (x1 < w)
+        Doom_FillSamples(buf + x1, c,
+            (w - x1 + DOOM_RESOLUTION_SCALE - 1) / DOOM_RESOLUTION_SCALE,
+            DOOM_RESOLUTION_SCALE);
+#else
     for (x1 = (-x) & (DOOM_RESOLUTION_SCALE - 1); x1 < w; x1 += DOOM_RESOLUTION_SCALE)
         buf[x1] = c;
+#endif
     return;
 #endif
 

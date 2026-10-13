@@ -19,7 +19,7 @@ fn physical(pointer: (u16, u16)) -> usize {
 }
 
 fn invoke(vm: &mut VM, entry: usize, dest: (u16, u16), source: (u16, u16),
-          map: (u16, u16), position: u32, step: u32, count: u16) -> u64 {
+          map: (u16, u16), position: u32, step: u32, count: u16, stride: Option<u16>) -> u64 {
     for r in 1..32 { vm.registers[r] = (r as u16).wrapping_mul(1783) ^ 0xa5a5; }
     vm.registers[1] = (entry % BANK) as u16;
     vm.registers[2] = (entry / BANK) as u16;
@@ -30,8 +30,9 @@ fn invoke(vm: &mut VM, entry: usize, dest: (u16, u16), source: (u16, u16),
     vm.registers[9] = source.0; vm.registers[10] = source.1;
     vm.registers[28] = 2; vm.registers[29] = 1000;
     vm.registers[30] = 777; vm.registers[31] = 1;
-    let arguments = [map.0, map.1, position as u16, (position >> 16) as u16,
+    let mut arguments = vec![map.0, map.1, position as u16, (position >> 16) as u16,
                      step as u16, (step >> 16) as u16, count];
+    if let Some(stride) = stride { arguments.push(stride); }
     let stack = 2 * BANK + 1000;
     for (i, argument) in arguments.iter().enumerate() { vm.memory[stack - 1 - i] = *argument; }
     let saved: Vec<_> = SAVED.iter().map(|&r| (r, vm.registers[r])).collect();
@@ -72,7 +73,7 @@ fn main() {
         // If count is zero, even completely invalid pointers must be ignored.
         let before = vm.memory.clone();
         let instructions = invoke(&mut vm, entry, (65535, 65000), (65535, 65000),
-                                  (65535, 65000), u32::MAX, u32::MAX, 0);
+                                  (65535, 65000), u32::MAX, u32::MAX, 0, None);
         assert!(instructions <= 5, "zero count performed more than a return");
         // Argument setup is the only allowed memory difference in this call.
         let stack = 2 * BANK + 1000;
@@ -123,7 +124,7 @@ fn main() {
                     cursor = cursor.wrapping_add(step);
                     pixel
                 }).collect();
-                let instructions = invoke(&mut vm, entry, dest, source, map, position, step, count);
+                let instructions = invoke(&mut vm, entry, dest, source, map, position, step, count, None);
                 // Every skipped column cell and both endpoint neighbors are guards.
                 for cell in d - 1..end {
                     let expected_cell = if cell >= d && (cell - d) % stride < (if low {2} else {1})
@@ -142,8 +143,67 @@ fn main() {
                     (false,true,true)=>"column_low_fast", (false,true,false)=>"column_low_split",
                     (true,true,true)=>"span_low_fast", (true,true,false)=>"span_low_split" };
                 *path_cases.entry(path).or_default() += 1;
-                if fast && count == 200 { assert!(instructions <= if low { if span {4500} else {3900} } else { if span {3700} else {3100} }, "hot raster path regressed"); }
+                // Columns deliberately replace per-pixel bitwise masks with
+                // bounded add/subtract arithmetic. This costs <=3 extra
+                // instructions per pixel but much less work on the BF CPU.
+                if fast && count == 200 { assert!(instructions <= if low { if span {4500} else {4550} } else { if span {3700} else {3750} }, "hot raster path regressed"); }
                 reports.push(format!("{{\"kernel\":\"{label}\",\"layout\":{layout},\"sample\":{sample},\"position\":{position},\"step\":{step},\"pixels\":{count},\"path\":\"{path}\",\"instructions\":{instructions}}}"));
+            }
+        }
+    }
+    // Strided leaves retain exactly one top-left sample from each output
+    // block. Check both scales through the actual guest ABI, including source
+    // and destination tags, split tables, and every discarded cell as a guard.
+    for (span, name) in [(false, "Doom_DrawColumnStrided"), (true, "Doom_DrawSpanStrided")] {
+        let entry = *vm.debug_symbols.iter().find(|(_, symbol)| symbol.as_str() == name)
+            .unwrap_or_else(|| panic!("missing symbol {name}")).0;
+        for scale in [2u16, 4] {
+            let stride = if span { scale } else { 320 * scale };
+            let zero_steps = invoke(&mut vm, entry, (65535, 65000), (65535, 65000),
+                (65535, 65000), u32::MAX, u32::MAX, 0, Some(stride));
+            assert!(zero_steps <= 5, "zero strided count must return before source or stride work");
+            for (layout, (dest, source, map)) in [
+                ((200, 7), (200, 5), (200, 3)),
+                ((63999, 7), (63999, 5), (63999, 3)),
+                ((63000, 7), (10000, 65534), (50000, 65535)),
+                ((32, 65535), (62000, 5), (63999, 3)),
+                ((1200, 65534), (63900, 5), (1234, 4)),
+                ((12345, 7), (59000, 65535), (12000, 65534)),
+            ].into_iter().enumerate() {
+                let d = physical(dest); let s = physical(source); let m = physical(map);
+                // Tagged destinations remain inside their allocations and do
+                // not overlap the fixture's stack or other source tables.
+                let count = if dest.1 >= 65534 { 3 } else { 50 };
+                let table_size = if span { 4096 } else { 128 };
+                for (position, step) in [(u32::MAX, 1), (0, u32::MAX),
+                    (0x0400fc00, 0x04010400), (next(&mut state), next(&mut state))] {
+                    let end = d + count as usize * stride as usize + 1;
+                    let colors: Vec<_> = (0..256).map(|i| ((i * 73 + 9) & 255) as u16).collect();
+                    let texels: Vec<_> = (0..table_size).map(|i| ((i * 17 + (i >> 2)) & 255) as u16).collect();
+                    vm.memory[s..s + table_size].copy_from_slice(&texels);
+                    vm.memory[m..m + 256].copy_from_slice(&colors);
+                    vm.memory[d - 1..end].fill(SENTINEL);
+                    let mut cursor = position;
+                    let expected: Vec<_> = (0..count).map(|_| {
+                        let spot = if span { ((cursor >> 4) & 4032) | (cursor >> 26) }
+                                   else { (cursor >> 16) & 127 };
+                        let pixel = colors[texels[spot as usize] as usize];
+                        cursor = cursor.wrapping_add(step);
+                        pixel
+                    }).collect();
+                    let instructions = invoke(&mut vm, entry, dest, source, map,
+                        position, step, count, Some(stride));
+                    for cell in d - 1..end {
+                        let expected_cell = if cell >= d && (cell - d) % stride as usize == 0
+                            && (cell - d) / (stride as usize) < count as usize {
+                            expected[(cell - d) / stride as usize]
+                        } else { SENTINEL };
+                        assert_eq!(vm.memory[cell], expected_cell, "{name} scale {scale} layout {layout} cell {cell}");
+                    }
+                    assert_eq!(&vm.memory[s..s + table_size], texels.as_slice(), "strided source changed");
+                    assert_eq!(&vm.memory[m..m + 256], colors.as_slice(), "strided map changed");
+                    reports.push(format!("{{\"kernel\":\"{name}\",\"scale\":{scale},\"layout\":{layout},\"pixels\":{count},\"instructions\":{instructions}}}"));
+                }
             }
         }
     }

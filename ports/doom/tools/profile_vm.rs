@@ -70,8 +70,8 @@ fn main() -> Result<(), String> {
         if frame == 1 || frame == frames || profiled {
             capture::write_png(&snapshot, &out.join(format!("frame-{frame}.png")))?;
         }
-        let record = format!("{{\"frame\":{frame},\"tick\":{},\"instructions\":{},\"seconds\":{seconds:.9},\"profiled\":{profiled}}}",
-            vm.devices.tick(), vm.executed_instructions - before);
+        let record = format!("{{\"frame\":{frame},\"tick\":{},\"width\":{},\"height\":{},\"instructions\":{},\"seconds\":{seconds:.9},\"profiled\":{profiled}}}",
+            vm.devices.tick(), snapshot.width, snapshot.height, vm.executed_instructions - before);
         writeln!(metrics, "{record}").map_err(|e| e.to_string())?;
         metrics.flush().map_err(|e| e.to_string())?;
         eprintln!("{record}");

@@ -250,8 +250,14 @@ void F_TextWrite (void)
     {
         byte *row = src + ((y & 63) << 6);
         dest = I_VideoBuffer + (int32_t)y * SCREENWIDTH;
+#ifdef RIPPLE
+        for (x = 0; x < SCREENWIDTH; x += 64)
+            Doom_CopySamples(dest + x, row, 64 / DOOM_RESOLUTION_SCALE,
+                             DOOM_RESOLUTION_SCALE);
+#else
         for (x = 0; x < SCREENWIDTH; x += DOOM_RESOLUTION_SCALE)
             dest[x] = row[x & 63];
+#endif
     }
 #else
     for (y=0 ; y<SCREENHEIGHT ; y++)
@@ -755,4 +761,3 @@ void F_Drawer (void)
             break;
     }
 }
-

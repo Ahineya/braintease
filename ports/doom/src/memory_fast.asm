@@ -13,8 +13,9 @@ Doom_Memcpy:
     LOAD T0, SB, SC
     ADDI SC, SP, -2
     LOAD T1, SB, SC
-    OR T2, T0, T1
-    BEQ T2, R0, doom_memory_return
+    BNE T0, R0, doom_copy_nonempty
+    BEQ T1, R0, doom_memory_return
+doom_copy_nonempty:
     LI T7, 64000
     LI T3, 65535
     BNE A1, T3, doom_copy_dst_stack
@@ -48,7 +49,10 @@ doom_memory_copy_count_chunk:
     SUB T0, T0, T2
     SUB T1, T1, SC
     SRLI T4, T2, 2
-    ANDI T5, T2, 3
+    ; remainder = chunk - 4*quotient; all values fit a native word.
+    ADD T5, T4, T4
+    ADD T5, T5, T5
+    SUB T5, T2, T5
     BEQ T4, R0, doom_memory_copy_tail
 
 doom_memory_copy_four:
@@ -80,8 +84,9 @@ doom_memory_copy_one:
     ADDI T5, T5, -1
     BNE T5, R0, doom_memory_copy_one
 doom_memory_copy_end:
-    OR T2, T0, T1
-    BEQ T2, R0, doom_memory_return
+    BNE T0, R0, doom_memory_copy_continue
+    BEQ T1, R0, doom_memory_return
+doom_memory_copy_continue:
     BNE A0, T7, doom_memory_copy_dst_next
     ADD A0, R0, R0
     ADDI A1, A1, 1
@@ -100,8 +105,9 @@ Doom_Memset:
     LOAD T0, SB, SC
     ADDI SC, SP, -2
     LOAD T1, SB, SC
-    OR T2, T0, T1
-    BEQ T2, R0, doom_memory_return
+    BNE T0, R0, doom_set_nonempty
+    BEQ T1, R0, doom_memory_return
+doom_set_nonempty:
     LI T7, 64000
     LI T3, 65535
     BNE A1, T3, doom_set_dst_stack
@@ -122,7 +128,9 @@ doom_memory_set_count_chunk:
     SUB T0, T0, T2
     SUB T1, T1, SC
     SRLI T4, T2, 2
-    ANDI T5, T2, 3
+    ADD T5, T4, T4
+    ADD T5, T5, T5
+    SUB T5, T2, T5
     BEQ T4, R0, doom_memory_set_tail
 doom_memory_set_four:
     STORE A2, A1, A0
@@ -143,8 +151,9 @@ doom_memory_set_one:
     ADDI T5, T5, -1
     BNE T5, R0, doom_memory_set_one
 doom_memory_set_end:
-    OR T2, T0, T1
-    BEQ T2, R0, doom_memory_return
+    BNE T0, R0, doom_memory_set_continue
+    BEQ T1, R0, doom_memory_return
+doom_memory_set_continue:
     ADD A0, R0, R0
     ADDI A1, A1, 1
     BEQ R0, R0, doom_memory_set_chunk
@@ -158,8 +167,9 @@ Doom_Memmove:
     LOAD T0, SB, SC
     ADDI SC, SP, -2
     LOAD T1, SB, SC
-    OR T2, T0, T1
-    BEQ T2, R0, doom_memory_return
+    BNE T0, R0, doom_move_nonempty
+    BEQ T1, R0, doom_memory_return
+doom_move_nonempty:
     LI T7, 64000
     LI T3, 65535
     BNE A1, T3, doom_move_dst_stack
@@ -237,7 +247,7 @@ doom_memory_move_src_previous:
     ADDI T0, T0, -1
     SLTU SC, T2, T0
     SUB T1, T1, SC
-    OR T2, T0, T1
-    BNE T2, R0, doom_memory_move_back
+    BNE T0, R0, doom_memory_move_back
+    BNE T1, R0, doom_memory_move_back
 doom_memory_return:
     JALR R0, RAB, RA

@@ -511,6 +511,12 @@ R_DrawVisSprite
     patch_t*		patch;
 	
 	
+#if DOOM_RESOLUTION_SCALE > 1
+    /* An entire narrow sprite may fall between output columns. */
+    x1 = vis->x1 + (((-(viewwindowx + (vis->x1 << detailshift)))
+                    & (DOOM_RESOLUTION_SCALE - 1)) >> detailshift);
+    if (x1 > vis->x2) return;
+#endif
     patch = W_CachePatchNum (vis->patch+firstspritelump, PU_CACHE);
 
     dc_colormap = vis->colormap;
@@ -536,8 +542,6 @@ R_DrawVisSprite
 #if DOOM_RESOLUTION_SCALE > 1
     /* Align in screen coordinates, not patch coordinates: this also handles
      * flipped sprites and subwindows without reading discarded posts. */
-    x1 = vis->x1 + (((-(viewwindowx + (vis->x1 << detailshift)))
-                    & (DOOM_RESOLUTION_SCALE - 1)) >> detailshift);
     frac = (uint32_t)frac + (uint32_t)vis->xiscale * (x1 - vis->x1);
     for (dc_x = x1; dc_x <= vis->x2;
          dc_x += DOOM_RESOLUTION_SCALE >> detailshift,

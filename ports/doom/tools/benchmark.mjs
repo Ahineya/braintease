@@ -33,7 +33,7 @@ export function sampleReference(raw, scale) {
 
 // Object labels recover static function boundaries omitted from binary DEBUG.
 // Reject stale objects rather than attributing samples to invented boundaries.
-export function analyzeProfile(binary, hitPath, objectDir, archives = []) {
+export function analyzeProfile(binary, hitPath, objectDir = null, archives = []) {
   const raw = fs.readFileSync(binary);
   require(raw.subarray(0, 5).toString() === 'RLINK', 'expected RLINK image');
   const bank = raw.readUInt16LE(5), entry = raw.readUInt32LE(7), length = raw.readUInt32LE(11);
@@ -63,16 +63,40 @@ export function analyzeProfile(binary, hitPath, objectDir, archives = []) {
     }
     const starts = [...names.keys()].sort((a, b) => a - b);
     if (!starts.length) return;
-    const segments = size <= bank ? [[0, size]] : starts.map((start, i) => [start, starts[i + 1] ?? size]);
+    // RCC reachability can discard functions, and startup placement moves
+    // initializers/functions independently even when the object fits one bank.
+    // Each metadata range therefore needs its own binary-symbol anchor.
+    let boundaries = starts;
+    if (object.rcc) {
+      boundaries = object.rcc.code.map(name => {
+        require(object.labels[name], origin + ': missing RCC code label ' + name);
+        return Math.floor(object.labels[name].absolute_address / 4);
+      }).sort((a, b) => a - b);
+      require(boundaries[0] === 0 && boundaries.every((pc, i) => pc < size && (!i || pc > boundaries[i - 1])),
+        origin + ': invalid RCC function boundaries');
+    }
+    const segments = !object.rcc && size <= bank ? [[0, size]]
+      : boundaries.map((start, i) => [start, boundaries[i + 1] ?? size]);
     for (const [begin, end] of segments) {
       const anchors = new Set(labels.filter(([name, pc]) => pc >= begin && pc < end && symbols.has(name))
         .map(([name, pc]) => symbols.get(name) - pc));
       if (!anchors.size) continue;
       require(anchors.size === 1, origin + ': inconsistent object/binary anchors; save matching objects');
       const shift = [...anchors][0];
-      for (let pc = begin; pc < end; pc++)
-        require(raw[15 + (pc + shift) * 8] === object.instructions[pc].opcode,
-          origin + ': stale object at local PC ' + pc);
+      for (let pc = begin; pc < end; pc++) {
+        const inst = object.instructions[pc], at = 15 + (pc + shift) * 8;
+        const reference = object.unresolved_references?.[pc];
+        const moved = new Set();
+        if (inst.opcode === 19 || reference?.ref_type === 'absolute') {
+          moved.add(2); moved.add(3);
+        } else if (['code_bank', 'code_offset'].includes(reference?.ref_type)
+                   || (reference?.ref_type === 'data' && inst.opcode === 14)) moved.add(2);
+        else if (reference) moved.add(3);
+        require(pc + shift >= 0 && pc + shift < length
+          && raw[at] === inst.opcode && raw[at + 1] === (inst.word0 ?? 0)
+          && [1, 2, 3].every(word => moved.has(word) || raw.readUInt16LE(at + word * 2) === inst['word' + word]),
+        origin + ': stale object at local PC ' + pc);
+      }
       starts.forEach((start, i) => {
         if (start < begin || start >= end) return;
         const symbol = names.get(start).sort()[0];
@@ -82,7 +106,7 @@ export function analyzeProfile(binary, hitPath, objectDir, archives = []) {
       });
     }
   }
-  for (const file of fs.readdirSync(objectDir).filter(file => file.endsWith('.pobj')).sort())
+  if (objectDir) for (const file of fs.readdirSync(objectDir).filter(file => file.endsWith('.pobj')).sort())
     objectRanges(json(path.join(objectDir, file)), file);
   for (const archive of archives) for (const row of json(archive).objects)
     objectRanges(row.object, path.basename(archive) + ':' + row.name);
@@ -121,11 +145,14 @@ export function analyzeProfile(binary, hitPath, objectDir, archives = []) {
   require(Number.isSafeInteger(total), 'sample total exceeds exact JavaScript integer range');
   const rows = functions.filter(fn => fn.instructions).sort((a, b) => b.instructions - a.instructions)
     .map(fn => ({ ...fn, percent: fn.instructions * 100 / total, opcodes: sorted(fn.opcodes) }));
+  hot.sort((a, b) => b.hits - a.hits);
   return { binary_sha256: digest(binary), instruction_count: length, bank_size: bank, entry,
     total, attributed, unattributed: total - attributed, functions: rows,
     spill_load_store: rows.reduce((sum, fn) => sum + fn.spill_load_store, 0),
     spill_with_address_setup: rows.reduce((sum, fn) => sum + fn.spill_with_address_setup, 0),
-    opcodes: sorted(opcodes), hot_instructions: hot.sort((a, b) => b.hits - a.hits).slice(0, 100) };
+    opcodes: sorted(opcodes), hot_instructions: hot.slice(0, 100),
+    hot_bitwise_instructions: hot.filter(row => ['AND', 'ANDI', 'OR', 'ORI', 'XOR', 'XORI'].includes(row.instruction[0])).slice(0, 100),
+    hot_shift_instructions: hot.filter(row => ['SLL', 'SLLI', 'SRL', 'SRLI'].includes(row.instruction[0])).slice(0, 100) };
 }
 
 export function benchmark(options = {}) {
@@ -158,6 +185,8 @@ export function benchmark(options = {}) {
     const rows = fs.readFileSync(path.join(out, 'timing/frames.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
     const guestFrames = frameRows(guestLog);
     require(rows.length === settings.frames && guestFrames.length === settings.frames, 'missing guest frame records');
+    require(rows.every(row => row.width === 320 / settings.sampleScale && row.height === 200 / settings.sampleScale),
+      'guest presentation dimensions do not match the selected resolution');
     Object.assign(result, { frames: rows, checks: [], binary_sha256: digest(binary), native_sha256: digest(native),
       script_sha256: digest(script), vm_library_sha256: digest(RLIB), disk_image: diskMetadata,
       wad_mode: settings.wadMode, bank_size: BANK, memory_cells: MEMORY, seed: 1,

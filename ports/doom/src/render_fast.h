@@ -5,7 +5,8 @@
 /* These leaf routines implement the ordinary C loops with the existing VM
  * instruction set. Pointers may cross banks; count is in 16-bit C bytes.
  * The port builds them only for Ripple, retaining upstream C for the native
- * reference. The framebuffer and patch-column stride is always 320. */
+ * reference. The logical indexed framebuffer row stride remains 320; sampled
+ * routines specify their source and destination steps below. */
 void Doom_ConvertRGB565(unsigned short *dest, const unsigned char *source,
                        const unsigned short *palette, unsigned int count);
 /* The Doom framebuffer contains decoded palette indices in 0..255. This
@@ -26,6 +27,10 @@ void Doom_CopyPatchColumnSampled(unsigned char *dest, const unsigned char *sourc
 /* Copy retained cells between non-overlapping sparse rows (or identical
  * pointers), advancing both pointers by scale cells per sample. */
 void Doom_CopySamples(unsigned char *dest, const unsigned char *source,
+                       unsigned int count, unsigned int scale);
+/* Fill only retained cells of a sparse row, advancing by scale (1, 2 or 4).
+ * Count <= 320; value is a C byte and the pointer may cross a bank. */
+void Doom_FillSamples(unsigned char *dest, unsigned int value,
                        unsigned int count, unsigned int scale);
 void Doom_DrawColumn(unsigned char *dest, const unsigned char *source,
                      const unsigned char *map, uint32_t frac, uint32_t step,

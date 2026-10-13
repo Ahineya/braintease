@@ -15,14 +15,20 @@ function run(command, args) {
 }
 let reference;
 let frames;
+const cc = process.env.CC || 'clang';
+const sdk = spawnSync(process.execPath, [path.join(port, 'tools/build-support.mjs'), 'native-flags', cc],
+  { encoding: 'utf8', timeout: 30000 });
+if (sdk.error || sdk.status !== 0) throw new Error(sdk.error?.message || sdk.stderr);
+const nativeFlags = sdk.stdout.trim();
+const sdkArgs = nativeFlags ? ['-isysroot', JSON.parse(nativeFlags.replace(/^-isysroot /, ''))] : [];
 for (const scale of [1, 2, 4]) {
   const exe = path.join(out, 'ui-sampling-' + scale), raw = exe + '.raw';
-  run(process.env.CC || 'cc', ['-std=c99', '-O2', '-ffunction-sections', '-fdata-sections',
+  run(cc, ['-std=c99', '-O2', '-fwrapv', ...sdkArgs, '-ffunction-sections', '-fdata-sections',
     process.platform === 'darwin' ? '-Wl,-dead_strip' : '-Wl,--gc-sections',
     '-DDOOM_PORT', '-DDOOM_RESOLUTION_SCALE=' + scale,
     '-I' + path.join(port, 'engine'), '-I' + path.join(port, 'src'),
     path.join(port, 'tests/ui_sampling.c'), path.join(port, 'engine/v_video.c'),
-    path.join(port, 'engine/f_finale.c'), '-lm', '-o', exe]);
+    path.join(port, 'engine/f_finale.c'), path.join(port, 'engine/r_draw.c'), '-lm', '-o', exe]);
   run(exe, [raw]);
   const actual = fs.readFileSync(raw);
   if (scale === 1) {
@@ -41,6 +47,12 @@ for (const scale of [1, 2, 4]) {
     const rejected = spawnSync(exe, [raw, 'unaligned'], { encoding: 'utf8', timeout: 30000 });
     if (rejected.error || rejected.status !== 89 || !rejected.stderr.includes('unaligned sampled screen copy'))
       throw new Error('Unaligned sparse copy was not rejected');
+    for (const name of ['column-x', 'column-y', 'column-low', 'translated-y', 'translated-low',
+      'fuzz-x', 'fuzz-low', 'span-x', 'span-y', 'span-low', 'span-order']) {
+      const guarded = spawnSync(exe, [raw, 'guard-' + name], { encoding: 'utf8', timeout: 30000 });
+      if (guarded.error || guarded.status !== 89 || !guarded.stderr.includes('R_DrawSampled'))
+        throw new Error('Malformed raster coordinates were not rejected: ' + name);
+    }
   }
 }
-console.log(`UI SAMPLING OK ${frames} cases at scales 1/2/4; exact retained pixels and untouched discarded cells`);
+console.log(`UI SAMPLING OK ${frames} cases at scales 1/2/4; exact retained pixels, untouched discarded cells, raster range guards`);

@@ -7,6 +7,10 @@
 ; Packed span addition intentionally includes carry between the two halves,
 ; exactly as the upstream 32-bit unsigned expression does.
 ; Source/colormap entries are decoded octets (0..255). Pointers are canonical.
+; Columns keep the integer position and step modulo128 once on entry. Their
+; per-pixel sum is at most127+127+1=255, so one subtraction replaces AND127.
+; This spends a few extra ordinary guest instructions to avoid bitwise work
+; on every pixel in the Brainfuck CPU, including negative/wrapping steps.
 ; Zero count performs no memory accesses through any supplied pointer.
 ; Clobbers A0-A3,T0-T7,RV0,RV1,SC; preserves all callee-saved registers.
 ; Common path has whole source and colormap tables in one bank. The fallback
@@ -14,18 +18,21 @@
 .code
 
 Doom_DrawColumn:
+    ADDI SC, SP, -7
+    LOAD T6, SB, SC
+    BEQ T6, R0, L_doom_raster_column_return
     LI RV1, 320
     BEQ R0, R0, L_doom_raster_column_entry
 
 ; Stride is the eighth stack word; position/step/count already select samples.
 ; Maximum supported stride is 1280, so a canonical offset cannot wrap 16 bits.
 Doom_DrawColumnStrided:
-    ADDI SC, SP, -8
-    LOAD RV1, SB, SC
-L_doom_raster_column_entry:
     ADDI SC, SP, -7
     LOAD T6, SB, SC
     BEQ T6, R0, L_doom_raster_column_return
+    ADDI SC, SP, -8
+    LOAD RV1, SB, SC
+L_doom_raster_column_entry:
     ADDI SC, SP, -1
     LOAD T0, SB, SC
     ADDI SC, SP, -2
@@ -38,6 +45,8 @@ L_doom_raster_column_entry:
     LOAD T4, SB, SC
     ADDI SC, SP, -6
     LOAD T5, SB, SC
+    ANDI T3, T3, 127
+    ANDI T5, T5, 127
     LI SC, -1
     BNE A1, SC, L_doom_raster_column_A1_stack
     ADD A1, GP, R0
@@ -73,8 +82,7 @@ L_doom_raster_column_T1_ready:
     SLTU SC, T0, SC
     BEQ SC, R0, L_doom_raster_column_split
 L_doom_raster_column_fast:
-    ANDI RV0, T3, 127
-    ADD RV0, A2, RV0
+    ADD RV0, A2, T3
     LOAD RV0, A3, RV0
     ADD RV0, T0, RV0
     LOAD RV0, T1, RV0
@@ -83,6 +91,11 @@ L_doom_raster_column_fast:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
+    ADDI RV0, T3, -128
+    SLT SC, RV0, R0
+    BNE SC, R0, column_normalized_0
+    ADD T3, RV0, R0
+column_normalized_0:
     ADD A0, A0, RV1
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_column_fast_next
@@ -93,8 +106,7 @@ L_doom_raster_column_fast_next:
     BNE T6, R0, L_doom_raster_column_fast
     JALR R0, RAB, RA
 L_doom_raster_column_split:
-    ANDI RV0, T3, 127
-    ADD RV0, A2, RV0
+    ADD RV0, A2, T3
     SLTU SC, RV0, A2
     BNE SC, R0, L_doom_raster_column_source_cross
     SLTU SC, RV0, T7
@@ -122,6 +134,11 @@ L_doom_raster_column_map_loaded:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
+    ADDI RV0, T3, -128
+    SLT SC, RV0, R0
+    BNE SC, R0, column_normalized_1
+    ADD T3, RV0, R0
+column_normalized_1:
     ADD A0, A0, RV1
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_column_split_next
@@ -135,18 +152,21 @@ L_doom_raster_column_return:
     JALR R0, RAB, RA
 
 Doom_DrawSpan:
+    ADDI SC, SP, -7
+    LOAD T6, SB, SC
+    BEQ T6, R0, L_doom_raster_span_return
     LI RV1, 1
     BEQ R0, R0, L_doom_raster_span_entry
 
 ; Stride is the eighth stack word; position/step/count already select samples.
 ; Maximum supported stride is 1280, so a canonical offset cannot wrap 16 bits.
 Doom_DrawSpanStrided:
-    ADDI SC, SP, -8
-    LOAD RV1, SB, SC
-L_doom_raster_span_entry:
     ADDI SC, SP, -7
     LOAD T6, SB, SC
     BEQ T6, R0, L_doom_raster_span_return
+    ADDI SC, SP, -8
+    LOAD RV1, SB, SC
+L_doom_raster_span_entry:
     ADDI SC, SP, -1
     LOAD T0, SB, SC
     ADDI SC, SP, -2
@@ -194,10 +214,12 @@ L_doom_raster_span_T1_ready:
     SLTU SC, T0, SC
     BEQ SC, R0, L_doom_raster_span_split
 L_doom_raster_span_fast:
-    SRLI RV0, T2, 4
-    ANDI RV0, RV0, 4032
+    ; Extract the six-bit row, then place it above the six-bit column.
+    SRLI RV0, T2, 10
+    SLLI RV0, RV0, 6
     SRLI SC, T3, 10
-    OR RV0, RV0, SC
+    ; Row occupies bits6..11; column occupies bits0..5.
+    ADD RV0, RV0, SC
     ADD RV0, A2, RV0
     LOAD RV0, A3, RV0
     ADD RV0, T0, RV0
@@ -217,10 +239,12 @@ L_doom_raster_span_fast_next:
     BNE T6, R0, L_doom_raster_span_fast
     JALR R0, RAB, RA
 L_doom_raster_span_split:
-    SRLI RV0, T2, 4
-    ANDI RV0, RV0, 4032
+    ; Extract the six-bit row, then place it above the six-bit column.
+    SRLI RV0, T2, 10
+    SLLI RV0, RV0, 6
     SRLI SC, T3, 10
-    OR RV0, RV0, SC
+    ; Row occupies bits6..11; column occupies bits0..5.
+    ADD RV0, RV0, SC
     ADD RV0, A2, RV0
     SLTU SC, RV0, A2
     BNE SC, R0, L_doom_raster_span_source_cross
@@ -279,6 +303,8 @@ Doom_DrawColumnLow:
     LOAD T4, SB, SC
     ADDI SC, SP, -6
     LOAD T5, SB, SC
+    ANDI T3, T3, 127
+    ANDI T5, T5, 127
     LI SC, -1
     BNE A1, SC, L_doom_raster_column_low_A1_stack
     ADD A1, GP, R0
@@ -314,8 +340,7 @@ L_doom_raster_column_low_T1_ready:
     SLTU SC, T0, SC
     BEQ SC, R0, L_doom_raster_column_low_split
 L_doom_raster_column_low_fast:
-    ANDI RV0, T3, 127
-    ADD RV0, A2, RV0
+    ADD RV0, A2, T3
     LOAD RV0, A3, RV0
     ADD RV0, T0, RV0
     LOAD RV0, T1, RV0
@@ -333,6 +358,11 @@ L_doom_raster_column_low_fast_pair:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
+    ADDI RV0, T3, -128
+    SLT SC, RV0, R0
+    BNE SC, R0, column_normalized_2
+    ADD T3, RV0, R0
+column_normalized_2:
     ADDI A0, A0, 319
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_column_low_fast_next
@@ -343,8 +373,7 @@ L_doom_raster_column_low_fast_next:
     BNE T6, R0, L_doom_raster_column_low_fast
     JALR R0, RAB, RA
 L_doom_raster_column_low_split:
-    ANDI RV0, T3, 127
-    ADD RV0, A2, RV0
+    ADD RV0, A2, T3
     SLTU SC, RV0, A2
     BNE SC, R0, L_doom_raster_column_low_source_cross
     SLTU SC, RV0, T7
@@ -381,6 +410,11 @@ L_doom_raster_column_low_split_pair:
     SLTU RV0, T2, T4
     ADD T3, T3, T5
     ADD T3, T3, RV0
+    ADDI RV0, T3, -128
+    SLT SC, RV0, R0
+    BNE SC, R0, column_normalized_3
+    ADD T3, RV0, R0
+column_normalized_3:
     ADDI A0, A0, 319
     SLTU SC, A0, T7
     BNE SC, R0, L_doom_raster_column_low_split_next
@@ -444,10 +478,12 @@ L_doom_raster_span_low_T1_ready:
     SLTU SC, T0, SC
     BEQ SC, R0, L_doom_raster_span_low_split
 L_doom_raster_span_low_fast:
-    SRLI RV0, T2, 4
-    ANDI RV0, RV0, 4032
+    ; Extract the six-bit row, then place it above the six-bit column.
+    SRLI RV0, T2, 10
+    SLLI RV0, RV0, 6
     SRLI SC, T3, 10
-    OR RV0, RV0, SC
+    ; Row occupies bits6..11; column occupies bits0..5.
+    ADD RV0, RV0, SC
     ADD RV0, A2, RV0
     LOAD RV0, A3, RV0
     ADD RV0, T0, RV0
@@ -476,10 +512,12 @@ L_doom_raster_span_low_fast_next:
     BNE T6, R0, L_doom_raster_span_low_fast
     JALR R0, RAB, RA
 L_doom_raster_span_low_split:
-    SRLI RV0, T2, 4
-    ANDI RV0, RV0, 4032
+    ; Extract the six-bit row, then place it above the six-bit column.
+    SRLI RV0, T2, 10
+    SLLI RV0, RV0, 6
     SRLI SC, T3, 10
-    OR RV0, RV0, SC
+    ; Row occupies bits6..11; column occupies bits0..5.
+    ADD RV0, RV0, SC
     ADD RV0, A2, RV0
     SLTU SC, RV0, A2
     BNE SC, R0, L_doom_raster_span_low_source_cross

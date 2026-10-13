@@ -5,7 +5,7 @@ existing VM instruction set. This directory contains the engine, platform code,
 build rules, shareware WAD and regression fixtures. No external Doom checkout,
 patch application, Python installation or source-fetch step is required.
 
-Current scope: single-player Doom at 320×200 RGB565, keyboard controls, 35 Hz
+Current scope: single-player Doom at 320×200 RGB565 by default, keyboard controls, 35 Hz
 logical simulation ticks and silent audio. Development and tests use the Rust
 VM. An experimental Brainfuck launcher uses the same port and guest ISA;
 the regular port tests do not run it.
@@ -34,6 +34,8 @@ ports/doom/run.sh --scene e1m1              # start directly in the first level
 ports/doom/run.sh --scene menu              # show the main menu using a short input replay
 ports/doom/run.sh --scene demo1             # play the IWAD's first demo immediately
 ports/doom/run.sh --scene e1m1 --low-detail # half-width world rendering
+ports/doom/run.sh --scene e1m1 --half-resolution # 160x100, one sample per 2x2 block
+ports/doom/run.sh --scene e1m1 --quarter-resolution # 80x50, one sample per 4x4 block
 ports/doom/run.sh --scene e1m1 --headless   # capture one frame and stop
 ports/doom/run.sh --build-only
 ```
@@ -54,6 +56,112 @@ Outputs are under `build/ripple/engine/` and `build/native/engine/`. Set
 Set `DOOM_BUILD=/absolute/output/directory` when launching or invoking the Node
 test tools directly. Build settings and tool/source changes invalidate the
 affected outputs.
+
+### Run flags at a glance
+
+Use `ports/doom/run.sh` for the Rust VM or `scripts/run-bf-doom.sh` for
+Brainfuck. Both accept the following flags:
+
+| Flag | Purpose |
+| --- | --- |
+| `--scene title\|menu\|e1m1\|demo1` | Select startup; default is title |
+| `--low-detail` | Doom's coarser horizontal world rendering |
+| `--half-resolution`, `--quarter-resolution` | Render 160×100 or 80×50; choose one |
+| `--wad FILE` | Original source IWAD |
+| `--wad-mode packed\|expanded\|cooked` | Asset storage; default is cooked |
+| `--asset-validation preflight\|guest` | Build-time checks or extra guest checks |
+| `--build-only`, `--jobs N` | Build without running; compilation parallelism |
+| `--headless`, `--output DIR` | No window; output directory |
+| `--input-script FILE` | Deterministic keyboard replay |
+| `--clock paced\|unthrottled\|stepped` | Logical clock policy |
+| `--timeout SECONDS`, `--max-instructions N` | Execution limits; Rust launcher applies these only in headless mode |
+| `--help` | Launcher reference |
+
+The Rust launcher also accepts `--frame N` for headless capture (default 1).
+It uses paced time with a window, unthrottled time headlessly, and a 300-second
+headless timeout. The BF launcher defaults to a window, unthrottled time and
+**no timeout**. Its additional host flags are:
+
+| Flag | Purpose |
+| --- | --- |
+| `--visual` | Explicitly request a window |
+| `--telemetry-lite` | Dot every 5 seconds; counts/rates every 30 seconds |
+| `--telemetry`, `--telemetry-interval SECONDS` | Detailed progress; cannot combine with lite |
+| `--save-state FILE`, `--save-at-frame N` | Save on exit, optionally stop at a chosen frame |
+| `--load-state FILE` | Resume the matching saved build and disk |
+| `--input-script-relative` | Schedule replay ticks relative to the restored tick |
+| `--screenshot FILE`, `--raw-frame FILE` | Save PNG or raw RGB565 output |
+| `--capture-frame N`, `--expect-frame FILE` | Stop at a frame; optionally compare raw pixels |
+| `--report FILE`, `--profile FILE` | Execution report or slower diagnostic profiling |
+| `--max-dispatches N`, `--max-ticks N` | Additional execution limits |
+| `--seed N`, `--tick-hz N` | Device seed and clock rate; Doom requires 35 Hz |
+| `--control-stdin` | Accept automation commands, including stepped-clock grants |
+| `--no-optimize`, `--exit-code` | Disable BF optimization; propagate guest exit status |
+| `--terminal`, `--tty-stdin`, `--input TEXT`, `--text-frame FILE` | Generic host terminal/text options |
+
+`target/release/rbf --help` gives the complete host syntax. The Doom wrapper
+manages `--disk` and `--max-tape-cells`. `DOOM_BUILD=/absolute/directory` selects
+a separate build tree. Restore with the original build and output directory;
+omit build settings such as resolution/detail/WAD flags on restore.
+
+### Half and quarter resolution
+
+Both launchers accept `--half-resolution` (160×100) and `--quarter-resolution`
+(80×50). They are mutually exclusive. The normal mode remains 320×200; direct
+Make builds use `RESOLUTION_SCALE=1`, `2` or `4`.
+
+```sh
+scripts/run-bf-doom.sh --quarter-resolution --scene menu --telemetry-lite \
+  --save-state ports/doom/build/run-bf/menu-quarter.state --save-at-frame 1
+scripts/run-bf-doom.sh --load-state ports/doom/build/run-bf/menu-quarter.state \
+  --telemetry-lite
+```
+
+Doom keeps its original projection, field of view and 320×200 UI coordinates.
+The drawing loops visit only the top-left sample of each 2×2 or 4×4 block:
+discarded columns are skipped before texture or patch fetching where possible,
+and row/texture steps advance directly to the next retained pixel. Conversion
+packs those samples into a smaller RGB565 buffer and the existing display API
+presents it at its actual dimensions. This avoids rendering a complete frame
+and resizing it afterward. Menus, status bar, automap and finale drawing use
+the same absolute sampling grid.
+
+The indexed backing buffers retain their logical 320-cell row stride, with
+unsampled cells unused. This keeps the prepared assets and renderer geometry
+compatible while eliminating the discarded pixel reads, shading and stores.
+Half resolution has 16,000 output pixels; quarter resolution has 4,000, versus
+64,000 normally. Game simulation, visibility/clipping and asset loading still
+run, so these pixel reductions are not promises of 4× or 16× overall speed.
+The invisibility fuzz effect deliberately uses adjacent retained rows instead
+of unavailable discarded neighbors. Other ordinary drawing is tested against
+top-left samples of the independent full-resolution native image.
+
+The existing `--low-detail`/F5 setting is independent and can be combined with
+either resolution. Changing resolution recompiles the guest and requires a new
+checkpoint. On restore, omit the resolution flag: the saved build already fixes
+it. Use separate `DOOM_BUILD` directories to retain multiple configurations.
+The VM, ISA, Brainfuck CPU and memory bank sizes are unchanged.
+
+With the bundled shareware WAD, a 22-frame replay covering movement, detail
+changes, view resizing, automap and menus measured the following guest work:
+
+| Measurement | 320×200 | 160×100 | 80×50 |
+| --- | ---: | ---: | ---: |
+| Median gameplay instructions/frame, excluding startup | 6,958,396 | 4,944,031 | 3,936,789 |
+| Startup through the first plain title presentation | 8,884,746 | 8,035,924 | 7,668,095 |
+
+The gameplay median falls by 29% and 43%. Initialization and asset loading are
+largely unchanged, so boot gains are smaller. These are guest instruction
+counts measured in the Rust VM, not BF wall-time predictions. Unchanged title
+and menu presentations retain the existing frame cache.
+
+`make test-resolution` checks all three modes against full-resolution native
+top-left samples: 213 title/menu, invalidation, gameplay and demo frames, with
+matching logical state and output dimensions. Separate fixtures check sparse
+UI writes, translated/invisibility drawing through RCC, bank boundaries and
+the assembly calling convention. A small compiled-C fixture exercising the
+sampled conversion, copy and fill routines also passed in BF under a 45-second
+limit; the resolution change does not require a full Doom BF test run.
 
 ### Asset storage
 
@@ -797,6 +905,7 @@ make -C ports/doom test-fixtures
 make -C ports/doom test-kernels
 make -C ports/doom test-gameplay
 make -C ports/doom test-presentation
+make -C ports/doom test-resolution
 ```
 
 The default `make test` compares title, menu-to-E1M1 and direct E1M1 output with
@@ -810,7 +919,7 @@ This caught a compiler bug that truncated wide `switch` selectors and prevented
 the automap's status-bar refresh. The selector now retains its promoted width;
 `./rct switch_wide_control` covers signed 32-bit and unsigned 32/64-bit dispatch.
 For direct invocation, use `node ports/doom/tools/test.mjs fixtures` (or
-`smoke`, `kernels`, `gameplay`, `presentation`). Add `--output DIR` to retain a separate run;
+`smoke`, `kernels`, `gameplay`, `presentation`, `resolution`). Add `--output DIR` to retain a separate run;
 `--help` lists limits and options.
 
 Test manifests identify the source WAD, storage mode, padded disk image,

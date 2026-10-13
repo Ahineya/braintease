@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "render_fast.h"
 
 #ifndef RIPPLE
@@ -41,6 +42,26 @@ void Doom_DrawSpanLow(unsigned char *dest, const unsigned char *source,
     while (count--) {
         dest[1] = dest[0] = map[source[((position >> 4) & 4032) | (position >> 26)]];
         dest += 2;
+        position += step;
+    }
+}
+void Doom_DrawColumnStrided(unsigned char *dest, const unsigned char *source,
+                            const unsigned char *map, uint32_t frac, uint32_t step,
+                            unsigned int count, unsigned int stride)
+{
+    while (count--) {
+        *dest = map[source[(frac >> 16) & 127]];
+        dest += stride;
+        frac += step;
+    }
+}
+void Doom_DrawSpanStrided(unsigned char *dest, const unsigned char *source,
+                          const unsigned char *map, uint32_t position, uint32_t step,
+                          unsigned int count, unsigned int stride)
+{
+    while (count--) {
+        *dest = map[source[((position >> 4) & 4032) | (position >> 26)]];
+        dest += stride;
         position += step;
     }
 }
@@ -113,6 +134,44 @@ static void check(unsigned char *dest, const unsigned char *source,
     }
 }
 
+
+/* Check retained samples and every discarded destination cell. These inputs
+ * cross source/map/destination banks and exercise 32-bit carry/wrap in both
+ * half/quarter raster strides, without ever executing the BF backend. */
+static void check_strided(unsigned char *dest, const unsigned char *source,
+                          const unsigned char *map, unsigned int span,
+                          unsigned int scale, uint32_t position, uint32_t step)
+{
+    unsigned char expected[50];
+    uint32_t cursor = position;
+    unsigned int i, stride = span ? scale : 320U * scale;
+    uint32_t offset, extent = (uint32_t)50 * stride;
+    memset(dest, 213, extent);
+    dest[-1] = 91;
+    dest[extent] = 37;
+    for (i = 0; i < 50; ++i) {
+        unsigned int spot = span ? ((cursor >> 4) & 4032UL) | (cursor >> 26)
+                                 : (cursor >> 16) & 127UL;
+        expected[i] = map[source[spot]];
+        cursor += step;
+    }
+    if (span) Doom_DrawSpanStrided(dest, source, map, position, step, 50, stride);
+    else Doom_DrawColumnStrided(dest, source, map, position, step, 50, stride);
+    for (i = 0, offset = 0; i < 50; ++i, offset += stride) {
+        unsigned int skipped;
+        if (dest[offset] != expected[i]) {
+            puts("RASTER strided sample mismatch"); exit(1);
+        }
+        for (skipped = 1; skipped < stride; ++skipped)
+            if (dest[offset + skipped] != 213) {
+                puts("RASTER discarded pixel written"); exit(1);
+            }
+    }
+    if (dest[-1] != 91 || dest[extent] != 37) {
+        puts("RASTER strided guard overwritten"); exit(1);
+    }
+}
+
 int main(void)
 {
     unsigned char *storage = malloc(192000UL);
@@ -128,11 +187,18 @@ int main(void)
     Doom_DrawSpan(NULL, NULL, NULL, 0, 0, 0);
     Doom_DrawColumnLow(NULL, NULL, NULL, 0, 0, 0);
     Doom_DrawSpanLow(NULL, NULL, NULL, 0, 0, 0);
+    Doom_DrawColumnStrided(NULL, NULL, NULL, 0, 0, 0, 1280);
+    Doom_DrawSpanStrided(NULL, NULL, NULL, 0, 0, 0, 4);
     for (placement = 0; placement < 8; ++placement) {
         unsigned char *source = at_offset(storage, placement & 1 ? 63950U : 200U);
         unsigned char *map = at_offset(colors, placement & 2 ? 63920U : 200U);
         unsigned char *dest = at_offset(screen, placement & 4 ? 63950U : 200U);
         fill(source, map);
+        check_strided(dest, source, map, 0, 2, 0xfffffff0UL, 0x032113feUL);
+        check_strided(dest, source, map, 0, 4, 0x81351002UL, 0xffefcdabUL);
+        check_strided(dest, source, map, 1, 2, 0xfffffff0UL, 0x032113feUL);
+        check_strided(dest, source, map, 1, 4, 0x81351002UL, 0xffefcdabUL);
+        calls += 4;
         for (sample = 0; sample < 32; ++sample) {
             uint32_t position = next_random(), step = next_random();
             unsigned int count = sample < 3 ? sample : 200;
@@ -156,6 +222,6 @@ int main(void)
         check(local_dest + 1, global_source, local_map, 1, 1, position, step, 200);
         calls += 4;
     }
-    printf("RASTER OK %u cases: columns, spans, both detail modes, split banks, tags, wraparound\n", calls);
+    printf("RASTER OK %u cases: columns, spans, both detail modes, sparse2/4, split banks, tags, wraparound\n", calls);
     return 0;
 }

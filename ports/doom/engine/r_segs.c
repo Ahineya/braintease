@@ -103,6 +103,11 @@ R_RenderMaskedSegRange
     column_t*	col;
     int		lightnum;
     int		texnum;
+#if DOOM_RESOLUTION_SCALE > 1
+    x1 += ((-(viewwindowx + (x1 << detailshift)))
+           & (DOOM_RESOLUTION_SCALE - 1)) >> detailshift;
+    if (x1 > x2) return;
+#endif
     
     // Calculate light table.
     // Use different light tables
@@ -129,10 +134,6 @@ R_RenderMaskedSegRange
 
     maskedtexturecol = ds->maskedtexturecol;
 
-#if DOOM_RESOLUTION_SCALE > 1
-    x1 += ((-(viewwindowx + (x1 << detailshift)))
-           & (DOOM_RESOLUTION_SCALE - 1)) >> detailshift;
-#endif
     rw_scalestep = ds->scalestep;		
     spryscale = ds->scale1 + (x1 - ds->x1)*rw_scalestep;
     mfloorclip = ds->sprbottomclip;
@@ -159,6 +160,13 @@ R_RenderMaskedSegRange
     // draw the columns
     for (dc_x = x1 ; dc_x <= x2 ; dc_x += DOOM_RESOLUTION_SCALE > 1 ? DOOM_RESOLUTION_SCALE >> detailshift : 1)
     {
+#if DOOM_RESOLUTION_SCALE > 1
+        /* No post can draw if even the entire clipping opening has no
+         * retained row. Avoid fetching a texture only to discard it. */
+        int first = mceilingclip[dc_x] + 1;
+        first += (-(first + viewwindowy)) & (DOOM_RESOLUTION_SCALE - 1);
+        if (first >= mfloorclip[dc_x]) maskedtexturecol[dc_x] = SHRT_MAX;
+#endif
 	// calculate lighting
 	if (maskedtexturecol[dc_x] != SHRT_MAX)
 	{
@@ -319,7 +327,8 @@ void R_RenderSegLoop (void)
             if (yl <= yh)
             {
 #if DOOM_RESOLUTION_SCALE > 1
-                if (sampled)
+                if (sampled && (int)yl + ((-((int)yl + viewwindowy))
+                    & (DOOM_RESOLUTION_SCALE - 1)) <= (int)yh)
                 {
 #endif
                 dc_yl = yl;
@@ -349,7 +358,8 @@ void R_RenderSegLoop (void)
 		if (mid >= yl)
 		{
 #if DOOM_RESOLUTION_SCALE > 1
-                    if (sampled)
+                    if (sampled && (int)yl + ((-((int)yl + viewwindowy))
+                        & (DOOM_RESOLUTION_SCALE - 1)) <= (int)mid)
                     {
 #endif
 		    dc_yl = yl;
@@ -385,7 +395,8 @@ void R_RenderSegLoop (void)
 		if (mid <= yh)
 		{
 #if DOOM_RESOLUTION_SCALE > 1
-                    if (sampled)
+                    if (sampled && (int)mid + ((-((int)mid + viewwindowy))
+                        & (DOOM_RESOLUTION_SCALE - 1)) <= (int)yh)
                     {
 #endif
 		    dc_yl = mid;

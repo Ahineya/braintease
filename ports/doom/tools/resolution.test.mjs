@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { sampleReference } from './benchmark.mjs';
 
 const port = fileURLToPath(new URL('../', import.meta.url));
-function command(executable, args) {
-  const result = spawnSync(executable, args, { cwd: port, encoding: 'utf8', timeout: 10000 });
+function command(executable, args, env = process.env) {
+  const result = spawnSync(executable, args, { cwd: port, encoding: 'utf8', timeout: 10000, env });
   assert.ifError(result.error);
   return result;
 }
@@ -60,6 +60,25 @@ test('launchers reject conflicting resolution flags before any build', () => {
       assert.equal(result.status, 2);
       assert.match(result.stderr, /resolution flags cannot be combined/);
     }
+  }
+});
+
+test('both launchers pass the selected scale to Make, independently of low detail', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'doom-resolution-options-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(directory, 'cargo'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(directory, 'make'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$DOOM_TEST_BUILD_ARGS"\n', { mode: 0o755 });
+  const argumentsFile = path.join(directory, 'arguments');
+  const env = { ...process.env, PATH: directory + path.delimiter + process.env.PATH,
+    DOOM_TEST_BUILD_ARGS: argumentsFile };
+  for (const launcher of ['run.sh', 'run-bf.sh']) for (const [scale, flags] of [
+    [1, []], [2, ['--half-resolution']], [4, ['--quarter-resolution', '--low-detail']],
+  ]) {
+    const result = command('bash', [launcher, ...flags, '--build-only'], env);
+    assert.equal(result.status, 0, result.stderr);
+    const args = fs.readFileSync(argumentsFile, 'utf8').trim().split('\n');
+    assert.ok(args.includes('RESOLUTION_SCALE=' + scale));
+    assert.ok(args.includes('LOW_DETAIL=' + Number(scale === 4)));
   }
 });
 

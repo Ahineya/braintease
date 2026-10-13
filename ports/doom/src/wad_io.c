@@ -27,7 +27,8 @@ int wad_u16(const WadOctet *bytes, uint32_t length, uint32_t offset, uint16_t *o
     bytes += offset;
     lo = (uint16_t)*bytes++ & 255U;
     hi = (uint16_t)*bytes & 255U;
-    *out = lo | (hi << 8);
+    /* Octet/word fields are disjoint, so addition cannot carry between them. */
+    *out = lo + (hi << 8);
     return 1;
 }
 
@@ -39,10 +40,10 @@ int wad_u32(const WadOctet *bytes, uint32_t length, uint32_t offset, uint32_t *o
      * nested calls and repeated 32-bit indexing on the 16-bit guest. */
     bytes += offset;
     lo = (uint16_t)*bytes++ & 255U;
-    lo |= ((uint16_t)*bytes++ & 255U) << 8;
+    lo += ((uint16_t)*bytes++ & 255U) << 8;
     hi = (uint16_t)*bytes++ & 255U;
-    hi |= ((uint16_t)*bytes & 255U) << 8;
-    *out = (uint32_t)lo | ((uint32_t)hi << 16);
+    hi += ((uint16_t)*bytes & 255U) << 8;
+    *out = (uint32_t)lo + ((uint32_t)hi << 16);
     return 1;
 }
 
@@ -56,10 +57,19 @@ int wad_read_words(WadFile *wad, uint32_t offset, uint16_t *dest, uint32_t count
     /* Disk addresses count words. Split at each 32,768-word block boundary;
      * the leaf handles RAM boundaries without any per-word bit operations. */
     while (count != 0) {
-        uint16_t within = (uint16_t)offset & 32767U;
-        uint16_t chunk = 32768U - within;
+        uint16_t within = (uint16_t)offset;
+        uint16_t block = (uint16_t)(offset >> 16);
+        uint16_t chunk;
+        /* Split the low word without a mask or a cross-word shift. The asset
+         * range bounds a nonempty read below the 2^31-word storage limit. */
+        block += block;
+        if (within >= 32768U) {
+            within -= 32768U;
+            ++block;
+        }
+        chunk = 32768U - within;
         if ((uint32_t)chunk > count) chunk = (uint16_t)count;
-        mmio_write(MMIO_STORE_BLOCK, (uint16_t)(offset >> 15));
+        mmio_write(MMIO_STORE_BLOCK, block);
         mmio_write(MMIO_STORE_ADDR, within);
         dest = Doom_ReadStorageWords(dest, chunk);
         offset += chunk;
@@ -77,7 +87,7 @@ int wad_read_words(WadFile *wad, uint32_t offset, uint16_t *dest, uint32_t count
         int lo = fgetc((FILE *)wad->asset_file);
         int hi = fgetc((FILE *)wad->asset_file);
         if (lo == EOF || hi == EOF) return wad_fail(wad, "short asset read");
-        *dest++ = (uint16_t)((unsigned int)lo | ((unsigned int)hi << 8));
+        *dest++ = (uint16_t)((unsigned int)lo + ((unsigned int)hi << 8));
         --count;
     }
 #endif
@@ -115,13 +125,13 @@ int wad_read(WadFile *wad, uint32_t offset, WadOctet *dest, uint32_t count) {
         count -= chunk;
         if (within & 1U) {
             word = mmio_read(MMIO_STORE_DATA);
-            *dest++ = (WadOctet)((word >> 8) & 255U);
+            *dest++ = (WadOctet)(word >> 8);
             --chunk;
         }
         while (chunk >= 2U) {
             word = mmio_read(MMIO_STORE_DATA);
             *dest++ = (WadOctet)(word & 255U);
-            *dest++ = (WadOctet)((word >> 8) & 255U);
+            *dest++ = (WadOctet)(word >> 8);
             chunk -= 2U;
         }
         if (chunk != 0) *dest++ = (WadOctet)(mmio_read(MMIO_STORE_DATA) & 255U);
@@ -390,7 +400,7 @@ int wad_decode_patch(const WadOctet *bytes, uint32_t length,
 }
 
 uint16_t wad_rgb565(WadOctet red, WadOctet green, WadOctet blue) {
-    return (((uint16_t)red & 248U) << 8) |
-           (((uint16_t)green & 252U) << 3) |
+    return (((uint16_t)red & 248U) << 8) +
+           (((uint16_t)green & 252U) << 3) +
            (((uint16_t)blue & 255U) >> 3);
 }

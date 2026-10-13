@@ -1,10 +1,31 @@
 # rOS (DOS-like Ripple OS)
 
-Launch:
+Build and launch from the repository root:
 
 ```bash
-rvm bios.bin --disk disks/ros.img
+scripts/run-ros.sh
 ```
+
+This checks the release toolchain, builds the BIOS and, on first launch, the
+separate OS images and FAT16 disk in `build/ros`, then boots the Rust VM in the
+terminal. At the `C:\>` prompt, try `HELP`, `DIR`, `HELLO`, and `EXIT`.
+The disk is preserved between launches. Use `--fresh` to rebuild the OS images
+and reset the default disk, erasing its existing files. `--disk PATH` boots an
+existing rOS image without rebuilding that disk and cannot be combined with
+`--fresh`. `ROS_BUILD` selects another build directory.
+
+```bash
+scripts/run-ros.sh --build-only
+scripts/run-ros.sh --fresh
+scripts/run-ros.sh --headless --input $'DIR\nHELLO\nEXIT\n' --timeout 30
+scripts/run-ros.sh --disk disks/ros.img
+```
+
+Additional options pass through to `rvm`, such as `--frequency 2MHz` or `--tui`.
+The equivalent direct VM invocation after a default build is
+`target/release/rvm build/ros/bios.bin --disk build/ros/ros.img`.
+This OS uses interrupts and writable instruction memory, so it currently runs
+on the Rust VM rather than the Brainfuck host.
 
 `rvm` is CPU + MMIO only. It never contains BIOS, kernel, or FAT code. `bios.bin` is a normal RLINK image loaded into IMEM bank 0.
 

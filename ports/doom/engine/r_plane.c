@@ -449,7 +449,12 @@ void R_DrawPlanes (void)
 		dc_yl = pl->top[x];
 		dc_yh = pl->bottom[x];
 
-		if (dc_yl <= dc_yh)
+		if (dc_yl <= dc_yh
+#if DOOM_RESOLUTION_SCALE > 1
+                    && dc_yl + ((-(dc_yl + viewwindowy))
+                       & (DOOM_RESOLUTION_SCALE - 1)) <= dc_yh
+#endif
+                )
 		{
 		    angle = (viewangle + xtoviewangle[x])>>ANGLETOSKYSHIFT;
 		    dc_x = x;

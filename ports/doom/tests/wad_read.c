@@ -72,6 +72,24 @@ static void check_decoders(void)
     check(!wad_u32(octets, 5UL, UINT32_MAX, &wide), "32-bit offset wrap");
     check(wad_range(UINT32_MAX, UINT32_MAX, 0UL), "empty maximum range");
     check(!wad_range(UINT32_MAX, UINT32_MAX - 1UL, 3UL), "range sum wrap");
+    octets[1] = octets[2] = octets[3] = octets[4] = (WadOctet)0xffffU;
+    check(wad_u16(octets, 5UL, 1UL, &narrow) && narrow == 65535U,
+          "full narrow disjoint fields");
+    check(wad_u32(octets, 5UL, 1UL, &wide) && wide == UINT32_MAX,
+          "full wide disjoint fields");
+    {
+        static const uint16_t values[8] = {0, 1, 7, 31, 128, 255, 0xab12U, 0xffffU};
+        uint16_t r, g, b;
+        for (r = 0; r < 8; ++r) for (g = 0; g < 8; ++g) for (b = 0; b < 8; ++b) {
+            /* Independent arithmetic oracle: truncate octets, then quantize
+             * each channel and place it in its non-overlapping field. */
+            uint16_t expected = ((values[r] % 256U) / 8U) * 2048U
+                              + ((values[g] % 256U) / 4U) * 32U
+                              + (values[b] % 256U) / 8U;
+            check(wad_rgb565((WadOctet)values[r], (WadOctet)values[g], (WadOctet)values[b]) == expected,
+                  "RGB565 disjoint fields");
+        }
+    }
 }
 
 #ifndef WAD_READ_SMALL

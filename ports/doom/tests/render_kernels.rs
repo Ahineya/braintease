@@ -109,6 +109,87 @@ fn main() {
             reports.push(format!("{{\"case\":\"patch_{layout}_{count}\",\"pixels\":{count},\"instructions\":{steps}}}"));
         }
     }
+    for scale in [1u16, 2, 4] {
+        for (layout, dst) in [(0,7),(63999,7),(63841,7),(10000,65535),(5000,65534)].into_iter().enumerate() {
+            for count in [0u16,1,2,3,4,5,7,19,80,159,160,320] {
+                for value in [0u16,243,0xa5a5] {
+                    let mut vm = machine(&binary,&disk);
+                    let d = physical(dst.0,dst.1);
+                    let end = d + count as usize * scale as usize + 1;
+                    vm.memory[d-1..end].fill(SENTINEL);
+                    let steps = invoke(&mut vm,"Doom_FillSamples",dst,(value,count),&[scale]);
+                    for i in d-1..end {
+                        let expected = if i >= d && (i-d)%scale as usize == 0 && (i-d)/ (scale as usize) < count as usize {
+                            value
+                        } else {SENTINEL};
+                        assert_eq!(vm.memory[i],expected,"fill scale {scale} layout {layout} count {count} cell {i}");
+                    }
+                    assert!(steps < 2000,"sampled fill instruction budget");
+                    if count == 320 && layout != 1 && layout != 2 {
+                        assert!(steps < 850,"sampled fill contiguous-bank hot path regressed");
+                    }
+                    if count == 0 {assert!(steps <= 3,"empty fill did more than return");}
+                    reports.push(format!("{{\"case\":\"fill_sample_{scale}_{layout}_{count}_{value}\",\"instructions\":{steps}}}"));
+                }
+            }
+        }
+        for (layout, (dst,src,palette)) in [
+            ((100,7),(123,5),(80,3)),
+            ((63999,7),(63999,5),(63999,3)),
+            ((63841,7),(63681,5),(63744,3)),
+            ((10000,65535),(5000,65534),(63880,3)),
+            ((10000,7),(5000,5),(63800,65535)),
+        ].into_iter().enumerate() {
+            for count in [0u16,1,2,3,4,5,7,19,80,159,160,320] {
+                let mut vm = machine(&binary,&disk);
+                let d = physical(dst.0,dst.1); let s = physical(src.0,src.1);
+                let p = physical(palette.0,palette.1);
+                let colors: Vec<_> = (0u16..256).map(|v| v.wrapping_mul(197)^0xc79e).collect();
+                vm.memory[p..p+256].copy_from_slice(&colors);
+                // Poison discarded cells with invalid indices: reading them
+                // cannot accidentally look like a correct converted sample.
+                vm.memory[s..s+count as usize*scale as usize+1].fill(SENTINEL);
+                for i in 0..count as usize { vm.memory[s+i*scale as usize] = ((i*73+19)&255) as u16; }
+                vm.memory[d-1..d+count as usize+1].fill(SENTINEL);
+                let source_before = vm.memory[s..s+count as usize*scale as usize+1].to_vec();
+                let steps = invoke(&mut vm,"Doom_ConvertRGB565SampledRow",dst,src,&[palette.0,palette.1,count,scale]);
+                for i in 0..count as usize { assert_eq!(vm.memory[d+i],colors[(i*73+19)&255]); }
+                assert_eq!(vm.memory[d-1],SENTINEL); assert_eq!(vm.memory[d+count as usize],SENTINEL);
+                assert_eq!(&vm.memory[s..s+source_before.len()],source_before.as_slice());
+                assert!(steps < 6000,"sampled row conversion instruction budget");
+                reports.push(format!("{{\"case\":\"rgb_sample_{scale}_{layout}_{count}\",\"instructions\":{steps}}}"));
+            }
+        }
+        for kernel in ["Doom_CopySamples", "Doom_CopyPatchColumnSampled"] {
+            let stride = scale as usize * if kernel.contains("Patch") {320} else {1};
+            for (layout,(dst,src)) in [((100,7),(120,5)),((63900,7),(63999,5)),
+                                      ((63681,7),(63990,5)),((10000,65535),(5000,65534))].into_iter().enumerate() {
+                for count in [0u16,1,2,3,19,127,200,255] {
+                    if layout == 3 && count > 19 {continue;}
+                    let mut vm = machine(&binary,&disk);
+                    let d = physical(dst.0,dst.1); let s = physical(src.0,src.1);
+                    let end = d + count as usize * stride + 1;
+                    vm.memory[d-1..end].fill(SENTINEL);
+                    vm.memory[s..s+count as usize*scale as usize+1].fill(0xbeef);
+                    for i in 0..count as usize {vm.memory[s+i*scale as usize]=(i*73+19) as u16;}
+                    let source_before = vm.memory[s..s+count as usize*scale as usize+1].to_vec();
+                    let steps = invoke(&mut vm,kernel,dst,src,&[count,scale]);
+                    for i in d-1..end {
+                        let expected = if i >= d && (i-d)%stride == 0 && (i-d)/stride < count as usize {
+                            (((i-d)/stride)*73+19) as u16
+                        } else {SENTINEL};
+                        assert_eq!(vm.memory[i],expected,"{kernel} scale {scale} layout {layout} count {count} cell {i}");
+                    }
+                    assert_eq!(&vm.memory[s..s+source_before.len()],source_before.as_slice());
+                    assert!(steps < 4000,"sampled copy instruction budget");
+                    reports.push(format!("{{\"case\":\"{kernel}_{scale}_{layout}_{count}\",\"instructions\":{steps}}}"));
+                }
+            }
+        }
+    }
+    // A zero count must not even normalize or dereference a bogus pointer.
+    let mut vm = machine(&binary,&disk);
+    assert!(invoke(&mut vm,"Doom_FillSamples",(65535,65000),(0,0),&[]) <= 3);
     let report = format!("{{\"success\":true,\"bank_size\":64000,\"cases\":[{}]}}\n",reports.join(","));
     fs::write(root.join("kernel-results.json"),&report).unwrap();
     println!("Render kernels: {} cases passed (pixels, guards, bank tags, C ABI, saved registers and instruction budgets)",reports.len());

@@ -21,17 +21,22 @@ void Doom_ConvertRGB565SampledRow(unsigned short *dest, const unsigned char *sou
                                  const unsigned short *palette, unsigned int count,
                                  unsigned int scale)
 {
-    while (count--) { *dest++ = palette[*source]; source += scale; }
+    while (count) { *dest = palette[*source]; if (--count) { ++dest; source += scale; } }
 }
 void Doom_CopyPatchColumnSampled(unsigned char *dest, const unsigned char *source,
                                  unsigned int count, unsigned int scale)
 {
-    while (count--) { *dest = *source; source += scale; dest += 320 * scale; }
+    while (count) { *dest = *source; if (--count) { source += scale; dest += 320 * scale; } }
 }
 void Doom_CopySamples(unsigned char *dest, const unsigned char *source,
                        unsigned int count, unsigned int scale)
 {
-    while (count--) { *dest = *source; source += scale; dest += scale; }
+    while (count) { *dest = *source; if (--count) { source += scale; dest += scale; } }
+}
+void Doom_FillSamples(unsigned char *dest, unsigned int value,
+                       unsigned int count, unsigned int scale)
+{
+    while (count) { *dest = value; if (--count) dest += scale; }
 }
 #endif
 static unsigned short global_palette[256];
@@ -42,6 +47,7 @@ int main(void)
 {
     unsigned short destination[19];
     unsigned char column_source[3];
+    unsigned char fill_destination[19];
     unsigned int i;
     for (i = 0; i < 256; ++i) global_palette[i] = i * 257U;
     for (i = 0; i < 19; ++i) global_source[i] = i * 7U;
@@ -64,5 +70,13 @@ int main(void)
         if (global_column[i * 320] != column_source[i]) return 2;
     Doom_CopyPatchColumnSampled(global_column, column_source, 2, 2);
     if (global_column[0] != column_source[0] || global_column[640] != column_source[2]) return 6;
+    for (i = 0; i < 19; ++i) fill_destination[i] = global_column[i] = 73;
+    Doom_FillSamples(fill_destination + 1, 231, 5, 4);
+    Doom_FillSamples(global_column + 2, 99, 8, 2);
+    for (i = 0; i < 19; ++i) {
+        if (fill_destination[i] != (i % 4 == 1 ? 231 : 73)) return 7;
+        if (global_column[i] != (i >= 2 && i <= 16 && i % 2 == 0 ? 99 : 73)) return 8;
+    }
+    Doom_FillSamples((unsigned char *)0, 0, 0, 4);
     return 0;
 }

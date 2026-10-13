@@ -238,6 +238,17 @@ function presentation() {
   buildProgram('engine');
 }
 function resolution() {
+  const ui = run('ui-sampling', [process.execPath, path.join(PORT, 'tests/ui_sampling.mjs'),
+    path.join(out, 'ui-sampling')], out, 120);
+  require(ui.startsWith('UI SAMPLING OK '), 'UI sampling fixture did not finish');
+  result.checks.push({ label: 'ui-sampling', output: ui });
+  const sampledDirectory = path.join(out, 'sampled-raster');
+  const sampled = run('sampled-raster', [process.execPath, path.join(PORT, 'tests/sampled_raster.mjs'),
+    sampledDirectory, wad], out, 2200);
+  const sampledReport = json(path.join(sampledDirectory, 'results.json'));
+  require(sampled.includes('SAMPLED RASTER CHECK OK scales 2/4;') && sampledReport.success === true,
+    'RCC sampled raster fixture did not finish');
+  result.checks.push({ label: 'sampled-raster', report: sampledReport });
   // Preserve the normal build and use one full-resolution native oracle for all
   // scales. A reduced native build would share sampling bugs with the guest.
   const referenceBuild = path.join(out, 'reference-build');
@@ -274,6 +285,9 @@ function resolution() {
   for (const scale of [2, 4]) require(reports.get(scale).frames.slice(1, 5).every((row, index) =>
     row.instructions < reports.get(1).frames[index + 1].instructions),
     'reduced world rendering must execute fewer guest instructions, not only resize the output');
+  for (const scale of [2, 4]) require(reports.get(scale).frames.slice(8, 10).every((row, index) =>
+    row.instructions < reports.get(1).frames[index + 8].instructions),
+    'reduced automap rendering must execute fewer guest instructions, including its sparse clear');
 }
 try {
   if (stage === 'all') { fixtures(); kernels(); smoke(); gameplay(); presentation(); resolution(); }
