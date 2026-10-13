@@ -7,6 +7,7 @@ scene=title
 detail=high
 wad="${DOOM_WAD:-$PORT/assets/doom1.wad}"
 wad_mode="${DOOM_WAD_MODE:-${WAD_MODE:-cooked}}"
+asset_validation="${DOOM_ASSET_VALIDATION:-preflight}"
 build="${DOOM_BUILD:-$PORT/build}"
 case "$build" in /*) ;; *) build="$PWD/$build";; esac
 out="$build/run"
@@ -25,6 +26,7 @@ Usage: ports/doom/run.sh [options]
   --low-detail            Faster, coarser world rendering; F5 also toggles it
   --wad FILE              Shareware WAD (default: assets/doom1.wad)
   --wad-mode MODE         packed, expanded or cooked (default: cooked)
+  --asset-validation MODE preflight (default), or guest for extra guest checks
   --build-only            Build without opening the VM
   --headless              Capture a frame without a window
   --frame N               Presentation to capture (default: 1)
@@ -44,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --low-detail) detail=low; shift;;
     --wad) value "$@"; wad="$2"; shift 2;;
     --wad-mode) value "$@"; wad_mode="$2"; shift 2;;
+    --asset-validation) value "$@"; asset_validation="$2"; shift 2;;
     --build-only) build_only=1; shift;;
     --headless) headless=1; shift;;
     --frame) value "$@"; frame="$2"; shift 2;;
@@ -59,6 +62,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ "$scene" == title || "$scene" == e1m1 ]] || fail 'scene must be title or e1m1'
 [[ "$wad_mode" == packed || "$wad_mode" == expanded || "$wad_mode" == cooked ]] || fail 'WAD mode must be packed, expanded or cooked'
+[[ "$asset_validation" == preflight || "$asset_validation" == guest ]] || fail 'asset validation must be preflight or guest'
 [[ -z "$clock" || "$clock" == paced || "$clock" == unthrottled || "$clock" == stepped ]] || fail 'clock must be paced, unthrottled or stepped'
 for numeric in "$frame" "$instructions" "$timeout" "$jobs"; do
   [[ "$numeric" =~ ^[1-9][0-9]*$ ]] || fail 'frame, instruction limit, timeout and jobs must be positive integers'
@@ -76,7 +80,7 @@ start_map=0
 low_detail=0
 [[ "$scene" == e1m1 ]] && start_map=1
 [[ "$detail" == low ]] && low_detail=1
-make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=ripple "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "START_MAP=$start_map" "LOW_DETAIL=$low_detail"
+make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=ripple "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "ASSET_VALIDATION=$asset_validation" "START_MAP=$start_map" "LOW_DETAIL=$low_detail"
 [[ "$build_only" == 0 ]] || exit 0
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"

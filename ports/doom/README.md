@@ -75,11 +75,39 @@ Native builds and the `packed`/`expanded` modes retain the original decoders.
 The texture section adds all ordered patch references, dimensions, width masks,
 fixed-point heights, column lump IDs and offsets, composite allocation sizes,
 and texture-name hash chains. Unlike WAD lump names, duplicate texture names
-keep the **first** definition. The guest checks the target ABI, section bounds,
-IDs and offsets in near-memory batches, resolves pointer references and creates
-the animation translation table. It skips raw `TEXTURE1`/`TEXTURE2` decoding,
+keep the **first** definition. The normal guest checks the target ABI, section
+and destination bounds, resolves pointer references and creates the animation
+translation table. Prepared patch references copy directly to their final
+storage; column mappings, width masks, heights and composite sizes load in one
+contiguous span. It skips raw `TEXTURE1`/`TEXTURE2` decoding,
 per-texture allocations and `R_GenerateLookup`. The shareware section contains
 125 textures, 598 patch references and 10,776 columns in 36,638 disk words.
+
+Detailed validation happens **when producing the repacked image**. An independent
+Node readback validator checks the serialized directory, hashes, PNAMES, every
+cooked patch and all texture tables against the embedded original WAD before
+the packer publishes the image. Its sidecar records the exact image, metadata
+and validator identities. An unchanged build reuses that checked artifact;
+changing the source, packer, validator or cached bytes triggers regeneration.
+Staging retains the existing image identity check against the build manifest,
+without repeating semantic validation. Neither `rbf` nor `rvm` knows anything
+about Doom asset formats or validation.
+
+`make prepare` produces the checked asset without starting a VM. The standalone
+packer can also produce an image and validation sidecar, with any output name:
+
+```sh
+make -C ports/doom prepare
+node ports/doom/tools/assets-pack.mjs ports/doom/assets/doom1.wad build/doom-cooked.wad cooked
+```
+
+This is Ripple's expanded/cooked disk format, not a replacement IWAD for other
+Doom engines. `--wad` still selects the original IWAD; the generated file is
+the VM's disk image. Use the artifact matching the guest's build manifest. The default
+`ASSET_VALIDATION=preflight` means build-time validation. Diagnostic builds can
+add the former per-texture, per-patch and per-column guest checks with
+`ASSET_VALIDATION=guest`, or `--asset-validation guest` on either launcher.
+Changing that policy invalidates existing objects and binary/BF exports.
 
 Every Doom `calloc` now uses the existing fast clearing routine on Ripple,
 including renderer buffers, patch-cache slots and tic data. Allocation sizes
@@ -181,8 +209,9 @@ by the guest. With the same WAD and title-start configuration:
 | Complete `R_Init` | 19,805,769 | 8,859,875 |
 | Startup through first title frame | 104,553,661 | 93,610,961 |
 
-Zone allocations inside texture initialization fall from 674 to one. Validation
-and pointer relocation still execute in the guest; pixel composites remain lazy.
+Zone allocations inside texture initialization fall from 674 to one. These
+initial v3 measurements included detailed guest validation and pointer relocation;
+pixel composites remain lazy.
 The texture stage reads 41,694 words instead of 31,452, trading somewhat more
 prepared data for 69.3% less guest instruction work. These are instruction
 measurements, not BF wall-time or first-frame estimates.
@@ -194,15 +223,43 @@ initialization and reference checks in the BF host in 16.92 seconds under a
 45-second limit, retaining 64,000-cell banks and 256 RAM banks. This validates
 the new path on BF; it is not a full Doom boot benchmark.
 
+Moving detailed validation to artifact production and bulk-loading the prepared
+tables further reduces work, without changing the v3 disk bytes:
+
+| Stage | Checked v3 guest instructions | Prepared-image loader instructions |
+| --- | ---: | ---: |
+| Texture initialization | 4,833,593 | 498,885 |
+| Complete `R_Init` | 8,859,875 | 4,549,057 |
+| Startup through first title frame | 93,610,961 | 89,299,153 |
+
+Texture initialization performs 89.7% fewer instructions; complete `R_Init`
+performs 48.7% fewer. Its patch-index read now happens when sprite initialization
+first needs it, so total disk words through `R_Init` remain unchanged. The full
+title-start reduction is 4.6%; these guest-work counts are not BF elapsed-time
+predictions. In this build textures start near guest instruction 2,067,779 and
+finish near 2,566,664; complete `R_Init` finishes near 6,527,425.
+
+Both loaders match the original-WAD texture oracle on shareware and the
+80,000-column fixture. All 37 texture mutations fail the native validator and
+checked guest, and six structural mutations also fail the fast guest's retained
+bounds checks. Title/menu/E1M1 captures and all 244 gameplay replay frames match
+native output. The small BF fixture also passes under a 45-second execution
+limit with the usual bank and memory sizes. No full Doom BF run was needed for
+this change; allocation, pointer relocation, lazy pixel composites and later
+game initialization still execute in the guest.
+
 To reproduce the bounded reader comparison:
 
 ```sh
 node ports/doom/tools/benchmark-wad-read.mjs --timeout 60 --samples 3
 ```
 
-`make -C ports/doom test-assets` checks packing and incremental mode changes,
+`make -C ports/doom test-assets` checks serialized artifact validation, packing,
+validation-policy changes and incremental storage-mode changes,
 all 32 header words and 15 malformed metadata cases in the guest, as well as
-the original-WAD texture oracle, 37 malformed texture metadata cases and the
+the original-WAD texture oracle in both fast and checked guest builds,
+37 malformed texture metadata cases rejected by the native validator and
+checked guest loader, and the
 independent asset oracle. The texture oracle checks every texture field, patch
 reference, column mapping and hash lookup using the original WAD. For a separate
 80,000-column fixture spanning several banks, run:
@@ -487,6 +544,7 @@ w_file_port.c         clock, keyboard, indexed frame -> RGB565
 | `src/*_fast.asm` | Guest assembly for fixed-point arithmetic, raster loops, patch/palette operations, memory copies, expanded storage reads and cooked metadata validation; ordinary Ripple instructions |
 | `tools/generate-data.mjs` | Turn canonical trig tables, 967 states and 137 object definitions into bounded heap-initializer functions |
 | `tools/assets-pack.mjs` | Validate the source WAD and generate expanded/cooked disk images and their manifests |
+| `tools/assets-validate.mjs` | Independently read back cooked assets before publication; compare serialized metadata and pictures with the original WAD |
 | `tests/`, `tools/` | Native/VM comparisons, independent asset and kernel oracles, captures and profiling |
 | `tests/titlepic/` | Earlier C/BFM title-screen fixtures; neither is the full game |
 

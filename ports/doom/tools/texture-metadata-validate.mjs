@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Compare cooked texture initialization with the original-WAD native oracle,
-// then exercise loader rejection before the oracle can inspect corrupt data.
+// Compare cooked texture initialization with the original-WAD native oracle.
+// Both the preflight-trusting and diagnostic guest loaders must agree with the
+// oracle. Corrupt images must fail native preflight and the diagnostic loader.
 // Every execution is bounded and uses the Rust VM; Brainfuck is never run.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { assertSeparateFile } from './assets-pack.mjs';
-import { ROOT, BUILD, WAD, RVM, BANK, MEMORY, commands, build, digest, hash,
+import { validateCookedAssets } from './assets-validate.mjs';
+import { PORT, ROOT, BUILD, WAD, RVM, BANK, MEMORY, commands, build, digest, hash,
   json, mkdir, prepareDisk, require, run, writeJSON } from './test-support.mjs';
 
 // More than one bank of columns and several banks of offset cells. Mixed
@@ -76,10 +78,37 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
     bank_size: BANK, memory_cells: MEMORY, limits: { seconds: timeout, instructions: maxInstructions },
     checks: [], commands };
   try {
-    if (!skipBuild) build('texture_metadata', out, { wad: source, wadMode: 'cooked', target: 'both' });
+    const strictBuild = path.join(BUILD, 'texture-metadata-guest-validation');
+    if (!skipBuild) {
+      build('texture_metadata', out, { wad: source, wadMode: 'cooked', target: 'both', assetValidation: 'preflight' });
+      build('texture_metadata', path.join(out, 'guest-build'), { wad: source, wadMode: 'cooked', target: 'ripple',
+        assetValidation: 'guest', buildDir: strictBuild });
+    }
     const binary = path.join(BUILD, 'ripple/texture_metadata/texture_metadata.bin');
+    const strictBinary = path.join(strictBuild, 'ripple/texture_metadata/texture_metadata.bin');
     const native = path.join(BUILD, 'native/texture_metadata/texture_metadata');
-    const binaryHash = digest(binary), nativeHash = digest(native);
+    const binaryHash = digest(binary), strictBinaryHash = digest(strictBinary), nativeHash = digest(native);
+    function checkBuild(buildDir, validation, selectedBinary) {
+      const manifest = json(path.join(buildDir, 'manifest.json'));
+      require(manifest.settings?.asset_validation === validation
+        && manifest.settings?.wad_mode === 'cooked' && manifest.wad?.sha256 === sourceHash,
+      validation + ': build manifest has a different WAD or validation policy; rebuild before testing');
+      // The manifest/header are shared between programs. Only a per-binary
+      // signature proves this executable was linked for the requested policy.
+      const key = run('config-key-' + validation, ['node', path.join(PORT, 'tools/build-support.mjs'),
+        'config-key', source, 'cooked', BANK, path.join(buildDir, 'generated'), validation], out).trim();
+      require(/^[0-9a-f]{64}$/.test(key)
+        && fs.readFileSync(selectedBinary + '.asset-config', 'utf8').trim() === key,
+      validation + ': executable has stale asset configuration; rebuild before testing');
+      if (validation === 'preflight')
+        require(fs.readFileSync(path.join(buildDir, 'native/texture_metadata/.asset-config'), 'utf8').trim() === key,
+          'native oracle has stale asset configuration; rebuild before testing');
+      return manifest;
+    }
+    const fastManifest = checkBuild(BUILD, 'preflight', binary);
+    const strictManifest = checkBuild(strictBuild, 'guest', strictBinary);
+    require(fastManifest.asset_image?.sha256 === strictManifest.asset_image?.sha256,
+      'preflight and guest builds use different cooked assets');
     const nativeOutput = run('native-original-wad', [native], out, timeout);
     const expected = nativeOutput.match(/^TEXTURE METADATA OK .+$/m)?.[0];
     require(expected && nativeOutput.includes('TEXTURE METADATA INITIALIZED'), 'native original-WAD oracle failed');
@@ -88,18 +117,21 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
     require(asset.format_version === 3 && asset.texture_words > 16 && asset.texture_count > 0,
       'texture validation requires cooked v3 textures');
     const original = fs.readFileSync(disk);
-    const working = assertSeparateFile(path.join(out, 'mutant.img'), [source, asset.prepared_path, disk, binary, native]);
-    result.binary = { path: binary, sha256: binaryHash };
+    const working = assertSeparateFile(path.join(out, 'mutant.img'), [source, asset.prepared_path, disk, binary, strictBinary, native]);
+    result.binary = { path: binary, sha256: binaryHash, asset_validation: 'preflight' };
+    result.strict_binary = { path: strictBinary, sha256: strictBinaryHash, asset_validation: 'guest' };
     result.native = { path: native, sha256: nativeHash, expected };
     result.asset_image = asset;
 
-    function runCase(label, image, corrupted = false, mutations = []) {
+    function runCase(label, image, corrupted = false, mutations = [], validation = 'guest') {
+      const selectedBinary = validation === 'guest' ? strictBinary : binary;
+      const selectedBinaryHash = validation === 'guest' ? strictBinaryHash : binaryHash;
       const selectedDisk = corrupted ? working : disk;
       if (corrupted) fs.writeFileSync(working, image);
       const imageHash = hash(image), reportPath = path.join(out, label + '.report.json');
       const stdoutPath = path.join(out, label + '.stdout.log'), stderrPath = path.join(out, label + '.stderr.log');
       fs.rmSync(reportPath, { force: true });
-      const command = [RVM, binary, '--bank-size', BANK, '--memory', MEMORY,
+      const command = [RVM, selectedBinary, '--bank-size', BANK, '--memory', MEMORY,
         '--headless', '--clock', 'unthrottled', '--seed', 1, '--disk', selectedDisk,
         '--timeout', timeout, '--max-instructions', maxInstructions,
         '--exit-code', '--report', reportPath].map(String);
@@ -116,7 +148,7 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
         record.seconds = (performance.now() - start) / 1000;
       }
       record.exit_code = execution.status; record.signal = execution.signal;
-      const check = { label, corrupted, mutations, disk_sha256: imageHash,
+      const check = { label, corrupted, mutations, asset_validation: validation, disk_sha256: imageHash,
         exit_code: execution.status, success: false };
       result.checks.push(check);
       require(!execution.error && execution.signal === null, label + ': host execution failed or timed out');
@@ -124,7 +156,7 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
       const report = json(reportPath); check.vm_report = report;
       require(report.success === true && report.stop_reason === 'halted',
         label + ': expected explicit guest exit, got ' + report.stop_reason);
-      require(report.binary_sha256 === binaryHash && report.disk_sha256 === imageHash
+      require(report.binary_sha256 === selectedBinaryHash && report.disk_sha256 === imageHash
         && report.bank_size === BANK && report.memory_cells === MEMORY, label + ': incorrect execution inputs');
       const stdout = fs.readFileSync(stdoutPath, 'utf8');
       if (corrupted) {
@@ -140,11 +172,13 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
       }
       require(digest(selectedDisk) === imageHash && digest(source) === sourceHash
         && digest(asset.prepared_path) === asset.sha256 && digest(binary) === binaryHash
-        && digest(native) === nativeHash, label + ': an execution input changed');
+        && digest(strictBinary) === strictBinaryHash && digest(native) === nativeHash,
+      label + ': an execution input changed');
       check.success = true;
+      return check;
     }
 
-    function mutate(label, changes) {
+    function mutate(label, changes, { strict = true, fast = false } = {}) {
       const image = Buffer.from(original);
       const mutations = changes.map(([word, value]) => {
         require(Number.isSafeInteger(word) && word >= 0 && word < asset.total_words, label + ': invalid mutation address');
@@ -153,7 +187,15 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
         return { word, before, after: value };
       });
       require(!image.equals(original), label + ': mutation did not change image');
-      runCase(label, image, true, mutations);
+      let diagnostic;
+      try { validateCookedAssets(image, asset); }
+      catch (error) { diagnostic = error.message; }
+      require(diagnostic?.startsWith('Invalid cooked assets: '),
+        label + ': native preflight did not reject corrupt input');
+      for (const policy of [...(strict ? ['guest'] : []), ...(fast ? ['preflight'] : [])]) {
+        const check = runCase(policy === 'guest' ? label : 'fast-' + label, image, true, mutations, policy);
+        check.native_preflight = { success: true, diagnostic };
+      }
     }
     const u32 = (word, value) => [[word, value & 65535], [word + 1, value >>> 16]];
     const header = asset.texture_word, definition = header + 16;
@@ -163,18 +205,23 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
     const heightBase = maskBase + asset.texture_count;
     const sizeBase = heightBase + asset.texture_count * 2;
     const headBase = sizeBase + asset.texture_count * 2;
-    runCase('valid', original);
-    console.log('PASS texture metadata: ' + expected + ' (native original WAD and cooked Rust VM)');
+    result.native_preflight = validateCookedAssets(original, asset);
+    runCase('valid-preflight', original, false, [], 'preflight');
+    runCase('valid-guest', original);
+    console.log('PASS texture metadata: ' + expected + ' (native original WAD, preflight loader and strict guest loader)');
     for (let i = 0; i < 16; ++i) {
       const at = header + i;
-      mutate('header-' + String(i).padStart(2, '0'), [[at, (original.readUInt16LE(at * 2) + 1) & 65535]]);
+      mutate('header-' + String(i).padStart(2, '0'), [[at, (original.readUInt16LE(at * 2) + 1) & 65535]], { fast: i === 0 });
     }
     for (const [label, offset, value] of [
       ['name-high', 0, 256], ['width-zero', 8, 0], ['width-negative', 8, 32768],
       ['height-zero', 9, 0], ['height-negative', 9, 32768], ['index', 10, 1],
       ['next-self', 11, 0], ['next-outside', 11, asset.texture_count], ['next-high', 12, 1],
       ['patchcount-zero', 13, 0], ['patchcount-negative', 13, 32768], ['patch-id', 16, asset.lump_count],
-    ]) mutate('definition-' + label, [[definition + offset, value]]);
+    ]) mutate('definition-' + label, [[definition + offset, value]], {
+      fast: ['width-zero', 'width-negative', 'patchcount-zero', 'patchcount-negative'].includes(label),
+    });
+    mutate('definition-patchcount-outside', [[definition + 13, 32767]], { strict: false, fast: true });
     mutate('column-lump-outside', [[lumpBase, asset.lump_count]]);
     mutate('column-lump-negative', [[lumpBase, 65534]]);
     mutate('column-offset-outside', u32(offsetBase, 0xffffffff));
@@ -189,8 +236,10 @@ export function validateTextureMetadata({ wad = WAD, output, timeout = 60,
     if (compositeColumn >= 0) mutate('composite-column-offset', u32(offsetBase + compositeColumn * 2, 65536));
     require(digest(disk) === asset.sha256, 'valid reference image changed');
     result.success = true;
-    console.log('PASS texture metadata: ' + (result.checks.length - 1)
-      + ' corruptions rejected before initialization completed; source WAD and cache unchanged');
+    console.log('PASS texture metadata: ' + result.checks.filter(check => check.corrupted && check.asset_validation === 'guest').length
+      + ' corruptions rejected by native preflight and strict guest loader; '
+      + result.checks.filter(check => check.corrupted && check.asset_validation === 'preflight').length
+      + ' structural cases rejected by fast loader; source WAD and cache unchanged');
     return result;
   } catch (error) {
     result.error = error.message;
@@ -211,7 +260,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     } });
     if (values.help) console.log('Usage: node tools/texture-metadata-validate.mjs [--wad FILE] [--output DIRECTORY]\n'
       + '  [--timeout SECONDS] [--max-instructions N] [--skip-build] [--synthetic]\n'
-      + 'Compares native and cooked renderer texture initialization, then rejects corrupted copied images.\n'
+      + 'Compares native, preflight and strict guest texture initialization, then rejects corrupted copied images.\n'
+      + '--skip-build requires matching preflight and separate strict guest build signatures.\n'
       + '--synthetic uses 80 textures and 80,000 columns to cross multiple memory banks.\n'
       + 'DOOM_BUILD selects an isolated build directory. All runs are bounded; no Brainfuck is executed.');
     else validateTextureMetadata({ wad: values.wad, output: values.output,

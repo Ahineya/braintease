@@ -7,6 +7,7 @@ import path from 'node:path';
 import { constants as bufferConstants } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { validateCookedAssets } from './assets-validate.mjs';
 
 export const ASSET_VERSION = 3;
 export const WAD_MODES = Object.freeze({ packed: 0, expanded: 1, cooked: 2 });
@@ -22,6 +23,17 @@ const TEXTURE_PATCH_WORDS = 3;
 const SECTOR_OCTETS = 65536;
 const MAX_DISK_WORDS = 0x80000000; // 65536 blocks, each containing 32768 words.
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const validatorHash = () => hash(fs.readFileSync(new URL('./assets-validate.mjs', import.meta.url)));
+function metadataHash(metadata) {
+  // Paths and generator bookkeeping are added only when the artifact is saved.
+  const fields = Object.keys(metadata).filter(key => !['validation', 'path', 'generator_sha256'].includes(key)).sort();
+  return hash(JSON.stringify(Object.fromEntries(fields.map(key => [key, metadata[key]]))));
+}
+export function hasCurrentAssetValidation(metadata) {
+  return metadata?.mode === 'cooked' && metadata.validation?.validator_sha256 === validatorHash()
+    && metadata.validation.image_sha256 === metadata.sha256
+    && metadata.validation.metadata_sha256 === metadataHash(metadata);
+}
 const demand = (condition, message) => { if (!condition) throw new Error(message); };
 export function checkMode(mode) {
   demand(Object.hasOwn(WAD_MODES, mode), 'WAD mode must be packed, expanded or cooked');
@@ -346,6 +358,14 @@ export function packAssets(source, mode = 'cooked') {
     }
   }
   Object.assign(metadata, { octets: image.length, padding_octets: image.length - payloadOctets, sha256: hash(image) });
+  // Validate serialized output before publishing the artifact. The guest and
+  // VM hosts never need to repeat this semantic readback. Cache hits reuse the
+  // result only for the exact image, source, layout and validator revision.
+  if (mode === 'cooked') {
+    const checked = validateCookedAssets(image, metadata);
+    metadata.validation = { ...checked, validator_sha256: validatorHash(),
+      image_sha256: metadata.sha256, metadata_sha256: metadataHash(metadata) };
+  }
   return { image, metadata };
 }
 
@@ -388,7 +408,8 @@ export function cachedAssets(sourcePath, destination, mode = 'cooked') {
     let cached;
     try { cached = JSON.parse(fs.readFileSync(sidecar, 'utf8')); } catch { /* Rebuild an incomplete cache. */ }
     if (cached?.mode === mode && cached.format_version === ASSET_VERSION && cached.source_sha256 === sourceHash
-        && cached.generator_sha256 === generatorHash && hash(fs.readFileSync(file)) === cached.sha256)
+        && cached.generator_sha256 === generatorHash && hash(fs.readFileSync(file)) === cached.sha256
+        && (mode !== 'cooked' || hasCurrentAssetValidation(cached)))
       return { ...cached, path: file };
   }
   const { image, metadata } = packAssets(source, mode);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { hasCurrentAssetValidation } from './assets-pack.mjs';
 
 export const PORT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const ROOT = path.dirname(path.dirname(PORT));
@@ -49,6 +50,7 @@ export function run(label, command, out, timeout = 120) {
   return fs.readFileSync(stdout, 'utf8');
 }
 export const WAD_MODES = ['packed', 'expanded', 'cooked'];
+export const ASSET_VALIDATIONS = ['preflight', 'guest'];
 export function prepareDisk(wad, disk, { wadMode = 'packed', manifest } = {}) {
   require(WAD_MODES.includes(wadMode), 'unknown WAD storage mode: ' + wadMode);
   const source = fs.realpathSync(wad);
@@ -68,6 +70,8 @@ export function prepareDisk(wad, disk, { wadMode = 'packed', manifest } = {}) {
     const assetPath = fs.realpathSync(asset.path), image = fs.readFileSync(assetPath);
     require(image.length === asset.octets && hash(image) === asset.sha256,
       'prebuilt asset image differs from build manifest');
+    require(wadMode !== 'cooked' || hasCurrentAssetValidation(asset),
+      'cooked asset image has no current build validation; rebuild before testing');
     require(destination !== assetPath, 'test disk must differ from prebuilt asset image');
     if (fs.existsSync(disk)) {
       const a = fs.statSync(assetPath), b = fs.statSync(disk);
@@ -83,11 +87,14 @@ export function prepareDisk(wad, disk, { wadMode = 'packed', manifest } = {}) {
   fs.writeFileSync(disk, image);
   return { path: disk, mode: wadMode, octets: image.length, padding_octets: image.length - data.length, sha256: hash(image) };
 }
-export function build(program, out, { wad = WAD, wadMode = process.env.DOOM_WAD_MODE || 'cooked', target = 'both', startMap = false, lowDetail = false } = {}) {
+export function build(program, out, { wad = WAD, wadMode = process.env.DOOM_WAD_MODE || 'cooked', target = 'both',
+  startMap = false, lowDetail = false, assetValidation = 'preflight', buildDir = BUILD } = {}) {
   require(WAD_MODES.includes(wadMode), 'unknown WAD storage mode: ' + wadMode);
+  require(ASSET_VALIDATIONS.includes(assetValidation), 'unknown asset validation mode: ' + assetValidation);
   console.log('Building ' + program + ' (' + target + ')');
   run('build-' + program + (startMap ? '-map' : '-title'), ['make', '-C', PORT,
-    'PROGRAM=' + program, 'TARGET=' + target, 'WAD=' + path.resolve(wad), 'WAD_MODE=' + wadMode, 'BUILD=' + BUILD,
+    'PROGRAM=' + program, 'TARGET=' + target, 'WAD=' + path.resolve(wad), 'WAD_MODE=' + wadMode,
+    'ASSET_VALIDATION=' + assetValidation, 'BUILD=' + path.resolve(buildDir),
     'START_MAP=' + Number(startMap), 'LOW_DETAIL=' + Number(lowDetail), 'all'], out, 900);
 }
 export function compileRust(source, output, out) {

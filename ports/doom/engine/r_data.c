@@ -43,6 +43,12 @@
 #include "doom_build_config.h"
 #include "texture_metadata.h"
 
+/* Standalone builds keep the complete guest checks. The maintained launcher
+ * can select the loader for an image validated and matched by native tools. */
+#ifndef DOOM_ASSET_STRICT
+#define DOOM_ASSET_STRICT 1
+#endif
+
 //
 // Graphics.
 // DOOM graphics for walls and sprites
@@ -434,6 +440,7 @@ static uint32_t CookedTexturePair(const uint16_t *words)
     return value;
 }
 
+#if DOOM_ASSET_STRICT
 static uint32_t CookedTexturePatchSize(int lump, int *previous,
                                       uint32_t *previous_size)
 {
@@ -447,6 +454,7 @@ static uint32_t CookedTexturePatchSize(int lump, int *previous,
     }
     return *previous_size;
 }
+#endif
 
 static int R_LoadCookedTextures(void)
 {
@@ -456,8 +464,10 @@ static int R_LoadCookedTextures(void)
     uint32_t definition_words, column_count, tail_words, slab_words;
     uint32_t definitions_at, columns_at, offsets_at, masks_at, heights_at, sizes_at, links_at;
     uint32_t remaining_definitions, remaining_columns, file_at;
+#if DOOM_ASSET_STRICT
     uint32_t previous_size = 0;
     int previous_patch = -1;
+#endif
     unsigned int count, i;
 
     if (sizeof(char) != 1 || sizeof(short) != 1 || sizeof(int) != 1
@@ -531,23 +541,33 @@ static int R_LoadCookedTextures(void)
     cursor = definitions;
     for (i = 0; i < count; ++i) {
         texture_t record;
+#if DOOM_ASSET_STRICT
         texpatch_t patch_records[32];
+#endif
         texture_t *texture = (texture_t *)cursor;
         uint16_t *cells = (uint16_t *)&record;
-        unsigned int next, j, remaining_patches;
+        unsigned int next;
+#if DOOM_ASSET_STRICT
+        unsigned int j, remaining_patches;
+#endif
         uint32_t record_words;
         if (remaining_definitions < 14UL)
             I_Error("Truncated cooked texture definition");
         W_ReadAssetWords(file_at, cells, 14UL);
-        if (record.width <= 0 || record.height <= 0 || record.patchcount <= 0
-            || record.index != (int)i)
+        /* Width and patch count determine slab offsets even in the preflight
+         * path. Bound them before advancing any destination pointer. */
+        if (record.width <= 0 || record.patchcount <= 0)
+            I_Error("Invalid cooked texture definition");
+        next = cells[11];
+#if DOOM_ASSET_STRICT
+        if (record.height <= 0 || record.index != (int)i)
             I_Error("Invalid cooked texture definition");
         for (j = 0; j < 8; ++j)
             if ((unsigned int)record.name[j] > 255U)
                 I_Error("Invalid cooked texture name");
-        next = cells[11];
         if (cells[12] != 0 || (next < count ? next <= i : next != 65535U))
             I_Error("Invalid cooked texture hash link");
+#endif
         record_words = 14UL + (uint32_t)record.patchcount * 3UL;
         if (record_words > remaining_definitions || (uint32_t)record.width > remaining_columns)
             I_Error("Cooked texture definition exceeds its section");
@@ -560,6 +580,7 @@ static int R_LoadCookedTextures(void)
         memcpy(cursor, &record, 14U);
         cursor += 14U;
         file_at += 14UL;
+#if DOOM_ASSET_STRICT
         remaining_patches = (unsigned int)record.patchcount;
         while (remaining_patches != 0) {
             unsigned int batch = remaining_patches < 32U ? remaining_patches : 32U;
@@ -572,6 +593,13 @@ static int R_LoadCookedTextures(void)
             file_at += words;
             remaining_patches -= batch;
         }
+#else
+        /* The native preflight already checked every referenced patch. These
+         * records have their final target layout and need no relocation. */
+        W_ReadAssetWords(file_at, cursor, record_words - 14UL);
+        cursor += record_words - 14UL;
+        file_at += record_words - 14UL;
+#endif
         columns += (unsigned int)record.width;
         offsets += (size_t)(unsigned int)record.width * 2U;
         remaining_definitions -= record_words;
@@ -584,6 +612,7 @@ static int R_LoadCookedTextures(void)
         if (next < count) textures[i]->next = textures[next];
     }
 
+#if DOOM_ASSET_STRICT
     /* Scalar tables are small, but still validate near stack cells instead
      * of repeatedly traversing the distant permanent storage on Brainfuck. */
     for (i = 0; i < count;) {
@@ -654,6 +683,14 @@ static int R_LoadCookedTextures(void)
         if (composite_size != texturecompositesize[i])
             I_Error("Cooked composite size does not match its columns");
     }
+#else
+    /* Column IDs/offsets and scalar tables contain no guest pointers. Their
+     * contiguous serialized layout already matches the allocated slab, and
+     * native preflight has checked every entry. The storage reader handles
+     * disk blocks and RAM banks while copying directly to permanent storage. */
+    W_ReadAssetWords(columns_at, definitions + definition_words,
+                    column_count * 3UL + (uint32_t)count * 5UL);
+#endif
 
     for (i = 0; i < count;) {
         uint16_t heads[32];
@@ -665,7 +702,9 @@ static int R_LoadCookedTextures(void)
             unsigned int index = heads[j];
             if (index < count) pointers[j] = textures[index];
             else {
+#if DOOM_ASSET_STRICT
                 if (index != 65535U) I_Error("Invalid cooked texture hash head");
+#endif
                 pointers[j] = NULL;
             }
             heads[j] = i + j;

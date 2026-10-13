@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { WAD_MODES, checkMode, packAssets, cachedAssets, assertSeparateFile, writeAtomic } from './assets-pack.mjs';
+import { WAD_MODES, checkMode, packAssets, cachedAssets, hasCurrentAssetValidation, assertSeparateFile, writeAtomic } from './assets-pack.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function write(file, content) {
@@ -16,6 +16,10 @@ function write(file, content) {
 }
 const json = value => `${JSON.stringify(value, null, 2)}\n`;
 const port = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+function checkValidation(value) {
+  if (!['preflight', 'guest'].includes(value)) throw new Error('asset validation must be preflight or guest');
+  return value;
+}
 function sourceIdentity() {
   const files = ['Makefile', 'run.sh', 'run-bf.sh', 'upstream.json', 'tests/programs.mk'];
   function walk(directory) {
@@ -33,14 +37,16 @@ function sourceIdentity() {
 try {
   const [action, ...args] = process.argv.slice(2);
   if (action === 'config-key') {
-    const [source, mode = 'cooked', bank = '64000', generated = ''] = args;
+    const [source, mode = 'cooked', bank = '64000', generated = '', assetValidation = 'preflight'] = args;
     checkMode(mode);
+    checkValidation(assetValidation);
     const wad = fs.realpathSync(source);
     // Make compares this content key per program, independent of the shared
     // header's mtime. Include the generator so layout changes invalidate old
     // consumers even when the original WAD is unchanged.
-    process.stdout.write(`${sha(json({ wad, source: sha(fs.readFileSync(wad)), mode, bank, generated: path.resolve(generated),
+    process.stdout.write(`${sha(json({ wad, source: sha(fs.readFileSync(wad)), mode, bank, generated: path.resolve(generated), asset_validation: assetValidation,
       generator: sha(fs.readFileSync(fileURLToPath(new URL('./assets-pack.mjs', import.meta.url)))),
+      validator: sha(fs.readFileSync(new URL('./assets-validate.mjs', import.meta.url))),
       config: sha(fs.readFileSync(fileURLToPath(import.meta.url))) }))}\n`);
   } else if (action === 'config-stamp') {
     const [file, key] = args;
@@ -49,15 +55,17 @@ try {
   } else if (action === 'config-invalidate') {
     for (const file of args) fs.rmSync(file, { force: true });
   } else if (action === 'config') {
-    const [source, generated, manifest, bank = '64000', program = 'engine', startMap = '0', lowDetail = '0', defines = '', rippleFlags = '', cc = 'clang', cflags = '', cppflags = '', ldflags = '', wadMode = 'cooked'] = args;
+    const [source, generated, manifest, bank = '64000', program = 'engine', startMap = '0', lowDetail = '0', defines = '', rippleFlags = '', cc = 'clang', cflags = '', cppflags = '', ldflags = '', wadMode = 'cooked', assetValidation = 'preflight'] = args;
     const wad = fs.realpathSync(source), bytes = fs.readFileSync(wad);
     checkMode(wadMode);
+    checkValidation(assetValidation);
     const asset = cachedAssets(wad, path.join(path.dirname(manifest), 'assets', `doom-${wadMode}.img`), wadMode);
+    const validation = asset.validation ?? null;
     write(path.join(generated, 'doom_build_config.h'), `/* Generated: WAD lengths count octets; asset offsets count 16-bit disk words. */\n#ifndef DOOM_BUILD_CONFIG_H\n#define DOOM_BUILD_CONFIG_H\n#define DOOM_WAD_LENGTH ${bytes.length}UL\n#define DOOM_WAD_PATH ${JSON.stringify(wad)}\n#define DOOM_WAD_SHA256 ${JSON.stringify(sha(bytes))}\n#define DOOM_WAD_MODE ${WAD_MODES[wadMode]}\n#define DOOM_ASSET_PATH ${JSON.stringify(asset.path)}\n#define DOOM_ASSET_VERSION ${asset.format_version}U\n#define DOOM_ASSET_HEADER_WORD ${asset.header_word}UL\n#define DOOM_ASSET_INDEX_WORD ${asset.index_word}UL\n#define DOOM_ASSET_DIRECTORY_WORD ${asset.directory_word}UL\n#define DOOM_ASSET_HASH_HEADS_WORD ${asset.hash_heads_word}UL\n#define DOOM_ASSET_PNAMES_WORD ${asset.pnames_word}UL\n#define DOOM_ASSET_PNAMES_COUNT ${asset.pnames_count}UL\n#define DOOM_ASSET_PNAMES_LUMP ${asset.pnames_lump}UL\n#define DOOM_ASSET_TEXTURE_WORD ${asset.texture_word}UL\n#define DOOM_ASSET_TEXTURE_WORDS ${asset.texture_words}UL\n#define DOOM_ASSET_TEXTURE_COUNT ${asset.texture_count}UL\n#define DOOM_ASSET_TEXTURE_COLUMNS ${asset.texture_columns}UL\n#define DOOM_ASSET_TEXTURE_DEFINITION_WORDS ${asset.texture_definition_words}UL\n#define DOOM_ASSET_METADATA_ABI ${asset.metadata_abi}U\n#define DOOM_ASSET_DIRECTORY_RECORD_WORDS ${asset.directory_record_words}U\n#define DOOM_ASSET_HASH_ENTRY_WORDS ${asset.hash_entry_words}U\n#define DOOM_ASSET_PNAMES_ENTRY_WORDS ${asset.pnames_entry_words}U\n#define DOOM_ASSET_TOTAL_WORDS ${asset.total_words}UL\n#define DOOM_ASSET_LUMP_COUNT ${asset.lump_count}UL\n#define DOOM_ASSET_FINGERPRINT_LO ${asset.fingerprint_lo}U\n#define DOOM_ASSET_FINGERPRINT_HI ${asset.fingerprint_hi}U\n#endif\n`);
     const upstream = JSON.parse(fs.readFileSync(path.join(port, 'upstream.json')));
     write(manifest, json({ source_model: 'maintained engine/ sources', upstream: { project: upstream.project, repository: upstream.repository, revision: upstream.revision },
-      sources: sourceIdentity(), settings: { program, start_map: startMap === '1', low_detail: lowDetail === '1', wad_mode: wadMode, defines, ripple_flags: rippleFlags, cc, cflags, cppflags, ldflags },
-      wad: { path: wad, octets: bytes.length, sha256: sha(bytes) }, asset_image: asset, bank_size: Number(bank), memory_cells: 256 * Number(bank) }));
+      sources: sourceIdentity(), settings: { program, start_map: startMap === '1', low_detail: lowDetail === '1', wad_mode: wadMode, asset_validation: assetValidation, defines, ripple_flags: rippleFlags, cc, cflags, cppflags, ldflags },
+      wad: { path: wad, octets: bytes.length, sha256: sha(bytes) }, asset_image: asset, asset_preflight: validation, bank_size: Number(bank), memory_cells: 256 * Number(bank) }));
   } else if (action === 'stamp') {
     write(args[0], json(args.slice(1)));
   } else if (action === 'disk') {
@@ -78,12 +86,17 @@ try {
       image = fs.readFileSync(metadata.path);
       if (sha(image) !== metadata.sha256 || image.length !== metadata.octets)
         throw new Error('cached asset image differs from build manifest; rebuild before running');
+      if (mode === 'cooked' && !hasCurrentAssetValidation(metadata))
+        throw new Error('cooked asset image has no current build validation; rebuild before running');
     } else {
       disk = assertSeparateFile(destination, [wad]);
       ({ image, metadata } = packAssets(bytes, mode));
     }
+    // The packer already checked the complete serialized artifact. Staging
+    // only pairs those exact bytes with the build; no Doom semantics run here.
+    const validation = metadata.validation ?? null;
     writeAtomic(disk, image);
-    process.stdout.write(json({ ...metadata, path: disk }));
+    process.stdout.write(json({ ...metadata, path: disk, asset_preflight: validation }));
   } else if (action === 'bf-tape-cells') {
     // Only read the small layout header; expanded Doom BF can be very large.
     const fd = fs.openSync(args[0], 'r');
