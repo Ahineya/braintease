@@ -353,15 +353,32 @@ subsequent scans. Moving loops with one updated cell per iteration also batch
 cache maintenance, including writes at an offset from the predicate cell.
 Cached predicate runs can skip repeated reads only when their stride residue
 is disjoint from the writes; dependent predicates are checked in order.
-Every actual tape write remains present, and fallback
-execution preserves partial bounds failures. These optimizations inspect BF
-operations and tape cells,
+Proven uniform strided fills and moving updates can retain their values as
+deferred tape runs instead of writing each physical cell. Restoring a run's
+known backing value cancels the writes, and retaining that clean fact avoids
+rescanning the same range on its next use. Reads always see the exact logical
+value; point writes split runs, and incompatible patterns use bounded ordinary
+execution. Run storage is capped through incremental maintenance, with at most
+1024 physical cells committed per maintenance dispatch. Profiling reports this
+work as `materialize`. Fallback execution preserves partial bounds failures.
+Moving updates can also target a parallel progression when the write residue is
+disjoint from the predicate and both ranges are proved. This folds copy-like
+marker walks and their cleanup without knowing why the BF program uses them.
+These optimizations inspect BF operations and tape cells,
 with no knowledge of Ripple opcodes or register layouts. Checked fallback
 execution preserves tape-boundary behavior. Device and byte-I/O hooks are
 optimization barriers. The host accesses the RAM lane directly through
 `GuestMemory`; individual device writes invalidate only affected scan-cache
 entries instead of clearing the cache on every memory access.
 Frame publication reuses the existing immutable display buffers.
+
+Core callers should use `read_cell`, `write_cell` and `tape_len` for individual
+observations. `tape(&mut self)` and `tape_mut` return an exact dense snapshot by
+materializing deferred writes and discarding the retained run facts. They are
+useful for bulk inspection, but calling them at every host hook defeats this
+optimization. The peripheral adapter uses point access, so device reads and
+writes preserve unrelated runs. Input, output, hooks and budget yields expose
+the same logical state as ordinary BF execution.
 
 `--no-optimize` disables the loop/block optimizations for comparison. It still
 combines adjacent arithmetic and monotonic pointer runs. All host cells wrap at

@@ -37,6 +37,7 @@
 #include "w_wad.h"
 
 #include "wad_io.h"
+#include "doom_decode.h"
 
 //
 // GLOBALS
@@ -134,6 +135,7 @@ wad_file_t *W_AddFile (char *filename)
     uint32_t count;
     uint32_t directory;
     uint32_t offset;
+    uint32_t file_length;
     unsigned int remaining;
 
     if (numlumps != 0)
@@ -143,11 +145,14 @@ wad_file_t *W_AddFile (char *filename)
     if (W_Read(wad_file, 0UL, header, 12UL) != 12UL ||
         header[0] != 'I' || header[1] != 'W' || header[2] != 'A' || header[3] != 'D')
         I_Error("Configured file is not a valid IWAD");
-    wad_u32(header, 12UL, 4UL, &count);
-    wad_u32(header, 12UL, 8UL, &directory);
+    // The complete header is present; decode its fields without rechecking
+    // the same bounds or passing temporary output pointers through helpers.
+    count = DoomReadLE32(header + 4);
+    directory = DoomReadLE32(header + 8);
+    file_length = wad_file->length;
     // Lump IDs remain signed C ints; serialized sizes and offsets are 32-bit.
     if (count == 0 || count > 32767UL ||
-        !wad_range(wad_file->length, directory, count * 16UL))
+        directory > file_length || count * 16UL > file_length - directory)
         I_Error("IWAD directory is invalid or has too many lump IDs");
     ExtendLumpInfo((int)count);
     offset = directory;
@@ -166,10 +171,15 @@ wad_file_t *W_AddFile (char *filename)
         // and a wide indexed address calculation for every directory entry.
         while (batch != 0)
         {
-            wad_u32(record, 16UL, 0UL, &lump->position);
-            wad_u32(record, 16UL, 4UL, &lump->size);
-            if (!wad_range(wad_file->length, lump->position, lump->size))
+            uint32_t position = DoomReadLE32(record);
+            uint32_t size = DoomReadLE32(record + 4);
+            // Validate local decoded values before publishing the entry.
+            // Reading them back from a distant heap bank costs far more on
+            // the Brainfuck CPU than checking the stack-resident record.
+            if (position > file_length || size > file_length - position)
                 I_Error("IWAD lump lies outside configured file");
+            lump->position = position;
+            lump->size = size;
             lump->wad_file = wad_file;
             lump->cache = NULL;
             lump->next = NULL;

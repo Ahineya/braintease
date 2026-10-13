@@ -5,6 +5,8 @@
 //! `.trace` files with cmp. They encode exact full tape state at every event as
 //! changes from the preceding snapshot, plus each event and pointer. Trace
 //! generation and comparison are excluded from reported execution timings.
+//! Materializing snapshots can change fast-path availability, so dispatch
+//! counts are compared only between the untraced timed repetitions.
 use bf_wasm::engine::{Machine, Program, Stop};
 use std::{
     error::Error,
@@ -28,7 +30,7 @@ struct Outcome {
     events: Vec<Event>,
 }
 
-fn snapshot(bytes: &mut Vec<u8>, previous: &mut [u16], machine: &Machine, event: &Event) {
+fn snapshot(bytes: &mut Vec<u8>, previous: &mut [u16], machine: &mut Machine, event: &Event) {
     bytes.extend_from_slice(&[event.kind, event.value]);
     bytes.extend_from_slice(&(event.pointer as u64).to_le_bytes());
     let count_offset = bytes.len();
@@ -69,10 +71,10 @@ fn execute(program: &Program, cells: usize, mut trace: Option<&mut Vec<u8>>) -> 
             kind,
             value,
             pointer: machine.pointer(),
-            cell: machine.tape()[machine.pointer()],
+            cell: machine.read_cell(machine.pointer()),
         };
         if let Some(bytes) = trace.as_mut() {
-            snapshot(bytes, previous.as_mut().unwrap(), &machine, &event);
+            snapshot(bytes, previous.as_mut().unwrap(), &mut machine, &event);
         }
         events.push(event);
         match stop {
@@ -111,16 +113,17 @@ fn run() -> Result<()> {
     let parse_seconds = parse_started.elapsed().as_secs_f64();
     let mut trace = b"BFTRACE1".to_vec();
     trace.extend_from_slice(&(cells as u64).to_le_bytes());
-    let reference = execute(&program, cells, Some(&mut trace))?;
+    let mut reference = execute(&program, cells, Some(&mut trace))?;
     if let Some(parent) = prefix.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(prefix.with_extension("trace"), &trace)?;
 
     let mut times = Vec::new();
+    let mut timed_dispatches = None;
     for _ in 0..repeats {
         let started = Instant::now();
-        let outcome = execute(&program, cells, None)?;
+        let mut outcome = execute(&program, cells, None)?;
         times.push(started.elapsed().as_secs_f64());
         // Compare outside the measured interval, including each observable stop.
         assert_eq!(
@@ -134,11 +137,19 @@ fn run() -> Result<()> {
             "final pointer changed"
         );
         assert_eq!(outcome.events, reference.events, "event stream changed");
-        assert_eq!(outcome.machine.dispatches(), reference.machine.dispatches());
+        let dispatches = outcome.machine.dispatches();
+        if let Some(previous) = timed_dispatches {
+            assert_eq!(
+                dispatches, previous,
+                "dispatch count changed between timed repetitions"
+            );
+        } else {
+            timed_dispatches = Some(dispatches);
+        }
     }
     times.sort_by(f64::total_cmp);
     let json = format!("{{\"repeats\":{repeats},\"seconds_median\":{},\"seconds_min\":{},\"seconds_max\":{},\"parse_seconds\":{parse_seconds},\"dispatches\":{},\"events\":{},\"tape_cells\":{cells},\"final_pointer\":{},\"trace_bytes\":{},\"ir_instructions\":{},\"optimized_regions\":{}}}\n",
-        times[repeats / 2], times[0], times[repeats - 1], reference.machine.dispatches(), reference.events.len(), reference.machine.pointer(), trace.len(), program.instruction_count(), program.optimization_count());
+        times[repeats / 2], times[0], times[repeats - 1], timed_dispatches.unwrap(), reference.events.len(), reference.machine.pointer(), trace.len(), program.instruction_count(), program.optimization_count());
     fs::write(prefix.with_extension("json"), &json)?;
     print!("{json}");
     Ok(())
@@ -148,5 +159,26 @@ fn main() {
     if let Err(error) = run() {
         eprintln!("bench_replay: {error}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trace_materialization_changes_dispatch_work_but_preserves_observable_state() {
+        let source = format!("{}[->>[>]+[<]<]${}[-<]!", "+".repeat(512), ">".repeat(513),);
+        let program = Program::parse(&source, true, true).unwrap();
+        let mut trace = Vec::new();
+        let mut traced = execute(&program, 515, Some(&mut trace)).unwrap();
+        let mut untraced = execute(&program, 515, None).unwrap();
+        assert_eq!(untraced.events, traced.events);
+        assert_eq!(untraced.machine.pointer(), traced.machine.pointer());
+        assert!(
+            untraced.machine.dispatches() < traced.machine.dispatches(),
+            "the traced snapshot must materialize the fill before its cleanup"
+        );
+        assert_eq!(untraced.machine.tape(), traced.machine.tape());
     }
 }

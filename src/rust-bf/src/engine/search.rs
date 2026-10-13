@@ -122,8 +122,8 @@ impl Search {
             if !machine.range_fits(self.minimum, self.maximum) {
                 // Previous iterations are complete BF loop iterations, with
                 // the marker materialized before falling back to literal BF.
-                machine.write_cell(original, 0);
-                machine.write_cell(machine.pointer, 1);
+                machine.write_tape(original, 0);
+                machine.write_tape(machine.pointer, 1);
                 let last_zero = (machine.pointer as isize - self.stride) as usize;
                 machine.zero_cache.remember(slot, behind, last_zero);
                 return false;
@@ -134,7 +134,7 @@ impl Search {
                 // The literal loop consumes its marker, leaves the found cell
                 // unchanged, and exits one stride before that cell. Any final
                 // pointer movement following the loop remains ordinary code.
-                machine.write_cell(original, 0);
+                machine.write_tape(original, 0);
                 machine.zero_cache.remember(slot, behind, current);
                 machine.pc = self.next;
                 return true;
@@ -165,8 +165,8 @@ impl Search {
         // This is exactly a loop-head state after SCAN_LIMIT bounded probes.
         // Cached probes may represent many iterations with constant host work.
         // Leave PC unchanged so a long search can resume in the next dispatch.
-        machine.write_cell(original, 0);
-        machine.write_cell(machine.pointer, 1);
+        machine.write_tape(original, 0);
+        machine.write_tape(machine.pointer, 1);
         let last_zero = (machine.pointer as isize - self.stride) as usize;
         machine.zero_cache.remember(slot, behind, last_zero);
         true
@@ -244,11 +244,11 @@ mod tests {
         assert_eq!(machine.pc, 0);
         assert_eq!(machine.pointer, 8 + SCAN_LIMIT);
         assert_eq!(machine.tape[machine.pointer], 1);
-        assert!(machine.tape[8..machine.pointer].iter().all(|&v| v == 0));
+        assert!((8..machine.pointer).all(|index| machine.read_cell(index) == 0));
         assert_eq!(finish(&mut machine, &program).unwrap(), Stop::Hook(b'!'));
         assert_eq!(machine.pointer, 1000);
         assert_eq!(machine.tape[1000], 17);
-        assert!(machine.tape[..1000].iter().all(|&v| v == 0));
+        assert!((0..1000).all(|index| machine.read_cell(index) == 0));
     }
 
     #[test]

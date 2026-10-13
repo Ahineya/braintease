@@ -1,7 +1,7 @@
 //! A counted first-zero fill, proved from BF operations and current tape state.
 //! The changing forward/reverse scan pair encloses exactly one nonzero write.
 //! All other scans must be disjoint from every changed cell. No tape layout is
-//! assumed; checked batches leave every marker physically present on the tape.
+//! assumed; every marker remains observable in the exact logical tape.
 
 use super::{Kind, Machine, Part, Path, Routed, BLOCK_LIMIT, SCAN_LIMIT};
 use crate::engine::FILL_LIMIT;
@@ -193,7 +193,7 @@ impl Fill {
         } else {
             (first - self.minimum.unsigned_abs()) / step + 1
         };
-        let mut limit = usize::from(count).min(FILL_LIMIT).min(safe_steps);
+        let mut limit = usize::from(count).min(safe_steps);
         for path in paths[..path_count]
             .iter()
             .copied()
@@ -212,7 +212,10 @@ impl Fill {
             .zero_cache
             .known_run(step, first)
             .map_or(0, |known| known.steps_from(first, self.stride).min(limit));
-        while filled < limit {
+        if let Some((known, 0)) = machine.tape.uniform_prefix(first, self.stride, limit) {
+            filled = filled.max(known);
+        }
+        while filled < limit.min(FILL_LIMIT) {
             let current = if self.stride > 0 {
                 first + filled * step
             } else {
@@ -226,24 +229,25 @@ impl Fill {
         if filled == 0 {
             return false;
         }
-        let last = (first as isize + (filled - 1) as isize * self.stride) as usize;
-        machine.zero_cache.invalidate_run(first, last, step);
-        // Every old value was checked or proved zero. Only zero-cache facts
-        // can be invalidated, and that exact progression was invalidated above.
-        // Write the physical cells in ascending order for either BF direction.
-        let destinations = &mut machine.tape[first.min(last)..=first.max(last)];
-        if step == 1 {
-            destinations.fill(self.value);
-        } else {
-            for cell in destinations.iter_mut().step_by(step) {
-                *cell = self.value;
+        let mut last = (first as isize + (filled - 1) as isize * self.stride) as usize;
+        // Cached zero facts justify an arbitrarily long logical progression in
+        // constant work. Incompatible layouts retain bounded physical updates.
+        if !machine
+            .tape
+            .assign_uniform(first, last, step, 0, self.value)
+        {
+            filled = filled.min(FILL_LIMIT);
+            last = (first as isize + (filled - 1) as isize * self.stride) as usize;
+            for index in (first.min(last)..=first.max(last)).step_by(step) {
+                machine.tape[index] = self.value;
             }
         }
+        machine.zero_cache.invalidate_run(first, last, step);
         // The writes themselves prove a contiguous nonzero run on this
         // lattice. Reuse that fact when the next body returns through it.
         let (slot, _) = machine.scan_cache.prepare(step, first);
         machine.scan_cache.remember(slot, first, last);
-        machine.write_cell(control, count - filled as u16);
+        machine.write_tape(control, count - filled as u16);
         machine.pc = if count == filled as u16 {
             routed.next
         } else {
@@ -311,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn maximum_cell_count_fills_the_complete_physical_tape_in_bounded_slices() {
+    fn maximum_cell_count_preserves_the_complete_logical_tape_in_bounded_slices() {
         for stride in [-2isize, -1, 1, 2] {
             let movement = |delta: isize| {
                 if delta >= 0 {
@@ -434,7 +438,7 @@ mod tests {
             let mut machine = Machine::new(3000).unwrap();
             machine.write_cell(0, 2500);
             let (slot, _) = machine.zero_cache.prepare(1, 2);
-            machine.zero_cache.remember(slot, 2, 2999);
+            machine.zero_cache.remember(slot, 2, FILL_LIMIT + 1);
             assert_eq!(machine.run(&program, 1).unwrap(), Stop::Budget);
             assert_eq!(machine.tape()[0], 2500 - FILL_LIMIT as u16);
             let hole = FILL_LIMIT + 7;

@@ -250,7 +250,7 @@ fn execute(cli: Cli) -> Result<i32, String> {
         report.milliseconds = host.devices.devices.millis();
         report.frames = host.devices.presented_frames;
         report.input_overflow = host.devices.devices.overflow_seen();
-        report.guest_result = host.machine.tape()[host.layout.origin + 49]; // Rv0 = R5, register lane = 1.
+        report.guest_result = host.machine.read_cell(host.layout.origin + 49); // Rv0 = R5, register lane = 1.
         if let Some(frame) = host.devices.display.snapshot() {
             report.width = Some(frame.width);
             report.height = Some(frame.height);

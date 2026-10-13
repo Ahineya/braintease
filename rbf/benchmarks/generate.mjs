@@ -9,15 +9,20 @@ if (process.argv.length !== 3) {
 }
 const output = resolve(process.argv[2]);
 mkdirSync(output, { recursive: true });
-for (const name of ['late-code', 'far-ram', 'bank-jumps']) {
+for (const name of ['late-code', 'far-ram', 'far-ram-64k', 'bank-jumps', 'far-call-64k']) {
   const path = fileURLToPath(new URL(`${name}.asm`, import.meta.url));
   const template = readFileSync(path, 'utf8');
+  let paddingIndex = 0;
+  let paddingInstructions = 0;
   const source = template.replace(/^; BENCH_PADDING (\d+) (\d+)$/gm, (_, banks, size) => {
     const count = Number(banks);
     const length = Number(size);
-    if (count > 16 || length > 1024) throw new Error('excessive benchmark padding');
-    return Array.from({ length: count }, (_, index) =>
-      `benchmark_padding_${index}:\n${'NOP\n'.repeat(length)}`).join('');
+    paddingInstructions += count * length;
+    if (count > 64 || length > 64000 || paddingInstructions > 4096000) {
+      throw new Error('excessive benchmark padding');
+    }
+    return Array.from({ length: count }, () =>
+      `benchmark_padding_${paddingIndex++}:\n${'NOP\n'.repeat(length)}`).join('');
   });
   writeFileSync(resolve(output, `${name}.asm`), source);
 }

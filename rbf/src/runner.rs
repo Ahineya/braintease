@@ -444,8 +444,8 @@ impl Host {
                 Stop::Output(_) => return Err("Unexpected BF output opcode; rebuild with --bf-host to avoid duplicate TTY output".into()),
                 Stop::Hook(b'$') => {
                     if options.max_instructions.is_some_and(|limit| self.instructions >= limit) { return Err("Ripple instruction limit exceeded".into()); }
-                    let pc = usize::from(self.machine.tape()[self.layout.origin + 17]);
-                    let bank = usize::from(self.machine.tape()[self.layout.origin + 25]);
+                    let pc = usize::from(self.machine.read_cell(self.layout.origin + 17));
+                    let bank = usize::from(self.machine.read_cell(self.layout.origin + 25));
                     // Inspect published CPU state, never decode or execute an
                     // instruction. Raw jump/return offsets may exceed a bank;
                     // RVM fetch uses the same flattened address. I is the

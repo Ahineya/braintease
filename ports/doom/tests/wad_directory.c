@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "i_system.h"
 #include "w_wad.h"
 #include "wad_io.h"
@@ -15,10 +16,16 @@ static wad_file_t file;
 static unsigned int read_count;
 static uint32_t read_offsets[3];
 static size_t read_lengths[3];
+static int expect_invalid_range;
 
 void I_Error(char *format, ...)
 {
     va_list args;
+    if (expect_invalid_range &&
+        strcmp(format, "IWAD lump lies outside configured file") == 0) {
+        puts("WAD DIRECTORY OK 1/17 entries, batch tail, full names, EOF marker, duplicate lookup");
+        exit(0);
+    }
     va_start(args, format);
     printf("WAD DIRECTORY ERROR ");
     vprintf(format, args);
@@ -67,6 +74,8 @@ size_t W_Read(wad_file_t *wad, uint32_t offset, void *buffer, size_t length)
     check(wad == &file, "file identity");
     check(offset <= file.length && length <= file.length - offset,
           "parser read beyond serialized file");
+    check(offset <= sizeof(image) && length <= sizeof(image) - offset,
+          "parser read beyond fixture backing");
     check(read_count < 3, "unexpected extra directory read");
     read_offsets[read_count] = offset;
     read_lengths[read_count] = length;
@@ -81,6 +90,14 @@ static void put_u32(unsigned int offset, uint32_t value)
     image[offset + 1] = (WadOctet)((value >> 8) & 255UL);
     image[offset + 2] = (WadOctet)((value >> 16) & 255UL);
     image[offset + 3] = (WadOctet)((value >> 24) & 255UL);
+#ifdef RIPPLE
+    /* Serialized octets occupy full 16-bit cells. Field readers must ignore
+     * their upper bits even when decoding a previously validated record. */
+    image[offset] |= 0x5a00U;
+    image[offset + 1] |= 0xa500U;
+    image[offset + 2] |= 0x5a00U;
+    image[offset + 3] |= 0xa500U;
+#endif
 }
 
 static void prepare(unsigned int count)
@@ -93,13 +110,15 @@ static void prepare(unsigned int count)
     put_u32(8, 12UL);
     file.file_class = NULL;
     file.mapped = NULL;
-    file.length = 12UL + (uint32_t)count * 16UL;
+    /* Payloads need not be backed because this fixture only reads directory
+     * records. Large logical ranges exercise all four serialized octets. */
+    file.length = count == 1 ? 28UL : 0x12345678UL;
     read_count = 0;
     for (i = 0; i < count; ++i) {
         unsigned int record = 12U + i * 16U;
         const char *name = "ENTRY000";
-        uint32_t position = 4UL + i;
-        uint32_t length = 1UL;
+        uint32_t position = 0x01020304UL + i;
+        uint32_t length = 0x03040506UL;
         if (count == 1) name = "SINGLE08";
         else if (i == 0 || i == 16) name = "DUPENAME";
         else if (i == 15) name = "ABCDEFGH";
@@ -152,9 +171,9 @@ static void directory_case(unsigned int count)
     for (i = 0; i < count; ++i) {
         check(lumpinfo[i].wad_file == &file && lumpinfo[i].cache == NULL &&
               lumpinfo[i].next == NULL, "initial entry state");
-        check(lumpinfo[i].position == (i == count - 1 ? file.length : 4UL + i),
+        check(lumpinfo[i].position == (i == count - 1 ? file.length : 0x01020304UL + i),
               "entry position");
-        check(lumpinfo[i].size == (i == count - 1 ? 0UL : 1UL), "entry size");
+        check(lumpinfo[i].size == (i == count - 1 ? 0UL : 0x03040506UL), "entry size");
     }
     check(W_LumpLength(count - 1) == 0UL, "zero-length EOF marker");
     check_lookup(count);
@@ -173,6 +192,17 @@ int main(void)
     lumpinfo = NULL;
     numlumps = 0;
     directory_case(17);
-    puts("WAD DIRECTORY OK 1/17 entries, batch tail, full names, EOF marker, duplicate lookup");
-    return 0;
+    free(lumpinfo);
+    lumpinfo = NULL;
+    numlumps = 0;
+    prepare(1);
+    file.length = UINT32_MAX;
+    put_u32(12, UINT32_C(0xfffffff0));
+    put_u32(16, UINT32_C(0x20));
+    /* Position itself is in range; position+size wraps to a small number.
+     * Only subtraction-based bounds reject this directory safely. */
+    expect_invalid_range = 1;
+    W_AddFile("synthetic");
+    check(0, "accepted overflowing lump range");
+    return 1;
 }

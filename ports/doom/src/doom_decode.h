@@ -15,10 +15,13 @@ static inline uint16_t DoomReadLE16(const unsigned char *p)
 
 static inline uint32_t DoomReadLE32(const unsigned char *p)
 {
-    return (uint32_t)(p[0] & 255U)
-         | ((uint32_t)(p[1] & 255U) << 8)
-         | ((uint32_t)(p[2] & 255U) << 16)
-         | ((uint32_t)(p[3] & 255U) << 24);
+    /* Assemble native-width halves before widening. On the 16-bit guest this
+     * avoids applying wide shifts and ORs to each individual octet. */
+    uint16_t low = (uint16_t)((uint16_t)(p[0] & 255U)
+                 | (uint16_t)((uint16_t)(p[1] & 255U) << 8));
+    uint16_t high = (uint16_t)((uint16_t)(p[2] & 255U)
+                  | (uint16_t)((uint16_t)(p[3] & 255U) << 8));
+    return (uint32_t)low | ((uint32_t)high << 16);
 }
 
 static inline int32_t DoomReadS16(const unsigned char *p)

@@ -7,7 +7,9 @@ without running Doom. Each succeeds by writing `Y` to TTY and returning RV0=0.
 | --- | ---: | ---: | --- |
 | `late-code.asm` | 256 | 1 | A short loop after eight banks of skipped code |
 | `far-ram.asm` | 512 | 16 | Sixteen STORE/LOAD pairs at the last RAM word |
+| `far-ram-64k.asm` | 64000 | 256 | Sixty-four STORE/LOAD pairs crossing banks 136–137, plus the final RAM word |
 | `bank-jumps.asm` | 257 | 1 | Thirty-two calls to a distant code bank and returns |
+| `far-call-64k.asm` | 64000 | 256 | Sixteen calls to code bank 30 interleaved with verified RAM-bank-136 reads and writes |
 
 The assembler has no instruction repetition directive. `generate.mjs` expands
 the explicitly marked padding in these templates into ordinary assembly, keeping
@@ -20,7 +22,20 @@ From the repository root, with the release assembler/linker/macro tools built:
 node rbf/benchmarks/generate.mjs build/bf-bench/inputs
 BANK_SIZE=256 MEMORY_BANKS=1 scripts/build-bf.sh build/bf-bench/inputs/late-code.asm build/bf-bench/inputs/late-code
 BANK_SIZE=512 MEMORY_BANKS=16 scripts/build-bf.sh build/bf-bench/inputs/far-ram.asm build/bf-bench/inputs/far-ram
+BANK_SIZE=64000 MEMORY_BANKS=256 scripts/build-bf.sh build/bf-bench/inputs/far-ram-64k.asm build/bf-bench/inputs/far-ram-64k
 BANK_SIZE=257 MEMORY_BANKS=1 scripts/build-bf.sh build/bf-bench/inputs/bank-jumps.asm build/bf-bench/inputs/bank-jumps
+```
+
+The combined `far-call-64k` fixture has 1,926,005 instructions, almost all skipped
+NOP padding. Use the linker's direct BF exporter to avoid expanding millions of
+individual instruction macros:
+
+```sh
+src/ripple-asm/target/release/rasm assemble build/bf-bench/inputs/far-call-64k.asm \
+  --bank-size 64000 -o build/bf-bench/inputs/far-call-64k.pobj
+src/ripple-asm/target/release/rlink build/bf-bench/inputs/far-call-64k.pobj \
+  -f bf --standalone --bf-host --bank-size 64000 --memory-banks 256 \
+  -o build/bf-bench/inputs/far-call-64k.bf
 ```
 
 Keep those exact generated `.bf` files for both interpreter versions. Rebuilding
@@ -79,6 +94,29 @@ Ripple instruction counts. `elapsed_seconds` measures execution including guest
 tape initialization and host device callbacks; it excludes parsing and host
 setup. Compare captures as well when using display fixtures. Keep generated
 programs, executables, reports, and traces under ignored `build/` directories.
+
+The large `far-ram-64k` fixture uses the real host path rather than the core
+replay's full-tape trace. Its 131,072,264-cell tape exceeds that driver's cap:
+
+```sh
+target/release/rbf build/bf-bench/inputs/far-ram-64k.bf --headless --timeout 30 \
+  --max-tape-cells 131072264 --exit-code --report build/bf-bench/far-ram-64k.json
+```
+
+It checks each loaded value, including 16-bit arithmetic wraparound and a RAM
+bank crossing, before emitting `Y`. Keep its banks and memory allocation fixed
+when comparing interpreter versions.
+
+The combined fixture uses the same tape limit and succeeds after 267 guest
+instructions. Its leaf worker is at code bank 30, offset 6000; both sides of each
+call read and write RAM bank 136. This exercises interactions between code and
+RAM traversals. Its elapsed time also includes initializing the skipped code,
+so report it as a complete fixture measurement, not isolated call latency.
+
+```sh
+target/release/rbf build/bf-bench/inputs/far-call-64k.bf --headless --timeout 30 \
+  --max-tape-cells 131072264 --exit-code --report build/bf-bench/far-call-64k.json
+```
 
 ## Measured optimizer changes
 
@@ -160,3 +198,26 @@ The small fixtures' submillisecond-to-millisecond timings were noisy;
 the reported speedup is specific to the larger fixed startup prefix, not a
 general BF or full Doom boot estimate. Saved binaries, reports and traces are
 under ignored `build/bf-traversal-perf/`.
+
+### Deferred uniform tape runs (2026-10-13)
+
+The generic engine can represent proven constant progressions without eagerly
+writing each cell. Fill/cleanup cycles can cancel when they restore known backing
+values; retaining clean facts also avoids repeated scans. Point observations
+remain exact, and bounded materialization handles storage pressure. The CPU and
+ISA are unchanged.
+
+Three alternating before/after pairs ran the same frozen `far-ram-64k.bf` with
+release `rbf` binaries, a 30-second timeout and no concurrent timing workloads.
+Both versions printed `Y`, returned RV0=0 and executed 528 guest instructions:
+
+| Real host fixture | Before median | After median | Speedup |
+| --- | ---: | ---: | ---: |
+| Far RAM, 64,000-cell banks × 256 | 1.455 s | 0.0298 s | 48.9× |
+
+BF dispatches fell from 10,443,018 to 316,268. The source SHA256 was
+`fd2dda6edb2db79e111fa8b9926af84159e9d293dd26868a835d82315f344823`.
+These are execution times including tape initialization and device callbacks,
+excluding parsing and host setup. This deliberately amplified far-access test
+does not predict Doom's overall speed. Reports and saved binaries are under
+ignored `build/bf-far-access/`.

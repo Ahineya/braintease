@@ -160,9 +160,9 @@ impl GuestMemory for StridedMemory<'_> {
     }
 }
 
-/// Device access that tells the generic interpreter exactly which cells change.
-/// Borrowing its entire mutable tape would invalidate every cached scan, even
-/// for a read that returns the existing value. Both views use the same RAM lane.
+/// Device access through the interpreter's logical cells. Individual reads do
+/// not materialize deferred tape runs, and writes invalidate only affected
+/// facts. Both memory views use the same RAM lane.
 pub struct MachineMemory<'a> {
     machine: &'a mut Machine,
     cells: usize,
@@ -170,7 +170,7 @@ pub struct MachineMemory<'a> {
 
 impl<'a> MachineMemory<'a> {
     pub fn new(machine: &'a mut Machine, cells: usize) -> Self {
-        let length = machine.tape().len();
+        let length = machine.tape_len();
         assert!(length >= ORIGIN && cells <= (length - ORIGIN) / LANES);
         Self { machine, cells }
     }
@@ -182,7 +182,7 @@ impl GuestMemory for MachineMemory<'_> {
     }
     fn read(&self, index: usize) -> u16 {
         assert!(index < self.cells);
-        self.machine.tape()[ORIGIN + index * LANES + RAM_LANE]
+        self.machine.read_cell(ORIGIN + index * LANES + RAM_LANE)
     }
     fn write(&mut self, index: usize, value: u16) {
         assert!(index < self.cells);
@@ -245,6 +245,33 @@ mod tests {
             }
         }
         assert_eq!(machine.tape(), tape);
+    }
+
+    #[test]
+    fn device_reads_and_writes_observe_deferred_tape_runs() {
+        use bf_wasm::engine::{Program, Stop};
+        let source = format!("{}[->>[>]+[<]<]?", ">".repeat(10));
+        let program = Program::parse(&source, true, true).unwrap();
+        let mut machine = Machine::new(2312).unwrap();
+        machine.write_cell(10, 100);
+        assert_eq!(machine.run(&program, 1000).unwrap(), Stop::Hook(b'?'));
+        let mut expected = vec![0; 2312];
+        expected[12..112].fill(1);
+        {
+            let mut memory = MachineMemory::new(&mut machine, 256);
+            for index in 0..256 {
+                assert_eq!(
+                    memory.read(index),
+                    expected[ORIGIN + index * LANES + RAM_LANE]
+                );
+            }
+            for (index, value) in [(1, 42), (12, 0), (13, 65535), (255, 7)] {
+                memory.write(index, value);
+                expected[ORIGIN + index * LANES + RAM_LANE] = value;
+                assert_eq!(memory.read(index), value);
+            }
+        }
+        assert_eq!(machine.tape(), expected);
     }
 
     #[test]

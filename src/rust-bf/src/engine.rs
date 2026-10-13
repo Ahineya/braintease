@@ -12,6 +12,7 @@ mod profile;
 mod routed;
 mod scan;
 mod search;
+mod tape;
 
 pub use profile::{OperationProfile, Profile, ProfileReport, SiteProfile};
 
@@ -340,7 +341,7 @@ impl Program {
 /// Mutable execution state. `new` uses fixed, checked tape bounds for native
 /// hosts; `with_wrapping_tape` preserves the traditional CLI's pointer wrapping.
 pub struct Machine {
-    tape: Vec<u16>,
+    tape: tape::Tape,
     pointer: usize,
     pc: usize,
     dispatches: u64,
@@ -371,7 +372,7 @@ impl Machine {
             .map_err(|_| Error::TapeAllocation { cells })?;
         tape.resize(cells, 0);
         Ok(Self {
-            tape,
+            tape: tape::Tape::new(tape),
             pointer: 0,
             pc: 0,
             dispatches: 0,
@@ -382,14 +383,22 @@ impl Machine {
         })
     }
 
-    pub fn tape(&self) -> &[u16] {
-        &self.tape
+    /// Materialize all deferred writes for a coherent bulk observation.
+    pub fn tape(&mut self) -> &[u16] {
+        self.tape.materialize()
+    }
+    /// Exact logical point observation without materializing other cells.
+    pub fn read_cell(&self, index: usize) -> u16 {
+        self.tape[index]
+    }
+    pub fn tape_len(&self) -> usize {
+        self.tape.len()
     }
     pub fn tape_mut(&mut self) -> &mut [u16] {
         // The caller can change any cell, including a cached scan destination.
         self.scan_cache.reset();
         self.zero_cache.reset();
-        &mut self.tape
+        self.tape.materialize()
     }
     pub fn pointer(&self) -> usize {
         self.pointer
@@ -410,10 +419,25 @@ impl Machine {
     /// Write one tape cell, preserving cached facts about all other cells.
     /// Prefer this to `tape_mut()` for isolated host responses. Panics if
     /// `index` is outside the allocated tape, like indexing `tape_mut()`.
+    /// Explicit caller mutations may synchronously materialize deferred runs
+    /// to keep storage bounded; interpreter writes use budgeted maintenance.
     #[inline]
     pub fn write_cell(&mut self, index: usize, value: u16) {
+        // Explicit caller mutations have no interpreter budget. Reclaim bounded
+        // overlay storage here; execution uses resumable maintenance instead.
+        if self.tape.needs_materialization() {
+            self.tape.materialize();
+        }
+        self.write_tape(index, value);
+    }
+
+    #[inline]
+    fn write_tape(&mut self, index: usize, value: u16) {
         // Both predicates depend only on zero-ness, not a particular value.
         let old = self.tape[index];
+        if old == value {
+            return;
+        }
         if value == 0 && old != 0 {
             self.scan_cache.invalidate(index);
         } else if value != 0 && old == 0 {
@@ -433,7 +457,7 @@ impl Machine {
     fn apply(&mut self, arithmetic: &Arithmetic, multiplier: u16) {
         for &(offset, delta) in &arithmetic.changes {
             let target = (self.pointer as isize + offset) as usize;
-            self.write_cell(
+            self.write_tape(
                 target,
                 self.tape[target].wrapping_add(delta.wrapping_mul(multiplier)),
             );
@@ -464,7 +488,7 @@ impl Machine {
                     }
                     let iterations = value.wrapping_neg().wrapping_mul(*inverse);
                     self.apply(arithmetic, iterations);
-                    self.write_cell(self.pointer, 0);
+                    self.write_tape(self.pointer, 0);
                 }
                 self.pc = *next;
             }
@@ -528,7 +552,7 @@ impl Machine {
         } else {
             (self.pointer - arithmetic.minimum.unsigned_abs()) / step + 1
         };
-        let mut limit = (SCAN_LIMIT / 2).min(safe_steps);
+        let mut limit = safe_steps;
         let mut known_nonzero = false;
         if offset.unsigned_abs() % step != 0 {
             // The write and predicate use distinct residues. A cached run of
@@ -541,11 +565,50 @@ impl Machine {
             }
         }
         let first = (self.pointer as isize + offset) as usize;
+        if known_nonzero {
+            // Distinct predicate and destination residues make the predicates
+            // invariant. A proved constant destination run can therefore be
+            // updated without visiting its interior, just like a cached scan.
+            let mut uniform = self.tape.uniform_prefix(first, arithmetic.advance, limit);
+            if let Some(zeros) = self.zero_cache.known_run(step, first) {
+                let zero_count = limit.min(zeros.steps_from(first, arithmetic.advance));
+                if uniform.is_none_or(|(count, _)| zero_count > count) {
+                    uniform = Some((zero_count, 0));
+                }
+            }
+            if let Some((count, old)) = uniform {
+                let last = (first as isize + (count - 1) as isize * arithmetic.advance) as usize;
+                let value = old.wrapping_add(delta);
+                if self.tape.assign_uniform(first, last, step, old, value) {
+                    if value == 0 && old != 0 {
+                        self.scan_cache.invalidate_run(first, last, step);
+                    } else if value != 0 && old == 0 {
+                        self.zero_cache.invalidate_run(first, last, step);
+                    }
+                    if value == 0 {
+                        let (slot, _) = self.zero_cache.prepare(step, first);
+                        self.zero_cache.remember(slot, first, last);
+                    } else {
+                        let (slot, _) = self.scan_cache.prepare(step, first);
+                        self.scan_cache.remember(slot, first, last);
+                    }
+                    self.pointer =
+                        (self.pointer as isize + count as isize * arithmetic.advance) as usize;
+                    if self.tape[self.pointer] == 0 {
+                        self.pc = next;
+                    }
+                    return true;
+                }
+            }
+        }
+        limit = limit.min(SCAN_LIMIT / 2);
         let mut last = None;
         let mut created_zero = false;
         let mut created_nonzero = false;
         let mut all_zero = true;
         let mut all_nonzero = true;
+        let mut uniform_value = None;
+        let mut uniform = true;
         for _ in 0..limit {
             if !known_nonzero && self.tape[self.pointer] == 0 {
                 break;
@@ -558,10 +621,22 @@ impl Machine {
             created_nonzero |= value != 0 && old == 0;
             all_zero &= value == 0;
             all_nonzero &= value != 0;
+            if let Some(first_value) = uniform_value {
+                uniform &= value == first_value;
+            } else {
+                uniform_value = Some(value);
+            }
             last = Some(target);
             self.pointer = (self.pointer as isize + arithmetic.advance) as usize;
         }
         if let Some(last) = last {
+            if uniform {
+                let value = uniform_value.unwrap();
+                // Every destination was committed by the point path above.
+                // Retain a clean constant fact, even if unrelated strides
+                // later evict the zero/nonzero predicate caches.
+                self.tape.assign_uniform(first, last, step, value, value);
+            }
             // Destinations are distinct on an in-bounds monotonic walk. Keep
             // every write while invalidating each cache only once per batch.
             if created_zero {
@@ -596,24 +671,46 @@ impl Machine {
                 } else {
                     (self.pointer - arithmetic.minimum.unsigned_abs()) / step + 1
                 };
-                let count = (SCAN_LIMIT / 2)
-                    .min(safe_steps)
-                    .min(known.steps_from(self.pointer, arithmetic.advance));
+                let limit = safe_steps.min(known.steps_from(self.pointer, arithmetic.advance));
                 let first = self.pointer;
+                let uniform = self.tape.uniform_prefix(first, arithmetic.advance, limit);
+                let mut count = (SCAN_LIMIT / 2).min(limit);
+                let mut virtual_value = None;
+                if let Some((uniform_count, old)) = uniform {
+                    let last = (first as isize + (uniform_count - 1) as isize * arithmetic.advance)
+                        as usize;
+                    let value = old.wrapping_add(delta);
+                    if self.tape.assign_uniform(first, last, step, old, value) {
+                        count = uniform_count;
+                        virtual_value = Some(value);
+                    }
+                }
                 let last = (first as isize + (count - 1) as isize * arithmetic.advance) as usize;
                 let mut any_zero = false;
                 let mut all_zero = true;
-                // Predicates in this verified run are nonzero. Each body
-                // changes only its own distinct cell, so the updates commute.
-                // A single checked slice preserves all pointer excursions and
-                // avoids rechecking bounds/predicates for every complete body.
-                for cell in self.tape[first.min(last)..=first.max(last)]
-                    .iter_mut()
-                    .step_by(step)
-                {
-                    *cell = cell.wrapping_add(delta);
-                    any_zero |= *cell == 0;
-                    all_zero &= *cell == 0;
+                // A represented uniform run can be updated in constant work.
+                // Unproved/heterogeneous cells retain bounded physical writes.
+                if let Some(value) = virtual_value {
+                    any_zero = value == 0;
+                    all_zero = value == 0;
+                } else {
+                    let mut uniform_value = None;
+                    let mut uniform = true;
+                    for index in (first.min(last)..=first.max(last)).step_by(step) {
+                        let value = self.tape[index].wrapping_add(delta);
+                        self.tape[index] = value;
+                        any_zero |= value == 0;
+                        all_zero &= value == 0;
+                        if let Some(first_value) = uniform_value {
+                            uniform &= value == first_value;
+                        } else {
+                            uniform_value = Some(value);
+                        }
+                    }
+                    if uniform {
+                        let value = uniform_value.unwrap();
+                        self.tape.assign_uniform(first, last, step, value, value);
+                    }
                 }
                 self.pointer = (first as isize + count as isize * arithmetic.advance) as usize;
                 if any_zero {
@@ -636,6 +733,8 @@ impl Machine {
         let mut created_zero = false;
         let mut all_zero = true;
         let mut success = true;
+        let mut uniform_value = None;
+        let mut uniform = true;
         // These bodies touch only their own predicate, and strict in-bounds
         // movement makes their cells distinct. Batch cache maintenance while
         // retaining every physical write and every intermediate bounds check.
@@ -651,11 +750,20 @@ impl Machine {
             self.tape[self.pointer] = value;
             created_zero |= value == 0;
             all_zero &= value == 0;
+            if let Some(first_value) = uniform_value {
+                uniform &= value == first_value;
+            } else {
+                uniform_value = Some(value);
+            }
             last = Some(self.pointer);
             self.pointer = (self.pointer as isize + arithmetic.advance) as usize;
         }
         if let Some(last) = last {
             let step = arithmetic.advance.unsigned_abs();
+            if uniform {
+                let value = uniform_value.unwrap();
+                self.tape.assign_uniform(first, last, step, value, value);
+            }
             if created_zero {
                 self.scan_cache.invalidate_run(first, last, step);
             }
@@ -677,8 +785,9 @@ impl Machine {
     /// 256 scan/search probes, or 256 combined moving-loop
     /// iterations and cell updates. Routed loops inspect at most 128 parts per
     /// proof, with at most two proofs of 256 scan probes and bounded predicate
-    /// checks; a counted fill examines and writes at most 1024 markers. A scan
-    /// probe can skip a previously verified run of equal zero-ness in constant time.
+    /// checks; physical fill/maintenance work visits at most 1024 cells.
+    /// Verified uniform progressions may be represented or restored in constant
+    /// work, like cached scans. Every point/raw observation is logically exact.
     /// An input stop repeats until `provide_input` is called, without consuming
     /// another dispatch. Output and hooks have already advanced past the marker.
     pub fn run(&mut self, program: &Program, budget: u64) -> Result<Stop, Error> {
@@ -721,6 +830,19 @@ impl Machine {
             if PROFILE {
                 profile.as_deref_mut().unwrap().dispatch();
             }
+            if self.tape.needs_materialization() {
+                let started = PROFILE.then(std::time::Instant::now);
+                self.tape.materialize_step();
+                if PROFILE {
+                    profile.as_deref_mut().unwrap().record(
+                        profile::Kind::Materialize,
+                        program.code[self.pc].offset,
+                        started.unwrap().elapsed(),
+                        true,
+                    );
+                }
+                continue;
+            }
             let fast = program.fast_at[self.pc];
             if fast != NO_FAST_OP {
                 let operation = &program.fast[fast as usize];
@@ -760,7 +882,7 @@ impl Machine {
     fn literal(&mut self, instruction: Instruction) -> Result<Option<Stop>, Error> {
         match instruction.op {
             Op::Add(delta) => {
-                self.write_cell(self.pointer, self.tape[self.pointer].wrapping_add(delta));
+                self.write_tape(self.pointer, self.tape[self.pointer].wrapping_add(delta));
                 self.pc += 1;
             }
             Op::Move(delta) => {

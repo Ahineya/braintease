@@ -351,7 +351,7 @@ impl Routed {
             }
         }
         for change in changes {
-            machine.write_cell(
+            machine.write_tape(
                 change.index,
                 machine.tape[change.index].wrapping_add(change.delta.wrapping_mul(prefix)),
             );

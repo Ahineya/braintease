@@ -5,7 +5,7 @@
 use super::{FastOp, Op};
 use std::{collections::HashMap, time::Duration};
 
-const KINDS: usize = 13;
+const KINDS: usize = 14;
 const SITE_LIMIT: usize = 4096;
 
 #[derive(Clone, Copy)]
@@ -23,6 +23,7 @@ pub(super) enum Kind {
     Input,
     Output,
     Hook,
+    Materialize,
 }
 
 impl Kind {
@@ -64,6 +65,7 @@ impl Kind {
             "input",
             "output",
             "hook",
+            "materialize",
         ][self as usize]
     }
 

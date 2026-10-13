@@ -218,6 +218,27 @@ header, but WAD loading and the first frame had not completed. The additional
 five- to tenfold host-rate drops reported in longer runs were not reproduced
 locally; these changes do not establish their cause.
 
+The directory-decoding follow-up keeps decoded positions and sizes local while
+checking them, then writes each finished entry to the far heap. It avoids
+re-reading distant fields and repeated checked-helper calls for an already
+bounded record. Shared little-endian decoding assembles native 16-bit halves
+before widening, preserving the masks on serialized octets.
+
+With the bundled WAD, `W_AddFile` fell from 2,426,603 to 1,756,192 guest
+instructions (27.6% fewer), and far-heap reads fell from 7,965 to 381 (95.2%
+fewer). The 22,790 heap writes and 10,118 disk-word reads are unchanged.
+`DOOM Shareware` now completes at guest instruction 4,721,645, down from
+5,392,056. These counts come from the rebuilt production image, not an
+isolated decoder. Tests cover full-width fields, ignored upper cell bits,
+overflowing ranges and poisoned reused allocations; native/Rust VM title,
+menu and E1M1 pixels still match.
+
+The generic BF engine also defers proven uniform tape runs and cancels writes
+when cleanup restores their backing values. This targets repeated marker work
+in distant memory accesses without recognizing guest instructions. See the
+[engine design](../../rbf/README.md#execution-engine) and
+[fixed-bank benchmark](../../rbf/benchmarks/README.md#deferred-uniform-tape-runs-2026-10-13).
+
 ### Controls
 
 | Action | Keys |

@@ -23,10 +23,8 @@ fn moving_updates_bound_total_work_and_resume_long_walks() {
         let completed = SCAN_LIMIT / (changes + 1);
         assert_eq!(machine.pointer(), completed * changes);
         assert_eq!(machine.pc, 0, "resume must recheck the loop predicate");
-        assert!(machine.tape()[..machine.pointer()].iter().all(|&v| v == 2));
-        assert!(machine.tape()[machine.pointer()..stop]
-            .iter()
-            .all(|&v| v == 1));
+        assert!((0..machine.pointer()).all(|index| machine.read_cell(index) == 2));
+        assert!((machine.pointer()..stop).all(|index| machine.read_cell(index) == 1));
         assert_eq!(machine.tape()[stop], 0);
         assert!(completed * (changes + 1) <= SCAN_LIMIT);
         assert!(completed > 0);
@@ -71,11 +69,9 @@ fn moving_updates_recheck_predicates_after_budget_mutations() {
         machine.tape_mut()[current + distance] = 0;
         assert_eq!(machine.run(&program, 100).unwrap(), Stop::Hook(b'!'));
         assert_eq!(machine.pointer(), current + distance);
-        assert!(machine.tape()[..machine.pointer()].iter().all(|&v| v == 0));
-        assert_eq!(machine.tape()[machine.pointer()], 0);
-        assert!(machine.tape()[machine.pointer() + 1..1024]
-            .iter()
-            .all(|&v| v == 1));
+        assert!((0..machine.pointer()).all(|index| machine.read_cell(index) == 0));
+        assert_eq!(machine.read_cell(machine.pointer()), 0);
+        assert!((machine.pointer() + 1..1024).all(|index| machine.read_cell(index) == 1));
     }
 }
 
@@ -242,7 +238,7 @@ fn offset_walks_recheck_warm_predicates_after_budget_mutations() {
         for index in (0..4096).step_by(8) {
             assert_eq!(machine.tape()[index], 1);
             assert_eq!(
-                machine.tape()[index + 1],
+                machine.read_cell(index + 1),
                 u16::from(index < machine.pointer())
             );
         }
