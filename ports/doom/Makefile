@@ -47,7 +47,7 @@ SOURCES := $(SOURCES_$(PROGRAM))
 RIPPLE_SOURCES := $(SOURCES) $(if $(filter engine/m_fixed.c,$(SOURCES)),src/fixed_fast.asm) \
  $(if $(filter src/wad_io.c,$(SOURCES)),src/word_read_fast.asm) \
  $(if $(filter src/asset_metadata.c,$(SOURCES)),src/metadata_validate_fast.asm) \
- $(if $(filter engine libc wad_lookup wad_directory,$(PROGRAM)),src/compat_libc.c)
+ $(if $(filter engine libc wad_lookup wad_directory texture_metadata,$(PROGRAM)),src/compat_libc.c)
 NATIVE_SOURCES := $(filter %.c,$(SOURCES))
 ROUT := $(BUILD)/ripple/$(PROGRAM)
 NOUT := $(BUILD)/native/$(PROGRAM)
@@ -77,7 +77,7 @@ DEFINES := -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=2
  $(if $(filter engine info_storage,$(PROGRAM)),-DDOOM_GENERATED_INFO=1)
 SCENE_DEFINES := $(if $(filter 1,$(START_MAP)),-DDOOM_START_MAP=1) $(if $(filter 1,$(LOW_DETAIL)),-DDOOM_LOW_DETAIL=1)
 RIPPLE_FLAGS := -Iinclude $(INCLUDES) -I$(ROOT)/runtime/include $(DEFINES) -DRIPPLE=1 -DBANK_SIZE=$(BANK_SIZE) \
- $(if $(filter engine memory_kernels alloc_fast,$(PROGRAM)),-DDOOM_FAST_MEMORY=1)
+ $(if $(filter engine memory_kernels alloc_fast texture_metadata,$(PROGRAM)),-DDOOM_FAST_MEMORY=1)
 NATIVE_SDK_FLAGS = $(if $(findstring sysroot,$(CFLAGS)),,$(shell node tools/build-support.mjs native-flags "$(CC)"))
 comma := ,
 # Evaluate after comma is defined, including on older GNU make shipped by macOS.
@@ -89,6 +89,7 @@ HEADERS := $(wildcard include/*.h include/*/*.h src/*.h engine/*.h $(ROOT)/runti
 FIXTURE_STAMP := $(if $(GENERATE_$(PROGRAM)),$(GENERATED)/$(PROGRAM).fixture-stamp)
 FIXTURE_FILES_projection_widths := projection_loop.inc
 FIXTURE_FILES_texture_columns := texture_cache.inc
+FIXTURE_FILES_texture_metadata := texture_metadata.inc
 FIXTURE_FILES_keyboard_controls := input_commands.inc controls_defaults.inc platform_keyboard.inc
 FIXTURE_FILES_config_bindings := config_bindings.inc
 FIXTURE_OUTPUTS := $(addprefix $(GENERATED)/,$(FIXTURE_FILES_$(PROGRAM)))
@@ -198,6 +199,7 @@ test-gameplay:
 test-assets:
 	@node --test tools/assets-pack.test.mjs
 	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/metadata-validate.mjs --wad "$(WAD)"
+	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/texture-metadata-validate.mjs --wad "$(WAD)"
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs assets --wad "$(WAD)"
 clean:
 	rm -rf "$(BUILD)/ripple" "$(BUILD)/native" "$(BUILD)/assets" "$(GENERATED)"

@@ -26,6 +26,7 @@ const EXPECTED = {
   sky_widths: 'SKY OK: fixed-point midpoint and exposed sky row\n',
   event_widths: 'EVENT WIDTHS OK packed automap messages, queue copy, keyboard discrimination\n',
   texture_columns: 'TEXTURE OK: short/tall composites, last-column guard, holes, masked posts\n',
+  texture_metadata: 'TEXTURE METADATA INITIALIZED\nTEXTURE METADATA OK 125 textures, 598 references, 10776 columns\n',
   keyboard_controls: 'INPUT OK: arrows/WASD, Control fire, Space use, Shift/Alt, aliases and releases\n',
   config_bindings: 'CONFIG BINDINGS OK 24 numbered names, 97 fixed names, targets and player defaults\n',
 };

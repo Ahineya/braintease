@@ -59,17 +59,27 @@ The default `cooked` build derives a disk image from the original WAD. It keeps
 one serialized octet per 16-bit disk word, then appends prepared directory,
 name-lookup and graphics data in Ripple's in-memory layout. Reading those cells requires no byte
 unpacking; cached pictures need no second allocation and conversion pass.
-Texture initialization loads patch headers and column offsets, and sprite
-initialization reads only dimensions and origin offsets. Pixel posts load when
+Texture initialization loads prepared definitions and column mappings into one
+permanent zone allocation. Sprite initialization reads only dimensions and
+origin offsets. Pixel posts and texture composites still load or render when
 the renderer needs them.
 
-Cooked format v2 includes all directory records, hash bucket heads and chains,
+Cooked format v3 includes all directory records, hash bucket heads and chains,
 and the resolved `PNAMES` patch IDs. Preparation preserves case-insensitive
 lookup, last-duplicate priority and missing unused patch names. The guest reads
 bounded batches, checks ranges and indices, relocates pointers and copies the
 finished records to permanent zone storage. It no longer decodes the directory's numeric
 fields, hashes every lump name or searches for all 350 patch names at startup.
 Native builds and the `packed`/`expanded` modes retain the original decoders.
+
+The texture section adds all ordered patch references, dimensions, width masks,
+fixed-point heights, column lump IDs and offsets, composite allocation sizes,
+and texture-name hash chains. Unlike WAD lump names, duplicate texture names
+keep the **first** definition. The guest checks the target ABI, section bounds,
+IDs and offsets in near-memory batches, resolves pointer references and creates
+the animation translation table. It skips raw `TEXTURE1`/`TEXTURE2` decoding,
+per-texture allocations and `R_GenerateLookup`. The shareware section contains
+125 textures, 598 patch references and 10,776 columns in 36,638 disk words.
 
 Every Doom `calloc` now uses the existing fast clearing routine on Ripple,
 including renderer buffers, patch-cache slots and tic data. Allocation sizes
@@ -103,8 +113,8 @@ composites or rendering: those still run inside Doom. The larger disk image
 trades host storage for less guest work without changing the ISA, CPU, bank
 sizes or generic BF interpreter.
 
-With the bundled WAD, the v2 cooked image contains 968 validated patches and is
-12,779,520 padded host bytes. A three-sample v1 BF benchmark copying 4,096 texture
+With the bundled WAD, the v3 cooked image contains 968 validated patches and is
+12,845,056 padded host bytes. A three-sample v1 BF benchmark copying 4,096 texture
 octets into RAM bank 136 measured:
 
 | Storage mode | Read interval | Complete fixture |
@@ -161,6 +171,29 @@ messages through `W_Init` printed. The last samples were around 2,500 guest
 instructions per second. No frame had completed; this validates ongoing startup
 progress, not a full BF boot or a first-frame ETA.
 
+The v3 texture preparation closes a remaining gap in v2: picture patches were
+prepared, but texture composition records and lookup tables were still built
+by the guest. With the same WAD and title-start configuration:
+
+| Stage | Cooked v2 instructions | Cooked v3 instructions |
+| --- | ---: | ---: |
+| Texture initialization | 15,739,194 | 4,833,593 |
+| Complete `R_Init` | 19,805,769 | 8,859,875 |
+| Startup through first title frame | 104,553,661 | 93,610,961 |
+
+Zone allocations inside texture initialization fall from 674 to one. Validation
+and pointer relocation still execute in the guest; pixel composites remain lazy.
+The texture stage reads 41,694 words instead of 31,452, trading somewhat more
+prepared data for 69.3% less guest instruction work. These are instruction
+measurements, not BF wall-time or first-frame estimates.
+
+The original-WAD oracle also passes an 80-texture, 80,000-column image spanning
+several memory banks, including clipped overlaps, duplicate names and an empty
+patch column. A separate two-texture/four-column fixture completed its cooked
+initialization and reference checks in the BF host in 16.92 seconds under a
+45-second limit, retaining 64,000-cell banks and 256 RAM banks. This validates
+the new path on BF; it is not a full Doom boot benchmark.
+
 To reproduce the bounded reader comparison:
 
 ```sh
@@ -169,7 +202,16 @@ node ports/doom/tools/benchmark-wad-read.mjs --timeout 60 --samples 3
 
 `make -C ports/doom test-assets` checks packing and incremental mode changes,
 all 32 header words and 15 malformed metadata cases in the guest, as well as
-the independent asset oracle. `make -C ports/doom test-kernels` also
+the original-WAD texture oracle, 37 malformed texture metadata cases and the
+independent asset oracle. The texture oracle checks every texture field, patch
+reference, column mapping and hash lookup using the original WAD. For a separate
+80,000-column fixture spanning several banks, run:
+
+```sh
+DOOM_BUILD=build/doom-texture-banks node ports/doom/tools/texture-metadata-validate.mjs --synthetic
+```
+
+`make -C ports/doom test-kernels` also
 checks the word reader and directory validator against independent oracles,
 including full-width values, bank edges, pointer tags and the calling convention.
 

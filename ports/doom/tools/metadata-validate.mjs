@@ -32,9 +32,9 @@ export function validateMetadata({ wad = WAD, output, timeout = 30,
     const binaryHash = digest(binary);
     const disk = path.join(out, 'valid.img');
     const asset = prepareDisk(source, disk, { wadMode: 'cooked', manifest: path.join(BUILD, 'manifest.json') });
-    require(asset.format_version === 2 && asset.directory_record_words === 18
+    require(asset.format_version === 3 && asset.directory_record_words === 18
       && asset.hash_entry_words === 1 && asset.pnames_entry_words === 1,
-    'metadata validation requires the cooked v2 layout');
+    'metadata validation requires the cooked v3 layout');
     require(asset.lump_count > 0 && asset.lump_count < 32767 && asset.pnames_count > 0,
       'wad_lookup metadata validation requires the shareware WAD with PNAMES');
     const original = fs.readFileSync(disk);

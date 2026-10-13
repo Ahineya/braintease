@@ -82,6 +82,8 @@ int W_PatchAssetLocation(int lump, uint32_t *word_offset, uint32_t *word_count)
         || index_words > (uint32_t)(SIZE_MAX / sizeof(uint16_t)))
         I_Error("Invalid cooked patch directory bounds");
     index_end = DOOM_ASSET_PNAMES_WORD + DOOM_ASSET_PNAMES_COUNT;
+    if (DOOM_ASSET_TEXTURE_WORDS != 0UL)
+        index_end = DOOM_ASSET_TEXTURE_WORD + DOOM_ASSET_TEXTURE_WORDS;
     if (active_wad->patch_index == NULL) {
         /* This small permanent index also serves every sprite-header lookup.
          * Zone purges must not make repeated initialization reread it. */

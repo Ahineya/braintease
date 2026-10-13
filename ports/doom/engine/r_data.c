@@ -40,6 +40,8 @@
 #include "patch_cache.h"
 #include "doom_decode.h"
 #include "asset_metadata.h"
+#include "doom_build_config.h"
+#include "texture_metadata.h"
 
 //
 // Graphics.
@@ -84,49 +86,6 @@ typedef struct
     short		patchcount;
     mappatch_t	patches[1];
 } PACKEDATTR maptexture_t;
-
-
-// A single patch from a texture definition,
-//  basically a rectangular area within
-//  the texture rectangle.
-typedef struct
-{
-    // Block origin (allways UL),
-    // which has allready accounted
-    // for the internal origin of the patch.
-    short	originx;	
-    short	originy;
-    int		patch;
-} texpatch_t;
-
-
-// A maptexturedef_t describes a rectangular texture,
-//  which is composed of one or more mappatch_t structures
-//  that arrange graphic patches.
-
-typedef struct texture_s texture_t;
-
-struct texture_s
-{
-    // Keep name for switch changing, etc.
-    char	name[8];		
-    short	width;
-    short	height;
-
-    // Index in textures list
-
-    int         index;
-
-    // Next in hash table chain
-
-    texture_t  *next;
-    
-    // All the patches[patchcount]
-    //  are drawn back to front into the cached texture.
-    short	patchcount;
-    texpatch_t	patches[1];		
-};
-
 
 
 int		firstflat;
@@ -465,6 +424,262 @@ static void GenerateTextureHashTable(void)
     }
 }
 
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+static uint32_t CookedTexturePair(const uint16_t *words)
+{
+    uint32_t value;
+    /* The image stores native target cells; copy the pair without bitwise
+     * byte decoding. This is only compiled for the checked Ripple ABI. */
+    memcpy(&value, words, sizeof(value));
+    return value;
+}
+
+static uint32_t CookedTexturePatchSize(int lump, int *previous,
+                                      uint32_t *previous_size)
+{
+    uint32_t location;
+    if (lump < 0 || (unsigned int)lump >= numlumps)
+        I_Error("Invalid cooked texture patch ID");
+    if (lump != *previous) {
+        if (!W_PatchAssetLocation(lump, &location, previous_size))
+            I_Error("Cooked texture refers to a raw-only patch");
+        *previous = lump;
+    }
+    return *previous_size;
+}
+
+static int R_LoadCookedTextures(void)
+{
+    uint16_t header[16];
+    uint16_t *slab, *cursor, *definitions, *columns, *offsets;
+    uint16_t *masks, *heights, *sizes, *links;
+    uint32_t definition_words, column_count, tail_words, slab_words;
+    uint32_t definitions_at, columns_at, offsets_at, masks_at, heights_at, sizes_at, links_at;
+    uint32_t remaining_definitions, remaining_columns, file_at;
+    uint32_t previous_size = 0;
+    int previous_patch = -1;
+    unsigned int count, i;
+
+    if (sizeof(char) != 1 || sizeof(short) != 1 || sizeof(int) != 1
+        || sizeof(void *) != 2 || sizeof(uint32_t) != 2 || sizeof(size_t) != 2
+        || sizeof(fixed_t) != 2 || sizeof(texpatch_t) != 3
+        || sizeof(texture_t) != 17 || offsetof(texture_t, next) != 11
+        || offsetof(texture_t, patchcount) != 13 || offsetof(texture_t, patches) != 14)
+        I_Error("Cooked textures do not match the target C ABI");
+    if (DOOM_ASSET_TEXTURE_COUNT == 0UL || DOOM_ASSET_TEXTURE_COUNT > 32767UL
+        || numlumps == 0 || (uint32_t)numlumps != DOOM_ASSET_LUMP_COUNT
+        || DOOM_ASSET_TEXTURE_WORDS < 16UL
+        || DOOM_ASSET_TEXTURE_WORD > DOOM_ASSET_TOTAL_WORDS
+        || DOOM_ASSET_TEXTURE_WORDS > DOOM_ASSET_TOTAL_WORDS - DOOM_ASSET_TEXTURE_WORD)
+        I_Error("Invalid cooked texture section bounds");
+
+    W_ReadAssetWords(DOOM_ASSET_TEXTURE_WORD, header, 16UL);
+    count = (unsigned int)DOOM_ASSET_TEXTURE_COUNT;
+    definition_words = CookedTexturePair(header + 4);
+    column_count = CookedTexturePair(header + 6);
+    if (header[0] != 0x5458U || header[1] != 1U || header[2] != count
+        || header[3] != 0 || definition_words != DOOM_ASSET_TEXTURE_DEFINITION_WORDS
+        || column_count != DOOM_ASSET_TEXTURE_COLUMNS
+        || header[8] != (unsigned int)W_GetNumForName("TEXTURE1")
+        || header[9] != (unsigned int)W_CheckNumForName("TEXTURE2")
+        || header[10] != (unsigned int)W_GetNumForName("PNAMES"))
+        I_Error("Cooked texture header does not match the WAD");
+    for (i = 11; i < 16; ++i)
+        if (header[i] != 0) I_Error("Invalid cooked texture header padding");
+    tail_words = DOOM_ASSET_TEXTURE_WORDS - 16UL;
+    if (definition_words < (uint32_t)count * 17UL || definition_words > tail_words
+        || (uint32_t)count * 6UL > tail_words - definition_words
+        || column_count > (tail_words - definition_words - (uint32_t)count * 6UL) / 3UL
+        || definition_words + column_count * 3UL + (uint32_t)count * 6UL != tail_words
+        || tail_words > (uint32_t)SIZE_MAX - (uint32_t)count * 10UL - 1UL)
+        I_Error("Invalid cooked texture section layout");
+
+    /* All texture definitions, column tables and mutable pointer tables live
+     * in one permanent zone block. The final serialized hash IDs are reused
+     * as the animation translation table after the hash pointers are built. */
+    slab_words = (uint32_t)count * 10UL + tail_words + 1UL;
+    slab = Z_Malloc((size_t)slab_words, PU_STATIC, NULL);
+    cursor = slab;
+    textures = (texture_t **)cursor; cursor += (size_t)count * 2U;
+    texturecolumnlump = (short **)cursor; cursor += (size_t)count * 2U;
+    texturecolumnofs = (uint32_t **)cursor; cursor += (size_t)count * 2U;
+    texturecomposite = (byte **)cursor; cursor += (size_t)count * 2U;
+    textures_hashtable = (texture_t **)cursor; cursor += (size_t)count * 2U;
+    definitions = cursor; cursor += definition_words;
+    columns = cursor; cursor += column_count;
+    offsets = cursor; cursor += column_count * 2UL;
+    masks = cursor; cursor += count;
+    heights = cursor; cursor += (size_t)count * 2U;
+    sizes = cursor; cursor += (size_t)count * 2U;
+    links = cursor;
+    texturewidthmask = (int *)masks;
+    textureheight = (fixed_t *)heights;
+    texturecompositesize = (size_t *)sizes;
+    texturetranslation = (int *)links;
+    numtextures = count;
+
+    definitions_at = DOOM_ASSET_TEXTURE_WORD + 16UL;
+    columns_at = definitions_at + definition_words;
+    offsets_at = columns_at + column_count;
+    masks_at = offsets_at + column_count * 2UL;
+    heights_at = masks_at + count;
+    sizes_at = heights_at + (uint32_t)count * 2UL;
+    links_at = sizes_at + (uint32_t)count * 2UL;
+    file_at = definitions_at;
+    remaining_definitions = definition_words;
+    remaining_columns = column_count;
+    cursor = definitions;
+    for (i = 0; i < count; ++i) {
+        texture_t record;
+        texpatch_t patch_records[32];
+        texture_t *texture = (texture_t *)cursor;
+        uint16_t *cells = (uint16_t *)&record;
+        unsigned int next, j, remaining_patches;
+        uint32_t record_words;
+        if (remaining_definitions < 14UL)
+            I_Error("Truncated cooked texture definition");
+        W_ReadAssetWords(file_at, cells, 14UL);
+        if (record.width <= 0 || record.height <= 0 || record.patchcount <= 0
+            || record.index != (int)i)
+            I_Error("Invalid cooked texture definition");
+        for (j = 0; j < 8; ++j)
+            if ((unsigned int)record.name[j] > 255U)
+                I_Error("Invalid cooked texture name");
+        next = cells[11];
+        if (cells[12] != 0 || (next < count ? next <= i : next != 65535U))
+            I_Error("Invalid cooked texture hash link");
+        record_words = 14UL + (uint32_t)record.patchcount * 3UL;
+        if (record_words > remaining_definitions || (uint32_t)record.width > remaining_columns)
+            I_Error("Cooked texture definition exceeds its section");
+        texturetranslation[i] = (int)next;
+        record.next = NULL;
+        textures[i] = texture;
+        texturecolumnlump[i] = (short *)columns;
+        texturecolumnofs[i] = (uint32_t *)offsets;
+        texturecomposite[i] = NULL;
+        memcpy(cursor, &record, 14U);
+        cursor += 14U;
+        file_at += 14UL;
+        remaining_patches = (unsigned int)record.patchcount;
+        while (remaining_patches != 0) {
+            unsigned int batch = remaining_patches < 32U ? remaining_patches : 32U;
+            unsigned int words = batch * 3U;
+            W_ReadAssetWords(file_at, (uint16_t *)patch_records, (uint32_t)words);
+            for (j = 0; j < batch; ++j)
+                CookedTexturePatchSize(patch_records[j].patch, &previous_patch, &previous_size);
+            memcpy(cursor, patch_records, (size_t)words);
+            cursor += words;
+            file_at += words;
+            remaining_patches -= batch;
+        }
+        columns += (unsigned int)record.width;
+        offsets += (size_t)(unsigned int)record.width * 2U;
+        remaining_definitions -= record_words;
+        remaining_columns -= (unsigned int)record.width;
+    }
+    if (remaining_definitions != 0 || remaining_columns != 0)
+        I_Error("Cooked texture section has unused definitions or columns");
+    for (i = 0; i < count; ++i) {
+        unsigned int next = (unsigned int)texturetranslation[i];
+        if (next < count) textures[i]->next = textures[next];
+    }
+
+    /* Scalar tables are small, but still validate near stack cells instead
+     * of repeatedly traversing the distant permanent storage on Brainfuck. */
+    for (i = 0; i < count;) {
+        uint16_t batch_masks[32], batch_heights[64];
+        uint32_t batch_sizes[32];
+        unsigned int batch = count - i < 32U ? count - i : 32U;
+        unsigned int j;
+        W_ReadAssetWords(masks_at, batch_masks, (uint32_t)batch);
+        W_ReadAssetWords(heights_at, batch_heights, (uint32_t)batch * 2UL);
+        W_ReadAssetWords(sizes_at, (uint16_t *)batch_sizes, (uint32_t)batch * 2UL);
+        for (j = 0; j < batch; ++j) {
+            texture_t *texture = textures[i + j];
+            unsigned int mask = 1U;
+            unsigned int half_width = (unsigned int)texture->width / 2U;
+            while (mask <= half_width) mask += mask;
+            if (batch_masks[j] != mask - 1U || batch_heights[j * 2U] != 0
+                || batch_heights[j * 2U + 1U] != (unsigned int)texture->height
+                || batch_sizes[j] > 65536UL)
+                I_Error("Invalid cooked texture scalar table");
+        }
+        memcpy(texturewidthmask + i, batch_masks, (size_t)batch);
+        memcpy(textureheight + i, batch_heights, (size_t)batch * 2U);
+        memcpy(texturecompositesize + i, batch_sizes, (size_t)batch * 2U);
+        masks_at += batch;
+        heights_at += (uint32_t)batch * 2UL;
+        sizes_at += (uint32_t)batch * 2UL;
+        i += batch;
+    }
+
+    for (i = 0; i < count; ++i) {
+        short batch_lumps[32];
+        uint32_t batch_offsets[32];
+        texture_t *texture = textures[i];
+        unsigned int remaining = (unsigned int)texture->width;
+        unsigned int column = 0;
+        uint32_t composite_size = 0;
+        uint32_t column_size = texture->height < 128 ? 128UL : (uint32_t)texture->height;
+        while (remaining != 0) {
+            unsigned int batch = remaining < 32U ? remaining : 32U;
+            unsigned int j;
+            W_ReadAssetWords(columns_at, (uint16_t *)batch_lumps, (uint32_t)batch);
+            W_ReadAssetWords(offsets_at, (uint16_t *)batch_offsets, (uint32_t)batch * 2UL);
+            for (j = 0; j < batch; ++j) {
+                int lump = batch_lumps[j];
+                uint32_t offset = batch_offsets[j];
+                if (lump < 0) {
+                    if (lump != -1 || offset != composite_size
+                        || column_size > 65536UL - composite_size)
+                        I_Error("Invalid cooked composite column");
+                    composite_size += column_size;
+                } else {
+                    uint32_t patch_size = CookedTexturePatchSize(lump, &previous_patch, &previous_size);
+                    /* Empty posts may consist solely of a final 255 marker.
+                     * Masked consumers subtract three from this pixel pointer
+                     * before checking that marker, so the pixel pointer itself
+                     * can legitimately lie just beyond the patch payload. */
+                    if (offset < 3UL || offset - 3UL >= patch_size)
+                        I_Error("Invalid cooked direct column offset");
+                }
+            }
+            memcpy(texturecolumnlump[i] + column, batch_lumps, (size_t)batch);
+            memcpy(texturecolumnofs[i] + column, batch_offsets, (size_t)batch * 2U);
+            columns_at += batch;
+            offsets_at += (uint32_t)batch * 2UL;
+            column += batch;
+            remaining -= batch;
+        }
+        if (composite_size != texturecompositesize[i])
+            I_Error("Cooked composite size does not match its columns");
+    }
+
+    for (i = 0; i < count;) {
+        uint16_t heads[32];
+        texture_t *pointers[32];
+        unsigned int batch = count - i < 32U ? count - i : 32U;
+        unsigned int j;
+        W_ReadAssetWords(links_at, heads, (uint32_t)batch);
+        for (j = 0; j < batch; ++j) {
+            unsigned int index = heads[j];
+            if (index < count) pointers[j] = textures[index];
+            else {
+                if (index != 65535U) I_Error("Invalid cooked texture hash head");
+                pointers[j] = NULL;
+            }
+            heads[j] = i + j;
+        }
+        memcpy(textures_hashtable + i, pointers, (size_t)batch * 2U);
+        memcpy(texturetranslation + i, heads, (size_t)batch);
+        links_at += batch;
+        i += batch;
+    }
+    texturetranslation[count] = count;
+    return 1;
+}
+#endif
+
 
 //
 // R_InitTextures
@@ -484,6 +699,10 @@ void R_InitTextures(void)
     texture_t *texture;
     texpatch_t *patch;
     int mask;
+
+#if defined(RIPPLE) && DOOM_WAD_MODE == 2
+    if (R_LoadCookedTextures()) return;
+#endif
 
     lump = W_GetNumForName("PNAMES");
     lookup = W_LoadPatchNames(lump, &count);
@@ -848,4 +1067,3 @@ void R_PrecacheLevel (void)
 
     Z_Free(spritepresent);
 }
-

@@ -31,6 +31,8 @@ if (program === 'projection_widths') {
     + before(from(source, '#define HEIGHTBITS'), '//\n// R_StoreWallRange'));
 } else if (program === 'texture_columns') {
   write('texture_cache.inc', before(read('r_data.c'), 'static void GenerateTextureHashTable(void)'));
+} else if (program === 'texture_metadata') {
+  write('texture_metadata.inc', before(read('r_data.c'), '//\n// R_InitFlats'));
 } else if (program === 'config_bindings') {
   write('config_bindings.inc', before(from(read('d_main.c'), 'void D_BindVariables(void)'),
     '//\n// D_GrabMouseCallback'));

@@ -51,6 +51,62 @@ function texture(index) {
   result.write('TEXTURE', 8); result.writeUInt16LE(1, 20); result.writeUInt16LE(3, 22);
   result.writeUInt16LE(1, 28); result.writeUInt16LE(index, 34); return result;
 }
+function textureTable(definitions) {
+  const table = 4 + definitions.length * 4;
+  const result = Buffer.alloc(table + definitions.reduce((sum, item) => sum + 22 + item.patches.length * 10, 0));
+  result.writeUInt32LE(definitions.length);
+  let at = table;
+  definitions.forEach((item, i) => {
+    result.writeUInt32LE(at, 4 + i * 4); putName(result, item.name, at);
+    result.writeUInt16LE(item.width, at + 12); result.writeUInt16LE(item.height, at + 14);
+    result.writeUInt16LE(item.patches.length, at + 20);
+    item.patches.forEach((part, j) => {
+      result.writeInt16LE(part.x ?? 0, at + 22 + j * 10);
+      result.writeInt16LE(part.y ?? 0, at + 24 + j * 10);
+      result.writeUInt16LE(part.index ?? 0, at + 26 + j * 10);
+    });
+    at += 22 + item.patches.length * 10;
+  });
+  return result;
+}
+function columnPatch(width, height = 3) {
+  const directory = 8 + width * 4, result = Buffer.alloc(directory + width * 6);
+  result.writeUInt16LE(width); result.writeUInt16LE(height, 2);
+  for (let x = 0; x < width; ++x) {
+    result.writeUInt32LE(directory + x * 6, 8 + x * 4);
+    result.set([0, 1, 0, (x + 17) & 255, 0, 255], directory + x * 6);
+  }
+  return result;
+}
+function decodedTextures({ image, metadata }) {
+  const blob = image.subarray(metadata.texture_word * 2, (metadata.texture_word + metadata.texture_words) * 2);
+  const word = offset => blob.readUInt16LE(offset * 2), wide = offset => blob.readUInt32LE(offset * 2);
+  const count = word(2), definitions = [], columns = wide(6), definitionWords = wide(4);
+  let at = 16;
+  for (let i = 0; i < count; ++i) {
+    const partCount = word(at + 13), parts = [];
+    for (let p = 0; p < partCount; ++p) parts.push({
+      x: blob.readInt16LE((at + 14 + p * 3) * 2),
+      y: blob.readInt16LE((at + 15 + p * 3) * 2), lump: word(at + 16 + p * 3),
+    });
+    definitions.push({ name: Buffer.from(Array.from({ length: 8 }, (_, n) => word(at + n))),
+      width: word(at + 8), height: word(at + 9), index: word(at + 10), next: word(at + 11),
+      nextHigh: word(at + 12), parts });
+    at += 14 + partCount * 3;
+  }
+  assert.equal(at, 16 + definitionWords, 'definitions consume exactly their declared region');
+  const lumps = Array.from({ length: columns }, (_, i) => word(at + i)); at += columns;
+  const offsets = Array.from({ length: columns }, (_, i) => wide(at + i * 2)); at += columns * 2;
+  const masks = Array.from({ length: count }, (_, i) => word(at + i)); at += count;
+  const heights = Array.from({ length: count }, (_, i) => wide(at + i * 2)); at += count * 2;
+  const sizes = Array.from({ length: count }, (_, i) => wide(at + i * 2)); at += count * 2;
+  const heads = Array.from({ length: count }, (_, i) => word(at + i)); at += count;
+  assert.equal(at, metadata.texture_words, 'parallel arrays consume exactly the blob');
+  assert.deepEqual([word(0), word(1), word(3)], [0x5458, 1, 0]);
+  assert.ok(Array.from({ length: 5 }, (_, i) => word(11 + i)).every(n => n === 0));
+  return { definitions, columns, definitionWords, lumps, offsets, masks, heights, sizes, heads,
+    sourceIds: [word(8), word(9), word(10)] };
+}
 function support(...args) {
   return spawnSync(process.execPath, [path.join(port, 'tools/build-support.mjs'), ...args], { encoding: 'utf8' });
 }
@@ -272,7 +328,132 @@ test('PNAMES metadata chooses final table and final matching lump, retaining unr
   assert.equal(metadata.pnames_count, 4);
   assert.deepEqual(Array.from({ length: 4 }, (_, i) => image.readUInt16LE((metadata.pnames_word + i) * 2)),
     [2, 0xffff, 3, 4]);
-  assert.equal(image.readUInt32LE((metadata.index_word + 2 * 4) * 2), metadata.pnames_word + 4);
+  assert.equal(metadata.texture_word, metadata.pnames_word + 4);
+  assert.equal(image.readUInt32LE((metadata.index_word + 2 * 4) * 2), metadata.texture_word + metadata.texture_words);
+});
+
+test('texture metadata preserves definitions, clips negative origins and uses cooked column offsets', () => {
+  const source = wad([{ name: 'PNAMES', data: pnames(['LEFT', 'RIGHT']) },
+    { name: 'TEXTURE1', data: textureTable([{ name: 'WALL', width: 5, height: 3,
+      patches: [{ x: -1, y: -7 }, { index: 1, x: 3, y: 19 }] }]) },
+    { name: 'LEFT', data: columnPatch(4) }, { name: 'RIGHT', data: columnPatch(2) }]);
+  const packed = packAssets(source), { metadata, image } = packed, decoded = decodedTextures(packed);
+  assert.equal(metadata.texture_word, metadata.pnames_word + metadata.pnames_count);
+  assert.equal(image.readUInt32LE(metadata.header_word * 2 + 56), metadata.texture_word);
+  assert.equal(image.readUInt32LE(metadata.header_word * 2 + 60), metadata.texture_words);
+  assert.equal(metadata.texture_count, 1); assert.equal(metadata.texture_columns, 5);
+  assert.equal(metadata.texture_definition_words, 20);
+  assert.deepEqual(decoded.sourceIds, [1, 0xffff, 0]);
+  assert.deepEqual(decoded.definitions, [{ name: Buffer.from('WALL\0\0\0\0'), width: 5, height: 3,
+    index: 0, next: 0xffff, nextHigh: 0, parts: [{ x: -1, y: -7, lump: 2 }, { x: 3, y: 19, lump: 3 }] }]);
+  assert.deepEqual(decoded.lumps, [2, 2, 2, 3, 3]);
+  assert.deepEqual(decoded.offsets, [29, 35, 41, 23, 29]);
+  assert.deepEqual(decoded.masks, [3]); assert.deepEqual(decoded.heights, [3 * 65536]);
+  assert.deepEqual(decoded.sizes, [0]); assert.deepEqual(decoded.heads, [0]);
+});
+
+test('overlap lookup keeps patch order, pads short columns and bounds composite allocation', () => {
+  function cooked(width, height, count = 2) {
+    return packAssets(wad([{ name: 'PNAMES', data: pnames(['PATCH']) },
+      { name: 'TEXTURE1', data: textureTable([{ name: 'OVERLAP', width, height,
+        patches: Array.from({ length: count }, (_, i) => ({ y: -i })) }]) },
+      { name: 'PATCH', data: columnPatch(width, height) }]));
+  }
+  for (const [height, pitch] of [[3, 128], [128, 128], [256, 256]]) {
+    const result = decodedTextures(cooked(3, height, 3));
+    assert.deepEqual(result.lumps, [0xffff, 0xffff, 0xffff]);
+    assert.deepEqual(result.offsets, [0, pitch, pitch * 2]);
+    assert.deepEqual(result.sizes, [pitch * 3]);
+    assert.deepEqual(result.definitions[0].parts.map(p => p.y), [0, -1, -2]);
+  }
+  assert.deepEqual(decodedTextures(cooked(512, 128)).sizes, [65536]);
+  assert.throws(() => cooked(513, 128), /exceeds 64k/);
+  assert.deepEqual(decodedTextures(cooked(2, 32767)).sizes, [65534]);
+  assert.throws(() => cooked(3, 32767), /exceeds 64k/);
+  const mixed = decodedTextures(packAssets(wad([{ name: 'PNAMES', data: pnames(['WIDE', 'NARROW']) },
+    { name: 'TEXTURE1', data: textureTable([{ name: 'MIXED', width: 4, height: 16,
+      patches: [{}, { index: 1, x: 1 }] }]) }, { name: 'WIDE', data: columnPatch(4) },
+    { name: 'NARROW', data: columnPatch(2) }])));
+  assert.deepEqual(mixed.lumps, [2, 0xffff, 0xffff, 2]);
+  assert.deepEqual(mixed.offsets, [23, 0, 128, 41]);
+  assert.deepEqual(mixed.sizes, [256]);
+});
+
+test('an empty final patch column retains its valid marker-relative pixel offset', () => {
+  const empty = Buffer.alloc(13);
+  empty.writeUInt16LE(1); empty.writeUInt16LE(1, 2); empty.writeUInt32LE(12, 8); empty[12] = 255;
+  const packed = packAssets(wad([{ name: 'PNAMES', data: pnames(['EMPTY']) },
+    { name: 'TEXTURE1', data: textureTable([{ name: 'EMPTYTEX', width: 1, height: 1, patches: [{}] }]) },
+    { name: 'EMPTY', data: empty }]));
+  const decoded = decodedTextures(packed), cooked = cookPatch(empty);
+  assert.deepEqual(decoded.lumps, [2]); assert.deepEqual(decoded.offsets, [23]);
+  assert.equal(decoded.offsets[0], cooked.length / 2 + 2);
+  assert.equal(cooked.readUInt16LE((decoded.offsets[0] - 3) * 2), 255);
+});
+
+test('texture sources use final WAD names, combine TEXTURE2, and first texture duplicate wins', () => {
+  const definition = name => ({ name, width: 1, height: 3, patches: [{}] });
+  const source = wad([{ name: 'PNAMES', data: pnames(['PATCH']) },
+    { name: 'TEXTURE1', data: Buffer.alloc(4) },
+    { name: 'TEXTURE1', data: textureTable([definition('DUP'), definition('OTHER')]) },
+    { name: 'TEXTURE2', data: textureTable([definition('dup'), definition('last')]) },
+    { name: 'PATCH', data: patch() }]);
+  const decoded = decodedTextures(packAssets(source));
+  assert.deepEqual(decoded.sourceIds, [2, 3, 0]);
+  assert.deepEqual(decoded.definitions.map(d => d.index), [0, 1, 2, 3]);
+  const seen = new Set();
+  for (const head of decoded.heads) {
+    let index = head, last = -1;
+    while (index !== 0xffff) {
+      assert.ok(index > last && index < 4, 'hash chains only move forwards');
+      assert.ok(!seen.has(index), 'each texture appears once'); seen.add(index);
+      const definition = decoded.definitions[index];
+      assert.equal(definition.nextHigh, 0); last = index; index = definition.next;
+    }
+  }
+  assert.equal(seen.size, 4);
+  // Independent byte-wise BigInt hash follows the guest's uint16_t arithmetic.
+  function lookup(name) {
+    let h = 5381n;
+    for (const c of Buffer.from(name.toUpperCase())) h = BigInt.asUintN(16, (h << 5n) ^ h ^ BigInt(c));
+    let index = decoded.heads[Number(h % 4n)];
+    while (index !== 0xffff) {
+      if (decoded.definitions[index].name.toString('latin1').replace(/\0.*$/, '').toUpperCase() === name.toUpperCase()) return index;
+      index = decoded.definitions[index].next;
+    }
+    return -1;
+  }
+  assert.equal(lookup('dup'), 0); assert.equal(lookup('last'), 3); assert.equal(lookup('absent'), -1);
+});
+
+test('texture preparation rejects uncovered columns, invalid dimensions and malformed counts', () => {
+  function source(table, includeNames = true) {
+    return wad([...(includeNames ? [{ name: 'PNAMES', data: pnames(['PATCH']) }] : []),
+      { name: 'TEXTURE1', data: table }, { name: 'PATCH', data: patch() }]);
+  }
+  const single = textureTable([{ name: 'BAD', width: 1, height: 3, patches: [{}] }]);
+  assert.throws(() => packAssets(source(single, false)), /missing PNAMES/);
+  for (const [width, height] of [[0, 3], [32768, 3], [1, 0], [1, 32768]])
+    assert.throws(() => packAssets(source(textureTable([{ name: 'BAD', width, height, patches: [{}] }]))), /dimensions/);
+  assert.throws(() => packAssets(source(textureTable([{ name: 'BAD', width: 1, height: 3, patches: [] }]))), /patch count/);
+  assert.throws(() => packAssets(source(textureTable([]))), /no textures/);
+  for (const patches of [[{}], [{ x: 2 }], [{ x: -2 }]])
+    assert.throws(() => packAssets(source(textureTable([{ name: 'GAP', width: 2, height: 3, patches }]))), /column without a patch/);
+  const overlap = Buffer.from(single); overlap.writeUInt32LE(4, 4);
+  assert.throws(() => packAssets(source(overlap)), /overlaps offset table/);
+  const count = Buffer.alloc(4 + 32768 * 4); count.writeUInt32LE(32768);
+  assert.throws(() => packAssets(source(count)), /too many textures/);
+});
+
+test('shareware texture metadata contains all definitions and final lookup tables', () => {
+  const packed = packAssets(fs.readFileSync(path.join(port, 'assets/doom1.wad')));
+  const decoded = decodedTextures(packed);
+  assert.equal(packed.metadata.texture_count, 125);
+  assert.equal(decoded.definitionWords, 3544); assert.equal(decoded.columns, 10776);
+  assert.equal(decoded.definitions.reduce((sum, item) => sum + item.parts.length, 0), 598);
+  assert.equal(packed.metadata.texture_words, 36638);
+  assert.ok(decoded.lumps.includes(0xffff));
+  assert.ok(decoded.sizes.some(n => n > 0));
 });
 
 test('metadata counts fit signed guest lump IDs and bounded PNAMES storage', () => {
@@ -327,6 +508,9 @@ test('config and staging select matching image, preserve source and reject misma
       ['VERSION', 'format_version', 'U'], ['DIRECTORY_WORD', 'directory_word', 'UL'],
       ['HASH_HEADS_WORD', 'hash_heads_word', 'UL'], ['PNAMES_WORD', 'pnames_word', 'UL'],
       ['PNAMES_COUNT', 'pnames_count', 'UL'], ['PNAMES_LUMP', 'pnames_lump', 'UL'],
+      ['TEXTURE_WORD', 'texture_word', 'UL'], ['TEXTURE_WORDS', 'texture_words', 'UL'],
+      ['TEXTURE_COUNT', 'texture_count', 'UL'], ['TEXTURE_COLUMNS', 'texture_columns', 'UL'],
+      ['TEXTURE_DEFINITION_WORDS', 'texture_definition_words', 'UL'],
       ['METADATA_ABI', 'metadata_abi', 'U'], ['DIRECTORY_RECORD_WORDS', 'directory_record_words', 'U'],
       ['HASH_ENTRY_WORDS', 'hash_entry_words', 'U'], ['PNAMES_ENTRY_WORDS', 'pnames_entry_words', 'U'],
     ]) assert.ok(header.includes(`#define DOOM_ASSET_${macro} ${build.asset_image[field]}${suffix}\n`));
