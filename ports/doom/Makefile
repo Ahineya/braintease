@@ -1,4 +1,4 @@
-# Doom uses the repository's existing compiler, assembler and Rust VM.
+# Doom uses the repository's existing compiler, assembler and VM hosts.
 # Adapted engine sources are maintained in engine/; no fetch or patch step.
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
@@ -14,6 +14,7 @@ START_MAP ?= 0
 LOW_DETAIL ?= 0
 WAD ?= $(CURDIR)/assets/doom1.wad
 BANK_SIZE := 64000
+MEMORY_BANKS := 256
 RCC := $(ROOT)/target/release/rcc
 RASM := $(ROOT)/src/ripple-asm/target/release/rasm
 RLINK := $(ROOT)/src/ripple-asm/target/release/rlink
@@ -48,6 +49,7 @@ NATIVE_SOURCES := $(filter %.c,$(SOURCES))
 ROUT := $(BUILD)/ripple/$(PROGRAM)
 NOUT := $(BUILD)/native/$(PROGRAM)
 RIPPLE_BINARY := $(ROUT)/$(PROGRAM).bin
+BF_IMAGE := $(ROUT)/$(PROGRAM).bf
 NATIVE_BINARY := $(NOUT)/$(PROGRAM)
 source_stem = $(if $(filter tests/%,$(1)),test_)$(basename $(notdir $(1)))
 OBJECTS := $(foreach source,$(RIPPLE_SOURCES),$(ROUT)/$(call source_stem,$(source)).pobj)
@@ -71,7 +73,7 @@ FIXTURE_FILES_texture_columns := texture_cache.inc
 FIXTURE_FILES_keyboard_controls := input_commands.inc controls_defaults.inc platform_keyboard.inc
 FIXTURE_OUTPUTS := $(addprefix $(GENERATED)/,$(FIXTURE_FILES_$(PROGRAM)))
 
-.PHONY: all ripple native both prepare runtime run clean help test test-fixtures test-kernels test-gameplay test-assets FORCE _ripple _native
+.PHONY: all ripple bf native both prepare runtime run clean help test test-fixtures test-kernels test-gameplay test-assets FORCE _ripple _bf _native
 all: $(TARGET)
 both: native ripple
 prepare: $(GENERATED)/sources.mk $(GENERATED)/doom_build_config.h $(FIXTURE_STAMP)
@@ -111,8 +113,13 @@ ripple: runtime
 	@test -n "$(SOURCES)" || { printf 'Unknown PROGRAM: %s\n' "$(PROGRAM)" >&2; exit 1; }
 	@case ' $(NATIVE_FIXTURES) ' in *' $(PROGRAM) '*) printf '%s is native-only; use TARGET=native\n' '$(PROGRAM)' >&2; exit 1;; esac
 	+@$(MAKE) --no-print-directory _ripple
+bf: runtime
+	@test -n "$(SOURCES)" || { printf 'Unknown PROGRAM: %s\n' "$(PROGRAM)" >&2; exit 1; }
+	@case ' $(NATIVE_FIXTURES) ' in *' $(PROGRAM) '*) printf '%s is native-only; use TARGET=native\n' '$(PROGRAM)' >&2; exit 1;; esac
+	+@$(MAKE) --no-print-directory _bf
 native: _native
 _ripple: $(RIPPLE_BINARY)
+_bf: $(BF_IMAGE)
 _native: $(NATIVE_BINARY)
 
 define compile_c
@@ -135,6 +142,10 @@ $(foreach source,$(RIPPLE_SOURCES),$(eval $(call assemble,$(source))))
 $(RIPPLE_BINARY): $(OBJECTS) $(ROOT)/runtime/crt0.pobj $(ROOT)/runtime/libruntime.par $(RLINK) Makefile tests/programs.mk $(GENERATED)/sources.mk
 	@bash tools/log-command.sh "$(ROUT)/link.log" "$(RLINK)" "$(ROOT)/runtime/crt0.pobj" "$(ROOT)/runtime/libruntime.par" $(OBJECTS) -f binary --bank-size $(BANK_SIZE) -o "$@"
 	@printf '%s\n' "$@"
+$(BF_IMAGE): $(OBJECTS) $(ROOT)/runtime/crt0.pobj $(ROOT)/runtime/libruntime.par $(RLINK) Makefile tests/programs.mk $(GENERATED)/sources.mk
+	@printf '  Linking Brainfuck CPU image: %s\n' '$(PROGRAM)'
+	@bash tools/log-command.sh "$(ROUT)/bf-link.log" "$(RLINK)" "$(ROOT)/runtime/crt0.pobj" "$(ROOT)/runtime/libruntime.par" $(OBJECTS) -f bf --standalone --bf-host --bank-size $(BANK_SIZE) --memory-banks $(MEMORY_BANKS) -o "$@"
+	@printf '%s\n' "$@"
 $(NATIVE_BINARY): $(NATIVE_SOURCES) $(HEADERS) $(NOUT)/.flags $(FIXTURE_STAMP) $(FIXTURE_OUTPUTS) $(NATIVE_COMPILER) Makefile tests/programs.mk $(GENERATED)/sources.mk
 	@test -n "$(SOURCES)" || { printf 'Unknown PROGRAM: %s\n' "$(PROGRAM)" >&2; exit 1; }
 	@printf '  Native: %s\n' '$(PROGRAM)'
@@ -156,6 +167,6 @@ test-assets:
 clean:
 	rm -rf "$(BUILD)/ripple" "$(BUILD)/native" "$(GENERATED)"
 help:
-	@printf '%s\n' 'make -j4 [TARGET=ripple|native|both] [START_MAP=1] [LOW_DETAIL=1]' \
+	@printf '%s\n' 'make -j4 [TARGET=ripple|bf|native|both] [START_MAP=1] [LOW_DETAIL=1]' \
 	 'make PROGRAM=numeric TARGET=both' 'make test | test-fixtures | test-kernels | test-gameplay | test-assets' \
-	 './run.sh --scene e1m1 --low-detail' 'WAD=/path/to/doom1.wad and BUILD=build may be overridden.'
+	 './run.sh --scene e1m1 --low-detail' './run-bf.sh --telemetry' 'WAD=/path/to/doom1.wad and BUILD=build may be overridden.'

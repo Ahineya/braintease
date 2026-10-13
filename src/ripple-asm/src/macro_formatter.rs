@@ -3,7 +3,7 @@ use crate::linker::LinkedProgram;
 use std::collections::HashMap;
 
 const CPU_HEADER: &str = include_str!("cpu_header.bfm");
-const CPU_FOOTER: &str = include_str!("cpu_footer.bfm");
+pub(crate) const CPU_FOOTER: &str = include_str!("cpu_footer.bfm");
 
 pub struct MacroFormatter {
     opcode_to_macro: HashMap<u8, &'static str>,
@@ -323,6 +323,11 @@ impl MacroFormatter {
     /// explicit host callbacks at completed memory accesses. Its ASCII header
     /// deliberately contains no BF commands (or host callback characters).
     pub fn format_linked_program_host(&self, program: &LinkedProgram, memory_banks: u16) -> Result<String, String> {
+        self.validate_linked_program_host(program, memory_banks)?;
+        Ok(self.format_standalone(program, true, Some(memory_banks)))
+    }
+
+    pub(crate) fn validate_linked_program_host(&self, program: &LinkedProgram, memory_banks: u16) -> Result<(), String> {
         if program.bank_size < 32 {
             return Err("BF host bank size must be at least 32 cells for MMIO".into());
         }
@@ -342,11 +347,37 @@ impl MacroFormatter {
             if matches!(instruction.opcode, x if x == Opcode::Loadc as u8 || x == Opcode::Storc as u8) {
                 return Err("BF CPU does not implement LOADC/STORC code-memory access".into());
             }
+            if !self.opcode_to_macro.contains_key(&instruction.opcode) {
+                return Err(format!("Unknown opcode {} in BF image", instruction.opcode));
+            }
+            // Macro exports used #Rn names for register operands; malformed
+            // indices failed during expansion. Direct BF must reject them too.
+            let registers: &[u16] = match Opcode::from_u8(instruction.opcode).unwrap() {
+                Opcode::Halt | Opcode::Nop | Opcode::Brk => &[],
+                Opcode::Li | Opcode::Jal => std::slice::from_ref(&instruction.word1),
+                Opcode::Addi | Opcode::Andi | Opcode::Ori | Opcode::Xori
+                | Opcode::Slli | Opcode::Srli | Opcode::Muli | Opcode::Divi | Opcode::Modi
+                | Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge => {
+                    if instruction.word1 >= 32 || instruction.word2 >= 32 {
+                        return Err("BF image contains an invalid register index".into());
+                    }
+                    &[]
+                }
+                _ => {
+                    if instruction.word1 >= 32 || instruction.word2 >= 32 || instruction.word3 >= 32 {
+                        return Err("BF image contains an invalid register index".into());
+                    }
+                    &[]
+                }
+            };
+            if registers.iter().any(|&register| register >= 32) {
+                return Err("BF image contains an invalid register index".into());
+            }
         }
-        Ok(self.format_standalone(program, true, Some(memory_banks)))
+        Ok(())
     }
 
-    fn format_standalone(&self, program: &LinkedProgram, debug: bool, memory_banks: Option<u16>) -> String {
+    pub(crate) fn standalone_prefix(&self, program: &LinkedProgram, debug: bool, memory_banks: Option<u16>) -> String {
         let mut output = String::new();
         let entry = program.entry_point as usize / 4;
         if let Some(banks) = memory_banks {
@@ -377,6 +408,12 @@ impl MacroFormatter {
         }
         output.push_str(&header);
         output.push('\n');
+        output
+    }
+
+    fn format_standalone(&self, program: &LinkedProgram, debug: bool, memory_banks: Option<u16>) -> String {
+        let mut output = self.standalone_prefix(program, debug, memory_banks);
+        let entry = program.entry_point as usize / 4;
         
         // Add the program content (without @prg wrapper since it's in the template)
         let comments = HashMap::new();

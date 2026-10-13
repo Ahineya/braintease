@@ -1,8 +1,9 @@
 # Instrumented Brainfuck export
 
 `rlink --bf-host` exports the existing BF CPU with explicit host device hooks.
-It requires `--format macro --standalone`; ordinary binary and macro exports
-keep their existing formats. Guest instructions still execute as Brainfuck.
+It requires `--standalone` with `--format macro` or `--format bf`; ordinary
+binary and macro exports keep their existing formats. Guest instructions still
+execute as Brainfuck.
 
 For an ordinary 16-bit Brainfuck interpreter, omit `--bf-host`. The plain
 standalone export retains native `.` output and requires a wrapping tape whose
@@ -20,6 +21,24 @@ src/ripple-asm/target/release/rlink /tmp/example.pobj \
 src/bf-macro-expander/target/release/bfm expand /tmp/example.bfm \
   --strip-comments -o /tmp/example.bf
 ```
+
+For large programs, export expanded BF directly:
+
+```sh
+src/ripple-asm/target/release/rlink /tmp/example.pobj \
+  --format bf --standalone --bf-host --bank-size 512 --memory-banks 16 \
+  -o /tmp/example.bf
+```
+
+This path streams the code initializer, using short ordinary BF loops for large
+constants and a bounded scan to clear setup markers. It avoids constructing a
+macro syntax tree for millions of instruction words or emitting tens of
+thousands of `+` characters per constant. The CPU executor is expanded from the
+same unchanged templates. Initialization preserves device RAM, restores scratch
+cells and reaches the same tape state at the first instruction hook. Output is
+written to a temporary sibling and renamed only after successful completion.
+Direct BF output currently requires host mode; plain exports still use the
+macro path. Neither path adds native guest-instruction execution to the host.
 
 The expanded file starts with a self-contained header:
 
@@ -118,3 +137,9 @@ operands, raw boundary return addresses, maximum-PC rollover, branches at bank
 edges, and sequential fallthrough. Plain-mode runs check the same CPU without
 host hooks, using 16-bit wrapping cells and a circular tape. These tests do not
 run Doom.
+
+`cargo test --offline --manifest-path src/ripple-asm/Cargo.toml --test bf_compact`
+compares direct and macro exports using an independent BF interpreter: complete
+initial and final tapes, hooks, output, entry points, cross-bank calls and
+prepopulated device memory. It also checks large-image setup cleanup and export
+validation.

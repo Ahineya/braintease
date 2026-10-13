@@ -15,7 +15,7 @@ if (args.includes('--help')) {
         'Runs bounded BF captures sequentially unless --rvm-only is supplied.\n' +
         '--large-banks uses 64000-cell banks to exercise distant globals and stack.\n' +
         '--demo checks the original 64x64 interactive C demo with its 16384-cell banks.\n' +
-        'BF_COMPILER_OUT selects the output directory (default build/bf-compiler-regression[-large]).\n' +
+        'BF_COMPILER_OUT selects the output directory (default build/bf-compiler-regression[-large|-demo]).\n' +
         'Build current release tools first; elapsed time is reported, never asserted.');
     process.exit(0);
 }

@@ -7,7 +7,8 @@ patch application, Python installation or source-fetch step is required.
 
 Current scope: single-player Doom at 320×200 RGB565, keyboard controls, 35 Hz
 logical simulation ticks and silent audio. Development and tests use the Rust
-VM. The Brainfuck CPU implementation is unchanged and is not run by these tests.
+VM. An experimental Brainfuck launcher uses the same port and guest ISA;
+the regular port tests do not run it.
 
 ## Build and play
 
@@ -60,6 +61,58 @@ Headless output includes a PNG, raw RGB565, build manifest and execution report
 under `build/run/`. Use `--output DIR`, `--frame N`, `--timeout SECONDS` and
 `--max-instructions N` to set capture paths and limits. Reaching a limit before
 the requested frame is a failure. Run `ports/doom/run.sh --help` for all options.
+
+### Brainfuck host
+
+```sh
+scripts/run-bf-doom.sh --telemetry
+scripts/run-bf-doom.sh --build-only
+scripts/run-bf-doom.sh --scene e1m1 --low-detail --telemetry
+```
+
+The repository launcher delegates to `ports/doom/run-bf.sh`. It checks release
+tool freshness, builds the maintained engine, exports its existing objects as
+instrumented Brainfuck, and stages a writable copy of the WAD. The CPU and
+guest instructions execute in BF; `rbf` supplies graphics, disk, logical clock
+and keyboard devices. Both RAM and code retain the port's 64,000-cell bank size,
+with 256 RAM banks. Logical ticks are unthrottled by default.
+
+The window is enabled by default. There is **no default timeout**; close the
+window or press Ctrl-C to stop. Startup and the first frame can take a long time,
+and a successful full Doom boot in BF is not yet a validated milestone.
+`--telemetry` reports ongoing execution on stderr. For a bounded capture attempt:
+
+```sh
+scripts/run-bf-doom.sh --headless --telemetry --timeout 60 \
+  --screenshot ports/doom/build/run-bf/title.png
+```
+
+`--headless` only disables the window; add `--screenshot`, `--raw-frame` or another
+capture option to stop at a completed frame. A timeout before that frame returns
+a nonzero status and writes the execution report. `--timeout` bounds execution,
+including BF tape initialization; compilation, export, source parsing and host
+setup happen before that budget starts.
+
+The image is `build/ripple/engine/engine.bf` within this port. The linker writes
+compact ordinary BF initializers directly, avoiding an enormous macro expansion
+for millions of guest instructions. The CPU template and guest ISA are unchanged.
+`DOOM_BUILD` selects another build directory; `DOOM_WAD` or `--wad FILE` selects
+the source WAD. The disk copy and default `<scene>.json` report go under
+`build/run-bf/`; use `--output DIRECTORY` and `--report FILE` to override them.
+`--jobs N` controls compilation parallelism. Other host options, including
+`--timeout`, `--capture-frame`, `--input-script` and `--clock`, pass through to
+`rbf`. See `scripts/run-bf-doom.sh --help` and [the host guide](../../rbf/README.md).
+
+For direct builds after building the release tools, use
+`make -C ports/doom -j4 bf` or `make -C ports/doom -j4 TARGET=bf`.
+The launcher reads the export's declared tape size and sets the host's tape
+allocation limit accordingly. Doom needs hundreds of megabytes for the tape
+alone; the expanded source and interpreter representation need additional memory.
+
+The 2026-10-13 development-machine startup probe built a 368 MiB image, completed
+BF initialization and executed 1,718 guest instructions before its requested
+10-second execution timeout. No frame had appeared. This verifies bounded
+startup, not a complete Doom boot or a prediction of time to the first frame.
 
 ### Controls
 
@@ -257,5 +310,6 @@ in [the optimization notes](../../rcc-backend/OPTIMIZATIONS.md).
 Save/load, demo recording, multiplayer, sound, mouse input, persistent host
 configuration, PWADs and melt wipes are deferred. Longer sessions, additional
 maps and demo playback need broader validation beyond the bounded E1M1 replays.
-The Brainfuck host's device adapter and multi-bank code export remain separate
-future work; no Brainfuck execution is part of these build/test commands.
+The Brainfuck host supports the device interface and multi-bank export. Its
+experimental launcher is separate from the regular build/test commands; full
+Doom boot and gameplay on that backend remain to be validated.

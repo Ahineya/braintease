@@ -203,6 +203,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bf-macro-expander"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "lazy_static",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1899,6 +1911,7 @@ checksum = "f1382d1f0a252c4bf97dc20d979a2fdd05b024acd7c2ed0f7595d7817666a157"
 name = "ripple-asm"
 version = "0.1.0"
 dependencies = [
+ "bf-macro-expander",
  "clap",
  "regex",
  "serde",

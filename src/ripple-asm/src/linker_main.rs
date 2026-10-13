@@ -1,6 +1,7 @@
 use clap::Parser;
 use ripple_asm::{Linker, MacroFormatter, Archive, ObjectFile};
 use std::fs;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -15,7 +16,7 @@ struct Cli {
     #[arg(short, long)]
     output: Option<PathBuf>,
     
-    /// Output format (binary, text, macro, archive, sys, rxe)
+    /// Output format (binary, text, macro, bf, archive, sys, rxe)
     #[arg(short, long, default_value = "binary")]
     format: String,
     
@@ -35,7 +36,7 @@ struct Cli {
     #[arg(long, default_value = "2")]
     sb_bank: u16,
     
-    /// Generate standalone macro file with CPU template (for macro format only)
+    /// Generate standalone CPU output (macro or bf format)
     #[arg(short = 's', long = "standalone")]
     standalone: bool,
     
@@ -43,7 +44,7 @@ struct Cli {
     #[arg(short = 'd', long = "debug")]
     debug: bool,
 
-    /// Export the instrumented Brainfuck host protocol (requires macro --standalone)
+    /// Export the instrumented Brainfuck host protocol (requires macro or bf --standalone)
     #[arg(long)]
     bf_host: bool,
 
@@ -54,8 +55,11 @@ struct Cli {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    if cli.bf_host && (cli.format != "macro" || !cli.standalone) {
-        return Err("--bf-host requires --format macro --standalone".into());
+    if cli.bf_host && (!matches!(cli.format.as_str(), "macro" | "bf") || !cli.standalone) {
+        return Err("--bf-host requires --format macro or bf with --standalone".into());
+    }
+    if cli.format == "bf" && (!cli.bf_host || !cli.standalone) {
+        return Err("--format bf requires --standalone --bf-host".into());
     }
     
     if cli.inputs.is_empty() {
@@ -123,6 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 PathBuf::from(match cli.format.as_str() {
                     "text" => "a.txt",
                     "macro" => "a.bfm",
+                    "bf" => "a.bf",
                     "sys" => "a.sys",
                     "rxe" => "a.rxe",
                     _ => "a.out",
@@ -168,6 +173,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let debug_msg = if cli.debug { " with DEBUG=1" } else { "" };
                         println!("  (Standalone mode - includes CPU template{})", debug_msg);
                     }
+                }
+                "bf" => {
+                    // A temporary sibling prevents failed exports from replacing
+                    // a previously complete image. No expanded source is retained
+                    // in memory, including for multi-million-instruction images.
+                    let temporary = output_path.with_extension(format!("bf.{}.tmp", std::process::id()));
+                    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+                        let file = fs::File::create(&temporary)?;
+                        let mut writer = BufWriter::new(file);
+                        MacroFormatter::new().write_linked_program_host_bf(&program, cli.memory_banks, &mut writer)?;
+                        writer.flush()?;
+                        drop(writer);
+                        fs::rename(&temporary, &output_path)?;
+                        Ok(())
+                    })();
+                    if result.is_err() { let _ = fs::remove_file(&temporary); }
+                    result?;
+                    println!("✓ Linked to compact Brainfuck {}", output_path.display());
                 }
                 _ => {
                     eprintln!("Unknown format: {}", cli.format);

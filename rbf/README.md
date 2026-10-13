@@ -146,6 +146,50 @@ diagnostic profile eliminated all 1.68 million failed fill attempts without
 changing its BF dispatch count or physical writes. Demo source, ISA, CPU and
 bank sizes are unchanged in this performance pass.
 
+## Doom launcher
+
+```sh
+scripts/run-bf-doom.sh --telemetry
+scripts/run-bf-doom.sh --build-only
+```
+
+This launches the full maintained port in `ports/doom`, using the same C and
+guest assembly as the Rust VM build. The wrapper delegates to
+`ports/doom/run-bf.sh`, checks release tool freshness, builds and exports the
+engine, stages a writable WAD copy, and opens the graphics window. It retains
+64,000-cell banks and 256 RAM banks. The BF CPU performs all guest execution;
+the host supplies the existing devices. Logical ticks are unthrottled by default.
+
+There is **no default timeout**. Close the window or press Ctrl-C to stop.
+Startup may be very slow, and full Doom boot in BF remains unvalidated. Progress
+from `--telemetry` is useful before any frame appears. For a bounded attempt:
+
+```sh
+scripts/run-bf-doom.sh --headless --telemetry --timeout 60 \
+  --screenshot ports/doom/build/run-bf/title.png
+```
+
+The timeout covers execution and guest tape initialization, after compilation,
+export, parsing and host setup. It is not a promised time to the first frame.
+`--headless` alone does not request a capture or stop at a frame. Add capture
+options explicitly; a missed capture deadline returns nonzero and leaves a
+diagnostic report.
+
+Use `--scene e1m1`, `--low-detail`, `--wad FILE` and `--jobs N` for port settings.
+Other `rbf` options pass through, including capture flags and optional limits.
+The image is `ports/doom/build/ripple/engine/engine.bf`. The linker's direct BF
+export emits compact ordinary BF initializers, avoiding a huge macro expansion
+for millions of guest instructions. The CPU template and guest ISA are unchanged.
+The default report and staged disk go under `ports/doom/build/run-bf/`; change
+that with `--output DIRECTORY`, or select a report using `--report FILE`.
+`DOOM_BUILD` and `DOOM_WAD` select another build tree and source WAD.
+
+The launcher reads the image's tape requirement and supplies the allocation
+limit, because Doom exceeds `rbf`'s ordinary default. Allow hundreds of megabytes
+for the tape alone, plus expanded source and interpreter data. Use
+`make -C ports/doom -j4 bf` or `TARGET=bf` for a direct export build after building
+the tools. See [the port guide](../ports/doom/README.md#brainfuck-host) for details.
+
 ## Ordinary Brainfuck interpreters
 
 The portable CPU remains standard Brainfuck with 16-bit wrapping cells. Build
@@ -302,6 +346,7 @@ cargo test -p rbf
 cargo test --manifest-path src/rust-bf/Cargo.toml --lib engine
 cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_host
 cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_multibank
+cargo test --manifest-path src/ripple-asm/Cargo.toml --test bf_compact
 scripts/test-bf-host.sh
 node scripts/test-bf-compiler.mjs
 node scripts/test-bf-compiler.mjs --large-banks

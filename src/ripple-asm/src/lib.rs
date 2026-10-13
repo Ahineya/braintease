@@ -5,6 +5,7 @@ pub mod assembler;
 pub mod linker;
 mod reachability;
 pub mod macro_formatter;
+mod compact_bf;
 pub mod virtual_instructions;
 pub mod disassembler;
 

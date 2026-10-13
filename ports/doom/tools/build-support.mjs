@@ -16,7 +16,7 @@ function write(file, content) {
 const json = value => `${JSON.stringify(value, null, 2)}\n`;
 const port = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 function sourceIdentity() {
-  const files = ['Makefile', 'run.sh', 'upstream.json', 'tests/programs.mk'];
+  const files = ['Makefile', 'run.sh', 'run-bf.sh', 'upstream.json', 'tests/programs.mk'];
   function walk(directory) {
     for (const entry of fs.readdirSync(path.join(port, directory), { withFileTypes: true })) {
       const relative = `${directory}/${entry.name}`;
@@ -56,6 +56,17 @@ try {
     bytes.copy(image);
     fs.mkdirSync(path.dirname(disk), { recursive: true }); fs.writeFileSync(disk, image);
     process.stdout.write(json({ path: disk, octets: image.length, padding_octets: image.length - bytes.length, sha256: sha(image) }));
+  } else if (action === 'bf-tape-cells') {
+    // Only read the small layout header; expanded Doom BF can be very large.
+    const fd = fs.openSync(args[0], 'r');
+    const header = Buffer.alloc(512);
+    let length;
+    try { length = fs.readSync(fd, header, 0, header.length, 0); }
+    finally { fs.closeSync(fd); }
+    const match = /^BFHOST 1 BANK_SIZE \d+ MEMORY_BANKS \d+ INSTRUCTIONS \d+ ENTRY \d+ ORIGIN 8 TAPE_CELLS ([1-9]\d*) END_BFHOST\r?\n/.exec(header.toString('ascii', 0, length));
+    if (!match || !Number.isSafeInteger(Number(match[1])))
+      throw new Error('missing or invalid BFHOST tape size in the expanded image');
+    process.stdout.write(`${match[1]}\n`);
   } else if (action === 'run-manifest') {
     const [build, disk, output, scene, detail, ...command] = args;
     write(output, json({ ...JSON.parse(fs.readFileSync(build)), disk_image: JSON.parse(fs.readFileSync(disk)), scene, detail, command }));
@@ -70,5 +81,5 @@ try {
         directory = path.dirname(directory);
       }
     }
-  } else throw new Error('expected config, stamp, disk, run-manifest or native-flags');
+  } else throw new Error('expected config, stamp, disk, bf-tape-cells, run-manifest or native-flags');
 } catch (error) { console.error(`error: ${error.message}`); process.exitCode = 1; }
