@@ -221,3 +221,49 @@ These are execution times including tape initialization and device callbacks,
 excluding parsing and host setup. This deliberately amplified far-access test
 does not predict Doom's overall speed. Reports and saved binaries are under
 ignored `build/bf-far-access/`.
+
+### Uniform proofs reused by scans and searches (2026-10-13)
+
+Scans and moving-marker searches now recover zero/nonzero facts directly from
+represented uniform tape runs when their small predicate cache has lost them.
+Compatible larger strides can reuse a subset of the same progression. The
+original sentinel and pointer-excursion checks remain in place; no Ripple
+instruction, register layout or Doom behavior is recognized by the interpreter.
+
+A saved release host from **before deferred tape runs** and the final host ran
+one sequential comparison on the exact same frozen Doom BF image and staged
+disk. The final host includes deferred runs, point-access filters and this scan
+reuse; this comparison does **not** isolate the latest scan change. Both used
+64,000-cell banks, 256 RAM banks, headless unthrottled execution, seed 1, telemetry
+and no profiler. Each stopped at 1,000,000 observed guest instruction starts,
+with an additional 240-second execution timeout and a 270-second external bound.
+No other build or benchmark ran concurrently during these two timing runs.
+
+| Version | Execution time | BF dispatches |
+| --- | ---: | ---: |
+| Saved host before deferred tape runs | 161.805 s | 1,850,568,793 |
+| Final host with uniform scan/search reuse | 104.951 s | 1,268,907,747 |
+
+This fixed prefix was **1.54× faster**, with 31.4% fewer interpreter dispatches.
+Execution time includes tape initialization and device callbacks, excluding
+parsing and host setup. Stdout, guest result (50106), source/disk hashes and
+guest instruction count matched. Both executions reached 518 disk-word reads;
+the instruction-limit exit intentionally returned a nonzero status.
+
+These are single runs, not medians. The prefix includes early WAD directory
+reading but does not finish WAD loading or produce a frame, so this is neither
+a full Doom BF boot result nor an estimate of its eventual frame rate. The BF
+source SHA256 was
+`08a29f5821794ce25c87faeb85b21afe94db6d7aa72bffc48d74e43d741ac09c`.
+The disk SHA256 was
+`d05372d873f1cdcbf80c8126c84fdf182a749d17cf866c3ab959d6f58b09c282`.
+Saved inputs, executables, reports and telemetry are under ignored
+`build/bf-far-access/dropout/`; `comparison.json` records this pair.
+
+The combined host and mutable-pointer compiler changes also passed a separate
+1,000,000-instruction BF/Rust VM lockstep check: all registers at each boundary,
+each ordinary RAM store, final RAM and 299 console-output bytes matched. That
+check used a 180-second deadline and a 210-second external bound; its additional
+checking overhead and rebuilt guest make it a correctness check, not another
+timing comparison. Evidence is in ignored
+`build/pointer-ssa/bf-validation/lockstep.log`.

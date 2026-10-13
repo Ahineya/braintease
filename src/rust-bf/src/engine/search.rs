@@ -26,7 +26,9 @@ impl Machine {
         probes: &mut usize,
     ) -> Option<usize> {
         let step = stride.unsigned_abs();
-        let (slot, known) = self.zero_cache.prepare(step, pointer);
+        let (slot, known) = self
+            .zero_cache
+            .prepare_with_uniform(&self.tape, stride, pointer, true);
         let first = pointer;
         let mut last = None;
         let result = loop {
@@ -117,7 +119,10 @@ impl Search {
         let original = machine.pointer;
         let step = self.stride.unsigned_abs();
         let first_target = (original as isize + self.stride) as usize;
-        let (slot, known) = machine.zero_cache.prepare(step, first_target);
+        let (slot, known) =
+            machine
+                .zero_cache
+                .prepare_with_uniform(&machine.tape, self.stride, first_target, true);
         for _ in 0..SCAN_LIMIT {
             if !machine.range_fits(self.minimum, self.maximum) {
                 // Previous iterations are complete BF loop iterations, with
@@ -190,6 +195,33 @@ mod tests {
         let forward = movement(stride);
         let reverse = movement(-stride);
         format!("[{forward}[{reverse}-]{reverse}[-{forward}+{reverse}]{forward}]")
+    }
+
+    #[test]
+    fn represented_zero_runs_skip_cold_marker_searches_without_changing_tape() {
+        for stride in [-32isize, -8, 8, 32] {
+            let mut machine = Machine::new(65664).unwrap();
+            for index in (64..=65536).step_by(8) {
+                machine.write_cell(index, 5);
+            }
+            assert!(machine.tape.assign_uniform(64, 65536, 8, 5, 0));
+            let first = if stride > 0 { 64 } else { 65536 };
+            let last = if stride > 0 { 65536 } else { 64 };
+            let start = (first as isize - stride) as usize;
+            let stop = (last as isize + stride) as usize;
+            machine.write_cell(start, 1);
+            machine.write_cell(stop, 19);
+            machine.pointer = start;
+            machine.zero_cache.prepare(3, 1);
+            let program = Program::parse(&format!("{}$", pattern(stride)), true, true).unwrap();
+            assert_eq!(machine.run(&program, 2).unwrap(), Stop::Hook(b'$'));
+            assert_eq!(machine.pointer, last);
+            assert_eq!(machine.read_cell(start), 0);
+            assert_eq!(machine.read_cell(stop), 19);
+            assert!((64..=65536)
+                .step_by(8)
+                .all(|index| machine.read_cell(index) == 0));
+        }
     }
 
     fn finish(machine: &mut Machine, program: &Program) -> Result<Stop, Error> {

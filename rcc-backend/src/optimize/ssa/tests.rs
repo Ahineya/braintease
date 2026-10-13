@@ -86,7 +86,7 @@ fn promotes_loop_carried_locals_and_licm_respects_phi_dependencies() {
             result_type: IrType::I32,
         },
     );
-    promote_integer_locals(&mut f);
+    promote_locals(&mut f);
     assert!(!f
         .blocks
         .iter()
@@ -141,7 +141,7 @@ fn prunes_dead_phi_and_keeps_multiple_stores_in_program_order() {
         load(13),
         Instruction::Return(Some(Value::Temp(13))),
     ];
-    promote_integer_locals(&mut f);
+    promote_locals(&mut f);
     assert!(!f
         .blocks
         .iter()
@@ -187,7 +187,7 @@ fn leaves_uninitialized_volatile_address_taken_and_unreachable_uses_in_memory() 
             )),
         }
         let before = f.clone();
-        promote_integer_locals(&mut f);
+        promote_locals(&mut f);
         assert_eq!(f, before, "case {case}");
     }
 }
@@ -207,7 +207,7 @@ fn local_declared_inside_loop_is_promoted_when_each_read_is_initialized() {
         Instruction::Branch(1),
     ];
     f.blocks[3].instructions = vec![Instruction::Return(Some(Value::Temp(1)))];
-    promote_integer_locals(&mut f);
+    promote_locals(&mut f);
     assert!(!f
         .blocks
         .iter()
@@ -219,4 +219,106 @@ fn local_declared_inside_loop_is_promoted_when_each_read_is_initialized() {
                 | Instruction::Load { .. }
                 | Instruction::Store { .. }
         )));
+}
+
+fn pointer_example() -> Function {
+    use rcc_frontend::ir::FatPointer;
+    let pointer = IrType::FatPtr(Box::new(IrType::I16));
+    let mut f = example();
+    f.return_type = pointer.clone();
+    f.parameters[1].1 = pointer.clone();
+    for inst in f.blocks.iter_mut().flat_map(|b| &mut b.instructions) {
+        match inst {
+            Instruction::Alloca { alloc_type, result_type, .. } => {
+                *alloc_type = pointer.clone();
+                *result_type = IrType::FatPtr(Box::new(pointer.clone()));
+            }
+            Instruction::Store { value_type, .. } => *value_type = pointer.clone(),
+            Instruction::Load { result_type, .. } => *result_type = pointer.clone(),
+            Instruction::Binary { result: 12, .. } => {
+                *inst = Instruction::GetElementPtr {
+                    result: 12,
+                    ptr: Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(11)), bank: BankTag::Mixed }),
+                    indices: vec![Value::Constant(1)],
+                    result_type: pointer.clone(), source_element_type: IrType::I16,
+                    is_struct_field: false,
+                };
+            }
+            _ => {}
+        }
+    }
+    f
+}
+
+#[test]
+fn mutable_pointer_loop_aliases_preserve_both_components_and_phi_edges() {
+    let mut f = pointer_example();
+    promote_locals(&mut f);
+    let Instruction::Phi { result, incoming, result_type } = &f.blocks[1].instructions[0] else {
+        panic!("missing pointer Phi");
+    };
+    assert!(result_type.is_pointer());
+    assert_eq!(incoming, &vec![(Value::Temp(1), 0), (Value::Temp(12), 2)]);
+    assert!(matches!(&f.blocks[2].instructions[0], Instruction::GetElementPtr { ptr: Value::FatPtr(p), .. }
+        if *p.addr == Value::Temp(*result) && p.bank == BankTag::Mixed));
+    assert_eq!(f.blocks[3].instructions[0], Instruction::Return(Some(Value::Temp(*result))));
+    assert!(!f.blocks.iter().flat_map(|b| &b.instructions).any(|inst|
+        matches!(inst, Instruction::Load { .. } | Instruction::Store { .. } | Instruction::Alloca { .. } | Instruction::Binary { .. })));
+    // Phi destruction must copy a pointer pair, never turn it into an integer.
+    super::super::phi::destroy_phis(&mut f).unwrap();
+    for inst in f.blocks.iter().flat_map(|b| &b.instructions) {
+        match inst {
+            Instruction::Load { result_type, .. } => assert!(result_type.is_pointer()),
+            Instruction::Store { value_type, .. } => assert!(value_type.is_pointer()),
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn mutable_pointer_promotion_keeps_unsafe_or_untyped_sources_in_memory() {
+    use rcc_frontend::ir::FatPointer;
+    for case in 0..7 {
+        let mut f = pointer_example();
+        match case {
+            0 => if let Instruction::Load { volatile, .. } = &mut f.blocks[1].instructions[0] { *volatile = true; },
+            1 => f.blocks[0].instructions.insert(2, Instruction::Call {
+                result: None, function: Value::Function("escape".into()), args: vec![Value::Temp(10)],
+                result_type: IrType::Void, stack_args_from: None,
+            }),
+            2 => { f.blocks[0].instructions.remove(1); },
+            3 => if let Instruction::Store { value, .. } = &mut f.blocks[0].instructions[1] { *value = Value::Constant(0); },
+            4 => if let Instruction::Store { value, .. } = &mut f.blocks[0].instructions[1] {
+                *value = Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(1)), bank: BankTag::Heap(7) });
+            },
+            5 => f.parameters[1].1 = IrType::I16,
+            _ => if let Instruction::Store { volatile, .. } = &mut f.blocks[2].instructions[1] { *volatile = true; },
+        }
+        let before = f.clone();
+        promote_locals(&mut f);
+        assert_eq!(f, before, "case {case}");
+    }
+}
+
+#[test]
+fn pointer_aliases_can_feed_a_second_promoted_loop_local() {
+    let mut f = pointer_example();
+    let pointer = f.parameters[1].1.clone();
+    f.blocks[0].instructions.insert(1, Instruction::Alloca {
+        result: 20, alloc_type: pointer.clone(), count: None,
+        result_type: IrType::FatPtr(Box::new(pointer.clone())),
+    });
+    f.blocks[0].instructions.insert(3, Instruction::Store {
+        value: Value::Temp(1), ptr: Value::Temp(20), value_type: pointer.clone(), volatile: false,
+    });
+    f.blocks[2].instructions.insert(0, Instruction::Store {
+        value: Value::Temp(11), ptr: Value::Temp(20), value_type: pointer.clone(), volatile: false,
+    });
+    f.blocks[3].instructions = vec![Instruction::Load {
+        result: 21, ptr: Value::Temp(20), result_type: pointer, volatile: false,
+    }, Instruction::Return(Some(Value::Temp(21)))];
+    promote_locals(&mut f);
+    assert_eq!(f.blocks.iter().flat_map(|b| &b.instructions).filter(|inst| matches!(inst, Instruction::Phi { .. })).count(), 2);
+    assert!(!f.blocks.iter().flat_map(|b| &b.instructions).any(|inst|
+        matches!(inst, Instruction::Load { .. } | Instruction::Store { .. } | Instruction::Alloca { .. })));
 }

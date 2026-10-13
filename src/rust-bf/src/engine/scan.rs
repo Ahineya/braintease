@@ -91,6 +91,28 @@ impl Cache {
         (slot, self.runs[slot])
     }
 
+    /// A deferred constant progression is already a proof of its predicate.
+    /// Reuse it after a different scan stride evicts this small predicate cache,
+    /// instead of probing each logical cell and searching the overlay again.
+    pub(super) fn prepare_with_uniform(
+        &mut self,
+        tape: &super::tape::Tape,
+        stride: isize,
+        index: usize,
+        zero: bool,
+    ) -> (usize, Run) {
+        let (slot, known) = self.prepare(stride.unsigned_abs(), index);
+        if !known.contains(index) {
+            if let Some((count, value)) = tape.uniform_prefix(index, stride, usize::MAX) {
+                if (value == 0) == zero {
+                    let last = (index as isize + (count - 1) as isize * stride) as usize;
+                    self.remember(slot, index, last);
+                }
+            }
+        }
+        (slot, self.runs[slot])
+    }
+
     pub(super) fn remember(&mut self, slot: usize, first: usize, last: usize) {
         let low = first.min(last);
         let high = first.max(last);
@@ -167,6 +189,71 @@ impl Cache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::{Error, Program, Stop};
+
+    #[test]
+    fn deferred_predicates_survive_cache_eviction_in_both_directions() {
+        for direction in [-1isize, 1] {
+            for stride in [8isize, 32] {
+                let stride = stride * direction;
+                let first = if direction > 0 { 32 } else { 65536 };
+                let last = if direction > 0 { 65536 } else { 32 };
+                let source = format!(
+                    "[{}]$",
+                    if stride > 0 { ">" } else { "<" }.repeat(stride.unsigned_abs())
+                );
+                let program = Program::parse(&source, true, true).unwrap();
+                let mut machine = Machine::new(65580).unwrap();
+                assert!(machine.tape.assign_uniform(first, last, 8, 0, 7));
+                // Populate a different stride, forcing the proof to come from
+                // the logical tape rather than the separate scan cache.
+                machine.scan_cache.prepare(3, 1);
+                machine.pointer = first;
+                assert_eq!(machine.run(&program, 2).unwrap(), Stop::Hook(b'$'));
+                assert_eq!(machine.pointer, (last as isize + stride) as usize);
+                assert_eq!(machine.read_cell(first), 7);
+                assert_eq!(machine.read_cell(last), 7);
+
+                // An explicit mutation splits the proof. The new zero must
+                // stop a later scan even after another cache eviction.
+                let hole = (first as isize + 128 * stride) as usize;
+                machine.write_cell(hole, 0);
+                machine.scan_cache.prepare(3, 1);
+                machine.pointer = first;
+                machine.pc = 0;
+                assert_eq!(machine.run(&program, 2).unwrap(), Stop::Hook(b'$'));
+                assert_eq!(machine.pointer, hole);
+            }
+        }
+    }
+
+    #[test]
+    fn deferred_scan_facts_preserve_cancelled_excursion_bounds() {
+        let mut machine = Machine::new(1025).unwrap();
+        assert!(machine.tape.assign_uniform(0, 1024, 1, 0, 1));
+        let program = Program::parse("[>>><<]", true, false).unwrap();
+        let failure = machine.run(&program, 16).unwrap_err();
+        assert!(matches!(failure, Error::TapeBounds { pointer: 1024, .. }));
+        assert_eq!(machine.pointer, 1024);
+        assert_eq!(machine.read_cell(1024), 1);
+    }
+
+    #[test]
+    fn readonly_route_probes_reuse_logical_zero_and_nonzero_facts() {
+        let mut machine = Machine::new(65580).unwrap();
+        assert!(machine.tape.assign_uniform(32, 65536, 8, 0, 7));
+        let mut probes = 3;
+        assert_eq!(machine.trace_scan(32, 32, 0, 32, &mut probes), Some(65568));
+        assert!(probes > 0);
+        // This representation now restores physical zeros, but its retained
+        // clean fact is equally useful after the zero cache was evicted.
+        assert!(machine.tape.assign_uniform(32, 65536, 8, 7, 0));
+        machine.write_cell(65568, 19);
+        machine.zero_cache.prepare(3, 1);
+        let mut probes = 3;
+        assert_eq!(machine.trace_zeros(32, 32, &mut probes), Some(65568));
+        assert!(probes > 0);
+    }
 
     #[test]
     fn readonly_lookup_checks_stride_residue_and_bounds_without_evicting() {
@@ -239,7 +326,9 @@ impl Machine {
         probes: &mut usize,
     ) -> Option<usize> {
         let step = stride.unsigned_abs();
-        let (slot, known) = self.scan_cache.prepare(step, pointer);
+        let (slot, known) = self
+            .scan_cache
+            .prepare_with_uniform(&self.tape, stride, pointer, false);
         let first = pointer;
         let mut last = None;
         let result = loop {
@@ -292,7 +381,9 @@ impl Machine {
         next: usize,
     ) -> bool {
         let step = stride.unsigned_abs();
-        let (slot, known) = self.scan_cache.prepare(step, self.pointer);
+        let (slot, known) =
+            self.scan_cache
+                .prepare_with_uniform(&self.tape, stride, self.pointer, false);
         let first = self.pointer;
         let mut last = None;
         let mut success = true;

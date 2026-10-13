@@ -32,6 +32,15 @@ and preserve the 16-bit C byte and two-cell banked pointer ABI.
    zero-trip loops retain their observable behavior. Irreducible loops and
    loops requiring phi repair or a new preheader are skipped.
 
+After small-function inlining, pruned SSA promotion also handles mutable integer
+and pointer locals when every read is definitely initialized. Pointer stores
+must supply an SSA value of exactly the same pointer type; aliases preserve the
+address and bank together. Loop and branch joins use typed Phi nodes, lowered
+to private homes after optimization. Volatile objects, escaped addresses and
+unsupported pointer representations retain their original memory accesses.
+This removes intermediate cursor loads/stores in loops such as packed-byte
+decoding, without assuming that a pointer stays in one bank.
+
 During lowering, CFG liveness reclaims dead registers and instruction-local
 scratch values. Live pointer bank metadata and all companion words survive
 branches and calls. Operand registers are reused only after their last use.
@@ -125,6 +134,9 @@ pointer returns, escaped locals and volatile pointer objects. Backend tests
 exercise resolved-bank reuse under register pressure and each cache barrier.
 `pointer_bank_spill_join` covers both successors of a conditional pointer store
 before returning a heap pointer, including the path that skips the store.
+`test_mutable_pointer_promotion` covers repeated cursor updates, stack/global/far
+pointers, bank crossings, zero-trip null cursors, branches, early returns,
+escaped locals and volatile pointer objects.
 `make -C ports/doom test` compares title/menu/E1M1 screenshots
 against the native build; the fixtures stage checks arithmetic and assets.
 
@@ -174,3 +186,13 @@ palette conversion, memory operations and fixed-point arithmetic, all using the
 existing ISA. See `ports/doom/README.md` for sustained gameplay measurements and
 native pixel comparisons; these include renderer improvements beyond the
 general compiler passes.
+
+Mutable pointer SSA promotion (2026-10-13) reduces the shareware directory load
+from 1,756,192 to 1,606,410 guest instructions (8.5%). Within it, `wad_read` falls
+from 833,645 to 739,658 instructions (11.3%), with the same 10,118 packed disk
+word reads. The full title frame falls from 248,188,214 to 236,489,409 guest
+instructions. These are instruction counts with unchanged 64,000-cell banks,
+not BF wall-time estimates. Native/Rust VM title, menu-to-E1M1 and direct E1M1
+pixels match exactly. Pointer Phi homes add entry/exit work, so very short reads
+need not improve; the small reader fixture grows from 52,433 to 52,676 guest
+instructions. Local measurement artifacts are under `build/pointer-ssa/`.

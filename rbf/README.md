@@ -364,6 +364,15 @@ work as `materialize`. Fallback execution preserves partial bounds failures.
 Moving updates can also target a parallel progression when the write residue is
 disjoint from the predicate and both ranges are proved. This folds copy-like
 marker walks and their cleanup without knowing why the BF program uses them.
+Bounded physical walks retain newly proved uniform values for reuse. Conservative
+range/residue filters let unrelated cell accesses bypass the run list; clean
+facts already agree with physical storage and need no read indirection.
+Scans and moving-marker searches also reuse these uniform tape facts after a
+different stride evicts their predicate cache. A scan may follow a subset of a
+proved progression: its stride must be an exact multiple of the progression's
+stride, and its starting cell must belong to that progression. The ordinary
+sentinel checks and full pointer-excursion bounds still apply. This avoids
+repeated logical-cell lookups across a range whose predicate is already proved.
 These optimizations inspect BF operations and tape cells,
 with no knowledge of Ripple opcodes or register layouts. Checked fallback
 execution preserves tape-boundary behavior. Device and byte-I/O hooks are

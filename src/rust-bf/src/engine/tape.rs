@@ -154,18 +154,20 @@ impl Tape {
         &mut self.cells
     }
 
-    /// Return the constant prefix already represented on this exact lattice.
+    /// Return a proved constant prefix on the requested progression. A coarser
+    /// stride can use a run when every queried cell belongs to that run.
     pub(super) fn uniform_prefix(
         &self,
         first: usize,
         stride: isize,
         limit: usize,
     ) -> Option<(usize, u16)> {
-        if !self.all.contains(first) {
+        let step = stride.unsigned_abs();
+        if step == 0 || limit == 0 || !self.all.contains(first) {
             return None;
         }
         self.runs.iter().find_map(|run| {
-            if run.step != stride.unsigned_abs() || !run.contains(first) {
+            if step % run.step != 0 || !run.contains(first) {
                 return None;
             }
             let distance = if stride > 0 {
@@ -173,7 +175,7 @@ impl Tape {
             } else {
                 first - run.low
             };
-            Some(((distance / run.step + 1).min(limit), run.value))
+            Some(((distance / step + 1).min(limit), run.value))
         })
     }
 
@@ -340,6 +342,33 @@ impl PartialEq for Tape {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn uniform_prefix_accepts_only_proved_subprogressions_in_both_directions() {
+        let mut tape = Tape::new(vec![0; 4096]);
+        assert!(tape.assign_uniform(8, 2040, 8, 0, 7));
+        // Another interleaved progression must not be mistaken for this one.
+        assert!(tape.assign_uniform(12, 2044, 8, 0, 9));
+        assert_eq!(tape.uniform_prefix(24, 32, 1000), Some((64, 7)));
+        assert_eq!(tape.uniform_prefix(2040, -32, 1000), Some((64, 7)));
+        assert_eq!(tape.uniform_prefix(24, 32, 3), Some((3, 7)));
+        assert_eq!(tape.uniform_prefix(2040, -32, 2), Some((2, 7)));
+        assert_eq!(tape.uniform_prefix(28, 32, 1000), Some((64, 9)));
+        // Smaller/incompatible strides visit cells the fact does not cover.
+        assert_eq!(tape.uniform_prefix(24, 4, 1000), None);
+        assert_eq!(tape.uniform_prefix(24, 12, 1000), None);
+        assert_eq!(tape.uniform_prefix(25, 32, 1000), None);
+        assert_eq!(tape.uniform_prefix(2048, -32, 1000), None);
+        assert_eq!(tape.uniform_prefix(24, 0, 1000), None);
+        assert_eq!(tape.uniform_prefix(24, 32, 0), None);
+        tape[1048] = 11;
+        // A removed point splits the fact. Queries must stop at its boundary,
+        // even when a particular coarser progression would skip the hole.
+        assert_eq!(tape.uniform_prefix(24, 32, 1000), Some((32, 7)));
+        assert_eq!(tape.uniform_prefix(2040, -32, 1000), Some((31, 7)));
+        assert_eq!(tape.uniform_prefix(1048, 32, 1000), None);
+        assert_eq!(tape[1048], 11);
+    }
+
     #[test]
     fn filters_never_reject_a_progression_point_for_any_residue() {
         for step in 1..=257 {

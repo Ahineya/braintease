@@ -1,4 +1,4 @@
-//! Pruned SSA promotion for nonescaping integer locals. A local is promoted only
+//! Pruned SSA promotion for nonescaping integer and pointer locals. A local is promoted only
 //! when every read is definitely initialized; volatile/address-taken storage is
 //! never rewritten. Phi nodes remain until all SSA optimizations have finished.
 
@@ -8,7 +8,7 @@ use rcc_frontend::{
     ir::{Function, Instruction, IrBinaryOp, IrType, Value},
     BankTag,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 fn address(value: &Value) -> Option<TempId> {
     match value {
@@ -31,7 +31,19 @@ struct Candidate {
     escaped: bool,
 }
 
-pub(super) fn promote_integer_locals(function: &mut Function) {
+fn pointer_source(value: &Value, ty: &IrType, types: &HashMap<TempId, IrType>) -> Option<TempId> {
+    let source = match value {
+        Value::Temp(source) => *source,
+        Value::FatPtr(pointer) if pointer.bank == BankTag::Mixed => match pointer.addr.as_ref() {
+            Value::Temp(source) => *source,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    (types.get(&source) == Some(ty)).then_some(source)
+}
+
+pub(super) fn promote_locals(function: &mut Function) {
     let Ok(cfg) = Cfg::new(function) else {
         return;
     };
@@ -42,6 +54,7 @@ pub(super) fn promote_integer_locals(function: &mut Function) {
         return;
     };
     let n = function.blocks.len();
+    let mut types = super::constants::value_types(function);
     let mut candidates = BTreeMap::new();
     for (bi, block) in function.blocks.iter().enumerate() {
         for (ii, inst) in block.instructions.iter().enumerate() {
@@ -52,7 +65,8 @@ pub(super) fn promote_integer_locals(function: &mut Function) {
                 ..
             } = inst
             {
-                if alloc_type.is_integer() && matches!(count, None | Some(Value::Constant(1))) {
+                if (alloc_type.is_integer() || alloc_type.is_pointer())
+                    && matches!(count, None | Some(Value::Constant(1))) {
                     candidates.insert(
                         *result,
                         Candidate {
@@ -96,6 +110,14 @@ pub(super) fn promote_integer_locals(function: &mut Function) {
                             // The value of a store can still leak this address.
                             if let Instruction::Store { value, .. } = inst {
                                 super::value_temps(value, &mut uses);
+                                // Only an exactly typed SSA pointer retains both
+                                // its address and bank when replacing a memory
+                                // copy. Keep explicit/tagged values in memory.
+                                if candidate.ty.is_pointer()
+                                    && pointer_source(value, &candidate.ty, &types).is_none()
+                                {
+                                    candidate.escaped = true;
+                                }
                             }
                         }
                     }
@@ -216,8 +238,10 @@ pub(super) fn promote_integer_locals(function: &mut Function) {
             return;
         };
         let mut phis = BTreeMap::new();
+        let mut pointer_aliases = HashMap::new();
         for b in phi_blocks {
             phis.insert(b, (next, vec![]));
+            types.insert(next, candidate.ty.clone());
             next += 1;
         }
         debug_assert_eq!(next, end);
@@ -230,10 +254,24 @@ pub(super) fn promote_integer_locals(function: &mut Function) {
             for inst in &mut function.blocks[b].instructions {
                 match inst {
                     Instruction::Store { ptr, value, .. } if address(ptr) == Some(id) => {
-                        current = Some(value.clone());
+                        current = Some(if candidate.ty.is_pointer() {
+                            Value::Temp(pointer_source(value, &candidate.ty, &types)
+                                .expect("pointer stores validated before promotion"))
+                        } else {
+                            value.clone()
+                        });
                         *inst = Instruction::Comment("promoted local store".into());
                     }
                     Instruction::Load { result, ptr, .. } if address(ptr) == Some(id) => {
+                        if candidate.ty.is_pointer() {
+                            let Some(Value::Temp(source)) = current else {
+                                unreachable!("pointer values and Phi results are typed temporaries")
+                            };
+                            pointer_aliases.insert(*result, source);
+                            // substitute_temp_aliases removes this load after
+                            // rewriting every use, including nested fat pointers.
+                            continue;
+                        }
                         *inst = Instruction::Binary {
                             result: *result,
                             op: IrBinaryOp::Add,
@@ -281,5 +319,6 @@ pub(super) fn promote_integer_locals(function: &mut Function) {
                 if text == "promoted local store" || text == "promoted local allocation")
             });
         }
+        super::constants::substitute_temp_aliases(function, &pointer_aliases);
     }
 }

@@ -32,7 +32,7 @@ pub fn optimize_module(module: &mut rcc_frontend::ir::Module) {
     for function in &mut module.functions { optimize_function(function); }
     inline::inline_small_functions(module);
     for function in &mut module.functions {
-        ssa::promote_integer_locals(function);
+        ssa::promote_locals(function);
         redundancy::eliminate_redundancy(function);
         optimize_function(function);
     }
