@@ -1,0 +1,122 @@
+import { List } from "std/list";
+
+export fn byte_len(text: String) -> usize {
+    text.len()
+}
+
+export fn is_empty(text: String) -> bool {
+    text.is_empty()
+}
+
+export fn is_ascii(text: String) -> bool {
+    let mut i: usize = 0;
+    while (i < text.len()) {
+        if ((text[i] as i32) >= 128) { return false; }
+        i = i + 1;
+    }
+    true
+}
+
+fn region_eq(text: String, start: usize, needle: String) -> bool {
+    let mut i: usize = 0;
+    while (i < needle.len()) {
+        if (text[start + i] != needle[i]) { return false; }
+        i = i + 1;
+    }
+    true
+}
+
+export fn starts_with(text: String, prefix: String) -> bool {
+    if (prefix.len() > text.len()) { false } else { region_eq(text, 0, prefix) }
+}
+
+export fn ends_with(text: String, suffix: String) -> bool {
+    if (suffix.len() > text.len()) { false } else { region_eq(text, text.len() - suffix.len(), suffix) }
+}
+
+export fn contains(text: String, needle: String) -> bool {
+    match index_of(text, needle) {
+        Some(_) => true,
+        None => false,
+    }
+}
+
+export fn index_of(text: String, needle: String) -> Option<usize> {
+    let nlen = needle.len();
+    let tlen = text.len();
+    if (nlen == 0) { return Some(0); }
+    let mut start: usize = 0;
+    while (start + nlen <= tlen) {
+        if (region_eq(text, start, needle)) { return Some(start); }
+        start = start + 1;
+    }
+    None
+}
+
+export fn concat(left: String, right: String) -> String { left + right }
+
+export fn repeat(text: String, count: usize) -> String {
+    let mut out = "";
+    let mut i: usize = 0;
+    while (i < count) {
+        out = out + text;
+        i = i + 1;
+    }
+    out
+}
+
+fn is_space(ch: char) -> bool {
+    ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
+}
+
+export fn trim(text: String) -> String {
+    let mut start: usize = 0;
+    while (start < text.len() && is_space(text[start])) { start = start + 1; }
+    let mut end = text.len();
+    while (end > start && is_space(text[end - 1])) { end = end - 1; }
+    text[start..end]
+}
+
+export fn split(text: String, sep: String) -> List<String> {
+    let mut out: List<String> = Nil;
+    if (sep.len() == 0) {
+        let mut i = text.len();
+        while (i > 0) {
+            i = i - 1;
+            out = Cons(text[i..i + 1], out);
+        }
+        return out;
+    }
+    let mut start: usize = 0;
+    while (start <= text.len()) {
+        let rest = text[start..text.len()];
+        match index_of(rest, sep) {
+            Some(at) => {
+                out = Cons(text[start..start + at], out);
+                start = start + at + sep.len();
+            }
+            None => {
+                out = Cons(rest, out);
+                return out.reverse();
+            }
+        }
+    }
+    out.reverse()
+}
+
+export fn replace(text: String, from: String, to: String) -> String {
+    if (from.len() == 0) { return text; }
+    let mut out = "";
+    let mut i: usize = 0;
+    while (i < text.len()) {
+        let rest = text[i..text.len()];
+        if (starts_with(rest, from)) {
+            out = out + to;
+            i = i + from.len();
+        } else {
+            out = out + text[i..i + 1];
+            i = i + 1;
+        }
+    }
+    out
+}

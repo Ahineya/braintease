@@ -1,0 +1,67 @@
+impl<T> Option<T> {
+    export fn is_some(self) -> bool {
+        match self {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    export fn is_none(self) -> bool {
+        match self {
+            Some(_) => false,
+            None => true,
+        }
+    }
+
+    export fn unwrap_or(self, fallback: T) -> T {
+        match self {
+            Some(found) => found,
+            None => fallback,
+        }
+    }
+
+    export fn unwrap_or_else(self, fallback: fn() -> T) -> T {
+        match self {
+            Some(found) => found,
+            None => fallback(),
+        }
+    }
+
+    export fn map<U>(self, f: fn(T) -> U) -> Option<U> {
+        match self {
+            Some(found) => Some(f(found)),
+            None => None,
+        }
+    }
+
+    export fn and_then<U>(self, f: fn(T) -> Option<U>) -> Option<U> {
+        match self {
+            Some(found) => f(found),
+            None => None,
+        }
+    }
+
+    export fn or_else(self, fallback: fn() -> Option<T>) -> Option<T> {
+        match self {
+            Some(found) => Some(found),
+            None => fallback(),
+        }
+    }
+
+    export fn filter(self, predicate: fn(T) -> bool) -> Option<T> {
+        match self {
+            Some(found) => if (predicate(found)) { Some(found) } else { None },
+            None => None,
+        }
+    }
+}
+
+export fn is_some<T>(value: Option<T>) -> bool { value.is_some() }
+
+export fn is_none<T>(value: Option<T>) -> bool { value.is_none() }
+
+export fn unwrap_or<T>(value: Option<T>, fallback: T) -> T { value.unwrap_or(fallback) }
+
+export fn map<T, U>(value: Option<T>, f: fn(T) -> U) -> Option<U> { value.map(f) }
+
+export fn and_then<T, U>(value: Option<T>, f: fn(T) -> Option<U>) -> Option<U> { value.and_then(f) }

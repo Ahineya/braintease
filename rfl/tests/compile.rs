@@ -150,9 +150,49 @@ fn print_logs_values() {
 }
 
 #[test]
-fn string_values_are_rejected() {
-    let err = rfl::compile_to_ir("fn main() -> i16 { \"hi\" }\n").unwrap_err();
-    assert!(err.to_string().contains("string values"), "{err}");
+fn strings_compare_index_and_print() {
+    let source = r#"
+        struct Hold { text: String }
+        fn make() -> Hold { Hold { text: "Hi" } }
+        fn spoil() { let _gone = "NO"; }
+        fn main() -> i16 {
+            let h = make();
+            spoil();
+            let s = h.text;
+            let t = s;
+            println(s);
+            putc('!');
+            let code: i32 = 'A' as i32;
+            if (t == "Hi" && s != "" && s.len() == 2 && !s.is_empty() && s[0] == 'H' && 'A' < 'B' && code == 65) {
+                42
+            } else {
+                0
+            }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "Hi\n!", "status {}", result.status);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn string_is_not_a_c_type() {
+    let err = rfl::compile_to_ir("extern \"C\" { fn f(s: String); }\nfn main() -> i16 { 0 }\n").unwrap_err();
+    assert!(err.to_string().contains("C signature"), "{err}");
+}
+
+#[test]
+fn surrogate_cast_fails() {
+    let source = "fn main() -> i16 {\n  let n: i32 = 55296;\n  let _c = n as char;\n  42\n}\n";
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert!(result.stdout.contains("fail"), "{}", result.stdout);
+    assert_eq!(result.status, 1, "{}", result.stdout);
+}
+
+#[test]
+fn char_is_not_an_integer() {
+    let err = rfl::compile_to_ir("fn main() -> i16 { let n: i32 = 65; let _c: char = n; 0 }\n").unwrap_err();
+    assert!(err.to_string().contains("char"), "{err}");
 }
 
 #[test]
@@ -742,6 +782,24 @@ fn literal_patterns_match_values() {
 }
 
 #[test]
+fn for_range_uses_the_collection_length() {
+    let source = r#"
+        fn main() -> i16 {
+            let program = "ab";
+            let mut sum: i16 = 0;
+            for (i in 0..program.len()) {
+                println(program[i]);
+                sum = sum + (program[i] as i16);
+            }
+            if (sum == 195) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "a\nb\n", "status {}", result.status);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
 fn integer_match_must_be_exhaustive() {
     let err = rfl::compile_to_ir("fn main() -> i16 { match 1 { 0 => 1 } }\n").unwrap_err();
     assert!(err.to_string().contains("non-exhaustive"), "{err}");
@@ -1111,5 +1169,458 @@ fn repr_c_struct_crosses_the_c_abi() {
         ),
     ]);
     let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn printf_takes_variadic_arguments() {
+    let source = r#"
+        extern "C" {
+            fn printf(format: *const c_char, ...) -> c_int;
+        }
+        fn main() -> i16 {
+            printf(c"Result: %d\n", 20);
+            42
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "Result: 20\n", "status {}", result.status);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn variadic_call_needs_the_named_arguments() {
+    let err = rfl::compile_to_ir(
+        "extern \"C\" { fn printf(format: *const c_char, ...) -> c_int; }\nfn main() -> i16 { printf() }\n",
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("at least"), "{err}");
+}
+
+#[test]
+fn variadic_call_rejects_a_vector() {
+    let err = rfl::compile_to_ir(
+        "extern \"C\" { fn printf(format: *const c_char, ...) -> c_int; }\nfn main() -> i16 { let v: Vec<i16> = []; printf(c\"%d\", v) }\n",
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("variadic"), "{err}");
+}
+
+#[test]
+fn mixed_program_prints_the_folded_list() {
+    let (_tmp, main) = tmp_main(&[
+        ("math.c", "int sum(int a, int b) { return a + b; }\n"),
+        (
+            "list.rfl",
+            r#"
+                export type List<T> = Nil | Cons(T, List<T>);
+                export fn map(f, xs) {
+                    match xs {
+                        Nil => Nil,
+                        Cons(x, rest) => Cons(f(x), map(f, rest)),
+                    }
+                }
+                export fn fold(f, initial, xs) {
+                    match xs {
+                        Nil => initial,
+                        Cons(x, rest) => fold(f, f(initial, x), rest),
+                    }
+                }
+            "#,
+        ),
+        (
+            "main.rfl",
+            r#"
+                import { List, map, fold } from "./list";
+                import { sum } from "./math.c";
+                extern "C" {
+                    fn printf(format: *const c_char, ...) -> c_int;
+                }
+                fn main() -> c_int {
+                    let numbers = Cons(1, Cons(2, Cons(3, Cons(4, Nil))));
+                    let doubled = map(fn(x) => sum(x, x), numbers);
+                    let total = fold(fn(acc, x) => acc + x, 0, doubled);
+                    printf(c"Result: %d\n", total);
+                    0
+                }
+            "#,
+        ),
+    ]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "Result: 20\n", "status {}", result.status);
+    assert_eq!(result.status, 0, "{}", result.stdout);
+}
+
+#[test]
+fn std_list_chains_and_prints() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { List } from "std/list";
+            import { println } from "std/io";
+            fn main() -> i16 {
+                let numbers = List::from([1, 2, 3, 4, 5]);
+                let result = numbers
+                    .map(fn(x) => x * 2)
+                    .filter(fn(x) => x > 5)
+                    .fold(0, fn(acc, x) => acc + x);
+                println(result);
+                if (result == 24) { 42 } else { result }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "24\n", "status {}", result.status);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn imported_function_is_a_method() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { abs } from "std/math";
+            fn main() -> i16 {
+                let n = -41;
+                if (n.abs() == 41 && abs(n) == 41) { 42 } else { 0 }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn std_option_is_the_prelude() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { Option, unwrap_or } from "std/option";
+            fn pick(flag: bool) -> Option<i16> {
+                if (flag) { Some(42) } else { None }
+            }
+            fn chosen() -> Option<i16> {
+                let missing = pick(false);
+                let value = pick(true)?;
+                Some(unwrap_or(missing, value))
+            }
+            fn main() -> i16 {
+                match chosen() {
+                    Some(n) => n,
+                    None => 0,
+                }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn std_result_unwraps_or_the_fallback() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { unwrap_or } from "std/result";
+            fn main() -> i16 {
+                let bad: Result<i16, i16> = Err(1);
+                let good: Result<i16, i16> = Ok(42);
+                if (unwrap_or(bad, 7) == 7 && unwrap_or(good, 7) == 42) { 42 } else { 0 }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn std_string_reports_byte_length() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        "import { byte_len } from \"std/string\";\nfn main() -> i16 { if (byte_len(\"Hi\") == 2) { 42 } else { 0 } }\n",
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn return_inside_a_loop_stores_the_value() {
+    let source = r#"
+        fn find_e(text: String) -> bool {
+            let mut i: usize = 0;
+            while (i < text.len()) {
+                if (text[i] == 'e') { return true; }
+                i = i + 1;
+            }
+            false
+        }
+        fn early(n: i16) -> i16 {
+            if (n > 0) { return n; }
+            0
+        }
+        fn main() -> i16 {
+            if (find_e("hello") && early(42) == 42) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn bitwise_packs_and_shifts() {
+    let source = r#"
+        fn main() -> i16 {
+            let low: u16 = 15;
+            let high: u16 = 60;
+            let packed = (low & high) | (1 << 8);
+            let negative: i16 = -8;
+            if (packed == 268 && (negative >> 1) == -4 && (~low & 15) == 0) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn mutable_capture_is_shared() {
+    let source = r#"
+        fn make() -> fn() -> i16 {
+            let mut n = 40;
+            fn() => {
+                n = n + 1;
+                n
+            }
+        }
+        fn main() -> i16 {
+            let mut seen = 1;
+            let bump = fn() => { seen = seen + 1; };
+            bump();
+            let next = make();
+            let first = next();
+            let second = next();
+            if (seen == 2 && first == 41 && second == 42) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn c_function_pointer_calls_through_c() {
+    let (_tmp, main) = tmp_main(&[
+        ("cb.c", "int call_cb(int (*f)(int, int), int a, int b) { return f(a, b); }\n"),
+        (
+            "main.rfl",
+            r#"
+                import { call_cb } from "./cb.c";
+                export extern "C" fn add(a: c_int, b: c_int) -> c_int { a + b }
+                fn apply(f: extern "C" fn(c_int, c_int) -> c_int, a: c_int, b: c_int) -> c_int { f(a, b) }
+                fn main() -> i16 {
+                    if (apply(add, 10, 11) == 21 && call_cb(add, 20, 22) == 42) { 42 } else { 0 }
+                }
+            "#,
+        ),
+    ]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn native_function_is_not_a_c_pointer() {
+    let err = rfl::compile_to_ir(
+        "fn add(a: i16, b: i16) -> i16 { a + b }\nfn main() -> i16 {\n    let f: extern \"C\" fn(i16, i16) -> i16 = add;\n    f(1, 2)\n}\n",
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("extern"), "{err}");
+}
+
+#[test]
+fn raw_pointer_updates_a_local() {
+    let source = r#"
+        import { write_u16, write_at } from "std/mem";
+        fn main() -> i16 {
+            let mut x: u16 = 20;
+            unsafe {
+                let p: *mut u16 = &mut x;
+                *p = *p + 22;
+                let q = p.offset(0);
+                let same = q.addr();
+                let here = p.addr();
+                if (q.is_null() || same != here) { return 0; }
+                write_u16(p, 40);
+                write_at(p, 0, 42);
+            }
+            if (x == 42) { 42 } else { 0 }
+        }
+    "#;
+    let (_tmp, main) = tmp_main(&[("main.rfl", source)]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn raw_pointer_needs_unsafe() {
+    let err = rfl::compile_to_ir("fn load(p: *mut u16) -> u16 { *p }\nfn main() -> i16 { 0 }\n").unwrap_err();
+    assert!(err.to_string().contains("unsafe"), "{err}");
+}
+
+#[test]
+fn const_pointer_cannot_store() {
+    let err = rfl::compile_to_ir("fn store(p: *const u16) { unsafe { *p = 1; } }\nfn main() -> i16 { 0 }\n").unwrap_err();
+    assert!(err.to_string().contains("const"), "{err}");
+}
+
+#[test]
+fn mmio_talks_to_the_devices() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { tty_put, tty_write, set_mode, mode, MODE_TEXT40, rng_reseed, rng_seed, device_version } from "std/mmio";
+            fn main() -> i16 {
+                tty_put(89);
+                tty_write("Z");
+                set_mode(MODE_TEXT40);
+                rng_reseed(7);
+                if (mode() == MODE_TEXT40 && rng_seed() == 7 && device_version() == 1) { 42 } else { 0 }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "YZ", "status {}", result.status);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn std_math_covers_integers_and_trig() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { abs, gcd, lcm, isqrt, pow, count_ones, clamp, signum, min, sin, cos, sqrt, floor, ceil } from "std/math";
+            fn near(actual: f64, expected: f64) -> bool {
+                let gap = if (actual > expected) { actual - expected } else { expected - actual };
+                gap < 0.001
+            }
+            fn main() -> i16 {
+                let words = abs(-3) == 3 && signum(-2) == -1 && gcd(12, 18) == 6 && lcm(4, 6) == 12
+                    && isqrt(10) == 3 && pow(2, 5) == 32 && count_ones(7) == 3 && clamp(9, 1, 4) == 4
+                    && min(1.5, 2.5) == 1.5;
+                let curve = near(sin(0.0), 0.0) && near(cos(0.0), 1.0) && near(sin(1.5707963267948966), 1.0)
+                    && near(sqrt(4.0), 2.0) && floor(-1.2) == -2.0 && ceil(1.2) == 2.0;
+                if (words && curve) { 42 } else { 0 }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn std_list_option_string_and_char() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { List } from "std/list";
+            import { map } from "std/option";
+            import { contains, starts_with } from "std/string";
+            import { to_lower, digit } from "std/char";
+            fn positive(n: i16) -> bool { n > 0 }
+            fn twice(n: i16) -> i16 { n * 2 }
+            fn main() -> i16 {
+                let items = List::from([1, 2, 3]);
+                let flipped = items.reverse();
+                let found = match flipped.find(positive) {
+                    Some(n) => n,
+                    None => 0,
+                };
+                let doubled = match map(Some(21), twice) {
+                    Some(n) => n,
+                    None => 0,
+                };
+                let tail = match flipped.last() {
+                    Some(n) => n,
+                    None => 0,
+                };
+                let count = flipped.len();
+                let text_ok = contains("hello", "ell") && starts_with("hello", "he") && !contains("hello", "hex");
+                let letter = to_lower('B');
+                let value = match digit('7') { Some(n) => n, None => 0 };
+                if (count == 3 && found == 3 && tail == 1 && doubled == 42
+                    && text_ok && letter == 'b' && value == 7) { 42 } else { 0 }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn std_mem_copies_cells() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { copy, fill, read_i32, write_i32 } from "std/mem";
+            fn main() -> i16 {
+                let mut cell: u16 = 7;
+                let mut out: u16 = 0;
+                let mut wide: i32 = 0;
+                unsafe { copy(&mut out, &cell, 1); }
+                let copied = out;
+                unsafe { fill(&mut out, 1, 9); }
+                unsafe { write_i32(&mut wide, 65537); }
+                let got = unsafe { read_i32(&wide) };
+                if (copied == 7 && out == 9 && got == 65537) { 42 } else { 0 }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn strings_can_be_built_and_sliced() {
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        r#"
+            import { trim, repeat, replace, split } from "std/string";
+            import { List } from "std/list";
+            fn main() -> i16 {
+                let program = "++++++++++[->++++++<]>+++++.";
+                println(program[0]);
+                let joined = "a" + "b";
+                let piece = "hello"[1..=3];
+                let built = from_char('+') + from_byte(43);
+                let mut walked = "";
+                for (ch in "ab") { walked = walked + from_char(ch); }
+                let parts = split("a,b", ",");
+                let count = parts.len();
+                let first = match parts.nth(0) { Some(s) => s, None => "" };
+                let second = match parts.nth(1) { Some(s) => s, None => "" };
+                if (joined == "ab" && piece == "ell" && built == "++" && from_char('é') == "é" && walked == "ab"
+                    && trim("  hi ") == "hi" && repeat("ab", 3) == "ababab"
+                    && replace("aba", "a", "c") == "cbc" && count == 2 && first == "a" && second == "b") {
+                    42
+                } else { 0 }
+            }
+        "#,
+    )]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "+\n", "status {}", result.status);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn match_can_test_a_character() {
+    let source = r#"
+        fn main() -> i16 {
+            let program = "+";
+            match program[0] {
+                '+' => { println("plus"); }
+                _ => { println("other"); }
+            }
+            42
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "plus\n", "status {}", result.status);
     assert_eq!(result.status, 42, "{}", result.stdout);
 }

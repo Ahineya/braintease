@@ -1,0 +1,227 @@
+// Bank 0 devices. A cell address is one machine word.
+// TEXT40 cells begin at 32. Mode 4 framebuffers live outside this bank
+// and are presented with `device_submit`.
+
+extern "C" {
+    fn mmio_read(addr: c_uint) -> c_uint;
+    fn mmio_write(addr: c_uint, value: c_uint);
+}
+
+export fn read(addr: u16) -> u16 { mmio_read(addr) }
+export fn write(addr: u16, value: u16) -> () { mmio_write(addr, value); }
+
+fn bit(value: u16, index: u16) -> bool {
+    ((value >> index) & 1) == 1
+}
+
+// Registers
+export const TTY_OUT: u16 = 0;
+export const TTY_STATUS: u16 = 1;
+export const TTY_IN: u16 = 2;
+export const TTY_IN_STATUS: u16 = 3;
+export const RNG: u16 = 4;
+export const RNG_SEED: u16 = 5;
+export const DISP_MODE: u16 = 6;
+export const DISP_STATUS: u16 = 7;
+export const DISP_CTL: u16 = 8;
+export const DISP_FLUSH: u16 = 9;
+export const KEY_UP: u16 = 10;
+export const KEY_DOWN: u16 = 11;
+export const KEY_LEFT: u16 = 12;
+export const KEY_RIGHT: u16 = 13;
+export const KEY_Z: u16 = 14;
+export const KEY_X: u16 = 15;
+export const DISP_RESOLUTION: u16 = 16;
+export const STORE_BLOCK: u16 = 17;
+export const STORE_ADDR: u16 = 18;
+export const STORE_DATA: u16 = 19;
+export const STORE_CTL: u16 = 20;
+export const IRQ_STATUS: u16 = 21;
+export const IRQ_ENABLE: u16 = 22;
+export const IRQ_BUSY: u16 = 23;
+export const IRQ_VECTOR_BANK: u16 = 24;
+export const IRQ_VECTOR_OFF: u16 = 25;
+export const IRQ_CAUSE: u16 = 26;
+export const DEVICE_DESC_BANK: u16 = 27;
+export const DEVICE_DESC_OFF: u16 = 28;
+export const DEVICE_COMMAND: u16 = 29;
+export const DEVICE_STATUS: u16 = 30;
+export const DEVICE_VERSION: u16 = 31;
+
+export const MODE_OFF: u16 = 0;
+export const MODE_TTY: u16 = 1;
+export const MODE_TEXT40: u16 = 2;
+export const MODE_RGB565: u16 = 3;
+export const MODE_RGB565_EXT: u16 = 4;
+
+export const TEXT40_COLS: u16 = 40;
+export const TEXT40_ROWS: u16 = 25;
+export const TEXT40_BASE: u16 = 32;
+
+export const COLOR_BLACK: u16 = 0;
+export const COLOR_DARK_BLUE: u16 = 1;
+export const COLOR_DARK_PURPLE: u16 = 2;
+export const COLOR_DARK_GREEN: u16 = 3;
+export const COLOR_BROWN: u16 = 4;
+export const COLOR_DARK_GRAY: u16 = 5;
+export const COLOR_LIGHT_GRAY: u16 = 6;
+export const COLOR_WHITE: u16 = 7;
+export const COLOR_RED: u16 = 8;
+export const COLOR_ORANGE: u16 = 9;
+export const COLOR_YELLOW: u16 = 10;
+export const COLOR_GREEN: u16 = 11;
+export const COLOR_BLUE: u16 = 12;
+export const COLOR_INDIGO: u16 = 13;
+export const COLOR_PINK: u16 = 14;
+export const COLOR_PEACH: u16 = 15;
+
+export const IRQ_SOFTWARE: u16 = 1;
+export const DEVICE_PENDING: u16 = 32768;
+export const DEVICE_PRESENT: u16 = 1;
+export const DEVICE_CAPS: u16 = 2;
+export const DEVICE_NEXT_TICK: u16 = 3;
+export const DEVICE_GET_TIME: u16 = 4;
+export const DEVICE_INPUT_POP: u16 = 5;
+export const DEVICE_INPUT_STATE: u16 = 6;
+
+export fn tty() -> () { write(DISP_MODE, MODE_TTY); }
+
+export fn tty_put(ch: u16) -> () { write(TTY_OUT, ch); }
+
+export fn tty_write(text: String) -> () {
+    let mut i: usize = 0;
+    while (i < text.len()) {
+        tty_put(text[i] as u16);
+        i = i + 1;
+    }
+}
+
+export fn tty_ready() -> bool { bit(read(TTY_STATUS), 0) }
+
+export fn tty_get() -> u16 { read(TTY_IN) }
+
+export fn tty_has_byte() -> bool { bit(read(TTY_IN_STATUS), 0) }
+
+export fn rng_next() -> u16 { read(RNG) }
+
+export fn rng_seed() -> u16 { read(RNG_SEED) }
+
+export fn rng_reseed(seed: u16) -> () { write(RNG_SEED, seed); }
+
+export fn mode() -> u16 { read(DISP_MODE) }
+
+export fn set_mode(next: u16) -> () { write(DISP_MODE, next); }
+
+export fn display_ready() -> bool { bit(read(DISP_STATUS), 0) }
+
+export fn display_flushed() -> bool { bit(read(DISP_STATUS), 1) }
+
+export fn display_enable() -> () { write(DISP_CTL, 1); }
+
+export fn display_clear() -> () { write(DISP_CTL, 3); }
+
+export fn display_flush() -> () { write(DISP_FLUSH, 1); }
+
+// Mode 3 keeps an 8-bit width in the high byte and height in the low byte.
+export fn display_size(width: u16, height: u16) -> () {
+    write(DISP_RESOLUTION, (width << 8) | height);
+}
+
+export fn text40() -> () {
+    set_mode(MODE_TEXT40);
+    display_enable();
+}
+
+export fn rgb565() -> () {
+    set_mode(MODE_RGB565);
+    display_enable();
+}
+
+export fn rgb565_ext() -> () {
+    set_mode(MODE_RGB565_EXT);
+    display_enable();
+}
+
+export fn attr(fg: u16, bg: u16) -> u16 { (bg << 4) | fg }
+
+export fn text40_at(x: u16, y: u16) -> u16 {
+    TEXT40_BASE + y * TEXT40_COLS + x
+}
+
+export fn text40_put(x: u16, y: u16, ch: u16, fg: u16, bg: u16) -> () {
+    if (x < TEXT40_COLS && y < TEXT40_ROWS) {
+        write(text40_at(x, y), (attr(fg, bg) << 8) | ch);
+    }
+}
+
+export fn text40_write(x: u16, y: u16, text: String, fg: u16, bg: u16) -> () {
+    let mut i: usize = 0;
+    let mut col = x;
+    while (i < text.len() && col < TEXT40_COLS) {
+        text40_put(col, y, text[i] as u16, fg, bg);
+        i = i + 1;
+        col = col + 1;
+    }
+}
+
+export fn text40_char(x: u16, y: u16) -> u16 {
+    if (x < TEXT40_COLS && y < TEXT40_ROWS) { read(text40_at(x, y)) & 255 } else { 0 }
+}
+
+export fn key_down(which: u16) -> bool { bit(read(which), 0) }
+
+export fn rgb565_color(red: u16, green: u16, blue: u16) -> u16 {
+    ((red >> 3) << 11) | ((green >> 2) << 5) | (blue >> 3)
+}
+
+export fn storage_select(block: u16, addr: u16) -> () {
+    write(STORE_BLOCK, block);
+    write(STORE_ADDR, addr);
+}
+
+export fn storage_read() -> u16 { read(STORE_DATA) }
+
+export fn storage_write(value: u16) -> () { write(STORE_DATA, value); }
+
+export fn storage_status() -> u16 { read(STORE_CTL) }
+
+export fn storage_busy() -> bool { bit(storage_status(), 0) }
+
+export fn storage_dirty() -> bool { bit(storage_status(), 1) }
+
+export fn storage_commit() -> () { write(STORE_CTL, 4); }
+
+export fn storage_commit_all() -> () { write(STORE_CTL, 8); }
+
+export fn irq_status() -> u16 { read(IRQ_STATUS) }
+
+export fn irq_raise(bits: u16) -> () { write(IRQ_STATUS, bits); }
+
+export fn irq_enabled() -> u16 { read(IRQ_ENABLE) }
+
+export fn irq_set_enabled(mask: u16) -> () { write(IRQ_ENABLE, mask); }
+
+export fn irq_busy() -> bool { read(IRQ_BUSY) != 0 }
+
+export fn irq_ack() -> () { write(IRQ_BUSY, 1); }
+
+export fn irq_cause() -> u16 { read(IRQ_CAUSE) }
+
+export fn irq_set_vector(bank: u16, offset: u16) -> () {
+    write(IRQ_VECTOR_BANK, bank);
+    write(IRQ_VECTOR_OFF, offset);
+}
+
+// The descriptor is a run of cells the caller owns until the command returns.
+// `bank` is the pointer's bank cell and `offset` is its address cell.
+export fn device_submit(command: u16, bank: u16, offset: u16) -> () {
+    write(DEVICE_DESC_BANK, bank);
+    write(DEVICE_DESC_OFF, offset);
+    write(DEVICE_COMMAND, command);
+}
+
+export fn device_status() -> u16 { read(DEVICE_STATUS) }
+
+export fn device_pending() -> bool { device_status() == DEVICE_PENDING }
+
+export fn device_version() -> u16 { read(DEVICE_VERSION) }

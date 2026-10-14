@@ -1,0 +1,23 @@
+export fn is_digit(ch: char) -> bool {
+    ch >= '0' && ch <= '9'
+}
+
+export fn is_ascii_alpha(ch: char) -> bool {
+    (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+}
+
+export fn is_ascii(ch: char) -> bool {
+    (ch as i32) < 128
+}
+
+export fn to_lower(ch: char) -> char {
+    if (ch >= 'A' && ch <= 'Z') { ((ch as i32) + 32) as char } else { ch }
+}
+
+export fn to_upper(ch: char) -> char {
+    if (ch >= 'a' && ch <= 'z') { ((ch as i32) - 32) as char } else { ch }
+}
+
+export fn digit(ch: char) -> Option<i16> {
+    if (is_digit(ch)) { Some(((ch as i32) - 48) as i16) } else { None }
+}

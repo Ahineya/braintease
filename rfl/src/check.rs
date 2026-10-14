@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Adt, BinOp, Block, Ctor, Expr, ExprKind, Function, Impl, Module, Param, ParsedTy, Pat, Recv, Span, Stmt, TypeParam, UnaryOp};
 use crate::error::CompileError;
@@ -10,12 +10,16 @@ struct Sig {
     ret: Option<Ty>,
     /// Call this as a C function, not as an RFL frame.
     c_abi: bool,
+    /// `...` after the named parameters.
+    variadic: bool,
 }
 
 #[derive(Clone)]
 struct Binding {
     ty: Ty,
     mutable: bool,
+    /// Writes inside a closure share this binding through a heap cell.
+    shared: bool,
 }
 
 struct AdtSchema {
@@ -57,6 +61,9 @@ pub fn check(source: &str, module: &Module) -> Result<TModule, CompileError> {
         outer_scopes: Vec::new(),
         outer_bindings: Vec::new(),
         captures: Vec::new(),
+        cfns: Vec::new(),
+        shared_spans: HashSet::new(),
+        capture_error: None,
         vec_elems: Vec::new(),
         arrays: Vec::new(),
         slice_elems: Vec::new(),
@@ -212,7 +219,7 @@ fn prelude_option() -> Adt {
 }
 
 fn is_builtin(name: &str) -> bool {
-    matches!(name, "print" | "println" | "putc")
+    matches!(name, "print" | "println" | "putc" | "from_char" | "from_byte")
 }
 
 fn always_returns(block: &Block) -> bool {
@@ -269,6 +276,12 @@ struct Checker<'a> {
     struct_names: HashMap<String, u32>,
     tuples: Vec<Vec<Ty>>,
     ptrs: Vec<RefTy>,
+    /// Signatures of `extern "C" fn` types.
+    cfns: Vec<FuncSig>,
+    /// `let mut` patterns this function assigns from inside a closure.
+    shared_spans: HashSet<usize>,
+    /// A mutable capture the lowering cannot represent.
+    capture_error: Option<CompileError>,
     externs: Vec<crate::typed::ExternFn>,
     /// Nested `unsafe` blocks. A reference becomes a raw pointer only inside one.
     unsafe_depth: u32,
@@ -514,7 +527,7 @@ fn type_var_name(index: usize) -> String {
 impl<'a> Checker<'a> {
     fn bind(&mut self, name: String, ty: Ty, mutable: bool) -> u32 {
         let id = self.bindings.len() as u32;
-        self.bindings.push(Binding { ty, mutable });
+        self.bindings.push(Binding { ty, mutable, shared: false });
         self.scopes.last_mut().unwrap().insert(name, id);
         id
     }
@@ -539,9 +552,20 @@ impl<'a> Checker<'a> {
             self.scopes.last_mut().unwrap().insert(name.to_string(), found.local);
             return Some(found.local);
         }
-        let ty = self.outer_bindings[parent as usize].ty;
-        let local = self.bind(name.to_string(), ty, false);
-        self.captures.push(crate::typed::Capture { parent, local, ty });
+        let parent_binding = self.outer_bindings[parent as usize].clone();
+        let ty = parent_binding.ty;
+        if parent_binding.shared && !shareable(ty) && self.capture_error.is_none() {
+            self.capture_error = Some(CompileError::at(
+                self.source,
+                0,
+                format!("`{}` cannot be captured mutably", self.show(ty)),
+            ));
+        }
+        let local = self.bind(name.to_string(), ty, parent_binding.shared);
+        if parent_binding.shared {
+            self.bindings[local as usize].shared = true;
+        }
+        self.captures.push(crate::typed::Capture { parent, local, ty, shared: parent_binding.shared });
         Some(local)
     }
 
@@ -651,7 +675,7 @@ impl<'a> Checker<'a> {
                 Some(ty) => Some(self.apply(ty, &HashMap::new())?),
                 None => None,
             };
-            self.sigs.insert(func.name.clone(), Sig { params, ret, c_abi: func.c_export });
+            self.sigs.insert(func.name.clone(), Sig { params, ret, c_abi: func.c_export, variadic: false });
         }
         Ok(())
     }
@@ -683,9 +707,9 @@ impl<'a> Checker<'a> {
                 }
                 None => Ty::Unit,
             };
-            self.externs.push(crate::typed::ExternFn { name: decl.name.clone(), params: params.clone(), ret });
+            self.externs.push(crate::typed::ExternFn { name: decl.name.clone(), params: params.clone(), ret, variadic: decl.variadic });
             let ret = if ret == Ty::Unit { None } else { Some(ret) };
-            self.sigs.insert(decl.name.clone(), Sig { params, ret, c_abi: true });
+            self.sigs.insert(decl.name.clone(), Sig { params, ret, c_abi: true, variadic: decl.variadic });
         }
         Ok(())
     }
@@ -705,6 +729,9 @@ impl<'a> Checker<'a> {
             if self.c_pointee(inner) {
                 return Ok(());
             }
+        }
+        if matches!(ty, Ty::CFn(_)) {
+            return Ok(());
         }
         Err(CompileError::at(self.source, span, format!("`{}` cannot be used in a C signature", self.show(ty))))
     }
@@ -726,6 +753,23 @@ impl<'a> Checker<'a> {
         want_ptr.inner == got_ref.inner && (!want_ptr.mutable || got_ref.mutable)
     }
 
+    fn promote_vararg(&self, span: usize, expr: TExpr) -> Result<TExpr, CompileError> {
+        if expr.ty == Ty::F32 {
+            return Ok(TExpr { ty: Ty::F64, kind: TExprKind::Cast { expr: Box::new(expr), to: Ty::F64 } });
+        }
+        if matches!(expr.ty, Ty::I8 | Ty::U8) {
+            return Ok(TExpr { ty: Ty::I16, kind: TExprKind::Cast { expr: Box::new(expr), to: Ty::I16 } });
+        }
+        if expr.ty.is_int() || expr.ty.is_float() || matches!(expr.ty, Ty::Ptr(_)) || self.is_repr_struct(expr.ty) {
+            return Ok(expr);
+        }
+        Err(CompileError::at(
+            self.source,
+            span,
+            format!("`{}` cannot be passed to a variadic function", self.show(expr.ty)),
+        ))
+    }
+
     fn coerce_raw(&self, span: usize, expr: TExpr, want: Ty) -> Result<TExpr, CompileError> {
         if expr.ty == want {
             return Ok(expr);
@@ -741,7 +785,7 @@ impl<'a> Checker<'a> {
 
     fn validate_ty(&self, ty: &ParsedTy, params: &[String]) -> Result<(), CompileError> {
         match ty {
-            ParsedTy::Func { params: fn_params, ret, .. } => {
+            ParsedTy::Func { params: fn_params, ret, .. } | ParsedTy::CFn { params: fn_params, ret, .. } => {
                 for param in fn_params {
                     self.validate_ty(param, params)?;
                 }
@@ -813,6 +857,8 @@ impl<'a> Checker<'a> {
         let saved_outer_scopes = std::mem::take(&mut self.outer_scopes);
         let saved_outer_bindings = std::mem::take(&mut self.outer_bindings);
         let saved_captures = std::mem::take(&mut self.captures);
+        let saved_shared = std::mem::take(&mut self.shared_spans);
+        self.shared_spans = shared_assign_spans(&func.body);
         let saved_borrows = std::mem::take(&mut self.borrows);
         let saved_loose = self.loose_receiver;
         self.loose_receiver = false;
@@ -885,6 +931,10 @@ impl<'a> Checker<'a> {
                 format!("`{}` returns {}, the body has type {}", func.name, self.show(ret), self.show(body_ty)),
             ));
         }
+        if let Some(err) = self.capture_error.take() {
+            return Err(err);
+        }
+        let shared: Vec<bool> = self.bindings.iter().map(|binding| binding.shared).collect();
         let bindings = self.bindings.iter().map(|binding| binding.ty).collect();
         if func.c_export {
             let params = self.sigs[name].params.clone();
@@ -894,7 +944,7 @@ impl<'a> Checker<'a> {
             self.require_c_type(func.name_span.start, ret, true)?;
         }
         let captures = std::mem::take(&mut self.captures);
-        self.typed.push(TFn { name: name.to_string(), params, ret, bindings, body, closure, captures, c_export: func.c_export });
+        self.typed.push(TFn { name: name.to_string(), params, ret, bindings, body, closure, captures, shared, c_export: func.c_export });
         self.scopes = saved.scopes;
         self.bindings = saved.bindings;
         self.fn_ret = saved.fn_ret;
@@ -902,6 +952,7 @@ impl<'a> Checker<'a> {
         self.outer_scopes = saved_outer_scopes;
         self.outer_bindings = saved_outer_bindings;
         self.captures = saved_captures;
+        self.shared_spans = saved_shared;
         self.borrows = saved_borrows;
         self.loose_receiver = saved_loose;
         Ok(())
@@ -926,7 +977,7 @@ impl<'a> Checker<'a> {
             params.push(self.apply(param.ty.as_ref().unwrap(), &subst)?);
         }
         let ret = self.apply(func.ret.as_ref().unwrap(), &subst)?;
-        self.sigs.insert(mangled.clone(), Sig { params, ret: Some(ret), c_abi: false });
+        self.sigs.insert(mangled.clone(), Sig { params, ret: Some(ret), c_abi: false, variadic: false });
         self.check_fn(&func, &mangled, true, false)?;
         Ok(mangled)
     }
@@ -1033,6 +1084,17 @@ impl<'a> Checker<'a> {
                 }
                 let fn_ret = self.apply(ret, subst)?;
                 Ok(self.intern_func(fn_params, fn_ret))
+            }
+            ParsedTy::CFn { span, params, ret } => {
+                let mut fn_params = Vec::new();
+                for param in params {
+                    let ty = self.apply(param, subst)?;
+                    self.require_c_type(span.start, ty, false)?;
+                    fn_params.push(ty);
+                }
+                let fn_ret = self.apply(ret, subst)?;
+                self.require_c_type(span.start, fn_ret, true)?;
+                Ok(self.intern_cfn(fn_params, fn_ret))
             }
             ParsedTy::Ref { span, mutable, inner } => {
                 let inner = self.apply(inner, subst)?;
@@ -1193,6 +1255,15 @@ impl<'a> Checker<'a> {
         ))
     }
 
+    fn intern_cfn(&mut self, params: Vec<Ty>, ret: Ty) -> Ty {
+        if let Some(index) = self.cfns.iter().position(|sig| sig.params == params && sig.ret == ret) {
+            return Ty::CFn(index as u32);
+        }
+        let id = self.cfns.len() as u32;
+        self.cfns.push(FuncSig { params, ret });
+        Ty::CFn(id)
+    }
+
     fn intern_func(&mut self, params: Vec<Ty>, ret: Ty) -> Ty {
         if let Some(index) = self.funcs.iter().position(|sig| sig.params == params && sig.ret == ret) {
             return Ty::Func(index as u32);
@@ -1278,11 +1349,32 @@ impl<'a> Checker<'a> {
                 }
                 Ok(TStmt::Assign { binding: id, value })
             }
+            Stmt::DerefAssign { ptr, value } => self.check_ptr_store(ptr, None, value),
             Stmt::IndexAssign { name, name_span, index, value } => {
                 let Some(id) = self.resolve(name) else {
                     return Err(CompileError::at(self.source, name_span.start, format!("unknown name `{name}`")));
                 };
                 let ty = self.bindings[id as usize].ty;
+                if let Ty::Ptr(pid) = ty {
+                    self.require_unsafe(name_span.start)?;
+                    let info = &self.ptrs[pid as usize];
+                    if !info.mutable {
+                        return Err(CompileError::at(self.source, name_span.start, "cannot store through `*const`"));
+                    }
+                    let elem = info.inner;
+                    self.require_pointee(name_span.start, elem)?;
+                    let stride = elem.cells();
+                    let index = self.check_expr(index, Some(Ty::Usize))?;
+                    if index.ty != Ty::Usize {
+                        return Err(CompileError::at(self.source, name_span.start, format!("expected usize, found {}", self.show(index.ty))));
+                    }
+                    let value = self.check_expr(value, Some(elem))?;
+                    if value.ty != elem {
+                        return Err(CompileError::at(self.source, name_span.start, format!("expected {}, found {}", self.show(elem), self.show(value.ty))));
+                    }
+                    let ptr = TExpr { ty, kind: TExprKind::Name(id) };
+                    return Ok(TStmt::PtrStore { ptr, index: Some(index), value, stride });
+                }
                 if matches!(ty, Ty::Slice(_)) || matches!(self.referent(ty), Ty::Slice(_)) {
                     return Err(CompileError::at(self.source, name_span.start, "slices are read-only"));
                 }
@@ -1430,10 +1522,28 @@ impl<'a> Checker<'a> {
                 Ok(TExpr { ty, kind: TExprKind::Name(id) })
             }
             ExprKind::Borrow { mutable, expr } => self.check_borrow(span, *mutable, expr, expected),
+            ExprKind::Deref(inner) => self.check_deref(span, inner, expected),
             ExprKind::Assoc { ty_name, method, args } => self.check_assoc(span, ty_name, method, args, expected),
             ExprKind::Try(expr) => self.check_try(span, expr, expected),
             ExprKind::Unary { op, expr: inner } => self.check_unary(span, *op, inner, expected),
             ExprKind::Binary { op, lhs, rhs } => self.check_binary(span, *op, lhs, rhs, expected),
+            ExprKind::Char(scalar) => {
+                if let Some(want) = expected {
+                    if want != Ty::Char {
+                        return Err(CompileError::at(self.source, span, format!("expected {}, found char", self.show(want))));
+                    }
+                }
+                Ok(TExpr { ty: Ty::Char, kind: TExprKind::Char(*scalar) })
+            }
+            ExprKind::Str(chars) => {
+                let bytes = utf8_bytes(chars).map_err(|msg| CompileError::at(self.source, span, msg))?;
+                if let Some(want) = expected {
+                    if want != Ty::String {
+                        return Err(CompileError::at(self.source, span, format!("expected {}, found String", self.show(want))));
+                    }
+                }
+                Ok(TExpr { ty: Ty::String, kind: TExprKind::Str(bytes) })
+            }
             ExprKind::CStr(chars) => {
                 let ty = self.intern_ptr(false, Ty::I16);
                 if let Some(want) = expected {
@@ -1443,18 +1553,15 @@ impl<'a> Checker<'a> {
                 }
                 Ok(TExpr { ty, kind: TExprKind::CStr(chars.clone()) })
             }
-            ExprKind::Str(_) => {
-                Err(CompileError::at(self.source, span, "string values are not implemented yet"))
-            }
             ExprKind::Call { callee, type_args, args } => {
                 let mark = self.borrows.len();
                 let result = self.check_call(span, callee, type_args, args, expected)?;
                 self.borrows.truncate(mark);
                 Ok(result)
             }
-            ExprKind::Method { receiver, method, args } => {
+            ExprKind::Method { receiver, method, resolved, args } => {
                 let mark = self.borrows.len();
-                let result = self.check_method(span, receiver, method, args, expected)?;
+                let result = self.check_method(span, receiver, method, resolved, args, expected)?;
                 self.borrows.truncate(mark);
                 Ok(result)
             }
@@ -1531,6 +1638,14 @@ impl<'a> Checker<'a> {
                 }
                 Ok(TExpr { ty: inner.ty, kind: TExprKind::Unary { op, expr: Box::new(inner) } })
             }
+            UnaryOp::BitNot => {
+                let want = expected.filter(|ty| ty.is_int());
+                let inner = self.check_expr(inner, want)?;
+                if !inner.ty.is_int() {
+                    return Err(CompileError::at(self.source, span, format!("`~` expects an integer, found {}", self.show(inner.ty))));
+                }
+                Ok(TExpr { ty: inner.ty, kind: TExprKind::Unary { op, expr: Box::new(inner) } })
+            }
         }
     }
 
@@ -1542,6 +1657,50 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(self.source, span, "`&&` and `||` expect bool"));
             }
             return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+        }
+        if op == BinOp::Add && (self.peek(lhs) == Some(Ty::String) || self.peek(rhs) == Some(Ty::String)) {
+            let lhs = self.check_expr(lhs, Some(Ty::String))?;
+            let rhs = self.check_expr(rhs, Some(Ty::String))?;
+            if lhs.ty != Ty::String || rhs.ty != Ty::String {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("cannot combine {} and {}", self.show(lhs.ty), self.show(rhs.ty)),
+                ));
+            }
+            return Ok(TExpr { ty: Ty::String, kind: TExprKind::StrConcat { lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+        }
+        if op.is_bitwise() {
+            let operand_ty = expected.filter(|ty| ty.is_int())
+                .or_else(|| self.peek(lhs))
+                .or_else(|| self.peek(rhs))
+                .unwrap_or_else(|| number_default(lhs, rhs));
+            if !operand_ty.is_int() {
+                return Err(CompileError::at(self.source, span, format!("operator expects an integer, found {}", self.show(operand_ty))));
+            }
+            let lhs = self.check_expr(lhs, Some(operand_ty))?;
+            let rhs = self.check_expr(rhs, Some(operand_ty))?;
+            if lhs.ty != operand_ty || rhs.ty != operand_ty {
+                return Err(CompileError::at(self.source, span, format!("cannot combine {} and {}", self.show(lhs.ty), self.show(rhs.ty))));
+            }
+            return Ok(TExpr { ty: operand_ty, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+        }
+        if matches!(op, BinOp::Eq | BinOp::Ne) || op.is_compare() {
+            let hint = self.peek(lhs).or_else(|| self.peek(rhs));
+            if hint == Some(Ty::String) || hint == Some(Ty::Char) {
+                if hint == Some(Ty::String) && !matches!(op, BinOp::Eq | BinOp::Ne) {
+                    return Err(CompileError::at(self.source, span, "strings can only be compared with `==` and `!=`"));
+                }
+                if hint == Some(Ty::Char) && !op.is_compare() {
+                    return Err(CompileError::at(self.source, span, "a char cannot be used in arithmetic"));
+                }
+                let lhs = self.check_expr(lhs, hint)?;
+                let rhs = self.check_expr(rhs, Some(lhs.ty))?;
+                if lhs.ty != rhs.ty {
+                    return Err(CompileError::at(self.source, span, format!("cannot combine {} and {}", lhs.ty, rhs.ty)));
+                }
+                return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+            }
         }
         let operand_ty = if op.is_compare() {
             self.peek(lhs).or_else(|| self.peek(rhs)).unwrap_or_else(|| number_default(lhs, rhs))
@@ -1617,6 +1776,7 @@ impl<'a> Checker<'a> {
             return Err(CompileError::at(self.source, span, format!("unknown function `{callee}`")));
         };
         let c_abi = sig.c_abi;
+        let variadic = sig.variadic;
         let ret = if c_abi {
             sig.ret.unwrap_or(Ty::Unit)
         } else {
@@ -1629,17 +1789,26 @@ impl<'a> Checker<'a> {
             };
             ret
         };
-        if args.len() != sig.params.len() {
+        let fixed = sig.params.len();
+        if variadic {
+            if args.len() < fixed {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`{callee}` expects at least {fixed} arguments, found {}", args.len()),
+                ));
+            }
+        } else if args.len() != fixed {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{callee}` expects {} arguments, found {}", sig.params.len(), args.len()),
+                format!("`{callee}` expects {fixed} arguments, found {}", args.len()),
             ));
         }
         let params = sig.params.clone();
         let loose_first = std::mem::replace(&mut self.loose_receiver, false);
         let mut checked = Vec::new();
-        for (index, (arg, ty)) in args.iter().zip(params).enumerate() {
+        for (index, (arg, ty)) in args.iter().take(fixed).zip(params).enumerate() {
             let arg = if loose_first && index == 0 {
                 let typed = self.check_expr(arg, None)?;
                 if !self.ref_compatible(typed.ty, ty) {
@@ -1658,12 +1827,63 @@ impl<'a> Checker<'a> {
             };
             checked.push(arg);
         }
+        if variadic {
+            for arg in args.iter().skip(fixed) {
+                let typed = self.check_expr(arg, None)?;
+                checked.push(self.promote_vararg(span, typed)?);
+            }
+        }
         let kind = if c_abi {
-            TExprKind::Extern { callee: callee.to_string(), args: checked }
+            TExprKind::Extern { callee: callee.to_string(), args: checked, fixed }
         } else {
             TExprKind::Call { callee: callee.to_string(), args: checked }
         };
         Ok(TExpr { ty: ret, kind })
+    }
+
+    fn check_c_apply(
+        &mut self,
+        span: usize,
+        callee: &str,
+        binding: u32,
+        ty: Ty,
+        id: u32,
+        type_args: &[ParsedTy],
+        args: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
+        if !type_args.is_empty() {
+            return Err(CompileError::at(self.source, span, format!("`{callee}` does not take type arguments")));
+        }
+        let sig = self.cfns[id as usize].clone();
+        if args.len() != sig.params.len() {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{callee}` expects {} arguments, found {}", sig.params.len(), args.len()),
+            ));
+        }
+        let mut checked = Vec::new();
+        for (arg, param) in args.iter().zip(&sig.params) {
+            let typed = self.check_expr(arg, Some(*param))?;
+            if typed.ty != *param {
+                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(*param), self.show(typed.ty))));
+            }
+            checked.push(typed);
+        }
+        if let Some(want) = expected {
+            if want != sig.ret {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, `{callee}` has type {}", self.show(want), self.show(sig.ret)),
+                ));
+            }
+        }
+        Ok(TExpr {
+            ty: sig.ret,
+            kind: TExprKind::CApply { callee: Box::new(TExpr { ty, kind: TExprKind::Name(binding) }), args: checked },
+        })
     }
 
     fn check_apply(
@@ -1676,6 +1896,9 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let ty = self.bindings[binding as usize].ty;
+        if let Ty::CFn(id) = ty {
+            return self.check_c_apply(span, callee, binding, ty, id, type_args, args, expected);
+        }
         let Ty::Func(id) = ty else {
             return Err(CompileError::at(self.source, span, format!("`{callee}` is not a function")));
         };
@@ -1802,6 +2025,27 @@ impl<'a> Checker<'a> {
     /// `print`, `println`, and `putc` are temporary compiler builtins so programs
     /// can log values before `std/io` exists. They lower to direct `putchar` calls.
     fn check_builtin(&mut self, span: usize, callee: &str, args: &[Expr], expected: Option<Ty>) -> Result<TExpr, CompileError> {
+        if callee == "from_char" || callee == "from_byte" {
+            if args.len() != 1 {
+                return Err(CompileError::at(self.source, span, format!("`{callee}` expects 1 argument, found {}", args.len())));
+            }
+            let want_arg = if callee == "from_char" { Ty::Char } else { Ty::U8 };
+            let arg = self.check_expr(&args[0], Some(want_arg))?;
+            if arg.ty != want_arg {
+                return Err(CompileError::at(self.source, span, format!("`{callee}` expects {want_arg}, found {}", self.show(arg.ty))));
+            }
+            if let Some(want) = expected {
+                if want != Ty::String {
+                    return Err(CompileError::at(self.source, span, format!("expected {}, `{callee}` has type String", self.show(want))));
+                }
+            }
+            let kind = if callee == "from_char" {
+                TExprKind::StrFromChar(Box::new(arg))
+            } else {
+                TExprKind::StrFromByte(Box::new(arg))
+            };
+            return Ok(TExpr { ty: Ty::String, kind });
+        }
         if let Some(want) = expected {
             if want != Ty::Unit {
                 return Err(CompileError::at(self.source, span, format!("expected {want}, `{callee}` has type unit")));
@@ -1816,21 +2060,23 @@ impl<'a> Checker<'a> {
         }
         if callee == "putc" {
             let arg = self.check_expr(&args[0], None)?;
-            if !arg.ty.is_int() {
-                return Err(CompileError::at(self.source, span, format!("`putc` expects an integer, found {}", self.show(arg.ty))));
+            if !arg.ty.is_int() && arg.ty != Ty::Char {
+                return Err(CompileError::at(self.source, span, format!("`putc` expects an integer or char, found {}", self.show(arg.ty))));
             }
             return Ok(TExpr { ty: Ty::Unit, kind: TExprKind::Putc(Box::new(arg)) });
         }
         let newline = callee == "println";
         if let ExprKind::Str(chars) = &args[0].kind {
-            return Ok(TExpr { ty: Ty::Unit, kind: TExprKind::PrintLit { chars: chars.clone(), newline } });
+            let bytes = utf8_bytes(chars).map_err(|msg| CompileError::at(self.source, span, msg))?;
+            let cells = bytes.into_iter().map(u16::from).collect();
+            return Ok(TExpr { ty: Ty::Unit, kind: TExprKind::PrintLit { chars: cells, newline } });
         }
         let arg = self.check_expr(&args[0], None)?;
-        if !arg.ty.is_int() && arg.ty != Ty::Bool {
+        if !arg.ty.is_int() && arg.ty != Ty::Bool && arg.ty != Ty::Char && arg.ty != Ty::String {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{callee}` expects an integer, bool, or string, found {}", self.show(arg.ty)),
+                format!("`{callee}` expects an integer, bool, char, or string, found {}", self.show(arg.ty)),
             ));
         }
         Ok(TExpr { ty: Ty::Unit, kind: TExprKind::Print { value: Box::new(arg), newline } })
@@ -1891,6 +2137,26 @@ impl<'a> Checker<'a> {
         let Some(sig) = self.sigs.get(name) else {
             return Ok(None);
         };
+        if sig.c_abi {
+            if sig.variadic {
+                return Err(CompileError::at(self.source, span, format!("variadic function `{name}` cannot be used as a value")));
+            }
+            let Some(ret) = sig.ret else {
+                return Err(CompileError::at(self.source, span, format!("function `{name}` needs a return type to be used as a value")));
+            };
+            let params = sig.params.clone();
+            let ty = self.intern_cfn(params, ret);
+            if let Some(want) = expected {
+                if want != ty {
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, `{name}` has type {}", self.show(want), self.show(ty)),
+                    ));
+                }
+            }
+            return Ok(Some(TExpr { ty, kind: TExprKind::CFn { symbol: name.to_string() } }));
+        }
         let Some(ret) = sig.ret else {
             return Err(CompileError::at(self.source, span, format!("function `{name}` needs a return type to be used as a value")));
         };
@@ -2015,7 +2281,12 @@ impl<'a> Checker<'a> {
         }
         let refty = self.intern_ref(mutable, ty);
         if let Some(want) = expected {
-            if want != refty && !self.ptr_from_ref(want, refty) {
+            if self.ptr_from_ref(want, refty) {
+                self.require_unsafe(span)?;
+                self.note_borrow(span, id, mutable)?;
+                return Ok(TExpr { ty: want, kind: TExprKind::Borrow { binding: id } });
+            }
+            if want != refty {
                 return Err(CompileError::at(
                     self.source,
                     span,
@@ -2027,8 +2298,155 @@ impl<'a> Checker<'a> {
         Ok(TExpr { ty: refty, kind: TExprKind::Borrow { binding: id } })
     }
 
+    fn require_unsafe(&self, span: usize) -> Result<(), CompileError> {
+        if self.unsafe_depth == 0 {
+            Err(CompileError::at(self.source, span, "a raw pointer operation needs `unsafe`"))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn plain_pointee(&self, ty: Ty) -> bool {
+        if ty.is_int() || ty.is_float() || ty == Ty::Bool || ty == Ty::Char || matches!(ty, Ty::Ptr(_)) {
+            return true;
+        }
+        if let Ty::Struct { id, .. } = ty {
+            let info = &self.structs[id as usize];
+            return info.repr_c && info.fields.iter().all(|(_, field)| self.plain_pointee(*field));
+        }
+        if let Ty::Array { id, .. } = ty {
+            return self.plain_pointee(self.arrays[id as usize].elem);
+        }
+        false
+    }
+
+    fn require_pointee(&self, span: usize, ty: Ty) -> Result<(), CompileError> {
+        if self.plain_pointee(ty) {
+            Ok(())
+        } else {
+            Err(CompileError::at(self.source, span, format!("cannot load or store `{}` through a raw pointer", self.show(ty))))
+        }
+    }
+
+    fn check_deref(&mut self, span: usize, inner: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+        let ptr = self.check_expr(inner, None)?;
+        self.check_ptr_load(span, ptr, None, expected)
+    }
+
+    fn check_ptr_load(&mut self, span: usize, ptr: TExpr, index: Option<&Expr>, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+        self.require_unsafe(span)?;
+        let Ty::Ptr(id) = ptr.ty else {
+            return Err(CompileError::at(self.source, span, format!("expected a raw pointer, found {}", self.show(ptr.ty))));
+        };
+        let elem = self.ptrs[id as usize].inner;
+        self.require_pointee(span, elem)?;
+        if let Some(want) = expected {
+            if want != elem {
+                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(elem))));
+            }
+        }
+        let index = match index {
+            Some(index) => {
+                let index = self.check_expr(index, Some(Ty::Usize))?;
+                if index.ty != Ty::Usize {
+                    return Err(CompileError::at(self.source, span, format!("expected usize, found {}", self.show(index.ty))));
+                }
+                Some(Box::new(index))
+            }
+            None => None,
+        };
+        Ok(TExpr { ty: elem, kind: TExprKind::Deref { ptr: Box::new(ptr), index, stride: elem.cells() } })
+    }
+
+    fn check_ptr_store(&mut self, ptr: &Expr, index: Option<&Expr>, value: &Expr) -> Result<TStmt, CompileError> {
+        let span = ptr.span.start;
+        self.require_unsafe(span)?;
+        let ptr = self.check_expr(ptr, None)?;
+        let Ty::Ptr(id) = ptr.ty else {
+            return Err(CompileError::at(self.source, span, format!("expected a raw pointer, found {}", self.show(ptr.ty))));
+        };
+        let info = &self.ptrs[id as usize];
+        if !info.mutable {
+            return Err(CompileError::at(self.source, span, "cannot store through `*const`"));
+        }
+        let elem = info.inner;
+        self.require_pointee(span, elem)?;
+        let stride = elem.cells();
+        let index = match index {
+            Some(index) => {
+                let index = self.check_expr(index, Some(Ty::Usize))?;
+                if index.ty != Ty::Usize {
+                    return Err(CompileError::at(self.source, span, format!("expected usize, found {}", self.show(index.ty))));
+                }
+                Some(index)
+            }
+            None => None,
+        };
+        let value = self.check_expr(value, Some(elem))?;
+        if value.ty != elem {
+            return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(elem), self.show(value.ty))));
+        }
+        Ok(TStmt::PtrStore { ptr, index, value, stride })
+    }
+
+    fn check_ptr_method(
+        &mut self,
+        span: usize,
+        recv: TExpr,
+        method: &str,
+        args: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
+        let Ty::Ptr(id) = recv.ty else {
+            return Err(CompileError::at(self.source, span, "expected a raw pointer"));
+        };
+        let inner = self.ptrs[id as usize].inner;
+        match method {
+            "addr" | "bank" | "is_null" => {
+                if !args.is_empty() {
+                    return Err(CompileError::at(self.source, span, format!("`{method}` expects 0 arguments, found {}", args.len())));
+                }
+                let ty = if method == "is_null" { Ty::Bool } else { Ty::U16 };
+                if let Some(want) = expected {
+                    if want != ty {
+                        return Err(CompileError::at(self.source, span, format!("expected {}, `{method}` has type {}", self.show(want), self.show(ty))));
+                    }
+                }
+                let kind = match method {
+                    "addr" => TExprKind::PtrAddr { ptr: Box::new(recv) },
+                    "bank" => TExprKind::PtrBank { ptr: Box::new(recv) },
+                    _ => TExprKind::PtrNull { ptr: Box::new(recv) },
+                };
+                Ok(TExpr { ty, kind })
+            }
+            "offset" => {
+                self.require_unsafe(span)?;
+                if args.len() != 1 {
+                    return Err(CompileError::at(self.source, span, format!("`offset` expects 1 argument, found {}", args.len())));
+                }
+                let index = self.check_expr(&args[0], Some(Ty::I16))?;
+                if index.ty != Ty::I16 {
+                    return Err(CompileError::at(self.source, span, format!("expected i16, found {}", self.show(index.ty))));
+                }
+                if let Some(want) = expected {
+                    if want != recv.ty {
+                        return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(recv.ty))));
+                    }
+                }
+                Ok(TExpr {
+                    ty: recv.ty,
+                    kind: TExprKind::PtrOffset { ptr: Box::new(recv), index: Box::new(index), stride: inner.cells() },
+                })
+            }
+            _ => Err(CompileError::at(self.source, span, format!("a raw pointer has no method `{method}`"))),
+        }
+    }
+
     fn check_index(&mut self, span: usize, base: &Expr, index: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
+        if let Ty::Ptr(_) = base.ty {
+            return self.check_ptr_load(span, base, Some(index), expected);
+        }
         let Some(elem) = self.element_of(base.ty) else {
             return Err(CompileError::at(self.source, span, format!("expected a vector, slice, or array, found {}", self.show(base.ty))));
         };
@@ -2054,6 +2472,27 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
+        if base.ty == Ty::String {
+            let start = self.check_expr(start, Some(Ty::Usize))?;
+            let end = self.check_expr(end, Some(Ty::Usize))?;
+            if start.ty != Ty::Usize || end.ty != Ty::Usize {
+                return Err(CompileError::at(self.source, span, "a slice bound must be usize"));
+            }
+            if let Some(want) = expected {
+                if want != Ty::String {
+                    return Err(CompileError::at(self.source, span, format!("expected {}, found String", self.show(want))));
+                }
+            }
+            return Ok(TExpr {
+                ty: Ty::String,
+                kind: TExprKind::StrSlice {
+                    base: Box::new(base),
+                    start: Box::new(start),
+                    end: Box::new(end),
+                    inclusive,
+                },
+            });
+        }
         let Some(elem) = self.element_of(base.ty) else {
             return Err(CompileError::at(self.source, span, format!("expected a vector, slice, or array, found {}", self.show(base.ty))));
         };
@@ -2077,6 +2516,7 @@ impl<'a> Checker<'a> {
             Ty::Vec(id) => Some(self.vec_elems[id as usize]),
             Ty::Slice(id) => Some(self.slice_elems[id as usize]),
             Ty::Array { id, .. } => Some(self.arrays[id as usize].elem),
+            Ty::String => Some(Ty::Char),
             Ty::Ref(id) => match self.refs[id as usize].inner {
                 Ty::Vec(elem) => Some(self.vec_elems[elem as usize]),
                 _ => None,
@@ -2090,10 +2530,17 @@ impl<'a> Checker<'a> {
         span: usize,
         receiver: &Expr,
         method: &str,
+        resolved: &str,
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let recv = self.check_expr(receiver, None)?;
+        if let Ty::Ptr(_) = recv.ty {
+            return self.check_ptr_method(span, recv, method, args, expected);
+        }
+        if recv.ty == Ty::String && matches!(method, "len" | "is_empty") {
+            return self.check_vec_method(span, recv, method, args, Ty::U8, expected);
+        }
         let place = self.referent(recv.ty);
         if let Ty::Vec(id) = place {
             let elem = self.vec_elems[id as usize];
@@ -2126,7 +2573,7 @@ impl<'a> Checker<'a> {
         }
         let mut all = vec![receiver.clone()];
         all.extend(args.iter().cloned());
-        self.check_call(span, method, &[], &all, expected)
+        self.check_call(span, resolved, &[], &all, expected)
     }
 
     fn check_inherent(
@@ -2202,8 +2649,10 @@ impl<'a> Checker<'a> {
             Ty::F64 => "f64".to_string(),
             Ty::Usize => "usize".to_string(),
             Ty::Bool => "bool".to_string(),
+            Ty::Char => "char".to_string(),
+            Ty::String => "String".to_string(),
             Ty::Struct { id, .. } => self.structs[id as usize].name.clone(),
-            Ty::Unit | Ty::Func(_) | Ty::Ref(_) | Ty::Ptr(_) | Ty::Array { .. } | Ty::Tuple { .. } => return None,
+            Ty::Unit | Ty::Func(_) | Ty::CFn(_) | Ty::Ref(_) | Ty::Ptr(_) | Ty::Array { .. } | Ty::Tuple { .. } => return None,
         })
     }
 
@@ -2401,6 +2850,11 @@ impl<'a> Checker<'a> {
                 let params: Vec<String> = sig.params.iter().map(|param| self.show(*param)).collect();
                 format!("fn({}) -> {}", params.join(", "), self.show(sig.ret))
             }
+            Ty::CFn(id) => {
+                let sig = &self.cfns[id as usize];
+                let params: Vec<String> = sig.params.iter().map(|param| self.show(*param)).collect();
+                format!("extern \"C\" fn({}) -> {}", params.join(", "), self.show(sig.ret))
+            }
             other => other.to_string(),
         }
     }
@@ -2446,7 +2900,7 @@ impl<'a> Checker<'a> {
         let name = format!("__lambda{}", self.lambda_count);
         self.lambda_count += 1;
         let declared_ret = expected_sig.as_ref().map(|sig| sig.ret);
-        self.sigs.insert(name.clone(), Sig { params: sig_params.clone(), ret: declared_ret, c_abi: false });
+        self.sigs.insert(name.clone(), Sig { params: sig_params.clone(), ret: declared_ret, c_abi: false, variadic: false });
         let block = match &body.kind {
             ExprKind::Block(block) => (**block).clone(),
             _ => Block { stmts: Vec::new(), tail: Some(body.clone()) },
@@ -2601,6 +3055,9 @@ impl<'a> Checker<'a> {
         span: usize,
     ) -> Result<(), CompileError> {
         match parsed {
+            ParsedTy::CFn { .. } => {
+                Err(CompileError::at(self.source, span, "cannot infer a type through an `extern \"C\"` function"))
+            }
             ParsedTy::Func { params: fn_params, ret, .. } => {
                 let Ty::Func(id) = actual else {
                     return Err(CompileError::at(self.source, span, format!("expected a function, found {}", self.show(actual))));
@@ -2744,7 +3201,7 @@ impl<'a> Checker<'a> {
         let scrutinee = self.check_expr(scrutinee, None)?;
         let adt = match scrutinee.ty {
             Ty::Adt(id) => Some(id),
-            Ty::Bool | Ty::Struct { .. } | Ty::Tuple { .. } => None,
+            Ty::Bool | Ty::Char | Ty::Struct { .. } | Ty::Tuple { .. } => None,
             ty if ty.is_int() => None,
             ty => {
                 return Err(CompileError::at(self.source, span, format!("match expects a data type, found {}", self.show(ty))));
@@ -2825,8 +3282,8 @@ impl<'a> Checker<'a> {
         }
         let bool_done = scrutinee.ty == Ty::Bool && seen_lits.contains(&0) && seen_lits.contains(&1);
         let adt_done = adt.is_some() && covered.iter().all(|hit| *hit) && !covered.is_empty();
-        let open_int = scrutinee.ty.is_int() && !seen_total;
-        if !seen_total && !bool_done && !adt_done || open_int {
+        let open_scalar = (scrutinee.ty.is_int() || scrutinee.ty == Ty::Char) && !seen_total;
+        if !seen_total && !bool_done && !adt_done || open_scalar {
             return Err(CompileError::at(self.source, span, "non-exhaustive match"));
         }
         let ty = result.unwrap_or(Ty::Unit);
@@ -2854,6 +3311,16 @@ impl<'a> Checker<'a> {
                 }
                 bound.push(name.clone());
                 let id = self.bind(name.clone(), ty, mutable);
+                if mutable && self.shared_spans.contains(&span.start) {
+                    if !shareable(ty) {
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{}` cannot be captured mutably", self.show(ty)),
+                        ));
+                    }
+                    self.bindings[id as usize].shared = true;
+                }
                 Ok(TPat::Bind(id))
             }
             Pat::Ctor { name, span, fields: pats } => {
@@ -2885,6 +3352,12 @@ impl<'a> Checker<'a> {
                     return Err(CompileError::at(self.source, span.start, format!("expected {}, found a bool pattern", self.show(ty))));
                 }
                 Ok(TPat::Lit(i64::from(*value)))
+            }
+            Pat::Char { scalar, span } => {
+                if ty != Ty::Char {
+                    return Err(CompileError::at(self.source, span.start, format!("expected {}, found a char pattern", self.show(ty))));
+                }
+                Ok(TPat::Lit(i64::from(*scalar)))
             }
             Pat::Tuple { span, fields } => {
                 let Ty::Tuple { id, .. } = ty else {
@@ -2993,7 +3466,7 @@ impl<'a> Checker<'a> {
             ExprKind::Int(_) | ExprKind::Float(_) => None,
             ExprKind::Bool(_) => Some(Ty::Bool),
             ExprKind::Name(name) => self.consts.get(name).map(|(ty, _)| *ty),
-            ExprKind::Unary { op: UnaryOp::Neg, expr } => self.const_hint(expr),
+            ExprKind::Unary { op: UnaryOp::Neg | UnaryOp::BitNot, expr } => self.const_hint(expr),
             ExprKind::Unary { op: UnaryOp::Not, .. } => Some(Ty::Bool),
             ExprKind::Binary { op, .. } if op.is_compare() || op.is_logic() => Some(Ty::Bool),
             ExprKind::Binary { lhs, rhs, .. } => self.const_hint(lhs).or_else(|| self.const_hint(rhs)),
@@ -3118,6 +3591,25 @@ impl<'a> Checker<'a> {
                     _ => false,
                 };
                 Ok((Ty::Bool, i64::from(value)))
+            }
+            ExprKind::Unary { op: UnaryOp::BitNot, expr: inner } => {
+                let (ty, value) = self.eval_const(inner, expected.filter(|ty| ty.is_int()))?;
+                if !ty.is_int() {
+                    return Err(CompileError::at(self.source, span, format!("`~` expects an integer, found {}", self.show(ty))));
+                }
+                Ok((ty, fold_bitnot(ty, value)))
+            }
+            ExprKind::Binary { op, lhs, rhs } if op.is_bitwise() => {
+                let ty = expected.filter(|ty| ty.is_int())
+                    .or_else(|| self.const_hint(lhs))
+                    .or_else(|| self.const_hint(rhs))
+                    .unwrap_or_else(|| number_default(lhs, rhs));
+                if !ty.is_int() {
+                    return Err(CompileError::at(self.source, span, format!("operator expects an integer, found {}", self.show(ty))));
+                }
+                let (_, left) = self.eval_const(lhs, Some(ty))?;
+                let (_, right) = self.eval_const(rhs, Some(ty))?;
+                Ok((ty, fold_bitwise(ty, *op, left, right)))
             }
             ExprKind::Binary { op, lhs, rhs } if op.is_arith() => {
                 let ty = expected.filter(|ty| ty.is_int() || ty.is_float())
@@ -3538,16 +4030,19 @@ impl<'a> Checker<'a> {
         inclusive: bool,
         body: &Block,
     ) -> Result<TExpr, CompileError> {
-        let start = self.check_expr(start, None)?;
+        let bound = self.common_int(start, end);
+        let start = self.check_expr(start, bound)?;
         if !start.ty.is_int() {
             return Err(CompileError::at(self.source, span, format!("a range needs an integer, found {}", self.show(start.ty))));
         }
-        let end = self.check_expr(end, Some(start.ty))?;
+        let end_span = end.span.start;
+        let end_hint = bound.or_else(|| self.peek(end).filter(|ty| ty.is_int())).or(Some(start.ty));
+        let end = self.check_expr(end, end_hint)?;
         if end.ty != start.ty {
             return Err(CompileError::at(
                 self.source,
-                span,
-                format!("expected {}, found {}", self.show(start.ty), self.show(end.ty)),
+                end_span,
+                format!("a range's bounds have types {} and {}", self.show(start.ty), self.show(end.ty)),
             ));
         }
         self.scopes.push(HashMap::new());
@@ -3574,6 +4069,18 @@ impl<'a> Checker<'a> {
                 body: Box::new(body),
             },
         })
+    }
+
+    /// An unsuffixed literal adopts the other bound. `0..text.len()` is `usize`.
+    fn common_int(&self, start: &Expr, end: &Expr) -> Option<Ty> {
+        let left = self.peek(start).filter(|ty| ty.is_int());
+        let right = self.peek(end).filter(|ty| ty.is_int());
+        match (left, right) {
+            (Some(left), Some(right)) if left == right => Some(left),
+            (Some(left), None) => Some(left),
+            (None, Some(right)) => Some(right),
+            _ => None,
+        }
     }
 
     fn list_shape(&self, ty: Ty) -> Option<(u16, u16, Ty)> {
@@ -3783,7 +4290,7 @@ impl<'a> Checker<'a> {
                 Ok(solver.tuple(vars))
             }
             ParsedTy::Ref { span, .. } => Err(CompileError::at(self.source, span.start, "a reference cannot be inferred here")),
-            ParsedTy::Ptr { .. } => {
+            ParsedTy::Ptr { .. } | ParsedTy::CFn { .. } => {
                 let concrete = self.apply(ty, &HashMap::new())?;
                 Ok(solver.concrete(concrete))
             }
@@ -3852,7 +4359,7 @@ impl<'a> Checker<'a> {
                 self.infer_expr(solver, expr, sigs, functions, scope, ret, None)?;
                 Ok(())
             }
-            Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::IndexAssign { .. } | Stmt::FieldAssign { .. } => Ok(()),
+            Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::IndexAssign { .. } | Stmt::FieldAssign { .. } | Stmt::DerefAssign { .. } => Ok(()),
         }
     }
 
@@ -3879,6 +4386,8 @@ impl<'a> Checker<'a> {
                 var
             }
             ExprKind::CStr(_) => solver.concrete(self.intern_ptr(false, Ty::I16)),
+            ExprKind::Str(_) => solver.concrete(Ty::String),
+            ExprKind::Char(_) => solver.concrete(Ty::Char),
             ExprKind::Bool(_) => solver.concrete(Ty::Bool),
             ExprKind::Name(name) => self.infer_name(solver, span, name, sigs, functions, scope)?,
             ExprKind::Unary { op, expr: inner } => {
@@ -3888,6 +4397,10 @@ impl<'a> Checker<'a> {
                         let boolean = solver.concrete(Ty::Bool);
                         solver.unify(inner, boolean).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                         solver.concrete(Ty::Bool)
+                    }
+                    UnaryOp::BitNot => {
+                        solver.mark_numeric(inner);
+                        inner
                     }
                     UnaryOp::Neg => {
                         let root = solver.find(inner);
@@ -3909,7 +4422,7 @@ impl<'a> Checker<'a> {
                     boolean
                 } else {
                     solver.unify(left, right).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
-                    if op.is_arith() {
+                    if op.is_arith() || op.is_bitwise() {
                         let root = solver.find(left);
                         let float_info = matches!(solver.info[root as usize], Some(IInfo::Concrete(ty)) if ty.is_float());
                         if !solver.floaty[root as usize] && !float_info {
@@ -4178,6 +4691,10 @@ impl<'a> Checker<'a> {
                 solver.mark_numeric(var);
                 Ok(())
             }
+            Pat::Char { span, .. } => {
+                let ch = solver.concrete(Ty::Char);
+                solver.unify(var, ch).map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))
+            }
             Pat::Bool { span, .. } => {
                 let boolean = solver.concrete(Ty::Bool);
                 solver.unify(var, boolean).map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))
@@ -4299,6 +4816,14 @@ impl<'a> Checker<'a> {
             Ty::Func(id) => {
                 let sig = &self.funcs[id as usize];
                 ParsedTy::Func {
+                    span,
+                    params: sig.params.iter().map(|param| self.ty_to_parsed(*param)).collect(),
+                    ret: Box::new(self.ty_to_parsed(sig.ret)),
+                }
+            }
+            Ty::CFn(id) => {
+                let sig = &self.cfns[id as usize];
+                ParsedTy::CFn {
                     span,
                     params: sig.params.iter().map(|param| self.ty_to_parsed(*param)).collect(),
                     ret: Box::new(self.ty_to_parsed(sig.ret)),
@@ -4432,11 +4957,47 @@ fn float_compare(ty: Ty, op: BinOp, left: u64, right: u64) -> bool {
 }
 
 fn can_cast(from: Ty, to: Ty) -> bool {
+    if from == Ty::Char {
+        return to == Ty::Char || to.is_int();
+    }
+    if to == Ty::Char {
+        return from.is_int();
+    }
     (from.is_int() || from.is_float()) && (to.is_int() || to.is_float())
+}
+
+fn unicode_scalar(value: i64) -> bool {
+    (0..=0x10FFFF).contains(&value) && !(0xD800..=0xDFFF).contains(&value)
+}
+
+fn utf8_bytes(chars: &[u16]) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    for &cell in chars {
+        let Some(ch) = char::from_u32(u32::from(cell)) else {
+            return Err("string contains a surrogate".to_string());
+        };
+        let mut buf = [0u8; 4];
+        bytes.extend(ch.encode_utf8(&mut buf).as_bytes());
+    }
+    Ok(bytes)
 }
 
 fn fold_cast(from: Ty, to: Ty, kind: &TExprKind) -> Option<Result<TExprKind, String>> {
     match kind {
+        TExprKind::Char(scalar) if to == Ty::Char => Some(Ok(TExprKind::Char(*scalar))),
+        TExprKind::Char(scalar) if to.is_int() => {
+            let value = i64::from(*scalar);
+            if !to.in_range(value) {
+                return Some(Err(format!("{value} does not fit in {to}")));
+            }
+            Some(Ok(TExprKind::Int(value)))
+        }
+        TExprKind::Int(value) if to == Ty::Char => {
+            if !unicode_scalar(*value) {
+                return Some(Err(format!("{value} is not a Unicode scalar")));
+            }
+            Some(Ok(TExprKind::Char(*value as u32)))
+        }
         TExprKind::Int(value) if from == to && to.is_int() => Some(Ok(TExprKind::Int(*value))),
         TExprKind::Int(value) if to.is_int() => {
             if !to.in_range(*value) {
@@ -4491,13 +5052,13 @@ fn escaped_ref(ty: &ParsedTy) -> bool {
             ParsedTy::Array { elem, .. } => escaped_ref(elem),
             ParsedTy::Tuple { fields, .. } => fields.iter().any(escaped_ref),
             ParsedTy::Named { args, .. } => args.iter().any(escaped_ref),
-        ParsedTy::Func { ret, .. } => escaped_ref(ret),
+        ParsedTy::Func { ret, .. } | ParsedTy::CFn { ret, .. } => escaped_ref(ret),
     }
 }
 
 fn mentions_unsolved(ty: &ParsedTy, params: &[String], solved: &[Option<Ty>]) -> bool {
     match ty {
-        ParsedTy::Func { params: fn_params, ret, .. } => {
+        ParsedTy::Func { params: fn_params, ret, .. } | ParsedTy::CFn { params: fn_params, ret, .. } => {
             fn_params.iter().any(|param| mentions_unsolved(param, params, solved)) || mentions_unsolved(ret, params, solved)
         }
         ParsedTy::Ref { inner, .. } => mentions_unsolved(inner, params, solved),
@@ -4540,7 +5101,7 @@ fn arm_span(pat: &Pat) -> usize {
 fn pat_names(pat: &Pat, out: &mut Vec<(String, Span)>) {
     match pat {
         Pat::Name { name, span } if name != "_" => out.push((name.clone(), *span)),
-        Pat::Name { .. } | Pat::Int { .. } | Pat::Bool { .. } => {}
+        Pat::Name { .. } | Pat::Int { .. } | Pat::Bool { .. } | Pat::Char { .. } => {}
         Pat::Ctor { fields, .. } | Pat::Tuple { fields, .. } => {
             for field in fields {
                 pat_names(field, out);
@@ -4581,12 +5142,15 @@ impl<'a> Checker<'a> {
                 let id = self.outer_scopes.iter().rev().find_map(|scope| scope.get(name).copied())?;
                 Some(self.outer_bindings[id as usize].ty)
             }).or_else(|| self.consts.get(name).map(|(ty, _)| *ty)),
-            ExprKind::Borrow { .. } | ExprKind::Try(_) | ExprKind::Assoc { .. } | ExprKind::Slice { .. } => None,
+            ExprKind::Borrow { .. } | ExprKind::Try(_) | ExprKind::Assoc { .. } | ExprKind::Slice { .. } | ExprKind::Deref(_) => None,
             ExprKind::Unary { op: UnaryOp::Not, .. } => Some(Ty::Bool),
-            ExprKind::Unary { op: UnaryOp::Neg, expr } => self.peek(expr),
+            ExprKind::Unary { op: UnaryOp::Neg | UnaryOp::BitNot, expr } => self.peek(expr),
             ExprKind::Binary { op, .. } if op.is_compare() || op.is_logic() => Some(Ty::Bool),
             ExprKind::Binary { lhs, rhs, .. } => self.peek(lhs).or_else(|| self.peek(rhs)),
-            ExprKind::Str(_) | ExprKind::CStr(_) | ExprKind::Lambda { .. } => None,
+            ExprKind::Str(_) => Some(Ty::String),
+            ExprKind::Char(_) => Some(Ty::Char),
+            ExprKind::CStr(_) | ExprKind::Lambda { .. } => None,
+            ExprKind::Call { callee, .. } if matches!(callee.as_str(), "from_char" | "from_byte") => Some(Ty::String),
             ExprKind::Call { callee, .. } if is_builtin(callee) => Some(Ty::Unit),
             ExprKind::Call { callee, .. } => self.sigs.get(callee).and_then(|sig| sig.ret),
             ExprKind::Method { receiver, method, .. } => {
@@ -4620,6 +5184,211 @@ impl<'a> Checker<'a> {
         match &block.tail {
             Some(expr) => self.peek(expr),
             None => Some(Ty::Unit),
+        }
+    }
+}
+
+fn shareable(ty: Ty) -> bool {
+    ty.is_int() || ty.is_float() || ty == Ty::Bool || ty == Ty::Char
+}
+
+fn bit_width(ty: Ty) -> u32 {
+    match ty {
+        Ty::I8 | Ty::U8 => 8,
+        Ty::I16 | Ty::U16 | Ty::Usize => 16,
+        Ty::I32 | Ty::U32 => 32,
+        _ => 64,
+    }
+}
+
+fn fold_bitnot(ty: Ty, value: i64) -> i64 {
+    let width = bit_width(ty);
+    let mask = if width == 64 { u64::MAX } else { (1u64 << width) - 1 };
+    ty.bits((!(value as u64) & mask) as i64)
+}
+
+fn fold_bitwise(ty: Ty, op: BinOp, left: i64, right: i64) -> i64 {
+    let width = bit_width(ty);
+    let mask = if width == 64 { u64::MAX } else { (1u64 << width) - 1 };
+    let a = (left as u64) & mask;
+    let b = (right as u64) & mask;
+    let count = (b as u32) & (width - 1);
+    let bits = match op {
+        BinOp::BitAnd => a & b,
+        BinOp::BitOr => a | b,
+        BinOp::BitXor => a ^ b,
+        BinOp::Shl => a.wrapping_shl(count) & mask,
+        BinOp::Shr if ty.is_signed() => {
+            let shifted = match width {
+                8 => ((a as u8) as i8 >> count) as u64,
+                16 => ((a as u16) as i16 >> count) as u64,
+                32 => ((a as u32) as i32 >> count) as u64,
+                _ => ((a as i64) >> count) as u64,
+            };
+            shifted & mask
+        }
+        BinOp::Shr => a >> count,
+        _ => 0,
+    };
+    ty.bits(bits as i64)
+}
+
+/// Spans of `let mut` bindings that a nested closure assigns.
+fn shared_assign_spans(body: &Block) -> HashSet<usize> {
+    let mut found = HashSet::new();
+    let mut scopes = vec![HashMap::new()];
+    walk_block(body, &mut scopes, 0, &mut found);
+    found
+}
+
+fn walk_block(block: &Block, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>, depth: u32, found: &mut HashSet<usize>) {
+    scopes.push(HashMap::new());
+    for stmt in &block.stmts {
+        walk_stmt(stmt, scopes, depth, found);
+    }
+    if let Some(tail) = &block.tail {
+        walk_expr(tail, scopes, depth, found);
+    }
+    scopes.pop();
+}
+
+fn walk_stmt(stmt: &Stmt, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>, depth: u32, found: &mut HashSet<usize>) {
+    match stmt {
+        Stmt::Let { pattern, mutable, init, .. } => {
+            walk_expr(init, scopes, depth, found);
+            bind_pat(pattern, *mutable, depth, scopes);
+        }
+        Stmt::Assign { name, name_span: _, value } => {
+            note_assign(scopes, name, depth, found);
+            walk_expr(value, scopes, depth, found);
+        }
+        Stmt::IndexAssign { name, index, value, .. } => {
+            note_assign(scopes, name, depth, found);
+            walk_expr(index, scopes, depth, found);
+            walk_expr(value, scopes, depth, found);
+        }
+        Stmt::FieldAssign { name, value, .. } => {
+            note_assign(scopes, name, depth, found);
+            walk_expr(value, scopes, depth, found);
+        }
+        Stmt::DerefAssign { ptr, value } => {
+            walk_expr(ptr, scopes, depth, found);
+            walk_expr(value, scopes, depth, found);
+        }
+        Stmt::Expr(expr) => walk_expr(expr, scopes, depth, found),
+        Stmt::Return { value: Some(expr), .. } => walk_expr(expr, scopes, depth, found),
+        Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+    }
+}
+
+fn note_assign(scopes: &[HashMap<String, (usize, bool, u32)>], name: &str, depth: u32, found: &mut HashSet<usize>) {
+    let Some((span, mutable, bind_depth)) = scopes.iter().rev().find_map(|scope| scope.get(name).copied()) else {
+        return;
+    };
+    if mutable && bind_depth < depth {
+        found.insert(span);
+    }
+}
+
+fn bind_pat(pat: &Pat, mutable: bool, depth: u32, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>) {
+    match pat {
+        Pat::Name { name, span } if name != "_" => {
+            scopes.last_mut().unwrap().insert(name.clone(), (span.start, mutable, depth));
+        }
+        Pat::Ctor { fields, .. } => {
+            for field in fields {
+                bind_pat(field, mutable, depth, scopes);
+            }
+        }
+        Pat::Tuple { fields, .. } => {
+            for field in fields {
+                bind_pat(field, mutable, depth, scopes);
+            }
+        }
+        Pat::Struct { fields, .. } => {
+            for (_, _, field) in fields {
+                bind_pat(field, mutable, depth, scopes);
+            }
+        }
+        Pat::Name { .. } | Pat::Int { .. } | Pat::Bool { .. } | Pat::Char { .. } => {}
+    }
+}
+
+fn walk_expr(expr: &Expr, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>, depth: u32, found: &mut HashSet<usize>) {
+    match &expr.kind {
+        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Str(_) | ExprKind::CStr(_) | ExprKind::Char(_) | ExprKind::Name(_) => {}
+        ExprKind::Unary { expr, .. } | ExprKind::Try(expr) | ExprKind::Deref(expr) | ExprKind::Borrow { expr, .. } => {
+            walk_expr(expr, scopes, depth, found);
+        }
+        ExprKind::Binary { lhs, rhs, .. } | ExprKind::Range { start: lhs, end: rhs, .. } => {
+            walk_expr(lhs, scopes, depth, found);
+            walk_expr(rhs, scopes, depth, found);
+        }
+        ExprKind::Call { args, .. } | ExprKind::Assoc { args, .. } | ExprKind::Tuple(args) | ExprKind::Array(args) => {
+            for arg in args {
+                walk_expr(arg, scopes, depth, found);
+            }
+        }
+        ExprKind::Method { receiver, args, .. } => {
+            walk_expr(receiver, scopes, depth, found);
+            for arg in args {
+                walk_expr(arg, scopes, depth, found);
+            }
+        }
+        ExprKind::If { cond, then_body, else_body } => {
+            walk_expr(cond, scopes, depth, found);
+            walk_block(then_body, scopes, depth, found);
+            if let Some(else_body) = else_body {
+                walk_expr(else_body, scopes, depth, found);
+            }
+        }
+        ExprKind::Block(block) | ExprKind::Unsafe(block) => walk_block(block, scopes, depth, found),
+        ExprKind::Match { scrutinee, arms } => {
+            walk_expr(scrutinee, scopes, depth, found);
+            for arm in arms {
+                scopes.push(HashMap::new());
+                bind_pat(&arm.pat, false, depth, scopes);
+                if let Some(guard) = &arm.guard {
+                    walk_expr(guard, scopes, depth, found);
+                }
+                walk_expr(&arm.body, scopes, depth, found);
+                scopes.pop();
+            }
+        }
+        ExprKind::While { cond, body } => {
+            walk_expr(cond, scopes, depth, found);
+            walk_block(body, scopes, depth, found);
+        }
+        ExprKind::For { pat, iter, body } => {
+            walk_expr(iter, scopes, depth, found);
+            scopes.push(HashMap::new());
+            bind_pat(pat, false, depth, scopes);
+            walk_block(body, scopes, depth, found);
+            scopes.pop();
+        }
+        ExprKind::StructLit { fields, .. } => {
+            for (_, field) in fields {
+                walk_expr(field, scopes, depth, found);
+            }
+        }
+        ExprKind::Field { base, .. } => walk_expr(base, scopes, depth, found),
+        ExprKind::Cast { expr, .. } => walk_expr(expr, scopes, depth, found),
+        ExprKind::Lambda { params, body } => {
+            scopes.push(HashMap::new());
+            for param in params {
+                bind_pat(&param.pat, false, depth + 1, scopes);
+            }
+            walk_expr(body, scopes, depth + 1, found);
+            scopes.pop();
+        }
+        ExprKind::Index { base, index } => {
+            walk_expr(base, scopes, depth, found);
+            walk_expr(index, scopes, depth, found);
+        }
+        ExprKind::Slice { base, start, end, .. } => {
+            walk_expr(base, scopes, depth, found);
+            walk_expr(start, scopes, depth, found);
+            walk_expr(end, scopes, depth, found);
         }
     }
 }

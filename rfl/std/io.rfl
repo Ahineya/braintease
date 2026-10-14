@@ -1,0 +1,16 @@
+extern "C" {
+    fn getchar() -> c_int;
+    fn putchar(ch: c_int) -> c_int;
+}
+
+export fn read_byte() -> c_int { getchar() }
+
+export fn write_byte(value: c_int) -> c_int { putchar(value) }
+
+export fn write_text(text: String) -> () {
+    let mut i: usize = 0;
+    while (i < text.len()) {
+        putchar(text[i] as c_int);
+        i = i + 1;
+    }
+}

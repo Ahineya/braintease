@@ -42,6 +42,10 @@ struct Binding {
     mangled: String,
     exported: bool,
     ctors: Vec<(String, String)>,
+    /// A nullary or payload constructor. Patterns spell these as bare names.
+    is_ctor: bool,
+    /// A function. `receiver.name()` can call it when it is in scope.
+    is_fn: bool,
 }
 
 pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
@@ -73,11 +77,19 @@ fn link(path: PathBuf, source: String, ast: Module) -> Result<IrModule, CompileE
         .iter()
         .map(|table| table.iter().map(|(name, binding)| (name.clone(), binding.mangled.clone())).collect())
         .collect();
+    let mut ctor_names: Vec<HashSet<String>> = bindings
+        .iter()
+        .map(|table| table.iter().filter(|(_, binding)| binding.is_ctor).map(|(name, _)| name.clone()).collect())
+        .collect();
+    let mut fn_names: Vec<HashSet<String>> = bindings
+        .iter()
+        .map(|table| table.iter().filter(|(_, binding)| binding.is_fn).map(|(name, _)| name.clone()).collect())
+        .collect();
     for index in 0..rfls.len() {
         let resolved = rfls[index].clone_imports();
         let mut extra = Vec::new();
         for item in &resolved {
-            let decls = apply_import(index, item, &rfls, &bindings, &mut maps, &cmods, &extra)?;
+            let decls = apply_import(index, item, &rfls, &bindings, &mut maps, &mut ctor_names, &mut fn_names, &cmods, &extra)?;
             extra.extend(decls);
         }
         rfls[index].ast.externs.extend(extra);
@@ -95,7 +107,7 @@ fn link(path: PathBuf, source: String, ast: Module) -> Result<IrModule, CompileE
         }
     }
     for (index, unit) in rfls.iter_mut().enumerate() {
-        rewrite_uses(&mut unit.ast, &maps[index], bases[index]);
+        rewrite_uses(&mut unit.ast, &maps[index], &ctor_names[index], &fn_names[index], bases[index]);
         rename_defs(&mut unit.ast, &bindings[index]);
     }
 
@@ -235,17 +247,17 @@ fn own_bindings(
             if !entry {
                 return Err(CompileError::plain(format!("{}: another file cannot define `main`", file_label(&unit.path))));
             }
-            table.insert(func.name.clone(), Binding { mangled: "main".to_string(), exported: false, ctors: Vec::new() });
+            table.insert(func.name.clone(), Binding { mangled: "main".to_string(), exported: false, ctors: Vec::new(), is_ctor: false, is_fn: true });
             continue;
         }
         if func.c_export {
             if !taken_c.insert(func.name.clone()) {
                 return Err(CompileError::plain(format!("duplicate C export `{}`", func.name)));
             }
-            table.insert(func.name.clone(), Binding { mangled: func.name.clone(), exported: true, ctors: Vec::new() });
+            table.insert(func.name.clone(), Binding { mangled: func.name.clone(), exported: true, ctors: Vec::new(), is_ctor: false, is_fn: true });
             continue;
         }
-        table.insert(func.name.clone(), Binding { mangled: mangle(&func.name), exported: func.exported, ctors: Vec::new() });
+        table.insert(func.name.clone(), Binding { mangled: mangle(&func.name), exported: func.exported, ctors: Vec::new(), is_ctor: false, is_fn: true });
     }
     for adt in &unit.ast.adts {
         let mangled = mangle(&adt.name);
@@ -253,18 +265,76 @@ fn own_bindings(
         for ctor in &adt.ctors {
             let ctor_mangled = mangle(&ctor.name);
             ctors.push((ctor.name.clone(), ctor_mangled.clone()));
-            table.insert(ctor.name.clone(), Binding { mangled: ctor_mangled, exported: adt.exported, ctors: Vec::new() });
+            table.insert(ctor.name.clone(), Binding { mangled: ctor_mangled, exported: adt.exported, ctors: Vec::new(), is_ctor: true, is_fn: false });
         }
-        table.insert(adt.name.clone(), Binding { mangled, exported: adt.exported, ctors });
+        table.insert(adt.name.clone(), Binding { mangled, exported: adt.exported, ctors, is_ctor: false, is_fn: false });
     }
     for item in &unit.ast.structs {
-        table.insert(item.name.clone(), Binding { mangled: mangle(&item.name), exported: item.exported, ctors: Vec::new() });
+        table.insert(item.name.clone(), Binding { mangled: mangle(&item.name), exported: item.exported, ctors: Vec::new(), is_ctor: false, is_fn: false });
     }
     for item in &unit.ast.consts {
-        table.insert(item.name.clone(), Binding { mangled: mangle(&item.name), exported: item.exported, ctors: Vec::new() });
+        table.insert(item.name.clone(), Binding { mangled: mangle(&item.name), exported: item.exported, ctors: Vec::new(), is_ctor: false, is_fn: false });
+    }
+    for item in std_facade(&unit.path) {
+        if table.contains_key(item.name) {
+            return Err(CompileError::plain(format!("`{}` conflicts with a standard name", item.name)));
+        }
+        let ctors = item.ctors.iter().map(|(name, mangled)| (name.to_string(), mangled.to_string())).collect();
+        table.insert(item.name.to_string(), Binding {
+            mangled: item.mangled.to_string(),
+            exported: true,
+            ctors,
+            is_ctor: item.is_ctor,
+            is_fn: item.is_fn,
+        });
     }
     Ok(table)
 }
+
+struct Facade {
+    name: &'static str,
+    mangled: &'static str,
+    ctors: &'static [(&'static str, &'static str)],
+    is_ctor: bool,
+    is_fn: bool,
+}
+
+fn std_facade(path: &Path) -> &'static [Facade] {
+    let in_std = path.parent().and_then(|parent| parent.file_name()).is_some_and(|name| name == "std");
+    if !in_std {
+        return &[];
+    }
+    match path.file_stem().and_then(|name| name.to_str()) {
+        Some("option") => OPTION_FACADE,
+        Some("result") => RESULT_FACADE,
+        Some("io") => IO_FACADE,
+        Some("string") => STRING_FACADE,
+        _ => &[],
+    }
+}
+
+const OPTION_FACADE: &[Facade] = &[
+    Facade { name: "Option", mangled: "Option", ctors: &[("Some", "Some"), ("None", "None")], is_ctor: false, is_fn: false },
+    Facade { name: "Some", mangled: "Some", ctors: &[], is_ctor: true, is_fn: false },
+    Facade { name: "None", mangled: "None", ctors: &[], is_ctor: true, is_fn: false },
+];
+
+const RESULT_FACADE: &[Facade] = &[
+    Facade { name: "Result", mangled: "Result", ctors: &[("Ok", "Ok"), ("Err", "Err")], is_ctor: false, is_fn: false },
+    Facade { name: "Ok", mangled: "Ok", ctors: &[], is_ctor: true, is_fn: false },
+    Facade { name: "Err", mangled: "Err", ctors: &[], is_ctor: true, is_fn: false },
+];
+
+const STRING_FACADE: &[Facade] = &[
+    Facade { name: "from_char", mangled: "from_char", ctors: &[], is_ctor: false, is_fn: true },
+    Facade { name: "from_byte", mangled: "from_byte", ctors: &[], is_ctor: false, is_fn: true },
+];
+
+const IO_FACADE: &[Facade] = &[
+    Facade { name: "print", mangled: "print", ctors: &[], is_ctor: false, is_fn: true },
+    Facade { name: "println", mangled: "println", ctors: &[], is_ctor: false, is_fn: true },
+    Facade { name: "putc", mangled: "putc", ctors: &[], is_ctor: false, is_fn: true },
+];
 
 fn apply_import(
     index: usize,
@@ -272,6 +342,8 @@ fn apply_import(
     rfls: &[RflUnit],
     bindings: &[HashMap<String, Binding>],
     maps: &mut [HashMap<String, String>],
+    ctor_names: &mut [HashSet<String>],
+    fn_names: &mut [HashSet<String>],
     cmods: &[CMod],
     already: &[ExternDecl],
 ) -> Result<Vec<ExternDecl>, CompileError> {
@@ -286,8 +358,15 @@ fn apply_import(
                     return Err(CompileError::plain(format!("`{}` is not exported", item.name)));
                 }
                 bind_name(&mut maps[index], &item.alias, &binding.mangled, false)?;
+                if binding.is_ctor {
+                    ctor_names[index].insert(item.alias.clone());
+                }
+                if binding.is_fn {
+                    fn_names[index].insert(item.alias.clone());
+                }
                 for (ctor, mangled) in &binding.ctors {
                     bind_name(&mut maps[index], ctor, mangled, true)?;
+                    ctor_names[index].insert(ctor.clone());
                 }
             }
         }
@@ -295,6 +374,7 @@ fn apply_import(
             for item in &resolved.import.names {
                 let func = find_c_fn(&cmods[target], &item.name)?;
                 bind_name(&mut maps[index], &item.alias, &func.name, false)?;
+                fn_names[index].insert(item.alias.clone());
                 let present = rfls[index].ast.externs.iter().chain(already.iter()).chain(decls.iter()).any(|decl| decl.name == func.name);
                 if present {
                     continue;
@@ -312,9 +392,6 @@ fn find_c_fn<'a>(module: &'a CMod, name: &str) -> Result<&'a TypedFunction, Comp
             TypedTopLevelItem::Function(func) if func.name == name => {
                 if func.storage_class == StorageClass::Static {
                     return Err(CompileError::plain(format!("`{name}` is static")));
-                }
-                if func.is_variadic {
-                    return Err(CompileError::plain(format!("`{name}` is variadic")));
                 }
                 return Ok(func);
             }
@@ -344,7 +421,7 @@ fn extern_from_c(func: &TypedFunction, span: Span) -> Result<ExternDecl, Compile
         Type::Void => None,
         _ => Some(parsed_c_type(&func.return_type, span)?),
     };
-    Ok(ExternDecl { name: func.name.clone(), name_span: span, params, ret })
+    Ok(ExternDecl { name: func.name.clone(), name_span: span, params, ret, variadic: func.is_variadic })
 }
 
 fn parsed_c_type(ty: &Type, span: Span) -> Result<ParsedTy, CompileError> {
@@ -361,9 +438,26 @@ fn parsed_c_type(ty: &Type, span: Span) -> Result<ParsedTy, CompileError> {
         Type::UnsignedLongLong => Ok(named("u64")),
         Type::Float => Ok(named("f32")),
         Type::Double => Ok(named("f64")),
+        Type::Pointer { target, .. } if matches!(target.unqualified(), Type::Function { .. }) => {
+            parsed_c_type(target, span)
+        }
         Type::Pointer { target, .. } => {
             let inner = parsed_c_type(target, span)?;
             Ok(ParsedTy::Ptr { span, mutable: true, inner: Box::new(inner) })
+        }
+        Type::Function { return_type, parameters, is_variadic } => {
+            if *is_variadic {
+                return Err(CompileError::plain("a variadic C function pointer is not supported"));
+            }
+            let mut params = Vec::new();
+            for param in parameters {
+                params.push(parsed_c_type(param, span)?);
+            }
+            let ret = match return_type.unqualified() {
+                Type::Void => named("unit"),
+                _ => parsed_c_type(return_type, span)?,
+            };
+            Ok(ParsedTy::CFn { span, params, ret: Box::new(ret) })
         }
         Type::Struct { name: Some(name), .. } => Ok(named(name)),
         other => Err(CompileError::plain(format!("unsupported C type `{other}`"))),
@@ -414,13 +508,15 @@ fn rename_defs(ast: &mut Module, bindings: &HashMap<String, Binding>) {
 
 struct Rewriter<'a> {
     map: &'a HashMap<String, String>,
+    ctors: &'a HashSet<String>,
+    fns: &'a HashSet<String>,
     values: Vec<HashSet<String>>,
     types: Vec<HashSet<String>>,
     base: usize,
 }
 
-fn rewrite_uses(ast: &mut Module, map: &HashMap<String, String>, base: usize) {
-    let mut walk = Rewriter { map, values: Vec::new(), types: Vec::new(), base };
+fn rewrite_uses(ast: &mut Module, map: &HashMap<String, String>, ctors: &HashSet<String>, fns: &HashSet<String>, base: usize) {
+    let mut walk = Rewriter { map, ctors, fns, values: Vec::new(), types: Vec::new(), base };
     for adt in &mut ast.adts {
         walk.bump(&mut adt.name_span);
         walk.types.push(adt.params.iter().map(|param| param.name.clone()).collect());
@@ -585,6 +681,10 @@ impl Rewriter<'_> {
                 self.bump(name_span);
                 self.expr(value);
             }
+            Stmt::DerefAssign { ptr, value } => {
+                self.expr(ptr);
+                self.expr(value);
+            }
             Stmt::Expr(expr) => self.expr(expr),
             Stmt::Return { span, value } => {
                 self.bump(span);
@@ -599,7 +699,7 @@ impl Rewriter<'_> {
     fn expr(&mut self, expr: &mut Expr) {
         self.bump(&mut expr.span);
         match &mut expr.kind {
-            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Str(_) | ExprKind::CStr(_) => {}
+            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Str(_) | ExprKind::CStr(_) | ExprKind::Char(_) => {}
             ExprKind::Name(name) => self.rewrite_value(name),
             ExprKind::Unary { expr, .. } => self.expr(expr),
             ExprKind::Binary { lhs, rhs, .. } => {
@@ -615,8 +715,11 @@ impl Rewriter<'_> {
                     self.expr(arg);
                 }
             }
-            ExprKind::Method { receiver, args, .. } => {
+            ExprKind::Method { receiver, method, resolved, args } => {
                 self.expr(receiver);
+                if self.fns.contains(method) && !self.hidden_value(method) {
+                    self.rewrite_value(resolved);
+                }
                 for arg in args {
                     self.expr(arg);
                 }
@@ -695,7 +798,7 @@ impl Rewriter<'_> {
                 self.expr(start);
                 self.expr(end);
             }
-            ExprKind::Borrow { expr, .. } | ExprKind::Try(expr) => self.expr(expr),
+            ExprKind::Borrow { expr, .. } | ExprKind::Try(expr) | ExprKind::Deref(expr) => self.expr(expr),
             ExprKind::Assoc { ty_name, args, .. } => {
                 self.rewrite_type(ty_name);
                 for arg in args {
@@ -709,7 +812,9 @@ impl Rewriter<'_> {
         match pat {
             Pat::Name { name, span } => {
                 self.bump(span);
-                if bind && name != "_" {
+                if self.ctors.contains(name) && !self.hidden_value(name) {
+                    self.rewrite_value(name);
+                } else if bind && name != "_" {
                     if let Some(scope) = self.values.last_mut() {
                         scope.insert(name.clone());
                     }
@@ -722,7 +827,7 @@ impl Rewriter<'_> {
                     self.pat(field, bind);
                 }
             }
-            Pat::Int { span, .. } | Pat::Bool { span, .. } => self.bump(span),
+            Pat::Int { span, .. } | Pat::Bool { span, .. } | Pat::Char { span, .. } => self.bump(span),
             Pat::Tuple { span, fields } => {
                 self.bump(span);
                 for field in fields {
@@ -749,7 +854,7 @@ impl Rewriter<'_> {
                     self.ty(arg);
                 }
             }
-            ParsedTy::Func { span, params, ret } => {
+            ParsedTy::Func { span, params, ret } | ParsedTy::CFn { span, params, ret } => {
                 self.bump(span);
                 for param in params {
                     self.ty(param);
@@ -775,9 +880,29 @@ impl Rewriter<'_> {
     }
 }
 
+fn std_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std")
+}
+
+fn std_module_name(spec: &str) -> Option<&str> {
+    let rest = spec.strip_prefix("std/")?;
+    let rest = rest.strip_suffix(".rfl").unwrap_or(rest);
+    if rest.is_empty() || rest.contains('/') || rest.contains('.') {
+        return None;
+    }
+    Some(rest)
+}
+
 fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileError> {
     if spec == "std" || spec.starts_with("std/") {
-        return Err(CompileError::plain("the standard library is not implemented yet"));
+        let Some(name) = std_module_name(spec) else {
+            return Err(CompileError::plain("expected a standard library module such as `std/list`"));
+        };
+        let path = std_dir().join(format!("{name}.rfl"));
+        if !path.exists() {
+            return Err(CompileError::plain(format!("the standard library module `{name}` is not implemented yet")));
+        }
+        return Ok(path);
     }
     let spec = if spec.ends_with(".rfl") || spec.ends_with(".c") {
         spec.to_string()

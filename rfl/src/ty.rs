@@ -16,6 +16,8 @@ pub enum Ty {
     /// One unsigned cell. Wide enough for every collection length this machine can allocate.
     Usize,
     Bool,
+    /// Unicode scalar. Two cells, the same width as `i32`.
+    Char,
     Unit,
     /// Index into the module's algebraic types. Three cells: tag, address, bank.
     /// Nullary values keep a zero address. A payload is a refcounted heap object.
@@ -41,6 +43,12 @@ pub enum Ty {
     /// Index into the checker's raw-pointer table. Two cells: address and bank.
     /// Not refcounted. Used to talk to C.
     Ptr(u32),
+    /// Index into the checker's C function-pointer table. Two cells: the code
+    /// address and its bank. No environment, and not an RFL callable.
+    CFn(u32),
+    /// Immutable UTF-8 text. Two cells: address and bank of a refcounted object.
+    /// A null pointer is the empty string. Bytes follow a length cell, one octet per cell.
+    String,
 }
 
 impl Ty {
@@ -57,6 +65,8 @@ impl Ty {
             "f32" => Self::F32,
             "f64" => Self::F64,
             "bool" => Self::Bool,
+            "char" => Self::Char,
+            "String" => Self::String,
             "unit" => Self::Unit,
             "usize" => Self::Usize,
             // C `int` is 16 bits here. `c_char` is a full cell, not `i8`.
@@ -95,7 +105,7 @@ impl Ty {
 
     /// The value owns a share of a refcounted heap object.
     pub fn is_managed(self) -> bool {
-        self.owns_buffer() || matches!(self, Self::Adt(_) | Self::Func(_))
+        self.owns_buffer() || matches!(self, Self::Adt(_) | Self::Func(_) | Self::String)
     }
 
     pub fn is_signed(self) -> bool {
@@ -114,7 +124,8 @@ impl Ty {
             Self::Func(_) => 4,
             Self::I32 | Self::U32 | Self::F32 => 2,
             Self::I64 | Self::U64 | Self::F64 => 4,
-            Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) => 2,
+            Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::String => 2,
+            Self::Char => 2,
             Self::Slice(_) => 4,
             Self::Array { len, width, .. } => len as i64 * width as i64,
             Self::Struct { width, .. } | Self::Tuple { width, .. } => width as i64,
@@ -132,7 +143,7 @@ impl Ty {
             Self::U32 => (0..=u32::MAX as i64).contains(&value),
             Self::I64 => true,
             Self::U64 => value >= 0,
-            Self::Bool | Self::Unit | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => false,
+            Self::Bool | Self::Char | Self::Unit | Self::String | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => false,
         }
     }
 
@@ -141,9 +152,9 @@ impl Ty {
         match self {
             Self::I8 | Self::U8 => value & 0xff,
             Self::I16 | Self::U16 | Self::Usize | Self::Bool => value & 0xffff,
-            Self::I32 | Self::U32 => value & 0xffff_ffff,
+            Self::I32 | Self::U32 | Self::Char => value & 0xffff_ffff,
             Self::I64 | Self::U64 => value,
-            Self::Unit | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => 0,
+            Self::Unit | Self::String | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => 0,
         }
     }
 }
@@ -162,6 +173,8 @@ impl std::fmt::Display for Ty {
             Self::F32 => "f32",
             Self::F64 => "f64",
             Self::Bool => "bool",
+            Self::Char => "char",
+            Self::String => "String",
             Self::Unit => "unit",
             Self::Usize => "usize",
             Self::Adt(_) => "adt",
@@ -173,6 +186,7 @@ impl std::fmt::Display for Ty {
             Self::Struct { .. } => "struct",
             Self::Tuple { .. } => "tuple",
             Self::Ptr(_) => "ptr",
+            Self::CFn(_) => "extern fn",
         };
         f.write_str(name)
     }

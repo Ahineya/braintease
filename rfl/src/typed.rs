@@ -21,6 +21,8 @@ pub struct ExternFn {
     pub name: String,
     pub params: Vec<Ty>,
     pub ret: Ty,
+    /// Named parameters, then `...`.
+    pub variadic: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +54,8 @@ pub struct TFn {
     pub closure: bool,
     /// Values copied into the environment when the closure is created.
     pub captures: Vec<Capture>,
+    /// Parallel to `bindings`. A shared binding's slot holds a box pointer.
+    pub shared: Vec<bool>,
     /// Also emitted as a C function of the same name.
     pub c_export: bool,
 }
@@ -60,9 +64,12 @@ pub struct TFn {
 pub struct Capture {
     /// Binding in the function that creates the closure.
     pub parent: u32,
-    /// Immutable binding in this function that receives the copy.
+    /// Binding in this function that receives the capture.
     pub local: u32,
     pub ty: Ty,
+    /// The outer binding and this one share a heap cell. Writes on either side
+    /// are visible to the other.
+    pub shared: bool,
 }
 
 #[derive(Debug)]
@@ -80,6 +87,8 @@ pub enum TStmt {
     IndexAssign { binding: u32, index: TExpr, value: TExpr, elem: Ty },
     /// Store `value` at a cell offset inside a struct binding.
     FieldAssign { binding: u32, offset: i64, value: TExpr },
+    /// Store through a raw pointer. `index` selects an element of `stride` cells.
+    PtrStore { ptr: TExpr, index: Option<TExpr>, value: TExpr, stride: i64 },
     Expr(TExpr),
     Return(Option<TExpr>),
     Break,
@@ -103,11 +112,28 @@ pub enum TExprKind {
     Binary { op: BinOp, lhs: Box<TExpr>, rhs: Box<TExpr> },
     Call { callee: String, args: Vec<TExpr> },
     /// A direct call to a C function. The callee is not an RFL frame.
-    Extern { callee: String, args: Vec<TExpr> },
+    /// `fixed` is the number of named parameters. Later arguments are variadic.
+    Extern { callee: String, args: Vec<TExpr>, fixed: usize },
     /// Static `c"..."` bytes. The value is `*const c_char`.
     CStr(Vec<u16>),
+    /// A `String`. Bytes are UTF-8, one octet per cell in the object.
+    Str(Vec<u8>),
+    /// `left + right` when both sides are strings. A new string.
+    StrConcat { lhs: Box<TExpr>, rhs: Box<TExpr> },
+    /// `s[start..end]`. The bounds are byte offsets. The result is a new string.
+    StrSlice { base: Box<TExpr>, start: Box<TExpr>, end: Box<TExpr>, inclusive: bool },
+    /// One character, encoded as UTF-8.
+    StrFromChar(Box<TExpr>),
+    /// One octet, even when it is not a UTF-8 lead byte.
+    StrFromByte(Box<TExpr>),
+    /// A `char` scalar.
+    Char(u32),
     /// Call a function value. `params` is the callee's parameter list.
     Apply { callee: Box<TExpr>, args: Vec<TExpr>, params: Vec<Ty> },
+    /// Address of a C function. The value is a code pointer, not an RFL closure.
+    CFn { symbol: String },
+    /// Call a C function pointer.
+    CApply { callee: Box<TExpr>, args: Vec<TExpr> },
     /// A lambda lifted to `func`. The value is a closure with an empty environment.
     Closure { func: String },
     If { cond: Box<TExpr>, then_body: Box<TBlock>, else_body: Option<Box<TExpr>> },
@@ -160,6 +186,16 @@ pub enum TExprKind {
     Get { vec: Box<TExpr>, index: Box<TExpr>, elem: Ty, some_tag: u16, none_tag: u16 },
     /// `&binding` or `&mut binding`. The value points at that local.
     Borrow { binding: u32 },
+    /// Load `stride` cells at `ptr`, plus `index` elements when present.
+    Deref { ptr: Box<TExpr>, index: Option<Box<TExpr>>, stride: i64 },
+    /// `ptr` moved by `index` elements of `stride` cells.
+    PtrOffset { ptr: Box<TExpr>, index: Box<TExpr>, stride: i64 },
+    /// Address cell of a raw pointer.
+    PtrAddr { ptr: Box<TExpr> },
+    /// Bank cell of a raw pointer. Negative values are bank tags.
+    PtrBank { ptr: Box<TExpr> },
+    /// The address cell is zero.
+    PtrNull { ptr: Box<TExpr> },
     /// `expr?`. `fail` is the error payload, or nothing when failure is nullary.
     Try { expr: Box<TExpr>, ok_tag: u16, fail_tag: u16, payload: Ty, fail: Option<Ty> },
 }

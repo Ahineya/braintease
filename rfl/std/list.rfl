@@ -1,0 +1,127 @@
+export type List<T> =
+    | Nil
+    | Cons(T, List<T>);
+
+impl<T> List<T> {
+    export fn from(items: Vec<T>) -> List<T> {
+        if (items.is_empty()) {
+            Nil
+        } else {
+            let mut i = items.len() - 1;
+            let mut acc = Cons(items[i], Nil);
+            while (i > 0) {
+                i = i - 1;
+                acc = Cons(items[i], acc);
+            }
+            acc
+        }
+    }
+
+    export fn is_empty(self) -> bool {
+        match self {
+            Nil => true,
+            Cons(_, _) => false,
+        }
+    }
+
+    export fn len(self) -> usize {
+        match self {
+            Nil => 0,
+            Cons(_, rest) => {
+                let n = rest.len();
+                n + 1
+            },
+        }
+    }
+
+    export fn head(self) -> Option<T> {
+        match self {
+            Nil => None,
+            Cons(x, _) => Some(x),
+        }
+    }
+
+    export fn tail(self) -> List<T> {
+        match self {
+            Nil => Nil,
+            Cons(_, rest) => rest,
+        }
+    }
+
+    export fn nth(self, index: usize) -> Option<T> {
+        match self {
+            Nil => None,
+            Cons(x, rest) => if (index == 0) { Some(x) } else { rest.nth(index - 1) },
+        }
+    }
+
+    export fn last(self) -> Option<T> {
+        match self {
+            Nil => None,
+            Cons(x, rest) => if (rest.is_empty()) { Some(x) } else { rest.last() },
+        }
+    }
+
+    export fn append(self, other: List<T>) -> List<T> {
+        match self {
+            Nil => other,
+            Cons(x, rest) => Cons(x, rest.append(other)),
+        }
+    }
+
+    export fn reverse(self) -> List<T> {
+        self.reversed(Nil)
+    }
+
+    fn reversed(self, acc: List<T>) -> List<T> {
+        match self {
+            Nil => acc,
+            Cons(x, rest) => rest.reversed(Cons(x, acc)),
+        }
+    }
+
+    export fn map<U>(self, f: fn(T) -> U) -> List<U> {
+        match self {
+            Nil => Nil,
+            Cons(x, rest) => Cons(f(x), rest.map(f)),
+        }
+    }
+
+    export fn filter(self, predicate: fn(T) -> bool) -> List<T> {
+        match self {
+            Nil => Nil,
+            Cons(x, rest) => {
+                let tail = rest.filter(predicate);
+                if (predicate(x)) { Cons(x, tail) } else { tail }
+            },
+        }
+    }
+
+    export fn fold<U>(self, initial: U, f: fn(U, T) -> U) -> U {
+        match self {
+            Nil => initial,
+            Cons(x, rest) => rest.fold(f(initial, x), f),
+        }
+    }
+
+    export fn find(self, predicate: fn(T) -> bool) -> Option<T> {
+        match self {
+            Nil => None,
+            Cons(x, rest) => if (predicate(x)) { Some(x) } else { rest.find(predicate) },
+        }
+    }
+
+    export fn any(self, predicate: fn(T) -> bool) -> bool {
+        match self {
+            Nil => false,
+            Cons(x, rest) => if (predicate(x)) { true } else { rest.any(predicate) },
+        }
+    }
+
+    export fn all(self, predicate: fn(T) -> bool) -> bool {
+        match self {
+            Nil => true,
+            Cons(x, rest) => if (predicate(x)) { rest.all(predicate) } else { false },
+        }
+    }
+}

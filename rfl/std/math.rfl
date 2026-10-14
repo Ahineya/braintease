@@ -1,0 +1,167 @@
+// Machine-word integers, and f64. `sin` and `sqrt` are software:
+// a quadrant reduction plus a Taylor polynomial, and Newton for the root.
+// Angles outside the finite range return NaN.
+
+export fn abs(n: i16) -> i16 {
+    if (n < 0) { -n } else { n }
+}
+
+export fn signum(n: i16) -> i16 {
+    if (n < 0) { -1 } else if (n > 0) { 1 } else { 0 }
+}
+
+export fn min<T>(a: T, b: T) -> T {
+    if (a < b) { a } else { b }
+}
+
+export fn max<T>(a: T, b: T) -> T {
+    if (a > b) { a } else { b }
+}
+
+export fn clamp<T>(n: T, low: T, high: T) -> T {
+    if (n < low) { low } else if (n > high) { high } else { n }
+}
+
+export fn gcd(a: i16, b: i16) -> i16 {
+    let mut x = abs(a);
+    let mut y = abs(b);
+    while (y != 0) {
+        let next = x % y;
+        x = y;
+        y = next;
+    }
+    x
+}
+
+export fn lcm(a: i16, b: i16) -> i16 {
+    if (a == 0 || b == 0) { 0 } else { abs(a) / gcd(a, b) * abs(b) }
+}
+
+export fn isqrt(n: i16) -> i16 {
+    if (n <= 0) { return 0; }
+    let mut guess = n;
+    let mut i = 0;
+    while (i < 8) {
+        guess = (guess + n / guess) / 2;
+        i = i + 1;
+    }
+    if (guess * guess > n) { guess - 1 } else { guess }
+}
+
+export fn pow(base: i16, exp: i16) -> i16 {
+    if (exp < 0) { return 0; }
+    let mut result = 1;
+    let mut i = 0;
+    while (i < exp) {
+        result = result * base;
+        i = i + 1;
+    }
+    result
+}
+
+export fn count_ones(n: u16) -> u16 {
+    let mut left = n;
+    let mut count: u16 = 0;
+    while (left != 0) {
+        if ((left & 1) == 1) { count = count + 1; }
+        left = left >> 1;
+    }
+    count
+}
+
+export const PI: f64 = 3.141592653589793;
+export const HALF_PI: f64 = 1.5707963267948966;
+export const E: f64 = 2.718281828459045;
+
+export fn fabs(x: f64) -> f64 {
+    if (x < 0.0) { -x } else { x }
+}
+
+export fn floor(x: f64) -> f64 {
+    if (x != x || x >= 2147483647.0 || x <= -2147483648.0) { return x; }
+    let whole = (x as i32) as f64;
+    if (x < whole) { whole - 1.0 } else { whole }
+}
+
+export fn ceil(x: f64) -> f64 {
+    let down = floor(x);
+    if (down == x) { x } else { down + 1.0 }
+}
+
+export fn round(x: f64) -> f64 {
+    if (x >= 0.0) { floor(x + 0.5) } else { ceil(x - 0.5) }
+}
+
+export fn fract(x: f64) -> f64 {
+    x - floor(x)
+}
+
+export fn sqrt(x: f64) -> f64 {
+    if (x != x || x < 0.0) { return 0.0 / 0.0; }
+    if (x == 0.0) { return 0.0; }
+    let mut guess = if (x > 1.0) { x * 0.5 } else { 1.0 };
+    let mut i = 0;
+    while (i < 16) {
+        guess = (guess + x / guess) * 0.5;
+        i = i + 1;
+    }
+    guess
+}
+
+fn finite(x: f64) -> bool {
+    x == x && x < 1.0e300 && x > -1.0e300
+}
+
+fn sin_poly(z: f64) -> f64 {
+    let z2 = z * z;
+    let mut acc = 2.505210838544172e-8;
+    acc = 2.7557319223985893e-6 - z2 * acc;
+    acc = 0.0001984126984126984 - z2 * acc;
+    acc = 0.008333333333333333 - z2 * acc;
+    acc = 0.16666666666666666 - z2 * acc;
+    z * (1.0 - z2 * acc)
+}
+
+fn cos_poly(z: f64) -> f64 {
+    let z2 = z * z;
+    let mut acc = 2.755731922398589e-7;
+    acc = 2.48015873015873e-5 - z2 * acc;
+    acc = 0.001388888888888889 - z2 * acc;
+    acc = 0.041666666666666664 - z2 * acc;
+    acc = 0.5 - z2 * acc;
+    1.0 - z2 * acc
+}
+
+fn turn_of(x: f64) -> i32 {
+    let quarters = floor(x / HALF_PI);
+    quarters as i32
+}
+
+fn into_quarter(x: f64) -> f64 {
+    let quarters = floor(x / HALF_PI);
+    x - quarters * HALF_PI
+}
+
+export fn sin(x: f64) -> f64 {
+    if (!finite(x)) { return 0.0 / 0.0; }
+    let turn = turn_of(x) & 3;
+    let z = into_quarter(x);
+    if (turn == 0) { sin_poly(z) }
+    else if (turn == 1) { cos_poly(z) }
+    else if (turn == 2) { -sin_poly(z) }
+    else { -cos_poly(z) }
+}
+
+export fn cos(x: f64) -> f64 {
+    if (!finite(x)) { return 0.0 / 0.0; }
+    let turn = turn_of(x) & 3;
+    let z = into_quarter(x);
+    if (turn == 0) { cos_poly(z) }
+    else if (turn == 1) { -sin_poly(z) }
+    else if (turn == 2) { -cos_poly(z) }
+    else { sin_poly(z) }
+}
+
+export fn tan(x: f64) -> f64 {
+    sin(x) / cos(x)
+}

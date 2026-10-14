@@ -55,6 +55,10 @@ fn run_asm(asm: &str) -> Result<RunResult, CompileError> {
         text.contains("rfl_frame_alloc")
             || text.contains("putchar")
             || text.contains("puts")
+            || text.contains("printf")
+            || text.contains("getchar")
+            || text.contains("mmio_read")
+            || text.contains("mmio_write")
             || text.contains("malloc")
     }) {
         link.arg(root.join("runtime/libruntime.par"));

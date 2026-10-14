@@ -127,6 +127,8 @@ pub struct ExternDecl {
     pub name_span: Span,
     pub params: Vec<Param>,
     pub ret: Option<ParsedTy>,
+    /// `fn name(named, ...)`. Extra arguments are passed on the stack.
+    pub variadic: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +152,8 @@ pub enum ParsedTy {
     Ptr { span: Span, mutable: bool, inner: Box<ParsedTy> },
     /// `(T, U, ...)`.
     Tuple { span: Span, fields: Vec<ParsedTy> },
+    /// `extern "C" fn(...) -> ...`. A code address, with no environment.
+    CFn { span: Span, params: Vec<ParsedTy>, ret: Box<ParsedTy> },
 }
 
 impl ParsedTy {
@@ -160,7 +164,8 @@ impl ParsedTy {
             | ParsedTy::Ref { span, .. }
             | ParsedTy::Ptr { span, .. }
             | ParsedTy::Array { span, .. }
-            | ParsedTy::Tuple { span, .. } => *span,
+            | ParsedTy::Tuple { span, .. }
+            | ParsedTy::CFn { span, .. } => *span,
         }
     }
 }
@@ -185,6 +190,8 @@ pub enum Stmt {
         name_span: Span,
         value: Expr,
     },
+    /// `*ptr = value` or `*ptr` is handled as an expression. This stores through a raw pointer.
+    DerefAssign { ptr: Expr, value: Expr },
     /// `name[index] = value` on a mutable vector.
     IndexAssign {
         name: String,
@@ -228,6 +235,8 @@ pub enum ExprKind {
     Str(Vec<u16>),
     /// `c"..."`. A `*const c_char` pointing at static cells plus a trailing zero.
     CStr(Vec<u16>),
+    /// A Unicode scalar.
+    Char(u32),
     Name(String),
     Unary {
         op: UnaryOp,
@@ -247,7 +256,10 @@ pub enum ExprKind {
     /// `receiver.method(args)`. Resolved as an ordinary call with the receiver first.
     Method {
         receiver: Box<Expr>,
+        /// Name as written. Builtin and inherent methods use this.
         method: String,
+        /// Free function to call when no inherent method matches.
+        resolved: String,
         args: Vec<Expr>,
     },
     If {
@@ -313,6 +325,8 @@ pub enum ExprKind {
         mutable: bool,
         expr: Box<Expr>,
     },
+    /// `*expr`. The operand is a raw pointer. Legal only in `unsafe`.
+    Deref(Box<Expr>),
     /// `Type::function(args)`.
     Assoc {
         ty_name: String,
@@ -341,6 +355,8 @@ impl Expr {
 pub enum UnaryOp {
     Neg,
     Not,
+    /// `~`. Bitwise complement of an integer.
+    BitNot,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -358,6 +374,11 @@ pub enum BinOp {
     Ge,
     And,
     Or,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 #[derive(Debug, Clone)]
@@ -374,6 +395,7 @@ pub enum Pat {
     Ctor { name: String, span: Span, fields: Vec<Pat> },
     Int { value: i64, span: Span },
     Bool { value: bool, span: Span },
+    Char { scalar: u32, span: Span },
     Tuple { span: Span, fields: Vec<Pat> },
     /// `Point { x, y: pat }`. A missing pattern means the field name is the binding.
     Struct { name: String, span: Span, fields: Vec<(String, Span, Pat)> },
@@ -386,6 +408,7 @@ impl Pat {
             | Pat::Ctor { span, .. }
             | Pat::Int { span, .. }
             | Pat::Bool { span, .. }
+            | Pat::Char { span, .. }
             | Pat::Tuple { span, .. }
             | Pat::Struct { span, .. } => *span,
         }
@@ -403,5 +426,9 @@ impl BinOp {
 
     pub fn is_arith(self) -> bool {
         matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Rem)
+    }
+
+    pub fn is_bitwise(self) -> bool {
+        matches!(self, Self::BitAnd | Self::BitOr | Self::BitXor | Self::Shl | Self::Shr)
     }
 }

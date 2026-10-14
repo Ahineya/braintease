@@ -1,0 +1,28 @@
+// Simple brainfuck interpreter
+
+fn main() {
+    let mut tape: Vec<u16> = [];
+    let mut tp: usize = 0;
+
+    let program = "++++++++++[->++++++<]>+++++.";
+
+    println("It works!");
+    println(program[0]);
+
+    println("a" + "b");
+
+    println(program.len());
+
+    for (i in 0..program.len()) {
+        println(program[i]);
+    }
+
+    while(tp < program.len()) {
+        break;
+    }
+
+    match program[0] {
+        '+' => {println("plus");}
+        _ => {}
+    }
+}

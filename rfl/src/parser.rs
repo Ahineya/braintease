@@ -3,7 +3,7 @@ use crate::error::CompileError;
 use crate::lexer::{Token, TokenKind};
 
 pub fn parse(source: &str, tokens: &[Token]) -> Result<Module, CompileError> {
-    let mut parser = Parser { source, tokens, index: 0 };
+    let mut parser = Parser { source, tokens, index: 0, pending_gt: false };
     let mut adts = Vec::new();
     let mut structs = Vec::new();
     let mut impls = Vec::new();
@@ -48,6 +48,8 @@ struct Parser<'a> {
     source: &'a str,
     tokens: &'a [Token],
     index: usize,
+    /// One `>` left over from a `>>` that closed a generic argument.
+    pending_gt: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -211,8 +213,13 @@ impl<'a> Parser<'a> {
         let (name, name_span) = self.expect_ident()?;
         self.expect(&TokenKind::LParen, "'('")?;
         let mut params = Vec::new();
+        let mut variadic = false;
         if !self.is(&TokenKind::RParen) {
             loop {
+                if self.eat(&TokenKind::Ellipsis) {
+                    variadic = true;
+                    break;
+                }
                 params.push(self.parse_param()?);
                 if self.eat(&TokenKind::Comma) {
                     if self.is(&TokenKind::RParen) {
@@ -224,9 +231,12 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect(&TokenKind::RParen, "')'")?;
+        if variadic && params.is_empty() {
+            return Err(CompileError::at(self.source, name_span.start, "a variadic function needs a named parameter"));
+        }
         let ret = if self.eat(&TokenKind::Arrow) { Some(self.parse_type()?) } else { None };
         self.expect(&TokenKind::Semi, "';'")?;
-        Ok(ExternDecl { name, name_span, params, ret })
+        Ok(ExternDecl { name, name_span, params, ret, variadic })
     }
 
     fn expect_abi_c(&mut self) -> Result<(), CompileError> {
@@ -347,7 +357,7 @@ impl<'a> Parser<'a> {
             }
             break;
         }
-        self.expect(&TokenKind::Gt, "'>'")?;
+        self.expect_gt()?;
         Ok(params)
     }
 
@@ -358,9 +368,11 @@ impl<'a> Parser<'a> {
             return Ok(None);
         }
         let saved = self.index;
+        let saved_gt = self.pending_gt;
         self.bump();
         if !self.is_ident() {
             self.index = saved;
+            self.pending_gt = saved_gt;
             return Ok(None);
         }
         let mut type_args = Vec::new();
@@ -369,20 +381,23 @@ impl<'a> Parser<'a> {
                 Ok(ty) => type_args.push(ty),
                 Err(_) => {
                     self.index = saved;
+                    self.pending_gt = saved_gt;
                     return Ok(None);
                 }
             }
             if self.eat(&TokenKind::Comma) {
                 if !self.is_ident() {
                     self.index = saved;
+                    self.pending_gt = saved_gt;
                     return Ok(None);
                 }
                 continue;
             }
             break;
         }
-        if !self.eat(&TokenKind::Gt) || !self.is(&TokenKind::LParen) {
+        if !self.eat_gt() || !self.is(&TokenKind::LParen) {
             self.index = saved;
+            self.pending_gt = saved_gt;
             return Ok(None);
         }
         self.bump();
@@ -460,7 +475,34 @@ impl<'a> Parser<'a> {
         Ok(Param { name, name_span, ty, pat })
     }
 
+    fn parse_c_fn_type(&mut self) -> Result<ParsedTy, CompileError> {
+        let span = self.expect(&TokenKind::Extern, "`extern`")?.span;
+        self.expect_abi_c()?;
+        self.expect(&TokenKind::Fn, "`fn`")?;
+        self.expect(&TokenKind::LParen, "'('")?;
+        let mut params = Vec::new();
+        if !self.is(&TokenKind::RParen) {
+            loop {
+                params.push(self.parse_type()?);
+                if self.eat(&TokenKind::Comma) {
+                    continue;
+                }
+                break;
+            }
+        }
+        self.expect(&TokenKind::RParen, "')'")?;
+        let ret = if self.eat(&TokenKind::Arrow) {
+            self.parse_type()?
+        } else {
+            ParsedTy::Named { span, name: "unit".to_string(), args: Vec::new() }
+        };
+        Ok(ParsedTy::CFn { span, params, ret: Box::new(ret) })
+    }
+
     fn parse_type(&mut self) -> Result<ParsedTy, CompileError> {
+        if self.is(&TokenKind::Extern) {
+            return self.parse_c_fn_type();
+        }
         if self.eat(&TokenKind::LParen) {
             let span = self.prev_span();
             if self.eat(&TokenKind::RParen) {
@@ -544,7 +586,7 @@ impl<'a> Parser<'a> {
                 }
                 break;
             }
-            self.expect(&TokenKind::Gt, "'>'")?;
+            self.expect_gt()?;
         }
         Ok(ParsedTy::Named { name, span, args })
     }
@@ -646,6 +688,12 @@ impl<'a> Parser<'a> {
     }
 
     fn finish_place_assign(&mut self, expr: Expr) -> Result<Stmt, CompileError> {
+        if let ExprKind::Deref(inner) = expr.kind {
+            self.expect(&TokenKind::Eq, "'='")?;
+            let value = self.parse_expr()?;
+            self.expect(&TokenKind::Semi, "';'")?;
+            return Ok(Stmt::DerefAssign { ptr: *inner, value });
+        }
         if let ExprKind::Field { .. } = &expr.kind {
             let mut fields = Vec::new();
             let mut cursor = expr;
@@ -734,10 +782,37 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_and(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_equality()?;
+        let mut expr = self.parse_bitor()?;
         while self.eat(&TokenKind::AndAnd) {
-            let rhs = self.parse_equality()?;
+            let rhs = self.parse_bitor()?;
             expr = self.binary(BinOp::And, expr, rhs);
+        }
+        Ok(expr)
+    }
+
+    fn parse_bitor(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_bitxor()?;
+        while self.eat(&TokenKind::Pipe) {
+            let rhs = self.parse_bitxor()?;
+            expr = self.binary(BinOp::BitOr, expr, rhs);
+        }
+        Ok(expr)
+    }
+
+    fn parse_bitxor(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_bitand()?;
+        while self.eat(&TokenKind::Caret) {
+            let rhs = self.parse_bitand()?;
+            expr = self.binary(BinOp::BitXor, expr, rhs);
+        }
+        Ok(expr)
+    }
+
+    fn parse_bitand(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_equality()?;
+        while self.eat(&TokenKind::Amp) {
+            let rhs = self.parse_equality()?;
+            expr = self.binary(BinOp::BitAnd, expr, rhs);
         }
         Ok(expr)
     }
@@ -772,21 +847,37 @@ impl<'a> Parser<'a> {
             } else {
                 break;
             };
-            let rhs = self.parse_term()?;
+            let rhs = self.parse_shift()?;
             expr = self.binary(op, expr, rhs);
         }
         Ok(expr)
     }
 
     fn parse_range(&mut self) -> Result<Expr, CompileError> {
-        let expr = self.parse_term()?;
+        let expr = self.parse_shift()?;
         let inclusive = self.eat(&TokenKind::DotDotEq);
         if inclusive || self.eat(&TokenKind::DotDot) {
-            let end = self.parse_term()?;
+            let end = self.parse_shift()?;
             return Ok(Expr {
                 span: expr.span,
                 kind: ExprKind::Range { start: Box::new(expr), end: Box::new(end), inclusive },
             });
+        }
+        Ok(expr)
+    }
+
+    fn parse_shift(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_term()?;
+        loop {
+            let op = if self.eat(&TokenKind::Shl) {
+                BinOp::Shl
+            } else if self.eat(&TokenKind::Shr) {
+                BinOp::Shr
+            } else {
+                break;
+            };
+            let rhs = self.parse_term()?;
+            expr = self.binary(op, expr, rhs);
         }
         Ok(expr)
     }
@@ -826,6 +917,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_unary(&mut self) -> Result<Expr, CompileError> {
+        if self.eat(&TokenKind::Star) {
+            let span = self.prev_span();
+            let expr = self.parse_unary()?;
+            return Ok(Expr { span, kind: ExprKind::Deref(Box::new(expr)) });
+        }
         if self.eat(&TokenKind::Amp) {
             let span = self.prev_span();
             let mutable = self.eat(&TokenKind::Mut);
@@ -848,12 +944,23 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Unary { op: UnaryOp::Not, expr: Box::new(expr) },
             });
         }
+        if self.eat(&TokenKind::Tilde) {
+            let span = self.prev_span();
+            let expr = self.parse_unary()?;
+            return Ok(Expr {
+                span,
+                kind: ExprKind::Unary { op: UnaryOp::BitNot, expr: Box::new(expr) },
+            });
+        }
         self.parse_postfix()
     }
 
     fn parse_postfix(&mut self) -> Result<Expr, CompileError> {
         let mut expr = self.parse_primary()?;
         loop {
+            if expr.ends_with_block() {
+                break;
+            }
             if let ExprKind::Name(name) = expr.kind.clone() {
                 if let Some(call) = self.try_generic_call(name, expr.span)? {
                     expr = call;
@@ -957,7 +1064,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 self.expect(&TokenKind::RParen, "')'")?;
-                expr = Expr { span, kind: ExprKind::Method { receiver: Box::new(expr), method, args } };
+                expr = Expr { span, kind: ExprKind::Method { receiver: Box::new(expr), resolved: method.clone(), method, args } };
             } else if self.eat(&TokenKind::Question) {
                 expr = Expr { span: expr.span, kind: ExprKind::Try(Box::new(expr)) };
             } else if self.eat(&TokenKind::As) {
@@ -980,6 +1087,7 @@ impl<'a> Parser<'a> {
             TokenKind::Float(text) => Ok(Expr { span: token.span, kind: ExprKind::Float(text) }),
             TokenKind::Str(chars) => Ok(Expr { span: token.span, kind: ExprKind::Str(chars) }),
             TokenKind::CStr(chars) => Ok(Expr { span: token.span, kind: ExprKind::CStr(chars) }),
+            TokenKind::Char(scalar) => Ok(Expr { span: token.span, kind: ExprKind::Char(scalar) }),
             TokenKind::True => Ok(Expr { span: token.span, kind: ExprKind::Bool(true) }),
             TokenKind::False => Ok(Expr { span: token.span, kind: ExprKind::Bool(false) }),
             TokenKind::Ident(name) => Ok(Expr { span: token.span, kind: ExprKind::Name(name) }),
@@ -1145,6 +1253,11 @@ impl<'a> Parser<'a> {
             let token = self.bump();
             return Ok(Pat::Bool { value: token.kind == TokenKind::True, span: token.span });
         }
+        if let TokenKind::Char(scalar) = &self.tokens[self.index].kind {
+            let scalar = *scalar;
+            let span = self.bump().span;
+            return Ok(Pat::Char { scalar, span });
+        }
         let (name, span) = self.expect_ident()?;
         if self.eat(&TokenKind::LBrace) {
             return self.parse_struct_pat(name, span);
@@ -1247,6 +1360,32 @@ impl<'a> Parser<'a> {
         match token.kind {
             TokenKind::Ident(name) => Ok((name, token.span)),
             _ => Err(CompileError::at(self.source, token.span.start, "expected a name")),
+        }
+    }
+
+    /// `>` or the first half of `>>`. The second half stays for the next closer.
+    fn eat_gt(&mut self) -> bool {
+        if self.pending_gt {
+            self.pending_gt = false;
+            return true;
+        }
+        if self.eat(&TokenKind::Gt) {
+            return true;
+        }
+        if self.is(&TokenKind::Shr) {
+            self.bump();
+            self.pending_gt = true;
+            return true;
+        }
+        false
+    }
+
+    fn expect_gt(&mut self) -> Result<(), CompileError> {
+        if self.eat_gt() {
+            Ok(())
+        } else {
+            let token = self.current();
+            Err(CompileError::at(self.source, token.span.start, "expected '>'"))
         }
     }
 

@@ -1,0 +1,37 @@
+// Raw memory. `*p`, `*p = value`, `p[i]`, and `p.offset(n)` are legal only
+// in `unsafe`. `addr`, `bank`, and `is_null` inspect the pointer itself.
+//
+// A pointer from `&mut place` refers to that local. The read and write
+// functions are those operations for one value. `copy` and `fill` walk cells.
+
+export fn read_u8(p: *const u8) -> u8 { unsafe { *p } }
+export fn write_u8(p: *mut u8, value: u8) -> () { unsafe { *p = value; } }
+
+export fn read_u16(p: *const u16) -> u16 { unsafe { *p } }
+export fn write_u16(p: *mut u16, value: u16) -> () { unsafe { *p = value; } }
+
+export fn read_i16(p: *const i16) -> i16 { unsafe { *p } }
+export fn write_i16(p: *mut i16, value: i16) -> () { unsafe { *p = value; } }
+
+export fn read_i32(p: *const i32) -> i32 { unsafe { *p } }
+export fn write_i32(p: *mut i32, value: i32) -> () { unsafe { *p = value; } }
+
+export fn read_at(p: *const u16, index: usize) -> u16 { unsafe { p[index] } }
+
+export fn write_at(p: *mut u16, index: usize, value: u16) -> () { unsafe { p[index] = value; } }
+
+export fn copy(dest: *mut u16, src: *const u16, count: usize) -> () {
+    let mut i: usize = 0;
+    while (i < count) {
+        write_at(dest, i, read_at(src, i));
+        i = i + 1;
+    }
+}
+
+export fn fill(dest: *mut u16, count: usize, value: u16) -> () {
+    let mut i: usize = 0;
+    while (i < count) {
+        write_at(dest, i, value);
+        i = i + 1;
+    }
+}

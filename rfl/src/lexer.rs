@@ -17,6 +17,8 @@ pub enum TokenKind {
     Str(Vec<u16>),
     /// `c"..."`. Same cell encoding as a string, including escapes.
     CStr(Vec<u16>),
+    /// A character literal. The value is a Unicode scalar.
+    Char(u32),
     Fn,
     Let,
     Mut,
@@ -79,6 +81,14 @@ pub enum TokenKind {
     StarEq,
     SlashEq,
     PercentEq,
+    /// `<<` and `>>`.
+    Shl,
+    Shr,
+    /// `^` and `~`.
+    Caret,
+    Tilde,
+    /// `...` in a variadic `extern "C"` signature.
+    Ellipsis,
     Eof,
 }
 
@@ -133,6 +143,9 @@ impl<'a> Lexer<'a> {
                     if self.peek_char() == Some('=') {
                         self.bump();
                         TokenKind::DotDotEq
+                    } else if self.peek_char() == Some('.') {
+                        self.bump();
+                        TokenKind::Ellipsis
                     } else {
                         TokenKind::DotDot
                     }
@@ -167,8 +180,10 @@ impl<'a> Lexer<'a> {
             }
             '=' => self.eq_token(),
             '!' => self.op2('=', TokenKind::NotEq, TokenKind::Not),
-            '<' => self.op2('=', TokenKind::Le, TokenKind::Lt),
-            '>' => self.op2('=', TokenKind::Ge, TokenKind::Gt),
+            '<' => self.shift_or_compare('<', TokenKind::Shl, TokenKind::Le, TokenKind::Lt),
+            '>' => self.shift_or_compare('>', TokenKind::Shr, TokenKind::Ge, TokenKind::Gt),
+            '^' => { self.bump(); TokenKind::Caret }
+            '~' => { self.bump(); TokenKind::Tilde }
             '&' => {
                 self.bump();
                 if self.peek_char() == Some('&') {
@@ -277,7 +292,11 @@ impl<'a> Lexer<'a> {
             return Err(self.error(start, "character literal must be one character"));
         }
         self.bump();
-        Ok(TokenKind::Int(ch as i64))
+        let scalar = u32::from(ch);
+        if (0xD800..=0xDFFF).contains(&scalar) {
+            return Err(self.error(start, "character literal is not a Unicode scalar"));
+        }
+        Ok(TokenKind::Char(scalar))
     }
 
     fn escape(&mut self, start: usize) -> Result<u16, CompileError> {
@@ -351,6 +370,19 @@ impl<'a> Lexer<'a> {
             TokenKind::FatArrow
         } else {
             TokenKind::Eq
+        }
+    }
+
+    fn shift_or_compare(&mut self, again: char, shift: TokenKind, equal: TokenKind, one: TokenKind) -> TokenKind {
+        self.bump();
+        if self.peek_char() == Some(again) {
+            self.bump();
+            shift
+        } else if self.peek_char() == Some('=') {
+            self.bump();
+            equal
+        } else {
+            one
         }
     }
 
