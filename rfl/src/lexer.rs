@@ -26,7 +26,11 @@ pub enum TokenKind {
     Break,
     Continue,
     Match,
+    For,
+    In,
     Type,
+    Impl,
+    Const,
     Struct,
     Export,
     Import,
@@ -36,9 +40,15 @@ pub enum TokenKind {
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
     Comma,
     Colon,
+    ColonColon,
+    Question,
     Dot,
+    DotDot,
+    DotDotEq,
     Semi,
     Arrow,
     Plus,
@@ -57,6 +67,7 @@ pub enum TokenKind {
     Gt,
     Ge,
     AndAnd,
+    Amp,
     OrOr,
     PlusEq,
     MinusEq,
@@ -97,9 +108,33 @@ impl<'a> Lexer<'a> {
             ')' => { self.bump(); TokenKind::RParen }
             '{' => { self.bump(); TokenKind::LBrace }
             '}' => { self.bump(); TokenKind::RBrace }
+            '[' => { self.bump(); TokenKind::LBracket }
+            ']' => { self.bump(); TokenKind::RBracket }
             ',' => { self.bump(); TokenKind::Comma }
-            ':' => { self.bump(); TokenKind::Colon }
-            '.' => { self.bump(); TokenKind::Dot }
+            ':' => {
+                self.bump();
+                if self.peek_char() == Some(':') {
+                    self.bump();
+                    TokenKind::ColonColon
+                } else {
+                    TokenKind::Colon
+                }
+            }
+            '?' => { self.bump(); TokenKind::Question }
+            '.' => {
+                self.bump();
+                if self.peek_char() == Some('.') {
+                    self.bump();
+                    if self.peek_char() == Some('=') {
+                        self.bump();
+                        TokenKind::DotDotEq
+                    } else {
+                        TokenKind::DotDot
+                    }
+                } else {
+                    TokenKind::Dot
+                }
+            }
             ';' => { self.bump(); TokenKind::Semi }
             '+' => self.op2('=', TokenKind::PlusEq, TokenKind::Plus),
             '*' => self.op2('=', TokenKind::StarEq, TokenKind::Star),
@@ -135,7 +170,7 @@ impl<'a> Lexer<'a> {
                     self.bump();
                     TokenKind::AndAnd
                 } else {
-                    return Err(self.error(start, "references are not implemented yet"));
+                    TokenKind::Amp
                 }
             }
             '|' => {
@@ -254,7 +289,11 @@ impl<'a> Lexer<'a> {
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
             "match" => TokenKind::Match,
+            "for" => TokenKind::For,
+            "in" => TokenKind::In,
             "type" => TokenKind::Type,
+            "impl" => TokenKind::Impl,
+            "const" => TokenKind::Const,
             "struct" => TokenKind::Struct,
             "export" => TokenKind::Export,
             "import" => TokenKind::Import,

@@ -42,7 +42,9 @@ pub fn run_program(source: &str) -> Result<RunResult, CompileError> {
     tool(&mut assemble)?;
     let mut link = Command::new(&rlink);
     link.arg(&crt0).arg(&pobj_path);
-    if std::fs::read_to_string(&asm_path).is_ok_and(|text| text.contains("rfl_frame_alloc") || text.contains("putchar")) {
+    if std::fs::read_to_string(&asm_path).is_ok_and(|text| {
+        text.contains("rfl_frame_alloc") || text.contains("putchar") || text.contains("malloc")
+    }) {
         link.arg(root.join("runtime/libruntime.par"));
     }
     link.args(["-f", "binary", "--bank-size", "64000", "-o"]).arg(&bin_path);

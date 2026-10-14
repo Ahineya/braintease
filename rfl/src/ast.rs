@@ -6,7 +6,60 @@ pub struct Span {
 #[derive(Debug, Clone)]
 pub struct Module {
     pub adts: Vec<Adt>,
+    pub structs: Vec<StructItem>,
+    pub impls: Vec<Impl>,
+    pub consts: Vec<Const>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructItem {
+    pub name: String,
+    pub name_span: Span,
+    pub fields: Vec<StructField>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: String,
+    pub name_span: Span,
+    pub ty: ParsedTy,
+}
+
+/// A named value computed while compiling.
+#[derive(Debug, Clone)]
+pub struct Const {
+    pub name: String,
+    pub name_span: Span,
+    pub ty: ParsedTy,
+    pub init: Expr,
+}
+
+/// `self`, `&self`, or `&mut self`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recv {
+    Value,
+    Shared,
+    Mut,
+}
+
+#[derive(Debug, Clone)]
+pub struct Impl {
+    pub span: Span,
+    pub type_params: Vec<TypeParam>,
+    pub ty: ParsedTy,
+    pub items: Vec<ImplItem>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImplItem {
+    pub name: String,
+    pub name_span: Span,
+    pub type_params: Vec<TypeParam>,
+    pub receiver: Option<Recv>,
+    pub params: Vec<Param>,
+    pub ret: Option<ParsedTy>,
+    pub body: Block,
 }
 
 #[derive(Debug, Clone)]
@@ -45,18 +98,30 @@ pub struct Param {
     pub name: String,
     pub name_span: Span,
     pub ty: Option<ParsedTy>,
+    /// `Point { x, y }` in a parameter list. A plain name is `Pat::Name`.
+    pub pat: Pat,
 }
 
 #[derive(Debug, Clone)]
 pub enum ParsedTy {
     Named { span: Span, name: String, args: Vec<ParsedTy> },
     Func { span: Span, params: Vec<ParsedTy>, ret: Box<ParsedTy> },
+    /// `&T` or `&mut T`.
+    Ref { span: Span, mutable: bool, inner: Box<ParsedTy> },
+    /// `[T; N]`. `len` is a constant expression.
+    Array { span: Span, elem: Box<ParsedTy>, len: Box<Expr> },
+    /// `(T, U, ...)`.
+    Tuple { span: Span, fields: Vec<ParsedTy> },
 }
 
 impl ParsedTy {
     pub fn span(&self) -> Span {
         match self {
-            ParsedTy::Named { span, .. } | ParsedTy::Func { span, .. } => *span,
+            ParsedTy::Named { span, .. }
+            | ParsedTy::Func { span, .. }
+            | ParsedTy::Ref { span, .. }
+            | ParsedTy::Array { span, .. }
+            | ParsedTy::Tuple { span, .. } => *span,
         }
     }
 }
@@ -69,9 +134,9 @@ pub struct Block {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
+    /// `let [mut] pattern [: type] = expr`. The pattern must be irrefutable.
     Let {
-        name: String,
-        name_span: Span,
+        pattern: Pat,
         mutable: bool,
         ty: Option<ParsedTy>,
         init: Expr,
@@ -79,6 +144,20 @@ pub enum Stmt {
     Assign {
         name: String,
         name_span: Span,
+        value: Expr,
+    },
+    /// `name[index] = value` on a mutable vector.
+    IndexAssign {
+        name: String,
+        name_span: Span,
+        index: Expr,
+        value: Expr,
+    },
+    /// `name.field = value` on a mutable struct.
+    FieldAssign {
+        name: String,
+        name_span: Span,
+        fields: Vec<String>,
         value: Expr,
     },
     Expr(Expr),
@@ -142,6 +221,30 @@ pub enum ExprKind {
         cond: Box<Expr>,
         body: Box<Block>,
     },
+    /// `for (pat in iter) body`.
+    For {
+        pat: Pat,
+        iter: Box<Expr>,
+        body: Box<Block>,
+    },
+    /// `(a, b)`.
+    Tuple(Vec<Expr>),
+    /// `Name { field: expr, ... }`.
+    StructLit {
+        name: String,
+        fields: Vec<(String, Expr)>,
+    },
+    /// `base.field`.
+    Field {
+        base: Box<Expr>,
+        name: String,
+    },
+    /// `start..end` or `start..=end`. Legal as the iterator of `for`.
+    Range {
+        start: Box<Expr>,
+        end: Box<Expr>,
+        inclusive: bool,
+    },
     Cast {
         expr: Box<Expr>,
         ty: ParsedTy,
@@ -150,6 +253,31 @@ pub enum ExprKind {
         params: Vec<Param>,
         body: Box<Expr>,
     },
+    Array(Vec<Expr>),
+    Index {
+        base: Box<Expr>,
+        index: Box<Expr>,
+    },
+    /// `base[start..end]` or `base[start..=end]`. The result is an owning slice.
+    Slice {
+        base: Box<Expr>,
+        start: Box<Expr>,
+        end: Box<Expr>,
+        inclusive: bool,
+    },
+    /// `&expr` or `&mut expr`.
+    Borrow {
+        mutable: bool,
+        expr: Box<Expr>,
+    },
+    /// `Type::function(args)`.
+    Assoc {
+        ty_name: String,
+        method: String,
+        args: Vec<Expr>,
+    },
+    /// `expr?` on the prelude `Option` or `Result`.
+    Try(Box<Expr>),
 }
 
 impl Expr {
@@ -157,7 +285,7 @@ impl Expr {
     pub fn ends_with_block(&self) -> bool {
         match &self.kind {
             ExprKind::If { else_body, .. } => else_body.as_ref().map(|e| e.ends_with_block()).unwrap_or(true),
-            ExprKind::Block(_) | ExprKind::While { .. } | ExprKind::Match { .. } => true,
+            ExprKind::Block(_) | ExprKind::While { .. } | ExprKind::Match { .. } | ExprKind::For { .. } => true,
             ExprKind::Lambda { body, .. } => body.ends_with_block(),
             _ => false,
         }
@@ -190,6 +318,8 @@ pub enum BinOp {
 #[derive(Debug, Clone)]
 pub struct Arm {
     pub pat: Pat,
+    /// Evaluated after the pattern matches. A false guard tries the next arm.
+    pub guard: Option<Expr>,
     pub body: Expr,
 }
 
@@ -197,6 +327,24 @@ pub struct Arm {
 pub enum Pat {
     Name { name: String, span: Span },
     Ctor { name: String, span: Span, fields: Vec<Pat> },
+    Int { value: i64, span: Span },
+    Bool { value: bool, span: Span },
+    Tuple { span: Span, fields: Vec<Pat> },
+    /// `Point { x, y: pat }`. A missing pattern means the field name is the binding.
+    Struct { name: String, span: Span, fields: Vec<(String, Span, Pat)> },
+}
+
+impl Pat {
+    pub fn span(&self) -> Span {
+        match self {
+            Pat::Name { span, .. }
+            | Pat::Ctor { span, .. }
+            | Pat::Int { span, .. }
+            | Pat::Bool { span, .. }
+            | Pat::Tuple { span, .. }
+            | Pat::Struct { span, .. } => *span,
+        }
+    }
 }
 
 impl BinOp {

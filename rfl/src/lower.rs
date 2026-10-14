@@ -13,7 +13,7 @@ use rcc_ir::BankTag;
 use crate::ast::{BinOp, UnaryOp};
 use crate::error::CompileError;
 use crate::ty::Ty;
-use crate::typed::{TBlock, TExpr, TExprKind, TFn, TModule, TStmt};
+use crate::typed::{AdtDef, CtorDef, TBlock, TExpr, TExprKind, TFn, TModule, TStmt};
 
 const RESUME: i64 = 0;
 const FUNC_ID: i64 = 1;
@@ -40,6 +40,8 @@ struct Proc {
     captures: Vec<LowerCap>,
     result_slot: Option<usize>,
     segs: Vec<Seg>,
+    structs: Vec<Vec<Ty>>,
+    tuples: Vec<Vec<Ty>>,
 }
 
 #[derive(Clone)]
@@ -48,8 +50,9 @@ struct LowerCap {
     parent: u32,
     /// Slot in this function that receives the copy.
     slot: usize,
+    ty: Ty,
     cells: i64,
-    /// Cell offset inside the environment object.
+    /// Cell offset inside the environment object. Cell 0 is the refcount.
     offset: i64,
 }
 
@@ -75,6 +78,40 @@ enum Insn {
     Putc { slot: usize },
     /// Build a closure value for a lifted lambda.
     Closure { dest: usize, func: String },
+    VecLit { dest: usize, elems: Vec<usize>, elem: Ty },
+    ArrayLit { dest: usize, elems: Vec<usize>, elem: Ty },
+    /// `base[start..end]`. `inclusive` means the end index is kept.
+    SliceNew { dest: usize, base: usize, start: usize, end: usize, inclusive: bool, elem: Ty },
+    ToVec { dest: usize, src: usize, elem: Ty },
+    Index { dest: usize, vec: usize, index: usize, elem: Ty },
+    Len { dest: usize, vec: usize },
+    Empty { dest: usize, vec: usize },
+    Clear { vec: usize },
+    Pop { vec: usize, value: usize, dest: usize, elem: Ty, some_tag: u16, none_tag: u16 },
+    Get { vec: usize, index: usize, value: usize, dest: usize, elem: Ty, some_tag: u16, none_tag: u16 },
+    Push { vec: usize, value: usize, elem: Ty },
+    IndexStore { vec: usize, index: usize, value: usize, elem: Ty },
+    /// Address of a local slot. The destination holds that pointer.
+    Borrow { dest: usize, slot: usize },
+    /// `expr?`. Failure writes the function result and returns.
+    Try {
+        src: usize,
+        dest: usize,
+        result: usize,
+        ok_tag: u16,
+        fail_tag: u16,
+        payload: Ty,
+        fail_slot: Option<usize>,
+        fail: Option<Ty>,
+    },
+    /// Release `dest`, then put `src` there. `transfer` clears `src` without an extra retain.
+    VecStore { dest: usize, src: usize, transfer: bool },
+    /// Store fields of an inline struct or tuple, in order.
+    Record { dest: usize, fields: Vec<usize> },
+    /// Copy `cells` words from `src` at `offset` into `dest`.
+    Take { dest: usize, src: usize, offset: i64 },
+    /// Store `src` at a cell offset inside `dest`.
+    FieldStore { dest: usize, offset: i64, src: usize },
 }
 
 enum Term {
@@ -86,10 +123,17 @@ enum Term {
     Apply { slot: usize, args: Vec<usize>, arg_tys: Vec<Ty>, dest: usize, next: usize },
     Tag { slot: usize, tag: u16, then_seg: usize, else_seg: usize },
     Fail,
+    /// Direct tail call. The callee reuses this frame's caller link.
+    Tail { callee: String, args: Vec<usize> },
+    /// Compare `slot` with `value` and branch.
+    Lit { slot: usize, value: i64, then_seg: usize, else_seg: usize },
 }
 
 struct Built {
     procs: Vec<Proc>,
+    adts: Vec<AdtDef>,
+    structs: Vec<Vec<Ty>>,
+    tuples: Vec<Vec<Ty>>,
     need_alloc: bool,
     need_fail: bool,
     need_heap: bool,
@@ -110,8 +154,8 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     let mut need_io = false;
     let mut need_print_num = false;
     for (func_id, func) in module.functions.iter().enumerate() {
-        let proc = build_fn(func, func_id)?;
-        if proc.segs.iter().any(|seg| matches!(seg.term, Some(Term::Call { .. } | Term::Apply { .. }))) {
+        let proc = build_fn(func, func_id, module.structs.clone(), module.tuples.clone())?;
+        if proc.segs.iter().any(|seg| matches!(seg.term, Some(Term::Call { .. } | Term::Apply { .. } | Term::Tail { .. }))) {
             need_alloc = true;
         }
         if proc.segs.len() > 1 || proc.segs.iter().any(|seg| matches!(seg.term, Some(Term::Fail))) {
@@ -125,6 +169,33 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
             need_fail = true;
         }
         if !proc.captures.is_empty() {
+            need_heap = true;
+            need_fail = true;
+        }
+        if proc.slots.iter().any(|slot| slot.ty.owns_buffer()) {
+            need_heap = true;
+            need_fail = true;
+        }
+        if proc.slots.iter().any(|slot| matches!(slot.ty, Ty::Adt(_) | Ty::Func(_))) {
+            need_heap = true;
+        }
+        if proc.segs.iter().any(|seg| {
+            seg.insns.iter().any(|insn| {
+                matches!(
+                    insn,
+                    Insn::Pop { .. }
+                        | Insn::Get { .. }
+                        | Insn::Push { .. }
+                        | Insn::Clear { .. }
+                        | Insn::IndexStore { .. }
+                        | Insn::Index { .. }
+                        | Insn::VecLit { .. }
+                        | Insn::SliceNew { .. }
+                        | Insn::ToVec { .. }
+                        | Insn::Try { fail: Some(_), .. }
+                )
+            })
+        }) {
             need_heap = true;
             need_fail = true;
         }
@@ -147,7 +218,17 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     if !procs.iter().any(|proc| proc.name == "main") {
         return Err(CompileError::plain("program has no main"));
     }
-    Ok(Built { procs, need_alloc, need_fail, need_heap, need_io, need_print_num })
+    Ok(Built {
+        procs,
+        adts: module.adts.clone(),
+        structs: module.structs.clone(),
+        tuples: module.tuples.clone(),
+        need_alloc,
+        need_fail,
+        need_heap,
+        need_io,
+        need_print_num,
+    })
 }
 
 struct FnBuild {
@@ -159,9 +240,13 @@ struct FnBuild {
     dead: bool,
     /// `(continue target, break target)` for each enclosing loop.
     loops: Vec<(usize, usize)>,
+    result: Option<usize>,
+    fn_name: String,
+    /// The expression under construction is in tail position.
+    tail_block: bool,
 }
 
-fn build_fn(func: &TFn, func_id: usize) -> Result<Proc, CompileError> {
+fn build_fn(func: &TFn, func_id: usize, structs: Vec<Vec<Ty>>, tuples: Vec<Vec<Ty>>) -> Result<Proc, CompileError> {
     let mut build = FnBuild {
         slots: Vec::new(),
         next_offset: PAYLOAD,
@@ -170,8 +255,12 @@ fn build_fn(func: &TFn, func_id: usize) -> Result<Proc, CompileError> {
         cur: 0,
         dead: false,
         loops: Vec::new(),
+        result: None,
+        fn_name: func.name.clone(),
+        tail_block: true,
     };
     let result_slot = if func.ret == Ty::Unit { None } else { Some(build.alloc(func.ret)) };
+    build.result = result_slot;
     let param_count = func.params.len();
     let mut env_at = None;
     for (index, ty) in func.bindings.iter().enumerate() {
@@ -187,12 +276,14 @@ fn build_fn(func: &TFn, func_id: usize) -> Result<Proc, CompileError> {
         build.next_offset += 2;
     }
     let mut captures = Vec::new();
-    let mut env_offset = 0i64;
+    // Cell 0 of an environment is its refcount. Captures follow it.
+    let mut env_offset = 1i64;
     for cap in &func.captures {
         let cells = cap.ty.cells();
         captures.push(LowerCap {
             parent: cap.parent,
             slot: build.binding_slot[cap.local as usize],
+            ty: cap.ty,
             cells,
             offset: env_offset,
         });
@@ -218,6 +309,8 @@ fn build_fn(func: &TFn, func_id: usize) -> Result<Proc, CompileError> {
         captures,
         result_slot,
         segs: build.segs,
+        structs,
+        tuples,
     })
 }
 
@@ -251,6 +344,7 @@ impl FnBuild {
     }
 
     fn emit_block(&mut self, block: &TBlock, result: Option<usize>) {
+        let tail_block = std::mem::replace(&mut self.tail_block, false);
         for stmt in &block.stmts {
             if self.dead {
                 return;
@@ -261,11 +355,13 @@ impl FnBuild {
             return;
         }
         if let Some(tail) = &block.tail {
+            self.tail_block = tail_block;
             if let Some(result) = result {
                 self.emit_expr_to(tail, result);
             } else {
                 self.emit_expr(tail);
             }
+            self.tail_block = false;
         }
     }
 
@@ -275,20 +371,67 @@ impl FnBuild {
                 let dest = self.binding_slot[*binding as usize];
                 self.emit_expr_to(init, dest);
             }
+            TStmt::Destructure { pat, init } => {
+                let slot = self.emit_expr(init);
+                if self.dead {
+                    return;
+                }
+                let fail = self.fresh();
+                self.bind_pat(pat, slot, fail);
+                let cont = self.cur;
+                self.cur = fail;
+                self.dead = false;
+                self.terminate(Term::Fail);
+                self.cur = cont;
+                self.dead = false;
+            }
             TStmt::Assign { binding, value } => {
                 let dest = self.binding_slot[*binding as usize];
-                self.emit_expr_to(value, dest);
+                if self.slots[dest].ty.owns_buffer() {
+                    let transfer = !matches!(value.kind, TExprKind::Name(_));
+                    let src = self.emit_expr(value);
+                    if src != dest {
+                        self.insn(Insn::VecStore { dest, src, transfer });
+                    }
+                } else {
+                    self.emit_expr_to(value, dest);
+                }
+            }
+            TStmt::FieldAssign { binding, offset, value } => {
+                let dest = self.binding_slot[*binding as usize];
+                let src = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::FieldStore { dest, offset: *offset, src });
+            }
+            TStmt::IndexAssign { binding, index, value, elem } => {
+                let vec = self.binding_slot[*binding as usize];
+                let index = self.emit_expr(index);
+                if self.dead {
+                    return;
+                }
+                let value = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::IndexStore { vec, index, value, elem: *elem });
             }
             TStmt::Expr(expr) => {
                 self.emit_expr(expr);
             }
             TStmt::Return(value) => {
+                let saved = self.tail_block;
+                self.tail_block = true;
                 if let (Some(result), Some(value)) = (result, value) {
                     self.emit_expr_to(value, result);
                 } else if let Some(value) = value {
                     self.emit_expr(value);
                 }
-                self.terminate(Term::Return);
+                self.tail_block = saved;
+                if !self.dead {
+                    self.terminate(Term::Return);
+                }
             }
             TStmt::Break => self.jump_loop(false),
             TStmt::Continue => self.jump_loop(true),
@@ -303,6 +446,8 @@ impl FnBuild {
     }
 
     fn emit_while(&mut self, cond: &TExpr, body: &TBlock) {
+        let saved = self.tail_block;
+        self.tail_block = false;
         let head = self.fresh();
         let body_seg = self.fresh();
         let after = self.fresh();
@@ -324,6 +469,74 @@ impl FnBuild {
         self.loops.pop();
         self.cur = after;
         self.dead = false;
+        self.tail_block = saved;
+    }
+
+    fn emit_for(
+        &mut self,
+        index: u32,
+        start: &TExpr,
+        end: &TExpr,
+        inclusive: bool,
+        extract: &Option<Box<TStmt>>,
+        body: &TBlock,
+    ) {
+        let saved = self.tail_block;
+        self.tail_block = false;
+        let idx = self.binding_slot[index as usize];
+        self.emit_expr_to(start, idx);
+        if self.dead {
+            self.tail_block = saved;
+            return;
+        }
+        let end_slot = self.emit_expr(end);
+        if self.dead {
+            self.tail_block = saved;
+            return;
+        }
+        let head = self.fresh();
+        let body_seg = self.fresh();
+        let step = self.fresh();
+        let after = self.fresh();
+        self.terminate(Term::Jump(head));
+        self.cur = head;
+        self.dead = false;
+        let cond = self.alloc(Ty::Bool);
+        let op = if inclusive { BinOp::Le } else { BinOp::Lt };
+        self.insn(Insn::Bin { dest: cond, op, lhs: idx, rhs: end_slot });
+        self.terminate(Term::If { cond, then_seg: body_seg, else_seg: after });
+        self.loops.push((step, after));
+        self.cur = body_seg;
+        self.dead = false;
+        if let Some(extract) = extract {
+            self.emit_stmt(extract, None);
+        }
+        if !self.dead {
+            self.emit_block(body, None);
+        }
+        if !self.dead {
+            self.terminate(Term::Jump(step));
+        }
+        self.cur = step;
+        self.dead = false;
+        if inclusive {
+            let eq = self.alloc(Ty::Bool);
+            self.insn(Insn::Bin { dest: eq, op: BinOp::Eq, lhs: idx, rhs: end_slot });
+            let inc = self.fresh();
+            self.terminate(Term::If { cond: eq, then_seg: after, else_seg: inc });
+            self.cur = inc;
+            self.dead = false;
+        }
+        let one = self.alloc(self.slots[idx].ty);
+        self.insn(Insn::Const { slot: one, value: 1 });
+        self.insn(Insn::Bin { dest: idx, op: BinOp::Add, lhs: idx, rhs: one });
+        if !self.dead {
+            self.terminate(Term::Jump(head));
+        }
+        self.loops.pop();
+        self.cur = after;
+        self.dead = false;
+        self.tail_block = saved;
     }
 
     fn emit_expr(&mut self, expr: &TExpr) -> usize {
@@ -402,6 +615,124 @@ impl FnBuild {
                 self.dead = false;
             }
             TExprKind::Closure { func } => self.insn(Insn::Closure { dest, func: func.clone() }),
+            TExprKind::ArrayLit { elems, elem } => {
+                let mut slots = Vec::new();
+                for elem in elems {
+                    slots.push(self.emit_expr(elem));
+                    if self.dead {
+                        return;
+                    }
+                }
+                self.insn(Insn::ArrayLit { dest, elems: slots, elem: *elem });
+            }
+            TExprKind::Slice { base, start, end, inclusive, elem } => {
+                let base = self.emit_expr(base);
+                if self.dead {
+                    return;
+                }
+                let start = self.emit_expr(start);
+                if self.dead {
+                    return;
+                }
+                let end = self.emit_expr(end);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::SliceNew { dest, base, start, end, inclusive: *inclusive, elem: *elem });
+            }
+            TExprKind::ToVec { src, elem } => {
+                let src = self.emit_expr(src);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::ToVec { dest, src, elem: *elem });
+            }
+            TExprKind::VecLit { elems, elem } => {
+                let mut slots = Vec::new();
+                for elem in elems {
+                    slots.push(self.emit_expr(elem));
+                    if self.dead {
+                        return;
+                    }
+                }
+                self.insn(Insn::VecLit { dest, elems: slots, elem: *elem });
+            }
+            TExprKind::Index { base, index, elem } => {
+                let vec = self.emit_expr(base);
+                if self.dead {
+                    return;
+                }
+                let index = self.emit_expr(index);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::Index { dest, vec, index, elem: *elem });
+            }
+            TExprKind::Len { vec } => {
+                let vec = self.emit_expr(vec);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::Len { dest, vec });
+            }
+            TExprKind::Empty { vec } => {
+                let vec = self.emit_expr(vec);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::Empty { dest, vec });
+            }
+            TExprKind::Clear { binding } => {
+                let vec = self.binding_slot[*binding as usize];
+                self.insn(Insn::Clear { vec });
+            }
+            TExprKind::Pop { binding, elem, some_tag, none_tag } => {
+                let value = self.alloc(*elem);
+                let vec = self.binding_slot[*binding as usize];
+                self.insn(Insn::Pop { vec, value, dest, elem: *elem, some_tag: *some_tag, none_tag: *none_tag });
+            }
+            TExprKind::Borrow { binding } => {
+                let slot = self.binding_slot[*binding as usize];
+                self.insn(Insn::Borrow { dest, slot });
+            }
+            TExprKind::Try { expr, ok_tag, fail_tag, payload, fail } => {
+                let src = self.emit_expr(expr);
+                if self.dead {
+                    return;
+                }
+                let result = self.result.expect("? is used in a function that returns a value");
+                let fail_slot = fail.map(|ty| self.alloc(ty));
+                self.insn(Insn::Try {
+                    src,
+                    dest,
+                    result,
+                    ok_tag: *ok_tag,
+                    fail_tag: *fail_tag,
+                    payload: *payload,
+                    fail_slot,
+                    fail: *fail,
+                });
+            }
+            TExprKind::Get { vec, index, elem, some_tag, none_tag } => {
+                let vec = self.emit_expr(vec);
+                if self.dead {
+                    return;
+                }
+                let index = self.emit_expr(index);
+                if self.dead {
+                    return;
+                }
+                let value = self.alloc(*elem);
+                self.insn(Insn::Get { vec, index, value, dest, elem: *elem, some_tag: *some_tag, none_tag: *none_tag });
+            }
+            TExprKind::Push { binding, value, elem } => {
+                let value = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                let vec = self.binding_slot[*binding as usize];
+                self.insn(Insn::Push { vec, value, elem: *elem });
+            }
             TExprKind::Call { callee, args } => {
                 let mut arg_slots = Vec::new();
                 for arg in args {
@@ -409,6 +740,10 @@ impl FnBuild {
                     if self.dead {
                         return;
                     }
+                }
+                if self.in_tail(dest, expr.ty) {
+                    self.terminate(Term::Tail { callee: callee.clone(), args: arg_slots });
+                    return;
                 }
                 let next = self.fresh();
                 self.segs[self.cur].term = Some(Term::Call {
@@ -449,6 +784,26 @@ impl FnBuild {
             }
             TExprKind::Block(block) => self.emit_block(block, Some(dest)),
             TExprKind::While { cond, body } => self.emit_while(cond, body),
+            TExprKind::ForIter { index, start, end, inclusive, extract, body } => {
+                self.emit_for(*index, start, end, *inclusive, extract, body);
+            }
+            TExprKind::Record { fields } => {
+                let mut slots = Vec::new();
+                for field in fields {
+                    slots.push(self.emit_expr(field));
+                    if self.dead {
+                        return;
+                    }
+                }
+                self.insn(Insn::Record { dest, fields: slots });
+            }
+            TExprKind::Field { base, offset } => {
+                let src = self.emit_expr(base);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::Take { dest, src, offset: *offset });
+            }
             TExprKind::Ctor { tag, args } => {
                 let mut fields = Vec::new();
                 for arg in args {
@@ -539,6 +894,17 @@ impl FnBuild {
             let fail = self.fresh();
             self.bind_pat(&arm.pat, slot, fail);
             if !self.dead {
+                if let Some(guard) = &arm.guard {
+                    let cond = self.emit_expr(guard);
+                    if !self.dead {
+                        let ok = self.fresh();
+                        self.terminate(Term::If { cond, then_seg: ok, else_seg: fail });
+                        self.cur = ok;
+                        self.dead = false;
+                    }
+                }
+            }
+            if !self.dead {
                 self.emit_block(&arm.body, Some(dest));
             }
             if !self.dead {
@@ -569,7 +935,8 @@ impl FnBuild {
                 self.terminate(Term::Tag { slot, tag: *tag, then_seg: ok, else_seg: fail });
                 self.cur = ok;
                 self.dead = false;
-                let mut offset = 1i64;
+                // Payload objects are refcount, tag, then fields.
+                let mut offset = 2i64;
                 for field in fields {
                     let cells = field.ty.cells();
                     match field.pat.as_ref() {
@@ -590,6 +957,41 @@ impl FnBuild {
                     offset += cells;
                 }
             }
+            crate::typed::TPat::Lit(value) => {
+                let ok = self.fresh();
+                self.terminate(Term::Lit { slot, value: *value, then_seg: ok, else_seg: fail });
+                self.cur = ok;
+                self.dead = false;
+            }
+            crate::typed::TPat::Product { fields } => {
+                for field in fields {
+                    match field.pat.as_ref() {
+                        crate::typed::TPat::Wild => {}
+                        crate::typed::TPat::Bind(id) => {
+                            let dest = self.binding_slot[*id as usize];
+                            self.insn(Insn::Take { dest, src: slot, offset: field.offset });
+                        }
+                        nested => {
+                            let dest = self.alloc(field.ty);
+                            self.insn(Insn::Take { dest, src: slot, offset: field.offset });
+                            self.bind_pat(nested, dest, fail);
+                            if self.dead {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn in_tail(&self, dest: usize, ty: Ty) -> bool {
+        if !self.tail_block || self.fn_name == "main" {
+            return false;
+        }
+        match self.result {
+            Some(slot) => dest == slot,
+            None => ty == Ty::Unit,
         }
     }
 }
@@ -617,7 +1019,7 @@ fn fold_bin(op: BinOp, result: Ty, operand: Ty, a: i64, b: i64) -> Option<i64> {
 fn bits(ty: Ty, value: i64) -> u64 {
     match ty {
         Ty::I8 | Ty::U8 => value as u8 as u64,
-        Ty::I16 | Ty::U16 => value as u16 as u64,
+        Ty::I16 | Ty::U16 | Ty::Usize => value as u16 as u64,
         Ty::I32 | Ty::U32 => value as u32 as u64,
         _ => value as u64,
     }
@@ -639,12 +1041,12 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     }
     if built.need_alloc || built.need_heap {
         module.add_function(extern_fn("malloc", ptr_ty(), vec![IrType::I32]));
+        module.add_function(extern_fn("free", IrType::Void, vec![ptr_ty()]));
     }
     if built.need_io {
         module.add_function(extern_fn("putchar", IrType::Void, vec![IrType::I16]));
     }
     if built.need_alloc {
-        module.add_function(extern_fn("free", IrType::Void, vec![ptr_ty()]));
         module.add_global(GlobalVariable {
             name: "rfl_bump".to_string(),
             var_type: ptr_ty(),
@@ -670,6 +1072,7 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
         emit_print_u64(&mut builder)?;
         module.add_function(builder.finish_function().unwrap());
     }
+    emit_arc(&mut builder, &mut module, built)?;
     Ok(module)
 }
 
@@ -877,8 +1280,11 @@ fn emit_seg(
     labels: &[u32],
     index: usize,
 ) -> Result<(), CompileError> {
-    if index == 0 && !proc.captures.is_empty() {
-        emit_capture_loads(builder, proc, frame)?;
+    if index == 0 {
+        zero_managed_slots(builder, proc, frame)?;
+        if !proc.captures.is_empty() {
+            emit_capture_loads(builder, proc, frame)?;
+        }
     }
     for insn in &proc.segs[index].insns {
         emit_insn(builder, proc, built, frame, insn)?;
@@ -905,6 +1311,13 @@ fn emit_seg(
             builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
             builder.build_return(Some(null_ptr())).ir()
         }
+        Term::Lit { slot, value, then_seg, else_seg } => {
+            let ty = proc.slots[*slot].ty;
+            let got = load_slot(builder, proc, frame, *slot)?;
+            let same = builder.build_binary(IrBinaryOp::Eq, got, Value::Constant(ty.bits(*value)), IrType::I1).ir()?;
+            builder.build_branch_cond(Value::Temp(same), labels[*then_seg], labels[*else_seg]).ir()
+        }
+        Term::Tail { callee, args } => emit_tail_call(builder, proc, built, frame, callee, args),
     }
 }
 
@@ -915,7 +1328,16 @@ fn emit_insn(builder: &mut IrBuilder, proc: &Proc, built: &Built, frame: &Value,
             let ptr = gep(builder, frame, slot.offset)?;
             builder.build_store(Value::Constant(*value), ptr, ir_ty(slot.ty)).ir()
         }
-        Insn::Copy { dest, src } => copy_slot(builder, proc, frame, *src, proc, frame, *dest),
+        Insn::Copy { dest, src } => {
+            if *dest != *src && keeps(proc, proc.slots[*dest].ty) {
+                release_managed(builder, proc, frame, *dest)?;
+            }
+            if *dest != *src {
+                copy_slot(builder, proc, frame, *src, proc, frame, *dest)
+            } else {
+                Ok(())
+            }
+        }
         Insn::Bin { dest, op, lhs, rhs } => emit_bin(builder, proc, frame, *dest, *op, *lhs, *rhs),
         Insn::Neg { dest, src } => {
             let slot = &proc.slots[*src];
@@ -952,16 +1374,43 @@ fn emit_insn(builder: &mut IrBuilder, proc: &Proc, built: &Built, frame: &Value,
                 let callee = built.procs.iter().find(|item| item.name == *func).unwrap();
                 (callee.func_id, callee.frame_cells, callee.captures.clone())
             };
+            let (addr, bank) = if captures.is_empty() {
+                (Value::Constant(0), Value::Constant(0))
+            } else {
+                emit_env(builder, proc, frame, &captures)?
+            };
+            release_managed(builder, proc, frame, *dest)?;
             let base = proc.slots[*dest].offset;
             store_cell(builder, frame, base, Value::Constant(func_id as i64))?;
             store_cell(builder, frame, base + 1, Value::Constant(frame_cells))?;
-            if captures.is_empty() {
-                store_cell(builder, frame, base + 2, Value::Constant(0))?;
-                store_cell(builder, frame, base + 3, Value::Constant(0))
-            } else {
-                emit_env(builder, proc, frame, base, &captures)
-            }
+            store_cell(builder, frame, base + 2, addr)?;
+            store_cell(builder, frame, base + 3, bank)
         }
+        Insn::VecLit { dest, elems, elem } => emit_vec_lit(builder, proc, frame, *dest, elems, *elem),
+        Insn::ArrayLit { dest, elems, elem } => emit_array_lit(builder, proc, frame, *dest, elems, *elem),
+        Insn::SliceNew { dest, base, start, end, inclusive, elem } => {
+            emit_slice_new(builder, proc, frame, *dest, *base, *start, *end, *inclusive, *elem)
+        }
+        Insn::ToVec { dest, src, elem } => emit_to_vec(builder, proc, frame, *dest, *src, *elem),
+        Insn::Index { dest, vec, index, elem } => emit_vec_index(builder, proc, frame, *dest, *vec, *index, *elem),
+        Insn::Len { dest, vec } => emit_vec_len(builder, proc, frame, *dest, *vec),
+        Insn::Empty { dest, vec } => emit_vec_empty(builder, proc, frame, *dest, *vec),
+        Insn::Clear { vec } => emit_vec_clear(builder, proc, frame, *vec),
+        Insn::Pop { vec, value, dest, elem, some_tag, none_tag } => {
+            emit_vec_pop(builder, proc, frame, *vec, *value, *dest, *elem, *some_tag, *none_tag)
+        }
+        Insn::Get { vec, index, value, dest, elem, some_tag, none_tag } => {
+            emit_vec_get(builder, proc, frame, *vec, *index, *value, *dest, *elem, *some_tag, *none_tag)
+        }
+        Insn::Borrow { dest, slot } => emit_borrow(builder, proc, frame, *dest, *slot),
+        Insn::Try { src, dest, result, ok_tag, fail_tag, payload, fail_slot, fail } => {
+            emit_try(builder, proc, frame, *src, *dest, *result, *ok_tag, *fail_tag, *payload, *fail_slot, *fail, built.need_alloc)
+        }
+        Insn::Push { vec, value, elem } => emit_vec_push(builder, proc, frame, *vec, *value, *elem),
+        Insn::IndexStore { vec, index, value, elem } => {
+            emit_vec_index_store(builder, proc, frame, *vec, *index, *value, *elem)
+        }
+        Insn::VecStore { dest, src, transfer } => emit_vec_store(builder, proc, frame, *dest, *src, *transfer),
         Insn::Putc { slot } => {
             let ty = proc.slots[*slot].ty;
             let value = load_slot(builder, proc, frame, *slot)?;
@@ -974,6 +1423,9 @@ fn emit_insn(builder: &mut IrBuilder, proc: &Proc, built: &Built, frame: &Value,
             };
             putchar(builder, cell)
         }
+        Insn::Record { dest, fields } => emit_record(builder, proc, frame, *dest, fields),
+        Insn::Take { dest, src, offset } => emit_take(builder, proc, frame, *dest, *src, *offset),
+        Insn::FieldStore { dest, offset, src } => emit_field_store(builder, proc, frame, *dest, *offset, *src),
         Insn::Cast { dest, src, from, to } => {
             let value = load_slot(builder, proc, frame, *src)?;
             let cast = cast_value(builder, value, *from, *to)?;
@@ -1017,24 +1469,35 @@ fn emit_return(builder: &mut IrBuilder, proc: &Proc, frame: &Value, release: boo
     let caller = builder.new_label();
     builder.build_branch_cond(Value::Temp(is_root), root, caller).ir()?;
     builder.create_block(root).ir()?;
+    release_managed_slots(builder, proc, frame)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(caller).ir()?;
     let caller_ptr = load_fat(builder, frame, CALLER)?;
     if let Some(result) = proc.result_slot {
         let dest = load_cell(builder, frame, DEST, IrType::I16)?;
         let slot = builder.build_pointer_offset(caller_ptr.clone(), dest, ptr_ty()).ir()?;
-        if matches!(proc.ret, Ty::Adt(_) | Ty::Func(_)) {
+        if cell_wise(proc.ret) {
             let start = proc.slots[result].offset;
+            let mut words = Vec::new();
             for index in 0..proc.ret.cells() {
-                let value = load_cell(builder, frame, start + index, IrType::I16)?;
-                let cell = builder.build_pointer_offset(slot.clone(), Value::Constant(index), ptr_ty()).ir()?;
+                words.push(load_cell(builder, frame, start + index, IrType::I16)?);
+            }
+            if keeps(proc, proc.ret) {
+                release_managed_through(builder, proc, &slot, proc.ret)?;
+            }
+            for (index, value) in words.into_iter().enumerate() {
+                let cell = builder.build_pointer_offset(slot.clone(), Value::Constant(index as i64), ptr_ty()).ir()?;
                 builder.build_store(value, cell, IrType::I16).ir()?;
+            }
+            if keeps(proc, proc.ret) {
+                retain_managed_through(builder, proc, &slot, proc.ret)?;
             }
         } else {
             let value = load_slot(builder, proc, frame, result)?;
             builder.build_store(value, slot, ir_ty(proc.ret)).ir()?;
         }
     }
+    release_managed_slots(builder, proc, frame)?;
     if release {
         let saved = builder.build_alloca(ptr_ty(), None).ir()?;
         builder.build_store(caller_ptr, saved.clone(), ptr_ty()).ir()?;
@@ -1044,6 +1507,194 @@ fn emit_return(builder: &mut IrBuilder, proc: &Proc, frame: &Value, release: boo
     } else {
         builder.build_return(Some(caller_ptr)).ir()
     }
+}
+
+fn keeps(proc: &Proc, ty: Ty) -> bool {
+    match ty {
+        Ty::Struct { id, .. } => proc.structs[id as usize].iter().any(|field| keeps(proc, *field)),
+        Ty::Tuple { id, .. } => proc.tuples[id as usize].iter().any(|field| keeps(proc, *field)),
+        other => other.is_managed(),
+    }
+}
+
+fn retain_tree(builder: &mut IrBuilder, proc: &Proc, frame: &Value, offset: i64, ty: Ty) -> Result<(), CompileError> {
+    match ty {
+        Ty::Struct { id, .. } => {
+            let mut at = offset;
+            for field in proc.structs[id as usize].clone() {
+                retain_tree(builder, proc, frame, at, field)?;
+                at += field.cells();
+            }
+            Ok(())
+        }
+        Ty::Tuple { id, .. } => {
+            let mut at = offset;
+            for field in proc.tuples[id as usize].clone() {
+                retain_tree(builder, proc, frame, at, field)?;
+                at += field.cells();
+            }
+            Ok(())
+        }
+        other => retain_value_at(builder, frame, offset, other),
+    }
+}
+
+fn release_tree(builder: &mut IrBuilder, proc: &Proc, frame: &Value, offset: i64, ty: Ty) -> Result<(), CompileError> {
+    match ty {
+        Ty::Struct { id, .. } => {
+            let mut at = offset;
+            for field in proc.structs[id as usize].clone() {
+                release_tree(builder, proc, frame, at, field)?;
+                at += field.cells();
+            }
+            Ok(())
+        }
+        Ty::Tuple { id, .. } => {
+            let mut at = offset;
+            for field in proc.tuples[id as usize].clone() {
+                release_tree(builder, proc, frame, at, field)?;
+                at += field.cells();
+            }
+            Ok(())
+        }
+        Ty::Vec(_) | Ty::Slice(_) => release_vec(builder, frame, offset),
+        Ty::Adt(id) => {
+            let tag = load_cell(builder, frame, offset, IrType::I16)?;
+            let addr = load_cell(builder, frame, offset + 1, IrType::I16)?;
+            let bank = load_cell(builder, frame, offset + 2, IrType::I16)?;
+            call_if_live(builder, &format!("rfl_drop_adt_{id}"), vec![tag, addr, bank])?;
+            store_cell(builder, frame, offset + 1, Value::Constant(0))?;
+            store_cell(builder, frame, offset + 2, Value::Constant(0))
+        }
+        Ty::Func(_) => {
+            let id = load_cell(builder, frame, offset, IrType::I16)?;
+            let addr = load_cell(builder, frame, offset + 2, IrType::I16)?;
+            let bank = load_cell(builder, frame, offset + 3, IrType::I16)?;
+            call_if_live(builder, "rfl_drop_func", vec![id, addr, bank])?;
+            store_cell(builder, frame, offset + 2, Value::Constant(0))?;
+            store_cell(builder, frame, offset + 3, Value::Constant(0))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn emit_record(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, fields: &[usize]) -> Result<(), CompileError> {
+    if keeps(proc, proc.slots[dest].ty) {
+        release_tree(builder, proc, frame, proc.slots[dest].offset, proc.slots[dest].ty)?;
+    }
+    let mut offset = proc.slots[dest].offset;
+    for field in fields {
+        let ty = proc.slots[*field].ty;
+        for index in 0..ty.cells() {
+            let value = load_cell(builder, frame, proc.slots[*field].offset + index, IrType::I16)?;
+            store_cell(builder, frame, offset, value)?;
+            offset += 1;
+        }
+        if keeps(proc, ty) {
+            retain_tree(builder, proc, frame, offset - ty.cells(), ty)?;
+        }
+    }
+    Ok(())
+}
+
+fn emit_take(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, src: usize, offset: i64) -> Result<(), CompileError> {
+    let ty = proc.slots[dest].ty;
+    let from = proc.slots[src].offset + offset;
+    if keeps(proc, ty) {
+        release_tree(builder, proc, frame, proc.slots[dest].offset, ty)?;
+    }
+    for index in 0..ty.cells() {
+        let value = load_cell(builder, frame, from + index, IrType::I16)?;
+        store_cell(builder, frame, proc.slots[dest].offset + index, value)?;
+    }
+    if keeps(proc, ty) {
+        retain_tree(builder, proc, frame, proc.slots[dest].offset, ty)?;
+    }
+    Ok(())
+}
+
+fn emit_field_store(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, offset: i64, src: usize) -> Result<(), CompileError> {
+    let ty = proc.slots[src].ty;
+    let at = proc.slots[dest].offset + offset;
+    if keeps(proc, ty) {
+        release_tree(builder, proc, frame, at, ty)?;
+    }
+    for index in 0..ty.cells() {
+        let value = load_cell(builder, frame, proc.slots[src].offset + index, IrType::I16)?;
+        store_cell(builder, frame, at + index, value)?;
+    }
+    if keeps(proc, ty) {
+        retain_tree(builder, proc, frame, at, ty)?;
+    }
+    Ok(())
+}
+
+fn emit_tail_call(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    built: &Built,
+    frame: &Value,
+    callee: &str,
+    args: &[usize],
+) -> Result<(), CompileError> {
+    let callee_proc = built.procs.iter().find(|proc| proc.name == callee).unwrap();
+    let mut saved = Vec::new();
+    for arg in args {
+        let ty = proc.slots[*arg].ty;
+        if keeps(proc, ty) {
+            retain_tree(builder, proc, frame, proc.slots[*arg].offset, ty)?;
+        }
+        let mut words = Vec::new();
+        if ty != Ty::Unit {
+            if cell_wise(ty) {
+                for index in 0..ty.cells() {
+                    let value = load_cell(builder, frame, proc.slots[*arg].offset + index, IrType::I16)?;
+                    let mem = builder.build_alloca(IrType::I16, None).ir()?;
+                    builder.build_store(value, mem.clone(), IrType::I16).ir()?;
+                    words.push(mem);
+                }
+            } else {
+                let value = load_slot(builder, proc, frame, *arg)?;
+                let mem = builder.build_alloca(ir_ty(ty), None).ir()?;
+                builder.build_store(value, mem.clone(), ir_ty(ty)).ir()?;
+                words.push(mem);
+            }
+        }
+        saved.push(words);
+    }
+    let caller_mem = builder.build_alloca(ptr_ty(), None).ir()?;
+    let caller_ptr = load_fat(builder, frame, CALLER)?;
+    builder.build_store(caller_ptr, caller_mem.clone(), ptr_ty()).ir()?;
+    let dest_mem = builder.build_alloca(IrType::I16, None).ir()?;
+    let dest_off = load_cell(builder, frame, DEST, IrType::I16)?;
+    builder.build_store(dest_off, dest_mem.clone(), IrType::I16).ir()?;
+    release_managed_slots(builder, proc, frame)?;
+    builder.build_call(Value::Global("rfl_frame_release".to_string()), vec![frame.clone()], IrType::Void).ir()?;
+    let words = i32_const(builder, callee_proc.frame_cells)?;
+    let raw = builder.build_call(Value::Global("rfl_frame_alloc".to_string()), vec![words], ptr_ty()).ir()?.unwrap();
+    let callee_frame = fat_temp(raw, BankTag::Mixed);
+    store_cell(builder, &callee_frame, RESUME, Value::Constant(0))?;
+    store_cell(builder, &callee_frame, FUNC_ID, Value::Constant(callee_proc.func_id as i64))?;
+    let saved_caller = load_ptr_slot(builder, &caller_mem)?;
+    let caller_slot = gep(builder, &callee_frame, CALLER)?;
+    builder.build_store(saved_caller, caller_slot, ptr_ty()).ir()?;
+    let saved_dest = Value::Temp(builder.build_load(dest_mem, IrType::I16).ir()?);
+    store_cell(builder, &callee_frame, DEST, saved_dest)?;
+    for (words, param) in saved.iter().zip(&callee_proc.param_slots) {
+        let ty = callee_proc.slots[*param].ty;
+        let base = callee_proc.slots[*param].offset;
+        if cell_wise(ty) {
+            for (index, mem) in words.iter().enumerate() {
+                let value = Value::Temp(builder.build_load(mem.clone(), IrType::I16).ir()?);
+                store_cell(builder, &callee_frame, base + index as i64, value)?;
+            }
+        } else if let Some(mem) = words.first() {
+            let value = Value::Temp(builder.build_load(mem.clone(), ir_ty(ty)).ir()?);
+            let ptr = gep(builder, &callee_frame, base)?;
+            builder.build_store(value, ptr, ir_ty(ty)).ir()?;
+        }
+    }
+    builder.build_return(Some(callee_frame)).ir()
 }
 
 fn emit_call(
@@ -1122,10 +1773,13 @@ fn copy_to_offset(
     if ty == Ty::Unit {
         return Ok(());
     }
-    if matches!(ty, Ty::Adt(_) | Ty::Func(_)) {
+    if cell_wise(ty) {
         for index in 0..ty.cells() {
             let value = load_cell(builder, src_frame, src_proc.slots[src].offset + index, IrType::I16)?;
             store_cell(builder, dest_frame, dest_offset + index, value)?;
+        }
+        if keeps(src_proc, ty) {
+            retain_tree(builder, src_proc, dest_frame, dest_offset, ty)?;
         }
         return Ok(());
     }
@@ -1223,12 +1877,15 @@ fn emit_capture_loads(builder: &mut IrBuilder, proc: &Proc, frame: &Value) -> Re
             let value = load_cell(builder, &env, cap.offset + index, IrType::I16)?;
             store_cell(builder, frame, dest + index, value)?;
         }
+        if keeps(proc, proc.slots[cap.slot].ty) {
+            retain_managed(builder, proc, frame, cap.slot)?;
+        }
     }
     Ok(())
 }
 
-fn emit_env(builder: &mut IrBuilder, proc: &Proc, frame: &Value, base: i64, captures: &[LowerCap]) -> Result<(), CompileError> {
-    let words = captures.iter().map(|cap| cap.cells).sum::<i64>();
+fn emit_env(builder: &mut IrBuilder, proc: &Proc, frame: &Value, captures: &[LowerCap]) -> Result<(Value, Value), CompileError> {
+    let words = 1 + captures.iter().map(|cap| cap.cells).sum::<i64>();
     let size = i32_const(builder, words)?;
     let raw = builder.build_call(Value::Global("malloc".to_string()), vec![size], ptr_ty()).ir()?.unwrap();
     let obj = fat_temp(raw, BankTag::Mixed);
@@ -1240,17 +1897,1108 @@ fn emit_env(builder: &mut IrBuilder, proc: &Proc, frame: &Value, base: i64, capt
     builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
+    store_object_cell(builder, &obj, OBJ_REFS, Value::Constant(1))?;
     for cap in captures {
-        let src = proc.slots[proc.binding_slots[cap.parent as usize]].offset;
+        let parent = proc.binding_slots[cap.parent as usize];
+        let src = proc.slots[parent].offset;
         for index in 0..cap.cells {
             let value = load_cell(builder, frame, src + index, IrType::I16)?;
             store_object_cell(builder, &obj, cap.offset + index, value)?;
         }
+        if keeps(proc, proc.slots[parent].ty) {
+            retain_managed(builder, proc, frame, parent)?;
+        }
     }
     let addr = low16_of_ptr(builder, &obj)?;
     let bank = bank16_of_ptr(builder, &obj)?;
-    store_cell(builder, frame, base + 2, addr)?;
-    store_cell(builder, frame, base + 3, bank)
+    Ok((addr, bank))
+}
+
+const VEC_REFS: i64 = 0;
+const VEC_LEN: i64 = 1;
+const VEC_CAP: i64 = 2;
+const VEC_DATA: i64 = 3;
+/// Refcount, then tag, then constructor fields.
+const OBJ_REFS: i64 = 0;
+const OBJ_TAG: i64 = 1;
+const OBJ_FIELDS: i64 = 2;
+
+fn zero_managed_slots(builder: &mut IrBuilder, proc: &Proc, frame: &Value) -> Result<(), CompileError> {
+    for (index, slot) in proc.slots.iter().enumerate() {
+        if keeps(proc, slot.ty) && !proc.param_slots.contains(&index) {
+            for cell in 0..slot.ty.cells() {
+                store_cell(builder, frame, slot.offset + cell, Value::Constant(0))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn release_managed_slots(builder: &mut IrBuilder, proc: &Proc, frame: &Value) -> Result<(), CompileError> {
+    for index in 0..proc.slots.len() {
+        if keeps(proc, proc.slots[index].ty) {
+            release_managed(builder, proc, frame, index)?;
+        }
+    }
+    Ok(())
+}
+
+fn retain_vec(builder: &mut IrBuilder, frame: &Value, offset: i64) -> Result<(), CompileError> {
+    let addr = load_cell(builder, frame, offset, IrType::I16)?;
+    let bank = load_cell(builder, frame, offset + 1, IrType::I16)?;
+    adjust_refcount(builder, addr, bank, true)
+}
+
+fn release_vec(builder: &mut IrBuilder, frame: &Value, offset: i64) -> Result<(), CompileError> {
+    let addr = load_cell(builder, frame, offset, IrType::I16)?;
+    let bank = load_cell(builder, frame, offset + 1, IrType::I16)?;
+    adjust_refcount(builder, addr, bank, false)
+}
+
+/// `retain` increments. Otherwise the last reference frees the buffer and any earlier one decrements.
+fn adjust_refcount(builder: &mut IrBuilder, addr: Value, bank: Value, retain: bool) -> Result<(), CompileError> {
+    let skip = builder.new_label();
+    let go = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), skip, go).ir()?;
+    builder.create_block(go).ir()?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let refs = load_cell(builder, &obj, VEC_REFS, IrType::I16)?;
+    if retain {
+        let next = builder.build_binary(IrBinaryOp::Add, refs, Value::Constant(1), IrType::I16).ir()?;
+        store_object_cell(builder, &obj, VEC_REFS, Value::Temp(next))?;
+        builder.build_branch(skip).ir()?;
+    } else {
+        let last = builder.build_binary(IrBinaryOp::Eq, refs.clone(), Value::Constant(1), IrType::I1).ir()?;
+        let free_it = builder.new_label();
+        let dec = builder.new_label();
+        builder.build_branch_cond(Value::Temp(last), free_it, dec).ir()?;
+        builder.create_block(dec).ir()?;
+        let next = builder.build_binary(IrBinaryOp::Sub, refs, Value::Constant(1), IrType::I16).ir()?;
+        store_object_cell(builder, &obj, VEC_REFS, Value::Temp(next))?;
+        builder.build_branch(skip).ir()?;
+        builder.create_block(free_it).ir()?;
+        builder.build_call(Value::Global("free".to_string()), vec![obj], IrType::Void).ir()?;
+        builder.build_branch(skip).ir()?;
+    }
+    builder.create_block(skip).ir()?;
+    Ok(())
+}
+
+fn emit_vec_store(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    src: usize,
+    transfer: bool,
+) -> Result<(), CompileError> {
+    release_vec(builder, frame, proc.slots[dest].offset)?;
+    let cells = proc.slots[src].ty.cells();
+    for index in 0..cells {
+        let value = load_cell(builder, frame, proc.slots[src].offset + index, IrType::I16)?;
+        store_cell(builder, frame, proc.slots[dest].offset + index, value)?;
+    }
+    if transfer {
+        store_cell(builder, frame, proc.slots[src].offset, Value::Constant(0))?;
+        store_cell(builder, frame, proc.slots[src].offset + 1, Value::Constant(0))
+    } else {
+        retain_vec(builder, frame, proc.slots[dest].offset)
+    }
+}
+
+fn runtime_fail(builder: &mut IrBuilder) -> Result<(), CompileError> {
+    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    builder.build_return(Some(null_ptr())).ir()
+}
+
+fn exclusive_end(builder: &mut IrBuilder, end: Value, inclusive: bool) -> Result<Value, CompileError> {
+    if !inclusive {
+        return Ok(end);
+    }
+    let exclusive = Value::Temp(builder.build_binary(IrBinaryOp::Add, end.clone(), Value::Constant(1), IrType::I16).ir()?);
+    let wrapped = builder.build_binary(IrBinaryOp::Ule, exclusive.clone(), end, IrType::I1).ir()?;
+    let bad = builder.new_label();
+    let ok = builder.new_label();
+    builder.build_branch_cond(Value::Temp(wrapped), bad, ok).ir()?;
+    builder.create_block(bad).ir()?;
+    runtime_fail(builder)?;
+    builder.create_block(ok).ir()?;
+    Ok(exclusive)
+}
+
+fn check_range(builder: &mut IrBuilder, start: Value, exclusive: Value, len: Value) -> Result<(), CompileError> {
+    let bad = builder.new_label();
+    let mid = builder.new_label();
+    let ok = builder.new_label();
+    let start_ok = builder.build_binary(IrBinaryOp::Ule, start, exclusive.clone(), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(start_ok), mid, bad).ir()?;
+    builder.create_block(mid).ir()?;
+    let end_ok = builder.build_binary(IrBinaryOp::Ule, exclusive, len, IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(end_ok), ok, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    runtime_fail(builder)?;
+    builder.create_block(ok).ir()?;
+    Ok(())
+}
+
+fn store_empty_slice(builder: &mut IrBuilder, frame: &Value, offset: i64) -> Result<(), CompileError> {
+    for cell in 0..4 {
+        store_cell(builder, frame, offset + cell, Value::Constant(0))?;
+    }
+    Ok(())
+}
+
+fn emit_array_lit(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    elems: &[usize],
+    elem: Ty,
+) -> Result<(), CompileError> {
+    let mut at = proc.slots[dest].offset;
+    for slot in elems {
+        for cell in 0..elem.cells() {
+            let value = load_cell(builder, frame, proc.slots[*slot].offset + cell, IrType::I16)?;
+            store_cell(builder, frame, at, value)?;
+            at += 1;
+        }
+    }
+    Ok(())
+}
+
+fn copy_inline_elem(
+    builder: &mut IrBuilder,
+    frame: &Value,
+    base: i64,
+    index: Value,
+    width: i64,
+    dest: i64,
+) -> Result<(), CompileError> {
+    let scaled = scale_index(builder, index, width)?;
+    let origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(base), scaled, IrType::I16).ir()?);
+    for cell in 0..width {
+        let off = Value::Temp(builder.build_binary(IrBinaryOp::Add, origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let ptr = builder.build_pointer_offset(frame.clone(), off, ptr_ty()).ir()?;
+        let word = Value::Temp(builder.build_load(ptr, IrType::I16).ir()?);
+        store_cell(builder, frame, dest + cell, word)?;
+    }
+    Ok(())
+}
+
+fn store_inline_elem(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    value: usize,
+    base: i64,
+    index: Value,
+    width: i64,
+) -> Result<(), CompileError> {
+    let scaled = scale_index(builder, index, width)?;
+    let origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(base), scaled, IrType::I16).ir()?);
+    for cell in 0..width {
+        let word = load_cell(builder, frame, proc.slots[value].offset + cell, IrType::I16)?;
+        let off = Value::Temp(builder.build_binary(IrBinaryOp::Add, origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let ptr = builder.build_pointer_offset(frame.clone(), off, ptr_ty()).ir()?;
+        builder.build_store(word, ptr, IrType::I16).ir()?;
+    }
+    Ok(())
+}
+
+fn emit_array_index(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    array: usize,
+    index: usize,
+) -> Result<(), CompileError> {
+    let Ty::Array { len, width, .. } = proc.slots[array].ty else {
+        return Ok(());
+    };
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), Value::Constant(len as i64), IrType::I1).ir()?;
+    let bad = builder.new_label();
+    let ok = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    runtime_fail(builder)?;
+    builder.create_block(ok).ir()?;
+    copy_inline_elem(builder, frame, proc.slots[array].offset, at, width as i64, proc.slots[dest].offset)
+}
+
+fn emit_array_store(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    array: usize,
+    index: usize,
+    value: usize,
+) -> Result<(), CompileError> {
+    let Ty::Array { len, width, .. } = proc.slots[array].ty else {
+        return Ok(());
+    };
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), Value::Constant(len as i64), IrType::I1).ir()?;
+    let bad = builder.new_label();
+    let ok = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    runtime_fail(builder)?;
+    builder.create_block(ok).ir()?;
+    store_inline_elem(builder, proc, frame, value, proc.slots[array].offset, at, width as i64)
+}
+
+fn emit_array_get(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    array: usize,
+    index: usize,
+    value: usize,
+    dest: usize,
+    elem: Ty,
+    some_tag: u16,
+    none_tag: u16,
+) -> Result<(), CompileError> {
+    let Ty::Array { len, width, .. } = proc.slots[array].ty else {
+        return Ok(());
+    };
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), Value::Constant(len as i64), IrType::I1).ir()?;
+    let none = builder.new_label();
+    let ok = builder.new_label();
+    let done = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, none).ir()?;
+    builder.create_block(ok).ir()?;
+    copy_inline_elem(builder, frame, proc.slots[array].offset, at, width as i64, proc.slots[value].offset)?;
+    emit_make(builder, proc, frame, dest, some_tag, &[(value, elem.cells())])?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(none).ir()?;
+    store_immediate(builder, frame, dest, proc, none_tag)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_slice_index(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    slice: usize,
+    index: usize,
+    elem: Ty,
+) -> Result<(), CompileError> {
+    let base = proc.slots[slice].offset;
+    let len = load_cell(builder, frame, base + 3, IrType::I16)?;
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
+    let bad = builder.new_label();
+    let ok = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    runtime_fail(builder)?;
+    builder.create_block(ok).ir()?;
+    let start = load_cell(builder, frame, base + 2, IrType::I16)?;
+    let elem_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start, at, IrType::I16).ir()?);
+    let addr = load_cell(builder, frame, base, IrType::I16)?;
+    let bank = load_cell(builder, frame, base + 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let scaled = scale_index(builder, elem_at, elem.cells())?;
+    let data = Value::Temp(builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    copy_object_cells(builder, proc, frame, &obj, data, dest, elem.cells())
+}
+
+fn emit_slice_get(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    slice: usize,
+    index: usize,
+    value: usize,
+    dest: usize,
+    elem: Ty,
+    some_tag: u16,
+    none_tag: u16,
+) -> Result<(), CompileError> {
+    let base = proc.slots[slice].offset;
+    let len = load_cell(builder, frame, base + 3, IrType::I16)?;
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
+    let none = builder.new_label();
+    let ok = builder.new_label();
+    let done = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, none).ir()?;
+    builder.create_block(ok).ir()?;
+    let start = load_cell(builder, frame, base + 2, IrType::I16)?;
+    let elem_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start, at, IrType::I16).ir()?);
+    let addr = load_cell(builder, frame, base, IrType::I16)?;
+    let bank = load_cell(builder, frame, base + 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let scaled = scale_index(builder, elem_at, elem.cells())?;
+    let data = Value::Temp(builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    copy_object_cells(builder, proc, frame, &obj, data, value, elem.cells())?;
+    emit_make(builder, proc, frame, dest, some_tag, &[(value, elem.cells())])?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(none).ir()?;
+    store_immediate(builder, frame, dest, proc, none_tag)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_slice_new(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    base: usize,
+    start: usize,
+    end: usize,
+    inclusive: bool,
+    elem: Ty,
+) -> Result<(), CompileError> {
+    let start = load_slot(builder, proc, frame, start)?;
+    let end = load_slot(builder, proc, frame, end)?;
+    let exclusive = exclusive_end(builder, end, inclusive)?;
+    match proc.slots[base].ty {
+        Ty::Array { len, width, .. } => {
+            check_range(builder, start.clone(), exclusive.clone(), Value::Constant(len as i64))?;
+            let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), IrType::I16).ir()?);
+            slice_from_array(builder, proc, frame, dest, base, start, count, width as i64)
+        }
+        Ty::Slice(_) => slice_from_slice(builder, proc, frame, dest, base, start, exclusive),
+        _ => slice_from_vec(builder, proc, frame, dest, base, start, exclusive, elem),
+    }
+}
+
+fn slice_from_array(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    array: usize,
+    start: Value,
+    count: Value,
+    width: i64,
+) -> Result<(), CompileError> {
+    let empty = builder.new_label();
+    let copy = builder.new_label();
+    let is_empty = builder.build_binary(IrBinaryOp::Eq, count.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_empty), empty, copy).ir()?;
+    builder.create_block(empty).ir()?;
+    store_empty_slice(builder, frame, proc.slots[dest].offset)?;
+    let done = builder.new_label();
+    builder.build_branch(done).ir()?;
+    builder.create_block(copy).ir()?;
+    let obj = alloc_vec(builder, count.clone(), count.clone(), width)?;
+    copy_array_span(builder, frame, proc.slots[array].offset, start, &obj, count.clone(), width)?;
+    let header = gep(builder, frame, proc.slots[dest].offset)?;
+    store_vec_ptr(builder, &header, &obj)?;
+    store_cell(builder, frame, proc.slots[dest].offset + 2, Value::Constant(0))?;
+    store_cell(builder, frame, proc.slots[dest].offset + 3, count)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn slice_from_slice(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    src: usize,
+    start: Value,
+    exclusive: Value,
+) -> Result<(), CompileError> {
+    let base = proc.slots[src].offset;
+    let old_len = load_cell(builder, frame, base + 3, IrType::I16)?;
+    check_range(builder, start.clone(), exclusive.clone(), old_len)?;
+    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), IrType::I16).ir()?);
+    let old_start = load_cell(builder, frame, base + 2, IrType::I16)?;
+    let new_start = Value::Temp(builder.build_binary(IrBinaryOp::Add, old_start, start, IrType::I16).ir()?);
+    let empty = builder.new_label();
+    let keep = builder.new_label();
+    let done = builder.new_label();
+    let is_empty = builder.build_binary(IrBinaryOp::Eq, count.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_empty), empty, keep).ir()?;
+    builder.create_block(empty).ir()?;
+    store_empty_slice(builder, frame, proc.slots[dest].offset)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(keep).ir()?;
+    for cell in 0..2 {
+        let word = load_cell(builder, frame, base + cell, IrType::I16)?;
+        store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
+    }
+    store_cell(builder, frame, proc.slots[dest].offset + 2, new_start)?;
+    store_cell(builder, frame, proc.slots[dest].offset + 3, count)?;
+    retain_vec(builder, frame, proc.slots[dest].offset)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn slice_from_vec(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    vec: usize,
+    start: Value,
+    exclusive: Value,
+    _elem: Ty,
+) -> Result<(), CompileError> {
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let len_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    let missing = builder.new_label();
+    let present = builder.new_label();
+    let join = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), missing, present).ir()?;
+    builder.create_block(missing).ir()?;
+    builder.build_store(Value::Constant(0), len_slot.clone(), IrType::I16).ir()?;
+    builder.build_branch(join).ir()?;
+    builder.create_block(present).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    builder.build_store(len, len_slot.clone(), IrType::I16).ir()?;
+    builder.build_branch(join).ir()?;
+    builder.create_block(join).ir()?;
+    let len = Value::Temp(builder.build_load(len_slot, IrType::I16).ir()?);
+    check_range(builder, start.clone(), exclusive.clone(), len)?;
+    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), IrType::I16).ir()?);
+    let empty = builder.new_label();
+    let keep = builder.new_label();
+    let done = builder.new_label();
+    let is_empty = builder.build_binary(IrBinaryOp::Eq, count.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_empty), empty, keep).ir()?;
+    builder.create_block(empty).ir()?;
+    store_empty_slice(builder, frame, proc.slots[dest].offset)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(keep).ir()?;
+    let header = vec_header(builder, proc, frame, vec)?;
+    for cell in 0..2 {
+        let word = load_cell(builder, &header, cell, IrType::I16)?;
+        store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
+    }
+    store_cell(builder, frame, proc.slots[dest].offset + 2, start)?;
+    store_cell(builder, frame, proc.slots[dest].offset + 3, count)?;
+    retain_vec(builder, frame, proc.slots[dest].offset)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn copy_array_span(
+    builder: &mut IrBuilder,
+    frame: &Value,
+    array_offset: i64,
+    start: Value,
+    obj: &Value,
+    count: Value,
+    width: i64,
+) -> Result<(), CompileError> {
+    let head = builder.new_label();
+    let body = builder.new_label();
+    let done = builder.new_label();
+    let i_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    builder.build_store(Value::Constant(0), i_slot.clone(), IrType::I16).ir()?;
+    builder.build_branch(head).ir()?;
+    builder.create_block(head).ir()?;
+    let i = Value::Temp(builder.build_load(i_slot.clone(), IrType::I16).ir()?);
+    let more = builder.build_binary(IrBinaryOp::Ult, i.clone(), count.clone(), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(more), body, done).ir()?;
+    builder.create_block(body).ir()?;
+    let from = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), i.clone(), IrType::I16).ir()?);
+    let src_scaled = scale_index(builder, from, width)?;
+    let src_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(array_offset), src_scaled, IrType::I16).ir()?);
+    let dst_scaled = scale_index(builder, i.clone(), width)?;
+    let dst_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    for cell in 0..width {
+        let src_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let src_ptr = builder.build_pointer_offset(frame.clone(), src_off, ptr_ty()).ir()?;
+        let word = Value::Temp(builder.build_load(src_ptr, IrType::I16).ir()?);
+        let dst_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let dst_ptr = builder.build_pointer_offset(obj.clone(), dst_off, ptr_ty()).ir()?;
+        builder.build_store(word, dst_ptr, IrType::I16).ir()?;
+    }
+    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), IrType::I16).ir()?;
+    builder.build_store(Value::Temp(next), i_slot, IrType::I16).ir()?;
+    builder.build_branch(head).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_to_vec(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    src: usize,
+    elem: Ty,
+) -> Result<(), CompileError> {
+    let header = gep(builder, frame, proc.slots[dest].offset)?;
+    match proc.slots[src].ty {
+        Ty::Array { len, width, .. } => {
+            if len == 0 {
+                store_cell(builder, frame, proc.slots[dest].offset, Value::Constant(0))?;
+                return store_cell(builder, frame, proc.slots[dest].offset + 1, Value::Constant(0));
+            }
+            let count = Value::Constant(len as i64);
+            let obj = alloc_vec(builder, count.clone(), count.clone(), width as i64)?;
+            copy_array_span(builder, frame, proc.slots[src].offset, Value::Constant(0), &obj, count, width as i64)?;
+            store_vec_ptr(builder, &header, &obj)
+        }
+        Ty::Slice(_) => {
+            let base = proc.slots[src].offset;
+            let len = load_cell(builder, frame, base + 3, IrType::I16)?;
+            let empty = builder.new_label();
+            let copy = builder.new_label();
+            let done = builder.new_label();
+            let is_empty = builder.build_binary(IrBinaryOp::Eq, len.clone(), Value::Constant(0), IrType::I1).ir()?;
+            builder.build_branch_cond(Value::Temp(is_empty), empty, copy).ir()?;
+            builder.create_block(empty).ir()?;
+            store_cell(builder, frame, proc.slots[dest].offset, Value::Constant(0))?;
+            store_cell(builder, frame, proc.slots[dest].offset + 1, Value::Constant(0))?;
+            builder.build_branch(done).ir()?;
+            builder.create_block(copy).ir()?;
+            let obj = alloc_vec(builder, len.clone(), len.clone(), elem.cells())?;
+            let start = load_cell(builder, frame, base + 2, IrType::I16)?;
+            let addr = load_cell(builder, frame, base, IrType::I16)?;
+            let bank = load_cell(builder, frame, base + 1, IrType::I16)?;
+            let src_obj = fat_from_parts(builder, addr, bank)?;
+            copy_object_span(builder, &src_obj, start, &obj, len, elem.cells())?;
+            store_vec_ptr(builder, &header, &obj)?;
+            builder.build_branch(done).ir()?;
+            builder.create_block(done).ir()?;
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn copy_object_span(
+    builder: &mut IrBuilder,
+    src: &Value,
+    start: Value,
+    dest: &Value,
+    count: Value,
+    width: i64,
+) -> Result<(), CompileError> {
+    let head = builder.new_label();
+    let body = builder.new_label();
+    let done = builder.new_label();
+    let i_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    builder.build_store(Value::Constant(0), i_slot.clone(), IrType::I16).ir()?;
+    builder.build_branch(head).ir()?;
+    builder.create_block(head).ir()?;
+    let i = Value::Temp(builder.build_load(i_slot.clone(), IrType::I16).ir()?);
+    let more = builder.build_binary(IrBinaryOp::Ult, i.clone(), count.clone(), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(more), body, done).ir()?;
+    builder.create_block(body).ir()?;
+    let from = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), i.clone(), IrType::I16).ir()?);
+    let src_scaled = scale_index(builder, from, width)?;
+    let src_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    let dst_scaled = scale_index(builder, i.clone(), width)?;
+    let dst_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    for cell in 0..width {
+        let src_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let src_ptr = builder.build_pointer_offset(src.clone(), src_off, ptr_ty()).ir()?;
+        let word = Value::Temp(builder.build_load(src_ptr, IrType::I16).ir()?);
+        let dst_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let dst_ptr = builder.build_pointer_offset(dest.clone(), dst_off, ptr_ty()).ir()?;
+        builder.build_store(word, dst_ptr, IrType::I16).ir()?;
+    }
+    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), IrType::I16).ir()?;
+    builder.build_store(Value::Temp(next), i_slot, IrType::I16).ir()?;
+    builder.build_branch(head).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_vec_len(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, vec: usize) -> Result<(), CompileError> {
+    match proc.slots[vec].ty {
+        Ty::Array { len, .. } => return store_slot(builder, proc, frame, dest, Value::Constant(len as i64)),
+        Ty::Slice(_) => {
+            let len = load_cell(builder, frame, proc.slots[vec].offset + 3, IrType::I16)?;
+            return store_slot(builder, proc, frame, dest, len);
+        }
+        _ => {}
+    }
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let empty = builder.new_label();
+    let full = builder.new_label();
+    let done = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), empty, full).ir()?;
+    builder.create_block(empty).ir()?;
+    store_slot(builder, proc, frame, dest, Value::Constant(0))?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(full).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    store_slot(builder, proc, frame, dest, len)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_vec_lit(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    elems: &[usize],
+    elem: Ty,
+) -> Result<(), CompileError> {
+    let base = proc.slots[dest].offset;
+    if elems.is_empty() {
+        store_cell(builder, frame, base, Value::Constant(0))?;
+        return store_cell(builder, frame, base + 1, Value::Constant(0));
+    }
+    let len = Value::Constant(elems.len() as i64);
+    let obj = alloc_vec(builder, len.clone(), len, elem.cells())?;
+    for (index, slot) in elems.iter().enumerate() {
+        let at = VEC_DATA + index as i64 * elem.cells();
+        for cell in 0..elem.cells() {
+            let value = load_cell(builder, frame, proc.slots[*slot].offset + cell, IrType::I16)?;
+            store_object_cell(builder, &obj, at + cell, value)?;
+        }
+    }
+    let header = gep(builder, frame, base)?;
+    store_vec_ptr(builder, &header, &obj)
+}
+
+fn emit_vec_index(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    vec: usize,
+    index: usize,
+    elem: Ty,
+) -> Result<(), CompileError> {
+    match proc.slots[vec].ty {
+        Ty::Array { .. } => return emit_array_index(builder, proc, frame, dest, vec, index),
+        Ty::Slice(_) => return emit_slice_index(builder, proc, frame, dest, vec, index, elem),
+        _ => {}
+    }
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let bad = builder.new_label();
+    let ok_ptr = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), bad, ok_ptr).ir()?;
+    builder.create_block(ok_ptr).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
+    let ok = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    builder.build_return(Some(null_ptr())).ir()?;
+    builder.create_block(ok).ir()?;
+    let scaled = scale_index(builder, at, elem.cells())?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    copy_object_cells(builder, proc, frame, &obj, Value::Temp(data), dest, elem.cells())
+}
+
+fn emit_vec_empty(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, vec: usize) -> Result<(), CompileError> {
+    match proc.slots[vec].ty {
+        Ty::Array { len, .. } => {
+            return store_slot(builder, proc, frame, dest, Value::Constant(i64::from(len == 0)));
+        }
+        Ty::Slice(_) => {
+            let len = load_cell(builder, frame, proc.slots[vec].offset + 3, IrType::I16)?;
+            let empty = builder.build_binary(IrBinaryOp::Eq, len, Value::Constant(0), IrType::I1).ir()?;
+            return store_slot(builder, proc, frame, dest, Value::Temp(empty));
+        }
+        _ => {}
+    }
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let yes = builder.new_label();
+    let check = builder.new_label();
+    let no = builder.new_label();
+    let done = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), yes, check).ir()?;
+    builder.create_block(check).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let zero = builder.build_binary(IrBinaryOp::Eq, len, Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(zero), yes, no).ir()?;
+    builder.create_block(yes).ir()?;
+    store_slot(builder, proc, frame, dest, Value::Constant(1))?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(no).ir()?;
+    store_slot(builder, proc, frame, dest, Value::Constant(0))?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_vec_clear(builder: &mut IrBuilder, proc: &Proc, frame: &Value, vec: usize) -> Result<(), CompileError> {
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    adjust_refcount(builder, addr, bank, false)?;
+    store_cell(builder, &header, 0, Value::Constant(0))?;
+    store_cell(builder, &header, 1, Value::Constant(0))
+}
+
+fn emit_vec_index_store(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    vec: usize,
+    index: usize,
+    value: usize,
+    elem: Ty,
+) -> Result<(), CompileError> {
+    if let Ty::Array { .. } = proc.slots[vec].ty {
+        return emit_array_store(builder, proc, frame, vec, index, value);
+    }
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let bad = builder.new_label();
+    let have = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), bad, have).ir()?;
+    builder.create_block(have).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let refs = load_cell(builder, &obj, VEC_REFS, IrType::I16)?;
+    let unique = builder.build_binary(IrBinaryOp::Eq, refs, Value::Constant(1), IrType::I1).ir()?;
+    let write = builder.new_label();
+    let detach = builder.new_label();
+    builder.build_branch_cond(Value::Temp(unique), write, detach).ir()?;
+    builder.create_block(detach).ir()?;
+    detach_vec(builder, &header, &obj, elem.cells())?;
+    builder.build_branch(write).ir()?;
+    builder.create_block(write).ir()?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
+    let ok = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    builder.build_return(Some(null_ptr())).ir()?;
+    builder.create_block(ok).ir()?;
+    let scaled = scale_index(builder, at, elem.cells())?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    store_object_cells(builder, proc, frame, value, &obj, Value::Temp(data), elem.cells())
+}
+
+fn store_immediate(builder: &mut IrBuilder, frame: &Value, dest: usize, proc: &Proc, tag: u16) -> Result<(), CompileError> {
+    release_managed(builder, proc, frame, dest)?;
+    let base = proc.slots[dest].offset;
+    store_cell(builder, frame, base, Value::Constant(tag as i64))?;
+    store_cell(builder, frame, base + 1, Value::Constant(0))?;
+    store_cell(builder, frame, base + 2, Value::Constant(0))
+}
+
+fn emit_vec_get(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    vec: usize,
+    index: usize,
+    value: usize,
+    dest: usize,
+    elem: Ty,
+    some_tag: u16,
+    none_tag: u16,
+) -> Result<(), CompileError> {
+    match proc.slots[vec].ty {
+        Ty::Array { .. } => return emit_array_get(builder, proc, frame, vec, index, value, dest, elem, some_tag, none_tag),
+        Ty::Slice(_) => return emit_slice_get(builder, proc, frame, vec, index, value, dest, elem, some_tag, none_tag),
+        _ => {}
+    }
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let none = builder.new_label();
+    let have = builder.new_label();
+    let done = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), none, have).ir()?;
+    builder.create_block(have).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let at = load_slot(builder, proc, frame, index)?;
+    let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
+    let ok = builder.new_label();
+    builder.build_branch_cond(Value::Temp(in_range), ok, none).ir()?;
+    builder.create_block(ok).ir()?;
+    let scaled = scale_index(builder, at, elem.cells())?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    copy_object_cells(builder, proc, frame, &obj, Value::Temp(data), value, elem.cells())?;
+    emit_make(builder, proc, frame, dest, some_tag, &[(value, elem.cells())])?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(none).ir()?;
+    store_immediate(builder, frame, dest, proc, none_tag)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_vec_pop(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    vec: usize,
+    value: usize,
+    dest: usize,
+    elem: Ty,
+    some_tag: u16,
+    none_tag: u16,
+) -> Result<(), CompileError> {
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let none = builder.new_label();
+    let have = builder.new_label();
+    let done = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), none, have).ir()?;
+    builder.create_block(have).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let empty = builder.build_binary(IrBinaryOp::Eq, len, Value::Constant(0), IrType::I1).ir()?;
+    let live = builder.new_label();
+    builder.build_branch_cond(Value::Temp(empty), none, live).ir()?;
+    builder.create_block(live).ir()?;
+    let refs = load_cell(builder, &obj, VEC_REFS, IrType::I16)?;
+    let unique = builder.build_binary(IrBinaryOp::Eq, refs, Value::Constant(1), IrType::I1).ir()?;
+    let write = builder.new_label();
+    let detach = builder.new_label();
+    builder.build_branch_cond(Value::Temp(unique), write, detach).ir()?;
+    builder.create_block(detach).ir()?;
+    detach_vec(builder, &header, &obj, elem.cells())?;
+    builder.build_branch(write).ir()?;
+    builder.create_block(write).ir()?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let next = builder.build_binary(IrBinaryOp::Sub, len, Value::Constant(1), IrType::I16).ir()?;
+    store_object_cell(builder, &obj, VEC_LEN, Value::Temp(next))?;
+    let scaled = scale_index(builder, Value::Temp(next), elem.cells())?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    copy_object_cells(builder, proc, frame, &obj, Value::Temp(data), value, elem.cells())?;
+    emit_make(builder, proc, frame, dest, some_tag, &[(value, elem.cells())])?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(none).ir()?;
+    store_immediate(builder, frame, dest, proc, none_tag)?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn emit_vec_push(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    vec: usize,
+    value: usize,
+    elem: Ty,
+) -> Result<(), CompileError> {
+    let header = vec_header(builder, proc, frame, vec)?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let fresh = builder.new_label();
+    let have = builder.new_label();
+    let append = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), fresh, have).ir()?;
+
+    builder.create_block(fresh).ir()?;
+    let obj = alloc_vec(builder, Value::Constant(0), Value::Constant(4), elem.cells())?;
+    store_vec_ptr(builder, &header, &obj)?;
+    builder.build_branch(append).ir()?;
+
+    builder.create_block(have).ir()?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let refs = load_cell(builder, &obj, VEC_REFS, IrType::I16)?;
+    let unique = builder.build_binary(IrBinaryOp::Eq, refs, Value::Constant(1), IrType::I1).ir()?;
+    let detach = builder.new_label();
+    let owned = builder.new_label();
+    builder.build_branch_cond(Value::Temp(unique), owned, detach).ir()?;
+
+    builder.create_block(detach).ir()?;
+    detach_vec(builder, &header, &obj, elem.cells())?;
+    builder.build_branch(append).ir()?;
+
+    builder.create_block(owned).ir()?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let cap = load_cell(builder, &obj, VEC_CAP, IrType::I16)?;
+    let full = builder.build_binary(IrBinaryOp::Uge, len, cap.clone(), IrType::I1).ir()?;
+    let grow = builder.new_label();
+    builder.build_branch_cond(Value::Temp(full), grow, append).ir()?;
+    builder.create_block(grow).ir()?;
+    let new_cap = builder.build_binary(IrBinaryOp::Add, cap, Value::Constant(4), IrType::I16).ir()?;
+    grow_vec(builder, &header, &obj, Value::Temp(new_cap), elem.cells())?;
+    builder.build_branch(append).ir()?;
+
+    builder.create_block(append).ir()?;
+    let addr = load_cell(builder, &header, 0, IrType::I16)?;
+    let bank = load_cell(builder, &header, 1, IrType::I16)?;
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let scaled = scale_index(builder, len.clone(), elem.cells())?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    store_object_cells(builder, proc, frame, value, &obj, Value::Temp(data), elem.cells())?;
+    let next = builder.build_binary(IrBinaryOp::Add, len, Value::Constant(1), IrType::I16).ir()?;
+    store_object_cell(builder, &obj, VEC_LEN, Value::Temp(next))
+}
+
+fn detach_vec(builder: &mut IrBuilder, header: &Value, obj: &Value, cells: i64) -> Result<(), CompileError> {
+    let len = load_cell(builder, obj, VEC_LEN, IrType::I16)?;
+    let cap = load_cell(builder, obj, VEC_CAP, IrType::I16)?;
+    let room = builder.build_binary(IrBinaryOp::Ugt, cap.clone(), len.clone(), IrType::I1).ir()?;
+    let use_cap = builder.new_label();
+    let bump = builder.new_label();
+    let join = builder.new_label();
+    let saved = builder.build_alloca(IrType::I16, None).ir()?;
+    builder.build_branch_cond(Value::Temp(room), use_cap, bump).ir()?;
+    builder.create_block(use_cap).ir()?;
+    builder.build_store(cap, saved.clone(), IrType::I16).ir()?;
+    builder.build_branch(join).ir()?;
+    builder.create_block(bump).ir()?;
+    let bumped = builder.build_binary(IrBinaryOp::Add, len.clone(), Value::Constant(4), IrType::I16).ir()?;
+    builder.build_store(Value::Temp(bumped), saved.clone(), IrType::I16).ir()?;
+    builder.build_branch(join).ir()?;
+    builder.create_block(join).ir()?;
+    let new_cap = Value::Temp(builder.build_load(saved, IrType::I16).ir()?);
+    let new_obj = alloc_vec(builder, len.clone(), new_cap, cells)?;
+    copy_elements(builder, obj, &new_obj, len, cells)?;
+    let refs = load_cell(builder, obj, VEC_REFS, IrType::I16)?;
+    let next = builder.build_binary(IrBinaryOp::Sub, refs, Value::Constant(1), IrType::I16).ir()?;
+    store_object_cell(builder, obj, VEC_REFS, Value::Temp(next))?;
+    store_vec_ptr(builder, header, &new_obj)
+}
+
+fn grow_vec(builder: &mut IrBuilder, header: &Value, obj: &Value, new_cap: Value, cells: i64) -> Result<(), CompileError> {
+    let len = load_cell(builder, obj, VEC_LEN, IrType::I16)?;
+    let new_obj = alloc_vec(builder, len.clone(), new_cap, cells)?;
+    copy_elements(builder, obj, &new_obj, len, cells)?;
+    builder.build_call(Value::Global("free".to_string()), vec![obj.clone()], IrType::Void).ir()?;
+    store_vec_ptr(builder, header, &new_obj)
+}
+
+fn alloc_vec(builder: &mut IrBuilder, len: Value, cap: Value, cells: i64) -> Result<Value, CompileError> {
+    let scaled = scale_index(builder, cap.clone(), cells)?;
+    let words = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let size = as_i32(builder, Value::Temp(words))?;
+    let raw = builder.build_call(Value::Global("malloc".to_string()), vec![size], ptr_ty()).ir()?.unwrap();
+    let obj = fat_temp(raw, BankTag::Mixed);
+    let bad = builder.new_label();
+    let ok = builder.new_label();
+    let missing = ptr_is_null(builder, &obj)?;
+    builder.build_branch_cond(missing, bad, ok).ir()?;
+    builder.create_block(bad).ir()?;
+    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    builder.build_return(Some(null_ptr())).ir()?;
+    builder.create_block(ok).ir()?;
+    store_object_cell(builder, &obj, VEC_REFS, Value::Constant(1))?;
+    store_object_cell(builder, &obj, VEC_LEN, len)?;
+    store_object_cell(builder, &obj, VEC_CAP, cap)?;
+    Ok(obj)
+}
+
+fn store_vec_ptr(builder: &mut IrBuilder, header: &Value, obj: &Value) -> Result<(), CompileError> {
+    let addr = low16_of_ptr(builder, obj)?;
+    let bank = bank16_of_ptr(builder, obj)?;
+    store_cell(builder, header, 0, addr)?;
+    store_cell(builder, header, 1, bank)
+}
+
+fn scale_index(builder: &mut IrBuilder, index: Value, cells: i64) -> Result<Value, CompileError> {
+    if cells == 1 {
+        return Ok(index);
+    }
+    let scaled = builder.build_binary(IrBinaryOp::Mul, index, Value::Constant(cells), IrType::I16).ir()?;
+    Ok(Value::Temp(scaled))
+}
+
+fn copy_elements(builder: &mut IrBuilder, src: &Value, dest: &Value, len: Value, cells: i64) -> Result<(), CompileError> {
+    let head = builder.new_label();
+    let body = builder.new_label();
+    let done = builder.new_label();
+    let i_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    builder.build_store(Value::Constant(0), i_slot.clone(), IrType::I16).ir()?;
+    builder.build_branch(head).ir()?;
+    builder.create_block(head).ir()?;
+    let i = Value::Temp(builder.build_load(i_slot.clone(), IrType::I16).ir()?);
+    let more = builder.build_binary(IrBinaryOp::Ult, i.clone(), len.clone(), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(more), body, done).ir()?;
+    builder.create_block(body).ir()?;
+    let scaled = scale_index(builder, i.clone(), cells)?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    for cell in 0..cells {
+        let at = builder.build_binary(IrBinaryOp::Add, Value::Temp(data), Value::Constant(cell), IrType::I16).ir()?;
+        let from = builder.build_pointer_offset(src.clone(), Value::Temp(at), ptr_ty()).ir()?;
+        let word = Value::Temp(builder.build_load(from, IrType::I16).ir()?);
+        let into = builder.build_pointer_offset(dest.clone(), Value::Temp(at), ptr_ty()).ir()?;
+        builder.build_store(word, into, IrType::I16).ir()?;
+    }
+    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), IrType::I16).ir()?;
+    builder.build_store(Value::Temp(next), i_slot, IrType::I16).ir()?;
+    builder.build_branch(head).ir()?;
+    builder.create_block(done).ir()?;
+    Ok(())
+}
+
+fn store_object_cells(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    src: usize,
+    obj: &Value,
+    data: Value,
+    cells: i64,
+) -> Result<(), CompileError> {
+    for cell in 0..cells {
+        let value = load_cell(builder, frame, proc.slots[src].offset + cell, IrType::I16)?;
+        let at = builder.build_binary(IrBinaryOp::Add, data.clone(), Value::Constant(cell), IrType::I16).ir()?;
+        let into = builder.build_pointer_offset(obj.clone(), Value::Temp(at), ptr_ty()).ir()?;
+        builder.build_store(value, into, IrType::I16).ir()?;
+    }
+    Ok(())
+}
+
+fn copy_object_cells(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    obj: &Value,
+    data: Value,
+    dest: usize,
+    cells: i64,
+) -> Result<(), CompileError> {
+    for cell in 0..cells {
+        let at = builder.build_binary(IrBinaryOp::Add, data.clone(), Value::Constant(cell), IrType::I16).ir()?;
+        let from = builder.build_pointer_offset(obj.clone(), Value::Temp(at), ptr_ty()).ir()?;
+        let word = Value::Temp(builder.build_load(from, IrType::I16).ir()?);
+        store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
+    }
+    Ok(())
 }
 
 fn emit_make(
@@ -1261,13 +3009,21 @@ fn emit_make(
     tag: u16,
     fields: &[(usize, i64)],
 ) -> Result<(), CompileError> {
-    let base = proc.slots[dest].offset;
-    store_cell(builder, frame, base, Value::Constant(tag as i64))?;
+    // Keep each field alive before `dest` is overwritten. `x = Cons(1, x)` retains
+    // the old node, copies it into the new one, then drops the slot's own share.
+    for (slot, _) in fields {
+        if keeps(proc, proc.slots[*slot].ty) {
+            retain_managed(builder, proc, frame, *slot)?;
+        }
+    }
     if fields.is_empty() {
+        release_managed(builder, proc, frame, dest)?;
+        let base = proc.slots[dest].offset;
+        store_cell(builder, frame, base, Value::Constant(tag as i64))?;
         store_cell(builder, frame, base + 1, Value::Constant(0))?;
         return store_cell(builder, frame, base + 2, Value::Constant(0));
     }
-    let words = 1 + fields.iter().map(|(_, cells)| *cells).sum::<i64>();
+    let words = 2 + fields.iter().map(|(_, cells)| *cells).sum::<i64>();
     let size = i32_const(builder, words)?;
     let raw = builder.build_call(Value::Global("malloc".to_string()), vec![size], ptr_ty()).ir()?.unwrap();
     let obj = fat_temp(raw, BankTag::Mixed);
@@ -1279,8 +3035,9 @@ fn emit_make(
     builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
-    store_object_cell(builder, &obj, 0, Value::Constant(tag as i64))?;
-    let mut offset = 1i64;
+    store_object_cell(builder, &obj, OBJ_REFS, Value::Constant(1))?;
+    store_object_cell(builder, &obj, OBJ_TAG, Value::Constant(tag as i64))?;
+    let mut offset = OBJ_FIELDS;
     for (slot, cells) in fields {
         let src = proc.slots[*slot].offset;
         for index in 0..*cells {
@@ -1291,6 +3048,9 @@ fn emit_make(
     }
     let addr = low16_of_ptr(builder, &obj)?;
     let bank = bank16_of_ptr(builder, &obj)?;
+    release_managed(builder, proc, frame, dest)?;
+    let base = proc.slots[dest].offset;
+    store_cell(builder, frame, base, Value::Constant(tag as i64))?;
     store_cell(builder, frame, base + 1, addr)?;
     store_cell(builder, frame, base + 2, bank)
 }
@@ -1308,11 +3068,24 @@ fn emit_read(
     let addr = load_cell(builder, frame, src_at + 1, IrType::I16)?;
     let bank = load_cell(builder, frame, src_at + 2, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let dest_at = proc.slots[dest].offset;
+    let mut words = Vec::new();
     for index in 0..cells {
         let ptr = gep(builder, &obj, offset + index)?;
-        let value = Value::Temp(builder.build_load(ptr, IrType::I16).ir()?);
-        store_cell(builder, frame, dest_at + index, value)?;
+        words.push(Value::Temp(builder.build_load(ptr, IrType::I16).ir()?));
+    }
+    let ty = proc.slots[dest].ty;
+    if ty.is_managed() {
+        retain_words(builder, &words, ty)?;
+        release_managed(builder, proc, frame, dest)?;
+    } else if keeps(proc, ty) {
+        release_managed(builder, proc, frame, dest)?;
+    }
+    let dest_at = proc.slots[dest].offset;
+    for (index, value) in words.into_iter().enumerate() {
+        store_cell(builder, frame, dest_at + index as i64, value)?;
+    }
+    if keeps(proc, ty) && !ty.is_managed() {
+        retain_tree(builder, proc, frame, dest_at, ty)?;
     }
     Ok(())
 }
@@ -1346,10 +3119,13 @@ fn copy_slot(
     if ty == Ty::Unit {
         return Ok(());
     }
-    if matches!(ty, Ty::Adt(_) | Ty::Func(_)) {
+    if cell_wise(ty) {
         for index in 0..ty.cells() {
             let value = load_cell(builder, src_frame, src_proc.slots[src].offset + index, IrType::I16)?;
             store_cell(builder, dest_frame, dest_proc.slots[dest].offset + index, value)?;
+        }
+        if keeps(src_proc, ty) {
+            retain_tree(builder, src_proc, dest_frame, dest_proc.slots[dest].offset, ty)?;
         }
         return Ok(());
     }
@@ -1593,10 +3369,10 @@ fn wide_zero(builder: &mut IrBuilder, ty: IrType) -> Result<Value, CompileError>
 
 fn arith_ty(ty: Ty) -> IrType {
     match ty {
-        Ty::I8 | Ty::U8 | Ty::I16 | Ty::U16 => IrType::I16,
+        Ty::I8 | Ty::U8 | Ty::I16 | Ty::U16 | Ty::Usize => IrType::I16,
         Ty::I32 | Ty::U32 => IrType::I32,
         Ty::I64 | Ty::U64 => IrType::I64,
-        Ty::Bool | Ty::Unit | Ty::Adt(_) | Ty::Func(_) => IrType::I16,
+        Ty::Bool | Ty::Unit | Ty::Adt(_) | Ty::Func(_) | Ty::Vec(_) | Ty::Ref(_) | Ty::Array { .. } | Ty::Slice(_) | Ty::Struct { .. } | Ty::Tuple { .. } => IrType::I16,
     }
 }
 
@@ -1621,27 +3397,400 @@ fn ir_op(op: BinOp, ty: Ty) -> IrBinaryOp {
 fn ir_ty(ty: Ty) -> IrType {
     match ty {
         Ty::I8 | Ty::U8 => IrType::I8,
-        Ty::I16 | Ty::U16 => IrType::I16,
+        Ty::I16 | Ty::U16 | Ty::Usize => IrType::I16,
         Ty::I32 | Ty::U32 => IrType::I32,
         Ty::I64 | Ty::U64 => IrType::I64,
         Ty::Bool => IrType::I1,
         Ty::Unit => IrType::Void,
-        Ty::Adt(_) | Ty::Func(_) => IrType::I16,
+        Ty::Adt(_) | Ty::Func(_) | Ty::Vec(_) | Ty::Ref(_) | Ty::Array { .. } | Ty::Slice(_) | Ty::Struct { .. } | Ty::Tuple { .. } => IrType::I16,
     }
 }
 
 fn width(ty: Ty) -> u32 {
     match ty {
         Ty::I8 | Ty::U8 => 8,
-        Ty::I16 | Ty::U16 | Ty::Bool => 16,
+        Ty::I16 | Ty::U16 | Ty::Usize | Ty::Bool => 16,
         Ty::I32 | Ty::U32 => 32,
         Ty::I64 | Ty::U64 => 64,
-        Ty::Unit | Ty::Adt(_) | Ty::Func(_) => 0,
+        Ty::Unit | Ty::Adt(_) | Ty::Func(_) | Ty::Vec(_) | Ty::Ref(_) | Ty::Array { .. } | Ty::Slice(_) | Ty::Struct { .. } | Ty::Tuple { .. } => 0,
     }
+}
+
+fn cell_wise(ty: Ty) -> bool {
+    matches!(ty, Ty::Adt(_) | Ty::Func(_) | Ty::Vec(_) | Ty::Ref(_) | Ty::Array { .. } | Ty::Slice(_) | Ty::Struct { .. } | Ty::Tuple { .. })
+}
+
+/// Pointer to the two cells that store a vector's buffer address and bank.
+fn vec_header(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize) -> Result<Value, CompileError> {
+    let offset = proc.slots[slot].offset;
+    if proc.slots[slot].ty.is_ref() {
+        let addr = load_cell(builder, frame, offset, IrType::I16)?;
+        let bank = load_cell(builder, frame, offset + 1, IrType::I16)?;
+        fat_from_parts(builder, addr, bank)
+    } else {
+        gep(builder, frame, offset)
+    }
+}
+
+fn emit_try(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    src: usize,
+    dest: usize,
+    result: usize,
+    ok_tag: u16,
+    fail_tag: u16,
+    payload: Ty,
+    fail_slot: Option<usize>,
+    fail: Option<Ty>,
+    release: bool,
+) -> Result<(), CompileError> {
+    let tag = load_cell(builder, frame, proc.slots[src].offset, IrType::I16)?;
+    let ok = builder.new_label();
+    let fail_block = builder.new_label();
+    let is_ok = builder.build_binary(IrBinaryOp::Eq, tag, Value::Constant(ok_tag as i64), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_ok), ok, fail_block).ir()?;
+    builder.create_block(fail_block).ir()?;
+    if let Some(fail_ty) = fail {
+        let slot = fail_slot.expect("a payload failure has a slot");
+        emit_read(builder, proc, frame, slot, src, OBJ_FIELDS, fail_ty.cells())?;
+        emit_make(builder, proc, frame, result, fail_tag, &[(slot, fail_ty.cells())])?;
+    } else {
+        store_immediate(builder, frame, result, proc, fail_tag)?;
+    }
+    emit_return(builder, proc, frame, release)?;
+    builder.create_block(ok).ir()?;
+    emit_read(builder, proc, frame, dest, src, OBJ_FIELDS, payload.cells())
+}
+
+fn emit_borrow(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, slot: usize) -> Result<(), CompileError> {
+    let place = gep(builder, frame, proc.slots[slot].offset)?;
+    let addr = low16_of_ptr(builder, &place)?;
+    let bank = bank16_of_ptr(builder, &place)?;
+    let base = proc.slots[dest].offset;
+    store_cell(builder, frame, base, addr)?;
+    store_cell(builder, frame, base + 1, bank)
 }
 
 fn ptr_ty() -> IrType {
     IrType::FatPtr(Box::new(IrType::I16))
+}
+
+fn retain_value_at(builder: &mut IrBuilder, frame: &Value, offset: i64, ty: Ty) -> Result<(), CompileError> {
+    let index = match ty {
+        Ty::Vec(_) | Ty::Slice(_) => 0,
+        Ty::Adt(_) => 1,
+        Ty::Func(_) => 2,
+        _ => return Ok(()),
+    };
+    let addr = load_cell(builder, frame, offset + index, IrType::I16)?;
+    let bank = load_cell(builder, frame, offset + index + 1, IrType::I16)?;
+    adjust_refcount(builder, addr, bank, true)
+}
+
+fn retain_managed(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize) -> Result<(), CompileError> {
+    let offset = proc.slots[slot].offset;
+    retain_tree(builder, proc, frame, offset, proc.slots[slot].ty)
+}
+
+fn retain_words(builder: &mut IrBuilder, words: &[Value], ty: Ty) -> Result<(), CompileError> {
+    let index = match ty {
+        Ty::Vec(_) | Ty::Slice(_) => 0,
+        Ty::Adt(_) => 1,
+        Ty::Func(_) => 2,
+        _ => return Ok(()),
+    };
+    adjust_refcount(builder, words[index].clone(), words[index + 1].clone(), true)
+}
+
+fn load_through(builder: &mut IrBuilder, slot: &Value, index: i64) -> Result<Value, CompileError> {
+    let ptr = builder.build_pointer_offset(slot.clone(), Value::Constant(index), ptr_ty()).ir()?;
+    Ok(Value::Temp(builder.build_load(ptr, IrType::I16).ir()?))
+}
+
+fn store_through(builder: &mut IrBuilder, slot: &Value, index: i64, value: Value) -> Result<(), CompileError> {
+    let ptr = builder.build_pointer_offset(slot.clone(), Value::Constant(index), ptr_ty()).ir()?;
+    builder.build_store(value, ptr, IrType::I16).ir()
+}
+
+fn retain_managed_through(builder: &mut IrBuilder, proc: &Proc, slot: &Value, ty: Ty) -> Result<(), CompileError> {
+    match ty {
+        Ty::Struct { id, .. } => through_fields(builder, proc, slot, &proc.structs[id as usize], true),
+        Ty::Tuple { id, .. } => through_fields(builder, proc, slot, &proc.tuples[id as usize], true),
+        Ty::Vec(_) | Ty::Slice(_) | Ty::Adt(_) | Ty::Func(_) => {
+            let index = match ty {
+                Ty::Vec(_) | Ty::Slice(_) => 0,
+                Ty::Adt(_) => 1,
+                _ => 2,
+            };
+            let addr = load_through(builder, slot, index)?;
+            let bank = load_through(builder, slot, index + 1)?;
+            adjust_refcount(builder, addr, bank, true)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn through_fields(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    slot: &Value,
+    fields: &[Ty],
+    retain: bool,
+) -> Result<(), CompileError> {
+    let mut at = 0i64;
+    for field in fields {
+        let ptr = builder.build_pointer_offset(slot.clone(), Value::Constant(at), ptr_ty()).ir()?;
+        if retain {
+            retain_managed_through(builder, proc, &ptr, *field)?;
+        } else {
+            release_managed_through(builder, proc, &ptr, *field)?;
+        }
+        at += field.cells();
+    }
+    Ok(())
+}
+
+fn release_managed(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize) -> Result<(), CompileError> {
+    let ty = proc.slots[slot].ty;
+    let offset = proc.slots[slot].offset;
+    release_tree(builder, proc, frame, offset, ty)
+}
+
+fn release_managed_through(builder: &mut IrBuilder, proc: &Proc, slot: &Value, ty: Ty) -> Result<(), CompileError> {
+    match ty {
+        Ty::Struct { id, .. } => through_fields(builder, proc, slot, &proc.structs[id as usize], false),
+        Ty::Tuple { id, .. } => through_fields(builder, proc, slot, &proc.tuples[id as usize], false),
+        Ty::Vec(_) | Ty::Slice(_) => {
+            let addr = load_through(builder, slot, 0)?;
+            let bank = load_through(builder, slot, 1)?;
+            adjust_refcount(builder, addr, bank, false)?;
+            store_through(builder, slot, 0, Value::Constant(0))?;
+            store_through(builder, slot, 1, Value::Constant(0))
+        }
+        Ty::Adt(id) => {
+            let tag = load_through(builder, slot, 0)?;
+            let addr = load_through(builder, slot, 1)?;
+            let bank = load_through(builder, slot, 2)?;
+            call_if_live(builder, &format!("rfl_drop_adt_{id}"), vec![tag, addr, bank])?;
+            store_through(builder, slot, 1, Value::Constant(0))?;
+            store_through(builder, slot, 2, Value::Constant(0))
+        }
+        Ty::Func(_) => {
+            let id = load_through(builder, slot, 0)?;
+            let addr = load_through(builder, slot, 2)?;
+            let bank = load_through(builder, slot, 3)?;
+            call_if_live(builder, "rfl_drop_func", vec![id, addr, bank])?;
+            store_through(builder, slot, 2, Value::Constant(0))?;
+            store_through(builder, slot, 3, Value::Constant(0))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// `args[1]` is the heap address. A zero address is not an object.
+fn call_if_live(builder: &mut IrBuilder, name: &str, args: Vec<Value>) -> Result<(), CompileError> {
+    let addr = args[1].clone();
+    let skip = builder.new_label();
+    let go = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr, Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), skip, go).ir()?;
+    builder.create_block(go).ir()?;
+    builder.build_call(Value::Global(name.to_string()), args, IrType::Void).ir()?;
+    builder.build_branch(skip).ir()?;
+    builder.create_block(skip).ir()?;
+    Ok(())
+}
+
+fn emit_arc(builder: &mut IrBuilder, module: &mut Module, built: &Built) -> Result<(), CompileError> {
+    let adt_slots = built.procs.iter().any(|proc| proc.slots.iter().any(|slot| matches!(slot.ty, Ty::Adt(_))));
+    let func_slots = built.procs.iter().any(|proc| proc.slots.iter().any(|slot| matches!(slot.ty, Ty::Func(_))));
+    let func_fields = built.adts.iter().any(|adt| {
+        adt.ctors.iter().any(|ctor| ctor.fields.iter().any(|ty| matches!(ty, Ty::Func(_))))
+    });
+    let needs_drop_func = func_slots || func_fields || built.procs.iter().any(|proc| !proc.captures.is_empty());
+    if adt_slots {
+        for (id, adt) in built.adts.iter().enumerate() {
+            emit_drop_adt(builder, id as u32, adt, built)?;
+            module.add_function(builder.finish_function().unwrap());
+        }
+    }
+    if needs_drop_func {
+        emit_drop_func(builder, built)?;
+        module.add_function(builder.finish_function().unwrap());
+    }
+    Ok(())
+}
+
+fn emit_drop_adt(builder: &mut IrBuilder, adt_id: u32, adt: &AdtDef, built: &Built) -> Result<(), CompileError> {
+    builder.create_function(format!("rfl_drop_adt_{adt_id}"), IrType::Void);
+    builder.add_parameter(0, IrType::I16);
+    builder.add_parameter(1, IrType::I16);
+    builder.add_parameter(2, IrType::I16);
+    let entry = builder.new_label();
+    builder.create_block(entry).ir()?;
+    let addr_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    let bank_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    let tag_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    builder.build_store(Value::Temp(0), addr_slot.clone(), IrType::I16).ir()?;
+    builder.build_store(Value::Temp(1), bank_slot.clone(), IrType::I16).ir()?;
+    builder.build_store(Value::Temp(2), tag_slot.clone(), IrType::I16).ir()?;
+    let head = builder.new_label();
+    let done = builder.new_label();
+    builder.build_branch(head).ir()?;
+    builder.create_block(head).ir()?;
+    let addr = Value::Temp(builder.build_load(addr_slot.clone(), IrType::I16).ir()?);
+    let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
+    let live = builder.new_label();
+    builder.build_branch_cond(Value::Temp(is_null), done, live).ir()?;
+    builder.create_block(live).ir()?;
+    let bank = Value::Temp(builder.build_load(bank_slot.clone(), IrType::I16).ir()?);
+    let tag = Value::Temp(builder.build_load(tag_slot.clone(), IrType::I16).ir()?);
+    let obj = fat_from_parts(builder, addr, bank)?;
+    let refs = load_cell(builder, &obj, OBJ_REFS, IrType::I16)?;
+    let last = builder.build_binary(IrBinaryOp::Eq, refs.clone(), Value::Constant(1), IrType::I1).ir()?;
+    let drop_it = builder.new_label();
+    let dec = builder.new_label();
+    builder.build_branch_cond(Value::Temp(last), drop_it, dec).ir()?;
+    builder.create_block(dec).ir()?;
+    let next = builder.build_binary(IrBinaryOp::Sub, refs, Value::Constant(1), IrType::I16).ir()?;
+    store_object_cell(builder, &obj, OBJ_REFS, Value::Temp(next))?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(drop_it).ir()?;
+    for (tag_index, ctor) in adt.ctors.iter().enumerate() {
+        let matched = builder.new_label();
+        let next_check = builder.new_label();
+        let is_tag = builder
+            .build_binary(IrBinaryOp::Eq, tag.clone(), Value::Constant(tag_index as i64), IrType::I1)
+            .ir()?;
+        builder.build_branch_cond(Value::Temp(is_tag), matched, next_check).ir()?;
+        builder.create_block(matched).ir()?;
+        emit_drop_ctor(builder, built, &obj, ctor, adt_id, &addr_slot, &bank_slot, &tag_slot, head, done)?;
+        builder.create_block(next_check).ir()?;
+    }
+    builder.build_call(Value::Global("free".to_string()), vec![obj], IrType::Void).ir()?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    builder.build_return(None).ir()
+}
+
+fn emit_drop_ctor(
+    builder: &mut IrBuilder,
+    built: &Built,
+    obj: &Value,
+    ctor: &CtorDef,
+    adt_id: u32,
+    addr_slot: &Value,
+    bank_slot: &Value,
+    tag_slot: &Value,
+    head: u32,
+    done: u32,
+) -> Result<(), CompileError> {
+    let tail_at = ctor.fields.iter().rposition(|field| matches!(field, Ty::Adt(id) if *id == adt_id));
+    let mut offset = OBJ_FIELDS;
+    let mut tail_tag = None;
+    let mut tail_addr = None;
+    let mut tail_bank = None;
+    for (index, field) in ctor.fields.iter().enumerate() {
+        if Some(index) == tail_at {
+            tail_tag = Some(load_cell(builder, obj, offset, IrType::I16)?);
+            tail_addr = Some(load_cell(builder, obj, offset + 1, IrType::I16)?);
+            tail_bank = Some(load_cell(builder, obj, offset + 2, IrType::I16)?);
+        } else {
+            release_object_field(builder, built, obj, offset, *field)?;
+        }
+        offset += field.cells();
+    }
+    builder.build_call(Value::Global("free".to_string()), vec![obj.clone()], IrType::Void).ir()?;
+    if let (Some(tag), Some(addr), Some(bank)) = (tail_tag, tail_addr, tail_bank) {
+        builder.build_store(addr, addr_slot.clone(), IrType::I16).ir()?;
+        builder.build_store(bank, bank_slot.clone(), IrType::I16).ir()?;
+        builder.build_store(tag, tag_slot.clone(), IrType::I16).ir()?;
+        builder.build_branch(head).ir()
+    } else {
+        builder.build_branch(done).ir()
+    }
+}
+
+fn release_object_field(builder: &mut IrBuilder, built: &Built, obj: &Value, offset: i64, ty: Ty) -> Result<(), CompileError> {
+    match ty {
+        Ty::Struct { id, .. } | Ty::Tuple { id, .. } => {
+            let fields = match ty {
+                Ty::Struct { id, .. } => built.structs[id as usize].clone(),
+                _ => built.tuples[id as usize].clone(),
+            };
+            let mut at = offset;
+            for field in fields {
+                release_object_field(builder, built, obj, at, field)?;
+                at += field.cells();
+            }
+            Ok(())
+        }
+        Ty::Vec(_) | Ty::Slice(_) => {
+            let addr = load_cell(builder, obj, offset, IrType::I16)?;
+            let bank = load_cell(builder, obj, offset + 1, IrType::I16)?;
+            adjust_refcount(builder, addr, bank, false)
+        }
+        Ty::Adt(id) => {
+            let tag = load_cell(builder, obj, offset, IrType::I16)?;
+            let addr = load_cell(builder, obj, offset + 1, IrType::I16)?;
+            let bank = load_cell(builder, obj, offset + 2, IrType::I16)?;
+            call_if_live(builder, &format!("rfl_drop_adt_{id}"), vec![tag, addr, bank])
+        }
+        Ty::Func(_) => {
+            let id = load_cell(builder, obj, offset, IrType::I16)?;
+            let addr = load_cell(builder, obj, offset + 2, IrType::I16)?;
+            let bank = load_cell(builder, obj, offset + 3, IrType::I16)?;
+            call_if_live(builder, "rfl_drop_func", vec![id, addr, bank])
+        }
+        _ => Ok(()),
+    }
+}
+
+fn emit_drop_func(builder: &mut IrBuilder, built: &Built) -> Result<(), CompileError> {
+    builder.create_function("rfl_drop_func".to_string(), IrType::Void);
+    builder.add_parameter(0, IrType::I16);
+    builder.add_parameter(1, IrType::I16);
+    builder.add_parameter(2, IrType::I16);
+    let entry = builder.new_label();
+    builder.create_block(entry).ir()?;
+    let skip = builder.new_label();
+    let go = builder.new_label();
+    let is_null = builder.build_binary(IrBinaryOp::Eq, Value::Temp(1), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_null), skip, go).ir()?;
+    builder.create_block(go).ir()?;
+    let obj = fat_from_parts(builder, Value::Temp(1), Value::Temp(2))?;
+    let refs = load_cell(builder, &obj, OBJ_REFS, IrType::I16)?;
+    let last = builder.build_binary(IrBinaryOp::Eq, refs.clone(), Value::Constant(1), IrType::I1).ir()?;
+    let drop_it = builder.new_label();
+    let dec = builder.new_label();
+    builder.build_branch_cond(Value::Temp(last), drop_it, dec).ir()?;
+    builder.create_block(dec).ir()?;
+    let next = builder.build_binary(IrBinaryOp::Sub, refs, Value::Constant(1), IrType::I16).ir()?;
+    store_object_cell(builder, &obj, OBJ_REFS, Value::Temp(next))?;
+    builder.build_branch(skip).ir()?;
+    builder.create_block(drop_it).ir()?;
+    let capturing: Vec<&Proc> = built.procs.iter().filter(|proc| !proc.captures.is_empty()).collect();
+    for proc in &capturing {
+        let matched = builder.new_label();
+        let next_check = builder.new_label();
+        let is_fn = builder
+            .build_binary(IrBinaryOp::Eq, Value::Temp(0), Value::Constant(proc.func_id as i64), IrType::I1)
+            .ir()?;
+        builder.build_branch_cond(Value::Temp(is_fn), matched, next_check).ir()?;
+        builder.create_block(matched).ir()?;
+        for cap in &proc.captures {
+            release_object_field(builder, built, &obj, cap.offset, cap.ty)?;
+        }
+        builder.build_call(Value::Global("free".to_string()), vec![obj.clone()], IrType::Void).ir()?;
+        builder.build_branch(skip).ir()?;
+        builder.create_block(next_check).ir()?;
+    }
+    builder.build_call(Value::Global("free".to_string()), vec![obj], IrType::Void).ir()?;
+    builder.build_branch(skip).ir()?;
+    builder.create_block(skip).ir()?;
+    builder.build_return(None).ir()
 }
 
 fn fat_temp(temp: u32, bank: BankTag) -> Value {
