@@ -1,6 +1,6 @@
 //! Tests for Binary operation lowering
 
-use rcc_frontend::ir::{Value, IrBinaryOp};
+use rcc_ir::ir::{Value, IrBinaryOp};
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::new_function_naming;
 use crate::instr::{lower_binary_op, lower_binary_op_immediate};

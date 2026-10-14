@@ -7,8 +7,8 @@ use crate::{
     regmgmt::RegisterPressureManager,
 };
 use rcc_codegen::{AsmInst, Reg};
-use rcc_frontend::ir::{FatPointer, IrBinaryOp as B};
-use rcc_frontend::BankTag;
+use rcc_ir::ir::{FatPointer, IrBinaryOp as B};
+use rcc_ir::BankTag;
 
 fn block(id: u32, instructions: Vec<Instruction>) -> BasicBlock {
     let mut b = BasicBlock::new(id);

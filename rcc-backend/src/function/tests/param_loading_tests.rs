@@ -9,7 +9,7 @@
 use crate::function::calling_convention::{CallingConvention};
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::new_function_naming;
-use rcc_frontend::ir::IrType;
+use rcc_ir::ir::IrType;
 use rcc_codegen::{AsmInst, Reg};
 
 #[test]

@@ -121,7 +121,7 @@ fn test_load_param_from_registers_and_stack() {
     let mut naming = new_function_naming();
     
     // Create sample parameter types (all scalars for this test)
-    use rcc_frontend::ir::IrType;
+    use rcc_ir::ir::IrType;
     let param_types = vec![
         (0, IrType::I16), // param 0
         (1, IrType::I16), // param 1
@@ -297,7 +297,7 @@ fn test_mixed_param_types_on_stack() {
     // param 3: scalar (stack at FP-8)
     // param 4: fat pointer (stack at FP-9, FP-10)
     // param 5: scalar (stack at FP-11)
-    use rcc_frontend::ir::IrType;
+    use rcc_ir::ir::IrType;
     let param_types = vec![
         (0, IrType::I16),                           // param 0: scalar
         (1, IrType::FatPtr(Box::new(IrType::I16))), // param 1: fat pointer

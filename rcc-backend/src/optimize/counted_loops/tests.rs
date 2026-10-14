@@ -7,7 +7,7 @@ use crate::{
     regmgmt::RegisterPressureManager,
 };
 use rcc_codegen::{AsmInst, Reg};
-use rcc_frontend::{ir::FatPointer, BankTag};
+use rcc_ir::{ir::FatPointer, BankTag};
 
 fn address() -> Value {
     Value::FatPtr(FatPointer {
@@ -218,7 +218,7 @@ fn module_pipeline_keeps_same_bank_address_proofs_before_rotating() {
     if let I::Store { ptr, .. } = &mut f.blocks[2].instructions[1] {
         *ptr = Value::Temp(6);
     }
-    let mut module = rcc_frontend::ir::Module::new("counted_pipeline".into());
+    let mut module = rcc_ir::ir::Module::new("counted_pipeline".into());
     module.functions.push(f);
     let mut code = crate::lower::module::lower_module(&module, 64000, false).unwrap();
     assert!(matches!(code.pop(), Some(AsmInst::Jalr(..))));
@@ -246,7 +246,7 @@ fn module_pipeline_keeps_same_bank_address_proofs_before_rotating() {
 
 #[test]
 fn operand_only_assembly_keeps_memory_effects_and_can_rotate() {
-    use rcc_frontend::ir::AsmOperandIR;
+    use rcc_ir::ir::AsmOperandIR;
     let mut f = counted(false);
     f.blocks[2].instructions[0] = I::InlineAsm {
         assembly: "STORE %0, R0, %1".into(),

@@ -1,5 +1,5 @@
 use super::*;
-use rcc_frontend::ir::{AsmOperandIR, BasicBlock};
+use rcc_ir::ir::{AsmOperandIR, BasicBlock};
 fn block(id: u32, instructions: Vec<I>) -> BasicBlock {
     let mut b = BasicBlock::new(id);
     b.instructions = instructions;

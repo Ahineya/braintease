@@ -1765,7 +1765,7 @@ dependencies = [
  "pretty_assertions",
  "rcc-codegen",
  "rcc-common",
- "rcc-frontend",
+ "rcc-ir",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -1800,6 +1800,7 @@ dependencies = [
  "rcc-codegen",
  "rcc-common",
  "rcc-frontend",
+ "rcc-ir",
  "rcc-preprocessor",
  "serde",
  "serde_json",
@@ -1812,9 +1813,18 @@ dependencies = [
  "log",
  "ratatui 0.26.3",
  "rcc-common",
+ "rcc-ir",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "rcc-ir"
+version = "0.1.0"
+dependencies = [
+ "rcc-common",
+ "serde",
 ]
 
 [[package]]

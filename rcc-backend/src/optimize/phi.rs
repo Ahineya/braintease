@@ -8,7 +8,7 @@
 //! a TempId repeatedly in predecessor blocks would violate both invariants.
 
 use super::cfg::{next_temp, Cfg};
-use rcc_frontend::ir::{BasicBlock, Function, Instruction, IrType, Value};
+use rcc_ir::ir::{BasicBlock, Function, Instruction, IrType, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub fn destroy_phis(function: &mut Function) -> Result<(), String> {

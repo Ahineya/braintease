@@ -3,7 +3,7 @@
 //! This module manages global variable allocation, tracking, and initialization
 //! code generation for the V2 backend.
 
-use rcc_frontend::ir::{GlobalVariable, IrType, Value, Linkage};
+use rcc_ir::ir::{GlobalVariable, IrType, Value, Linkage};
 use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use std::collections::HashMap;
 use log::debug;
@@ -318,7 +318,7 @@ impl GlobalManager {
                     }
                     Value::Constant(val) => {
                         // Direct constant pointer value
-                        if matches!(fp.bank, rcc_frontend::BankTag::Global) {
+                        if matches!(fp.bank, rcc_ir::BankTag::Global) {
                             insts.extend(self.emit_gp_addr(Reg::T0, *val as u16));
                         } else {
                             insts.push(AsmInst::Li(Reg::T0, *val as i16));
@@ -328,16 +328,16 @@ impl GlobalManager {
                         
                         // Store the bank component
                         match fp.bank {
-                            rcc_frontend::BankTag::Global => {
+                            rcc_ir::BankTag::Global => {
                                 insts.push(AsmInst::Add(Reg::T0, Reg::Gp, Reg::R0)); // Copy GP register
                             }
-                            rcc_frontend::BankTag::Stack => {
+                            rcc_ir::BankTag::Stack => {
                                 insts.push(AsmInst::Add(Reg::T0, Reg::Sb, Reg::R0)); // Copy SB register
                             }
-                            rcc_frontend::BankTag::Null => {
+                            rcc_ir::BankTag::Null => {
                                 insts.push(AsmInst::Li(Reg::T0, crate::regmgmt::BankTagValue::NULL));
                             }
-                            rcc_frontend::BankTag::Heap(bank) => insts.push(AsmInst::Li(Reg::T0, bank as i16)),
+                            rcc_ir::BankTag::Heap(bank) => insts.push(AsmInst::Li(Reg::T0, bank as i16)),
                             _ => panic!("unsupported constant global pointer bank"),
                         }
                         insts.extend(self.emit_gp_addr(Reg::T1, address + 1));
@@ -418,8 +418,8 @@ impl GlobalManager {
 
     /// Relocate the base first, then add the displacement to the complete fat
     /// pointer. A 16-bit addition alone loses both bank-size and CPU-word carry.
-    fn lower_address_pointer_init(&self, base: &Value, bank: rcc_frontend::BankTag, cells: i64, address: u16) -> Vec<AsmInst> {
-        use rcc_frontend::BankTag;
+    fn lower_address_pointer_init(&self, base: &Value, bank: rcc_ir::BankTag, cells: i64, address: u16) -> Vec<AsmInst> {
+        use rcc_ir::BankTag;
         let mut insts = match base {
             Value::Global(name) => vec![AsmInst::LiLabel(Reg::T0, name.clone())],
             Value::Constant(offset) if bank == BankTag::Global => self.emit_gp_addr(Reg::T0, *offset as u16),
@@ -471,7 +471,7 @@ impl Default for GlobalManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcc_frontend::ir::Linkage;
+    use rcc_ir::ir::Linkage;
 
     fn allocated_manager() -> GlobalManager {
         let mut manager = GlobalManager::new();

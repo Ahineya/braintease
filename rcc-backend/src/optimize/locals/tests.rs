@@ -1,5 +1,5 @@
 use super::*;
-use rcc_frontend::ir::{BasicBlock, FatPointer};
+use rcc_ir::ir::{BasicBlock, FatPointer};
 
 fn pointer_local() -> Function {
     let pointer = IrType::FatPtr(Box::new(IrType::I32));

@@ -3,13 +3,13 @@
 //! Handles loading values from memory with proper bank management.
 //! Supports both scalar loads and fat pointer loads (2-component).
 
-use rcc_frontend::ir::{Value, IrType as Type};
+use rcc_ir::ir::{Value, IrType as Type};
 use rcc_common::TempId;
 use crate::regmgmt::{RegisterPressureManager, BankInfo, BankTagValue};
 use crate::naming::NameGenerator;
 use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use log::{debug, trace, warn};
-use rcc_frontend::BankTag;
+use rcc_ir::BankTag;
 use super::helpers::{resolve_bank_tag_to_info, get_bank_register_with_runtime_check_safe};
 
 /// Private, pinned copies of a memory address. Advancing a multiword access
@@ -230,8 +230,8 @@ pub fn lower_load(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcc_frontend::ir::FatPointer;
-    use rcc_frontend::BankTag;
+    use rcc_ir::ir::FatPointer;
+    use rcc_ir::BankTag;
     use crate::instr::tests::machine::Machine;
 
     #[test]

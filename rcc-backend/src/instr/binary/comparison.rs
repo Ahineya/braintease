@@ -1,6 +1,6 @@
 //! Comparison operation generation
 
-use rcc_frontend::ir::IrBinaryOp;
+use rcc_ir::ir::IrBinaryOp;
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::NameGenerator;
 use rcc_codegen::{AsmInst, Reg};

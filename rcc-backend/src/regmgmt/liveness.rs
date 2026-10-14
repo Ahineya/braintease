@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use rcc_common::TempId;
-use rcc_frontend::ir::{Function, Instruction, Value};
+use rcc_ir::ir::{Function, Instruction, Value};
 
 #[derive(Default)]
 pub(crate) struct FunctionLiveness {
@@ -180,8 +180,8 @@ impl FunctionLiveness {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcc_frontend::ir::{AsmOperandIR, BasicBlock, FatPointer, IrBinaryOp, IrType};
-    use rcc_frontend::BankTag;
+    use rcc_ir::ir::{AsmOperandIR, BasicBlock, FatPointer, IrBinaryOp, IrType};
+    use rcc_ir::BankTag;
 
     fn block(id: u32, instructions: Vec<Instruction>) -> BasicBlock {
         let mut block = BasicBlock::new(id);

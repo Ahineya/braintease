@@ -1,4 +1,4 @@
-use rcc_frontend::ir::{Function, Value};
+use rcc_ir::ir::{Function, Value};
 use std::collections::BTreeSet;
 
 pub fn value_symbols(value: &Value, symbols: &mut BTreeSet<String>) {
@@ -25,7 +25,7 @@ pub fn function_symbols(function: &Function) -> BTreeSet<String> {
 
 pub fn function_has_opaque_asm(function: &Function) -> bool {
     function.blocks.iter().flat_map(|b| &b.instructions).any(|instruction| {
-        matches!(instruction, rcc_frontend::ir::Instruction::InlineAsm { assembly, clobbers, .. }
+        matches!(instruction, rcc_ir::ir::Instruction::InlineAsm { assembly, clobbers, .. }
             if !super::inline::safe_asm(assembly, clobbers))
     })
 }

@@ -1,6 +1,6 @@
 //! Arithmetic and logical operation generation
 
-use rcc_frontend::ir::IrBinaryOp;
+use rcc_ir::ir::IrBinaryOp;
 use rcc_codegen::{AsmInst, Reg};
 use crate::naming::NameGenerator;
 use crate::regmgmt::RegisterPressureManager;
@@ -145,7 +145,7 @@ mod tests {
     use super::*;
     use crate::instr::binary::{lower_binary_op, lower_binary_op_immediate};
     use crate::naming::new_function_naming;
-    use rcc_frontend::ir::Value;
+    use rcc_ir::ir::Value;
 
     /// Execute the existing word instructions emitted by these operations.
     /// Expected results below use host signed arithmetic, independently of the

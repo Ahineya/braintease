@@ -1,9 +1,9 @@
 //! Comprehensive tests for RegisterPressureManager
 
 use crate::regmgmt::*;
-use rcc_frontend::ir::{Value, IrBinaryOp, BasicBlock, Instruction, IrType, FatPointer};
+use rcc_ir::ir::{Value, IrBinaryOp, BasicBlock, Instruction, IrType, FatPointer};
 use rcc_codegen::{Reg, AsmInst};
-use rcc_frontend::BankTag;
+use rcc_ir::BankTag;
 
 #[test]
 fn test_sethi_ullman_ordering() {

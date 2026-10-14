@@ -2,7 +2,7 @@
 //! machine allocation pass: registers unused and dead through the selected loop
 //! are borrowed, and every entry/exit preserves observable stack-home values.
 use rcc_codegen::{AsmInst as A, Reg};
-use rcc_frontend::{
+use rcc_ir::{
     ir::{Function, Instruction as I, Value},
     BankTag,
 };

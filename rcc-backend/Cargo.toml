@@ -7,7 +7,7 @@ description = "Ripple C99 Compiler - Backend (Assembly Generation)"
 [dependencies]
 rcc-common.workspace = true
 rcc-codegen = { path = "../rcc-codegen" }
-rcc-frontend = { path = "../rcc-frontend" }
+rcc-ir.workspace = true
 thiserror.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }

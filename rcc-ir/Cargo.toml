@@ -1,0 +1,12 @@
+[package]
+name = "rcc-ir"
+version = "0.1.0"
+edition = "2021"
+description = "Ripple compiler intermediate representation"
+
+[dependencies]
+rcc-common.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

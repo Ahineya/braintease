@@ -3,7 +3,7 @@
 //! Opaque/frame-dependent assembly, recursion and varargs remain real calls.
 
 use super::{operands, result, value_temps};
-use rcc_frontend::ir::{BasicBlock, Function, Instruction as I, IrBinaryOp, IrType, Module, Value};
+use rcc_ir::ir::{BasicBlock, Function, Instruction as I, IrBinaryOp, IrType, Module, Value};
 use std::collections::{HashMap, HashSet};
 
 const MAX_BODY: usize = 48;
@@ -536,7 +536,7 @@ pub(super) fn inline_small_functions(module: &mut Module) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcc_frontend::ir::AsmOperandIR;
+    use rcc_ir::ir::AsmOperandIR;
     fn ret(name: &str) -> Function {
         let mut f = Function::new(name.into(), IrType::I32);
         f.parameters.push((0, IrType::I32));

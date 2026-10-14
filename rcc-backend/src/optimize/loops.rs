@@ -1,4 +1,4 @@
-use rcc_frontend::ir::{Function, Instruction, IrBinaryOp as B, IrUnaryOp as U};
+use rcc_ir::ir::{Function, Instruction, IrBinaryOp as B, IrUnaryOp as U};
 use std::collections::{HashMap, HashSet};
 
 /// Natural-loop LICM. Only nontrapping, pure computations move; loads, stores,

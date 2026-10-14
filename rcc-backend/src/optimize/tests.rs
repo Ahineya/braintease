@@ -1,5 +1,5 @@
 use super::*;
-use rcc_frontend::ir::{BasicBlock, IrBinaryOp as B, IrType as T, IrUnaryOp as U};
+use rcc_ir::ir::{BasicBlock, IrBinaryOp as B, IrType as T, IrUnaryOp as U};
 
 fn binary(result: u32, op: B, lhs: Value, rhs: Value, ty: T) -> Instruction {
     Instruction::Binary {
@@ -32,8 +32,8 @@ fn gep_keeps_native_zero_extended_indices_but_not_signed_or_wide_ones() {
             Instruction::Unary { result: 1, op: extension, operand: Value::Temp(0), result_type: T::I32 },
             Instruction::GetElementPtr {
                 result: 2,
-                ptr: Value::FatPtr(rcc_frontend::ir::FatPointer {
-                    addr: Box::new(Value::Constant(1234)), bank: rcc_frontend::BankTag::Global,
+                ptr: Value::FatPtr(rcc_ir::ir::FatPointer {
+                    addr: Box::new(Value::Constant(1234)), bank: rcc_ir::BankTag::Global,
                 }),
                 indices: vec![Value::Temp(1)],
                 result_type: T::FatPtr(Box::new(T::I16)),

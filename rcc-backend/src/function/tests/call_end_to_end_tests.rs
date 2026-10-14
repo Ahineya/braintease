@@ -7,7 +7,7 @@
 use crate::function::calling_convention::{CallingConvention, CallArg};
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::new_function_naming;
-use rcc_frontend::ir::IrType;
+use rcc_ir::ir::IrType;
 use rcc_codegen::{AsmInst, Reg};
 
 /// Helper to simulate a complete function call and verify parameter passing

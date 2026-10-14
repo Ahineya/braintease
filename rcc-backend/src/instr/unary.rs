@@ -3,7 +3,7 @@
 //! Implements all unary operations including negation, bitwise NOT,
 //! and type conversions (zero/sign extend, truncate, pointer casts).
 
-use rcc_frontend::ir::{Value, IrUnaryOp, IrType};
+use rcc_ir::ir::{Value, IrUnaryOp, IrType};
 use rcc_common::TempId;
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::NameGenerator;

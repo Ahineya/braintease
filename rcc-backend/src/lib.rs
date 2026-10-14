@@ -11,8 +11,8 @@ pub mod naming;
 pub mod globals;
 pub mod optimize;
 
-// Re-export IR types from frontend for convenience
-pub use rcc_frontend::ir::{
+// Re-export IR types for convenience
+pub use rcc_ir::ir::{
     Module, Function, BasicBlock, Instruction, Value, IrType,
     IrBinaryOp, IrUnaryOp, GlobalVariable, Linkage, IrBuilder
 };

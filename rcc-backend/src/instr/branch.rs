@@ -3,7 +3,7 @@
 //! Implements conditional and unconditional branch instructions.
 //! Note: Branches in the VM use relative addresses, while JAL uses absolute addresses.
 
-use rcc_frontend::ir::Value;
+use rcc_ir::ir::Value;
 use rcc_common::LabelId;
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::NameGenerator;

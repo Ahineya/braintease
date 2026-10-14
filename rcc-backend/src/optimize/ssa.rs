@@ -4,7 +4,7 @@
 
 use super::cfg::{next_temp, Cfg};
 use rcc_common::TempId;
-use rcc_frontend::{
+use rcc_ir::{
     ir::{Function, Instruction, IrBinaryOp, IrType, Value},
     BankTag,
 };

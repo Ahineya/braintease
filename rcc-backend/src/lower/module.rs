@@ -3,7 +3,7 @@
 //! This module is responsible for lowering IR modules to assembly,
 //! including global variable initialization and function lowering.
 
-use rcc_frontend::ir::{Module, Linkage, Instruction, Value};
+use rcc_ir::ir::{Module, Linkage, Instruction, Value};
 use rcc_codegen::AsmInst;
 use log::{debug, info};
 use crate::globals::GlobalManager;

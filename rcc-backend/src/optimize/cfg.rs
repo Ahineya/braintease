@@ -1,7 +1,7 @@
 //! CFG facts shared by scalar promotion and Phi destruction. Actual terminators
 //! are authoritative; stale frontend predecessor/successor caches are ignored.
 
-use rcc_frontend::ir::{Function, Instruction};
+use rcc_ir::ir::{Function, Instruction};
 use std::collections::{BTreeSet, HashMap};
 
 pub(crate) struct Cfg {

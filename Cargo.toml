@@ -2,6 +2,7 @@
 members = [
     "rcc-codegen",
     "rcc-common",
+    "rcc-ir",
     "rcc-backend",
     "rcc-driver",
     "rcc-frontend",
@@ -27,6 +28,7 @@ serde_json = "1.0"
 log = "0.4"
 env_logger = "0.11"
 rcc-common = { path = "rcc-common" }
+rcc-ir = { path = "rcc-ir" }
 rcc-frontend = { path = "rcc-frontend" }
 
 [workspace.lints.rust]

@@ -1,6 +1,6 @@
 //! Helper functions for binary operation lowering
 
-use rcc_frontend::ir::{Value, IrBinaryOp};
+use rcc_ir::ir::{Value, IrBinaryOp};
 use crate::regmgmt::RegisterPressureManager;
 use crate::instr::helpers::calculate_value_need;
 

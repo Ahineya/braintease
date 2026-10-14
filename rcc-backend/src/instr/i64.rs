@@ -2,7 +2,7 @@
 //!
 //! Low word in the named temp, then `{name}__w1`, `{name}__w2`, `{name}__w3`.
 
-use rcc_frontend::ir::{IrBinaryOp, IrUnaryOp, Value};
+use rcc_ir::ir::{IrBinaryOp, IrUnaryOp, Value};
 use rcc_common::TempId;
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::NameGenerator;

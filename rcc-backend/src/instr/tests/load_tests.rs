@@ -1,11 +1,11 @@
 //! Tests for Load instruction lowering
 
-use rcc_frontend::ir::{Value, IrType as Type, FatPointer, };
+use rcc_ir::ir::{Value, IrType as Type, FatPointer, };
 use crate::regmgmt::{RegisterPressureManager, BankInfo};
 use crate::naming::new_function_naming;
 use crate::instr::lower_load;
 use rcc_codegen::{AsmInst, Reg};
-use rcc_frontend::BankTag;
+use rcc_ir::BankTag;
 
 #[test]
 fn test_load_scalar_from_stack() {

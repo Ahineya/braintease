@@ -1,7 +1,7 @@
 //! GEP already zero-extends one-word operands. Preserve that information rather
 //! than hiding it behind a two-word temporary with a permanently zero high word.
 use rcc_common::TempId;
-use rcc_frontend::ir::{Function, Instruction, IrType, IrUnaryOp, Value};
+use rcc_ir::ir::{Function, Instruction, IrType, IrUnaryOp, Value};
 use std::collections::{HashMap, HashSet};
 
 pub(super) fn narrow_gep_indices(function: &mut Function) {

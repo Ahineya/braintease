@@ -2,7 +2,7 @@
 //! only to SSA values: memory loads and unknown control-flow joins stay unknown.
 //! A same-bank GEP needs an unsigned range proof; no wraparound is assumed away.
 use rcc_common::TempId;
-use rcc_frontend::{
+use rcc_ir::{
     ir::{FatPointer, Function, Instruction as I, IrBinaryOp as B, IrType, IrUnaryOp as U, Value},
     BankTag,
 };
@@ -520,7 +520,7 @@ pub fn preserve_pointer_banks(function: &mut Function, bank_size: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcc_frontend::ir::BasicBlock;
+    use rcc_ir::ir::BasicBlock;
 
     fn pointer_type() -> IrType {
         IrType::FatPtr(Box::new(IrType::I16))
@@ -649,7 +649,7 @@ mod tests {
             2,
             I::InlineAsm {
                 assembly: "LI %0, 17".into(),
-                outputs: vec![rcc_frontend::ir::AsmOperandIR {
+                outputs: vec![rcc_ir::ir::AsmOperandIR {
                     constraint: "=r".into(),
                     value: Value::Temp(5),
                     tied_to: None,

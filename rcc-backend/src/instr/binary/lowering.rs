@@ -1,6 +1,6 @@
 //! Main binary operation lowering logic
 
-use rcc_frontend::ir::{Value, IrBinaryOp};
+use rcc_ir::ir::{Value, IrBinaryOp};
 use rcc_common::TempId;
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::NameGenerator;
@@ -292,7 +292,7 @@ mod shared_operand_tests {
     use super::*;
     use std::collections::BTreeSet;
     use crate::instr::{lower_unary_op, tests::machine::Machine};
-    use rcc_frontend::ir::{IrType, IrUnaryOp};
+    use rcc_ir::ir::{IrType, IrUnaryOp};
 
     #[test]
     fn arithmetic_comparison_not_and_neg_preserve_future_operand_uses() {

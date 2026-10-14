@@ -6,7 +6,7 @@
 //! The implementation follows GCC's extended inline assembly format with
 //! proper register allocation, constraint parsing, and placeholder substitution.
 
-use rcc_frontend::ir::{AsmOperandIR, Value};
+use rcc_ir::ir::{AsmOperandIR, Value};
 use rcc_codegen::{AsmInst, Reg};
 use rcc_common::{CompilerError, SourceLocation};
 use crate::naming::NameGenerator;

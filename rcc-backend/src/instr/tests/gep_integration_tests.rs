@@ -1,11 +1,11 @@
 //! Execute GEP sequences with loads, stores, pointer fields, and matrix access.
 //! Spill instructions are allowed; assertions concern observable memory values.
-use rcc_frontend::ir::{Value, IrType, FatPointer};
+use rcc_ir::ir::{Value, IrType, FatPointer};
 use crate::instr::{lower_gep, lower_store, lower_load};
 use crate::regmgmt::{RegisterPressureManager, BankInfo};
 use crate::naming::{new_function_naming, NameGenerator};
 use rcc_codegen::{AsmInst, Reg};
-use rcc_frontend::BankTag;
+use rcc_ir::BankTag;
 use super::machine::Machine;
 use super::gep_tests::{seed, seed_index, capture_pointer};
 

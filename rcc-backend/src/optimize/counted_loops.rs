@@ -10,7 +10,7 @@ use super::{
     cfg::{next_temp, Cfg},
     result, used_temps,
 };
-use rcc_frontend::ir::{BasicBlock, Function, Instruction as I, IrBinaryOp as B, IrType, Value};
+use rcc_ir::ir::{BasicBlock, Function, Instruction as I, IrBinaryOp as B, IrType, Value};
 use std::collections::{HashMap, HashSet};
 
 struct Loop {

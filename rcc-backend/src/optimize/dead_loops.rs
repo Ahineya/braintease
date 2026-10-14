@@ -1,7 +1,7 @@
 //! Remove empty counter loops only after proving termination at target width.
 //! In particular, a backedge alone is never evidence that a loop can disappear.
 use super::{cfg::Cfg, result, used_temps};
-use rcc_frontend::ir::{Function, Instruction as I, IrBinaryOp as B, IrType, Value};
+use rcc_ir::ir::{Function, Instruction as I, IrBinaryOp as B, IrType, Value};
 use std::collections::{HashMap, HashSet};
 
 pub(super) fn eliminate(function: &mut Function) {
@@ -169,7 +169,7 @@ fn candidate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcc_frontend::ir::BasicBlock;
+    use rcc_ir::ir::BasicBlock;
 
     fn counted(initial: i64, bound: i64, signed: bool) -> Function {
         let mut f = Function::new("empty".into(), IrType::I16);

@@ -8,8 +8,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use rcc_codegen::{AsmInst, Reg};
 use rcc_common::TempId;
-use rcc_frontend::ir::{BasicBlock, Instruction, Value, IrBinaryOp};
-use rcc_frontend::BankTag;
+use rcc_ir::ir::{BasicBlock, Instruction, Value, IrBinaryOp};
+use rcc_ir::BankTag;
 use super::allocator::{RegAllocV2, ALLOCATABLE_REGISTERS};
 use super::bank::BankInfo;
 use log::{debug, trace};

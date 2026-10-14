@@ -1,6 +1,6 @@
 //! Tests for branch instruction lowering
 
-use rcc_frontend::ir::Value;
+use rcc_ir::ir::Value;
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::NameGenerator;
 use crate::instr::branch::{lower_branch, lower_branch_cond, lower_compare_and_branch, ComparisonType};

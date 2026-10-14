@@ -78,7 +78,7 @@ impl CallingConvention {
     }
     
     /// Analyze parameter placement for load_param based on IrType
-    fn analyze_param_placement(&self, param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)])
+    fn analyze_param_placement(&self, param_types: &[(rcc_common::TempId, rcc_ir::ir::IrType)])
         -> (Vec<(usize, usize)>, usize) {
         self.analyze_placement(param_types.len(), |i| param_types[i].1.abi_slots())
     }
@@ -96,7 +96,7 @@ impl CallingConvention {
     fn calculate_stack_param_offset(
         &self,
         param_index: usize,
-        param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)],
+        param_types: &[(rcc_common::TempId, rcc_ir::ir::IrType)],
         first_stack_param: usize,
     ) -> i16 {
         // Stack layout: ... param6, param5, param4, RA, RAB, FP, S0, S1, S2, S3, locals...
@@ -121,11 +121,11 @@ impl CallingConvention {
     /// Extra args are always on the stack, after any named stack parameters.
     pub(super) fn first_vararg_offset(
         &self,
-        named_params: &[(rcc_common::TempId, rcc_frontend::ir::IrType)],
+        named_params: &[(rcc_common::TempId, rcc_ir::ir::IrType)],
     ) -> i16 {
         let (_, first_stack_param) = self.analyze_param_placement(named_params);
         let mut dummy = named_params.to_vec();
-        dummy.push((u32::MAX, rcc_frontend::ir::IrType::I16));
+        dummy.push((u32::MAX, rcc_ir::ir::IrType::I16));
         self.calculate_stack_param_offset(named_params.len(), &dummy, first_stack_param)
     }
     
@@ -504,7 +504,7 @@ impl CallingConvention {
     /// param_types: The types of all parameters to calculate correct stack offsets
     /// Returns (instructions, address_reg, optional_bank_reg for fat pointers)
     pub(super) fn load_param(&self, index: usize, 
-                     param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)],
+                     param_types: &[(rcc_common::TempId, rcc_ir::ir::IrType)],
                      pressure_manager: &mut RegisterPressureManager,
                      naming: &mut NameGenerator) -> (Vec<AsmInst>, Reg, Option<Reg>) {
         info!("Loading parameter {index}");

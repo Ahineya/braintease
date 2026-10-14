@@ -18,7 +18,7 @@ mod redundancy;
 mod tests;
 
 use rcc_common::TempId;
-use rcc_frontend::ir::{Function, Instruction, Value};
+use rcc_ir::ir::{Function, Instruction, Value};
 use std::collections::{HashMap, HashSet};
 
 pub use constants::fold_binary;
@@ -28,7 +28,7 @@ pub(crate) use counted_loops::rotate as rotate_counted_loops;
 pub use reachability::{function_symbols, function_has_opaque_asm, value_symbols};
 pub(crate) use inline::safe_asm;
 
-pub fn optimize_module(module: &mut rcc_frontend::ir::Module) {
+pub fn optimize_module(module: &mut rcc_ir::ir::Module) {
     for function in &mut module.functions { optimize_function(function); }
     inline::inline_small_functions(module);
     for function in &mut module.functions {

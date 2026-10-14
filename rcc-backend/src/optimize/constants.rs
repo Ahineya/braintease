@@ -1,5 +1,5 @@
 use rcc_common::TempId;
-use rcc_frontend::ir::{Function, Instruction, IrBinaryOp as B, IrType, IrUnaryOp as U, Value};
+use rcc_ir::ir::{Function, Instruction, IrBinaryOp as B, IrType, IrUnaryOp as U, Value};
 use std::collections::HashMap;
 
 fn width(ty: &IrType) -> Option<u32> {
@@ -387,7 +387,7 @@ pub(super) fn substitute_temp_aliases(function: &mut Function, aliases: &HashMap
 #[cfg(test)]
 mod identity_tests {
     use super::*;
-    use rcc_frontend::ir::BasicBlock;
+    use rcc_ir::ir::BasicBlock;
 
     #[test]
     fn typed_aliases_keep_wide_arguments_and_remove_boolean_rechecks() {

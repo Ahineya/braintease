@@ -10,7 +10,7 @@ use rcc_codegen::Reg;
 /// the actual bank address.
 /// 
 /// These are the actual runtime values stored in memory, not to be confused
-/// with the compile-time BankTag enum from rcc_frontend.
+/// with the compile-time BankTag enum from rcc_ir.
 pub struct BankTagValue;
 
 impl BankTagValue {

@@ -1,6 +1,6 @@
 use super::*;
 use crate::instr::tests::machine::Machine;
-use rcc_frontend::ir::{BasicBlock, IrType};
+use rcc_ir::ir::{BasicBlock, IrType};
 fn function() -> Function {
     Function::new("loop".into(), IrType::I16)
 }

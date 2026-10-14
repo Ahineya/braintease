@@ -3,12 +3,12 @@
 //! Handles storing values to memory with proper bank management.
 //! Supports both scalar stores and fat pointer stores (2-component).
 
-use rcc_frontend::ir::{Value, IrType};
+use rcc_ir::ir::{Value, IrType};
 use crate::regmgmt::{RegisterPressureManager, BankInfo, BankTagValue};
 use crate::naming::NameGenerator;
 use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use log::{debug, trace, warn};
-use rcc_frontend::BankTag;
+use rcc_ir::BankTag;
 use super::load::MemoryCursor;
 use super::helpers::{resolve_mixed_bank, resolve_bank_tag_to_info, get_bank_register_with_runtime_check_safe, get_bank_value_for_argument, materialize_bank_to_register};
 
@@ -403,8 +403,8 @@ pub fn lower_store(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcc_frontend::ir::{FatPointer};
-    use rcc_frontend::types::BankTag;
+    use rcc_ir::ir::{FatPointer};
+    use rcc_ir::BankTag;
     
     #[test]
     #[should_panic(expected = "Unexpected Value::Global('test_global')")]
@@ -420,7 +420,7 @@ mod tests {
         });
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_ir::ir::IrType::I16);
     }
     
     #[test]
@@ -434,7 +434,7 @@ mod tests {
         let ptr = Value::Global("test_global".to_string());
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_ir::ir::IrType::I16);
     }
     
     #[test]
@@ -454,7 +454,7 @@ mod tests {
         });
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_ir::ir::IrType::I16);
     }
     
     #[test]
@@ -471,7 +471,7 @@ mod tests {
         });
         
         // This should panic
-        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_frontend::ir::IrType::I16);
+        lower_store(&mut mgr, &mut naming, &value, &ptr, &rcc_ir::ir::IrType::I16);
     }
     
     #[test]

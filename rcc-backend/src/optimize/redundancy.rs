@@ -2,13 +2,13 @@
 //! global reads that the entire function leaves unchanged may be speculated.
 //! Unknown stores/calls and assembly memory clobbers remain hard barriers.
 use rcc_common::TempId;
-use rcc_frontend::ir::{Function, Instruction as I, IrBinaryOp as B, IrType, Value};
+use rcc_ir::ir::{Function, Instruction as I, IrBinaryOp as B, IrType, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 fn global(value: &Value) -> Option<&str> {
     match value {
         Value::Global(name) => Some(name),
-        Value::FatPtr(p) if p.bank == rcc_frontend::BankTag::Global => global(&p.addr),
+        Value::FatPtr(p) if p.bank == rcc_ir::BankTag::Global => global(&p.addr),
         _ => None,
     }
 }
@@ -63,7 +63,7 @@ fn hoist_readonly_globals(function: &mut Function) {
                 } else {
                     let local = match ptr {
                         Value::Temp(id) => allocas.contains(id),
-                        Value::FatPtr(p) if p.bank == rcc_frontend::BankTag::Stack => {
+                        Value::FatPtr(p) if p.bank == rcc_ir::BankTag::Stack => {
                             matches!(&*p.addr, Value::Temp(id) if allocas.contains(id))
                         }
                         _ => false,

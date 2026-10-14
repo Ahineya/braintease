@@ -5,8 +5,8 @@
 //! 
 //! DO NOT CONFUSE WITH /v2/function/internal.rs which is an internal implementation detail.
 
-use rcc_frontend::ir::{Function, Instruction, Value, IrType};
-use rcc_frontend::BankTag;
+use rcc_ir::ir::{Function, Instruction, Value, IrType};
+use rcc_ir::BankTag;
 use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use std::collections::HashMap;
 use log::{debug, info, trace};
@@ -321,7 +321,7 @@ fn handle_return_instruction(
 
 /// Lower a single basic block's instructions
 fn lower_basic_block(
-    block: &rcc_frontend::ir::BasicBlock,
+    block: &rcc_ir::ir::BasicBlock,
     block_idx: usize,
     function: &Function,
     builder: &mut FunctionBuilder,
@@ -548,7 +548,7 @@ pub fn lower_function_v2(
 #[cfg(test)]
 mod lifetime_tests {
     use super::*;
-    use rcc_frontend::ir::{BasicBlock, IrBinaryOp, IrUnaryOp};
+    use rcc_ir::ir::{BasicBlock, IrBinaryOp, IrUnaryOp};
     use crate::instr::tests::machine::Machine;
 
     fn lower_for_execution(function: &Function) -> (Vec<AsmInst>, RegisterPressureManager) {

@@ -1,11 +1,11 @@
 //! Tests for Store instruction lowering
 
-use rcc_frontend::ir::{Value, FatPointer, IrType};
+use rcc_ir::ir::{Value, FatPointer, IrType};
 use crate::regmgmt::{RegisterPressureManager, BankInfo};
 use crate::naming::new_function_naming;
 use crate::instr::lower_store;
 use rcc_codegen::{AsmInst, Reg};
-use rcc_frontend::BankTag;
+use rcc_ir::BankTag;
 
 #[test]
 fn test_store_scalar_to_stack() {

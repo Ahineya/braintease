@@ -1,6 +1,6 @@
 //! Tests for Unary operation lowering
 
-use rcc_frontend::ir::{Value, IrUnaryOp, IrType};
+use rcc_ir::ir::{Value, IrUnaryOp, IrType};
 use crate::regmgmt::RegisterPressureManager;
 use crate::naming::new_function_naming;
 use crate::instr::lower_unary_op;

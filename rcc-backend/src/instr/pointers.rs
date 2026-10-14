@@ -8,7 +8,7 @@ use crate::naming::NameGenerator;
 use crate::regmgmt::{BankInfo, BankTagValue, RegisterPressureManager};
 use rcc_codegen::{AsmInst, Reg};
 use rcc_common::TempId;
-use rcc_frontend::{BankTag, ir::{Value, IrBinaryOp}};
+use rcc_ir::{BankTag, ir::{Value, IrBinaryOp}};
 use super::{helpers, wide};
 
 fn reg(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator, insts: &mut Vec<AsmInst>, tag: &str) -> Reg {

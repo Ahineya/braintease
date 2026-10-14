@@ -1,5 +1,5 @@
 use super::*;
-use rcc_frontend::ir::BasicBlock;
+use rcc_ir::ir::BasicBlock;
 
 fn block(id: u32, instructions: Vec<Instruction>) -> BasicBlock {
     let mut b = BasicBlock::new(id);
@@ -222,7 +222,7 @@ fn local_declared_inside_loop_is_promoted_when_each_read_is_initialized() {
 }
 
 fn pointer_example() -> Function {
-    use rcc_frontend::ir::FatPointer;
+    use rcc_ir::ir::FatPointer;
     let pointer = IrType::FatPtr(Box::new(IrType::I16));
     let mut f = example();
     f.return_type = pointer.clone();
@@ -277,7 +277,7 @@ fn mutable_pointer_loop_aliases_preserve_both_components_and_phi_edges() {
 
 #[test]
 fn mutable_pointer_promotion_keeps_unsafe_or_untyped_sources_in_memory() {
-    use rcc_frontend::ir::FatPointer;
+    use rcc_ir::ir::FatPointer;
     for case in 0..7 {
         let mut f = pointer_example();
         match case {

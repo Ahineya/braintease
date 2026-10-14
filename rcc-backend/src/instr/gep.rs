@@ -3,7 +3,7 @@ use crate::naming::NameGenerator;
 use crate::regmgmt::RegisterPressureManager;
 use rcc_codegen::AsmInst;
 use rcc_common::TempId;
-use rcc_frontend::ir::Value;
+use rcc_ir::ir::Value;
 
 pub fn lower_gep(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     base_ptr: &Value, indices: &[Value], element_size: u32,
@@ -14,7 +14,7 @@ pub fn lower_gep(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
 
 #[cfg(test)]
 mod tests {
-    use rcc_frontend::BankTag;
+    use rcc_ir::BankTag;
     use super::*;
     use crate::regmgmt::BankInfo;
     use crate::naming::new_function_naming;
@@ -50,7 +50,7 @@ mod tests {
         let mut naming = new_function_naming();
 
         // Create a base pointer
-        let base_ptr = Value::FatPtr(rcc_frontend::ir::FatPointer {
+        let base_ptr = Value::FatPtr(rcc_ir::ir::FatPointer {
             addr: Box::new(Value::Temp(10)),
             bank: BankTag::Stack,
         });

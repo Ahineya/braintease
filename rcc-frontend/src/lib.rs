@@ -12,7 +12,8 @@ pub mod ast;
 pub mod types;  // Type system definitions
 pub mod semantic;
 pub mod codegen;
-pub mod ir;
+pub use rcc_ir::ir;
+pub use rcc_ir::{emit_module, parse_module, IrTextError};
 pub mod typed_ast;
 pub mod c_formatter;
 mod codegen_tests;

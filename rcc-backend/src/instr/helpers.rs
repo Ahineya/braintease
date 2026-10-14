@@ -3,8 +3,8 @@
 //! This module contains shared utilities used across different instruction
 //! lowering implementations.
 
-use rcc_frontend::ir::{Value, FatPointer};
-use rcc_frontend::BankTag;
+use rcc_ir::ir::{Value, FatPointer};
+use rcc_ir::BankTag;
 use crate::regmgmt::{RegisterPressureManager, BankInfo, BankTagValue};
 use crate::naming::NameGenerator;
 use crate::globals::GlobalManager;

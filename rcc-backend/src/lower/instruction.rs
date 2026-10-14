@@ -3,8 +3,8 @@
 //! This module is responsible for lowering individual IR instructions to assembly,
 //! delegating to specialized modules for each instruction type.
 
-use rcc_frontend::ir::{Instruction, Value, IrType, FatPointer};
-use rcc_frontend::BankTag;
+use rcc_ir::ir::{Instruction, Value, IrType, FatPointer};
+use rcc_ir::BankTag;
 use rcc_codegen::{AsmInst, Reg, emit_addr_constant};
 use std::collections::HashMap;
 use log::{debug, warn};
@@ -39,11 +39,11 @@ pub fn lower_instruction(
     match instruction {
         Instruction::Binary { result, op, lhs, rhs, result_type } => {
             debug!("V2: Binary: t{result} = {lhs:?} {op:?} {rhs:?}");
-            let comparison = matches!(op, rcc_frontend::ir::IrBinaryOp::Eq | rcc_frontend::ir::IrBinaryOp::Ne
-                | rcc_frontend::ir::IrBinaryOp::Slt | rcc_frontend::ir::IrBinaryOp::Sle
-                | rcc_frontend::ir::IrBinaryOp::Sgt | rcc_frontend::ir::IrBinaryOp::Sge
-                | rcc_frontend::ir::IrBinaryOp::Ult | rcc_frontend::ir::IrBinaryOp::Ule
-                | rcc_frontend::ir::IrBinaryOp::Ugt | rcc_frontend::ir::IrBinaryOp::Uge);
+            let comparison = matches!(op, rcc_ir::ir::IrBinaryOp::Eq | rcc_ir::ir::IrBinaryOp::Ne
+                | rcc_ir::ir::IrBinaryOp::Slt | rcc_ir::ir::IrBinaryOp::Sle
+                | rcc_ir::ir::IrBinaryOp::Sgt | rcc_ir::ir::IrBinaryOp::Sge
+                | rcc_ir::ir::IrBinaryOp::Ult | rcc_ir::ir::IrBinaryOp::Ule
+                | rcc_ir::ir::IrBinaryOp::Ugt | rcc_ir::ir::IrBinaryOp::Uge);
             if let (Value::Constant(a), Value::Constant(b)) = (lhs, rhs) {
                 if let Some(value) = crate::optimize::fold_binary(*op, *a, *b, result_type) {
                     let words = if comparison { 1 } else { result_type.abi_slots() };
@@ -93,22 +93,22 @@ pub fn lower_instruction(
             debug!("V2: Unary: t{result} = {op:?} {operand:?}");
             let canonical_operand = canonicalize_value(operand, global_manager, mgr, naming)?;
             let operand = &canonical_operand;
-            let unary_insts = if matches!(op, rcc_frontend::ir::IrUnaryOp::PtrToInt) {
+            let unary_insts = if matches!(op, rcc_ir::ir::IrUnaryOp::PtrToInt) {
                 crate::instr::pointers::to_integer(mgr, naming, operand, *result)
-            } else if matches!(op, rcc_frontend::ir::IrUnaryOp::PtrToLinear) {
+            } else if matches!(op, rcc_ir::ir::IrUnaryOp::PtrToLinear) {
                 crate::instr::pointers::to_linear(mgr, naming, operand, *result, bank_size)
-            } else if matches!(op, rcc_frontend::ir::IrUnaryOp::IntToPtr) {
+            } else if matches!(op, rcc_ir::ir::IrUnaryOp::IntToPtr) {
                 crate::instr::pointers::from_integer(mgr, naming, operand, *result)
             } else if result_type.is_i64()
-                && matches!(op, rcc_frontend::ir::IrUnaryOp::SExt | rcc_frontend::ir::IrUnaryOp::ZExt)
+                && matches!(op, rcc_ir::ir::IrUnaryOp::SExt | rcc_ir::ir::IrUnaryOp::ZExt)
             {
                 crate::instr::i64::lower_i64_extend(mgr, naming, *op, operand, *result)
             } else if result_type.is_wide()
-                && matches!(op, rcc_frontend::ir::IrUnaryOp::SExt | rcc_frontend::ir::IrUnaryOp::ZExt)
+                && matches!(op, rcc_ir::ir::IrUnaryOp::SExt | rcc_ir::ir::IrUnaryOp::ZExt)
             {
                 crate::instr::wide::lower_i32_extend(mgr, naming, *op, operand, *result)
             } else if result_type.is_wide()
-                && matches!(op, rcc_frontend::ir::IrUnaryOp::Trunc)
+                && matches!(op, rcc_ir::ir::IrUnaryOp::Trunc)
             {
                 crate::instr::i64::lower_trunc_i64_to_i32(mgr, naming, operand, *result)
             } else {
@@ -562,11 +562,11 @@ pub fn lower_instruction(
             debug!("V2: Cast: t{result} = cast {value:?} to {target_type:?}");
             if target_type.is_i64() {
                 insts.extend(crate::instr::i64::lower_i64_extend(
-                    mgr, naming, rcc_frontend::ir::IrUnaryOp::SExt, value, *result,
+                    mgr, naming, rcc_ir::ir::IrUnaryOp::SExt, value, *result,
                 ));
             } else if target_type.is_wide() {
                 insts.extend(crate::instr::wide::lower_i32_extend(
-                    mgr, naming, rcc_frontend::ir::IrUnaryOp::SExt, value, *result,
+                    mgr, naming, rcc_ir::ir::IrUnaryOp::SExt, value, *result,
                 ));
             } else if let Value::Temp(t) = value {
                 let src_name = naming.temp_name(*t);

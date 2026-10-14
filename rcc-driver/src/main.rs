@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 // use rcc_codegen::generate_assembly; // Not used currently
 use rcc_backend::{lower_module_to_assembly_with_options, LoweringOptions};
 use rcc_frontend::{Frontend, SemanticAnalyzer};
+use rcc_ir::ir::Module;
 use rcc_preprocessor::Preprocessor;
 use std::fs;
 use std::path::PathBuf;
@@ -64,15 +65,23 @@ enum Commands {
         output: Option<PathBuf>,
     },
     
-    /// Generate assembly from simple IR (for M1 testing)
+    /// Lower a textual IR file to assembly
     GenerateAsm {
-        /// Input IR description (JSON format planned)
+        /// Input textual IR file
         #[arg(short, long)]
-        input: Option<PathBuf>,
+        input: PathBuf,
         
         /// Output assembly file
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Bank size in cells (default: 64000, matching runtime and rct)
+        #[arg(long, default_value = "64000")]
+        bank_size: u16,
+
+        /// Enable spill/reload tracing for debugging register allocation
+        #[arg(long)]
+        trace_spills: bool,
     },
     
     /// Compile C99 source file
@@ -84,7 +93,7 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
         
-        /// Emit IR to stdout and exit (do not lower to assembly)
+        /// Emit textual IR to stdout and exit (do not lower to assembly)
         #[arg(long)]
         emit_ir: bool,
         
@@ -140,8 +149,8 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::GenerateAsm { input, output } => {
-            if let Err(e) = generate_asm_command(input.as_deref(), output.as_deref()) {
+        Commands::GenerateAsm { input, output, bank_size, trace_spills } => {
+            if let Err(e) = generate_asm_command(&input, output.as_deref(), bank_size, trace_spills) {
                 eprintln!("Error generating assembly: {e}");
                 std::process::exit(1);
             }
@@ -193,14 +202,81 @@ fn run_test(_test_name: &str, _output_path: Option<&std::path::Path>) -> Result<
 }
 
 fn generate_asm_command(
-    _input_path: Option<&std::path::Path>,
-    _output_path: Option<&std::path::Path>,
+    input_path: &std::path::Path,
+    output_path: Option<&std::path::Path>,
+    bank_size: u16,
+    trace_spills: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement IR file parsing and assembly generation
-    // For now, just show that the command exists
-    println!("Generate assembly command - not yet implemented");
-    println!("This will be implemented in a future milestone when we have a real IR format");
-    Ok(())
+    let text = fs::read_to_string(input_path)?;
+    let module = rcc_ir::parse_module(&text)?;
+    let output = if let Some(path) = output_path {
+        path.to_path_buf()
+    } else {
+        let mut path = input_path.to_path_buf();
+        path.set_extension("asm");
+        path
+    };
+    write_assembly(&module, &output, bank_size, trace_spills)
+}
+
+fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let ir_output = rcc_ir::emit_module(module);
+    if config.emit_ir {
+        print!("{ir_output}");
+        return Ok(());
+    }
+    if config.print_ir {
+        println!("\n=== IR Output ===");
+        print!("{ir_output}");
+        println!("=== End IR ===\n");
+    }
+    if config.save_ir {
+        let ir_path = if let Some(path) = &config.ir_output_path {
+            path.clone()
+        } else {
+            let mut path = config.input_path.clone();
+            path.set_extension("ir");
+            path
+        };
+        fs::write(&ir_path, &ir_output)?;
+        println!("IR saved to: {}", ir_path.display());
+    }
+    let output = if let Some(path) = &config.output_path {
+        path.clone()
+    } else {
+        let mut path = config.input_path.clone();
+        path.set_extension("asm");
+        path
+    };
+    write_assembly(module, &output, config.bank_size, config.trace_spills)
+}
+
+fn write_assembly(
+    module: &Module,
+    output: &std::path::Path,
+    bank_size: u16,
+    trace_spills: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let has_main = module.functions.iter().any(|func| func.name == "main");
+    let options = LoweringOptions {
+        bank_size,
+        use_v2: true,
+        trace_spills,
+    };
+    match lower_module_to_assembly_with_options(module, options) {
+        Ok(asm_instructions) => {
+            println!("💕 Successfully lowered to assembly");
+            let asm_text = rcc_codegen::emit::emit_complete_program(asm_instructions, has_main)?;
+            fs::write(output, asm_text)?;
+            println!("Assembly written to: {}", output.display());
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to lower IR to assembly: {e}");
+            eprintln!("Note: Code generation is still under development for complex features");
+            Err(e.into())
+        }
+    }
 }
 
 /// Tracing helper struct to save semantic analysis state
@@ -248,6 +324,20 @@ fn save_trace_file<T: Serialize>(
 }
 
 fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Error>> {
+    if config.input_path.extension().and_then(|ext| ext.to_str()) == Some("ir") {
+        let text = fs::read_to_string(&config.input_path)?;
+        let module = rcc_ir::parse_module(&text)?;
+        if !config.emit_ir {
+            println!(
+                "Parsed IR module '{}' ({} functions, bank_size: {})",
+                module.name,
+                module.functions.len(),
+                config.bank_size
+            );
+        }
+        return finish_module(&module, &config);
+    }
+
     // Don't print compilation message if we're just emitting IR
     if !config.emit_ir {
         println!("Compiling C99 file: {} (bank_size: {})", config.input_path.display(), config.bank_size);
@@ -261,16 +351,16 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
         let mut preprocessor = Preprocessor::new();
         
         // Add include directories
-        for dir in config.include_dirs {
-            preprocessor.add_include_dir(dir);
+        for dir in &config.include_dirs {
+            preprocessor.add_include_dir(dir.clone());
         }
         
         // Process defines
-        for define in config.defines {
+        for define in &config.defines {
             if let Some((name, value)) = define.split_once('=') {
                 preprocessor.define(name.to_string(), Some(value.to_string()));
             } else {
-                preprocessor.define(define, None);
+                preprocessor.define(define.clone(), None);
             }
         }
         
@@ -412,121 +502,7 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
                 }
             }
             
-            // Format IR output
-            let mut ir_output = String::new();
-            
-            // Add global declarations at the top for better debugging
-            if !ir_module.globals.is_empty() {
-                ir_output.push_str("; Global variables:\n");
-                for global in &ir_module.globals {
-                    ir_output.push_str(&format!("; @{} : {:?}", global.name, global.var_type));
-                    if let Some(init) = &global.initializer {
-                        // Show initializer in a readable format
-                        match init {
-                            rcc_frontend::ir::Value::Constant(val) => {
-                                ir_output.push_str(&format!(" = {val}"));
-                            }
-                            rcc_frontend::ir::Value::ConstantArray(values) => {
-                                // If it looks like a string, show it as a string
-                                if values.last() == Some(&0) && 
-                                   values[..values.len().saturating_sub(1)].iter()
-                                       .all(|&v| (32..=126).contains(&v)) {
-                                    let s: String = values[..values.len().saturating_sub(1)].iter()
-                                        .map(|&c| c as u8 as char).collect();
-                                    ir_output.push_str(&format!(" = \"{s}\""));
-                                } else {
-                                    ir_output.push_str(&format!(" = {values:?}"));
-                                }
-                            }
-                            _ => {
-                                ir_output.push_str(&format!(" = {init:?}"));
-                            }
-                        }
-                    }
-                    ir_output.push('\n');
-                }
-                ir_output.push('\n');
-            }
-            
-            // String literals are included in globals now, so we don't need a separate section
-            
-            for func in &ir_module.functions {
-                ir_output.push_str(&format!("define {} {{\n", func.name));
-                for (param_id, param_type) in &func.parameters {
-                    ir_output.push_str(&format!("  param %{param_id}: {param_type:?}\n"));
-                }
-                for block in &func.blocks {
-                    ir_output.push_str(&format!("L{}:\n", block.id));
-                    for inst in &block.instructions {
-                        ir_output.push_str(&format!("  {inst}\n"));
-                    }
-                }
-                ir_output.push_str("}\n");
-            }
-            
-            // If --emit-ir is set, just print IR and exit
-            if config.emit_ir {
-                print!("{ir_output}");
-                return Ok(());
-            }
-            
-            // Print IR if requested (when not using --emit-ir)
-            if config.print_ir {
-                println!("\n=== IR Output ===");
-                print!("{ir_output}");
-                println!("=== End IR ===\n");
-            }
-            
-            // Save IR to file if requested
-            if config.save_ir {
-                let ir_path = if let Some(path) = config.ir_output_path {
-                    // Use the specified IR output path
-                    path
-                } else {
-                    // Default: save next to input file with .ir extension
-                    let mut path = config.input_path.clone();
-                    path.set_extension("ir");
-                    path
-                };
-                fs::write(&ir_path, &ir_output)?;
-                println!("IR saved to: {}", ir_path.display());
-            }
-            
-            // Check if main function exists
-            let has_main = ir_module.functions.iter().any(|f| f.name == "main");
-            
-            // Lower Module to assembly with bank_size parameter
-            let options = LoweringOptions {
-                bank_size: config.bank_size,
-                use_v2: true,
-                trace_spills: config.trace_spills,
-            };
-            match lower_module_to_assembly_with_options(&ir_module, options) {
-                Ok(asm_instructions) => {
-                    println!("💕 Successfully lowered to assembly");
-                    
-                    // Generate assembly text
-                    let asm_text = rcc_codegen::emit::emit_complete_program(asm_instructions, has_main)?;
-                    
-                    // Write to output file
-                    let final_output_path = if let Some(path) = config.output_path {
-                        path
-                    } else {
-                        let mut path = config.input_path.clone();
-                        path.set_extension("asm");
-                        path
-                    };
-                    
-                    fs::write(&final_output_path, asm_text)?;
-                    println!("Assembly written to: {}", final_output_path.display());
-                    Ok(())
-                }
-                Err(e) => {
-                    eprintln!("Error: Failed to lower IR to assembly: {e}");
-                    eprintln!("Note: Code generation is still under development for complex features");
-                    Err(e.into())
-                }
-            }
+            finish_module(&ir_module, &config)
         }
         Err(e) => {
             eprintln!("Error: Failed to generate IR: {e}");

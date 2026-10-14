@@ -50,7 +50,7 @@ pub struct FunctionBuilder {
     cleanup_stack: Vec<i16>,
     
     /// Parameter types for this function (needed for correct stack offset calculation)
-    param_types: Vec<(rcc_common::TempId, rcc_frontend::ir::IrType)>,
+    param_types: Vec<(rcc_common::TempId, rcc_ir::ir::IrType)>,
 }
 
 impl Default for FunctionBuilder {
@@ -91,7 +91,7 @@ impl FunctionBuilder {
 
     /// FP-relative offset of the first unnamed argument in a variadic callee.
     pub fn first_vararg_fp_offset(
-        param_types: &[(rcc_common::TempId, rcc_frontend::ir::IrType)],
+        param_types: &[(rcc_common::TempId, rcc_ir::ir::IrType)],
     ) -> i16 {
         CallingConvention::new().first_vararg_offset(param_types)
     }
@@ -112,7 +112,7 @@ impl FunctionBuilder {
     
     /// Create a new function builder with parameter types
     /// This should be used when lowering IR functions that have parameter type information
-    pub fn with_params(param_types: Vec<(rcc_common::TempId, rcc_frontend::ir::IrType)>) -> Self {
+    pub fn with_params(param_types: Vec<(rcc_common::TempId, rcc_ir::ir::IrType)>) -> Self {
         info!("Creating new FunctionBuilder with {} parameters", param_types.len());
         Self {
             func: FunctionLowering::new(),

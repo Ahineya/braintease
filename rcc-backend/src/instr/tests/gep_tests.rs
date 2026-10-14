@@ -1,11 +1,11 @@
 //! Behavioral GEP regressions: verify normalized addresses and banks rather
 //! than requiring a particular instruction sequence or bank metadata variant.
-use rcc_frontend::ir::{Value, FatPointer};
+use rcc_ir::ir::{Value, FatPointer};
 use crate::instr::{lower_gep, pointers, wide};
 use crate::regmgmt::{RegisterPressureManager, BankInfo};
 use crate::naming::{new_function_naming, NameGenerator};
 use rcc_codegen::{AsmInst, Reg};
-use rcc_frontend::BankTag;
+use rcc_ir::BankTag;
 use super::machine::Machine;
 
 pub(super) fn seed(mgr: &mut RegisterPressureManager, name: String, value: u16, insts: &mut Vec<AsmInst>) -> Reg {
