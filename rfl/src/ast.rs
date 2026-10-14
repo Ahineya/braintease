@@ -10,6 +10,25 @@ pub struct Module {
     pub impls: Vec<Impl>,
     pub consts: Vec<Const>,
     pub functions: Vec<Function>,
+    /// `extern "C" { fn ...; }` declarations. The bodies live in C.
+    pub externs: Vec<ExternDecl>,
+    pub imports: Vec<Import>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Import {
+    pub span: Span,
+    pub names: Vec<ImportItem>,
+    pub path: String,
+    pub path_span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportItem {
+    pub name: String,
+    /// Name used in this file. Equal to `name` when there is no `as`.
+    pub alias: String,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -17,6 +36,9 @@ pub struct StructItem {
     pub name: String,
     pub name_span: Span,
     pub fields: Vec<StructField>,
+    /// `#[repr(C)]`. Fields are the C layout, with no padding.
+    pub repr_c: bool,
+    pub exported: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +55,7 @@ pub struct Const {
     pub name_span: Span,
     pub ty: ParsedTy,
     pub init: Expr,
+    pub exported: bool,
 }
 
 /// `self`, `&self`, or `&mut self`.
@@ -68,6 +91,7 @@ pub struct Adt {
     pub name_span: Span,
     pub params: Vec<TypeParam>,
     pub ctors: Vec<Ctor>,
+    pub exported: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +115,18 @@ pub struct Function {
     pub params: Vec<Param>,
     pub ret: Option<ParsedTy>,
     pub body: Block,
+    /// `export extern "C"`. A C wrapper calls this function.
+    pub c_export: bool,
+    pub exported: bool,
+}
+
+/// A C function with no RFL body.
+#[derive(Debug, Clone)]
+pub struct ExternDecl {
+    pub name: String,
+    pub name_span: Span,
+    pub params: Vec<Param>,
+    pub ret: Option<ParsedTy>,
 }
 
 #[derive(Debug, Clone)]
@@ -110,6 +146,8 @@ pub enum ParsedTy {
     Ref { span: Span, mutable: bool, inner: Box<ParsedTy> },
     /// `[T; N]`. `len` is a constant expression.
     Array { span: Span, elem: Box<ParsedTy>, len: Box<Expr> },
+    /// `*const T` or `*mut T`. Two cells, not refcounted.
+    Ptr { span: Span, mutable: bool, inner: Box<ParsedTy> },
     /// `(T, U, ...)`.
     Tuple { span: Span, fields: Vec<ParsedTy> },
 }
@@ -120,6 +158,7 @@ impl ParsedTy {
             ParsedTy::Named { span, .. }
             | ParsedTy::Func { span, .. }
             | ParsedTy::Ref { span, .. }
+            | ParsedTy::Ptr { span, .. }
             | ParsedTy::Array { span, .. }
             | ParsedTy::Tuple { span, .. } => *span,
         }
@@ -182,9 +221,13 @@ pub struct Expr {
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     Int(i64),
+    /// Decimal spelling. The checker chooses `f32` or `f64`.
+    Float(String),
     Bool(bool),
     /// A string literal. It is only valid as an argument of `print` or `println`.
     Str(Vec<u16>),
+    /// `c"..."`. A `*const c_char` pointing at static cells plus a trailing zero.
+    CStr(Vec<u16>),
     Name(String),
     Unary {
         op: UnaryOp,
@@ -278,6 +321,8 @@ pub enum ExprKind {
     },
     /// `expr?` on the prelude `Option` or `Result`.
     Try(Box<Expr>),
+    /// `unsafe { ... }`. The block is ordinary; the flag is for the checker.
+    Unsafe(Box<Block>),
 }
 
 impl Expr {
@@ -285,7 +330,7 @@ impl Expr {
     pub fn ends_with_block(&self) -> bool {
         match &self.kind {
             ExprKind::If { else_body, .. } => else_body.as_ref().map(|e| e.ends_with_block()).unwrap_or(true),
-            ExprKind::Block(_) | ExprKind::While { .. } | ExprKind::Match { .. } | ExprKind::For { .. } => true,
+            ExprKind::Block(_) | ExprKind::Unsafe(_) | ExprKind::While { .. } | ExprKind::Match { .. } | ExprKind::For { .. } => true,
             ExprKind::Lambda { body, .. } => body.ends_with_block(),
             _ => false,
         }

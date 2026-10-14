@@ -6,6 +6,7 @@ mod check;
 mod error;
 mod lexer;
 mod lower;
+mod modules;
 mod parser;
 mod run;
 mod ty;
@@ -13,13 +14,20 @@ mod typed;
 
 pub use error::CompileError;
 pub use rcc_ir::ir::Module;
-pub use run::{run_program, RunResult};
+pub use run::{run_file, run_program, RunResult};
 
 pub fn compile_to_ir(source: &str) -> Result<Module, CompileError> {
     let tokens = lexer::tokenize(source)?;
     let ast = parser::parse(source, &tokens)?;
+    if !ast.imports.is_empty() {
+        return Err(CompileError::plain("import needs a source file"));
+    }
     let typed = check::check(source, &ast)?;
     lower::lower("program", &typed)
+}
+
+pub fn compile_file(path: &std::path::Path) -> Result<Module, CompileError> {
+    modules::compile_path(path)
 }
 
 pub fn compile_to_ir_text(source: &str) -> Result<String, CompileError> {
@@ -27,8 +35,20 @@ pub fn compile_to_ir_text(source: &str) -> Result<String, CompileError> {
     Ok(rcc_ir::emit_module(&module))
 }
 
+pub fn compile_file_to_ir_text(path: &std::path::Path) -> Result<String, CompileError> {
+    let module = compile_file(path)?;
+    Ok(rcc_ir::emit_module(&module))
+}
+
 pub fn compile_to_asm(source: &str) -> Result<String, CompileError> {
-    let module = compile_to_ir(source)?;
+    asm_of(&compile_to_ir(source)?)
+}
+
+pub fn compile_file_to_asm(path: &std::path::Path) -> Result<String, CompileError> {
+    asm_of(&compile_file(path)?)
+}
+
+fn asm_of(module: &Module) -> Result<String, CompileError> {
     let has_main = module.functions.iter().any(|func| func.name == "main");
     let instructions = rcc_backend::lower_module_to_assembly_with_options(
         &module,

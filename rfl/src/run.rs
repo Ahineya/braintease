@@ -15,6 +15,15 @@ pub struct RunResult {
 
 pub fn run_program(source: &str) -> Result<RunResult, CompileError> {
     let asm = crate::compile_to_asm(source)?;
+    run_asm(&asm)
+}
+
+pub fn run_file(path: &std::path::Path) -> Result<RunResult, CompileError> {
+    let asm = crate::compile_file_to_asm(path)?;
+    run_asm(&asm)
+}
+
+fn run_asm(asm: &str) -> Result<RunResult, CompileError> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
     let dir = root.join("target/rfl-run");
     std::fs::create_dir_all(&dir).map_err(|err| CompileError::plain(format!("cannot create {}: {err}", dir.display())))?;
@@ -43,7 +52,10 @@ pub fn run_program(source: &str) -> Result<RunResult, CompileError> {
     let mut link = Command::new(&rlink);
     link.arg(&crt0).arg(&pobj_path);
     if std::fs::read_to_string(&asm_path).is_ok_and(|text| {
-        text.contains("rfl_frame_alloc") || text.contains("putchar") || text.contains("malloc")
+        text.contains("rfl_frame_alloc")
+            || text.contains("putchar")
+            || text.contains("puts")
+            || text.contains("malloc")
     }) {
         link.arg(root.join("runtime/libruntime.par"));
     }

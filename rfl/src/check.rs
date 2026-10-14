@@ -8,6 +8,8 @@ use crate::typed::*;
 struct Sig {
     params: Vec<Ty>,
     ret: Option<Ty>,
+    /// Call this as a C function, not as an RFL frame.
+    c_abi: bool,
 }
 
 #[derive(Clone)]
@@ -66,6 +68,9 @@ pub fn check(source: &str, module: &Module) -> Result<TModule, CompileError> {
         structs: Vec::new(),
         struct_names: HashMap::new(),
         tuples: Vec::new(),
+        ptrs: Vec::new(),
+        externs: Vec::new(),
+        unsafe_depth: 0,
     };
     let mut owned = module.clone();
     owned.adts.insert(0, prelude_option());
@@ -89,7 +94,15 @@ pub fn check(source: &str, module: &Module) -> Result<TModule, CompileError> {
         checker.check_fn(func, &func.name, true, false)?;
     }
     let structs = checker.structs.iter().map(|info| info.fields.iter().map(|(_, ty)| *ty).collect()).collect();
-    Ok(TModule { functions: checker.typed, adts: checker.adts, structs, tuples: checker.tuples })
+    let repr_c = checker.structs.iter().map(|info| info.repr_c).collect();
+    Ok(TModule {
+        functions: checker.typed,
+        adts: checker.adts,
+        structs,
+        repr_c,
+        tuples: checker.tuples,
+        externs: checker.externs,
+    })
 }
 
 fn prelude_result() -> Adt {
@@ -107,6 +120,7 @@ fn prelude_result() -> Adt {
             Ctor { name: "Ok".to_string(), name_span: span, fields: vec![value] },
             Ctor { name: "Err".to_string(), name_span: span, fields: vec![error] },
         ],
+        exported: false,
     }
 }
 
@@ -154,6 +168,8 @@ fn expand_impls(source: &str, module: &mut Module) -> Result<Vec<Inherent>, Comp
                 params,
                 ret,
                 body: method.body,
+                c_export: false,
+                exported: false,
             });
             methods.push(Inherent { type_name: type_name.clone(), method: method.name, func, receiver: method.receiver });
         }
@@ -191,6 +207,7 @@ fn prelude_option() -> Adt {
             Ctor { name: "None".to_string(), name_span: span, fields: Vec::new() },
             Ctor { name: "Some".to_string(), name_span: span, fields: vec![param] },
         ],
+        exported: false,
     }
 }
 
@@ -251,12 +268,17 @@ struct Checker<'a> {
     structs: Vec<StructInfo>,
     struct_names: HashMap<String, u32>,
     tuples: Vec<Vec<Ty>>,
+    ptrs: Vec<RefTy>,
+    externs: Vec<crate::typed::ExternFn>,
+    /// Nested `unsafe` blocks. A reference becomes a raw pointer only inside one.
+    unsafe_depth: u32,
 }
 
 struct StructInfo {
     name: String,
     fields: Vec<(String, Ty)>,
     width: u16,
+    repr_c: bool,
 }
 
 #[derive(Clone)]
@@ -302,11 +324,13 @@ struct Solver {
     parent: Vec<u32>,
     info: Vec<Option<IInfo>>,
     numeric: Vec<bool>,
+    /// Unbound variable introduced by a float literal. Defaults to `f64`.
+    floaty: Vec<bool>,
 }
 
 impl Solver {
     fn new() -> Self {
-        Self { parent: Vec::new(), info: Vec::new(), numeric: Vec::new() }
+        Self { parent: Vec::new(), info: Vec::new(), numeric: Vec::new(), floaty: Vec::new() }
     }
 
     fn fresh(&mut self) -> u32 {
@@ -314,6 +338,7 @@ impl Solver {
         self.parent.push(id);
         self.info.push(None);
         self.numeric.push(false);
+        self.floaty.push(false);
         id
     }
 
@@ -359,21 +384,34 @@ impl Solver {
         self.numeric[var as usize] = true;
     }
 
+    fn mark_float(&mut self, var: u32) {
+        let var = self.find(var);
+        self.floaty[var as usize] = true;
+    }
+
     fn unify(&mut self, a: u32, b: u32) -> Result<(), &'static str> {
         let a = self.find(a);
         let b = self.find(b);
         if a == b {
             return Ok(());
         }
+        let numeric = self.numeric[a as usize] || self.numeric[b as usize];
+        let floaty = self.floaty[a as usize] || self.floaty[b as usize];
+        if numeric && floaty {
+            return Err("incompatible types");
+        }
         let a_info = self.info[a as usize].take();
         let b_info = self.info[b as usize].take();
-        let numeric = self.numeric[a as usize] || self.numeric[b as usize];
         self.parent[a as usize] = b;
         self.numeric[b as usize] = numeric;
+        self.floaty[b as usize] = floaty;
         match (a_info, b_info) {
             (None, None) => Ok(()),
             (Some(info), None) | (None, Some(info)) => {
                 if numeric && !info_allows_numeric(&info) {
+                    return Err("incompatible types");
+                }
+                if floaty && !info_allows_float(&info) {
                     return Err("incompatible types");
                 }
                 self.info[b as usize] = Some(info);
@@ -381,6 +419,9 @@ impl Solver {
             }
             (Some(left), Some(right)) => {
                 if numeric && (!info_allows_numeric(&left) || !info_allows_numeric(&right)) {
+                    return Err("incompatible types");
+                }
+                if floaty && (!info_allows_float(&left) || !info_allows_float(&right)) {
                     return Err("incompatible types");
                 }
                 self.info[b as usize] = Some(right.clone());
@@ -426,7 +467,12 @@ impl Solver {
 
     fn default_numbers(&mut self) {
         for index in 0..self.parent.len() {
-            if self.parent[index] == index as u32 && self.numeric[index] && self.info[index].is_none() {
+            if self.parent[index] != index as u32 || self.info[index].is_some() {
+                continue;
+            }
+            if self.floaty[index] {
+                self.info[index] = Some(IInfo::Concrete(Ty::F64));
+            } else if self.numeric[index] {
                 self.info[index] = Some(IInfo::Concrete(Ty::I16));
             }
         }
@@ -435,6 +481,10 @@ impl Solver {
 
 fn info_allows_numeric(info: &IInfo) -> bool {
     matches!(info, IInfo::Concrete(ty) if ty.is_int())
+}
+
+fn info_allows_float(info: &IInfo) -> bool {
+    matches!(info, IInfo::Concrete(ty) if ty.is_float())
 }
 
 fn rewrite_layout(ty: Ty, struct_w: &[u16], tuple_w: &[u16], arrays: &[ArrayInfo]) -> Ty {
@@ -545,6 +595,7 @@ impl<'a> Checker<'a> {
         }
         self.infer_omitted(&mut module.functions)?;
         self.ast_fns = module.functions.clone();
+        self.register_externs(&module.externs)?;
         for (index, func) in module.functions.iter().enumerate() {
             if is_builtin(&func.name) {
                 return Err(CompileError::at(self.source, func.name_span.start, format!("`{}` is a builtin", func.name)));
@@ -574,6 +625,14 @@ impl<'a> Checker<'a> {
                 }
                 self.validate_ty(ret, &type_params)?;
             }
+            if func.c_export {
+                if !type_params.is_empty() {
+                    return Err(CompileError::at(self.source, func.name_span.start, "an exported function cannot be generic"));
+                }
+                if func.name == "main" {
+                    return Err(CompileError::at(self.source, func.name_span.start, "cannot export `main`"));
+                }
+            }
             if !type_params.is_empty() {
                 if func.name == "main" {
                     return Err(CompileError::at(self.source, func.name_span.start, "main cannot be generic"));
@@ -592,9 +651,92 @@ impl<'a> Checker<'a> {
                 Some(ty) => Some(self.apply(ty, &HashMap::new())?),
                 None => None,
             };
-            self.sigs.insert(func.name.clone(), Sig { params, ret });
+            self.sigs.insert(func.name.clone(), Sig { params, ret, c_abi: func.c_export });
         }
         Ok(())
+    }
+
+    fn register_externs(&mut self, decls: &[crate::ast::ExternDecl]) -> Result<(), CompileError> {
+        for decl in decls {
+            if is_builtin(&decl.name) {
+                return Err(CompileError::at(self.source, decl.name_span.start, format!("`{}` is a builtin", decl.name)));
+            }
+            if self.sigs.contains_key(&decl.name) || self.fn_schemas.contains_key(&decl.name) || self.ctor_schema.contains_key(&decl.name) {
+                return Err(CompileError::at(self.source, decl.name_span.start, format!("duplicate function `{}`", decl.name)));
+            }
+            let mut params = Vec::new();
+            for param in &decl.params {
+                let Some(ty) = &param.ty else {
+                    return Err(CompileError::at(self.source, param.name_span.start, format!("parameter `{}` needs a type", param.name)));
+                };
+                self.validate_ty(ty, &[])?;
+                let ty = self.apply(ty, &HashMap::new())?;
+                self.require_c_type(param.name_span.start, ty, false)?;
+                params.push(ty);
+            }
+            let ret = match &decl.ret {
+                Some(ty) => {
+                    self.validate_ty(ty, &[])?;
+                    let ty = self.apply(ty, &HashMap::new())?;
+                    self.require_c_type(decl.name_span.start, ty, true)?;
+                    ty
+                }
+                None => Ty::Unit,
+            };
+            self.externs.push(crate::typed::ExternFn { name: decl.name.clone(), params: params.clone(), ret });
+            let ret = if ret == Ty::Unit { None } else { Some(ret) };
+            self.sigs.insert(decl.name.clone(), Sig { params, ret, c_abi: true });
+        }
+        Ok(())
+    }
+
+    fn require_c_type(&self, span: usize, ty: Ty, is_return: bool) -> Result<(), CompileError> {
+        if is_return && ty == Ty::Unit {
+            return Ok(());
+        }
+        if ty.is_int() || ty.is_float() {
+            return Ok(());
+        }
+        if self.is_repr_struct(ty) {
+            return Ok(());
+        }
+        if let Ty::Ptr(id) = ty {
+            let inner = self.ptrs[id as usize].inner;
+            if self.c_pointee(inner) {
+                return Ok(());
+            }
+        }
+        Err(CompileError::at(self.source, span, format!("`{}` cannot be used in a C signature", self.show(ty))))
+    }
+
+    fn is_repr_struct(&self, ty: Ty) -> bool {
+        matches!(ty, Ty::Struct { id, .. } if self.structs.get(id as usize).is_some_and(|info| info.repr_c))
+    }
+
+    fn c_pointee(&self, ty: Ty) -> bool {
+        ty.is_int() || ty.is_float() || self.is_repr_struct(ty)
+    }
+
+    /// `&mut T` may become `*mut T` or `*const T`. `&T` may become `*const T`.
+    fn ptr_from_ref(&self, want: Ty, got: Ty) -> bool {
+        let Ty::Ptr(want_id) = want else { return false };
+        let Ty::Ref(got_id) = got else { return false };
+        let want_ptr = &self.ptrs[want_id as usize];
+        let got_ref = &self.refs[got_id as usize];
+        want_ptr.inner == got_ref.inner && (!want_ptr.mutable || got_ref.mutable)
+    }
+
+    fn coerce_raw(&self, span: usize, expr: TExpr, want: Ty) -> Result<TExpr, CompileError> {
+        if expr.ty == want {
+            return Ok(expr);
+        }
+        if self.ptr_from_ref(want, expr.ty) {
+            if self.unsafe_depth == 0 {
+                return Err(CompileError::at(self.source, span, "converting a reference to a raw pointer needs `unsafe`"));
+            }
+            return Ok(TExpr { ty: want, kind: expr.kind });
+        }
+        Ok(expr)
     }
 
     fn validate_ty(&self, ty: &ParsedTy, params: &[String]) -> Result<(), CompileError> {
@@ -606,6 +748,7 @@ impl<'a> Checker<'a> {
                 self.validate_ty(ret, params)
             }
             ParsedTy::Ref { inner, .. } => self.validate_ty(inner, params),
+            ParsedTy::Ptr { inner, .. } => self.validate_ty(inner, params),
             ParsedTy::Array { elem, .. } => self.validate_ty(elem, params),
             ParsedTy::Tuple { fields, .. } => {
                 for field in fields {
@@ -743,8 +886,15 @@ impl<'a> Checker<'a> {
             ));
         }
         let bindings = self.bindings.iter().map(|binding| binding.ty).collect();
+        if func.c_export {
+            let params = self.sigs[name].params.clone();
+            for ty in params {
+                self.require_c_type(func.name_span.start, ty, false)?;
+            }
+            self.require_c_type(func.name_span.start, ret, true)?;
+        }
         let captures = std::mem::take(&mut self.captures);
-        self.typed.push(TFn { name: name.to_string(), params, ret, bindings, body, closure, captures });
+        self.typed.push(TFn { name: name.to_string(), params, ret, bindings, body, closure, captures, c_export: func.c_export });
         self.scopes = saved.scopes;
         self.bindings = saved.bindings;
         self.fn_ret = saved.fn_ret;
@@ -776,7 +926,7 @@ impl<'a> Checker<'a> {
             params.push(self.apply(param.ty.as_ref().unwrap(), &subst)?);
         }
         let ret = self.apply(func.ret.as_ref().unwrap(), &subst)?;
-        self.sigs.insert(mangled.clone(), Sig { params, ret: Some(ret) });
+        self.sigs.insert(mangled.clone(), Sig { params, ret: Some(ret), c_abi: false });
         self.check_fn(&func, &mangled, true, false)?;
         Ok(mangled)
     }
@@ -812,6 +962,11 @@ impl<'a> Checker<'a> {
                 let refty = &self.refs[id as usize];
                 let prefix = if refty.mutable { "refmut$" } else { "ref$" };
                 format!("{prefix}{}", self.mangle_ty(refty.inner))
+            }
+            Ty::Ptr(id) => {
+                let ptr = &self.ptrs[id as usize];
+                let prefix = if ptr.mutable { "ptrmut$" } else { "ptr$" };
+                format!("{prefix}{}$", self.mangle_ty(ptr.inner))
             }
             Ty::Func(id) => {
                 let sig = &self.funcs[id as usize];
@@ -886,6 +1041,10 @@ impl<'a> Checker<'a> {
                 }
                 Ok(self.intern_ref(*mutable, inner))
             }
+            ParsedTy::Ptr { mutable, inner, .. } => {
+                let inner = self.apply(inner, subst)?;
+                Ok(self.intern_ptr(*mutable, inner))
+            }
             ParsedTy::Array { span, elem, len } => {
                 let elem = self.apply(elem, subst)?;
                 self.require_vec_elem(span.start, elem)?;
@@ -944,6 +1103,15 @@ impl<'a> Checker<'a> {
                 Ok(Ty::Adt(id))
             }
         }
+    }
+
+    fn intern_ptr(&mut self, mutable: bool, inner: Ty) -> Ty {
+        if let Some(index) = self.ptrs.iter().position(|ptr| ptr.mutable == mutable && ptr.inner == inner) {
+            return Ty::Ptr(index as u32);
+        }
+        let id = self.ptrs.len() as u32;
+        self.ptrs.push(RefTy { mutable, inner });
+        Ty::Ptr(id)
     }
 
     fn intern_ref(&mut self, mutable: bool, inner: Ty) -> Ty {
@@ -1015,13 +1183,13 @@ impl<'a> Checker<'a> {
     }
 
     fn require_vec_elem(&self, span: usize, elem: Ty) -> Result<(), CompileError> {
-        if elem.is_int() || elem == Ty::Bool {
+        if elem.is_int() || elem.is_float() || elem == Ty::Bool {
             return Ok(());
         }
         Err(CompileError::at(
             self.source,
             span,
-            format!("vector elements must be integers or bool, found {}", self.show(elem)),
+            format!("vector elements must be numbers or bool, found {}", self.show(elem)),
         ))
     }
 
@@ -1198,6 +1366,18 @@ impl<'a> Checker<'a> {
                 }
                 Ok(TExpr { ty, kind: TExprKind::Int(*value) })
             }
+            ExprKind::Float(text) => {
+                let value = parse_float_literal(self.source, span, text)?;
+                let ty = match expected {
+                    Some(ty) if ty.is_float() => ty,
+                    Some(ty) => {
+                        return Err(CompileError::at(self.source, span, format!("expected {ty}, found a float literal")));
+                    }
+                    None => Ty::F64,
+                };
+                let bits = float_literal_bits(ty, value).map_err(|msg| CompileError::at(self.source, span, msg))?;
+                Ok(TExpr { ty, kind: TExprKind::Float(bits) })
+            }
             ExprKind::Bool(value) => {
                 if let Some(ty) = expected {
                     if ty != Ty::Bool {
@@ -1226,7 +1406,13 @@ impl<'a> Checker<'a> {
                                 ));
                             }
                         }
-                        let kind = if ty == Ty::Bool { TExprKind::Bool(value != 0) } else { TExprKind::Int(value) };
+                        let kind = if ty == Ty::Bool {
+                            TExprKind::Bool(value != 0)
+                        } else if ty.is_float() {
+                            TExprKind::Float(value as u64)
+                        } else {
+                            TExprKind::Int(value)
+                        };
                         return Ok(TExpr { ty, kind });
                     }
                     if let Some(value) = self.fn_value(span, name, expected)? {
@@ -1248,6 +1434,15 @@ impl<'a> Checker<'a> {
             ExprKind::Try(expr) => self.check_try(span, expr, expected),
             ExprKind::Unary { op, expr: inner } => self.check_unary(span, *op, inner, expected),
             ExprKind::Binary { op, lhs, rhs } => self.check_binary(span, *op, lhs, rhs, expected),
+            ExprKind::CStr(chars) => {
+                let ty = self.intern_ptr(false, Ty::I16);
+                if let Some(want) = expected {
+                    if want != ty {
+                        return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(ty))));
+                    }
+                }
+                Ok(TExpr { ty, kind: TExprKind::CStr(chars.clone()) })
+            }
             ExprKind::Str(_) => {
                 Err(CompileError::at(self.source, span, "string values are not implemented yet"))
             }
@@ -1275,6 +1470,14 @@ impl<'a> Checker<'a> {
             ExprKind::StructLit { name, fields } => self.check_struct_lit(span, name, fields, expected),
             ExprKind::Field { base, name } => self.check_field(span, base, name, expected),
             ExprKind::Range { .. } => Err(CompileError::at(self.source, span, "a range can only be used in `for`")),
+            ExprKind::Unsafe(block) => {
+                self.unsafe_depth += 1;
+                let body = self.check_block(block, expected);
+                self.unsafe_depth -= 1;
+                let body = body?;
+                let ty = body.tail.as_ref().map(|e| e.ty).unwrap_or(Ty::Unit);
+                Ok(TExpr { ty, kind: TExprKind::Block(Box::new(body)) })
+            }
             ExprKind::Block(block) => {
                 let body = self.check_block(block, expected)?;
                 let ty = body.tail.as_ref().map(|e| e.ty).unwrap_or(Ty::Unit);
@@ -1282,18 +1485,13 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Cast { expr: inner, ty } => {
                 let to = self.apply(ty, &HashMap::new())?;
-                if !to.is_int() {
-                    return Err(CompileError::at(self.source, ty.span().start, format!("cannot cast to {to}")));
-                }
                 let inner = self.check_expr(inner, None)?;
-                if !inner.ty.is_int() {
+                if !can_cast(inner.ty, to) {
                     return Err(CompileError::at(self.source, span, format!("cannot cast {} to {to}", inner.ty)));
                 }
-                if let TExprKind::Int(value) = inner.kind {
-                    if !to.in_range(value) {
-                        return Err(CompileError::at(self.source, span, format!("{value} does not fit in {to}")));
-                    }
-                    return Ok(TExpr { ty: to, kind: TExprKind::Int(value) });
+                if let Some(folded) = fold_cast(inner.ty, to, &inner.kind) {
+                    let folded = folded.map_err(|msg| CompileError::at(self.source, span, msg))?;
+                    return Ok(TExpr { ty: to, kind: folded });
                 }
                 Ok(TExpr { ty: to, kind: TExprKind::Cast { expr: Box::new(inner), to } })
             }
@@ -1310,10 +1508,17 @@ impl<'a> Checker<'a> {
                 Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Unary { op, expr: Box::new(inner) } })
             }
             UnaryOp::Neg => {
-                let want = expected.filter(|ty| ty.is_int());
+                let want = expected.filter(|ty| ty.is_int() || ty.is_float());
                 let inner = self.check_expr(inner, want)?;
+                if inner.ty.is_float() {
+                    if let TExprKind::Float(bits) = inner.kind {
+                        let sign = if inner.ty == Ty::F32 { 0x8000_0000 } else { 1u64 << 63 };
+                        return Ok(TExpr { ty: inner.ty, kind: TExprKind::Float(bits ^ sign) });
+                    }
+                    return Ok(TExpr { ty: inner.ty, kind: TExprKind::Unary { op, expr: Box::new(inner) } });
+                }
                 if !inner.ty.is_int() || !inner.ty.is_signed() {
-                    return Err(CompileError::at(self.source, span, format!("`-` expects a signed integer, found {}", inner.ty)));
+                    return Err(CompileError::at(self.source, span, format!("`-` expects a signed integer or a float, found {}", inner.ty)));
                 }
                 if let TExprKind::Int(value) = inner.kind {
                     let Some(negated) = value.checked_neg() else {
@@ -1339,15 +1544,19 @@ impl<'a> Checker<'a> {
             return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } });
         }
         let operand_ty = if op.is_compare() {
-            self.peek(lhs).or_else(|| self.peek(rhs)).unwrap_or(Ty::I16)
+            self.peek(lhs).or_else(|| self.peek(rhs)).unwrap_or_else(|| number_default(lhs, rhs))
         } else {
-            expected.filter(|ty| ty.is_int())
+            expected.filter(|ty| ty.is_int() || ty.is_float())
                 .or_else(|| self.peek(lhs))
                 .or_else(|| self.peek(rhs))
-                .unwrap_or(Ty::I16)
+                .unwrap_or_else(|| number_default(lhs, rhs))
         };
-        if !operand_ty.is_int() {
-            return Err(CompileError::at(self.source, span, format!("operator expects integers, found {operand_ty}")));
+        if operand_ty.is_float() {
+            if op == BinOp::Rem {
+                return Err(CompileError::at(self.source, span, "`%` expects integers"));
+            }
+        } else if !operand_ty.is_int() {
+            return Err(CompileError::at(self.source, span, format!("operator expects a number, found {operand_ty}")));
         }
         let lhs = self.check_expr(lhs, Some(operand_ty))?;
         let rhs = self.check_expr(rhs, Some(operand_ty))?;
@@ -1362,6 +1571,17 @@ impl<'a> Checker<'a> {
         if let Some(want) = expected {
             if want != ty {
                 return Err(CompileError::at(self.source, span, format!("expected {want}, this expression has type {ty}")));
+            }
+        }
+        if operand_ty.is_float() {
+            if let (TExprKind::Float(left), TExprKind::Float(right)) = (&lhs.kind, &rhs.kind) {
+                let left = *left;
+                let right = *right;
+                if op.is_compare() {
+                    return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Bool(float_compare(operand_ty, op, left, right)) });
+                }
+                let bits = float_arith(operand_ty, op, left, right);
+                return Ok(TExpr { ty, kind: TExprKind::Float(bits) });
             }
         }
         Ok(TExpr { ty, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } })
@@ -1396,12 +1616,18 @@ impl<'a> Checker<'a> {
         let Some(sig) = self.sigs.get(callee) else {
             return Err(CompileError::at(self.source, span, format!("unknown function `{callee}`")));
         };
-        let Some(ret) = sig.ret else {
-            return Err(CompileError::at(
-                self.source,
-                span,
-                format!("function `{callee}` needs a return type before it can be called"),
-            ));
+        let c_abi = sig.c_abi;
+        let ret = if c_abi {
+            sig.ret.unwrap_or(Ty::Unit)
+        } else {
+            let Some(ret) = sig.ret else {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("function `{callee}` needs a return type before it can be called"),
+                ));
+            };
+            ret
         };
         if args.len() != sig.params.len() {
             return Err(CompileError::at(
@@ -1421,7 +1647,10 @@ impl<'a> Checker<'a> {
                 }
                 typed
             } else {
-                let typed = self.check_expr(arg, Some(ty))?;
+                let mut typed = self.check_expr(arg, Some(ty))?;
+                if c_abi {
+                    typed = self.coerce_raw(span, typed, ty)?;
+                }
                 if typed.ty != ty {
                     return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(ty), self.show(typed.ty))));
                 }
@@ -1429,7 +1658,12 @@ impl<'a> Checker<'a> {
             };
             checked.push(arg);
         }
-        Ok(TExpr { ty: ret, kind: TExprKind::Call { callee: callee.to_string(), args: checked } })
+        let kind = if c_abi {
+            TExprKind::Extern { callee: callee.to_string(), args: checked }
+        } else {
+            TExprKind::Call { callee: callee.to_string(), args: checked }
+        };
+        Ok(TExpr { ty: ret, kind })
     }
 
     fn check_apply(
@@ -1779,10 +2013,9 @@ impl<'a> Checker<'a> {
         if mutable && !self.bindings[id as usize].mutable {
             return Err(CompileError::at(self.source, span, format!("`{name}` is not mutable")));
         }
-        self.note_borrow(span, id, mutable)?;
         let refty = self.intern_ref(mutable, ty);
         if let Some(want) = expected {
-            if want != refty {
+            if want != refty && !self.ptr_from_ref(want, refty) {
                 return Err(CompileError::at(
                     self.source,
                     span,
@@ -1790,6 +2023,7 @@ impl<'a> Checker<'a> {
                 ));
             }
         }
+        self.note_borrow(span, id, mutable)?;
         Ok(TExpr { ty: refty, kind: TExprKind::Borrow { binding: id } })
     }
 
@@ -1964,10 +2198,12 @@ impl<'a> Checker<'a> {
             Ty::U32 => "u32".to_string(),
             Ty::I64 => "i64".to_string(),
             Ty::U64 => "u64".to_string(),
+            Ty::F32 => "f32".to_string(),
+            Ty::F64 => "f64".to_string(),
             Ty::Usize => "usize".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::Struct { id, .. } => self.structs[id as usize].name.clone(),
-            Ty::Unit | Ty::Func(_) | Ty::Ref(_) | Ty::Array { .. } | Ty::Tuple { .. } => return None,
+            Ty::Unit | Ty::Func(_) | Ty::Ref(_) | Ty::Ptr(_) | Ty::Array { .. } | Ty::Tuple { .. } => return None,
         })
     }
 
@@ -2155,6 +2391,11 @@ impl<'a> Checker<'a> {
                 let prefix = if refty.mutable { "&mut " } else { "&" };
                 format!("{prefix}{}", self.show(refty.inner))
             }
+            Ty::Ptr(id) => {
+                let ptr = &self.ptrs[id as usize];
+                let prefix = if ptr.mutable { "*mut " } else { "*const " };
+                format!("{prefix}{}", self.show(ptr.inner))
+            }
             Ty::Func(id) => {
                 let sig = &self.funcs[id as usize];
                 let params: Vec<String> = sig.params.iter().map(|param| self.show(*param)).collect();
@@ -2205,7 +2446,7 @@ impl<'a> Checker<'a> {
         let name = format!("__lambda{}", self.lambda_count);
         self.lambda_count += 1;
         let declared_ret = expected_sig.as_ref().map(|sig| sig.ret);
-        self.sigs.insert(name.clone(), Sig { params: sig_params.clone(), ret: declared_ret });
+        self.sigs.insert(name.clone(), Sig { params: sig_params.clone(), ret: declared_ret, c_abi: false });
         let block = match &body.kind {
             ExprKind::Block(block) => (**block).clone(),
             _ => Block { stmts: Vec::new(), tail: Some(body.clone()) },
@@ -2217,6 +2458,8 @@ impl<'a> Checker<'a> {
             params: params.to_vec(),
             ret: None,
             body: block,
+            c_export: false,
+            exported: false,
         };
         self.check_fn(&func, &name, true, true)?;
         let ret = self.sigs[&name].ret.unwrap();
@@ -2374,6 +2617,16 @@ impl<'a> Checker<'a> {
                     self.infer_field(param, got, params, solved, span)?;
                 }
                 self.infer_field(ret, sig.ret, params, solved, span)
+            }
+            ParsedTy::Ptr { span, mutable, inner } => {
+                let Ty::Ptr(id) = actual else {
+                    return Err(CompileError::at(self.source, span.start, format!("expected a pointer, found {}", self.show(actual))));
+                };
+                if self.ptrs[id as usize].mutable != *mutable {
+                    return Err(CompileError::at(self.source, span.start, format!("expected a pointer, found {}", self.show(actual))));
+                }
+                let inner_ty = self.ptrs[id as usize].inner;
+                self.infer_field(inner, inner_ty, params, solved, span.start)
             }
             ParsedTy::Ref { span, mutable, inner } => {
                 let Ty::Ref(id) = actual else {
@@ -2719,8 +2972,8 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(self.source, item.name_span.start, format!("`{}` is already a function", item.name)));
             }
             let ty = self.apply(&item.ty, &HashMap::new())?;
-            if !ty.is_int() && ty != Ty::Bool {
-                return Err(CompileError::at(self.source, item.name_span.start, format!("a constant must be an integer or bool, found {}", self.show(ty))));
+            if !ty.is_int() && !ty.is_float() && ty != Ty::Bool {
+                return Err(CompileError::at(self.source, item.name_span.start, format!("a constant must be a number or bool, found {}", self.show(ty))));
             }
             let (got, value) = self.eval_const(&item.init, Some(ty))?;
             if got != ty {
@@ -2737,7 +2990,7 @@ impl<'a> Checker<'a> {
 
     fn const_hint(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {
-            ExprKind::Int(_) => None,
+            ExprKind::Int(_) | ExprKind::Float(_) => None,
             ExprKind::Bool(_) => Some(Ty::Bool),
             ExprKind::Name(name) => self.consts.get(name).map(|(ty, _)| *ty),
             ExprKind::Unary { op: UnaryOp::Neg, expr } => self.const_hint(expr),
@@ -2764,6 +3017,18 @@ impl<'a> Checker<'a> {
                 }
                 Ok((ty, *value))
             }
+            ExprKind::Float(text) => {
+                let value = parse_float_literal(self.source, span, text)?;
+                let ty = match expected {
+                    Some(ty) if ty.is_float() => ty,
+                    Some(ty) => {
+                        return Err(CompileError::at(self.source, span, format!("expected {}, found a float literal", self.show(ty))));
+                    }
+                    None => Ty::F64,
+                };
+                let bits = float_literal_bits(ty, value).map_err(|msg| CompileError::at(self.source, span, msg))?;
+                Ok((ty, bits as i64))
+            }
             ExprKind::Bool(value) => {
                 if let Some(want) = expected {
                     if want != Ty::Bool {
@@ -2784,7 +3049,11 @@ impl<'a> Checker<'a> {
                 Ok((ty, value))
             }
             ExprKind::Unary { op: UnaryOp::Neg, expr: inner } => {
-                let (ty, value) = self.eval_const(inner, expected.filter(|ty| ty.is_int()))?;
+                let (ty, value) = self.eval_const(inner, expected.filter(|ty| ty.is_int() || ty.is_float()))?;
+                if ty.is_float() {
+                    let sign = if ty == Ty::F32 { 0x8000_0000u64 } else { 1u64 << 63 };
+                    return Ok((ty, (value as u64 ^ sign) as i64));
+                }
                 if !ty.is_int() {
                     return Err(CompileError::at(self.source, span, format!("cannot negate {}", self.show(ty))));
                 }
@@ -2827,11 +3096,17 @@ impl<'a> Checker<'a> {
                         return Err(CompileError::at(self.source, span, format!("expected {}, found bool", self.show(want))));
                     }
                 }
-                let operand = self.const_hint(lhs).filter(|ty| ty.is_int()).or_else(|| self.const_hint(rhs).filter(|ty| ty.is_int())).unwrap_or(Ty::I16);
+                let operand = self.const_hint(lhs).filter(|ty| ty.is_int() || ty.is_float())
+                    .or_else(|| self.const_hint(rhs).filter(|ty| ty.is_int() || ty.is_float()))
+                    .unwrap_or_else(|| number_default(lhs, rhs));
                 let (left_ty, left) = self.eval_const(lhs, Some(operand))?;
                 let (right_ty, right) = self.eval_const(rhs, Some(operand))?;
                 if left_ty != operand || right_ty != operand {
                     return Err(CompileError::at(self.source, span, format!("cannot compare {} and {}", self.show(left_ty), self.show(right_ty))));
+                }
+                if operand.is_float() {
+                    let value = float_compare(operand, *op, left as u64, right as u64);
+                    return Ok((Ty::Bool, i64::from(value)));
                 }
                 let value = match op {
                     BinOp::Eq => left == right,
@@ -2845,9 +3120,20 @@ impl<'a> Checker<'a> {
                 Ok((Ty::Bool, i64::from(value)))
             }
             ExprKind::Binary { op, lhs, rhs } if op.is_arith() => {
-                let ty = expected.filter(|ty| ty.is_int()).or_else(|| self.const_hint(lhs)).or_else(|| self.const_hint(rhs)).unwrap_or(Ty::I16);
+                let ty = expected.filter(|ty| ty.is_int() || ty.is_float())
+                    .or_else(|| self.const_hint(lhs))
+                    .or_else(|| self.const_hint(rhs))
+                    .unwrap_or_else(|| number_default(lhs, rhs));
+                if ty.is_float() {
+                    if *op == BinOp::Rem {
+                        return Err(CompileError::at(self.source, span, "`%` expects integers"));
+                    }
+                    let (_, left) = self.eval_const(lhs, Some(ty))?;
+                    let (_, right) = self.eval_const(rhs, Some(ty))?;
+                    return Ok((ty, float_arith(ty, *op, left as u64, right as u64) as i64));
+                }
                 if !ty.is_int() {
-                    return Err(CompileError::at(self.source, span, format!("operator expects integers, found {}", self.show(ty))));
+                    return Err(CompileError::at(self.source, span, format!("operator expects a number, found {}", self.show(ty))));
                 }
                 let (_, left) = self.eval_const(lhs, Some(ty))?;
                 let (_, right) = self.eval_const(rhs, Some(ty))?;
@@ -2884,7 +3170,7 @@ impl<'a> Checker<'a> {
             }
             let id = self.structs.len() as u32;
             self.struct_names.insert(item.name.clone(), id);
-            self.structs.push(StructInfo { name: item.name.clone(), fields: Vec::new(), width: 0 });
+            self.structs.push(StructInfo { name: item.name.clone(), fields: Vec::new(), width: 0, repr_c: item.repr_c });
         }
         Ok(())
     }
@@ -2946,7 +3232,38 @@ impl<'a> Checker<'a> {
         for (info, elem) in self.arrays.iter_mut().zip(elems) {
             info.elem = elem;
         }
+        self.check_repr(items)
+    }
+
+    fn check_repr(&self, items: &[crate::ast::StructItem]) -> Result<(), CompileError> {
+        for item in items {
+            if !item.repr_c {
+                continue;
+            }
+            let id = self.struct_names[&item.name];
+            let info = &self.structs[id as usize];
+            for (field, (_, ty)) in item.fields.iter().zip(&info.fields) {
+                if self.c_layout_field(*ty) {
+                    continue;
+                }
+                return Err(CompileError::at(
+                    self.source,
+                    field.ty.span().start,
+                    format!("`{}` cannot be stored in a `#[repr(C)]` struct", self.show(*ty)),
+                ));
+            }
+        }
         Ok(())
+    }
+
+    fn c_layout_field(&self, ty: Ty) -> bool {
+        if ty.is_int() || ty.is_float() || self.is_repr_struct(ty) {
+            return true;
+        }
+        if let Ty::Ptr(id) = ty {
+            return self.c_pointee(self.ptrs[id as usize].inner);
+        }
+        false
     }
 
     fn measure_struct(&self, id: usize, stack: &mut Vec<usize>) -> Result<u16, CompileError> {
@@ -3466,6 +3783,10 @@ impl<'a> Checker<'a> {
                 Ok(solver.tuple(vars))
             }
             ParsedTy::Ref { span, .. } => Err(CompileError::at(self.source, span.start, "a reference cannot be inferred here")),
+            ParsedTy::Ptr { .. } => {
+                let concrete = self.apply(ty, &HashMap::new())?;
+                Ok(solver.concrete(concrete))
+            }
             ParsedTy::Array { span, .. } => {
                 let concrete = self.apply(ty, &HashMap::new())?;
                 let _ = span;
@@ -3552,6 +3873,12 @@ impl<'a> Checker<'a> {
                 solver.mark_numeric(var);
                 var
             }
+            ExprKind::Float(_) => {
+                let var = solver.fresh();
+                solver.mark_float(var);
+                var
+            }
+            ExprKind::CStr(_) => solver.concrete(self.intern_ptr(false, Ty::I16)),
             ExprKind::Bool(_) => solver.concrete(Ty::Bool),
             ExprKind::Name(name) => self.infer_name(solver, span, name, sigs, functions, scope)?,
             ExprKind::Unary { op, expr: inner } => {
@@ -3563,7 +3890,11 @@ impl<'a> Checker<'a> {
                         solver.concrete(Ty::Bool)
                     }
                     UnaryOp::Neg => {
-                        solver.mark_numeric(inner);
+                        let root = solver.find(inner);
+                        let float_info = matches!(solver.info[root as usize], Some(IInfo::Concrete(ty)) if ty.is_float());
+                        if !solver.floaty[root as usize] && !float_info {
+                            solver.mark_numeric(inner);
+                        }
                         inner
                     }
                 }
@@ -3579,14 +3910,18 @@ impl<'a> Checker<'a> {
                 } else {
                     solver.unify(left, right).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                     if op.is_arith() {
-                        solver.mark_numeric(left);
+                        let root = solver.find(left);
+                        let float_info = matches!(solver.info[root as usize], Some(IInfo::Concrete(ty)) if ty.is_float());
+                        if !solver.floaty[root as usize] && !float_info {
+                            solver.mark_numeric(left);
+                        }
                         left
                     } else {
                         solver.concrete(Ty::Bool)
                     }
                 }
             }
-            ExprKind::Block(block) => {
+            ExprKind::Block(block) | ExprKind::Unsafe(block) => {
                 scope.push(HashMap::new());
                 let ty = self.infer_block(solver, block, sigs, functions, scope, ret)?;
                 scope.pop();
@@ -3988,6 +4323,10 @@ impl<'a> Checker<'a> {
                 let refty = &self.refs[id as usize];
                 ParsedTy::Ref { span, mutable: refty.mutable, inner: Box::new(self.ty_to_parsed(refty.inner)) }
             }
+            Ty::Ptr(id) => {
+                let ptr = &self.ptrs[id as usize];
+                ParsedTy::Ptr { span, mutable: ptr.mutable, inner: Box::new(self.ty_to_parsed(ptr.inner)) }
+            }
             Ty::Array { id, len, .. } => ParsedTy::Array {
                 span,
                 elem: Box::new(self.ty_to_parsed(self.arrays[id as usize].elem)),
@@ -4011,9 +4350,144 @@ impl<'a> Checker<'a> {
     }
 }
 
+fn number_default(lhs: &Expr, rhs: &Expr) -> Ty {
+    if has_float_lit(lhs) || has_float_lit(rhs) { Ty::F64 } else { Ty::I16 }
+}
+
+fn has_float_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Float(_) => true,
+        ExprKind::Unary { expr, .. } => has_float_lit(expr),
+        ExprKind::Binary { lhs, rhs, .. } => has_float_lit(lhs) || has_float_lit(rhs),
+        _ => false,
+    }
+}
+
+fn parse_float_literal(source: &str, span: usize, text: &str) -> Result<f64, CompileError> {
+    let value: f64 = text.parse().map_err(|_| {
+        CompileError::at(source, span, format!("invalid float literal {text}"))
+    })?;
+    if !value.is_finite() {
+        return Err(CompileError::at(source, span, format!("{text} does not fit in f64")));
+    }
+    Ok(value)
+}
+
+fn float_literal_bits(ty: Ty, value: f64) -> Result<u64, String> {
+    match ty {
+        Ty::F32 => {
+            let narrow = value as f32;
+            if !narrow.is_finite() {
+                return Err(format!("{value} does not fit in f32"));
+            }
+            Ok(u64::from(narrow.to_bits()))
+        }
+        Ty::F64 => Ok(value.to_bits()),
+        _ => Err("not a float".to_string()),
+    }
+}
+
+fn float_value(ty: Ty, bits: u64) -> f64 {
+    if ty == Ty::F32 { f64::from(f32::from_bits(bits as u32)) } else { f64::from_bits(bits) }
+}
+
+fn float_arith(ty: Ty, op: BinOp, left: u64, right: u64) -> u64 {
+    let value = if ty == Ty::F32 {
+        let left = f32::from_bits(left as u32);
+        let right = f32::from_bits(right as u32);
+        let value = match op {
+            BinOp::Add => left + right,
+            BinOp::Sub => left - right,
+            BinOp::Mul => left * right,
+            BinOp::Div => left / right,
+            _ => 0.0,
+        };
+        return u64::from(value.to_bits());
+    } else {
+        let left = f64::from_bits(left);
+        let right = f64::from_bits(right);
+        match op {
+            BinOp::Add => left + right,
+            BinOp::Sub => left - right,
+            BinOp::Mul => left * right,
+            BinOp::Div => left / right,
+            _ => 0.0,
+        }
+    };
+    value.to_bits()
+}
+
+fn float_compare(ty: Ty, op: BinOp, left: u64, right: u64) -> bool {
+    let left = float_value(ty, left);
+    let right = float_value(ty, right);
+    match op {
+        BinOp::Eq => left == right,
+        BinOp::Ne => left != right,
+        BinOp::Lt => left < right,
+        BinOp::Le => left <= right,
+        BinOp::Gt => left > right,
+        BinOp::Ge => left >= right,
+        _ => false,
+    }
+}
+
+fn can_cast(from: Ty, to: Ty) -> bool {
+    (from.is_int() || from.is_float()) && (to.is_int() || to.is_float())
+}
+
+fn fold_cast(from: Ty, to: Ty, kind: &TExprKind) -> Option<Result<TExprKind, String>> {
+    match kind {
+        TExprKind::Int(value) if from == to && to.is_int() => Some(Ok(TExprKind::Int(*value))),
+        TExprKind::Int(value) if to.is_int() => {
+            if !to.in_range(*value) {
+                return Some(Err(format!("{value} does not fit in {to}")));
+            }
+            Some(Ok(TExprKind::Int(*value)))
+        }
+        TExprKind::Int(value) if to.is_float() => Some(Ok(TExprKind::Float(int_to_float_bits(from, to, *value)))),
+        TExprKind::Float(bits) if from == to => Some(Ok(TExprKind::Float(*bits))),
+        TExprKind::Float(bits) if to.is_float() => match float_literal_bits(to, float_value(from, *bits)) {
+            Ok(bits) => Some(Ok(TExprKind::Float(bits))),
+            Err(msg) => Some(Err(msg)),
+        },
+        TExprKind::Float(bits) if to.is_int() => match float_to_int(to, from, *bits) {
+            Ok(value) => Some(Ok(TExprKind::Int(value))),
+            Err(msg) => Some(Err(msg)),
+        },
+        _ => None,
+    }
+}
+
+fn int_to_float_bits(from: Ty, to: Ty, value: i64) -> u64 {
+    if to == Ty::F32 {
+        let narrow = if from.is_signed() { value as f32 } else { value as u64 as f32 };
+        u64::from(narrow.to_bits())
+    } else {
+        let wide = if from.is_signed() { value as f64 } else { value as u64 as f64 };
+        wide.to_bits()
+    }
+}
+
+fn float_to_int(to: Ty, from: Ty, bits: u64) -> Result<i64, String> {
+    let value = float_value(from, bits);
+    if !value.is_finite() {
+        return Err(format!("cannot cast {from} to {to}"));
+    }
+    let trunc = value.trunc();
+    if trunc.abs() >= 9223372036854775808.0 && !(to == Ty::I64 && trunc == -9223372036854775808.0) {
+        return Err(format!("float value does not fit in {to}"));
+    }
+    let value = trunc as i64;
+    if !to.in_range(value) {
+        return Err(format!("{value} does not fit in {to}"));
+    }
+    Ok(value)
+}
+
 fn escaped_ref(ty: &ParsedTy) -> bool {
     match ty {
         ParsedTy::Ref { .. } => true,
+        ParsedTy::Ptr { inner, .. } => escaped_ref(inner),
             ParsedTy::Array { elem, .. } => escaped_ref(elem),
             ParsedTy::Tuple { fields, .. } => fields.iter().any(escaped_ref),
             ParsedTy::Named { args, .. } => args.iter().any(escaped_ref),
@@ -4027,6 +4501,7 @@ fn mentions_unsolved(ty: &ParsedTy, params: &[String], solved: &[Option<Ty>]) ->
             fn_params.iter().any(|param| mentions_unsolved(param, params, solved)) || mentions_unsolved(ret, params, solved)
         }
         ParsedTy::Ref { inner, .. } => mentions_unsolved(inner, params, solved),
+        ParsedTy::Ptr { inner, .. } => mentions_unsolved(inner, params, solved),
         ParsedTy::Array { elem, .. } => mentions_unsolved(elem, params, solved),
         ParsedTy::Tuple { fields, .. } => fields.iter().any(|field| mentions_unsolved(field, params, solved)),
         ParsedTy::Named { name, args, .. } => {
@@ -4100,7 +4575,7 @@ impl<'a> Checker<'a> {
 
     fn peek(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {
-            ExprKind::Int(_) => None,
+            ExprKind::Int(_) | ExprKind::Float(_) => None,
             ExprKind::Bool(_) => Some(Ty::Bool),
             ExprKind::Name(name) => self.lookup(name).map(|id| self.bindings[id as usize].ty).or_else(|| {
                 let id = self.outer_scopes.iter().rev().find_map(|scope| scope.get(name).copied())?;
@@ -4111,7 +4586,7 @@ impl<'a> Checker<'a> {
             ExprKind::Unary { op: UnaryOp::Neg, expr } => self.peek(expr),
             ExprKind::Binary { op, .. } if op.is_compare() || op.is_logic() => Some(Ty::Bool),
             ExprKind::Binary { lhs, rhs, .. } => self.peek(lhs).or_else(|| self.peek(rhs)),
-            ExprKind::Str(_) | ExprKind::Lambda { .. } => None,
+            ExprKind::Str(_) | ExprKind::CStr(_) | ExprKind::Lambda { .. } => None,
             ExprKind::Call { callee, .. } if is_builtin(callee) => Some(Ty::Unit),
             ExprKind::Call { callee, .. } => self.sigs.get(callee).and_then(|sig| sig.ret),
             ExprKind::Method { receiver, method, .. } => {
@@ -4133,7 +4608,7 @@ impl<'a> Checker<'a> {
             ExprKind::If { then_body, else_body: Some(else_body), .. } => {
                 self.peek_block(then_body).or_else(|| self.peek(else_body))
             }
-            ExprKind::Block(block) => self.peek_block(block),
+            ExprKind::Block(block) | ExprKind::Unsafe(block) => self.peek_block(block),
             ExprKind::Cast { ty, .. } => match ty {
                 ParsedTy::Named { name, args, .. } if args.is_empty() => Ty::parse_name(name),
                 _ => None,

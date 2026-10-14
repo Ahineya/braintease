@@ -9,6 +9,10 @@ pub enum Ty {
     U32,
     I64,
     U64,
+    /// IEEE-754 binary32. Two cells, operated on by the soft-float helpers.
+    F32,
+    /// IEEE-754 binary64. Four cells, operated on by the soft-float helpers.
+    F64,
     /// One unsigned cell. Wide enough for every collection length this machine can allocate.
     Usize,
     Bool,
@@ -34,6 +38,9 @@ pub enum Ty {
     Struct { id: u32, width: u16 },
     /// Inline tuple. `id` indexes the tuple table. `width` is the total cell count.
     Tuple { id: u32, width: u16 },
+    /// Index into the checker's raw-pointer table. Two cells: address and bank.
+    /// Not refcounted. Used to talk to C.
+    Ptr(u32),
 }
 
 impl Ty {
@@ -47,9 +54,16 @@ impl Ty {
             "u32" => Self::U32,
             "i64" => Self::I64,
             "u64" => Self::U64,
+            "f32" => Self::F32,
+            "f64" => Self::F64,
             "bool" => Self::Bool,
             "unit" => Self::Unit,
             "usize" => Self::Usize,
+            // C `int` is 16 bits here. `c_char` is a full cell, not `i8`.
+            "c_char" | "c_short" | "c_int" => Self::I16,
+            "c_uint" => Self::U16,
+            "c_long" => Self::I32,
+            "c_size_t" => Self::U32,
             _ => return None,
         })
     }
@@ -88,15 +102,19 @@ impl Ty {
         matches!(self, Self::I8 | Self::I16 | Self::I32 | Self::I64)
     }
 
+    pub fn is_float(self) -> bool {
+        matches!(self, Self::F32 | Self::F64)
+    }
+
     /// Cells occupied in an activation record.
     pub fn cells(self) -> i64 {
         match self {
             Self::Unit => 0,
             Self::Adt(_) => 3,
             Self::Func(_) => 4,
-            Self::I32 | Self::U32 => 2,
-            Self::I64 | Self::U64 => 4,
-            Self::Vec(_) | Self::Ref(_) => 2,
+            Self::I32 | Self::U32 | Self::F32 => 2,
+            Self::I64 | Self::U64 | Self::F64 => 4,
+            Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) => 2,
             Self::Slice(_) => 4,
             Self::Array { len, width, .. } => len as i64 * width as i64,
             Self::Struct { width, .. } | Self::Tuple { width, .. } => width as i64,
@@ -114,7 +132,7 @@ impl Ty {
             Self::U32 => (0..=u32::MAX as i64).contains(&value),
             Self::I64 => true,
             Self::U64 => value >= 0,
-            Self::Bool | Self::Unit | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => false,
+            Self::Bool | Self::Unit | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => false,
         }
     }
 
@@ -125,7 +143,7 @@ impl Ty {
             Self::I16 | Self::U16 | Self::Usize | Self::Bool => value & 0xffff,
             Self::I32 | Self::U32 => value & 0xffff_ffff,
             Self::I64 | Self::U64 => value,
-            Self::Unit | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => 0,
+            Self::Unit | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => 0,
         }
     }
 }
@@ -141,6 +159,8 @@ impl std::fmt::Display for Ty {
             Self::U32 => "u32",
             Self::I64 => "i64",
             Self::U64 => "u64",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
             Self::Bool => "bool",
             Self::Unit => "unit",
             Self::Usize => "usize",
@@ -152,6 +172,7 @@ impl std::fmt::Display for Ty {
             Self::Slice(_) => "slice",
             Self::Struct { .. } => "struct",
             Self::Tuple { .. } => "tuple",
+            Self::Ptr(_) => "ptr",
         };
         f.write_str(name)
     }

@@ -853,3 +853,263 @@ fn products_keep_managed_fields() {
     let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(result.status, 42, "{}", result.stdout);
 }
+
+#[test]
+fn floats_use_softfloat() {
+    let source = r#"
+        const STEP: f64 = 0.5;
+        fn add(a: f64, b: f64) -> f64 { a + b }
+        fn mul32(a: f32, b: f32) -> f32 { a * b }
+        fn neg(a: f64) -> f64 { -a }
+        fn div(a: f64, b: f64) -> f64 { a / b }
+        fn cut(a: f64) -> i16 { a as i16 }
+        fn widen(a: i16) -> f64 { a as f64 }
+        fn shift(x) { x + 0.5 }
+        fn main() -> i16 {
+            let wide = add(20.5, 21.5);
+            let narrow = mul32(1.5, 2.0);
+            let down = neg(1.5);
+            let ratio = div(5.0, 2.0);
+            let from_int = widen(20);
+            let trunc = cut(3.9);
+            let widened = mul32(1.5, 1.0) as f64;
+            let inf = div(1.0, 0.0);
+            let nan = div(0.0, 0.0);
+            let xs = [10.0, 32.0];
+            let stepped = add(1.0, STEP);
+            let shifted = shift(19.5);
+            if (wide != 42.0) { 1 }
+            else if (narrow != 3.0) { 2 }
+            else if (!(down < 0.0 && down == -1.5)) { 3 }
+            else if (ratio != 2.5) { 4 }
+            else if (from_int != 20.0) { 5 }
+            else if (trunc != 3) { 6 }
+            else if (widened != 1.5) { 7 }
+            else if (!(inf > 1.0)) { 8 }
+            else if (nan == nan) { 9 }
+            else if (xs[0] + xs[1] != 42.0) { 10 }
+            else if (stepped != 1.5) { 11 }
+            else if (shifted != 20.0) { 12 }
+            else { 42 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn float_and_integer_do_not_mix() {
+    let err = rfl::compile_to_ir("fn main() -> i16 { if (1.0 + 1 == 2.0) { 1 } else { 0 } }\n").unwrap_err();
+    assert!(err.to_string().contains("integer"), "{err}");
+}
+
+#[test]
+fn float_remainder_is_rejected() {
+    let err = rfl::compile_to_ir("fn main() -> i16 { if (1.0 % 2.0 == 0.0) { 1 } else { 0 } }\n").unwrap_err();
+    assert!(err.to_string().contains("integers"), "{err}");
+}
+
+#[test]
+fn c_is_a_name_until_a_quote() {
+    let source = r#"
+        fn c(c: i16) -> i16 { c }
+        fn main() -> i16 { c(42) }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn export_reenters_through_c() {
+    let source = r#"
+        export extern "C" fn add(a: c_int, b: c_int) -> c_int { a + b }
+        fn main() -> i16 { add(20, 22) }
+    "#;
+    let text = ir(source);
+    assert!(text.contains("function i16 @\"add\""), "{text}");
+    assert!(text.contains("function i16* @rfl_fn_add"), "{text}");
+    assert!(text.contains("call i16 global @\"add\""), "{text}");
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn c_string_calls_puts() {
+    let source = r#"
+        extern "C" {
+            fn puts(s: *const c_char) -> c_int;
+        }
+        fn main() -> i16 {
+            puts(c"Y");
+            42
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.stdout, "Y\n", "status {}", result.status);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn c_signature_rejects_a_vector() {
+    let err = rfl::compile_to_ir(
+        "extern \"C\" { fn bad(v: Vec<i16>) -> c_int; }\nfn main() -> i16 { 0 }\n",
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("C signature"), "{err}");
+}
+
+struct Tmp(std::path::PathBuf);
+
+impl Drop for Tmp {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn tmp_main(files: &[(&str, &str)]) -> (Tmp, std::path::PathBuf) {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("rfl-mod-{}-{n}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, body) in files {
+        std::fs::write(dir.join(name), body).unwrap();
+    }
+    let main = dir.join("main.rfl");
+    (Tmp(dir), main)
+}
+
+#[test]
+fn import_needs_a_source_file() {
+    let err = rfl::compile_to_ir("import { sum } from \"./math\";\nfn main() -> i16 { 0 }\n").unwrap_err();
+    assert!(err.to_string().contains("source file"), "{err}");
+}
+
+#[test]
+fn standard_library_is_not_implemented() {
+    let (_tmp, main) = tmp_main(&[("main.rfl", "import { foo } from \"std/foo\";\nfn main() -> i16 { 0 }\n")]);
+    let err = rfl::compile_file(&main).unwrap_err();
+    assert!(err.to_string().contains("standard library"), "{err}");
+}
+
+#[test]
+fn import_renames_a_function() {
+    let (_tmp, main) = tmp_main(&[
+        ("math.rfl", "export fn sum(a: i16, b: i16) -> i16 { a + b }\n"),
+        ("main.rfl", "import { sum as add } from \"./math\";\nfn main() -> i16 { add(20, 22) }\n"),
+    ]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn private_import_is_rejected() {
+    let (_tmp, main) = tmp_main(&[
+        ("lib.rfl", "fn hidden() -> i16 { 1 }\n"),
+        ("main.rfl", "import { hidden } from \"./lib\";\nfn main() -> i16 { hidden() }\n"),
+    ]);
+    let err = rfl::compile_file(&main).unwrap_err();
+    assert!(err.to_string().contains("not exported"), "{err}");
+}
+
+#[test]
+fn import_cycle_is_rejected() {
+    let (tmp, _main) = tmp_main(&[
+        ("a.rfl", "import { b } from \"./b\";\nexport fn a() -> i16 { b() }\nfn main() -> i16 { a() }\n"),
+        ("b.rfl", "import { a } from \"./a\";\nexport fn b() -> i16 { a() }\n"),
+    ]);
+    let err = rfl::compile_file(&tmp.0.join("a.rfl")).unwrap_err();
+    assert!(err.to_string().contains("cycle"), "{err}");
+}
+
+#[test]
+fn export_type_brings_constructors() {
+    let (_tmp, main) = tmp_main(&[
+        ("choice.rfl", "export type Choice = No | Yes(i16);\n"),
+        (
+            "main.rfl",
+            "import { Choice } from \"./choice\";\nfn main() -> i16 {\n    let c = Yes(42);\n    match (c) { Yes(n) => n, No => 0 }\n}\n",
+        ),
+    ]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn import_c_function() {
+    let (_tmp, main) = tmp_main(&[
+        ("math.c", "int add(int a, int b) { return a + b; }\n"),
+        ("main.rfl", "import { add } from \"./math.c\";\nfn main() -> i16 { add(20, 22) }\n"),
+    ]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn static_c_function_is_rejected() {
+    let (_tmp, main) = tmp_main(&[
+        ("secret.c", "static int secret(void) { return 1; }\n"),
+        ("main.rfl", "import { secret } from \"./secret.c\";\nfn main() -> i16 { secret() }\n"),
+    ]);
+    let err = rfl::compile_file(&main).unwrap_err();
+    assert!(err.to_string().contains("static"), "{err}");
+}
+
+#[test]
+fn plain_struct_cannot_be_a_c_pointer() {
+    let err = rfl::compile_to_ir(
+        "struct Point { x: i16 }\nextern \"C\" { fn f(p: *mut Point); }\nfn main() -> i16 { 0 }\n",
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("C signature"), "{err}");
+}
+
+#[test]
+fn raw_pointer_cast_needs_unsafe() {
+    let source = r#"
+        #[repr(C)]
+        struct Point { x: c_int, y: c_int }
+        extern "C" { fn nudge(p: *mut Point, dx: c_int); }
+        fn main() -> i16 {
+            let mut p = Point { x: 1, y: 2 };
+            nudge(&mut p, 1);
+            p.x
+        }
+    "#;
+    let err = rfl::compile_to_ir(source).unwrap_err();
+    assert!(err.to_string().contains("unsafe"), "{err}");
+}
+
+#[test]
+fn repr_c_struct_crosses_the_c_abi() {
+    let (_tmp, main) = tmp_main(&[
+        (
+            "point.c",
+            r#"
+                struct Point { int x; int y; };
+                struct Point make_point(int x, int y) {
+                    struct Point p;
+                    p.x = x;
+                    p.y = y;
+                    return p;
+                }
+                void nudge(struct Point *p, int dx) { p->x = p->x + dx; }
+                int sum_point(struct Point p) { return p.x + p.y; }
+            "#,
+        ),
+        (
+            "main.rfl",
+            r#"
+                import { make_point, nudge, sum_point } from "./point.c";
+                #[repr(C)]
+                struct Point { x: c_int, y: c_int }
+                fn main() -> i16 {
+                    let mut p = make_point(10, 22);
+                    unsafe { nudge(&mut p, 10); }
+                    sum_point(p)
+                }
+            "#,
+        ),
+    ]);
+    let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}

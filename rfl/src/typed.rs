@@ -8,8 +8,19 @@ pub struct TModule {
     pub adts: Vec<AdtDef>,
     /// Field types of each struct, indexed by [`Ty::Struct`](crate::ty::Ty::Struct).
     pub structs: Vec<Vec<Ty>>,
+    /// Parallel to `structs`. True when the struct is `#[repr(C)]`.
+    pub repr_c: Vec<bool>,
     /// Field types of each tuple, indexed by [`Ty::Tuple`](crate::ty::Ty::Tuple).
     pub tuples: Vec<Vec<Ty>>,
+    /// C functions this module calls. Their bodies are not here.
+    pub externs: Vec<ExternFn>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExternFn {
+    pub name: String,
+    pub params: Vec<Ty>,
+    pub ret: Ty,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +52,8 @@ pub struct TFn {
     pub closure: bool,
     /// Values copied into the environment when the closure is created.
     pub captures: Vec<Capture>,
+    /// Also emitted as a C function of the same name.
+    pub c_export: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,11 +95,17 @@ pub struct TExpr {
 #[derive(Debug)]
 pub enum TExprKind {
     Int(i64),
+    /// IEEE bits. `f32` uses the low 32 bits.
+    Float(u64),
     Bool(bool),
     Name(u32),
     Unary { op: UnaryOp, expr: Box<TExpr> },
     Binary { op: BinOp, lhs: Box<TExpr>, rhs: Box<TExpr> },
     Call { callee: String, args: Vec<TExpr> },
+    /// A direct call to a C function. The callee is not an RFL frame.
+    Extern { callee: String, args: Vec<TExpr> },
+    /// Static `c"..."` bytes. The value is `*const c_char`.
+    CStr(Vec<u16>),
     /// Call a function value. `params` is the callee's parameter list.
     Apply { callee: Box<TExpr>, args: Vec<TExpr>, params: Vec<Ty> },
     /// A lambda lifted to `func`. The value is a closure with an empty environment.

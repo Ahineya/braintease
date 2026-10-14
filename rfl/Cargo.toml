@@ -11,7 +11,9 @@ path = "src/main.rs"
 [dependencies]
 rcc-backend = { path = "../rcc-backend" }
 rcc-codegen = { path = "../rcc-codegen" }
+rcc-frontend = { path = "../rcc-frontend" }
 rcc-ir = { workspace = true }
+rcc-preprocessor = { path = "../rcc-preprocessor" }
 clap = { version = "4.5", features = ["derive"] }
 
 [lints]

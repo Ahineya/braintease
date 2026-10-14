@@ -42,23 +42,20 @@ fn run() -> Result<i32, rfl::CompileError> {
     let cli = Cli::parse();
     match cli.command {
         Command::Run { input } => {
-            let source = read(&input)?;
-            let result = rfl::run_program(&source)?;
+            let result = rfl::run_file(&input)?;
             print!("{}", result.stdout);
             Ok(result.status)
         }
         Command::Check { input } => {
-            let source = read(&input)?;
-            rfl::compile_to_ir(&source)?;
+            rfl::compile_file(&input)?;
             Ok(0)
         }
         Command::Compile { input, output, emit_ir } => {
-            let source = read(&input)?;
             if emit_ir {
-                print!("{}", rfl::compile_to_ir_text(&source)?);
+                print!("{}", rfl::compile_file_to_ir_text(&input)?);
                 return Ok(0);
             }
-            let asm = rfl::compile_to_asm(&source)?;
+            let asm = rfl::compile_file_to_asm(&input)?;
             let output = output.unwrap_or_else(|| {
                 let mut path = input;
                 path.set_extension("asm");
@@ -70,10 +67,4 @@ fn run() -> Result<i32, rfl::CompileError> {
             Ok(0)
         }
     }
-}
-
-fn read(path: &std::path::Path) -> Result<String, rfl::CompileError> {
-    std::fs::read_to_string(path).map_err(|err| {
-        rfl::CompileError::plain(format!("cannot read {}: {err}", path.display()))
-    })
 }

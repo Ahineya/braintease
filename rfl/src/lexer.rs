@@ -11,8 +11,12 @@ pub struct Token {
 pub enum TokenKind {
     Ident(String),
     Int(i64),
+    /// Source spelling of a float literal, such as `1.5` or `1e-2`.
+    Float(String),
     /// Decoded string literal. Cells are Unicode scalars that fit in 16 bits.
     Str(Vec<u16>),
+    /// `c"..."`. Same cell encoding as a string, including escapes.
+    CStr(Vec<u16>),
     Fn,
     Let,
     Mut,
@@ -36,6 +40,7 @@ pub enum TokenKind {
     Import,
     Extern,
     Unsafe,
+    Hash,
     LParen,
     RParen,
     LBrace,
@@ -182,7 +187,15 @@ impl<'a> Lexer<'a> {
                     TokenKind::Pipe
                 }
             }
-            '"' => return self.string(start),
+            '#' => {
+                self.bump();
+                TokenKind::Hash
+            }
+            '"' => return self.string(start, false),
+            'c' if self.peek_next() == Some('"') => {
+                self.bump();
+                return self.string(start, true);
+            }
             '\'' => self.character(start)?,
             c if c.is_ascii_digit() => self.number(start)?,
             c if is_ident_start(c) => self.ident(start),
@@ -200,20 +213,44 @@ impl<'a> Lexer<'a> {
         if self.peek_char() == Some('x') || self.peek_char() == Some('X') {
             return Err(self.error(start, "hex literals are not implemented yet"));
         }
+        let mut is_float = false;
         if self.peek_char() == Some('.') {
             let fraction = self.source[self.index + 1..].chars().next();
             if fraction.is_some_and(|c| c.is_ascii_digit()) {
-                return Err(self.error(start, "float literals are not implemented yet"));
+                is_float = true;
+                self.bump();
+                while self.peek_char().is_some_and(|c| c.is_ascii_digit()) {
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_char(), Some('e' | 'E')) {
+            is_float = true;
+            self.bump();
+            if matches!(self.peek_char(), Some('+' | '-')) {
+                self.bump();
+            }
+            if !self.peek_char().is_some_and(|c| c.is_ascii_digit()) {
+                return Err(self.error(start, "a float exponent needs digits"));
+            }
+            while self.peek_char().is_some_and(|c| c.is_ascii_digit()) {
+                self.bump();
             }
         }
         let text = &self.source[start..self.index];
+        if is_float {
+            if text.parse::<f64>().is_err() {
+                return Err(self.error(start, format!("invalid float literal {text}")));
+            }
+            return Ok(TokenKind::Float(text.to_string()));
+        }
         let value = text.parse::<i64>().map_err(|_| {
             self.error(start, format!("integer literal {text} does not fit in i64"))
         })?;
         Ok(TokenKind::Int(value))
     }
 
-    fn string(&mut self, start: usize) -> Result<Token, CompileError> {
+    fn string(&mut self, start: usize, cstr: bool) -> Result<Token, CompileError> {
         self.bump();
         let mut chars = Vec::new();
         loop {
@@ -226,7 +263,8 @@ impl<'a> Lexer<'a> {
                 Some(_) => chars.push(self.escape(start)?),
             }
         }
-        Ok(Token { kind: TokenKind::Str(chars), span: Span { start } })
+        let kind = if cstr { TokenKind::CStr(chars) } else { TokenKind::Str(chars) };
+        Ok(Token { kind, span: Span { start } })
     }
 
     fn character(&mut self, start: usize) -> Result<TokenKind, CompileError> {
