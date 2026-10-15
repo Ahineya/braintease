@@ -1,0 +1,5 @@
+{
+  "description": "Mailbox Ethernet discovery, octet validation and isolation without a live backend",
+  "expected": "YYYYYYYYYYY\n",
+  "use_runtime": true
+}

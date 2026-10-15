@@ -103,6 +103,9 @@ impl VM {
             }
             HDR_DISP_FLUSH => Some(0), // Write-only, return 0
             HDR_KEY_UP | HDR_KEY_DOWN | HDR_KEY_LEFT | HDR_KEY_RIGHT | HDR_KEY_Z | HDR_KEY_X => {
+                if self.display_mode == DISP_RGB565_EXT {
+                    self.poll_device_input();
+                }
                 let value = if self.display_mode == DISP_RGB565_EXT || !self.host_input_enabled {
                     let key = match addr {
                         HDR_KEY_UP => 82,
@@ -441,6 +444,9 @@ impl VM {
             }
             HDR_IRQ_CAUSE => true, // Read-only
             27..=31 => {
+                if self.devices.is_input_request(addr, value) {
+                    self.poll_device_input();
+                }
                 if let Some(frame) = self.devices.write_register(
                     addr,
                     value,

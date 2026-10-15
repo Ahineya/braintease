@@ -40,6 +40,9 @@ struct Cli {
     /// Explicit writable block disk; no default host disk is opened
     #[arg(long)]
     disk: Option<PathBuf>,
+    /// NIC policy: auto (default), host, shared, off, or an external helper socket
+    #[arg(long, conflicts_with_all = ["load_state", "save_state"])]
+    net: Option<PathBuf>,
     #[arg(long, default_value_t = 0x12345678)]
     seed: u32,
     #[arg(long, default_value_t = 35, value_parser = clap::value_parser!(u16).range(1..))]
@@ -268,6 +271,18 @@ fn execute(cli: Cli) -> Result<i32, String> {
         host.devices.devices.set_script(script)?;
         provenance.input_script_sha256 = Some(runner::sha256_file(path)?);
     }
+    let network_setting = if cli.load_state.is_some() || cli.save_state.is_some() {
+        Some(std::ffi::OsString::from("off"))
+    } else {
+        cli.net
+            .as_ref()
+            .map(|p| p.as_os_str().to_owned())
+            .or_else(|| std::env::var_os("RIPPLE_NET"))
+    };
+    host.devices
+        .devices
+        .network
+        .configure_host(network_setting.as_deref())?;
     if let Some(text) = &cli.input {
         host.devices.push_input(text.as_bytes());
     }

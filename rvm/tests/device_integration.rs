@@ -203,7 +203,7 @@ fn malformed_present_descriptors_never_publish_or_replace_previous_frame() {
 }
 
 #[test]
-fn ticks_latch_input_once_and_clock_reads_and_present_do_not_advance_time() {
+fn tick_grants_deliver_controller_input_and_clock_reads_and_present_do_not_advance_time() {
     let mut vm = TestVm::new();
     vm.mode(DISP_RGB565_EXT);
     let clock = [1, 8, 0, 0, 0, 0, 0, 0];
@@ -238,4 +238,51 @@ fn ticks_latch_input_once_and_clock_reads_and_present_do_not_advance_time() {
     assert_eq!(vm.command(1, &[1, 8, 1, 1, 1, 1, 0, 0]), 0);
     assert_eq!(vm.devices.tick(), 35);
     assert_eq!(vm.devices.millis(), 1000);
+}
+
+#[test]
+fn live_keyboard_polling_works_before_any_tick_and_does_not_advance_replay() {
+    let mut vm = TestVm::new();
+    vm.host_input_enabled = true;
+    vm.mode(DISP_RGB565_EXT);
+    vm.devices
+        .set_script(
+            rvm::devices::InputScript::from_json(r#"[{"tick":1,"key":"A","down":true}]"#).unwrap(),
+        )
+        .unwrap();
+    let display = vm.rgb565_display.as_ref().unwrap().get_state();
+    display.lock().unwrap().set_key(82, true);
+    let event = [1, 8, 0, 0, 0, 0, 0, 0];
+    assert_eq!(vm.command(5, &event), 0);
+    assert_eq!(
+        &vm.memory[DESCRIPTOR + 2..DESCRIPTOR + 8],
+        &[1, 82, 1, 0, 0, 0]
+    );
+    assert_eq!(vm.devices.tick(), 0);
+    assert!(!vm.devices.held(4));
+    for _ in 0..3 {
+        assert_eq!(vm.command(5, &event), 0);
+        assert_eq!(vm.memory[DESCRIPTOR + 2], 0);
+    }
+    display.lock().unwrap().set_key(82, false);
+    let mut state = [0; 19];
+    state[0] = 1;
+    state[1] = 19;
+    assert_eq!(vm.command(6, &state), 0);
+    assert!(!vm.devices.held(82));
+    assert_eq!(vm.devices.tick(), 0);
+    // A queued release at tick zero must survive checkpoint validation.
+    rvm::devices::DeviceState::restore_checkpoint(vm.devices.checkpoint()).unwrap();
+    assert_eq!(vm.command(5, &event), 0);
+    assert_eq!(
+        &vm.memory[DESCRIPTOR + 2..DESCRIPTOR + 8],
+        &[1, 82, 0, 0, 0, 0]
+    );
+    assert_eq!(vm.command(3, &event), 0x8000);
+    vm.complete_tick(Vec::new()).unwrap();
+    assert_eq!(vm.command(5, &event), 0);
+    assert_eq!(
+        &vm.memory[DESCRIPTOR + 2..DESCRIPTOR + 8],
+        &[1, 4, 1, 1, 0, 0]
+    );
 }

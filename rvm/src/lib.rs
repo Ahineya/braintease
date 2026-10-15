@@ -14,4 +14,6 @@ pub use asm_formatter::{format_asm_line, format_instruction_spans, get_instructi
 pub use vm::{Instr, VM};
 pub mod capture;
 pub mod devices;
+pub mod input;
+pub mod network;
 pub mod runner;

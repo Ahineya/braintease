@@ -219,6 +219,9 @@ impl BfDevices {
             }
             HDR_KEY_UP..=HDR_KEY_X => {
                 let key = [82, 81, 80, 79, 29, 27][address - HDR_KEY_UP];
+                if self.display_mode == DISP_RGB565_EXT {
+                    self.poll_device_input();
+                }
                 let down = if self.display_mode == DISP_RGB565_EXT || !self.host_input_enabled {
                     self.devices.held(key)
                 } else if self.display_mode == DISP_RGB565 {
@@ -336,6 +339,9 @@ impl BfDevices {
                 }
             }
             27..=31 => {
+                if self.devices.is_input_request(address, value) {
+                    self.poll_device_input();
+                }
                 if let Some(frame) = self.devices.write_register_with_memory(
                     address,
                     value,
@@ -378,41 +384,20 @@ impl BfDevices {
         Ok(())
     }
 
-    /// Complete only a requested tick. Window input is latched at this boundary,
-    /// with the same overflow recovery and ordering as the Rust VM.
+    fn poll_device_input(&mut self) {
+        if self.host_input_enabled {
+            rvm::input::poll_display_input(&mut self.devices, &self.display);
+        }
+    }
+
+    /// Complete a requested tick with explicit controller events. Window input
+    /// is sampled by input commands independently of clock progression.
     pub fn complete_tick<M: GuestMemory + ?Sized>(
         &mut self,
         memory: &mut M,
-        mut events: Vec<KeyTransition>,
+        events: Vec<KeyTransition>,
     ) -> Result<(), String> {
-        if !self.devices.has_pending_tick() {
-            return Ok(());
-        }
-        if self.host_input_enabled {
-            let shared = self.display.get_state();
-            let mut state = shared.lock().unwrap();
-            if state.key_overflow {
-                self.devices.mark_input_overflow();
-                state.pending_keys.clear();
-                for (key, down) in state.keys_held.iter().copied().enumerate() {
-                    if self.devices.held(key as u16) != down {
-                        events.push(KeyTransition {
-                            key: key as u16,
-                            down,
-                        });
-                    }
-                }
-                state.key_overflow = false;
-            } else {
-                events.extend(
-                    std::mem::take(&mut state.pending_keys)
-                        .into_iter()
-                        .map(|(key, down)| KeyTransition { key, down }),
-                );
-            }
-        }
-        self.devices
-            .complete_tick_with_memory(memory, self.bank_size, &events)
+        self.devices.complete_tick_with_memory(memory, self.bank_size, &events)
     }
 }
 
@@ -541,7 +526,7 @@ mod tests {
     }
 
     #[test]
-    fn extended_snapshot_and_tick_input_cross_banks_without_early_visibility() {
+    fn extended_snapshot_and_independent_input_preserve_scheduled_ticks() {
         let mut host = host();
         let mut memory = vec![0; 256];
         store(&mut host, &mut memory, HDR_DISP_MODE, DISP_RGB565_EXT);
@@ -569,7 +554,11 @@ mod tests {
         host.display.get_state().lock().unwrap().set_key(82, true);
         host.complete_tick(&mut memory, vec![]).unwrap();
         assert_eq!(host.devices.tick(), 0);
-        assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 0);
+        command(&mut host, &mut memory, COMMAND_INPUT_POP, 8);
+        assert_eq!(&memory[65..70], &[1, 82, 1, 0, 0]);
+        assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 1);
+        assert_eq!(host.devices.tick(), 0);
+        assert!(!host.devices.held(40)); // Future replay remains unavailable.
         command(&mut host, &mut memory, COMMAND_NEXT_TICK, 8);
         assert_eq!(
             host.read_mmio(REGISTER_STATUS, &mut memory).unwrap(),
@@ -579,7 +568,7 @@ mod tests {
             .unwrap();
         assert_eq!(host.devices.tick(), 1);
         assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 1);
-        for key in [40, 4, 82] {
+        for key in [40, 4] {
             command(&mut host, &mut memory, COMMAND_INPUT_POP, 8);
             assert_eq!(&memory[65..70], &[1, key, 1, 1, 0]);
         }
@@ -606,13 +595,12 @@ mod tests {
         assert!(!host.devices.held(4));
         assert!(!host.devices.overflow_seen());
         host.host_input_enabled = true;
-        command(&mut host, &mut memory, COMMAND_NEXT_TICK, 8);
-        host.complete_tick(&mut memory, vec![]).unwrap();
+        command(&mut host, &mut memory, COMMAND_INPUT_STATE, 19);
         assert!(host.devices.held(4));
         assert!(host.devices.overflow_seen());
-        assert_eq!(host.devices.status(), STATUS_INPUT_OVERFLOW);
+        assert_eq!(host.devices.tick(), 1);
+        assert_eq!(host.devices.status(), STATUS_OK);
         assert!(!host.display.get_state().lock().unwrap().key_overflow);
-        command(&mut host, &mut memory, COMMAND_INPUT_STATE, 19);
         assert_eq!(memory[65], 1);
         assert_eq!(memory[66] & (1 << 4), 1 << 4);
         assert!(!host.devices.input_overflowed());

@@ -16,7 +16,9 @@ pub const REGISTER_COMMAND: usize = 29;
 pub const REGISTER_STATUS: usize = 30;
 pub const REGISTER_VERSION: usize = 31;
 pub const DISPLAY_MODE_EXTENDED: u16 = 4;
-pub const CAPABILITIES: u16 = 15;
+/// INPUT_POP/INPUT_STATE collect live input without a clock grant.
+pub const CAP_INPUT_POLL: u16 = 0x0010;
+pub const CAPABILITIES: u16 = 15 | CAP_INPUT_POLL | crate::network::CAP_NETWORK;
 pub const KEY_COUNT: usize = 256;
 pub const INPUT_QUEUE_CAPACITY: usize = 256;
 
@@ -327,6 +329,8 @@ struct DescriptorPointer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeviceState {
+    #[serde(default)]
+    pub network: crate::network::NetworkDevice,
     descriptor: DescriptorPointer,
     command: u16,
     status: u16,
@@ -354,6 +358,7 @@ impl DeviceState {
     }
 
     pub fn restore_checkpoint(snapshot: Self) -> Result<Self, String> {
+        snapshot.network.validate_checkpoint()?;
         if snapshot.tick_hz == 0
             || snapshot.events.len() > INPUT_QUEUE_CAPACITY
             || snapshot.script_position > snapshot.script.events.len()
@@ -367,7 +372,6 @@ impl DeviceState {
         let mut previous = 0;
         for event in &snapshot.events {
             if usize::from(event.key) >= KEY_COUNT
-                || event.tick == 0
                 || event.tick > snapshot.tick
                 || event.tick < previous
             {
@@ -394,6 +398,7 @@ impl DeviceState {
             return Err("virtual tick rate must be greater than zero".to_string());
         }
         Ok(Self {
+            network: crate::network::NetworkDevice::default(),
             descriptor: DescriptorPointer { bank: 0, offset: 0 },
             command: 0,
             status: STATUS_OK,
@@ -411,8 +416,11 @@ impl DeviceState {
 
     pub fn reset(&mut self) {
         let script = self.script.clone();
+        let network = std::mem::take(&mut self.network);
+        network.reset();
         *self = Self::new(self.tick_hz).expect("an initialized tick rate is nonzero");
         self.script = script;
+        self.network = network;
     }
 
     pub fn set_tick_hz(&mut self, tick_hz: u16) -> Result<(), String> {
@@ -553,9 +561,14 @@ impl DeviceState {
             COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME | COMMAND_INPUT_POP => 8,
             COMMAND_CAPABILITIES => 4,
             COMMAND_INPUT_STATE => 19,
-            _ => return Err(STATUS_UNKNOWN_COMMAND),
+            _ => crate::network::descriptor_length(command).ok_or(STATUS_UNKNOWN_COMMAND)?,
         };
         let range = Self::descriptor_range(self.descriptor, memory, bank_size, length)?;
+        if crate::network::descriptor_length(command).is_some() {
+            self.network.execute(command, memory, range, bank_size)?;
+            self.status = STATUS_OK;
+            return Ok(None);
+        }
         let mut words = [0u16; 19];
         for (word, address) in words.iter_mut().zip(range.clone()) {
             *word = memory.read(address);
@@ -643,6 +656,21 @@ impl DeviceState {
         descriptor[7] = 0;
     }
 
+    /// Deliver live input at the current logical tick, including tick zero.
+    /// Delivery neither advances time nor releases future replay events.
+    pub fn accept_input(&mut self, events: impl IntoIterator<Item = KeyTransition>) {
+        for event in events {
+            self.apply_transition(event);
+        }
+    }
+
+    /// Hosts collect window input only for an input command that can execute.
+    pub fn is_input_request(&self, address: usize, value: u16) -> bool {
+        address == REGISTER_COMMAND
+            && !self.has_pending_tick()
+            && matches!(value, COMMAND_INPUT_POP | COMMAND_INPUT_STATE)
+    }
+
     fn apply_transition(&mut self, transition: KeyTransition) {
         if usize::from(transition.key) >= KEY_COUNT {
             return;
@@ -668,23 +696,24 @@ impl DeviceState {
         }
     }
 
-    /// Grant one pending tick, apply scripted events and then ordered live
-    /// events, and atomically return the new clock value to the waiting guest.
+    /// Grant one pending tick, apply scripted/explicit tick-scheduled events,
+    /// and atomically return the new clock value. Live window input is collected
+    /// independently by INPUT_POP/INPUT_STATE, never by advancing the clock.
     /// Calling without a pending command has no effect.
     pub fn complete_tick(
         &mut self,
         memory: &mut [u16],
         bank_size: u16,
-        live_events: &[KeyTransition],
+        tick_events: &[KeyTransition],
     ) -> Result<(), String> {
-        self.complete_tick_with_memory(memory, bank_size, live_events)
+        self.complete_tick_with_memory(memory, bank_size, tick_events)
     }
 
     pub fn complete_tick_with_memory<M: GuestMemory + ?Sized>(
         &mut self,
         memory: &mut M,
         bank_size: u16,
-        live_events: &[KeyTransition],
+        tick_events: &[KeyTransition],
     ) -> Result<(), String> {
         let Some(pointer) = self.pending_tick.take() else {
             return Ok(());
@@ -705,9 +734,7 @@ impl DeviceState {
             self.script_position += 1;
             self.apply_transition(transition);
         }
-        for &transition in live_events {
-            self.apply_transition(transition);
-        }
+        self.accept_input(tick_events.iter().copied());
         let mut descriptor = [0u16; 8];
         self.write_time(&mut descriptor);
         for offset in 2..8 {

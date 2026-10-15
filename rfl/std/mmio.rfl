@@ -83,6 +83,18 @@ export const DEVICE_NEXT_TICK: u16 = 3;
 export const DEVICE_GET_TIME: u16 = 4;
 export const DEVICE_INPUT_POP: u16 = 5;
 export const DEVICE_INPUT_STATE: u16 = 6;
+// CAPS bit: live INPUT_POP/INPUT_STATE work independently of clock grants.
+export const CAP_INPUT_POLL: u16 = 16;
+export const CAP_NETWORK: u16 = 32;
+export const DEVICE_NET_INFO: u16 = 256;
+export const DEVICE_NET_TX: u16 = 257;
+export const DEVICE_NET_RX: u16 = 258;
+export const DEVICE_NET_STATS: u16 = 259;
+export const NET_OK: u16 = 0;
+export const NET_EMPTY: u16 = 1;
+export const NET_WOULD_BLOCK: u16 = 2;
+export const NET_BUFFER_TOO_SMALL: u16 = 3;
+export const NET_LINK_DOWN: u16 = 4;
 
 export fn tty() -> () { write(DISP_MODE, MODE_TTY); }
 

@@ -13,6 +13,8 @@ use std::{
 };
 fn run(mut command: Command, seconds: u64) -> Result<(bool, String, String)> {
     let mut child = command
+        .env("RIPPLE_NET", "off")
+        .env("RCC_NATIVE_NET", "off")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

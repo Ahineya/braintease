@@ -21,7 +21,7 @@ int main(void) {
 
     if (vm_devices_version() != VM_DEVICE_ABI_VERSION) return fail(1);
     if (vm_devices_caps(&caps) != VM_DEVICE_OK) return fail(2);
-    if (caps.bits != 15 || caps.key_count != VM_KEY_COUNT) return fail(3);
+    if ((caps.bits & 15U) != 15U || !(caps.bits & VM_CAP_INPUT_POLL) || caps.key_count != VM_KEY_COUNT) return fail(3);
     if (vm_get_time(&before) != VM_DEVICE_OK) return fail(4);
     if (before.tick != 0UL || before.ms != 0UL || before.hz == 0) return fail(5);
     if (vm_get_time(&again) != VM_DEVICE_OK) return fail(6);

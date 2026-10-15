@@ -5,6 +5,7 @@
 /getchar.asm
 /mmio.asm
 /vm_devices.asm
+/vm_network.asm
 /rand.asm
 /graphics.asm
 /string.asm

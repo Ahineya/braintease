@@ -64,6 +64,12 @@ impl Host {
 pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
     let entry: unsafe extern "C" fn(*mut Runtime) -> u64 = unsafe { std::mem::transmute(entry) };
     let mut runtime = Runtime::new();
+    let network_setting = std::env::var_os("RCC_NATIVE_NET").or_else(|| std::env::var_os("RIPPLE_NET"));
+    runtime
+        .devices
+        .network
+        .configure_host(network_setting.as_deref())
+        .unwrap_or_else(|error| fatal(&error));
     if let Some(path) = std::env::var_os("RCC_NATIVE_INPUT_SCRIPT") {
         let script = rvm::devices::InputScript::from_path(path).unwrap_or_else(|e| fatal(&e));
         runtime

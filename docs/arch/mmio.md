@@ -35,6 +35,19 @@ C helpers: `runtime/include/mmio.h` (`tty_*`, `rng_*`, `storage_*`, `irq_*`, TEX
 
 ## Versioned device commands
 
+The five `DEVICE_*` registers are a mailbox for requests stored elsewhere in
+guest RAM. A descriptor is a small request-and-reply record: the host reads its
+inputs and writes its outputs at the guest address you supply.
+
+For example, put `[1, 4, 0, 0]` in four cells at bank 2, offset 100. Write 2 to
+bank-0 address 27, 100 to address 28, then 2 (`CAPS`) to address 29. On success,
+address 30 reads zero and the record contains `[1, 4, capability_bits, 256]`.
+Only writing address 29 submits a command. The pointer selects guest data RAM,
+and the host validates its range; it is not a host process pointer.
+
+See the [worked memory and C examples](../../rvm/mmio.md#worked-example-a-capabilities-request-in-memory)
+and the [complete example using C helpers](../../rvm/mmio.md#complete-c-example-using-the-helpers).
+
 `runtime/include/vm_devices.h` provides framebuffer presentation, a logical
 simulation clock, keyboard events, and held-key state. The descriptor starts with
 `[version, length]`, followed by command-specific 16-bit cells. Lengths, offsets,
@@ -58,10 +71,21 @@ through `PRESENT`; it does not reserve pixel storage in bank 0. Presentation and
 time reads never advance the clock. See the [full wire contract](../../rvm/mmio.md#device-command-abi-version-1)
 and [Doom platform guide](../doom-platform.md).
 
+Hosts advertising `VM_CAP_INPUT_POLL` (0x0010) collect live keyboard input on
+`INPUT_POP` and `INPUT_STATE`, independently of clock grants. Live events carry
+the current logical tick, including zero; scheduled replay and stepped-controller
+events remain tied to tick grants.
+
 These are host-device extensions; instruction encoding and CPU semantics are
-unchanged. The Rust VM implements them. The Brainfuck VM needs the corresponding
-host adapter before a guest using this ABI can run there; this is not an existing
-Brainfuck capability.
+unchanged. The Rust VM, Brainfuck host adapter, and native runtime implement this
+device-command ABI. The Brainfuck CPU continues to execute guest instructions
+in Brainfuck.
+
+The [networking contract](../mmio.networking.md) adds `NET_INFO` (0x0100),
+`NET_TX` (0x0101), `NET_RX` (0x0102), and `NET_STATS` (0x0103) in the same mailbox,
+advertised by capability 0x0020. It documents queues, one-octet-per-cell buffers,
+the C helpers, host attachment and bidirectional ping tests. No additional MMIO
+addresses are used.
 
 ## Interrupts
 

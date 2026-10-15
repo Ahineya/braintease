@@ -49,36 +49,19 @@ impl VM {
         Ok(())
     }
 
-    /// Grant one outstanding NEXT_TICK, latching input at the grant boundary.
-    pub fn complete_tick(&mut self, mut events: Vec<KeyTransition>) -> Result<(), String> {
+    /// Collect live input independently of logical time. Deterministic hosts
+    /// leave window events untouched and use the scheduled replay/controller.
+    pub(super) fn poll_device_input(&mut self) {
         if self.host_input_enabled {
-            if let Some(display) = self.rgb565_display.as_ref() {
-                let shared = display.get_state();
-                let mut state = shared.lock().unwrap();
-                if state.key_overflow {
-                    self.devices.mark_input_overflow();
-                    // The bitmap remains authoritative if host transitions overflowed.
-                    state.pending_keys.clear();
-                    for (key, down) in state.keys_held.iter().copied().enumerate() {
-                        if self.devices.held(key as u16) != down {
-                            events.push(KeyTransition {
-                                key: key as u16,
-                                down,
-                            });
-                        }
-                    }
-                    state.key_overflow = false;
-                } else {
-                    events.extend(
-                        std::mem::take(&mut state.pending_keys)
-                            .into_iter()
-                            .map(|(key, down)| KeyTransition { key, down }),
-                    );
-                }
+            if let Some(display) = &self.rgb565_display {
+                crate::input::poll_display_input(&mut self.devices, display);
             }
         }
-        self.devices
-            .complete_tick(&mut self.memory, self.bank_size, &events)
+    }
+
+    /// Grant a tick with explicit controller events; do not sample the window.
+    pub fn complete_tick(&mut self, events: Vec<KeyTransition>) -> Result<(), String> {
+        self.devices.complete_tick(&mut self.memory, self.bank_size, &events)
     }
 
     pub fn window_closed(&self) -> bool {

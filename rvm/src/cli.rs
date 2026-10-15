@@ -95,6 +95,10 @@ pub struct Cli {
     #[arg(long)]
     pub disk: Option<PathBuf>,
 
+    /// NIC policy: auto (default), host, shared, off, or an external helper socket
+    #[arg(long)]
+    pub net: Option<PathBuf>,
+
     /// After HALT, exit with main()'s return value in RV0 (low 8 bits).
     /// Used by the c-testsuite runner so `return 1` fails the test.
     #[arg(long)]

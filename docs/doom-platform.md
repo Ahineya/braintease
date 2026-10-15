@@ -44,6 +44,14 @@ That recovery discards remaining stale events and clears the overflow flag;
 an ordinary state read leaves queued events untouched.
 The same input protocol supports a windowed host and deterministic replay.
 
+On hosts advertising `VM_CAP_INPUT_POLL`, `vm_input_pop()` and
+`vm_input_state()` collect live input independently of clock grants. A program
+can process keyboard input before its first tick or while its simulation is
+paused. Live event timestamps record the current logical tick, which can be
+zero. Doom continues to poll after requesting a tick as its own game-loop
+policy. Tick grants do not collect live window input; scheduled replay and
+stepped-controller input still become available at their specified grants.
+
 ```c
 #include <vm_devices.h>
 #include <mmio.h>

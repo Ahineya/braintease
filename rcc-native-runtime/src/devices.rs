@@ -17,6 +17,9 @@ impl Runtime {
                 HDR_DISP_STATUS => 1 | if self.flushed { 2 } else { 0 },
                 HDR_DISP_CTL => u16::from(self.enabled),
                 HDR_KEY_UP..=HDR_KEY_X => {
+                    if self.mode == DISP_RGB565_EXT {
+                        self.poll_device_input();
+                    }
                     let key = [82, 81, 80, 79, 29, 27][index - HDR_KEY_UP];
                     if self.mode == DISP_RGB565 && self.host.visual() {
                         u16::from(self.display.get_state().lock().unwrap().keys_held[key])
@@ -88,6 +91,9 @@ impl Runtime {
                     fatal("native v1 interrupts are unavailable")
                 }
                 27..=31 => {
+                    if self.devices.is_input_request(index, value) {
+                        self.poll_device_input();
+                    }
                     if let Some(frame) = self.devices.write_register(
                         index,
                         value,
@@ -115,16 +121,8 @@ impl Runtime {
                                 std::thread::sleep(delay);
                             }
                         }
-                        let events = {
-                            let shared = self.display.get_state();
-                            let mut state = shared.lock().unwrap();
-                            std::mem::take(&mut state.pending_keys)
-                                .into_iter()
-                                .map(|(key, down)| rvm::devices::KeyTransition { key, down })
-                                .collect::<Vec<_>>()
-                        };
                         self.devices
-                            .complete_tick(&mut self.memory, BANK as u16, &events)
+                            .complete_tick(&mut self.memory, BANK as u16, &[])
                             .unwrap_or_else(|e| fatal(&e));
                     }
                 }
@@ -136,6 +134,9 @@ impl Runtime {
             return;
         }
         self.memory[index] = value;
+    }
+    fn poll_device_input(&mut self) {
+        rvm::input::poll_display_input(&mut self.devices, &self.display);
     }
     fn request_display_if_enabled(&mut self) {
         if self.enabled && matches!(self.mode, DISP_RGB565 | DISP_RGB565_EXT) {
@@ -161,5 +162,38 @@ impl Runtime {
             self.flush();
             std::process::exit(0);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn native_input_commands_poll_window_without_a_tick_grant() {
+        let mut rt = Runtime::new();
+        let desc = BANK + 10;
+        rt.memory[desc..desc + 8].copy_from_slice(&[1, 8, 0, 0, 0, 0, 0, 0]);
+        rt.write(27, 1);
+        rt.write(28, 10);
+        rt.display.get_state().lock().unwrap().set_key(82, true);
+        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
+        assert_eq!(&rt.memory[desc + 2..desc + 8], &[1, 82, 1, 0, 0, 0]);
+        assert_eq!(rt.devices.tick(), 0);
+        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
+        assert_eq!(rt.memory[desc + 2], 0);
+        rt.display.get_state().lock().unwrap().set_key(82, false);
+        rt.memory[desc + 1] = 19;
+        rt.write(29, rvm::devices::COMMAND_INPUT_STATE);
+        assert_eq!(rt.memory[desc + 3 + 82 / 16] & (1 << (82 % 16)), 0);
+        assert_eq!(rt.devices.tick(), 0);
+        rt.memory[desc + 1] = 8;
+        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
+        assert_eq!(&rt.memory[desc + 2..desc + 8], &[1, 82, 0, 0, 0, 0]);
+        rt.display.get_state().lock().unwrap().set_key(4, true);
+        rt.write(29, rvm::devices::COMMAND_NEXT_TICK);
+        assert_eq!(rt.devices.tick(), 1);
+        assert!(!rt.devices.held(4)); // Clock grants do not collect live input.
+        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
+        assert_eq!(&rt.memory[desc + 2..desc + 8], &[1, 4, 1, 1, 0, 0]);
     }
 }

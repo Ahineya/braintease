@@ -131,6 +131,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         process::exit(1);
     }
 
+    let network_setting = cli
+        .net
+        .as_ref()
+        .map(|p| p.as_os_str().to_owned())
+        .or_else(|| std::env::var_os("RIPPLE_NET"));
+    vm.devices
+        .network
+        .configure_host(network_setting.as_deref())?;
+
     if verbose {
         println!("Loading binary from {}...", file_path.display());
         println!("Bank size: {bank_size}");

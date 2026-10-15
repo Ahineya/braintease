@@ -113,6 +113,9 @@ build/graphics
 RCC_NATIVE_HEADLESS=1 build/graphics
 RCC_NATIVE_FRAME=build/frame.rgb565 RCC_NATIVE_FRAME_NUMBER=10 RCC_NATIVE_TIMEOUT=30 build/graphics
 RCC_NATIVE_INPUT_SCRIPT=path/to/replay.json build/graphics
+build/network/monitor/native/monitor
+RCC_NATIVE_NET=off build/network/native/ping
+RCC_NATIVE_NET=/path/to/nic.sock build/network/native/ping
 ```
 
 The frame option saves little-endian RGB565 pixels at the requested completed
@@ -127,6 +130,17 @@ code executes on a worker. `RCC_NATIVE_HEADLESS=1` suppresses the window, and
 frame captures are headless automatically. Replay format is the same as RVM's input scripts. Tick requests
 complete immediately headlessly and are paced at the shared tick rate with a
 window. `RCC_NATIVE_UNTHROTTLED=1` disables visual pacing.
+Live keyboard events are collected by input commands independently of tick
+grants; applications can poll input without advancing their simulation clock.
+Tick-scheduled replay retains deterministic delivery.
+Networking uses the same mailbox through `<vm_network.h>`, with one octet per
+compatibility cell and bounded host queues. On macOS the first `vm_net_info`
+query automatically starts host-only Ethernet using an embedded native helper;
+only that helper needs `sudo` authorization. Console programs that do not query
+the NIC never initialize networking. `RCC_NATIVE_NET=off` disables attachment,
+`shared` explicitly selects Internet sharing, and a socket path reuses an
+external Ethernet helper. `RIPPLE_NET` is a shared fallback setting. See the
+[networking contract and ping examples](../docs/mmio.networking.md).
 
 TEXT40 rendering, storage devices, and VM interrupts are not implemented in this
 milestone and report runtime errors when requested. TTY input is available via

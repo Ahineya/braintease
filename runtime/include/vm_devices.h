@@ -27,6 +27,9 @@
 #define VM_CAP_CLOCK 0x0002U
 #define VM_CAP_INPUT_EVENTS 0x0004U
 #define VM_CAP_INPUT_STATE 0x0008U
+/* Live input can be polled before/between ticks without advancing the clock. */
+#define VM_CAP_INPUT_POLL 0x0010U
+#define VM_CAP_NETWORK 0x0020U
 #define VM_KEY_COUNT 256
 #define VM_KEY_STATE_WORDS 16
 
@@ -176,6 +179,9 @@ unsigned short vm_present_rgb565(const unsigned short *pixels,
  * Neither presenting nor reading the clock advances a simulation tick. */
 unsigned short vm_next_tick(VmClock *clock);
 unsigned short vm_get_time(VmClock *clock);
+/* Input commands collect live keyboard transitions at the current logical tick
+ * (which may be zero), independently of NEXT_TICK. Scheduled replay events
+ * remain tied to tick grants. Check VM_CAP_INPUT_POLL on older ABI-1 hosts. */
 unsigned short vm_input_pop(VmInputEvent *event);
 
 /* Returns held keys and the sticky queue-overflow flag, then clears the flag.

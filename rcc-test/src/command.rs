@@ -20,6 +20,8 @@ pub async fn run_command(
     timeout_secs: u64,
 ) -> Result<CommandResult> {
     let child = Command::new("sh")
+        .env("RIPPLE_NET", "off")
+        .env("RCC_NATIVE_NET", "off")
         .arg("-c")
         .arg(cmd)
         .stdout(Stdio::piped())
@@ -63,6 +65,8 @@ pub fn run_command_sync(cmd: &str, timeout_secs: u64) -> Result<CommandResult> {
     
     let start = Instant::now();
     let mut child = Command::new("sh")
+        .env("RIPPLE_NET", "off")
+        .env("RCC_NATIVE_NET", "off")
         .arg("-c")
         .arg(cmd)
         .stdout(Stdio::piped())

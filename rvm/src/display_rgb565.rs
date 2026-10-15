@@ -48,7 +48,7 @@ pub struct RGB565Checkpoint {
     layout_revision: u64,
 }
 
-/// Shared display and host keyboard state. Device input is latched by the VM.
+/// Shared display and host keyboard state. Hosts collect queued transitions on input polls.
 pub struct RGB565State {
     pub width: u16,
     pub height: u16,

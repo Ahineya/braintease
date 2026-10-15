@@ -4,6 +4,10 @@
 
 The Ripple VM implements a memory-mapped I/O (MMIO) system with a dedicated 32-word header at bank 0, addresses 0-31. This provides efficient access to I/O devices, random number generation, and display control without requiring system calls or special instructions.
 
+For the `DEVICE_*` interface, start with the [submission sequence](#device-command-abi-version-1),
+[worked descriptor example](#worked-example-a-capabilities-request-in-memory),
+and [complete C example](#complete-c-example-using-the-helpers).
+
 ## Memory Layout
 
 ### MMIO Header (Bank 0, Words 0-31)
@@ -273,6 +277,45 @@ to 28, then command ID to 29. Read the result at address 30. The ABI version at
 address 31 is read-only and currently returns 1. Old hosts return zero at this
 previously reserved address; check it before using the interface.
 
+A descriptor is a **request-and-reply record in guest RAM**. The guest chooses
+where to put it: a stack array, a global, or an allocated buffer all work. The
+host reads its input fields and writes results into its output fields. Addresses
+27–31 hold the pointer, command and status; they do not hold the descriptor itself.
+
+The sequence is:
+
+1. Check `DEVICE_VERSION` at bank 0, address 31.
+2. Fill the descriptor in ordinary guest RAM, including version and length.
+3. Write its bank and offset to bank-0 addresses 27 and 28.
+4. Write the command ID to bank-0 address 29. **This write submits the request.**
+5. Read status at address 30. On success, consume the descriptor's output fields.
+
+Writing the pointer registers alone does nothing, and the host does not watch the
+descriptor for changes. Submit each request explicitly. Commands complete before
+the next guest instruction; `NEXT_TICK` can suspend the guest while waiting for a
+host grant. Keep the descriptor and any referenced buffer alive until completion.
+
+The descriptor-pointer and status registers are shared by all device commands.
+Finish each submission and read its result before another caller uses the
+mailbox. Multitasking or interrupt-handler callers must serialize the entire
+transaction; the C helpers do not provide that synchronization. Individual
+devices retain their own state between submissions. See the planned networking
+device's [mailbox-sharing rules](../docs/mmio.networking.md#sharing-the-mailbox-with-other-devices).
+
+The pointer can select any valid range in guest data RAM, subject to bounds and
+bank-offset validation; it cannot select the MMIO header or host process memory.
+The host interprets the memory according to the selected command. For example,
+`PRESENT` reads a pixel buffer, while `CAPS` writes query results into the
+descriptor. The command ID selects a built-in host operation; the descriptor
+holds its arguments and results.
+
+Offsets count cells within the configured bank size. With 64,000-cell banks,
+`(2, 100)` means absolute guest cell `2 * 64000 + 100`. A four-cell descriptor
+starting at `(1, 63998)` occupies `(1, 63998)`, `(1, 63999)`, `(2, 0)`, `(2, 1)`.
+This continuation differs from packed C pointer encoding: a pointer cast to
+`unsigned long` stores bank in the high 16 bits and offset in the low 16 bits.
+The C helpers handle that encoding for you.
+
 Every descriptor starts with version 1 and its exact length in cells; larger or
 smaller lengths are rejected. Version-1 layouts are listed below in cell order.
 Multiword integers use the low cell first.
@@ -285,6 +328,92 @@ Multiword integers use the low cell first.
 | GET_TIME | 4 | 8 | same as NEXT_TICK |
 | INPUT_POP | 5 | 8 | version, length, available (out), key (out), down (out), tick low (out), tick high (out), overflow (out) |
 | INPUT_STATE | 6 | 19 | version, length, overflow (out), 16 held-key bitmap cells (out) |
+
+#### Worked example: a capabilities request in memory
+
+Assume bank 2, offsets 100–103 are available guest RAM. First write this record:
+
+| Guest location | Before submission | Meaning | After successful `CAPS` on current hosts |
+|----------------|-------------------|---------|-----------------------------------------|
+| `(2, 100)` | 1 | descriptor version | 1 |
+| `(2, 101)` | 4 | descriptor length, including these first two cells | 4 |
+| `(2, 102)` | 0 | capability bits, output | 63 |
+| `(2, 103)` | 0 | key count, output | 256 |
+
+Then perform these bank-0 MMIO operations, in order:
+
+```text
+write address 27 = 2      # descriptor bank
+write address 28 = 100    # descriptor offset
+write address 29 = 2      # CAPS command ID; host processes the request now
+read  address 30          # 0 means success
+```
+
+The host obtains the descriptor address from registers 27/28, reads its header,
+validates the four-cell range, and writes results at `(2, 102)` and `(2, 103)`.
+Read those cells only after checking status. Test capability bits with a mask;
+future hosts may return additional bits rather than exactly 63.
+
+Here is a complete Ripple C program doing the same operation with a stack array
+instead of a hard-coded address. `volatile` ensures the descriptor's memory
+accesses are preserved around the host operation.
+
+```c
+#include <mmio.h>
+#include <vm_devices.h>
+#include <stdio.h>
+
+int main(void) {
+    volatile unsigned short descriptor[4];
+    unsigned long address;
+    unsigned short status;
+
+    if (mmio_read(MMIO_DEVICE_VERSION) != VM_DEVICE_ABI_VERSION) return 1;
+    descriptor[0] = VM_DEVICE_ABI_VERSION;
+    descriptor[1] = 4;
+    descriptor[2] = 0;
+    descriptor[3] = 0;
+    address = (unsigned long)descriptor;
+    mmio_write(MMIO_DEVICE_DESC_BANK, (unsigned short)(address >> 16));
+    mmio_write(MMIO_DEVICE_DESC_OFF, (unsigned short)address);
+    mmio_write(MMIO_DEVICE_COMMAND, VM_DEVICE_CAPS);
+    status = mmio_read(MMIO_DEVICE_STATUS);
+    if (status != VM_DEVICE_OK) return 2;
+    printf("caps=%u keys=%u\n", descriptor[2], descriptor[3]);
+    return 0;
+}
+```
+
+In application code, `vm_devices_caps(&caps)` performs this construction,
+submission and output extraction for you.
+
+#### Worked example: descriptor and framebuffer are separate
+
+Suppose a descriptor at `(2, 200)` contains these eight cells:
+
+```text
+[1, 8, 2, 2, 3, 3, 50, 0]
+       |  |  |  |   |
+       |  |  |  |   +-- framebuffer offset 50
+       |  |  |  +------ framebuffer bank 3
+       |  |  +--------- row stride 3 cells
+       |  +------------ height 2
+       +--------------- width 2
+```
+
+The framebuffer at `(3, 50)` contains:
+
+```text
+offset:  50      51      52        53      54
+value:   0xf800  0x07e0  padding   0x001f  0xffff
+pixel:   red     green   skipped   blue    white
+```
+
+Select mode 4 by writing 4 to bank-0 address 6. Write descriptor bank 2 to
+address 27, offset 200 to address 28, and command ID 1 (`PRESENT`) to address 29.
+On success, the host has copied a 2×2 frame: red/green above blue/white. Stride
+is the distance between row starts, so the padding cell is not displayed. The
+guest may then reuse the framebuffer; presentation has not advanced the clock.
 
 #### Status and capabilities
 
@@ -299,9 +428,18 @@ Multiword integers use the low cell first.
 | 6 | input queue overflow during a tick grant |
 | 0x8000 | pending host tick grant |
 
-`CAPS` returns bits 0–3 set (15): extended RGB565, logical clock, input events,
-and held-key state. Key count is 256. Unknown future capability bits should be
+`CAPS` returns bits 0–5 set (63): extended RGB565, logical clock, input events,
+held-key state, independent live-input polling (`VM_CAP_INPUT_POLL`, 0x0010),
+and Ethernet networking (`VM_CAP_NETWORK`, 0x0020).
+Older ABI-1 hosts may lack bit 4 and collect live input only at tick grants.
+Older hosts may also lack networking. Key count is 256. Unknown future capability bits should be
 ignored. Error statuses must be checked before consuming output fields.
+
+Networking uses additional command IDs in this same mailbox: `NET_INFO` 0x0100
+(18 cells), `NET_TX` 0x0101 (8), `NET_RX` 0x0102 (9), and `NET_STATS` 0x0103 (27).
+See the [network wire formats and examples](../docs/mmio.networking.md#commands-and-wire-format).
+It needs no separate MMIO addresses. Packet transfers copy one eight-bit octet
+per guest cell and do not advance time, consume keyboard events or publish frames.
 
 #### Extended RGB565 presentation
 
@@ -343,6 +481,15 @@ Ctrl/Shift/Alt/GUI = 224–231. `runtime/include/vm_devices.h` defines named key
 `INPUT_POP` returns one transition: `available=1`, key ID, `down=1` for press or
 0 for release, and the logical tick at which it was recorded. An empty queue
 returns `available=0`. Use `available` before reading the event's other fields.
+
+With `VM_CAP_INPUT_POLL`, both input commands collect pending live keyboard
+transitions without advancing the clock or requiring `NEXT_TICK`. Live events
+carry the current logical tick when collected, including tick zero before the
+first grant; this is an observation timestamp, not a wall-clock timestamp.
+Clock reads, tick grants and presentations do not collect live window input.
+Scripted input and explicit stepped-controller events retain their scheduled
+tick-grant delivery, so polling cannot release future replay events.
+
 Held keys persist until release; host auto-repeat must not create extra presses.
 
 `INPUT_STATE` returns a bitmap: key `k` is bit `(k & 15)` of cell `(k >> 4)`.
@@ -368,10 +515,80 @@ Use `vm_devices_version()` for discovery, `vm_devices_caps()` for capabilities,
 `vm_present_rgb565()` for output, `vm_next_tick()` / `vm_get_time()` for time,
 and `vm_input_pop()` / `vm_input_state()` for keyboard input.
 
-The instruction set is unchanged. The Rust VM hosts these devices. The
-Brainfuck implementation still needs a host adapter for this ABI; guests using
-it do not automatically work on the existing Brainfuck backend. See
+The instruction set is unchanged. The Rust VM, Brainfuck host and native
+runtime share this device protocol and live-input collection. The Brainfuck
+CPU still executes guest instructions in ordinary Brainfuck. See
 [`docs/doom-platform.md`](../docs/doom-platform.md) for the current port boundary.
+
+#### Complete C example using the helpers
+
+This one-shot program queries capabilities, polls input before any tick grant,
+advances one tick, and presents a 2×2 frame. The helpers allocate descriptors on
+the stack; `pixels` is a separate guest-memory buffer. No manual bank calculation
+is needed. The program exits after presenting; an interactive application would
+repeat input, simulation and rendering according to its own loop policy.
+
+```c
+#include <mmio.h>
+#include <vm_devices.h>
+#include <stdio.h>
+
+static unsigned short pixels[4] = {0xf800U, 0x07e0U, 0x001fU, 0xffffU};
+
+int main(void) {
+    VmDeviceCaps caps;
+    VmClock clock;
+    VmInputEvent event;
+    VmInputState keys;
+    unsigned short needed = VM_CAP_RGB565_EXT | VM_CAP_CLOCK
+        | VM_CAP_INPUT_EVENTS | VM_CAP_INPUT_STATE | VM_CAP_INPUT_POLL;
+
+    if (vm_devices_version() != VM_DEVICE_ABI_VERSION) return 1;
+    if (vm_devices_caps(&caps) != VM_DEVICE_OK) return 2;
+    if ((caps.bits & needed) != needed) return 3;
+    display_set_mode(DISP_MODE_RGB565_EXT);
+    display_enable();
+
+    if (vm_get_time(&clock) != VM_DEVICE_OK) return 4;
+    printf("before: tick=%lu ms=%lu\n", clock.tick, clock.ms);
+
+    /* Independent input polling: no NEXT_TICK required. */
+    if (vm_input_state(&keys) != VM_DEVICE_OK) return 5;
+    printf("up=%d\n", vm_key_is_down(&keys, VM_KEY_UP));
+    for (;;) {
+        if (vm_input_pop(&event) != VM_DEVICE_OK) return 6;
+        if (event.overflow) {
+            /* Recover the authoritative bitmap and discard stale events. */
+            if (vm_input_state(&keys) != VM_DEVICE_OK) return 7;
+            printf("resync up=%d\n", vm_key_is_down(&keys, VM_KEY_UP));
+            break;
+        }
+        if (!event.available) break;
+        printf("key=%u down=%u tick=%lu\n", event.key, event.down, event.tick);
+    }
+
+    if (vm_next_tick(&clock) != VM_DEVICE_OK) return 8;
+    printf("after: tick=%lu ms=%lu\n", clock.tick, clock.ms);
+    if (vm_present_rgb565(pixels, 2, 2, 2) != VM_DEVICE_OK) return 9;
+    return 0;
+}
+```
+
+With a fresh, headless host, no replay and the default 35 Hz clock, output is:
+
+```text
+before: tick=0 ms=0
+up=0
+after: tick=1 ms=28
+```
+
+`GET_TIME` and input polling leave time unchanged. Only `NEXT_TICK` advances it;
+paced execution may wait, while unthrottled execution grants it immediately.
+Replay events scheduled for tick 1 become available after that grant, so call
+`vm_input_pop()` again afterwards to consume them. An ordinary `INPUT_STATE`
+snapshot leaves queued events intact; after overflow it clears stale events and
+the overflow flag. An application maintaining controls must replace its own
+held-key state from that recovery snapshot.
 
 ### MMIO Read Handling
 
@@ -693,10 +910,17 @@ pub const STORE_COMMIT_ALL: u16    = 0x0008;  // bit3
 
 ## Future Enhancements
 
+Networking has a [device contract and acceptance plan](../docs/mmio.networking.md):
+a raw Ethernet NIC through the existing mailbox, bounded host queues, one octet
+per guest cell, bidirectional host ping, and an external VPS ping stretch goal.
+The Ethernet commands and local host attachment are implemented. Guest ICMP to
+the external VPS's IPv4 address has passed on all three runtimes; guest DNS
+remains later work.
+
 Further device commands can extend the versioned mailbox without moving existing
 MMIO addresses. Possible future devices include:
 - Sound generation
-- Network I/O
+- Additional network backends
 - DMA controllers
 - Serial communication ports
 
