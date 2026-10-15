@@ -279,3 +279,34 @@ fn native_wall_timeout_stops_a_loop_without_memory_accesses() {
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("native wall-time limit exceeded"));
 }
+
+#[test]
+fn native_graphics_can_explicitly_run_headless_without_capturing() {
+    let f = Fixture::new();
+    let exe = f.compile(
+        "headless",
+        r#"
+        extern void mmio_write(unsigned short, unsigned short);
+        int main(void) {
+            mmio_write(16, 0x0101);
+            mmio_write(6, 3);
+            mmio_write(8, 1);
+            mmio_write(33, 0xf800);
+            mmio_write(9, 1);
+            return 42;
+        }
+    "#,
+        false,
+    );
+    let result = Command::new(exe)
+        .env("RCC_NATIVE_HEADLESS", "1")
+        .env_remove("RCC_NATIVE_FRAME")
+        .output()
+        .unwrap();
+    assert_eq!(
+        result.status.code(),
+        Some(42),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}

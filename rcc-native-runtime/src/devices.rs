@@ -18,7 +18,7 @@ impl Runtime {
                 HDR_DISP_CTL => u16::from(self.enabled),
                 HDR_KEY_UP..=HDR_KEY_X => {
                     let key = [82, 81, 80, 79, 29, 27][index - HDR_KEY_UP];
-                    if self.mode == DISP_RGB565 && self.visual {
+                    if self.mode == DISP_RGB565 && self.host.visual() {
                         u16::from(self.display.get_state().lock().unwrap().keys_held[key])
                     } else {
                         u16::from(self.devices.held(key as u16))
@@ -63,6 +63,7 @@ impl Runtime {
                         }
                         self.mode = value;
                     }
+                    self.request_display_if_enabled();
                 }
                 HDR_DISP_CTL => {
                     if value & 1 != 0 {
@@ -71,6 +72,7 @@ impl Runtime {
                     if value & 2 != 0 {
                         self.memory[32..1032].fill(0);
                     }
+                    self.request_display_if_enabled();
                 }
                 HDR_DISP_FLUSH => {
                     if value != 0 {
@@ -99,7 +101,7 @@ impl Runtime {
                         self.capture();
                     }
                     if self.devices.has_pending_tick() {
-                        if self.paced {
+                        if self.host.paced() {
                             let origin =
                                 *self.clock_start.get_or_insert_with(std::time::Instant::now);
                             let target = origin
@@ -135,7 +137,15 @@ impl Runtime {
         }
         self.memory[index] = value;
     }
+    fn request_display_if_enabled(&mut self) {
+        if self.enabled && matches!(self.mode, DISP_RGB565 | DISP_RGB565_EXT) {
+            self.host.request_window();
+        }
+    }
     fn capture(&mut self) {
+        // Publishing also implies graphics use for callers of the legacy flush
+        // or PRESENT interface that do not explicitly set the enable bit.
+        self.host.request_window();
         self.presentations += 1;
         if self.presentations != self.frame_target {
             return;

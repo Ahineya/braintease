@@ -122,7 +122,7 @@ make -C "$PORT" -j "$jobs" PROGRAM=engine "TARGET=$make_target" "BUILD=$build" "
 if [[ "$build_only" == 1 ]]; then
   if [[ "$target" == native ]]; then
     printf 'Native executable: %s\n' "$build/rcc-native/engine/engine"
-    printf 'Run with a window: RCC_NATIVE_VISUAL=1 %q\n' "$build/rcc-native/engine/engine"
+    printf 'Run: %q\n' "$build/rcc-native/engine/engine"
   fi
   exit 0
 fi
@@ -134,9 +134,7 @@ fi
 if [[ "$target" == native ]]; then
   command=(env "RCC_NATIVE_FRAME_NUMBER=$frame")
   if [[ "$headless" == 1 ]]; then
-    command+=("RCC_NATIVE_FRAME=$out/$scene.rgb565" "RCC_NATIVE_TIMEOUT=$timeout")
-  else
-    command+=(RCC_NATIVE_VISUAL=1)
+    command+=(RCC_NATIVE_HEADLESS=1 "RCC_NATIVE_FRAME=$out/$scene.rgb565" "RCC_NATIVE_TIMEOUT=$timeout")
   fi
   [[ "$clock" != unthrottled ]] || command+=(RCC_NATIVE_UNTHROTTLED=1)
   [[ "$clock" != paced ]] || command+=(RCC_NATIVE_PACED=1)

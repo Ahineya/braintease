@@ -40,7 +40,7 @@ function compare(label, scene, frame, replay) {
   const expectedLog = run(path.join(build, 'native/engine/engine'),
     [reference, String(frame), scene, ...(input ? [path.join(out, `${label}.input.txt`)] : [])], `${label}-clang`);
   const actualLog = run(path.join(build, 'rcc-native/engine/engine'), [], `${label}-rcc`, {
-    RCC_NATIVE_VISUAL: undefined, RCC_NATIVE_PACED: undefined, RCC_NATIVE_FRAME: actual, RCC_NATIVE_FRAME_NUMBER: String(frame), RCC_NATIVE_TIMEOUT: '60',
+    RCC_NATIVE_HEADLESS: '1', RCC_NATIVE_PACED: undefined, RCC_NATIVE_FRAME: actual, RCC_NATIVE_FRAME_NUMBER: String(frame), RCC_NATIVE_TIMEOUT: '60',
     RCC_NATIVE_INPUT_SCRIPT: input,
   });
   assert.equal(fs.statSync(actual).size, 320 * 200 * 2);

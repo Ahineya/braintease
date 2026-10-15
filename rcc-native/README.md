@@ -109,7 +109,8 @@ seeking, EOF/error checks, closing, removing and renaming files are supported.
 Host `FILE *` values never cross the private ABI.
 
 ```sh
-RCC_NATIVE_VISUAL=1 build/graphics
+build/graphics
+RCC_NATIVE_HEADLESS=1 build/graphics
 RCC_NATIVE_FRAME=build/frame.rgb565 RCC_NATIVE_FRAME_NUMBER=10 RCC_NATIVE_TIMEOUT=30 build/graphics
 RCC_NATIVE_INPUT_SCRIPT=path/to/replay.json build/graphics
 ```
@@ -119,8 +120,11 @@ presentation (default 1) and exits. `RCC_NATIVE_TIMEOUT` bounds execution in
 seconds and reports failure if the limit is reached. Requesting a frame from a program which never presents
 one is an error. Legacy RGB565 front/back buffers and the descriptor-based
 extended display use the existing device implementation. Loop polling allows
-window close to stop even a loop with no memory accesses. Headless execution is
-the default. Replay format is the same as RVM's input scripts. Tick requests
+window close to stop even a loop with no memory accesses. Enabling RGB565 or
+RGB565_EXT opens a window automatically; console programs do not initialize
+the window system. The main thread waits for a display request while native
+code executes on a worker. `RCC_NATIVE_HEADLESS=1` suppresses the window, and
+frame captures are headless automatically. Replay format is the same as RVM's input scripts. Tick requests
 complete immediately headlessly and are paced at the shared tick rate with a
 window. `RCC_NATIVE_UNTHROTTLED=1` disables visual pacing.
 

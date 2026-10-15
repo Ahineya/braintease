@@ -3,8 +3,10 @@
 mod devices;
 mod exports;
 mod files;
+mod host;
 mod memory;
 mod strings;
+pub use host::rcc_native_start;
 use rcc_ir::target::DataLayout;
 use rvm::{devices::DeviceState, display_rgb565::RGB565Display};
 use std::collections::BTreeMap;
@@ -27,8 +29,7 @@ pub struct Runtime {
     enabled: bool,
     flushed: bool,
     rng: u32,
-    visual: bool,
-    paced: bool,
+    host: host::Host,
     files: BTreeMap<u64, files::Stream>,
     errno: u64,
     clock_start: Option<std::time::Instant>,
@@ -40,9 +41,6 @@ pub struct Runtime {
 impl Runtime {
     fn new() -> Self {
         let heap = 5 * BANK + 1;
-        let visual = std::env::var_os("RCC_NATIVE_VISUAL").is_some();
-        let paced = std::env::var_os("RCC_NATIVE_UNTHROTTLED").is_none()
-            && (visual || std::env::var_os("RCC_NATIVE_PACED").is_some());
         Self {
             memory: vec![0; CELLS],
             stack: 2 * BANK + 1,
@@ -57,8 +55,7 @@ impl Runtime {
             enabled: false,
             flushed: false,
             rng: 1,
-            visual,
-            paced,
+            host: host::Host::from_env(),
             files: BTreeMap::new(),
             errno: 0,
             clock_start: None,
@@ -113,7 +110,7 @@ impl Runtime {
             self.flush();
             fatal("native wall-time limit exceeded");
         }
-        if self.visual && self.display.is_window_closed() {
+        if self.host.visual() && self.display.is_window_closed() {
             self.flush();
             std::process::exit(0);
         }
@@ -122,42 +119,4 @@ impl Runtime {
 fn fatal(message: &str) -> ! {
     eprintln!("native runtime error: {message}");
     std::process::exit(1)
-}
-
-/// # Safety
-/// `entry` must be the synchronous native entry emitted by rcc-native, with
-/// signature `extern "C" fn(*mut Runtime) -> u64`, valid for this process.
-#[no_mangle]
-pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
-    let entry: unsafe extern "C" fn(*mut Runtime) -> u64 = unsafe { std::mem::transmute(entry) };
-    let mut runtime = Runtime::new();
-    if let Some(path) = std::env::var_os("RCC_NATIVE_INPUT_SCRIPT") {
-        let script = rvm::devices::InputScript::from_path(path).unwrap_or_else(|e| fatal(&e));
-        runtime
-            .devices
-            .set_script(script)
-            .unwrap_or_else(|e| fatal(&e));
-    }
-    if runtime.visual {
-        let state = runtime.display.get_state();
-        let worker = std::thread::spawn(move || {
-            let status = unsafe { entry(&mut runtime) };
-            runtime.flush();
-            runtime.display.shutdown();
-            status
-        });
-        if let Err(error) = rvm::display_rgb565::run_rgb565_display(state) {
-            fatal(&format!("native display: {error}"));
-        }
-        worker
-            .join()
-            .unwrap_or_else(|_| fatal("native worker panicked")) as i32
-    } else {
-        let status = unsafe { entry(&mut runtime) };
-        runtime.flush();
-        if std::env::var_os("RCC_NATIVE_FRAME").is_some() {
-            fatal("requested native frame was never presented");
-        }
-        status as i32
-    }
 }
