@@ -1,0 +1,242 @@
+//! Methods in the RFL type checker.
+
+use super::*;
+
+impl<'a> Checker<'a> {
+    pub(super) fn check_method(
+        &mut self,
+        span: usize,
+        receiver: &Expr,
+        method: &str,
+        resolved: &str,
+        args: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
+        let recv = self.check_expr(receiver, None)?;
+        if let Ty::Ptr(_) = recv.ty {
+            return self.check_ptr_method(span, recv, method, args, expected);
+        }
+        if recv.ty == Ty::String && matches!(method, "len" | "is_empty") {
+            return self.check_vec_method(span, recv, method, args, Ty::U8, expected);
+        }
+        let place = self.referent(recv.ty);
+        if let Ty::Vec(id) = place {
+            let elem = self.vec_elems[id as usize];
+            if matches!(
+                method,
+                "len" | "push" | "is_empty" | "clear" | "pop" | "get"
+            ) {
+                return self.check_vec_method(span, recv, method, args, elem, expected);
+            }
+        }
+        if let Ty::Slice(id) = recv.ty {
+            let elem = self.slice_elems[id as usize];
+            if matches!(method, "len" | "is_empty" | "get" | "to_vec") {
+                return self.check_view_method(span, recv, method, args, elem, expected);
+            }
+            if matches!(method, "push" | "pop" | "clear") {
+                return Err(CompileError::at(self.source, span, "slices are read-only"));
+            }
+        }
+        if let Ty::Array { id, .. } = recv.ty {
+            let elem = self.arrays[id as usize].elem;
+            if matches!(method, "len" | "is_empty" | "get" | "to_vec") {
+                return self.check_view_method(span, recv, method, args, elem, expected);
+            }
+        }
+        if let Some(key) = self.type_key(recv.ty) {
+            if let Some(info) = self
+                .methods
+                .iter()
+                .find(|item| item.type_name == key && item.method == method)
+                .cloned()
+            {
+                if info.receiver.is_none() {
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`{method}` is an associated function of `{key}`"),
+                    ));
+                }
+                return self.check_inherent(span, receiver, recv.ty, &info, args, expected);
+            }
+        }
+        let mut all = vec![receiver.clone()];
+        all.extend(args.iter().cloned());
+        self.check_call(span, resolved, &[], &all, expected)
+    }
+
+    pub(super) fn check_inherent(
+        &mut self,
+        span: usize,
+        receiver: &Expr,
+        recv_ty: Ty,
+        info: &Inherent,
+        args: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
+        let adapted = self.adapt_receiver(span, receiver, recv_ty, info.receiver)?;
+        let mut all = vec![adapted];
+        all.extend(args.iter().cloned());
+        let arity = self
+            .ast_fns
+            .iter()
+            .find(|func| func.name == info.func)
+            .map(|func| func.params.len())
+            .unwrap_or(0);
+        let expect = arity - usize::from(info.receiver.is_some());
+        if let Some(preview) = self
+            .ast_fns
+            .iter()
+            .find(|func| func.name == info.func)
+            .map(|func| parsed_signature(func, info.receiver.is_some()))
+        {
+            self.note_sig(preview);
+        }
+        if args.len() != expect {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "`{}` expects {expect} arguments, found {}",
+                    info.method,
+                    args.len()
+                ),
+            ));
+        }
+        self.loose_receiver = matches!(info.receiver, Some(Recv::Shared));
+        self.sig_skip_self = true;
+        let result = if self.fn_schemas.contains_key(&info.func) {
+            self.check_generic_call(span, &info.func, &[], &all, expected)
+        } else {
+            self.check_call(span, &info.func, &[], &all, expected)
+        };
+        self.loose_receiver = false;
+        self.sig_skip_self = false;
+        result
+    }
+
+    pub(super) fn adapt_receiver(
+        &self,
+        span: usize,
+        expr: &Expr,
+        ty: Ty,
+        recv: Option<Recv>,
+    ) -> Result<Expr, CompileError> {
+        let Some(recv) = recv else {
+            return Ok(expr.clone());
+        };
+        match recv {
+            Recv::Value => {
+                if ty.is_ref() {
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "this method takes `self` by value",
+                    ));
+                }
+                Ok(expr.clone())
+            }
+            Recv::Shared => Ok(if ty.is_ref() {
+                expr.clone()
+            } else {
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Borrow {
+                        mutable: false,
+                        expr: Box::new(expr.clone()),
+                    },
+                }
+            }),
+            Recv::Mut => {
+                if let Ty::Ref(id) = ty {
+                    if !self.refs[id as usize].mutable {
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            "this method needs a mutable reference",
+                        ));
+                    }
+                    return Ok(expr.clone());
+                }
+                Ok(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Borrow {
+                        mutable: true,
+                        expr: Box::new(expr.clone()),
+                    },
+                })
+            }
+        }
+    }
+
+    pub(super) fn type_key(&self, ty: Ty) -> Option<String> {
+        let ty = self.referent(ty);
+        Some(match ty {
+            Ty::Adt(id) => self.schemas[self.adts[id as usize].schema].name.clone(),
+            Ty::Vec(_) => "Vec".to_string(),
+            Ty::Slice(_) => "Slice".to_string(),
+            Ty::I8 => "i8".to_string(),
+            Ty::U8 => "u8".to_string(),
+            Ty::I16 => "i16".to_string(),
+            Ty::U16 => "u16".to_string(),
+            Ty::I32 => "i32".to_string(),
+            Ty::U32 => "u32".to_string(),
+            Ty::I64 => "i64".to_string(),
+            Ty::U64 => "u64".to_string(),
+            Ty::F32 => "f32".to_string(),
+            Ty::F64 => "f64".to_string(),
+            Ty::Usize => "usize".to_string(),
+            Ty::Bool => "bool".to_string(),
+            Ty::Char => "char".to_string(),
+            Ty::String => "String".to_string(),
+            Ty::Struct { id, .. } => self.structs[id as usize].name.clone(),
+            Ty::Unit
+            | Ty::Func(_)
+            | Ty::CFn(_)
+            | Ty::Ref(_)
+            | Ty::Ptr(_)
+            | Ty::Array { .. }
+            | Ty::Tuple { .. } => return None,
+        })
+    }
+
+    pub(super) fn ref_compatible(&self, actual: Ty, want: Ty) -> bool {
+        if actual == want {
+            return true;
+        }
+        let (Ty::Ref(actual_id), Ty::Ref(want_id)) = (actual, want) else {
+            return false;
+        };
+        let actual = &self.refs[actual_id as usize];
+        let want = &self.refs[want_id as usize];
+        actual.inner == want.inner && actual.mutable && !want.mutable
+    }
+
+    pub(super) fn check_assoc(
+        &mut self,
+        span: usize,
+        ty_name: &str,
+        method: &str,
+        args: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
+        let Some(info) = self
+            .methods
+            .iter()
+            .find(|item| item.type_name == ty_name && item.method == method)
+            .cloned()
+        else {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{ty_name}` has no function `{method}`"),
+            ));
+        };
+        if self.fn_schemas.contains_key(&info.func) {
+            self.check_generic_call(span, &info.func, &[], args, expected)
+        } else {
+            self.check_call(span, &info.func, &[], args, expected)
+        }
+    }
+}

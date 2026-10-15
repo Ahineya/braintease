@@ -1,0 +1,11 @@
+// Shared string helpers keep repeated operations out of the caller's code bank.
+fn main() {
+    let a = "Hello" + " ";
+    let b = a + "Ripple";
+    let c = b + "!";
+    let d = c[0..5];
+    let e = from_char('é');
+    let f = d + " " + e;
+    println(f);
+    println(f == "Hello é");
+}

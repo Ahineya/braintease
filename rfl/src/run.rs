@@ -45,6 +45,7 @@ fn run_asm(asm: &str, terminal: bool, jit: bool) -> Result<RunResult, CompileErr
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let stem = dir.join(format!("prog-{stamp}-{}", std::process::id()));
+    let _cleanup = RunArtifacts(stem.clone());
     let asm_path = stem.with_extension("asm");
     let pobj_path = stem.with_extension("pobj");
     let bin_path = stem.with_extension("bin");
@@ -66,16 +67,15 @@ fn run_asm(asm: &str, terminal: bool, jit: bool) -> Result<RunResult, CompileErr
     tool(&mut assemble)?;
     let mut link = Command::new(&rlink);
     link.arg(&crt0).arg(&pobj_path);
-    if std::fs::read_to_string(&asm_path).is_ok_and(|text| {
-        text.contains("rfl_frame_alloc")
-            || text.contains("putchar")
-            || text.contains("puts")
-            || text.contains("printf")
-            || text.contains("getchar")
-            || text.contains("mmio_read")
-            || text.contains("mmio_write")
-            || text.contains("malloc")
-    }) {
+    if asm.contains("rfl_frame_alloc")
+        || asm.contains("putchar")
+        || asm.contains("puts")
+        || asm.contains("printf")
+        || asm.contains("getchar")
+        || asm.contains("mmio_read")
+        || asm.contains("mmio_write")
+        || asm.contains("malloc")
+    {
         link.arg(root.join("runtime/libruntime.par"));
     }
     link.args(["-f", "binary", "--bank-size", "64000", "-o"])
@@ -129,4 +129,15 @@ fn tool(cmd: &mut Command) -> Result<(), CompileError> {
     Err(CompileError::plain(format!(
         "tool failed:\n{stdout}{stderr}"
     )))
+}
+
+/// Remove only artifacts owned by this invocation, including failed tool runs.
+struct RunArtifacts(PathBuf);
+
+impl Drop for RunArtifacts {
+    fn drop(&mut self) {
+        for extension in ["asm", "pobj", "bin"] {
+            let _ = std::fs::remove_file(self.0.with_extension(extension));
+        }
+    }
 }

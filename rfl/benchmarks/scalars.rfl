@@ -1,0 +1,10 @@
+// Native-word induction variables and temporaries should remain in registers.
+fn main() {
+    let mut i = 0;
+    let mut sum = 0;
+    while (i < 10000) {
+        sum += i % 7;
+        i += 1;
+    }
+    println(sum);
+}

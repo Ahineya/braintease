@@ -1,9 +1,5 @@
 import { read_byte, write_byte } from "std/io";
 
-// ============================================
-// Brainfuck syntax
-// ============================================
-
 type List<T> =
     | Nil
     | Cons(T, List<T>);
@@ -16,10 +12,6 @@ type Op =
     | Input
     | Output
     | Loop(List<Op>);
-
-// ============================================
-// Functional tape (zipper)
-// ============================================
 
 type Tape =
     | Tape(List<u16>, u16, List<u16>);
@@ -58,7 +50,6 @@ fn move_right(tape: Tape) -> Tape {
         Tape(left, value, Cons(next, rest)) =>
             Tape(Cons(value, left), next, rest),
 
-        _ => tape,
     }
 }
 
@@ -70,7 +61,6 @@ fn move_left(tape: Tape) -> Tape {
         Tape(Cons(prev, rest), value, right) =>
             Tape(rest, prev, Cons(value, right)),
 
-        _ => tape,
     }
 }
 

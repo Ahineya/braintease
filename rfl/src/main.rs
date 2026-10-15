@@ -55,7 +55,7 @@ fn run() -> Result<i32, rfl::CompileError> {
         Command::Run { input, jit } => rfl::run_file_in_terminal(&input, jit),
         Command::Check { input } => {
             eprintln!("    Checking {}", input.display());
-            rfl::compile_file(&input)?;
+            rfl::check_file(&input)?;
             eprintln!("    Finished");
             Ok(0)
         }

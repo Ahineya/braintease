@@ -32,7 +32,7 @@ enum Target {
     C(usize),
 }
 
-struct CMod {
+pub(super) struct CMod {
     path: PathBuf,
     typed: TypedTranslationUnit,
     ir: IrModule,
@@ -278,18 +278,36 @@ fn shift_error(err: CompileError, root: &str, base: usize, len: usize) -> Compil
 }
 
 pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
+    let (typed, mut cmods) = check_path(path)?;
+    let mut ir = crate::lower::lower("program", &typed)?;
+    for (index, cmod) in cmods.iter_mut().enumerate() {
+        prefix_globals(&mut cmod.ir, &format!("c{index}_"));
+        merge_ir(&mut ir, &mut cmod.ir)?;
+    }
+    Ok(ir)
+}
+
+pub(super) fn check_path(path: &Path) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
     let canon = std::fs::canonicalize(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     let source = read_text(&canon)?;
-    let ast = parse_source(&source)?;
+    let at_file = |err: CompileError| match err.offset {
+        Some(offset) => CompileError::at_file(&canon, &source, offset, err.detail),
+        None => err,
+    };
+    let ast = parse_source(&source).map_err(at_file)?;
     if ast.imports.is_empty() {
-        let typed = crate::check::check(&source, &ast)?;
-        return crate::lower::lower("program", &typed);
+        let typed = crate::check::check(&source, &ast).map_err(at_file)?;
+        return Ok((typed, Vec::new()));
     }
     link(canon, source, ast)
 }
 
-fn link(path: PathBuf, source: String, ast: Module) -> Result<IrModule, CompileError> {
+fn link(
+    path: PathBuf,
+    source: String,
+    ast: Module,
+) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
     let mut rfls = vec![RflUnit {
         path: path.clone(),
         source,
@@ -399,13 +417,18 @@ fn link(path: PathBuf, source: String, ast: Module) -> Result<IrModule, CompileE
             merged.externs.push(ext);
         }
     }
-    let typed = crate::check::check(&packed, &merged)?;
-    let mut ir = crate::lower::lower("program", &typed)?;
-    for (index, cmod) in cmods.iter_mut().enumerate() {
-        prefix_globals(&mut cmod.ir, &format!("c{index}_"));
-        merge_ir(&mut ir, &mut cmod.ir)?;
-    }
-    Ok(ir)
+    let typed = crate::check::check(&packed, &merged).map_err(|err| {
+        let Some(offset) = err.offset else {
+            return err;
+        };
+        for (unit, base) in rfls.iter().zip(&bases) {
+            if (*base..=base + unit.source.len()).contains(&offset) {
+                return CompileError::at_file(&unit.path, &unit.source, offset - base, err.detail);
+            }
+        }
+        err
+    })?;
+    Ok((typed, cmods))
 }
 
 impl RflUnit {

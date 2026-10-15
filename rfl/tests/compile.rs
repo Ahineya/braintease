@@ -186,7 +186,11 @@ fn string_is_not_a_c_type() {
 fn surrogate_cast_fails() {
     let source = "fn main() -> i16 {\n  let n: i32 = 55296;\n  let _c = n as char;\n  42\n}\n";
     let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
-    assert!(result.stdout.contains("fail"), "{}", result.stdout);
+    assert!(
+        result.stdout.contains("invalid character"),
+        "{}",
+        result.stdout
+    );
     assert_eq!(result.status, 1, "{}", result.stdout);
 }
 
@@ -308,7 +312,11 @@ fn vector_index_assign_is_bounds_checked() {
     let source = "fn main() -> i16 { let mut a = [7]; a[1] = 3; 0 }\n";
     let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(result.status, 1, "{}", result.stdout);
-    assert!(result.stdout.contains("fail"), "{}", result.stdout);
+    assert!(
+        result.stdout.contains("index out of bounds"),
+        "{}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -322,7 +330,11 @@ fn vector_index_is_bounds_checked() {
     let result = rfl::run_program("fn main() -> i16 { let a = [7]; a[1] }\n")
         .unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(result.status, 1, "{}", result.stdout);
-    assert!(result.stdout.contains("fail"), "{}", result.stdout);
+    assert!(
+        result.stdout.contains("index out of bounds"),
+        "{}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -701,7 +713,7 @@ fn fixed_array_length_is_part_of_the_type() {
 
 #[test]
 fn i8_addition_truncates() {
-    let source = "fn add(a: i8, b: i8) -> i8 { a + b }\nfn main() -> i16 { 0 }\n";
+    let source = "fn add(a: i8, b: i8) -> i8 { a + b }\nfn main() -> i16 { add(1, 2) as i16 }\n";
     let text = ir(source);
     assert!(text.contains("trunc"), "{text}");
 }
