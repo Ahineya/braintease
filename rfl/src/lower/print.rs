@@ -160,19 +160,45 @@ pub(super) fn emit_print_u64(builder: &mut IrBuilder) -> Result<(), CompileError
     builder
         .build_store(Value::Constant(0), i_slot.clone(), IrType::I16)
         .ir()?;
-    builder.build_branch(step).ir()?;
+    let small = builder.new_label();
+    let ten = i64_const(builder, 10)?;
+    let is_small = builder
+        .build_binary(IrBinaryOp::Ult, Value::Temp(0), ten, IrType::I1)
+        .ir()?;
+    builder
+        .build_branch_cond(Value::Temp(is_small), small, step)
+        .ir()?;
+    builder.create_block(small).ir()?;
+    let low = builder
+        .build_unary(IrUnaryOp::Trunc, Value::Temp(0), IrType::I16)
+        .ir()?;
+    let digit = builder
+        .build_binary(
+            IrBinaryOp::Add,
+            Value::Temp(low),
+            Value::Constant(48),
+            IrType::I16,
+        )
+        .ir()?;
+    putchar(builder, Value::Temp(digit))?;
+    builder.build_branch(done).ir()?;
 
     builder.create_block(step).ir()?;
     let n = Value::Temp(builder.build_load(n_slot.clone(), IrType::I64).ir()?);
     let ten = i64_const(builder, 10)?;
-    let digit = Value::Temp(
-        builder
-            .build_binary(IrBinaryOp::URem, n.clone(), ten.clone(), IrType::I64)
-            .ir()?,
-    );
     let next = Value::Temp(
         builder
-            .build_binary(IrBinaryOp::UDiv, n, ten, IrType::I64)
+            .build_binary(IrBinaryOp::UDiv, n.clone(), ten.clone(), IrType::I64)
+            .ir()?,
+    );
+    let consumed = Value::Temp(
+        builder
+            .build_binary(IrBinaryOp::Mul, next.clone(), ten, IrType::I64)
+            .ir()?,
+    );
+    let digit = Value::Temp(
+        builder
+            .build_binary(IrBinaryOp::Sub, n, consumed, IrType::I64)
             .ir()?,
     );
     builder
@@ -459,9 +485,14 @@ pub(super) fn emit_print_f64(builder: &mut IrBuilder) -> Result<(), CompileError
             )
             .ir()?,
     );
+    let consumed = Value::Temp(
+        builder
+            .build_binary(IrBinaryOp::Mul, ip.clone(), million, IrType::I64)
+            .ir()?,
+    );
     let rem = Value::Temp(
         builder
-            .build_binary(IrBinaryOp::URem, as_int, million, IrType::I64)
+            .build_binary(IrBinaryOp::Sub, as_int, consumed, IrType::I64)
             .ir()?,
     );
     builder
@@ -526,20 +557,29 @@ pub(super) fn emit_print_f64(builder: &mut IrBuilder) -> Result<(), CompileError
 
     builder.create_block(frac).ir()?;
     putchar(builder, Value::Constant('.' as i64))?;
-    let mut rest = rem;
+    let mut rest = Value::Temp(
+        builder
+            .build_unary(IrUnaryOp::Trunc, rem, IrType::I32)
+            .ir()?,
+    );
     for (index, power) in [100_000_i64, 10_000, 1_000, 100, 10, 1]
         .into_iter()
         .enumerate()
     {
-        let scale = i64_const(builder, power)?;
+        let scale = i32_const(builder, power)?;
         let digit = Value::Temp(
             builder
-                .build_binary(IrBinaryOp::UDiv, rest.clone(), scale.clone(), IrType::I64)
+                .build_binary(IrBinaryOp::UDiv, rest.clone(), scale.clone(), IrType::I32)
+                .ir()?,
+        );
+        let consumed = Value::Temp(
+            builder
+                .build_binary(IrBinaryOp::Mul, digit.clone(), scale, IrType::I32)
                 .ir()?,
         );
         rest = Value::Temp(
             builder
-                .build_binary(IrBinaryOp::URem, rest, scale, IrType::I64)
+                .build_binary(IrBinaryOp::Sub, rest, consumed, IrType::I32)
                 .ir()?,
         );
         let narrow = Value::Temp(

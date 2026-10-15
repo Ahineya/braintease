@@ -21,7 +21,7 @@ def command(args):
     return subprocess.run([str(a) for a in args], capture_output=True, text=True)
 
 
-def measure(compiler, source, directory, runs, execute, compile_args=()):
+def measure(compiler, source, directory, runs, execute, compile_args=(), vm_args=(), timeout=20):
     asm = directory / "program.asm"
     times = []
     for _ in range(runs):
@@ -57,7 +57,7 @@ def measure(compiler, source, directory, runs, execute, compile_args=()):
     for _ in range(runs):
         start = time.perf_counter()
         output = command([ROOT / "target/release/rvm", binary, "--headless", "--exit-code",
-                          "--timeout", "20", "--memory", "4294967296", "--report", report])
+                          "--timeout", str(timeout), "--memory", "4294967296", "--report", report, *vm_args])
         execution_times.append(time.perf_counter() - start)
         result.update(status=output.returncode, stdout=output.stdout)
         if report.exists():

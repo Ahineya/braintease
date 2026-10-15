@@ -11,6 +11,7 @@ mod arrays;
 mod buffer_ownership;
 mod build;
 mod closures;
+mod constants;
 mod dispatch;
 mod emit;
 mod faults;
@@ -32,6 +33,7 @@ use arrays::*;
 use buffer_ownership::*;
 use build::*;
 use closures::*;
+use constants::*;
 use dispatch::*;
 use emit::*;
 use faults::*;
@@ -478,6 +480,9 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     retain_reachable(&mut procs);
+    for proc in &mut procs {
+        fold_scalar_constants(proc);
+    }
     let mut need_alloc = false;
     let mut need_fail = false;
     let mut need_heap = false;

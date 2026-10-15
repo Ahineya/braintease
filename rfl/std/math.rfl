@@ -132,20 +132,11 @@ fn cos_poly(z: f64) -> f64 {
     1.0 - z2 * acc
 }
 
-fn turn_of(x: f64) -> i32 {
-    let quarters = floor(x / HALF_PI);
-    quarters as i32
-}
-
-fn into_quarter(x: f64) -> f64 {
-    let quarters = floor(x / HALF_PI);
-    x - quarters * HALF_PI
-}
-
 export fn sin(x: f64) -> f64 {
     if (!finite(x)) { return 0.0 / 0.0; }
-    let turn = turn_of(x) & 3;
-    let z = into_quarter(x);
+    let quarters = floor(x / HALF_PI);
+    let turn = (quarters as i32) & 3;
+    let z = x - quarters * HALF_PI;
     if (turn == 0) { sin_poly(z) }
     else if (turn == 1) { cos_poly(z) }
     else if (turn == 2) { -sin_poly(z) }
@@ -154,8 +145,9 @@ export fn sin(x: f64) -> f64 {
 
 export fn cos(x: f64) -> f64 {
     if (!finite(x)) { return 0.0 / 0.0; }
-    let turn = turn_of(x) & 3;
-    let z = into_quarter(x);
+    let quarters = floor(x / HALF_PI);
+    let turn = (quarters as i32) & 3;
+    let z = x - quarters * HALF_PI;
     if (turn == 0) { cos_poly(z) }
     else if (turn == 1) { -sin_poly(z) }
     else if (turn == 2) { -cos_poly(z) }

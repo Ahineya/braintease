@@ -66,12 +66,12 @@ many arguments, and inference and IDE metadata remain coupled to checking.
 ## Optimization changes
 
 RFL's resumable heap frames hide locals from the backend's ordinary stack-local
-SSA promotion. `promote_frame_words` gives nonescaping word, 32-bit integer, character, and boolean slots local
+SSA promotion. `promote_frame_words` gives nonescaping word, 32/64-bit integer, floating-point, character, and boolean slots local
 homes while an activation runs, reloads them on entry, and publishes them before
 a call stores its resume state. Results, borrowed slots, managed values, and
 shared mutable captures keep their existing storage. The shared backend can then
-promote the local homes and optimize arithmetic and loops. Slots with partial or differently typed accesses remain in memory. Other wide
-and sub-word types are not promoted by this pass yet.
+promote the local homes and optimize arithmetic and loops. Slots with partial or differently typed accesses remain in memory. Sub-word
+integer slots are not promoted by this pass yet.
 
 Only actual suspension continuations enter resume dispatch. Resume and function
 selection use balanced decision trees. Unreachable RFL functions are excluded
@@ -197,6 +197,99 @@ variants. This script builds temporary C runners and removes all generated files
 The general benchmark script also accepts repeated `--case` arguments and reports
 VM wall time separately from compilation.
 
+## Floating-point workload: `beep.rfl`
+
+The unchanged example generates 44,100 samples using software binary64 `sin`,
+then formats each sample as a decimal line. It emits 391,700 bytes of text;
+there is no audio-device write in this example.
+
+Baseline compiler and math-library snapshots for this investigation correspond
+to commit `0cc8f7b`. A complete headless JIT run, excluding compilation, assembly,
+and linking, gave:
+
+| Full 44,100-sample workload | Before | After |
+|---|---:|---:|
+| Guest instructions | 10,307,734,663 | 7,154,129,521 |
+| JIT process time | 23.28 s | 17.47 s |
+| Compile time | 1.68 s | 1.25 s |
+| Assembly instructions | 30,976 | 26,518 |
+
+These are one complete run per version, with wall time dependent on host load.
+Guest work fell by 30.6% and measured execution time by 25%. Both runs completed
+successfully, produced 44,100 lines, and had identical output SHA-256 hashes.
+
+Changes responsible for the reduction:
+
+- Immutable scalar propagation folds finite normal binary64 constant expressions
+  and exact integer-to-binary64 conversions before they become opaque software
+  helper calls. Borrowed, shared, parameter, captured, and multiply assigned
+  values do not become constant facts. Operation order is preserved; special
+  values and subnormal arithmetic continue through the runtime.
+- Frame scalar promotion includes `f32`, `f64`, and 64-bit integers, with the same
+  protection for borrowed/shared storage and partial-word accesses. The shared
+  optimizer can eliminate more temporary frame loads and stores.
+- `sin` and `cos` compute their quadrant reduction once. Previously separate
+  helpers each divided by `HALF_PI` and called `floor` for the same input.
+- Float formatting extracts its six fractional digits with bounded 32-bit
+  arithmetic. Quotients and remainders share a division, using `r = n - q*d`.
+  Small unsigned integers have a direct single-digit printing path. Rounding,
+  scientific notation, signs, and trimming behavior are preserved.
+
+The bounded controls use the first 128 samples while keeping the original 44,100
+sample rate. Math controls accumulate an observable checksum and print it once,
+so future pure-call elimination cannot silently remove their computation.
+
+| 128-iteration control | Guest instructions before | Guest instructions after |
+|---|---:|---:|
+| Original calculation and formatting | 29,435,412 | 20,317,638 |
+| Calculation plus final checksum | 23,505,216 | 18,282,825 |
+| Repeated formatting of `0.625` | 6,152,956 | 2,276,482 |
+
+The formatter control uses 63% fewer instructions. Calculation remains the
+largest cost. Arithmetic checksum controls estimate these incremental costs,
+relative to a conversion-and-checksum control:
+
+| Added binary64 operation | Extra guest instructions per iteration |
+|---|---:|
+| Addition | approximately 1,489 |
+| Multiplication | approximately 6,101 |
+| Division | approximately 25,007 |
+
+These are differences between controlled loops, including associated lowering
+and checksum effects, rather than function self-costs from a PC sampler.
+`runtime/softfloat.c` implements multiplication with a multiword 128-bit product
+and division with a 64-step 128/64-bit integer division. The JIT compiles those
+integer guest instructions; it does not recognize them as host floating-point
+operations.
+
+The next priorities suggested by this evidence are:
+
+1. Improve the software multiply/divide algorithms and common-case paths, or add
+   explicit JIT acceleration for compiler-owned software-float helpers. Any host
+   acceleration needs agreement with the target's rounding and special values.
+2. Preserve floating-point semantics and purity through optimization, lowering
+   to software helpers later. Opaque calls currently prevent ordinary common
+   subexpression elimination and loop-invariant motion from seeing arithmetic.
+3. Inline small nonrecursive scalar math functions, removing their activation
+   frames and driver dispatch from tight loops while retaining general recursion.
+
+Reproduce with:
+
+```sh
+python3 rfl/tools/benchmark_beep.py --samples 128 --micro --runs 3
+python3 rfl/tools/benchmark_beep.py --full --jit --runs 1
+```
+
+For before/after runs, supply both `--baseline /path/to/rfl-before` and
+`--baseline-math /path/to/math-before.rfl`. An old compiler alone is insufficient
+because the standard library is read from source during compilation. The script
+checks output hashes, captures output without dumping thousands of lines, and
+keeps compilation time separate from execution time.
+
+Validation passed all 145 RFL tests, including new checks for runtime/constant
+binary64 agreement, mutable and borrowed floats across calls, and formatting
+edge cases. The imperative BF benchmark remains at 5,378,037 guest instructions.
+
 ## Remaining specification gaps
 
 These are still unsupported; passing regression tests do not imply conformance.
@@ -253,6 +346,6 @@ clear, COW, growth, get/pop, nested products, closures, borrowed-element rejecti
 and receiver snapshots across an index expression with effects. Allocation-size
 overflow is checked before adding buffer headers or multiplying element widths.
 Reference counts also fail explicitly at their 16-bit limit instead of wrapping
-and freeing live collection elements. The final validation covered 140 passing
+and freeing live collection elements. That collection follow-up covered 140 passing
 tests (3 library, 105 original compile tests, 24 regressions, and 8 managed-collection
 tests).

@@ -74,7 +74,17 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
                 && proc.result_slot != Some(slot)
                 && matches!(
                     info.ty,
-                    Ty::I16 | Ty::U16 | Ty::I32 | Ty::U32 | Ty::Usize | Ty::Char | Ty::Bool
+                    Ty::I16
+                        | Ty::U16
+                        | Ty::I32
+                        | Ty::U32
+                        | Ty::I64
+                        | Ty::U64
+                        | Ty::F32
+                        | Ty::F64
+                        | Ty::Usize
+                        | Ty::Char
+                        | Ty::Bool
                 ))
             .then_some((info.offset, slot))
         })

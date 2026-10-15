@@ -172,6 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(runner::sha256_file)
             .transpose()?,
         input_overflow: false,
+        jit: None,
     };
     let mut guest_exit: Option<i32> = None;
     let vm_moved_to_arc = if visual_mode {

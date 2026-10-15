@@ -10,6 +10,7 @@ mod storage;
 mod terminal;
 
 pub use instruction::Instr;
+pub use jit::JitStats;
 pub use state::{KeyboardState, VMState};
 pub use storage::{Storage, StorageCheckpoint};
 pub use terminal::install_terminal_cleanup_hook;
@@ -52,9 +53,13 @@ pub struct VM {
     /// on the interpreter, which remains the oracle.
     pub jit_enabled: bool,
     jit: Option<jit::JitEngine>,
-    /// The loaded image has already been translated. `STORC` clears individual
-    /// regions and they are translated again on the next fetch.
-    jit_image_ready: bool,
+    /// Bounded native call nesting; guest calls beyond this use the driver.
+    jit_depth: u64,
+    /// Changes to instruction memory invalidate active callers as well as entries.
+    jit_epoch: u64,
+    // Refreshed at batch entry; helpers do not resize data memory.
+    jit_memory_base: usize,
+    jit_memory_len: u64,
     /// Instructions still allowed in the current JIT batch.
     jit_budget: u64,
     /// Fault reported by a JIT helper. Cleared when the batch returns it.
@@ -160,7 +165,10 @@ impl VM {
             verbose: false,
             jit_enabled: false,
             jit: None,
-            jit_image_ready: false,
+            jit_depth: 0,
+            jit_epoch: 0,
+            jit_memory_base: 0,
+            jit_memory_len: 0,
             jit_budget: 0,
             jit_fault: None,
             skip_pc_increment: false,
@@ -396,9 +404,9 @@ impl VM {
     /// change execution state, or record device errors. Reads retain all their
     /// normal side effects. The interpreter fetches every instruction again,
     /// including after STORC, and dispatches IRQs on instruction boundaries.
-    /// The JIT compiles a guest function into one native function. `JAL`
-    /// calls it and `JALR` returns. It drops any region STORC overwrites
-    /// and dispatches IRQs before each region.
+    /// The JIT interprets cold paths and compiles hot basic-block regions.
+    /// Short budget tails also use the interpreter. STORC invalidates native
+    /// regions and active callers; IRQs dispatch before region entry.
     ///
     /// The caller owns host polling and tick/capture/limit policies. A pending
     /// tick or device error leaves the VM untouched, as do HALT and breakpoints.
@@ -622,6 +630,7 @@ impl VM {
         self.irq_vector_off = 0;
         self.irq_cause = 0;
         self.jit_budget = 0;
+        self.jit_depth = 0;
         self.jit_fault = None;
 
         // Clear all memory (reset to zeros)

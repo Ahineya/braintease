@@ -84,6 +84,8 @@ pub struct RunReport {
     pub disk_sha256: Option<String>,
     pub input_script_sha256: Option<String>,
     pub input_overflow: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jit: Option<crate::vm::JitStats>,
 }
 
 pub fn sha256_file(path: &Path) -> Result<String, String> {
@@ -102,6 +104,7 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
 
 impl RunReport {
     pub fn finish(&mut self, vm: &VM, result: &Result<String, String>) {
+        self.jit = vm.jit_stats();
         self.success = result.is_ok();
         self.stop_reason = match result {
             Ok(s) | Err(s) => s.clone(),

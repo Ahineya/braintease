@@ -114,3 +114,65 @@ pub(super) fn operands(insn: &Insn) -> Vec<usize> {
         | Insn::Str { .. } => vec![],
     }
 }
+
+/// Slots assigned by an instruction, including mutations and scratch results.
+pub(super) fn destinations(insn: &Insn) -> Vec<usize> {
+    match insn {
+        Insn::Const { slot, .. } | Insn::BoxNew { slot } => vec![*slot],
+        Insn::Copy { dest, .. }
+        | Insn::Bin { dest, .. }
+        | Insn::Neg { dest, .. }
+        | Insn::Not { dest, .. }
+        | Insn::BitNot { dest, .. }
+        | Insn::CFn { dest, .. }
+        | Insn::CApply { dest, .. }
+        | Insn::Cast { dest, .. }
+        | Insn::Make { dest, .. }
+        | Insn::Read { dest, .. }
+        | Insn::Closure { dest, .. }
+        | Insn::VecLit { dest, .. }
+        | Insn::VecFill { dest, .. }
+        | Insn::ArrayLit { dest, .. }
+        | Insn::SliceNew { dest, .. }
+        | Insn::ToVec { dest, .. }
+        | Insn::Index { dest, .. }
+        | Insn::Len { dest, .. }
+        | Insn::Empty { dest, .. }
+        | Insn::Borrow { dest, .. }
+        | Insn::VecStore { dest, .. }
+        | Insn::Record { dest, .. }
+        | Insn::Take { dest, .. }
+        | Insn::FieldStore { dest, .. }
+        | Insn::Extern { dest, .. }
+        | Insn::StrConcat { dest, .. }
+        | Insn::StrSlice { dest, .. }
+        | Insn::StrFromChar { dest, .. }
+        | Insn::StrFromByte { dest, .. }
+        | Insn::CStr { dest, .. }
+        | Insn::Str { dest, .. }
+        | Insn::PtrLoad { dest, .. }
+        | Insn::PtrOff { dest, .. }
+        | Insn::PtrWord { dest, .. }
+        | Insn::PtrNull { dest, .. } => vec![*dest],
+        Insn::Clear { vec, .. } | Insn::Push { vec, .. } | Insn::IndexStore { vec, .. } => {
+            vec![*vec]
+        }
+        Insn::Pop {
+            vec, value, dest, ..
+        } => vec![*vec, *value, *dest],
+        Insn::Get { value, dest, .. } => vec![*value, *dest],
+        Insn::Try {
+            dest,
+            result,
+            fail_slot,
+            ..
+        } => {
+            let mut slots = vec![*dest, *result];
+            slots.extend(fail_slot);
+            slots
+        }
+        Insn::Print { .. } | Insn::PrintLit { .. } | Insn::Putc { .. } | Insn::PtrStore { .. } => {
+            vec![]
+        }
+    }
+}
