@@ -1,0 +1,8 @@
+import {sin} from "std/math";
+
+fn main() {
+    let end: u32 = 44100;
+	for (i in 0..end) {
+		println(sin((i as f64)/440.0)*0.5+0.5);
+	}
+}

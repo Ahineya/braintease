@@ -16,6 +16,8 @@ enum Command {
     Check { input: PathBuf },
     /// Compile, link, and run a source file on rvm
     Run { input: PathBuf },
+    /// Start the language server on standard input and output
+    Lsp,
     /// Compile a source file to Ripple IR or assembly
     Compile {
         input: PathBuf,
@@ -41,6 +43,10 @@ fn main() -> ExitCode {
 fn run() -> Result<i32, rfl::CompileError> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Lsp => {
+            rfl::serve_lsp();
+            Ok(0)
+        }
         Command::Run { input } => rfl::run_file_in_terminal(&input),
         Command::Check { input } => {
             eprintln!("    Checking {}", input.display());

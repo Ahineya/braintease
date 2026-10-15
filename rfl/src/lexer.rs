@@ -89,11 +89,21 @@ pub enum TokenKind {
     Tilde,
     /// `...` in a variadic `extern "C"` signature.
     Ellipsis,
+    /// `// ...` through the end of the line. The newline stays outside the token.
+    LineComment,
+    /// `/* ... */`, including the delimiters.
+    BlockComment,
     Eof,
 }
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>, CompileError> {
-    let mut lexer = Lexer { source, index: 0 };
+    let tokens = tokenize_with_trivia(source)?;
+    Ok(tokens.into_iter().filter(|token| !matches!(token.kind, TokenKind::LineComment | TokenKind::BlockComment)).collect())
+}
+
+/// Every token, including comments. The parser uses [`tokenize`], which drops comments.
+pub fn tokenize_with_trivia(source: &str) -> Result<Vec<Token>, CompileError> {
+    let mut lexer = Lexer { source, index: 0, trivia: true };
     let mut tokens = Vec::new();
     loop {
         let token = lexer.next_token()?;
@@ -109,14 +119,17 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompileError> {
 struct Lexer<'a> {
     source: &'a str,
     index: usize,
+    trivia: bool,
 }
 
 impl<'a> Lexer<'a> {
     fn next_token(&mut self) -> Result<Token, CompileError> {
-        self.skip_trivia()?;
+        if let Some(comment) = self.skip_trivia()? {
+            return Ok(comment);
+        }
         let start = self.index;
         let Some(ch) = self.peek_char() else {
-            return Ok(Token { kind: TokenKind::Eof, span: Span { start } });
+            return Ok(Token { kind: TokenKind::Eof, span: Span::new(start, start) });
         };
         let kind = match ch {
             '(' => { self.bump(); TokenKind::LParen }
@@ -218,7 +231,7 @@ impl<'a> Lexer<'a> {
                 return Err(self.error(start, format!("unexpected character {ch:?}")));
             }
         };
-        Ok(Token { kind, span: Span { start } })
+        Ok(Token { kind, span: Span::new(start, self.index) })
     }
 
     fn number(&mut self, start: usize) -> Result<TokenKind, CompileError> {
@@ -279,7 +292,7 @@ impl<'a> Lexer<'a> {
             }
         }
         let kind = if cstr { TokenKind::CStr(chars) } else { TokenKind::Str(chars) };
-        Ok(Token { kind, span: Span { start } })
+        Ok(Token { kind, span: Span::new(start, self.index) })
     }
 
     fn character(&mut self, start: usize) -> Result<TokenKind, CompileError> {
@@ -396,14 +409,18 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn skip_trivia(&mut self) -> Result<(), CompileError> {
+    fn skip_trivia(&mut self) -> Result<Option<Token>, CompileError> {
         loop {
             while self.peek_char().is_some_and(|c| c.is_whitespace()) {
                 self.bump();
             }
             if self.peek_char() == Some('/') && self.peek_next() == Some('/') {
+                let start = self.index;
                 while self.peek_char().is_some_and(|c| c != '\n') {
                     self.bump();
+                }
+                if self.trivia {
+                    return Ok(Some(Token { kind: TokenKind::LineComment, span: Span::new(start, self.index) }));
                 }
                 continue;
             }
@@ -422,11 +439,14 @@ impl<'a> Lexer<'a> {
                         Some(_) => self.bump(),
                     }
                 }
+                if self.trivia {
+                    return Ok(Some(Token { kind: TokenKind::BlockComment, span: Span::new(start, self.index) }));
+                }
                 continue;
             }
             break;
         }
-        Ok(())
+        Ok(None)
     }
 
     fn peek_char(&self) -> Option<char> {

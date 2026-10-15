@@ -858,6 +858,19 @@ fn for_walks_ranges_vectors_and_lists() {
 }
 
 #[test]
+fn a_wide_literal_range_is_not_forced_to_i16() {
+    let source = r#"
+        fn main() -> i16 {
+            let mut n: i32 = 0;
+            for (i in 44099..44100) { n = i; }
+            if (n == 44099) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
 fn tail_calls_reuse_the_frame() {
     let source = r#"
         fn go(n: i16, acc: i16) -> i16 {
@@ -872,6 +885,32 @@ fn tail_calls_reuse_the_frame() {
     "#;
     let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn println_prints_floats() {
+    let source = r#"
+        fn main() -> i16 {
+            println(1.5);
+            println(-2.0);
+            println(0.1);
+            let narrow: f32 = 3.25;
+            println(narrow);
+            println(1.0 / 0.0);
+            println(0.0 / 0.0);
+            println(10000000.0);
+            println(0.00001);
+            42
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(
+        result.stdout,
+        "1.5\n-2\n0.1\n3.25\ninf\nnan\n1e+7\n1e-5\n",
+        "status {}",
+        result.status
+    );
+    assert_eq!(result.status, 42);
 }
 
 #[test]

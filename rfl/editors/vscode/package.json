@@ -1,0 +1,38 @@
+{
+  "name": "rfl",
+  "displayName": "RFL",
+  "description": "Language support for the Ripple Functional Language",
+  "version": "0.1.0",
+  "publisher": "ripple",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:rfl"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "rfl",
+        "aliases": ["RFL", "rfl"],
+        "extensions": [".rfl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rfl",
+        "scopeName": "source.rfl",
+        "path": "./syntaxes/rfl.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "RFL",
+      "properties": {
+        "rfl.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the rfl binary. Empty uses target/debug/rfl, then target/release/rfl, then the PATH."
+        }
+      }
+    }
+  }
+}

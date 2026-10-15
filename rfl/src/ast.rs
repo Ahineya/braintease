@@ -1,6 +1,27 @@
+/// A half-open byte range `[start, end)` in the source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+
+    pub fn empty() -> Self {
+        Self { start: 0, end: 0 }
+    }
+
+    /// The span from the start of `self` through the end of `other`.
+    pub fn to(self, other: Span) -> Span {
+        Span { start: self.start, end: other.end.max(self.end) }
+    }
+
+    pub fn contains(self, offset: usize) -> bool {
+        offset >= self.start && offset < self.end
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -172,6 +193,8 @@ impl ParsedTy {
 
 #[derive(Debug, Clone)]
 pub struct Block {
+    /// From the opening `{` through the closing `}`.
+    pub span: Span,
     pub stmts: Vec<Stmt>,
     pub tail: Option<Expr>,
 }
@@ -180,6 +203,8 @@ pub struct Block {
 pub enum Stmt {
     /// `let [mut] pattern [: type] = expr`. The pattern must be irrefutable.
     Let {
+        /// From `let` through the terminating semicolon.
+        span: Span,
         pattern: Pat,
         mutable: bool,
         ty: Option<ParsedTy>,
@@ -249,6 +274,8 @@ pub enum ExprKind {
     },
     Call {
         callee: String,
+        /// The callee name as it appears in the source, not the argument list.
+        callee_span: Span,
         /// Explicit `name<i16>(...)` arguments. Empty means infer them.
         type_args: Vec<ParsedTy>,
         args: Vec<Expr>,
@@ -258,6 +285,8 @@ pub enum ExprKind {
         receiver: Box<Expr>,
         /// Name as written. Builtin and inherent methods use this.
         method: String,
+        /// The method name token, not the receiver or the argument list.
+        method_span: Span,
         /// Free function to call when no inherent method matches.
         resolved: String,
         args: Vec<Expr>,
@@ -293,6 +322,7 @@ pub enum ExprKind {
     Field {
         base: Box<Expr>,
         name: String,
+        name_span: Span,
     },
     /// `start..end` or `start..=end`. Legal as the iterator of `for`.
     Range {

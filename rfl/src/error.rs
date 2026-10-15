@@ -3,25 +3,45 @@ use std::path::Path;
 
 #[derive(Debug)]
 pub struct CompileError {
+    /// Full diagnostic, including the source line.
     pub message: String,
+    /// The sentence after `error:`.
+    pub detail: String,
+    pub line: u32,
+    pub column: u32,
+    /// Byte offset in the source this diagnostic was rendered from.
+    pub offset: Option<usize>,
 }
 
 impl CompileError {
     pub fn at(source: &str, offset: usize, message: impl Into<String>) -> Self {
-        Self {
-            message: render(None, source, offset, &message.into()),
-        }
+        Self::make(None, source, Some(offset), message.into())
     }
 
     pub fn at_file(path: &Path, source: &str, offset: usize, message: impl Into<String>) -> Self {
-        Self {
-            message: render(Some(path), source, offset, &message.into()),
-        }
+        Self::make(Some(path), source, Some(offset), message.into())
     }
 
     pub fn plain(message: impl Into<String>) -> Self {
+        let detail = message.into();
         Self {
-            message: format!("error: {}", message.into()),
+            message: format!("error: {detail}"),
+            detail,
+            line: 0,
+            column: 0,
+            offset: None,
+        }
+    }
+
+    fn make(path: Option<&Path>, source: &str, offset: Option<usize>, detail: String) -> Self {
+        let at = offset.unwrap_or(0);
+        let (line, column) = line_col(source, at);
+        Self {
+            message: render(path, source, at, &detail),
+            detail,
+            line,
+            column,
+            offset,
         }
     }
 }

@@ -1,0 +1,189 @@
+import { read_byte, write_byte } from "std/io";
+
+// ============================================
+// Brainfuck syntax
+// ============================================
+
+type List<T> =
+    | Nil
+    | Cons(T, List<T>);
+
+type Op =
+    | Inc
+    | Dec
+    | Left
+    | Right
+    | Input
+    | Output
+    | Loop(List<Op>);
+
+// ============================================
+// Functional tape (zipper)
+// ============================================
+
+type Tape =
+    | Tape(List<u16>, u16, List<u16>);
+
+fn cell(tape: Tape) -> u16 {
+    match tape {
+        Tape(_, value, _) => value,
+    }
+}
+
+fn set(tape: Tape, value: u16) -> Tape {
+    match tape {
+        Tape(left, _, right) => Tape(left, value, right),
+    }
+}
+
+fn inc(tape: Tape) -> Tape {
+    match tape {
+        Tape(left, value, right) =>
+            Tape(left, value + 1, right),
+    }
+}
+
+fn dec(tape: Tape) -> Tape {
+    match tape {
+        Tape(left, value, right) =>
+            Tape(left, value - 1, right),
+    }
+}
+
+fn move_right(tape: Tape) -> Tape {
+    match tape {
+        Tape(left, value, Nil) =>
+            Tape(Cons(value, left), 0, Nil),
+
+        Tape(left, value, Cons(next, rest)) =>
+            Tape(Cons(value, left), next, rest),
+
+        _ => tape,
+    }
+}
+
+fn move_left(tape: Tape) -> Tape {
+    match tape {
+        Tape(Nil, value, right) =>
+            Tape(Nil, 0, Cons(value, right)),
+
+        Tape(Cons(prev, rest), value, right) =>
+            Tape(rest, prev, Cons(value, right)),
+
+        _ => tape,
+    }
+}
+
+// ============================================
+// Parser
+// ============================================
+
+type Parsed =
+    | Parsed(List<Op>, usize);
+
+fn prepend(op: Op, source: String, pos: usize) -> Parsed {
+    match parse_seq(source, pos) {
+        Parsed(rest, next) =>
+            Parsed(Cons(op, rest), next),
+    }
+}
+
+fn parse_seq(source: String, pos: usize) -> Parsed {
+    if (pos >= source.len()) {
+        return Parsed(Nil, pos);
+    }
+
+    match source[pos] {
+        '+' => prepend(Inc, source, pos + 1),
+        '-' => prepend(Dec, source, pos + 1),
+        '<' => prepend(Left, source, pos + 1),
+        '>' => prepend(Right, source, pos + 1),
+        '.' => prepend(Output, source, pos + 1),
+        ',' => prepend(Input, source, pos + 1),
+
+        '[' => {
+            match parse_seq(source, pos + 1) {
+                Parsed(body, after_body) => {
+                    match parse_seq(source, after_body) {
+                        Parsed(rest, end) =>
+                            Parsed(Cons(Loop(body), rest), end),
+                    }
+                },
+            }
+        },
+
+        ']' => Parsed(Nil, pos + 1),
+
+        _ => parse_seq(source, pos + 1),
+    }
+}
+
+fn parse(source: String) -> List<Op> {
+    match parse_seq(source, 0) {
+        Parsed(ops, _) => ops,
+    }
+}
+
+// ============================================
+// Interpreter
+// ============================================
+
+fn run(program: List<Op>, tape: Tape) -> Tape {
+    match program {
+        Nil => tape,
+
+        Cons(op, rest) =>
+            run(rest, execute(op, tape)),
+    }
+}
+
+fn run_loop(body: List<Op>, tape: Tape) -> Tape {
+    if (cell(tape) == 0) {
+        tape
+    } else {
+        run_loop(body, run(body, tape))
+    }
+}
+
+fn execute(op: Op, tape: Tape) -> Tape {
+    match op {
+        Inc => inc(tape),
+
+        Dec => dec(tape),
+
+        Left => move_left(tape),
+
+        Right => move_right(tape),
+
+        Input => {
+            let byte = read_byte();
+
+            set(tape, if (byte < 0) {
+                0
+            } else {
+                byte as u16
+            })
+        },
+
+        Output => {
+            write_byte(cell(tape) as c_int);
+            tape
+        },
+
+        Loop(body) => run_loop(body, tape),
+    }
+}
+
+// ============================================
+// Main
+// ============================================
+
+fn main() {
+    let source = "++++++++++[->++++++<]>+++++.";
+
+    let program = parse(source);
+
+    let tape = Tape(Nil, 0, Nil);
+
+    run(program, tape);
+}

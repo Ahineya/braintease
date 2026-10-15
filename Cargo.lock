@@ -1928,6 +1928,7 @@ dependencies = [
  "rcc-frontend",
  "rcc-ir",
  "rcc-preprocessor",
+ "serde_json",
 ]
 
 [[package]]

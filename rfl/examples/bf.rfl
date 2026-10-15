@@ -1,5 +1,3 @@
-// Simple brainfuck interpreter
-
 import { read_byte } from "std/io";
 
 fn main() {

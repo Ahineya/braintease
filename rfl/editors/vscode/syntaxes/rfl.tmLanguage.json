@@ -1,0 +1,53 @@
+{
+  "scopeName": "source.rfl",
+  "patterns": [{ "include": "#item" }],
+  "repository": {
+    "item": {
+      "patterns": [
+        { "include": "#comment" },
+        { "include": "#string" },
+        { "include": "#char" },
+        { "include": "#number" },
+        { "include": "#keyword" },
+        { "include": "#type" },
+        { "include": "#operator" }
+      ]
+    },
+    "comment": {
+      "patterns": [
+        { "name": "comment.line.double-slash.rfl", "match": "//.*" },
+        { "name": "comment.block.rfl", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "string": {
+      "patterns": [
+        { "name": "string.quoted.other.c.rfl", "begin": "c\"", "end": "\"", "patterns": [{ "include": "#escape" }] },
+        { "name": "string.quoted.double.rfl", "begin": "\"", "end": "\"", "patterns": [{ "include": "#escape" }] }
+      ]
+    },
+    "escape": {
+      "match": "\\\\.",
+      "name": "constant.character.escape.rfl"
+    },
+    "char": {
+      "name": "string.quoted.single.rfl",
+      "match": "'(?:\\\\.|[^'\\\\])'"
+    },
+    "number": {
+      "name": "constant.numeric.rfl",
+      "match": "\\b\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][+-]?\\d[\\d_]*)?(?:i8|u8|i16|u16|i32|u32|i64|u64|f32|f64|usize)?\\b"
+    },
+    "keyword": {
+      "name": "keyword.control.rfl",
+      "match": "\\b(?:fn|let|mut|if|else|return|as|while|break|continue|match|for|in|type|impl|const|struct|export|import|extern|unsafe|true|false)\\b"
+    },
+    "type": {
+      "name": "entity.name.type.rfl",
+      "match": "\\b(?:i8|u8|i16|u16|i32|u32|i64|u64|f32|f64|bool|char|String|usize|unit|Vec|Slice|Option|Result|c_int|c_char|c_short|c_uint|c_long|c_size_t)\\b"
+    },
+    "operator": {
+      "name": "keyword.operator.rfl",
+      "match": "->|=>|&&|\\|\\||<<|>>|\\+=|-=|\\*=|/=|%=|==|!=|<=|>=|[+\\-*/%&|^~!=<>]"
+    }
+  }
+}

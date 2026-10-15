@@ -48,6 +48,179 @@ struct Binding {
     is_fn: bool,
 }
 
+/// Typecheck `source` as the contents of `path`, resolving its imports.
+/// Spans in the result are offsets into `source`, not the linked buffer.
+pub(crate) fn check_root(path: &Path, source: &str) -> Result<(crate::check::ProgramInfo, Vec<CompileError>), CompileError> {
+    let ast = parse_source(source)?;
+    if ast.imports.is_empty() {
+        let (info, result) = crate::check::analyze(source, &ast);
+        return Ok((info, result.err().into_iter().collect()));
+    }
+    let canon = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut rfls = vec![RflUnit { path: canon.clone(), source: source.to_string(), ast, resolved: Vec::new() }];
+    let mut cmods = Vec::new();
+    let mut stack = vec![canon];
+    resolve_imports(0, &mut stack, &mut rfls, &mut cmods)?;
+    stack.pop();
+    let mut taken_c = HashSet::new();
+    let mut bindings = Vec::new();
+    for (index, unit) in rfls.iter().enumerate() {
+        bindings.push(own_bindings(unit, index, index == 0, &mut taken_c)?);
+    }
+    let mut maps: Vec<HashMap<String, String>> = bindings
+        .iter()
+        .map(|table| table.iter().map(|(name, binding)| (name.clone(), binding.mangled.clone())).collect())
+        .collect();
+    let mut ctor_names: Vec<HashSet<String>> = bindings
+        .iter()
+        .map(|table| table.iter().filter(|(_, binding)| binding.is_ctor).map(|(name, _)| name.clone()).collect())
+        .collect();
+    let mut fn_names: Vec<HashSet<String>> = bindings
+        .iter()
+        .map(|table| table.iter().filter(|(_, binding)| binding.is_fn).map(|(name, _)| name.clone()).collect())
+        .collect();
+    for index in 0..rfls.len() {
+        let resolved = rfls[index].clone_imports();
+        let mut extra = Vec::new();
+        for item in &resolved {
+            let decls = apply_import(index, item, &rfls, &bindings, &mut maps, &mut ctor_names, &mut fn_names, &cmods, &extra)?;
+            extra.extend(decls);
+        }
+        rfls[index].ast.externs.extend(extra);
+    }
+    let mut packed = String::new();
+    let mut bases = Vec::new();
+    let mut lengths = Vec::new();
+    for unit in &rfls {
+        let header = format!("// {}\n", unit.path.display());
+        bases.push(packed.len() + header.len());
+        lengths.push(unit.source.len());
+        packed.push_str(&header);
+        packed.push_str(&unit.source);
+        if !packed.ends_with('\n') {
+            packed.push('\n');
+        }
+    }
+    for (index, unit) in rfls.iter_mut().enumerate() {
+        rewrite_uses(&mut unit.ast, &maps[index], &ctor_names[index], &fn_names[index], bases[index]);
+        rename_defs(&mut unit.ast, &bindings[index]);
+    }
+    let mut merged = Module {
+        adts: Vec::new(),
+        structs: Vec::new(),
+        impls: Vec::new(),
+        consts: Vec::new(),
+        functions: Vec::new(),
+        externs: Vec::new(),
+        imports: Vec::new(),
+    };
+    for unit in &mut rfls {
+        merged.adts.append(&mut unit.ast.adts);
+        merged.structs.append(&mut unit.ast.structs);
+        merged.impls.append(&mut unit.ast.impls);
+        merged.consts.append(&mut unit.ast.consts);
+        merged.functions.append(&mut unit.ast.functions);
+        for ext in unit.ast.externs.drain(..) {
+            if merged.externs.iter().any(|found| found.name == ext.name) {
+                continue;
+            }
+            merged.externs.push(ext);
+        }
+    }
+    let (info, result) = crate::check::analyze(&packed, &merged);
+    let chunks: Vec<(PathBuf, usize, usize)> = rfls.iter().enumerate().map(|(index, unit)| (unit.path.clone(), bases[index], lengths[index])).collect();
+    let info = shift_info(info, &chunks, 0);
+    let diagnostics = result.err().into_iter().map(|err| shift_error(err, source, chunks[0].1, chunks[0].2)).collect();
+    Ok((info, diagnostics))
+}
+
+fn shift_span(span: crate::ast::Span, base: usize, len: usize) -> Option<crate::ast::Span> {
+    if span.start >= base && span.end <= base + len {
+        Some(crate::ast::Span::new(span.start - base, span.end - base))
+    } else {
+        None
+    }
+}
+
+fn shift_info(info: crate::check::ProgramInfo, chunks: &[(PathBuf, usize, usize)], root: usize) -> crate::check::ProgramInfo {
+    let (root_path, base, len) = &chunks[root];
+    let root_path = root_path.clone();
+    let base = *base;
+    let len = *len;
+    crate::check::ProgramInfo {
+        facts: info
+            .facts
+            .into_iter()
+            .filter_map(|mut fact| {
+                fact.scope = shift_scope(fact.scope, base, len)?;
+                if let Some(def) = shift_span(fact.def, base, len) {
+                    fact.def = def;
+                }
+                if fact.visible_from >= base && fact.visible_from <= base + len {
+                    fact.visible_from -= base;
+                } else if fact.visible_from != 0 {
+                    fact.visible_from = 0;
+                }
+                Some(fact)
+            })
+            .collect(),
+        uses: info
+            .uses
+            .into_iter()
+            .filter_map(|mut name| {
+                name.span = shift_span(name.span, base, len)?;
+                if let Some((path, def)) = locate(chunks, name.def) {
+                    if path != root_path {
+                        name.def_file = Some(path);
+                    }
+                    name.def = def;
+                }
+                Some(name)
+            })
+            .collect(),
+        expr_types: info
+            .expr_types
+            .into_iter()
+            .filter_map(|mut expr| {
+                expr.span = shift_span(expr.span, base, len)?;
+                Some(expr)
+            })
+            .collect(),
+        methods: info.methods,
+        call_sigs: info
+            .call_sigs
+            .into_iter()
+            .filter_map(|mut sig| {
+                sig.span = shift_span(sig.span, base, len)?;
+                Some(sig)
+            })
+            .collect(),
+    }
+}
+
+fn shift_scope(span: crate::ast::Span, base: usize, len: usize) -> Option<crate::ast::Span> {
+    if span.start <= base && span.end >= base + len {
+        return Some(crate::ast::Span::new(0, len));
+    }
+    shift_span(span, base, len)
+}
+
+fn locate(chunks: &[(PathBuf, usize, usize)], span: crate::ast::Span) -> Option<(PathBuf, crate::ast::Span)> {
+    chunks.iter().find_map(|(path, base, len)| {
+        shift_span(span, *base, *len).map(|span| (path.clone(), span))
+    })
+}
+
+fn shift_error(err: CompileError, root: &str, base: usize, len: usize) -> CompileError {
+    let Some(offset) = err.offset else {
+        return err;
+    };
+    if offset < base || offset > base + len {
+        return err;
+    }
+    CompileError::at(root, offset - base, err.detail)
+}
+
 pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
     let canon = std::fs::canonicalize(path).map_err(|err| {
         CompileError::plain(format!("cannot read {}: {err}", path.display()))
@@ -589,6 +762,7 @@ fn rewrite_uses(ast: &mut Module, map: &HashMap<String, String>, ctors: &HashSet
 impl Rewriter<'_> {
     fn bump(&self, span: &mut Span) {
         span.start = span.start.saturating_add(self.base);
+        span.end = span.end.saturating_add(self.base);
     }
 
     fn hidden_value(&self, name: &str) -> bool {
@@ -706,7 +880,8 @@ impl Rewriter<'_> {
                 self.expr(lhs);
                 self.expr(rhs);
             }
-            ExprKind::Call { callee, type_args, args } => {
+            ExprKind::Call { callee, callee_span, type_args, args } => {
+                self.bump(callee_span);
                 self.rewrite_value(callee);
                 for ty in type_args {
                     self.ty(ty);
@@ -715,7 +890,7 @@ impl Rewriter<'_> {
                     self.expr(arg);
                 }
             }
-            ExprKind::Method { receiver, method, resolved, args } => {
+            ExprKind::Method { receiver, method, resolved, args, .. } => {
                 self.expr(receiver);
                 if self.fns.contains(method) && !self.hidden_value(method) {
                     self.rewrite_value(resolved);
