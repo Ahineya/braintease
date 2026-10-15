@@ -137,6 +137,8 @@ fn completion(docs: &HashMap<String, Doc>, params: &Value) -> Value {
                 CompletionKind::EnumMember => 20,
             },
             "detail": item.detail,
+            "filterText": item.label,
+            "textEdit": { "range": range(doc, item.replace.start, item.replace.end), "newText": item.label },
         })
     }).collect();
     json!(items)

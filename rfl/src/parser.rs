@@ -3,45 +3,32 @@ use crate::error::CompileError;
 use crate::lexer::{Token, TokenKind};
 
 pub fn parse(source: &str, tokens: &[Token]) -> Result<Module, CompileError> {
-    let mut parser = Parser { source, tokens, index: 0, pending_gt: false };
-    let mut adts = Vec::new();
-    let mut structs = Vec::new();
-    let mut impls = Vec::new();
-    let mut consts = Vec::new();
-    let mut functions = Vec::new();
-    let mut externs = Vec::new();
-    let mut imports = Vec::new();
-    while !parser.is(&TokenKind::Eof) {
-        if parser.is(&TokenKind::Type) {
-            adts.push(parser.parse_adt()?);
-        } else if parser.is(&TokenKind::Struct) {
-            structs.push(parser.parse_struct()?);
-        } else if parser.is(&TokenKind::Hash) {
-            parser.parse_repr_c()?;
-            let mut item = parser.parse_struct()?;
-            item.repr_c = true;
-            structs.push(item);
-        } else if parser.is(&TokenKind::Impl) {
-            impls.push(parser.parse_impl()?);
-        } else if parser.is(&TokenKind::Const) {
-            consts.push(parser.parse_const()?);
-        } else if parser.is(&TokenKind::Export) {
-            parser.parse_exported(&mut adts, &mut structs, &mut consts, &mut functions)?;
-        } else if parser.is(&TokenKind::Extern) {
-            externs.extend(parser.parse_extern_block()?);
-        } else if parser.is(&TokenKind::Fn) {
-            functions.push(parser.parse_function()?);
-        } else if parser.is(&TokenKind::Import) {
-            imports.push(parser.parse_import()?);
-        } else {
-            let token = parser.bump();
-            return Err(CompileError::at(source, token.span.start, "expected `fn`, `type`, `struct`, `impl`, or `const`"));
+    let mut parser = Parser { source, tokens, index: 0, pending_gt: false, tolerant: false, errors: Vec::new() };
+    parser.parse_module()
+}
+
+/// Parse for the language server. A missing name after `.`, or a missing `;`
+/// before the next statement, is reported and the rest of the file is kept.
+pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileError>) {
+    let mut parser = Parser { source, tokens, index: 0, pending_gt: false, tolerant: true, errors: Vec::new() };
+    match parser.parse_module() {
+        Ok(module) => (module, parser.errors),
+        Err(err) => {
+            parser.errors.push(err);
+            (
+                Module {
+                    adts: Vec::new(),
+                    structs: Vec::new(),
+                    impls: Vec::new(),
+                    consts: Vec::new(),
+                    functions: Vec::new(),
+                    externs: Vec::new(),
+                    imports: Vec::new(),
+                },
+                parser.errors,
+            )
         }
     }
-    if functions.is_empty() && adts.is_empty() && structs.is_empty() && consts.is_empty() && externs.is_empty() && impls.is_empty() && imports.is_empty() {
-        return Err(CompileError::at(source, 0, "expected a function"));
-    }
-    Ok(Module { adts, structs, impls, consts, functions, externs, imports })
 }
 
 struct Parser<'a> {
@@ -50,9 +37,53 @@ struct Parser<'a> {
     index: usize,
     /// One `>` left over from a `>>` that closed a generic argument.
     pending_gt: bool,
+    /// Keep going after a missing member name or semicolon. The compiler does not.
+    tolerant: bool,
+    errors: Vec<CompileError>,
 }
 
 impl<'a> Parser<'a> {
+    fn parse_module(&mut self) -> Result<Module, CompileError> {
+        let mut adts = Vec::new();
+        let mut structs = Vec::new();
+        let mut impls = Vec::new();
+        let mut consts = Vec::new();
+        let mut functions = Vec::new();
+        let mut externs = Vec::new();
+        let mut imports = Vec::new();
+        while !self.is(&TokenKind::Eof) {
+            if self.is(&TokenKind::Type) {
+                adts.push(self.parse_adt()?);
+            } else if self.is(&TokenKind::Struct) {
+                structs.push(self.parse_struct()?);
+            } else if self.is(&TokenKind::Hash) {
+                self.parse_repr_c()?;
+                let mut item = self.parse_struct()?;
+                item.repr_c = true;
+                structs.push(item);
+            } else if self.is(&TokenKind::Impl) {
+                impls.push(self.parse_impl()?);
+            } else if self.is(&TokenKind::Const) {
+                consts.push(self.parse_const()?);
+            } else if self.is(&TokenKind::Export) {
+                self.parse_exported(&mut adts, &mut structs, &mut consts, &mut functions)?;
+            } else if self.is(&TokenKind::Extern) {
+                externs.extend(self.parse_extern_block()?);
+            } else if self.is(&TokenKind::Fn) {
+                functions.push(self.parse_function()?);
+            } else if self.is(&TokenKind::Import) {
+                imports.push(self.parse_import()?);
+            } else {
+                let token = self.bump();
+                return Err(CompileError::at(self.source, token.span.start, "expected `fn`, `type`, `struct`, `impl`, or `const`"));
+            }
+        }
+        if functions.is_empty() && adts.is_empty() && structs.is_empty() && consts.is_empty() && externs.is_empty() && impls.is_empty() && imports.is_empty() {
+            return Err(CompileError::at(self.source, 0, "expected a function"));
+        }
+        Ok(Module { adts, structs, impls, consts, functions, externs, imports })
+    }
+
     fn parse_function(&mut self) -> Result<Function, CompileError> {
         self.expect(&TokenKind::Fn, "fn")?;
         let name_tok = self.expect_ident()?;
@@ -654,6 +685,11 @@ impl<'a> Parser<'a> {
                 stmts.push(Stmt::Expr(expr));
                 continue;
             }
+            if self.tolerant && !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
+                self.errors.push(CompileError::at(self.source, expr.span.end, "expected ';'"));
+                stmts.push(Stmt::Expr(expr));
+                continue;
+            }
             tail = Some(expr);
             break;
         }
@@ -1060,6 +1096,20 @@ impl<'a> Parser<'a> {
                     }
                 }
             } else if self.eat(&TokenKind::Dot) {
+                if !self.is_ident() {
+                    let dot = self.prev_span();
+                    if !self.tolerant {
+                        return Err(CompileError::at(self.source, dot.end, "expected a name"));
+                    }
+                    self.errors.push(CompileError::at(self.source, dot.end, "expected a name"));
+                    let base_span = expr.span;
+                    let name_span = Span::new(dot.end, dot.end);
+                    expr = Expr {
+                        span: base_span.to(name_span),
+                        kind: ExprKind::Field { base: Box::new(expr), name: String::new(), name_span },
+                    };
+                    continue;
+                }
                 let (method, span) = self.expect_ident()?;
                 if !self.is(&TokenKind::LParen) {
                     let base_span = expr.span;

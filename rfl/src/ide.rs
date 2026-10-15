@@ -38,8 +38,8 @@ pub struct Analysis {
 
 impl Analysis {
     pub fn open(path: Option<&Path>, source: &str) -> Self {
-        let parsed = match lexer::tokenize(source).and_then(|tokens| parser::parse(source, &tokens)) {
-            Ok(ast) => ast,
+        let (parsed, parse_errors) = match lexer::tokenize(source) {
+            Ok(tokens) => parser::parse_for_ide(source, &tokens),
             Err(err) => {
                 return Self {
                     source: source.to_string(),
@@ -52,10 +52,8 @@ impl Analysis {
             }
         };
         let symbols = symbols_of(&parsed);
-        let (info, diagnostics) = if parsed.imports.is_empty() || path.is_none() {
-            let (info, result) = check::analyze(source, &parsed);
-            (info, result.err().into_iter().collect())
-        } else {
+        let recover = !parse_errors.is_empty();
+        let (info, mut diagnostics) = if !recover && !parsed.imports.is_empty() && path.is_some() {
             match crate::modules::check_root(path.unwrap(), source) {
                 Ok(checked) => checked,
                 Err(err) => {
@@ -65,7 +63,11 @@ impl Analysis {
                     (info, diagnostics)
                 }
             }
+        } else {
+            let (info, result) = check::analyze(source, &parsed);
+            (info, result.err().into_iter().collect())
         };
+        diagnostics.splice(0..0, parse_errors);
         Self {
             source: source.to_string(),
             path: path.map(|path| path.to_path_buf()),
@@ -117,8 +119,9 @@ impl Analysis {
     }
 
     pub fn completions(&self, offset: usize) -> Vec<Completion> {
+        let replace = ident_around(&self.source, offset);
         if let Some(dot) = self.dot_before(offset) {
-            return self.method_completions(dot);
+            return self.method_completions(dot, replace);
         }
         let mut items = Vec::new();
         let mut seen = Vec::new();
@@ -134,7 +137,7 @@ impl Analysis {
             } else {
                 CompletionKind::Variable
             };
-            items.push(Completion { label: fact.name.clone(), kind, detail: fact.ty.clone() });
+            items.push(Completion { label: fact.name.clone(), kind, detail: fact.ty.clone(), replace });
         }
         for fact in self.facts().filter(|fact| fact.scope.contains(offset) && offset >= fact.visible_from && (fact.ty.starts_with("fn(") || fact.variant)) {
             if seen.contains(&fact.name) {
@@ -142,7 +145,7 @@ impl Analysis {
             }
             seen.push(fact.name.clone());
             let kind = if fact.variant { CompletionKind::EnumMember } else { CompletionKind::Function };
-            items.push(Completion { label: fact.name.clone(), kind, detail: fact.ty.clone() });
+            items.push(Completion { label: fact.name.clone(), kind, detail: fact.ty.clone(), replace });
         }
         for symbol in &self.symbols {
             if seen.contains(&symbol.name) {
@@ -158,11 +161,12 @@ impl Analysis {
                     SymbolKind::Field => CompletionKind::Field,
                 },
                 detail: symbol.detail.clone(),
+                replace,
             });
         }
         for word in KEYWORDS {
             if !seen.iter().any(|name| name == word) {
-                items.push(Completion { label: (*word).to_string(), kind: CompletionKind::Keyword, detail: String::new() });
+                items.push(Completion { label: (*word).to_string(), kind: CompletionKind::Keyword, detail: String::new(), replace });
             }
         }
         items
@@ -226,35 +230,41 @@ impl Analysis {
         hints
     }
 
-    fn method_completions(&self, receiver_end: usize) -> Vec<Completion> {
-        let Some(expr) = self.info.expr_types.iter().find(|expr| expr.span.end == receiver_end) else {
+    fn method_completions(&self, dot: usize, replace: crate::ast::Span) -> Vec<Completion> {
+        let bytes = self.source.as_bytes();
+        let mut end = dot;
+        while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+            end -= 1;
+        }
+        let Some(expr) = self
+            .info
+            .expr_types
+            .iter()
+            .filter(|expr| expr.span.end == end)
+            .min_by_key(|expr| expr.span.end - expr.span.start)
+        else {
             return Vec::new();
         };
         let mut items = Vec::new();
-        let ty = expr.ty.as_str();
-        let builtin: &[&str] = if ty.starts_with("Vec<") || ty == "vec" {
-            &["len", "push", "pop", "get", "is_empty", "clear"]
-        } else if ty == "String" {
-            &["len", "is_empty"]
-        } else if ty.starts_with("Slice<") {
-            &["len", "is_empty", "get"]
-        } else {
-            &[]
-        };
-        for name in builtin {
-            items.push(Completion { label: (*name).to_string(), kind: CompletionKind::Method, detail: expr.ty.clone() });
+        let ty = expr.ty.clone();
+        for (name, detail) in builtin_methods(&ty) {
+            items.push(Completion { label: name, kind: CompletionKind::Method, detail, replace });
         }
         for (type_name, method) in &self.info.methods {
-            if ty == type_name || ty.starts_with(&format!("{type_name}<")) {
-                items.push(Completion { label: method.clone(), kind: CompletionKind::Method, detail: type_name.clone() });
+            if ty == *type_name || ty.starts_with(&format!("{type_name}<")) {
+                items.push(Completion { label: method.clone(), kind: CompletionKind::Method, detail: type_name.clone(), replace });
             }
         }
         items
     }
 
+    /// The `.` of a member access, including when the cursor is in the partial name (`tape.l`).
     fn dot_before(&self, offset: usize) -> Option<usize> {
-        let mut index = offset;
         let bytes = self.source.as_bytes();
+        let mut index = offset.min(bytes.len());
+        while index > 0 && is_ident_byte(bytes[index - 1]) {
+            index -= 1;
+        }
         while index > 0 && bytes[index - 1].is_ascii_whitespace() {
             index -= 1;
         }
@@ -546,6 +556,63 @@ pub struct Completion {
     pub label: String,
     pub kind: CompletionKind,
     pub detail: String,
+    /// The identifier being typed. Empty when the cursor is directly after `.`.
+    pub replace: crate::ast::Span,
+}
+
+fn ident_around(source: &str, offset: usize) -> crate::ast::Span {
+    let bytes = source.as_bytes();
+    let mut start = offset.min(bytes.len());
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    let mut end = offset.min(bytes.len());
+    while end < bytes.len() && is_ident_byte(bytes[end]) {
+        end += 1;
+    }
+    crate::ast::Span::new(start, end)
+}
+
+fn is_ident_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+/// `Vec<u16>` and `[u16; 4]` carry their element type in the checker's display.
+fn builtin_methods(ty: &str) -> Vec<(String, String)> {
+    let elem = type_argument(ty);
+    let mut methods = Vec::new();
+    let mut add = |name: &str, detail: String| methods.push((name.to_string(), detail));
+    if ty.starts_with("Vec<") {
+        add("len", "fn() -> usize".to_string());
+        add("is_empty", "fn() -> bool".to_string());
+        add("push", format!("fn({elem}) -> ()"));
+        add("pop", format!("fn() -> Option<{elem}>"));
+        add("get", format!("fn(usize) -> Option<{elem}>"));
+        add("clear", "fn() -> ()".to_string());
+    } else if ty == "String" {
+        add("len", "fn() -> usize".to_string());
+        add("is_empty", "fn() -> bool".to_string());
+    } else if ty.starts_with("Slice<") || ty.starts_with('[') {
+        add("len", "fn() -> usize".to_string());
+        add("is_empty", "fn() -> bool".to_string());
+        add("get", format!("fn(usize) -> Option<{elem}>"));
+        add("to_vec", format!("fn() -> Vec<{elem}>"));
+    }
+    methods
+}
+
+fn type_argument(ty: &str) -> String {
+    if let Some(rest) = ty.strip_prefix("Vec<").or_else(|| ty.strip_prefix("Slice<")) {
+        if let Some(elem) = rest.strip_suffix('>') {
+            return elem.to_string();
+        }
+    }
+    if let Some(rest) = ty.strip_prefix('[') {
+        if let Some(end) = rest.find(';') {
+            return rest[..end].trim().to_string();
+        }
+    }
+    "_".to_string()
 }
 
 #[derive(Clone, Copy)]
@@ -651,6 +718,20 @@ mod tests {
         assert!(!names.contains(&"y"), "{names:?}");
         let hover = doc.hover(after).unwrap();
         assert!(hover.contains("i16"), "{hover}");
+    }
+
+    #[test]
+    fn completion_after_a_dot_lists_methods() {
+        let source = "fn main() {\n  let mut tape: Vec<u16> = [];\n  tape.l\n  let n = 1;\n}\n";
+        let doc = Analysis::open(None, source);
+        let typed = source.find("tape.l").unwrap() + "tape.l".len();
+        let labels: Vec<String> = doc.completions(typed).into_iter().map(|item| item.label).collect();
+        assert!(labels.iter().any(|label| label == "len"), "{labels:?}\n{}", doc.diagnostics.iter().map(|err| err.to_string()).collect::<Vec<_>>().join("\n"));
+        assert!(labels.iter().any(|label| label == "push"), "{labels:?}");
+        assert!(!labels.iter().any(|label| label == "let"), "{labels:?}");
+        let bare = source.find("tape.").unwrap() + "tape.".len();
+        let labels: Vec<String> = doc.completions(bare).into_iter().map(|item| item.label).collect();
+        assert!(labels.iter().any(|label| label == "len"), "{labels:?}");
     }
 
     #[test]

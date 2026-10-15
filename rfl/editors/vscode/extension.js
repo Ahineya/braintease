@@ -62,8 +62,14 @@ function hover(connection, doc, pos) {
 function complete(connection, doc, pos) {
   return connection.request("textDocument/completion", textParams(doc, pos)).then((items) => {
     return (items || []).map((item) => {
-      const converted = new vscode.CompletionItem(item.label, item.kind);
+      const kind = typeof item.kind === "number" && item.kind > 0 ? item.kind - 1 : vscode.CompletionItemKind.Text;
+      const converted = new vscode.CompletionItem(item.label, kind);
       converted.detail = item.detail || undefined;
+      converted.filterText = item.filterText || item.label;
+      if (item.textEdit && item.textEdit.range) {
+        converted.range = toRange(item.textEdit.range);
+        converted.insertText = item.textEdit.newText;
+      }
       return converted;
     });
   });
