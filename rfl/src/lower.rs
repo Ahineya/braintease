@@ -190,9 +190,11 @@ enum Insn {
     },
     Clear {
         vec: usize,
+        offset: i64,
     },
     Pop {
         vec: usize,
+        offset: i64,
         value: usize,
         dest: usize,
         elem: Ty,
@@ -210,6 +212,7 @@ enum Insn {
     },
     Push {
         vec: usize,
+        offset: i64,
         value: usize,
         elem: Ty,
     },
@@ -1335,12 +1338,16 @@ impl FnBuild {
                 }
                 self.insn(Insn::Empty { dest, vec });
             }
-            TExprKind::Clear { binding } => {
+            TExprKind::Clear { binding, offset } => {
                 let vec = self.binding_slot[*binding as usize];
-                self.insn(Insn::Clear { vec });
+                self.insn(Insn::Clear {
+                    vec,
+                    offset: *offset,
+                });
             }
             TExprKind::Pop {
                 binding,
+                offset,
                 elem,
                 some_tag,
                 none_tag,
@@ -1349,6 +1356,7 @@ impl FnBuild {
                 let vec = self.binding_slot[*binding as usize];
                 self.insn(Insn::Pop {
                     vec,
+                    offset: *offset,
                     value,
                     dest,
                     elem: *elem,
@@ -1474,6 +1482,7 @@ impl FnBuild {
             }
             TExprKind::Push {
                 binding,
+                offset,
                 value,
                 elem,
             } => {
@@ -1484,6 +1493,7 @@ impl FnBuild {
                 let vec = self.binding_slot[*binding as usize];
                 self.insn(Insn::Push {
                     vec,
+                    offset: *offset,
                     value,
                     elem: *elem,
                 });
@@ -2578,16 +2588,17 @@ fn emit_insn(
         } => emit_vec_index(builder, proc, frame, *dest, *vec, *index, *elem),
         Insn::Len { dest, vec } => emit_vec_len(builder, proc, frame, *dest, *vec),
         Insn::Empty { dest, vec } => emit_vec_empty(builder, proc, frame, *dest, *vec),
-        Insn::Clear { vec } => emit_vec_clear(builder, proc, frame, *vec),
+        Insn::Clear { vec, offset } => emit_vec_clear(builder, proc, frame, *vec, *offset),
         Insn::Pop {
             vec,
+            offset,
             value,
             dest,
             elem,
             some_tag,
             none_tag,
         } => emit_vec_pop(
-            builder, proc, frame, *vec, *value, *dest, *elem, *some_tag, *none_tag,
+            builder, proc, frame, *vec, *offset, *value, *dest, *elem, *some_tag, *none_tag,
         ),
         Insn::Get {
             vec,
@@ -2655,7 +2666,12 @@ fn emit_insn(
             *fail,
             built.need_alloc,
         ),
-        Insn::Push { vec, value, elem } => emit_vec_push(builder, proc, frame, *vec, *value, *elem),
+        Insn::Push {
+            vec,
+            offset,
+            value,
+            elem,
+        } => emit_vec_push(builder, proc, frame, *vec, *offset, *value, *elem),
         Insn::IndexStore {
             vec,
             index,
@@ -3041,6 +3057,20 @@ fn emit_take(
     offset: i64,
 ) -> Result<(), CompileError> {
     let ty = proc.slots[dest].ty;
+    if proc.slots[src].ty.is_ref() {
+        let place = borrowed_place(builder, frame, proc.slots[src].offset, offset)?;
+        if keeps(proc, ty) {
+            release_tree(builder, proc, frame, proc.slots[dest].offset, ty)?;
+        }
+        for index in 0..ty.cells() {
+            let value = load_pointee_cell(builder, &place, index)?;
+            store_cell(builder, frame, proc.slots[dest].offset + index, value)?;
+        }
+        if keeps(proc, ty) {
+            retain_tree(builder, proc, frame, proc.slots[dest].offset, ty)?;
+        }
+        return Ok(());
+    }
     let from = proc.slots[src].offset + offset;
     if keeps(proc, ty) {
         release_tree(builder, proc, frame, proc.slots[dest].offset, ty)?;
@@ -3064,6 +3094,18 @@ fn emit_field_store(
     src: usize,
 ) -> Result<(), CompileError> {
     let ty = proc.slots[src].ty;
+    if proc.slots[dest].ty.is_ref() {
+        let place = borrowed_place(builder, frame, proc.slots[dest].offset, offset)?;
+        release_through(builder, proc, &place, ty)?;
+        for index in 0..ty.cells() {
+            let value = load_cell(builder, frame, proc.slots[src].offset + index, IrType::I16)?;
+            store_pointee_cell(builder, &place, index, value)?;
+        }
+        if keeps(proc, ty) {
+            retain_tree(builder, proc, frame, proc.slots[src].offset, ty)?;
+        }
+        return Ok(());
+    }
     let at = proc.slots[dest].offset + offset;
     if keeps(proc, ty) {
         release_tree(builder, proc, frame, at, ty)?;
@@ -5665,8 +5707,9 @@ fn emit_vec_clear(
     proc: &Proc,
     frame: &Value,
     vec: usize,
+    offset: i64,
 ) -> Result<(), CompileError> {
-    let header = vec_header(builder, proc, frame, vec)?;
+    let header = header_at(builder, proc, frame, vec, offset)?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     adjust_refcount(builder, addr, bank, false)?;
@@ -5697,13 +5740,19 @@ fn emit_vec_index_store(
             value,
         );
     }
-    let at = proc.slots[vec].offset + offset;
-    let header = if container.is_ref() {
-        let addr = load_cell(builder, frame, at, IrType::I16)?;
-        let bank = load_cell(builder, frame, at + 1, IrType::I16)?;
+    let place = if proc.slots[vec].ty.is_ref() {
+        borrowed_place(builder, frame, proc.slots[vec].offset, offset)?
+    } else {
+        gep(builder, frame, proc.slots[vec].offset + offset)?
+    };
+    // `&Vec` already points at the header. A reference stored in a field needs
+    // one more load to reach that header.
+    let header = if container.is_ref() && !(proc.slots[vec].ty.is_ref() && offset == 0) {
+        let addr = load_cell(builder, &place, 0, IrType::I16)?;
+        let bank = load_cell(builder, &place, 1, IrType::I16)?;
         fat_from_parts(builder, addr, bank)?
     } else {
-        gep(builder, frame, at)?
+        place
     };
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bad = builder.new_label();
@@ -5858,13 +5907,14 @@ fn emit_vec_pop(
     proc: &Proc,
     frame: &Value,
     vec: usize,
+    offset: i64,
     value: usize,
     dest: usize,
     elem: Ty,
     some_tag: u16,
     none_tag: u16,
 ) -> Result<(), CompileError> {
-    let header = vec_header(builder, proc, frame, vec)?;
+    let header = header_at(builder, proc, frame, vec, offset)?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let none = builder.new_label();
     let have = builder.new_label();
@@ -5942,10 +5992,11 @@ fn emit_vec_push(
     proc: &Proc,
     frame: &Value,
     vec: usize,
+    offset: i64,
     value: usize,
     elem: Ty,
 ) -> Result<(), CompileError> {
-    let header = vec_header(builder, proc, frame, vec)?;
+    let header = header_at(builder, proc, frame, vec, offset)?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let fresh = builder.new_label();
     let have = builder.new_label();
@@ -6569,6 +6620,107 @@ fn gep(builder: &mut IrBuilder, frame: &Value, offset: i64) -> Result<Value, Com
     builder
         .build_pointer_offset(frame.clone(), Value::Constant(offset), ptr_ty())
         .ir()
+}
+
+/// Pointer to cell `field` of the local borrowed by the reference at `ref_offset`.
+fn borrowed_place(
+    builder: &mut IrBuilder,
+    frame: &Value,
+    ref_offset: i64,
+    field: i64,
+) -> Result<Value, CompileError> {
+    let addr = load_cell(builder, frame, ref_offset, IrType::I16)?;
+    let bank = load_cell(builder, frame, ref_offset + 1, IrType::I16)?;
+    let base = fat_from_parts(builder, addr, bank)?;
+    if field == 0 {
+        Ok(base)
+    } else {
+        builder
+            .build_pointer_offset(base, Value::Constant(field), ptr_ty())
+            .ir()
+    }
+}
+
+fn load_pointee_cell(
+    builder: &mut IrBuilder,
+    place: &Value,
+    index: i64,
+) -> Result<Value, CompileError> {
+    let ptr = builder
+        .build_pointer_offset(place.clone(), Value::Constant(index), ptr_ty())
+        .ir()?;
+    Ok(Value::Temp(builder.build_load(ptr, IrType::I16).ir()?))
+}
+
+fn store_pointee_cell(
+    builder: &mut IrBuilder,
+    place: &Value,
+    index: i64,
+    value: Value,
+) -> Result<(), CompileError> {
+    let ptr = builder
+        .build_pointer_offset(place.clone(), Value::Constant(index), ptr_ty())
+        .ir()?;
+    builder.build_store(value, ptr, IrType::I16).ir()?;
+    Ok(())
+}
+
+fn release_through(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    place: &Value,
+    ty: Ty,
+) -> Result<(), CompileError> {
+    match ty {
+        Ty::Vec(_) | Ty::Slice(_) | Ty::String => {
+            let addr = load_pointee_cell(builder, place, 0)?;
+            let bank = load_pointee_cell(builder, place, 1)?;
+            adjust_refcount(builder, addr, bank, false)
+        }
+        Ty::Struct { id, .. } => {
+            let mut at = 0i64;
+            for field in proc.structs[id as usize].clone() {
+                let sub = builder
+                    .build_pointer_offset(place.clone(), Value::Constant(at), ptr_ty())
+                    .ir()?;
+                release_through(builder, proc, &sub, field)?;
+                at += field.cells();
+            }
+            Ok(())
+        }
+        Ty::Tuple { id, .. } => {
+            let mut at = 0i64;
+            for field in proc.tuples[id as usize].clone() {
+                let sub = builder
+                    .build_pointer_offset(place.clone(), Value::Constant(at), ptr_ty())
+                    .ir()?;
+                release_through(builder, proc, &sub, field)?;
+                at += field.cells();
+            }
+            Ok(())
+        }
+        Ty::Adt(id) => {
+            let tag = load_pointee_cell(builder, place, 0)?;
+            let addr = load_pointee_cell(builder, place, 1)?;
+            let bank = load_pointee_cell(builder, place, 2)?;
+            call_if_live(
+                builder,
+                &format!("rfl_drop_adt_{id}"),
+                vec![tag, addr, bank],
+            )?;
+            store_pointee_cell(builder, place, 1, Value::Constant(0))?;
+            store_pointee_cell(builder, place, 2, Value::Constant(0))
+        }
+        Ty::Func(_) => {
+            let id = load_pointee_cell(builder, place, 0)?;
+            let addr = load_pointee_cell(builder, place, 2)?;
+            let bank = load_pointee_cell(builder, place, 3)?;
+            call_if_live(builder, "rfl_drop_func", vec![id, addr, bank])?;
+            store_pointee_cell(builder, place, 2, Value::Constant(0))?;
+            store_pointee_cell(builder, place, 3, Value::Constant(0))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn widen_for_op(builder: &mut IrBuilder, value: Value, ty: Ty) -> Result<Value, CompileError> {
@@ -7798,6 +7950,22 @@ fn cell_wise(ty: Ty) -> bool {
 }
 
 /// Pointer to the two cells that store a vector's buffer address and bank.
+fn header_at(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    slot: usize,
+    offset: i64,
+) -> Result<Value, CompileError> {
+    if proc.slots[slot].ty.is_ref() {
+        borrowed_place(builder, frame, proc.slots[slot].offset, offset)
+    } else if offset == 0 {
+        vec_header(builder, proc, frame, slot)
+    } else {
+        gep(builder, frame, proc.slots[slot].offset + offset)
+    }
+}
+
 fn vec_header(
     builder: &mut IrBuilder,
     proc: &Proc,

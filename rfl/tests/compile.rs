@@ -762,6 +762,31 @@ fn structs_and_tuples_are_values() {
 }
 
 #[test]
+fn fields_of_a_mutable_reference() {
+    let source = r#"
+        struct Machine { program: String, tape: Vec<i16>, ip: usize, tp: usize }
+        fn step(m: &mut Machine) {
+            match m.program[m.ip] {
+                '+' => { m.tape[m.tp] += 1; }
+                '>' => { m.tp = m.tp + 1; }
+                _ => {}
+            }
+            m.ip += 1;
+        }
+        fn main() -> i16 {
+            let mut machine = Machine { program: "+>", tape: [], ip: 0, tp: 0 };
+            machine.tape.push(1);
+            machine.tape.push(2);
+            step(&mut machine);
+            step(&mut machine);
+            machine.tape[0] + machine.tape[1]
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 4, "{}", result.stdout);
+}
+
+#[test]
 fn index_assign_through_a_field() {
     let source = r#"
         struct Machine { tape: Vec<i16>, tp: usize }

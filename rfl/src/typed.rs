@@ -286,19 +286,22 @@ pub enum TExprKind {
     Empty {
         vec: Box<TExpr>,
     },
-    /// `place.clear()` on a mutable name.
+    /// `place.clear()` on a mutable vector place.
     Clear {
         binding: u32,
+        offset: i64,
     },
-    /// `place.push(value)` on a mutable name.
+    /// `place.push(value)` on a mutable vector place.
     Push {
         binding: u32,
+        offset: i64,
         value: Box<TExpr>,
         elem: Ty,
     },
     /// `place.pop()`, copying the buffer first when it is shared.
     Pop {
         binding: u32,
+        offset: i64,
         elem: Ty,
         some_tag: u16,
         none_tag: u16,

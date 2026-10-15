@@ -20,6 +20,7 @@ timeout=300
 jobs=4
 headless=0
 build_only=0
+jit=0
 usage() {
   cat <<'EOF'
 Usage: ports/doom/run.sh [options]
@@ -36,6 +37,7 @@ Usage: ports/doom/run.sh [options]
   --input-script FILE     Deterministic keyboard input
   --output DIRECTORY      Captures, disk copy and reports (default: build/run)
   --clock MODE            paced, unthrottled or stepped
+  --jit                   Run the guest with rvm's Cranelift JIT
   --max-instructions N    Headless instruction budget (default: 100000000000)
   --timeout SECONDS       Headless time budget (default: 300)
   --jobs N                Parallel compiler jobs (default: 4)
@@ -58,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     --input-script) value "$@"; input="$2"; shift 2;;
     --output) value "$@"; out="$2"; shift 2;;
     --clock) value "$@"; clock="$2"; shift 2;;
+    --jit) jit=1; shift;;
     --max-instructions) value "$@"; instructions="$2"; shift 2;;
     --timeout) value "$@"; timeout="$2"; shift 2;;
     --jobs) value "$@"; jobs="$2"; shift 2;;
@@ -110,6 +113,7 @@ else
 fi
 [[ -z "$input" ]] || command+=(--input-script "$input")
 [[ "$clock" != stepped ]] || command+=(--control-stdin)
+[[ "$jit" == 0 ]] || command+=(--jit)
 node "$PORT/tools/build-support.mjs" run-manifest "$build/manifest.json" "$out/disk-image.json" \
   "$out/$scene.manifest.json" "$scene" "$detail" "${command[@]}"
 cd "$ROOT"

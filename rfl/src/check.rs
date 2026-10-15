@@ -4807,7 +4807,7 @@ impl<'a> Checker<'a> {
                     format!("`clear` expects 0 arguments, found {}", args.len()),
                 ));
             }
-            let binding = self.vec_place(span, &recv, "clear", true)?;
+            let (binding, offset) = self.vec_place(span, &recv, "clear", true)?;
             if let Some(want) = expected {
                 if want != Ty::Unit {
                     return Err(CompileError::at(
@@ -4819,7 +4819,7 @@ impl<'a> Checker<'a> {
             }
             return Ok(TExpr {
                 ty: Ty::Unit,
-                kind: TExprKind::Clear { binding },
+                kind: TExprKind::Clear { binding, offset },
             });
         }
         if method == "pop" {
@@ -4831,7 +4831,7 @@ impl<'a> Checker<'a> {
                     format!("`pop` expects 0 arguments, found {}", args.len()),
                 ));
             }
-            let binding = self.vec_place(span, &recv, "pop", true)?;
+            let (binding, offset) = self.vec_place(span, &recv, "pop", true)?;
             let (option, some_tag, none_tag) = self.option_of(elem)?;
             if let Some(want) = expected {
                 if want != option {
@@ -4850,6 +4850,7 @@ impl<'a> Checker<'a> {
                 ty: option,
                 kind: TExprKind::Pop {
                     binding,
+                    offset,
                     elem,
                     some_tag,
                     none_tag,
@@ -4906,7 +4907,7 @@ impl<'a> Checker<'a> {
                 format!("`push` expects 1 argument, found {}", args.len()),
             ));
         }
-        let binding = self.vec_place(span, &recv, "push", true)?;
+        let (binding, offset) = self.vec_place(span, &recv, "push", true)?;
         if let Some(want) = expected {
             if want != Ty::Unit {
                 return Err(CompileError::at(
@@ -4932,6 +4933,7 @@ impl<'a> Checker<'a> {
             ty: Ty::Unit,
             kind: TExprKind::Push {
                 binding,
+                offset,
                 value: Box::new(value),
                 elem,
             },
@@ -4956,34 +4958,45 @@ impl<'a> Checker<'a> {
         recv: &TExpr,
         method: &str,
         mutate: bool,
-    ) -> Result<u32, CompileError> {
-        let TExprKind::Name(binding) = recv.kind else {
-            return Err(CompileError::at(
-                self.source,
-                span,
-                format!("`{method}` needs a name"),
-            ));
+    ) -> Result<(u32, i64), CompileError> {
+        let mut offset = 0i64;
+        let mut cursor = recv;
+        let binding = loop {
+            match &cursor.kind {
+                TExprKind::Name(binding) => break *binding,
+                TExprKind::Field { base, offset: at } => {
+                    offset += *at;
+                    cursor = base;
+                }
+                _ => {
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`{method}` needs a name"),
+                    ));
+                }
+            }
         };
-        let ty = self.bindings[binding as usize].ty;
-        if !matches!(self.referent(ty), Ty::Vec(_)) {
+        let root_ty = self.bindings[binding as usize].ty;
+        if !matches!(self.referent(recv.ty), Ty::Vec(_)) {
             return Err(CompileError::at(
                 self.source,
                 span,
                 format!("`{method}` needs a vector"),
             ));
         }
-        if mutate && !self.place_mutable(binding, ty) {
-            let message = if ty.is_ref() {
+        if mutate && !self.place_mutable(binding, root_ty) {
+            let message = if root_ty.is_ref() {
                 format!("`{method}` needs a mutable reference")
             } else {
                 format!("`{method}` needs a mutable name")
             };
             return Err(CompileError::at(self.source, span, message));
         }
-        if mutate && !ty.is_ref() {
+        if mutate && !root_ty.is_ref() {
             self.note_use(span, binding, true)?;
         }
-        Ok(binding)
+        Ok((binding, offset))
     }
 
     fn show(&self, ty: Ty) -> String {
@@ -6692,7 +6705,7 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
-        let (offset, ty) = self.field_at(span, base.ty, name)?;
+        let (offset, ty) = self.field_at(span, self.referent(base.ty), name)?;
         if let Some(want) = expected {
             if want != ty {
                 return Err(CompileError::at(
@@ -6835,8 +6848,8 @@ impl<'a> Checker<'a> {
                 format!("unknown name `{name}`"),
             ));
         };
-        let mut ty = self.bindings[id as usize].ty;
-        if !self.place_mutable(id, ty) {
+        let root = self.bindings[id as usize].ty;
+        if !self.place_mutable(id, root) {
             return Err(CompileError::at(
                 self.source,
                 span,
@@ -6844,6 +6857,7 @@ impl<'a> Checker<'a> {
             ));
         }
         self.note_use(span, id, true)?;
+        let mut ty = self.referent(root);
         let mut offset = 0i64;
         for field in fields {
             let (at, next) = self.field_at(span, ty, field)?;
@@ -8413,25 +8427,47 @@ fn pat_names(pat: &Pat, out: &mut Vec<(String, Span)>) {
 
 impl<'a> Checker<'a> {
     fn vec_elem_of(&self, expr: &Expr) -> Option<Ty> {
-        let ExprKind::Name(name) = &expr.kind else {
-            return None;
-        };
-        let ty = if let Some(id) = self.lookup(name) {
-            self.bindings[id as usize].ty
-        } else {
-            let id = self
-                .outer_scopes
-                .iter()
-                .rev()
-                .find_map(|scope| scope.get(name).copied())?;
-            self.outer_bindings[id as usize].ty
-        };
+        let ty = self.peek_place(expr)?;
         self.element_of(ty).or_else(|| {
             let Ty::Ref(id) = ty else {
                 return None;
             };
             self.element_of(self.refs[id as usize].inner)
         })
+    }
+
+    fn peek_place(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Name(name) => self.binding_ty(name),
+            ExprKind::Field { base, name, .. } => {
+                let ty = self.peek_place(base)?;
+                self.field_ty(ty, name)
+            }
+            _ => None,
+        }
+    }
+
+    fn binding_ty(&self, name: &str) -> Option<Ty> {
+        if let Some(id) = self.lookup(name) {
+            return Some(self.bindings[id as usize].ty);
+        }
+        let id = self
+            .outer_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())?;
+        Some(self.outer_bindings[id as usize].ty)
+    }
+
+    fn field_ty(&self, ty: Ty, name: &str) -> Option<Ty> {
+        let Ty::Struct { id, .. } = self.referent(ty) else {
+            return None;
+        };
+        self.structs[id as usize]
+            .fields
+            .iter()
+            .find(|(field, _)| field == name)
+            .map(|(_, ty)| *ty)
     }
 
     fn peek(&self, expr: &Expr) -> Option<Ty> {
@@ -8489,7 +8525,9 @@ impl<'a> Checker<'a> {
                     self.sigs.get(method).and_then(|sig| sig.ret)
                 }
             }
-            ExprKind::Index { base, .. } => self.vec_elem_of(base),
+            ExprKind::Index { base, .. } => self
+                .peek_place(base)
+                .and_then(|ty| self.element_of(self.referent(ty))),
             ExprKind::Array(_) => None,
             ExprKind::If {
                 else_body: None, ..
@@ -8498,8 +8536,10 @@ impl<'a> Checker<'a> {
             | ExprKind::For { .. } => Some(Ty::Unit),
             ExprKind::Tuple(_)
             | ExprKind::StructLit { .. }
-            | ExprKind::Field { .. }
             | ExprKind::Range { .. } => None,
+            ExprKind::Field { base, name, .. } => {
+                self.peek_place(base).and_then(|ty| self.field_ty(ty, name))
+            }
             ExprKind::Match { arms, .. } => arms.first().and_then(|arm| self.peek(&arm.body)),
             ExprKind::If {
                 then_body,
