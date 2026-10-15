@@ -247,10 +247,12 @@ pub enum Stmt {
         ptr: Expr,
         value: Expr,
     },
-    /// `name[index] = value` on a mutable vector.
+    /// `name[index] = value`, or `name.field[index] = value`, on a mutable vector or array.
     IndexAssign {
         name: String,
         name_span: Span,
+        /// Empty for `tape[i]`. `tape` then `cell` for `m.tape.cell[i]`.
+        fields: Vec<String>,
         index: Expr,
         value: Expr,
     },

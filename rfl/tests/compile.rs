@@ -762,6 +762,20 @@ fn structs_and_tuples_are_values() {
 }
 
 #[test]
+fn index_assign_through_a_field() {
+    let source = r#"
+        struct Machine { tape: Vec<i16>, tp: usize }
+        fn main() -> i16 {
+            let mut m = Machine { tape: [1], tp: 0 };
+            m.tape[m.tp] += 1;
+            if (m.tape[0] == 2) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
 fn literal_patterns_match_values() {
     let source = r#"
         fn classify(n: i16) -> i16 {

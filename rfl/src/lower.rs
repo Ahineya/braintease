@@ -218,6 +218,10 @@ enum Insn {
         index: usize,
         value: usize,
         elem: Ty,
+        /// Added to the slot offset. A field's vector lives inside its struct.
+        offset: i64,
+        /// `Vec`, `Array`, or a reference to a vector. Selects the store shape.
+        container: Ty,
     },
     /// Address of a local slot. The destination holds that pointer.
     Borrow {
@@ -850,9 +854,11 @@ impl FnBuild {
             }
             TStmt::IndexAssign {
                 binding,
+                offset,
                 index,
                 value,
                 elem,
+                container,
             } => {
                 let vec = self.binding_slot[*binding as usize];
                 let index = self.emit_expr(index);
@@ -868,6 +874,8 @@ impl FnBuild {
                     index,
                     value,
                     elem: *elem,
+                    offset: *offset,
+                    container: *container,
                 });
             }
             TStmt::Expr(expr) => {
@@ -2653,7 +2661,19 @@ fn emit_insn(
             index,
             value,
             elem,
-        } => emit_vec_index_store(builder, proc, frame, *vec, *index, *value, *elem),
+            offset,
+            container,
+        } => emit_vec_index_store(
+            builder,
+            proc,
+            frame,
+            *vec,
+            *index,
+            *value,
+            *elem,
+            *offset,
+            *container,
+        ),
         Insn::VecStore {
             dest,
             src,
@@ -4809,17 +4829,16 @@ fn emit_array_index(
     )
 }
 
-fn emit_array_store(
+fn emit_array_store_at(
     builder: &mut IrBuilder,
     proc: &Proc,
     frame: &Value,
-    array: usize,
+    base: i64,
+    len: u16,
+    width: u16,
     index: usize,
     value: usize,
 ) -> Result<(), CompileError> {
-    let Ty::Array { len, width, .. } = proc.slots[array].ty else {
-        return Ok(());
-    };
     let at = load_slot(builder, proc, frame, index)?;
     let in_range = builder
         .build_binary(
@@ -4837,15 +4856,7 @@ fn emit_array_store(
     builder.create_block(bad).ir()?;
     runtime_fail(builder, FAIL_BOUNDS)?;
     builder.create_block(ok).ir()?;
-    store_inline_elem(
-        builder,
-        proc,
-        frame,
-        value,
-        proc.slots[array].offset,
-        at,
-        width as i64,
-    )
+    store_inline_elem(builder, proc, frame, value, base, at, width as i64)
 }
 
 fn emit_array_get(
@@ -5671,11 +5682,29 @@ fn emit_vec_index_store(
     index: usize,
     value: usize,
     elem: Ty,
+    offset: i64,
+    container: Ty,
 ) -> Result<(), CompileError> {
-    if let Ty::Array { .. } = proc.slots[vec].ty {
-        return emit_array_store(builder, proc, frame, vec, index, value);
+    if let Ty::Array { len, width, .. } = container {
+        return emit_array_store_at(
+            builder,
+            proc,
+            frame,
+            proc.slots[vec].offset + offset,
+            len,
+            width,
+            index,
+            value,
+        );
     }
-    let header = vec_header(builder, proc, frame, vec)?;
+    let at = proc.slots[vec].offset + offset;
+    let header = if container.is_ref() {
+        let addr = load_cell(builder, frame, at, IrType::I16)?;
+        let bank = load_cell(builder, frame, at + 1, IrType::I16)?;
+        fat_from_parts(builder, addr, bank)?
+    } else {
+        gep(builder, frame, at)?
+    };
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bad = builder.new_label();
     let have = builder.new_label();

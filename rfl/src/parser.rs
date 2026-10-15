@@ -1006,20 +1006,33 @@ impl<'a> Parser<'a> {
                 "expected an index before '='",
             ));
         };
-        let ExprKind::Name(name) = base.kind else {
-            return Err(CompileError::at(
-                self.source,
-                base.span.start,
-                "index assignment needs a name",
-            ));
+        let mut fields = Vec::new();
+        let mut cursor = *base;
+        let (name, name_span) = loop {
+            match cursor.kind {
+                ExprKind::Name(name) => break (name, cursor.span),
+                ExprKind::Field { base, name, .. } => {
+                    fields.push(name);
+                    cursor = *base;
+                }
+                _ => {
+                    return Err(CompileError::at(
+                        self.source,
+                        cursor.span.start,
+                        "index assignment needs a name",
+                    ));
+                }
+            }
         };
+        fields.reverse();
         let op = self.compound_op()?;
         let rhs = self.parse_expr()?;
         self.expect(&TokenKind::Semi, "';'")?;
         let value = self.compound_value(op, lhs, rhs);
         Ok(Stmt::IndexAssign {
             name,
-            name_span: base.span,
+            name_span,
+            fields,
             index: *index,
             value,
         })

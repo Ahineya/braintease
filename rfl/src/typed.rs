@@ -95,9 +95,13 @@ pub enum TStmt {
     },
     IndexAssign {
         binding: u32,
+        /// Cell offset of the vector or array inside `binding`. Zero for a bare name.
+        offset: i64,
         index: TExpr,
         value: TExpr,
         elem: Ty,
+        /// The vector, array, or reference that `index` selects from.
+        container: Ty,
     },
     /// Store `value` at a cell offset inside a struct binding.
     FieldAssign {

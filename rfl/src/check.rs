@@ -2208,9 +2208,13 @@ impl<'a> Checker<'a> {
             Stmt::IndexAssign {
                 name,
                 name_span,
+                fields,
                 index,
                 value,
             } => {
+                if !fields.is_empty() {
+                    return self.check_field_index(name, name_span.start, fields, index, value);
+                }
                 let Some(id) = self.resolve(name) else {
                     return Err(CompileError::at(
                         self.source,
@@ -2314,9 +2318,11 @@ impl<'a> Checker<'a> {
                 }
                 Ok(TStmt::IndexAssign {
                     binding: id,
+                    offset: 0,
                     index,
                     value,
                     elem,
+                    container: ty,
                 })
             }
             Stmt::FieldAssign {
@@ -4145,8 +4151,18 @@ impl<'a> Checker<'a> {
         value: &Expr,
     ) -> Result<TStmt, CompileError> {
         let span = ptr.span.start;
-        self.require_unsafe(span)?;
         let ptr = self.check_expr(ptr, None)?;
+        self.store_through_ptr(span, ptr, index, value)
+    }
+
+    fn store_through_ptr(
+        &mut self,
+        span: usize,
+        ptr: TExpr,
+        index: Option<&Expr>,
+        value: &Expr,
+    ) -> Result<TStmt, CompileError> {
+        self.require_unsafe(span)?;
         let Ty::Ptr(id) = ptr.ty else {
             return Err(CompileError::at(
                 self.source,
@@ -6715,6 +6731,94 @@ impl<'a> Checker<'a> {
             span,
             format!("{} has no field `{name}`", self.show(ty)),
         ))
+    }
+
+    fn check_field_index(
+        &mut self,
+        name: &str,
+        span: usize,
+        fields: &[String],
+        index: &Expr,
+        value: &Expr,
+    ) -> Result<TStmt, CompileError> {
+        let Some(id) = self.resolve(name) else {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown name `{name}`"),
+            ));
+        };
+        let root = self.bindings[id as usize].ty;
+        if !self.place_mutable(id, root) {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{name}` is not mutable"),
+            ));
+        }
+        self.note_use(span, id, true)?;
+        let mut ty = root;
+        let mut offset = 0i64;
+        for field in fields {
+            let (at, next) = self.field_at(span, self.referent(ty), field)?;
+            offset += at;
+            ty = next;
+        }
+        if let Ty::Ptr(_) = ty {
+            let ptr = TExpr {
+                ty,
+                kind: TExprKind::Field {
+                    base: Box::new(TExpr {
+                        ty: root,
+                        kind: TExprKind::Name(id),
+                    }),
+                    offset,
+                },
+            };
+            return self.store_through_ptr(span, ptr, Some(index), value);
+        }
+        if matches!(ty, Ty::Slice(_)) || matches!(self.referent(ty), Ty::Slice(_)) {
+            return Err(CompileError::at(self.source, span, "slices are read-only"));
+        }
+        let elem = if let Ty::Vec(vec_id) = self.referent(ty) {
+            self.vec_elems[vec_id as usize]
+        } else if let Ty::Array { id: array_id, .. } = ty {
+            self.arrays[array_id as usize].elem
+        } else {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{}` is not a vector or array", fields.join(".")),
+            ));
+        };
+        let index = self.check_expr(index, Some(Ty::Usize))?;
+        if index.ty != Ty::Usize {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("expected usize, found {}", self.show(index.ty)),
+            ));
+        }
+        let value = self.check_expr(value, Some(elem))?;
+        if value.ty != elem {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "expected {}, found {}",
+                    self.show(elem),
+                    self.show(value.ty)
+                ),
+            ));
+        }
+        Ok(TStmt::IndexAssign {
+            binding: id,
+            offset,
+            index,
+            value,
+            elem,
+            container: ty,
+        })
     }
 
     fn check_field_assign(

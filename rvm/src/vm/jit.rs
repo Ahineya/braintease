@@ -1,12 +1,13 @@
 //! Cranelift JIT. A function is translated the first time it runs.
 //!
 //! Branches, and the instruction after a call, stay in that function. `JAL`
-//! calls the callee's native function and `JALR` returns from it. The host is
-//! entered again only when the instruction budget runs out or a store hits
-//! the bank-zero header. Guest writes go straight to the VM register file, so
-//! leaving a region does not spill thirty-two values through a phi. `STORC`
-//! drops the region that covered the written instruction; that entrance is
-//! translated again the next time it runs.
+//! calls the callee's native function and `JALR` returns from it. A compiled
+//! call loads the callee from a table and jumps to it; Rust runs only the
+//! first time that address is translated, and again after `STORC` clears the
+//! slot. The host is entered again when the instruction budget runs out or a
+//! store hits the bank-zero header. Guest register writes go to the VM as
+//! they happen. `STORC` drops the region that covered the written instruction;
+//! that entrance is translated again the next time it runs.
 //!
 //! `STORC` is the only instruction that writes code memory. The region returns
 //! immediately after it, and every region whose instructions cover the written
@@ -22,7 +23,7 @@ use crate::constants::TEXT40_BASE_WORD;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{types, InstBuilder};
 use cranelift_codegen::ir::{
-    AbiParam, Block, BlockArg, FuncRef, MemFlagsData, UserFuncName, Value,
+    AbiParam, Block, BlockArg, FuncRef, MemFlagsData, SigRef, Type, UserFuncName, Value,
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
@@ -34,8 +35,10 @@ const CONT: i32 = 0;
 const YIELD: i32 = 1;
 const FAULT: i32 = 2;
 
-/// One instruction per block, so every address in a compiled region is an
-/// entry. A coarser block recompiles when execution resumes in its middle.
+/// One instruction per block, so a resume always lands on an entry that was
+/// compiled with this region. Packing more instructions into a block forces
+/// Cranelift to rebuild a much larger function whenever execution stops in
+/// the middle of it.
 const MAX_BLOCK: usize = 1;
 /// Branch-connected instructions compiled together, including the code after
 /// a call. The callee itself is a separate native function. Past this cap the
@@ -69,6 +72,11 @@ pub(super) struct JitEngine {
     blocks: HashMap<usize, Compiled>,
     dead: u32,
     seq: u32,
+    /// Native function per guest instruction. Zero means "not compiled".
+    /// `table_base` is a stable cell holding the allocation's address, which
+    /// compiled calls reload so a later growth of `table` stays visible.
+    table: Vec<usize>,
+    table_base: Box<usize>,
 }
 
 struct Offsets {
@@ -331,7 +339,29 @@ impl JitEngine {
             blocks: HashMap::new(),
             dead: 0,
             seq: 0,
+            table: Vec::new(),
+            table_base: Box::new(0),
         })
+    }
+
+    fn ensure_table(&mut self, len: usize) {
+        if len <= self.table.len() {
+            return;
+        }
+        self.table.resize(len, 0);
+        *self.table_base = self.table.as_ptr() as usize;
+    }
+
+    fn publish(&mut self, index: usize, code: JitFn) {
+        self.ensure_table(index + 1);
+        self.table[index] = code as usize;
+        *self.table_base = self.table.as_ptr() as usize;
+    }
+
+    fn clear_slot(&mut self, index: usize) {
+        if index < self.table.len() {
+            self.table[index] = 0;
+        }
     }
 
     fn get(&self, index: usize) -> Option<JitFn> {
@@ -353,8 +383,20 @@ impl JitEngine {
         if doomed.is_empty() {
             return;
         }
+        let mut cover = Vec::new();
+        for key in &doomed {
+            if let Some(block) = self.blocks.get(key) {
+                for &(start, len) in &block.ranges {
+                    cover.extend(start..start + len);
+                }
+            }
+            cover.push(*key);
+        }
         for key in doomed {
             self.blocks.remove(&key);
+        }
+        for index in cover {
+            self.clear_slot(index);
         }
         // One edit invalidates the whole region. Rebuilding the module is the
         // expensive path, and self-modifying stores are rare.
@@ -373,12 +415,19 @@ impl JitEngine {
         self.module = module;
         self.ids = ids;
         self.blocks.clear();
+        self.table.fill(0);
         self.dead = 0;
         log::debug!("jit reclaimed invalidated blocks");
         Ok(())
     }
 
-    fn compile(&mut self, bank_size: u16, start: usize, region: &Region) -> Result<JitFn, String> {
+    fn compile(
+        &mut self,
+        bank_size: u16,
+        start: usize,
+        region: &Region,
+        code_len: usize,
+    ) -> Result<JitFn, String> {
         if bank_size == 0 {
             return Err("JIT: bank size is zero".into());
         }
@@ -400,6 +449,10 @@ impl JitEngine {
         let mut ctx = self.module.make_context();
         ctx.func.signature = sig;
         ctx.func.name = UserFuncName::user(0, id.as_u32());
+        self.ensure_table(code_len);
+        let table_cell = &*self.table_base as *const usize as i64;
+        let table_len = self.table.len();
+        let guest_sig_data = ctx.func.signature.clone();
         let ids = self.ids;
         let mut func_ctx = FunctionBuilderContext::new();
         let config = self.module.target_config();
@@ -431,6 +484,7 @@ impl JitEngine {
             let unknown = self
                 .module
                 .declare_func_in_func(ids.unknown, &mut builder.func);
+            let guest_sig = builder.func.import_signature(guest_sig_data);
             let mut var_reg = [Variable::from_u32(0); 32];
             for index in 0..32 {
                 var_reg[index] = builder.declare_var(types::I16);
@@ -458,6 +512,10 @@ impl JitEngine {
                 halt,
                 brk,
                 unknown,
+                ptr,
+                guest_sig,
+                table_cell,
+                table_len,
             };
             cg.emit_region(region)?;
             cg.b.seal_all_blocks();
@@ -485,6 +543,7 @@ impl JitEngine {
                     code,
                 },
             );
+            self.publish(block.index, code);
         }
         Ok(code)
     }
@@ -513,6 +572,11 @@ struct Cg<'a> {
     halt: FuncRef,
     brk: FuncRef,
     unknown: FuncRef,
+    ptr: Type,
+    guest_sig: SigRef,
+    /// Address of the stable cell that holds the call-table pointer.
+    table_cell: i64,
+    table_len: usize,
 }
 
 impl<'a> Cg<'a> {
@@ -752,6 +816,7 @@ impl<'a> Cg<'a> {
             0x17 => self.branch(inst, IntCC::SignedLessThan),
             0x18 => self.branch(inst, IntCC::SignedGreaterThanOrEqual),
             0x19 => {
+                self.spill();
                 self.b.ins().call(self.brk, &[self.vm]);
                 self.bump();
                 self.advance();
@@ -1062,6 +1127,7 @@ impl<'a> Cg<'a> {
 
     fn emit_brk(&mut self) {
         self.ensure_budget();
+        self.spill();
         self.b.ins().call(self.brk, &[self.vm]);
         self.bump();
         self.advance();
@@ -1084,6 +1150,54 @@ impl<'a> Cg<'a> {
         self.bump();
     }
 
+    /// Call a compiled callee directly when its slot is filled. The first call
+    /// and any call after `STORC` clears the slot go through Rust, which
+    /// compiles and publishes the slot.
+    fn call_guest(&mut self, target: usize) -> Result<Value, String> {
+        let target_i32 = i32::try_from(target)
+            .map_err(|_| format!("JIT call target {target} does not fit in i32"))?;
+        if target >= self.table_len {
+            let index = self.k32(i64::from(target_i32));
+            return Ok(self.call_i32(self.call, &[self.vm, index]));
+        }
+        let cell = self.b.ins().iconst(self.ptr, self.table_cell);
+        let base = self.b.ins().load(self.ptr, self.flags, cell, 0);
+        let no_table = self.b.ins().icmp_imm_s(IntCC::Equal, base, 0);
+        let have = self.b.create_block();
+        let slow = self.b.create_block();
+        let join = self.b.create_block();
+        self.b.append_block_param(join, types::I32);
+        self.b.ins().brif(no_table, slow, no_args(), have, no_args());
+
+        self.b.switch_to_block(have);
+        let slot = self
+            .b
+            .ins()
+            .iadd_imm_s(base, i64::from(target_i32) * 8);
+        let fp = self.b.ins().load(self.ptr, self.flags, slot, 0);
+        let missing = self.b.ins().icmp_imm_s(IntCC::Equal, fp, 0);
+        let hit = self.b.create_block();
+        self.b.ins().brif(missing, slow, no_args(), hit, no_args());
+
+        self.b.switch_to_block(hit);
+        let direct = self
+            .b
+            .ins()
+            .call_indirect(self.guest_sig, fp, &[self.vm]);
+        let direct = self.b.inst_results(direct)[0];
+        let direct_arg = BlockArg::Value(direct);
+        self.b.ins().jump(join, std::slice::from_ref(&direct_arg));
+
+        self.b.switch_to_block(slow);
+        let index = self.k32(i64::from(target_i32));
+        let slow_status = self.call_i32(self.call, &[self.vm, index]);
+        let slow_arg = BlockArg::Value(slow_status);
+        self.b.ins().jump(join, std::slice::from_ref(&slow_arg));
+
+        self.b.switch_to_block(join);
+        Ok(self.b.block_params(join)[0])
+    }
+
     /// Publish registers, call the callee, and resume unless it yielded or
     /// faulted. The callee has its own variables and reads the VM.
     fn emit_native_call(
@@ -1098,10 +1212,7 @@ impl<'a> Cg<'a> {
 
         self.spill();
         let target = linear(self.bank_size, inst.word3, inst.word2);
-        let target = i32::try_from(target)
-            .map_err(|_| format!("JIT call target {target} does not fit in i32"))?;
-        let index = self.k32(i64::from(target));
-        let status = self.call_i32(self.call, &[self.vm, index]);
+        let status = self.call_guest(target)?;
         let stop = self.b.ins().icmp_imm_s(IntCC::NotEqual, status, 0);
         let cont = self.b.create_block();
         let side = self.b.create_block();
@@ -1404,7 +1515,8 @@ fn rx(word: u16) -> Option<usize> {
 
 fn build_module() -> Result<(JITModule, HostIds), String> {
     let mut builder = JITBuilder::with_flags(
-        // Higher optimization levels cost more to compile than this guest saves.
+        // `speed` made this guest slower overall: the extra register allocation
+        // cost more than the tighter code saved.
         &[("opt_level", "none")],
         cranelift_module::default_libcall_names(),
     )
@@ -1648,6 +1760,6 @@ impl VM {
         self.jit
             .as_mut()
             .ok_or_else(|| "JIT engine missing".to_string())?
-            .compile(self.bank_size, index, &region)
+            .compile(self.bank_size, index, &region, self.instructions.len())
     }
 }

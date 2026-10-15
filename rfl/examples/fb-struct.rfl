@@ -1,0 +1,93 @@
+import { read_byte } from "std/io";
+
+struct Machine {
+    program: String,
+    tape: Vec<u16>,
+    ip: usize,
+    tp: usize,
+}
+
+fn step(m: &mut Machine) {
+    match m.program[m.ip] {
+        '+' => {
+            m.tape[m.tp] += 1;
+        }
+
+        '-' => {
+            m.tape[m.tp] -= 1;
+        }
+
+        '<' => {
+            if (m.tp == 0) {
+                m.tp = m.tape.len() - 1;
+            } else {
+                m.tp -= 1;
+            }
+        }
+
+        '>' => {
+            m.tp = (m.tp + 1) % m.tape.len();
+        }
+
+        '[' => {
+            if (m.tape[m.tp] == 0) {
+                let mut depth = 1;
+
+                while (depth > 0) {
+                    m.ip += 1;
+
+                    match m.program[m.ip] {
+                        '[' => { depth += 1; }
+                        ']' => { depth -= 1; }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        ']' => {
+            if (m.tape[m.tp] != 0) {
+                let mut depth = 1;
+
+                while (depth > 0) {
+                    m.ip -= 1;
+
+                    match m.program[m.ip] {
+                        '[' => { depth -= 1; }
+                        ']' => { depth += 1; }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        '.' => {
+            print(m.tape[m.tp] as char);
+        }
+
+        ',' => {
+            m.tape[m.tp] = read_byte() as u16;
+        }
+
+        _ => {}
+    }
+
+    m.ip += 1;
+}
+
+fn main() {
+    let mut machine = Machine {
+        program: "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.",
+        tape: [],
+        ip: 0,
+        tp: 0,
+    };
+
+    for (_ in 0..30000) {
+        machine.tape.push(0);
+    }
+
+    while (machine.ip < machine.program.len()) {
+        step(&mut machine);
+    }
+}
