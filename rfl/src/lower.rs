@@ -17,6 +17,7 @@ mod emit;
 mod faults;
 mod ffi;
 mod frames;
+mod liveness;
 mod memory;
 mod numeric;
 mod objects;

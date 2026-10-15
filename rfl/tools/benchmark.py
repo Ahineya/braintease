@@ -21,7 +21,8 @@ def command(args):
     return subprocess.run([str(a) for a in args], capture_output=True, text=True)
 
 
-def measure(compiler, source, directory, runs, execute, compile_args=(), vm_args=(), timeout=20):
+def measure(compiler, source, directory, runs, execute, compile_args=(), vm_args=(), timeout=20,
+            runtime=None):
     asm = directory / "program.asm"
     times = []
     for _ in range(runs):
@@ -47,7 +48,7 @@ def measure(compiler, source, directory, runs, execute, compile_args=(), vm_args
         [assembler / "rasm", "assemble", asm, "-o", obj,
          "--bank-size", "64000", "--max-immediate", "65535"],
         [assembler / "rlink", ROOT / "runtime/crt0.pobj", obj,
-         ROOT / "runtime/libruntime.par", "-f", "binary", "--bank-size", "64000", "-o", binary],
+         runtime or ROOT / "runtime/libruntime.par", "-f", "binary", "--bank-size", "64000", "-o", binary],
     ]:
         output = command(args)
         if output.returncode:

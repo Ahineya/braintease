@@ -1,6 +1,13 @@
-// Machine-word integers, and f64. `sin` and `sqrt` are software:
-// a quadrant reduction plus a Taylor polynomial, and Newton for the root.
-// Angles outside the finite range return NaN.
+// Machine-word integers and software f64. Trigonometric functions reduce to
+// [-pi/4, pi/4] before evaluating Taylor polynomials (absolute error < 2e-10).
+// Ordinary angles use split pi/2; large finite angles use integer range reduction.
+// Non-finite angles return NaN. floor and correctly rounded sqrt use integer helpers.
+
+extern "C" {
+    fn __rcc_f64_floor(x: f64) -> f64;
+    fn __rcc_f64_sqrt(x: f64) -> f64;
+    fn __rcc_f64_reduce_pi2(x: f64, quadrant: *mut i32) -> f64;
+}
 
 export fn abs(n: i16) -> i16 {
     if (n < 0) { -n } else { n }
@@ -74,22 +81,29 @@ export const HALF_PI: f64 = 1.5707963267948966;
 export const E: f64 = 2.718281828459045;
 
 export fn fabs(x: f64) -> f64 {
-    if (x < 0.0) { -x } else { x }
+    if (x == 0.0) { 0.0 } else if (x < 0.0) { -x } else { x }
 }
 
 export fn floor(x: f64) -> f64 {
-    if (x != x || x >= 2147483647.0 || x <= -2147483648.0) { return x; }
-    let whole = (x as i32) as f64;
-    if (x < whole) { whole - 1.0 } else { whole }
+    __rcc_f64_floor(x)
 }
 
 export fn ceil(x: f64) -> f64 {
     let down = floor(x);
-    if (down == x) { x } else { down + 1.0 }
+    if (down == x) { return x; }
+    let up = down + 1.0;
+    if (up == 0.0 && x < 0.0) { -0.0 } else { up }
 }
 
 export fn round(x: f64) -> f64 {
-    if (x >= 0.0) { floor(x + 0.5) } else { ceil(x - 0.5) }
+    if (x == 0.0 || !finite(x) || x >= 4503599627370496.0 || x <= -4503599627370496.0) { return x; }
+    if (x >= 0.0) {
+        let down = floor(x);
+        if (x - down >= 0.5) { down + 1.0 } else { down }
+    } else {
+        let up = ceil(x);
+        if (up - x >= 0.5) { up - 1.0 } else { up }
+    }
 }
 
 export fn fract(x: f64) -> f64 {
@@ -97,29 +111,35 @@ export fn fract(x: f64) -> f64 {
 }
 
 export fn sqrt(x: f64) -> f64 {
-    if (x != x || x < 0.0) { return 0.0 / 0.0; }
-    if (x == 0.0) { return 0.0; }
-    let mut guess = if (x > 1.0) { x * 0.5 } else { 1.0 };
-    let mut i = 0;
-    while (i < 16) {
-        guess = (guess + x / guess) * 0.5;
-        i = i + 1;
-    }
-    guess
+    __rcc_f64_sqrt(x)
 }
 
 fn finite(x: f64) -> bool {
-    x == x && x < 1.0e300 && x > -1.0e300
+    x <= 1.7976931348623157e308 && x >= -1.7976931348623157e308
+}
+
+fn reduce_pi2(x: f64, quadrant: *mut i32) -> f64 {
+    if (x > -1048576.0 && x < 1048576.0) {
+        // Multiplication replaces a software division. The high part has only
+        // 33 significant bits, so q*high is exact throughout this fast path.
+        let q = (x * 0.6366197723675814 + if (x >= 0.0) { 0.5 } else { -0.5 }) as i32;
+        unsafe { *quadrant = q & 3; }
+        let whole = q as f64;
+        (x - whole * 1.5707963267341256) - whole * 6.077100506506192e-11
+    } else {
+        unsafe { __rcc_f64_reduce_pi2(x, quadrant) * HALF_PI }
+    }
 }
 
 fn sin_poly(z: f64) -> f64 {
+    if (z == 0.0) { return z; }
     let z2 = z * z;
     let mut acc = 2.505210838544172e-8;
     acc = 2.7557319223985893e-6 - z2 * acc;
     acc = 0.0001984126984126984 - z2 * acc;
     acc = 0.008333333333333333 - z2 * acc;
     acc = 0.16666666666666666 - z2 * acc;
-    z * (1.0 - z2 * acc)
+    z - (z * z2) * acc
 }
 
 fn cos_poly(z: f64) -> f64 {
@@ -134,9 +154,9 @@ fn cos_poly(z: f64) -> f64 {
 
 export fn sin(x: f64) -> f64 {
     if (!finite(x)) { return 0.0 / 0.0; }
-    let quarters = floor(x / HALF_PI);
-    let turn = (quarters as i32) & 3;
-    let z = x - quarters * HALF_PI;
+    if (x >= -0.7853981633974483 && x <= 0.7853981633974483) { return sin_poly(x); }
+    let mut turn: i32 = 0;
+    let z = unsafe { reduce_pi2(x, &mut turn) };
     if (turn == 0) { sin_poly(z) }
     else if (turn == 1) { cos_poly(z) }
     else if (turn == 2) { -sin_poly(z) }
@@ -145,9 +165,9 @@ export fn sin(x: f64) -> f64 {
 
 export fn cos(x: f64) -> f64 {
     if (!finite(x)) { return 0.0 / 0.0; }
-    let quarters = floor(x / HALF_PI);
-    let turn = (quarters as i32) & 3;
-    let z = x - quarters * HALF_PI;
+    if (x >= -0.7853981633974483 && x <= 0.7853981633974483) { return cos_poly(x); }
+    let mut turn: i32 = 0;
+    let z = unsafe { reduce_pi2(x, &mut turn) };
     if (turn == 0) { cos_poly(z) }
     else if (turn == 1) { -sin_poly(z) }
     else if (turn == 2) { -cos_poly(z) }

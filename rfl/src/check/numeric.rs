@@ -211,6 +211,12 @@ pub(super) fn float_to_int(to: Ty, from: Ty, bits: u64) -> Result<i64, String> {
         return Err(format!("cannot cast {from} to {to}"));
     }
     let trunc = value.trunc();
+    if to == Ty::U64 {
+        if !(0.0..18446744073709551616.0).contains(&trunc) {
+            return Err(format!("float value does not fit in {to}"));
+        }
+        return Ok(trunc as u64 as i64);
+    }
     if trunc.abs() >= 9223372036854775808.0 && !(to == Ty::I64 && trunc == -9223372036854775808.0) {
         return Err(format!("float value does not fit in {to}"));
     }

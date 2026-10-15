@@ -55,6 +55,7 @@ pub(super) fn retain_reachable(procs: &mut Vec<Proc>) {
 }
 
 pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
+    let live_at_resume = super::liveness::live_at_resume(proc);
     let borrowed: HashSet<_> = proc
         .segs
         .iter()
@@ -194,23 +195,38 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
         let old = std::mem::take(&mut block.instructions);
         for mut inst in old {
             // This is the publication point used by direct and indirect RFL calls.
-            if matches!(&inst, Instruction::Store { ptr, .. } if offset_of(ptr) == Some(RESUME)) {
-                for (offset, (home, ty)) in &homes {
-                    let value = fresh();
-                    let addr = fresh();
-                    block.instructions.push(Instruction::Load {
-                        result: value,
-                        ptr: home.clone(),
-                        result_type: ty.clone(),
-                        volatile: false,
-                    });
-                    block.instructions.push(frame_gep(addr, *offset));
-                    block.instructions.push(Instruction::Store {
-                        value: Value::Temp(value),
-                        ptr: fat_temp(addr, BankTag::Mixed),
-                        value_type: ty.clone(),
-                        volatile: false,
-                    });
+            if let Instruction::Store {
+                ptr, value: resume, ..
+            } = &inst
+            {
+                if offset_of(ptr) == Some(RESUME) {
+                    for (offset, (home, ty)) in &homes {
+                        let slot = candidates[offset];
+                        let live = match resume {
+                            Value::Constant(id) => usize::try_from(*id)
+                                .ok()
+                                .and_then(|id| live_at_resume.get(id)),
+                            _ => None,
+                        };
+                        if live.is_some_and(|live| !live.contains(&slot)) {
+                            continue;
+                        }
+                        let value = fresh();
+                        let addr = fresh();
+                        block.instructions.push(Instruction::Load {
+                            result: value,
+                            ptr: home.clone(),
+                            result_type: ty.clone(),
+                            volatile: false,
+                        });
+                        block.instructions.push(frame_gep(addr, *offset));
+                        block.instructions.push(Instruction::Store {
+                            value: Value::Temp(value),
+                            ptr: fat_temp(addr, BankTag::Mixed),
+                            value_type: ty.clone(),
+                            volatile: false,
+                        });
+                    }
                 }
             }
             match &mut inst {

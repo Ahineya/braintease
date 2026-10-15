@@ -1,0 +1,5 @@
+{
+  "description": "Bit-exact software float rounding, subnormals, scaling and integer conversions",
+  "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n",
+  "use_runtime": true
+}

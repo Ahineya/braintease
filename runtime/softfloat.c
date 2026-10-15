@@ -67,133 +67,95 @@ static int f32_iszero(unsigned long a) {
     return (a & ~F32_SIGN) == 0;
 }
 
-static unsigned long f32_pack(unsigned long sign, int exp, unsigned long frac) {
-    unsigned long e;
+/* A 27-bit significand fits in two VM words: 24 value bits plus guard,
+ * round and sticky. Jam discarded bits into bit zero before each rounding. */
+static unsigned long f32_shr_jam(unsigned long x, int n) {
+    if (n <= 0) { return x; }
+    if (n >= 32) { return x != 0; }
+    return (x >> n) | ((x & ((1UL << n) - 1UL)) != 0);
+}
 
-    if (exp >= 255) {
-        return sign | F32_INF;
+static unsigned long f32_round_pack(unsigned long sign, int exp, unsigned long sig) {
+    unsigned long extra;
+    if (sig & (1UL << 27)) {
+        sig = f32_shr_jam(sig, 1);
+        exp = exp + 1;
     }
     if (exp <= 0) {
-        if (exp < -23) {
-            return sign;
-        }
-        frac = (frac | 0x800000UL) >> (1 - exp);
-        e = 0;
-        return sign | e | (frac & F32_FRAC);
+        sig = f32_shr_jam(sig, 1 - exp);
+        exp = 0;
     }
-    e = ((unsigned long)exp) << 23;
-    return sign | e | (frac & F32_FRAC);
+    extra = sig & 7UL;
+    sig = sig >> 3;
+    if (extra > 4UL || (extra == 4UL && (sig & 1UL))) {
+        sig = sig + 1UL;
+    }
+    if (sig & (1UL << 24)) {
+        sig = sig >> 1;
+        exp = exp + 1;
+    }
+    if (exp == 1 && sig < (1UL << 23)) { exp = 0; }
+    if (exp == 0 && (sig & (1UL << 23))) {
+        exp = 1;
+    }
+    if (exp >= 255) { return sign | F32_INF; }
+    return sign | ((unsigned long)exp << 23) | (sig & F32_FRAC);
 }
 
 unsigned long __rcc_f32_add(unsigned long a, unsigned long b) {
     unsigned long sign_a;
     unsigned long sign_b;
+    unsigned long sig_a;
+    unsigned long sig_b;
+    unsigned long sig;
+    unsigned long sign;
     int exp_a;
     int exp_b;
-    unsigned long frac_a;
-    unsigned long frac_b;
-    int diff;
-    unsigned long long sig_a;
-    unsigned long long sig_b;
-    unsigned long sign;
     int exp;
-    unsigned long long sig;
 
-    if (f32_isnan(a)) {
-        return F32_QNAN;
-    }
-    if (f32_isnan(b)) {
-        return F32_QNAN;
-    }
-    if (f32_isinf(a) && f32_isinf(b)) {
-        if ((a ^ b) & F32_SIGN) {
-            return F32_QNAN;
-        }
-        return a;
-    }
+    if (f32_isnan(a) || f32_isnan(b)) { return F32_QNAN; }
     if (f32_isinf(a)) {
+        if (f32_isinf(b) && ((a ^ b) & F32_SIGN)) { return F32_QNAN; }
         return a;
     }
-    if (f32_isinf(b)) {
-        return b;
-    }
+    if (f32_isinf(b)) { return b; }
     if (f32_iszero(a)) {
-        if (f32_iszero(b)) {
-            return a & b;
-        }
+        if (f32_iszero(b)) { return a & b; }
         return b;
     }
-    if (f32_iszero(b)) {
-        return a;
-    }
-
+    if (f32_iszero(b)) { return a; }
     sign_a = a & F32_SIGN;
     sign_b = b & F32_SIGN;
     exp_a = (int)((a & F32_EXP) >> 23);
     exp_b = (int)((b & F32_EXP) >> 23);
-    frac_a = a & F32_FRAC;
-    frac_b = b & F32_FRAC;
-
-    if (exp_a == 0) {
-        exp_a = 1;
-    } else {
-        frac_a = frac_a | 0x800000UL;
-    }
-    if (exp_b == 0) {
-        exp_b = 1;
-    } else {
-        frac_b = frac_b | 0x800000UL;
-    }
-
-    sig_a = ((unsigned long long)frac_a) << 3;
-    sig_b = ((unsigned long long)frac_b) << 3;
-
+    sig_a = a & F32_FRAC;
+    sig_b = b & F32_FRAC;
+    if (exp_a == 0) { exp_a = 1; } else { sig_a = sig_a | 0x800000UL; }
+    if (exp_b == 0) { exp_b = 1; } else { sig_b = sig_b | 0x800000UL; }
+    sig_a = sig_a << 3;
+    sig_b = sig_b << 3;
     if (exp_a < exp_b) {
-        diff = exp_b - exp_a;
-        if (diff > 31) {
-            sig_a = 0;
-        } else {
-            sig_a = sig_a >> diff;
-        }
+        sig_a = f32_shr_jam(sig_a, exp_b - exp_a);
         exp_a = exp_b;
     } else if (exp_b < exp_a) {
-        diff = exp_a - exp_b;
-        if (diff > 31) {
-            sig_b = 0;
-        } else {
-            sig_b = sig_b >> diff;
-        }
+        sig_b = f32_shr_jam(sig_b, exp_a - exp_b);
     }
-
     exp = exp_a;
     if (sign_a == sign_b) {
-        sign = sign_a;
-        sig = sig_a + sig_b;
-        if (sig & (1ULL << 27)) {
-            sig = sig >> 1;
-            exp = exp + 1;
-        }
-        return f32_pack(sign, exp, (unsigned long)(sig >> 3));
+        return f32_round_pack(sign_a, exp, sig_a + sig_b);
     }
-
-    if (sig_a >= sig_b) {
-        sign = sign_a;
-        sig = sig_a - sig_b;
-    } else {
-        sign = sign_b;
-        sig = sig_b - sig_a;
-    }
-    if (sig == 0) {
-        return 0;
-    }
-    while ((sig & (1ULL << 26)) == 0) {
+    if (sig_a >= sig_b) { sign = sign_a; sig = sig_a - sig_b; }
+    else { sign = sign_b; sig = sig_b - sig_a; }
+    if (sig == 0) { return 0; }
+    while ((sig & (1UL << 26)) == 0 && exp > 1) {
         sig = sig << 1;
         exp = exp - 1;
-        if (exp <= 0) {
-            return sign;
-        }
     }
-    return f32_pack(sign, exp, (unsigned long)(sig >> 3));
+    if (exp == 1 && (sig & (1UL << 26)) == 0) {
+        sig = sig << 1;
+        exp = 0;
+    }
+    return f32_round_pack(sign, exp, sig);
 }
 
 unsigned long __rcc_f32_sub(unsigned long a, unsigned long b) {
@@ -202,106 +164,95 @@ unsigned long __rcc_f32_sub(unsigned long a, unsigned long b) {
 
 unsigned long __rcc_f32_mul(unsigned long a, unsigned long b) {
     unsigned long sign;
+    unsigned long sig_a;
+    unsigned long sig_b;
+    unsigned long low;
+    unsigned long cross;
+    unsigned long high;
+    unsigned long old_low;
+    unsigned long sig;
     int exp_a;
     int exp_b;
-    unsigned long frac_a;
-    unsigned long frac_b;
     int exp;
-    unsigned long long prod;
+    int shift;
 
     sign = (a ^ b) & F32_SIGN;
-    if (f32_isnan(a) || f32_isnan(b)) {
-        return F32_QNAN;
-    }
-    if ((f32_isinf(a) && f32_iszero(b)) || (f32_isinf(b) && f32_iszero(a))) {
-        return F32_QNAN;
-    }
-    if (f32_isinf(a) || f32_isinf(b)) {
-        return sign | F32_INF;
-    }
-    if (f32_iszero(a) || f32_iszero(b)) {
-        return sign;
-    }
-
+    if (f32_isnan(a) || f32_isnan(b)) { return F32_QNAN; }
+    if ((f32_isinf(a) && f32_iszero(b)) || (f32_isinf(b) && f32_iszero(a))) { return F32_QNAN; }
+    if (f32_isinf(a) || f32_isinf(b)) { return sign | F32_INF; }
+    if (f32_iszero(a) || f32_iszero(b)) { return sign; }
     exp_a = (int)((a & F32_EXP) >> 23);
     exp_b = (int)((b & F32_EXP) >> 23);
-    frac_a = a & F32_FRAC;
-    frac_b = b & F32_FRAC;
+    sig_a = a & F32_FRAC;
+    sig_b = b & F32_FRAC;
     if (exp_a == 0) {
-        exp_a = 1;
-    } else {
-        frac_a = frac_a | 0x800000UL;
-    }
+        shift = clz32(sig_a) - 8;
+        sig_a = sig_a << shift;
+        exp_a = 1 - shift;
+    } else { sig_a = sig_a | 0x800000UL; }
     if (exp_b == 0) {
-        exp_b = 1;
-    } else {
-        frac_b = frac_b | 0x800000UL;
-    }
-
+        shift = clz32(sig_b) - 8;
+        sig_b = sig_b << shift;
+        exp_b = 1 - shift;
+    } else { sig_b = sig_b | 0x800000UL; }
     exp = exp_a + exp_b - 127;
-    prod = (unsigned long long)frac_a * (unsigned long long)frac_b;
-    /* 24 x 24 -> 48 bits. Hidden bit of the product sits at bit 46 or 47. */
-    if (prod & (1ULL << 47)) {
-        prod = prod >> 24;
-        exp = exp + 1;
-    } else {
-        prod = prod >> 23;
-    }
-    return f32_pack(sign, exp, (unsigned long)prod);
+    if (sig_a == 0x800000UL) { return f32_round_pack(sign, exp, sig_b << 3); }
+    if (sig_b == 0x800000UL) { return f32_round_pack(sign, exp, sig_a << 3); }
+    /* 24x24 -> 48 using 16-bit limbs, without a general 64-bit product. */
+    low = (sig_a & 0xFFFFUL) * (sig_b & 0xFFFFUL);
+    cross = (sig_a >> 16) * (sig_b & 0xFFFFUL) + (sig_a & 0xFFFFUL) * (sig_b >> 16);
+    old_low = low;
+    low = low + (cross << 16);
+    high = (sig_a >> 16) * (sig_b >> 16) + (cross >> 16) + (low < old_low);
+    shift = 20;
+    if (high & 0x8000UL) { shift = 21; exp = exp + 1; }
+    sig = (high << (32 - shift)) | (low >> shift);
+    sig = sig | ((low & ((1UL << shift) - 1UL)) != 0);
+    return f32_round_pack(sign, exp, sig);
 }
 
 unsigned long __rcc_f32_div(unsigned long a, unsigned long b) {
     unsigned long sign;
+    unsigned long sig_a;
+    unsigned long sig_b;
+    unsigned long q;
+    unsigned long rem;
     int exp_a;
     int exp_b;
-    unsigned long frac_a;
-    unsigned long frac_b;
     int exp;
-    unsigned long long num;
-    unsigned long long den;
-    unsigned long long q;
+    int shift;
+    int i;
 
     sign = (a ^ b) & F32_SIGN;
-    if (f32_isnan(a) || f32_isnan(b)) {
-        return F32_QNAN;
-    }
-    if (f32_iszero(a) && f32_iszero(b)) {
-        return F32_QNAN;
-    }
-    if (f32_isinf(a) && f32_isinf(b)) {
-        return F32_QNAN;
-    }
-    if (f32_isinf(b) || f32_iszero(a)) {
-        return sign;
-    }
-    if (f32_isinf(a) || f32_iszero(b)) {
-        return sign | F32_INF;
-    }
-
+    if (f32_isnan(a) || f32_isnan(b)) { return F32_QNAN; }
+    if ((f32_iszero(a) && f32_iszero(b)) || (f32_isinf(a) && f32_isinf(b))) { return F32_QNAN; }
+    if (f32_isinf(b) || f32_iszero(a)) { return sign; }
+    if (f32_isinf(a) || f32_iszero(b)) { return sign | F32_INF; }
     exp_a = (int)((a & F32_EXP) >> 23);
     exp_b = (int)((b & F32_EXP) >> 23);
-    frac_a = a & F32_FRAC;
-    frac_b = b & F32_FRAC;
+    sig_a = a & F32_FRAC;
+    sig_b = b & F32_FRAC;
     if (exp_a == 0) {
-        exp_a = 1;
-    } else {
-        frac_a = frac_a | 0x800000UL;
-    }
+        shift = clz32(sig_a) - 8;
+        sig_a = sig_a << shift;
+        exp_a = 1 - shift;
+    } else { sig_a = sig_a | 0x800000UL; }
     if (exp_b == 0) {
-        exp_b = 1;
-    } else {
-        frac_b = frac_b | 0x800000UL;
-    }
-
+        shift = clz32(sig_b) - 8;
+        sig_b = sig_b << shift;
+        exp_b = 1 - shift;
+    } else { sig_b = sig_b | 0x800000UL; }
     exp = exp_a - exp_b + 127;
-    num = ((unsigned long long)frac_a) << 23;
-    den = (unsigned long long)frac_b;
-    q = num / den;
-    if ((q & 0x800000UL) == 0) {
-        q = q << 1;
-        exp = exp - 1;
+    if (sig_b == 0x800000UL) { return f32_round_pack(sign, exp, sig_a << 3); }
+    if (sig_a < sig_b) { sig_a = sig_a << 1; exp = exp - 1; }
+    rem = sig_a - sig_b;
+    q = 1;
+    for (i = 0; i < 25; i++) {
+        rem = rem + rem;
+        q = q + q;
+        if (rem >= sig_b) { rem = rem - sig_b; q = q | 1UL; }
     }
-    return f32_pack(sign, exp, (unsigned long)q);
+    return f32_round_pack(sign, exp, (q << 1) | (rem != 0));
 }
 
 int __rcc_f32_eq(unsigned long a, unsigned long b) {
@@ -351,94 +302,58 @@ int __rcc_f32_ge(unsigned long a, unsigned long b) {
     return __rcc_f32_le(b, a);
 }
 
-unsigned long __rcc_f32_from_si(long x) {
-    unsigned long sign;
-    unsigned long mag;
-    int shift;
-    int exp;
-
-    if (x == 0) {
-        return 0;
-    }
-    mag = (unsigned long)x;
-    if (x < 0) {
-        sign = F32_SIGN;
-        mag = 0UL - mag;
-    } else {
-        sign = 0;
-    }
-    shift = clz32(mag);
-    exp = 158 - shift; /* 127 + 31 - shift */
-    if (shift >= 8) {
-        mag = mag << (shift - 8);
-    } else {
-        mag = mag >> (8 - shift);
-    }
-    return f32_pack(sign, exp, mag);
-}
-
 unsigned long __rcc_f32_from_ui(unsigned long x) {
     int shift;
     int exp;
-
-    if (x == 0) {
-        return 0;
-    }
+    unsigned long extra;
+    if (x == 0) { return 0; }
     shift = clz32(x);
     exp = 158 - shift;
-    if (shift >= 8) {
-        x = x << (shift - 8);
-    } else {
-        x = x >> (8 - shift);
-    }
-    return f32_pack(0, exp, x);
+    if (shift >= 5) { x = x << (shift - 5); }
+    else { x = f32_shr_jam(x, 5 - shift); }
+    /* Integer inputs are normalized and cannot underflow or overflow binary32.
+     * Adding the hidden bit to (exp-1) also handles a rounding carry. */
+    extra = x & 7UL;
+    x = x >> 3;
+    if (extra > 4UL || (extra == 4UL && (x & 1UL))) { x = x + 1UL; }
+    return ((unsigned long)(exp - 1) << 23) + x;
 }
 
-unsigned long __rcc_f32_from_i64(long long x) {
-    unsigned long sign;
-    unsigned long long mag;
-    int shift;
-    int exp;
-    unsigned long frac;
-
-    if (x == 0) {
-        return 0;
-    }
-    if (x < 0) {
-        sign = F32_SIGN;
-        mag = (unsigned long long)(0 - x);
-    } else {
-        sign = 0;
-        mag = (unsigned long long)x;
-    }
-    shift = clz64(mag);
-    exp = 190 - shift; /* 127 + 63 - shift */
-    if (shift <= 40) {
-        mag = mag >> (40 - shift);
-    } else {
-        mag = mag << (shift - 40);
-    }
-    frac = (unsigned long)mag;
-    return f32_pack(sign, exp, frac);
+unsigned long __rcc_f32_from_si(long x) {
+    unsigned long mag;
+    mag = (unsigned long)x;
+    if (x < 0) { return F32_SIGN | __rcc_f32_from_ui(0UL - mag); }
+    return __rcc_f32_from_ui(mag);
 }
 
 unsigned long __rcc_f32_from_u64(unsigned long long x) {
     int shift;
     int exp;
-    unsigned long frac;
-
-    if (x == 0) {
-        return 0;
-    }
+    unsigned long extra;
+    unsigned long sig;
+    int sticky;
+    if (x == 0) { return 0; }
     shift = clz64(x);
     exp = 190 - shift;
-    if (shift <= 40) {
-        x = x >> (40 - shift);
-    } else {
-        x = x << (shift - 40);
+    if (shift >= 37) { sig = (unsigned long)x << (shift - 37); }
+    else {
+        shift = 37 - shift;
+        sticky = (x & ((1ULL << shift) - 1ULL)) != 0;
+        sig = (unsigned long)(x >> shift) | sticky;
     }
-    frac = (unsigned long)x;
-    return f32_pack(0, exp, frac);
+    /* Integer inputs are normalized and cannot underflow or overflow binary32.
+     * Adding the hidden bit to (exp-1) also handles a rounding carry. */
+    extra = sig & 7UL;
+    sig = sig >> 3;
+    if (extra > 4UL || (extra == 4UL && (sig & 1UL))) { sig = sig + 1UL; }
+    return ((unsigned long)(exp - 1) << 23) + sig;
+}
+
+unsigned long __rcc_f32_from_i64(long long x) {
+    unsigned long long mag;
+    mag = (unsigned long long)x;
+    if (x < 0) { return F32_SIGN | __rcc_f32_from_u64(0ULL - mag); }
+    return __rcc_f32_from_u64(mag);
 }
 
 long __rcc_f32_to_si(unsigned long a) {
@@ -488,21 +403,41 @@ long __rcc_f32_to_si(unsigned long a) {
 }
 
 unsigned long __rcc_f32_to_ui(unsigned long a) {
-    long v;
-
-    v = __rcc_f32_to_si(a);
-    if (v < 0) {
-        return 0;
-    }
-    return (unsigned long)v;
-}
-
-long long __rcc_f32_to_i64(unsigned long a) {
-    return (long long)__rcc_f32_to_si(a);
+    int exp;
+    unsigned long sig;
+    if ((a & F32_SIGN) || f32_isnan(a)) { return 0; }
+    exp = (int)((a & F32_EXP) >> 23);
+    if (exp >= 159) { return 0xFFFFFFFFUL; }
+    if (exp < 127) { return 0; }
+    sig = (a & F32_FRAC) | 0x800000UL;
+    if (exp >= 150) { return sig << (exp - 150); }
+    return sig >> (150 - exp);
 }
 
 unsigned long long __rcc_f32_to_u64(unsigned long a) {
-    return (unsigned long long)__rcc_f32_to_ui(a);
+    int exp;
+    unsigned long long sig;
+    if ((a & F32_SIGN) || f32_isnan(a)) { return 0; }
+    exp = (int)((a & F32_EXP) >> 23);
+    if (exp >= 191) { return 0xFFFFFFFFFFFFFFFFULL; }
+    if (exp < 127) { return 0; }
+    sig = (unsigned long long)((a & F32_FRAC) | 0x800000UL);
+    if (exp >= 150) { return sig << (exp - 150); }
+    return sig >> (150 - exp);
+}
+
+long long __rcc_f32_to_i64(unsigned long a) {
+    int exp;
+    unsigned long long mag;
+    if (f32_isnan(a)) { return 0; }
+    exp = (int)((a & F32_EXP) >> 23);
+    if (exp >= 190) {
+        if (a & F32_SIGN) { return (long long)0x8000000000000000ULL; }
+        return 0x7FFFFFFFFFFFFFFFLL;
+    }
+    mag = __rcc_f32_to_u64(a & ~F32_SIGN);
+    if (a & F32_SIGN) { return (long long)(0ULL - mag); }
+    return (long long)mag;
 }
 
 static int f64_isnan(unsigned long long a) {
@@ -592,6 +527,27 @@ static unsigned long long f64_pack(unsigned long long sign, int exp, unsigned lo
     return sign | e | (frac & F64_FRAC);
 }
 
+/* A widening 32x32 product expressed using the VM's 16-bit word size.
+ * Casting both inputs to u64 first asks the backend for a general 64x64 product,
+ * including products of the zero upper halves. */
+static unsigned long long mul_u32_wide(unsigned long a, unsigned long b) {
+    unsigned long p00;
+    unsigned long p01;
+    unsigned long p10;
+    unsigned long p11;
+    unsigned long mid;
+    unsigned long hi;
+    unsigned long lo;
+    p00 = (a & 65535UL) * (b & 65535UL);
+    p01 = (a & 65535UL) * (b >> 16);
+    p10 = (a >> 16) * (b & 65535UL);
+    p11 = (a >> 16) * (b >> 16);
+    mid = (p00 >> 16) + (p01 & 65535UL) + (p10 & 65535UL);
+    lo = (p00 & 65535UL) | (mid << 16);
+    hi = p11 + (p01 >> 16) + (p10 >> 16) + (mid >> 16);
+    return ((unsigned long long)hi << 32) | (unsigned long long)lo;
+}
+
 static void mul_u64(unsigned long long a, unsigned long long b,
                     unsigned long long *hi, unsigned long long *lo) {
     unsigned long a0;
@@ -608,88 +564,72 @@ static void mul_u64(unsigned long long a, unsigned long long b,
     a1 = (unsigned long)(a >> 32);
     b0 = (unsigned long)b;
     b1 = (unsigned long)(b >> 32);
-    p00 = (unsigned long long)a0 * (unsigned long long)b0;
-    p01 = (unsigned long long)a0 * (unsigned long long)b1;
-    p10 = (unsigned long long)a1 * (unsigned long long)b0;
-    p11 = (unsigned long long)a1 * (unsigned long long)b1;
+    p00 = mul_u32_wide(a0, b0);
+    p01 = mul_u32_wide(a0, b1);
+    p10 = mul_u32_wide(a1, b0);
+    p11 = mul_u32_wide(a1, b1);
     mid = (p00 >> 32) + (p01 & 0xFFFFFFFFULL) + (p10 & 0xFFFFFFFFULL);
     *lo = (p00 & 0xFFFFFFFFULL) | (mid << 32);
     *hi = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32);
 }
 
-/* 128-bit / 64-bit using 32-bit limbs. I64 shift/div in a C loop needs more
- * pinned T/S registers than the CPU has (the compiler parks I64 div in A/Rv/X).
- * Requires n1 < d so the quotient fits in 64 bits. */
-static unsigned long long div128_64(unsigned long long n1, unsigned long long n0,
-                                    unsigned long long d, unsigned long long *rem) {
+/* Divide normalized significands in [1, 2). The caller normalizes the ratio.
+ * Keep 53 result bits, guard and round, then summarize the remainder as sticky.
+ * The remainder is always below the 53-bit divisor, so doubling cannot overflow.
+ * 32-bit limbs avoid a wide division and keep the loop small on the 16-bit VM. */
+static unsigned long long f64_div_sig(unsigned long long a, unsigned long long b,
+                                       int *sticky) {
     unsigned long r1;
     unsigned long r0;
-    unsigned long n1h;
-    unsigned long n0h;
     unsigned long d1;
     unsigned long d0;
     unsigned long q1;
     unsigned long q0;
+    unsigned long long rem;
     int i;
 
-    r1 = (unsigned long)(n1 >> 32);
-    r0 = (unsigned long)n1;
-    n1h = (unsigned long)(n0 >> 32);
-    n0h = (unsigned long)n0;
-    d1 = (unsigned long)(d >> 32);
-    d0 = (unsigned long)d;
+    rem = a - b;
+    r1 = (unsigned long)(rem >> 32);
+    r0 = (unsigned long)rem;
+    d1 = (unsigned long)(b >> 32);
+    d0 = (unsigned long)b;
     q1 = 0;
-    q0 = 0;
-
-    for (i = 0; i < 64; i++) {
-        unsigned long msb;
-        unsigned long bit;
-        unsigned long carry;
-        unsigned long nr1;
-        unsigned long nr0;
-        unsigned long br;
-
-        msb = r1 >> 31;
-        bit = n1h >> 31;
-        carry = n0h >> 31;
-        n0h = n0h + n0h;
-        n1h = (n1h + n1h) | carry;
-        carry = r0 >> 31;
-        nr0 = (r0 + r0) | bit;
-        nr1 = (r1 + r1) | carry;
-        carry = q0 >> 31;
+    q0 = 1;
+    for (i = 0; i < 54; i++) {
+        unsigned long borrow;
+        r1 = (r1 + r1) | (r0 >> 31);
+        r0 = r0 + r0;
+        q1 = (q1 + q1) | (q0 >> 31);
         q0 = q0 + q0;
-        q1 = (q1 + q1) | carry;
-        if (msb || nr1 > d1 || (nr1 == d1 && nr0 >= d0)) {
-            br = nr0 < d0;
-            r0 = nr0 - d0;
-            r1 = nr1 - d1 - br;
+        if (r1 > d1 || (r1 == d1 && r0 >= d0)) {
+            borrow = r0 < d0;
+            r0 = r0 - d0;
+            r1 = r1 - d1 - borrow;
             q0 = q0 | 1UL;
-        } else {
-            r0 = nr0;
-            r1 = nr1;
         }
     }
-    *rem = ((unsigned long long)r1 << 32) | (unsigned long long)r0;
-    return ((unsigned long long)q1 << 32) | (unsigned long long)q0;
+    *sticky = r1 != 0 || r0 != 0;
+    return (((unsigned long long)q1 << 32) | (unsigned long long)q0) << 8;
 }
 
 static unsigned long long f64_normalize_round(unsigned long long sign, int exp, unsigned long long sig, int sticky) {
     if (sig == 0) {
         return sign;
     }
-    while ((sig & (1ULL << 62)) == 0) {
+    while ((sig & ((1ULL << 62) | (1ULL << 63))) == 0 && exp > 1) {
         sig = sig << 1;
         exp = exp - 1;
-        if (exp <= 0) {
-            break;
-        }
+    }
+    if (exp == 1 && (sig & ((1ULL << 62) | (1ULL << 63))) == 0) {
+        /* Already scaled as a subnormal: compensate for round_pack's shift. */
+        sig = sig << 1;
+        exp = 0;
     }
     return f64_round_pack(sign, exp, sig, sticky);
 }
 
 unsigned long long __rcc_f64_from_f32(unsigned long a) {
-    unsigned long sign;
+    unsigned long long sign;
     int exp;
     unsigned long frac;
     unsigned long long f64frac;
@@ -725,39 +665,16 @@ unsigned long __rcc_f32_from_f64(unsigned long long a) {
     unsigned long sign;
     int exp;
     unsigned long long frac;
-    unsigned long f;
-    unsigned long long round_bits;
-    int sticky;
-    int odd;
-
-    if (f64_isnan(a)) {
-        return F32_QNAN;
-    }
-    sign = (unsigned long)((a & F64_SIGN) >> 32) & F32_SIGN;
+    unsigned long sig;
+    if (f64_isnan(a)) { return F32_QNAN; }
+    sign = (unsigned long)(a >> 32) & F32_SIGN;
     exp = (int)((a & F64_EXP) >> 52);
-    frac = a & F64_FRAC;
-    if (exp == 2047) {
-        return sign | F32_INF;
-    }
-    if (exp == 0) {
-        return sign;
-    }
-    exp = exp - (1023 - 127);
-    /* 52-bit frac -> 23-bit: keep top 23, round using the rest. */
-    round_bits = frac & 0x1FFFFFFFULL;
-    f = (unsigned long)(frac >> 29);
-    sticky = (round_bits & 0x0FFFFFFFULL) != 0;
-    odd = (int)(f & 1);
-    if (round_bits > 0x10000000ULL || (round_bits == 0x10000000ULL && (sticky || odd))) {
-        f = f + 1;
-        /* Fraction is 23 bits (no hidden bit). Overflow means 1.11..1 rounded
-         * to the next binade: increment exponent and clear the fraction. */
-        if (f & 0x800000UL) {
-            f = 0;
-            exp = exp + 1;
-        }
-    }
-    return f32_pack(sign, exp, f);
+    if (exp == 2047) { return sign | F32_INF; }
+    /* Every binary64 subnormal is below half the smallest binary32 value. */
+    if (exp == 0) { return sign; }
+    frac = (a & F64_FRAC) | (1ULL << 52);
+    sig = (unsigned long)(frac >> 26) | ((frac & ((1ULL << 26) - 1ULL)) != 0);
+    return f32_round_pack(sign, exp - (1023 - 127), sig);
 }
 
 unsigned long long __rcc_f64_add(unsigned long long a, unsigned long long b) {
@@ -837,6 +754,10 @@ unsigned long long __rcc_f64_add(unsigned long long a, unsigned long long b) {
     if (sign_a == sign_b) {
         sign = sign_a;
         sig = sig_a + sig_b;
+        if (exp == 1 && sig < (1ULL << 62)) {
+            sig = sig << 1;
+            exp = 0;
+        }
         return f64_round_pack(sign, exp, sig, sticky);
     }
 
@@ -848,6 +769,11 @@ unsigned long long __rcc_f64_add(unsigned long long a, unsigned long long b) {
         sig = sig_b - sig_a;
     } else {
         return 0;
+    }
+    /* Alignment discarded a fraction of the smaller magnitude: subtract it,
+     * rather than treating it as a positive tail of the difference. */
+    if (sticky) {
+        sig = sig - 1ULL;
     }
     return f64_normalize_round(sign, exp, sig, sticky);
 }
@@ -910,6 +836,14 @@ unsigned long long __rcc_f64_mul(unsigned long long a, unsigned long long b) {
     }
 
     exp = exp_a + exp_b - 1023;
+    /* Exact binary scaling needs no 106-bit product. Keep round_pack for
+     * gradual underflow, exponent overflow and ties at the subnormal boundary. */
+    if (sig_b == (1ULL << 52)) {
+        return f64_round_pack(sign, exp, sig_a << 10, 0);
+    }
+    if (sig_a == (1ULL << 52)) {
+        return f64_round_pack(sign, exp, sig_b << 10, 0);
+    }
     mul_u64(sig_a, sig_b, &hi, &lo);
     sticky = 0;
     /* 53x53 product is in [2^104, 2^106). Leading 1 at bit 104 or 105. */
@@ -937,8 +871,6 @@ unsigned long long __rcc_f64_div(unsigned long long a, unsigned long long b) {
     unsigned long long sig_a;
     unsigned long long sig_b;
     int exp;
-    unsigned long long q;
-    unsigned long long rem;
     int sticky;
     unsigned long long sig;
 
@@ -985,15 +917,14 @@ unsigned long long __rcc_f64_div(unsigned long long a, unsigned long long b) {
     }
 
     exp = exp_a - exp_b + 1023;
-    /* q = (sig_a << 61) / sig_b  in ~[2^60, 2^62) */
-    q = div128_64(sig_a >> 3, sig_a << 61, sig_b, &rem);
-    sticky = rem != 0;
-    if (q < (1ULL << 61)) {
-        sig = q << 2;
-        exp = exp - 1;
-    } else {
-        sig = q << 1;
+    if (sig_b == (1ULL << 52)) {
+        return f64_round_pack(sign, exp, sig_a << 10, 0);
     }
+    if (sig_a < sig_b) {
+        sig_a = sig_a << 1;
+        exp = exp - 1;
+    }
+    sig = f64_div_sig(sig_a, sig_b, &sticky);
     return f64_round_pack(sign, exp, sig, sticky);
 }
 
@@ -1082,12 +1013,21 @@ unsigned long long __rcc_f64_from_i64(long long x) {
     return sign | __rcc_f64_from_u64(mag);
 }
 
-unsigned long long __rcc_f64_from_si(long x) {
-    return __rcc_f64_from_i64((long long)x);
+unsigned long long __rcc_f64_from_ui(unsigned long x) {
+    int shift;
+    int exp;
+    unsigned long long sig;
+    if (x == 0) { return 0; }
+    shift = clz32(x);
+    exp = 1054 - shift;
+    /* Every 32-bit integer fits exactly: no wide normalization or rounding. */
+    sig = (unsigned long long)x << (shift + 21);
+    return ((unsigned long long)exp << 52) | (sig & F64_FRAC);
 }
 
-unsigned long long __rcc_f64_from_ui(unsigned long x) {
-    return __rcc_f64_from_u64((unsigned long long)x);
+unsigned long long __rcc_f64_from_si(long x) {
+    if (x < 0) { return F64_SIGN | __rcc_f64_from_ui(0UL - (unsigned long)x); }
+    return __rcc_f64_from_ui((unsigned long)x);
 }
 
 long long __rcc_f64_to_i64(unsigned long long a) {

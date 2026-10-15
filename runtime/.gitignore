@@ -13,6 +13,7 @@
 /ctype.asm
 /stdlib.asm
 /softfloat.asm
+/softmath.asm
 /scanf.asm
 /qfixed.asm
 /ros/putchar.asm

@@ -12,7 +12,7 @@ RUNTIME_HEADERS = $(wildcard include/*.h)
 BANK_SIZE_STAMP = .bank-size
 
 # Source files
-C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c vm_devices.c rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c scanf.c
+C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c vm_devices.c rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
 ASM_SOURCES = crt0.asm
 
 # qfixed lives in src/ and is compiled via the qfixed.asm rule below

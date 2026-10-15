@@ -264,9 +264,8 @@ operations.
 
 The next priorities suggested by this evidence are:
 
-1. Improve the software multiply/divide algorithms and common-case paths, or add
-   explicit JIT acceleration for compiler-owned software-float helpers. Any host
-   acceleration needs agreement with the target's rounding and special values.
+1. Improve the software multiply/divide algorithms and common-case paths.
+   The subsequent audit below implements this using guest integer instructions.
 2. Preserve floating-point semantics and purity through optimization, lowering
    to software helpers later. Opaque calls currently prevent ordinary common
    subexpression elimination and loop-invariant motion from seeing arithmetic.
@@ -289,6 +288,142 @@ keeps compilation time separate from execution time.
 Validation passed all 145 RFL tests, including new checks for runtime/constant
 binary64 agreement, mutable and borrowed floats across calls, and formatting
 edge cases. The imperative BF benchmark remains at 5,378,037 guest instructions.
+
+## Integer software-float and stdlib follow-up
+
+This comparison starts from `95ac58b`, including the preceding JIT improvements.
+Both versions use the same RVM binary. The saved baseline compiler, math source,
+and runtime archive are all required: replacing only the compiler would link the
+new arithmetic implementation into both programs. Execution times are medians
+of three serial runs, excluding front-end compilation, assembly, and linking. JIT time
+includes cold native compilation.
+
+| Full 44,100-sample beep | Before | After |
+|---|---:|---:|
+| Executed guest instructions | 7,154,129,521 | 4,497,887,860 |
+| JIT process time | 6.091 s | 4.377 s |
+| RFL compile time | 1.254 s | 1.146 s |
+| RFL assembly instructions | 26,518 | 20,824 |
+
+Guest work falls by 37.1%; measured JIT process time falls by
+28.1%. No ISA changes, guest hardware-float instructions, or host-float JIT
+substitutions are involved. The Brainfuck VM can execute the same integer
+algorithms; its wall time was not measured.
+
+The bounded controls below execute 128 iterations with observable checksums.
+Square-root inputs are `i + 0.125`; both versions give identical printed checksums.
+
+| Control | Guest instructions before | Guest instructions after |
+|---|---:|---:|
+| Beep math plus checksum | 18,282,825 | 10,492,928 |
+| Binary64 multiplication | 1,147,367 | 722,394 |
+| Binary64 division | 3,567,318 | 2,149,235 |
+| Square root | 68,963,660 | 4,770,359 |
+| Floor | 1,346,856 | 748,405 |
+| Binary32 addition | 281,271 | 298,420 |
+| Binary32 division | 600,723 | 633,400 |
+
+The square-root control executes 14.5 times fewer instructions. Relative to the
+conversion-and-checksum control, the estimated incremental binary64 multiplication
+cost drops from about 6,101 to 3,362 instructions, and division from about 25,007
+to 14,510. Binary32 addition/division controls increase by approximately 6%/5%
+while gaining proper rounding; their short wall times are sensitive to startup
+and host load.
+
+**Runtime arithmetic.** Binary64 division now generates a normalized quotient
+with 53 value bits, guard, round, and a sticky remainder. It performs 54 iterations
+on two 32-bit remainder/quotient limbs, avoiding the old shifted 128-bit numerator
+and its extra bookkeeping. Exact powers of two bypass general multiplication and
+division while still using the rounding path for underflow and overflow. Widening
+32x32 multiplication is expressed with 16-bit pieces instead of requesting four
+general 64x64 products for the 106-bit significand product. Exact 32-bit integer
+to binary64 conversion also bypasses generic 64-bit normalization and rounding.
+
+The audit found correctness defects as well as excessive work:
+
+- Binary32 arithmetic and integer conversions truncated, lost subnormal values,
+  and generated too few quotient bits. It now uses a 27-bit working significand
+  with guard, round, and sticky bits, and round-to-nearest-even. Addition and
+  division stay in 32-bit integers; multiplication uses a 48-bit product assembled
+  from 16-bit pieces.
+- Binary32-to-binary64 widening discarded the sign into a 32-bit variable.
+- Adding binary64 subnormals could incorrectly set the normal exponent bit.
+  Subtraction must also treat a discarded alignment tail as a subtraction.
+- Binary64-to-binary32 conversion rounded before handling gradual underflow.
+- Binary32-to-unsigned and 64-bit integer casts incorrectly passed through a
+  signed 32-bit conversion. The integer ABI retains saturating casts and NaN-to-zero.
+- The RFL checker rejected valid constant float-to-`u64` conversions above `i64::MAX`.
+
+NaNs remain canonicalized by arithmetic helpers. These routines have a fixed
+round-to-nearest-even arithmetic contract, without an exception-flag API.
+Binary32 correctness has a small instruction cost in some controls, shown above.
+
+**RFL frontend.** Immutable propagation now folds binary32 arithmetic and
+float-width conversions before helper lowering, with the existing safeguards for
+mutation, sharing, borrowing, and special values. Operations retain their source
+order and binary32 precision. A separate scalar liveness analysis follows branches,
+loops, and call continuations. Only values needed after a resumable call are
+published to the heap frame; consumed temporaries no longer get saved at every
+subsequent call. Callee-written results, borrowed values, managed storage, and
+captured values retain their required behavior. Closure creation conservatively
+keeps scalar inputs live because capture operands are held in lifted metadata.
+
+**Standard math.** Sine and cosine reduce to `[-pi/4, pi/4]` using multiplication
+by `2/pi` and a split `pi/2` for ordinary angles, avoiding software division and
+flooring. Inputs already inside that interval skip reduction. Large finite angles
+use a 1152-bit fixed-point `2/pi` table and integer multiplication to recover the
+quadrant and fractional remainder; they no longer saturate a quadrant into `i32`
+or hit the arbitrary `1e300` finite cutoff. The Taylor polynomials approximate sine
+and cosine with an absolute error bound of `2e-10`; their results can differ from
+correctly rounded libm results.
+
+`floor` and `sqrt` are small wrappers around integer helpers in
+`runtime/softmath.c`. Floor works beyond the old signed-32-bit boundary. The root
+uses a digit-by-digit integer algorithm with a remainder for correct rounding,
+replacing sixteen Newton divisions with an unsuitable initial guess. Tests cover
+positive infinity, negative zero, the smallest subnormal, and the largest finite
+binary64 input. Ceiling, rounding ties, large integral values, and signed zero
+also have corrections and execution tests.
+
+The beep output intentionally changes: the maximum difference from the old
+printed output is `0.000001`. All 44,100 current printed samples were checked
+against native sine, with maximum absolute error `4.987e-7`, within six-decimal
+rounding. The unformatted trigonometry tests check against native results at
+quadrant boundaries, adjacent representable values, audio angles, and very large
+positive and negative angles. The benchmark continues to require identical output
+by default; numeric tolerance must be requested explicitly.
+
+Validation passed all **151 RFL tests**, six C/runtime tests (including bit-pattern
+regressions), and **13,369,400** seeded reference checks for arithmetic, comparisons,
+integer conversions, width conversions, floor, square root, and large-angle
+reduction. The native test adapter fixes C integer widths to match Ripple; it does
+not replace the VM execution tests. The oracle independently regenerates all 1152
+table bits using high-precision arithmetic.
+
+Reproduce after saving all three baseline artifacts:
+
+```sh
+cargo build --release -p rfl
+make -C runtime
+python3 runtime/tests/softfloat_oracle.py --samples 300000 --math
+cargo test --release -p rfl -- --test-threads=4
+./rct test_softfloat_bits test_softmath_bits test_float_basic test_printf_float test_sscanf_float test_static_float_to_integer --timeout 20
+python3 rfl/tools/benchmark_beep.py --baseline /path/to/rfl-before \
+  --baseline-math /path/to/math-before.rfl --baseline-runtime /path/to/runtime-before.par \
+  --full --jit --runs 3 --max-output-error 0.000001
+```
+
+`--micro --f32 --samples 128` adds observable arithmetic, square-root, floor, and
+formatting controls. In paired micro runs, use a tolerance appropriate to the
+accumulated checksum, such as `--max-output-error 0.0001`. The JSON records output
+hashes and the measured maximum error. On macOS the host oracle needs a matching
+compiler and SDK; it respects `CC` and `SDKROOT`.
+
+Further opportunities are semantic float operations or explicit purity through
+backend optimization, known-width widening multiplication in the shared backend,
+and inlining small scalar RFL functions. Common-entry scalar reloads remain a
+source of register pressure in large procedures; selecting reloads at each resume
+entry is a separate optimization from the live-value publication implemented here.
 
 ## Remaining specification gaps
 
