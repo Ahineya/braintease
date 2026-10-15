@@ -7,8 +7,9 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
         .ir
         .get_function("main")
         .ok_or("native executable needs main")?;
-    if main.is_external || !main.parameters.is_empty() {
-        return Err("native v1 entry main must have no parameters".into());
+    let main_arguments = main.parameters.len();
+    if main.is_external || !matches!(main_arguments, 0 | 2) {
+        return Err("native main must have zero parameters or (argc, argv)".into());
     }
     let initializers = super::globals::initializers(compiler)?;
     let mut context = compiler.object.make_context();
@@ -41,12 +42,17 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
             .functions
             .iter()
             .filter(|f| !f.is_external)
-            .map(|f| (f.name.clone(), f.parameters.len()))
+            .map(|f| {
+                (
+                    f.name.clone(),
+                    f.parameters.len() + usize::from(f.is_vararg),
+                )
+            })
             .chain(compiler.address_taken.iter().map(|name| {
                 let arity = compiler
                     .ir
                     .get_function(name)
-                    .map(|f| f.parameters.len())
+                    .map(|f| f.parameters.len() + usize::from(f.is_vararg))
                     .or_else(|| {
                         rcc_ir::target::NATIVE_SERVICES
                             .iter()
@@ -69,10 +75,26 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
             let token = b.ins().bor(code, count);
             b.ins().call(register, &[runtime, token, address]);
         }
+        if let Some(&errno) = compiler.globals.get("errno") {
+            let id = compiler.import("rcc_native_errno", 1)?;
+            let reference = compiler.object.declare_func_in_func(id, b.func);
+            let address = b.ins().iconst(types::I64, errno as i64);
+            b.ins().call(reference, &[runtime, address]);
+        }
+        let mut arguments = vec![runtime];
+        if main_arguments == 2 {
+            let id = compiler.import("rcc_native_arguments", 0)?;
+            let reference = compiler.object.declare_func_in_func(id, b.func);
+            let call = b.ins().call(reference, &[runtime]);
+            let packed = b.inst_results(call)[0];
+            let argc = b.ins().ushr_imm_u(packed, 32);
+            let argv = b.ins().band_imm_u(packed, 0xffff_ffff);
+            arguments.extend([argc, argv]);
+        }
         let main = compiler
             .object
             .declare_func_in_func(compiler.functions["main"], b.func);
-        let call = b.ins().call(main, &[runtime]);
+        let call = b.ins().call(main, &arguments);
         let result = b.inst_results(call)[0];
         b.ins().return_(&[result]);
         b.seal_all_blocks();

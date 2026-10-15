@@ -2,7 +2,9 @@
 //! it has no instruction decoder, VM registers or interpreter dispatch loop.
 mod devices;
 mod exports;
+mod files;
 mod memory;
+mod strings;
 use rcc_ir::target::DataLayout;
 use rvm::{devices::DeviceState, display_rgb565::RGB565Display};
 use std::collections::BTreeMap;
@@ -26,10 +28,21 @@ pub struct Runtime {
     flushed: bool,
     rng: u32,
     visual: bool,
+    paced: bool,
+    files: BTreeMap<u64, files::Stream>,
+    errno: u64,
+    clock_start: Option<std::time::Instant>,
+    presentations: u64,
+    frame_target: u64,
+    deadline: Option<std::time::Instant>,
+    poll_count: u16,
 }
 impl Runtime {
     fn new() -> Self {
         let heap = 5 * BANK + 1;
+        let visual = std::env::var_os("RCC_NATIVE_VISUAL").is_some();
+        let paced = std::env::var_os("RCC_NATIVE_UNTHROTTLED").is_none()
+            && (visual || std::env::var_os("RCC_NATIVE_PACED").is_some());
         Self {
             memory: vec![0; CELLS],
             stack: 2 * BANK + 1,
@@ -44,7 +57,32 @@ impl Runtime {
             enabled: false,
             flushed: false,
             rng: 1,
-            visual: std::env::var_os("RCC_NATIVE_VISUAL").is_some(),
+            visual,
+            paced,
+            files: BTreeMap::new(),
+            errno: 0,
+            clock_start: None,
+            presentations: 0,
+            frame_target: std::env::var("RCC_NATIVE_FRAME_NUMBER")
+                .ok()
+                .map(|v| {
+                    v.parse::<u64>()
+                        .ok()
+                        .filter(|n| *n > 0)
+                        .unwrap_or_else(|| fatal("RCC_NATIVE_FRAME_NUMBER must be positive"))
+                })
+                .unwrap_or(1),
+            deadline: std::env::var("RCC_NATIVE_TIMEOUT").ok().map(|v| {
+                let seconds = v
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|n| *n > 0)
+                    .unwrap_or_else(|| fatal("RCC_NATIVE_TIMEOUT must be positive"));
+                std::time::Instant::now()
+                    .checked_add(std::time::Duration::from_secs(seconds))
+                    .unwrap_or_else(|| fatal("native timeout overflow"))
+            }),
+            poll_count: 0,
         }
     }
     fn flush(&mut self) {
@@ -64,6 +102,17 @@ impl Runtime {
         value & 65535
     }
     fn poll(&mut self) {
+        self.poll_count = self.poll_count.wrapping_add(1);
+        if self.poll_count & 1023 != 0 {
+            return;
+        }
+        if self
+            .deadline
+            .is_some_and(|deadline| std::time::Instant::now() >= deadline)
+        {
+            self.flush();
+            fatal("native wall-time limit exceeded");
+        }
         if self.visual && self.display.is_window_closed() {
             self.flush();
             std::process::exit(0);

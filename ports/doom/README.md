@@ -57,6 +57,38 @@ Set `DOOM_BUILD=/absolute/output/directory` when launching or invoking the Node
 test tools directly. Build settings and tool/source changes invalidate the
 affected outputs.
 
+### Native RCC execution
+
+RCC can also compile the engine through Cranelift into a host executable:
+
+```sh
+cargo build --release -p rcc-driver -p rcc-native-runtime
+ports/doom/run.sh --target native --scene e1m1
+ports/doom/run.sh --target native --scene demo1 --headless --frame 32
+make -C ports/doom test-native
+```
+
+This runs the C engine as native code, with the compatibility 16-bit-cell data
+model and logical pointers. It uses portable C rendering kernels and the shared
+RGB565, keyboard and clock services. Host file adapters read the original WAD;
+no VM instruction dispatch or Brainfuck execution is involved. The window uses
+35 Hz pacing; `--clock unthrottled` disables pacing. `--jit` and stepped clocks
+apply to the VM backend.
+
+The executable is `build/rcc-native/engine/engine`; direct builds use
+`make -C ports/doom -j4 TARGET=rcc-native`. The existing `TARGET=native` still
+builds the independent Clang/GCC reference. Native headless runs save raw
+RGB565 and a run manifest, with `--frame`, `--input-script`, and `--timeout`
+support; VM instruction limits and VM execution reports do not apply.
+Platform C interoperability and native host pointers remain future work.
+The same port limitations (silent audio, no persistent configuration/savegames)
+apply. See [the native backend guide](../../rcc-native/README.md).
+
+`test-native` compares exact title/menu/E1M1 pixels, 32- and 180-frame gameplay
+replays, and 32 demo frames against Clang. It also checks every logical frame
+record through each captured frame. Logs and captures stay under
+`build/native-validation/`.
+
 ### Run flags at a glance
 
 Use `ports/doom/run.sh` for the Rust VM or `scripts/run-bf-doom.sh` for

@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod command;
 pub mod compiler;
+mod native;
 pub mod config;
 pub mod reporter;
 pub mod runner;

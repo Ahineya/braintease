@@ -10,6 +10,8 @@ mod floating;
 mod globals;
 mod instruction;
 mod link;
+mod units;
+pub use units::link_modules;
 
 use cranelift_codegen::ir::{types, AbiParam, Signature};
 use cranelift_codegen::settings::{self, Configurable};
@@ -38,10 +40,9 @@ impl Compiler {
     }
     fn callee(&mut self, name: &str, arguments: usize) -> Result<FuncId, String> {
         if let Some(function) = self.ir.get_function(name) {
-            if function.is_vararg {
-                return Err(format!("native v1 variadic call {name} is not supported"));
-            }
-            if function.parameters.len() != arguments {
+            if (function.is_vararg && arguments < function.parameters.len())
+                || (!function.is_vararg && function.parameters.len() != arguments)
+            {
                 return Err(format!("native call {name} argument count mismatch"));
             }
             if !function.is_external {
@@ -126,7 +127,10 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
     )
     .map_err(|e| e.to_string())?;
     let mut ir = module.clone();
+    units::retain_reachable(&mut ir);
+    units::hoist_static_allocas(&mut ir);
     rcc_backend::optimize::optimize_module(&mut ir);
+    units::retain_reachable(&mut ir);
     let mut compiler = Compiler {
         object: ObjectModule::new(builder),
         functions: BTreeMap::new(),
@@ -169,7 +173,7 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
                 } else {
                     Linkage::Export
                 },
-                &compiler.signature(function.parameters.len()),
+                &compiler.signature(function.parameters.len() + usize::from(function.is_vararg)),
             )
             .map_err(|e| format!("native declaration {}: {e}", function.name))?;
         if compiler

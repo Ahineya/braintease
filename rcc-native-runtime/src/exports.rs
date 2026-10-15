@@ -43,6 +43,9 @@ fn copy(rt: &mut Runtime, dest: u64, src: u64, count: u64) -> u64 {
 service!(rcc_native_ext_putchar(rt, value) {
     rt.putc(value)
 });
+service!(rcc_native_ext_abs(_rt, value) { (value as i16).wrapping_abs() as u16 as u64 });
+service!(rcc_native_ext_labs(_rt, value) { (value as i32).wrapping_abs() as u32 as u64 });
+service!(rcc_native_ext_llabs(_rt, value) { (value as i64).wrapping_abs() as u64 });
 service!(rcc_native_ext_puts(rt, text) {
     let mut at = linear(text);
     while at < CELLS {

@@ -20,6 +20,8 @@ pub(super) struct Cg<'a, 'b> {
     pub(super) mark: ClValue,
     pub(super) allocas: BTreeMap<u32, u64>,
     edges: Vec<(Block, u32, u32)>,
+    pub(super) va_input: Option<ClValue>,
+    pub(super) var_area: u64,
 }
 impl Cg<'_, '_> {
     pub fn k(&mut self, value: i64) -> ClValue {
@@ -119,7 +121,8 @@ impl Cg<'_, '_> {
 
 pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Result<(), String> {
     let mut context = compiler.object.make_context();
-    context.func.signature = compiler.signature(function.parameters.len());
+    context.func.signature =
+        compiler.signature(function.parameters.len() + usize::from(function.is_vararg));
     let mut frontend = FunctionBuilderContext::new();
     {
         let mut b = FunctionBuilder::new(&mut context.func, &mut frontend);
@@ -172,6 +175,29 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
                 }
             }
         }
+        let var_area = cells;
+        let mut extra = 0;
+        for inst in function.blocks.iter().flat_map(|b| &b.instructions) {
+            if let I::Call {
+                args,
+                stack_args_from: Some(fixed),
+                ..
+            } = inst
+            {
+                if *fixed > args.len() {
+                    return Err("variadic call has fewer arguments than named parameters".into());
+                }
+                let count: u64 = args[*fixed..]
+                    .iter()
+                    .map(|arg| argument_words(arg, &types_map))
+                    .sum();
+                extra = extra.max(count);
+            }
+        }
+        cells = cells.checked_add(extra).ok_or("variadic area overflow")?;
+        let va_input = function
+            .is_vararg
+            .then(|| b.block_params(entry)[function.parameters.len() + 1]);
         let vars = types_map
             .keys()
             .map(|&id| (id, b.declare_var(types::I64)))
@@ -194,6 +220,8 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             mark: zero,
             allocas,
             edges: Vec::new(),
+            va_input,
+            var_area,
         };
         cg.mark = cg.runtime("rcc_native_stack_mark", &[])?;
         let size = cg.k(i64::try_from(cells).map_err(|_| "native frame exceeds i64")?);
@@ -231,7 +259,7 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
         .define_function(id, &mut context)
         .map_err(|e| {
             format!(
-                "native compilation {}: {e}\n{}",
+                "native compilation {}: {e:?}\n{}",
                 function.name,
                 context.func.display()
             )
@@ -301,5 +329,13 @@ pub(super) fn width(ty: &IrType) -> u32 {
         IrType::I16 => 16,
         IrType::I32 | IrType::F32 | IrType::FatPtr(_) => 32,
         _ => 64,
+    }
+}
+
+pub(super) fn argument_words(value: &Value, types: &BTreeMap<u32, IrType>) -> u64 {
+    match value {
+        Value::Temp(id) => types.get(id).and_then(IrType::size_in_words).unwrap_or(1),
+        Value::FatPtr(_) | Value::Global(_) | Value::Function(_) | Value::AddressOffset { .. } => 2,
+        _ => 1,
     }
 }

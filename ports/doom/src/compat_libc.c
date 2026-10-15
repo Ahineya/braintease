@@ -26,6 +26,7 @@ static int output_stream_ok(FILE *stream) {
     return stream == stdout || stream == stderr;
 }
 
+#ifndef RCC_NATIVE
 FILE *fopen(const char *path, const char *mode) { errno = ENOENT; return NULL; }
 FILE *freopen(const char *path, const char *mode, FILE *stream) { errno = ENOSYS; return NULL; }
 int fclose(FILE *stream) { errno = EBADF; return EOF; }
@@ -55,6 +56,7 @@ int fputs(const char *text, FILE *stream) {
 }
 int remove(const char *path) { errno = ENOSYS; return -1; }
 int rename(const char *old_path, const char *new_path) { errno = ENOSYS; return -1; }
+#endif
 int mkdir(const char *path, mode_t mode) { errno = ENOSYS; return -1; }
 int stat(const char *path, struct stat *info) { errno = ENOENT; return -1; }
 
@@ -398,3 +400,14 @@ double fabs(double value) {
     number.bits &= UINT64_C(0x7fffffffffffffff);
     return number.real;
 }
+
+#ifdef RCC_NATIVE
+int printf(const char *format, ...) {
+    va_list args;
+    int result;
+    va_start(args, format);
+    result = vprintf(format, args);
+    va_end(args);
+    return result;
+}
+#endif

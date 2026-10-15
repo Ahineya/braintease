@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and run the maintained Doom port on the Rust VM.
+# Build and run the maintained Doom port on the Rust VM or as native RCC code.
 set -euo pipefail
 PORT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$PORT/../.." && pwd)"
@@ -20,18 +20,24 @@ timeout=300
 jobs=4
 headless=0
 build_only=0
+clean_only=0
+rebuild=0
 jit=0
+target=ripple
 usage() {
   cat <<'EOF'
 Usage: ports/doom/run.sh [options]
-  --scene SCENE            title (default), menu, e1m1, or demo1
+  --target TARGET         ripple (default), or native (RCC/Cranelift)
+  --scene SCENE           title (default), menu, e1m1, or demo1
   --low-detail            Faster, coarser world rendering; F5 also toggles it
   --half-resolution       Render top-left samples only: 160x100 (2x2 blocks)
   --quarter-resolution    Render top-left samples only: 80x50 (4x4 blocks)
   --wad FILE              Shareware WAD (default: assets/doom1.wad)
   --wad-mode MODE         packed, expanded or cooked (default: cooked)
   --asset-validation MODE preflight (default), or guest for extra guest checks
-  --build-only            Build without opening the VM
+  --build-only            Build without running; native prints executable path
+  --clean                 Remove generated Doom build files and exit
+  --rebuild               Clean before building and running (or --build-only)
   --headless              Capture a frame without a window
   --frame N               Presentation to capture (default: 1)
   --input-script FILE     Deterministic keyboard input
@@ -47,6 +53,7 @@ fail() { printf 'error: %s\n' "$*" >&2; exit 2; }
 value() { [[ $# -ge 2 && -n "$2" ]] || fail "$1 requires a value"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --target) value "$@"; target="$2"; shift 2;;
     --scene) value "$@"; scene="$2"; shift 2;;
     --low-detail) detail=low; shift;;
     --half-resolution) [[ "$resolution_scale" != 4 ]] || fail 'resolution flags cannot be combined'; resolution_scale=2; shift;;
@@ -55,6 +62,8 @@ while [[ $# -gt 0 ]]; do
     --wad-mode) value "$@"; wad_mode="$2"; shift 2;;
     --asset-validation) value "$@"; asset_validation="$2"; shift 2;;
     --build-only) build_only=1; shift;;
+    --clean) clean_only=1; shift;;
+    --rebuild) rebuild=1; shift;;
     --headless) headless=1; shift;;
     --frame) value "$@"; frame="$2"; shift 2;;
     --input-script) value "$@"; input="$2"; shift 2;;
@@ -68,6 +77,12 @@ while [[ $# -gt 0 ]]; do
     *) fail "unknown option: $1";;
   esac
 done
+[[ "$clean_only" == 0 || "$rebuild" == 0 ]] || fail '--clean and --rebuild cannot be combined'
+[[ "$target" == ripple || "$target" == native ]] || fail 'target must be ripple or native'
+if [[ "$target" == native ]]; then
+  [[ "$jit" == 0 ]] || fail '--jit applies to the Ripple VM; native code is compiled ahead of time'
+  [[ "$clock" != stepped ]] || fail 'native execution supports paced or unthrottled clocks'
+fi
 [[ "$scene" == title || "$scene" == menu || "$scene" == e1m1 || "$scene" == demo1 ]] || fail 'scene must be title, menu, e1m1 or demo1'
 [[ "$wad_mode" == packed || "$wad_mode" == expanded || "$wad_mode" == cooked ]] || fail 'WAD mode must be packed, expanded or cooked'
 [[ "$asset_validation" == preflight || "$asset_validation" == guest ]] || fail 'asset validation must be preflight or guest'
@@ -75,6 +90,10 @@ done
 for numeric in "$frame" "$instructions" "$timeout" "$jobs"; do
   [[ "$numeric" =~ ^[1-9][0-9]*$ ]] || fail 'frame, instruction limit, timeout and jobs must be positive integers'
 done
+if [[ "$clean_only" == 1 ]]; then
+  make -C "$PORT" clean "BUILD=$build"
+  exit 0
+fi
 [[ -f "$wad" ]] || fail "WAD not found: $wad"
 wad="$(cd "$(dirname "$wad")" && pwd)/$(basename "$wad")"
 if [[ "$scene" == menu ]]; then
@@ -85,7 +104,7 @@ if [[ -n "$input" ]]; then
   [[ -f "$input" ]] || fail "input script not found: $input"
   input="$(cd "$(dirname "$input")" && pwd)/$(basename "$input")"
 fi
-if [[ "$build_only" == 0 && ! -x "$ROOT/target/release/rvm" ]]; then
+if [[ "$target" == ripple && "$build_only" == 0 && ! -x "$ROOT/target/release/rvm" ]]; then
   fail 'Rust VM missing; build the release toolchain from the repository root first'
 fi
 start_map=0
@@ -94,14 +113,41 @@ low_detail=0
 [[ "$scene" == e1m1 ]] && start_map=1
 [[ "$scene" == demo1 ]] && start_demo=1
 [[ "$detail" == low ]] && low_detail=1
-make -C "$PORT" -j "$jobs" PROGRAM=engine TARGET=ripple "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "ASSET_VALIDATION=$asset_validation" "START_MAP=$start_map" "START_DEMO=$start_demo" "LOW_DETAIL=$low_detail" "RESOLUTION_SCALE=$resolution_scale"
-[[ "$build_only" == 0 ]] || exit 0
+make_target=ripple
+[[ "$target" == native ]] && make_target=rcc-native
+if [[ "$rebuild" == 1 ]]; then
+  make -C "$PORT" clean "BUILD=$build"
+fi
+make -C "$PORT" -j "$jobs" PROGRAM=engine "TARGET=$make_target" "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "ASSET_VALIDATION=$asset_validation" "START_MAP=$start_map" "START_DEMO=$start_demo" "LOW_DETAIL=$low_detail" "RESOLUTION_SCALE=$resolution_scale"
+if [[ "$build_only" == 1 ]]; then
+  if [[ "$target" == native ]]; then
+    printf 'Native executable: %s\n' "$build/rcc-native/engine/engine"
+    printf 'Run with a window: RCC_NATIVE_VISUAL=1 %q\n' "$build/rcc-native/engine/engine"
+  fi
+  exit 0
+fi
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
-node "$PORT/tools/build-support.mjs" disk "$wad" "$out/doom1.wad" "$wad_mode" "$build/manifest.json" > "$out/disk-image.json"
 if [[ -z "$clock" ]]; then
   if [[ "$headless" == 1 ]]; then clock=unthrottled; else clock=paced; fi
 fi
+if [[ "$target" == native ]]; then
+  command=(env "RCC_NATIVE_FRAME_NUMBER=$frame")
+  if [[ "$headless" == 1 ]]; then
+    command+=("RCC_NATIVE_FRAME=$out/$scene.rgb565" "RCC_NATIVE_TIMEOUT=$timeout")
+  else
+    command+=(RCC_NATIVE_VISUAL=1)
+  fi
+  [[ "$clock" != unthrottled ]] || command+=(RCC_NATIVE_UNTHROTTLED=1)
+  [[ "$clock" != paced ]] || command+=(RCC_NATIVE_PACED=1)
+  [[ -z "$input" ]] || command+=("RCC_NATIVE_INPUT_SCRIPT=$input")
+  command+=("$build/rcc-native/engine/engine")
+  node "$PORT/tools/build-support.mjs" run-manifest "$build/manifest.json" - \
+    "$out/$scene.manifest.json" "$scene" "$detail" "${command[@]}"
+  cd "$ROOT"
+  exec "${command[@]}"
+fi
+node "$PORT/tools/build-support.mjs" disk "$wad" "$out/doom1.wad" "$wad_mode" "$build/manifest.json" > "$out/disk-image.json"
 command=("$ROOT/target/release/rvm" "$build/ripple/engine/engine.bin"
   --bank-size 64000 --memory 16384000 --disk "$out/doom1.wad" --seed 1
   --clock "$clock" --report "$out/$scene.json")

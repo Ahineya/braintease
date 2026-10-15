@@ -55,6 +55,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Link native-targeted IR translation units into a host executable
+    LinkNative {
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        #[arg(short, long)]
+        output: PathBuf,
+    },
     /// Test the backend code generation with built-in examples
     Test {
         /// Which test to run
@@ -147,6 +154,21 @@ fn main() {
     let cli = Cli::parse();
     
     match cli.command {
+        Commands::LinkNative { inputs, output } => {
+            let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+                let modules = inputs.iter().map(|path| {
+                    let text = fs::read_to_string(path)?;
+                    rcc_ir::parse_module(&text).map_err(Into::into)
+                }).collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+                let module = rcc_native::link_modules(&modules)?;
+                rcc_native::compile_executable(&module, &output)?;
+                Ok(())
+            })();
+            if let Err(error) = result {
+                eprintln!("Native link failed: {error}");
+                std::process::exit(1);
+            }
+        },
         Commands::Test { test_name, output } => {
             if let Err(e) = run_test(&test_name, output.as_deref()) {
                 eprintln!("Error running test: {e}");

@@ -366,6 +366,7 @@ pub fn compile_bfm_file(
 
     // Step 3: Link and run (BFM tests are standalone)
     match config.backend {
+        Backend::Native => anyhow::bail!("native backend is available for C tests only"),
         Backend::Rvm => {
             compile_and_run_rvm_standalone(
                 basename,
@@ -394,6 +395,9 @@ pub fn compile_c_file(
     config: &RunConfig,
     use_runtime: bool,
 ) -> Result<CompilationResult> {
+    if config.backend == Backend::Native {
+        return crate::native::compile_and_run(c_file, tools, config);
+    }
     let basename = c_file
         .file_stem()
         .context("Invalid C file path")?
@@ -489,6 +493,7 @@ pub fn compile_c_file(
 
     // Step 4: Link and run
     match config.backend {
+        Backend::Native => anyhow::bail!("native backend is available for C tests only"),
         Backend::Rvm => {
             compile_and_run_rvm(
                 basename,

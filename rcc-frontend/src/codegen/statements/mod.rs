@@ -40,6 +40,17 @@ pub struct TypedStatementGenerator<'a> {
 impl<'a> TypedStatementGenerator<'a> {
     /// Generate IR for a typed statement
     pub fn generate(&mut self, stmt: &TypedStmt) -> Result<(), CompilerError> {
+        // Unreachable source still needs scope and label processing, but must
+        // never append instructions after an existing block terminator.
+        // Containers and labels manage their own entry points.
+        if self.builder.current_block_has_terminator()
+            && !matches!(stmt, TypedStmt::Case { .. } | TypedStmt::Default { .. }
+                | TypedStmt::Label { .. } | TypedStmt::Compound(_)
+                | TypedStmt::DeclarationGroup(_) | TypedStmt::Empty)
+        {
+            let dead = self.builder.new_label();
+            self.builder.create_block(dead)?;
+        }
         match stmt {
             TypedStmt::DeclarationGroup(declarations) => {
                 for declaration in declarations {

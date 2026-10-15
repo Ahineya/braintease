@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "description": "Switch arms returning directly must end their IR blocks before join branches",
+  "use_runtime": true
+}

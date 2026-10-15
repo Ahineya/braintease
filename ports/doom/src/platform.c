@@ -18,7 +18,7 @@
 #include "z_zone.h"
 #include "doom_port.h"
 #include "doom_resolution.h"
-#ifdef RIPPLE
+#if defined(RIPPLE) || defined(RCC_NATIVE)
 #include <mmio.h>
 #include <vm_devices.h>
 #include "render_fast.h"
@@ -43,7 +43,7 @@ static byte palette_rgb[768];
 static uint32_t logical_tick;
 static uint32_t presented;
 static unsigned char held[256];
-#ifndef RIPPLE
+#if !defined(RIPPLE) && !defined(RCC_NATIVE)
 static const char *capture_path;
 static unsigned long capture_frame = 1;
 static FILE *input_file;
@@ -71,7 +71,7 @@ uint32_t Doom_Tick(void) { return logical_tick; }
 
 void Doom_NextTick(void)
 {
-#ifdef RIPPLE
+#if defined(RIPPLE) || defined(RCC_NATIVE)
     VmClock clock;
     if (vm_next_tick(&clock) != VM_DEVICE_OK) I_Error("VM tick failed");
     if (clock.hz != 35 || clock.tick != logical_tick + 1UL)
@@ -136,7 +136,7 @@ void Doom_PostKey(unsigned int usage, int down)
 
 void I_StartTic(void)
 {
-#ifdef RIPPLE
+#if defined(RIPPLE) || defined(RCC_NATIVE)
     VmInputEvent event;
     VmInputState state;
     unsigned short status;
@@ -163,7 +163,7 @@ void I_StartTic(void)
 
 void Doom_ConfigureCapture(const char *path, unsigned long frame, const char *input)
 {
-#ifndef RIPPLE
+#if !defined(RIPPLE) && !defined(RCC_NATIVE)
     capture_path = path;
     capture_frame = frame;
     if (input) {
@@ -195,7 +195,7 @@ void I_InitGraphics(void)
         }
     }
 #endif
-#ifdef RIPPLE
+#if defined(RIPPLE) || defined(RCC_NATIVE)
     VmDeviceCaps caps;
     if (vm_devices_caps(&caps) != VM_DEVICE_OK || (caps.bits & 15U) != 15U)
         I_Error("VM device ABI 1 with RGB565_EXT, clock and keyboard required");
@@ -270,7 +270,7 @@ static void finish_update(int repeat)
     printf("ENGINE frame %lu tick %lu state %d episode %d map %d\n",
            (unsigned long)presented, (unsigned long)logical_tick,
            (int)gamestate, gameepisode, gamemap);
-#ifdef RIPPLE
+#if defined(RIPPLE) || defined(RCC_NATIVE)
     if (vm_present_rgb565(framebuffer, DOOM_OUTPUT_WIDTH, DOOM_OUTPUT_HEIGHT, DOOM_OUTPUT_WIDTH) != VM_DEVICE_OK)
         I_Error("VM presentation failed");
 #else

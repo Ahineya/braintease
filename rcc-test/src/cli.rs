@@ -177,6 +177,7 @@ pub enum Command {
 pub enum BackendArg {
     Bf,
     Rvm,
+    Native,
 }
 
 impl BackendArg {
@@ -184,6 +185,7 @@ impl BackendArg {
         match self {
             BackendArg::Bf => crate::config::Backend::Brainfuck,
             BackendArg::Rvm => crate::config::Backend::Rvm,
+            BackendArg::Native => crate::config::Backend::Native,
         }
     }
 }

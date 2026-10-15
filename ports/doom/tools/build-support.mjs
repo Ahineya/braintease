@@ -117,7 +117,7 @@ try {
     process.stdout.write(`${match[1]}\n`);
   } else if (action === 'run-manifest') {
     const [build, disk, output, scene, detail, ...command] = args;
-    write(output, json({ ...JSON.parse(fs.readFileSync(build)), disk_image: JSON.parse(fs.readFileSync(disk)), scene, detail, command }));
+    write(output, json({ ...JSON.parse(fs.readFileSync(build)), disk_image: disk === '-' ? null : JSON.parse(fs.readFileSync(disk)), scene, detail, command }));
   } else if (action === 'native-flags') {
     if (process.platform === 'darwin') {
       const cc = args[0] || 'clang';

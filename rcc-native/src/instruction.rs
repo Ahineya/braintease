@@ -73,18 +73,31 @@ impl Cg<'_, '_> {
                 let value = self.runtime("rcc_native_gep", &[self.frame, offset])?;
                 self.define(*result, value)?;
             }
-            I::Call { result, function, args, result_type, .. } => {
+            I::Call { result, function, args, result_type, stack_args_from } => {
                 let mut values = vec![self.context];
                 for arg in args { values.push(self.value(arg)?); }
+                if let Some(fixed) = stack_args_from {
+                    let offset = self.k(self.var_area as i64);
+                    let base = self.runtime("rcc_native_gep", &[self.frame,offset])?;
+                    let mut cursor = base;
+                    for (i,arg) in args.iter().enumerate().skip(*fixed) {
+                        let words = super::emit::argument_words(arg,&self.types);
+                        let count = self.k(words as i64);
+                        self.runtime("rcc_native_store", &[cursor,values[i+1],count])?;
+                        cursor = self.runtime("rcc_native_gep", &[cursor,count])?;
+                    }
+                    values.truncate(fixed+1);
+                    values.push(base);
+                }
                 let call = if let Value::Global(name) | Value::Function(name) = function {
                     let id = self.compiler.callee(name, args.len())?;
                     let reference = self.compiler.object.declare_func_in_func(id, self.b.func);
                     self.b.ins().call(reference, &values)
                 } else {
                     let code = self.value(function)?;
-                    let count = self.k(args.len() as i64);
+                    let count = self.k((values.len()-1) as i64);
                     let address = self.runtime("rcc_native_function", &[code, count])?;
-                    let sig = self.b.import_signature(self.compiler.signature(args.len()));
+                    let sig = self.b.import_signature(self.compiler.signature(values.len()-1));
                     self.b.ins().call_indirect(sig, address, &values)
                 };
                 if let Some(result) = result {
@@ -125,6 +138,24 @@ impl Cg<'_, '_> {
                 let value = self.value(value)?;
                 let value = self.mask(value, width(target_type));
                 self.define(*result, value)?;
+            }
+            I::Intrinsic { intrinsic, args, result_type, result } if intrinsic == "va_start" => {
+                if args.len()!=1 || result.is_some() || *result_type!=IrType::Void { return Err("invalid va_start signature".into()); }
+                let input = self.va_input.ok_or("va_start outside a variadic function")?;
+                let ap = self.value(&args[0])?;
+                let words = self.k(2);
+                self.runtime("rcc_native_store", &[ap,input,words])?;
+            }
+            I::Intrinsic { intrinsic, args, result_type, result } if intrinsic == "va_arg" => {
+                if args.len()!=1 { return Err("invalid va_arg signature".into()); }
+                let ap = self.value(&args[0])?;
+                let pointer_words = self.k(2);
+                let pointer = self.runtime("rcc_native_load", &[ap,pointer_words])?;
+                let words = self.k(Target::Native.layout().size_in_cells(result_type)? as i64);
+                let value = self.runtime("rcc_native_load", &[pointer,words])?;
+                let next = self.runtime("rcc_native_gep", &[pointer,words])?;
+                self.runtime("rcc_native_store", &[ap,next,pointer_words])?;
+                self.define(result.ok_or("va_arg requires a result")?,value)?;
             }
             I::Intrinsic { result, intrinsic, args, result_type } => {
                 let value = self.floating(intrinsic, args, result_type)?;

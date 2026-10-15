@@ -85,8 +85,11 @@ pointer.
 This is not the platform C ABI. Do not link ordinary system C objects against
 these symbols. Runtime bindings are explicit and prefixed, so e.g. logical
 `malloc`/`puts` cannot accidentally resolve to host libc. Calls to unknown
-externals and variadic functions fail explicitly. Defined C functions can be
-imported into RFL as before. V1 requires a zero-argument `main`.
+externals fail explicitly. Defined C functions can be imported into RFL as before.
+Variadic C functions use a hidden logical pointer to arguments packed in the
+caller's frame, preserving promoted scalar widths and supporting `va_copy`.
+`main` accepts zero arguments or `(int argc, char **argv)`; process arguments
+are copied into logical memory.
 
 Host data layouts, direct native RFL calls, native pointers, aggregate ABI
 classification, host C interoperability, and cross-compilation are later work.
@@ -99,22 +102,27 @@ Dynamic `alloca` and Ripple inline assembly are rejected.
 and device adapters. It reuses `rvm`'s device protocol and RGB565 presentation
 implementation, without constructing a VM. Supported services include
 `putchar`, `puts`, `getchar`, allocation, cell-oriented memory/string functions,
-MMIO, exit, and the selected host-math bindings.
+MMIO, exit, integer absolute values, and the selected host-math bindings.
+C file streams use runtime-owned handles and checked logical buffers: host
+files transfer octets into compatibility cells. Opening, reading, writing,
+seeking, EOF/error checks, closing, removing and renaming files are supported.
+Host `FILE *` values never cross the private ABI.
 
 ```sh
 RCC_NATIVE_VISUAL=1 build/graphics
-RCC_NATIVE_FRAME=build/first-frame.rgb565 build/graphics
+RCC_NATIVE_FRAME=build/frame.rgb565 RCC_NATIVE_FRAME_NUMBER=10 RCC_NATIVE_TIMEOUT=30 build/graphics
 RCC_NATIVE_INPUT_SCRIPT=path/to/replay.json build/graphics
 ```
 
-The first-frame option saves little-endian RGB565 pixels at the first completed
-presentation and exits. Requesting a frame from a program which never presents
+The frame option saves little-endian RGB565 pixels at the requested completed
+presentation (default 1) and exits. `RCC_NATIVE_TIMEOUT` bounds execution in
+seconds and reports failure if the limit is reached. Requesting a frame from a program which never presents
 one is an error. Legacy RGB565 front/back buffers and the descriptor-based
 extended display use the existing device implementation. Loop polling allows
 window close to stop even a loop with no memory accesses. Headless execution is
 the default. Replay format is the same as RVM's input scripts. Tick requests
-currently complete immediately with the shared deterministic clock; native
-visual pacing is later work.
+complete immediately headlessly and are paced at the shared tick rate with a
+window. `RCC_NATIVE_UNTHROTTLED=1` disables visual pacing.
 
 TEXT40 rendering, storage devices, and VM interrupts are not implemented in this
 milestone and report runtime errors when requested. TTY input is available via
@@ -127,12 +135,31 @@ ARM64. A host C linker is required. The runtime is found at
 (e.g. with `CARGO_TARGET_DIR`). `RCC_NATIVE_CC` overrides the linker executable.
 On macOS the SDK comes from the selected developer toolchain through `xcrun`.
 
+## Multi-file C programs and Doom
+
+Compile each translation unit with `rcc compile file.c --target native --emit-ir`
+and save stdout to a separate `.ir` file. Link them together with:
+
+```sh
+target/release/rcc link-native first.ir second.ir -o build/program
+ports/doom/run.sh --target native --scene e1m1
+make -C ports/doom test-native
+```
+
+The linker isolates static symbols per unit, resolves shared definitions and
+removes unreachable functions/globals. Incomplete unused extern declarations
+need no runtime binding. Doom uses its portable C kernels, the port's C formatter
+and scanf implementation, logical file adapters and the shared host devices.
+`TARGET=rcc-native` builds this executable; Doom's older `TARGET=native` remains
+the Clang/GCC reference for validation.
+
 ## Validation
 
 Build the release runtime first, then:
 
 ```sh
 cargo test -p rcc-ir -p rcc-native -p rcc-native-runtime
+cargo test -p rcc-driver --test native
 cargo test -p rfl --test target_cfg --test native
 cargo test -p rfl
 ./rct native_ir_bridge test_float_basic test_double_basic test_double_precision \

@@ -6,7 +6,11 @@ SHELL := /bin/bash
 
 ROOT := $(abspath ../..)
 BUILD ?= build
+# Cleanup quotes these paths in the shell; keep spaces intact instead of
+# splitting the directory into words through make's abspath function.
+ifneq ($(MAKECMDGOALS),clean)
 override BUILD := $(abspath $(BUILD))
+endif
 GENERATED := $(BUILD)/generated
 PROGRAM ?= engine
 TARGET ?= ripple
@@ -38,8 +42,10 @@ endif
 
 # The generator writes these lists alongside bounded C initialization functions.
 # Remaking an included makefile makes a clean checkout work on the first build.
+# It is expected to be absent after clean. The executable targets also require
+# it explicitly, so generation failures still stop the build.
 ifeq ($(filter clean help,$(MAKECMDGOALS)),)
-include $(GENERATED)/sources.mk
+-include $(GENERATED)/sources.mk
 endif
 $(GENERATED)/sources.mk: engine/tables.c engine/info.c tools/generate-data.mjs
 	@node tools/generate-data.mjs engine "$(GENERATED)"
@@ -206,7 +212,7 @@ $(NATIVE_BINARY): $(NATIVE_SOURCES) $(HEADERS) $(NOUT)/.flags $(FIXTURE_STAMP) $
 	@printf '%s\n' "$@"
 
 run:
-	+@DOOM_BUILD="$(BUILD)" DOOM_WAD="$(WAD)" DOOM_WAD_MODE="$(WAD_MODE)" DOOM_ASSET_VALIDATION="$(ASSET_VALIDATION)" ./run.sh $(if $(filter 1,$(START_MAP)),--scene e1m1) $(if $(filter 1,$(START_DEMO)),--scene demo1) $(if $(filter 1,$(LOW_DETAIL)),--low-detail) $(if $(filter 2,$(RESOLUTION_SCALE)),--half-resolution) $(if $(filter 4,$(RESOLUTION_SCALE)),--quarter-resolution) $(RUN_ARGS)
+	+@DOOM_BUILD="$(BUILD)" DOOM_WAD="$(WAD)" DOOM_WAD_MODE="$(WAD_MODE)" DOOM_ASSET_VALIDATION="$(ASSET_VALIDATION)" ./run.sh $(if $(filter rcc-native,$(TARGET)),--target native) $(if $(filter 1,$(START_MAP)),--scene e1m1) $(if $(filter 1,$(START_DEMO)),--scene demo1) $(if $(filter 1,$(LOW_DETAIL)),--low-detail) $(if $(filter 2,$(RESOLUTION_SCALE)),--half-resolution) $(if $(filter 4,$(RESOLUTION_SCALE)),--quarter-resolution) $(RUN_ARGS)
 test:
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs smoke --wad "$(WAD)"
 test-fixtures:
@@ -229,9 +235,36 @@ test-assets:
 	+@DOOM_BUILD="$(abspath $(BUILD))" node tools/renderer-metadata-validate.mjs --wad "$(WAD)"
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs assets --wad "$(WAD)"
 clean:
-	rm -rf "$(BUILD)/ripple" "$(BUILD)/native" "$(BUILD)/assets" "$(GENERATED)"
+	rm -rf "$(BUILD)/ripple" "$(BUILD)/native" "$(BUILD)/rcc-native" "$(BUILD)/assets" "$(GENERATED)"
 help:
-	@printf '%s\n' 'make -j4 [TARGET=ripple|bf|native|both] [WAD_MODE=packed|expanded|cooked] [START_MAP=1|START_DEMO=1] [LOW_DETAIL=1] [RESOLUTION_SCALE=1|2|4]' \
+	@printf '%s\n' 'make -j4 [TARGET=ripple|bf|native|rcc-native|both] [WAD_MODE=packed|expanded|cooked] [START_MAP=1|START_DEMO=1] [LOW_DETAIL=1] [RESOLUTION_SCALE=1|2|4]' \
+	 'rcc-native compiles RCC IR through Cranelift; native is the Clang/GCC reference.' \
 	 'ASSET_VALIDATION=preflight (default) uses assets checked when packed; guest also enables detailed guest checks.' \
 	 'make PROGRAM=numeric TARGET=both' 'make test | test-fixtures | test-kernels | test-gameplay | test-presentation | test-resolution | test-assets' \
 	 './run.sh --scene e1m1 --low-detail' './run-bf.sh --telemetry' 'WAD=/path/to/doom1.wad and BUILD=build may be overridden.'
+
+# RCC host code generation keeps each C translation unit separate through IR.
+# The clang "native" reference remains available for pixel comparisons.
+RNOUT := $(BUILD)/rcc-native/$(PROGRAM)
+RCC_NATIVE_SOURCES := $(sort $(NATIVE_SOURCES) src/compat_libc.c $(ROOT)/runtime/vm_devices.c $(ROOT)/runtime/ctype.c $(ROOT)/runtime/scanf.c src/native_devices.c)
+RCC_NATIVE_FLAGS := -Iinclude $(INCLUDES) -I$(ROOT)/runtime/include $(DEFINES) -DRCC_NATIVE=1 -DRIPPLE_MMIO_NO_INLINE=1 -DDOOM_ASSET_STRICT=$(if $(filter guest,$(ASSET_VALIDATION)),1,0)
+RCC_NATIVE_IR := $(foreach source,$(RCC_NATIVE_SOURCES),$(RNOUT)/$(call source_stem,$(source)).ir)
+.PHONY: rcc-native test-native
+rcc-native: $(RNOUT)/$(PROGRAM)
+test-native:
+	+@DOOM_BUILD="$(BUILD)" DOOM_WAD="$(WAD)" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test-native.mjs
+$(RNOUT)/.flags: FORCE Makefile
+	@node tools/build-support.mjs stamp "$@" "$(RCC_NATIVE_FLAGS)" "$(RCC)" "$(ASSET_CONFIG_KEY)"
+$(RNOUT)/.main-flags: FORCE tools/build-support.mjs
+	@node tools/build-support.mjs stamp "$@" "$(SCENE_DEFINES)"
+define compile_native_ir
+$(RNOUT)/$(call source_stem,$(1)).ir: $(1) $(HEADERS) $(RCC) $(RNOUT)/.flags $(FIXTURE_STAMP) $(FIXTURE_OUTPUTS) $(if $(filter src/main.c,$(1)),$(RNOUT)/.main-flags)
+	@printf '  RCC native IR: %s\n' '$(1)'
+	@"$(RCC)" compile "$(1)" --target native --emit-ir $(RCC_NATIVE_FLAGS) $(if $(filter src/main.c,$(1)),$(SCENE_DEFINES)) > "$$@.tmp" 2> "$$@.log" || { cat "$$@.log" >&2; rm -f "$$@.tmp"; exit 1; }
+	@mv "$$@.tmp" "$$@"
+endef
+$(foreach source,$(RCC_NATIVE_SOURCES),$(eval $(call compile_native_ir,$(source))))
+$(RNOUT)/$(PROGRAM): $(GENERATED)/sources.mk $(RCC_NATIVE_IR) $(ROOT)/target/release/librcc_native_runtime.a $(RCC)
+	@printf '  RCC native link: %s\n' '$(PROGRAM)'
+	@bash tools/log-command.sh "$(RNOUT)/link.log" "$(RCC)" link-native $(RCC_NATIVE_IR) -o "$@"
+	@printf '%s\n' "$@"

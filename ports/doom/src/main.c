@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 #ifdef DOOM_START_DEMO
     start_demo = 1;
 #endif
-#ifndef RIPPLE
+#if !defined(RIPPLE) && !defined(RCC_NATIVE)
     if (argc < 2) {
         fprintf(stderr, "Usage: engine OUTPUT.rgb565 [FRAME] [title|map|demo1] [INPUT.txt]\n");
         return 1;

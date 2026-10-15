@@ -99,6 +99,20 @@ impl Runtime {
                         self.capture();
                     }
                     if self.devices.has_pending_tick() {
+                        if self.paced {
+                            let origin =
+                                *self.clock_start.get_or_insert_with(std::time::Instant::now);
+                            let target = origin
+                                + std::time::Duration::from_secs_f64(
+                                    (self.devices.tick() + 1) as f64
+                                        / f64::from(self.devices.tick_hz()),
+                                );
+                            if let Some(delay) =
+                                target.checked_duration_since(std::time::Instant::now())
+                            {
+                                std::thread::sleep(delay);
+                            }
+                        }
                         let events = {
                             let shared = self.display.get_state();
                             let mut state = shared.lock().unwrap();
@@ -122,6 +136,10 @@ impl Runtime {
         self.memory[index] = value;
     }
     fn capture(&mut self) {
+        self.presentations += 1;
+        if self.presentations != self.frame_target {
+            return;
+        }
         if let Some(path) = std::env::var_os("RCC_NATIVE_FRAME") {
             let frame = self
                 .display

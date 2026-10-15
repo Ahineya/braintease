@@ -119,6 +119,7 @@ impl Default for RunConfig {
 pub enum Backend {
     Brainfuck,
     Rvm,
+    Native,
 }
 
 impl Backend {
@@ -126,6 +127,7 @@ impl Backend {
         match self {
             Backend::Brainfuck => "bf",
             Backend::Rvm => "rvm",
+            Backend::Native => "native",
         }
     }
 }
