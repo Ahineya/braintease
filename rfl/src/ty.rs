@@ -13,7 +13,8 @@ pub enum Ty {
     F32,
     /// IEEE-754 binary64. Four cells, operated on by the soft-float helpers.
     F64,
-    /// One unsigned cell. Wide enough for every collection length this machine can allocate.
+    /// Two cells, the same width as `u32`. Indexes and lengths have to cover
+    /// every heap object `malloc` can return, and that size is 32 bits.
     Usize,
     Bool,
     /// Unicode scalar. Two cells, the same width as `i32`.
@@ -33,8 +34,8 @@ pub enum Ty {
     Ref(u32),
     /// Inline `[T; N]`. `id` finds the element type. `width` is that element's cells.
     Array { id: u32, len: u16, width: u16 },
-    /// Index into the slice element table. Four cells: buffer address, bank,
-    /// first element, and element count. The buffer is a vector allocation.
+    /// Index into the slice element table. Six cells: buffer address, bank,
+    /// 32-bit first element, and 32-bit element count. The buffer is a vector allocation.
     Slice(u32),
     /// Inline struct. `id` indexes the struct table. `width` is the total cell count.
     Struct { id: u32, width: u16 },
@@ -47,7 +48,8 @@ pub enum Ty {
     /// address and its bank. No environment, and not an RFL callable.
     CFn(u32),
     /// Immutable UTF-8 text. Two cells: address and bank of a refcounted object.
-    /// A null pointer is the empty string. Bytes follow a length cell, one octet per cell.
+    /// A null pointer is the empty string. A 32-bit length follows the refcount,
+    /// then one octet per cell.
     String,
 }
 
@@ -122,11 +124,12 @@ impl Ty {
             Self::Unit => 0,
             Self::Adt(_) => 3,
             Self::Func(_) => 4,
-            Self::I32 | Self::U32 | Self::F32 => 2,
+            Self::I32 | Self::U32 | Self::Usize | Self::F32 => 2,
             Self::I64 | Self::U64 | Self::F64 => 4,
             Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::String => 2,
             Self::Char => 2,
-            Self::Slice(_) => 4,
+            // Address, bank, 32-bit start, 32-bit count.
+            Self::Slice(_) => 6,
             Self::Array { len, width, .. } => len as i64 * width as i64,
             Self::Struct { width, .. } | Self::Tuple { width, .. } => width as i64,
             _ => 1,
@@ -138,9 +141,9 @@ impl Ty {
             Self::I8 => (-128..=127).contains(&value),
             Self::U8 => (0..=255).contains(&value),
             Self::I16 => (-32768..=32767).contains(&value),
-            Self::U16 | Self::Usize => (0..=65535).contains(&value),
+            Self::U16 => (0..=65535).contains(&value),
+            Self::Usize | Self::U32 => (0..=u32::MAX as i64).contains(&value),
             Self::I32 => (i32::MIN as i64..=i32::MAX as i64).contains(&value),
-            Self::U32 => (0..=u32::MAX as i64).contains(&value),
             Self::I64 => true,
             Self::U64 => value >= 0,
             Self::Bool | Self::Char | Self::Unit | Self::String | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => false,
@@ -151,8 +154,8 @@ impl Ty {
     pub fn bits(self, value: i64) -> i64 {
         match self {
             Self::I8 | Self::U8 => value & 0xff,
-            Self::I16 | Self::U16 | Self::Usize | Self::Bool => value & 0xffff,
-            Self::I32 | Self::U32 | Self::Char => value & 0xffff_ffff,
+            Self::I16 | Self::U16 | Self::Bool => value & 0xffff,
+            Self::I32 | Self::U32 | Self::Usize | Self::Char => value & 0xffff_ffff,
             Self::I64 | Self::U64 => value,
             Self::Unit | Self::String | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => 0,
         }

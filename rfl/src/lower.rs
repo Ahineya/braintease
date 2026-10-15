@@ -1283,8 +1283,8 @@ fn fold_bin(op: BinOp, result: Ty, operand: Ty, a: i64, b: i64) -> Option<i64> {
 fn bits(ty: Ty, value: i64) -> u64 {
     match ty {
         Ty::I8 | Ty::U8 => value as u8 as u64,
-        Ty::I16 | Ty::U16 | Ty::Usize => value as u16 as u64,
-        Ty::I32 | Ty::U32 => value as u32 as u64,
+        Ty::I16 | Ty::U16 => value as u16 as u64,
+        Ty::I32 | Ty::U32 | Ty::Usize => value as u32 as u64,
         _ => value as u64,
     }
 }
@@ -1301,7 +1301,10 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     let mut module = Module::new(module_name.to_string());
     let mut builder = IrBuilder::new();
     if built.need_alloc || built.need_fail || built.need_heap {
-        module.add_function(extern_fn("rfl_fail", IrType::Void, Vec::new()));
+        module.add_function(extern_fn("rfl_halt", IrType::Void, Vec::new()));
+        if !built.need_io {
+            module.add_function(extern_fn("putchar", IrType::Void, vec![IrType::I16]));
+        }
     }
     if built.need_alloc || built.need_heap {
         module.add_function(extern_fn("malloc", ptr_ty(), vec![IrType::I32]));
@@ -1366,6 +1369,10 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     }
     if built.need_print_num {
         emit_print_u64(&mut builder)?;
+        module.add_function(builder.finish_function().unwrap());
+    }
+    if built.need_alloc || built.need_fail || built.need_heap {
+        emit_rfl_fail(&mut builder)?;
         module.add_function(builder.finish_function().unwrap());
     }
     emit_arc(&mut builder, &mut module, built)?;
@@ -1434,7 +1441,7 @@ fn emit_frame_alloc(builder: &mut IrBuilder) -> Result<(), CompileError> {
     let is_null = ptr_is_null(builder, &fresh)?;
     builder.build_branch_cond(is_null, bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_ALLOC)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     let prev_slot = gep(builder, &fresh, BUMP_PREV)?;
@@ -1557,7 +1564,7 @@ fn emit_switch(builder: &mut IrBuilder, frame: &Value, labels: &[u32]) -> Result
             let bad = builder.new_label();
             builder.build_branch_cond(Value::Temp(is_here), labels[index], bad).ir()?;
             builder.create_block(bad).ir()?;
-            builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+            fail(builder, FAIL_UNREACHABLE)?;
             builder.build_return(Some(null_ptr())).ir()?;
             return Ok(());
         }
@@ -1604,7 +1611,7 @@ fn emit_seg(
             emit_apply(builder, proc, frame, *slot, args, arg_tys, *dest, *next)
         }
         Term::Fail => {
-            builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+            fail(builder, FAIL_MATCH)?;
             builder.build_return(Some(null_ptr())).ir()
         }
         Term::Lit { slot, value, then_seg, else_seg } => {
@@ -1794,7 +1801,7 @@ fn emit_bin(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, op
         let is_zero = builder.build_binary(IrBinaryOp::Eq, right.clone(), zero, IrType::I1).ir()?;
         builder.build_branch_cond(Value::Temp(is_zero), bad, ok).ir()?;
         builder.create_block(bad).ir()?;
-        builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+        fail(builder, FAIL_DIV0)?;
         builder.build_return(Some(null_ptr())).ir()?;
         builder.create_block(ok).ir()?;
     }
@@ -2309,7 +2316,7 @@ fn repr_struct(repr: &[bool], ty: Ty) -> bool {
     matches!(ty, Ty::Struct { id, .. } if repr.get(id as usize).copied().unwrap_or(false))
 }
 
-const STR_DATA: i64 = 2;
+const STR_DATA: i64 = 3;
 
 fn emit_str(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, bytes: &[u8]) -> Result<(), CompileError> {
     let base = proc.slots[dest].offset;
@@ -2318,7 +2325,7 @@ fn emit_str(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, by
         return store_cell(builder, frame, base + 1, Value::Constant(0));
     }
     let len = Value::Constant(bytes.len() as i64);
-    let words = builder.build_binary(IrBinaryOp::Add, len.clone(), Value::Constant(STR_DATA), IrType::I16).ir()?;
+    let words = builder.build_binary(IrBinaryOp::Add, len.clone(), Value::Constant(STR_DATA), COUNT).ir()?;
     let size = as_i32(builder, Value::Temp(words))?;
     let raw = builder.build_call(Value::Global("malloc".to_string()), vec![size], ptr_ty()).ir()?.unwrap();
     let obj = fat_temp(raw, BankTag::Mixed);
@@ -2327,11 +2334,11 @@ fn emit_str(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize, by
     let missing = ptr_is_null(builder, &obj)?;
     builder.build_branch_cond(missing, bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_ALLOC)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     store_object_cell(builder, &obj, VEC_REFS, Value::Constant(1))?;
-    store_object_cell(builder, &obj, VEC_LEN, len)?;
+    store_count(builder, &obj, VEC_LEN, len)?;
     for (index, byte) in bytes.iter().enumerate() {
         store_object_cell(builder, &obj, STR_DATA + index as i64, Value::Constant(i64::from(*byte)))?;
     }
@@ -2356,16 +2363,16 @@ fn emit_string_index(
     builder.create_block(ok_ptr).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     let at = load_slot(builder, proc, frame, index)?;
     let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_BOUNDS)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
-    let data = builder.build_binary(IrBinaryOp::Add, at, Value::Constant(STR_DATA), IrType::I16).ir()?;
+    let data = builder.build_binary(IrBinaryOp::Add, at, Value::Constant(STR_DATA), COUNT).ir()?;
     let ptr = builder.build_pointer_offset(obj, Value::Temp(data), ptr_ty()).ir()?;
     let loaded = builder.build_load(ptr, IrType::I16).ir()?;
     let masked = builder.build_binary(IrBinaryOp::And, Value::Temp(loaded), Value::Constant(0xFF), IrType::I16).ir()?;
@@ -2383,7 +2390,7 @@ fn emit_str_concat(
 ) -> Result<(), CompileError> {
     let left = string_len(builder, proc, frame, lhs)?;
     let right = string_len(builder, proc, frame, rhs)?;
-    let total = Value::Temp(builder.build_binary(IrBinaryOp::Add, left.clone(), right.clone(), IrType::I16).ir()?);
+    let total = Value::Temp(builder.build_binary(IrBinaryOp::Add, left.clone(), right.clone(), COUNT).ir()?);
     let reuse = dest == lhs || dest == rhs;
     let (old_addr, old_bank) = if reuse {
         (
@@ -2414,7 +2421,7 @@ fn emit_str_slice(
     let start = load_slot(builder, proc, frame, start)?;
     let end = load_slot(builder, proc, frame, end)?;
     let end = if inclusive {
-        Value::Temp(builder.build_binary(IrBinaryOp::Add, end, Value::Constant(1), IrType::I16).ir()?)
+        Value::Temp(builder.build_binary(IrBinaryOp::Add, end, Value::Constant(1), COUNT).ir()?)
     } else {
         end
     };
@@ -2425,10 +2432,10 @@ fn emit_str_slice(
     let both = builder.build_binary(IrBinaryOp::And, Value::Temp(start_ok), Value::Temp(end_ok), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(both), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_RANGE)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
-    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, end, start.clone(), IrType::I16).ir()?);
+    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, end, start.clone(), COUNT).ir()?);
     finish_new_string(builder, proc, frame, dest, count.clone(), &[(base, start, count)])
 }
 
@@ -2550,7 +2557,8 @@ fn utf8_piece(builder: &mut IrBuilder, ch: &Value, shift: i64, mask: i64, mark: 
 }
 
 fn alloc_string(builder: &mut IrBuilder, byte_len: Value) -> Result<Value, CompileError> {
-    let words = Value::Temp(builder.build_binary(IrBinaryOp::Add, byte_len.clone(), Value::Constant(STR_DATA), IrType::I16).ir()?);
+    let byte_len = as_i32(builder, byte_len)?;
+    let words = Value::Temp(builder.build_binary(IrBinaryOp::Add, byte_len.clone(), Value::Constant(STR_DATA), COUNT).ir()?);
     let size = as_i32(builder, words)?;
     let raw = builder.build_call(Value::Global("malloc".to_string()), vec![size], ptr_ty()).ir()?.unwrap();
     let obj = fat_temp(raw, BankTag::Mixed);
@@ -2559,11 +2567,11 @@ fn alloc_string(builder: &mut IrBuilder, byte_len: Value) -> Result<Value, Compi
     let missing = ptr_is_null(builder, &obj)?;
     builder.build_branch_cond(missing, bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_ALLOC)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     store_object_cell(builder, &obj, VEC_REFS, Value::Constant(1))?;
-    store_object_cell(builder, &obj, VEC_LEN, byte_len)?;
+    store_count(builder, &obj, VEC_LEN, byte_len)?;
     Ok(obj)
 }
 
@@ -2587,30 +2595,30 @@ fn finish_new_string(
     builder.build_branch(done).ir()?;
     builder.create_block(full).ir()?;
     let obj = alloc_string(builder, total)?;
-    let cursor = builder.build_alloca(IrType::I16, None).ir()?;
-    builder.build_store(Value::Constant(0), cursor.clone(), IrType::I16).ir()?;
+    let cursor = builder.build_alloca(COUNT, None).ir()?;
+    builder.build_store(Value::Constant(0), cursor.clone(), COUNT).ir()?;
     for (slot, start, count) in pieces {
-        let index = builder.build_alloca(IrType::I16, None).ir()?;
-        builder.build_store(Value::Constant(0), index.clone(), IrType::I16).ir()?;
+        let index = builder.build_alloca(COUNT, None).ir()?;
+        builder.build_store(Value::Constant(0), index.clone(), COUNT).ir()?;
         let head = builder.new_label();
         let body = builder.new_label();
         let next = builder.new_label();
         builder.build_branch(head).ir()?;
         builder.create_block(head).ir()?;
-        let at = Value::Temp(builder.build_load(index.clone(), IrType::I16).ir()?);
+        let at = Value::Temp(builder.build_load(index.clone(), COUNT).ir()?);
         let more = builder.build_binary(IrBinaryOp::Ult, at.clone(), count.clone(), IrType::I1).ir()?;
         builder.build_branch_cond(Value::Temp(more), body, next).ir()?;
         builder.create_block(body).ir()?;
-        let src_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), at.clone(), IrType::I16).ir()?);
+        let src_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), at.clone(), COUNT).ir()?);
         let byte = string_byte(builder, proc, frame, *slot, src_at)?;
-        let dst_at = Value::Temp(builder.build_load(cursor.clone(), IrType::I16).ir()?);
-        let placed = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_at.clone(), Value::Constant(STR_DATA), IrType::I16).ir()?);
+        let dst_at = Value::Temp(builder.build_load(cursor.clone(), COUNT).ir()?);
+        let placed = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_at.clone(), Value::Constant(STR_DATA), COUNT).ir()?);
         let ptr = builder.build_pointer_offset(obj.clone(), placed, ptr_ty()).ir()?;
         builder.build_store(byte, ptr, IrType::I16).ir()?;
-        let stepped = Value::Temp(builder.build_binary(IrBinaryOp::Add, at, Value::Constant(1), IrType::I16).ir()?);
-        builder.build_store(stepped.clone(), index, IrType::I16).ir()?;
-        let advanced = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_at, Value::Constant(1), IrType::I16).ir()?);
-        builder.build_store(advanced, cursor.clone(), IrType::I16).ir()?;
+        let stepped = Value::Temp(builder.build_binary(IrBinaryOp::Add, at, Value::Constant(1), COUNT).ir()?);
+        builder.build_store(stepped.clone(), index, COUNT).ir()?;
+        let advanced = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_at, Value::Constant(1), COUNT).ir()?);
+        builder.build_store(advanced, cursor.clone(), COUNT).ir()?;
         builder.build_branch(head).ir()?;
         builder.create_block(next).ir()?;
     }
@@ -2641,14 +2649,14 @@ fn emit_string_cmp(
     store_slot(builder, proc, frame, dest, Value::Constant(i64::from(op == BinOp::Ne)))?;
     builder.build_branch(done).ir()?;
     builder.create_block(scan).ir()?;
-    let index_slot = builder.build_alloca(IrType::I16, None).ir()?;
-    builder.build_store(Value::Constant(0), index_slot.clone(), IrType::I16).ir()?;
+    let index_slot = builder.build_alloca(COUNT, None).ir()?;
+    builder.build_store(Value::Constant(0), index_slot.clone(), COUNT).ir()?;
     let head = builder.new_label();
     let equal = builder.new_label();
     let mismatch = builder.new_label();
     builder.build_branch(head).ir()?;
     builder.create_block(head).ir()?;
-    let index = builder.build_load(index_slot.clone(), IrType::I16).ir()?;
+    let index = builder.build_load(index_slot.clone(), COUNT).ir()?;
     let finished = builder.build_binary(IrBinaryOp::Eq, Value::Temp(index), left, IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(finished), equal, mismatch).ir()?;
     builder.create_block(mismatch).ir()?;
@@ -2658,8 +2666,8 @@ fn emit_string_cmp(
     let next = builder.new_label();
     builder.build_branch_cond(Value::Temp(same), next, differ).ir()?;
     builder.create_block(next).ir()?;
-    let stepped = builder.build_binary(IrBinaryOp::Add, Value::Temp(index), Value::Constant(1), IrType::I16).ir()?;
-    builder.build_store(Value::Temp(stepped), index_slot, IrType::I16).ir()?;
+    let stepped = builder.build_binary(IrBinaryOp::Add, Value::Temp(index), Value::Constant(1), COUNT).ir()?;
+    builder.build_store(Value::Temp(stepped), index_slot, COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(equal).ir()?;
     store_slot(builder, proc, frame, dest, Value::Constant(i64::from(op == BinOp::Eq)))?;
@@ -2674,20 +2682,20 @@ fn string_len(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize) 
     let none = builder.new_label();
     let some = builder.new_label();
     let done = builder.new_label();
-    let out = builder.build_alloca(IrType::I16, None).ir()?;
+    let out = builder.build_alloca(COUNT, None).ir()?;
     let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(is_null), none, some).ir()?;
     builder.create_block(none).ir()?;
-    builder.build_store(Value::Constant(0), out.clone(), IrType::I16).ir()?;
+    builder.build_store(Value::Constant(0), out.clone(), COUNT).ir()?;
     builder.build_branch(done).ir()?;
     builder.create_block(some).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
-    builder.build_store(len, out.clone(), IrType::I16).ir()?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
+    builder.build_store(len, out.clone(), COUNT).ir()?;
     builder.build_branch(done).ir()?;
     builder.create_block(done).ir()?;
-    Ok(Value::Temp(builder.build_load(out, IrType::I16).ir()?))
+    Ok(Value::Temp(builder.build_load(out, COUNT).ir()?))
 }
 
 fn string_byte(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize, index: Value) -> Result<Value, CompileError> {
@@ -2695,28 +2703,28 @@ fn string_byte(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize,
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let at = builder.build_binary(IrBinaryOp::Add, index, Value::Constant(STR_DATA), IrType::I16).ir()?;
+    let at = builder.build_binary(IrBinaryOp::Add, index, Value::Constant(STR_DATA), COUNT).ir()?;
     let ptr = builder.build_pointer_offset(obj, Value::Temp(at), ptr_ty()).ir()?;
     Ok(Value::Temp(builder.build_load(ptr, IrType::I16).ir()?))
 }
 
 fn emit_print_string(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize, newline: bool) -> Result<(), CompileError> {
     let len = string_len(builder, proc, frame, slot)?;
-    let index_slot = builder.build_alloca(IrType::I16, None).ir()?;
-    builder.build_store(Value::Constant(0), index_slot.clone(), IrType::I16).ir()?;
+    let index_slot = builder.build_alloca(COUNT, None).ir()?;
+    builder.build_store(Value::Constant(0), index_slot.clone(), COUNT).ir()?;
     let head = builder.new_label();
     let body = builder.new_label();
     let done = builder.new_label();
     builder.build_branch(head).ir()?;
     builder.create_block(head).ir()?;
-    let index = builder.build_load(index_slot.clone(), IrType::I16).ir()?;
+    let index = builder.build_load(index_slot.clone(), COUNT).ir()?;
     let finished = builder.build_binary(IrBinaryOp::Eq, Value::Temp(index), len, IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(finished), done, body).ir()?;
     builder.create_block(body).ir()?;
     let byte = string_byte(builder, proc, frame, slot, Value::Temp(index))?;
     putchar(builder, byte)?;
-    let stepped = builder.build_binary(IrBinaryOp::Add, Value::Temp(index), Value::Constant(1), IrType::I16).ir()?;
-    builder.build_store(Value::Temp(stepped), index_slot, IrType::I16).ir()?;
+    let stepped = builder.build_binary(IrBinaryOp::Add, Value::Temp(index), Value::Constant(1), COUNT).ir()?;
+    builder.build_store(Value::Temp(stepped), index_slot, COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(done).ir()?;
     if newline {
@@ -2827,7 +2835,7 @@ fn emit_dispatch(
         builder.create_block(miss).ir()?;
         if index + 1 == built.procs.len() {
             if built.need_fail {
-                builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+                fail(builder, FAIL_UNREACHABLE)?;
             }
             builder.build_return(on_miss.clone()).ir()?;
         }
@@ -2867,7 +2875,7 @@ fn emit_env(builder: &mut IrBuilder, proc: &Proc, frame: &Value, captures: &[Low
     let missing = ptr_is_null(builder, &obj)?;
     builder.build_branch_cond(missing, bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_ALLOC)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     store_object_cell(builder, &obj, OBJ_REFS, Value::Constant(1))?;
@@ -2892,9 +2900,14 @@ fn emit_env(builder: &mut IrBuilder, proc: &Proc, frame: &Value, captures: &[Low
 }
 
 const VEC_REFS: i64 = 0;
+/// `usize` values in headers and index arithmetic. Two cells.
+const COUNT: IrType = IrType::I32;
 const VEC_LEN: i64 = 1;
-const VEC_CAP: i64 = 2;
-const VEC_DATA: i64 = 3;
+const VEC_CAP: i64 = 3;
+const VEC_DATA: i64 = 5;
+const SLICE_START: i64 = 2;
+const SLICE_LEN: i64 = 4;
+const SLICE_CELLS: i64 = 6;
 /// Refcount, then tag, then constructor fields.
 const OBJ_REFS: i64 = 0;
 const OBJ_TAG: i64 = 1;
@@ -2988,22 +3001,79 @@ fn emit_vec_store(
     }
 }
 
-fn runtime_fail(builder: &mut IrBuilder) -> Result<(), CompileError> {
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+const FAIL_BOUNDS: i64 = 1;
+const FAIL_RANGE: i64 = 2;
+const FAIL_OVERFLOW: i64 = 3;
+const FAIL_ALLOC: i64 = 4;
+const FAIL_DIV0: i64 = 5;
+const FAIL_CHAR: i64 = 6;
+const FAIL_MATCH: i64 = 7;
+const FAIL_UNREACHABLE: i64 = 8;
+const FAIL_NULL: i64 = 9;
+
+fn fail(builder: &mut IrBuilder, code: i64) -> Result<(), CompileError> {
+    builder.build_call(Value::Global("rfl_fail".to_string()), vec![Value::Constant(code)], IrType::Void).ir()?;
+    Ok(())
+}
+
+fn runtime_fail(builder: &mut IrBuilder, code: i64) -> Result<(), CompileError> {
+    fail(builder, code)?;
     builder.build_return(Some(null_ptr())).ir()
+}
+
+fn emit_rfl_fail(builder: &mut IrBuilder) -> Result<(), CompileError> {
+    builder.create_function("rfl_fail".to_string(), IrType::Void);
+    builder.add_parameter(0, IrType::I16);
+    let entry = builder.new_label();
+    let done = builder.new_label();
+    builder.create_block(entry).ir()?;
+    let code = Value::Temp(0);
+    let messages = [
+        (FAIL_BOUNDS, "error: index out of bounds\n"),
+        (FAIL_RANGE, "error: slice range out of bounds\n"),
+        (FAIL_OVERFLOW, "error: integer overflow\n"),
+        (FAIL_ALLOC, "error: allocation failed\n"),
+        (FAIL_DIV0, "error: division by zero\n"),
+        (FAIL_CHAR, "error: invalid character\n"),
+        (FAIL_MATCH, "error: non-exhaustive match\n"),
+        (FAIL_UNREACHABLE, "error: unreachable state\n"),
+        (FAIL_NULL, "error: null pointer\n"),
+    ];
+    for (id, text) in messages {
+        let print = builder.new_label();
+        let next = builder.new_label();
+        let same = builder.build_binary(IrBinaryOp::Eq, code.clone(), Value::Constant(id), IrType::I1).ir()?;
+        builder.build_branch_cond(Value::Temp(same), print, next).ir()?;
+        builder.create_block(print).ir()?;
+        emit_text(builder, text)?;
+        builder.build_branch(done).ir()?;
+        builder.create_block(next).ir()?;
+    }
+    emit_text(builder, "error: runtime error\n")?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(done).ir()?;
+    builder.build_call(Value::Global("rfl_halt".to_string()), Vec::new(), IrType::Void).ir()?;
+    builder.build_return(None).ir()
+}
+
+fn emit_text(builder: &mut IrBuilder, text: &str) -> Result<(), CompileError> {
+    for byte in text.bytes() {
+        putchar(builder, Value::Constant(i64::from(byte)))?;
+    }
+    Ok(())
 }
 
 fn exclusive_end(builder: &mut IrBuilder, end: Value, inclusive: bool) -> Result<Value, CompileError> {
     if !inclusive {
         return Ok(end);
     }
-    let exclusive = Value::Temp(builder.build_binary(IrBinaryOp::Add, end.clone(), Value::Constant(1), IrType::I16).ir()?);
+    let exclusive = Value::Temp(builder.build_binary(IrBinaryOp::Add, end.clone(), Value::Constant(1), COUNT).ir()?);
     let wrapped = builder.build_binary(IrBinaryOp::Ule, exclusive.clone(), end, IrType::I1).ir()?;
     let bad = builder.new_label();
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(wrapped), bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    runtime_fail(builder)?;
+    runtime_fail(builder, FAIL_OVERFLOW)?;
     builder.create_block(ok).ir()?;
     Ok(exclusive)
 }
@@ -3018,13 +3088,13 @@ fn check_range(builder: &mut IrBuilder, start: Value, exclusive: Value, len: Val
     let end_ok = builder.build_binary(IrBinaryOp::Ule, exclusive, len, IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(end_ok), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    runtime_fail(builder)?;
+    runtime_fail(builder, FAIL_RANGE)?;
     builder.create_block(ok).ir()?;
     Ok(())
 }
 
 fn store_empty_slice(builder: &mut IrBuilder, frame: &Value, offset: i64) -> Result<(), CompileError> {
-    for cell in 0..4 {
+    for cell in 0..SLICE_CELLS {
         store_cell(builder, frame, offset + cell, Value::Constant(0))?;
     }
     Ok(())
@@ -3058,9 +3128,9 @@ fn copy_inline_elem(
     dest: i64,
 ) -> Result<(), CompileError> {
     let scaled = scale_index(builder, index, width)?;
-    let origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(base), scaled, IrType::I16).ir()?);
+    let origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(base), scaled, COUNT).ir()?);
     for cell in 0..width {
-        let off = Value::Temp(builder.build_binary(IrBinaryOp::Add, origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let off = Value::Temp(builder.build_binary(IrBinaryOp::Add, origin.clone(), Value::Constant(cell), COUNT).ir()?);
         let ptr = builder.build_pointer_offset(frame.clone(), off, ptr_ty()).ir()?;
         let word = Value::Temp(builder.build_load(ptr, IrType::I16).ir()?);
         store_cell(builder, frame, dest + cell, word)?;
@@ -3078,10 +3148,10 @@ fn store_inline_elem(
     width: i64,
 ) -> Result<(), CompileError> {
     let scaled = scale_index(builder, index, width)?;
-    let origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(base), scaled, IrType::I16).ir()?);
+    let origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(base), scaled, COUNT).ir()?);
     for cell in 0..width {
         let word = load_cell(builder, frame, proc.slots[value].offset + cell, IrType::I16)?;
-        let off = Value::Temp(builder.build_binary(IrBinaryOp::Add, origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let off = Value::Temp(builder.build_binary(IrBinaryOp::Add, origin.clone(), Value::Constant(cell), COUNT).ir()?);
         let ptr = builder.build_pointer_offset(frame.clone(), off, ptr_ty()).ir()?;
         builder.build_store(word, ptr, IrType::I16).ir()?;
     }
@@ -3105,7 +3175,7 @@ fn emit_array_index(
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    runtime_fail(builder)?;
+    runtime_fail(builder, FAIL_BOUNDS)?;
     builder.create_block(ok).ir()?;
     copy_inline_elem(builder, frame, proc.slots[array].offset, at, width as i64, proc.slots[dest].offset)
 }
@@ -3127,7 +3197,7 @@ fn emit_array_store(
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    runtime_fail(builder)?;
+    runtime_fail(builder, FAIL_BOUNDS)?;
     builder.create_block(ok).ir()?;
     store_inline_elem(builder, proc, frame, value, proc.slots[array].offset, at, width as i64)
 }
@@ -3174,22 +3244,22 @@ fn emit_slice_index(
     elem: Ty,
 ) -> Result<(), CompileError> {
     let base = proc.slots[slice].offset;
-    let len = load_cell(builder, frame, base + 3, IrType::I16)?;
+    let len = load_count_at(builder, frame, base + SLICE_LEN)?;
     let at = load_slot(builder, proc, frame, index)?;
     let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
     let bad = builder.new_label();
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    runtime_fail(builder)?;
+    runtime_fail(builder, FAIL_BOUNDS)?;
     builder.create_block(ok).ir()?;
-    let start = load_cell(builder, frame, base + 2, IrType::I16)?;
-    let elem_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start, at, IrType::I16).ir()?);
+    let start = load_count_at(builder, frame, base + SLICE_START)?;
+    let elem_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start, at, COUNT).ir()?);
     let addr = load_cell(builder, frame, base, IrType::I16)?;
     let bank = load_cell(builder, frame, base + 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
     let scaled = scale_index(builder, elem_at, elem.cells())?;
-    let data = Value::Temp(builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    let data = Value::Temp(builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?);
     copy_object_cells(builder, proc, frame, &obj, data, dest, elem.cells())
 }
 
@@ -3206,7 +3276,7 @@ fn emit_slice_get(
     none_tag: u16,
 ) -> Result<(), CompileError> {
     let base = proc.slots[slice].offset;
-    let len = load_cell(builder, frame, base + 3, IrType::I16)?;
+    let len = load_count_at(builder, frame, base + SLICE_LEN)?;
     let at = load_slot(builder, proc, frame, index)?;
     let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
     let none = builder.new_label();
@@ -3214,13 +3284,13 @@ fn emit_slice_get(
     let done = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, none).ir()?;
     builder.create_block(ok).ir()?;
-    let start = load_cell(builder, frame, base + 2, IrType::I16)?;
-    let elem_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start, at, IrType::I16).ir()?);
+    let start = load_count_at(builder, frame, base + SLICE_START)?;
+    let elem_at = Value::Temp(builder.build_binary(IrBinaryOp::Add, start, at, COUNT).ir()?);
     let addr = load_cell(builder, frame, base, IrType::I16)?;
     let bank = load_cell(builder, frame, base + 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
     let scaled = scale_index(builder, elem_at, elem.cells())?;
-    let data = Value::Temp(builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    let data = Value::Temp(builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?);
     copy_object_cells(builder, proc, frame, &obj, data, value, elem.cells())?;
     emit_make(builder, proc, frame, dest, some_tag, &[(value, elem.cells())])?;
     builder.build_branch(done).ir()?;
@@ -3248,7 +3318,7 @@ fn emit_slice_new(
     match proc.slots[base].ty {
         Ty::Array { len, width, .. } => {
             check_range(builder, start.clone(), exclusive.clone(), Value::Constant(len as i64))?;
-            let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), IrType::I16).ir()?);
+            let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), COUNT).ir()?);
             slice_from_array(builder, proc, frame, dest, base, start, count, width as i64)
         }
         Ty::Slice(_) => slice_from_slice(builder, proc, frame, dest, base, start, exclusive),
@@ -3279,8 +3349,8 @@ fn slice_from_array(
     copy_array_span(builder, frame, proc.slots[array].offset, start, &obj, count.clone(), width)?;
     let header = gep(builder, frame, proc.slots[dest].offset)?;
     store_vec_ptr(builder, &header, &obj)?;
-    store_cell(builder, frame, proc.slots[dest].offset + 2, Value::Constant(0))?;
-    store_cell(builder, frame, proc.slots[dest].offset + 3, count)?;
+    store_count_at(builder, frame, proc.slots[dest].offset + SLICE_START, Value::Constant(0))?;
+    store_count_at(builder, frame, proc.slots[dest].offset + SLICE_LEN, count)?;
     builder.build_branch(done).ir()?;
     builder.create_block(done).ir()?;
     Ok(())
@@ -3296,11 +3366,11 @@ fn slice_from_slice(
     exclusive: Value,
 ) -> Result<(), CompileError> {
     let base = proc.slots[src].offset;
-    let old_len = load_cell(builder, frame, base + 3, IrType::I16)?;
+    let old_len = load_count_at(builder, frame, base + SLICE_LEN)?;
     check_range(builder, start.clone(), exclusive.clone(), old_len)?;
-    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), IrType::I16).ir()?);
-    let old_start = load_cell(builder, frame, base + 2, IrType::I16)?;
-    let new_start = Value::Temp(builder.build_binary(IrBinaryOp::Add, old_start, start, IrType::I16).ir()?);
+    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), COUNT).ir()?);
+    let old_start = load_count_at(builder, frame, base + SLICE_START)?;
+    let new_start = Value::Temp(builder.build_binary(IrBinaryOp::Add, old_start, start, COUNT).ir()?);
     let empty = builder.new_label();
     let keep = builder.new_label();
     let done = builder.new_label();
@@ -3314,8 +3384,8 @@ fn slice_from_slice(
         let word = load_cell(builder, frame, base + cell, IrType::I16)?;
         store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
     }
-    store_cell(builder, frame, proc.slots[dest].offset + 2, new_start)?;
-    store_cell(builder, frame, proc.slots[dest].offset + 3, count)?;
+    store_count_at(builder, frame, proc.slots[dest].offset + SLICE_START, new_start)?;
+    store_count_at(builder, frame, proc.slots[dest].offset + SLICE_LEN, count)?;
     retain_vec(builder, frame, proc.slots[dest].offset)?;
     builder.build_branch(done).ir()?;
     builder.create_block(done).ir()?;
@@ -3334,25 +3404,25 @@ fn slice_from_vec(
 ) -> Result<(), CompileError> {
     let header = vec_header(builder, proc, frame, vec)?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
-    let len_slot = builder.build_alloca(IrType::I16, None).ir()?;
+    let len_slot = builder.build_alloca(COUNT, None).ir()?;
     let missing = builder.new_label();
     let present = builder.new_label();
     let join = builder.new_label();
     let is_null = builder.build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(is_null), missing, present).ir()?;
     builder.create_block(missing).ir()?;
-    builder.build_store(Value::Constant(0), len_slot.clone(), IrType::I16).ir()?;
+    builder.build_store(Value::Constant(0), len_slot.clone(), COUNT).ir()?;
     builder.build_branch(join).ir()?;
     builder.create_block(present).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
-    builder.build_store(len, len_slot.clone(), IrType::I16).ir()?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
+    builder.build_store(len, len_slot.clone(), COUNT).ir()?;
     builder.build_branch(join).ir()?;
     builder.create_block(join).ir()?;
-    let len = Value::Temp(builder.build_load(len_slot, IrType::I16).ir()?);
+    let len = Value::Temp(builder.build_load(len_slot, COUNT).ir()?);
     check_range(builder, start.clone(), exclusive.clone(), len)?;
-    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), IrType::I16).ir()?);
+    let count = Value::Temp(builder.build_binary(IrBinaryOp::Sub, exclusive, start.clone(), COUNT).ir()?);
     let empty = builder.new_label();
     let keep = builder.new_label();
     let done = builder.new_label();
@@ -3367,8 +3437,8 @@ fn slice_from_vec(
         let word = load_cell(builder, &header, cell, IrType::I16)?;
         store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
     }
-    store_cell(builder, frame, proc.slots[dest].offset + 2, start)?;
-    store_cell(builder, frame, proc.slots[dest].offset + 3, count)?;
+    store_count_at(builder, frame, proc.slots[dest].offset + SLICE_START, start)?;
+    store_count_at(builder, frame, proc.slots[dest].offset + SLICE_LEN, count)?;
     retain_vec(builder, frame, proc.slots[dest].offset)?;
     builder.build_branch(done).ir()?;
     builder.create_block(done).ir()?;
@@ -3387,29 +3457,29 @@ fn copy_array_span(
     let head = builder.new_label();
     let body = builder.new_label();
     let done = builder.new_label();
-    let i_slot = builder.build_alloca(IrType::I16, None).ir()?;
-    builder.build_store(Value::Constant(0), i_slot.clone(), IrType::I16).ir()?;
+    let i_slot = builder.build_alloca(COUNT, None).ir()?;
+    builder.build_store(Value::Constant(0), i_slot.clone(), COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(head).ir()?;
-    let i = Value::Temp(builder.build_load(i_slot.clone(), IrType::I16).ir()?);
+    let i = Value::Temp(builder.build_load(i_slot.clone(), COUNT).ir()?);
     let more = builder.build_binary(IrBinaryOp::Ult, i.clone(), count.clone(), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(more), body, done).ir()?;
     builder.create_block(body).ir()?;
-    let from = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), i.clone(), IrType::I16).ir()?);
+    let from = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), i.clone(), COUNT).ir()?);
     let src_scaled = scale_index(builder, from, width)?;
-    let src_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(array_offset), src_scaled, IrType::I16).ir()?);
+    let src_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, Value::Constant(array_offset), src_scaled, COUNT).ir()?);
     let dst_scaled = scale_index(builder, i.clone(), width)?;
-    let dst_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    let dst_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_scaled, Value::Constant(VEC_DATA), COUNT).ir()?);
     for cell in 0..width {
-        let src_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let src_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_origin.clone(), Value::Constant(cell), COUNT).ir()?);
         let src_ptr = builder.build_pointer_offset(frame.clone(), src_off, ptr_ty()).ir()?;
         let word = Value::Temp(builder.build_load(src_ptr, IrType::I16).ir()?);
-        let dst_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let dst_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_origin.clone(), Value::Constant(cell), COUNT).ir()?);
         let dst_ptr = builder.build_pointer_offset(obj.clone(), dst_off, ptr_ty()).ir()?;
         builder.build_store(word, dst_ptr, IrType::I16).ir()?;
     }
-    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), IrType::I16).ir()?;
-    builder.build_store(Value::Temp(next), i_slot, IrType::I16).ir()?;
+    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), COUNT).ir()?;
+    builder.build_store(Value::Temp(next), i_slot, COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(done).ir()?;
     Ok(())
@@ -3437,7 +3507,7 @@ fn emit_to_vec(
         }
         Ty::Slice(_) => {
             let base = proc.slots[src].offset;
-            let len = load_cell(builder, frame, base + 3, IrType::I16)?;
+            let len = load_count_at(builder, frame, base + SLICE_LEN)?;
             let empty = builder.new_label();
             let copy = builder.new_label();
             let done = builder.new_label();
@@ -3449,7 +3519,7 @@ fn emit_to_vec(
             builder.build_branch(done).ir()?;
             builder.create_block(copy).ir()?;
             let obj = alloc_vec(builder, len.clone(), len.clone(), elem.cells())?;
-            let start = load_cell(builder, frame, base + 2, IrType::I16)?;
+            let start = load_count_at(builder, frame, base + SLICE_START)?;
             let addr = load_cell(builder, frame, base, IrType::I16)?;
             let bank = load_cell(builder, frame, base + 1, IrType::I16)?;
             let src_obj = fat_from_parts(builder, addr, bank)?;
@@ -3474,29 +3544,29 @@ fn copy_object_span(
     let head = builder.new_label();
     let body = builder.new_label();
     let done = builder.new_label();
-    let i_slot = builder.build_alloca(IrType::I16, None).ir()?;
-    builder.build_store(Value::Constant(0), i_slot.clone(), IrType::I16).ir()?;
+    let i_slot = builder.build_alloca(COUNT, None).ir()?;
+    builder.build_store(Value::Constant(0), i_slot.clone(), COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(head).ir()?;
-    let i = Value::Temp(builder.build_load(i_slot.clone(), IrType::I16).ir()?);
+    let i = Value::Temp(builder.build_load(i_slot.clone(), COUNT).ir()?);
     let more = builder.build_binary(IrBinaryOp::Ult, i.clone(), count.clone(), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(more), body, done).ir()?;
     builder.create_block(body).ir()?;
-    let from = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), i.clone(), IrType::I16).ir()?);
+    let from = Value::Temp(builder.build_binary(IrBinaryOp::Add, start.clone(), i.clone(), COUNT).ir()?);
     let src_scaled = scale_index(builder, from, width)?;
-    let src_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    let src_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_scaled, Value::Constant(VEC_DATA), COUNT).ir()?);
     let dst_scaled = scale_index(builder, i.clone(), width)?;
-    let dst_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?);
+    let dst_origin = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_scaled, Value::Constant(VEC_DATA), COUNT).ir()?);
     for cell in 0..width {
-        let src_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let src_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, src_origin.clone(), Value::Constant(cell), COUNT).ir()?);
         let src_ptr = builder.build_pointer_offset(src.clone(), src_off, ptr_ty()).ir()?;
         let word = Value::Temp(builder.build_load(src_ptr, IrType::I16).ir()?);
-        let dst_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_origin.clone(), Value::Constant(cell), IrType::I16).ir()?);
+        let dst_off = Value::Temp(builder.build_binary(IrBinaryOp::Add, dst_origin.clone(), Value::Constant(cell), COUNT).ir()?);
         let dst_ptr = builder.build_pointer_offset(dest.clone(), dst_off, ptr_ty()).ir()?;
         builder.build_store(word, dst_ptr, IrType::I16).ir()?;
     }
-    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), IrType::I16).ir()?;
-    builder.build_store(Value::Temp(next), i_slot, IrType::I16).ir()?;
+    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), COUNT).ir()?;
+    builder.build_store(Value::Temp(next), i_slot, COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(done).ir()?;
     Ok(())
@@ -3506,7 +3576,7 @@ fn emit_vec_len(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize
     match proc.slots[vec].ty {
         Ty::Array { len, .. } => return store_slot(builder, proc, frame, dest, Value::Constant(len as i64)),
         Ty::Slice(_) => {
-            let len = load_cell(builder, frame, proc.slots[vec].offset + 3, IrType::I16)?;
+            let len = load_count_at(builder, frame, proc.slots[vec].offset + SLICE_LEN)?;
             return store_slot(builder, proc, frame, dest, len);
         }
         _ => {}
@@ -3524,7 +3594,7 @@ fn emit_vec_len(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usize
     builder.create_block(full).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     store_slot(builder, proc, frame, dest, len)?;
     builder.build_branch(done).ir()?;
     builder.create_block(done).ir()?;
@@ -3581,17 +3651,17 @@ fn emit_vec_index(
     builder.create_block(ok_ptr).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     let at = load_slot(builder, proc, frame, index)?;
     let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_BOUNDS)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     let scaled = scale_index(builder, at, elem.cells())?;
-    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?;
     copy_object_cells(builder, proc, frame, &obj, Value::Temp(data), dest, elem.cells())
 }
 
@@ -3601,7 +3671,7 @@ fn emit_vec_empty(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usi
             return store_slot(builder, proc, frame, dest, Value::Constant(i64::from(len == 0)));
         }
         Ty::Slice(_) => {
-            let len = load_cell(builder, frame, proc.slots[vec].offset + 3, IrType::I16)?;
+            let len = load_count_at(builder, frame, proc.slots[vec].offset + SLICE_LEN)?;
             let empty = builder.build_binary(IrBinaryOp::Eq, len, Value::Constant(0), IrType::I1).ir()?;
             return store_slot(builder, proc, frame, dest, Value::Temp(empty));
         }
@@ -3618,7 +3688,7 @@ fn emit_vec_empty(builder: &mut IrBuilder, proc: &Proc, frame: &Value, dest: usi
     builder.create_block(check).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     let zero = builder.build_binary(IrBinaryOp::Eq, len, Value::Constant(0), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(zero), yes, no).ir()?;
     builder.create_block(yes).ir()?;
@@ -3673,17 +3743,17 @@ fn emit_vec_index_store(
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     let at = load_slot(builder, proc, frame, index)?;
     let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, bad).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_BOUNDS)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     let scaled = scale_index(builder, at, elem.cells())?;
-    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?;
     store_object_cells(builder, proc, frame, value, &obj, Value::Temp(data), elem.cells())
 }
 
@@ -3722,14 +3792,14 @@ fn emit_vec_get(
     builder.create_block(have).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     let at = load_slot(builder, proc, frame, index)?;
     let in_range = builder.build_binary(IrBinaryOp::Ult, at.clone(), len, IrType::I1).ir()?;
     let ok = builder.new_label();
     builder.build_branch_cond(Value::Temp(in_range), ok, none).ir()?;
     builder.create_block(ok).ir()?;
     let scaled = scale_index(builder, at, elem.cells())?;
-    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?;
     copy_object_cells(builder, proc, frame, &obj, Value::Temp(data), value, elem.cells())?;
     emit_make(builder, proc, frame, dest, some_tag, &[(value, elem.cells())])?;
     builder.build_branch(done).ir()?;
@@ -3761,7 +3831,7 @@ fn emit_vec_pop(
     builder.create_block(have).ir()?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     let empty = builder.build_binary(IrBinaryOp::Eq, len, Value::Constant(0), IrType::I1).ir()?;
     let live = builder.new_label();
     builder.build_branch_cond(Value::Temp(empty), none, live).ir()?;
@@ -3778,11 +3848,11 @@ fn emit_vec_pop(
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
-    let next = builder.build_binary(IrBinaryOp::Sub, len, Value::Constant(1), IrType::I16).ir()?;
-    store_object_cell(builder, &obj, VEC_LEN, Value::Temp(next))?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
+    let next = builder.build_binary(IrBinaryOp::Sub, len, Value::Constant(1), COUNT).ir()?;
+    store_count(builder, &obj, VEC_LEN, Value::Temp(next))?;
     let scaled = scale_index(builder, Value::Temp(next), elem.cells())?;
-    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?;
     copy_object_cells(builder, proc, frame, &obj, Value::Temp(data), value, elem.cells())?;
     emit_make(builder, proc, frame, dest, some_tag, &[(value, elem.cells())])?;
     builder.build_branch(done).ir()?;
@@ -3828,46 +3898,46 @@ fn emit_vec_push(
     builder.build_branch(append).ir()?;
 
     builder.create_block(owned).ir()?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
-    let cap = load_cell(builder, &obj, VEC_CAP, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
+    let cap = load_count(builder, &obj, VEC_CAP)?;
     let full = builder.build_binary(IrBinaryOp::Uge, len, cap.clone(), IrType::I1).ir()?;
     let grow = builder.new_label();
     builder.build_branch_cond(Value::Temp(full), grow, append).ir()?;
     builder.create_block(grow).ir()?;
-    let new_cap = builder.build_binary(IrBinaryOp::Add, cap, Value::Constant(4), IrType::I16).ir()?;
-    grow_vec(builder, &header, &obj, Value::Temp(new_cap), elem.cells())?;
+    let new_cap = next_capacity(builder, cap)?;
+    grow_vec(builder, &header, &obj, new_cap, elem.cells())?;
     builder.build_branch(append).ir()?;
 
     builder.create_block(append).ir()?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
     let obj = fat_from_parts(builder, addr, bank)?;
-    let len = load_cell(builder, &obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, &obj, VEC_LEN)?;
     let scaled = scale_index(builder, len.clone(), elem.cells())?;
-    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?;
     store_object_cells(builder, proc, frame, value, &obj, Value::Temp(data), elem.cells())?;
-    let next = builder.build_binary(IrBinaryOp::Add, len, Value::Constant(1), IrType::I16).ir()?;
-    store_object_cell(builder, &obj, VEC_LEN, Value::Temp(next))
+    let next = builder.build_binary(IrBinaryOp::Add, len, Value::Constant(1), COUNT).ir()?;
+    store_count(builder, &obj, VEC_LEN, Value::Temp(next))
 }
 
 fn detach_vec(builder: &mut IrBuilder, header: &Value, obj: &Value, cells: i64) -> Result<(), CompileError> {
-    let len = load_cell(builder, obj, VEC_LEN, IrType::I16)?;
-    let cap = load_cell(builder, obj, VEC_CAP, IrType::I16)?;
+    let len = load_count(builder, obj, VEC_LEN)?;
+    let cap = load_count(builder, obj, VEC_CAP)?;
     let room = builder.build_binary(IrBinaryOp::Ugt, cap.clone(), len.clone(), IrType::I1).ir()?;
     let use_cap = builder.new_label();
     let bump = builder.new_label();
     let join = builder.new_label();
-    let saved = builder.build_alloca(IrType::I16, None).ir()?;
+    let saved = builder.build_alloca(COUNT, None).ir()?;
     builder.build_branch_cond(Value::Temp(room), use_cap, bump).ir()?;
     builder.create_block(use_cap).ir()?;
-    builder.build_store(cap, saved.clone(), IrType::I16).ir()?;
+    builder.build_store(cap, saved.clone(), COUNT).ir()?;
     builder.build_branch(join).ir()?;
     builder.create_block(bump).ir()?;
-    let bumped = builder.build_binary(IrBinaryOp::Add, len.clone(), Value::Constant(4), IrType::I16).ir()?;
-    builder.build_store(Value::Temp(bumped), saved.clone(), IrType::I16).ir()?;
+    let bumped = next_capacity(builder, len.clone())?;
+    builder.build_store(bumped, saved.clone(), COUNT).ir()?;
     builder.build_branch(join).ir()?;
     builder.create_block(join).ir()?;
-    let new_cap = Value::Temp(builder.build_load(saved, IrType::I16).ir()?);
+    let new_cap = Value::Temp(builder.build_load(saved, COUNT).ir()?);
     let new_obj = alloc_vec(builder, len.clone(), new_cap, cells)?;
     copy_elements(builder, obj, &new_obj, len, cells)?;
     let refs = load_cell(builder, obj, VEC_REFS, IrType::I16)?;
@@ -3877,7 +3947,7 @@ fn detach_vec(builder: &mut IrBuilder, header: &Value, obj: &Value, cells: i64) 
 }
 
 fn grow_vec(builder: &mut IrBuilder, header: &Value, obj: &Value, new_cap: Value, cells: i64) -> Result<(), CompileError> {
-    let len = load_cell(builder, obj, VEC_LEN, IrType::I16)?;
+    let len = load_count(builder, obj, VEC_LEN)?;
     let new_obj = alloc_vec(builder, len.clone(), new_cap, cells)?;
     copy_elements(builder, obj, &new_obj, len, cells)?;
     builder.build_call(Value::Global("free".to_string()), vec![obj.clone()], IrType::Void).ir()?;
@@ -3886,7 +3956,7 @@ fn grow_vec(builder: &mut IrBuilder, header: &Value, obj: &Value, new_cap: Value
 
 fn alloc_vec(builder: &mut IrBuilder, len: Value, cap: Value, cells: i64) -> Result<Value, CompileError> {
     let scaled = scale_index(builder, cap.clone(), cells)?;
-    let words = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let words = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?;
     let size = as_i32(builder, Value::Temp(words))?;
     let raw = builder.build_call(Value::Global("malloc".to_string()), vec![size], ptr_ty()).ir()?.unwrap();
     let obj = fat_temp(raw, BankTag::Mixed);
@@ -3895,12 +3965,12 @@ fn alloc_vec(builder: &mut IrBuilder, len: Value, cap: Value, cells: i64) -> Res
     let missing = ptr_is_null(builder, &obj)?;
     builder.build_branch_cond(missing, bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_ALLOC)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     store_object_cell(builder, &obj, VEC_REFS, Value::Constant(1))?;
-    store_object_cell(builder, &obj, VEC_LEN, len)?;
-    store_object_cell(builder, &obj, VEC_CAP, cap)?;
+    store_count(builder, &obj, VEC_LEN, len)?;
+    store_count(builder, &obj, VEC_CAP, cap)?;
     Ok(obj)
 }
 
@@ -3915,7 +3985,7 @@ fn scale_index(builder: &mut IrBuilder, index: Value, cells: i64) -> Result<Valu
     if cells == 1 {
         return Ok(index);
     }
-    let scaled = builder.build_binary(IrBinaryOp::Mul, index, Value::Constant(cells), IrType::I16).ir()?;
+    let scaled = builder.build_binary(IrBinaryOp::Mul, index, Value::Constant(cells), COUNT).ir()?;
     Ok(Value::Temp(scaled))
 }
 
@@ -3923,25 +3993,25 @@ fn copy_elements(builder: &mut IrBuilder, src: &Value, dest: &Value, len: Value,
     let head = builder.new_label();
     let body = builder.new_label();
     let done = builder.new_label();
-    let i_slot = builder.build_alloca(IrType::I16, None).ir()?;
-    builder.build_store(Value::Constant(0), i_slot.clone(), IrType::I16).ir()?;
+    let i_slot = builder.build_alloca(COUNT, None).ir()?;
+    builder.build_store(Value::Constant(0), i_slot.clone(), COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(head).ir()?;
-    let i = Value::Temp(builder.build_load(i_slot.clone(), IrType::I16).ir()?);
+    let i = Value::Temp(builder.build_load(i_slot.clone(), COUNT).ir()?);
     let more = builder.build_binary(IrBinaryOp::Ult, i.clone(), len.clone(), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(more), body, done).ir()?;
     builder.create_block(body).ir()?;
     let scaled = scale_index(builder, i.clone(), cells)?;
-    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), IrType::I16).ir()?;
+    let data = builder.build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT).ir()?;
     for cell in 0..cells {
-        let at = builder.build_binary(IrBinaryOp::Add, Value::Temp(data), Value::Constant(cell), IrType::I16).ir()?;
+        let at = builder.build_binary(IrBinaryOp::Add, Value::Temp(data), Value::Constant(cell), COUNT).ir()?;
         let from = builder.build_pointer_offset(src.clone(), Value::Temp(at), ptr_ty()).ir()?;
         let word = Value::Temp(builder.build_load(from, IrType::I16).ir()?);
         let into = builder.build_pointer_offset(dest.clone(), Value::Temp(at), ptr_ty()).ir()?;
         builder.build_store(word, into, IrType::I16).ir()?;
     }
-    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), IrType::I16).ir()?;
-    builder.build_store(Value::Temp(next), i_slot, IrType::I16).ir()?;
+    let next = builder.build_binary(IrBinaryOp::Add, i, Value::Constant(1), COUNT).ir()?;
+    builder.build_store(Value::Temp(next), i_slot, COUNT).ir()?;
     builder.build_branch(head).ir()?;
     builder.create_block(done).ir()?;
     Ok(())
@@ -3958,7 +4028,7 @@ fn store_object_cells(
 ) -> Result<(), CompileError> {
     for cell in 0..cells {
         let value = load_cell(builder, frame, proc.slots[src].offset + cell, IrType::I16)?;
-        let at = builder.build_binary(IrBinaryOp::Add, data.clone(), Value::Constant(cell), IrType::I16).ir()?;
+        let at = builder.build_binary(IrBinaryOp::Add, data.clone(), Value::Constant(cell), COUNT).ir()?;
         let into = builder.build_pointer_offset(obj.clone(), Value::Temp(at), ptr_ty()).ir()?;
         builder.build_store(value, into, IrType::I16).ir()?;
     }
@@ -3975,7 +4045,7 @@ fn copy_object_cells(
     cells: i64,
 ) -> Result<(), CompileError> {
     for cell in 0..cells {
-        let at = builder.build_binary(IrBinaryOp::Add, data.clone(), Value::Constant(cell), IrType::I16).ir()?;
+        let at = builder.build_binary(IrBinaryOp::Add, data.clone(), Value::Constant(cell), COUNT).ir()?;
         let from = builder.build_pointer_offset(obj.clone(), Value::Temp(at), ptr_ty()).ir()?;
         let word = Value::Temp(builder.build_load(from, IrType::I16).ir()?);
         store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
@@ -4014,7 +4084,7 @@ fn emit_make(
     let missing = ptr_is_null(builder, &obj)?;
     builder.build_branch_cond(missing, bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_ALLOC)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     store_object_cell(builder, &obj, OBJ_REFS, Value::Constant(1))?;
@@ -4075,6 +4145,60 @@ fn emit_read(
 fn store_object_cell(builder: &mut IrBuilder, obj: &Value, offset: i64, value: Value) -> Result<(), CompileError> {
     let ptr = gep(builder, obj, offset)?;
     builder.build_store(value, ptr, IrType::I16).ir()
+}
+
+fn load_count(builder: &mut IrBuilder, obj: &Value, offset: i64) -> Result<Value, CompileError> {
+    let ptr = gep(builder, obj, offset)?;
+    Ok(Value::Temp(builder.build_load(ptr, COUNT).ir()?))
+}
+
+fn store_count(builder: &mut IrBuilder, obj: &Value, offset: i64, value: Value) -> Result<(), CompileError> {
+    let ptr = gep(builder, obj, offset)?;
+    builder.build_store(value, ptr, COUNT).ir()
+}
+
+fn load_count_at(builder: &mut IrBuilder, frame: &Value, offset: i64) -> Result<Value, CompileError> {
+    load_cell(builder, frame, offset, COUNT)
+}
+
+fn store_count_at(builder: &mut IrBuilder, frame: &Value, offset: i64, value: Value) -> Result<(), CompileError> {
+    let ptr = gep(builder, frame, offset)?;
+    builder.build_store(value, ptr, COUNT).ir()
+}
+
+/// Double `cap`, saturating at the top of `u32`. A counter that cannot grow fails.
+fn next_capacity(builder: &mut IrBuilder, cap: Value) -> Result<Value, CompileError> {
+    let slot = builder.build_alloca(COUNT, None).ir()?;
+    let zero = builder.new_label();
+    let scale = builder.new_label();
+    let pick_max = builder.new_label();
+    let pick_double = builder.new_label();
+    let check = builder.new_label();
+    let bad = builder.new_label();
+    let done = builder.new_label();
+    let is_zero = builder.build_binary(IrBinaryOp::Eq, cap.clone(), Value::Constant(0), IrType::I1).ir()?;
+    builder.build_branch_cond(Value::Temp(is_zero), zero, scale).ir()?;
+    builder.create_block(zero).ir()?;
+    builder.build_store(Value::Constant(4), slot.clone(), COUNT).ir()?;
+    builder.build_branch(done).ir()?;
+    builder.create_block(scale).ir()?;
+    let doubled = Value::Temp(builder.build_binary(IrBinaryOp::Add, cap.clone(), cap.clone(), COUNT).ir()?);
+    let overflow = Value::Temp(builder.build_binary(IrBinaryOp::Ult, doubled.clone(), cap.clone(), IrType::I1).ir()?);
+    builder.build_branch_cond(overflow, pick_max, pick_double).ir()?;
+    builder.create_block(pick_max).ir()?;
+    builder.build_store(Value::Constant(0xffff_ffff), slot.clone(), COUNT).ir()?;
+    builder.build_branch(check).ir()?;
+    builder.create_block(pick_double).ir()?;
+    builder.build_store(doubled, slot.clone(), COUNT).ir()?;
+    builder.build_branch(check).ir()?;
+    builder.create_block(check).ir()?;
+    let candidate = Value::Temp(builder.build_load(slot.clone(), COUNT).ir()?);
+    let grew = Value::Temp(builder.build_binary(IrBinaryOp::Ugt, candidate, cap, IrType::I1).ir()?);
+    builder.build_branch_cond(grew, done, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    runtime_fail(builder, FAIL_OVERFLOW)?;
+    builder.create_block(done).ir()?;
+    Ok(Value::Temp(builder.build_load(slot, COUNT).ir()?))
 }
 
 fn fat_from_parts(builder: &mut IrBuilder, addr: Value, bank: Value) -> Result<Value, CompileError> {
@@ -4196,7 +4320,7 @@ fn cast_char(builder: &mut IrBuilder, value: Value, from: Ty, to: Ty) -> Result<
     let invalid = builder.build_binary(IrBinaryOp::Or, Value::Temp(above), Value::Temp(surrogate), IrType::I1).ir()?;
     builder.build_branch_cond(Value::Temp(invalid), bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_CHAR)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     Ok(bits)
@@ -4471,8 +4595,8 @@ fn wide_zero(builder: &mut IrBuilder, ty: IrType) -> Result<Value, CompileError>
 
 fn arith_ty(ty: Ty) -> IrType {
     match ty {
-        Ty::I8 | Ty::U8 | Ty::I16 | Ty::U16 | Ty::Usize => IrType::I16,
-        Ty::I32 | Ty::U32 | Ty::F32 | Ty::Char => IrType::I32,
+        Ty::I8 | Ty::U8 | Ty::I16 | Ty::U16 => IrType::I16,
+        Ty::I32 | Ty::U32 | Ty::Usize | Ty::F32 | Ty::Char => IrType::I32,
         Ty::I64 | Ty::U64 | Ty::F64 => IrType::I64,
         Ty::Bool | Ty::Unit | Ty::String | Ty::Adt(_) | Ty::Func(_) | Ty::Vec(_) | Ty::Ref(_) | Ty::Ptr(_) | Ty::CFn(_) | Ty::Array { .. } | Ty::Slice(_) | Ty::Struct { .. } | Ty::Tuple { .. } => IrType::I16,
     }
@@ -4504,8 +4628,8 @@ fn ir_op(op: BinOp, ty: Ty) -> IrBinaryOp {
 fn fold_bitwise(ty: Ty, op: BinOp, left: i64, right: i64) -> i64 {
     let width = match ty {
         Ty::I8 | Ty::U8 => 8,
-        Ty::I16 | Ty::U16 | Ty::Usize => 16,
-        Ty::I32 | Ty::U32 => 32,
+        Ty::I16 | Ty::U16 => 16,
+        Ty::I32 | Ty::U32 | Ty::Usize => 32,
         _ => 64,
     };
     let mask = if width == 64 { u64::MAX } else { (1u64 << width) - 1 };
@@ -4535,8 +4659,8 @@ fn fold_bitwise(ty: Ty, op: BinOp, left: i64, right: i64) -> i64 {
 fn ir_ty(ty: Ty) -> IrType {
     match ty {
         Ty::I8 | Ty::U8 => IrType::I8,
-        Ty::I16 | Ty::U16 | Ty::Usize => IrType::I16,
-        Ty::I32 | Ty::U32 | Ty::F32 | Ty::Char => IrType::I32,
+        Ty::I16 | Ty::U16 => IrType::I16,
+        Ty::I32 | Ty::U32 | Ty::Usize | Ty::F32 | Ty::Char => IrType::I32,
         Ty::I64 | Ty::U64 | Ty::F64 => IrType::I64,
         Ty::Bool => IrType::I1,
         Ty::Unit => IrType::Void,
@@ -4547,8 +4671,8 @@ fn ir_ty(ty: Ty) -> IrType {
 fn width(ty: Ty) -> u32 {
     match ty {
         Ty::I8 | Ty::U8 => 8,
-        Ty::I16 | Ty::U16 | Ty::Usize | Ty::Bool => 16,
-        Ty::I32 | Ty::U32 | Ty::F32 | Ty::Char => 32,
+        Ty::I16 | Ty::U16 | Ty::Bool => 16,
+        Ty::I32 | Ty::U32 | Ty::Usize | Ty::F32 | Ty::Char => 32,
         Ty::I64 | Ty::U64 | Ty::F64 => 64,
         Ty::Unit | Ty::String | Ty::Adt(_) | Ty::Func(_) | Ty::Vec(_) | Ty::Ref(_) | Ty::Ptr(_) | Ty::CFn(_) | Ty::Array { .. } | Ty::Slice(_) | Ty::Struct { .. } | Ty::Tuple { .. } => 0,
     }
@@ -4685,7 +4809,7 @@ fn pointer_at(
         let is_null = builder.build_binary(IrBinaryOp::Eq, addr, Value::Constant(0), IrType::I1).ir()?;
         builder.build_branch_cond(Value::Temp(is_null), bad, ok).ir()?;
         builder.create_block(bad).ir()?;
-        builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+        fail(builder, FAIL_NULL)?;
         builder.build_return(Some(null_ptr())).ir()?;
         builder.create_block(ok).ir()?;
     }
@@ -4702,7 +4826,7 @@ fn emit_box_new(builder: &mut IrBuilder, proc: &Proc, frame: &Value, slot: usize
     let missing = ptr_is_null(builder, &obj)?;
     builder.build_branch_cond(missing, bad, ok).ir()?;
     builder.create_block(bad).ir()?;
-    builder.build_call(Value::Global("rfl_fail".to_string()), Vec::new(), IrType::Void).ir()?;
+    fail(builder, FAIL_ALLOC)?;
     builder.build_return(Some(null_ptr())).ir()?;
     builder.create_block(ok).ir()?;
     store_object_cell(builder, &obj, 0, Value::Constant(1))?;

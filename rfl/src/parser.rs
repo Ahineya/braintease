@@ -642,7 +642,7 @@ impl<'a> Parser<'a> {
                 continue;
             }
             let expr = self.parse_expr()?;
-            if self.is(&TokenKind::Eq) {
+            if self.is_assign_op() {
                 stmts.push(self.finish_place_assign(expr)?);
                 continue;
             }
@@ -688,13 +688,16 @@ impl<'a> Parser<'a> {
     }
 
     fn finish_place_assign(&mut self, expr: Expr) -> Result<Stmt, CompileError> {
-        if let ExprKind::Deref(inner) = expr.kind {
-            self.expect(&TokenKind::Eq, "'='")?;
-            let value = self.parse_expr()?;
+        if let ExprKind::Deref(_) = &expr.kind {
+            let ExprKind::Deref(inner) = expr.kind.clone() else { unreachable!() };
+            let op = self.compound_op()?;
+            let rhs = self.parse_expr()?;
             self.expect(&TokenKind::Semi, "';'")?;
+            let value = self.compound_value(op, Expr { span: expr.span, kind: ExprKind::Deref(inner.clone()) }, rhs);
             return Ok(Stmt::DerefAssign { ptr: *inner, value });
         }
         if let ExprKind::Field { .. } = &expr.kind {
+            let lhs = expr.clone();
             let mut fields = Vec::new();
             let mut cursor = expr;
             let root = loop {
@@ -710,25 +713,35 @@ impl<'a> Parser<'a> {
                 }
             };
             fields.reverse();
-            self.expect(&TokenKind::Eq, "'='")?;
-            let value = self.parse_expr()?;
+            let op = self.compound_op()?;
+            let rhs = self.parse_expr()?;
             self.expect(&TokenKind::Semi, "';'")?;
+            let value = self.compound_value(op, lhs, rhs);
             return Ok(Stmt::FieldAssign { name: root.0, name_span: root.1, fields, value });
         }
         self.finish_index_assign(expr)
     }
 
     fn finish_index_assign(&mut self, expr: Expr) -> Result<Stmt, CompileError> {
+        let lhs = expr.clone();
         let ExprKind::Index { base, index } = expr.kind else {
             return Err(CompileError::at(self.source, expr.span.start, "expected an index before '='"));
         };
         let ExprKind::Name(name) = base.kind else {
             return Err(CompileError::at(self.source, base.span.start, "index assignment needs a name"));
         };
-        self.expect(&TokenKind::Eq, "'='")?;
-        let value = self.parse_expr()?;
+        let op = self.compound_op()?;
+        let rhs = self.parse_expr()?;
         self.expect(&TokenKind::Semi, "';'")?;
+        let value = self.compound_value(op, lhs, rhs);
         Ok(Stmt::IndexAssign { name, name_span: base.span, index: *index, value })
+    }
+
+    fn compound_value(&self, op: Option<BinOp>, lhs: Expr, rhs: Expr) -> Expr {
+        match op {
+            None => rhs,
+            Some(op) => self.binary(op, lhs, rhs),
+        }
     }
 
     fn compound_op(&mut self) -> Result<Option<BinOp>, CompileError> {
@@ -1419,8 +1432,16 @@ impl<'a> Parser<'a> {
         let Some(token) = self.tokens.get(self.index + 1) else {
             return false;
         };
+        Self::assign_kind(&token.kind)
+    }
+
+    fn is_assign_op(&self) -> bool {
+        Self::assign_kind(&self.current().kind)
+    }
+
+    fn assign_kind(kind: &TokenKind) -> bool {
         matches!(
-            token.kind,
+            kind,
             TokenKind::Eq
                 | TokenKind::PlusEq
                 | TokenKind::MinusEq

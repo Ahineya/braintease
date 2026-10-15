@@ -1,5 +1,5 @@
 use crate::ast::Span;
-use crate::error::{CompileError, line_col};
+use crate::error::CompileError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
@@ -446,10 +446,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn error(&self, offset: usize, message: impl Into<String>) -> CompileError {
-        let (line, column) = line_col(self.source, offset);
-        CompileError {
-            message: format!("{line}:{column}: {}", message.into()),
-        }
+        CompileError::at(self.source, offset, message)
     }
 }
 

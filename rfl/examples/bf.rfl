@@ -1,28 +1,73 @@
 // Simple brainfuck interpreter
 
+import { read_byte } from "std/io";
+
 fn main() {
     let mut tape: Vec<u16> = [];
+
+    let mut ip: usize = 0;
     let mut tp: usize = 0;
 
-    let program = "++++++++++[->++++++<]>+++++.";
-
-    println("It works!");
-    println(program[0]);
-
-    println("a" + "b");
-
-    println(program.len());
-
-    for (i in 0..program.len()) {
-        println(program[i]);
+    for (_ in 0..30000) {
+        tape.push(0);
     }
 
-    while(tp < program.len()) {
-        break;
-    }
+    let program = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
 
-    match program[0] {
-        '+' => {println("plus");}
-        _ => {}
+    while (ip < program.len()) {
+        match program[ip] {
+            '+' => { tape[tp] += 1; }
+            '-' => { tape[tp] -= 1; }
+            '<' => {
+                if (tp == 0) {
+                    tp = tape.len() - 1;
+                } else {
+                    tp -= 1;
+                }
+            }
+
+            '>' => {
+                tp = (tp + 1) % tape.len();
+            }
+
+            '[' => {
+                if (tape[tp] == 0) {
+                    let mut depth = 1;
+
+                    while (depth > 0) {
+                        ip += 1;
+
+                        match program[ip] {
+                            '[' => { depth += 1; }
+                            ']' => { depth -= 1; }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            ']' => {
+                if (tape[tp] != 0) {
+                    let mut depth = 1;
+
+                    while (depth > 0) {
+                        ip -= 1;
+
+                        match program[ip] {
+                            '[' => { depth -= 1; }
+                            ']' => { depth += 1; }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            '.' => { print(tape[tp] as char); }
+            ',' => { tape[tp] = read_byte() as u16; }
+
+            _ => {}
+        }
+
+        ip += 1;
     }
 }

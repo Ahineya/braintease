@@ -1609,6 +1609,69 @@ fn strings_can_be_built_and_sliced() {
 }
 
 #[test]
+fn vector_len_is_wider_than_a_cell() {
+    let source = r#"
+        fn main() -> i16 {
+            let wide: usize = 70000;
+            let mut tape: Vec<u16> = [];
+            let count: usize = 65536;
+            for (_ in 0..count) { tape.push(1); }
+            let n = tape.len();
+            if (wide == 70000 && n == 65536 && tape[0] == 1 && tape[65535] == 1) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn diagnostics_point_at_the_source_line() {
+    let err = rfl::compile_to_ir("fn main() {\n  let a = 1;\n  a = 2;\n}\n").unwrap_err();
+    let text = err.to_string();
+    assert!(text.contains("error:"), "{text}");
+    assert!(text.contains("not mutable"), "{text}");
+    assert!(text.contains("a = 2"), "{text}");
+    assert!(text.contains("--> <source>:3:"), "{text}");
+}
+
+#[test]
+fn out_of_bounds_names_the_failure() {
+    let source = "fn main() -> i16 {\n  let text = \"ab\";\n  let _ch = text[3];\n  0\n}\n";
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert!(result.stdout.contains("index out of bounds"), "{}", result.stdout);
+}
+
+#[test]
+fn compound_assignment_updates_an_index() {
+    let source = r#"
+        fn main() -> i16 {
+            let mut tape: Vec<u16> = [];
+            tape.push(0);
+            let mut tp: usize = 0;
+            let program = "+->";
+            let mut i: usize = 0;
+            while (i < program.len()) {
+                match program[i] {
+                    '+' => { tape[tp] += 1; }
+                    '-' => { tape[tp] -= 1; }
+                    '<' => { tp -= 1; }
+                    '>' => { tp += 1; }
+                    '[' => {}
+                    ']' => {}
+                    '.' => { print(tape[tp]); }
+                    ',' => {}
+                    _ => {}
+                }
+                i += 1;
+            }
+            if (tape[0] == 0 && tp == 1) { 42 } else { 0 }
+        }
+    "#;
+    let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
 fn match_can_test_a_character() {
     let source = r#"
         fn main() -> i16 {

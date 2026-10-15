@@ -14,7 +14,7 @@ mod typed;
 
 pub use error::CompileError;
 pub use rcc_ir::ir::Module;
-pub use run::{run_file, run_program, RunResult};
+pub use run::{run_file, run_file_in_terminal, run_program, RunResult};
 
 pub fn compile_to_ir(source: &str) -> Result<Module, CompileError> {
     let tokens = lexer::tokenize(source)?;
@@ -65,19 +65,9 @@ fn asm_of(module: &Module) -> Result<String, CompileError> {
     Ok(asm)
 }
 
-/// Prints `fail` and halts. The backend leaves `rfl_fail` unresolved.
+/// `rfl_fail` prints the reason and calls this. The backend has no halt instruction.
 const RFL_FAIL_ASM: &str = "
-rfl_fail:
-    LI A0, 102
-    STORE A0, R0, R0
-    LI A0, 97
-    STORE A0, R0, R0
-    LI A0, 105
-    STORE A0, R0, R0
-    LI A0, 108
-    STORE A0, R0, R0
-    LI A0, 10
-    STORE A0, R0, R0
+rfl_halt:
     LI RV0, 1
     HALT
 ";

@@ -5195,8 +5195,8 @@ fn shareable(ty: Ty) -> bool {
 fn bit_width(ty: Ty) -> u32 {
     match ty {
         Ty::I8 | Ty::U8 => 8,
-        Ty::I16 | Ty::U16 | Ty::Usize => 16,
-        Ty::I32 | Ty::U32 => 32,
+        Ty::I16 | Ty::U16 => 16,
+        Ty::I32 | Ty::U32 | Ty::Usize => 32,
         _ => 64,
     }
 }

@@ -32,7 +32,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(status) => ExitCode::from(status as u8),
         Err(err) => {
-            eprintln!("error: {err}");
+            eprintln!("{err}");
             ExitCode::FAILURE
         }
     }
@@ -41,21 +41,22 @@ fn main() -> ExitCode {
 fn run() -> Result<i32, rfl::CompileError> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Run { input } => {
-            let result = rfl::run_file(&input)?;
-            print!("{}", result.stdout);
-            Ok(result.status)
-        }
+        Command::Run { input } => rfl::run_file_in_terminal(&input),
         Command::Check { input } => {
+            eprintln!("    Checking {}", input.display());
             rfl::compile_file(&input)?;
+            eprintln!("    Finished");
             Ok(0)
         }
         Command::Compile { input, output, emit_ir } => {
+            eprintln!("   Compiling {}", input.display());
             if emit_ir {
                 print!("{}", rfl::compile_file_to_ir_text(&input)?);
+                eprintln!("    Finished");
                 return Ok(0);
             }
             let asm = rfl::compile_file_to_asm(&input)?;
+            eprintln!("    Finished");
             let output = output.unwrap_or_else(|| {
                 let mut path = input;
                 path.set_extension("asm");
