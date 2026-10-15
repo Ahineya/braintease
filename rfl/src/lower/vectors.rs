@@ -51,6 +51,7 @@ pub(super) fn emit_vec_lit(
     elems: &[usize],
     elem: Ty,
 ) -> Result<(), CompileError> {
+    release_managed(builder, proc, frame, dest)?;
     let base = proc.slots[dest].offset;
     if elems.is_empty() {
         store_cell(builder, frame, base, Value::Constant(0))?;
@@ -59,6 +60,7 @@ pub(super) fn emit_vec_lit(
     let len = Value::Constant(elems.len() as i64);
     let obj = alloc_vec(builder, len.clone(), len, elem.cells())?;
     for (index, slot) in elems.iter().enumerate() {
+        retain_managed(builder, proc, frame, *slot)?;
         let at = VEC_DATA + index as i64 * elem.cells();
         for cell in 0..elem.cells() {
             let value = load_cell(builder, frame, proc.slots[*slot].offset + cell, IrType::I16)?;
@@ -187,11 +189,12 @@ pub(super) fn emit_vec_clear(
     frame: &Value,
     vec: usize,
     offset: i64,
+    elem: Ty,
 ) -> Result<(), CompileError> {
     let header = header_at(builder, proc, frame, vec, offset)?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
     let bank = load_cell(builder, &header, 1, IrType::I16)?;
-    adjust_refcount(builder, addr, bank, false)?;
+    release_element_buffer(builder, addr, bank, elem)?;
     store_cell(builder, &header, 0, Value::Constant(0))?;
     store_cell(builder, &header, 1, Value::Constant(0))
 }
@@ -255,7 +258,7 @@ pub(super) fn emit_vec_index_store(
         .build_branch_cond(Value::Temp(unique), write, detach)
         .ir()?;
     builder.create_block(detach).ir()?;
-    detach_vec(builder, &header, &obj, elem.cells())?;
+    detach_vec(builder, proc, &header, &obj, elem)?;
     builder.build_branch(write).ir()?;
     builder.create_block(write).ir()?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
@@ -278,6 +281,10 @@ pub(super) fn emit_vec_index_store(
     let data = builder
         .build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT)
         .ir()?;
+    let place = builder
+        .build_pointer_offset(obj.clone(), Value::Temp(data), ptr_ty())
+        .ir()?;
+    release_managed_through(builder, proc, &place, elem)?;
     store_object_cells(
         builder,
         proc,
@@ -426,7 +433,7 @@ pub(super) fn emit_vec_pop(
         .build_branch_cond(Value::Temp(unique), write, detach)
         .ir()?;
     builder.create_block(detach).ir()?;
-    detach_vec(builder, &header, &obj, elem.cells())?;
+    detach_vec(builder, proc, &header, &obj, elem)?;
     builder.build_branch(write).ir()?;
     builder.create_block(write).ir()?;
     let addr = load_cell(builder, &header, 0, IrType::I16)?;
@@ -450,6 +457,10 @@ pub(super) fn emit_vec_pop(
         value,
         elem.cells(),
     )?;
+    let place = builder
+        .build_pointer_offset(obj.clone(), Value::Temp(data), ptr_ty())
+        .ir()?;
+    release_managed_through(builder, proc, &place, elem)?;
     emit_make(
         builder,
         proc,
@@ -511,7 +522,7 @@ pub(super) fn emit_vec_push(
         .ir()?;
 
     builder.create_block(detach).ir()?;
-    detach_vec(builder, &header, &obj, elem.cells())?;
+    detach_vec(builder, proc, &header, &obj, elem)?;
     builder.build_branch(append).ir()?;
 
     builder.create_block(owned).ir()?;
@@ -555,10 +566,12 @@ pub(super) fn emit_vec_push(
 
 pub(super) fn detach_vec(
     builder: &mut IrBuilder,
+    proc: &Proc,
     header: &Value,
     obj: &Value,
-    cells: i64,
+    elem: Ty,
 ) -> Result<(), CompileError> {
+    let cells = elem.cells();
     let len = load_count(builder, obj, VEC_LEN)?;
     let cap = load_count(builder, obj, VEC_CAP)?;
     let room = builder
@@ -581,7 +594,8 @@ pub(super) fn detach_vec(
     builder.create_block(join).ir()?;
     let new_cap = Value::Temp(builder.build_load(saved, COUNT).ir()?);
     let new_obj = alloc_vec(builder, len.clone(), new_cap, cells)?;
-    copy_elements(builder, obj, &new_obj, len, cells)?;
+    copy_elements(builder, obj, &new_obj, len.clone(), cells)?;
+    retain_buffer_elements(builder, proc, &new_obj, len, elem)?;
     let refs = load_cell(builder, obj, VEC_REFS, IrType::I16)?;
     let next = builder
         .build_binary(IrBinaryOp::Sub, refs, Value::Constant(1), IrType::I16)
@@ -616,6 +630,28 @@ pub(super) fn alloc_vec(
     cap: Value,
     cells: i64,
 ) -> Result<Value, CompileError> {
+    // Check the allocation expression before multiplying or adding the header.
+    // In particular, a bulk fill must not wrap a huge length into a tiny buffer.
+    let cap = as_i32(builder, cap)?;
+    if cells > 0 {
+        let max_capacity = (i64::from(u32::MAX) - VEC_DATA) / cells;
+        let overflow = builder
+            .build_binary(
+                IrBinaryOp::Ugt,
+                cap.clone(),
+                Value::Constant(max_capacity),
+                IrType::I1,
+            )
+            .ir()?;
+        let bad = builder.new_label();
+        let ok = builder.new_label();
+        builder
+            .build_branch_cond(Value::Temp(overflow), bad, ok)
+            .ir()?;
+        builder.create_block(bad).ir()?;
+        runtime_fail(builder, FAIL_OVERFLOW)?;
+        builder.create_block(ok).ir()?;
+    }
     let scaled = scale_index(builder, cap.clone(), cells)?;
     let words = builder
         .build_binary(IrBinaryOp::Add, scaled, Value::Constant(VEC_DATA), COUNT)
@@ -729,6 +765,7 @@ pub(super) fn store_object_cells(
     data: Value,
     cells: i64,
 ) -> Result<(), CompileError> {
+    retain_managed(builder, proc, frame, src)?;
     for cell in 0..cells {
         let value = load_cell(builder, frame, proc.slots[src].offset + cell, IrType::I16)?;
         let at = builder
@@ -751,6 +788,7 @@ pub(super) fn copy_object_cells(
     dest: usize,
     cells: i64,
 ) -> Result<(), CompileError> {
+    release_managed(builder, proc, frame, dest)?;
     for cell in 0..cells {
         let at = builder
             .build_binary(IrBinaryOp::Add, data.clone(), Value::Constant(cell), COUNT)
@@ -761,6 +799,7 @@ pub(super) fn copy_object_cells(
         let word = Value::Temp(builder.build_load(from, IrType::I16).ir()?);
         store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
     }
+    retain_managed(builder, proc, frame, dest)?;
     Ok(())
 }
 

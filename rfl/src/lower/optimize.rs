@@ -64,7 +64,7 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
             _ => None,
         })
         .collect();
-    let candidates: BTreeMap<_, _> = proc
+    let mut candidates: BTreeMap<_, _> = proc
         .slots
         .iter()
         .enumerate()
@@ -72,7 +72,10 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
             (!info.shared
                 && !borrowed.contains(&slot)
                 && proc.result_slot != Some(slot)
-                && matches!(info.ty, Ty::I16 | Ty::U16))
+                && matches!(
+                    info.ty,
+                    Ty::I16 | Ty::U16 | Ty::I32 | Ty::U32 | Ty::Usize | Ty::Char | Ty::Bool
+                ))
             .then_some((info.offset, slot))
         })
         .collect();
@@ -105,6 +108,35 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
         },
         _ => None,
     };
+    // Inline aggregates and the tail-call protocol sometimes access words of a
+    // scalar separately. Keep those slots in memory rather than split an alias.
+    for inst in function.blocks.iter().flat_map(|b| &b.instructions) {
+        let access = match inst {
+            Instruction::Load {
+                ptr,
+                result_type,
+                volatile,
+                ..
+            } => Some((ptr, result_type, *volatile)),
+            Instruction::Store {
+                ptr,
+                value_type,
+                volatile,
+                ..
+            } => Some((ptr, value_type, *volatile)),
+            _ => None,
+        };
+        if let Some((ptr, ty, volatile)) = access {
+            if let Some(at) = offset_of(ptr) {
+                candidates.retain(|offset, slot| {
+                    let info = &proc.slots[*slot];
+                    !(at >= *offset
+                        && at < *offset + info.ty.cells()
+                        && (at != *offset || *ty != ir_ty(info.ty) || volatile))
+                });
+            }
+        }
+    }
     let mut next = function
         .blocks
         .iter()
@@ -121,14 +153,15 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
     };
     let mut homes = BTreeMap::new();
     let mut entry = Vec::new();
-    for offset in candidates.keys() {
+    for (offset, slot) in &candidates {
+        let ty = ir_ty(proc.slots[*slot].ty);
         let local = fresh();
         let addr = fresh();
         let value = fresh();
         let home = fat_temp(local, BankTag::Stack);
         entry.push(Instruction::Alloca {
             result: local,
-            alloc_type: IrType::I16,
+            alloc_type: ty.clone(),
             count: None,
             result_type: ptr_ty(),
         });
@@ -136,36 +169,36 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
         entry.push(Instruction::Load {
             result: value,
             ptr: fat_temp(addr, BankTag::Mixed),
-            result_type: IrType::I16,
+            result_type: ty.clone(),
             volatile: false,
         });
         entry.push(Instruction::Store {
             value: Value::Temp(value),
             ptr: home.clone(),
-            value_type: IrType::I16,
+            value_type: ty.clone(),
             volatile: false,
         });
-        homes.insert(*offset, home);
+        homes.insert(*offset, (home, ty));
     }
     for block in &mut function.blocks {
         let old = std::mem::take(&mut block.instructions);
         for mut inst in old {
             // This is the publication point used by direct and indirect RFL calls.
             if matches!(&inst, Instruction::Store { ptr, .. } if offset_of(ptr) == Some(RESUME)) {
-                for (offset, home) in &homes {
+                for (offset, (home, ty)) in &homes {
                     let value = fresh();
                     let addr = fresh();
                     block.instructions.push(Instruction::Load {
                         result: value,
                         ptr: home.clone(),
-                        result_type: IrType::I16,
+                        result_type: ty.clone(),
                         volatile: false,
                     });
                     block.instructions.push(frame_gep(addr, *offset));
                     block.instructions.push(Instruction::Store {
                         value: Value::Temp(value),
                         ptr: fat_temp(addr, BankTag::Mixed),
-                        value_type: IrType::I16,
+                        value_type: ty.clone(),
                         volatile: false,
                     });
                 }
@@ -173,18 +206,16 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
             match &mut inst {
                 Instruction::Load {
                     ptr,
-                    result_type: IrType::I16,
                     volatile: false,
                     ..
                 }
                 | Instruction::Store {
                     ptr,
-                    value_type: IrType::I16,
                     volatile: false,
                     ..
                 } => {
                     if let Some(home) = offset_of(ptr).and_then(|offset| homes.get(&offset)) {
-                        *ptr = home.clone();
+                        *ptr = home.0.clone();
                     }
                 }
                 _ => {}

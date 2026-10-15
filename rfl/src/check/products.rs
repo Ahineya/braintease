@@ -106,6 +106,11 @@ impl<'a> Checker<'a> {
             );
         }
         self.tuples = tuple_fields;
+        for elems in [&mut self.vec_elems, &mut self.slice_elems] {
+            for elem in elems {
+                *elem = rewrite_layout(*elem, &widths, &tuple_w, &self.arrays);
+            }
+        }
         let elems: Vec<Ty> = self
             .arrays
             .iter()

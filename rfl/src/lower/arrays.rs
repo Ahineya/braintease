@@ -76,8 +76,10 @@ pub(super) fn emit_array_lit(
     elems: &[usize],
     elem: Ty,
 ) -> Result<(), CompileError> {
+    release_managed(builder, proc, frame, dest)?;
     let mut at = proc.slots[dest].offset;
     for slot in elems {
+        retain_managed(builder, proc, frame, *slot)?;
         for cell in 0..elem.cells() {
             let value = load_cell(builder, frame, proc.slots[*slot].offset + cell, IrType::I16)?;
             store_cell(builder, frame, at, value)?;
@@ -89,12 +91,14 @@ pub(super) fn emit_array_lit(
 
 pub(super) fn copy_inline_elem(
     builder: &mut IrBuilder,
+    proc: &Proc,
     frame: &Value,
     base: i64,
     index: Value,
     width: i64,
-    dest: i64,
+    dest: usize,
 ) -> Result<(), CompileError> {
+    release_managed(builder, proc, frame, dest)?;
     let scaled = scale_index(builder, index, width)?;
     let origin = Value::Temp(
         builder
@@ -116,9 +120,9 @@ pub(super) fn copy_inline_elem(
             .build_pointer_offset(frame.clone(), off, ptr_ty())
             .ir()?;
         let word = Value::Temp(builder.build_load(ptr, IrType::I16).ir()?);
-        store_cell(builder, frame, dest + cell, word)?;
+        store_cell(builder, frame, proc.slots[dest].offset + cell, word)?;
     }
-    Ok(())
+    retain_managed(builder, proc, frame, dest)
 }
 
 pub(super) fn store_inline_elem(
@@ -136,6 +140,11 @@ pub(super) fn store_inline_elem(
             .build_binary(IrBinaryOp::Add, Value::Constant(base), scaled, COUNT)
             .ir()?,
     );
+    let place = builder
+        .build_pointer_offset(frame.clone(), origin.clone(), ptr_ty())
+        .ir()?;
+    release_managed_through(builder, proc, &place, proc.slots[value].ty)?;
+    retain_managed(builder, proc, frame, value)?;
     for cell in 0..width {
         let word = load_cell(builder, frame, proc.slots[value].offset + cell, IrType::I16)?;
         let off = Value::Temp(
@@ -186,11 +195,12 @@ pub(super) fn emit_array_index(
     builder.create_block(ok).ir()?;
     copy_inline_elem(
         builder,
+        proc,
         frame,
         proc.slots[array].offset,
         at,
         width as i64,
-        proc.slots[dest].offset,
+        dest,
     )
 }
 
@@ -257,11 +267,12 @@ pub(super) fn emit_array_get(
     builder.create_block(ok).ir()?;
     copy_inline_elem(
         builder,
+        proc,
         frame,
         proc.slots[array].offset,
         at,
         width as i64,
-        proc.slots[value].offset,
+        value,
     )?;
     emit_make(
         builder,
@@ -388,6 +399,7 @@ pub(super) fn emit_slice_new(
     inclusive: bool,
     elem: Ty,
 ) -> Result<(), CompileError> {
+    release_managed(builder, proc, frame, dest)?;
     let start = load_slot(builder, proc, frame, start)?;
     let end = load_slot(builder, proc, frame, end)?;
     let exclusive = exclusive_end(builder, end, inclusive)?;
@@ -448,6 +460,13 @@ pub(super) fn slice_from_array(
         &obj,
         count.clone(),
         width,
+    )?;
+    retain_buffer_elements(
+        builder,
+        proc,
+        &obj,
+        count.clone(),
+        proc.collections.element(proc.slots[array].ty),
     )?;
     let header = gep(builder, frame, proc.slots[dest].offset)?;
     store_vec_ptr(builder, &header, &obj)?;
@@ -693,6 +712,7 @@ pub(super) fn emit_to_vec(
     src: usize,
     elem: Ty,
 ) -> Result<(), CompileError> {
+    release_managed(builder, proc, frame, dest)?;
     let header = gep(builder, frame, proc.slots[dest].offset)?;
     match proc.slots[src].ty {
         Ty::Array { len, width, .. } => {
@@ -713,9 +733,10 @@ pub(super) fn emit_to_vec(
                 proc.slots[src].offset,
                 Value::Constant(0),
                 &obj,
-                count,
+                count.clone(),
                 width as i64,
             )?;
+            retain_buffer_elements(builder, proc, &obj, count, elem)?;
             store_vec_ptr(builder, &header, &obj)
         }
         Ty::Slice(_) => {
@@ -745,7 +766,8 @@ pub(super) fn emit_to_vec(
             let addr = load_cell(builder, frame, base, IrType::I16)?;
             let bank = load_cell(builder, frame, base + 1, IrType::I16)?;
             let src_obj = fat_from_parts(builder, addr, bank)?;
-            copy_object_span(builder, &src_obj, start, &obj, len, elem.cells())?;
+            copy_object_span(builder, &src_obj, start, &obj, len.clone(), elem.cells())?;
+            retain_buffer_elements(builder, proc, &obj, len, elem)?;
             store_vec_ptr(builder, &header, &obj)?;
             builder.build_branch(done).ir()?;
             builder.create_block(done).ir()?;

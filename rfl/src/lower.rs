@@ -8,6 +8,7 @@
 //! stack only holds the driver and the function that is running right now.
 
 mod arrays;
+mod buffer_ownership;
 mod build;
 mod closures;
 mod dispatch;
@@ -23,9 +24,12 @@ mod ownership;
 mod print;
 mod string_runtime;
 mod strings;
+mod temporaries;
+mod vector_fill;
 mod vectors;
 
 use arrays::*;
+use buffer_ownership::*;
 use build::*;
 use closures::*;
 use dispatch::*;
@@ -41,6 +45,8 @@ use ownership::*;
 use print::*;
 use string_runtime::*;
 use strings::*;
+use temporaries::*;
+use vector_fill::*;
 use vectors::*;
 
 use rcc_ir::ir::{
@@ -84,6 +90,7 @@ struct Proc {
     segs: Vec<Seg>,
     structs: Arc<Vec<Vec<Ty>>>,
     tuples: Arc<Vec<Vec<Ty>>>,
+    collections: Arc<crate::typed::CollectionTypes>,
     /// Emit a C function of this name that runs the frame function.
     c_export: bool,
 }
@@ -192,6 +199,11 @@ enum Insn {
         elems: Vec<usize>,
         elem: Ty,
     },
+    VecFill {
+        dest: usize,
+        len: u32,
+        value: i64,
+    },
     ArrayLit {
         dest: usize,
         elems: Vec<usize>,
@@ -226,6 +238,7 @@ enum Insn {
         vec: usize,
     },
     Clear {
+        elem: Ty,
         vec: usize,
         offset: i64,
     },
@@ -427,6 +440,7 @@ struct Built {
     adts: Vec<AdtDef>,
     structs: Arc<Vec<Vec<Ty>>>,
     tuples: Arc<Vec<Vec<Ty>>>,
+    collections: Arc<crate::typed::CollectionTypes>,
     /// Parallel to `structs`.
     repr_c: Vec<bool>,
     need_alloc: bool,
@@ -448,11 +462,20 @@ pub fn lower(module_name: &str, module: &TModule) -> Result<Module, CompileError
 fn build(module: &TModule) -> Result<Built, CompileError> {
     let structs = Arc::new(module.structs.clone());
     let tuples = Arc::new(module.tuples.clone());
+    let collections = Arc::new(module.collections.clone());
     let mut procs = module
         .functions
         .iter()
         .enumerate()
-        .map(|(id, func)| build_fn(func, id, structs.clone(), tuples.clone()))
+        .map(|(id, func)| {
+            build_fn(
+                func,
+                id,
+                structs.clone(),
+                tuples.clone(),
+                collections.clone(),
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
     retain_reachable(&mut procs);
     let mut need_alloc = false;
@@ -607,6 +630,7 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
         adts: module.adts.clone(),
         structs,
         tuples,
+        collections,
         repr_c: module.repr_c.clone(),
         need_alloc,
         need_fail,
@@ -648,6 +672,19 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     if built.need_alloc || built.need_heap {
         module.add_function(extern_fn("malloc", ptr_ty(), vec![IrType::I32]));
         module.add_function(extern_fn("free", IrType::Void, vec![ptr_ty()]));
+    }
+    if built
+        .procs
+        .iter()
+        .flat_map(|p| &p.segs)
+        .flat_map(|s| &s.insns)
+        .any(|i| matches!(i, Insn::VecFill { .. }))
+    {
+        module.add_function(extern_fn(
+            "memset",
+            ptr_ty(),
+            vec![ptr_ty(), IrType::I16, IrType::I32],
+        ));
     }
     if built.need_io {
         module.add_function(extern_fn("putchar", IrType::Void, vec![IrType::I16]));

@@ -366,7 +366,11 @@ impl<'a> Checker<'a> {
             }
             return Ok(TExpr {
                 ty: Ty::Unit,
-                kind: TExprKind::Clear { binding, offset },
+                kind: TExprKind::Clear {
+                    binding,
+                    offset,
+                    elem,
+                },
             });
         }
         if method == "pop" {

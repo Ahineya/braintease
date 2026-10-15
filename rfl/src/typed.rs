@@ -1,8 +1,27 @@
 use crate::ast::{BinOp, UnaryOp};
 use crate::ty::Ty;
 
+#[derive(Debug, Clone, Default)]
+pub struct CollectionTypes {
+    pub vectors: Vec<Ty>,
+    pub slices: Vec<Ty>,
+    pub arrays: Vec<Ty>,
+}
+
+impl CollectionTypes {
+    pub fn element(&self, ty: Ty) -> Ty {
+        match ty {
+            Ty::Vec(id) => self.vectors[id as usize],
+            Ty::Slice(id) => self.slices[id as usize],
+            Ty::Array { id, .. } => self.arrays[id as usize],
+            _ => panic!("compiler bug: expected a collection type"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct TModule {
+    pub collections: CollectionTypes,
     pub functions: Vec<TFn>,
     /// Concrete algebraic types, indexed by [`Ty::Adt`](crate::ty::Ty::Adt).
     pub adts: Vec<AdtDef>,
@@ -288,6 +307,7 @@ pub enum TExprKind {
     },
     /// `place.clear()` on a mutable vector place.
     Clear {
+        elem: Ty,
         binding: u32,
         offset: i64,
     },

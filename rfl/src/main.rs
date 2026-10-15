@@ -84,3 +84,23 @@ fn run() -> Result<i32, rfl::CompileError> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_accepts_flags_before_or_after_the_filename() {
+        for args in [
+            ["rfl", "run", "--jit", "examples/beep.rfl"],
+            ["rfl", "run", "examples/beep.rfl", "--jit"],
+        ] {
+            let cli = Cli::try_parse_from(args).unwrap();
+            let Command::Run { input, jit } = cli.command else {
+                panic!("expected the run command");
+            };
+            assert_eq!(input, PathBuf::from("examples/beep.rfl"));
+            assert!(jit);
+        }
+    }
+}

@@ -104,26 +104,28 @@ pub(super) fn fat_from_parts(
     addr: Value,
     bank: Value,
 ) -> Result<Value, CompileError> {
-    let mem = builder.build_alloca(IrType::I32, None).ir()?;
     let low = builder
-        .build_pointer_offset_with_bank(
-            mem.clone(),
-            Value::Constant(0),
-            ptr_ty(),
-            Some(BankTag::Stack),
-        )
+        .build_unary(IrUnaryOp::ZExt, addr, IrType::I32)
         .ir()?;
-    builder.build_store(addr, low, IrType::I16).ir()?;
     let high = builder
-        .build_pointer_offset_with_bank(
-            mem.clone(),
-            Value::Constant(1),
-            ptr_ty(),
-            Some(BankTag::Stack),
+        .build_unary(IrUnaryOp::ZExt, bank, IrType::I32)
+        .ir()?;
+    let shifted = builder
+        .build_binary(
+            IrBinaryOp::Shl,
+            Value::Temp(high),
+            Value::Constant(16),
+            IrType::I32,
         )
         .ir()?;
-    builder.build_store(bank, high, IrType::I16).ir()?;
-    let bits = builder.build_load(mem, IrType::I32).ir()?;
+    let bits = builder
+        .build_binary(
+            IrBinaryOp::Or,
+            Value::Temp(low),
+            Value::Temp(shifted),
+            IrType::I32,
+        )
+        .ir()?;
     let raw = builder
         .build_unary(IrUnaryOp::IntToPtr, Value::Temp(bits), ptr_ty())
         .ir()?;
@@ -309,56 +311,7 @@ pub(super) fn release_through(
     place: &Value,
     ty: Ty,
 ) -> Result<(), CompileError> {
-    match ty {
-        Ty::Vec(_) | Ty::Slice(_) | Ty::String => {
-            let addr = load_pointee_cell(builder, place, 0)?;
-            let bank = load_pointee_cell(builder, place, 1)?;
-            adjust_refcount(builder, addr, bank, false)
-        }
-        Ty::Struct { id, .. } => {
-            let mut at = 0i64;
-            for field in proc.structs[id as usize].clone() {
-                let sub = builder
-                    .build_pointer_offset(place.clone(), Value::Constant(at), ptr_ty())
-                    .ir()?;
-                release_through(builder, proc, &sub, field)?;
-                at += field.cells();
-            }
-            Ok(())
-        }
-        Ty::Tuple { id, .. } => {
-            let mut at = 0i64;
-            for field in proc.tuples[id as usize].clone() {
-                let sub = builder
-                    .build_pointer_offset(place.clone(), Value::Constant(at), ptr_ty())
-                    .ir()?;
-                release_through(builder, proc, &sub, field)?;
-                at += field.cells();
-            }
-            Ok(())
-        }
-        Ty::Adt(id) => {
-            let tag = load_pointee_cell(builder, place, 0)?;
-            let addr = load_pointee_cell(builder, place, 1)?;
-            let bank = load_pointee_cell(builder, place, 2)?;
-            call_if_live(
-                builder,
-                &format!("rfl_drop_adt_{id}"),
-                vec![tag, addr, bank],
-            )?;
-            store_pointee_cell(builder, place, 1, Value::Constant(0))?;
-            store_pointee_cell(builder, place, 2, Value::Constant(0))
-        }
-        Ty::Func(_) => {
-            let id = load_pointee_cell(builder, place, 0)?;
-            let addr = load_pointee_cell(builder, place, 2)?;
-            let bank = load_pointee_cell(builder, place, 3)?;
-            call_if_live(builder, "rfl_drop_func", vec![id, addr, bank])?;
-            store_pointee_cell(builder, place, 2, Value::Constant(0))?;
-            store_pointee_cell(builder, place, 3, Value::Constant(0))
-        }
-        _ => Ok(()),
-    }
+    release_managed_through(builder, proc, place, ty)
 }
 
 pub(super) fn header_at(

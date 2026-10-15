@@ -351,17 +351,25 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn require_vec_elem(&self, span: usize, elem: Ty) -> Result<(), CompileError> {
-        if elem.is_int() || elem.is_float() || matches!(elem, Ty::Bool | Ty::Char) {
+        if !self.collection_borrows(elem) {
             return Ok(());
         }
         Err(CompileError::at(
             self.source,
             span,
-            format!(
-                "vector elements must be numbers, bool, or char, found {}",
-                self.show(elem)
-            ),
+            "collection elements cannot contain borrowed references",
         ))
+    }
+
+    fn collection_borrows(&self, ty: Ty) -> bool {
+        match ty {
+            Ty::Ref(_) => true,
+            Ty::Tuple { id, .. } => self.tuples[id as usize]
+                .iter()
+                .any(|t| self.collection_borrows(*t)),
+            Ty::Array { id, .. } => self.collection_borrows(self.arrays[id as usize].elem),
+            _ => false, // Named aggregates already reject stored references.
+        }
     }
 
     pub(super) fn intern_cfn(&mut self, params: Vec<Ty>, ret: Ty) -> Ty {

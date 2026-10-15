@@ -22,6 +22,7 @@ pub(super) fn build_fn(
     func_id: usize,
     structs: Arc<Vec<Vec<Ty>>>,
     tuples: Arc<Vec<Vec<Ty>>>,
+    collections: Arc<crate::typed::CollectionTypes>,
 ) -> Result<Proc, CompileError> {
     let mut build = FnBuild {
         slots: Vec::new(),
@@ -103,6 +104,7 @@ pub(super) fn build_fn(
         segs: build.segs,
         structs,
         tuples,
+        collections,
         c_export: func.c_export,
     })
 }
@@ -364,6 +366,9 @@ impl FnBuild {
         extract: &Option<Box<TStmt>>,
         body: &TBlock,
     ) {
+        if extract.is_none() && !inclusive && self.fold_vector_fill(start, end, body) {
+            return;
+        }
         let saved = self.tail_block;
         self.tail_block = false;
         let idx = self.binding_slot[index as usize];
@@ -693,4 +698,8 @@ pub(super) fn less(ty: Ty, a: i64, b: i64) -> bool {
     }
 }
 
+#[path = "expressions.rs"]
 mod expr;
+
+#[path = "vector_fill_build.rs"]
+mod vector_fill_build;

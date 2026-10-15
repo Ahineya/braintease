@@ -52,11 +52,11 @@ in private child modules.
 | Expressions and calls | `src/check/{expressions,operators,calls,control}.rs` |
 | Products, patterns, coverage | `src/check/{products,patterns,coverage}.rs` |
 | Methods, references, captures | `src/check/{methods,borrows,closures,captures}.rs` |
-| Checked expressions to segmented frame code | `src/lower/build.rs`, `src/lower/build/expr.rs` |
+| Checked expressions to segmented frame code | `src/lower/build.rs`, `src/lower/expressions.rs` |
 | IR emission and call protocol | `src/lower/{emit,frames,dispatch}.rs` |
-| Ownership and object representations | `src/lower/{ownership,objects,memory}.rs` |
+| Ownership and object representations | `src/lower/{ownership,buffer_ownership,objects,memory}.rs` |
 | Collections, text, arithmetic, C ABI | `src/lower/{arrays,vectors,strings,string_runtime,numeric,ffi}.rs` |
-| RFL optimization preparation | `src/lower/optimize.rs` |
+| RFL optimization preparation | `src/lower/{optimize,temporaries,vector_fill_build,vector_fill}.rs` |
 
 Struct and tuple layout tables are shared between procedures rather than deeply
 cloned for each function. This is a structural cleanup, not a claim that the
@@ -66,12 +66,12 @@ many arguments, and inference and IDE metadata remain coupled to checking.
 ## Optimization changes
 
 RFL's resumable heap frames hide locals from the backend's ordinary stack-local
-SSA promotion. `promote_frame_words` gives nonescaping `i16` and `u16` slots local
+SSA promotion. `promote_frame_words` gives nonescaping word, 32-bit integer, character, and boolean slots local
 homes while an activation runs, reloads them on entry, and publishes them before
 a call stores its resume state. Results, borrowed slots, managed values, and
 shared mutable captures keep their existing storage. The shared backend can then
-promote the local homes and optimize arithmetic and loops. Wider and sub-word
-slots are not promoted by this pass yet.
+promote the local homes and optimize arithmetic and loops. Slots with partial or differently typed accesses remain in memory. Other wide
+and sub-word types are not promoted by this pass yet.
 
 Only actual suspension continuations enter resume dispatch. Resume and function
 selection use balanced decision trees. Unreachable RFL functions are excluded
@@ -85,8 +85,8 @@ The existing string construction test exceeded the bank limit before these
 changes and now assembles, links, and executes.
 
 The shared backend optimizer itself is unchanged; these passes expose RFL's
-semantics in a form it already understands. ARC traffic, frame-slot liveness,
-wide scalar promotion, and call elimination remain optimization opportunities.
+semantics in a form it already understands. More complete lifetime analysis, checked-access elimination, and call elimination
+remain optimization opportunities.
 
 ## Measurements
 
@@ -120,6 +120,83 @@ python3 rfl/tools/benchmark.py --baseline /path/to/old/rfl --execute
 Omit `--baseline` to measure the current compiler alone. The script preserves
 compile, assembly, link, and runtime failures in its JSON output.
 
+## Managed collections and the imperative Brainfuck example
+
+Vectors, owning slices, and fixed arrays now accept managed and product elements:
+strings, nested collections, structs, tuples, ADTs, and closures. The typed module
+carries element layouts into lowering. Buffer destructors release every live
+element when their last vector or slice owner dies; a slice owns the whole backing
+buffer. COW detachment retains copied elements, unique growth transfers their
+ownership, indexed replacement releases the previous element, and extraction,
+`get`, `pop`, array copies, and `to_vec` preserve independent owners. Borrowed
+references remain forbidden as stored collection elements, including in tuples.
+Forward-declared struct widths are resolved in collection element tables.
+
+The IR revealed a severe lifetime bug in `examples/bf.rfl`: loading `tape[tp]`
+first retained an operand snapshot, which stayed alive until frame exit. The
+following indexed write saw a shared buffer and copied all 30,000 tape cells.
+Repeating that operation drove a Hello World program to **2,003,263,115 guest
+instructions**. This was real execution work, separate from compilation.
+
+Single-use managed operands are now released immediately after their consumer.
+Simple collection reads use their binding directly when evaluation cannot mutate
+it; an index with effects still evaluates against an owning receiver snapshot.
+Fat pointers are assembled from SSA integer values, eliminating the temporary
+stack union previously used for every address/bank pair. These changes preserve
+left-to-right argument and operand evaluation.
+
+The tape's 30,000 individual pushes were another large cost. A conservative
+fresh-vector optimization recognizes a constant push loop immediately after an
+empty vector initialization and emits one allocation plus a bulk cell fill.
+It requires no intervening operation that could expose an alias, a constant
+exclusive range, and a single-cell constant value representable by runtime
+`memset`. Other loops retain their ordinary semantics. Tests cover bank crossings,
+existing contents, aliases, empty ranges, and values outside the fill range.
+
+A separate before/after comparison for this follow-up uses the compiler binary
+saved immediately before these collection and performance fixes. Both versions
+compile the **unchanged** `examples/bf.rfl`. The C variants reuse the existing
+`c-test/examples/brainfuck.c` interpreter with a fixed-input `main`, excluding
+interactive prompts. All print exactly `Hello World!\n`.
+
+| Interpreter | Guest instructions | VM process time, median of 3 |
+|---|---:|---:|
+| RFL before this follow-up | 2,003,263,115 | 14.445 s |
+| RFL after this follow-up | 5,378,037 | 0.037 s |
+| C, original 4,096 byte tape | 499,524 | 0.012 s |
+| C, matching 30,000 unsigned 16-bit tape cells | 1,742,865 | 0.026 s |
+
+The RFL result uses about **372 times fewer instructions**. Across measurements,
+current RFL VM time ranged from 0.037 to 0.059 s and matched C from 0.019 to
+0.029 s. These process times include startup, exclude compilation/assembly/linking,
+and use the interpreter without JIT. Wall time is sensitive to host load;
+instruction counts stayed stable.
+
+The latest compilation medians were 0.602 s before versus 0.628 s after. Earlier
+current-compiler medians ranged from 0.955 to 1.369 s under different host load;
+this work does not claim a compilation speedup. Assembly decreased from 37,143
+to 30,481 instructions. Wider SSA preparation still merits compiler profiling.
+
+C remains ahead: the matching-tape variant executes about three times fewer
+instructions. RFL still emits checked dynamic collection operations, UTF-8
+character indexing, COW uniqueness checks, and 32-bit index arithmetic; C uses
+static storage, unchecked element access, 16-bit indexes, and explicit wrap
+branches. Further optimization should preserve the higher-level semantics while
+removing provably redundant checks and arithmetic.
+
+Reproduce and inspect the frontend IR with:
+
+```sh
+cargo build --release -p rfl
+python3 rfl/tools/benchmark_bf.py --baseline /path/to/rfl-before --runs 3
+target/release/rfl compile rfl/examples/bf.rfl --emit-ir
+```
+
+Omit the baseline argument to compare the current RFL compiler against both C
+variants. This script builds temporary C runners and removes all generated files.
+The general benchmark script also accepts repeated `--case` arguments and reports
+VM wall time separately from compilation.
+
 ## Remaining specification gaps
 
 These are still unsupported; passing regression tests do not imply conformance.
@@ -128,7 +205,6 @@ These are still unsupported; passing regression tests do not imply conformance.
 |---|---|---|
 | Traits, bounds, coherence, qualified trait calls, `Printable` | Trait declarations are rejected; printing is compiler-built-in scalar/string output | `src/ast.rs`, `src/parser.rs`, `src/check/control.rs` |
 | `defer`, including cleanup on `?`, return, break, and continue | No defer AST or lowering | `src/ast.rs`, `src/parser.rs`, `src/lower/build.rs` |
-| Collections of managed or product values | `Vec<String>`, `Vec<Option<T>>`, nested vectors, and struct elements are rejected | `src/check/types.rs`, `src/typed.rs`, `src/lower/vectors.rs` |
 | General reference places and safe dereference | `&point.x` is rejected; dereferencing `&i16` is treated as an unsafe raw-pointer operation | `src/check/borrows.rs`, `src/check/ffi.rs` |
 | Constructors as callable values | `let cons = Cons` is rejected for a payload constructor | `src/check/constructors.rs`, `src/check/control.rs` |
 | Polymorphic immutable local callables | A local identity lambda used first on an integer cannot also be called on a boolean | `src/check/closures.rs`, `src/check/inference.rs` |
@@ -136,10 +212,6 @@ These are still unsupported; passing regression tests do not imply conformance.
 | Machine limits hidden from source values | Fixed-array lengths, frame metadata, reference counts, and root-frame storage still have machine-width or stack constraints | `src/ty.rs`, `src/lower/{frames,ownership}.rs` |
 | Source locations on runtime faults | Fault reasons are printed, but faults do not carry the original expression location | `src/typed.rs`, `src/lower/faults.rs` |
 | Complete build/link CLI | Only `check`, `compile`, `run`, and `lsp` exist; documented `build --link` is absent | `src/main.rs`, `src/run.rs` |
-
-The collection restriction must not simply be removed. The typed module needs
-collection element ownership metadata; copying, detaching, replacing, popping,
-and dropping buffers must retain/release their elements recursively.
 
 Similarly, traits need a registry and bound-aware generic checking, not just
 rewriting methods after concrete substitution. Generic trait methods must retain
@@ -150,8 +222,8 @@ method with the same name.
 
 1. Introduce a common place representation for names, fields, indexes, and
    dereferences, with explicit borrowing and write semantics.
-2. Carry ownership/layout descriptors through typed collections and implement
-   recursive element destruction and COW copying.
+2. Extend lifetime analysis beyond single-use temporaries and optimize checked
+   collection accesses while preserving evaluation order and aliasing.
 3. Unify scope exits and cleanup before implementing `defer`.
 4. Implement the trait registry, explicit bounds, coherence, lexical trait
    visibility, qualified calls, and standard `Printable` implementations.
@@ -176,4 +248,11 @@ argument snapshots, ADT cleanup and frame churn, native and C calls, borrowed wr
 nested pattern coverage, fixed-array fields, character collections, string
 helpers, real tail-call protocol, and original-file diagnostics. Optimization
 regressions check that frame scalars reach SSA and repeated string operations
-share helper bodies.
+share helper bodies. Managed-collection tests cover ownership after return or
+clear, COW, growth, get/pop, nested products, closures, borrowed-element rejection,
+and receiver snapshots across an index expression with effects. Allocation-size
+overflow is checked before adding buffer headers or multiplying element widths.
+Reference counts also fail explicitly at their 16-bit limit instead of wrapping
+and freeing live collection elements. The final validation covered 140 passing
+tests (3 library, 105 original compile tests, 24 regressions, and 8 managed-collection
+tests).

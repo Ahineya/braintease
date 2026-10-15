@@ -10,6 +10,7 @@ pub(super) fn keeps(proc: &Proc, ty: Ty) -> bool {
         Ty::Tuple { id, .. } => proc.tuples[id as usize]
             .iter()
             .any(|field| keeps(proc, *field)),
+        Ty::Array { id, .. } => keeps(proc, proc.collections.arrays[id as usize]),
         other => other.is_managed(),
     }
 }
@@ -21,25 +22,11 @@ pub(super) fn retain_tree(
     offset: i64,
     ty: Ty,
 ) -> Result<(), CompileError> {
-    match ty {
-        Ty::Struct { id, .. } => {
-            let mut at = offset;
-            for field in proc.structs[id as usize].clone() {
-                retain_tree(builder, proc, frame, at, field)?;
-                at += field.cells();
-            }
-            Ok(())
-        }
-        Ty::Tuple { id, .. } => {
-            let mut at = offset;
-            for field in proc.tuples[id as usize].clone() {
-                retain_tree(builder, proc, frame, at, field)?;
-                at += field.cells();
-            }
-            Ok(())
-        }
-        other => retain_value_at(builder, frame, offset, other),
+    if !keeps(proc, ty) {
+        return Ok(());
     }
+    let place = gep(builder, frame, offset)?;
+    retain_managed_through(builder, proc, &place, ty)
 }
 
 pub(super) fn release_tree(
@@ -49,46 +36,11 @@ pub(super) fn release_tree(
     offset: i64,
     ty: Ty,
 ) -> Result<(), CompileError> {
-    match ty {
-        Ty::Struct { id, .. } => {
-            let mut at = offset;
-            for field in proc.structs[id as usize].clone() {
-                release_tree(builder, proc, frame, at, field)?;
-                at += field.cells();
-            }
-            Ok(())
-        }
-        Ty::Tuple { id, .. } => {
-            let mut at = offset;
-            for field in proc.tuples[id as usize].clone() {
-                release_tree(builder, proc, frame, at, field)?;
-                at += field.cells();
-            }
-            Ok(())
-        }
-        Ty::Vec(_) | Ty::Slice(_) | Ty::String => release_vec(builder, frame, offset),
-        Ty::Adt(id) => {
-            let tag = load_cell(builder, frame, offset, IrType::I16)?;
-            let addr = load_cell(builder, frame, offset + 1, IrType::I16)?;
-            let bank = load_cell(builder, frame, offset + 2, IrType::I16)?;
-            call_if_live(
-                builder,
-                &format!("rfl_drop_adt_{id}"),
-                vec![tag, addr, bank],
-            )?;
-            store_cell(builder, frame, offset + 1, Value::Constant(0))?;
-            store_cell(builder, frame, offset + 2, Value::Constant(0))
-        }
-        Ty::Func(_) => {
-            let id = load_cell(builder, frame, offset, IrType::I16)?;
-            let addr = load_cell(builder, frame, offset + 2, IrType::I16)?;
-            let bank = load_cell(builder, frame, offset + 3, IrType::I16)?;
-            call_if_live(builder, "rfl_drop_func", vec![id, addr, bank])?;
-            store_cell(builder, frame, offset + 2, Value::Constant(0))?;
-            store_cell(builder, frame, offset + 3, Value::Constant(0))
-        }
-        _ => Ok(()),
+    if !keeps(proc, ty) {
+        return Ok(());
     }
+    let place = gep(builder, frame, offset)?;
+    release_managed_through(builder, proc, &place, ty)
 }
 
 pub(super) fn zero_managed_slots(
@@ -179,16 +131,6 @@ pub(super) fn retain_vec(
     adjust_refcount(builder, addr, bank, true)
 }
 
-pub(super) fn release_vec(
-    builder: &mut IrBuilder,
-    frame: &Value,
-    offset: i64,
-) -> Result<(), CompileError> {
-    let addr = load_cell(builder, frame, offset, IrType::I16)?;
-    let bank = load_cell(builder, frame, offset + 1, IrType::I16)?;
-    adjust_refcount(builder, addr, bank, false)
-}
-
 /// `retain` increments. Otherwise the last reference frees the buffer and any earlier one decrements.
 pub(super) fn adjust_refcount(
     builder: &mut IrBuilder,
@@ -208,6 +150,23 @@ pub(super) fn adjust_refcount(
     let obj = fat_from_parts(builder, addr, bank)?;
     let refs = load_cell(builder, &obj, VEC_REFS, IrType::I16)?;
     if retain {
+        let overflow = builder
+            .build_binary(
+                IrBinaryOp::Eq,
+                refs.clone(),
+                Value::Constant(u16::MAX as i64),
+                IrType::I1,
+            )
+            .ir()?;
+        let bad = builder.new_label();
+        let room = builder.new_label();
+        builder
+            .build_branch_cond(Value::Temp(overflow), bad, room)
+            .ir()?;
+        builder.create_block(bad).ir()?;
+        fail(builder, FAIL_OVERFLOW)?;
+        builder.build_branch(skip).ir()?;
+        builder.create_block(room).ir()?;
         let next = builder
             .build_binary(IrBinaryOp::Add, refs, Value::Constant(1), IrType::I16)
             .ir()?;
@@ -246,7 +205,7 @@ pub(super) fn emit_vec_store(
     src: usize,
     transfer: bool,
 ) -> Result<(), CompileError> {
-    release_vec(builder, frame, proc.slots[dest].offset)?;
+    release_managed(builder, proc, frame, dest)?;
     let cells = proc.slots[src].ty.cells();
     for index in 0..cells {
         let value = load_cell(builder, frame, proc.slots[src].offset + index, IrType::I16)?;
@@ -263,23 +222,6 @@ pub(super) fn emit_vec_store(
     } else {
         retain_vec(builder, frame, proc.slots[dest].offset)
     }
-}
-
-pub(super) fn retain_value_at(
-    builder: &mut IrBuilder,
-    frame: &Value,
-    offset: i64,
-    ty: Ty,
-) -> Result<(), CompileError> {
-    let index = match ty {
-        Ty::Vec(_) | Ty::Slice(_) | Ty::String => 0,
-        Ty::Adt(_) => 1,
-        Ty::Func(_) => 2,
-        _ => return Ok(()),
-    };
-    let addr = load_cell(builder, frame, offset + index, IrType::I16)?;
-    let bank = load_cell(builder, frame, offset + index + 1, IrType::I16)?;
-    adjust_refcount(builder, addr, bank, true)
 }
 
 pub(super) fn retain_managed(
@@ -341,6 +283,17 @@ pub(super) fn retain_managed_through(
     ty: Ty,
 ) -> Result<(), CompileError> {
     match ty {
+        Ty::Array { id, len, width } => {
+            let elem = proc.collections.arrays[id as usize];
+            if !keeps(proc, elem) {
+                return Ok(());
+            }
+            for i in 0..len {
+                let place = gep(builder, slot, i64::from(i) * i64::from(width))?;
+                retain_managed_through(builder, proc, &place, elem)?;
+            }
+            Ok(())
+        }
         Ty::Struct { id, .. } => {
             through_fields(builder, proc, slot, &proc.structs[id as usize], true)
         }
@@ -401,6 +354,17 @@ pub(super) fn release_managed_through(
     ty: Ty,
 ) -> Result<(), CompileError> {
     match ty {
+        Ty::Array { id, len, width } => {
+            let elem = proc.collections.arrays[id as usize];
+            if !keeps(proc, elem) {
+                return Ok(());
+            }
+            for i in 0..len {
+                let place = gep(builder, slot, i64::from(i) * i64::from(width))?;
+                release_managed_through(builder, proc, &place, elem)?;
+            }
+            Ok(())
+        }
         Ty::Struct { id, .. } => {
             through_fields(builder, proc, slot, &proc.structs[id as usize], false)
         }
@@ -410,7 +374,7 @@ pub(super) fn release_managed_through(
         Ty::Vec(_) | Ty::Slice(_) | Ty::String => {
             let addr = load_through(builder, slot, 0)?;
             let bank = load_through(builder, slot, 1)?;
-            adjust_refcount(builder, addr, bank, false)?;
+            release_buffer(builder, &proc.collections, addr, bank, ty)?;
             store_through(builder, slot, 0, Value::Constant(0))?;
             store_through(builder, slot, 1, Value::Constant(0))
         }
@@ -467,31 +431,19 @@ pub(super) fn emit_arc(
     module: &mut Module,
     built: &Built,
 ) -> Result<(), CompileError> {
-    let adt_slots = built
-        .procs
-        .iter()
-        .any(|proc| proc.slots.iter().any(|slot| matches!(slot.ty, Ty::Adt(_))));
-    let func_slots = built
-        .procs
-        .iter()
-        .any(|proc| proc.slots.iter().any(|slot| matches!(slot.ty, Ty::Func(_))));
-    let func_fields = built.adts.iter().any(|adt| {
-        adt.ctors
-            .iter()
-            .any(|ctor| ctor.fields.iter().any(|ty| matches!(ty, Ty::Func(_))))
-    });
-    let needs_drop_func =
-        func_slots || func_fields || built.procs.iter().any(|proc| !proc.captures.is_empty());
-    if adt_slots {
-        for (id, adt) in built.adts.iter().enumerate() {
-            emit_drop_adt(builder, id as u32, adt, built)?;
-            module.add_function(builder.finish_function().unwrap());
-        }
+    // Types from checked but pruned functions do not require a runtime.
+    if !built.need_heap {
+        return Ok(());
     }
-    if needs_drop_func {
+    for (id, adt) in built.adts.iter().enumerate() {
+        emit_drop_adt(builder, id as u32, adt, built)?;
+        module.add_function(builder.finish_function().unwrap());
+    }
+    if built.need_heap {
         emit_drop_func(builder, built)?;
         module.add_function(builder.finish_function().unwrap());
     }
+    emit_buffer_drops(builder, module, built)?;
     Ok(())
 }
 
@@ -640,6 +592,18 @@ pub(super) fn release_object_field(
     ty: Ty,
 ) -> Result<(), CompileError> {
     match ty {
+        Ty::Array { id, len, width } => {
+            for i in 0..len {
+                release_object_field(
+                    builder,
+                    built,
+                    obj,
+                    offset + i64::from(i) * i64::from(width),
+                    built.collections.arrays[id as usize],
+                )?;
+            }
+            Ok(())
+        }
         Ty::Struct { id, .. } | Ty::Tuple { id, .. } => {
             let fields = match ty {
                 Ty::Struct { id, .. } => built.structs[id as usize].clone(),
@@ -655,7 +619,7 @@ pub(super) fn release_object_field(
         Ty::Vec(_) | Ty::Slice(_) | Ty::String => {
             let addr = load_cell(builder, obj, offset, IrType::I16)?;
             let bank = load_cell(builder, obj, offset + 1, IrType::I16)?;
-            adjust_refcount(builder, addr, bank, false)
+            release_buffer(builder, &built.collections, addr, bank, ty)
         }
         Ty::Adt(id) => {
             let tag = load_cell(builder, obj, offset, IrType::I16)?;

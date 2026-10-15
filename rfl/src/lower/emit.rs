@@ -68,8 +68,14 @@ pub(super) fn emit_seg(
             emit_capture_loads(builder, proc, frame)?;
         }
     }
+    let consumed = consumed_temporaries(proc);
     for insn in &proc.segs[index].insns {
         emit_insn(builder, proc, built, frame, insn)?;
+        for slot in operands(insn) {
+            if consumed.contains(&slot) {
+                release_managed(builder, proc, frame, slot)?;
+            }
+        }
     }
     match proc.segs[index].term.as_ref().unwrap() {
         Term::Return => emit_return(builder, proc, frame, built.need_alloc),
@@ -310,6 +316,9 @@ pub(super) fn emit_insn(
         Insn::VecLit { dest, elems, elem } => {
             emit_vec_lit(builder, proc, frame, *dest, elems, *elem)
         }
+        Insn::VecFill { dest, len, value } => {
+            emit_vec_fill(builder, proc, frame, *dest, *len, *value)
+        }
         Insn::ArrayLit { dest, elems, elem } => {
             emit_array_lit(builder, proc, frame, *dest, elems, *elem)
         }
@@ -332,7 +341,9 @@ pub(super) fn emit_insn(
         } => emit_vec_index(builder, proc, frame, *dest, *vec, *index, *elem),
         Insn::Len { dest, vec } => emit_vec_len(builder, proc, frame, *dest, *vec),
         Insn::Empty { dest, vec } => emit_vec_empty(builder, proc, frame, *dest, *vec),
-        Insn::Clear { vec, offset } => emit_vec_clear(builder, proc, frame, *vec, *offset),
+        Insn::Clear { vec, offset, elem } => {
+            emit_vec_clear(builder, proc, frame, *vec, *offset, *elem)
+        }
         Insn::Pop {
             vec,
             offset,

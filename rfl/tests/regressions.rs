@@ -326,3 +326,75 @@ fn unreachable_calls_do_not_create_missing_resume_labels() {
     assert_eq!(result.status, 42, "{}", result.stdout);
     assert_eq!(result.stdout, "");
 }
+
+#[test]
+fn managed_collection_elements_keep_independent_owners() {
+    let result = run(r#"
+        fn words() -> Vec<String> { ["alpha", "beta"] }
+        fn main() -> i16 {
+            let mut a = words();
+            let mut b = a;
+            let slice = a[0..2];
+            b[0] = "changed";
+            b.push("gamma");
+            let popped = b.pop();
+            let first = a[0];
+            a.clear();
+            b.clear();
+            let copied = slice.to_vec();
+            if (first == "alpha" && copied[1] == "beta") {
+                match popped { Some(s) => if (s == "gamma") { 42 } else { 1 }, None => 2 }
+            } else { 3 }
+        }
+    "#);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn wide_frame_scalars_are_promoted_without_losing_suspended_results() {
+    let result = run(r#"
+        fn wide(n: usize) -> usize { n + 65536 }
+        fn main() -> i16 {
+            let mut i: usize = 65536;
+            let mut sum: usize = 0;
+            while (i < 65539) { sum += wide(i); i += 1; }
+            if (sum == 393219) { 42 } else { 1 }
+        }
+    "#);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn constant_vector_fill_crosses_banks_and_keeps_aliases_independent() {
+    let result = run(r#"
+        fn main() -> i16 {
+            let mut large: Vec<u16> = [];
+            for (_ in 0..70000) { large.push(7); }
+            let mut empty: Vec<u16> = [];
+            let alias = empty;
+            for (_ in 0..12) { empty.push(9); }
+            let mut existing = [1];
+            for (_ in 0..3) { existing.push(2); }
+            let mut zero: Vec<u16> = [];
+            for (_ in 5..2) { zero.push(3); }
+            let mut outside_byte: Vec<u16> = [];
+            for (_ in 0..2) { outside_byte.push(999); }
+            if (large.len() == 70000 && large[65536] == 7 && large[69999] == 7 &&
+                alias.is_empty() && empty.len() == 12 && existing[3] == 2 &&
+                existing[0] == 1 && zero.is_empty() && outside_byte[1] == 999) { 42 } else { 1 }
+        }
+    "#);
+    assert_eq!(result.status, 42, "{}", result.stdout);
+}
+
+#[test]
+fn bulk_vector_allocation_checks_header_size_overflow() {
+    let result = run(r#"
+        fn main() {
+            let mut xs: Vec<u16> = [];
+            for (_ in 0..4294967295) { xs.push(0); }
+        }
+    "#);
+    assert_eq!(result.status, 1, "{}", result.stdout);
+    assert!(result.stdout.contains("overflow"), "{}", result.stdout);
+}

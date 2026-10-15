@@ -206,6 +206,11 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
             .collect();
         let repr_c = checker.structs.iter().map(|info| info.repr_c).collect();
         Ok(TModule {
+            collections: CollectionTypes {
+                vectors: checker.vec_elems.clone(),
+                slices: checker.slice_elems.clone(),
+                arrays: checker.arrays.iter().map(|a| a.elem).collect(),
+            },
             functions: std::mem::take(&mut checker.typed),
             adts: std::mem::take(&mut checker.adts),
             structs,

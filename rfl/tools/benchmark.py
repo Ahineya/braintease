@@ -21,12 +21,12 @@ def command(args):
     return subprocess.run([str(a) for a in args], capture_output=True, text=True)
 
 
-def measure(compiler, source, directory, runs, execute):
+def measure(compiler, source, directory, runs, execute, compile_args=()):
     asm = directory / "program.asm"
     times = []
     for _ in range(runs):
         start = time.perf_counter()
-        compiled = command([compiler, "compile", source, "-o", asm])
+        compiled = command([compiler, "compile", source, "-o", asm, *compile_args])
         times.append(time.perf_counter() - start)
         if compiled.returncode:
             return {"compile_error": compiled.stderr}
@@ -53,11 +53,20 @@ def measure(compiler, source, directory, runs, execute):
         if output.returncode:
             result["tool_error"] = output.stdout + output.stderr
             return result
-    output = command([ROOT / "target/release/rvm", binary, "--headless", "--exit-code",
-                      "--timeout", "20", "--memory", "4294967296", "--report", report])
-    result.update(status=output.returncode, stdout=output.stdout)
-    if report.exists():
-        result["execution"] = json.loads(report.read_text())
+    execution_times = []
+    for _ in range(runs):
+        start = time.perf_counter()
+        output = command([ROOT / "target/release/rvm", binary, "--headless", "--exit-code",
+                          "--timeout", "20", "--memory", "4294967296", "--report", report])
+        execution_times.append(time.perf_counter() - start)
+        result.update(status=output.returncode, stdout=output.stdout)
+        if report.exists():
+            result["execution"] = json.loads(report.read_text())
+        if output.returncode:
+            result["runtime_error"] = output.stderr
+            break
+    # Includes VM process startup, excludes compilation, assembly and linking.
+    result["vm_seconds_median"] = round(statistics.median(execution_times), 6)
     return result
 
 
@@ -67,11 +76,12 @@ def main():
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--case", type=Path, action="append", help="Source to measure; repeat for multiple cases")
     args = parser.parse_args()
     if args.runs < 1:
         parser.error("--runs must be positive")
     results = {}
-    cases = [ROOT / "rfl/benchmarks/scalars.rfl", ROOT / "rfl/benchmarks/strings.rfl",
+    cases = args.case or [ROOT / "rfl/benchmarks/scalars.rfl", ROOT / "rfl/benchmarks/strings.rfl",
              ROOT / "rfl/examples/bf-fn.rfl"]
     with tempfile.TemporaryDirectory(prefix="rfl-benchmark-") as temporary:
         for source in cases:
