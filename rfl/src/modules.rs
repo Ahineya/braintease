@@ -68,7 +68,7 @@ pub(crate) fn check_root(
     }];
     let mut cmods = Vec::new();
     let mut stack = vec![canon];
-    resolve_imports(0, &mut stack, &mut rfls, &mut cmods)?;
+    resolve_imports(0, &mut stack, &mut rfls, &mut cmods, rcc_ir::target::Target::Ripple)?;
     stack.pop();
     let mut taken_c = HashSet::new();
     let mut bindings = Vec::new();
@@ -278,8 +278,13 @@ fn shift_error(err: CompileError, root: &str, base: usize, len: usize) -> Compil
 }
 
 pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
-    let (typed, mut cmods) = check_path(path)?;
+    compile_path_for_target(path, rcc_ir::target::Target::Ripple)
+}
+
+pub fn compile_path_for_target(path: &Path, target: rcc_ir::target::Target) -> Result<IrModule, CompileError> {
+    let (typed, mut cmods) = check_path_for_target(path, target)?;
     let mut ir = crate::lower::lower("program", &typed)?;
+    ir.target = target;
     for (index, cmod) in cmods.iter_mut().enumerate() {
         prefix_globals(&mut cmod.ir, &format!("c{index}_"));
         merge_ir(&mut ir, &mut cmod.ir)?;
@@ -288,6 +293,10 @@ pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
 }
 
 pub(super) fn check_path(path: &Path) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
+    check_path_for_target(path, rcc_ir::target::Target::Ripple)
+}
+
+pub(super) fn check_path_for_target(path: &Path, target: rcc_ir::target::Target) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
     let canon = std::fs::canonicalize(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     let source = read_text(&canon)?;
@@ -295,18 +304,19 @@ pub(super) fn check_path(path: &Path) -> Result<(crate::typed::TModule, Vec<CMod
         Some(offset) => CompileError::at_file(&canon, &source, offset, err.detail),
         None => err,
     };
-    let ast = parse_source(&source).map_err(at_file)?;
+    let ast = parse_source_for_target(&source, target).map_err(at_file)?;
     if ast.imports.is_empty() {
         let typed = crate::check::check(&source, &ast).map_err(at_file)?;
         return Ok((typed, Vec::new()));
     }
-    link(canon, source, ast)
+    link(canon, source, ast, target)
 }
 
 fn link(
     path: PathBuf,
     source: String,
     ast: Module,
+    target: rcc_ir::target::Target,
 ) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
     let mut rfls = vec![RflUnit {
         path: path.clone(),
@@ -316,7 +326,7 @@ fn link(
     }];
     let mut cmods = Vec::new();
     let mut stack = vec![path];
-    resolve_imports(0, &mut stack, &mut rfls, &mut cmods)?;
+    resolve_imports(0, &mut stack, &mut rfls, &mut cmods, target)?;
     stack.pop();
 
     let mut taken_c = HashSet::new();
@@ -457,6 +467,7 @@ fn resolve_imports(
     stack: &mut Vec<PathBuf>,
     rfls: &mut Vec<RflUnit>,
     cmods: &mut Vec<CMod>,
+    target: rcc_ir::target::Target,
 ) -> Result<(), CompileError> {
     let imports = rfls[index].ast.imports.clone();
     let from = rfls[index].path.clone();
@@ -466,7 +477,7 @@ fn resolve_imports(
         let target = if target_path.extension().is_some_and(|ext| ext == "c") {
             Target::C(load_c(&target_path, cmods)?)
         } else {
-            Target::Rfl(load_rfl(&target_path, stack, rfls, cmods)?)
+            Target::Rfl(load_rfl(&target_path, stack, rfls, cmods, target)?)
         };
         resolved.push(Resolved { import, target });
     }
@@ -479,6 +490,7 @@ fn load_rfl(
     stack: &mut Vec<PathBuf>,
     rfls: &mut Vec<RflUnit>,
     cmods: &mut Vec<CMod>,
+    target: rcc_ir::target::Target,
 ) -> Result<usize, CompileError> {
     let canon = std::fs::canonicalize(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
@@ -494,7 +506,7 @@ fn load_rfl(
         return Ok(index);
     }
     let source = read_text(&canon)?;
-    let ast = parse_source(&source)?;
+    let ast = parse_source_for_target(&source, target)?;
     let index = rfls.len();
     rfls.push(RflUnit {
         path: canon.clone(),
@@ -503,7 +515,7 @@ fn load_rfl(
         resolved: Vec::new(),
     });
     stack.push(canon);
-    resolve_imports(index, stack, rfls, cmods)?;
+    resolve_imports(index, stack, rfls, cmods, target)?;
     stack.pop();
     Ok(index)
 }
@@ -1516,8 +1528,12 @@ fn read_text(path: &Path) -> Result<String, CompileError> {
 }
 
 fn parse_source(source: &str) -> Result<Module, CompileError> {
+    parse_source_for_target(source, rcc_ir::target::Target::Ripple)
+}
+
+fn parse_source_for_target(source: &str, target: rcc_ir::target::Target) -> Result<Module, CompileError> {
     let tokens = lexer::tokenize(source)?;
-    parser::parse(source, &tokens)
+    parser::parse_for_target(source, &tokens, target)
 }
 
 fn prefix_globals(module: &mut IrModule, prefix: &str) {

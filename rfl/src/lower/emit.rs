@@ -595,9 +595,10 @@ pub(super) fn call_helper(
     args: Vec<Value>,
     ret: IrType,
 ) -> Result<Value, CompileError> {
-    let temp = builder
-        .build_call(Value::Global(name.to_string()), args, ret)
-        .ir()?
-        .unwrap();
+    let temp = if rcc_ir::float::FloatIntrinsic::from_helper(name).is_some() {
+        rcc_ir::float::build_from_helper(builder, name, args, ret)
+    } else {
+        builder.build_call(Value::Global(name.to_string()), args, ret)
+    }.ir()?.unwrap();
     Ok(Value::Temp(temp))
 }

@@ -10,6 +10,9 @@ pub fn emit_module(module: &Module) -> String {
     let mut out = String::new();
     let _ = write!(out, "module {} {{\n", emit_name(&module.name));
 
+    if module.target != crate::target::Target::Ripple {
+        let _ = writeln!(out, "  target {}", module.target.name());
+    }
     let mut type_names: Vec<&String> = module.type_definitions.keys().collect();
     type_names.sort();
     for name in type_names {

@@ -152,6 +152,7 @@ fn cos_poly(z: f64) -> f64 {
     1.0 - z2 * acc
 }
 
+#[cfg(not(target_has = "host_math"))]
 export fn sin(x: f64) -> f64 {
     if (!finite(x)) { return 0.0 / 0.0; }
     if (x >= -0.7853981633974483 && x <= 0.7853981633974483) { return sin_poly(x); }
@@ -163,6 +164,7 @@ export fn sin(x: f64) -> f64 {
     else { -cos_poly(z) }
 }
 
+#[cfg(not(target_has = "host_math"))]
 export fn cos(x: f64) -> f64 {
     if (!finite(x)) { return 0.0 / 0.0; }
     if (x >= -0.7853981633974483 && x <= 0.7853981633974483) { return cos_poly(x); }
@@ -177,3 +179,16 @@ export fn cos(x: f64) -> f64 {
 export fn tan(x: f64) -> f64 {
     sin(x) / cos(x)
 }
+
+// Native target bindings are excluded before type checking on Ripple.
+#[cfg(target_has = "host_math")]
+extern "C" {
+    fn __rfl_host_sin(x: f64) -> f64;
+    fn __rfl_host_cos(x: f64) -> f64;
+}
+
+#[cfg(target_has = "host_math")]
+export fn sin(x: f64) -> f64 { __rfl_host_sin(x) }
+
+#[cfg(target_has = "host_math")]
+export fn cos(x: f64) -> f64 { __rfl_host_cos(x) }

@@ -41,6 +41,7 @@ struct CompileConfig {
     defines: Vec<String>,
     /// Enable tracing of all compilation stages to JSON files
     trace: bool,
+    target: rcc_ir::target::Target,
 }
 
 #[derive(Parser)]
@@ -136,6 +137,9 @@ enum Commands {
         /// Enable tracing of all compilation stages to JSON files
         #[arg(long)]
         trace: bool,
+        /// Native v1 uses host machine code with the shared Ripple data ABI
+        #[arg(long, default_value="ripple", value_parser=rcc_ir::target::Target::parse)]
+        target: rcc_ir::target::Target,
     },
 }
 
@@ -155,7 +159,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, no_preprocess, include_dirs, defines, trace } => {
+        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, no_preprocess, include_dirs, defines, trace, target } => {
             // Initialize logger based on debug level
             let log_level = match debug {
                 0 => "error",
@@ -184,6 +188,7 @@ fn main() {
                 include_dirs,
                 defines,
                 trace,
+                target,
             };
             
             if let Err(e) = compile_c99_file(config) {
@@ -220,6 +225,12 @@ fn generate_asm_command(
 }
 
 fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn std::error::Error>> {
+    if module.target == rcc_ir::target::Target::Native && config.target != module.target {
+        return Err("native IR cannot be retargeted to Ripple; recompile the source".into());
+    }
+    let mut selected = module.clone();
+    selected.target = config.target;
+    let module = &selected;
     let ir_output = rcc_ir::emit_module(module);
     if config.emit_ir {
         print!("{ir_output}");
@@ -245,10 +256,13 @@ fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn 
         path.clone()
     } else {
         let mut path = config.input_path.clone();
-        path.set_extension("asm");
+        path.set_extension(if config.target == rcc_ir::target::Target::Native { "native" } else { "asm" });
         path
     };
-    write_assembly(module, &output, config.bank_size, config.trace_spills)
+    if config.target == rcc_ir::target::Target::Native {
+        if config.bank_size != 64000 { return Err("native v1 data ABI requires --bank-size 64000".into()); }
+        rcc_native::compile_executable(module, &output).map_err(Into::into)
+    } else { write_assembly(module, &output, config.bank_size, config.trace_spills) }
 }
 
 fn write_assembly(
@@ -327,6 +341,9 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
     if config.input_path.extension().and_then(|ext| ext.to_str()) == Some("ir") {
         let text = fs::read_to_string(&config.input_path)?;
         let module = rcc_ir::parse_module(&text)?;
+        if module.target != config.target {
+            return Err(format!("IR target is {}; use --target {} or recompile the source", module.target.name(), module.target.name()).into());
+        }
         if !config.emit_ir {
             println!(
                 "Parsed IR module '{}' ({} functions, bank_size: {})",

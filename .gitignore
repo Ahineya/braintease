@@ -27,6 +27,8 @@ build
 
 *.pobj
 *.out
+# Default native compiler outputs
+*.native
 target
 
 __pycache__

@@ -30,6 +30,16 @@ impl<'a> Checker<'a> {
             }
             UnaryOp::Neg => {
                 let want = expected.filter(|ty| ty.is_int() || ty.is_float());
+                // Check the signed literal as a whole: its positive magnitude
+                // need not fit (for example -32768 in i16 or -128 in i8).
+                if let ExprKind::Int(value) = &inner.kind {
+                    let ty = want.unwrap_or(Ty::I16);
+                    if ty.is_signed() {
+                        let value = value.checked_neg().filter(|v| ty.in_range(*v))
+                            .ok_or_else(|| CompileError::at(self.source, span, format!("-{value} does not fit in {ty}")))?;
+                        return Ok(TExpr { ty, kind: TExprKind::Int(value) });
+                    }
+                }
                 let inner = self.check_expr(inner, want)?;
                 if inner.ty.is_float() {
                     if let TExprKind::Float(bits) = inner.kind {

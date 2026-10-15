@@ -192,7 +192,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "miniz_oxide",
- "object",
+ "object 0.36.7",
  "rustc-demangle",
  "windows-targets 0.52.6",
 ]
@@ -691,6 +691,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cranelift-object"
+version = "0.137.0-rc.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf4679ba31ca1fac564d4c6691a080c45330b39eef79927b3fc1346e94ddbdc8"
+dependencies = [
+ "anyhow",
+ "cranelift-codegen",
+ "cranelift-control",
+ "cranelift-module",
+ "gimli 0.33.0",
+ "log",
+ "object 0.40.0",
+ "target-lexicon",
+]
+
+[[package]]
 name = "cranelift-srcgen"
 version = "0.137.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1025,7 +1041,7 @@ checksum = "0bf7f043f89559805f8c7cacc432749b2fa0d0a0a9ee46ce47164ed5ba7f126c"
 dependencies = [
  "fnv",
  "hashbrown 0.16.1",
- "indexmap 2.10.0",
+ "indexmap 2.14.2",
  "stable_deref_trait",
 ]
 
@@ -1198,12 +1214,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.10.0"
+version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
+checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
- "hashbrown 0.15.5",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -1744,6 +1760,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.40.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c"
+dependencies = [
+ "crc32fast",
+ "hashbrown 0.17.1",
+ "indexmap 2.14.2",
+ "memchr",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2048,6 +2076,7 @@ dependencies = [
  "rcc-common",
  "rcc-frontend",
  "rcc-ir",
+ "rcc-native",
  "rcc-preprocessor",
  "serde",
  "serde_json",
@@ -2072,6 +2101,28 @@ version = "0.1.0"
 dependencies = [
  "rcc-common",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rcc-native"
+version = "0.1.0"
+dependencies = [
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-module",
+ "cranelift-native",
+ "cranelift-object",
+ "rcc-backend",
+ "rcc-ir",
+]
+
+[[package]]
+name = "rcc-native-runtime"
+version = "0.1.0"
+dependencies = [
+ "rcc-ir",
+ "rvm",
 ]
 
 [[package]]
@@ -2200,6 +2251,7 @@ dependencies = [
  "rcc-codegen",
  "rcc-frontend",
  "rcc-ir",
+ "rcc-native",
  "rcc-preprocessor",
  "serde_json",
 ]
@@ -2702,7 +2754,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.10.0",
+ "indexmap 2.14.2",
  "toml_datetime",
  "winnow",
 ]

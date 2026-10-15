@@ -30,6 +30,8 @@ pub struct GlobalVariable {
 /// IR Module - represents a complete compilation unit
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Module {
+    #[serde(default)]
+    pub target: crate::target::Target,
     pub name: String,
     pub functions: Vec<Function>,
     pub globals: Vec<GlobalVariable>,
@@ -41,6 +43,7 @@ pub struct Module {
 impl Module {
     pub fn new(name: String) -> Self {
         Self {
+            target: crate::target::Target::Ripple,
             name,
             functions: Vec::new(),
             globals: Vec::new(),

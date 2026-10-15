@@ -3,6 +3,8 @@ members = [
     "rcc-codegen",
     "rcc-common",
     "rcc-ir",
+    "rcc-native",
+    "rcc-native-runtime",
     "rcc-backend",
     "rcc-driver",
     "rcc-frontend",

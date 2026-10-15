@@ -1,8 +1,10 @@
 # RFL lowering decisions
 
-**Status:** Locked for RFL 0.1  
+**Status:** Ripple lowering for RFL 0.1; native compatibility target available
 **Language spec:** [initial.md](initial.md)  
 **IR:** [docs/ir.md](../docs/ir.md)
+
+The native target is documented in [rcc-native/README.md](../rcc-native/README.md). It retains these data layouts and RFL activation records for its first milestone, while generating host machine code and native floating arithmetic. The hardware-stack descriptions below refer to Ripple.
 
 RFL source does not mention banks, fat pointers, the hardware stack, or the width of a machine cell. The compiler and a small runtime hide those limits. `extern "C"` and `unsafe` are the boundary where the Ripple C ABI shows through.
 
@@ -86,7 +88,7 @@ Machine cells are 16 bits. RFL types keep the widths in the language spec. The c
 | `u16` | One cell. Comparisons, division, remainder, and shifts use the unsigned IR operations |
 | `i32`, `u32` | Two cells, little-endian, the existing wide integer lowering |
 | `i64`, `u64` | Four cells, the existing 64-bit lowering |
-| `f32`, `f64` | Two and four cells. Operations are calls to the `__rcc_f32_*` and `__rcc_f64_*` helpers in `libruntime.par`. An IR `add` on a float type is rejected by the backend |
+| `f32`, `f64` | Two and four cells. Operations remain typed `float.*` intrinsics until target lowering. Ripple selects the `__rcc_f32_*` and `__rcc_f64_*` helpers in `libruntime.par`; native selects hardware arithmetic. An IR `add` on a float type is rejected by the backend |
 | `char` | Unicode scalar in an `i32` |
 | `String` | Managed object: header, byte length, then one UTF-8 octet per cell |
 | `unit` | No value. A `unit` function returns `void` |
@@ -125,7 +127,7 @@ These are runtime faults. They are not `Result` values. The frontend inserts the
 | Indexing a built-in array or other bounds-checked collection | Index is outside the length |
 | Allocation | `malloc` returns null |
 
-Float operations are left to the soft-float helpers.
+Float operations follow IEEE arithmetic; Ripple uses software helpers and native uses hardware arithmetic.
 
 A fault calls one runtime entry, `rfl_fail`. It writes a short message with `putchar` and halts with a non-zero status. It does not return. Division by zero in a user function that returns `Result` is ordinary RFL: the function tests the divisor itself and does not use the fault path.
 
@@ -158,7 +160,7 @@ The hardware stack still bounds how deep C can recurse, and how many times C can
 
 Importing a `.c` file runs the C preprocessor and the C frontend, then links the resulting IR module. Types come from the C typed tree. The IR width alone is not enough: `int` and `unsigned int` are both `i16`. `static` symbols stay internal to the C module and are not imported.
 
-Float code imported from C keeps working because the same soft-float runtime is linked.
+Float code imported from C uses the same typed floating IR and the selected target implementation as RFL.
 
 ---
 

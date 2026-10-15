@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 rcc-backend = { path = "../rcc-backend" }
+rcc-native = { path = "../rcc-native" }
 rcc-codegen = { path = "../rcc-codegen" }
 rcc-frontend = { path = "../rcc-frontend" }
 rcc-ir = { workspace = true }

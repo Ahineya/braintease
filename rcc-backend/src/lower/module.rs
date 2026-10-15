@@ -13,7 +13,11 @@ use super::function::lower_function_v2;
 
 /// Lower an entire module using the V2 backend
 pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Result<Vec<AsmInst>, String> {
+    if module.target != rcc_ir::target::Target::Ripple {
+        return Err("native IR cannot be lowered to Ripple; recompile source for --target ripple".into());
+    }
     let mut optimized = module.clone();
+    rcc_ir::float::lower_to_softfloat(&mut optimized)?;
     crate::optimize::optimize_module(&mut optimized);
     for function in &mut optimized.functions {
         crate::optimize::preserve_pointer_banks(function, bank_size);

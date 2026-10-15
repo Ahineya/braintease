@@ -65,7 +65,7 @@ fn emit_call(
     args: Vec<Value>,
     ret_ty: IrType,
 ) -> Result<Value, CompilerError> {
-    let result = gen.builder.build_call(Value::Global(name.to_string()), args, ret_ty)
+    let result = rcc_ir::float::build_from_helper(gen.builder, name, args, ret_ty)
         .map_err(|e| CodegenError::InternalError {
             message: e,
             location: rcc_common::SourceLocation::new_simple(0, 0),

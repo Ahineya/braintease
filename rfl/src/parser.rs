@@ -1,9 +1,16 @@
+mod cfg;
+
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::lexer::{Token, TokenKind};
 
 pub fn parse(source: &str, tokens: &[Token]) -> Result<Module, CompileError> {
+    parse_for_target(source, tokens, rcc_ir::target::Target::Ripple)
+}
+
+pub fn parse_for_target(source: &str, tokens: &[Token], target: rcc_ir::target::Target) -> Result<Module, CompileError> {
     let mut parser = Parser {
+        target,
         source,
         tokens,
         index: 0,
@@ -18,6 +25,7 @@ pub fn parse(source: &str, tokens: &[Token]) -> Result<Module, CompileError> {
 /// before the next statement, is reported and the rest of the file is kept.
 pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileError>) {
     let mut parser = Parser {
+        target: rcc_ir::target::Target::Ripple,
         source,
         tokens,
         index: 0,
@@ -46,6 +54,7 @@ pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileErro
 }
 
 struct Parser<'a> {
+    target: rcc_ir::target::Target,
     source: &'a str,
     tokens: &'a [Token],
     index: usize,
@@ -65,16 +74,33 @@ impl<'a> Parser<'a> {
         let mut functions = Vec::new();
         let mut externs = Vec::new();
         let mut imports = Vec::new();
+        let mut parsed_any = false;
         while !self.is(&TokenKind::Eof) {
-            if self.is(&TokenKind::Type) {
+            let mut enabled = true;
+            let mut repr_c = false;
+            while self.is(&TokenKind::Hash) {
+                let before = self.index;
+                enabled &= self.cfg_attributes()?;
+                if self.index == before {
+                    if repr_c {
+                        return Err(CompileError::at(self.source, self.current().span.start, "duplicate repr attribute"));
+                    }
+                    self.parse_repr_c()?;
+                    repr_c = true;
+                }
+            }
+            let counts = (adts.len(), structs.len(), impls.len(), consts.len(), functions.len(), externs.len(), imports.len());
+            parsed_any = true;
+            if repr_c {
+                let exported = self.eat(&TokenKind::Export);
+                let mut item = self.parse_struct()?;
+                item.repr_c = true;
+                item.exported = exported;
+                structs.push(item);
+            } else if self.is(&TokenKind::Type) {
                 adts.push(self.parse_adt()?);
             } else if self.is(&TokenKind::Struct) {
                 structs.push(self.parse_struct()?);
-            } else if self.is(&TokenKind::Hash) {
-                self.parse_repr_c()?;
-                let mut item = self.parse_struct()?;
-                item.repr_c = true;
-                structs.push(item);
             } else if self.is(&TokenKind::Impl) {
                 impls.push(self.parse_impl()?);
             } else if self.is(&TokenKind::Const) {
@@ -95,8 +121,17 @@ impl<'a> Parser<'a> {
                     "expected `fn`, `type`, `struct`, `impl`, or `const`",
                 ));
             }
+            if !enabled {
+                adts.truncate(counts.0);
+                structs.truncate(counts.1);
+                impls.truncate(counts.2);
+                consts.truncate(counts.3);
+                functions.truncate(counts.4);
+                externs.truncate(counts.5);
+                imports.truncate(counts.6);
+            }
         }
-        if functions.is_empty()
+        if !parsed_any && functions.is_empty()
             && adts.is_empty()
             && structs.is_empty()
             && consts.is_empty()
@@ -297,7 +332,9 @@ impl<'a> Parser<'a> {
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut decls = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
-            decls.push(self.parse_extern_fn()?);
+            let enabled = self.cfg_attributes()?;
+            let declaration = self.parse_extern_fn()?;
+            if enabled { decls.push(declaration); }
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
         Ok(decls)
@@ -367,8 +404,10 @@ impl<'a> Parser<'a> {
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut items = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
+            let enabled = self.cfg_attributes()?;
             self.eat(&TokenKind::Export);
-            items.push(self.parse_method()?);
+            let method = self.parse_method()?;
+            if enabled { items.push(method); }
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
         Ok(Impl {

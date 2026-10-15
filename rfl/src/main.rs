@@ -13,25 +13,34 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Typecheck a source file
-    Check { input: PathBuf },
-    /// Compile, link, and run a source file on rvm
+    Check {
+        input: PathBuf,
+        #[arg(long, default_value="ripple", value_parser=rfl::Target::parse)]
+        target: rfl::Target,
+    },
+    /// Compile, link, and run a source file
     Run {
         input: PathBuf,
         /// Execute the guest with rvm's Cranelift JIT
         #[arg(long)]
         jit: bool,
+        /// Code generation target (native v1 retains the Ripple data ABI)
+        #[arg(long, default_value="ripple", value_parser=rfl::Target::parse)]
+        target: rfl::Target,
     },
     /// Start the language server on standard input and output
     Lsp,
-    /// Compile a source file to Ripple IR or assembly
+    /// Compile a source file to IR, Ripple assembly, or a native executable
     Compile {
         input: PathBuf,
-        /// Write assembly here. Defaults to the input path with a `.asm` extension.
+        /// Output path. Defaults to `.asm` for Ripple or `.native` for native.
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// Print textual IR and do not write assembly
+        /// Print textual IR instead of generating target code
         #[arg(long)]
         emit_ir: bool,
+        #[arg(long, default_value="ripple", value_parser=rfl::Target::parse)]
+        target: rfl::Target,
     },
 }
 
@@ -52,10 +61,19 @@ fn run() -> Result<i32, rfl::CompileError> {
             rfl::serve_lsp();
             Ok(0)
         }
-        Command::Run { input, jit } => rfl::run_file_in_terminal(&input, jit),
-        Command::Check { input } => {
+        Command::Run { input, jit, target } => {
+            if target == rfl::Target::Native {
+                if jit {
+                    return Err(rfl::CompileError::plain("--jit selects the Ripple VM JIT; native programs are ahead-of-time compiled"));
+                }
+                rfl::run_native_file(&input, true).map(|result| result.status)
+            } else {
+                rfl::run_file_in_terminal(&input, jit)
+            }
+        }
+        Command::Check { input, target } => {
             eprintln!("    Checking {}", input.display());
-            rfl::check_file(&input)?;
+            rfl::check_file_for_target(&input, target)?;
             eprintln!("    Finished");
             Ok(0)
         }
@@ -63,11 +81,21 @@ fn run() -> Result<i32, rfl::CompileError> {
             input,
             output,
             emit_ir,
+            target,
         } => {
             eprintln!("   Compiling {}", input.display());
             if emit_ir {
-                print!("{}", rfl::compile_file_to_ir_text(&input)?);
+                print!(
+                    "{}",
+                    rcc_ir::emit_module(&rfl::compile_file_for_target(&input, target)?)
+                );
                 eprintln!("    Finished");
+                return Ok(0);
+            }
+            if target == rfl::Target::Native {
+                let output = output.unwrap_or_else(|| input.with_extension("native"));
+                rfl::compile_file_to_native(&input, &output)?;
+                eprintln!("    Finished {}", output.display());
                 return Ok(0);
             }
             let asm = rfl::compile_file_to_asm(&input)?;
@@ -96,7 +124,7 @@ mod tests {
             ["rfl", "run", "examples/beep.rfl", "--jit"],
         ] {
             let cli = Cli::try_parse_from(args).unwrap();
-            let Command::Run { input, jit } = cli.command else {
+            let Command::Run { input, jit, .. } = cli.command else {
                 panic!("expected the run command");
             };
             assert_eq!(input, PathBuf::from("examples/beep.rfl"));

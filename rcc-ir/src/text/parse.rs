@@ -54,6 +54,7 @@ impl Parser {
         let name = self.parse_name()?;
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut module = Module::new(name);
+        let mut saw_target = false;
         loop {
             if self.peek_kind(&TokenKind::RBrace) {
                 break;
@@ -61,7 +62,12 @@ impl Parser {
             if self.eof() {
                 return Err(self.error("unclosed module"));
             }
-            if self.peek_kind(&TokenKind::At) {
+            if self.eat_keyword("target") {
+                if saw_target { return Err(self.error("duplicate module target")); }
+                saw_target = true;
+                let name = self.expect_ident()?;
+                module.target = crate::target::Target::parse(&name).map_err(|e| self.error(e))?;
+            } else if self.peek_kind(&TokenKind::At) {
                 module.globals.push(self.parse_global()?);
             } else if self.eat_keyword("type") {
                 let key = self.parse_name()?;

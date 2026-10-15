@@ -452,7 +452,6 @@ struct Built {
     need_io: bool,
     need_print_num: bool,
     need_print_float: bool,
-    need_float: bool,
     externs: Vec<crate::typed::ExternFn>,
     cstrs: Vec<Vec<u16>>,
 }
@@ -490,7 +489,6 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     let mut need_io = false;
     let mut need_print_num = false;
     let mut need_print_float = false;
-    let mut need_float = false;
     for proc in &procs {
         if proc.segs.iter().any(|seg| {
             matches!(
@@ -514,15 +512,6 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
             })
         }) {
             need_fail = true;
-        }
-        if proc.segs.iter().any(|seg| {
-            seg.insns.iter().any(|insn| match insn {
-                Insn::Bin { lhs, .. } => proc.slots[*lhs].ty.is_float(),
-                Insn::Cast { from, to, .. } => from.is_float() || to.is_float(),
-                _ => false,
-            })
-        }) {
-            need_float = true;
         }
         if proc.segs.iter().any(|seg| {
             seg.insns
@@ -618,7 +607,6 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
                         if ty.is_float() {
                             need_print_num = true;
                             need_print_float = true;
-                            need_float = true;
                         }
                     }
                     Insn::PrintLit { .. } | Insn::Putc { .. } => need_io = true,
@@ -644,7 +632,6 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
         need_io,
         need_print_num,
         need_print_float,
-        need_float,
         externs: module.externs.clone(),
         cstrs,
     })
@@ -694,11 +681,6 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     }
     if built.need_io {
         module.add_function(extern_fn("putchar", IrType::Void, vec![IrType::I16]));
-    }
-    if built.need_float {
-        for func in softfloat_externs() {
-            module.add_function(func);
-        }
     }
     for ext in &built.externs {
         if module.get_function(&ext.name).is_some() {

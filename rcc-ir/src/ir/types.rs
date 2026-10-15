@@ -57,31 +57,11 @@ pub enum IrType {
 }
 
 impl IrType {
-    /// Get the size of this type in bytes
+    /// Size in 16-bit compatibility cells, checked for layout overflow.
     pub fn size_in_words(&self) -> Option<u64> {
-        match self {
-            IrType::Void => None,
-            IrType::I1 => Some(1), // Stored in full byte
-            IrType::I8 => Some(1),
-            IrType::I16 => Some(1),
-            IrType::I32 | IrType::F32 => Some(2),
-            IrType::I64 | IrType::F64 => Some(4),
-            IrType::FatPtr(_) => Some(2), // Fat pointers: 2 words (address + bank tag)
-            IrType::Array { size, element_type } => {
-                element_type.size_in_words().map(|elem_size| elem_size * size)
-            }
-            IrType::Function { .. } => None, // Functions don't have size
-            IrType::Struct { fields, .. } => {
-                let mut total = 0;
-                for field in fields {
-                    total += field.size_in_words()?;
-                }
-                Some(total)
-            }
-            IrType::Label => None,
-        }
+        crate::target::DataLayout::RIPPLE16.size_in_cells(self).ok()
     }
-    
+
     /// Check if this is an integer type
     pub fn is_integer(&self) -> bool {
         matches!(self, IrType::I1 | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64)
