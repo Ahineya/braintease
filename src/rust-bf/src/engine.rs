@@ -15,6 +15,12 @@ mod scan;
 mod search;
 mod tape;
 
+#[cfg(all(feature = "jit", any(target_arch = "aarch64", target_arch = "x86_64")))]
+pub mod jit;
+#[cfg(not(all(feature = "jit", any(target_arch = "aarch64", target_arch = "x86_64"))))]
+#[path = "engine/jit/unavailable.rs"]
+pub mod jit;
+
 pub use checkpoint::CheckpointError;
 pub use profile::{OperationProfile, Profile, ProfileReport, SiteProfile};
 
@@ -39,6 +45,7 @@ pub enum Error {
     },
     NoPendingInput,
     DispatchOverflow,
+    Jit(String),
 }
 
 impl fmt::Display for Error {
@@ -50,6 +57,7 @@ impl fmt::Display for Error {
             Self::TapeBounds { offset, pointer } => write!(f, "Brainfuck pointer left the tape near source byte {offset} (last valid cell {pointer})"),
             Self::NoPendingInput => write!(f, "Brainfuck machine is not awaiting input"),
             Self::DispatchOverflow => write!(f, "Brainfuck dispatch counter overflow"),
+            Self::Jit(message) => write!(f, "{message}"),
         }
     }
 }

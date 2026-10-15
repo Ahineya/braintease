@@ -225,6 +225,7 @@ impl Host {
             }
             let devices = BfDevices::restore_checkpoint(state.devices, storage)?;
             let host = Self {
+                jit_stats: None,
                 layout: layout.clone(),
                 machine,
                 devices,

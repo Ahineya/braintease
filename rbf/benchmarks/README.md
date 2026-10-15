@@ -41,6 +41,85 @@ src/ripple-asm/target/release/rlink build/bf-bench/inputs/far-call-64k.pobj \
 Keep those exact generated `.bf` files for both interpreter versions. Rebuilding
 the CPU footer between measurements would also measure changes to the program.
 
+## Native BF JIT comparison
+
+Build first, then keep builds and other timing workloads idle while measuring:
+
+```sh
+cargo build --release --manifest-path src/rust-bf/Cargo.toml
+cargo build --release -p rbf --example check_squares_jit
+cargo build --release -p rbf
+scripts/run-bf-rgb565-c.sh --build-only
+python3 rbf/benchmarks/benchmark_jit.py --squares build/bf/rgb565-demo.bf
+target/release/examples/check_squares_jit build/bf/rgb565-demo.bf
+```
+
+The Python driver runs Mandelbrot and optionally the original C four-square
+demo, alternating interpreter/JIT order for three repetitions. Each process
+starts cold, including native compilation. `--repetitions`, `--timeout`, `--frames`
+(default four), `--output`, `--bf` and `--rbf` select bounds/artifacts/binaries.
+It never builds anything or selects Doom. Mandelbrot has an external process
+deadline; square runs additionally have the host execution deadline. Timeouts,
+nonzero exits, differing stdout, pixels or stable execution-report fields fail
+explicitly. BF dispatch counts may differ because native execution can change
+derived scan facts. Reports, stderr and captures remain under `build/bf-jit/`.
+
+The BF CLI timer includes parsing and execution. The RBF execution timer
+includes tape initialization, native compilation and host callbacks, excluding
+parsing and host setup. Process time is recorded separately. Exact source,
+report and frame hashes make the frozen input explicit.
+The frame comparison uses no keys. The separate Rust example runs five frames
+with Right, Down, Left and Up held in turn, checking exact full tape, front
+pixels, stdout and guest instruction counts against the interpreter. It also
+independently checks the red player's expected coordinates. This legacy demo
+never requests NEXT_TICK, so tick-script replay cannot test its arrow movement;
+the checker changes live held-key state at frame boundaries without a window.
+Its repeated host runs intentionally warm fresh JIT caches and are correctness
+checks, not steady-state performance measurements.
+
+### Native JIT results (2026-10-15)
+
+Three alternating, sequential pairs on macOS 27 ARM64 with rustc 1.97.1,
+using the same release executable for both modes and no concurrent builds or
+timing workloads. Every JIT process started cold; compilation is included.
+
+| Workload | Interpreter median | JIT median | Result |
+| --- | ---: | ---: | --- |
+| Classic `mandelbrot.bf` | 5.621 s | 2.399 s | 2.34× faster |
+| Original C four-square demo, four frames | 1.406 s | 1.686 s | 19.9% slower |
+
+Mandelbrot uses the standalone CLI timer (parsing plus execution); its ranges
+were 5.612–5.645 s and 2.388–2.400 s. The square demo uses the host execution
+timer (including tape initialization, excluding parsing/setup); ranges were
+1.400–1.408 s and 1.677–1.740 s. The demo retains three 16,384-cell RAM banks,
+a 393,480-cell tape and 119,440 observed guest instructions. All compared
+stdout, stable report fields and exact frame pixels matched. Its fourth frame
+also matched the corresponding RVM binary, and the five-frame arrow checker
+matched complete tape state and expected player positions.
+
+Mandelbrot executes about 92% of its 1.326 billion IR dispatches natively.
+The square demo executes only about 8% natively: 43 of 55 compiled regions
+retire after short runs. Compilation costs roughly 0.1 s in each workload.
+Native entry, cell preparation and scan-fact maintenance remain overhead for
+the short arithmetic regions between the BF CPU's summarized algorithms.
+
+A separate, instrumented first-frame profile attributes about half of the
+**timed operation cost** to guarded routed loops (1.62 million attempts, just
+275 fallbacks). This includes profiler overhead and is not an unprofiled wall
+time breakdown. These loops already replace large BF traversals with bounded
+Rust proofs and deferred updates; lowering arithmetic alone does not improve
+them. Compiling/specializing those summaries and reducing transitions across
+them is the next useful JIT target. Preserving their scan and deferred-write
+algorithms matters more than removing dispatch in isolation.
+
+The current JIT is therefore opt-in, with `rbf --jit` explicitly experimental.
+No Doom run or Doom speed estimate was made. Frozen binaries and their hashes
+are under ignored `build/bf-jit/final-bin/`; commands, hashes, raw measurements
+and captures are under `build/bf-jit/final-measured/`. Source SHA256 values:
+
+- Mandelbrot: `dc634e6a22d7bfa260c827e021fa47485b25e6cd736b7e4e476b550e6827ebdd`
+- Square BF image: `210c35f844c454c664e7f11766b47127ce96230e3e037afab6e66eaaeed62ff8`
+
 ## Core replay with exact state comparison
 
 Build and preserve the benchmark binary **before** changing the interpreter:

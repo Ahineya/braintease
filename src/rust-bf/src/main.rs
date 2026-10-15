@@ -46,6 +46,10 @@ struct Args {
     /// Skip optimization phase
     #[arg(long)]
     no_optimize: bool,
+
+    /// Compile hot regions to native code (wrapping 16-bit mode)
+    #[arg(long, conflicts_with = "emit_optimized")]
+    jit: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -657,14 +661,35 @@ fn parse_literal(code: &str) -> Result<Vec<Op>, String> {
     Ok(scopes.pop().unwrap())
 }
 
-fn run_fast(program: &Program, tape_size: usize) -> Result<u64, Box<dyn std::error::Error>> {
+fn run_fast(
+    program: &Program,
+    tape_size: usize,
+    native: bool,
+    statistics: bool,
+) -> Result<u64, Box<dyn std::error::Error>> {
     let mut machine = Machine::with_wrapping_tape(tape_size)?;
+    let mut jit = native
+        .then(|| bf_wasm::engine::jit::Jit::new(program))
+        .transpose()?;
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
     loop {
-        match machine.run(program, 65_536)? {
+        let stop = if let Some(jit) = &mut jit {
+            jit.run(&mut machine, 65_536)?
+        } else {
+            machine.run(program, 65_536)?
+        };
+        match stop {
             Stop::Budget => {}
-            Stop::Halted => { output.flush()?; return Ok(machine.dispatches()); }
+            Stop::Halted => {
+                output.flush()?;
+                if statistics {
+                    if let Some(jit) = &jit {
+                        eprintln!("JIT: {:?}", jit.stats());
+                    }
+                }
+                return Ok(machine.dispatches());
+            }
             Stop::Output(value) => output.write_all(&[value])?,
             Stop::Input => {
                 output.flush()?;
@@ -694,6 +719,10 @@ fn main() {
     }
     if args.tape_size == 0 {
         eprintln!("Error: tape-size must be positive");
+        std::process::exit(1);
+    }
+    if args.jit && !(args.cell_size == 16 && args.wrap && args.wrap_tape) {
+        eprintln!("Error: --jit requires wrapping 16-bit cells and a wrapping tape");
         std::process::exit(1);
     }
     
@@ -734,7 +763,7 @@ fn main() {
                 if args.verbose {
                     eprintln!("Parsed {} IR instructions, {} optimized regions", program.instruction_count(), program.optimization_count());
                 }
-                run_fast(&program, args.tape_size).map_err(|error| error.to_string())
+                run_fast(&program, args.tape_size, args.jit, args.stat || args.verbose).map_err(|error| error.to_string())
             });
         match result {
             Ok(dispatches) => {

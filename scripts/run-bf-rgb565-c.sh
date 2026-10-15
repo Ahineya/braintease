@@ -20,6 +20,7 @@ Use arrow keys to move the red square. Close its window or press Ctrl-C to stop.
   --visual           Open the graphics window (default)
   --telemetry-lite   Dot every 5s; BF/guest counts and rates every 30s on stderr
   --telemetry        Report ongoing BF execution and drawing progress on stderr
+  --jit              Try native compilation of hot Brainfuck loops
 
 Other options, such as --timeout, --capture-frame, --screenshot, --raw-frame,
 --report and --no-optimize, are passed to rbf. Use rbf --help for the full list.

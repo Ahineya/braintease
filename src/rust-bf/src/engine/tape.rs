@@ -113,6 +113,52 @@ impl Tape {
         self.runs.len() > RUN_LIMIT
     }
 
+    /// Expose a bounded physical window for native code while retaining all
+    /// deferred progressions outside it. At most 1024 cells are materialized;
+    /// each old progression splits at most once. Native writes invalidate
+    /// predicate caches for this window before touching the returned allocation.
+    #[cfg(all(feature = "jit", any(target_arch = "aarch64", target_arch = "x86_64")))]
+    pub(super) fn prepare_native(&mut self, low: usize, high: usize) -> *mut u16 {
+        debug_assert!(low < high && high <= self.len() && high - low <= 1024);
+        if self.all.low < high && self.all.high >= low {
+            let mut at = 0;
+            while at < self.runs.len() {
+                let run = self.runs[at];
+                if run.low >= high || run.high < low {
+                    at += 1;
+                    continue;
+                }
+                let first = run.low + low.saturating_sub(run.low).div_ceil(run.step) * run.step;
+                let last = run.low + ((high - 1).min(run.high) - run.low) / run.step * run.step;
+                if first > last {
+                    at += 1;
+                    continue;
+                }
+                if run.backing != Some(run.value) {
+                    for index in (first..=last).step_by(run.step) {
+                        self.cells[index] = run.value;
+                    }
+                }
+                self.runs.swap_remove(at);
+                if first > run.low {
+                    self.runs.push(Run {
+                        high: first - run.step,
+                        ..run
+                    });
+                }
+                if last < run.high {
+                    self.runs.push(Run {
+                        low: last + run.step,
+                        ..run
+                    });
+                }
+            }
+            self.refresh_filters();
+        }
+        debug_assert!(self.runs.len() <= MAX_RUNS);
+        self.cells.as_mut_ptr()
+    }
+
     /// Commit at most one bounded prefix. Logical contents never change.
     pub(super) fn materialize_step(&mut self) {
         let Some((slot, _)) = self

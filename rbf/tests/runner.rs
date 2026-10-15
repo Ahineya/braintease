@@ -548,3 +548,65 @@ fn capture_baseline_and_output_errors_are_not_silent_successes() {
     let error = run(&mut host(), &program.source, &limits(), &mut BrokenWriter).unwrap_err();
     assert!(error.contains("output unavailable"), "{error}");
 }
+
+#[test]
+fn jit_keeps_hot_loop_state_and_device_input_output_boundaries() {
+    let mut program = TapeProgram::default();
+    program.source = format!("{}[>+<--]", "+".repeat(4000));
+    program.store(HDR_TTY_OUT, 65);
+    program.ram(HDR_TTY_IN_POP);
+    program.source.push('?');
+    let input_pointer = program.pointer;
+    program.source.push('[');
+    program.source.push('-');
+    program.ram(HDR_TTY_OUT);
+    program.source.push('+');
+    program.at(input_pointer);
+    program.source.push(']');
+    program.ram(HDR_TTY_OUT);
+    program.source.push('!');
+    let mut plain = host();
+    let mut native = host();
+    plain.devices.push_input(&[128]);
+    native.devices.push_input(&[128]);
+    let mut a = Vec::new();
+    let mut b = Vec::new();
+    let want = run(&mut plain, &program.source, &limits(), &mut a);
+    let got = run(
+        &mut native,
+        &program.source,
+        &RunOptions {
+            jit: true,
+            ..limits()
+        },
+        &mut b,
+    );
+    assert_eq!(got, want);
+    assert_eq!(b, a);
+    assert_eq!(a, [65, 193]);
+    assert_eq!(native.machine.tape(), plain.machine.tape());
+    assert_eq!(native.machine.pointer(), plain.machine.pointer());
+    assert!(native.jit_stats.as_ref().unwrap().native_dispatches > 0);
+}
+
+#[test]
+fn jit_obeys_host_dispatch_limits_and_rejects_misleading_profile_combinations() {
+    let source = "+[>+<++]";
+    let program = Program::parse(source, false, true).unwrap();
+    let options = RunOptions {
+        jit: true,
+        max_dispatches: Some(32768),
+        ..limits()
+    };
+    let mut native = host();
+    let error = native.run(&program, &options, &mut Vec::new()).unwrap_err();
+    assert!(error.contains("dispatch limit"), "{error}");
+    assert_eq!(native.machine.dispatches(), 32768);
+    assert!(native.jit_stats.as_ref().unwrap().native_dispatches > 0);
+    let mut profiled = host();
+    profiled.profile = Some(Profile::default());
+    let error = profiled
+        .run(&program, &options, &mut Vec::new())
+        .unwrap_err();
+    assert!(error.contains("profiling and JIT"), "{error}");
+}

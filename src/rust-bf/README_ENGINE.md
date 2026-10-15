@@ -5,8 +5,9 @@ validates brackets and optionally enables arithmetic blocks, affine loops with
 multiple destinations, cached scans, moving-marker searches, moving update
 loops, and guarded loops containing arithmetic and scans. It parses once;
 machines hold independent tape and execution state.
-The core uses safe Rust and
-wraps cells modulo 65536. Both the native `bf` CLI and Ripple's `rbf` host use it.
+The interpreter uses safe Rust and wraps cells modulo 65536. Both the native
+`bf` CLI and Ripple's `rbf` host use it. Optional native JIT execution isolates
+its unsafe function-pointer call and generated memory accesses in `engine/jit`.
 
 `Machine::new(cells)` uses strict tape bounds. `with_wrapping_tape(cells)` supports
 the traditional command-line pointer behavior. Optimizations check the complete
@@ -171,6 +172,56 @@ and writes raw output bytes. Other cell sizes, saturating cells and clamped tape
 pointers use explicit literal compatibility execution. The existing WASM API is
 unchanged.
 
+## Optional native JIT
+
+```sh
+cargo build --release --manifest-path src/rust-bf/Cargo.toml
+src/rust-bf/target/release/bf src/rust-bf/mandelbrot.bf --jit --stat
+```
+
+`--jit` is opt-in. The default `jit` build feature includes Cranelift for native
+AArch64 and x86-64 hosts; `--no-default-features` builds the interpreter alone.
+WASM builds exclude native code generation even with default features enabled.
+Requesting JIT in an unsupported build fails explicitly. The CLI requires its
+wrapping 16-bit configuration and rejects incompatible cell/pointer modes.
+`--stat` or `--verbose` writes compile time, native code size, native dispatches,
+entry/fallback counts and retired regions to stderr; stdout remains guest bytes.
+
+Library callers create `engine::jit::Jit::new(&program)` and use
+`jit.run(&mut machine, budget)` in place of `machine.run`. The cache borrows its
+immutable program, preventing accidental reuse with different code. It compiles
+hot control-flow regions after 32 samples, leaving affine/block summaries intact.
+Only graphs containing a native cycle compile; inner loops exclude their exit
+continuations. Regions averaging fewer than 16 dispatches over their first 64
+native entries retire to Rust. Cached scans, moving-marker searches, deferred
+fills and routed-loop proofs continue using the existing Rust implementations.
+Cold stretches execute in batches of at most 64 IR dispatches, sampled between
+batches and at host events. The ordinary interpreter has no JIT bookkeeping.
+
+Each region covers at most 96 operations, 128 distinct relative cell offsets and
+512 updates, with at most 256 compilations per executor. Dense dispatch/heat
+metadata uses two bytes per parsed instruction, allocated only for JIT callers.
+Graphs with a fixed pointer offset at every instruction prepare at most 128
+exact cells and prove their complete pointer excursions before entry. Native
+writes invalidate predicate facts only when zero/nonzero state changes. Other
+graphs use a bounded 1024-cell physical window with per-operation bounds guards.
+Both paths preserve deferred tape runs outside the prepared cells/window.
+Native code allocations are released with the executor. Compilation failures
+are explicit errors.
+
+Every native operation consumes the same IR budget unit as its Rust equivalent.
+Bounds failures and wrapping aliases return to retained original instructions;
+I/O, hooks, pending input and host mutations retain synchronous behavior. Derived
+cache changes can change future optimized dispatch counts, as with checkpoint
+restoration. Native code is never serialized: a checkpoint can resume through
+either executor and warms new native regions when requested. No guest opcode,
+CPU register layout, device or host floating-point operation is recognized.
+
+Native JIT is workload-dependent: arithmetic loops can benefit substantially,
+while workloads dominated by existing scan/route summaries and device barriers
+may remain faster in the interpreter. See the bounded, serial comparison driver
+and measurements in [rbf/benchmarks](../../rbf/benchmarks/README.md).
+
 Run differential and native CLI tests with:
 
 ```sh
@@ -197,5 +248,5 @@ the exact tape, pointer and event stream at every host hook and I/O stop. Save a
 baseline executable before rebuilding, run both on the same frozen BF image,
 and compare their `.trace` files. Timing excludes parsing and trace generation,
 and includes machine allocation. Reproducible small CPU workloads and commands
-are in [rbf/benchmarks](../../../rbf/benchmarks/README.md). They exercise distant
+are in [rbf/benchmarks](../../rbf/benchmarks/README.md). They exercise distant
 instruction pointers, far RAM addresses and cross-bank calls without running Doom.

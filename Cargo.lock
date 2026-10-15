@@ -202,6 +202,10 @@ name = "bf"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-jit",
+ "cranelift-module",
  "js-sys",
  "serde",
  "serde-wasm-bindgen",

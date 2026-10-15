@@ -65,3 +65,40 @@ fn input_bytes_and_eof_survive_native_output() {
     assert!(result.status.success());
     assert_eq!(result.stdout, [128, 255, 0]);
 }
+
+#[cfg(all(feature = "jit", any(target_arch = "aarch64", target_arch = "x86_64")))]
+#[test]
+fn jit_cli_executes_native_loops_and_rejects_incompatible_cell_modes() {
+    let source = format!("{}[>+<--]>.", "+".repeat(4000));
+    let reference = output(&["-e", &source]);
+    let native = output(&["-e", &source, "--jit", "--stat"]);
+    assert!(
+        native.status.success(),
+        "{}",
+        String::from_utf8_lossy(&native.stderr)
+    );
+    assert_eq!(native.stdout, reference.stdout);
+    let stats = String::from_utf8_lossy(&native.stderr);
+    assert!(stats.contains("JIT: JitStats"), "{stats}");
+    assert!(!stats.contains("native_dispatches: 0"), "{stats}");
+    for extra in [
+        vec!["--cell-size", "8"],
+        vec!["--no-wrap"],
+        vec!["--no-wrap-tape"],
+        vec!["--emit-optimized"],
+    ] {
+        let mut args = vec!["-e", "+.", "--jit"];
+        args.extend(extra);
+        let result = output(&args);
+        assert!(!result.status.success());
+    }
+}
+
+#[cfg(not(all(feature = "jit", any(target_arch = "aarch64", target_arch = "x86_64"))))]
+#[test]
+fn jit_cli_fails_explicitly_without_a_native_backend() {
+    let result = output(&["-e", "+.", "--jit"]);
+    assert!(!result.status.success());
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("BF JIT requires"));
+}

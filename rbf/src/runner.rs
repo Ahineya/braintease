@@ -3,7 +3,7 @@ use crate::{
     image::{Layout, MachineMemory},
     telemetry::{Progress, Snapshot},
 };
-use bf_wasm::engine::{Machine, Profile, Program, Stop};
+use bf_wasm::engine::{jit::{Jit, JitStats}, Machine, Profile, Program, Stop};
 use rvm::{
     capture,
     constants::{DISP_RGB565, HDR_DISP_MODE, HDR_STORE_DATA},
@@ -24,6 +24,7 @@ use std::{
 };
 
 pub struct RunOptions {
+    pub jit: bool,
     pub clock: ClockPolicy,
     pub screenshot: Option<PathBuf>,
     pub raw_frame: Option<PathBuf>,
@@ -45,6 +46,7 @@ pub struct RunOptions {
 impl Default for RunOptions {
     fn default() -> Self {
         Self {
+            jit: false,
             clock: ClockPolicy::Unthrottled,
             screenshot: None,
             raw_frame: None,
@@ -66,6 +68,8 @@ impl Default for RunOptions {
 
 #[derive(Serialize)]
 pub struct RunReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jit: Option<JitStats>,
     pub report_version: u16,
     pub backend: &'static str,
     pub success: bool,
@@ -105,6 +109,7 @@ impl RunReport {
 }
 
 pub struct Host {
+    pub jit_stats: Option<JitStats>,
     pub layout: Layout,
     pub machine: Machine,
     pub devices: BfDevices,
@@ -171,6 +176,7 @@ impl Host {
         }
         let machine = Machine::new(layout.tape_cells).map_err(|e| e.to_string())?;
         Ok(Self {
+            jit_stats: None,
             layout,
             machine,
             devices,
@@ -207,6 +213,12 @@ impl Host {
         output: &mut impl Write,
         mut progress: Option<&mut dyn Progress>,
     ) -> Result<String, String> {
+        self.jit_stats = None;
+        if options.jit && self.profile.is_some() {
+            return Err("BF profiling and JIT execution cannot be combined".into());
+        }
+        let mut jit = options.jit.then(|| Jit::new(program))
+            .transpose().map_err(|e| e.to_string())?;
         let mut observation = progress.as_ref().map(|_| {
             let mut observation = Observation::default();
             observation.display_mode(self);
@@ -219,8 +231,10 @@ impl Host {
         } else {
             Ok(())
         };
-        let result = result
-            .and_then(|()| self.execute(program, options, output, &mut progress, &mut observation));
+        let result = result.and_then(|()| {
+            self.execute(program, options, output, &mut progress, &mut observation, &mut jit)
+        });
+        self.jit_stats = jit.as_ref().map(|jit| jit.stats().clone());
         let bytes = self.devices.take_output();
         let write_result = output
             .write_all(&bytes)
@@ -261,6 +275,7 @@ impl Host {
         output: &mut impl Write,
         progress: &mut Option<&mut dyn Progress>,
         observation: &mut Option<Observation>,
+        jit: &mut Option<Jit<'_>>,
     ) -> Result<String, String> {
         let rgb_capture = options.screenshot.is_some() || options.raw_frame.is_some();
         let capture = rgb_capture || options.text_frame.is_some();
@@ -460,6 +475,8 @@ impl Host {
             }
             let stop = if let Some(profile) = &mut self.profile {
                 self.machine.run_profiled(program, budget, profile)
+            } else if let Some(jit) = jit {
+                jit.run(&mut self.machine, budget)
             } else {
                 self.machine.run(program, budget)
             }

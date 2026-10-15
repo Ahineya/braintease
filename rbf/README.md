@@ -480,6 +480,32 @@ combines adjacent arithmetic and monotonic pointer runs. All host cells wrap at
 CPU's left-seeking macros. The existing `bf` CLI uses the same core for its
 default 16-bit wrapping configuration. The browser/WASM API is unchanged.
 
+### Optional native Brainfuck JIT
+
+```sh
+target/release/rbf program.bf --jit --headless --timeout 30 --report build/jit.json
+scripts/run-bf-rgb565-c.sh --jit
+```
+
+`--jit` compiles hot generic BF loops on AArch64/x86-64. Ripple instructions
+still execute through the BF CPU; the ISA, exported programs and devices are
+unchanged. The flag is opt-in and cannot be combined with `--profile`.
+The execution report gains a `jit` object with compilation time, native code
+size, compiled/retired regions, native dispatches, entry counts and guard
+fallbacks. Other reports retain their existing shape.
+
+The JIT retains the interpreter's scan/search/route and deferred-tape algorithms.
+It preserves bounds failures, 16-bit wrapping, host hooks, cancellation slices
+and checkpoint behavior. Native code and heat counters are temporary: each
+`Host::run` or restored process starts with a cold native cache. Checkpoints can
+switch between interpreter and JIT. See the [core guide](../src/rust-bf/README_ENGINE.md#optional-native-jit)
+for compilation limits and memory/coherence details.
+
+JIT is not automatically faster for the BF CPU. Its scan/route summaries already
+replace substantial BF work with efficient Rust algorithms, and device barriers
+limit how long execution can remain native. Use the [bounded comparison driver](benchmarks/README.md)
+on the actual workload; Mandelbrot results do not predict Doom performance.
+
 ## Small checks
 
 ```sh

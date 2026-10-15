@@ -184,6 +184,35 @@ impl Cache {
             };
         }
     }
+
+    /// Native execution may write any cell in this bounded physical window.
+    /// Trim every intersecting residue while retaining facts outside the window.
+    #[cfg(all(feature = "jit", any(target_arch = "aarch64", target_arch = "x86_64")))]
+    pub(super) fn invalidate_range(&mut self, low: usize, high: usize) {
+        if self.stride == 0 || low > high {
+            return;
+        }
+        for run in &mut self.runs {
+            if run.low > run.high || run.low > high || run.high < low {
+                continue;
+            }
+            let first = run.low + low.saturating_sub(run.low).div_ceil(self.stride) * self.stride;
+            let last = run.low + (high.min(run.high) - run.low) / self.stride * self.stride;
+            if first > last {
+                continue;
+            }
+            if first - run.low >= run.high - last && first > run.low {
+                run.high = first - self.stride;
+            } else if last < run.high {
+                run.low = last + self.stride;
+            } else {
+                *run = Run {
+                    residue: run.residue,
+                    ..Run::EMPTY
+                };
+            }
+        }
+    }
 }
 
 #[cfg(test)]

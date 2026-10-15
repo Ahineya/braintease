@@ -110,6 +110,9 @@ struct Cli {
     /// Disable affine-loop and offset-block optimization for comparison
     #[arg(long)]
     no_optimize: bool,
+    /// Experimentally compile hot Brainfuck loops to native code
+    #[arg(long, conflicts_with = "profile")]
+    jit: bool,
     /// Return the low octet of guest RV0 after a normal HALT
     #[arg(long)]
     exit_code: bool,
@@ -284,6 +287,7 @@ fn execute(cli: Cli) -> Result<i32, String> {
         signal_hook::flag::register(signal, Arc::clone(&cancelled)).map_err(|e| e.to_string())?;
     }
     let options = RunOptions {
+        jit: cli.jit,
         clock: cli.clock,
         screenshot: cli.screenshot,
         raw_frame: cli.raw_frame,
@@ -315,6 +319,7 @@ fn execute(cli: Cli) -> Result<i32, String> {
     }
     let state = host.devices.display.get_state();
     let mut report = RunReport {
+        jit: None,
         report_version: 1,
         backend: "brainfuck",
         success: false,
@@ -368,6 +373,7 @@ fn execute(cli: Cli) -> Result<i32, String> {
             }
         }
         report.bf_dispatches = host.machine.dispatches();
+        report.jit = host.jit_stats.clone();
         report.ripple_instructions = host.instructions;
         report.tick = host.devices.devices.tick();
         report.milliseconds = host.devices.devices.millis();
