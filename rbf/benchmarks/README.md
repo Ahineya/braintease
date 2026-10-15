@@ -77,7 +77,7 @@ the checker changes live held-key state at frame boundaries without a window.
 Its repeated host runs intentionally warm fresh JIT caches and are correctness
 checks, not steady-state performance measurements.
 
-### Native JIT results (2026-10-15)
+### Initial native JIT results (2026-10-15)
 
 Three alternating, sequential pairs on macOS 27 ARM64 with rustc 1.97.1,
 using the same release executable for both modes and no concurrent builds or
@@ -112,13 +112,56 @@ them. Compiling/specializing those summaries and reducing transitions across
 them is the next useful JIT target. Preserving their scan and deferred-write
 algorithms matters more than removing dispatch in isolation.
 
-The current JIT is therefore opt-in, with `rbf --jit` explicitly experimental.
+At this baseline, JIT remains opt-in, with `rbf --jit` explicitly experimental.
 No Doom run or Doom speed estimate was made. Frozen binaries and their hashes
 are under ignored `build/bf-jit/final-bin/`; commands, hashes, raw measurements
 and captures are under `build/bf-jit/final-measured/`. Source SHA256 values:
 
 - Mandelbrot: `dc634e6a22d7bfa260c827e021fa47485b25e6cd736b7e4e476b550e6827ebdd`
 - Square BF image: `210c35f844c454c664e7f11766b47127ce96230e3e037afab6e66eaaeed62ff8`
+
+### Guarded-transfer specialization (2026-10-15)
+
+The next change gives two-write routes a smaller proof when the actual scan
+strides establish disjoint counter, destination and subsequent scan lanes.
+The destination must be a scanned zero exit. Such a body changes that earlier
+sentinel, so the general multi-iteration proof could only accept one iteration
+anyway. Parsing now certifies independence once; execution traces the scans,
+checks all pointer excursions and the return to the counter, then commits two
+writes. Cold scans, aliases and failed guards still use retained BF instructions.
+No Ripple opcode, CPU lane constant or physical-tape window is involved.
+
+Three serial alternating repetitions on the same machine and frozen four-square
+image as above, including cold JIT compilation:
+
+| Four frames | Before median | After median | Execution-time reduction |
+| --- | ---: | ---: | ---: |
+| Interpreter | 1.405 s | 0.924 s | 34.2% |
+| JIT | 1.681 s | 1.168 s | 30.5% |
+
+Interpreter ranges were 1.401–1.431 s before and 0.923–0.927 s after; JIT ranges
+were 1.680–1.682 s before and 1.167–1.172 s after. All stable report fields,
+stdout, 119,440 guest instruction starts and exact fourth-frame pixels matched.
+BF dispatches remained 64,341,508 in the interpreter and 64,353,197 in JIT mode.
+The five-frame arrow checker matched full logical tape, pixels, output and
+expected player positions. A checkpoint written by the baseline host also
+resumed to the same first frame in both candidate modes.
+JIT still loses to the interpreter on this workload. Both benefit from the same
+small Rust execution plan; this change does not add native lowering for scans.
+
+A separate native-backedge experiment called the certified Rust summary from
+generated code. Its square median was 1.161 s versus 1.168 s without that wrapper,
+a difference below 1%; it also made the recursive-call fixture slower. That
+backend was left out. Further JIT work should lower useful route/update work
+and preserve logical tape facts, rather than merely compile a callback loop.
+
+The [new C/assembly suite](jit/README.md) covers five checked, bounded workloads
+and records operation profiles plus compressed hot-loop shapes. Sorting improves
+from 0.398 s to 0.277 s in the interpreter; arithmetic-heavy cases barely change.
+The profiles identify millions of moving updates and tiny scans as a separate
+remaining cost. Saved binaries and comparison evidence are under ignored
+`build/bf-transfers/`, with final case reports in `final-cases/` and square reports
+in `final-squares/`. No Doom run or Doom speed estimate was made.
 
 ## Core replay with exact state comparison
 

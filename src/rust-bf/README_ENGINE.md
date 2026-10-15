@@ -69,6 +69,18 @@ changes during a budget yield. Exit cells must remain zero at every summarized
 evaluation. Cancelled writes remain part of this proof, because their
 intermediate values could affect a scan.
 
+Two-write routes have a smaller execution plan when parsing proves that the
+counter and scan lanes are independent. The proof uses the greatest common
+divisor of the actual BF scan strides, without a fixed tape layout. The second
+write must immediately follow a zero-seeking scan, and its lane must be disjoint
+from the counter and every later scan. Such a route changes an earlier zero
+sentinel, so it summarizes exactly one body. Each invocation traces the route
+once with the usual probe limit, checks every pointer excursion and the return
+to the counter, then commits the two writes. Failed proofs leave the original
+instructions available. This avoids initializing the general multi-iteration
+proof's temporary arrays on each invocation, in both interpreter and JIT modes.
+The derived execution plan is excluded from checkpoint program identity.
+
 These routes may also return through a moving-marker search. A read-only
 zero-run trace finds its destination, then the proof requires the marker to be
 exactly one, the trailing and intermediate cells to be zero, and the found cell

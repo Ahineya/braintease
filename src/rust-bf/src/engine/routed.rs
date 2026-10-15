@@ -1,16 +1,18 @@
-//! Affine loops whose destinations are found by invariant, ordinary BF scans.
+//! Guarded arithmetic loops whose destinations are found by ordinary BF scans.
 //!
 //! For example, `[->>[>]>+<<[<]<]` transfers its control cell into a remote
 //! destination when the intervening scan lanes have suitable sentinels. Resolve
 //! the route without writing, then prove that no write can change any predicate
 //! along it. That proof makes every iteration follow the same route. There are
 //! no assumed strides, tape layouts, sentinels, or input values. A separate
-//! guarded summary handles counted first-zero filling; all other changing
-//! routes retain the original BF instructions.
+//! guarded summary handles counted first-zero filling. A single-body transfer
+//! plan handles independent lanes even when a write changes an earlier exit.
+//! Other changing routes retain the original BF instructions.
 
 use super::{search::Search, Machine, Op, Program, BLOCK_LIMIT, SCAN_LIMIT};
 
 mod fill;
+mod transfer;
 
 #[derive(Debug)]
 enum Kind {
@@ -48,13 +50,26 @@ struct Part {
     kind: Kind,
 }
 
-#[derive(Debug)]
 pub(super) struct Routed {
     parts: Vec<Part>,
     start: usize,
     next: usize,
     fill: Option<fill::Fill>,
     retry: bool,
+    transfer: Option<transfer::Transfer>,
+}
+
+// Derived execution plans do not change the optimizer's checkpoint identity.
+impl std::fmt::Debug for Routed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Routed")
+            .field("parts", &self.parts)
+            .field("start", &self.start)
+            .field("next", &self.next)
+            .field("fill", &self.fill)
+            .field("retry", &self.retry)
+            .finish()
+    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -143,12 +158,18 @@ impl Routed {
         // its affine route after the first literal body warms a scan cache.
         let retry = fill.is_some() || parts.iter().any(|p| matches!(p.kind, Kind::Search(_)));
         let fill = fill.and_then(|fill| fill.compile(&parts));
+        let transfer = if fill.is_none() {
+            transfer::Transfer::compile(&parts)
+        } else {
+            None
+        };
         (scans != 0).then_some(Self {
             parts,
             start: at,
             next,
             fill,
             retry,
+            transfer,
         })
     }
 
@@ -161,6 +182,9 @@ impl Routed {
             if fill.execute(self, machine) {
                 return true;
             }
+        }
+        if let Some(transfer) = &self.transfer {
+            return transfer.execute(self, machine);
         }
         self.execute_affine(machine)
     }

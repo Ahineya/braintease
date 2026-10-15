@@ -429,7 +429,11 @@ by moving-marker searches. Guarded folds handle transfers through scan routes,
 including nested moving-marker return searches, while their predicates remain
 unchanged. They verify exact marker, zero-cell and sentinel conditions and stop
 before a changing boundary. Other folds handle counted loops that fill
-successive zero cells. Parsing rejects statically impossible fill routes,
+successive zero cells. Two-write transfers use a smaller single-body proof when
+the scan strides establish independent counter, destination and later scan
+lanes. This retains logical tape access and cached scans, with no physical
+window preparation or general multi-iteration proof arrays.
+Parsing rejects statically impossible fill routes,
 combines pointer moves while retaining their full boundary excursions, and
 precomputes the valid fills' excursion bounds. Fills check route exclusions once
 per bounded batch,
@@ -505,6 +509,9 @@ JIT is not automatically faster for the BF CPU. Its scan/route summaries already
 replace substantial BF work with efficient Rust algorithms, and device barriers
 limit how long execution can remain native. Use the [bounded comparison driver](benchmarks/README.md)
 on the actual workload; Mandelbrot results do not predict Doom performance.
+The [checked C/assembly suite](benchmarks/jit/README.md) adds arithmetic, indexed
+memory, recursive calls, wide integers and sorting, with matching RVM images
+and bounded BF loop profiles.
 
 ## Small checks
 

@@ -20,6 +20,46 @@ fn same(a: &mut Machine, b: &mut Machine) {
 }
 
 #[test]
+fn summarized_transfers_preserve_budgets_guards_hooks_and_deferred_runs() {
+    let body = "[->[<<<]>[>>>]+>>[<<<]>>>[>>>]<<<<]$";
+    for cells in [33, 34, 35, 65536] {
+        for wrapping in [false, true] {
+            let program = Program::parse(body, true, true).unwrap();
+            let mut jit = Jit::new(&program).unwrap();
+            jit.warm(0).unwrap();
+            let mut a = Machine::allocate(cells, wrapping).unwrap();
+            let mut b = Machine::allocate(cells, wrapping).unwrap();
+            for m in [&mut a, &mut b] {
+                m.pointer = 30;
+                m.write_cell(30, 3);
+                for i in (4..=31).step_by(3).chain((2..=17).step_by(3)) {
+                    m.write_cell(i, 1);
+                }
+                if cells > 60000 {
+                    assert!(m.tape.assign_uniform(1024, 60000, 8, 0, 7));
+                }
+            }
+            for turn in 0..20 {
+                let budget = [0, 1, 2, 3, 127][turn % 5];
+                let want = a.run(&program, budget);
+                assert_eq!(jit.run(&mut b, budget), want);
+                same(&mut a, &mut b);
+                if !matches!(want, Ok(Stop::Budget)) {
+                    break;
+                }
+                if turn == 2 {
+                    a.write_cell(20, 65535);
+                    b.write_cell(20, 65535);
+                }
+            }
+            if cells > 60000 {
+                assert_eq!(b.tape.uniform_prefix(1024, 8, 100), Some((100, 7)));
+            }
+        }
+    }
+}
+
+#[test]
 fn native_regions_match_every_small_budget_and_wrapping_alias() {
     for (source, optimize) in [
         ("[>+<--]>[-]<++", true),
