@@ -1,5 +1,5 @@
-use crossterm::event::KeyCode;
 use crate::tui_debugger::{DebuggerMode, MemoryWatch, TuiDebugger, WatchFormat};
+use crossterm::event::KeyCode;
 
 impl TuiDebugger {
     pub(crate) fn handle_add_watch_mode(&mut self, key: KeyCode) {
@@ -46,5 +46,4 @@ impl TuiDebugger {
             _ => {}
         }
     }
-    
 }

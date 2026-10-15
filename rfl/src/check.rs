@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::{Adt, BinOp, Block, Ctor, Expr, ExprKind, Function, Impl, Module, Param, ParsedTy, Pat, Recv, Span, Stmt, TypeParam, UnaryOp};
+use crate::ast::{
+    Adt, BinOp, Block, Ctor, Expr, ExprKind, Function, Impl, Module, Param, ParsedTy, Pat, Recv,
+    Span, Stmt, TypeParam, UnaryOp,
+};
 use crate::error::CompileError;
 use crate::ty::Ty;
 use crate::typed::*;
@@ -148,7 +151,11 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
         checker.register(&mut owned)?;
         for item in &owned.consts {
             if checker.ctor_schema.contains_key(&item.name) {
-                return Err(CompileError::at(source, item.name_span.start, format!("`{}` is already a constructor", item.name)));
+                return Err(CompileError::at(
+                    source,
+                    item.name_span.start,
+                    format!("`{}` is already a constructor", item.name),
+                ));
             }
         }
         let concrete: Vec<Function> = owned
@@ -160,7 +167,11 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
         for func in &concrete {
             checker.check_fn(func, &func.name, true, false)?;
         }
-        let structs = checker.structs.iter().map(|info| info.fields.iter().map(|(_, ty)| *ty).collect()).collect();
+        let structs = checker
+            .structs
+            .iter()
+            .map(|info| info.fields.iter().map(|(_, ty)| *ty).collect())
+            .collect();
         let repr_c = checker.structs.iter().map(|info| info.repr_c).collect();
         Ok(TModule {
             functions: std::mem::take(&mut checker.typed),
@@ -175,7 +186,11 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
         facts: std::mem::take(&mut checker.facts),
         uses: std::mem::take(&mut checker.uses),
         expr_types: std::mem::take(&mut checker.expr_types),
-        methods: checker.methods.iter().map(|method| (method.type_name.clone(), method.method.clone())).collect(),
+        methods: checker
+            .methods
+            .iter()
+            .map(|method| (method.type_name.clone(), method.method.clone()))
+            .collect(),
         call_sigs: std::mem::take(&mut checker.call_sigs),
     };
     (info, result)
@@ -183,18 +198,40 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
 
 fn prelude_result() -> Adt {
     let span = Span::empty();
-    let value = ParsedTy::Named { span, name: "T".to_string(), args: Vec::new() };
-    let error = ParsedTy::Named { span, name: "E".to_string(), args: Vec::new() };
+    let value = ParsedTy::Named {
+        span,
+        name: "T".to_string(),
+        args: Vec::new(),
+    };
+    let error = ParsedTy::Named {
+        span,
+        name: "E".to_string(),
+        args: Vec::new(),
+    };
     Adt {
         name: "Result".to_string(),
         name_span: span,
         params: vec![
-            TypeParam { name: "T".to_string(), span },
-            TypeParam { name: "E".to_string(), span },
+            TypeParam {
+                name: "T".to_string(),
+                span,
+            },
+            TypeParam {
+                name: "E".to_string(),
+                span,
+            },
         ],
         ctors: vec![
-            Ctor { name: "Ok".to_string(), name_span: span, fields: vec![value] },
-            Ctor { name: "Err".to_string(), name_span: span, fields: vec![error] },
+            Ctor {
+                name: "Ok".to_string(),
+                name_span: span,
+                fields: vec![value],
+            },
+            Ctor {
+                name: "Err".to_string(),
+                name_span: span,
+                fields: vec![error],
+            },
         ],
         exported: false,
     }
@@ -206,11 +243,27 @@ fn expand_impls(source: &str, module: &mut Module) -> Result<Vec<Inherent>, Comp
     for item in impls {
         let type_name = impl_type_name(source, &item)?;
         for method in item.items {
-            if methods.iter().any(|found: &Inherent| found.type_name == type_name && found.method == method.name) {
-                return Err(CompileError::at(source, method.name_span.start, format!("duplicate method `{type_name}::{}`", method.name)));
+            if methods
+                .iter()
+                .any(|found: &Inherent| found.type_name == type_name && found.method == method.name)
+            {
+                return Err(CompileError::at(
+                    source,
+                    method.name_span.start,
+                    format!("duplicate method `{type_name}::{}`", method.name),
+                ));
             }
-            if type_name == "Vec" && matches!(method.name.as_str(), "len" | "push" | "is_empty" | "clear" | "pop" | "get") {
-                return Err(CompileError::at(source, method.name_span.start, format!("`Vec` already has `{}`", method.name)));
+            if type_name == "Vec"
+                && matches!(
+                    method.name.as_str(),
+                    "len" | "push" | "is_empty" | "clear" | "pop" | "get"
+                )
+            {
+                return Err(CompileError::at(
+                    source,
+                    method.name_span.start,
+                    format!("`Vec` already has `{}`", method.name),
+                ));
             }
             let func = format!("{type_name}${}", method.name);
             let mut type_params = item.type_params.clone();
@@ -219,20 +272,35 @@ fn expand_impls(source: &str, module: &mut Module) -> Result<Vec<Inherent>, Comp
             if let Some(recv) = method.receiver {
                 let ty = match recv {
                     Recv::Value => item.ty.clone(),
-                    Recv::Shared => ParsedTy::Ref { span: method.name_span, mutable: false, inner: Box::new(item.ty.clone()) },
-                    Recv::Mut => ParsedTy::Ref { span: method.name_span, mutable: true, inner: Box::new(item.ty.clone()) },
+                    Recv::Shared => ParsedTy::Ref {
+                        span: method.name_span,
+                        mutable: false,
+                        inner: Box::new(item.ty.clone()),
+                    },
+                    Recv::Mut => ParsedTy::Ref {
+                        span: method.name_span,
+                        mutable: true,
+                        inner: Box::new(item.ty.clone()),
+                    },
                 };
                 params.push(Param {
                     name: "self".to_string(),
                     name_span: method.name_span,
                     ty: Some(ty),
-                    pat: Pat::Name { name: "self".to_string(), span: method.name_span },
+                    pat: Pat::Name {
+                        name: "self".to_string(),
+                        span: method.name_span,
+                    },
                 });
             }
             params.extend(method.params.iter().cloned());
             let ret = method.ret.or_else(|| {
                 if method.body.tail.is_none() {
-                    Some(ParsedTy::Named { span: method.name_span, name: "unit".to_string(), args: Vec::new() })
+                    Some(ParsedTy::Named {
+                        span: method.name_span,
+                        name: "unit".to_string(),
+                        args: Vec::new(),
+                    })
                 } else {
                     None
                 }
@@ -247,7 +315,12 @@ fn expand_impls(source: &str, module: &mut Module) -> Result<Vec<Inherent>, Comp
                 c_export: false,
                 exported: false,
             });
-            methods.push(Inherent { type_name: type_name.clone(), method: method.name, func, receiver: method.receiver });
+            methods.push(Inherent {
+                type_name: type_name.clone(),
+                method: method.name,
+                func,
+                receiver: method.receiver,
+            });
         }
     }
     Ok(methods)
@@ -255,18 +328,30 @@ fn expand_impls(source: &str, module: &mut Module) -> Result<Vec<Inherent>, Comp
 
 fn impl_type_name(source: &str, item: &Impl) -> Result<String, CompileError> {
     let ParsedTy::Named { span, name, args } = &item.ty else {
-        return Err(CompileError::at(source, item.span.start, "an impl type must be a named type"));
+        return Err(CompileError::at(
+            source,
+            item.span.start,
+            "an impl type must be a named type",
+        ));
     };
     if item.type_params.is_empty() {
         return Ok(name.clone());
     }
     if args.len() != item.type_params.len() {
-        return Err(CompileError::at(source, span.start, format!("`{name}` expects {} type arguments", item.type_params.len())));
+        return Err(CompileError::at(
+            source,
+            span.start,
+            format!("`{name}` expects {} type arguments", item.type_params.len()),
+        ));
     }
     for (arg, param) in args.iter().zip(&item.type_params) {
         let ok = matches!(arg, ParsedTy::Named { name: arg_name, args, .. } if args.is_empty() && arg_name == &param.name);
         if !ok {
-            return Err(CompileError::at(source, arg.span().start, "a generic impl uses its type parameters in order"));
+            return Err(CompileError::at(
+                source,
+                arg.span().start,
+                "a generic impl uses its type parameters in order",
+            ));
         }
     }
     Ok(name.clone())
@@ -274,21 +359,39 @@ fn impl_type_name(source: &str, item: &Impl) -> Result<String, CompileError> {
 
 fn prelude_option() -> Adt {
     let span = Span::empty();
-    let param = ParsedTy::Named { span, name: "T".to_string(), args: Vec::new() };
+    let param = ParsedTy::Named {
+        span,
+        name: "T".to_string(),
+        args: Vec::new(),
+    };
     Adt {
         name: "Option".to_string(),
         name_span: span,
-        params: vec![TypeParam { name: "T".to_string(), span }],
+        params: vec![TypeParam {
+            name: "T".to_string(),
+            span,
+        }],
         ctors: vec![
-            Ctor { name: "None".to_string(), name_span: span, fields: Vec::new() },
-            Ctor { name: "Some".to_string(), name_span: span, fields: vec![param] },
+            Ctor {
+                name: "None".to_string(),
+                name_span: span,
+                fields: Vec::new(),
+            },
+            Ctor {
+                name: "Some".to_string(),
+                name_span: span,
+                fields: vec![param],
+            },
         ],
         exported: false,
     }
 }
 
 fn is_builtin(name: &str) -> bool {
-    matches!(name, "print" | "println" | "putc" | "from_char" | "from_byte")
+    matches!(
+        name,
+        "print" | "println" | "putc" | "from_char" | "from_byte"
+    )
 }
 
 fn always_returns(block: &Block) -> bool {
@@ -301,9 +404,11 @@ fn always_returns(block: &Block) -> bool {
 
 fn expr_returns(expr: &Expr) -> bool {
     match &expr.kind {
-        ExprKind::If { then_body, else_body, .. } => {
-            always_returns(then_body) && else_body.as_ref().is_some_and(|e| expr_returns(e))
-        }
+        ExprKind::If {
+            then_body,
+            else_body,
+            ..
+        } => always_returns(then_body) && else_body.as_ref().is_some_and(|e| expr_returns(e)),
         ExprKind::Block(block) => block.tail.is_none() && always_returns(block),
         _ => false,
     }
@@ -427,7 +532,12 @@ struct Solver {
 
 impl Solver {
     fn new() -> Self {
-        Self { parent: Vec::new(), info: Vec::new(), numeric: Vec::new(), floaty: Vec::new() }
+        Self {
+            parent: Vec::new(),
+            info: Vec::new(),
+            numeric: Vec::new(),
+            floaty: Vec::new(),
+        }
     }
 
     fn fresh(&mut self) -> u32 {
@@ -540,7 +650,16 @@ impl Solver {
                 }
                 self.unify(ar, br)
             }
-            (IInfo::Adt { schema: a, args: aa }, IInfo::Adt { schema: b, args: ba }) => {
+            (
+                IInfo::Adt {
+                    schema: a,
+                    args: aa,
+                },
+                IInfo::Adt {
+                    schema: b,
+                    args: ba,
+                },
+            ) => {
                 if a != b || aa.len() != ba.len() {
                     return Err("incompatible types");
                 }
@@ -586,12 +705,22 @@ fn info_allows_float(info: &IInfo) -> bool {
 
 fn rewrite_layout(ty: Ty, struct_w: &[u16], tuple_w: &[u16], arrays: &[ArrayInfo]) -> Ty {
     match ty {
-        Ty::Struct { id, .. } => Ty::Struct { id, width: struct_w[id as usize] },
-        Ty::Tuple { id, .. } => Ty::Tuple { id, width: tuple_w[id as usize] },
+        Ty::Struct { id, .. } => Ty::Struct {
+            id,
+            width: struct_w[id as usize],
+        },
+        Ty::Tuple { id, .. } => Ty::Tuple {
+            id,
+            width: tuple_w[id as usize],
+        },
         Ty::Array { id, len, .. } => {
             let elem = rewrite_layout(arrays[id as usize].elem, struct_w, tuple_w, arrays);
             let width = len as i64 * elem.cells();
-            Ty::Array { id, len, width: width as u16 }
+            Ty::Array {
+                id,
+                len,
+                width: width as u16,
+            }
         }
         other => other,
     }
@@ -647,34 +776,85 @@ fn parsed_brief(ty: &ParsedTy) -> String {
     match ty {
         ParsedTy::Named { name, args, .. } if args.is_empty() => name.clone(),
         ParsedTy::Named { name, args, .. } => {
-            format!("{name}<{}>", args.iter().map(parsed_brief).collect::<Vec<_>>().join(", "))
+            format!(
+                "{name}<{}>",
+                args.iter().map(parsed_brief).collect::<Vec<_>>().join(", ")
+            )
         }
-        ParsedTy::Ref { mutable, inner, .. } => format!("{}{}", if *mutable { "&mut " } else { "&" }, parsed_brief(inner)),
-        ParsedTy::Ptr { mutable, inner, .. } => format!("{}{}", if *mutable { "*mut " } else { "*const " }, parsed_brief(inner)),
+        ParsedTy::Ref { mutable, inner, .. } => format!(
+            "{}{}",
+            if *mutable { "&mut " } else { "&" },
+            parsed_brief(inner)
+        ),
+        ParsedTy::Ptr { mutable, inner, .. } => format!(
+            "{}{}",
+            if *mutable { "*mut " } else { "*const " },
+            parsed_brief(inner)
+        ),
         ParsedTy::Func { params, ret, .. } => {
-            format!("fn({}) -> {}", params.iter().map(parsed_brief).collect::<Vec<_>>().join(", "), parsed_brief(ret))
+            format!(
+                "fn({}) -> {}",
+                params
+                    .iter()
+                    .map(parsed_brief)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                parsed_brief(ret)
+            )
         }
         ParsedTy::CFn { params, ret, .. } => {
-            format!("extern \"C\" fn({}) -> {}", params.iter().map(parsed_brief).collect::<Vec<_>>().join(", "), parsed_brief(ret))
+            format!(
+                "extern \"C\" fn({}) -> {}",
+                params
+                    .iter()
+                    .map(parsed_brief)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                parsed_brief(ret)
+            )
         }
-        ParsedTy::Tuple { fields, .. } => format!("({})", fields.iter().map(parsed_brief).collect::<Vec<_>>().join(", ")),
+        ParsedTy::Tuple { fields, .. } => format!(
+            "({})",
+            fields
+                .iter()
+                .map(parsed_brief)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         ParsedTy::Array { elem, .. } => format!("[{}; _]", parsed_brief(elem)),
     }
 }
 
 fn parsed_signature(func: &Function, skip_first: bool) -> String {
-    let mut params: Vec<String> = func.params.iter().map(|param| param.ty.as_ref().map(parsed_brief).unwrap_or_else(|| "_".to_string())).collect();
+    let mut params: Vec<String> = func
+        .params
+        .iter()
+        .map(|param| {
+            param
+                .ty
+                .as_ref()
+                .map(parsed_brief)
+                .unwrap_or_else(|| "_".to_string())
+        })
+        .collect();
     if skip_first && !params.is_empty() {
         params.remove(0);
     }
-    let ret = func.ret.as_ref().map(parsed_brief).unwrap_or_else(|| "()".to_string());
+    let ret = func
+        .ret
+        .as_ref()
+        .map(parsed_brief)
+        .unwrap_or_else(|| "()".to_string());
     format!("fn({}) -> {ret}", params.join(", "))
 }
 
 fn literal_int(expr: &Expr) -> Option<i64> {
     match &expr.kind {
         ExprKind::Int(value) => Some(*value),
-        ExprKind::Unary { op: UnaryOp::Neg, expr } => literal_int(expr).map(|value| value.wrapping_neg()),
+        ExprKind::Unary {
+            op: UnaryOp::Neg,
+            expr,
+        } => literal_int(expr).map(|value| value.wrapping_neg()),
         _ => None,
     }
 }
@@ -699,7 +879,6 @@ fn type_var_name(index: usize) -> String {
     }
 }
 
-
 impl<'a> Checker<'a> {
     fn bind(&mut self, name: String, ty: Ty, mutable: bool) -> u32 {
         self.bind_spanned(name, ty, mutable, Span::empty())
@@ -707,13 +886,25 @@ impl<'a> Checker<'a> {
 
     fn bind_spanned(&mut self, name: String, ty: Ty, mutable: bool, def: Span) -> u32 {
         let id = self.bindings.len() as u32;
-        self.bindings.push(Binding { ty, mutable, shared: false, def });
+        self.bindings.push(Binding {
+            ty,
+            mutable,
+            shared: false,
+            def,
+        });
         self.scopes.last_mut().unwrap().insert(name.clone(), id);
         if def.end > def.start && !name.starts_with("__") {
             let scope = self.scope_spans.last().copied().unwrap_or(def);
             let visible_from = self.next_visible.take().unwrap_or(def.end);
             let shown = self.show(ty);
-            self.facts.push(BindingFact { name, def, ty: shown, scope, visible_from, variant: false });
+            self.facts.push(BindingFact {
+                name,
+                def,
+                ty: shown,
+                scope,
+                visible_from,
+                variant: false,
+            });
         }
         id
     }
@@ -733,9 +924,16 @@ impl<'a> Checker<'a> {
         if let Some(id) = self.lookup(name) {
             return Some(id);
         }
-        let parent = self.outer_scopes.iter().rev().find_map(|scope| scope.get(name).copied())?;
+        let parent = self
+            .outer_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())?;
         if let Some(found) = self.captures.iter().find(|cap| cap.parent == parent) {
-            self.scopes.last_mut().unwrap().insert(name.to_string(), found.local);
+            self.scopes
+                .last_mut()
+                .unwrap()
+                .insert(name.to_string(), found.local);
             return Some(found.local);
         }
         let parent_binding = self.outer_bindings[parent as usize].clone();
@@ -751,27 +949,50 @@ impl<'a> Checker<'a> {
         if parent_binding.shared {
             self.bindings[local as usize].shared = true;
         }
-        self.captures.push(crate::typed::Capture { parent, local, ty, shared: parent_binding.shared });
+        self.captures.push(crate::typed::Capture {
+            parent,
+            local,
+            ty,
+            shared: parent_binding.shared,
+        });
         Some(local)
     }
 
     fn register(&mut self, module: &mut Module) -> Result<(), CompileError> {
         self.declare_structs(&module.structs)?;
         for adt in &module.adts {
-            if self.schemas.iter().any(|schema| schema.name == adt.name) || self.struct_names.contains_key(&adt.name) {
-                return Err(CompileError::at(self.source, adt.name_span.start, format!("duplicate type `{}`", adt.name)));
+            if self.schemas.iter().any(|schema| schema.name == adt.name)
+                || self.struct_names.contains_key(&adt.name)
+            {
+                return Err(CompileError::at(
+                    self.source,
+                    adt.name_span.start,
+                    format!("duplicate type `{}`", adt.name),
+                ));
             }
             let mut params = Vec::new();
             for param in &adt.params {
                 if params.contains(&param.name) {
-                    return Err(CompileError::at(self.source, param.span.start, format!("duplicate type parameter `{}`", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.span.start,
+                        format!("duplicate type parameter `{}`", param.name),
+                    ));
                 }
                 if Ty::parse_name(&param.name).is_some() {
-                    return Err(CompileError::at(self.source, param.span.start, format!("`{}` is not a valid type parameter", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.span.start,
+                        format!("`{}` is not a valid type parameter", param.name),
+                    ));
                 }
                 params.push(param.name.clone());
             }
-            self.schemas.push(AdtSchema { name: adt.name.clone(), params, ctors: Vec::new() });
+            self.schemas.push(AdtSchema {
+                name: adt.name.clone(),
+                params,
+                ctors: Vec::new(),
+            });
             if adt.name_span.end > adt.name_span.start {
                 self.type_defs.insert(adt.name.clone(), adt.name_span);
             }
@@ -779,14 +1000,26 @@ impl<'a> Checker<'a> {
         for (index, adt) in module.adts.iter().enumerate() {
             for ctor in &adt.ctors {
                 if is_builtin(&ctor.name) {
-                    return Err(CompileError::at(self.source, ctor.name_span.start, format!("`{}` is a builtin", ctor.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        ctor.name_span.start,
+                        format!("`{}` is a builtin", ctor.name),
+                    ));
                 }
                 if self.ctor_schema.contains_key(&ctor.name) {
-                    return Err(CompileError::at(self.source, ctor.name_span.start, format!("duplicate constructor `{}`", ctor.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        ctor.name_span.start,
+                        format!("duplicate constructor `{}`", ctor.name),
+                    ));
                 }
                 for field in &ctor.fields {
                     if escaped_ref(field) {
-                        return Err(CompileError::at(self.source, field.span().start, "a reference cannot be stored in a type"));
+                        return Err(CompileError::at(
+                            self.source,
+                            field.span().start,
+                            "a reference cannot be stored in a type",
+                        ));
                     }
                     self.validate_ty(field, &self.schemas[index].params.clone())?;
                 }
@@ -797,12 +1030,27 @@ impl<'a> Checker<'a> {
                     let ret = if adt.params.is_empty() {
                         adt.name.clone()
                     } else {
-                        format!("{}<{}>", adt.name, adt.params.iter().map(|param| param.name.as_str()).collect::<Vec<_>>().join(", "))
+                        format!(
+                            "{}<{}>",
+                            adt.name,
+                            adt.params
+                                .iter()
+                                .map(|param| param.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
                     };
                     let ty = if ctor.fields.is_empty() {
                         ret
                     } else {
-                        format!("fn({}) -> {ret}", ctor.fields.iter().map(parsed_brief).collect::<Vec<_>>().join(", "))
+                        format!(
+                            "fn({}) -> {ret}",
+                            ctor.fields
+                                .iter()
+                                .map(parsed_brief)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
                     };
                     self.facts.push(BindingFact {
                         name: ctor.name.clone(),
@@ -831,49 +1079,93 @@ impl<'a> Checker<'a> {
         self.register_externs(&module.externs)?;
         for (index, func) in module.functions.iter().enumerate() {
             if is_builtin(&func.name) {
-                return Err(CompileError::at(self.source, func.name_span.start, format!("`{}` is a builtin", func.name)));
+                return Err(CompileError::at(
+                    self.source,
+                    func.name_span.start,
+                    format!("`{}` is a builtin", func.name),
+                ));
             }
-            if self.sigs.contains_key(&func.name) || self.fn_schemas.contains_key(&func.name) || self.ctor_schema.contains_key(&func.name) {
-                return Err(CompileError::at(self.source, func.name_span.start, format!("duplicate function `{}`", func.name)));
+            if self.sigs.contains_key(&func.name)
+                || self.fn_schemas.contains_key(&func.name)
+                || self.ctor_schema.contains_key(&func.name)
+            {
+                return Err(CompileError::at(
+                    self.source,
+                    func.name_span.start,
+                    format!("duplicate function `{}`", func.name),
+                ));
             }
             let mut type_params = Vec::new();
             for param in &func.type_params {
                 if type_params.contains(&param.name) {
-                    return Err(CompileError::at(self.source, param.span.start, format!("duplicate type parameter `{}`", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.span.start,
+                        format!("duplicate type parameter `{}`", param.name),
+                    ));
                 }
                 if Ty::parse_name(&param.name).is_some() {
-                    return Err(CompileError::at(self.source, param.span.start, format!("`{}` is not a valid type parameter", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.span.start,
+                        format!("`{}` is not a valid type parameter", param.name),
+                    ));
                 }
                 type_params.push(param.name.clone());
             }
             for param in &func.params {
                 let Some(ty) = &param.ty else {
-                    return Err(CompileError::at(self.source, param.name_span.start, format!("parameter `{}` needs a type", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.name_span.start,
+                        format!("parameter `{}` needs a type", param.name),
+                    ));
                 };
                 self.validate_ty(ty, &type_params)?;
             }
             if let Some(ret) = &func.ret {
                 if escaped_ref(ret) {
-                    return Err(CompileError::at(self.source, ret.span().start, "a function cannot return a reference"));
+                    return Err(CompileError::at(
+                        self.source,
+                        ret.span().start,
+                        "a function cannot return a reference",
+                    ));
                 }
                 self.validate_ty(ret, &type_params)?;
             }
             if func.c_export {
                 if !type_params.is_empty() {
-                    return Err(CompileError::at(self.source, func.name_span.start, "an exported function cannot be generic"));
+                    return Err(CompileError::at(
+                        self.source,
+                        func.name_span.start,
+                        "an exported function cannot be generic",
+                    ));
                 }
                 if func.name == "main" {
-                    return Err(CompileError::at(self.source, func.name_span.start, "cannot export `main`"));
+                    return Err(CompileError::at(
+                        self.source,
+                        func.name_span.start,
+                        "cannot export `main`",
+                    ));
                 }
             }
             if !type_params.is_empty() {
                 if func.name == "main" {
-                    return Err(CompileError::at(self.source, func.name_span.start, "main cannot be generic"));
+                    return Err(CompileError::at(
+                        self.source,
+                        func.name_span.start,
+                        "main cannot be generic",
+                    ));
                 }
                 if func.ret.is_none() {
-                    return Err(CompileError::at(self.source, func.name_span.start, format!("generic function `{}` needs a return type", func.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        func.name_span.start,
+                        format!("generic function `{}` needs a return type", func.name),
+                    ));
                 }
-                self.fn_schemas.insert(func.name.clone(), FnSchema { index, type_params });
+                self.fn_schemas
+                    .insert(func.name.clone(), FnSchema { index, type_params });
                 self.note_fn_fact(func);
                 continue;
             }
@@ -885,7 +1177,15 @@ impl<'a> Checker<'a> {
                 Some(ty) => Some(self.apply(ty, &HashMap::new())?),
                 None => None,
             };
-            self.sigs.insert(func.name.clone(), Sig { params, ret, c_abi: func.c_export, variadic: false });
+            self.sigs.insert(
+                func.name.clone(),
+                Sig {
+                    params,
+                    ret,
+                    c_abi: func.c_export,
+                    variadic: false,
+                },
+            );
             self.note_fn_fact(func);
         }
         Ok(())
@@ -895,7 +1195,11 @@ impl<'a> Checker<'a> {
         if func.name_span.end <= func.name_span.start {
             return;
         }
-        let written = self.source.get(func.name_span.start..func.name_span.end).unwrap_or(func.name.as_str()).to_string();
+        let written = self
+            .source
+            .get(func.name_span.start..func.name_span.end)
+            .unwrap_or(func.name.as_str())
+            .to_string();
         self.facts.push(BindingFact {
             name: written,
             def: func.name_span,
@@ -909,15 +1213,30 @@ impl<'a> Checker<'a> {
     fn register_externs(&mut self, decls: &[crate::ast::ExternDecl]) -> Result<(), CompileError> {
         for decl in decls {
             if is_builtin(&decl.name) {
-                return Err(CompileError::at(self.source, decl.name_span.start, format!("`{}` is a builtin", decl.name)));
+                return Err(CompileError::at(
+                    self.source,
+                    decl.name_span.start,
+                    format!("`{}` is a builtin", decl.name),
+                ));
             }
-            if self.sigs.contains_key(&decl.name) || self.fn_schemas.contains_key(&decl.name) || self.ctor_schema.contains_key(&decl.name) {
-                return Err(CompileError::at(self.source, decl.name_span.start, format!("duplicate function `{}`", decl.name)));
+            if self.sigs.contains_key(&decl.name)
+                || self.fn_schemas.contains_key(&decl.name)
+                || self.ctor_schema.contains_key(&decl.name)
+            {
+                return Err(CompileError::at(
+                    self.source,
+                    decl.name_span.start,
+                    format!("duplicate function `{}`", decl.name),
+                ));
             }
             let mut params = Vec::new();
             for param in &decl.params {
                 let Some(ty) = &param.ty else {
-                    return Err(CompileError::at(self.source, param.name_span.start, format!("parameter `{}` needs a type", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.name_span.start,
+                        format!("parameter `{}` needs a type", param.name),
+                    ));
                 };
                 self.validate_ty(ty, &[])?;
                 let ty = self.apply(ty, &HashMap::new())?;
@@ -933,12 +1252,33 @@ impl<'a> Checker<'a> {
                 }
                 None => Ty::Unit,
             };
-            self.externs.push(crate::typed::ExternFn { name: decl.name.clone(), params: params.clone(), ret, variadic: decl.variadic });
+            self.externs.push(crate::typed::ExternFn {
+                name: decl.name.clone(),
+                params: params.clone(),
+                ret,
+                variadic: decl.variadic,
+            });
             let ret = if ret == Ty::Unit { None } else { Some(ret) };
-            self.sigs.insert(decl.name.clone(), Sig { params, ret, c_abi: true, variadic: decl.variadic });
+            self.sigs.insert(
+                decl.name.clone(),
+                Sig {
+                    params,
+                    ret,
+                    c_abi: true,
+                    variadic: decl.variadic,
+                },
+            );
             if decl.name_span.end > decl.name_span.start {
-                let shown = self.sigs[&decl.name].params.iter().map(|ty| self.show(*ty)).collect::<Vec<_>>().join(", ");
-                let ret = self.sigs[&decl.name].ret.map(|ty| self.show(ty)).unwrap_or_else(|| "()".to_string());
+                let shown = self.sigs[&decl.name]
+                    .params
+                    .iter()
+                    .map(|ty| self.show(*ty))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let ret = self.sigs[&decl.name]
+                    .ret
+                    .map(|ty| self.show(ty))
+                    .unwrap_or_else(|| "()".to_string());
                 self.facts.push(BindingFact {
                     name: decl.name.clone(),
                     def: decl.name_span,
@@ -971,7 +1311,11 @@ impl<'a> Checker<'a> {
         if matches!(ty, Ty::CFn(_)) {
             return Ok(());
         }
-        Err(CompileError::at(self.source, span, format!("`{}` cannot be used in a C signature", self.show(ty))))
+        Err(CompileError::at(
+            self.source,
+            span,
+            format!("`{}` cannot be used in a C signature", self.show(ty)),
+        ))
     }
 
     fn is_repr_struct(&self, ty: Ty) -> bool {
@@ -993,18 +1337,37 @@ impl<'a> Checker<'a> {
 
     fn promote_vararg(&self, span: usize, expr: TExpr) -> Result<TExpr, CompileError> {
         if expr.ty == Ty::F32 {
-            return Ok(TExpr { ty: Ty::F64, kind: TExprKind::Cast { expr: Box::new(expr), to: Ty::F64 } });
+            return Ok(TExpr {
+                ty: Ty::F64,
+                kind: TExprKind::Cast {
+                    expr: Box::new(expr),
+                    to: Ty::F64,
+                },
+            });
         }
         if matches!(expr.ty, Ty::I8 | Ty::U8) {
-            return Ok(TExpr { ty: Ty::I16, kind: TExprKind::Cast { expr: Box::new(expr), to: Ty::I16 } });
+            return Ok(TExpr {
+                ty: Ty::I16,
+                kind: TExprKind::Cast {
+                    expr: Box::new(expr),
+                    to: Ty::I16,
+                },
+            });
         }
-        if expr.ty.is_int() || expr.ty.is_float() || matches!(expr.ty, Ty::Ptr(_)) || self.is_repr_struct(expr.ty) {
+        if expr.ty.is_int()
+            || expr.ty.is_float()
+            || matches!(expr.ty, Ty::Ptr(_))
+            || self.is_repr_struct(expr.ty)
+        {
             return Ok(expr);
         }
         Err(CompileError::at(
             self.source,
             span,
-            format!("`{}` cannot be passed to a variadic function", self.show(expr.ty)),
+            format!(
+                "`{}` cannot be passed to a variadic function",
+                self.show(expr.ty)
+            ),
         ))
     }
 
@@ -1014,16 +1377,32 @@ impl<'a> Checker<'a> {
         }
         if self.ptr_from_ref(want, expr.ty) {
             if self.unsafe_depth == 0 {
-                return Err(CompileError::at(self.source, span, "converting a reference to a raw pointer needs `unsafe`"));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "converting a reference to a raw pointer needs `unsafe`",
+                ));
             }
-            return Ok(TExpr { ty: want, kind: expr.kind });
+            return Ok(TExpr {
+                ty: want,
+                kind: expr.kind,
+            });
         }
         Ok(expr)
     }
 
     fn validate_ty(&self, ty: &ParsedTy, params: &[String]) -> Result<(), CompileError> {
         match ty {
-            ParsedTy::Func { params: fn_params, ret, .. } | ParsedTy::CFn { params: fn_params, ret, .. } => {
+            ParsedTy::Func {
+                params: fn_params,
+                ret,
+                ..
+            }
+            | ParsedTy::CFn {
+                params: fn_params,
+                ret,
+                ..
+            } => {
                 for param in fn_params {
                     self.validate_ty(param, params)?;
                 }
@@ -1041,13 +1420,21 @@ impl<'a> Checker<'a> {
             ParsedTy::Named { span, name, args } => {
                 if params.iter().any(|param| param == name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("type parameter `{name}` does not take arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("type parameter `{name}` does not take arguments"),
+                        ));
                     }
                     return Ok(());
                 }
                 if Ty::parse_name(name).is_some() {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("`{name}` does not take type arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{name}` does not take type arguments"),
+                        ));
                     }
                     return Ok(());
                 }
@@ -1059,15 +1446,28 @@ impl<'a> Checker<'a> {
                 }
                 if self.struct_names.contains_key(name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("`{name}` does not take type arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{name}` does not take type arguments"),
+                        ));
                     }
                     return Ok(());
                 }
                 let Some(schema) = self.schemas.iter().find(|schema| schema.name == *name) else {
-                    return Err(CompileError::at(self.source, span.start, format!("unknown type `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("unknown type `{name}`"),
+                    ));
                 };
                 if args.len() != schema.params.len() {
-                    return Err(self.arity_error(span.start, name, schema.params.len(), args.len()));
+                    return Err(self.arity_error(
+                        span.start,
+                        name,
+                        schema.params.len(),
+                        args.len(),
+                    ));
                 }
                 for arg in args {
                     self.validate_ty(arg, params)?;
@@ -1079,13 +1479,27 @@ impl<'a> Checker<'a> {
 
     fn arity_error(&self, offset: usize, name: &str, expect: usize, found: usize) -> CompileError {
         if expect == 0 {
-            CompileError::at(self.source, offset, format!("`{name}` does not take type arguments"))
+            CompileError::at(
+                self.source,
+                offset,
+                format!("`{name}` does not take type arguments"),
+            )
         } else {
-            CompileError::at(self.source, offset, format!("`{name}` expects {expect} type arguments, found {found}"))
+            CompileError::at(
+                self.source,
+                offset,
+                format!("`{name}` expects {expect} type arguments, found {found}"),
+            )
         }
     }
 
-    fn check_fn(&mut self, func: &Function, name: &str, closure: bool, capture: bool) -> Result<(), CompileError> {
+    fn check_fn(
+        &mut self,
+        func: &Function,
+        name: &str,
+        closure: bool,
+        capture: bool,
+    ) -> Result<(), CompileError> {
         let saved = Suspended {
             scopes: std::mem::take(&mut self.scopes),
             bindings: std::mem::take(&mut self.bindings),
@@ -1116,7 +1530,11 @@ impl<'a> Checker<'a> {
             let simple = matches!(&param.pat, Pat::Name { name, .. } if name != "_");
             if simple {
                 if seen.contains_key(&param.name) {
-                    return Err(CompileError::at(self.source, param.name_span.start, format!("duplicate parameter `{}`", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.name_span.start,
+                        format!("duplicate parameter `{}`", param.name),
+                    ));
                 }
                 seen.insert(param.name.clone(), ());
                 let id = self.bind(param.name.clone(), ty, false);
@@ -1136,7 +1554,11 @@ impl<'a> Checker<'a> {
                 pat_names(&param.pat, &mut names);
                 for (bound, span) in &names {
                     if seen.contains_key(bound) {
-                        return Err(CompileError::at(self.source, span.start, format!("duplicate parameter `{bound}`")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("duplicate parameter `{bound}`"),
+                        ));
                     }
                     seen.insert(bound.clone(), ());
                 }
@@ -1149,11 +1571,18 @@ impl<'a> Checker<'a> {
                 self.next_visible = None;
                 let pat = pat?;
                 if !self.irrefutable_pat(&pat, ty) {
-                    return Err(CompileError::at(self.source, param.name_span.start, "a parameter pattern must be irrefutable"));
+                    return Err(CompileError::at(
+                        self.source,
+                        param.name_span.start,
+                        "a parameter pattern must be irrefutable",
+                    ));
                 }
                 prefix.push(TStmt::Destructure {
                     pat,
-                    init: TExpr { ty, kind: TExprKind::Name(hidden) },
+                    init: TExpr {
+                        ty,
+                        kind: TExprKind::Name(hidden),
+                    },
                 });
             }
         }
@@ -1167,13 +1596,26 @@ impl<'a> Checker<'a> {
         }
         self.fn_ret = ret;
         if ret.is_ref() {
-            return Err(CompileError::at(self.source, func.name_span.start, "a function cannot return a reference"));
+            return Err(CompileError::at(
+                self.source,
+                func.name_span.start,
+                "a function cannot return a reference",
+            ));
         }
         self.sigs.get_mut(name).unwrap().ret = Some(ret);
         if func.type_params.is_empty() && func.name_span.end > func.name_span.start {
-            let params = self.sigs[name].params.iter().map(|ty| self.show(*ty)).collect::<Vec<_>>().join(", ");
+            let params = self.sigs[name]
+                .params
+                .iter()
+                .map(|ty| self.show(*ty))
+                .collect::<Vec<_>>()
+                .join(", ");
             let signature = format!("fn({params}) -> {}", self.show(ret));
-            if let Some(fact) = self.facts.iter_mut().find(|fact| fact.def == func.name_span) {
+            if let Some(fact) = self
+                .facts
+                .iter_mut()
+                .find(|fact| fact.def == func.name_span)
+            {
                 fact.ty = signature;
             }
         }
@@ -1183,13 +1625,22 @@ impl<'a> Checker<'a> {
         }
         let body_ty = body.tail.as_ref().map(|expr| expr.ty).unwrap_or(Ty::Unit);
         if func.body.tail.is_none() && ret != Ty::Unit && !always_returns(&func.body) {
-            return Err(CompileError::at(self.source, func.name_span.start, format!("`{}` must return {}", func.name, self.show(ret))));
+            return Err(CompileError::at(
+                self.source,
+                func.name_span.start,
+                format!("`{}` must return {}", func.name, self.show(ret)),
+            ));
         }
         if func.body.tail.is_some() && body_ty != ret {
             return Err(CompileError::at(
                 self.source,
                 func.name_span.start,
-                format!("`{}` returns {}, the body has type {}", func.name, self.show(ret), self.show(body_ty)),
+                format!(
+                    "`{}` returns {}, the body has type {}",
+                    func.name,
+                    self.show(ret),
+                    self.show(body_ty)
+                ),
             ));
         }
         if let Some(err) = self.capture_error.take() {
@@ -1205,7 +1656,17 @@ impl<'a> Checker<'a> {
             self.require_c_type(func.name_span.start, ret, true)?;
         }
         let captures = std::mem::take(&mut self.captures);
-        self.typed.push(TFn { name: name.to_string(), params, ret, bindings, body, closure, captures, shared, c_export: func.c_export });
+        self.typed.push(TFn {
+            name: name.to_string(),
+            params,
+            ret,
+            bindings,
+            body,
+            closure,
+            captures,
+            shared,
+            c_export: func.c_export,
+        });
         self.scopes = saved.scopes;
         self.bindings = saved.bindings;
         self.fn_ret = saved.fn_ret;
@@ -1238,7 +1699,15 @@ impl<'a> Checker<'a> {
             params.push(self.apply(param.ty.as_ref().unwrap(), &subst)?);
         }
         let ret = self.apply(func.ret.as_ref().unwrap(), &subst)?;
-        self.sigs.insert(mangled.clone(), Sig { params, ret: Some(ret), c_abi: false, variadic: false });
+        self.sigs.insert(
+            mangled.clone(),
+            Sig {
+                params,
+                ret: Some(ret),
+                c_abi: false,
+                variadic: false,
+            },
+        );
         self.check_fn(&func, &mangled, true, false)?;
         Ok(mangled)
     }
@@ -1316,7 +1785,12 @@ impl<'a> Checker<'a> {
         let ctors = self.schemas[schema].ctors.clone();
         let id = self.adts.len() as u32;
         let display = applied_name(&name, args, self);
-        self.adts.push(AdtDef { name: display, schema, args: args.to_vec(), ctors: Vec::new() });
+        self.adts.push(AdtDef {
+            name: display,
+            schema,
+            args: args.to_vec(),
+            ctors: Vec::new(),
+        });
         self.mono.insert(key, id);
         let mut subst = HashMap::new();
         for (param, arg) in params.iter().zip(args) {
@@ -1357,10 +1831,18 @@ impl<'a> Checker<'a> {
                 self.require_c_type(span.start, fn_ret, true)?;
                 Ok(self.intern_cfn(fn_params, fn_ret))
             }
-            ParsedTy::Ref { span, mutable, inner } => {
+            ParsedTy::Ref {
+                span,
+                mutable,
+                inner,
+            } => {
                 let inner = self.apply(inner, subst)?;
                 if inner.is_ref() {
-                    return Err(CompileError::at(self.source, span.start, "cannot borrow a reference"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        "cannot borrow a reference",
+                    ));
                 }
                 Ok(self.intern_ref(*mutable, inner))
             }
@@ -1373,7 +1855,11 @@ impl<'a> Checker<'a> {
                 self.require_vec_elem(span.start, elem)?;
                 let (_, value) = self.eval_const(len, Some(Ty::Usize))?;
                 if !(0..=u16::MAX as i64).contains(&value) {
-                    return Err(CompileError::at(self.source, span.start, format!("array length {value} does not fit in usize")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("array length {value} does not fit in usize"),
+                    ));
                 }
                 Ok(self.intern_array(elem, value as u16))
             }
@@ -1387,13 +1873,21 @@ impl<'a> Checker<'a> {
             ParsedTy::Named { span, name, args } => {
                 if let Some(found) = subst.get(name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("type parameter `{name}` does not take arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("type parameter `{name}` does not take arguments"),
+                        ));
                     }
                     return Ok(*found);
                 }
                 if let Some(prim) = Ty::parse_name(name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("`{name}` does not take type arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{name}` does not take type arguments"),
+                        ));
                     }
                     return Ok(prim);
                 }
@@ -1403,17 +1897,33 @@ impl<'a> Checker<'a> {
                     }
                     let elem = self.apply(&args[0], subst)?;
                     self.require_vec_elem(span.start, elem)?;
-                    return Ok(if name == "Vec" { self.intern_vec(elem) } else { self.intern_slice(elem) });
+                    return Ok(if name == "Vec" {
+                        self.intern_vec(elem)
+                    } else {
+                        self.intern_slice(elem)
+                    });
                 }
                 if let Some(id) = self.struct_names.get(name).copied() {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("`{name}` does not take type arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{name}` does not take type arguments"),
+                        ));
                     }
                     self.note_type(*span, name);
-                    return Ok(Ty::Struct { id, width: self.struct_width(id) });
+                    return Ok(Ty::Struct {
+                        id,
+                        width: self.struct_width(id),
+                    });
                 }
-                let Some(schema) = self.schemas.iter().position(|schema| schema.name == *name) else {
-                    return Err(CompileError::at(self.source, span.start, format!("unknown type `{name}`")));
+                let Some(schema) = self.schemas.iter().position(|schema| schema.name == *name)
+                else {
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("unknown type `{name}`"),
+                    ));
                 };
                 self.note_type(*span, name);
                 let expect = self.schemas[schema].params.len();
@@ -1431,7 +1941,11 @@ impl<'a> Checker<'a> {
     }
 
     fn intern_ptr(&mut self, mutable: bool, inner: Ty) -> Ty {
-        if let Some(index) = self.ptrs.iter().position(|ptr| ptr.mutable == mutable && ptr.inner == inner) {
+        if let Some(index) = self
+            .ptrs
+            .iter()
+            .position(|ptr| ptr.mutable == mutable && ptr.inner == inner)
+        {
             return Ty::Ptr(index as u32);
         }
         let id = self.ptrs.len() as u32;
@@ -1440,7 +1954,11 @@ impl<'a> Checker<'a> {
     }
 
     fn intern_ref(&mut self, mutable: bool, inner: Ty) -> Ty {
-        if let Some(index) = self.refs.iter().position(|refty| refty.mutable == mutable && refty.inner == inner) {
+        if let Some(index) = self
+            .refs
+            .iter()
+            .position(|refty| refty.mutable == mutable && refty.inner == inner)
+        {
             return Ty::Ref(index as u32);
         }
         let id = self.refs.len() as u32;
@@ -1449,24 +1967,47 @@ impl<'a> Checker<'a> {
     }
 
     fn referent(&self, ty: Ty) -> Ty {
-        if let Ty::Ref(id) = ty { self.refs[id as usize].inner } else { ty }
+        if let Ty::Ref(id) = ty {
+            self.refs[id as usize].inner
+        } else {
+            ty
+        }
     }
 
     fn place_mutable(&self, binding: u32, ty: Ty) -> bool {
-        if let Ty::Ref(id) = ty { self.refs[id as usize].mutable } else { self.bindings[binding as usize].mutable }
+        if let Ty::Ref(id) = ty {
+            self.refs[id as usize].mutable
+        } else {
+            self.bindings[binding as usize].mutable
+        }
     }
 
-    fn note_borrow(&mut self, span: usize, binding: u32, mutable: bool) -> Result<(), CompileError> {
-        let conflict = self.borrows.iter().any(|borrow| borrow.binding == binding && (mutable || borrow.mutable));
+    fn note_borrow(
+        &mut self,
+        span: usize,
+        binding: u32,
+        mutable: bool,
+    ) -> Result<(), CompileError> {
+        let conflict = self
+            .borrows
+            .iter()
+            .any(|borrow| borrow.binding == binding && (mutable || borrow.mutable));
         if conflict {
             return Err(CompileError::at(self.source, span, "already borrowed"));
         }
-        self.borrows.push(LiveBorrow { binding, mutable, depth: self.scopes.len() });
+        self.borrows.push(LiveBorrow {
+            binding,
+            mutable,
+            depth: self.scopes.len(),
+        });
         Ok(())
     }
 
     fn note_use(&self, span: usize, binding: u32, mutate: bool) -> Result<(), CompileError> {
-        let conflict = self.borrows.iter().any(|borrow| borrow.binding == binding && (mutate || borrow.mutable));
+        let conflict = self
+            .borrows
+            .iter()
+            .any(|borrow| borrow.binding == binding && (mutate || borrow.mutable));
         if conflict {
             return Err(CompileError::at(self.source, span, "already borrowed"));
         }
@@ -1481,8 +2022,16 @@ impl<'a> Checker<'a> {
 
     fn intern_array(&mut self, elem: Ty, len: u16) -> Ty {
         let width = elem.cells() as u16;
-        if let Some(index) = self.arrays.iter().position(|info| info.elem == elem && info.len == len) {
-            return Ty::Array { id: index as u32, len, width };
+        if let Some(index) = self
+            .arrays
+            .iter()
+            .position(|info| info.elem == elem && info.len == len)
+        {
+            return Ty::Array {
+                id: index as u32,
+                len,
+                width,
+            };
         }
         let id = self.arrays.len() as u32;
         self.arrays.push(ArrayInfo { elem, len });
@@ -1514,12 +2063,19 @@ impl<'a> Checker<'a> {
         Err(CompileError::at(
             self.source,
             span,
-            format!("vector elements must be numbers or bool, found {}", self.show(elem)),
+            format!(
+                "vector elements must be numbers or bool, found {}",
+                self.show(elem)
+            ),
         ))
     }
 
     fn intern_cfn(&mut self, params: Vec<Ty>, ret: Ty) -> Ty {
-        if let Some(index) = self.cfns.iter().position(|sig| sig.params == params && sig.ret == ret) {
+        if let Some(index) = self
+            .cfns
+            .iter()
+            .position(|sig| sig.params == params && sig.ret == ret)
+        {
             return Ty::CFn(index as u32);
         }
         let id = self.cfns.len() as u32;
@@ -1528,7 +2084,11 @@ impl<'a> Checker<'a> {
     }
 
     fn intern_func(&mut self, params: Vec<Ty>, ret: Ty) -> Ty {
-        if let Some(index) = self.funcs.iter().position(|sig| sig.params == params && sig.ret == ret) {
+        if let Some(index) = self
+            .funcs
+            .iter()
+            .position(|sig| sig.params == params && sig.ret == ret)
+        {
             return Ty::Func(index as u32);
         }
         let id = self.funcs.len() as u32;
@@ -1550,7 +2110,11 @@ impl<'a> Checker<'a> {
         if let Some(tail_expr) = &tail {
             if tail_expr.ty.is_ref() {
                 let span = block.tail.as_ref().map(|expr| expr.span.start).unwrap_or(0);
-                return Err(CompileError::at(self.source, span, "a reference cannot escape this block"));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "a reference cannot escape this block",
+                ));
             }
         }
         self.pop_scope();
@@ -1560,7 +2124,13 @@ impl<'a> Checker<'a> {
 
     fn check_stmt(&mut self, stmt: &Stmt) -> Result<TStmt, CompileError> {
         match stmt {
-            Stmt::Let { span: let_span, pattern, mutable, ty, init } => {
+            Stmt::Let {
+                span: let_span,
+                pattern,
+                mutable,
+                ty,
+                init,
+            } => {
                 self.next_visible = Some(let_span.end);
                 let annotated = match ty {
                     Some(parsed) => Some(self.apply(parsed, &HashMap::new())?),
@@ -1573,13 +2143,20 @@ impl<'a> Checker<'a> {
                         return Err(CompileError::at(
                             self.source,
                             span,
-                            format!("the pattern has type {want}, the initializer has type {}", init.ty),
+                            format!(
+                                "the pattern has type {want}, the initializer has type {}",
+                                init.ty
+                            ),
                         ));
                     }
                 }
                 let pat = self.check_pat(pattern, init.ty, *mutable)?;
                 if !self.irrefutable_pat(&pat, init.ty) {
-                    return Err(CompileError::at(self.source, span, "a `let` pattern must be irrefutable"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "a `let` pattern must be irrefutable",
+                    ));
                 }
                 match pat {
                     TPat::Bind(binding) => Ok(TStmt::Let { binding, init }),
@@ -1587,13 +2164,25 @@ impl<'a> Checker<'a> {
                     other => Ok(TStmt::Destructure { pat: other, init }),
                 }
             }
-            Stmt::Assign { name, name_span, value } => {
+            Stmt::Assign {
+                name,
+                name_span,
+                value,
+            } => {
                 let Some(id) = self.resolve(name) else {
-                    return Err(CompileError::at(self.source, name_span.start, format!("unknown name `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        name_span.start,
+                        format!("unknown name `{name}`"),
+                    ));
                 };
                 let ty = self.bindings[id as usize].ty;
                 if ty.is_ref() {
-                    return Err(CompileError::at(self.source, name_span.start, "a reference cannot be reassigned"));
+                    return Err(CompileError::at(
+                        self.source,
+                        name_span.start,
+                        "a reference cannot be reassigned",
+                    ));
                 }
                 if !self.bindings[id as usize].mutable {
                     let captured = self.captures.iter().any(|cap| cap.local == id);
@@ -1616,33 +2205,70 @@ impl<'a> Checker<'a> {
                 Ok(TStmt::Assign { binding: id, value })
             }
             Stmt::DerefAssign { ptr, value } => self.check_ptr_store(ptr, None, value),
-            Stmt::IndexAssign { name, name_span, index, value } => {
+            Stmt::IndexAssign {
+                name,
+                name_span,
+                index,
+                value,
+            } => {
                 let Some(id) = self.resolve(name) else {
-                    return Err(CompileError::at(self.source, name_span.start, format!("unknown name `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        name_span.start,
+                        format!("unknown name `{name}`"),
+                    ));
                 };
                 let ty = self.bindings[id as usize].ty;
                 if let Ty::Ptr(pid) = ty {
                     self.require_unsafe(name_span.start)?;
                     let info = &self.ptrs[pid as usize];
                     if !info.mutable {
-                        return Err(CompileError::at(self.source, name_span.start, "cannot store through `*const`"));
+                        return Err(CompileError::at(
+                            self.source,
+                            name_span.start,
+                            "cannot store through `*const`",
+                        ));
                     }
                     let elem = info.inner;
                     self.require_pointee(name_span.start, elem)?;
                     let stride = elem.cells();
                     let index = self.check_expr(index, Some(Ty::Usize))?;
                     if index.ty != Ty::Usize {
-                        return Err(CompileError::at(self.source, name_span.start, format!("expected usize, found {}", self.show(index.ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            name_span.start,
+                            format!("expected usize, found {}", self.show(index.ty)),
+                        ));
                     }
                     let value = self.check_expr(value, Some(elem))?;
                     if value.ty != elem {
-                        return Err(CompileError::at(self.source, name_span.start, format!("expected {}, found {}", self.show(elem), self.show(value.ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            name_span.start,
+                            format!(
+                                "expected {}, found {}",
+                                self.show(elem),
+                                self.show(value.ty)
+                            ),
+                        ));
                     }
-                    let ptr = TExpr { ty, kind: TExprKind::Name(id) };
-                    return Ok(TStmt::PtrStore { ptr, index: Some(index), value, stride });
+                    let ptr = TExpr {
+                        ty,
+                        kind: TExprKind::Name(id),
+                    };
+                    return Ok(TStmt::PtrStore {
+                        ptr,
+                        index: Some(index),
+                        value,
+                        stride,
+                    });
                 }
                 if matches!(ty, Ty::Slice(_)) || matches!(self.referent(ty), Ty::Slice(_)) {
-                    return Err(CompileError::at(self.source, name_span.start, "slices are read-only"));
+                    return Err(CompileError::at(
+                        self.source,
+                        name_span.start,
+                        "slices are read-only",
+                    ));
                 }
                 if !ty.is_ref() {
                     self.note_use(name_span.start, id, true)?;
@@ -1660,23 +2286,45 @@ impl<'a> Checker<'a> {
                 } else if let Ty::Array { id: array_id, .. } = ty {
                     self.arrays[array_id as usize].elem
                 } else {
-                    return Err(CompileError::at(self.source, name_span.start, format!("`{name}` is not a vector or array")));
+                    return Err(CompileError::at(
+                        self.source,
+                        name_span.start,
+                        format!("`{name}` is not a vector or array"),
+                    ));
                 };
                 let index = self.check_expr(index, Some(Ty::Usize))?;
                 if index.ty != Ty::Usize {
-                    return Err(CompileError::at(self.source, name_span.start, format!("expected usize, found {}", self.show(index.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        name_span.start,
+                        format!("expected usize, found {}", self.show(index.ty)),
+                    ));
                 }
                 let value = self.check_expr(value, Some(elem))?;
                 if value.ty != elem {
                     return Err(CompileError::at(
                         self.source,
                         name_span.start,
-                        format!("expected {}, found {}", self.show(elem), self.show(value.ty)),
+                        format!(
+                            "expected {}, found {}",
+                            self.show(elem),
+                            self.show(value.ty)
+                        ),
                     ));
                 }
-                Ok(TStmt::IndexAssign { binding: id, index, value, elem })
+                Ok(TStmt::IndexAssign {
+                    binding: id,
+                    index,
+                    value,
+                    elem,
+                })
             }
-            Stmt::FieldAssign { name, name_span, fields, value } => self.check_field_assign(name, name_span.start, fields, value),
+            Stmt::FieldAssign {
+                name,
+                name_span,
+                fields,
+                value,
+            } => self.check_field_assign(name, name_span.start, fields, value),
             Stmt::Expr(expr) => Ok(TStmt::Expr(self.check_expr(expr, None)?)),
             Stmt::Return { span, value } => {
                 let value = match value {
@@ -1688,20 +2336,31 @@ impl<'a> Checker<'a> {
                     return Err(CompileError::at(
                         self.source,
                         span.start,
-                        format!("return has type {got}, the function returns {}", self.fn_ret),
+                        format!(
+                            "return has type {got}, the function returns {}",
+                            self.fn_ret
+                        ),
                     ));
                 }
                 Ok(TStmt::Return(value))
             }
             Stmt::Break { span } => {
                 if self.loops == 0 {
-                    return Err(CompileError::at(self.source, span.start, "`break` is outside a loop"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        "`break` is outside a loop",
+                    ));
                 }
                 Ok(TStmt::Break)
             }
             Stmt::Continue { span } => {
                 if self.loops == 0 {
-                    return Err(CompileError::at(self.source, span.start, "`continue` is outside a loop"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        "`continue` is outside a loop",
+                    ));
                 }
                 Ok(TStmt::Continue)
             }
@@ -1713,7 +2372,10 @@ impl<'a> Checker<'a> {
         self.current_span = expr.span;
         let typed = self.check_expr_kind(expr, expected)?;
         let ty = self.show(typed.ty);
-        self.expr_types.push(ExprType { span: expr.span, ty });
+        self.expr_types.push(ExprType {
+            span: expr.span,
+            ty,
+        });
         self.current_span = saved;
         Ok(typed)
     }
@@ -1725,7 +2387,12 @@ impl<'a> Checker<'a> {
         if def.end <= def.start || span.end <= span.start {
             return;
         }
-        self.uses.push(NameUse { span, def, def_file: None, ty: format!("type {name}") });
+        self.uses.push(NameUse {
+            span,
+            def,
+            def_file: None,
+            ty: format!("type {name}"),
+        });
     }
 
     fn note_sig(&mut self, label: String) {
@@ -1749,55 +2416,112 @@ impl<'a> Checker<'a> {
     }
 
     fn method_def(&self, method: &str, receiver: &Expr) -> Option<(Span, String)> {
-        let recv = self.expr_types.iter().rev().find(|expr| expr.span == receiver.span)?.ty.as_str();
-        let facts: Vec<&BindingFact> = self.facts.iter().filter(|fact| fact.name == method && fact.ty.starts_with("fn(")).collect();
-        let matched = facts.iter().copied().find(|fact| signature_accepts_receiver(&fact.ty, recv));
-        let fact = matched.or_else(|| if facts.len() == 1 { Some(facts[0]) } else { None })?;
+        let recv = self
+            .expr_types
+            .iter()
+            .rev()
+            .find(|expr| expr.span == receiver.span)?
+            .ty
+            .as_str();
+        let facts: Vec<&BindingFact> = self
+            .facts
+            .iter()
+            .filter(|fact| fact.name == method && fact.ty.starts_with("fn("))
+            .collect();
+        let matched = facts
+            .iter()
+            .copied()
+            .find(|fact| signature_accepts_receiver(&fact.ty, recv));
+        let fact = matched.or_else(|| {
+            if facts.len() == 1 {
+                Some(facts[0])
+            } else {
+                None
+            }
+        })?;
         Some((fact.def, fact.ty.clone()))
     }
 
-    fn check_expr_kind(&mut self, expr: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_expr_kind(
+        &mut self,
+        expr: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let span = expr.span.start;
         match &expr.kind {
             ExprKind::Int(value) => {
                 let ty = match expected {
                     Some(ty) if ty.is_int() => ty,
                     Some(ty) => {
-                        return Err(CompileError::at(self.source, span, format!("expected {ty}, found an integer literal")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {ty}, found an integer literal"),
+                        ));
                     }
                     None => Ty::I16,
                 };
                 if !ty.in_range(*value) {
-                    return Err(CompileError::at(self.source, span, format!("{value} does not fit in {ty}")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("{value} does not fit in {ty}"),
+                    ));
                 }
-                Ok(TExpr { ty, kind: TExprKind::Int(*value) })
+                Ok(TExpr {
+                    ty,
+                    kind: TExprKind::Int(*value),
+                })
             }
             ExprKind::Float(text) => {
                 let value = parse_float_literal(self.source, span, text)?;
                 let ty = match expected {
                     Some(ty) if ty.is_float() => ty,
                     Some(ty) => {
-                        return Err(CompileError::at(self.source, span, format!("expected {ty}, found a float literal")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {ty}, found a float literal"),
+                        ));
                     }
                     None => Ty::F64,
                 };
-                let bits = float_literal_bits(ty, value).map_err(|msg| CompileError::at(self.source, span, msg))?;
-                Ok(TExpr { ty, kind: TExprKind::Float(bits) })
+                let bits = float_literal_bits(ty, value)
+                    .map_err(|msg| CompileError::at(self.source, span, msg))?;
+                Ok(TExpr {
+                    ty,
+                    kind: TExprKind::Float(bits),
+                })
             }
             ExprKind::Bool(value) => {
                 if let Some(ty) = expected {
                     if ty != Ty::Bool {
-                        return Err(CompileError::at(self.source, span, format!("expected {ty}, found bool")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {ty}, found bool"),
+                        ));
                     }
                 }
-                Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Bool(*value) })
+                Ok(TExpr {
+                    ty: Ty::Bool,
+                    kind: TExprKind::Bool(*value),
+                })
             }
             ExprKind::Name(name) => {
                 if self.lookup(name).is_none() {
-                    let parent = self.outer_scopes.iter().rev().find_map(|scope| scope.get(name).copied());
+                    let parent = self
+                        .outer_scopes
+                        .iter()
+                        .rev()
+                        .find_map(|scope| scope.get(name).copied());
                     if let Some(parent) = parent {
                         if self.outer_bindings[parent as usize].ty.is_ref() {
-                            return Err(CompileError::at(self.source, span, "cannot capture a reference"));
+                            return Err(CompileError::at(
+                                self.source,
+                                span,
+                                "cannot capture a reference",
+                            ));
                         }
                     }
                 }
@@ -1808,7 +2532,11 @@ impl<'a> Checker<'a> {
                                 return Err(CompileError::at(
                                     self.source,
                                     span,
-                                    format!("expected {}, `{name}` has type {}", self.show(want), self.show(ty)),
+                                    format!(
+                                        "expected {}, `{name}` has type {}",
+                                        self.show(want),
+                                        self.show(ty)
+                                    ),
                                 ));
                             }
                         }
@@ -1830,211 +2558,451 @@ impl<'a> Checker<'a> {
                 let def = self.bindings[id as usize].def;
                 if def.end > def.start {
                     let shown = self.show(ty);
-                    self.uses.push(NameUse { span: expr.span, def, def_file: None, ty: shown });
+                    self.uses.push(NameUse {
+                        span: expr.span,
+                        def,
+                        def_file: None,
+                        ty: shown,
+                    });
                 }
                 self.note_use(span, id, false)?;
                 if let Some(want) = expected {
                     if want != ty {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, `{name}` has type {}", self.show(want), self.show(ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!(
+                                "expected {}, `{name}` has type {}",
+                                self.show(want),
+                                self.show(ty)
+                            ),
+                        ));
                     }
                 }
-                Ok(TExpr { ty, kind: TExprKind::Name(id) })
+                Ok(TExpr {
+                    ty,
+                    kind: TExprKind::Name(id),
+                })
             }
             ExprKind::Borrow { mutable, expr } => self.check_borrow(span, *mutable, expr, expected),
             ExprKind::Deref(inner) => self.check_deref(span, inner, expected),
-            ExprKind::Assoc { ty_name, method, args } => self.check_assoc(span, ty_name, method, args, expected),
+            ExprKind::Assoc {
+                ty_name,
+                method,
+                args,
+            } => self.check_assoc(span, ty_name, method, args, expected),
             ExprKind::Try(expr) => self.check_try(span, expr, expected),
             ExprKind::Unary { op, expr: inner } => self.check_unary(span, *op, inner, expected),
             ExprKind::Binary { op, lhs, rhs } => self.check_binary(span, *op, lhs, rhs, expected),
             ExprKind::Char(scalar) => {
                 if let Some(want) = expected {
                     if want != Ty::Char {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found char", self.show(want))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found char", self.show(want)),
+                        ));
                     }
                 }
-                Ok(TExpr { ty: Ty::Char, kind: TExprKind::Char(*scalar) })
+                Ok(TExpr {
+                    ty: Ty::Char,
+                    kind: TExprKind::Char(*scalar),
+                })
             }
             ExprKind::Str(chars) => {
-                let bytes = utf8_bytes(chars).map_err(|msg| CompileError::at(self.source, span, msg))?;
+                let bytes =
+                    utf8_bytes(chars).map_err(|msg| CompileError::at(self.source, span, msg))?;
                 if let Some(want) = expected {
                     if want != Ty::String {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found String", self.show(want))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found String", self.show(want)),
+                        ));
                     }
                 }
-                Ok(TExpr { ty: Ty::String, kind: TExprKind::Str(bytes) })
+                Ok(TExpr {
+                    ty: Ty::String,
+                    kind: TExprKind::Str(bytes),
+                })
             }
             ExprKind::CStr(chars) => {
                 let ty = self.intern_ptr(false, Ty::I16);
                 if let Some(want) = expected {
                     if want != ty {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found {}", self.show(want), self.show(ty)),
+                        ));
                     }
                 }
-                Ok(TExpr { ty, kind: TExprKind::CStr(chars.clone()) })
+                Ok(TExpr {
+                    ty,
+                    kind: TExprKind::CStr(chars.clone()),
+                })
             }
-            ExprKind::Call { callee, callee_span, type_args, args } => {
+            ExprKind::Call {
+                callee,
+                callee_span,
+                type_args,
+                args,
+            } => {
                 let mark = self.borrows.len();
                 let result = self.check_call(span, callee, type_args, args, expected)?;
                 self.borrows.truncate(mark);
                 let written = self.source.get(callee_span.start..callee_span.end);
-                let found = self.facts.iter().rev().find(|fact| {
-                    self.source.get(fact.def.start..fact.def.end) == written
-                }).map(|fact| (fact.def, fact.ty.clone()));
+                let found = self
+                    .facts
+                    .iter()
+                    .rev()
+                    .find(|fact| self.source.get(fact.def.start..fact.def.end) == written)
+                    .map(|fact| (fact.def, fact.ty.clone()));
                 if let Some((def, ty)) = found {
-                    self.uses.push(NameUse { span: *callee_span, def, def_file: None, ty });
+                    self.uses.push(NameUse {
+                        span: *callee_span,
+                        def,
+                        def_file: None,
+                        ty,
+                    });
                 }
                 Ok(result)
             }
-            ExprKind::Method { receiver, method, method_span, resolved, args } => {
+            ExprKind::Method {
+                receiver,
+                method,
+                method_span,
+                resolved,
+                args,
+            } => {
                 let mark = self.borrows.len();
                 let result = self.check_method(span, receiver, method, resolved, args, expected);
                 self.borrows.truncate(mark);
                 if let Some((def, ty)) = self.method_def(method, receiver) {
-                    self.uses.push(NameUse { span: *method_span, def, def_file: None, ty });
+                    self.uses.push(NameUse {
+                        span: *method_span,
+                        def,
+                        def_file: None,
+                        ty,
+                    });
                 }
                 result
             }
             ExprKind::Array(elems) => self.check_array(span, elems, expected),
             ExprKind::Index { base, index } => self.check_index(span, base, index, expected),
-            ExprKind::Slice { base, start, end, inclusive } => self.check_slice(span, base, start, end, *inclusive, expected),
+            ExprKind::Slice {
+                base,
+                start,
+                end,
+                inclusive,
+            } => self.check_slice(span, base, start, end, *inclusive, expected),
             ExprKind::Lambda { params, body } => self.check_lambda(span, params, body, expected),
-            ExprKind::Match { scrutinee, arms } => self.check_match(span, scrutinee, arms, expected),
-            ExprKind::If { cond, then_body, else_body } => self.check_if(cond, then_body, else_body, expected),
+            ExprKind::Match { scrutinee, arms } => {
+                self.check_match(span, scrutinee, arms, expected)
+            }
+            ExprKind::If {
+                cond,
+                then_body,
+                else_body,
+            } => self.check_if(cond, then_body, else_body, expected),
             ExprKind::While { cond, body } => self.check_while(span, cond, body, expected),
             ExprKind::For { pat, iter, body } => self.check_for(span, pat, iter, body, expected),
             ExprKind::Tuple(fields) => self.check_tuple(span, fields, expected),
-            ExprKind::StructLit { name, fields } => self.check_struct_lit(span, name, fields, expected),
+            ExprKind::StructLit { name, fields } => {
+                self.check_struct_lit(span, name, fields, expected)
+            }
             ExprKind::Field { base, name, .. } => self.check_field(span, base, name, expected),
-            ExprKind::Range { .. } => Err(CompileError::at(self.source, span, "a range can only be used in `for`")),
+            ExprKind::Range { .. } => Err(CompileError::at(
+                self.source,
+                span,
+                "a range can only be used in `for`",
+            )),
             ExprKind::Unsafe(block) => {
                 self.unsafe_depth += 1;
                 let body = self.check_block(block, expected);
                 self.unsafe_depth -= 1;
                 let body = body?;
                 let ty = body.tail.as_ref().map(|e| e.ty).unwrap_or(Ty::Unit);
-                Ok(TExpr { ty, kind: TExprKind::Block(Box::new(body)) })
+                Ok(TExpr {
+                    ty,
+                    kind: TExprKind::Block(Box::new(body)),
+                })
             }
             ExprKind::Block(block) => {
                 let body = self.check_block(block, expected)?;
                 let ty = body.tail.as_ref().map(|e| e.ty).unwrap_or(Ty::Unit);
-                Ok(TExpr { ty, kind: TExprKind::Block(Box::new(body)) })
+                Ok(TExpr {
+                    ty,
+                    kind: TExprKind::Block(Box::new(body)),
+                })
             }
             ExprKind::Cast { expr: inner, ty } => {
                 let to = self.apply(ty, &HashMap::new())?;
                 let inner = self.check_expr(inner, None)?;
                 if !can_cast(inner.ty, to) {
-                    return Err(CompileError::at(self.source, span, format!("cannot cast {} to {to}", inner.ty)));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("cannot cast {} to {to}", inner.ty),
+                    ));
                 }
                 if let Some(folded) = fold_cast(inner.ty, to, &inner.kind) {
                     let folded = folded.map_err(|msg| CompileError::at(self.source, span, msg))?;
-                    return Ok(TExpr { ty: to, kind: folded });
+                    return Ok(TExpr {
+                        ty: to,
+                        kind: folded,
+                    });
                 }
-                Ok(TExpr { ty: to, kind: TExprKind::Cast { expr: Box::new(inner), to } })
+                Ok(TExpr {
+                    ty: to,
+                    kind: TExprKind::Cast {
+                        expr: Box::new(inner),
+                        to,
+                    },
+                })
             }
         }
     }
 
-    fn check_unary(&mut self, span: usize, op: UnaryOp, inner: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_unary(
+        &mut self,
+        span: usize,
+        op: UnaryOp,
+        inner: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         match op {
             UnaryOp::Not => {
                 let inner = self.check_expr(inner, Some(Ty::Bool))?;
                 if inner.ty != Ty::Bool {
-                    return Err(CompileError::at(self.source, span, format!("`!` expects bool, found {}", inner.ty)));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`!` expects bool, found {}", inner.ty),
+                    ));
                 }
-                Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Unary { op, expr: Box::new(inner) } })
+                Ok(TExpr {
+                    ty: Ty::Bool,
+                    kind: TExprKind::Unary {
+                        op,
+                        expr: Box::new(inner),
+                    },
+                })
             }
             UnaryOp::Neg => {
                 let want = expected.filter(|ty| ty.is_int() || ty.is_float());
                 let inner = self.check_expr(inner, want)?;
                 if inner.ty.is_float() {
                     if let TExprKind::Float(bits) = inner.kind {
-                        let sign = if inner.ty == Ty::F32 { 0x8000_0000 } else { 1u64 << 63 };
-                        return Ok(TExpr { ty: inner.ty, kind: TExprKind::Float(bits ^ sign) });
+                        let sign = if inner.ty == Ty::F32 {
+                            0x8000_0000
+                        } else {
+                            1u64 << 63
+                        };
+                        return Ok(TExpr {
+                            ty: inner.ty,
+                            kind: TExprKind::Float(bits ^ sign),
+                        });
                     }
-                    return Ok(TExpr { ty: inner.ty, kind: TExprKind::Unary { op, expr: Box::new(inner) } });
+                    return Ok(TExpr {
+                        ty: inner.ty,
+                        kind: TExprKind::Unary {
+                            op,
+                            expr: Box::new(inner),
+                        },
+                    });
                 }
                 if !inner.ty.is_int() || !inner.ty.is_signed() {
-                    return Err(CompileError::at(self.source, span, format!("`-` expects a signed integer or a float, found {}", inner.ty)));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!(
+                            "`-` expects a signed integer or a float, found {}",
+                            inner.ty
+                        ),
+                    ));
                 }
                 if let TExprKind::Int(value) = inner.kind {
                     let Some(negated) = value.checked_neg() else {
-                        return Err(CompileError::at(self.source, span, format!("-{value} does not fit in {}", inner.ty)));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("-{value} does not fit in {}", inner.ty),
+                        ));
                     };
                     if !inner.ty.in_range(negated) {
-                        return Err(CompileError::at(self.source, span, format!("{negated} does not fit in {}", inner.ty)));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("{negated} does not fit in {}", inner.ty),
+                        ));
                     }
-                    return Ok(TExpr { ty: inner.ty, kind: TExprKind::Int(negated) });
+                    return Ok(TExpr {
+                        ty: inner.ty,
+                        kind: TExprKind::Int(negated),
+                    });
                 }
-                Ok(TExpr { ty: inner.ty, kind: TExprKind::Unary { op, expr: Box::new(inner) } })
+                Ok(TExpr {
+                    ty: inner.ty,
+                    kind: TExprKind::Unary {
+                        op,
+                        expr: Box::new(inner),
+                    },
+                })
             }
             UnaryOp::BitNot => {
                 let want = expected.filter(|ty| ty.is_int());
                 let inner = self.check_expr(inner, want)?;
                 if !inner.ty.is_int() {
-                    return Err(CompileError::at(self.source, span, format!("`~` expects an integer, found {}", self.show(inner.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`~` expects an integer, found {}", self.show(inner.ty)),
+                    ));
                 }
-                Ok(TExpr { ty: inner.ty, kind: TExprKind::Unary { op, expr: Box::new(inner) } })
+                Ok(TExpr {
+                    ty: inner.ty,
+                    kind: TExprKind::Unary {
+                        op,
+                        expr: Box::new(inner),
+                    },
+                })
             }
         }
     }
 
-    fn check_binary(&mut self, span: usize, op: BinOp, lhs: &Expr, rhs: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_binary(
+        &mut self,
+        span: usize,
+        op: BinOp,
+        lhs: &Expr,
+        rhs: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         if op.is_logic() {
             let lhs = self.check_expr(lhs, Some(Ty::Bool))?;
             let rhs = self.check_expr(rhs, Some(Ty::Bool))?;
             if lhs.ty != Ty::Bool || rhs.ty != Ty::Bool {
-                return Err(CompileError::at(self.source, span, "`&&` and `||` expect bool"));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "`&&` and `||` expect bool",
+                ));
             }
-            return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+            return Ok(TExpr {
+                ty: Ty::Bool,
+                kind: TExprKind::Binary {
+                    op,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+            });
         }
-        if op == BinOp::Add && (self.peek(lhs) == Some(Ty::String) || self.peek(rhs) == Some(Ty::String)) {
+        if op == BinOp::Add
+            && (self.peek(lhs) == Some(Ty::String) || self.peek(rhs) == Some(Ty::String))
+        {
             let lhs = self.check_expr(lhs, Some(Ty::String))?;
             let rhs = self.check_expr(rhs, Some(Ty::String))?;
             if lhs.ty != Ty::String || rhs.ty != Ty::String {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("cannot combine {} and {}", self.show(lhs.ty), self.show(rhs.ty)),
+                    format!(
+                        "cannot combine {} and {}",
+                        self.show(lhs.ty),
+                        self.show(rhs.ty)
+                    ),
                 ));
             }
-            return Ok(TExpr { ty: Ty::String, kind: TExprKind::StrConcat { lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+            return Ok(TExpr {
+                ty: Ty::String,
+                kind: TExprKind::StrConcat {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+            });
         }
         if op.is_bitwise() {
-            let operand_ty = expected.filter(|ty| ty.is_int())
+            let operand_ty = expected
+                .filter(|ty| ty.is_int())
                 .or_else(|| self.peek(lhs))
                 .or_else(|| self.peek(rhs))
                 .unwrap_or_else(|| number_default(lhs, rhs));
             if !operand_ty.is_int() {
-                return Err(CompileError::at(self.source, span, format!("operator expects an integer, found {}", self.show(operand_ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "operator expects an integer, found {}",
+                        self.show(operand_ty)
+                    ),
+                ));
             }
             let lhs = self.check_expr(lhs, Some(operand_ty))?;
             let rhs = self.check_expr(rhs, Some(operand_ty))?;
             if lhs.ty != operand_ty || rhs.ty != operand_ty {
-                return Err(CompileError::at(self.source, span, format!("cannot combine {} and {}", self.show(lhs.ty), self.show(rhs.ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "cannot combine {} and {}",
+                        self.show(lhs.ty),
+                        self.show(rhs.ty)
+                    ),
+                ));
             }
-            return Ok(TExpr { ty: operand_ty, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+            return Ok(TExpr {
+                ty: operand_ty,
+                kind: TExprKind::Binary {
+                    op,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+            });
         }
         if matches!(op, BinOp::Eq | BinOp::Ne) || op.is_compare() {
             let hint = self.peek(lhs).or_else(|| self.peek(rhs));
             if hint == Some(Ty::String) || hint == Some(Ty::Char) {
                 if hint == Some(Ty::String) && !matches!(op, BinOp::Eq | BinOp::Ne) {
-                    return Err(CompileError::at(self.source, span, "strings can only be compared with `==` and `!=`"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "strings can only be compared with `==` and `!=`",
+                    ));
                 }
                 if hint == Some(Ty::Char) && !op.is_compare() {
-                    return Err(CompileError::at(self.source, span, "a char cannot be used in arithmetic"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "a char cannot be used in arithmetic",
+                    ));
                 }
                 let lhs = self.check_expr(lhs, hint)?;
                 let rhs = self.check_expr(rhs, Some(lhs.ty))?;
                 if lhs.ty != rhs.ty {
-                    return Err(CompileError::at(self.source, span, format!("cannot combine {} and {}", lhs.ty, rhs.ty)));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("cannot combine {} and {}", lhs.ty, rhs.ty),
+                    ));
                 }
-                return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } });
+                return Ok(TExpr {
+                    ty: Ty::Bool,
+                    kind: TExprKind::Binary {
+                        op,
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    },
+                });
             }
         }
         let operand_ty = if op.is_compare() {
-            self.peek(lhs).or_else(|| self.peek(rhs)).unwrap_or_else(|| number_default(lhs, rhs))
+            self.peek(lhs)
+                .or_else(|| self.peek(rhs))
+                .unwrap_or_else(|| number_default(lhs, rhs))
         } else {
-            expected.filter(|ty| ty.is_int() || ty.is_float())
+            expected
+                .filter(|ty| ty.is_int() || ty.is_float())
                 .or_else(|| self.peek(lhs))
                 .or_else(|| self.peek(rhs))
                 .unwrap_or_else(|| number_default(lhs, rhs))
@@ -2044,7 +3012,11 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(self.source, span, "`%` expects integers"));
             }
         } else if !operand_ty.is_int() {
-            return Err(CompileError::at(self.source, span, format!("operator expects a number, found {operand_ty}")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("operator expects a number, found {operand_ty}"),
+            ));
         }
         let lhs = self.check_expr(lhs, Some(operand_ty))?;
         let rhs = self.check_expr(rhs, Some(operand_ty))?;
@@ -2055,10 +3027,18 @@ impl<'a> Checker<'a> {
                 format!("cannot combine {} and {}", lhs.ty, rhs.ty),
             ));
         }
-        let ty = if op.is_compare() { Ty::Bool } else { operand_ty };
+        let ty = if op.is_compare() {
+            Ty::Bool
+        } else {
+            operand_ty
+        };
         if let Some(want) = expected {
             if want != ty {
-                return Err(CompileError::at(self.source, span, format!("expected {want}, this expression has type {ty}")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {want}, this expression has type {ty}"),
+                ));
             }
         }
         if operand_ty.is_float() {
@@ -2066,13 +3046,26 @@ impl<'a> Checker<'a> {
                 let left = *left;
                 let right = *right;
                 if op.is_compare() {
-                    return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Bool(float_compare(operand_ty, op, left, right)) });
+                    return Ok(TExpr {
+                        ty: Ty::Bool,
+                        kind: TExprKind::Bool(float_compare(operand_ty, op, left, right)),
+                    });
                 }
                 let bits = float_arith(operand_ty, op, left, right);
-                return Ok(TExpr { ty, kind: TExprKind::Float(bits) });
+                return Ok(TExpr {
+                    ty,
+                    kind: TExprKind::Float(bits),
+                });
             }
         }
-        Ok(TExpr { ty, kind: TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+        })
     }
 
     fn check_call(
@@ -2086,7 +3079,11 @@ impl<'a> Checker<'a> {
         let skip_self = std::mem::replace(&mut self.sig_skip_self, false);
         if is_builtin(callee) {
             if !type_args.is_empty() {
-                return Err(CompileError::at(self.source, span, format!("`{callee}` does not take type arguments")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`{callee}` does not take type arguments"),
+                ));
             }
             return self.check_builtin(span, callee, args, expected);
         }
@@ -2101,10 +3098,18 @@ impl<'a> Checker<'a> {
             return self.check_generic_call(span, callee, type_args, args, expected);
         }
         if !type_args.is_empty() {
-            return Err(CompileError::at(self.source, span, format!("`{callee}` does not take type arguments")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{callee}` does not take type arguments"),
+            ));
         }
         let Some(sig) = self.sigs.get(callee) else {
-            return Err(CompileError::at(self.source, span, format!("unknown function `{callee}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown function `{callee}`"),
+            ));
         };
         let c_abi = sig.c_abi;
         let variadic = sig.variadic;
@@ -2128,7 +3133,10 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("`{callee}` expects at least {fixed} arguments, found {}", args.len()),
+                    format!(
+                        "`{callee}` expects at least {fixed} arguments, found {}",
+                        args.len()
+                    ),
                 ));
             }
         } else if args.len() != fixed {
@@ -2144,7 +3152,11 @@ impl<'a> Checker<'a> {
             let arg = if loose_first && index == 0 {
                 let typed = self.check_expr(arg, None)?;
                 if !self.ref_compatible(typed.ty, ty) {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(ty), self.show(typed.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, found {}", self.show(ty), self.show(typed.ty)),
+                    ));
                 }
                 typed
             } else {
@@ -2153,7 +3165,11 @@ impl<'a> Checker<'a> {
                     typed = self.coerce_raw(span, typed, ty)?;
                 }
                 if typed.ty != ty {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(ty), self.show(typed.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, found {}", self.show(ty), self.show(typed.ty)),
+                    ));
                 }
                 typed
             };
@@ -2166,9 +3182,16 @@ impl<'a> Checker<'a> {
             }
         }
         let kind = if c_abi {
-            TExprKind::Extern { callee: callee.to_string(), args: checked, fixed }
+            TExprKind::Extern {
+                callee: callee.to_string(),
+                args: checked,
+                fixed,
+            }
         } else {
-            TExprKind::Call { callee: callee.to_string(), args: checked }
+            TExprKind::Call {
+                callee: callee.to_string(),
+                args: checked,
+            }
         };
         Ok(TExpr { ty: ret, kind })
     }
@@ -2185,21 +3208,37 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         if !type_args.is_empty() {
-            return Err(CompileError::at(self.source, span, format!("`{callee}` does not take type arguments")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{callee}` does not take type arguments"),
+            ));
         }
         let sig = self.cfns[id as usize].clone();
         if args.len() != sig.params.len() {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{callee}` expects {} arguments, found {}", sig.params.len(), args.len()),
+                format!(
+                    "`{callee}` expects {} arguments, found {}",
+                    sig.params.len(),
+                    args.len()
+                ),
             ));
         }
         let mut checked = Vec::new();
         for (arg, param) in args.iter().zip(&sig.params) {
             let typed = self.check_expr(arg, Some(*param))?;
             if typed.ty != *param {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(*param), self.show(typed.ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {}, found {}",
+                        self.show(*param),
+                        self.show(typed.ty)
+                    ),
+                ));
             }
             checked.push(typed);
         }
@@ -2208,13 +3247,23 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("expected {}, `{callee}` has type {}", self.show(want), self.show(sig.ret)),
+                    format!(
+                        "expected {}, `{callee}` has type {}",
+                        self.show(want),
+                        self.show(sig.ret)
+                    ),
                 ));
             }
         }
         Ok(TExpr {
             ty: sig.ret,
-            kind: TExprKind::CApply { callee: Box::new(TExpr { ty, kind: TExprKind::Name(binding) }), args: checked },
+            kind: TExprKind::CApply {
+                callee: Box::new(TExpr {
+                    ty,
+                    kind: TExprKind::Name(binding),
+                }),
+                args: checked,
+            },
         })
     }
 
@@ -2232,10 +3281,18 @@ impl<'a> Checker<'a> {
             return self.check_c_apply(span, callee, binding, ty, id, type_args, args, expected);
         }
         let Ty::Func(id) = ty else {
-            return Err(CompileError::at(self.source, span, format!("`{callee}` is not a function")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{callee}` is not a function"),
+            ));
         };
         if !type_args.is_empty() {
-            return Err(CompileError::at(self.source, span, format!("`{callee}` does not take type arguments")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{callee}` does not take type arguments"),
+            ));
         }
         let sig = self.funcs[id as usize].clone();
         self.noted_fn(&sig.params, sig.ret, false);
@@ -2243,14 +3300,26 @@ impl<'a> Checker<'a> {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{callee}` expects {} arguments, found {}", sig.params.len(), args.len()),
+                format!(
+                    "`{callee}` expects {} arguments, found {}",
+                    sig.params.len(),
+                    args.len()
+                ),
             ));
         }
         let mut checked = Vec::new();
         for (arg, param) in args.iter().zip(&sig.params) {
             let typed = self.check_expr(arg, Some(*param))?;
             if typed.ty != *param {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(*param), self.show(typed.ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {}, found {}",
+                        self.show(*param),
+                        self.show(typed.ty)
+                    ),
+                ));
             }
             checked.push(typed);
         }
@@ -2259,14 +3328,21 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("expected {}, `{callee}` has type {}", self.show(want), self.show(sig.ret)),
+                    format!(
+                        "expected {}, `{callee}` has type {}",
+                        self.show(want),
+                        self.show(sig.ret)
+                    ),
                 ));
             }
         }
         Ok(TExpr {
             ty: sig.ret,
             kind: TExprKind::Apply {
-                callee: Box::new(TExpr { ty, kind: TExprKind::Name(binding) }),
+                callee: Box::new(TExpr {
+                    ty,
+                    kind: TExprKind::Name(binding),
+                }),
                 args: checked,
                 params: sig.params,
             },
@@ -2289,7 +3365,11 @@ impl<'a> Checker<'a> {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{callee}` expects {} arguments, found {}", func.params.len(), args.len()),
+                format!(
+                    "`{callee}` expects {} arguments, found {}",
+                    func.params.len(),
+                    args.len()
+                ),
             ));
         }
         let loose_first = std::mem::replace(&mut self.loose_receiver, false);
@@ -2299,7 +3379,11 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("`{callee}` expects {} type arguments, found {}", type_params.len(), type_args.len()),
+                    format!(
+                        "`{callee}` expects {} type arguments, found {}",
+                        type_params.len(),
+                        type_args.len()
+                    ),
                 ));
             }
             for (index, ty) in type_args.iter().enumerate() {
@@ -2317,7 +3401,11 @@ impl<'a> Checker<'a> {
                 let typed = self.check_expr(arg, None)?;
                 if let Some(ty) = self.concrete_field(param_ty, &type_params, &solved)? {
                     if !self.ref_compatible(typed.ty, ty) {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(ty), self.show(typed.ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found {}", self.show(ty), self.show(typed.ty)),
+                        ));
                     }
                 } else {
                     self.loose_receiver = true;
@@ -2330,7 +3418,11 @@ impl<'a> Checker<'a> {
             if let Some(ty) = self.concrete_field(param_ty, &type_params, &solved)? {
                 let typed = self.check_expr(arg, Some(ty))?;
                 if typed.ty != ty {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(ty), self.show(typed.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, found {}", self.show(ty), self.show(typed.ty)),
+                    ));
                 }
                 checked.push(typed);
             } else {
@@ -2340,7 +3432,11 @@ impl<'a> Checker<'a> {
             }
         }
         if solved.iter().any(|slot| slot.is_none()) {
-            return Err(CompileError::at(self.source, span, format!("cannot infer type arguments for `{callee}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("cannot infer type arguments for `{callee}`"),
+            ));
         }
         let concrete: Vec<Ty> = solved.into_iter().map(Option::unwrap).collect();
         let mangled = self.instantiate(callee, &concrete)?;
@@ -2352,30 +3448,62 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("expected {}, `{callee}` has type {}", self.show(want), self.show(ret)),
+                    format!(
+                        "expected {}, `{callee}` has type {}",
+                        self.show(want),
+                        self.show(ret)
+                    ),
                 ));
             }
         }
-        Ok(TExpr { ty: ret, kind: TExprKind::Call { callee: mangled, args: checked } })
+        Ok(TExpr {
+            ty: ret,
+            kind: TExprKind::Call {
+                callee: mangled,
+                args: checked,
+            },
+        })
     }
 
     /// `print`, `println`, and `putc` are temporary compiler builtins so programs
     /// can log values before `std/io` exists. They lower to direct `putchar` calls.
-    fn check_builtin(&mut self, span: usize, callee: &str, args: &[Expr], expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_builtin(
+        &mut self,
+        span: usize,
+        callee: &str,
+        args: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         if callee == "from_char" || callee == "from_byte" {
             let arg_ty = if callee == "from_char" { "char" } else { "u8" };
             self.note_sig(format!("fn({arg_ty}) -> String"));
             if args.len() != 1 {
-                return Err(CompileError::at(self.source, span, format!("`{callee}` expects 1 argument, found {}", args.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                ));
             }
-            let want_arg = if callee == "from_char" { Ty::Char } else { Ty::U8 };
+            let want_arg = if callee == "from_char" {
+                Ty::Char
+            } else {
+                Ty::U8
+            };
             let arg = self.check_expr(&args[0], Some(want_arg))?;
             if arg.ty != want_arg {
-                return Err(CompileError::at(self.source, span, format!("`{callee}` expects {want_arg}, found {}", self.show(arg.ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`{callee}` expects {want_arg}, found {}", self.show(arg.ty)),
+                ));
             }
             if let Some(want) = expected {
                 if want != Ty::String {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, `{callee}` has type String", self.show(want))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, `{callee}` has type String", self.show(want)),
+                    ));
                 }
             }
             let kind = if callee == "from_char" {
@@ -2383,11 +3511,18 @@ impl<'a> Checker<'a> {
             } else {
                 TExprKind::StrFromByte(Box::new(arg))
             };
-            return Ok(TExpr { ty: Ty::String, kind });
+            return Ok(TExpr {
+                ty: Ty::String,
+                kind,
+            });
         }
         if let Some(want) = expected {
             if want != Ty::Unit {
-                return Err(CompileError::at(self.source, span, format!("expected {want}, `{callee}` has type unit")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {want}, `{callee}` has type unit"),
+                ));
             }
         }
         if args.len() != 1 {
@@ -2403,33 +3538,74 @@ impl<'a> Checker<'a> {
             self.note_sig("fn(integer | char) -> ()".to_string());
             let arg = self.check_expr(&args[0], None)?;
             if !arg.ty.is_int() && arg.ty != Ty::Char {
-                return Err(CompileError::at(self.source, span, format!("`putc` expects an integer or char, found {}", self.show(arg.ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "`putc` expects an integer or char, found {}",
+                        self.show(arg.ty)
+                    ),
+                ));
             }
-            return Ok(TExpr { ty: Ty::Unit, kind: TExprKind::Putc(Box::new(arg)) });
+            return Ok(TExpr {
+                ty: Ty::Unit,
+                kind: TExprKind::Putc(Box::new(arg)),
+            });
         }
         if let ExprKind::Str(chars) = &args[0].kind {
-            let bytes = utf8_bytes(chars).map_err(|msg| CompileError::at(self.source, span, msg))?;
+            let bytes =
+                utf8_bytes(chars).map_err(|msg| CompileError::at(self.source, span, msg))?;
             let cells = bytes.into_iter().map(u16::from).collect();
-            return Ok(TExpr { ty: Ty::Unit, kind: TExprKind::PrintLit { chars: cells, newline } });
+            return Ok(TExpr {
+                ty: Ty::Unit,
+                kind: TExprKind::PrintLit {
+                    chars: cells,
+                    newline,
+                },
+            });
         }
         let arg = self.check_expr(&args[0], None)?;
-        if !arg.ty.is_int() && !arg.ty.is_float() && arg.ty != Ty::Bool && arg.ty != Ty::Char && arg.ty != Ty::String {
+        if !arg.ty.is_int()
+            && !arg.ty.is_float()
+            && arg.ty != Ty::Bool
+            && arg.ty != Ty::Char
+            && arg.ty != Ty::String
+        {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{callee}` expects an integer, float, bool, char, or string, found {}", self.show(arg.ty)),
+                format!(
+                    "`{callee}` expects an integer, float, bool, char, or string, found {}",
+                    self.show(arg.ty)
+                ),
             ));
         }
-        Ok(TExpr { ty: Ty::Unit, kind: TExprKind::Print { value: Box::new(arg), newline } })
+        Ok(TExpr {
+            ty: Ty::Unit,
+            kind: TExprKind::Print {
+                value: Box::new(arg),
+                newline,
+            },
+        })
     }
 
-    fn check_if(&mut self, cond: &Expr, then_body: &Block, else_body: &Option<Box<Expr>>, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_if(
+        &mut self,
+        cond: &Expr,
+        then_body: &Block,
+        else_body: &Option<Box<Expr>>,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let cond = self.check_expr(cond, Some(Ty::Bool))?;
         let Some(else_body) = else_body else {
             let then_body = self.check_block(then_body, None)?;
             return Ok(TExpr {
                 ty: Ty::Unit,
-                kind: TExprKind::If { cond: Box::new(cond), then_body: Box::new(then_body), else_body: None },
+                kind: TExprKind::If {
+                    cond: Box::new(cond),
+                    then_body: Box::new(then_body),
+                    else_body: None,
+                },
             });
         };
         let then_body = self.check_block(then_body, expected)?;
@@ -2444,35 +3620,66 @@ impl<'a> Checker<'a> {
         }
         Ok(TExpr {
             ty: then_ty,
-            kind: TExprKind::If { cond: Box::new(cond), then_body: Box::new(then_body), else_body: Some(Box::new(else_expr)) },
+            kind: TExprKind::If {
+                cond: Box::new(cond),
+                then_body: Box::new(then_body),
+                else_body: Some(Box::new(else_expr)),
+            },
         })
     }
 
-    fn check_while(&mut self, span: usize, cond: &Expr, body: &Block, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_while(
+        &mut self,
+        span: usize,
+        cond: &Expr,
+        body: &Block,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         if let Some(want) = expected {
             if want != Ty::Unit {
-                return Err(CompileError::at(self.source, span, format!("expected {want}, `while` has type unit")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {want}, `while` has type unit"),
+                ));
             }
         }
         let cond = self.check_expr(cond, Some(Ty::Bool))?;
         if cond.ty != Ty::Bool {
-            return Err(CompileError::at(self.source, span, format!("`while` expects bool, found {}", cond.ty)));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`while` expects bool, found {}", cond.ty),
+            ));
         }
         self.loops += 1;
         let body = self.check_block(body, None)?;
         self.loops -= 1;
-        Ok(TExpr { ty: Ty::Unit, kind: TExprKind::While { cond: Box::new(cond), body: Box::new(body) } })
+        Ok(TExpr {
+            ty: Ty::Unit,
+            kind: TExprKind::While {
+                cond: Box::new(cond),
+                body: Box::new(body),
+            },
+        })
     }
 
     /// A monomorphic function name is a callable value: code id plus an empty environment.
     /// Every function frame reserves the environment slot, so the same call protocol reaches
     /// named functions and lambdas.
-    fn fn_value(&mut self, span: usize, name: &str, expected: Option<Ty>) -> Result<Option<TExpr>, CompileError> {
+    fn fn_value(
+        &mut self,
+        span: usize,
+        name: &str,
+        expected: Option<Ty>,
+    ) -> Result<Option<TExpr>, CompileError> {
         if self.fn_schemas.contains_key(name) {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("generic function `{name}` needs a concrete signature to be used as a value"),
+                format!(
+                    "generic function `{name}` needs a concrete signature to be used as a value"
+                ),
             ));
         }
         let Some(sig) = self.sigs.get(name) else {
@@ -2480,10 +3687,18 @@ impl<'a> Checker<'a> {
         };
         if sig.c_abi {
             if sig.variadic {
-                return Err(CompileError::at(self.source, span, format!("variadic function `{name}` cannot be used as a value")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("variadic function `{name}` cannot be used as a value"),
+                ));
             }
             let Some(ret) = sig.ret else {
-                return Err(CompileError::at(self.source, span, format!("function `{name}` needs a return type to be used as a value")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("function `{name}` needs a return type to be used as a value"),
+                ));
             };
             let params = sig.params.clone();
             let ty = self.intern_cfn(params, ret);
@@ -2492,14 +3707,27 @@ impl<'a> Checker<'a> {
                     return Err(CompileError::at(
                         self.source,
                         span,
-                        format!("expected {}, `{name}` has type {}", self.show(want), self.show(ty)),
+                        format!(
+                            "expected {}, `{name}` has type {}",
+                            self.show(want),
+                            self.show(ty)
+                        ),
                     ));
                 }
             }
-            return Ok(Some(TExpr { ty, kind: TExprKind::CFn { symbol: name.to_string() } }));
+            return Ok(Some(TExpr {
+                ty,
+                kind: TExprKind::CFn {
+                    symbol: name.to_string(),
+                },
+            }));
         }
         let Some(ret) = sig.ret else {
-            return Err(CompileError::at(self.source, span, format!("function `{name}` needs a return type to be used as a value")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("function `{name}` needs a return type to be used as a value"),
+            ));
         };
         let params = sig.params.clone();
         let ty = self.intern_func(params, ret);
@@ -2508,36 +3736,74 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("expected {}, `{name}` has type {}", self.show(want), self.show(ty)),
+                    format!(
+                        "expected {}, `{name}` has type {}",
+                        self.show(want),
+                        self.show(ty)
+                    ),
                 ));
             }
         }
-        Ok(Some(TExpr { ty, kind: TExprKind::Closure { func: name.to_string() } }))
+        Ok(Some(TExpr {
+            ty,
+            kind: TExprKind::Closure {
+                func: name.to_string(),
+            },
+        }))
     }
 
-    fn check_array(&mut self, span: usize, elems: &[Expr], expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_array(
+        &mut self,
+        span: usize,
+        elems: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let (expected_elem, array_len) = match expected {
             Some(Ty::Vec(id)) => (Some(self.vec_elems[id as usize]), None),
             Some(Ty::Array { id, len, .. }) => (Some(self.arrays[id as usize].elem), Some(len)),
             Some(want) => {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found an array", self.show(want))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found an array", self.show(want)),
+                ));
             }
             None => (None, None),
         };
         if let Some(len) = array_len {
             if elems.len() != len as usize {
-                return Err(CompileError::at(self.source, span, format!("expected {len} elements, found {}", elems.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {len} elements, found {}", elems.len()),
+                ));
             }
         }
         if elems.is_empty() {
             let Some(elem) = expected_elem else {
-                return Err(CompileError::at(self.source, span, "cannot infer the element type of an empty array"));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "cannot infer the element type of an empty array",
+                ));
             };
             if array_len == Some(0) {
                 let ty = self.intern_array(elem, 0);
-                return Ok(TExpr { ty, kind: TExprKind::ArrayLit { elems: Vec::new(), elem } });
+                return Ok(TExpr {
+                    ty,
+                    kind: TExprKind::ArrayLit {
+                        elems: Vec::new(),
+                        elem,
+                    },
+                });
             }
-            return Ok(TExpr { ty: self.intern_vec(elem), kind: TExprKind::VecLit { elems: Vec::new(), elem } });
+            return Ok(TExpr {
+                ty: self.intern_vec(elem),
+                kind: TExprKind::VecLit {
+                    elems: Vec::new(),
+                    elem,
+                },
+            });
         }
         let mut checked = Vec::new();
         let first = self.check_expr(&elems[0], expected_elem)?;
@@ -2545,87 +3811,207 @@ impl<'a> Checker<'a> {
         self.require_vec_elem(span, elem)?;
         if let Some(want) = expected_elem {
             if want != elem {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(elem))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found {}", self.show(want), self.show(elem)),
+                ));
             }
         }
         checked.push(first);
         for expr in &elems[1..] {
             let item = self.check_expr(expr, Some(elem))?;
             if item.ty != elem {
-                return Err(CompileError::at(self.source, expr.span.start, format!("expected {}, found {}", self.show(elem), self.show(item.ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    expr.span.start,
+                    format!("expected {}, found {}", self.show(elem), self.show(item.ty)),
+                ));
             }
             checked.push(item);
         }
         if let Some(len) = array_len {
             let ty = self.intern_array(elem, len);
-            return Ok(TExpr { ty, kind: TExprKind::ArrayLit { elems: checked, elem } });
+            return Ok(TExpr {
+                ty,
+                kind: TExprKind::ArrayLit {
+                    elems: checked,
+                    elem,
+                },
+            });
         }
-        Ok(TExpr { ty: self.intern_vec(elem), kind: TExprKind::VecLit { elems: checked, elem } })
+        Ok(TExpr {
+            ty: self.intern_vec(elem),
+            kind: TExprKind::VecLit {
+                elems: checked,
+                elem,
+            },
+        })
     }
 
-    fn check_try(&mut self, span: usize, expr: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_try(
+        &mut self,
+        span: usize,
+        expr: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let operand = self.check_expr(expr, None)?;
         let Ty::Adt(id) = operand.ty else {
-            return Err(CompileError::at(self.source, span, format!("`?` expects Option or Result, found {}", self.show(operand.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "`?` expects Option or Result, found {}",
+                    self.show(operand.ty)
+                ),
+            ));
         };
         let schema = self.adts[id as usize].schema;
         let name = self.schemas[schema].name.clone();
         let args = self.adts[id as usize].args.clone();
         let (payload, fail, ok_tag, fail_tag) = if name == "Option" {
             let Ty::Adt(ret_id) = self.fn_ret else {
-                return Err(CompileError::at(self.source, span, format!("`?` needs the function to return Option, it returns {}", self.show(self.fn_ret))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "`?` needs the function to return Option, it returns {}",
+                        self.show(self.fn_ret)
+                    ),
+                ));
             };
             if self.schemas[self.adts[ret_id as usize].schema].name != "Option" {
-                return Err(CompileError::at(self.source, span, format!("`?` needs the function to return Option, it returns {}", self.show(self.fn_ret))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "`?` needs the function to return Option, it returns {}",
+                        self.show(self.fn_ret)
+                    ),
+                ));
             }
-            (args[0], None, self.ctor_schema["Some"].1, self.ctor_schema["None"].1)
+            (
+                args[0],
+                None,
+                self.ctor_schema["Some"].1,
+                self.ctor_schema["None"].1,
+            )
         } else if name == "Result" {
             let Ty::Adt(ret_id) = self.fn_ret else {
-                return Err(CompileError::at(self.source, span, format!("`?` needs the function to return Result, it returns {}", self.show(self.fn_ret))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "`?` needs the function to return Result, it returns {}",
+                        self.show(self.fn_ret)
+                    ),
+                ));
             };
             if self.schemas[self.adts[ret_id as usize].schema].name != "Result" {
-                return Err(CompileError::at(self.source, span, format!("`?` needs the function to return Result, it returns {}", self.show(self.fn_ret))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "`?` needs the function to return Result, it returns {}",
+                        self.show(self.fn_ret)
+                    ),
+                ));
             }
             let ret_err = self.adts[ret_id as usize].args[1];
             if ret_err != args[1] {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("`?` error type is {}, the function returns {}", self.show(args[1]), self.show(ret_err)),
+                    format!(
+                        "`?` error type is {}, the function returns {}",
+                        self.show(args[1]),
+                        self.show(ret_err)
+                    ),
                 ));
             }
-            (args[0], Some(args[1]), self.ctor_schema["Ok"].1, self.ctor_schema["Err"].1)
+            (
+                args[0],
+                Some(args[1]),
+                self.ctor_schema["Ok"].1,
+                self.ctor_schema["Err"].1,
+            )
         } else {
-            return Err(CompileError::at(self.source, span, "`?` expects Option or Result"));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "`?` expects Option or Result",
+            ));
         };
         if let Some(want) = expected {
             if want != payload {
-                return Err(CompileError::at(self.source, span, format!("expected {}, `?` has type {}", self.show(want), self.show(payload))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {}, `?` has type {}",
+                        self.show(want),
+                        self.show(payload)
+                    ),
+                ));
             }
         }
-        Ok(TExpr { ty: payload, kind: TExprKind::Try { expr: Box::new(operand), ok_tag, fail_tag, payload, fail } })
+        Ok(TExpr {
+            ty: payload,
+            kind: TExprKind::Try {
+                expr: Box::new(operand),
+                ok_tag,
+                fail_tag,
+                payload,
+                fail,
+            },
+        })
     }
 
-    fn check_borrow(&mut self, span: usize, mutable: bool, expr: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_borrow(
+        &mut self,
+        span: usize,
+        mutable: bool,
+        expr: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let ExprKind::Name(name) = &expr.kind else {
-            return Err(CompileError::at(self.source, span, "only a name can be borrowed"));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "only a name can be borrowed",
+            ));
         };
         let Some(id) = self.resolve(name) else {
-            return Err(CompileError::at(self.source, span, format!("unknown name `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown name `{name}`"),
+            ));
         };
         let ty = self.bindings[id as usize].ty;
         if ty.is_ref() {
-            return Err(CompileError::at(self.source, span, "cannot borrow a reference"));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "cannot borrow a reference",
+            ));
         }
         if mutable && !self.bindings[id as usize].mutable {
-            return Err(CompileError::at(self.source, span, format!("`{name}` is not mutable")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{name}` is not mutable"),
+            ));
         }
         let refty = self.intern_ref(mutable, ty);
         if let Some(want) = expected {
             if self.ptr_from_ref(want, refty) {
                 self.require_unsafe(span)?;
                 self.note_borrow(span, id, mutable)?;
-                return Ok(TExpr { ty: want, kind: TExprKind::Borrow { binding: id } });
+                return Ok(TExpr {
+                    ty: want,
+                    kind: TExprKind::Borrow { binding: id },
+                });
             }
             if want != refty {
                 return Err(CompileError::at(
@@ -2636,24 +4022,40 @@ impl<'a> Checker<'a> {
             }
         }
         self.note_borrow(span, id, mutable)?;
-        Ok(TExpr { ty: refty, kind: TExprKind::Borrow { binding: id } })
+        Ok(TExpr {
+            ty: refty,
+            kind: TExprKind::Borrow { binding: id },
+        })
     }
 
     fn require_unsafe(&self, span: usize) -> Result<(), CompileError> {
         if self.unsafe_depth == 0 {
-            Err(CompileError::at(self.source, span, "a raw pointer operation needs `unsafe`"))
+            Err(CompileError::at(
+                self.source,
+                span,
+                "a raw pointer operation needs `unsafe`",
+            ))
         } else {
             Ok(())
         }
     }
 
     fn plain_pointee(&self, ty: Ty) -> bool {
-        if ty.is_int() || ty.is_float() || ty == Ty::Bool || ty == Ty::Char || matches!(ty, Ty::Ptr(_)) {
+        if ty.is_int()
+            || ty.is_float()
+            || ty == Ty::Bool
+            || ty == Ty::Char
+            || matches!(ty, Ty::Ptr(_))
+        {
             return true;
         }
         if let Ty::Struct { id, .. } = ty {
             let info = &self.structs[id as usize];
-            return info.repr_c && info.fields.iter().all(|(_, field)| self.plain_pointee(*field));
+            return info.repr_c
+                && info
+                    .fields
+                    .iter()
+                    .all(|(_, field)| self.plain_pointee(*field));
         }
         if let Ty::Array { id, .. } = ty {
             return self.plain_pointee(self.arrays[id as usize].elem);
@@ -2665,50 +4067,100 @@ impl<'a> Checker<'a> {
         if self.plain_pointee(ty) {
             Ok(())
         } else {
-            Err(CompileError::at(self.source, span, format!("cannot load or store `{}` through a raw pointer", self.show(ty))))
+            Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "cannot load or store `{}` through a raw pointer",
+                    self.show(ty)
+                ),
+            ))
         }
     }
 
-    fn check_deref(&mut self, span: usize, inner: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_deref(
+        &mut self,
+        span: usize,
+        inner: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let ptr = self.check_expr(inner, None)?;
         self.check_ptr_load(span, ptr, None, expected)
     }
 
-    fn check_ptr_load(&mut self, span: usize, ptr: TExpr, index: Option<&Expr>, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_ptr_load(
+        &mut self,
+        span: usize,
+        ptr: TExpr,
+        index: Option<&Expr>,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         self.require_unsafe(span)?;
         let Ty::Ptr(id) = ptr.ty else {
-            return Err(CompileError::at(self.source, span, format!("expected a raw pointer, found {}", self.show(ptr.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("expected a raw pointer, found {}", self.show(ptr.ty)),
+            ));
         };
         let elem = self.ptrs[id as usize].inner;
         self.require_pointee(span, elem)?;
         if let Some(want) = expected {
             if want != elem {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(elem))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found {}", self.show(want), self.show(elem)),
+                ));
             }
         }
         let index = match index {
             Some(index) => {
                 let index = self.check_expr(index, Some(Ty::Usize))?;
                 if index.ty != Ty::Usize {
-                    return Err(CompileError::at(self.source, span, format!("expected usize, found {}", self.show(index.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected usize, found {}", self.show(index.ty)),
+                    ));
                 }
                 Some(Box::new(index))
             }
             None => None,
         };
-        Ok(TExpr { ty: elem, kind: TExprKind::Deref { ptr: Box::new(ptr), index, stride: elem.cells() } })
+        Ok(TExpr {
+            ty: elem,
+            kind: TExprKind::Deref {
+                ptr: Box::new(ptr),
+                index,
+                stride: elem.cells(),
+            },
+        })
     }
 
-    fn check_ptr_store(&mut self, ptr: &Expr, index: Option<&Expr>, value: &Expr) -> Result<TStmt, CompileError> {
+    fn check_ptr_store(
+        &mut self,
+        ptr: &Expr,
+        index: Option<&Expr>,
+        value: &Expr,
+    ) -> Result<TStmt, CompileError> {
         let span = ptr.span.start;
         self.require_unsafe(span)?;
         let ptr = self.check_expr(ptr, None)?;
         let Ty::Ptr(id) = ptr.ty else {
-            return Err(CompileError::at(self.source, span, format!("expected a raw pointer, found {}", self.show(ptr.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("expected a raw pointer, found {}", self.show(ptr.ty)),
+            ));
         };
         let info = &self.ptrs[id as usize];
         if !info.mutable {
-            return Err(CompileError::at(self.source, span, "cannot store through `*const`"));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "cannot store through `*const`",
+            ));
         }
         let elem = info.inner;
         self.require_pointee(span, elem)?;
@@ -2717,7 +4169,11 @@ impl<'a> Checker<'a> {
             Some(index) => {
                 let index = self.check_expr(index, Some(Ty::Usize))?;
                 if index.ty != Ty::Usize {
-                    return Err(CompileError::at(self.source, span, format!("expected usize, found {}", self.show(index.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected usize, found {}", self.show(index.ty)),
+                    ));
                 }
                 Some(index)
             }
@@ -2725,9 +4181,22 @@ impl<'a> Checker<'a> {
         };
         let value = self.check_expr(value, Some(elem))?;
         if value.ty != elem {
-            return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(elem), self.show(value.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "expected {}, found {}",
+                    self.show(elem),
+                    self.show(value.ty)
+                ),
+            ));
         }
-        Ok(TStmt::PtrStore { ptr, index, value, stride })
+        Ok(TStmt::PtrStore {
+            ptr,
+            index,
+            value,
+            stride,
+        })
     }
 
     fn check_ptr_method(
@@ -2739,68 +4208,142 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let Ty::Ptr(id) = recv.ty else {
-            return Err(CompileError::at(self.source, span, "expected a raw pointer"));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "expected a raw pointer",
+            ));
         };
         let inner = self.ptrs[id as usize].inner;
         match method {
             "addr" | "bank" | "is_null" => {
                 if !args.is_empty() {
-                    return Err(CompileError::at(self.source, span, format!("`{method}` expects 0 arguments, found {}", args.len())));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`{method}` expects 0 arguments, found {}", args.len()),
+                    ));
                 }
-                let ty = if method == "is_null" { Ty::Bool } else { Ty::U16 };
+                let ty = if method == "is_null" {
+                    Ty::Bool
+                } else {
+                    Ty::U16
+                };
                 if let Some(want) = expected {
                     if want != ty {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, `{method}` has type {}", self.show(want), self.show(ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!(
+                                "expected {}, `{method}` has type {}",
+                                self.show(want),
+                                self.show(ty)
+                            ),
+                        ));
                     }
                 }
                 let kind = match method {
-                    "addr" => TExprKind::PtrAddr { ptr: Box::new(recv) },
-                    "bank" => TExprKind::PtrBank { ptr: Box::new(recv) },
-                    _ => TExprKind::PtrNull { ptr: Box::new(recv) },
+                    "addr" => TExprKind::PtrAddr {
+                        ptr: Box::new(recv),
+                    },
+                    "bank" => TExprKind::PtrBank {
+                        ptr: Box::new(recv),
+                    },
+                    _ => TExprKind::PtrNull {
+                        ptr: Box::new(recv),
+                    },
                 };
                 Ok(TExpr { ty, kind })
             }
             "offset" => {
                 self.require_unsafe(span)?;
                 if args.len() != 1 {
-                    return Err(CompileError::at(self.source, span, format!("`offset` expects 1 argument, found {}", args.len())));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`offset` expects 1 argument, found {}", args.len()),
+                    ));
                 }
                 let index = self.check_expr(&args[0], Some(Ty::I16))?;
                 if index.ty != Ty::I16 {
-                    return Err(CompileError::at(self.source, span, format!("expected i16, found {}", self.show(index.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected i16, found {}", self.show(index.ty)),
+                    ));
                 }
                 if let Some(want) = expected {
                     if want != recv.ty {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(recv.ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found {}", self.show(want), self.show(recv.ty)),
+                        ));
                     }
                 }
                 Ok(TExpr {
                     ty: recv.ty,
-                    kind: TExprKind::PtrOffset { ptr: Box::new(recv), index: Box::new(index), stride: inner.cells() },
+                    kind: TExprKind::PtrOffset {
+                        ptr: Box::new(recv),
+                        index: Box::new(index),
+                        stride: inner.cells(),
+                    },
                 })
             }
-            _ => Err(CompileError::at(self.source, span, format!("a raw pointer has no method `{method}`"))),
+            _ => Err(CompileError::at(
+                self.source,
+                span,
+                format!("a raw pointer has no method `{method}`"),
+            )),
         }
     }
 
-    fn check_index(&mut self, span: usize, base: &Expr, index: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_index(
+        &mut self,
+        span: usize,
+        base: &Expr,
+        index: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
         if let Ty::Ptr(_) = base.ty {
             return self.check_ptr_load(span, base, Some(index), expected);
         }
         let Some(elem) = self.element_of(base.ty) else {
-            return Err(CompileError::at(self.source, span, format!("expected a vector, slice, or array, found {}", self.show(base.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "expected a vector, slice, or array, found {}",
+                    self.show(base.ty)
+                ),
+            ));
         };
         if let Some(want) = expected {
             if want != elem {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(elem))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found {}", self.show(want), self.show(elem)),
+                ));
             }
         }
         let index = self.check_expr(index, Some(Ty::Usize))?;
         if index.ty != Ty::Usize {
-            return Err(CompileError::at(self.source, span, format!("expected usize, found {}", self.show(index.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("expected usize, found {}", self.show(index.ty)),
+            ));
         }
-        Ok(TExpr { ty: elem, kind: TExprKind::Index { base: Box::new(base), index: Box::new(index), elem } })
+        Ok(TExpr {
+            ty: elem,
+            kind: TExprKind::Index {
+                base: Box::new(base),
+                index: Box::new(index),
+                elem,
+            },
+        })
     }
 
     fn check_slice(
@@ -2817,11 +4360,19 @@ impl<'a> Checker<'a> {
             let start = self.check_expr(start, Some(Ty::Usize))?;
             let end = self.check_expr(end, Some(Ty::Usize))?;
             if start.ty != Ty::Usize || end.ty != Ty::Usize {
-                return Err(CompileError::at(self.source, span, "a slice bound must be usize"));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "a slice bound must be usize",
+                ));
             }
             if let Some(want) = expected {
                 if want != Ty::String {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, found String", self.show(want))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, found String", self.show(want)),
+                    ));
                 }
             }
             return Ok(TExpr {
@@ -2835,20 +4386,44 @@ impl<'a> Checker<'a> {
             });
         }
         let Some(elem) = self.element_of(base.ty) else {
-            return Err(CompileError::at(self.source, span, format!("expected a vector, slice, or array, found {}", self.show(base.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "expected a vector, slice, or array, found {}",
+                    self.show(base.ty)
+                ),
+            ));
         };
         let start = self.check_expr(start, Some(Ty::Usize))?;
         let end = self.check_expr(end, Some(Ty::Usize))?;
         if start.ty != Ty::Usize || end.ty != Ty::Usize {
-            return Err(CompileError::at(self.source, span, "a slice bound must be usize"));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "a slice bound must be usize",
+            ));
         }
         let ty = self.intern_slice(elem);
         if let Some(want) = expected {
             if want != ty {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found {}", self.show(want), self.show(ty)),
+                ));
             }
         }
-        Ok(TExpr { ty, kind: TExprKind::Slice { base: Box::new(base), start: Box::new(start), end: Box::new(end), inclusive, elem } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Slice {
+                base: Box::new(base),
+                start: Box::new(start),
+                end: Box::new(end),
+                inclusive,
+                elem,
+            },
+        })
     }
 
     /// Element type of a vector, slice, array, or a reference to a vector.
@@ -2885,7 +4460,10 @@ impl<'a> Checker<'a> {
         let place = self.referent(recv.ty);
         if let Ty::Vec(id) = place {
             let elem = self.vec_elems[id as usize];
-            if matches!(method, "len" | "push" | "is_empty" | "clear" | "pop" | "get") {
+            if matches!(
+                method,
+                "len" | "push" | "is_empty" | "clear" | "pop" | "get"
+            ) {
                 return self.check_vec_method(span, recv, method, args, elem, expected);
             }
         }
@@ -2905,9 +4483,18 @@ impl<'a> Checker<'a> {
             }
         }
         if let Some(key) = self.type_key(recv.ty) {
-            if let Some(info) = self.methods.iter().find(|item| item.type_name == key && item.method == method).cloned() {
+            if let Some(info) = self
+                .methods
+                .iter()
+                .find(|item| item.type_name == key && item.method == method)
+                .cloned()
+            {
                 if info.receiver.is_none() {
-                    return Err(CompileError::at(self.source, span, format!("`{method}` is an associated function of `{key}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`{method}` is an associated function of `{key}`"),
+                    ));
                 }
                 return self.check_inherent(span, receiver, recv.ty, &info, args, expected);
             }
@@ -2929,13 +4516,31 @@ impl<'a> Checker<'a> {
         let adapted = self.adapt_receiver(span, receiver, recv_ty, info.receiver)?;
         let mut all = vec![adapted];
         all.extend(args.iter().cloned());
-        let arity = self.ast_fns.iter().find(|func| func.name == info.func).map(|func| func.params.len()).unwrap_or(0);
+        let arity = self
+            .ast_fns
+            .iter()
+            .find(|func| func.name == info.func)
+            .map(|func| func.params.len())
+            .unwrap_or(0);
         let expect = arity - usize::from(info.receiver.is_some());
-        if let Some(preview) = self.ast_fns.iter().find(|func| func.name == info.func).map(|func| parsed_signature(func, info.receiver.is_some())) {
+        if let Some(preview) = self
+            .ast_fns
+            .iter()
+            .find(|func| func.name == info.func)
+            .map(|func| parsed_signature(func, info.receiver.is_some()))
+        {
             self.note_sig(preview);
         }
         if args.len() != expect {
-            return Err(CompileError::at(self.source, span, format!("`{}` expects {expect} arguments, found {}", info.method, args.len())));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "`{}` expects {expect} arguments, found {}",
+                    info.method,
+                    args.len()
+                ),
+            ));
         }
         self.loose_receiver = matches!(info.receiver, Some(Recv::Shared));
         self.sig_skip_self = true;
@@ -2949,30 +4554,56 @@ impl<'a> Checker<'a> {
         result
     }
 
-    fn adapt_receiver(&self, span: usize, expr: &Expr, ty: Ty, recv: Option<Recv>) -> Result<Expr, CompileError> {
+    fn adapt_receiver(
+        &self,
+        span: usize,
+        expr: &Expr,
+        ty: Ty,
+        recv: Option<Recv>,
+    ) -> Result<Expr, CompileError> {
         let Some(recv) = recv else {
             return Ok(expr.clone());
         };
         match recv {
             Recv::Value => {
                 if ty.is_ref() {
-                    return Err(CompileError::at(self.source, span, "this method takes `self` by value"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "this method takes `self` by value",
+                    ));
                 }
                 Ok(expr.clone())
             }
             Recv::Shared => Ok(if ty.is_ref() {
                 expr.clone()
             } else {
-                Expr { span: expr.span, kind: ExprKind::Borrow { mutable: false, expr: Box::new(expr.clone()) } }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Borrow {
+                        mutable: false,
+                        expr: Box::new(expr.clone()),
+                    },
+                }
             }),
             Recv::Mut => {
                 if let Ty::Ref(id) = ty {
                     if !self.refs[id as usize].mutable {
-                        return Err(CompileError::at(self.source, span, "this method needs a mutable reference"));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            "this method needs a mutable reference",
+                        ));
                     }
                     return Ok(expr.clone());
                 }
-                Ok(Expr { span: expr.span, kind: ExprKind::Borrow { mutable: true, expr: Box::new(expr.clone()) } })
+                Ok(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Borrow {
+                        mutable: true,
+                        expr: Box::new(expr.clone()),
+                    },
+                })
             }
         }
     }
@@ -2980,7 +4611,9 @@ impl<'a> Checker<'a> {
     fn type_key(&self, ty: Ty) -> Option<String> {
         let ty = self.referent(ty);
         Some(match ty {
-            Ty::Adt(id) => self.schemas[self.adts[id as usize].schema as usize].name.clone(),
+            Ty::Adt(id) => self.schemas[self.adts[id as usize].schema as usize]
+                .name
+                .clone(),
             Ty::Vec(_) => "Vec".to_string(),
             Ty::Slice(_) => "Slice".to_string(),
             Ty::I8 => "i8".to_string(),
@@ -2998,7 +4631,13 @@ impl<'a> Checker<'a> {
             Ty::Char => "char".to_string(),
             Ty::String => "String".to_string(),
             Ty::Struct { id, .. } => self.structs[id as usize].name.clone(),
-            Ty::Unit | Ty::Func(_) | Ty::CFn(_) | Ty::Ref(_) | Ty::Ptr(_) | Ty::Array { .. } | Ty::Tuple { .. } => return None,
+            Ty::Unit
+            | Ty::Func(_)
+            | Ty::CFn(_)
+            | Ty::Ref(_)
+            | Ty::Ptr(_)
+            | Ty::Array { .. }
+            | Ty::Tuple { .. } => return None,
         })
     }
 
@@ -3014,9 +4653,25 @@ impl<'a> Checker<'a> {
         actual.inner == want.inner && actual.mutable && !want.mutable
     }
 
-    fn check_assoc(&mut self, span: usize, ty_name: &str, method: &str, args: &[Expr], expected: Option<Ty>) -> Result<TExpr, CompileError> {
-        let Some(info) = self.methods.iter().find(|item| item.type_name == ty_name && item.method == method).cloned() else {
-            return Err(CompileError::at(self.source, span, format!("`{ty_name}` has no function `{method}`")));
+    fn check_assoc(
+        &mut self,
+        span: usize,
+        ty_name: &str,
+        method: &str,
+        args: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
+        let Some(info) = self
+            .methods
+            .iter()
+            .find(|item| item.type_name == ty_name && item.method == method)
+            .cloned()
+        else {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{ty_name}` has no function `{method}`"),
+            ));
         };
         if self.fn_schemas.contains_key(&info.func) {
             self.check_generic_call(span, &info.func, &[], args, expected)
@@ -3037,15 +4692,33 @@ impl<'a> Checker<'a> {
         if method == "to_vec" {
             self.note_sig(format!("fn() -> Vec<{}>", self.show(elem)));
             if !args.is_empty() {
-                return Err(CompileError::at(self.source, span, format!("`to_vec` expects 0 arguments, found {}", args.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`to_vec` expects 0 arguments, found {}", args.len()),
+                ));
             }
             let ty = self.intern_vec(elem);
             if let Some(want) = expected {
                 if want != ty {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, `to_vec` has type {}", self.show(want), self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!(
+                            "expected {}, `to_vec` has type {}",
+                            self.show(want),
+                            self.show(ty)
+                        ),
+                    ));
                 }
             }
-            return Ok(TExpr { ty, kind: TExprKind::ToVec { src: Box::new(recv), elem } });
+            return Ok(TExpr {
+                ty,
+                kind: TExprKind::ToVec {
+                    src: Box::new(recv),
+                    elem,
+                },
+            });
         }
         self.check_vec_method(span, recv, method, args, elem, expected)
     }
@@ -3062,106 +4735,226 @@ impl<'a> Checker<'a> {
         if method == "len" {
             self.note_sig("fn() -> usize".to_string());
             if !args.is_empty() {
-                return Err(CompileError::at(self.source, span, format!("`len` expects 0 arguments, found {}", args.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`len` expects 0 arguments, found {}", args.len()),
+                ));
             }
             if let Some(want) = expected {
                 if want != Ty::Usize {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, `len` has type usize", self.show(want))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, `len` has type usize", self.show(want)),
+                    ));
                 }
             }
-            return Ok(TExpr { ty: Ty::Usize, kind: TExprKind::Len { vec: Box::new(recv) } });
+            return Ok(TExpr {
+                ty: Ty::Usize,
+                kind: TExprKind::Len {
+                    vec: Box::new(recv),
+                },
+            });
         }
         if method == "is_empty" {
             self.note_sig("fn() -> bool".to_string());
             if !args.is_empty() {
-                return Err(CompileError::at(self.source, span, format!("`is_empty` expects 0 arguments, found {}", args.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`is_empty` expects 0 arguments, found {}", args.len()),
+                ));
             }
             if let Some(want) = expected {
                 if want != Ty::Bool {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, `is_empty` has type bool", self.show(want))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, `is_empty` has type bool", self.show(want)),
+                    ));
                 }
             }
-            return Ok(TExpr { ty: Ty::Bool, kind: TExprKind::Empty { vec: Box::new(recv) } });
+            return Ok(TExpr {
+                ty: Ty::Bool,
+                kind: TExprKind::Empty {
+                    vec: Box::new(recv),
+                },
+            });
         }
         if method == "clear" {
             self.note_sig("fn() -> ()".to_string());
             if !args.is_empty() {
-                return Err(CompileError::at(self.source, span, format!("`clear` expects 0 arguments, found {}", args.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`clear` expects 0 arguments, found {}", args.len()),
+                ));
             }
             let binding = self.vec_place(span, &recv, "clear", true)?;
             if let Some(want) = expected {
                 if want != Ty::Unit {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, `clear` has type unit", self.show(want))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, `clear` has type unit", self.show(want)),
+                    ));
                 }
             }
-            return Ok(TExpr { ty: Ty::Unit, kind: TExprKind::Clear { binding } });
+            return Ok(TExpr {
+                ty: Ty::Unit,
+                kind: TExprKind::Clear { binding },
+            });
         }
         if method == "pop" {
             self.note_sig(format!("fn() -> Option<{}>", self.show(elem)));
             if !args.is_empty() {
-                return Err(CompileError::at(self.source, span, format!("`pop` expects 0 arguments, found {}", args.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`pop` expects 0 arguments, found {}", args.len()),
+                ));
             }
             let binding = self.vec_place(span, &recv, "pop", true)?;
             let (option, some_tag, none_tag) = self.option_of(elem)?;
             if let Some(want) = expected {
                 if want != option {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, `pop` has type {}", self.show(want), self.show(option))));
-                }
-            }
-            return Ok(TExpr { ty: option, kind: TExprKind::Pop { binding, elem, some_tag, none_tag } });
-        }
-        if method == "get" {
-            self.note_sig(format!("fn(usize) -> Option<{}>", self.show(elem)));
-            if args.len() != 1 {
-                return Err(CompileError::at(self.source, span, format!("`get` expects 1 argument, found {}", args.len())));
-            }
-            let index = self.check_expr(&args[0], Some(Ty::Usize))?;
-            if index.ty != Ty::Usize {
-                return Err(CompileError::at(self.source, span, format!("expected usize, found {}", self.show(index.ty))));
-            }
-            let (option, some_tag, none_tag) = self.option_of(elem)?;
-            if let Some(want) = expected {
-                if want != option {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, `get` has type {}", self.show(want), self.show(option))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!(
+                            "expected {}, `pop` has type {}",
+                            self.show(want),
+                            self.show(option)
+                        ),
+                    ));
                 }
             }
             return Ok(TExpr {
                 ty: option,
-                kind: TExprKind::Get { vec: Box::new(recv), index: Box::new(index), elem, some_tag, none_tag },
+                kind: TExprKind::Pop {
+                    binding,
+                    elem,
+                    some_tag,
+                    none_tag,
+                },
+            });
+        }
+        if method == "get" {
+            self.note_sig(format!("fn(usize) -> Option<{}>", self.show(elem)));
+            if args.len() != 1 {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`get` expects 1 argument, found {}", args.len()),
+                ));
+            }
+            let index = self.check_expr(&args[0], Some(Ty::Usize))?;
+            if index.ty != Ty::Usize {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected usize, found {}", self.show(index.ty)),
+                ));
+            }
+            let (option, some_tag, none_tag) = self.option_of(elem)?;
+            if let Some(want) = expected {
+                if want != option {
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!(
+                            "expected {}, `get` has type {}",
+                            self.show(want),
+                            self.show(option)
+                        ),
+                    ));
+                }
+            }
+            return Ok(TExpr {
+                ty: option,
+                kind: TExprKind::Get {
+                    vec: Box::new(recv),
+                    index: Box::new(index),
+                    elem,
+                    some_tag,
+                    none_tag,
+                },
             });
         }
         self.note_sig(format!("fn({}) -> ()", self.show(elem)));
         if args.len() != 1 {
-            return Err(CompileError::at(self.source, span, format!("`push` expects 1 argument, found {}", args.len())));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`push` expects 1 argument, found {}", args.len()),
+            ));
         }
         let binding = self.vec_place(span, &recv, "push", true)?;
         if let Some(want) = expected {
             if want != Ty::Unit {
-                return Err(CompileError::at(self.source, span, format!("expected {}, `push` has type unit", self.show(want))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, `push` has type unit", self.show(want)),
+                ));
             }
         }
         let value = self.check_expr(&args[0], Some(elem))?;
         if value.ty != elem {
-            return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(elem), self.show(value.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!(
+                    "expected {}, found {}",
+                    self.show(elem),
+                    self.show(value.ty)
+                ),
+            ));
         }
-        Ok(TExpr { ty: Ty::Unit, kind: TExprKind::Push { binding, value: Box::new(value), elem } })
+        Ok(TExpr {
+            ty: Ty::Unit,
+            kind: TExprKind::Push {
+                binding,
+                value: Box::new(value),
+                elem,
+            },
+        })
     }
 
     fn option_of(&mut self, elem: Ty) -> Result<(Ty, u16, u16), CompileError> {
-        let schema = self.schemas.iter().position(|schema| schema.name == "Option").expect("prelude Option");
+        let schema = self
+            .schemas
+            .iter()
+            .position(|schema| schema.name == "Option")
+            .expect("prelude Option");
         let id = self.monomorphize(schema, &[elem])?;
         let none = self.ctor_schema["None"].1;
         let some = self.ctor_schema["Some"].1;
         Ok((Ty::Adt(id), some, none))
     }
 
-    fn vec_place(&mut self, span: usize, recv: &TExpr, method: &str, mutate: bool) -> Result<u32, CompileError> {
+    fn vec_place(
+        &mut self,
+        span: usize,
+        recv: &TExpr,
+        method: &str,
+        mutate: bool,
+    ) -> Result<u32, CompileError> {
         let TExprKind::Name(binding) = recv.kind else {
-            return Err(CompileError::at(self.source, span, format!("`{method}` needs a name")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{method}` needs a name"),
+            ));
         };
         let ty = self.bindings[binding as usize].ty;
         if !matches!(self.referent(ty), Ty::Vec(_)) {
-            return Err(CompileError::at(self.source, span, format!("`{method}` needs a vector")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{method}` needs a vector"),
+            ));
         }
         if mutate && !self.place_mutable(binding, ty) {
             let message = if ty.is_ref() {
@@ -3182,10 +4975,15 @@ impl<'a> Checker<'a> {
             Ty::Adt(id) => self.adts[id as usize].name.clone(),
             Ty::Vec(id) => format!("Vec<{}>", self.show(self.vec_elems[id as usize])),
             Ty::Slice(id) => format!("Slice<{}>", self.show(self.slice_elems[id as usize])),
-            Ty::Array { id, len, .. } => format!("[{}; {len}]", self.show(self.arrays[id as usize].elem)),
+            Ty::Array { id, len, .. } => {
+                format!("[{}; {len}]", self.show(self.arrays[id as usize].elem))
+            }
             Ty::Struct { id, .. } => self.structs[id as usize].name.clone(),
             Ty::Tuple { id, .. } => {
-                let fields: Vec<String> = self.tuples[id as usize].iter().map(|ty| self.show(*ty)).collect();
+                let fields: Vec<String> = self.tuples[id as usize]
+                    .iter()
+                    .map(|ty| self.show(*ty))
+                    .collect();
                 format!("({})", fields.join(", "))
             }
             Ty::Ref(id) => {
@@ -3200,23 +4998,39 @@ impl<'a> Checker<'a> {
             }
             Ty::Func(id) => {
                 let sig = &self.funcs[id as usize];
-                let params: Vec<String> = sig.params.iter().map(|param| self.show(*param)).collect();
+                let params: Vec<String> =
+                    sig.params.iter().map(|param| self.show(*param)).collect();
                 format!("fn({}) -> {}", params.join(", "), self.show(sig.ret))
             }
             Ty::CFn(id) => {
                 let sig = &self.cfns[id as usize];
-                let params: Vec<String> = sig.params.iter().map(|param| self.show(*param)).collect();
-                format!("extern \"C\" fn({}) -> {}", params.join(", "), self.show(sig.ret))
+                let params: Vec<String> =
+                    sig.params.iter().map(|param| self.show(*param)).collect();
+                format!(
+                    "extern \"C\" fn({}) -> {}",
+                    params.join(", "),
+                    self.show(sig.ret)
+                )
             }
             other => other.to_string(),
         }
     }
 
-    fn check_lambda(&mut self, span: usize, params: &[crate::ast::Param], body: &Expr, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_lambda(
+        &mut self,
+        span: usize,
+        params: &[crate::ast::Param],
+        body: &Expr,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let expected_sig = match expected {
             Some(Ty::Func(id)) => Some(self.funcs[id as usize].clone()),
             Some(want) => {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found a function", self.show(want))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found a function", self.show(want)),
+                ));
             }
             None => None,
         };
@@ -3225,7 +5039,11 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("expected {} parameters, found {}", sig.params.len(), params.len()),
+                    format!(
+                        "expected {} parameters, found {}",
+                        sig.params.len(),
+                        params.len()
+                    ),
                 ));
             }
         }
@@ -3238,7 +5056,12 @@ impl<'a> Checker<'a> {
                         return Err(CompileError::at(
                             self.source,
                             param.name_span.start,
-                            format!("expected {}, `{}` has type {}", self.show(sig.params[index]), param.name, self.show(ty)),
+                            format!(
+                                "expected {}, `{}` has type {}",
+                                self.show(sig.params[index]),
+                                param.name,
+                                self.show(ty)
+                            ),
                         ));
                     }
                 }
@@ -3253,10 +5076,22 @@ impl<'a> Checker<'a> {
         let name = format!("__lambda{}", self.lambda_count);
         self.lambda_count += 1;
         let declared_ret = expected_sig.as_ref().map(|sig| sig.ret);
-        self.sigs.insert(name.clone(), Sig { params: sig_params.clone(), ret: declared_ret, c_abi: false, variadic: false });
+        self.sigs.insert(
+            name.clone(),
+            Sig {
+                params: sig_params.clone(),
+                ret: declared_ret,
+                c_abi: false,
+                variadic: false,
+            },
+        );
         let block = match &body.kind {
             ExprKind::Block(block) => (**block).clone(),
-            _ => Block { span: body.span, stmts: Vec::new(), tail: Some(body.clone()) },
+            _ => Block {
+                span: body.span,
+                stmts: Vec::new(),
+                tail: Some(body.clone()),
+            },
         };
         let func = Function {
             name: name.clone(),
@@ -3271,18 +5106,33 @@ impl<'a> Checker<'a> {
         self.check_fn(&func, &name, true, true)?;
         let ret = self.sigs[&name].ret.unwrap();
         let ty = self.intern_func(sig_params, ret);
-        Ok(TExpr { ty, kind: TExprKind::Closure { func: name } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Closure { func: name },
+        })
     }
 
-    fn nullary(&self, span: usize, name: &str, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn nullary(
+        &self,
+        span: usize,
+        name: &str,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let Some(&(schema, tag)) = self.ctor_schema.get(name) else {
-            return Err(CompileError::at(self.source, span, format!("unknown name `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown name `{name}`"),
+            ));
         };
         if !self.schemas[schema].ctors[tag as usize].is_empty() {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{name}` expects {} arguments", self.schemas[schema].ctors[tag as usize].len()),
+                format!(
+                    "`{name}` expects {} arguments",
+                    self.schemas[schema].ctors[tag as usize].len()
+                ),
             ));
         }
         let id = if let Some(Ty::Adt(id)) = expected {
@@ -3290,7 +5140,11 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("expected {}, `{name}` constructs {}", self.show(Ty::Adt(id)), self.schemas[schema].name),
+                    format!(
+                        "expected {}, `{name}` constructs {}",
+                        self.show(Ty::Adt(id)),
+                        self.schemas[schema].name
+                    ),
                 ));
             }
             id
@@ -3301,7 +5155,11 @@ impl<'a> Checker<'a> {
                     return Err(CompileError::at(
                         self.source,
                         span,
-                        format!("expected {}, `{name}` has type {}", self.show(want), self.show(Ty::Adt(id))),
+                        format!(
+                            "expected {}, `{name}` has type {}",
+                            self.show(want),
+                            self.show(Ty::Adt(id))
+                        ),
                     ));
                 }
             }
@@ -3310,12 +5168,26 @@ impl<'a> Checker<'a> {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("expected {}, `{name}` constructs {}", self.show(want), self.schemas[schema].name),
+                format!(
+                    "expected {}, `{name}` constructs {}",
+                    self.show(want),
+                    self.schemas[schema].name
+                ),
             ));
         } else {
-            return Err(CompileError::at(self.source, span, format!("cannot infer type arguments for `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("cannot infer type arguments for `{name}`"),
+            ));
         };
-        Ok(TExpr { ty: Ty::Adt(id), kind: TExprKind::Ctor { tag, args: Vec::new() } })
+        Ok(TExpr {
+            ty: Ty::Adt(id),
+            kind: TExprKind::Ctor {
+                tag,
+                args: Vec::new(),
+            },
+        })
     }
 
     fn check_ctor(
@@ -3330,13 +5202,21 @@ impl<'a> Checker<'a> {
         let params = self.schemas[schema].params.clone();
         let fields = self.schemas[schema].ctors[tag as usize].clone();
         if !type_args.is_empty() && params.is_empty() {
-            return Err(CompileError::at(self.source, span, format!("`{name}` does not take type arguments")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{name}` does not take type arguments"),
+            ));
         }
         if args.len() != fields.len() {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{name}` expects {} arguments, found {}", fields.len(), args.len()),
+                format!(
+                    "`{name}` expects {} arguments, found {}",
+                    fields.len(),
+                    args.len()
+                ),
             ));
         }
         let mut solved = vec![None; params.len()];
@@ -3345,7 +5225,11 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("`{name}` expects {} type arguments, found {}", params.len(), type_args.len()),
+                    format!(
+                        "`{name}` expects {} type arguments, found {}",
+                        params.len(),
+                        type_args.len()
+                    ),
                 ));
             }
             for (index, ty) in type_args.iter().enumerate() {
@@ -3363,7 +5247,11 @@ impl<'a> Checker<'a> {
             if let Some(ty) = self.concrete_field(field, &params, &solved)? {
                 let typed = self.check_expr(arg, Some(ty))?;
                 if typed.ty != ty {
-                    return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(ty), self.show(typed.ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {}, found {}", self.show(ty), self.show(typed.ty)),
+                    ));
                 }
                 checked.push(typed);
             } else {
@@ -3373,20 +5261,40 @@ impl<'a> Checker<'a> {
             }
         }
         if solved.iter().any(|slot| slot.is_none()) {
-            return Err(CompileError::at(self.source, span, format!("cannot infer type arguments for `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("cannot infer type arguments for `{name}`"),
+            ));
         }
         let concrete: Vec<Ty> = solved.into_iter().map(Option::unwrap).collect();
         let id = self.monomorphize(schema, &concrete)?;
         let ty = Ty::Adt(id);
         if let Some(want) = expected {
             if want != ty {
-                return Err(CompileError::at(self.source, span, format!("expected {}, `{name}` has type {}", self.show(want), self.show(ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {}, `{name}` has type {}",
+                        self.show(want),
+                        self.show(ty)
+                    ),
+                ));
             }
         }
-        Ok(TExpr { ty, kind: TExprKind::Ctor { tag, args: checked } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Ctor { tag, args: checked },
+        })
     }
 
-    fn concrete_field(&mut self, field: &ParsedTy, params: &[String], solved: &[Option<Ty>]) -> Result<Option<Ty>, CompileError> {
+    fn concrete_field(
+        &mut self,
+        field: &ParsedTy,
+        params: &[String],
+        solved: &[Option<Ty>],
+    ) -> Result<Option<Ty>, CompileError> {
         if mentions_unsolved(field, params, solved) {
             return Ok(None);
         }
@@ -3408,19 +5316,33 @@ impl<'a> Checker<'a> {
         span: usize,
     ) -> Result<(), CompileError> {
         match parsed {
-            ParsedTy::CFn { .. } => {
-                Err(CompileError::at(self.source, span, "cannot infer a type through an `extern \"C\"` function"))
-            }
-            ParsedTy::Func { params: fn_params, ret, .. } => {
+            ParsedTy::CFn { .. } => Err(CompileError::at(
+                self.source,
+                span,
+                "cannot infer a type through an `extern \"C\"` function",
+            )),
+            ParsedTy::Func {
+                params: fn_params,
+                ret,
+                ..
+            } => {
                 let Ty::Func(id) = actual else {
-                    return Err(CompileError::at(self.source, span, format!("expected a function, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected a function, found {}", self.show(actual)),
+                    ));
                 };
                 let sig = self.funcs[id as usize].clone();
                 if fn_params.len() != sig.params.len() {
                     return Err(CompileError::at(
                         self.source,
                         span,
-                        format!("expected {} parameters, found {}", fn_params.len(), sig.params.len()),
+                        format!(
+                            "expected {} parameters, found {}",
+                            fn_params.len(),
+                            sig.params.len()
+                        ),
                     ));
                 }
                 for (param, got) in fn_params.iter().zip(sig.params) {
@@ -3428,30 +5350,66 @@ impl<'a> Checker<'a> {
                 }
                 self.infer_field(ret, sig.ret, params, solved, span)
             }
-            ParsedTy::Ptr { span, mutable, inner } => {
+            ParsedTy::Ptr {
+                span,
+                mutable,
+                inner,
+            } => {
                 let Ty::Ptr(id) = actual else {
-                    return Err(CompileError::at(self.source, span.start, format!("expected a pointer, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected a pointer, found {}", self.show(actual)),
+                    ));
                 };
                 if self.ptrs[id as usize].mutable != *mutable {
-                    return Err(CompileError::at(self.source, span.start, format!("expected a pointer, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected a pointer, found {}", self.show(actual)),
+                    ));
                 }
                 let inner_ty = self.ptrs[id as usize].inner;
                 self.infer_field(inner, inner_ty, params, solved, span.start)
             }
-            ParsedTy::Ref { span, mutable, inner } => {
+            ParsedTy::Ref {
+                span,
+                mutable,
+                inner,
+            } => {
                 let Ty::Ref(id) = actual else {
-                    return Err(CompileError::at(self.source, span.start, format!("expected a reference, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected a reference, found {}", self.show(actual)),
+                    ));
                 };
                 let actual_mut = self.refs[id as usize].mutable;
                 let inner_ty = self.refs[id as usize].inner;
                 if actual_mut != *mutable && !(self.loose_receiver && actual_mut && !*mutable) {
-                    return Err(CompileError::at(self.source, span.start, format!("expected a {}, found {}", if *mutable { "mutable reference" } else { "shared reference" }, self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!(
+                            "expected a {}, found {}",
+                            if *mutable {
+                                "mutable reference"
+                            } else {
+                                "shared reference"
+                            },
+                            self.show(actual)
+                        ),
+                    ));
                 }
                 self.infer_field(inner, inner_ty, params, solved, span.start)
             }
             ParsedTy::Tuple { span, fields } => {
                 let Ty::Tuple { id, .. } = actual else {
-                    return Err(CompileError::at(self.source, span.start, format!("expected a tuple, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected a tuple, found {}", self.show(actual)),
+                    ));
                 };
                 let got = self.tuples[id as usize].clone();
                 if fields.len() != got.len() {
@@ -3468,18 +5426,40 @@ impl<'a> Checker<'a> {
             }
             ParsedTy::Array { span, elem, len } => {
                 let Ty::Array { id, len: got, .. } = actual else {
-                    return Err(CompileError::at(self.source, span.start, format!("expected an array, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected an array, found {}", self.show(actual)),
+                    ));
                 };
                 let (_, value) = self.eval_const(len, Some(Ty::Usize))?;
                 if value != got as i64 {
-                    return Err(CompileError::at(self.source, span.start, format!("expected length {value}, found {got}")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected length {value}, found {got}"),
+                    ));
                 }
-                self.infer_field(elem, self.arrays[id as usize].elem, params, solved, span.start)
+                self.infer_field(
+                    elem,
+                    self.arrays[id as usize].elem,
+                    params,
+                    solved,
+                    span.start,
+                )
             }
-            ParsedTy::Named { span: name_span, name, args } => {
+            ParsedTy::Named {
+                span: name_span,
+                name,
+                args,
+            } => {
                 if let Some(index) = params.iter().position(|param| param == name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, name_span.start, format!("type parameter `{name}` does not take arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            name_span.start,
+                            format!("type parameter `{name}` does not take arguments"),
+                        ));
                     }
                     match solved[index] {
                         None => solved[index] = Some(actual),
@@ -3488,7 +5468,11 @@ impl<'a> Checker<'a> {
                             return Err(CompileError::at(
                                 self.source,
                                 span,
-                                format!("expected {}, found {}", self.show(existing), self.show(actual)),
+                                format!(
+                                    "expected {}, found {}",
+                                    self.show(existing),
+                                    self.show(actual)
+                                ),
                             ));
                         }
                     }
@@ -3496,19 +5480,35 @@ impl<'a> Checker<'a> {
                 }
                 if let Some(prim) = Ty::parse_name(name) {
                     if prim != actual {
-                        return Err(CompileError::at(self.source, span, format!("expected {prim}, found {}", self.show(actual))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {prim}, found {}", self.show(actual)),
+                        ));
                     }
                     return Ok(());
                 }
                 if let Some(id) = self.struct_names.get(name).copied() {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, name_span.start, format!("`{name}` does not take type arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            name_span.start,
+                            format!("`{name}` does not take type arguments"),
+                        ));
                     }
                     let Ty::Struct { id: got, .. } = actual else {
-                        return Err(CompileError::at(self.source, span, format!("expected {name}, found {}", self.show(actual))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {name}, found {}", self.show(actual)),
+                        ));
                     };
                     if got != id {
-                        return Err(CompileError::at(self.source, span, format!("expected {name}, found {}", self.show(actual))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {name}, found {}", self.show(actual)),
+                        ));
                     }
                     return Ok(());
                 }
@@ -3518,29 +5518,55 @@ impl<'a> Checker<'a> {
                     }
                     let elem = if name == "Vec" {
                         let Ty::Vec(id) = actual else {
-                            return Err(CompileError::at(self.source, span, format!("expected Vec, found {}", self.show(actual))));
+                            return Err(CompileError::at(
+                                self.source,
+                                span,
+                                format!("expected Vec, found {}", self.show(actual)),
+                            ));
                         };
                         self.vec_elems[id as usize]
                     } else {
                         let Ty::Slice(id) = actual else {
-                            return Err(CompileError::at(self.source, span, format!("expected Slice, found {}", self.show(actual))));
+                            return Err(CompileError::at(
+                                self.source,
+                                span,
+                                format!("expected Slice, found {}", self.show(actual)),
+                            ));
                         };
                         self.slice_elems[id as usize]
                     };
                     return self.infer_field(&args[0], elem, params, solved, span);
                 }
-                let Some(schema) = self.schemas.iter().position(|schema| schema.name == *name) else {
-                    return Err(CompileError::at(self.source, name_span.start, format!("unknown type `{name}`")));
+                let Some(schema) = self.schemas.iter().position(|schema| schema.name == *name)
+                else {
+                    return Err(CompileError::at(
+                        self.source,
+                        name_span.start,
+                        format!("unknown type `{name}`"),
+                    ));
                 };
                 let Ty::Adt(id) = actual else {
-                    return Err(CompileError::at(self.source, span, format!("expected {name}, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {name}, found {}", self.show(actual)),
+                    ));
                 };
                 if self.adts[id as usize].schema != schema {
-                    return Err(CompileError::at(self.source, span, format!("expected {name}, found {}", self.show(actual))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("expected {name}, found {}", self.show(actual)),
+                    ));
                 }
                 let concrete = self.adts[id as usize].args.clone();
                 if args.len() != concrete.len() {
-                    return Err(self.arity_error(name_span.start, name, concrete.len(), args.len()));
+                    return Err(self.arity_error(
+                        name_span.start,
+                        name,
+                        concrete.len(),
+                        args.len(),
+                    ));
                 }
                 for (arg, got) in args.iter().zip(concrete) {
                     self.infer_field(arg, got, params, solved, span)?;
@@ -3550,26 +5576,45 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_match(&mut self, span: usize, scrutinee: &Expr, arms: &[crate::ast::Arm], expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_match(
+        &mut self,
+        span: usize,
+        scrutinee: &Expr,
+        arms: &[crate::ast::Arm],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let scrutinee = self.check_expr(scrutinee, None)?;
         let adt = match scrutinee.ty {
             Ty::Adt(id) => Some(id),
             Ty::Bool | Ty::Char | Ty::Struct { .. } | Ty::Tuple { .. } => None,
             ty if ty.is_int() => None,
             ty => {
-                return Err(CompileError::at(self.source, span, format!("match expects a data type, found {}", self.show(ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("match expects a data type, found {}", self.show(ty)),
+                ));
             }
         };
-        let mut covered = vec![false; adt.map(|id| self.adts[id as usize].ctors.len()).unwrap_or(0)];
+        let mut covered = vec![
+            false;
+            adt.map(|id| self.adts[id as usize].ctors.len())
+                .unwrap_or(0)
+        ];
         let mut seen_lits: Vec<i64> = Vec::new();
         let mut seen_total = false;
         let mut result: Option<Ty> = expected;
         let mut typed = Vec::new();
         for arm in arms {
             let adt_done = adt.is_some() && covered.iter().all(|hit| *hit);
-            let bool_done = scrutinee.ty == Ty::Bool && seen_lits.contains(&0) && seen_lits.contains(&1);
+            let bool_done =
+                scrutinee.ty == Ty::Bool && seen_lits.contains(&0) && seen_lits.contains(&1);
             if seen_total || adt_done || bool_done {
-                return Err(CompileError::at(self.source, arm_span(&arm.pat), "unreachable pattern"));
+                return Err(CompileError::at(
+                    self.source,
+                    arm_span(&arm.pat),
+                    "unreachable pattern",
+                ));
             }
             self.scopes.push(HashMap::new());
             let arm_scope = Span::new(arm.pat.span().end, arm.body.span.end);
@@ -3577,19 +5622,31 @@ impl<'a> Checker<'a> {
             let pat = self.check_pat(&arm.pat, scrutinee.ty, false)?;
             if let TPat::Ctor { tag, .. } = &pat {
                 if adt.is_some() && covered[*tag as usize] {
-                    return Err(CompileError::at(self.source, arm_span(&arm.pat), "unreachable pattern"));
+                    return Err(CompileError::at(
+                        self.source,
+                        arm_span(&arm.pat),
+                        "unreachable pattern",
+                    ));
                 }
             }
             if let TPat::Lit(value) = &pat {
                 if seen_lits.contains(value) {
-                    return Err(CompileError::at(self.source, arm_span(&arm.pat), "unreachable pattern"));
+                    return Err(CompileError::at(
+                        self.source,
+                        arm_span(&arm.pat),
+                        "unreachable pattern",
+                    ));
                 }
             }
             let guard = match &arm.guard {
                 Some(expr) => {
                     let guard = self.check_expr(expr, Some(Ty::Bool))?;
                     if guard.ty != Ty::Bool {
-                        return Err(CompileError::at(self.source, expr.span.start, format!("a guard must be bool, found {}", self.show(guard.ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            expr.span.start,
+                            format!("a guard must be bool, found {}", self.show(guard.ty)),
+                        ));
                     }
                     Some(guard)
                 }
@@ -3598,14 +5655,18 @@ impl<'a> Checker<'a> {
             if guard.is_none() {
                 match &pat {
                     TPat::Wild | TPat::Bind(_) => seen_total = true,
-                    TPat::Ctor { tag, fields } if fields.iter().all(|field| field_irrefutable(&field.pat)) => {
+                    TPat::Ctor { tag, fields }
+                        if fields.iter().all(|field| field_irrefutable(&field.pat)) =>
+                    {
                         if adt.is_some() {
                             covered[*tag as usize] = true;
                         }
                     }
                     TPat::Ctor { .. } => {}
                     TPat::Lit(value) => seen_lits.push(*value),
-                    TPat::Product { fields } if fields.iter().all(|field| field_irrefutable(&field.pat)) => {
+                    TPat::Product { fields }
+                        if fields.iter().all(|field| field_irrefutable(&field.pat)) =>
+                    {
                         seen_total = true;
                     }
                     TPat::Product { .. } => {}
@@ -3615,35 +5676,53 @@ impl<'a> Checker<'a> {
                 ExprKind::Block(block) => self.check_block(block, result)?,
                 _ => {
                     let expr = self.check_expr(&arm.body, result)?;
-                    TBlock { stmts: Vec::new(), tail: Some(expr) }
+                    TBlock {
+                        stmts: Vec::new(),
+                        tail: Some(expr),
+                    }
                 }
             };
             self.pop_scope();
             self.scope_spans.pop();
             let arm_ty = body.tail.as_ref().map(|expr| expr.ty).unwrap_or(Ty::Unit);
             if arm_ty.is_ref() {
-                return Err(CompileError::at(self.source, arm.body.span.start, "a reference cannot escape this match"));
+                return Err(CompileError::at(
+                    self.source,
+                    arm.body.span.start,
+                    "a reference cannot escape this match",
+                ));
             }
             if let Some(want) = result {
                 if arm_ty != want {
                     return Err(CompileError::at(
                         self.source,
                         arm.body.span.start,
-                        format!("expected {}, this arm has type {}", self.show(want), self.show(arm_ty)),
+                        format!(
+                            "expected {}, this arm has type {}",
+                            self.show(want),
+                            self.show(arm_ty)
+                        ),
                     ));
                 }
             }
             result = Some(arm_ty);
             typed.push(TArm { pat, guard, body });
         }
-        let bool_done = scrutinee.ty == Ty::Bool && seen_lits.contains(&0) && seen_lits.contains(&1);
+        let bool_done =
+            scrutinee.ty == Ty::Bool && seen_lits.contains(&0) && seen_lits.contains(&1);
         let adt_done = adt.is_some() && covered.iter().all(|hit| *hit) && !covered.is_empty();
         let open_scalar = (scrutinee.ty.is_int() || scrutinee.ty == Ty::Char) && !seen_total;
         if !seen_total && !bool_done && !adt_done || open_scalar {
             return Err(CompileError::at(self.source, span, "non-exhaustive match"));
         }
         let ty = result.unwrap_or(Ty::Unit);
-        Ok(TExpr { ty, kind: TExprKind::Match { scrutinee: Box::new(scrutinee), arms: typed } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Match {
+                scrutinee: Box::new(scrutinee),
+                arms: typed,
+            },
+        })
     }
 
     fn check_pat(&mut self, pat: &Pat, ty: Ty, mutable: bool) -> Result<TPat, CompileError> {
@@ -3651,19 +5730,36 @@ impl<'a> Checker<'a> {
         self.check_pat_at(pat, ty, mutable, &mut bound)
     }
 
-    fn check_pat_at(&mut self, pat: &Pat, ty: Ty, mutable: bool, bound: &mut Vec<String>) -> Result<TPat, CompileError> {
+    fn check_pat_at(
+        &mut self,
+        pat: &Pat,
+        ty: Ty,
+        mutable: bool,
+        bound: &mut Vec<String>,
+    ) -> Result<TPat, CompileError> {
         match pat {
             Pat::Name { name, .. } if name == "_" => Ok(TPat::Wild),
             Pat::Name { name, span } => {
                 if self.ctor_schema.contains_key(name) {
                     let (tag, fields) = self.ctor_fields(name, ty, span.start)?;
                     if !fields.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("`{name}` expects {} fields", fields.len())));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{name}` expects {} fields", fields.len()),
+                        ));
                     }
-                    return Ok(TPat::Ctor { tag, fields: Vec::new() });
+                    return Ok(TPat::Ctor {
+                        tag,
+                        fields: Vec::new(),
+                    });
                 }
                 if bound.iter().any(|found| found == name) {
-                    return Err(CompileError::at(self.source, span.start, format!("`{name}` is bound twice in this pattern")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("`{name}` is bound twice in this pattern"),
+                    ));
                 }
                 bound.push(name.clone());
                 let id = self.bind_spanned(name.clone(), ty, mutable, *span);
@@ -3679,85 +5775,147 @@ impl<'a> Checker<'a> {
                 }
                 Ok(TPat::Bind(id))
             }
-            Pat::Ctor { name, span, fields: pats } => {
+            Pat::Ctor {
+                name,
+                span,
+                fields: pats,
+            } => {
                 let (tag, field_tys) = self.ctor_fields(name, ty, span.start)?;
                 if pats.len() != field_tys.len() {
                     return Err(CompileError::at(
                         self.source,
                         span.start,
-                        format!("`{name}` expects {} fields, found {}", field_tys.len(), pats.len()),
+                        format!(
+                            "`{name}` expects {} fields, found {}",
+                            field_tys.len(),
+                            pats.len()
+                        ),
                     ));
                 }
                 let mut fields = Vec::new();
                 for (pat, field_ty) in pats.iter().zip(field_tys) {
-                    fields.push(FieldPat { ty: field_ty, pat: Box::new(self.check_pat_at(pat, field_ty, mutable, bound)?) });
+                    fields.push(FieldPat {
+                        ty: field_ty,
+                        pat: Box::new(self.check_pat_at(pat, field_ty, mutable, bound)?),
+                    });
                 }
                 Ok(TPat::Ctor { tag, fields })
             }
             Pat::Int { value, span } => {
                 if !ty.is_int() {
-                    return Err(CompileError::at(self.source, span.start, format!("expected {}, found an integer pattern", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected {}, found an integer pattern", self.show(ty)),
+                    ));
                 }
                 if !ty.in_range(*value) {
-                    return Err(CompileError::at(self.source, span.start, format!("{value} does not fit in {}", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("{value} does not fit in {}", self.show(ty)),
+                    ));
                 }
                 Ok(TPat::Lit(*value))
             }
             Pat::Bool { value, span } => {
                 if ty != Ty::Bool {
-                    return Err(CompileError::at(self.source, span.start, format!("expected {}, found a bool pattern", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected {}, found a bool pattern", self.show(ty)),
+                    ));
                 }
                 Ok(TPat::Lit(i64::from(*value)))
             }
             Pat::Char { scalar, span } => {
                 if ty != Ty::Char {
-                    return Err(CompileError::at(self.source, span.start, format!("expected {}, found a char pattern", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected {}, found a char pattern", self.show(ty)),
+                    ));
                 }
                 Ok(TPat::Lit(i64::from(*scalar)))
             }
             Pat::Tuple { span, fields } => {
                 let Ty::Tuple { id, .. } = ty else {
-                    return Err(CompileError::at(self.source, span.start, format!("expected {}, found a tuple pattern", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected {}, found a tuple pattern", self.show(ty)),
+                    ));
                 };
                 let field_tys = self.tuples[id as usize].clone();
                 if fields.len() != field_tys.len() {
                     return Err(CompileError::at(
                         self.source,
                         span.start,
-                        format!("expected {} fields, found {}", field_tys.len(), fields.len()),
+                        format!(
+                            "expected {} fields, found {}",
+                            field_tys.len(),
+                            fields.len()
+                        ),
                     ));
                 }
-                Ok(TPat::Product { fields: self.product_fields(fields, &field_tys, mutable, bound)? })
+                Ok(TPat::Product {
+                    fields: self.product_fields(fields, &field_tys, mutable, bound)?,
+                })
             }
             Pat::Struct { name, span, fields } => {
                 let Some(id) = self.struct_names.get(name).copied() else {
-                    return Err(CompileError::at(self.source, span.start, format!("unknown struct `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("unknown struct `{name}`"),
+                    ));
                 };
                 let Ty::Struct { id: got, .. } = ty else {
-                    return Err(CompileError::at(self.source, span.start, format!("expected {}, found `{name}`", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected {}, found `{name}`", self.show(ty)),
+                    ));
                 };
                 if got != id {
-                    return Err(CompileError::at(self.source, span.start, format!("expected {}, found `{name}`", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("expected {}, found `{name}`", self.show(ty)),
+                    ));
                 }
                 let info = self.structs[id as usize].fields.clone();
                 if fields.len() != info.len() {
                     return Err(CompileError::at(
                         self.source,
                         span.start,
-                        format!("`{name}` expects {} fields, found {}", info.len(), fields.len()),
+                        format!(
+                            "`{name}` expects {} fields, found {}",
+                            info.len(),
+                            fields.len()
+                        ),
                     ));
                 }
                 let mut ordered = Vec::new();
                 for (field_name, field_ty) in &info {
-                    let Some((_, _, pat)) = fields.iter().find(|(name, _, _)| name == field_name) else {
-                        return Err(CompileError::at(self.source, span.start, format!("missing field `{field_name}`")));
+                    let Some((_, _, pat)) = fields.iter().find(|(name, _, _)| name == field_name)
+                    else {
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("missing field `{field_name}`"),
+                        ));
                     };
                     ordered.push(self.check_pat_at(pat, *field_ty, mutable, bound)?);
                 }
                 let mut offset = 0i64;
                 let mut product = Vec::new();
                 for ((_, field_ty), pat) in info.iter().zip(ordered) {
-                    product.push(ProductField { offset, ty: *field_ty, pat: Box::new(pat) });
+                    product.push(ProductField {
+                        offset,
+                        ty: *field_ty,
+                        pat: Box::new(pat),
+                    });
                     offset += field_ty.cells();
                 }
                 Ok(TPat::Product { fields: product })
@@ -3765,11 +5923,21 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn product_fields(&mut self, pats: &[Pat], tys: &[Ty], mutable: bool, bound: &mut Vec<String>) -> Result<Vec<ProductField>, CompileError> {
+    fn product_fields(
+        &mut self,
+        pats: &[Pat],
+        tys: &[Ty],
+        mutable: bool,
+        bound: &mut Vec<String>,
+    ) -> Result<Vec<ProductField>, CompileError> {
         let mut fields = Vec::new();
         let mut offset = 0i64;
         for (pat, ty) in pats.iter().zip(tys) {
-            fields.push(ProductField { offset, ty: *ty, pat: Box::new(self.check_pat_at(pat, *ty, mutable, bound)?) });
+            fields.push(ProductField {
+                offset,
+                ty: *ty,
+                pat: Box::new(self.check_pat_at(pat, *ty, mutable, bound)?),
+            });
             offset += ty.cells();
         }
         Ok(fields)
@@ -3780,14 +5948,18 @@ impl<'a> Checker<'a> {
         match pat {
             TPat::Wild | TPat::Bind(_) => true,
             TPat::Lit(_) => false,
-            TPat::Product { fields } => fields.iter().all(|field| self.irrefutable_pat(&field.pat, field.ty)),
+            TPat::Product { fields } => fields
+                .iter()
+                .all(|field| self.irrefutable_pat(&field.pat, field.ty)),
             TPat::Ctor { tag, fields } => {
                 let Ty::Adt(id) = ty else {
                     return false;
                 };
                 self.adts[id as usize].ctors.len() == 1
                     && *tag == 0
-                    && fields.iter().all(|field| self.irrefutable_pat(&field.pat, field.ty))
+                    && fields
+                        .iter()
+                        .all(|field| self.irrefutable_pat(&field.pat, field.ty))
             }
         }
     }
@@ -3795,21 +5967,41 @@ impl<'a> Checker<'a> {
     fn eval_consts(&mut self, consts: &[crate::ast::Const]) -> Result<(), CompileError> {
         for item in consts {
             if self.consts.contains_key(&item.name) {
-                return Err(CompileError::at(self.source, item.name_span.start, format!("duplicate constant `{}`", item.name)));
+                return Err(CompileError::at(
+                    self.source,
+                    item.name_span.start,
+                    format!("duplicate constant `{}`", item.name),
+                ));
             }
             if self.ast_fns.iter().any(|func| func.name == item.name) {
-                return Err(CompileError::at(self.source, item.name_span.start, format!("`{}` is already a function", item.name)));
+                return Err(CompileError::at(
+                    self.source,
+                    item.name_span.start,
+                    format!("`{}` is already a function", item.name),
+                ));
             }
             let ty = self.apply(&item.ty, &HashMap::new())?;
             if !ty.is_int() && !ty.is_float() && ty != Ty::Bool {
-                return Err(CompileError::at(self.source, item.name_span.start, format!("a constant must be a number or bool, found {}", self.show(ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    item.name_span.start,
+                    format!(
+                        "a constant must be a number or bool, found {}",
+                        self.show(ty)
+                    ),
+                ));
             }
             let (got, value) = self.eval_const(&item.init, Some(ty))?;
             if got != ty {
                 return Err(CompileError::at(
                     self.source,
                     item.name_span.start,
-                    format!("`{}` has type {}, the initializer has type {}", item.name, self.show(ty), self.show(got)),
+                    format!(
+                        "`{}` has type {}, the initializer has type {}",
+                        item.name,
+                        self.show(ty),
+                        self.show(got)
+                    ),
                 ));
             }
             self.consts.insert(item.name.clone(), (ty, value));
@@ -3822,10 +6014,17 @@ impl<'a> Checker<'a> {
             ExprKind::Int(_) | ExprKind::Float(_) => None,
             ExprKind::Bool(_) => Some(Ty::Bool),
             ExprKind::Name(name) => self.consts.get(name).map(|(ty, _)| *ty),
-            ExprKind::Unary { op: UnaryOp::Neg | UnaryOp::BitNot, expr } => self.const_hint(expr),
-            ExprKind::Unary { op: UnaryOp::Not, .. } => Some(Ty::Bool),
+            ExprKind::Unary {
+                op: UnaryOp::Neg | UnaryOp::BitNot,
+                expr,
+            } => self.const_hint(expr),
+            ExprKind::Unary {
+                op: UnaryOp::Not, ..
+            } => Some(Ty::Bool),
             ExprKind::Binary { op, .. } if op.is_compare() || op.is_logic() => Some(Ty::Bool),
-            ExprKind::Binary { lhs, rhs, .. } => self.const_hint(lhs).or_else(|| self.const_hint(rhs)),
+            ExprKind::Binary { lhs, rhs, .. } => {
+                self.const_hint(lhs).or_else(|| self.const_hint(rhs))
+            }
             _ => None,
         }
     }
@@ -3837,12 +6036,20 @@ impl<'a> Checker<'a> {
                 let ty = match expected {
                     Some(ty) if ty.is_int() => ty,
                     Some(ty) => {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found an integer literal", self.show(ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found an integer literal", self.show(ty)),
+                        ));
                     }
                     None => Ty::I16,
                 };
                 if !ty.in_range(*value) {
-                    return Err(CompileError::at(self.source, span, format!("{value} does not fit in {ty}")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("{value} does not fit in {ty}"),
+                    ));
                 }
                 Ok((ty, *value))
             }
@@ -3851,66 +6058,118 @@ impl<'a> Checker<'a> {
                 let ty = match expected {
                     Some(ty) if ty.is_float() => ty,
                     Some(ty) => {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found a float literal", self.show(ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found a float literal", self.show(ty)),
+                        ));
                     }
                     None => Ty::F64,
                 };
-                let bits = float_literal_bits(ty, value).map_err(|msg| CompileError::at(self.source, span, msg))?;
+                let bits = float_literal_bits(ty, value)
+                    .map_err(|msg| CompileError::at(self.source, span, msg))?;
                 Ok((ty, bits as i64))
             }
             ExprKind::Bool(value) => {
                 if let Some(want) = expected {
                     if want != Ty::Bool {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found bool", self.show(want))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found bool", self.show(want)),
+                        ));
                     }
                 }
                 Ok((Ty::Bool, i64::from(*value)))
             }
             ExprKind::Name(name) => {
                 let Some((ty, value)) = self.consts.get(name).copied() else {
-                    return Err(CompileError::at(self.source, span, format!("unknown constant `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("unknown constant `{name}`"),
+                    ));
                 };
                 if let Some(want) = expected {
                     if want != ty {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, `{name}` has type {}", self.show(want), self.show(ty))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!(
+                                "expected {}, `{name}` has type {}",
+                                self.show(want),
+                                self.show(ty)
+                            ),
+                        ));
                     }
                 }
                 Ok((ty, value))
             }
-            ExprKind::Unary { op: UnaryOp::Neg, expr: inner } => {
-                let (ty, value) = self.eval_const(inner, expected.filter(|ty| ty.is_int() || ty.is_float()))?;
+            ExprKind::Unary {
+                op: UnaryOp::Neg,
+                expr: inner,
+            } => {
+                let (ty, value) =
+                    self.eval_const(inner, expected.filter(|ty| ty.is_int() || ty.is_float()))?;
                 if ty.is_float() {
-                    let sign = if ty == Ty::F32 { 0x8000_0000u64 } else { 1u64 << 63 };
+                    let sign = if ty == Ty::F32 {
+                        0x8000_0000u64
+                    } else {
+                        1u64 << 63
+                    };
                     return Ok((ty, (value as u64 ^ sign) as i64));
                 }
                 if !ty.is_int() {
-                    return Err(CompileError::at(self.source, span, format!("cannot negate {}", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("cannot negate {}", self.show(ty)),
+                    ));
                 }
                 let Some(value) = value.checked_neg() else {
                     return Err(CompileError::at(self.source, span, "constant overflow"));
                 };
                 if !ty.in_range(value) {
-                    return Err(CompileError::at(self.source, span, format!("{value} does not fit in {ty}")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("{value} does not fit in {ty}"),
+                    ));
                 }
                 Ok((ty, value))
             }
-            ExprKind::Unary { op: UnaryOp::Not, expr: inner } => {
+            ExprKind::Unary {
+                op: UnaryOp::Not,
+                expr: inner,
+            } => {
                 let (ty, value) = self.eval_const(inner, Some(Ty::Bool))?;
                 if ty != Ty::Bool {
-                    return Err(CompileError::at(self.source, span, "`!` in a constant expects bool"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "`!` in a constant expects bool",
+                    ));
                 }
                 Ok((Ty::Bool, i64::from(value == 0)))
             }
             ExprKind::Binary { op, lhs, rhs } if op.is_logic() => {
                 if let Some(want) = expected {
                     if want != Ty::Bool {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found bool", self.show(want))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found bool", self.show(want)),
+                        ));
                     }
                 }
                 let (left_ty, left) = self.eval_const(lhs, Some(Ty::Bool))?;
                 let (right_ty, right) = self.eval_const(rhs, Some(Ty::Bool))?;
                 if left_ty != Ty::Bool || right_ty != Ty::Bool {
-                    return Err(CompileError::at(self.source, span, "`&&` and `||` expect bool"));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "`&&` and `||` expect bool",
+                    ));
                 }
                 let value = match op {
                     BinOp::And => left != 0 && right != 0,
@@ -3922,16 +6181,33 @@ impl<'a> Checker<'a> {
             ExprKind::Binary { op, lhs, rhs } if op.is_compare() => {
                 if let Some(want) = expected {
                     if want != Ty::Bool {
-                        return Err(CompileError::at(self.source, span, format!("expected {}, found bool", self.show(want))));
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!("expected {}, found bool", self.show(want)),
+                        ));
                     }
                 }
-                let operand = self.const_hint(lhs).filter(|ty| ty.is_int() || ty.is_float())
-                    .or_else(|| self.const_hint(rhs).filter(|ty| ty.is_int() || ty.is_float()))
+                let operand = self
+                    .const_hint(lhs)
+                    .filter(|ty| ty.is_int() || ty.is_float())
+                    .or_else(|| {
+                        self.const_hint(rhs)
+                            .filter(|ty| ty.is_int() || ty.is_float())
+                    })
                     .unwrap_or_else(|| number_default(lhs, rhs));
                 let (left_ty, left) = self.eval_const(lhs, Some(operand))?;
                 let (right_ty, right) = self.eval_const(rhs, Some(operand))?;
                 if left_ty != operand || right_ty != operand {
-                    return Err(CompileError::at(self.source, span, format!("cannot compare {} and {}", self.show(left_ty), self.show(right_ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!(
+                            "cannot compare {} and {}",
+                            self.show(left_ty),
+                            self.show(right_ty)
+                        ),
+                    ));
                 }
                 if operand.is_float() {
                     let value = float_compare(operand, *op, left as u64, right as u64);
@@ -3948,27 +6224,40 @@ impl<'a> Checker<'a> {
                 };
                 Ok((Ty::Bool, i64::from(value)))
             }
-            ExprKind::Unary { op: UnaryOp::BitNot, expr: inner } => {
+            ExprKind::Unary {
+                op: UnaryOp::BitNot,
+                expr: inner,
+            } => {
                 let (ty, value) = self.eval_const(inner, expected.filter(|ty| ty.is_int()))?;
                 if !ty.is_int() {
-                    return Err(CompileError::at(self.source, span, format!("`~` expects an integer, found {}", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("`~` expects an integer, found {}", self.show(ty)),
+                    ));
                 }
                 Ok((ty, fold_bitnot(ty, value)))
             }
             ExprKind::Binary { op, lhs, rhs } if op.is_bitwise() => {
-                let ty = expected.filter(|ty| ty.is_int())
+                let ty = expected
+                    .filter(|ty| ty.is_int())
                     .or_else(|| self.const_hint(lhs))
                     .or_else(|| self.const_hint(rhs))
                     .unwrap_or_else(|| number_default(lhs, rhs));
                 if !ty.is_int() {
-                    return Err(CompileError::at(self.source, span, format!("operator expects an integer, found {}", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("operator expects an integer, found {}", self.show(ty)),
+                    ));
                 }
                 let (_, left) = self.eval_const(lhs, Some(ty))?;
                 let (_, right) = self.eval_const(rhs, Some(ty))?;
                 Ok((ty, fold_bitwise(ty, *op, left, right)))
             }
             ExprKind::Binary { op, lhs, rhs } if op.is_arith() => {
-                let ty = expected.filter(|ty| ty.is_int() || ty.is_float())
+                let ty = expected
+                    .filter(|ty| ty.is_int() || ty.is_float())
                     .or_else(|| self.const_hint(lhs))
                     .or_else(|| self.const_hint(rhs))
                     .unwrap_or_else(|| number_default(lhs, rhs));
@@ -3981,7 +6270,11 @@ impl<'a> Checker<'a> {
                     return Ok((ty, float_arith(ty, *op, left as u64, right as u64) as i64));
                 }
                 if !ty.is_int() {
-                    return Err(CompileError::at(self.source, span, format!("operator expects a number, found {}", self.show(ty))));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("operator expects a number, found {}", self.show(ty)),
+                    ));
                 }
                 let (_, left) = self.eval_const(lhs, Some(ty))?;
                 let (_, right) = self.eval_const(rhs, Some(ty))?;
@@ -3989,8 +6282,20 @@ impl<'a> Checker<'a> {
                     BinOp::Add => left.checked_add(right),
                     BinOp::Sub => left.checked_sub(right),
                     BinOp::Mul => left.checked_mul(right),
-                    BinOp::Div if right == 0 => return Err(CompileError::at(self.source, span, "division by zero in a constant")),
-                    BinOp::Rem if right == 0 => return Err(CompileError::at(self.source, span, "division by zero in a constant")),
+                    BinOp::Div if right == 0 => {
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            "division by zero in a constant",
+                        ))
+                    }
+                    BinOp::Rem if right == 0 => {
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            "division by zero in a constant",
+                        ))
+                    }
                     BinOp::Div => left.checked_div(right),
                     BinOp::Rem => left.checked_rem(right),
                     _ => None,
@@ -3999,11 +6304,19 @@ impl<'a> Checker<'a> {
                     return Err(CompileError::at(self.source, span, "constant overflow"));
                 };
                 if !ty.in_range(value) {
-                    return Err(CompileError::at(self.source, span, format!("{value} does not fit in {ty}")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("{value} does not fit in {ty}"),
+                    ));
                 }
                 Ok((ty, value))
             }
-            _ => Err(CompileError::at(self.source, span, "not a constant expression")),
+            _ => Err(CompileError::at(
+                self.source,
+                span,
+                "not a constant expression",
+            )),
         }
     }
 
@@ -4014,14 +6327,23 @@ impl<'a> Checker<'a> {
                 || item.name == "Vec"
                 || item.name == "Slice"
             {
-                return Err(CompileError::at(self.source, item.name_span.start, format!("duplicate type `{}`", item.name)));
+                return Err(CompileError::at(
+                    self.source,
+                    item.name_span.start,
+                    format!("duplicate type `{}`", item.name),
+                ));
             }
             let id = self.structs.len() as u32;
             self.struct_names.insert(item.name.clone(), id);
             if item.name_span.end > item.name_span.start {
                 self.type_defs.insert(item.name.clone(), item.name_span);
             }
-            self.structs.push(StructInfo { name: item.name.clone(), fields: Vec::new(), width: 0, repr_c: item.repr_c });
+            self.structs.push(StructInfo {
+                name: item.name.clone(),
+                fields: Vec::new(),
+                width: 0,
+                repr_c: item.repr_c,
+            });
         }
         Ok(())
     }
@@ -4033,11 +6355,19 @@ impl<'a> Checker<'a> {
             let mut seen = HashMap::new();
             for field in &item.fields {
                 if seen.contains_key(&field.name) {
-                    return Err(CompileError::at(self.source, field.name_span.start, format!("duplicate field `{}`", field.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        field.name_span.start,
+                        format!("duplicate field `{}`", field.name),
+                    ));
                 }
                 seen.insert(field.name.clone(), ());
                 if escaped_ref(&field.ty) {
-                    return Err(CompileError::at(self.source, field.ty.span().start, "a reference cannot be stored in a type"));
+                    return Err(CompileError::at(
+                        self.source,
+                        field.ty.span().start,
+                        "a reference cannot be stored in a type",
+                    ));
                 }
                 self.validate_ty(&field.ty, &[])?;
                 fields.push((field.name.clone(), self.apply(&field.ty, &HashMap::new())?));
@@ -4064,7 +6394,10 @@ impl<'a> Checker<'a> {
         for info in &self.structs {
             let mut fields = Vec::new();
             for (name, ty) in &info.fields {
-                fields.push((name.clone(), rewrite_layout(*ty, &widths, &tuple_w, &self.arrays)));
+                fields.push((
+                    name.clone(),
+                    rewrite_layout(*ty, &widths, &tuple_w, &self.arrays),
+                ));
             }
             struct_fields.push(fields);
         }
@@ -4076,10 +6409,19 @@ impl<'a> Checker<'a> {
         }
         let mut tuple_fields = Vec::new();
         for fields in &self.tuples {
-            tuple_fields.push(fields.iter().map(|ty| rewrite_layout(*ty, &widths, &tuple_w, &self.arrays)).collect::<Vec<_>>());
+            tuple_fields.push(
+                fields
+                    .iter()
+                    .map(|ty| rewrite_layout(*ty, &widths, &tuple_w, &self.arrays))
+                    .collect::<Vec<_>>(),
+            );
         }
         self.tuples = tuple_fields;
-        let elems: Vec<Ty> = self.arrays.iter().map(|info| rewrite_layout(info.elem, &widths, &tuple_w, &self.arrays)).collect();
+        let elems: Vec<Ty> = self
+            .arrays
+            .iter()
+            .map(|info| rewrite_layout(info.elem, &widths, &tuple_w, &self.arrays))
+            .collect();
         for (info, elem) in self.arrays.iter_mut().zip(elems) {
             info.elem = elem;
         }
@@ -4100,7 +6442,10 @@ impl<'a> Checker<'a> {
                 return Err(CompileError::at(
                     self.source,
                     field.ty.span().start,
-                    format!("`{}` cannot be stored in a `#[repr(C)]` struct", self.show(*ty)),
+                    format!(
+                        "`{}` cannot be stored in a `#[repr(C)]` struct",
+                        self.show(*ty)
+                    ),
                 ));
             }
         }
@@ -4132,7 +6477,11 @@ impl<'a> Checker<'a> {
         }
         stack.pop();
         if sum > u16::MAX as i64 {
-            return Err(CompileError::at(self.source, 0, format!("struct `{}` is too large", self.structs[id].name)));
+            return Err(CompileError::at(
+                self.source,
+                0,
+                format!("struct `{}` is too large", self.structs[id].name),
+            ));
         }
         Ok(sum as u16)
     }
@@ -4147,7 +6496,9 @@ impl<'a> Checker<'a> {
                 }
                 Ok(sum)
             }
-            Ty::Array { id, len, .. } => Ok(len as i64 * self.measure_ty(self.arrays[id as usize].elem, stack)?),
+            Ty::Array { id, len, .. } => {
+                Ok(len as i64 * self.measure_ty(self.arrays[id as usize].elem, stack)?)
+            }
             other => Ok(other.cells()),
         }
     }
@@ -4156,7 +6507,9 @@ impl<'a> Checker<'a> {
         match ty {
             Ty::Struct { id, .. } => struct_w[id as usize] as i64,
             Ty::Tuple { id, .. } => tuple_w[id as usize] as i64,
-            Ty::Array { id, len, .. } => len as i64 * self.raw_cells(self.arrays[id as usize].elem, struct_w, tuple_w),
+            Ty::Array { id, len, .. } => {
+                len as i64 * self.raw_cells(self.arrays[id as usize].elem, struct_w, tuple_w)
+            }
             other => other.cells(),
         }
     }
@@ -4168,7 +6521,10 @@ impl<'a> Checker<'a> {
     fn intern_tuple(&mut self, span: usize, fields: Vec<Ty>) -> Result<Ty, CompileError> {
         if let Some(index) = self.tuples.iter().position(|got| got == &fields) {
             let width: i64 = self.tuples[index].iter().map(|ty| ty.cells()).sum();
-            return Ok(Ty::Tuple { id: index as u32, width: width as u16 });
+            return Ok(Ty::Tuple {
+                id: index as u32,
+                width: width as u16,
+            });
         }
         let width: i64 = fields.iter().map(|ty| ty.cells()).sum();
         if width > u16::MAX as i64 {
@@ -4176,14 +6532,26 @@ impl<'a> Checker<'a> {
         }
         let id = self.tuples.len() as u32;
         self.tuples.push(fields);
-        Ok(Ty::Tuple { id, width: width as u16 })
+        Ok(Ty::Tuple {
+            id,
+            width: width as u16,
+        })
     }
 
-    fn check_tuple(&mut self, span: usize, fields: &[Expr], expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_tuple(
+        &mut self,
+        span: usize,
+        fields: &[Expr],
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let expected_fields = match expected {
             Some(Ty::Tuple { id, .. }) => Some(self.tuples[id as usize].clone()),
             Some(want) => {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found a tuple", self.show(want))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found a tuple", self.show(want)),
+                ));
             }
             None => None,
         };
@@ -4205,7 +6573,11 @@ impl<'a> Checker<'a> {
                     return Err(CompileError::at(
                         self.source,
                         span,
-                        format!("expected {}, found {}", self.show(want), self.show(value.ty)),
+                        format!(
+                            "expected {}, found {}",
+                            self.show(want),
+                            self.show(value.ty)
+                        ),
                     ));
                 }
             }
@@ -4213,7 +6585,10 @@ impl<'a> Checker<'a> {
         }
         let tys: Vec<Ty> = typed.iter().map(|expr| expr.ty).collect();
         let ty = self.intern_tuple(span, tys)?;
-        Ok(TExpr { ty, kind: TExprKind::Record { fields: typed } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Record { fields: typed },
+        })
     }
 
     fn check_struct_lit(
@@ -4224,7 +6599,11 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let Some(id) = self.struct_names.get(name).copied() else {
-            return Err(CompileError::at(self.source, span, format!("unknown struct `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown struct `{name}`"),
+            ));
         };
         let info = self.structs[id as usize].fields.clone();
         let width = self.structs[id as usize].width;
@@ -4232,27 +6611,43 @@ impl<'a> Checker<'a> {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{name}` expects {} fields, found {}", info.len(), fields.len()),
+                format!(
+                    "`{name}` expects {} fields, found {}",
+                    info.len(),
+                    fields.len()
+                ),
             ));
         }
         let mut seen = HashMap::new();
         for (field, _) in fields {
             if seen.contains_key(field) {
-                return Err(CompileError::at(self.source, span, format!("duplicate field `{field}`")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("duplicate field `{field}`"),
+                ));
             }
             seen.insert(field.clone(), ());
         }
         let mut ordered = Vec::new();
         for (field_name, field_ty) in &info {
             let Some((_, expr)) = fields.iter().find(|(found, _)| found == field_name) else {
-                return Err(CompileError::at(self.source, span, format!("missing field `{field_name}`")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("missing field `{field_name}`"),
+                ));
             };
             let value = self.check_expr(expr, Some(*field_ty))?;
             if value.ty != *field_ty {
                 return Err(CompileError::at(
                     self.source,
                     span,
-                    format!("expected {}, found {}", self.show(*field_ty), self.show(value.ty)),
+                    format!(
+                        "expected {}, found {}",
+                        self.show(*field_ty),
+                        self.show(value.ty)
+                    ),
                 ));
             }
             ordered.push(value);
@@ -4260,26 +6655,53 @@ impl<'a> Checker<'a> {
         let ty = Ty::Struct { id, width };
         if let Some(want) = expected {
             if want != ty {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {name}", self.show(want))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found {name}", self.show(want)),
+                ));
             }
         }
-        Ok(TExpr { ty, kind: TExprKind::Record { fields: ordered } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Record { fields: ordered },
+        })
     }
 
-    fn check_field(&mut self, span: usize, base: &Expr, name: &str, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_field(
+        &mut self,
+        span: usize,
+        base: &Expr,
+        name: &str,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
         let (offset, ty) = self.field_at(span, base.ty, name)?;
         if let Some(want) = expected {
             if want != ty {
-                return Err(CompileError::at(self.source, span, format!("expected {}, found {}", self.show(want), self.show(ty))));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {}, found {}", self.show(want), self.show(ty)),
+                ));
             }
         }
-        Ok(TExpr { ty, kind: TExprKind::Field { base: Box::new(base), offset } })
+        Ok(TExpr {
+            ty,
+            kind: TExprKind::Field {
+                base: Box::new(base),
+                offset,
+            },
+        })
     }
 
     fn field_at(&self, span: usize, ty: Ty, name: &str) -> Result<(i64, Ty), CompileError> {
         let Ty::Struct { id, .. } = ty else {
-            return Err(CompileError::at(self.source, span, format!("{} has no field `{name}`", self.show(ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("{} has no field `{name}`", self.show(ty)),
+            ));
         };
         let mut offset = 0i64;
         for (field, field_ty) in &self.structs[id as usize].fields {
@@ -4288,16 +6710,34 @@ impl<'a> Checker<'a> {
             }
             offset += field_ty.cells();
         }
-        Err(CompileError::at(self.source, span, format!("{} has no field `{name}`", self.show(ty))))
+        Err(CompileError::at(
+            self.source,
+            span,
+            format!("{} has no field `{name}`", self.show(ty)),
+        ))
     }
 
-    fn check_field_assign(&mut self, name: &str, span: usize, fields: &[String], value: &Expr) -> Result<TStmt, CompileError> {
+    fn check_field_assign(
+        &mut self,
+        name: &str,
+        span: usize,
+        fields: &[String],
+        value: &Expr,
+    ) -> Result<TStmt, CompileError> {
         let Some(id) = self.resolve(name) else {
-            return Err(CompileError::at(self.source, span, format!("unknown name `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown name `{name}`"),
+            ));
         };
         let mut ty = self.bindings[id as usize].ty;
         if !self.place_mutable(id, ty) {
-            return Err(CompileError::at(self.source, span, format!("`{name}` is not mutable")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{name}` is not mutable"),
+            ));
         }
         self.note_use(span, id, true)?;
         let mut offset = 0i64;
@@ -4314,16 +6754,36 @@ impl<'a> Checker<'a> {
                 format!("expected {}, found {}", self.show(ty), self.show(value.ty)),
             ));
         }
-        Ok(TStmt::FieldAssign { binding: id, offset, value })
+        Ok(TStmt::FieldAssign {
+            binding: id,
+            offset,
+            value,
+        })
     }
 
-    fn check_for(&mut self, span: usize, pat: &Pat, iter: &Expr, body: &Block, expected: Option<Ty>) -> Result<TExpr, CompileError> {
+    fn check_for(
+        &mut self,
+        span: usize,
+        pat: &Pat,
+        iter: &Expr,
+        body: &Block,
+        expected: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         if let Some(want) = expected {
             if want != Ty::Unit {
-                return Err(CompileError::at(self.source, span, format!("expected {want}, `for` has type unit")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("expected {want}, `for` has type unit"),
+                ));
             }
         }
-        if let ExprKind::Range { start, end, inclusive } = &iter.kind {
+        if let ExprKind::Range {
+            start,
+            end,
+            inclusive,
+        } = &iter.kind
+        {
             return self.check_for_range(span, pat, start, end, *inclusive, body);
         }
         let iter = self.check_expr(iter, None)?;
@@ -4331,14 +6791,22 @@ impl<'a> Checker<'a> {
             return self.check_for_list(pat, iter, nil, cons, elem, body);
         }
         let elem = self.element_of(iter.ty).ok_or_else(|| {
-            CompileError::at(self.source, span, format!("cannot iterate over {}", self.show(iter.ty)))
+            CompileError::at(
+                self.source,
+                span,
+                format!("cannot iterate over {}", self.show(iter.ty)),
+            )
         })?;
         let snap = self.bind(format!("__snap{}", self.bindings.len()), iter.ty, false);
         let index = self.bind(format!("__idx{}", self.bindings.len()), Ty::Usize, true);
         self.scopes.push(HashMap::new());
         let elem_pat = self.check_pat(pat, elem, false)?;
         if !self.irrefutable_pat(&elem_pat, elem) {
-            return Err(CompileError::at(self.source, pat.span().start, "a `for` pattern must be irrefutable"));
+            return Err(CompileError::at(
+                self.source,
+                pat.span().start,
+                "a `for` pattern must be irrefutable",
+            ));
         }
         self.loops += 1;
         let body = self.check_block(body, None)?;
@@ -4347,24 +6815,44 @@ impl<'a> Checker<'a> {
         let loaded = TExpr {
             ty: elem,
             kind: TExprKind::Index {
-                base: Box::new(TExpr { ty: iter.ty, kind: TExprKind::Name(snap) }),
-                index: Box::new(TExpr { ty: Ty::Usize, kind: TExprKind::Name(index) }),
+                base: Box::new(TExpr {
+                    ty: iter.ty,
+                    kind: TExprKind::Name(snap),
+                }),
+                index: Box::new(TExpr {
+                    ty: Ty::Usize,
+                    kind: TExprKind::Name(index),
+                }),
                 elem,
             },
         };
         let extract = match elem_pat {
-            TPat::Bind(binding) => TStmt::Let { binding, init: loaded },
+            TPat::Bind(binding) => TStmt::Let {
+                binding,
+                init: loaded,
+            },
             TPat::Wild => TStmt::Expr(loaded),
-            other => TStmt::Destructure { pat: other, init: loaded },
+            other => TStmt::Destructure {
+                pat: other,
+                init: loaded,
+            },
         };
         let iter_expr = TExpr {
             ty: Ty::Unit,
             kind: TExprKind::ForIter {
                 index,
-                start: Box::new(TExpr { ty: Ty::Usize, kind: TExprKind::Int(0) }),
+                start: Box::new(TExpr {
+                    ty: Ty::Usize,
+                    kind: TExprKind::Int(0),
+                }),
                 end: Box::new(TExpr {
                     ty: Ty::Usize,
-                    kind: TExprKind::Len { vec: Box::new(TExpr { ty: iter.ty, kind: TExprKind::Name(snap) }) },
+                    kind: TExprKind::Len {
+                        vec: Box::new(TExpr {
+                            ty: iter.ty,
+                            kind: TExprKind::Name(snap),
+                        }),
+                    },
                 }),
                 inclusive: false,
                 extract: Some(Box::new(extract)),
@@ -4374,7 +6862,10 @@ impl<'a> Checker<'a> {
         Ok(TExpr {
             ty: Ty::Unit,
             kind: TExprKind::Block(Box::new(TBlock {
-                stmts: vec![TStmt::Let { binding: snap, init: iter }],
+                stmts: vec![TStmt::Let {
+                    binding: snap,
+                    init: iter,
+                }],
                 tail: Some(iter_expr),
             })),
         })
@@ -4392,16 +6883,26 @@ impl<'a> Checker<'a> {
         let bound = self.common_int(start, end);
         let start = self.check_expr(start, bound)?;
         if !start.ty.is_int() {
-            return Err(CompileError::at(self.source, span, format!("a range needs an integer, found {}", self.show(start.ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("a range needs an integer, found {}", self.show(start.ty)),
+            ));
         }
         let end_span = end.span.start;
-        let end_hint = bound.or_else(|| self.peek(end).filter(|ty| ty.is_int())).or(Some(start.ty));
+        let end_hint = bound
+            .or_else(|| self.peek(end).filter(|ty| ty.is_int()))
+            .or(Some(start.ty));
         let end = self.check_expr(end, end_hint)?;
         if end.ty != start.ty {
             return Err(CompileError::at(
                 self.source,
                 end_span,
-                format!("a range's bounds have types {} and {}", self.show(start.ty), self.show(end.ty)),
+                format!(
+                    "a range's bounds have types {} and {}",
+                    self.show(start.ty),
+                    self.show(end.ty)
+                ),
             ));
         }
         self.scopes.push(HashMap::new());
@@ -4410,7 +6911,11 @@ impl<'a> Checker<'a> {
             TPat::Bind(id) => id,
             TPat::Wild => self.bind(format!("__i{}", self.bindings.len()), start.ty, true),
             _ => {
-                return Err(CompileError::at(self.source, pat.span().start, "a range binds one name"));
+                return Err(CompileError::at(
+                    self.source,
+                    pat.span().start,
+                    "a range binds one name",
+                ));
             }
         };
         self.loops += 1;
@@ -4470,13 +6975,25 @@ impl<'a> Checker<'a> {
         Some((nil?, cons?, elem?))
     }
 
-    fn check_for_list(&mut self, pat: &Pat, iter: TExpr, nil: u16, cons: u16, elem: Ty, body: &Block) -> Result<TExpr, CompileError> {
+    fn check_for_list(
+        &mut self,
+        pat: &Pat,
+        iter: TExpr,
+        nil: u16,
+        cons: u16,
+        elem: Ty,
+        body: &Block,
+    ) -> Result<TExpr, CompileError> {
         let list_ty = iter.ty;
         let cursor = self.bind(format!("__cur{}", self.bindings.len()), list_ty, true);
         self.scopes.push(HashMap::new());
         let elem_pat = self.check_pat(pat, elem, false)?;
         if !self.irrefutable_pat(&elem_pat, elem) {
-            return Err(CompileError::at(self.source, pat.span().start, "a `for` pattern must be irrefutable"));
+            return Err(CompileError::at(
+                self.source,
+                pat.span().start,
+                "a `for` pattern must be irrefutable",
+            ));
         }
         let rest = self.bind(format!("__rest{}", self.bindings.len()), list_ty, false);
         self.loops += 1;
@@ -4485,7 +7002,10 @@ impl<'a> Checker<'a> {
         self.pop_scope();
         let mut stmts = vec![TStmt::Assign {
             binding: cursor,
-            value: TExpr { ty: list_ty, kind: TExprKind::Name(rest) },
+            value: TExpr {
+                ty: list_ty,
+                kind: TExprKind::Name(rest),
+            },
         }];
         stmts.extend(user.stmts);
         if let Some(tail) = user.tail {
@@ -4494,19 +7014,34 @@ impl<'a> Checker<'a> {
         let matched = TExpr {
             ty: Ty::Unit,
             kind: TExprKind::Match {
-                scrutinee: Box::new(TExpr { ty: list_ty, kind: TExprKind::Name(cursor) }),
+                scrutinee: Box::new(TExpr {
+                    ty: list_ty,
+                    kind: TExprKind::Name(cursor),
+                }),
                 arms: vec![
                     TArm {
-                        pat: TPat::Ctor { tag: nil, fields: Vec::new() },
+                        pat: TPat::Ctor {
+                            tag: nil,
+                            fields: Vec::new(),
+                        },
                         guard: None,
-                        body: TBlock { stmts: vec![TStmt::Break], tail: None },
+                        body: TBlock {
+                            stmts: vec![TStmt::Break],
+                            tail: None,
+                        },
                     },
                     TArm {
                         pat: TPat::Ctor {
                             tag: cons,
                             fields: vec![
-                                FieldPat { ty: elem, pat: Box::new(elem_pat) },
-                                FieldPat { ty: list_ty, pat: Box::new(TPat::Bind(rest)) },
+                                FieldPat {
+                                    ty: elem,
+                                    pat: Box::new(elem_pat),
+                                },
+                                FieldPat {
+                                    ty: list_ty,
+                                    pat: Box::new(TPat::Bind(rest)),
+                                },
                             ],
                         },
                         guard: None,
@@ -4518,12 +7053,21 @@ impl<'a> Checker<'a> {
         Ok(TExpr {
             ty: Ty::Unit,
             kind: TExprKind::Block(Box::new(TBlock {
-                stmts: vec![TStmt::Let { binding: cursor, init: iter }],
+                stmts: vec![TStmt::Let {
+                    binding: cursor,
+                    init: iter,
+                }],
                 tail: Some(TExpr {
                     ty: Ty::Unit,
                     kind: TExprKind::While {
-                        cond: Box::new(TExpr { ty: Ty::Bool, kind: TExprKind::Bool(true) }),
-                        body: Box::new(TBlock { stmts: Vec::new(), tail: Some(matched) }),
+                        cond: Box::new(TExpr {
+                            ty: Ty::Bool,
+                            kind: TExprKind::Bool(true),
+                        }),
+                        body: Box::new(TBlock {
+                            stmts: Vec::new(),
+                            tail: Some(matched),
+                        }),
                     },
                 }),
             })),
@@ -4535,7 +7079,11 @@ impl<'a> Checker<'a> {
             for param in &mut func.params {
                 if param.ty.is_none() {
                     if let Pat::Struct { name, span, .. } = &param.pat {
-                        param.ty = Some(ParsedTy::Named { span: *span, name: name.clone(), args: Vec::new() });
+                        param.ty = Some(ParsedTy::Named {
+                            span: *span,
+                            name: name.clone(),
+                            args: Vec::new(),
+                        });
                     }
                 }
             }
@@ -4543,7 +7091,9 @@ impl<'a> Checker<'a> {
         let pending: Vec<usize> = functions
             .iter()
             .enumerate()
-            .filter(|(_, func)| func.type_params.is_empty() && func.params.iter().any(|param| param.ty.is_none()))
+            .filter(|(_, func)| {
+                func.type_params.is_empty() && func.params.iter().any(|param| param.ty.is_none())
+            })
             .map(|(index, _)| index)
             .collect();
         if pending.is_empty() {
@@ -4574,9 +7124,14 @@ impl<'a> Checker<'a> {
             for (param, var) in func.params.iter().zip(&params) {
                 self.infer_pat(&mut solver, &param.pat, *var, &mut scope)?;
             }
-            let body = self.infer_block(&mut solver, &func.body, &sigs, functions, &mut scope, ret)?;
+            let body =
+                self.infer_block(&mut solver, &func.body, &sigs, functions, &mut scope, ret)?;
             solver.unify(body, ret).map_err(|_| {
-                CompileError::at(self.source, func.name_span.start, format!("cannot infer the type of `{}`", func.name))
+                CompileError::at(
+                    self.source,
+                    func.name_span.start,
+                    format!("cannot infer the type of `{}`", func.name),
+                )
             })?;
         }
         solver.default_numbers();
@@ -4588,14 +7143,25 @@ impl<'a> Checker<'a> {
                 self.collect_free(&solver, var, &mut free, &mut seen);
             }
             if functions[index].name == "main" && !free.is_empty() {
-                return Err(CompileError::at(self.source, functions[index].name_span.start, "main cannot be generic"));
+                return Err(CompileError::at(
+                    self.source,
+                    functions[index].name_span.start,
+                    "main cannot be generic",
+                ));
             }
             let mut names = HashMap::new();
             for (slot, var) in free.iter().enumerate() {
                 names.insert(*var, type_var_name(slot));
             }
             let func = &mut functions[index];
-            func.type_params = free.iter().enumerate().map(|(slot, _)| TypeParam { name: type_var_name(slot), span: func.name_span }).collect();
+            func.type_params = free
+                .iter()
+                .enumerate()
+                .map(|(slot, _)| TypeParam {
+                    name: type_var_name(slot),
+                    span: func.name_span,
+                })
+                .collect();
             for (param, var) in func.params.iter_mut().zip(&params) {
                 param.ty = Some(self.render_var(&solver, *var, &names)?);
             }
@@ -4604,24 +7170,41 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    fn parsed_var(&mut self, solver: &mut Solver, ty: &ParsedTy, subst: &HashMap<String, u32>) -> Result<u32, CompileError> {
+    fn parsed_var(
+        &mut self,
+        solver: &mut Solver,
+        ty: &ParsedTy,
+        subst: &HashMap<String, u32>,
+    ) -> Result<u32, CompileError> {
         match ty {
             ParsedTy::Named { span, name, args } => {
                 if let Some(var) = subst.get(name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("type parameter `{name}` does not take arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("type parameter `{name}` does not take arguments"),
+                        ));
                     }
                     return Ok(*var);
                 }
                 if let Some(prim) = Ty::parse_name(name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("`{name}` does not take type arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{name}` does not take type arguments"),
+                        ));
                     }
                     return Ok(solver.concrete(prim));
                 }
                 if let Some(id) = self.struct_names.get(name).copied() {
                     if !args.is_empty() {
-                        return Err(CompileError::at(self.source, span.start, format!("`{name}` does not take type arguments")));
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("`{name}` does not take type arguments"),
+                        ));
                     }
                     return Ok(solver.structure(id));
                 }
@@ -4629,8 +7212,13 @@ impl<'a> Checker<'a> {
                     let concrete = self.apply(ty, &HashMap::new())?;
                     return Ok(solver.concrete(concrete));
                 }
-                let Some(schema) = self.schemas.iter().position(|schema| schema.name == *name) else {
-                    return Err(CompileError::at(self.source, span.start, format!("unknown type `{name}`")));
+                let Some(schema) = self.schemas.iter().position(|schema| schema.name == *name)
+                else {
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("unknown type `{name}`"),
+                    ));
                 };
                 let mut vars = Vec::new();
                 for arg in args {
@@ -4653,7 +7241,11 @@ impl<'a> Checker<'a> {
                 }
                 Ok(solver.tuple(vars))
             }
-            ParsedTy::Ref { span, .. } => Err(CompileError::at(self.source, span.start, "a reference cannot be inferred here")),
+            ParsedTy::Ref { span, .. } => Err(CompileError::at(
+                self.source,
+                span.start,
+                "a reference cannot be inferred here",
+            )),
             ParsedTy::Ptr { .. } | ParsedTy::CFn { .. } => {
                 let concrete = self.apply(ty, &HashMap::new())?;
                 Ok(solver.concrete(concrete))
@@ -4694,7 +7286,9 @@ impl<'a> Checker<'a> {
         ret: u32,
     ) -> Result<(), CompileError> {
         match stmt {
-            Stmt::Let { pattern, ty, init, .. } => {
+            Stmt::Let {
+                pattern, ty, init, ..
+            } => {
                 let expected = match ty {
                     Some(ty) => Some(self.parsed_var(solver, ty, &HashMap::new())?),
                     None => None,
@@ -4709,10 +7303,14 @@ impl<'a> Checker<'a> {
             }
             Stmt::Return { value, .. } => {
                 let got = match value {
-                    Some(expr) => self.infer_expr(solver, expr, sigs, functions, scope, ret, Some(ret))?,
+                    Some(expr) => {
+                        self.infer_expr(solver, expr, sigs, functions, scope, ret, Some(ret))?
+                    }
                     None => solver.concrete(Ty::Unit),
                 };
-                solver.unify(got, ret).map_err(|_| CompileError::at(self.source, 0, "incompatible types"))?;
+                solver
+                    .unify(got, ret)
+                    .map_err(|_| CompileError::at(self.source, 0, "incompatible types"))?;
                 Ok(())
             }
             Stmt::Assign { value, .. } => {
@@ -4723,7 +7321,11 @@ impl<'a> Checker<'a> {
                 self.infer_expr(solver, expr, sigs, functions, scope, ret, None)?;
                 Ok(())
             }
-            Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::IndexAssign { .. } | Stmt::FieldAssign { .. } | Stmt::DerefAssign { .. } => Ok(()),
+            Stmt::Break { .. }
+            | Stmt::Continue { .. }
+            | Stmt::IndexAssign { .. }
+            | Stmt::FieldAssign { .. }
+            | Stmt::DerefAssign { .. } => Ok(()),
         }
     }
 
@@ -4759,7 +7361,9 @@ impl<'a> Checker<'a> {
                 match op {
                     UnaryOp::Not => {
                         let boolean = solver.concrete(Ty::Bool);
-                        solver.unify(inner, boolean).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                        solver.unify(inner, boolean).map_err(|_| {
+                            CompileError::at(self.source, span, "incompatible types")
+                        })?;
                         solver.concrete(Ty::Bool)
                     }
                     UnaryOp::BitNot => {
@@ -4781,11 +7385,17 @@ impl<'a> Checker<'a> {
                 let right = self.infer_expr(solver, rhs, sigs, functions, scope, ret, None)?;
                 if matches!(op, BinOp::And | BinOp::Or) {
                     let boolean = solver.concrete(Ty::Bool);
-                    solver.unify(left, boolean).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
-                    solver.unify(right, boolean).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                    solver
+                        .unify(left, boolean)
+                        .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                    solver
+                        .unify(right, boolean)
+                        .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                     boolean
                 } else {
-                    solver.unify(left, right).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                    solver
+                        .unify(left, right)
+                        .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                     if op.is_arith() || op.is_bitwise() {
                         let root = solver.find(left);
                         let float_info = matches!(solver.info[root as usize], Some(IInfo::Concrete(ty)) if ty.is_float());
@@ -4804,44 +7414,67 @@ impl<'a> Checker<'a> {
                 scope.pop();
                 ty
             }
-            ExprKind::If { cond, then_body, else_body } => {
+            ExprKind::If {
+                cond,
+                then_body,
+                else_body,
+            } => {
                 let cond = self.infer_expr(solver, cond, sigs, functions, scope, ret, None)?;
                 let boolean = solver.concrete(Ty::Bool);
-                solver.unify(cond, boolean).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                solver
+                    .unify(cond, boolean)
+                    .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                 scope.push(HashMap::new());
                 let then_ty = self.infer_block(solver, then_body, sigs, functions, scope, ret)?;
                 scope.pop();
                 if let Some(else_body) = else_body {
-                    let else_ty = self.infer_expr(solver, else_body, sigs, functions, scope, ret, Some(then_ty))?;
-                    solver.unify(then_ty, else_ty).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                    let else_ty = self.infer_expr(
+                        solver,
+                        else_body,
+                        sigs,
+                        functions,
+                        scope,
+                        ret,
+                        Some(then_ty),
+                    )?;
+                    solver
+                        .unify(then_ty, else_ty)
+                        .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                     then_ty
                 } else {
                     solver.concrete(Ty::Unit)
                 }
             }
             ExprKind::Match { scrutinee, arms } => {
-                let scrut = self.infer_expr(solver, scrutinee, sigs, functions, scope, ret, None)?;
+                let scrut =
+                    self.infer_expr(solver, scrutinee, sigs, functions, scope, ret, None)?;
                 let mut result = expected;
                 for arm in arms {
                     scope.push(HashMap::new());
                     self.infer_pat(solver, &arm.pat, scrut, scope)?;
                     if let Some(guard) = &arm.guard {
-                        let guard = self.infer_expr(solver, guard, sigs, functions, scope, ret, None)?;
+                        let guard =
+                            self.infer_expr(solver, guard, sigs, functions, scope, ret, None)?;
                         let boolean = solver.concrete(Ty::Bool);
                         solver.unify(guard, boolean).map_err(|_| {
                             CompileError::at(self.source, span, "incompatible types")
                         })?;
                     }
-                    let arm_ty = self.infer_expr(solver, &arm.body, sigs, functions, scope, ret, result)?;
+                    let arm_ty =
+                        self.infer_expr(solver, &arm.body, sigs, functions, scope, ret, result)?;
                     scope.pop();
                     if let Some(want) = result {
-                        solver.unify(arm_ty, want).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                        solver.unify(arm_ty, want).map_err(|_| {
+                            CompileError::at(self.source, span, "incompatible types")
+                        })?;
                     }
                     result = Some(arm_ty);
                 }
                 result.unwrap_or_else(|| solver.concrete(Ty::Unit))
             }
-            ExprKind::Call { callee, args, .. } => self.infer_call(solver, span, callee, args, sigs, functions, scope, ret)?,
+            ExprKind::Call { callee, args, .. } => {
+                self.infer_call(solver, span, callee, args, sigs, functions, scope, ret)?
+            }
             ExprKind::Tuple(fields) => {
                 let mut vars = Vec::new();
                 for field in fields {
@@ -4851,16 +7484,24 @@ impl<'a> Checker<'a> {
             }
             ExprKind::StructLit { name, fields } => {
                 let Some(id) = self.struct_names.get(name).copied() else {
-                    return Err(CompileError::at(self.source, span, format!("unknown struct `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("unknown struct `{name}`"),
+                    ));
                 };
                 let info = self.structs[id as usize].fields.clone();
                 for (field_name, field_ty) in &info {
-                    let Some((_, expr)) = fields.iter().find(|(found, _)| found == field_name) else {
+                    let Some((_, expr)) = fields.iter().find(|(found, _)| found == field_name)
+                    else {
                         continue;
                     };
                     let got = self.infer_expr(solver, expr, sigs, functions, scope, ret, None)?;
-                    let want = self.parsed_var(solver, &self.ty_to_parsed(*field_ty), &HashMap::new())?;
-                    solver.unify(got, want).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                    let want =
+                        self.parsed_var(solver, &self.ty_to_parsed(*field_ty), &HashMap::new())?;
+                    solver
+                        .unify(got, want)
+                        .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                 }
                 solver.structure(id)
             }
@@ -4873,7 +7514,9 @@ impl<'a> Checker<'a> {
             }
         };
         if let Some(expected) = expected {
-            solver.unify(got, expected).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+            solver
+                .unify(got, expected)
+                .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
         }
         Ok(got)
     }
@@ -4908,7 +7551,11 @@ impl<'a> Checker<'a> {
             let mut params = Vec::new();
             for param in &func.params {
                 let Some(ty) = &param.ty else {
-                    return Err(CompileError::at(self.source, span, format!("cannot infer a type for `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("cannot infer a type for `{name}`"),
+                    ));
                 };
                 params.push(self.parsed_var(solver, ty, &HashMap::new())?);
             }
@@ -4918,7 +7565,11 @@ impl<'a> Checker<'a> {
             };
             return Ok(solver.func(params, ret));
         }
-        Err(CompileError::at(self.source, span, format!("unknown name `{name}`")))
+        Err(CompileError::at(
+            self.source,
+            span,
+            format!("unknown name `{name}`"),
+        ))
     }
 
     fn infer_call(
@@ -4948,7 +7599,9 @@ impl<'a> Checker<'a> {
             if let Some(var) = map.get(callee) {
                 let result = solver.fresh();
                 let func = solver.func(arg_vars, result);
-                solver.unify(*var, func).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                solver
+                    .unify(*var, func)
+                    .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
                 return Ok(result);
             }
         }
@@ -4957,15 +7610,25 @@ impl<'a> Checker<'a> {
         }
         if let Some((params, result)) = sigs.get(callee) {
             if params.len() != arg_vars.len() {
-                return Err(CompileError::at(self.source, span, format!("`{callee}` expects {} arguments", params.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`{callee}` expects {} arguments", params.len()),
+                ));
             }
             for (param, arg) in params.iter().zip(arg_vars) {
-                solver.unify(*param, arg).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                solver
+                    .unify(*param, arg)
+                    .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
             }
             return Ok(*result);
         }
         let Some(func) = functions.iter().find(|func| func.name == callee).cloned() else {
-            return Err(CompileError::at(self.source, span, format!("unknown function `{callee}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown function `{callee}`"),
+            ));
         };
         if !func.type_params.is_empty() {
             let mut subst = HashMap::new();
@@ -4973,29 +7636,53 @@ impl<'a> Checker<'a> {
                 subst.insert(param.name.clone(), solver.fresh());
             }
             if func.params.len() != arg_vars.len() {
-                return Err(CompileError::at(self.source, span, format!("`{callee}` expects {} arguments", func.params.len())));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("`{callee}` expects {} arguments", func.params.len()),
+                ));
             }
             for (param, arg) in func.params.iter().zip(arg_vars) {
                 let Some(ty) = &param.ty else {
-                    return Err(CompileError::at(self.source, span, format!("parameter `{}` needs a type", param.name)));
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        format!("parameter `{}` needs a type", param.name),
+                    ));
                 };
                 let var = self.parsed_var(solver, ty, &subst)?;
-                solver.unify(var, arg).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+                solver
+                    .unify(var, arg)
+                    .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
             }
             let Some(ty) = &func.ret else {
-                return Err(CompileError::at(self.source, span, format!("function `{callee}` needs a return type")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("function `{callee}` needs a return type"),
+                ));
             };
             return self.parsed_var(solver, ty, &subst);
         }
         if func.params.len() != arg_vars.len() {
-            return Err(CompileError::at(self.source, span, format!("`{callee}` expects {} arguments", func.params.len())));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{callee}` expects {} arguments", func.params.len()),
+            ));
         }
         for (param, arg) in func.params.iter().zip(arg_vars) {
             let Some(ty) = &param.ty else {
-                return Err(CompileError::at(self.source, span, format!("cannot infer a type for `{callee}`")));
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!("cannot infer a type for `{callee}`"),
+                ));
             };
             let var = self.parsed_var(solver, ty, &HashMap::new())?;
-            solver.unify(var, arg).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+            solver
+                .unify(var, arg)
+                .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
         }
         match &func.ret {
             Some(ty) => self.parsed_var(solver, ty, &HashMap::new()),
@@ -5003,9 +7690,19 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn infer_ctor(&mut self, solver: &mut Solver, span: usize, name: &str, args: &[u32]) -> Result<u32, CompileError> {
+    fn infer_ctor(
+        &mut self,
+        solver: &mut Solver,
+        span: usize,
+        name: &str,
+        args: &[u32],
+    ) -> Result<u32, CompileError> {
         let Some(&(schema, tag)) = self.ctor_schema.get(name) else {
-            return Err(CompileError::at(self.source, span, format!("unknown constructor `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown constructor `{name}`"),
+            ));
         };
         let params = self.schemas[schema].params.clone();
         let fields = self.schemas[schema].ctors[tag as usize].clone();
@@ -5013,7 +7710,11 @@ impl<'a> Checker<'a> {
             return Err(CompileError::at(
                 self.source,
                 span,
-                format!("`{name}` expects {} arguments, found {}", fields.len(), args.len()),
+                format!(
+                    "`{name}` expects {} arguments, found {}",
+                    fields.len(),
+                    args.len()
+                ),
             ));
         }
         let mut subst = HashMap::new();
@@ -5022,19 +7723,29 @@ impl<'a> Checker<'a> {
         }
         for (field, arg) in fields.iter().zip(args) {
             let var = self.parsed_var(solver, field, &subst)?;
-            solver.unify(var, *arg).map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
+            solver
+                .unify(var, *arg)
+                .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
         }
         let arg_vars: Vec<u32> = params.iter().map(|param| subst[param]).collect();
         Ok(solver.adt(schema, arg_vars))
     }
 
-    fn infer_pat(&mut self, solver: &mut Solver, pat: &Pat, var: u32, scope: &mut Vec<HashMap<String, u32>>) -> Result<(), CompileError> {
+    fn infer_pat(
+        &mut self,
+        solver: &mut Solver,
+        pat: &Pat,
+        var: u32,
+        scope: &mut Vec<HashMap<String, u32>>,
+    ) -> Result<(), CompileError> {
         match pat {
             Pat::Name { name, .. } if name == "_" => Ok(()),
             Pat::Name { name, span } => {
                 if self.ctor_schema.contains_key(name) {
                     let ctor = self.infer_ctor(solver, span.start, name, &[])?;
-                    return solver.unify(var, ctor).map_err(|_| CompileError::at(self.source, span.start, "incompatible types"));
+                    return solver.unify(var, ctor).map_err(|_| {
+                        CompileError::at(self.source, span.start, "incompatible types")
+                    });
                 }
                 scope.last_mut().unwrap().insert(name.clone(), var);
                 Ok(())
@@ -5045,7 +7756,9 @@ impl<'a> Checker<'a> {
                     field_vars.push(solver.fresh());
                 }
                 let ctor = self.infer_ctor(solver, span.start, name, &field_vars)?;
-                solver.unify(var, ctor).map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))?;
+                solver
+                    .unify(var, ctor)
+                    .map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))?;
                 for (field, field_var) in fields.iter().zip(field_vars) {
                     self.infer_pat(solver, field, field_var, scope)?;
                 }
@@ -5057,11 +7770,15 @@ impl<'a> Checker<'a> {
             }
             Pat::Char { span, .. } => {
                 let ch = solver.concrete(Ty::Char);
-                solver.unify(var, ch).map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))
+                solver
+                    .unify(var, ch)
+                    .map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))
             }
             Pat::Bool { span, .. } => {
                 let boolean = solver.concrete(Ty::Bool);
-                solver.unify(var, boolean).map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))
+                solver
+                    .unify(var, boolean)
+                    .map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))
             }
             Pat::Tuple { fields, .. } => {
                 let mut vars = Vec::new();
@@ -5071,18 +7788,27 @@ impl<'a> Checker<'a> {
                     vars.push(field_var);
                 }
                 let tuple = solver.tuple(vars);
-                solver.unify(var, tuple).map_err(|_| CompileError::at(self.source, pat.span().start, "incompatible types"))
+                solver.unify(var, tuple).map_err(|_| {
+                    CompileError::at(self.source, pat.span().start, "incompatible types")
+                })
             }
             Pat::Struct { name, span, fields } => {
                 let Some(id) = self.struct_names.get(name).copied() else {
-                    return Err(CompileError::at(self.source, span.start, format!("unknown struct `{name}`")));
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!("unknown struct `{name}`"),
+                    ));
                 };
                 let structured = solver.structure(id);
-                solver.unify(var, structured).map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))?;
+                solver
+                    .unify(var, structured)
+                    .map_err(|_| CompileError::at(self.source, span.start, "incompatible types"))?;
                 let info = self.structs[id as usize].fields.clone();
                 for (field_name, _, field_pat) in fields {
                     if let Some((_, ty)) = info.iter().find(|(found, _)| found == field_name) {
-                        let field_var = self.parsed_var(solver, &self.ty_to_parsed(*ty), &HashMap::new())?;
+                        let field_var =
+                            self.parsed_var(solver, &self.ty_to_parsed(*ty), &HashMap::new())?;
                         self.infer_pat(solver, field_pat, field_var, scope)?;
                     }
                 }
@@ -5091,7 +7817,13 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn collect_free(&self, solver: &Solver, var: u32, free: &mut Vec<u32>, seen: &mut HashMap<u32, ()>) {
+    fn collect_free(
+        &self,
+        solver: &Solver,
+        var: u32,
+        free: &mut Vec<u32>,
+        seen: &mut HashMap<u32, ()>,
+    ) {
         let var = solver.find(var);
         match &solver.info[var as usize] {
             None => {
@@ -5119,10 +7851,19 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn render_var(&self, solver: &Solver, var: u32, names: &HashMap<u32, String>) -> Result<ParsedTy, CompileError> {
+    fn render_var(
+        &self,
+        solver: &Solver,
+        var: u32,
+        names: &HashMap<u32, String>,
+    ) -> Result<ParsedTy, CompileError> {
         let var = solver.find(var);
         if let Some(name) = names.get(&var) {
-            return Ok(ParsedTy::Named { span: Span::empty(), name: name.clone(), args: Vec::new() });
+            return Ok(ParsedTy::Named {
+                span: Span::empty(),
+                name: name.clone(),
+                args: Vec::new(),
+            });
         }
         let Some(info) = solver.info[var as usize].clone() else {
             return Err(CompileError::at(self.source, 0, "cannot infer a type"));
@@ -5161,7 +7902,10 @@ impl<'a> Checker<'a> {
                 for field in fields {
                     parsed.push(self.render_var(solver, field, names)?);
                 }
-                Ok(ParsedTy::Tuple { span: Span::empty(), fields: parsed })
+                Ok(ParsedTy::Tuple {
+                    span: Span::empty(),
+                    fields: parsed,
+                })
             }
         }
     }
@@ -5181,7 +7925,11 @@ impl<'a> Checker<'a> {
                 let sig = &self.funcs[id as usize];
                 ParsedTy::Func {
                     span,
-                    params: sig.params.iter().map(|param| self.ty_to_parsed(*param)).collect(),
+                    params: sig
+                        .params
+                        .iter()
+                        .map(|param| self.ty_to_parsed(*param))
+                        .collect(),
                     ret: Box::new(self.ty_to_parsed(sig.ret)),
                 }
             }
@@ -5189,7 +7937,11 @@ impl<'a> Checker<'a> {
                 let sig = &self.cfns[id as usize];
                 ParsedTy::CFn {
                     span,
-                    params: sig.params.iter().map(|param| self.ty_to_parsed(*param)).collect(),
+                    params: sig
+                        .params
+                        .iter()
+                        .map(|param| self.ty_to_parsed(*param))
+                        .collect(),
                     ret: Box::new(self.ty_to_parsed(sig.ret)),
                 }
             }
@@ -5203,44 +7955,85 @@ impl<'a> Checker<'a> {
                 name: "Slice".to_string(),
                 args: vec![self.ty_to_parsed(self.slice_elems[id as usize])],
             },
-            Ty::Struct { id, .. } => ParsedTy::Named { span, name: self.structs[id as usize].name.clone(), args: Vec::new() },
+            Ty::Struct { id, .. } => ParsedTy::Named {
+                span,
+                name: self.structs[id as usize].name.clone(),
+                args: Vec::new(),
+            },
             Ty::Tuple { id, .. } => ParsedTy::Tuple {
                 span,
-                fields: self.tuples[id as usize].iter().map(|field| self.ty_to_parsed(*field)).collect(),
+                fields: self.tuples[id as usize]
+                    .iter()
+                    .map(|field| self.ty_to_parsed(*field))
+                    .collect(),
             },
             Ty::Ref(id) => {
                 let refty = &self.refs[id as usize];
-                ParsedTy::Ref { span, mutable: refty.mutable, inner: Box::new(self.ty_to_parsed(refty.inner)) }
+                ParsedTy::Ref {
+                    span,
+                    mutable: refty.mutable,
+                    inner: Box::new(self.ty_to_parsed(refty.inner)),
+                }
             }
             Ty::Ptr(id) => {
                 let ptr = &self.ptrs[id as usize];
-                ParsedTy::Ptr { span, mutable: ptr.mutable, inner: Box::new(self.ty_to_parsed(ptr.inner)) }
+                ParsedTy::Ptr {
+                    span,
+                    mutable: ptr.mutable,
+                    inner: Box::new(self.ty_to_parsed(ptr.inner)),
+                }
             }
             Ty::Array { id, len, .. } => ParsedTy::Array {
                 span,
                 elem: Box::new(self.ty_to_parsed(self.arrays[id as usize].elem)),
-                len: Box::new(Expr { span, kind: ExprKind::Int(len as i64) }),
+                len: Box::new(Expr {
+                    span,
+                    kind: ExprKind::Int(len as i64),
+                }),
             },
-            other => ParsedTy::Named { span, name: other.to_string(), args: Vec::new() },
+            other => ParsedTy::Named {
+                span,
+                name: other.to_string(),
+                args: Vec::new(),
+            },
         }
     }
 
     fn ctor_fields(&self, name: &str, ty: Ty, span: usize) -> Result<(u16, Vec<Ty>), CompileError> {
         let Some(&(schema, tag)) = self.ctor_schema.get(name) else {
-            return Err(CompileError::at(self.source, span, format!("unknown constructor `{name}`")));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("unknown constructor `{name}`"),
+            ));
         };
         let Ty::Adt(id) = ty else {
-            return Err(CompileError::at(self.source, span, format!("`{name}` is not a constructor of {}", self.show(ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{name}` is not a constructor of {}", self.show(ty)),
+            ));
         };
         if self.adts[id as usize].schema != schema {
-            return Err(CompileError::at(self.source, span, format!("`{name}` is not a constructor of {}", self.show(ty))));
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("`{name}` is not a constructor of {}", self.show(ty)),
+            ));
         }
-        Ok((tag, self.adts[id as usize].ctors[tag as usize].fields.clone()))
+        Ok((
+            tag,
+            self.adts[id as usize].ctors[tag as usize].fields.clone(),
+        ))
     }
 }
 
 fn number_default(lhs: &Expr, rhs: &Expr) -> Ty {
-    if has_float_lit(lhs) || has_float_lit(rhs) { Ty::F64 } else { Ty::I16 }
+    if has_float_lit(lhs) || has_float_lit(rhs) {
+        Ty::F64
+    } else {
+        Ty::I16
+    }
 }
 
 fn has_float_lit(expr: &Expr) -> bool {
@@ -5253,11 +8046,15 @@ fn has_float_lit(expr: &Expr) -> bool {
 }
 
 fn parse_float_literal(source: &str, span: usize, text: &str) -> Result<f64, CompileError> {
-    let value: f64 = text.parse().map_err(|_| {
-        CompileError::at(source, span, format!("invalid float literal {text}"))
-    })?;
+    let value: f64 = text
+        .parse()
+        .map_err(|_| CompileError::at(source, span, format!("invalid float literal {text}")))?;
     if !value.is_finite() {
-        return Err(CompileError::at(source, span, format!("{text} does not fit in f64")));
+        return Err(CompileError::at(
+            source,
+            span,
+            format!("{text} does not fit in f64"),
+        ));
     }
     Ok(value)
 }
@@ -5277,7 +8074,11 @@ fn float_literal_bits(ty: Ty, value: f64) -> Result<u64, String> {
 }
 
 fn float_value(ty: Ty, bits: u64) -> f64 {
-    if ty == Ty::F32 { f64::from(f32::from_bits(bits as u32)) } else { f64::from_bits(bits) }
+    if ty == Ty::F32 {
+        f64::from(f32::from_bits(bits as u32))
+    } else {
+        f64::from_bits(bits)
+    }
 }
 
 fn float_arith(ty: Ty, op: BinOp, left: u64, right: u64) -> u64 {
@@ -5369,12 +8170,16 @@ fn fold_cast(from: Ty, to: Ty, kind: &TExprKind) -> Option<Result<TExprKind, Str
             }
             Some(Ok(TExprKind::Int(*value)))
         }
-        TExprKind::Int(value) if to.is_float() => Some(Ok(TExprKind::Float(int_to_float_bits(from, to, *value)))),
+        TExprKind::Int(value) if to.is_float() => {
+            Some(Ok(TExprKind::Float(int_to_float_bits(from, to, *value))))
+        }
         TExprKind::Float(bits) if from == to => Some(Ok(TExprKind::Float(*bits))),
-        TExprKind::Float(bits) if to.is_float() => match float_literal_bits(to, float_value(from, *bits)) {
-            Ok(bits) => Some(Ok(TExprKind::Float(bits))),
-            Err(msg) => Some(Err(msg)),
-        },
+        TExprKind::Float(bits) if to.is_float() => {
+            match float_literal_bits(to, float_value(from, *bits)) {
+                Ok(bits) => Some(Ok(TExprKind::Float(bits))),
+                Err(msg) => Some(Err(msg)),
+            }
+        }
         TExprKind::Float(bits) if to.is_int() => match float_to_int(to, from, *bits) {
             Ok(value) => Some(Ok(TExprKind::Int(value))),
             Err(msg) => Some(Err(msg)),
@@ -5385,10 +8190,18 @@ fn fold_cast(from: Ty, to: Ty, kind: &TExprKind) -> Option<Result<TExprKind, Str
 
 fn int_to_float_bits(from: Ty, to: Ty, value: i64) -> u64 {
     if to == Ty::F32 {
-        let narrow = if from.is_signed() { value as f32 } else { value as u64 as f32 };
+        let narrow = if from.is_signed() {
+            value as f32
+        } else {
+            value as u64 as f32
+        };
         u64::from(narrow.to_bits())
     } else {
-        let wide = if from.is_signed() { value as f64 } else { value as u64 as f64 };
+        let wide = if from.is_signed() {
+            value as f64
+        } else {
+            value as u64 as f64
+        };
         wide.to_bits()
     }
 }
@@ -5413,27 +8226,42 @@ fn escaped_ref(ty: &ParsedTy) -> bool {
     match ty {
         ParsedTy::Ref { .. } => true,
         ParsedTy::Ptr { inner, .. } => escaped_ref(inner),
-            ParsedTy::Array { elem, .. } => escaped_ref(elem),
-            ParsedTy::Tuple { fields, .. } => fields.iter().any(escaped_ref),
-            ParsedTy::Named { args, .. } => args.iter().any(escaped_ref),
+        ParsedTy::Array { elem, .. } => escaped_ref(elem),
+        ParsedTy::Tuple { fields, .. } => fields.iter().any(escaped_ref),
+        ParsedTy::Named { args, .. } => args.iter().any(escaped_ref),
         ParsedTy::Func { ret, .. } | ParsedTy::CFn { ret, .. } => escaped_ref(ret),
     }
 }
 
 fn mentions_unsolved(ty: &ParsedTy, params: &[String], solved: &[Option<Ty>]) -> bool {
     match ty {
-        ParsedTy::Func { params: fn_params, ret, .. } | ParsedTy::CFn { params: fn_params, ret, .. } => {
-            fn_params.iter().any(|param| mentions_unsolved(param, params, solved)) || mentions_unsolved(ret, params, solved)
+        ParsedTy::Func {
+            params: fn_params,
+            ret,
+            ..
+        }
+        | ParsedTy::CFn {
+            params: fn_params,
+            ret,
+            ..
+        } => {
+            fn_params
+                .iter()
+                .any(|param| mentions_unsolved(param, params, solved))
+                || mentions_unsolved(ret, params, solved)
         }
         ParsedTy::Ref { inner, .. } => mentions_unsolved(inner, params, solved),
         ParsedTy::Ptr { inner, .. } => mentions_unsolved(inner, params, solved),
         ParsedTy::Array { elem, .. } => mentions_unsolved(elem, params, solved),
-        ParsedTy::Tuple { fields, .. } => fields.iter().any(|field| mentions_unsolved(field, params, solved)),
+        ParsedTy::Tuple { fields, .. } => fields
+            .iter()
+            .any(|field| mentions_unsolved(field, params, solved)),
         ParsedTy::Named { name, args, .. } => {
             if let Some(index) = params.iter().position(|param| param == name) {
                 return solved[index].is_none();
             }
-            args.iter().any(|arg| mentions_unsolved(arg, params, solved))
+            args.iter()
+                .any(|arg| mentions_unsolved(arg, params, solved))
         }
     }
 }
@@ -5487,7 +8315,11 @@ impl<'a> Checker<'a> {
         let ty = if let Some(id) = self.lookup(name) {
             self.bindings[id as usize].ty
         } else {
-            let id = self.outer_scopes.iter().rev().find_map(|scope| scope.get(name).copied())?;
+            let id = self
+                .outer_scopes
+                .iter()
+                .rev()
+                .find_map(|scope| scope.get(name).copied())?;
             self.outer_bindings[id as usize].ty
         };
         self.element_of(ty).or_else(|| {
@@ -5502,27 +8334,52 @@ impl<'a> Checker<'a> {
         match &expr.kind {
             ExprKind::Int(_) | ExprKind::Float(_) => None,
             ExprKind::Bool(_) => Some(Ty::Bool),
-            ExprKind::Name(name) => self.lookup(name).map(|id| self.bindings[id as usize].ty).or_else(|| {
-                let id = self.outer_scopes.iter().rev().find_map(|scope| scope.get(name).copied())?;
-                Some(self.outer_bindings[id as usize].ty)
-            }).or_else(|| self.consts.get(name).map(|(ty, _)| *ty)),
-            ExprKind::Borrow { .. } | ExprKind::Try(_) | ExprKind::Assoc { .. } | ExprKind::Slice { .. } | ExprKind::Deref(_) => None,
-            ExprKind::Unary { op: UnaryOp::Not, .. } => Some(Ty::Bool),
-            ExprKind::Unary { op: UnaryOp::Neg | UnaryOp::BitNot, expr } => self.peek(expr),
+            ExprKind::Name(name) => self
+                .lookup(name)
+                .map(|id| self.bindings[id as usize].ty)
+                .or_else(|| {
+                    let id = self
+                        .outer_scopes
+                        .iter()
+                        .rev()
+                        .find_map(|scope| scope.get(name).copied())?;
+                    Some(self.outer_bindings[id as usize].ty)
+                })
+                .or_else(|| self.consts.get(name).map(|(ty, _)| *ty)),
+            ExprKind::Borrow { .. }
+            | ExprKind::Try(_)
+            | ExprKind::Assoc { .. }
+            | ExprKind::Slice { .. }
+            | ExprKind::Deref(_) => None,
+            ExprKind::Unary {
+                op: UnaryOp::Not, ..
+            } => Some(Ty::Bool),
+            ExprKind::Unary {
+                op: UnaryOp::Neg | UnaryOp::BitNot,
+                expr,
+            } => self.peek(expr),
             ExprKind::Binary { op, .. } if op.is_compare() || op.is_logic() => Some(Ty::Bool),
             ExprKind::Binary { lhs, rhs, .. } => self.peek(lhs).or_else(|| self.peek(rhs)),
             ExprKind::Str(_) => Some(Ty::String),
             ExprKind::Char(_) => Some(Ty::Char),
             ExprKind::CStr(_) | ExprKind::Lambda { .. } => None,
-            ExprKind::Call { callee, .. } if matches!(callee.as_str(), "from_char" | "from_byte") => Some(Ty::String),
+            ExprKind::Call { callee, .. }
+                if matches!(callee.as_str(), "from_char" | "from_byte") =>
+            {
+                Some(Ty::String)
+            }
             ExprKind::Call { callee, .. } if is_builtin(callee) => Some(Ty::Unit),
             ExprKind::Call { callee, .. } => self.sigs.get(callee).and_then(|sig| sig.ret),
-            ExprKind::Method { receiver, method, .. } => {
+            ExprKind::Method {
+                receiver, method, ..
+            } => {
                 if method == "len" && self.vec_elem_of(receiver).is_some() {
                     Some(Ty::Usize)
                 } else if method == "is_empty" && self.vec_elem_of(receiver).is_some() {
                     Some(Ty::Bool)
-                } else if (method == "push" || method == "clear") && self.vec_elem_of(receiver).is_some() {
+                } else if (method == "push" || method == "clear")
+                    && self.vec_elem_of(receiver).is_some()
+                {
                     Some(Ty::Unit)
                 } else {
                     self.sigs.get(method).and_then(|sig| sig.ret)
@@ -5530,12 +8387,21 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Index { base, .. } => self.vec_elem_of(base),
             ExprKind::Array(_) => None,
-            ExprKind::If { else_body: None, .. } | ExprKind::While { .. } | ExprKind::For { .. } => Some(Ty::Unit),
-            ExprKind::Tuple(_) | ExprKind::StructLit { .. } | ExprKind::Field { .. } | ExprKind::Range { .. } => None,
-            ExprKind::Match { arms, .. } => arms.first().and_then(|arm| self.peek(&arm.body)),
-            ExprKind::If { then_body, else_body: Some(else_body), .. } => {
-                self.peek_block(then_body).or_else(|| self.peek(else_body))
+            ExprKind::If {
+                else_body: None, ..
             }
+            | ExprKind::While { .. }
+            | ExprKind::For { .. } => Some(Ty::Unit),
+            ExprKind::Tuple(_)
+            | ExprKind::StructLit { .. }
+            | ExprKind::Field { .. }
+            | ExprKind::Range { .. } => None,
+            ExprKind::Match { arms, .. } => arms.first().and_then(|arm| self.peek(&arm.body)),
+            ExprKind::If {
+                then_body,
+                else_body: Some(else_body),
+                ..
+            } => self.peek_block(then_body).or_else(|| self.peek(else_body)),
             ExprKind::Block(block) | ExprKind::Unsafe(block) => self.peek_block(block),
             ExprKind::Cast { ty, .. } => match ty {
                 ParsedTy::Named { name, args, .. } if args.is_empty() => Ty::parse_name(name),
@@ -5567,13 +8433,21 @@ fn bit_width(ty: Ty) -> u32 {
 
 fn fold_bitnot(ty: Ty, value: i64) -> i64 {
     let width = bit_width(ty);
-    let mask = if width == 64 { u64::MAX } else { (1u64 << width) - 1 };
+    let mask = if width == 64 {
+        u64::MAX
+    } else {
+        (1u64 << width) - 1
+    };
     ty.bits((!(value as u64) & mask) as i64)
 }
 
 fn fold_bitwise(ty: Ty, op: BinOp, left: i64, right: i64) -> i64 {
     let width = bit_width(ty);
-    let mask = if width == 64 { u64::MAX } else { (1u64 << width) - 1 };
+    let mask = if width == 64 {
+        u64::MAX
+    } else {
+        (1u64 << width) - 1
+    };
     let a = (left as u64) & mask;
     let b = (right as u64) & mask;
     let count = (b as u32) & (width - 1);
@@ -5605,7 +8479,12 @@ fn shared_assign_spans(body: &Block) -> HashSet<usize> {
     found
 }
 
-fn walk_block(block: &Block, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>, depth: u32, found: &mut HashSet<usize>) {
+fn walk_block(
+    block: &Block,
+    scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>,
+    depth: u32,
+    found: &mut HashSet<usize>,
+) {
     scopes.push(HashMap::new());
     for stmt in &block.stmts {
         walk_stmt(stmt, scopes, depth, found);
@@ -5616,17 +8495,33 @@ fn walk_block(block: &Block, scopes: &mut Vec<HashMap<String, (usize, bool, u32)
     scopes.pop();
 }
 
-fn walk_stmt(stmt: &Stmt, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>, depth: u32, found: &mut HashSet<usize>) {
+fn walk_stmt(
+    stmt: &Stmt,
+    scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>,
+    depth: u32,
+    found: &mut HashSet<usize>,
+) {
     match stmt {
-        Stmt::Let { pattern, mutable, init, .. } => {
+        Stmt::Let {
+            pattern,
+            mutable,
+            init,
+            ..
+        } => {
             walk_expr(init, scopes, depth, found);
             bind_pat(pattern, *mutable, depth, scopes);
         }
-        Stmt::Assign { name, name_span: _, value } => {
+        Stmt::Assign {
+            name,
+            name_span: _,
+            value,
+        } => {
             note_assign(scopes, name, depth, found);
             walk_expr(value, scopes, depth, found);
         }
-        Stmt::IndexAssign { name, index, value, .. } => {
+        Stmt::IndexAssign {
+            name, index, value, ..
+        } => {
             note_assign(scopes, name, depth, found);
             walk_expr(index, scopes, depth, found);
             walk_expr(value, scopes, depth, found);
@@ -5640,13 +8535,24 @@ fn walk_stmt(stmt: &Stmt, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>,
             walk_expr(value, scopes, depth, found);
         }
         Stmt::Expr(expr) => walk_expr(expr, scopes, depth, found),
-        Stmt::Return { value: Some(expr), .. } => walk_expr(expr, scopes, depth, found),
+        Stmt::Return {
+            value: Some(expr), ..
+        } => walk_expr(expr, scopes, depth, found),
         Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
     }
 }
 
-fn note_assign(scopes: &[HashMap<String, (usize, bool, u32)>], name: &str, depth: u32, found: &mut HashSet<usize>) {
-    let Some((span, mutable, bind_depth)) = scopes.iter().rev().find_map(|scope| scope.get(name).copied()) else {
+fn note_assign(
+    scopes: &[HashMap<String, (usize, bool, u32)>],
+    name: &str,
+    depth: u32,
+    found: &mut HashSet<usize>,
+) {
+    let Some((span, mutable, bind_depth)) = scopes
+        .iter()
+        .rev()
+        .find_map(|scope| scope.get(name).copied())
+    else {
         return;
     };
     if mutable && bind_depth < depth {
@@ -5654,10 +8560,18 @@ fn note_assign(scopes: &[HashMap<String, (usize, bool, u32)>], name: &str, depth
     }
 }
 
-fn bind_pat(pat: &Pat, mutable: bool, depth: u32, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>) {
+fn bind_pat(
+    pat: &Pat,
+    mutable: bool,
+    depth: u32,
+    scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>,
+) {
     match pat {
         Pat::Name { name, span } if name != "_" => {
-            scopes.last_mut().unwrap().insert(name.clone(), (span.start, mutable, depth));
+            scopes
+                .last_mut()
+                .unwrap()
+                .insert(name.clone(), (span.start, mutable, depth));
         }
         Pat::Ctor { fields, .. } => {
             for field in fields {
@@ -5678,17 +8592,39 @@ fn bind_pat(pat: &Pat, mutable: bool, depth: u32, scopes: &mut Vec<HashMap<Strin
     }
 }
 
-fn walk_expr(expr: &Expr, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>, depth: u32, found: &mut HashSet<usize>) {
+fn walk_expr(
+    expr: &Expr,
+    scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>,
+    depth: u32,
+    found: &mut HashSet<usize>,
+) {
     match &expr.kind {
-        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Str(_) | ExprKind::CStr(_) | ExprKind::Char(_) | ExprKind::Name(_) => {}
-        ExprKind::Unary { expr, .. } | ExprKind::Try(expr) | ExprKind::Deref(expr) | ExprKind::Borrow { expr, .. } => {
+        ExprKind::Int(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::Str(_)
+        | ExprKind::CStr(_)
+        | ExprKind::Char(_)
+        | ExprKind::Name(_) => {}
+        ExprKind::Unary { expr, .. }
+        | ExprKind::Try(expr)
+        | ExprKind::Deref(expr)
+        | ExprKind::Borrow { expr, .. } => {
             walk_expr(expr, scopes, depth, found);
         }
-        ExprKind::Binary { lhs, rhs, .. } | ExprKind::Range { start: lhs, end: rhs, .. } => {
+        ExprKind::Binary { lhs, rhs, .. }
+        | ExprKind::Range {
+            start: lhs,
+            end: rhs,
+            ..
+        } => {
             walk_expr(lhs, scopes, depth, found);
             walk_expr(rhs, scopes, depth, found);
         }
-        ExprKind::Call { args, .. } | ExprKind::Assoc { args, .. } | ExprKind::Tuple(args) | ExprKind::Array(args) => {
+        ExprKind::Call { args, .. }
+        | ExprKind::Assoc { args, .. }
+        | ExprKind::Tuple(args)
+        | ExprKind::Array(args) => {
             for arg in args {
                 walk_expr(arg, scopes, depth, found);
             }
@@ -5699,7 +8635,11 @@ fn walk_expr(expr: &Expr, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>,
                 walk_expr(arg, scopes, depth, found);
             }
         }
-        ExprKind::If { cond, then_body, else_body } => {
+        ExprKind::If {
+            cond,
+            then_body,
+            else_body,
+        } => {
             walk_expr(cond, scopes, depth, found);
             walk_block(then_body, scopes, depth, found);
             if let Some(else_body) = else_body {
@@ -5749,7 +8689,9 @@ fn walk_expr(expr: &Expr, scopes: &mut Vec<HashMap<String, (usize, bool, u32)>>,
             walk_expr(base, scopes, depth, found);
             walk_expr(index, scopes, depth, found);
         }
-        ExprKind::Slice { base, start, end, .. } => {
+        ExprKind::Slice {
+            base, start, end, ..
+        } => {
             walk_expr(base, scopes, depth, found);
             walk_expr(start, scopes, depth, found);
             walk_expr(end, scopes, depth, found);

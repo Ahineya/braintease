@@ -15,7 +15,12 @@ enum Command {
     /// Typecheck a source file
     Check { input: PathBuf },
     /// Compile, link, and run a source file on rvm
-    Run { input: PathBuf },
+    Run {
+        input: PathBuf,
+        /// Execute the guest with rvm's Cranelift JIT
+        #[arg(long)]
+        jit: bool,
+    },
     /// Start the language server on standard input and output
     Lsp,
     /// Compile a source file to Ripple IR or assembly
@@ -47,14 +52,18 @@ fn run() -> Result<i32, rfl::CompileError> {
             rfl::serve_lsp();
             Ok(0)
         }
-        Command::Run { input } => rfl::run_file_in_terminal(&input),
+        Command::Run { input, jit } => rfl::run_file_in_terminal(&input, jit),
         Command::Check { input } => {
             eprintln!("    Checking {}", input.display());
             rfl::compile_file(&input)?;
             eprintln!("    Finished");
             Ok(0)
         }
-        Command::Compile { input, output, emit_ir } => {
+        Command::Compile {
+            input,
+            output,
+            emit_ir,
+        } => {
             eprintln!("   Compiling {}", input.display());
             if emit_ir {
                 print!("{}", rfl::compile_file_to_ir_text(&input)?);

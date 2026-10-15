@@ -1,10 +1,10 @@
-use ratatui::Frame;
+use crate::tui_debugger::{FocusedPane, TuiDebugger};
+use crate::vm::VM;
 use ratatui::layout::Rect;
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::Frame;
 use ripple_asm::Register;
-use crate::tui_debugger::{FocusedPane, TuiDebugger};
-use crate::vm::VM;
 
 impl TuiDebugger {
     pub(crate) fn draw_registers(&self, frame: &mut Frame, area: Rect, vm: &VM) {
@@ -14,20 +14,32 @@ impl TuiDebugger {
         let mut spans = Vec::new();
         spans.push(Span::styled("PC:", Style::default().fg(Color::LightCyan)));
         spans.push(Span::styled(
-            format!("{:04X}:{:04X}", vm.registers[Register::Pcb as usize], vm.registers[Register::Pc as usize]),
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            format!(
+                "{:04X}:{:04X}",
+                vm.registers[Register::Pcb as usize],
+                vm.registers[Register::Pc as usize]
+            ),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw("  "));
         spans.push(Span::styled("RA:", Style::default().fg(Color::LightCyan)));
         spans.push(Span::styled(
-            format!("{:04X}:{:04X}", vm.registers[Register::Rab as usize], vm.registers[Register::Ra as usize]),
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            format!(
+                "{:04X}:{:04X}",
+                vm.registers[Register::Rab as usize],
+                vm.registers[Register::Ra as usize]
+            ),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw("  "));
         spans.push(Span::styled("R0:", Style::default().fg(Color::LightCyan)));
         spans.push(Span::styled("0000", Style::default().fg(Color::DarkGray)));
         text.push(Line::from(spans));
-        
+
         // Empty line after hardware registers
         text.push(Line::from(""));
 
@@ -117,7 +129,14 @@ impl TuiDebugger {
         }
         text.push(Line::from(spans));
 
-        let title = format!(" Registers [{}] ", if self.focused_pane == FocusedPane::Registers { "ACTIVE" } else { "F2" });
+        let title = format!(
+            " Registers [{}] ",
+            if self.focused_pane == FocusedPane::Registers {
+                "ACTIVE"
+            } else {
+                "F2"
+            }
+        );
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
@@ -135,15 +154,19 @@ impl TuiDebugger {
     fn format_register(&self, name: &str, index: usize, vm: &VM) -> Vec<Span<'_>> {
         let value = vm.registers[index];
         let was_changed = self.register_changes.contains_key(&index);
-        
+
         let name_style = if was_changed {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::Gray)
         };
-        
+
         let value_style = if was_changed {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else if value != 0 {
             Style::default().fg(Color::Cyan)
         } else {
@@ -157,16 +180,24 @@ impl TuiDebugger {
         ]
     }
 
-    fn format_register_with_color(&self, name: &str, index: usize, vm: &VM, group_color: Color) -> Vec<Span<'_>> {
+    fn format_register_with_color(
+        &self,
+        name: &str,
+        index: usize,
+        vm: &VM,
+        group_color: Color,
+    ) -> Vec<Span<'_>> {
         let value = vm.registers[index];
         let was_changed = self.register_changes.contains_key(&index);
-        
+
         // Register name always stays in its group color
         let name_style = Style::default().fg(group_color);
-        
+
         // Only the value gets highlighted when changed
         let value_style = if was_changed {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else if value != 0 {
             Style::default().fg(Color::White)
         } else {

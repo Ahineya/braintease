@@ -99,6 +99,11 @@ pub struct Cli {
     /// Used by the c-testsuite runner so `return 1` fails the test.
     #[arg(long)]
     pub exit_code: bool,
+
+    /// Compile executed basic blocks to native code with Cranelift.
+    /// Debug, TUI, and --verbose stay on the interpreter.
+    #[arg(long)]
+    pub jit: bool,
 }
 
 impl Cli {

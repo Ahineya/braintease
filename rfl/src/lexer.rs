@@ -98,12 +98,19 @@ pub enum TokenKind {
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>, CompileError> {
     let tokens = tokenize_with_trivia(source)?;
-    Ok(tokens.into_iter().filter(|token| !matches!(token.kind, TokenKind::LineComment | TokenKind::BlockComment)).collect())
+    Ok(tokens
+        .into_iter()
+        .filter(|token| !matches!(token.kind, TokenKind::LineComment | TokenKind::BlockComment))
+        .collect())
 }
 
 /// Every token, including comments. The parser uses [`tokenize`], which drops comments.
 pub fn tokenize_with_trivia(source: &str) -> Result<Vec<Token>, CompileError> {
-    let mut lexer = Lexer { source, index: 0, trivia: true };
+    let mut lexer = Lexer {
+        source,
+        index: 0,
+        trivia: true,
+    };
     let mut tokens = Vec::new();
     loop {
         let token = lexer.next_token()?;
@@ -129,16 +136,40 @@ impl<'a> Lexer<'a> {
         }
         let start = self.index;
         let Some(ch) = self.peek_char() else {
-            return Ok(Token { kind: TokenKind::Eof, span: Span::new(start, start) });
+            return Ok(Token {
+                kind: TokenKind::Eof,
+                span: Span::new(start, start),
+            });
         };
         let kind = match ch {
-            '(' => { self.bump(); TokenKind::LParen }
-            ')' => { self.bump(); TokenKind::RParen }
-            '{' => { self.bump(); TokenKind::LBrace }
-            '}' => { self.bump(); TokenKind::RBrace }
-            '[' => { self.bump(); TokenKind::LBracket }
-            ']' => { self.bump(); TokenKind::RBracket }
-            ',' => { self.bump(); TokenKind::Comma }
+            '(' => {
+                self.bump();
+                TokenKind::LParen
+            }
+            ')' => {
+                self.bump();
+                TokenKind::RParen
+            }
+            '{' => {
+                self.bump();
+                TokenKind::LBrace
+            }
+            '}' => {
+                self.bump();
+                TokenKind::RBrace
+            }
+            '[' => {
+                self.bump();
+                TokenKind::LBracket
+            }
+            ']' => {
+                self.bump();
+                TokenKind::RBracket
+            }
+            ',' => {
+                self.bump();
+                TokenKind::Comma
+            }
             ':' => {
                 self.bump();
                 if self.peek_char() == Some(':') {
@@ -148,7 +179,10 @@ impl<'a> Lexer<'a> {
                     TokenKind::Colon
                 }
             }
-            '?' => { self.bump(); TokenKind::Question }
+            '?' => {
+                self.bump();
+                TokenKind::Question
+            }
             '.' => {
                 self.bump();
                 if self.peek_char() == Some('.') {
@@ -166,7 +200,10 @@ impl<'a> Lexer<'a> {
                     TokenKind::Dot
                 }
             }
-            ';' => { self.bump(); TokenKind::Semi }
+            ';' => {
+                self.bump();
+                TokenKind::Semi
+            }
             '+' => self.op2('=', TokenKind::PlusEq, TokenKind::Plus),
             '*' => self.op2('=', TokenKind::StarEq, TokenKind::Star),
             '%' => self.op2('=', TokenKind::PercentEq, TokenKind::Percent),
@@ -195,8 +232,14 @@ impl<'a> Lexer<'a> {
             '!' => self.op2('=', TokenKind::NotEq, TokenKind::Not),
             '<' => self.shift_or_compare('<', TokenKind::Shl, TokenKind::Le, TokenKind::Lt),
             '>' => self.shift_or_compare('>', TokenKind::Shr, TokenKind::Ge, TokenKind::Gt),
-            '^' => { self.bump(); TokenKind::Caret }
-            '~' => { self.bump(); TokenKind::Tilde }
+            '^' => {
+                self.bump();
+                TokenKind::Caret
+            }
+            '~' => {
+                self.bump();
+                TokenKind::Tilde
+            }
             '&' => {
                 self.bump();
                 if self.peek_char() == Some('&') {
@@ -231,7 +274,10 @@ impl<'a> Lexer<'a> {
                 return Err(self.error(start, format!("unexpected character {ch:?}")));
             }
         };
-        Ok(Token { kind, span: Span::new(start, self.index) })
+        Ok(Token {
+            kind,
+            span: Span::new(start, self.index),
+        })
     }
 
     fn number(&mut self, start: usize) -> Result<TokenKind, CompileError> {
@@ -291,8 +337,15 @@ impl<'a> Lexer<'a> {
                 Some(_) => chars.push(self.escape(start)?),
             }
         }
-        let kind = if cstr { TokenKind::CStr(chars) } else { TokenKind::Str(chars) };
-        Ok(Token { kind, span: Span::new(start, self.index) })
+        let kind = if cstr {
+            TokenKind::CStr(chars)
+        } else {
+            TokenKind::Str(chars)
+        };
+        Ok(Token {
+            kind,
+            span: Span::new(start, self.index),
+        })
     }
 
     fn character(&mut self, start: usize) -> Result<TokenKind, CompileError> {
@@ -386,7 +439,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn shift_or_compare(&mut self, again: char, shift: TokenKind, equal: TokenKind, one: TokenKind) -> TokenKind {
+    fn shift_or_compare(
+        &mut self,
+        again: char,
+        shift: TokenKind,
+        equal: TokenKind,
+        one: TokenKind,
+    ) -> TokenKind {
         self.bump();
         if self.peek_char() == Some(again) {
             self.bump();
@@ -420,7 +479,10 @@ impl<'a> Lexer<'a> {
                     self.bump();
                 }
                 if self.trivia {
-                    return Ok(Some(Token { kind: TokenKind::LineComment, span: Span::new(start, self.index) }));
+                    return Ok(Some(Token {
+                        kind: TokenKind::LineComment,
+                        span: Span::new(start, self.index),
+                    }));
                 }
                 continue;
             }
@@ -440,7 +502,10 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 if self.trivia {
-                    return Ok(Some(Token { kind: TokenKind::BlockComment, span: Span::new(start, self.index) }));
+                    return Ok(Some(Token {
+                        kind: TokenKind::BlockComment,
+                        span: Span::new(start, self.index),
+                    }));
                 }
                 continue;
             }

@@ -16,7 +16,10 @@ impl Span {
 
     /// The span from the start of `self` through the end of `other`.
     pub fn to(self, other: Span) -> Span {
-        Span { start: self.start, end: other.end.max(self.end) }
+        Span {
+            start: self.start,
+            end: other.end.max(self.end),
+        }
     }
 
     pub fn contains(self, offset: usize) -> bool {
@@ -163,18 +166,42 @@ pub struct Param {
 
 #[derive(Debug, Clone)]
 pub enum ParsedTy {
-    Named { span: Span, name: String, args: Vec<ParsedTy> },
-    Func { span: Span, params: Vec<ParsedTy>, ret: Box<ParsedTy> },
+    Named {
+        span: Span,
+        name: String,
+        args: Vec<ParsedTy>,
+    },
+    Func {
+        span: Span,
+        params: Vec<ParsedTy>,
+        ret: Box<ParsedTy>,
+    },
     /// `&T` or `&mut T`.
-    Ref { span: Span, mutable: bool, inner: Box<ParsedTy> },
+    Ref {
+        span: Span,
+        mutable: bool,
+        inner: Box<ParsedTy>,
+    },
     /// `[T; N]`. `len` is a constant expression.
-    Array { span: Span, elem: Box<ParsedTy>, len: Box<Expr> },
+    Array {
+        span: Span,
+        elem: Box<ParsedTy>,
+        len: Box<Expr>,
+    },
     /// `*const T` or `*mut T`. Two cells, not refcounted.
-    Ptr { span: Span, mutable: bool, inner: Box<ParsedTy> },
+    Ptr {
+        span: Span,
+        mutable: bool,
+        inner: Box<ParsedTy>,
+    },
     /// `(T, U, ...)`.
     Tuple { span: Span, fields: Vec<ParsedTy> },
     /// `extern "C" fn(...) -> ...`. A code address, with no environment.
-    CFn { span: Span, params: Vec<ParsedTy>, ret: Box<ParsedTy> },
+    CFn {
+        span: Span,
+        params: Vec<ParsedTy>,
+        ret: Box<ParsedTy>,
+    },
 }
 
 impl ParsedTy {
@@ -216,7 +243,10 @@ pub enum Stmt {
         value: Expr,
     },
     /// `*ptr = value` or `*ptr` is handled as an expression. This stores through a raw pointer.
-    DerefAssign { ptr: Expr, value: Expr },
+    DerefAssign {
+        ptr: Expr,
+        value: Expr,
+    },
     /// `name[index] = value` on a mutable vector.
     IndexAssign {
         name: String,
@@ -373,8 +403,15 @@ impl Expr {
     /// True when a following statement may omit a semicolon, as in `if (c) { ... }`.
     pub fn ends_with_block(&self) -> bool {
         match &self.kind {
-            ExprKind::If { else_body, .. } => else_body.as_ref().map(|e| e.ends_with_block()).unwrap_or(true),
-            ExprKind::Block(_) | ExprKind::Unsafe(_) | ExprKind::While { .. } | ExprKind::Match { .. } | ExprKind::For { .. } => true,
+            ExprKind::If { else_body, .. } => else_body
+                .as_ref()
+                .map(|e| e.ends_with_block())
+                .unwrap_or(true),
+            ExprKind::Block(_)
+            | ExprKind::Unsafe(_)
+            | ExprKind::While { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::For { .. } => true,
             ExprKind::Lambda { body, .. } => body.ends_with_block(),
             _ => false,
         }
@@ -421,14 +458,37 @@ pub struct Arm {
 
 #[derive(Debug, Clone)]
 pub enum Pat {
-    Name { name: String, span: Span },
-    Ctor { name: String, span: Span, fields: Vec<Pat> },
-    Int { value: i64, span: Span },
-    Bool { value: bool, span: Span },
-    Char { scalar: u32, span: Span },
-    Tuple { span: Span, fields: Vec<Pat> },
+    Name {
+        name: String,
+        span: Span,
+    },
+    Ctor {
+        name: String,
+        span: Span,
+        fields: Vec<Pat>,
+    },
+    Int {
+        value: i64,
+        span: Span,
+    },
+    Bool {
+        value: bool,
+        span: Span,
+    },
+    Char {
+        scalar: u32,
+        span: Span,
+    },
+    Tuple {
+        span: Span,
+        fields: Vec<Pat>,
+    },
     /// `Point { x, y: pat }`. A missing pattern means the field name is the binding.
-    Struct { name: String, span: Span, fields: Vec<(String, Span, Pat)> },
+    Struct {
+        name: String,
+        span: Span,
+        fields: Vec<(String, Span, Pat)>,
+    },
 }
 
 impl Pat {
@@ -447,7 +507,10 @@ impl Pat {
 
 impl BinOp {
     pub fn is_compare(self) -> bool {
-        matches!(self, Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge)
+        matches!(
+            self,
+            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge
+        )
     }
 
     pub fn is_logic(self) -> bool {
@@ -455,10 +518,16 @@ impl BinOp {
     }
 
     pub fn is_arith(self) -> bool {
-        matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Rem)
+        matches!(
+            self,
+            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Rem
+        )
     }
 
     pub fn is_bitwise(self) -> bool {
-        matches!(self, Self::BitAnd | Self::BitOr | Self::BitXor | Self::Shl | Self::Shr)
+        matches!(
+            self,
+            Self::BitAnd | Self::BitOr | Self::BitXor | Self::Shl | Self::Shr
+        )
     }
 }

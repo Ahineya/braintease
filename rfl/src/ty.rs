@@ -33,14 +33,24 @@ pub enum Ty {
     /// local: address cell, bank cell. It cannot outlive that local.
     Ref(u32),
     /// Inline `[T; N]`. `id` finds the element type. `width` is that element's cells.
-    Array { id: u32, len: u16, width: u16 },
+    Array {
+        id: u32,
+        len: u16,
+        width: u16,
+    },
     /// Index into the slice element table. Six cells: buffer address, bank,
     /// 32-bit first element, and 32-bit element count. The buffer is a vector allocation.
     Slice(u32),
     /// Inline struct. `id` indexes the struct table. `width` is the total cell count.
-    Struct { id: u32, width: u16 },
+    Struct {
+        id: u32,
+        width: u16,
+    },
     /// Inline tuple. `id` indexes the tuple table. `width` is the total cell count.
-    Tuple { id: u32, width: u16 },
+    Tuple {
+        id: u32,
+        width: u16,
+    },
     /// Index into the checker's raw-pointer table. Two cells: address and bank.
     /// Not refcounted. Used to talk to C.
     Ptr(u32),
@@ -83,7 +93,15 @@ impl Ty {
     pub fn is_int(self) -> bool {
         matches!(
             self,
-            Self::I8 | Self::U8 | Self::I16 | Self::U16 | Self::I32 | Self::U32 | Self::I64 | Self::U64 | Self::Usize
+            Self::I8
+                | Self::U8
+                | Self::I16
+                | Self::U16
+                | Self::I32
+                | Self::U32
+                | Self::I64
+                | Self::U64
+                | Self::Usize
         )
     }
 
@@ -146,7 +164,22 @@ impl Ty {
             Self::I32 => (i32::MIN as i64..=i32::MAX as i64).contains(&value),
             Self::I64 => true,
             Self::U64 => value >= 0,
-            Self::Bool | Self::Char | Self::Unit | Self::String | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => false,
+            Self::Bool
+            | Self::Char
+            | Self::Unit
+            | Self::String
+            | Self::F32
+            | Self::F64
+            | Self::Adt(_)
+            | Self::Func(_)
+            | Self::Vec(_)
+            | Self::Ref(_)
+            | Self::Ptr(_)
+            | Self::CFn(_)
+            | Self::Array { .. }
+            | Self::Slice(_)
+            | Self::Struct { .. }
+            | Self::Tuple { .. } => false,
         }
     }
 
@@ -157,7 +190,20 @@ impl Ty {
             Self::I16 | Self::U16 | Self::Bool => value & 0xffff,
             Self::I32 | Self::U32 | Self::Usize | Self::Char => value & 0xffff_ffff,
             Self::I64 | Self::U64 => value,
-            Self::Unit | Self::String | Self::F32 | Self::F64 | Self::Adt(_) | Self::Func(_) | Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::Array { .. } | Self::Slice(_) | Self::Struct { .. } | Self::Tuple { .. } => 0,
+            Self::Unit
+            | Self::String
+            | Self::F32
+            | Self::F64
+            | Self::Adt(_)
+            | Self::Func(_)
+            | Self::Vec(_)
+            | Self::Ref(_)
+            | Self::Ptr(_)
+            | Self::CFn(_)
+            | Self::Array { .. }
+            | Self::Slice(_)
+            | Self::Struct { .. }
+            | Self::Tuple { .. } => 0,
         }
     }
 }

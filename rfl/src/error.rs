@@ -74,12 +74,18 @@ pub fn line_col(source: &str, offset: usize) -> (u32, u32) {
 
 fn render(path: Option<&Path>, source: &str, offset: usize, message: &str) -> String {
     let (line_no, column) = line_col(source, offset);
-    let file = path.map(|path| path.display().to_string()).unwrap_or_else(|| "<source>".to_string());
+    let file = path
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "<source>".to_string());
     let line = source_line(source, line_no);
     let gutter = line_no.to_string().len();
     let mut out = String::new();
     out.push_str(&format!("error: {message}\n"));
-    out.push_str(&format!("{blank:>width$}--> {file}:{line_no}:{column}\n", blank = "", width = gutter));
+    out.push_str(&format!(
+        "{blank:>width$}--> {file}:{line_no}:{column}\n",
+        blank = "",
+        width = gutter
+    ));
     out.push_str(&format!("{blank:>width$} |\n", blank = "", width = gutter));
     out.push_str(&format!("{line_no:>width$} | {line}\n", width = gutter));
     let caret_at = column.saturating_sub(1) as usize;

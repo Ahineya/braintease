@@ -26,6 +26,10 @@ png = "0.17"
 sha2 = "0.10"
 winit = "0.28"
 log = { workspace = true }
+cranelift-codegen = "=0.137.0-rc.1"
+cranelift-frontend = "=0.137.0-rc.1"
+cranelift-jit = "=0.137.0-rc.1"
+cranelift-module = "=0.137.0-rc.1"
 
 [lints]
 workspace = true

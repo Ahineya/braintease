@@ -91,7 +91,9 @@ impl InputScript {
     /// Interpret a replay's positive ticks relative to a restored clock.
     pub fn relative_to(mut self, tick: u64) -> Result<Self, String> {
         for event in &mut self.events {
-            event.tick = event.tick.checked_add(tick)
+            event.tick = event
+                .tick
+                .checked_add(tick)
                 .ok_or("relative input script tick overflow")?;
         }
         Ok(self)
@@ -268,15 +270,27 @@ pub trait GuestMemory {
 }
 
 impl GuestMemory for [u16] {
-    fn len(&self) -> usize { <[u16]>::len(self) }
-    fn read(&self, index: usize) -> u16 { self[index] }
-    fn write(&mut self, index: usize, value: u16) { self[index] = value; }
+    fn len(&self) -> usize {
+        <[u16]>::len(self)
+    }
+    fn read(&self, index: usize) -> u16 {
+        self[index]
+    }
+    fn write(&mut self, index: usize, value: u16) {
+        self[index] = value;
+    }
 }
 
 impl GuestMemory for Vec<u16> {
-    fn len(&self) -> usize { Vec::len(self) }
-    fn read(&self, index: usize) -> u16 { self[index] }
-    fn write(&mut self, index: usize, value: u16) { self[index] = value; }
+    fn len(&self) -> usize {
+        Vec::len(self)
+    }
+    fn read(&self, index: usize) -> u16 {
+        self[index]
+    }
+    fn write(&mut self, index: usize, value: u16) {
+        self[index] = value;
+    }
 }
 
 /// Validate a contiguous cell span, including bank crossings, in ordinary RAM.
@@ -340,7 +354,8 @@ impl DeviceState {
     }
 
     pub fn restore_checkpoint(snapshot: Self) -> Result<Self, String> {
-        if snapshot.tick_hz == 0 || snapshot.events.len() > INPUT_QUEUE_CAPACITY
+        if snapshot.tick_hz == 0
+            || snapshot.events.len() > INPUT_QUEUE_CAPACITY
             || snapshot.script_position > snapshot.script.events.len()
             || snapshot.input_overflow && !snapshot.overflow_seen
             || !matches!(snapshot.status, 0..=6 | STATUS_PENDING)
@@ -351,8 +366,10 @@ impl DeviceState {
         }
         let mut previous = 0;
         for event in &snapshot.events {
-            if usize::from(event.key) >= KEY_COUNT || event.tick == 0
-                || event.tick > snapshot.tick || event.tick < previous
+            if usize::from(event.key) >= KEY_COUNT
+                || event.tick == 0
+                || event.tick > snapshot.tick
+                || event.tick < previous
             {
                 return Err("invalid device checkpoint input queue".into());
             }
@@ -360,7 +377,8 @@ impl DeviceState {
         }
         previous = 0;
         for (index, event) in snapshot.script.events.iter().enumerate() {
-            if usize::from(event.transition.key) >= KEY_COUNT || event.tick == 0
+            if usize::from(event.transition.key) >= KEY_COUNT
+                || event.tick == 0
                 || event.tick < previous
                 || (index < snapshot.script_position) != (event.tick <= snapshot.tick)
             {
@@ -712,7 +730,14 @@ mod tests {
     fn relative_scripts_preserve_order_and_reject_overflow() {
         let script = InputScript::from_json(r#"[{"tick":1,"key":"A","down":true},{"tick":1,"key":"A","down":false},{"tick":3,"key":"B","down":true}]"#).unwrap();
         let shifted = script.clone().relative_to(42).unwrap();
-        assert_eq!(shifted.events.iter().map(|event| event.tick).collect::<Vec<_>>(), [43, 43, 45]);
+        assert_eq!(
+            shifted
+                .events
+                .iter()
+                .map(|event| event.tick)
+                .collect::<Vec<_>>(),
+            [43, 43, 45]
+        );
         assert_eq!(shifted.events[1].transition, script.events[1].transition);
         assert!(script.relative_to(u64::MAX - 2).is_err());
         assert!(InputScript::default().relative_to(u64::MAX).is_ok());
@@ -722,16 +747,34 @@ mod tests {
     fn checkpoint_replays_pending_tick_and_script_cursor_exactly() {
         let mut state = DeviceState::new(70).unwrap();
         let mut memory = vec![0; 256];
-        state.set_script(InputScript::from_json(r#"[{"tick":1,"key":"A","down":true},{"tick":2,"key":"A","down":false}]"#).unwrap()).unwrap();
-        tick(&mut state, &mut memory, &[KeyTransition { key: 82, down: true }]);
+        state
+            .set_script(
+                InputScript::from_json(
+                    r#"[{"tick":1,"key":"A","down":true},{"tick":2,"key":"A","down":false}]"#,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        tick(
+            &mut state,
+            &mut memory,
+            &[KeyTransition {
+                key: 82,
+                down: true,
+            }],
+        );
         command(&mut state, &mut memory, COMMAND_NEXT_TICK, 8);
         let bytes = serde_json::to_vec(&state.checkpoint()).unwrap();
-        let mut restored = DeviceState::restore_checkpoint(serde_json::from_slice(&bytes).unwrap()).unwrap();
+        let mut restored =
+            DeviceState::restore_checkpoint(serde_json::from_slice(&bytes).unwrap()).unwrap();
         let mut copy = memory.clone();
         state.complete_tick(&mut memory, 64, &[]).unwrap();
         restored.complete_tick(&mut copy, 64, &[]).unwrap();
         assert_eq!(memory, copy);
-        assert_eq!(serde_json::to_value(state).unwrap(), serde_json::to_value(restored).unwrap());
+        assert_eq!(
+            serde_json::to_value(state).unwrap(),
+            serde_json::to_value(restored).unwrap()
+        );
         let mut corrupt: DeviceState = serde_json::from_slice(&bytes).unwrap();
         corrupt.script_position = usize::MAX;
         assert!(DeviceState::restore_checkpoint(corrupt).is_err());
@@ -739,24 +782,38 @@ mod tests {
 
     struct StridedMemory(Vec<u16>);
     impl GuestMemory for StridedMemory {
-        fn len(&self) -> usize { self.0.len() / 8 }
-        fn read(&self, index: usize) -> u16 { self.0[index * 8 + 4] }
-        fn write(&mut self, index: usize, value: u16) { self.0[index * 8 + 4] = value; }
+        fn len(&self) -> usize {
+            self.0.len() / 8
+        }
+        fn read(&self, index: usize) -> u16 {
+            self.0[index * 8 + 4]
+        }
+        fn write(&mut self, index: usize, value: u16) {
+            self.0[index * 8 + 4] = value;
+        }
     }
 
     #[test]
     fn strided_memory_matches_flat_commands_without_touching_other_lanes() {
         let mut flat = vec![0u16; 256];
         let mut strided = StridedMemory(vec![0xa55a; flat.len() * 8]);
-        for index in 0..flat.len() { strided.write(index, 0); }
+        for index in 0..flat.len() {
+            strided.write(index, 0);
+        }
         let mut native = DeviceState::default();
         let mut bf = DeviceState::default();
         let script = InputScript::from_json(r#"[{"tick":1,"key":"UP","down":true}]"#).unwrap();
         native.set_script(script.clone()).unwrap();
         bf.set_script(script).unwrap();
-        for (command, length) in [(COMMAND_CAPABILITIES, 4), (COMMAND_NEXT_TICK, 8),
-            (COMMAND_GET_TIME, 8), (COMMAND_INPUT_POP, 8), (COMMAND_INPUT_STATE, 19),
-            (COMMAND_PRESENT, 8), (99, 8)] {
+        for (command, length) in [
+            (COMMAND_CAPABILITIES, 4),
+            (COMMAND_NEXT_TICK, 8),
+            (COMMAND_GET_TIME, 8),
+            (COMMAND_INPUT_POP, 8),
+            (COMMAND_INPUT_STATE, 19),
+            (COMMAND_PRESENT, 8),
+            (99, 8),
+        ] {
             // The descriptor crosses bank 0->1; framebuffer crosses bank 1->2.
             flat[63..82].fill(0);
             flat[63] = ABI_VERSION;
@@ -765,11 +822,14 @@ mod tests {
                 flat[65..71].copy_from_slice(&[3, 2, 5, 1, 62, 0]);
                 flat[126..134].copy_from_slice(&[1, 2, 3, 99, 99, 4, 5, 6]);
             }
-            for (index, &value) in flat.iter().enumerate() { strided.write(index, value); }
+            for (index, &value) in flat.iter().enumerate() {
+                strided.write(index, value);
+            }
             native.write_register(REGISTER_DESCRIPTOR_OFFSET, 63, &mut flat, 64, 4);
             bf.write_register_with_memory(REGISTER_DESCRIPTOR_OFFSET, 63, &mut strided, 64, 4);
             let expected = native.write_register(REGISTER_COMMAND, command, &mut flat, 64, 4);
-            let actual = bf.write_register_with_memory(REGISTER_COMMAND, command, &mut strided, 64, 4);
+            let actual =
+                bf.write_register_with_memory(REGISTER_COMMAND, command, &mut strided, 64, 4);
             assert_eq!(actual, expected);
             if command == COMMAND_NEXT_TICK {
                 native.complete_tick(&mut flat, 64, &[]).unwrap();
@@ -777,8 +837,15 @@ mod tests {
             }
             assert_eq!(bf.status(), native.status());
             assert_eq!(bf.tick(), native.tick());
-            assert_eq!((0..flat.len()).map(|i| strided.read(i)).collect::<Vec<_>>(), flat);
-            assert!(strided.0.iter().enumerate().all(|(i, &v)| i % 8 == 4 || v == 0xa55a));
+            assert_eq!(
+                (0..flat.len()).map(|i| strided.read(i)).collect::<Vec<_>>(),
+                flat
+            );
+            assert!(strided
+                .0
+                .iter()
+                .enumerate()
+                .all(|(i, &v)| i % 8 == 4 || v == 0xa55a));
         }
     }
 

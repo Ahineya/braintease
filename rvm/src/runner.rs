@@ -343,10 +343,12 @@ fn run_with_execution(vm: &mut VM, options: &RunOptions, batched: bool) -> Resul
             continue;
         }
         if batched && !vm.debug_mode && !vm.verbose && options.frequency.is_none() {
-            // Preserve the existing host/control polling cadence exactly,
-            // including when a run resumes partway through a polling interval.
-            // MMIO, frames, ticks and execution errors may end a batch sooner.
-            let mut budget = 1024 - vm.executed_instructions % 1024;
+            // The interpreter polls every 1024 instructions. A compiled guest
+            // stays native across that gap; header stores, halt, and ticks
+            // still end the batch. Quit and window checks run on the coarser
+            // cadence, which is well under a frame.
+            let quantum = if vm.jit_enabled { 65_536 } else { 1024 };
+            let mut budget = quantum - vm.executed_instructions % quantum;
             if let Some(limit) = options.max_instructions {
                 budget = budget.min(limit - vm.executed_instructions);
             }

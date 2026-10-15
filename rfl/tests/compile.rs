@@ -177,7 +177,8 @@ fn strings_compare_index_and_print() {
 
 #[test]
 fn string_is_not_a_c_type() {
-    let err = rfl::compile_to_ir("extern \"C\" { fn f(s: String); }\nfn main() -> i16 { 0 }\n").unwrap_err();
+    let err = rfl::compile_to_ir("extern \"C\" { fn f(s: String); }\nfn main() -> i16 { 0 }\n")
+        .unwrap_err();
     assert!(err.to_string().contains("C signature"), "{err}");
 }
 
@@ -191,7 +192,8 @@ fn surrogate_cast_fails() {
 
 #[test]
 fn char_is_not_an_integer() {
-    let err = rfl::compile_to_ir("fn main() -> i16 { let n: i32 = 65; let _c: char = n; 0 }\n").unwrap_err();
+    let err = rfl::compile_to_ir("fn main() -> i16 { let n: i32 = 65; let _c: char = n; 0 }\n")
+        .unwrap_err();
     assert!(err.to_string().contains("char"), "{err}");
 }
 
@@ -317,7 +319,8 @@ fn empty_vector_needs_a_type() {
 
 #[test]
 fn vector_index_is_bounds_checked() {
-    let result = rfl::run_program("fn main() -> i16 { let a = [7]; a[1] }\n").unwrap_or_else(|err| panic!("{err}"));
+    let result = rfl::run_program("fn main() -> i16 { let a = [7]; a[1] }\n")
+        .unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(result.status, 1, "{}", result.stdout);
     assert!(result.stdout.contains("fail"), "{}", result.stdout);
 }
@@ -465,7 +468,8 @@ fn references_update_the_borrowed_vector() {
 
 #[test]
 fn shared_borrow_blocks_mutation() {
-    let source = "fn main() { let mut numbers = [1]; let view = &numbers; numbers.push(2); view.len(); }\n";
+    let source =
+        "fn main() { let mut numbers = [1]; let view = &numbers; numbers.push(2); view.len(); }\n";
     let err = rfl::compile_to_ir(source).unwrap_err();
     assert!(err.to_string().contains("already borrowed"), "{err}");
 }
@@ -592,7 +596,8 @@ fn destructure_and_guards_and_constants() {
 
 #[test]
 fn refutable_let_is_rejected() {
-    let err = rfl::compile_to_ir("fn main() -> i16 {\n  let Some(x) = Some(1);\n  x\n}\n").unwrap_err();
+    let err =
+        rfl::compile_to_ir("fn main() -> i16 {\n  let Some(x) = Some(1);\n  x\n}\n").unwrap_err();
     assert!(err.to_string().contains("irrefutable"), "{err}");
 }
 
@@ -605,7 +610,8 @@ fn guarded_arm_does_not_cover() {
 
 #[test]
 fn constant_must_be_known() {
-    let err = rfl::compile_to_ir("const B: i16 = A;\nconst A: i16 = 1;\nfn main() -> i16 { B }\n").unwrap_err();
+    let err = rfl::compile_to_ir("const B: i16 = A;\nconst A: i16 = 1;\nfn main() -> i16 { B }\n")
+        .unwrap_err();
     assert!(err.to_string().contains("unknown constant"), "{err}");
 }
 
@@ -687,7 +693,9 @@ fn managed_values_are_reclaimed() {
 
 #[test]
 fn fixed_array_length_is_part_of_the_type() {
-    let err = rfl::compile_to_ir("fn main() -> i16 {\n  let pixels: [i16; 2] = [1];\n  pixels[0]\n}\n").unwrap_err();
+    let err =
+        rfl::compile_to_ir("fn main() -> i16 {\n  let pixels: [i16; 2] = [1];\n  pixels[0]\n}\n")
+            .unwrap_err();
     assert!(err.to_string().contains("expected 2 elements"), "{err}");
 }
 
@@ -905,8 +913,7 @@ fn println_prints_floats() {
     "#;
     let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(
-        result.stdout,
-        "1.5\n-2\n0.1\n3.25\ninf\nnan\n1e+7\n1e-5\n",
+        result.stdout, "1.5\n-2\n0.1\n3.25\ninf\nnan\n1e+7\n1e-5\n",
         "status {}",
         result.status
     );
@@ -996,13 +1003,15 @@ fn floats_use_softfloat() {
 
 #[test]
 fn float_and_integer_do_not_mix() {
-    let err = rfl::compile_to_ir("fn main() -> i16 { if (1.0 + 1 == 2.0) { 1 } else { 0 } }\n").unwrap_err();
+    let err = rfl::compile_to_ir("fn main() -> i16 { if (1.0 + 1 == 2.0) { 1 } else { 0 } }\n")
+        .unwrap_err();
     assert!(err.to_string().contains("integer"), "{err}");
 }
 
 #[test]
 fn float_remainder_is_rejected() {
-    let err = rfl::compile_to_ir("fn main() -> i16 { if (1.0 % 2.0 == 0.0) { 1 } else { 0 } }\n").unwrap_err();
+    let err = rfl::compile_to_ir("fn main() -> i16 { if (1.0 % 2.0 == 0.0) { 1 } else { 0 } }\n")
+        .unwrap_err();
     assert!(err.to_string().contains("integers"), "{err}");
 }
 
@@ -1077,13 +1086,17 @@ fn tmp_main(files: &[(&str, &str)]) -> (Tmp, std::path::PathBuf) {
 
 #[test]
 fn import_needs_a_source_file() {
-    let err = rfl::compile_to_ir("import { sum } from \"./math\";\nfn main() -> i16 { 0 }\n").unwrap_err();
+    let err = rfl::compile_to_ir("import { sum } from \"./math\";\nfn main() -> i16 { 0 }\n")
+        .unwrap_err();
     assert!(err.to_string().contains("source file"), "{err}");
 }
 
 #[test]
 fn standard_library_is_not_implemented() {
-    let (_tmp, main) = tmp_main(&[("main.rfl", "import { foo } from \"std/foo\";\nfn main() -> i16 { 0 }\n")]);
+    let (_tmp, main) = tmp_main(&[(
+        "main.rfl",
+        "import { foo } from \"std/foo\";\nfn main() -> i16 { 0 }\n",
+    )]);
     let err = rfl::compile_file(&main).unwrap_err();
     assert!(err.to_string().contains("standard library"), "{err}");
 }
@@ -1091,8 +1104,14 @@ fn standard_library_is_not_implemented() {
 #[test]
 fn import_renames_a_function() {
     let (_tmp, main) = tmp_main(&[
-        ("math.rfl", "export fn sum(a: i16, b: i16) -> i16 { a + b }\n"),
-        ("main.rfl", "import { sum as add } from \"./math\";\nfn main() -> i16 { add(20, 22) }\n"),
+        (
+            "math.rfl",
+            "export fn sum(a: i16, b: i16) -> i16 { a + b }\n",
+        ),
+        (
+            "main.rfl",
+            "import { sum as add } from \"./math\";\nfn main() -> i16 { add(20, 22) }\n",
+        ),
     ]);
     let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(result.status, 42, "{}", result.stdout);
@@ -1102,7 +1121,10 @@ fn import_renames_a_function() {
 fn private_import_is_rejected() {
     let (_tmp, main) = tmp_main(&[
         ("lib.rfl", "fn hidden() -> i16 { 1 }\n"),
-        ("main.rfl", "import { hidden } from \"./lib\";\nfn main() -> i16 { hidden() }\n"),
+        (
+            "main.rfl",
+            "import { hidden } from \"./lib\";\nfn main() -> i16 { hidden() }\n",
+        ),
     ]);
     let err = rfl::compile_file(&main).unwrap_err();
     assert!(err.to_string().contains("not exported"), "{err}");
@@ -1111,8 +1133,14 @@ fn private_import_is_rejected() {
 #[test]
 fn import_cycle_is_rejected() {
     let (tmp, _main) = tmp_main(&[
-        ("a.rfl", "import { b } from \"./b\";\nexport fn a() -> i16 { b() }\nfn main() -> i16 { a() }\n"),
-        ("b.rfl", "import { a } from \"./a\";\nexport fn b() -> i16 { a() }\n"),
+        (
+            "a.rfl",
+            "import { b } from \"./b\";\nexport fn a() -> i16 { b() }\nfn main() -> i16 { a() }\n",
+        ),
+        (
+            "b.rfl",
+            "import { a } from \"./a\";\nexport fn b() -> i16 { a() }\n",
+        ),
     ]);
     let err = rfl::compile_file(&tmp.0.join("a.rfl")).unwrap_err();
     assert!(err.to_string().contains("cycle"), "{err}");
@@ -1135,7 +1163,10 @@ fn export_type_brings_constructors() {
 fn import_c_function() {
     let (_tmp, main) = tmp_main(&[
         ("math.c", "int add(int a, int b) { return a + b; }\n"),
-        ("main.rfl", "import { add } from \"./math.c\";\nfn main() -> i16 { add(20, 22) }\n"),
+        (
+            "main.rfl",
+            "import { add } from \"./math.c\";\nfn main() -> i16 { add(20, 22) }\n",
+        ),
     ]);
     let result = rfl::run_file(&main).unwrap_or_else(|err| panic!("{err}"));
     assert_eq!(result.status, 42, "{}", result.stdout);
@@ -1145,7 +1176,10 @@ fn import_c_function() {
 fn static_c_function_is_rejected() {
     let (_tmp, main) = tmp_main(&[
         ("secret.c", "static int secret(void) { return 1; }\n"),
-        ("main.rfl", "import { secret } from \"./secret.c\";\nfn main() -> i16 { secret() }\n"),
+        (
+            "main.rfl",
+            "import { secret } from \"./secret.c\";\nfn main() -> i16 { secret() }\n",
+        ),
     ]);
     let err = rfl::compile_file(&main).unwrap_err();
     assert!(err.to_string().contains("static"), "{err}");
@@ -1447,7 +1481,10 @@ fn mutable_capture_is_shared() {
 #[test]
 fn c_function_pointer_calls_through_c() {
     let (_tmp, main) = tmp_main(&[
-        ("cb.c", "int call_cb(int (*f)(int, int), int a, int b) { return f(a, b); }\n"),
+        (
+            "cb.c",
+            "int call_cb(int (*f)(int, int), int a, int b) { return f(a, b); }\n",
+        ),
         (
             "main.rfl",
             r#"
@@ -1499,13 +1536,17 @@ fn raw_pointer_updates_a_local() {
 
 #[test]
 fn raw_pointer_needs_unsafe() {
-    let err = rfl::compile_to_ir("fn load(p: *mut u16) -> u16 { *p }\nfn main() -> i16 { 0 }\n").unwrap_err();
+    let err = rfl::compile_to_ir("fn load(p: *mut u16) -> u16 { *p }\nfn main() -> i16 { 0 }\n")
+        .unwrap_err();
     assert!(err.to_string().contains("unsafe"), "{err}");
 }
 
 #[test]
 fn const_pointer_cannot_store() {
-    let err = rfl::compile_to_ir("fn store(p: *const u16) { unsafe { *p = 1; } }\nfn main() -> i16 { 0 }\n").unwrap_err();
+    let err = rfl::compile_to_ir(
+        "fn store(p: *const u16) { unsafe { *p = 1; } }\nfn main() -> i16 { 0 }\n",
+    )
+    .unwrap_err();
     assert!(err.to_string().contains("const"), "{err}");
 }
 
@@ -1677,7 +1718,11 @@ fn diagnostics_point_at_the_source_line() {
 fn out_of_bounds_names_the_failure() {
     let source = "fn main() -> i16 {\n  let text = \"ab\";\n  let _ch = text[3];\n  0\n}\n";
     let result = rfl::run_program(source).unwrap_or_else(|err| panic!("{err}"));
-    assert!(result.stdout.contains("index out of bounds"), "{}", result.stdout);
+    assert!(
+        result.stdout.contains("index out of bounds"),
+        "{}",
+        result.stdout
+    );
 }
 
 #[test]

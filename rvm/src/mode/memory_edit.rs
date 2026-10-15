@@ -1,6 +1,6 @@
-use crossterm::event::KeyCode;
 use crate::tui_debugger::{DebuggerMode, TuiDebugger};
 use crate::vm::VM;
+use crossterm::event::KeyCode;
 
 impl TuiDebugger {
     pub(crate) fn handle_memory_edit_mode(&mut self, key: KeyCode, vm: &mut VM) {
@@ -26,11 +26,17 @@ impl TuiDebugger {
                                     0 => instr.opcode = value,
                                     1 => instr.word0 = value,
                                     2 => instr.word1 = (instr.word1 & 0xFF00) | value as u16,
-                                    3 => instr.word1 = (instr.word1 & 0x00FF) | ((value as u16) << 8),
+                                    3 => {
+                                        instr.word1 = (instr.word1 & 0x00FF) | ((value as u16) << 8)
+                                    }
                                     4 => instr.word2 = (instr.word2 & 0xFF00) | value as u16,
-                                    5 => instr.word2 = (instr.word2 & 0x00FF) | ((value as u16) << 8),
+                                    5 => {
+                                        instr.word2 = (instr.word2 & 0x00FF) | ((value as u16) << 8)
+                                    }
                                     6 => instr.word3 = (instr.word3 & 0xFF00) | value as u16,
-                                    7 => instr.word3 = (instr.word3 & 0x00FF) | ((value as u16) << 8),
+                                    7 => {
+                                        instr.word3 = (instr.word3 & 0x00FF) | ((value as u16) << 8)
+                                    }
                                     _ => {}
                                 }
                             }
@@ -40,7 +46,7 @@ impl TuiDebugger {
                     self.mode = DebuggerMode::Normal;
                     return;
                 }
-                
+
                 // Parse regular memory edit: "address:value" or just "value" if address is pre-filled
                 let parts: Vec<&str> = self.command_buffer.split(':').collect();
 
@@ -62,7 +68,7 @@ impl TuiDebugger {
                     // Check if it's a string literal
                     if value_str.starts_with('"') && value_str.ends_with('"') {
                         // String literal - write multiple bytes
-                        let string_content = &value_str[1..value_str.len()-1];
+                        let string_content = &value_str[1..value_str.len() - 1];
                         for ch in string_content.chars() {
                             if addr < vm.memory.len() {
                                 vm.memory[addr] = ch as u16;
@@ -70,13 +76,18 @@ impl TuiDebugger {
                             }
                         }
                         // Jump to the modified address for visual feedback
-                        if let Ok(start_addr) = usize::from_str_radix(addr_str.trim_start_matches("0x"), 16) {
+                        if let Ok(start_addr) =
+                            usize::from_str_radix(addr_str.trim_start_matches("0x"), 16)
+                        {
                             self.memory_base_addr = start_addr & !0xF;
                             self.memory_scroll = 0;
                         }
                     } else {
                         // Parse single value - support multiple formats
-                        let value = if value_str.starts_with("'") && value_str.ends_with("'") && value_str.len() == 3 {
+                        let value = if value_str.starts_with("'")
+                            && value_str.ends_with("'")
+                            && value_str.len() == 3
+                        {
                             // Character literal
                             value_str.chars().nth(1).map(|c| c as u16)
                         } else if value_str.starts_with("0x") {
@@ -115,5 +126,4 @@ impl TuiDebugger {
             _ => {}
         }
     }
-    
 }

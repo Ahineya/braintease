@@ -80,15 +80,38 @@ pub struct TBlock {
 
 #[derive(Debug)]
 pub enum TStmt {
-    Let { binding: u32, init: TExpr },
+    Let {
+        binding: u32,
+        init: TExpr,
+    },
     /// Irrefutable constructor pattern. Bindings inside `pat` receive the fields.
-    Destructure { pat: TPat, init: TExpr },
-    Assign { binding: u32, value: TExpr },
-    IndexAssign { binding: u32, index: TExpr, value: TExpr, elem: Ty },
+    Destructure {
+        pat: TPat,
+        init: TExpr,
+    },
+    Assign {
+        binding: u32,
+        value: TExpr,
+    },
+    IndexAssign {
+        binding: u32,
+        index: TExpr,
+        value: TExpr,
+        elem: Ty,
+    },
     /// Store `value` at a cell offset inside a struct binding.
-    FieldAssign { binding: u32, offset: i64, value: TExpr },
+    FieldAssign {
+        binding: u32,
+        offset: i64,
+        value: TExpr,
+    },
     /// Store through a raw pointer. `index` selects an element of `stride` cells.
-    PtrStore { ptr: TExpr, index: Option<TExpr>, value: TExpr, stride: i64 },
+    PtrStore {
+        ptr: TExpr,
+        index: Option<TExpr>,
+        value: TExpr,
+        stride: i64,
+    },
     Expr(TExpr),
     Return(Option<TExpr>),
     Break,
@@ -108,20 +131,42 @@ pub enum TExprKind {
     Float(u64),
     Bool(bool),
     Name(u32),
-    Unary { op: UnaryOp, expr: Box<TExpr> },
-    Binary { op: BinOp, lhs: Box<TExpr>, rhs: Box<TExpr> },
-    Call { callee: String, args: Vec<TExpr> },
+    Unary {
+        op: UnaryOp,
+        expr: Box<TExpr>,
+    },
+    Binary {
+        op: BinOp,
+        lhs: Box<TExpr>,
+        rhs: Box<TExpr>,
+    },
+    Call {
+        callee: String,
+        args: Vec<TExpr>,
+    },
     /// A direct call to a C function. The callee is not an RFL frame.
     /// `fixed` is the number of named parameters. Later arguments are variadic.
-    Extern { callee: String, args: Vec<TExpr>, fixed: usize },
+    Extern {
+        callee: String,
+        args: Vec<TExpr>,
+        fixed: usize,
+    },
     /// Static `c"..."` bytes. The value is `*const c_char`.
     CStr(Vec<u16>),
     /// A `String`. Bytes are UTF-8, one octet per cell in the object.
     Str(Vec<u8>),
     /// `left + right` when both sides are strings. A new string.
-    StrConcat { lhs: Box<TExpr>, rhs: Box<TExpr> },
+    StrConcat {
+        lhs: Box<TExpr>,
+        rhs: Box<TExpr>,
+    },
     /// `s[start..end]`. The bounds are byte offsets. The result is a new string.
-    StrSlice { base: Box<TExpr>, start: Box<TExpr>, end: Box<TExpr>, inclusive: bool },
+    StrSlice {
+        base: Box<TExpr>,
+        start: Box<TExpr>,
+        end: Box<TExpr>,
+        inclusive: bool,
+    },
     /// One character, encoded as UTF-8.
     StrFromChar(Box<TExpr>),
     /// One octet, even when it is not a UTF-8 lead byte.
@@ -129,16 +174,34 @@ pub enum TExprKind {
     /// A `char` scalar.
     Char(u32),
     /// Call a function value. `params` is the callee's parameter list.
-    Apply { callee: Box<TExpr>, args: Vec<TExpr>, params: Vec<Ty> },
+    Apply {
+        callee: Box<TExpr>,
+        args: Vec<TExpr>,
+        params: Vec<Ty>,
+    },
     /// Address of a C function. The value is a code pointer, not an RFL closure.
-    CFn { symbol: String },
+    CFn {
+        symbol: String,
+    },
     /// Call a C function pointer.
-    CApply { callee: Box<TExpr>, args: Vec<TExpr> },
+    CApply {
+        callee: Box<TExpr>,
+        args: Vec<TExpr>,
+    },
     /// A lambda lifted to `func`. The value is a closure with an empty environment.
-    Closure { func: String },
-    If { cond: Box<TExpr>, then_body: Box<TBlock>, else_body: Option<Box<TExpr>> },
+    Closure {
+        func: String,
+    },
+    If {
+        cond: Box<TExpr>,
+        then_body: Box<TBlock>,
+        else_body: Option<Box<TExpr>>,
+    },
     Block(Box<TBlock>),
-    While { cond: Box<TExpr>, body: Box<TBlock> },
+    While {
+        cond: Box<TExpr>,
+        body: Box<TBlock>,
+    },
     /// `for` over a range or a random-access collection. `step` is where `continue` lands.
     ForIter {
         index: u32,
@@ -150,54 +213,136 @@ pub enum TExprKind {
         body: Box<TBlock>,
     },
     /// Inline struct or tuple literal. Fields are stored in order.
-    Record { fields: Vec<TExpr> },
+    Record {
+        fields: Vec<TExpr>,
+    },
     /// A field of an inline product, `offset` cells from the start of `base`.
-    Field { base: Box<TExpr>, offset: i64 },
-    Cast { expr: Box<TExpr>, to: Ty },
-    Ctor { tag: u16, args: Vec<TExpr> },
-    Match { scrutinee: Box<TExpr>, arms: Vec<TArm> },
+    Field {
+        base: Box<TExpr>,
+        offset: i64,
+    },
+    Cast {
+        expr: Box<TExpr>,
+        to: Ty,
+    },
+    Ctor {
+        tag: u16,
+        args: Vec<TExpr>,
+    },
+    Match {
+        scrutinee: Box<TExpr>,
+        arms: Vec<TArm>,
+    },
     /// Decimal integer, or `true`/`false`. `newline` adds a trailing line feed.
-    Print { value: Box<TExpr>, newline: bool },
+    Print {
+        value: Box<TExpr>,
+        newline: bool,
+    },
     /// Text written with `putchar`. Same newline rule as `Print`.
-    PrintLit { chars: Vec<u16>, newline: bool },
+    PrintLit {
+        chars: Vec<u16>,
+        newline: bool,
+    },
     /// One output cell.
     Putc(Box<TExpr>),
     /// A vector literal.
-    VecLit { elems: Vec<TExpr>, elem: Ty },
+    VecLit {
+        elems: Vec<TExpr>,
+        elem: Ty,
+    },
     /// `base[index]`, returning the element by value.
-    Index { base: Box<TExpr>, index: Box<TExpr>, elem: Ty },
+    Index {
+        base: Box<TExpr>,
+        index: Box<TExpr>,
+        elem: Ty,
+    },
     /// An inline `[T; N]` literal.
-    ArrayLit { elems: Vec<TExpr>, elem: Ty },
+    ArrayLit {
+        elems: Vec<TExpr>,
+        elem: Ty,
+    },
     /// `base[start..end]`, an owning slice of `elem`.
-    Slice { base: Box<TExpr>, start: Box<TExpr>, end: Box<TExpr>, inclusive: bool, elem: Ty },
+    Slice {
+        base: Box<TExpr>,
+        start: Box<TExpr>,
+        end: Box<TExpr>,
+        inclusive: bool,
+        elem: Ty,
+    },
     /// Copy an array or a slice into a fresh vector.
-    ToVec { src: Box<TExpr>, elem: Ty },
+    ToVec {
+        src: Box<TExpr>,
+        elem: Ty,
+    },
     /// `vec.len()`.
-    Len { vec: Box<TExpr> },
+    Len {
+        vec: Box<TExpr>,
+    },
     /// `vec.is_empty()`.
-    Empty { vec: Box<TExpr> },
+    Empty {
+        vec: Box<TExpr>,
+    },
     /// `place.clear()` on a mutable name.
-    Clear { binding: u32 },
+    Clear {
+        binding: u32,
+    },
     /// `place.push(value)` on a mutable name.
-    Push { binding: u32, value: Box<TExpr>, elem: Ty },
+    Push {
+        binding: u32,
+        value: Box<TExpr>,
+        elem: Ty,
+    },
     /// `place.pop()`, copying the buffer first when it is shared.
-    Pop { binding: u32, elem: Ty, some_tag: u16, none_tag: u16 },
+    Pop {
+        binding: u32,
+        elem: Ty,
+        some_tag: u16,
+        none_tag: u16,
+    },
     /// `vec.get(index)`. A missing element is `None`.
-    Get { vec: Box<TExpr>, index: Box<TExpr>, elem: Ty, some_tag: u16, none_tag: u16 },
+    Get {
+        vec: Box<TExpr>,
+        index: Box<TExpr>,
+        elem: Ty,
+        some_tag: u16,
+        none_tag: u16,
+    },
     /// `&binding` or `&mut binding`. The value points at that local.
-    Borrow { binding: u32 },
+    Borrow {
+        binding: u32,
+    },
     /// Load `stride` cells at `ptr`, plus `index` elements when present.
-    Deref { ptr: Box<TExpr>, index: Option<Box<TExpr>>, stride: i64 },
+    Deref {
+        ptr: Box<TExpr>,
+        index: Option<Box<TExpr>>,
+        stride: i64,
+    },
     /// `ptr` moved by `index` elements of `stride` cells.
-    PtrOffset { ptr: Box<TExpr>, index: Box<TExpr>, stride: i64 },
+    PtrOffset {
+        ptr: Box<TExpr>,
+        index: Box<TExpr>,
+        stride: i64,
+    },
     /// Address cell of a raw pointer.
-    PtrAddr { ptr: Box<TExpr> },
+    PtrAddr {
+        ptr: Box<TExpr>,
+    },
     /// Bank cell of a raw pointer. Negative values are bank tags.
-    PtrBank { ptr: Box<TExpr> },
+    PtrBank {
+        ptr: Box<TExpr>,
+    },
     /// The address cell is zero.
-    PtrNull { ptr: Box<TExpr> },
+    PtrNull {
+        ptr: Box<TExpr>,
+    },
     /// `expr?`. `fail` is the error payload, or nothing when failure is nullary.
-    Try { expr: Box<TExpr>, ok_tag: u16, fail_tag: u16, payload: Ty, fail: Option<Ty> },
+    Try {
+        expr: Box<TExpr>,
+        ok_tag: u16,
+        fail_tag: u16,
+        payload: Ty,
+        fail: Option<Ty>,
+    },
 }
 
 #[derive(Debug)]
@@ -211,11 +356,16 @@ pub struct TArm {
 pub enum TPat {
     Wild,
     Bind(u32),
-    Ctor { tag: u16, fields: Vec<FieldPat> },
+    Ctor {
+        tag: u16,
+        fields: Vec<FieldPat>,
+    },
     /// Integer or bool literal. Bool uses 1 and 0.
     Lit(i64),
     /// Inline product. `offset` is the cell offset of each field from the start of the value.
-    Product { fields: Vec<ProductField> },
+    Product {
+        fields: Vec<ProductField>,
+    },
 }
 
 #[derive(Debug)]

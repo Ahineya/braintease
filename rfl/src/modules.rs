@@ -50,14 +50,22 @@ struct Binding {
 
 /// Typecheck `source` as the contents of `path`, resolving its imports.
 /// Spans in the result are offsets into `source`, not the linked buffer.
-pub(crate) fn check_root(path: &Path, source: &str) -> Result<(crate::check::ProgramInfo, Vec<CompileError>), CompileError> {
+pub(crate) fn check_root(
+    path: &Path,
+    source: &str,
+) -> Result<(crate::check::ProgramInfo, Vec<CompileError>), CompileError> {
     let ast = parse_source(source)?;
     if ast.imports.is_empty() {
         let (info, result) = crate::check::analyze(source, &ast);
         return Ok((info, result.err().into_iter().collect()));
     }
     let canon = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let mut rfls = vec![RflUnit { path: canon.clone(), source: source.to_string(), ast, resolved: Vec::new() }];
+    let mut rfls = vec![RflUnit {
+        path: canon.clone(),
+        source: source.to_string(),
+        ast,
+        resolved: Vec::new(),
+    }];
     let mut cmods = Vec::new();
     let mut stack = vec![canon];
     resolve_imports(0, &mut stack, &mut rfls, &mut cmods)?;
@@ -69,21 +77,48 @@ pub(crate) fn check_root(path: &Path, source: &str) -> Result<(crate::check::Pro
     }
     let mut maps: Vec<HashMap<String, String>> = bindings
         .iter()
-        .map(|table| table.iter().map(|(name, binding)| (name.clone(), binding.mangled.clone())).collect())
+        .map(|table| {
+            table
+                .iter()
+                .map(|(name, binding)| (name.clone(), binding.mangled.clone()))
+                .collect()
+        })
         .collect();
     let mut ctor_names: Vec<HashSet<String>> = bindings
         .iter()
-        .map(|table| table.iter().filter(|(_, binding)| binding.is_ctor).map(|(name, _)| name.clone()).collect())
+        .map(|table| {
+            table
+                .iter()
+                .filter(|(_, binding)| binding.is_ctor)
+                .map(|(name, _)| name.clone())
+                .collect()
+        })
         .collect();
     let mut fn_names: Vec<HashSet<String>> = bindings
         .iter()
-        .map(|table| table.iter().filter(|(_, binding)| binding.is_fn).map(|(name, _)| name.clone()).collect())
+        .map(|table| {
+            table
+                .iter()
+                .filter(|(_, binding)| binding.is_fn)
+                .map(|(name, _)| name.clone())
+                .collect()
+        })
         .collect();
     for index in 0..rfls.len() {
         let resolved = rfls[index].clone_imports();
         let mut extra = Vec::new();
         for item in &resolved {
-            let decls = apply_import(index, item, &rfls, &bindings, &mut maps, &mut ctor_names, &mut fn_names, &cmods, &extra)?;
+            let decls = apply_import(
+                index,
+                item,
+                &rfls,
+                &bindings,
+                &mut maps,
+                &mut ctor_names,
+                &mut fn_names,
+                &cmods,
+                &extra,
+            )?;
             extra.extend(decls);
         }
         rfls[index].ast.externs.extend(extra);
@@ -102,7 +137,13 @@ pub(crate) fn check_root(path: &Path, source: &str) -> Result<(crate::check::Pro
         }
     }
     for (index, unit) in rfls.iter_mut().enumerate() {
-        rewrite_uses(&mut unit.ast, &maps[index], &ctor_names[index], &fn_names[index], bases[index]);
+        rewrite_uses(
+            &mut unit.ast,
+            &maps[index],
+            &ctor_names[index],
+            &fn_names[index],
+            bases[index],
+        );
         rename_defs(&mut unit.ast, &bindings[index]);
     }
     let mut merged = Module {
@@ -128,9 +169,17 @@ pub(crate) fn check_root(path: &Path, source: &str) -> Result<(crate::check::Pro
         }
     }
     let (info, result) = crate::check::analyze(&packed, &merged);
-    let chunks: Vec<(PathBuf, usize, usize)> = rfls.iter().enumerate().map(|(index, unit)| (unit.path.clone(), bases[index], lengths[index])).collect();
+    let chunks: Vec<(PathBuf, usize, usize)> = rfls
+        .iter()
+        .enumerate()
+        .map(|(index, unit)| (unit.path.clone(), bases[index], lengths[index]))
+        .collect();
     let info = shift_info(info, &chunks, 0);
-    let diagnostics = result.err().into_iter().map(|err| shift_error(err, source, chunks[0].1, chunks[0].2)).collect();
+    let diagnostics = result
+        .err()
+        .into_iter()
+        .map(|err| shift_error(err, source, chunks[0].1, chunks[0].2))
+        .collect();
     Ok((info, diagnostics))
 }
 
@@ -142,7 +191,11 @@ fn shift_span(span: crate::ast::Span, base: usize, len: usize) -> Option<crate::
     }
 }
 
-fn shift_info(info: crate::check::ProgramInfo, chunks: &[(PathBuf, usize, usize)], root: usize) -> crate::check::ProgramInfo {
+fn shift_info(
+    info: crate::check::ProgramInfo,
+    chunks: &[(PathBuf, usize, usize)],
+    root: usize,
+) -> crate::check::ProgramInfo {
     let (root_path, base, len) = &chunks[root];
     let root_path = root_path.clone();
     let base = *base;
@@ -205,7 +258,10 @@ fn shift_scope(span: crate::ast::Span, base: usize, len: usize) -> Option<crate:
     shift_span(span, base, len)
 }
 
-fn locate(chunks: &[(PathBuf, usize, usize)], span: crate::ast::Span) -> Option<(PathBuf, crate::ast::Span)> {
+fn locate(
+    chunks: &[(PathBuf, usize, usize)],
+    span: crate::ast::Span,
+) -> Option<(PathBuf, crate::ast::Span)> {
     chunks.iter().find_map(|(path, base, len)| {
         shift_span(span, *base, *len).map(|span| (path.clone(), span))
     })
@@ -222,9 +278,8 @@ fn shift_error(err: CompileError, root: &str, base: usize, len: usize) -> Compil
 }
 
 pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
-    let canon = std::fs::canonicalize(path).map_err(|err| {
-        CompileError::plain(format!("cannot read {}: {err}", path.display()))
-    })?;
+    let canon = std::fs::canonicalize(path)
+        .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     let source = read_text(&canon)?;
     let ast = parse_source(&source)?;
     if ast.imports.is_empty() {
@@ -235,7 +290,12 @@ pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
 }
 
 fn link(path: PathBuf, source: String, ast: Module) -> Result<IrModule, CompileError> {
-    let mut rfls = vec![RflUnit { path: path.clone(), source, ast, resolved: Vec::new() }];
+    let mut rfls = vec![RflUnit {
+        path: path.clone(),
+        source,
+        ast,
+        resolved: Vec::new(),
+    }];
     let mut cmods = Vec::new();
     let mut stack = vec![path];
     resolve_imports(0, &mut stack, &mut rfls, &mut cmods)?;
@@ -248,21 +308,48 @@ fn link(path: PathBuf, source: String, ast: Module) -> Result<IrModule, CompileE
     }
     let mut maps: Vec<HashMap<String, String>> = bindings
         .iter()
-        .map(|table| table.iter().map(|(name, binding)| (name.clone(), binding.mangled.clone())).collect())
+        .map(|table| {
+            table
+                .iter()
+                .map(|(name, binding)| (name.clone(), binding.mangled.clone()))
+                .collect()
+        })
         .collect();
     let mut ctor_names: Vec<HashSet<String>> = bindings
         .iter()
-        .map(|table| table.iter().filter(|(_, binding)| binding.is_ctor).map(|(name, _)| name.clone()).collect())
+        .map(|table| {
+            table
+                .iter()
+                .filter(|(_, binding)| binding.is_ctor)
+                .map(|(name, _)| name.clone())
+                .collect()
+        })
         .collect();
     let mut fn_names: Vec<HashSet<String>> = bindings
         .iter()
-        .map(|table| table.iter().filter(|(_, binding)| binding.is_fn).map(|(name, _)| name.clone()).collect())
+        .map(|table| {
+            table
+                .iter()
+                .filter(|(_, binding)| binding.is_fn)
+                .map(|(name, _)| name.clone())
+                .collect()
+        })
         .collect();
     for index in 0..rfls.len() {
         let resolved = rfls[index].clone_imports();
         let mut extra = Vec::new();
         for item in &resolved {
-            let decls = apply_import(index, item, &rfls, &bindings, &mut maps, &mut ctor_names, &mut fn_names, &cmods, &extra)?;
+            let decls = apply_import(
+                index,
+                item,
+                &rfls,
+                &bindings,
+                &mut maps,
+                &mut ctor_names,
+                &mut fn_names,
+                &cmods,
+                &extra,
+            )?;
             extra.extend(decls);
         }
         rfls[index].ast.externs.extend(extra);
@@ -280,7 +367,13 @@ fn link(path: PathBuf, source: String, ast: Module) -> Result<IrModule, CompileE
         }
     }
     for (index, unit) in rfls.iter_mut().enumerate() {
-        rewrite_uses(&mut unit.ast, &maps[index], &ctor_names[index], &fn_names[index], bases[index]);
+        rewrite_uses(
+            &mut unit.ast,
+            &maps[index],
+            &ctor_names[index],
+            &fn_names[index],
+            bases[index],
+        );
         rename_defs(&mut unit.ast, &bindings[index]);
     }
 
@@ -319,7 +412,10 @@ impl RflUnit {
     fn clone_imports(&self) -> Vec<Resolved> {
         self.resolved
             .iter()
-            .map(|item| Resolved { import: item.import.clone(), target: item.target.clone_index() })
+            .map(|item| Resolved {
+                import: item.import.clone(),
+                target: item.target.clone_index(),
+            })
             .collect()
     }
 }
@@ -361,13 +457,15 @@ fn load_rfl(
     rfls: &mut Vec<RflUnit>,
     cmods: &mut Vec<CMod>,
 ) -> Result<usize, CompileError> {
-    let canon = std::fs::canonicalize(path).map_err(|err| {
-        CompileError::plain(format!("cannot read {}: {err}", path.display()))
-    })?;
+    let canon = std::fs::canonicalize(path)
+        .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     if let Some(start) = stack.iter().position(|found| found == &canon) {
         let mut chain: Vec<String> = stack[start..].iter().map(|path| file_label(path)).collect();
         chain.push(file_label(&canon));
-        return Err(CompileError::plain(format!("import cycle: {}", chain.join(" -> "))));
+        return Err(CompileError::plain(format!(
+            "import cycle: {}",
+            chain.join(" -> ")
+        )));
     }
     if let Some(index) = rfls.iter().position(|unit| unit.path == canon) {
         return Ok(index);
@@ -375,7 +473,12 @@ fn load_rfl(
     let source = read_text(&canon)?;
     let ast = parse_source(&source)?;
     let index = rfls.len();
-    rfls.push(RflUnit { path: canon.clone(), source, ast, resolved: Vec::new() });
+    rfls.push(RflUnit {
+        path: canon.clone(),
+        source,
+        ast,
+        resolved: Vec::new(),
+    });
     stack.push(canon);
     resolve_imports(index, stack, rfls, cmods)?;
     stack.pop();
@@ -383,27 +486,40 @@ fn load_rfl(
 }
 
 fn load_c(path: &Path, cmods: &mut Vec<CMod>) -> Result<usize, CompileError> {
-    let canon = std::fs::canonicalize(path).map_err(|err| {
-        CompileError::plain(format!("cannot read {}: {err}", path.display()))
-    })?;
+    let canon = std::fs::canonicalize(path)
+        .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     if let Some(index) = cmods.iter().position(|unit| unit.path == canon) {
         return Ok(index);
     }
     let source = read_text(&canon)?;
     let mut preprocessor = rcc_preprocessor::Preprocessor::new();
-    let processed = preprocessor.process(&source, canon.clone()).map_err(|err| CompileError::plain(err.to_string()))?;
-    let mut ast = Frontend::parse_source(&processed).map_err(|err| CompileError::plain(err.to_string()))?;
+    let processed = preprocessor
+        .process(&source, canon.clone())
+        .map_err(|err| CompileError::plain(err.to_string()))?;
+    let mut ast =
+        Frontend::parse_source(&processed).map_err(|err| CompileError::plain(err.to_string()))?;
     let mut analyzer = SemanticAnalyzer::new();
-    analyzer.analyze(&mut ast).map_err(|err| CompileError::plain(err.to_string()))?;
+    analyzer
+        .analyze(&mut ast)
+        .map_err(|err| CompileError::plain(err.to_string()))?;
     let types = analyzer.into_type_info();
-    let typed = rcc_frontend::type_translation_unit(&ast, types).map_err(|err| CompileError::plain(err.to_string()))?;
+    let typed = rcc_frontend::type_translation_unit(&ast, types)
+        .map_err(|err| CompileError::plain(err.to_string()))?;
     let module = TypedCodeGenerator::new(canon.display().to_string())
         .generate(&typed)
         .map_err(|err| CompileError::plain(err.to_string()))?;
-    if module.functions.iter().any(|func| func.name == "main" && !func.is_external) {
+    if module
+        .functions
+        .iter()
+        .any(|func| func.name == "main" && !func.is_external)
+    {
         return Err(CompileError::plain("C `main` cannot be linked"));
     }
-    cmods.push(CMod { path: canon, typed, ir: module });
+    cmods.push(CMod {
+        path: canon,
+        typed,
+        ir: module,
+    });
     Ok(cmods.len() - 1)
 }
 
@@ -418,19 +534,52 @@ fn own_bindings(
     for func in &unit.ast.functions {
         if func.name == "main" {
             if !entry {
-                return Err(CompileError::plain(format!("{}: another file cannot define `main`", file_label(&unit.path))));
+                return Err(CompileError::plain(format!(
+                    "{}: another file cannot define `main`",
+                    file_label(&unit.path)
+                )));
             }
-            table.insert(func.name.clone(), Binding { mangled: "main".to_string(), exported: false, ctors: Vec::new(), is_ctor: false, is_fn: true });
+            table.insert(
+                func.name.clone(),
+                Binding {
+                    mangled: "main".to_string(),
+                    exported: false,
+                    ctors: Vec::new(),
+                    is_ctor: false,
+                    is_fn: true,
+                },
+            );
             continue;
         }
         if func.c_export {
             if !taken_c.insert(func.name.clone()) {
-                return Err(CompileError::plain(format!("duplicate C export `{}`", func.name)));
+                return Err(CompileError::plain(format!(
+                    "duplicate C export `{}`",
+                    func.name
+                )));
             }
-            table.insert(func.name.clone(), Binding { mangled: func.name.clone(), exported: true, ctors: Vec::new(), is_ctor: false, is_fn: true });
+            table.insert(
+                func.name.clone(),
+                Binding {
+                    mangled: func.name.clone(),
+                    exported: true,
+                    ctors: Vec::new(),
+                    is_ctor: false,
+                    is_fn: true,
+                },
+            );
             continue;
         }
-        table.insert(func.name.clone(), Binding { mangled: mangle(&func.name), exported: func.exported, ctors: Vec::new(), is_ctor: false, is_fn: true });
+        table.insert(
+            func.name.clone(),
+            Binding {
+                mangled: mangle(&func.name),
+                exported: func.exported,
+                ctors: Vec::new(),
+                is_ctor: false,
+                is_fn: true,
+            },
+        );
     }
     for adt in &unit.ast.adts {
         let mangled = mangle(&adt.name);
@@ -438,28 +587,74 @@ fn own_bindings(
         for ctor in &adt.ctors {
             let ctor_mangled = mangle(&ctor.name);
             ctors.push((ctor.name.clone(), ctor_mangled.clone()));
-            table.insert(ctor.name.clone(), Binding { mangled: ctor_mangled, exported: adt.exported, ctors: Vec::new(), is_ctor: true, is_fn: false });
+            table.insert(
+                ctor.name.clone(),
+                Binding {
+                    mangled: ctor_mangled,
+                    exported: adt.exported,
+                    ctors: Vec::new(),
+                    is_ctor: true,
+                    is_fn: false,
+                },
+            );
         }
-        table.insert(adt.name.clone(), Binding { mangled, exported: adt.exported, ctors, is_ctor: false, is_fn: false });
+        table.insert(
+            adt.name.clone(),
+            Binding {
+                mangled,
+                exported: adt.exported,
+                ctors,
+                is_ctor: false,
+                is_fn: false,
+            },
+        );
     }
     for item in &unit.ast.structs {
-        table.insert(item.name.clone(), Binding { mangled: mangle(&item.name), exported: item.exported, ctors: Vec::new(), is_ctor: false, is_fn: false });
+        table.insert(
+            item.name.clone(),
+            Binding {
+                mangled: mangle(&item.name),
+                exported: item.exported,
+                ctors: Vec::new(),
+                is_ctor: false,
+                is_fn: false,
+            },
+        );
     }
     for item in &unit.ast.consts {
-        table.insert(item.name.clone(), Binding { mangled: mangle(&item.name), exported: item.exported, ctors: Vec::new(), is_ctor: false, is_fn: false });
+        table.insert(
+            item.name.clone(),
+            Binding {
+                mangled: mangle(&item.name),
+                exported: item.exported,
+                ctors: Vec::new(),
+                is_ctor: false,
+                is_fn: false,
+            },
+        );
     }
     for item in std_facade(&unit.path) {
         if table.contains_key(item.name) {
-            return Err(CompileError::plain(format!("`{}` conflicts with a standard name", item.name)));
+            return Err(CompileError::plain(format!(
+                "`{}` conflicts with a standard name",
+                item.name
+            )));
         }
-        let ctors = item.ctors.iter().map(|(name, mangled)| (name.to_string(), mangled.to_string())).collect();
-        table.insert(item.name.to_string(), Binding {
-            mangled: item.mangled.to_string(),
-            exported: true,
-            ctors,
-            is_ctor: item.is_ctor,
-            is_fn: item.is_fn,
-        });
+        let ctors = item
+            .ctors
+            .iter()
+            .map(|(name, mangled)| (name.to_string(), mangled.to_string()))
+            .collect();
+        table.insert(
+            item.name.to_string(),
+            Binding {
+                mangled: item.mangled.to_string(),
+                exported: true,
+                ctors,
+                is_ctor: item.is_ctor,
+                is_fn: item.is_fn,
+            },
+        );
     }
     Ok(table)
 }
@@ -473,7 +668,10 @@ struct Facade {
 }
 
 fn std_facade(path: &Path) -> &'static [Facade] {
-    let in_std = path.parent().and_then(|parent| parent.file_name()).is_some_and(|name| name == "std");
+    let in_std = path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .is_some_and(|name| name == "std");
     if !in_std {
         return &[];
     }
@@ -487,26 +685,92 @@ fn std_facade(path: &Path) -> &'static [Facade] {
 }
 
 const OPTION_FACADE: &[Facade] = &[
-    Facade { name: "Option", mangled: "Option", ctors: &[("Some", "Some"), ("None", "None")], is_ctor: false, is_fn: false },
-    Facade { name: "Some", mangled: "Some", ctors: &[], is_ctor: true, is_fn: false },
-    Facade { name: "None", mangled: "None", ctors: &[], is_ctor: true, is_fn: false },
+    Facade {
+        name: "Option",
+        mangled: "Option",
+        ctors: &[("Some", "Some"), ("None", "None")],
+        is_ctor: false,
+        is_fn: false,
+    },
+    Facade {
+        name: "Some",
+        mangled: "Some",
+        ctors: &[],
+        is_ctor: true,
+        is_fn: false,
+    },
+    Facade {
+        name: "None",
+        mangled: "None",
+        ctors: &[],
+        is_ctor: true,
+        is_fn: false,
+    },
 ];
 
 const RESULT_FACADE: &[Facade] = &[
-    Facade { name: "Result", mangled: "Result", ctors: &[("Ok", "Ok"), ("Err", "Err")], is_ctor: false, is_fn: false },
-    Facade { name: "Ok", mangled: "Ok", ctors: &[], is_ctor: true, is_fn: false },
-    Facade { name: "Err", mangled: "Err", ctors: &[], is_ctor: true, is_fn: false },
+    Facade {
+        name: "Result",
+        mangled: "Result",
+        ctors: &[("Ok", "Ok"), ("Err", "Err")],
+        is_ctor: false,
+        is_fn: false,
+    },
+    Facade {
+        name: "Ok",
+        mangled: "Ok",
+        ctors: &[],
+        is_ctor: true,
+        is_fn: false,
+    },
+    Facade {
+        name: "Err",
+        mangled: "Err",
+        ctors: &[],
+        is_ctor: true,
+        is_fn: false,
+    },
 ];
 
 const STRING_FACADE: &[Facade] = &[
-    Facade { name: "from_char", mangled: "from_char", ctors: &[], is_ctor: false, is_fn: true },
-    Facade { name: "from_byte", mangled: "from_byte", ctors: &[], is_ctor: false, is_fn: true },
+    Facade {
+        name: "from_char",
+        mangled: "from_char",
+        ctors: &[],
+        is_ctor: false,
+        is_fn: true,
+    },
+    Facade {
+        name: "from_byte",
+        mangled: "from_byte",
+        ctors: &[],
+        is_ctor: false,
+        is_fn: true,
+    },
 ];
 
 const IO_FACADE: &[Facade] = &[
-    Facade { name: "print", mangled: "print", ctors: &[], is_ctor: false, is_fn: true },
-    Facade { name: "println", mangled: "println", ctors: &[], is_ctor: false, is_fn: true },
-    Facade { name: "putc", mangled: "putc", ctors: &[], is_ctor: false, is_fn: true },
+    Facade {
+        name: "print",
+        mangled: "print",
+        ctors: &[],
+        is_ctor: false,
+        is_fn: true,
+    },
+    Facade {
+        name: "println",
+        mangled: "println",
+        ctors: &[],
+        is_ctor: false,
+        is_fn: true,
+    },
+    Facade {
+        name: "putc",
+        mangled: "putc",
+        ctors: &[],
+        is_ctor: false,
+        is_fn: true,
+    },
 ];
 
 fn apply_import(
@@ -525,10 +789,16 @@ fn apply_import(
         Target::Rfl(target) => {
             for item in &resolved.import.names {
                 let Some(binding) = bindings[target].get(&item.name) else {
-                    return Err(CompileError::plain(format!("`{}` is not exported", item.name)));
+                    return Err(CompileError::plain(format!(
+                        "`{}` is not exported",
+                        item.name
+                    )));
                 };
                 if !binding.exported {
-                    return Err(CompileError::plain(format!("`{}` is not exported", item.name)));
+                    return Err(CompileError::plain(format!(
+                        "`{}` is not exported",
+                        item.name
+                    )));
                 }
                 bind_name(&mut maps[index], &item.alias, &binding.mangled, false)?;
                 if binding.is_ctor {
@@ -548,7 +818,13 @@ fn apply_import(
                 let func = find_c_fn(&cmods[target], &item.name)?;
                 bind_name(&mut maps[index], &item.alias, &func.name, false)?;
                 fn_names[index].insert(item.alias.clone());
-                let present = rfls[index].ast.externs.iter().chain(already.iter()).chain(decls.iter()).any(|decl| decl.name == func.name);
+                let present = rfls[index]
+                    .ast
+                    .externs
+                    .iter()
+                    .chain(already.iter())
+                    .chain(decls.iter())
+                    .any(|decl| decl.name == func.name);
                 if present {
                     continue;
                 }
@@ -568,7 +844,11 @@ fn find_c_fn<'a>(module: &'a CMod, name: &str) -> Result<&'a TypedFunction, Comp
                 }
                 return Ok(func);
             }
-            TypedTopLevelItem::GlobalVariable { name: found, storage_class, .. } if found == name => {
+            TypedTopLevelItem::GlobalVariable {
+                name: found,
+                storage_class,
+                ..
+            } if found == name => {
                 if *storage_class == StorageClass::Static {
                     return Err(CompileError::plain(format!("`{name}` is static")));
                 }
@@ -577,7 +857,10 @@ fn find_c_fn<'a>(module: &'a CMod, name: &str) -> Result<&'a TypedFunction, Comp
             _ => {}
         }
     }
-    Err(CompileError::plain(format!("`{name}` is not defined in {}", file_label(&module.path))))
+    Err(CompileError::plain(format!(
+        "`{name}` is not defined in {}",
+        file_label(&module.path)
+    )))
 }
 
 fn extern_from_c(func: &TypedFunction, span: Span) -> Result<ExternDecl, CompileError> {
@@ -587,18 +870,31 @@ fn extern_from_c(func: &TypedFunction, span: Span) -> Result<ExternDecl, Compile
             name: name.clone(),
             name_span: span,
             ty: Some(parsed_c_type(ty, span)?),
-            pat: Pat::Name { name: name.clone(), span },
+            pat: Pat::Name {
+                name: name.clone(),
+                span,
+            },
         });
     }
     let ret = match func.return_type.unqualified() {
         Type::Void => None,
         _ => Some(parsed_c_type(&func.return_type, span)?),
     };
-    Ok(ExternDecl { name: func.name.clone(), name_span: span, params, ret, variadic: func.is_variadic })
+    Ok(ExternDecl {
+        name: func.name.clone(),
+        name_span: span,
+        params,
+        ret,
+        variadic: func.is_variadic,
+    })
 }
 
 fn parsed_c_type(ty: &Type, span: Span) -> Result<ParsedTy, CompileError> {
-    let named = |name: &str| ParsedTy::Named { span, name: name.to_string(), args: Vec::new() };
+    let named = |name: &str| ParsedTy::Named {
+        span,
+        name: name.to_string(),
+        args: Vec::new(),
+    };
     match ty.unqualified() {
         Type::Void => Ok(named("unit")),
         Type::Char | Type::SignedChar => Ok(named("c_char")),
@@ -616,11 +912,21 @@ fn parsed_c_type(ty: &Type, span: Span) -> Result<ParsedTy, CompileError> {
         }
         Type::Pointer { target, .. } => {
             let inner = parsed_c_type(target, span)?;
-            Ok(ParsedTy::Ptr { span, mutable: true, inner: Box::new(inner) })
+            Ok(ParsedTy::Ptr {
+                span,
+                mutable: true,
+                inner: Box::new(inner),
+            })
         }
-        Type::Function { return_type, parameters, is_variadic } => {
+        Type::Function {
+            return_type,
+            parameters,
+            is_variadic,
+        } => {
             if *is_variadic {
-                return Err(CompileError::plain("a variadic C function pointer is not supported"));
+                return Err(CompileError::plain(
+                    "a variadic C function pointer is not supported",
+                ));
             }
             let mut params = Vec::new();
             for param in parameters {
@@ -630,20 +936,33 @@ fn parsed_c_type(ty: &Type, span: Span) -> Result<ParsedTy, CompileError> {
                 Type::Void => named("unit"),
                 _ => parsed_c_type(return_type, span)?,
             };
-            Ok(ParsedTy::CFn { span, params, ret: Box::new(ret) })
+            Ok(ParsedTy::CFn {
+                span,
+                params,
+                ret: Box::new(ret),
+            })
         }
-        Type::Struct { name: Some(name), .. } => Ok(named(name)),
+        Type::Struct {
+            name: Some(name), ..
+        } => Ok(named(name)),
         other => Err(CompileError::plain(format!("unsupported C type `{other}`"))),
     }
 }
 
-fn bind_name(map: &mut HashMap<String, String>, key: &str, mangled: &str, ctor: bool) -> Result<(), CompileError> {
+fn bind_name(
+    map: &mut HashMap<String, String>,
+    key: &str,
+    mangled: &str,
+    ctor: bool,
+) -> Result<(), CompileError> {
     if let Some(prev) = map.get(key) {
         if prev == mangled {
             return Ok(());
         }
         if ctor {
-            return Err(CompileError::plain(format!("constructor `{key}` is imported twice")));
+            return Err(CompileError::plain(format!(
+                "constructor `{key}` is imported twice"
+            )));
         }
         return Err(CompileError::plain(format!("`{key}` is already defined")));
     }
@@ -688,11 +1007,25 @@ struct Rewriter<'a> {
     base: usize,
 }
 
-fn rewrite_uses(ast: &mut Module, map: &HashMap<String, String>, ctors: &HashSet<String>, fns: &HashSet<String>, base: usize) {
-    let mut walk = Rewriter { map, ctors, fns, values: Vec::new(), types: Vec::new(), base };
+fn rewrite_uses(
+    ast: &mut Module,
+    map: &HashMap<String, String>,
+    ctors: &HashSet<String>,
+    fns: &HashSet<String>,
+    base: usize,
+) {
+    let mut walk = Rewriter {
+        map,
+        ctors,
+        fns,
+        values: Vec::new(),
+        types: Vec::new(),
+        base,
+    };
     for adt in &mut ast.adts {
         walk.bump(&mut adt.name_span);
-        walk.types.push(adt.params.iter().map(|param| param.name.clone()).collect());
+        walk.types
+            .push(adt.params.iter().map(|param| param.name.clone()).collect());
         for param in &mut adt.params {
             walk.bump(&mut param.span);
         }
@@ -718,7 +1051,12 @@ fn rewrite_uses(ast: &mut Module, map: &HashMap<String, String>, ctors: &HashSet
     }
     for item in &mut ast.impls {
         walk.bump(&mut item.span);
-        walk.types.push(item.type_params.iter().map(|param| param.name.clone()).collect());
+        walk.types.push(
+            item.type_params
+                .iter()
+                .map(|param| param.name.clone())
+                .collect(),
+        );
         for param in &mut item.type_params {
             walk.bump(&mut param.span);
         }
@@ -735,7 +1073,13 @@ fn rewrite_uses(ast: &mut Module, map: &HashMap<String, String>, ctors: &HashSet
         walk.types.pop();
     }
     for func in &mut ast.functions {
-        walk.function_like(&mut func.name_span, &mut func.type_params, &mut func.params, &mut func.ret, &mut func.body);
+        walk.function_like(
+            &mut func.name_span,
+            &mut func.type_params,
+            &mut func.params,
+            &mut func.ret,
+            &mut func.body,
+        );
     }
     for decl in &mut ast.externs {
         walk.bump(&mut decl.name_span);
@@ -800,7 +1144,8 @@ impl Rewriter<'_> {
         body: &mut Block,
     ) {
         self.bump(name_span);
-        self.types.push(type_params.iter().map(|param| param.name.clone()).collect());
+        self.types
+            .push(type_params.iter().map(|param| param.name.clone()).collect());
         for param in type_params.iter_mut() {
             self.bump(&mut param.span);
         }
@@ -835,23 +1180,34 @@ impl Rewriter<'_> {
 
     fn stmt(&mut self, stmt: &mut Stmt) {
         match stmt {
-            Stmt::Let { pattern, ty, init, .. } => {
+            Stmt::Let {
+                pattern, ty, init, ..
+            } => {
                 if let Some(ty) = ty {
                     self.ty(ty);
                 }
                 self.expr(init);
                 self.pat(pattern, true);
             }
-            Stmt::Assign { name_span, value, .. } => {
+            Stmt::Assign {
+                name_span, value, ..
+            } => {
                 self.bump(name_span);
                 self.expr(value);
             }
-            Stmt::IndexAssign { name_span, index, value, .. } => {
+            Stmt::IndexAssign {
+                name_span,
+                index,
+                value,
+                ..
+            } => {
                 self.bump(name_span);
                 self.expr(index);
                 self.expr(value);
             }
-            Stmt::FieldAssign { name_span, value, .. } => {
+            Stmt::FieldAssign {
+                name_span, value, ..
+            } => {
                 self.bump(name_span);
                 self.expr(value);
             }
@@ -873,14 +1229,24 @@ impl Rewriter<'_> {
     fn expr(&mut self, expr: &mut Expr) {
         self.bump(&mut expr.span);
         match &mut expr.kind {
-            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Str(_) | ExprKind::CStr(_) | ExprKind::Char(_) => {}
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Str(_)
+            | ExprKind::CStr(_)
+            | ExprKind::Char(_) => {}
             ExprKind::Name(name) => self.rewrite_value(name),
             ExprKind::Unary { expr, .. } => self.expr(expr),
             ExprKind::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);
             }
-            ExprKind::Call { callee, callee_span, type_args, args } => {
+            ExprKind::Call {
+                callee,
+                callee_span,
+                type_args,
+                args,
+            } => {
                 self.bump(callee_span);
                 self.rewrite_value(callee);
                 for ty in type_args {
@@ -890,7 +1256,13 @@ impl Rewriter<'_> {
                     self.expr(arg);
                 }
             }
-            ExprKind::Method { receiver, method, resolved, args, .. } => {
+            ExprKind::Method {
+                receiver,
+                method,
+                resolved,
+                args,
+                ..
+            } => {
                 self.expr(receiver);
                 if self.fns.contains(method) && !self.hidden_value(method) {
                     self.rewrite_value(resolved);
@@ -899,7 +1271,11 @@ impl Rewriter<'_> {
                     self.expr(arg);
                 }
             }
-            ExprKind::If { cond, then_body, else_body } => {
+            ExprKind::If {
+                cond,
+                then_body,
+                else_body,
+            } => {
                 self.expr(cond);
                 self.block(then_body);
                 if let Some(else_body) = else_body {
@@ -968,12 +1344,16 @@ impl Rewriter<'_> {
                 self.expr(base);
                 self.expr(index);
             }
-            ExprKind::Slice { base, start, end, .. } => {
+            ExprKind::Slice {
+                base, start, end, ..
+            } => {
                 self.expr(base);
                 self.expr(start);
                 self.expr(end);
             }
-            ExprKind::Borrow { expr, .. } | ExprKind::Try(expr) | ExprKind::Deref(expr) => self.expr(expr),
+            ExprKind::Borrow { expr, .. } | ExprKind::Try(expr) | ExprKind::Deref(expr) => {
+                self.expr(expr)
+            }
             ExprKind::Assoc { ty_name, args, .. } => {
                 self.rewrite_type(ty_name);
                 for arg in args {
@@ -1002,7 +1382,9 @@ impl Rewriter<'_> {
                     self.pat(field, bind);
                 }
             }
-            Pat::Int { span, .. } | Pat::Bool { span, .. } | Pat::Char { span, .. } => self.bump(span),
+            Pat::Int { span, .. } | Pat::Bool { span, .. } | Pat::Char { span, .. } => {
+                self.bump(span)
+            }
             Pat::Tuple { span, fields } => {
                 self.bump(span);
                 for field in fields {
@@ -1071,11 +1453,15 @@ fn std_module_name(spec: &str) -> Option<&str> {
 fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileError> {
     if spec == "std" || spec.starts_with("std/") {
         let Some(name) = std_module_name(spec) else {
-            return Err(CompileError::plain("expected a standard library module such as `std/list`"));
+            return Err(CompileError::plain(
+                "expected a standard library module such as `std/list`",
+            ));
         };
         let path = std_dir().join(format!("{name}.rfl"));
         if !path.exists() {
-            return Err(CompileError::plain(format!("the standard library module `{name}` is not implemented yet")));
+            return Err(CompileError::plain(format!(
+                "the standard library module `{name}` is not implemented yet"
+            )));
         }
         return Ok(path);
     }
@@ -1087,17 +1473,23 @@ fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileError> {
     let base = from.parent().unwrap_or_else(|| Path::new("."));
     let path = base.join(spec);
     if !path.exists() {
-        return Err(CompileError::plain(format!("cannot read {}", path.display())));
+        return Err(CompileError::plain(format!(
+            "cannot read {}",
+            path.display()
+        )));
     }
     Ok(path)
 }
 
 fn file_label(path: &Path) -> String {
-    path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string())
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 fn read_text(path: &Path) -> Result<String, CompileError> {
-    std::fs::read_to_string(path).map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))
+    std::fs::read_to_string(path)
+        .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))
 }
 
 fn parse_source(source: &str) -> Result<Module, CompileError> {
@@ -1126,12 +1518,19 @@ fn merge_ir(dst: &mut IrModule, src: &mut IrModule) -> Result<(), CompileError> 
     let offset = max_label(dst).saturating_add(1);
     for mut func in src.functions.drain(..) {
         shift_function(&mut func, offset);
-        if let Some(index) = dst.functions.iter().position(|found| found.name == func.name) {
+        if let Some(index) = dst
+            .functions
+            .iter()
+            .position(|found| found.name == func.name)
+        {
             let existing_external = dst.functions[index].is_external;
             if existing_external && !func.is_external {
                 dst.functions[index] = func;
             } else if !existing_external && !func.is_external {
-                return Err(CompileError::plain(format!("duplicate function `{}`", func.name)));
+                return Err(CompileError::plain(format!(
+                    "duplicate function `{}`",
+                    func.name
+                )));
             }
         } else {
             dst.functions.push(func);
@@ -1139,7 +1538,10 @@ fn merge_ir(dst: &mut IrModule, src: &mut IrModule) -> Result<(), CompileError> 
     }
     for global in src.globals.drain(..) {
         if dst.get_global(&global.name).is_some() {
-            return Err(CompileError::plain(format!("duplicate global `{}`", global.name)));
+            return Err(CompileError::plain(format!(
+                "duplicate global `{}`",
+                global.name
+            )));
         }
         dst.add_global(global);
     }
@@ -1165,7 +1567,11 @@ fn max_label(module: &IrModule) -> u32 {
 fn shift_function(func: &mut Function, offset: u32) {
     for block in &mut func.blocks {
         block.id = block.id.saturating_add(offset);
-        for label in block.predecessors.iter_mut().chain(block.successors.iter_mut()) {
+        for label in block
+            .predecessors
+            .iter_mut()
+            .chain(block.successors.iter_mut())
+        {
             *label = label.saturating_add(offset);
         }
         for insn in &mut block.instructions {
@@ -1177,7 +1583,11 @@ fn shift_function(func: &mut Function, offset: u32) {
 fn visit_labels(insn: &Instruction, visit: &mut dyn FnMut(u32)) {
     match insn {
         Instruction::Branch(label) => visit(*label),
-        Instruction::BranchCond { true_label, false_label, .. } => {
+        Instruction::BranchCond {
+            true_label,
+            false_label,
+            ..
+        } => {
             visit(*true_label);
             visit(*false_label);
         }
@@ -1193,7 +1603,11 @@ fn visit_labels(insn: &Instruction, visit: &mut dyn FnMut(u32)) {
 fn shift_insn(insn: &mut Instruction, offset: u32) {
     match insn {
         Instruction::Branch(label) => *label = label.saturating_add(offset),
-        Instruction::BranchCond { true_label, false_label, .. } => {
+        Instruction::BranchCond {
+            true_label,
+            false_label,
+            ..
+        } => {
             *true_label = true_label.saturating_add(offset);
             *false_label = false_label.saturating_add(offset);
         }
@@ -1256,7 +1670,12 @@ fn rewrite_insn(insn: &mut Instruction, names: &HashMap<String, String>) {
             }
         }
         Instruction::Cast { value, .. } => rewrite_value(value, names),
-        Instruction::Select { condition, true_value, false_value, .. } => {
+        Instruction::Select {
+            condition,
+            true_value,
+            false_value,
+            ..
+        } => {
             rewrite_value(condition, names);
             rewrite_value(true_value, names);
             rewrite_value(false_value, names);
@@ -1266,7 +1685,9 @@ fn rewrite_insn(insn: &mut Instruction, names: &HashMap<String, String>) {
                 rewrite_value(arg, names);
             }
         }
-        Instruction::InlineAsm { outputs, inputs, .. } => {
+        Instruction::InlineAsm {
+            outputs, inputs, ..
+        } => {
             for operand in outputs.iter_mut().chain(inputs.iter_mut()) {
                 rewrite_value(&mut operand.value, names);
             }
@@ -1288,6 +1709,10 @@ fn rewrite_value(value: &mut Value, names: &HashMap<String, String>) {
                 rewrite_value(value, names);
             }
         }
-        Value::Temp(_) | Value::Constant(_) | Value::Function(_) | Value::ConstantArray(_) | Value::Undef => {}
+        Value::Temp(_)
+        | Value::Constant(_)
+        | Value::Function(_)
+        | Value::ConstantArray(_)
+        | Value::Undef => {}
     }
 }

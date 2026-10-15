@@ -1,9 +1,14 @@
-use crossterm::event::{KeyCode, KeyModifiers};
 use crate::tui_debugger::{DebuggerMode, FocusedPane, TuiDebugger, MEMORY_NAV_COLS};
 use crate::vm::{VMState, VM};
+use crossterm::event::{KeyCode, KeyModifiers};
 
 impl TuiDebugger {
-    pub(crate) fn handle_normal_mode(&mut self, key: KeyCode, modifiers: KeyModifiers, vm: &mut VM) -> bool {
+    pub(crate) fn handle_normal_mode(
+        &mut self,
+        key: KeyCode,
+        modifiers: KeyModifiers,
+        vm: &mut VM,
+    ) -> bool {
         match key {
             // Quit
             KeyCode::Char('q') if modifiers == KeyModifiers::NONE => return false,
@@ -67,7 +72,9 @@ impl TuiDebugger {
             KeyCode::F(7) => self.focused_pane = FocusedPane::Output,
             KeyCode::F(8) => self.focused_pane = FocusedPane::CallStack,
             KeyCode::Tab if modifiers == KeyModifiers::NONE => self.cycle_pane(),
-            KeyCode::BackTab | KeyCode::Tab if modifiers == KeyModifiers::SHIFT => self.cycle_pane_reverse(),
+            KeyCode::BackTab | KeyCode::Tab if modifiers == KeyModifiers::SHIFT => {
+                self.cycle_pane_reverse()
+            }
 
             // Navigation based on focused pane
             KeyCode::Up | KeyCode::Char('k') => {
@@ -96,7 +103,7 @@ impl TuiDebugger {
             }
             KeyCode::Left | KeyCode::Char('h') => self.navigate_left(vm),
             KeyCode::Right | KeyCode::Char('l') => self.navigate_right(vm),
-            
+
             // Enter key - special handling for call stack
             KeyCode::Enter if self.focused_pane == FocusedPane::CallStack => {
                 self.navigate_to_callstack_entry(vm);
@@ -105,26 +112,33 @@ impl TuiDebugger {
             KeyCode::PageDown => self.page_down(vm),
 
             // Breakpoints
-            KeyCode::Char('b') if modifiers == KeyModifiers::NONE => self.toggle_breakpoint_at_cursor(vm),
+            KeyCode::Char('b') if modifiers == KeyModifiers::NONE => {
+                self.toggle_breakpoint_at_cursor(vm)
+            }
             KeyCode::Char('B') if modifiers == KeyModifiers::SHIFT => {
                 // Enter breakpoint.rs mode to set/toggle breakpoint.rs by instruction number
                 self.mode = DebuggerMode::SetBreakpoint;
                 self.command_buffer.clear();
-            },
+            }
             KeyCode::Char('B') if modifiers == KeyModifiers::NONE => self.breakpoints.clear(),
-            
+
             // Breakpoint panel operations when focused
-            KeyCode::Char('d') | KeyCode::Delete if self.focused_pane == FocusedPane::Breakpoints => {
+            KeyCode::Char('d') | KeyCode::Delete
+                if self.focused_pane == FocusedPane::Breakpoints =>
+            {
                 self.delete_selected_breakpoint();
-            },
+            }
 
             // Memory operations
-            KeyCode::Char('g') if modifiers == KeyModifiers::NONE => self.mode = DebuggerMode::GotoAddress,
+            KeyCode::Char('g') if modifiers == KeyModifiers::NONE => {
+                self.mode = DebuggerMode::GotoAddress
+            }
             KeyCode::Char('G') if modifiers == KeyModifiers::SHIFT => {
                 // Quick jump to stack
                 let sb = vm.registers[ripple_asm::Register::Sb as usize];
                 let sp = vm.registers[ripple_asm::Register::Sp as usize];
-                let stack_addr = sb as usize * vm.bank_size as usize + sp.saturating_sub(5) as usize;
+                let stack_addr =
+                    sb as usize * vm.bank_size as usize + sp.saturating_sub(5) as usize;
                 self.memory_base_addr = stack_addr & !0x7; // Align to 8-byte boundary
                 self.memory_scroll = 0;
                 self.focused_pane = FocusedPane::Memory;
@@ -134,14 +148,18 @@ impl TuiDebugger {
             KeyCode::Char('e') => {
                 if self.focused_pane == FocusedPane::Memory {
                     // Pre-fill with current cursor position
-                    let addr = self.memory_base_addr + self.memory_scroll * MEMORY_NAV_COLS + self.memory_cursor_col;
+                    let addr = self.memory_base_addr
+                        + self.memory_scroll * MEMORY_NAV_COLS
+                        + self.memory_cursor_col;
                     self.command_buffer = format!("{addr:04x}:");
                     self.mode = DebuggerMode::MemoryEdit;
-                } else if self.focused_pane == FocusedPane::Disassembly && self.show_instruction_hex {
+                } else if self.focused_pane == FocusedPane::Disassembly && self.show_instruction_hex
+                {
                     // Edit instruction byte at cursor
                     let instr_idx = self.disasm_scroll + self.disasm_cursor_row;
                     if instr_idx < vm.instructions.len() {
-                        self.command_buffer = format!("i{:04x}:{}:", instr_idx, self.disasm_cursor_byte);
+                        self.command_buffer =
+                            format!("i{:04x}:{}:", instr_idx, self.disasm_cursor_byte);
                         self.mode = DebuggerMode::MemoryEdit;
                     }
                 } else {
@@ -174,7 +192,7 @@ impl TuiDebugger {
             KeyCode::Char('8') if modifiers == KeyModifiers::ALT => {
                 self.show_callstack = !self.show_callstack;
             }
-            
+
             // Toggle hex view in disassembly
             KeyCode::Char('H') if modifiers == KeyModifiers::SHIFT => {
                 if self.focused_pane == FocusedPane::Disassembly {
@@ -186,12 +204,12 @@ impl TuiDebugger {
                     }
                 }
             }
-            
+
             // Toggle debug symbols in disassembly
             KeyCode::Char('D') if modifiers == KeyModifiers::SHIFT => {
                 self.show_debug_symbols = !self.show_debug_symbols;
             }
-            
+
             // Alternative toggle shortcuts using 'T' for toggle mode
             KeyCode::Char('T') if modifiers == KeyModifiers::SHIFT => {
                 // Enter panel toggle mode - next key will toggle a panel
@@ -243,18 +261,26 @@ impl TuiDebugger {
             }
 
             // Quick memory edit - if in memory view and pressing hex digit
-            KeyCode::Char(c) if self.focused_pane == FocusedPane::Memory && c.is_ascii_hexdigit() => {
-                let addr = self.memory_base_addr + self.memory_scroll * MEMORY_NAV_COLS + self.memory_cursor_col;
+            KeyCode::Char(c)
+                if self.focused_pane == FocusedPane::Memory && c.is_ascii_hexdigit() =>
+            {
+                let addr = self.memory_base_addr
+                    + self.memory_scroll * MEMORY_NAV_COLS
+                    + self.memory_cursor_col;
                 self.command_buffer = format!("{addr:04x}:{c}");
                 self.mode = DebuggerMode::MemoryEdit;
             }
-            
+
             // Quick instruction edit - if in disassembly hex view and pressing hex digit
-            KeyCode::Char(c) if self.focused_pane == FocusedPane::Disassembly 
-                && self.show_instruction_hex && c.is_ascii_hexdigit() => {
+            KeyCode::Char(c)
+                if self.focused_pane == FocusedPane::Disassembly
+                    && self.show_instruction_hex
+                    && c.is_ascii_hexdigit() =>
+            {
                 let instr_idx = self.disasm_scroll + self.disasm_cursor_row;
                 // Start editing this instruction byte
-                self.command_buffer = format!("i{:04x}:{}:{}", instr_idx, self.disasm_cursor_byte, c);
+                self.command_buffer =
+                    format!("i{:04x}:{}:{}", instr_idx, self.disasm_cursor_byte, c);
                 self.mode = DebuggerMode::MemoryEdit; // Reuse memory edit mode for instructions
             }
 
@@ -263,7 +289,6 @@ impl TuiDebugger {
 
         true
     }
-
 
     pub(crate) fn toggle_breakpoint_at_cursor(&mut self, vm: &VM) {
         if self.focused_pane == FocusedPane::Disassembly {
@@ -288,13 +313,13 @@ impl TuiDebugger {
             }
         }
     }
-    
+
     pub(crate) fn toggle_selected_breakpoint(&mut self) {
         if !self.breakpoints.is_empty() {
             // Get sorted breakpoints to find the selected one
             let mut sorted_breakpoints: Vec<_> = self.breakpoints.keys().cloned().collect();
             sorted_breakpoints.sort();
-            
+
             if self.selected_breakpoint < sorted_breakpoints.len() {
                 let addr = sorted_breakpoints[self.selected_breakpoint];
                 // Toggle the enabled state
@@ -304,19 +329,21 @@ impl TuiDebugger {
             }
         }
     }
-    
+
     pub(crate) fn delete_selected_breakpoint(&mut self) {
         if !self.breakpoints.is_empty() {
             // Get sorted breakpoints to find the selected one
             let mut sorted_breakpoints: Vec<_> = self.breakpoints.keys().cloned().collect();
             sorted_breakpoints.sort();
-            
+
             if self.selected_breakpoint < sorted_breakpoints.len() {
                 let addr = sorted_breakpoints[self.selected_breakpoint];
                 self.breakpoints.remove(&addr);
-                
+
                 // Adjust selected index if needed
-                if self.selected_breakpoint > 0 && self.selected_breakpoint >= self.breakpoints.len() {
+                if self.selected_breakpoint > 0
+                    && self.selected_breakpoint >= self.breakpoints.len()
+                {
                     self.selected_breakpoint -= 1;
                 }
             }
@@ -402,8 +429,9 @@ impl TuiDebugger {
                 if self.show_instruction_hex {
                     // Navigate within hex view
                     let visible_lines = 20; // Approximate
-                    if self.disasm_cursor_row < visible_lines - 1 
-                        && self.disasm_scroll + self.disasm_cursor_row < vm.instructions.len() - 1 {
+                    if self.disasm_cursor_row < visible_lines - 1
+                        && self.disasm_scroll + self.disasm_cursor_row < vm.instructions.len() - 1
+                    {
                         self.disasm_cursor_row += 1;
                     } else if self.disasm_scroll < vm.instructions.len().saturating_sub(1) {
                         self.disasm_scroll += 1;
@@ -414,7 +442,8 @@ impl TuiDebugger {
             }
             FocusedPane::Memory => {
                 // Move down by one row
-                let next_row_addr = self.memory_base_addr + (self.memory_scroll + 1) * MEMORY_NAV_COLS;
+                let next_row_addr =
+                    self.memory_base_addr + (self.memory_scroll + 1) * MEMORY_NAV_COLS;
                 if next_row_addr < vm.memory.len() {
                     self.memory_scroll += 1;
                     // Check if we need to scroll the view
@@ -492,14 +521,17 @@ impl TuiDebugger {
             }
             FocusedPane::Memory => {
                 // Move right by one column within the row
-                let current_addr = self.memory_base_addr + self.memory_scroll * MEMORY_NAV_COLS + self.memory_cursor_col;
+                let current_addr = self.memory_base_addr
+                    + self.memory_scroll * MEMORY_NAV_COLS
+                    + self.memory_cursor_col;
                 if self.memory_cursor_col < MEMORY_NAV_COLS - 1 {
                     if current_addr + 1 < vm.memory.len() {
                         self.memory_cursor_col += 1;
                     }
                 } else {
                     // Wrap to beginning of next row
-                    let next_row_addr = self.memory_base_addr + (self.memory_scroll + 1) * MEMORY_NAV_COLS;
+                    let next_row_addr =
+                        self.memory_base_addr + (self.memory_scroll + 1) * MEMORY_NAV_COLS;
                     if next_row_addr < vm.memory.len() {
                         self.memory_cursor_col = 0;
                         self.memory_scroll += 1;
@@ -541,7 +573,8 @@ impl TuiDebugger {
     pub(crate) fn page_down(&mut self, vm: &VM) {
         match self.focused_pane {
             FocusedPane::Disassembly => {
-                self.disasm_scroll = (self.disasm_scroll + 20).min(vm.instructions.len().saturating_sub(1));
+                self.disasm_scroll =
+                    (self.disasm_scroll + 20).min(vm.instructions.len().saturating_sub(1));
             }
             FocusedPane::Memory => {
                 // Page down in memory view
@@ -562,5 +595,4 @@ impl TuiDebugger {
             _ => {}
         }
     }
-
 }

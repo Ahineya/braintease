@@ -110,6 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set verbose mode if requested
     vm.verbose = verbose;
+    vm.jit_enabled = cli.jit;
 
     // Pre-populate input buffer if provided
     if let Some(input) = input_text {

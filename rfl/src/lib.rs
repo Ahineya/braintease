@@ -3,11 +3,11 @@
 
 mod ast;
 mod check;
-mod ide;
-mod lsp;
 mod error;
+mod ide;
 mod lexer;
 mod lower;
+mod lsp;
 mod modules;
 mod parser;
 mod run;
@@ -15,8 +15,8 @@ mod ty;
 mod typed;
 
 pub use error::CompileError;
-pub use rcc_ir::ir::Module;
 pub use lsp::serve as serve_lsp;
+pub use rcc_ir::ir::Module;
 pub use run::{run_file, run_file_in_terminal, run_program, RunResult};
 
 pub fn compile_to_ir(source: &str) -> Result<Module, CompileError> {

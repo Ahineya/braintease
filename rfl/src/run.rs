@@ -15,30 +15,31 @@ pub struct RunResult {
 
 pub fn run_program(source: &str) -> Result<RunResult, CompileError> {
     let asm = crate::compile_to_asm(source)?;
-    run_asm(&asm, false)
+    run_asm(&asm, false, false)
 }
 
 pub fn run_file(path: &std::path::Path) -> Result<RunResult, CompileError> {
     let asm = crate::compile_file_to_asm(path)?;
-    run_asm(&asm, false)
+    run_asm(&asm, false, false)
 }
 
 /// Run with the host terminal attached. `getchar` can read keystrokes, and
 /// the guest's own output is shown as it is produced. There is no wall-time
 /// limit, because the program may be waiting for a person.
-pub fn run_file_in_terminal(path: &std::path::Path) -> Result<i32, CompileError> {
+pub fn run_file_in_terminal(path: &std::path::Path, jit: bool) -> Result<i32, CompileError> {
     eprintln!("   Compiling {}", path.display());
     let asm = crate::compile_file_to_asm(path)?;
     eprintln!("    Finished");
     eprintln!("     Running `{}`", path.display());
-    let result = run_asm(&asm, true)?;
+    let result = run_asm(&asm, true, jit)?;
     Ok(result.status)
 }
 
-fn run_asm(asm: &str, terminal: bool) -> Result<RunResult, CompileError> {
+fn run_asm(asm: &str, terminal: bool, jit: bool) -> Result<RunResult, CompileError> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
     let dir = root.join("target/rfl-run");
-    std::fs::create_dir_all(&dir).map_err(|err| CompileError::plain(format!("cannot create {}: {err}", dir.display())))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|err| CompileError::plain(format!("cannot create {}: {err}", dir.display())))?;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -47,7 +48,9 @@ fn run_asm(asm: &str, terminal: bool) -> Result<RunResult, CompileError> {
     let asm_path = stem.with_extension("asm");
     let pobj_path = stem.with_extension("pobj");
     let bin_path = stem.with_extension("bin");
-    std::fs::write(&asm_path, asm).map_err(|err| CompileError::plain(format!("cannot write {}: {err}", asm_path.display())))?;
+    std::fs::write(&asm_path, asm).map_err(|err| {
+        CompileError::plain(format!("cannot write {}: {err}", asm_path.display()))
+    })?;
 
     let rasm = root.join("src/ripple-asm/target/release/rasm");
     let rlink = root.join("src/ripple-asm/target/release/rlink");
@@ -75,16 +78,25 @@ fn run_asm(asm: &str, terminal: bool) -> Result<RunResult, CompileError> {
     }) {
         link.arg(root.join("runtime/libruntime.par"));
     }
-    link.args(["-f", "binary", "--bank-size", "64000", "-o"]).arg(&bin_path);
+    link.args(["-f", "binary", "--bank-size", "64000", "-o"])
+        .arg(&bin_path);
     tool(&mut link)?;
 
     let mut command = Command::new(&rvm);
-    command.arg(&bin_path).args(["--exit-code", "--memory", "4294967296"]);
+    command
+        .arg(&bin_path)
+        .args(["--exit-code", "--memory", "4294967296"]);
+    if jit {
+        command.arg("--jit");
+    }
     if terminal {
         let status = command
             .status()
             .map_err(|err| CompileError::plain(format!("cannot run {}: {err}", rvm.display())))?;
-        return Ok(RunResult { status: status.code().unwrap_or(1), stdout: String::new() });
+        return Ok(RunResult {
+            status: status.code().unwrap_or(1),
+            stdout: String::new(),
+        });
     }
     // Tests capture output and must not take the keyboard. Headless disables
     // host input, so a guest that calls getchar would spin until this limit.
@@ -106,11 +118,15 @@ fn run_asm(asm: &str, terminal: bool) -> Result<RunResult, CompileError> {
 }
 
 fn tool(cmd: &mut Command) -> Result<(), CompileError> {
-    let output = cmd.output().map_err(|err| CompileError::plain(format!("cannot run tool: {err}")))?;
+    let output = cmd
+        .output()
+        .map_err(|err| CompileError::plain(format!("cannot run tool: {err}")))?;
     if output.status.success() {
         return Ok(());
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Err(CompileError::plain(format!("tool failed:\n{stdout}{stderr}")))
+    Err(CompileError::plain(format!(
+        "tool failed:\n{stdout}{stderr}"
+    )))
 }

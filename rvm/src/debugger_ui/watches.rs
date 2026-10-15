@@ -1,9 +1,9 @@
-use ratatui::Frame;
+use crate::tui_debugger::{FocusedPane, TuiDebugger};
+use crate::vm::VM;
 use ratatui::layout::Rect;
 use ratatui::prelude::{Color, Line, Span, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
-use crate::tui_debugger::{FocusedPane, TuiDebugger};
-use crate::vm::VM;
+use ratatui::Frame;
 
 impl TuiDebugger {
     pub(crate) fn draw_watches(&mut self, frame: &mut Frame, area: Rect, vm: &VM) {
@@ -12,7 +12,7 @@ impl TuiDebugger {
         if self.memory_watches.is_empty() {
             text.push(Line::from(Span::styled(
                 "No watches set",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
             text.push(Line::from(""));
             text.push(Line::from(Span::raw("Press 'w' to add a watch")));
@@ -29,7 +29,9 @@ impl TuiDebugger {
             }
 
             // Limit scroll to valid range
-            self.watches_scroll = self.watches_scroll.min(total_watches.saturating_sub(visible_lines));
+            self.watches_scroll = self
+                .watches_scroll
+                .min(total_watches.saturating_sub(visible_lines));
 
             // Show only visible watches
             let start = self.watches_scroll;
@@ -37,7 +39,8 @@ impl TuiDebugger {
 
             for i in start..end {
                 let watch = &self.memory_watches[i];
-                let is_selected = i == self.selected_watch && self.focused_pane == FocusedPane::Watches;
+                let is_selected =
+                    i == self.selected_watch && self.focused_pane == FocusedPane::Watches;
 
                 let mut spans = vec![];
                 if is_selected {
@@ -75,14 +78,23 @@ impl TuiDebugger {
         }
 
         let scroll_indicator = if !self.memory_watches.is_empty() {
-            format!(" [{}/{}]", self.selected_watch + 1, self.memory_watches.len())
+            format!(
+                " [{}/{}]",
+                self.selected_watch + 1,
+                self.memory_watches.len()
+            )
         } else {
             String::new()
         };
 
-        let title = format!(" Watches{} [{}] ",
-                            scroll_indicator,
-                            if self.focused_pane == FocusedPane::Watches { "ACTIVE" } else { "F5" }
+        let title = format!(
+            " Watches{} [{}] ",
+            scroll_indicator,
+            if self.focused_pane == FocusedPane::Watches {
+                "ACTIVE"
+            } else {
+                "F5"
+            }
         );
         let block = Block::default()
             .title(title)
@@ -96,5 +108,4 @@ impl TuiDebugger {
         let paragraph = Paragraph::new(text).block(block);
         frame.render_widget(paragraph, area);
     }
-
 }

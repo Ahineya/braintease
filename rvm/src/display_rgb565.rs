@@ -250,44 +250,74 @@ impl Default for RGB565Display {
 
 impl RGB565Display {
     pub fn checkpoint(&self) -> Result<RGB565Checkpoint, String> {
-        let state = self.state.lock().map_err(|_| "display state lock poisoned")?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "display state lock poisoned")?;
         Ok(RGB565Checkpoint {
-            width: state.width, height: state.height, initialized: state.initialized,
-            front: state.front_buffer.as_ref().clone(), back: state.back_buffer.clone(),
-            sequence: state.sequence, pending_keys: state.pending_keys.clone(),
-            held: state.keys_held.to_vec(), key_overflow: state.key_overflow,
-            legacy_layout: state.legacy_layout, layout_revision: state.layout_revision,
+            width: state.width,
+            height: state.height,
+            initialized: state.initialized,
+            front: state.front_buffer.as_ref().clone(),
+            back: state.back_buffer.clone(),
+            sequence: state.sequence,
+            pending_keys: state.pending_keys.clone(),
+            held: state.keys_held.to_vec(),
+            key_overflow: state.key_overflow,
+            legacy_layout: state.legacy_layout,
+            layout_revision: state.layout_revision,
         })
     }
 
-    pub fn restore_checkpoint(snapshot: RGB565Checkpoint, bank_size: usize) -> Result<Self, String> {
+    pub fn restore_checkpoint(
+        snapshot: RGB565Checkpoint,
+        bank_size: usize,
+    ) -> Result<Self, String> {
         let pixels = usize::from(snapshot.width) * usize::from(snapshot.height);
-        if snapshot.held.len() != 256 || snapshot.pending_keys.len() > 4096
+        if snapshot.held.len() != 256
+            || snapshot.pending_keys.len() > 4096
             || snapshot.pending_keys.iter().any(|(key, _)| *key >= 256)
             || snapshot.initialized && (pixels == 0 || snapshot.front.len() != pixels)
-            || !snapshot.initialized && (snapshot.width != 0 || snapshot.height != 0 || !snapshot.front.is_empty()
-                || !snapshot.back.is_empty() || snapshot.legacy_layout)
-            || snapshot.legacy_layout && (snapshot.width > 255 || snapshot.height > 255
-                || snapshot.back.len() != pixels || pixels > bank_size.saturating_sub(32) / 2)
+            || !snapshot.initialized
+                && (snapshot.width != 0
+                    || snapshot.height != 0
+                    || !snapshot.front.is_empty()
+                    || !snapshot.back.is_empty()
+                    || snapshot.legacy_layout)
+            || snapshot.legacy_layout
+                && (snapshot.width > 255
+                    || snapshot.height > 255
+                    || snapshot.back.len() != pixels
+                    || pixels > bank_size.saturating_sub(32) / 2)
             || !snapshot.legacy_layout && !snapshot.back.is_empty()
         {
             return Err("invalid RGB565 checkpoint".into());
         }
         let mut state = RGB565State::new();
-        state.width = snapshot.width; state.height = snapshot.height;
+        state.width = snapshot.width;
+        state.height = snapshot.height;
         state.initialized = snapshot.initialized;
-        state.front_buffer = Arc::new(snapshot.front); state.back_buffer = snapshot.back;
-        state.sequence = snapshot.sequence; state.pending_keys = snapshot.pending_keys;
+        state.front_buffer = Arc::new(snapshot.front);
+        state.back_buffer = snapshot.back;
+        state.sequence = snapshot.sequence;
+        state.pending_keys = snapshot.pending_keys;
         state.keys_held.copy_from_slice(&snapshot.held);
-        state.key_up = state.keys_held[82]; state.key_down = state.keys_held[81];
-        state.key_left = state.keys_held[80]; state.key_right = state.keys_held[79];
-        state.key_z = state.keys_held[29]; state.key_x = state.keys_held[27];
-        state.key_overflow = snapshot.key_overflow; state.legacy_layout = snapshot.legacy_layout;
+        state.key_up = state.keys_held[82];
+        state.key_down = state.keys_held[81];
+        state.key_left = state.keys_held[80];
+        state.key_right = state.keys_held[79];
+        state.key_z = state.keys_held[29];
+        state.key_x = state.keys_held[27];
+        state.key_overflow = snapshot.key_overflow;
+        state.legacy_layout = snapshot.legacy_layout;
         state.layout_revision = snapshot.layout_revision;
         // A stopped host connection is not a stopped guest. The new window
         // receives a new shutdown token and redraws from the restored buffers.
         let shutdown = Arc::clone(&state.shutdown);
-        Ok(Self { state: Arc::new(Mutex::new(state)), shutdown })
+        Ok(Self {
+            state: Arc::new(Mutex::new(state)),
+            shutdown,
+        })
     }
 
     pub fn new() -> Self {
@@ -693,16 +723,23 @@ mod tests {
     fn checkpoint_preserves_both_legacy_buffers_and_pending_keyboard_input() {
         let mut display = RGB565Display::new();
         display.init(2, 1, 64).unwrap();
-        display.write_memory(34, 0xabcd); display.flush();
+        display.write_memory(34, 0xabcd);
+        display.flush();
         display.write_memory(35, 0x1234);
         display.get_state().lock().unwrap().set_key(82, true);
         let checkpoint = display.checkpoint().unwrap();
         let encoded = serde_json::to_vec(&checkpoint).unwrap();
-        let mut restored = RGB565Display::restore_checkpoint(serde_json::from_slice(&encoded).unwrap(), 64).unwrap();
+        let mut restored =
+            RGB565Display::restore_checkpoint(serde_json::from_slice(&encoded).unwrap(), 64)
+                .unwrap();
         assert_eq!(restored.snapshot(), display.snapshot());
         assert_eq!(restored.read_memory(35), Some(0x1234));
-        assert_eq!(restored.get_state().lock().unwrap().pending_keys, [(82, true)]);
-        display.flush(); restored.flush();
+        assert_eq!(
+            restored.get_state().lock().unwrap().pending_keys,
+            [(82, true)]
+        );
+        display.flush();
+        restored.flush();
         assert_eq!(restored.snapshot(), display.snapshot());
         assert_eq!(restored.read_memory(34), display.read_memory(34));
         let mut corrupt = checkpoint;
@@ -715,7 +752,8 @@ mod tests {
         let mut display = RGB565Display::new();
         display.present(3, 2, vec![1, 2, 3, 4, 5, 6]).unwrap();
         display.shutdown();
-        let restored = RGB565Display::restore_checkpoint(display.checkpoint().unwrap(), 64).unwrap();
+        let restored =
+            RGB565Display::restore_checkpoint(display.checkpoint().unwrap(), 64).unwrap();
         assert_eq!(restored.snapshot(), display.snapshot());
         assert!(!restored.is_window_closed());
         assert_eq!(restored.read_memory(32), None);

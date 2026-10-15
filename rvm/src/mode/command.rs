@@ -1,6 +1,6 @@
-use crossterm::event::KeyCode;
 use crate::tui_debugger::{DebuggerMode, MemoryWatch, TuiDebugger, WatchFormat};
 use crate::vm::VM;
+use crossterm::event::KeyCode;
 
 impl TuiDebugger {
     pub(crate) fn handle_command_mode(&mut self, key: KeyCode, vm: &mut VM) -> bool {
@@ -156,7 +156,9 @@ impl TuiDebugger {
                 // Usage: mem <addr> <value> - Write value to memory
                 if parts.len() > 2 {
                     if let Ok(addr) = usize::from_str_radix(parts[1].trim_start_matches("0x"), 16) {
-                        if let Ok(value) = u16::from_str_radix(parts[2].trim_start_matches("0x"), 16) {
+                        if let Ok(value) =
+                            u16::from_str_radix(parts[2].trim_start_matches("0x"), 16)
+                        {
                             if addr < vm.memory.len() {
                                 vm.memory[addr] = value;
                             }
@@ -164,7 +166,7 @@ impl TuiDebugger {
                     }
                 }
             }
-            
+
             // Bank navigation command
             "bank" => {
                 // Usage: bank <number> - Jump to memory bank
@@ -186,7 +188,9 @@ impl TuiDebugger {
                 // Usage: reg <reg#> <value> - Set register value
                 if parts.len() > 2 {
                     if let Ok(reg) = parts[1].parse::<usize>() {
-                        if let Ok(value) = u16::from_str_radix(parts[2].trim_start_matches("0x"), 16) {
+                        if let Ok(value) =
+                            u16::from_str_radix(parts[2].trim_start_matches("0x"), 16)
+                        {
                             if reg < 18 {
                                 vm.registers[reg] = value;
                             }
@@ -210,5 +214,4 @@ impl TuiDebugger {
 
         true // Continue running
     }
-    
 }

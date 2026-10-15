@@ -1,6 +1,6 @@
-use crossterm::event::KeyCode;
 use crate::tui_debugger::{DebuggerMode, TuiDebugger};
 use crate::vm::VM;
+use crossterm::event::KeyCode;
 
 impl TuiDebugger {
     pub(crate) fn handle_breakpoint_mode(&mut self, key: KeyCode, vm: &VM) {
@@ -17,7 +17,9 @@ impl TuiDebugger {
                     // Convert instruction number to address
                     if instr_num < vm.instructions.len() {
                         let addr = instr_num; // Instruction number is the address
-                        if let std::collections::hash_map::Entry::Vacant(e) = self.breakpoints.entry(addr) {
+                        if let std::collections::hash_map::Entry::Vacant(e) =
+                            self.breakpoints.entry(addr)
+                        {
                             e.insert(true); // New breakpoints are enabled by default
                         } else {
                             self.breakpoints.remove(&addr);
@@ -26,7 +28,9 @@ impl TuiDebugger {
                 } else if input.starts_with("0x") {
                     // Parse as hex address
                     if let Ok(addr) = usize::from_str_radix(&input[2..], 16) {
-                        if let std::collections::hash_map::Entry::Vacant(e) = self.breakpoints.entry(addr) {
+                        if let std::collections::hash_map::Entry::Vacant(e) =
+                            self.breakpoints.entry(addr)
+                        {
                             e.insert(true); // New breakpoints are enabled by default
                         } else {
                             self.breakpoints.remove(&addr);
@@ -46,5 +50,4 @@ impl TuiDebugger {
             _ => {}
         }
     }
-    
 }

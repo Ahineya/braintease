@@ -3,14 +3,28 @@ use crate::error::CompileError;
 use crate::lexer::{Token, TokenKind};
 
 pub fn parse(source: &str, tokens: &[Token]) -> Result<Module, CompileError> {
-    let mut parser = Parser { source, tokens, index: 0, pending_gt: false, tolerant: false, errors: Vec::new() };
+    let mut parser = Parser {
+        source,
+        tokens,
+        index: 0,
+        pending_gt: false,
+        tolerant: false,
+        errors: Vec::new(),
+    };
     parser.parse_module()
 }
 
 /// Parse for the language server. A missing name after `.`, or a missing `;`
 /// before the next statement, is reported and the rest of the file is kept.
 pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileError>) {
-    let mut parser = Parser { source, tokens, index: 0, pending_gt: false, tolerant: true, errors: Vec::new() };
+    let mut parser = Parser {
+        source,
+        tokens,
+        index: 0,
+        pending_gt: false,
+        tolerant: true,
+        errors: Vec::new(),
+    };
     match parser.parse_module() {
         Ok(module) => (module, parser.errors),
         Err(err) => {
@@ -75,13 +89,32 @@ impl<'a> Parser<'a> {
                 imports.push(self.parse_import()?);
             } else {
                 let token = self.bump();
-                return Err(CompileError::at(self.source, token.span.start, "expected `fn`, `type`, `struct`, `impl`, or `const`"));
+                return Err(CompileError::at(
+                    self.source,
+                    token.span.start,
+                    "expected `fn`, `type`, `struct`, `impl`, or `const`",
+                ));
             }
         }
-        if functions.is_empty() && adts.is_empty() && structs.is_empty() && consts.is_empty() && externs.is_empty() && impls.is_empty() && imports.is_empty() {
+        if functions.is_empty()
+            && adts.is_empty()
+            && structs.is_empty()
+            && consts.is_empty()
+            && externs.is_empty()
+            && impls.is_empty()
+            && imports.is_empty()
+        {
             return Err(CompileError::at(self.source, 0, "expected a function"));
         }
-        Ok(Module { adts, structs, impls, consts, functions, externs, imports })
+        Ok(Module {
+            adts,
+            structs,
+            impls,
+            consts,
+            functions,
+            externs,
+            imports,
+        })
     }
 
     fn parse_function(&mut self) -> Result<Function, CompileError> {
@@ -168,7 +201,11 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         let token = self.bump();
-        Err(CompileError::at(self.source, token.span.start, "expected `fn`, `type`, `struct`, `const`, or `extern` after `export`"))
+        Err(CompileError::at(
+            self.source,
+            token.span.start,
+            "expected `fn`, `type`, `struct`, `const`, or `extern` after `export`",
+        ))
     }
 
     fn parse_repr_c(&mut self) -> Result<(), CompileError> {
@@ -176,12 +213,20 @@ impl<'a> Parser<'a> {
         self.expect(&TokenKind::LBracket, "'['")?;
         let (name, span) = self.expect_ident()?;
         if name != "repr" {
-            return Err(CompileError::at(self.source, span.start, "unknown attribute"));
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "unknown attribute",
+            ));
         }
         self.expect(&TokenKind::LParen, "'('")?;
         let (kind, span) = self.expect_ident()?;
         if kind != "C" {
-            return Err(CompileError::at(self.source, span.start, "unknown representation"));
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "unknown representation",
+            ));
         }
         self.expect(&TokenKind::RParen, "')'")?;
         self.expect(&TokenKind::RBracket, "']'")?;
@@ -212,19 +257,38 @@ impl<'a> Parser<'a> {
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
         if names.is_empty() {
-            return Err(CompileError::at(self.source, start.span.start, "expected a name to import"));
+            return Err(CompileError::at(
+                self.source,
+                start.span.start,
+                "expected a name to import",
+            ));
         }
         let (word, word_span) = self.expect_ident()?;
         if word != "from" {
-            return Err(CompileError::at(self.source, word_span.start, "expected `from`"));
+            return Err(CompileError::at(
+                self.source,
+                word_span.start,
+                "expected `from`",
+            ));
         }
         let path_tok = self.bump();
         let path = match path_tok.kind {
             TokenKind::Str(chars) => decode_path(&chars),
-            _ => return Err(CompileError::at(self.source, path_tok.span.start, "expected a path")),
+            _ => {
+                return Err(CompileError::at(
+                    self.source,
+                    path_tok.span.start,
+                    "expected a path",
+                ))
+            }
         };
         self.expect(&TokenKind::Semi, "';'")?;
-        Ok(Import { span: start.span, names, path, path_span: path_tok.span })
+        Ok(Import {
+            span: start.span,
+            names,
+            path,
+            path_span: path_tok.span,
+        })
     }
 
     fn parse_extern_block(&mut self) -> Result<Vec<ExternDecl>, CompileError> {
@@ -263,18 +327,36 @@ impl<'a> Parser<'a> {
         }
         self.expect(&TokenKind::RParen, "')'")?;
         if variadic && params.is_empty() {
-            return Err(CompileError::at(self.source, name_span.start, "a variadic function needs a named parameter"));
+            return Err(CompileError::at(
+                self.source,
+                name_span.start,
+                "a variadic function needs a named parameter",
+            ));
         }
-        let ret = if self.eat(&TokenKind::Arrow) { Some(self.parse_type()?) } else { None };
+        let ret = if self.eat(&TokenKind::Arrow) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
         self.expect(&TokenKind::Semi, "';'")?;
-        Ok(ExternDecl { name, name_span, params, ret, variadic })
+        Ok(ExternDecl {
+            name,
+            name_span,
+            params,
+            ret,
+            variadic,
+        })
     }
 
     fn expect_abi_c(&mut self) -> Result<(), CompileError> {
         let token = self.bump();
         match &token.kind {
             TokenKind::Str(chars) if chars.len() == 1 && chars[0] == u16::from(b'C') => Ok(()),
-            _ => Err(CompileError::at(self.source, token.span.start, "expected `\"C\"`")),
+            _ => Err(CompileError::at(
+                self.source,
+                token.span.start,
+                "expected `\"C\"`",
+            )),
         }
     }
 
@@ -289,7 +371,12 @@ impl<'a> Parser<'a> {
             items.push(self.parse_method()?);
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
-        Ok(Impl { span, type_params, ty, items })
+        Ok(Impl {
+            span,
+            type_params,
+            ty,
+            items,
+        })
     }
 
     fn parse_method(&mut self) -> Result<ImplItem, CompileError> {
@@ -322,9 +409,21 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect(&TokenKind::RParen, "')'")?;
-        let ret = if self.eat(&TokenKind::Arrow) { Some(self.parse_type()?) } else { None };
+        let ret = if self.eat(&TokenKind::Arrow) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
         let body = self.parse_block()?;
-        Ok(ImplItem { name, name_span, type_params, receiver, params, ret, body })
+        Ok(ImplItem {
+            name,
+            name_span,
+            type_params,
+            receiver,
+            params,
+            ret,
+            body,
+        })
     }
 
     fn starts_receiver(&self) -> bool {
@@ -372,7 +471,13 @@ impl<'a> Parser<'a> {
             break;
         }
         self.expect(&TokenKind::Semi, "';'")?;
-        Ok(Adt { name, name_span, params, ctors, exported: false })
+        Ok(Adt {
+            name,
+            name_span,
+            params,
+            ctors,
+            exported: false,
+        })
     }
 
     fn parse_generic_params(&mut self) -> Result<Vec<TypeParam>, CompileError> {
@@ -394,7 +499,11 @@ impl<'a> Parser<'a> {
 
     /// `name<ty, ...>(...)`. Anything else, including `a < b`, is left for the
     /// comparison parser.
-    fn try_generic_call(&mut self, callee: String, span: Span) -> Result<Option<Expr>, CompileError> {
+    fn try_generic_call(
+        &mut self,
+        callee: String,
+        span: Span,
+    ) -> Result<Option<Expr>, CompileError> {
         if !self.is(&TokenKind::Lt) {
             return Ok(None);
         }
@@ -443,7 +552,15 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect(&TokenKind::RParen, "')'")?;
-        Ok(Some(Expr { span, kind: ExprKind::Call { callee, callee_span: span, type_args, args } }))
+        Ok(Some(Expr {
+            span,
+            kind: ExprKind::Call {
+                callee,
+                callee_span: span,
+                type_args,
+                args,
+            },
+        }))
     }
 
     fn parse_ctor(&mut self) -> Result<Ctor, CompileError> {
@@ -461,7 +578,11 @@ impl<'a> Parser<'a> {
             }
             self.expect(&TokenKind::RParen, "')'")?;
         }
-        Ok(Ctor { name, name_span, fields })
+        Ok(Ctor {
+            name,
+            name_span,
+            fields,
+        })
     }
 
     fn parse_const(&mut self) -> Result<Const, CompileError> {
@@ -472,7 +593,13 @@ impl<'a> Parser<'a> {
         self.expect(&TokenKind::Eq, "'='")?;
         let init = self.parse_expr()?;
         self.expect(&TokenKind::Semi, "';'")?;
-        Ok(Const { name, name_span, ty, init, exported: false })
+        Ok(Const {
+            name,
+            name_span,
+            ty,
+            init,
+            exported: false,
+        })
     }
 
     fn parse_struct(&mut self) -> Result<StructItem, CompileError> {
@@ -484,16 +611,30 @@ impl<'a> Parser<'a> {
             let (field_name, field_span) = self.expect_ident()?;
             self.expect(&TokenKind::Colon, "':'")?;
             let ty = self.parse_type()?;
-            fields.push(StructField { name: field_name, name_span: field_span, ty });
+            fields.push(StructField {
+                name: field_name,
+                name_span: field_span,
+                ty,
+            });
             if !self.eat(&TokenKind::Comma) {
                 break;
             }
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
         if fields.is_empty() {
-            return Err(CompileError::at(self.source, name_span.start, "a struct needs a field"));
+            return Err(CompileError::at(
+                self.source,
+                name_span.start,
+                "a struct needs a field",
+            ));
         }
-        Ok(StructItem { name, name_span, fields, repr_c: false, exported: false })
+        Ok(StructItem {
+            name,
+            name_span,
+            fields,
+            repr_c: false,
+            exported: false,
+        })
     }
 
     fn parse_param(&mut self) -> Result<Param, CompileError> {
@@ -502,8 +643,17 @@ impl<'a> Parser<'a> {
             Pat::Name { name, span } if name != "_" => (name.clone(), *span),
             _ => (String::new(), pat.span()),
         };
-        let ty = if self.eat(&TokenKind::Colon) { Some(self.parse_type()?) } else { None };
-        Ok(Param { name, name_span, ty, pat })
+        let ty = if self.eat(&TokenKind::Colon) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        Ok(Param {
+            name,
+            name_span,
+            ty,
+            pat,
+        })
     }
 
     fn parse_c_fn_type(&mut self) -> Result<ParsedTy, CompileError> {
@@ -525,9 +675,17 @@ impl<'a> Parser<'a> {
         let ret = if self.eat(&TokenKind::Arrow) {
             self.parse_type()?
         } else {
-            ParsedTy::Named { span, name: "unit".to_string(), args: Vec::new() }
+            ParsedTy::Named {
+                span,
+                name: "unit".to_string(),
+                args: Vec::new(),
+            }
         };
-        Ok(ParsedTy::CFn { span, params, ret: Box::new(ret) })
+        Ok(ParsedTy::CFn {
+            span,
+            params,
+            ret: Box::new(ret),
+        })
     }
 
     fn parse_type(&mut self) -> Result<ParsedTy, CompileError> {
@@ -537,7 +695,11 @@ impl<'a> Parser<'a> {
         if self.eat(&TokenKind::LParen) {
             let span = self.prev_span();
             if self.eat(&TokenKind::RParen) {
-                return Ok(ParsedTy::Named { span, name: "unit".to_string(), args: Vec::new() });
+                return Ok(ParsedTy::Named {
+                    span,
+                    name: "unit".to_string(),
+                    args: Vec::new(),
+                });
             }
             let first = self.parse_type()?;
             if self.eat(&TokenKind::Comma) {
@@ -566,13 +728,21 @@ impl<'a> Parser<'a> {
             self.expect(&TokenKind::Semi, "';'")?;
             let len = self.parse_expr()?;
             self.expect(&TokenKind::RBracket, "']'")?;
-            return Ok(ParsedTy::Array { span, elem: Box::new(elem), len: Box::new(len) });
+            return Ok(ParsedTy::Array {
+                span,
+                elem: Box::new(elem),
+                len: Box::new(len),
+            });
         }
         if self.eat(&TokenKind::Amp) {
             let span = self.prev_span();
             let mutable = self.eat(&TokenKind::Mut);
             let inner = self.parse_type()?;
-            return Ok(ParsedTy::Ref { span, mutable, inner: Box::new(inner) });
+            return Ok(ParsedTy::Ref {
+                span,
+                mutable,
+                inner: Box::new(inner),
+            });
         }
         if self.eat(&TokenKind::Star) {
             let span = self.prev_span();
@@ -581,10 +751,18 @@ impl<'a> Parser<'a> {
             } else if self.eat(&TokenKind::Const) {
                 false
             } else {
-                return Err(CompileError::at(self.source, span.start, "expected `const` or `mut` after `*`"));
+                return Err(CompileError::at(
+                    self.source,
+                    span.start,
+                    "expected `const` or `mut` after `*`",
+                ));
             };
             let inner = self.parse_type()?;
-            return Ok(ParsedTy::Ptr { span, mutable, inner: Box::new(inner) });
+            return Ok(ParsedTy::Ptr {
+                span,
+                mutable,
+                inner: Box::new(inner),
+            });
         }
         if self.eat(&TokenKind::Fn) {
             let span = self.prev_span();
@@ -603,9 +781,17 @@ impl<'a> Parser<'a> {
             let ret = if self.eat(&TokenKind::Arrow) {
                 self.parse_type()?
             } else {
-                ParsedTy::Named { span, name: "unit".to_string(), args: Vec::new() }
+                ParsedTy::Named {
+                    span,
+                    name: "unit".to_string(),
+                    args: Vec::new(),
+                }
             };
-            return Ok(ParsedTy::Func { span, params, ret: Box::new(ret) });
+            return Ok(ParsedTy::Func {
+                span,
+                params,
+                ret: Box::new(ret),
+            });
         }
         let (name, span) = self.expect_ident()?;
         let mut args = Vec::new();
@@ -624,7 +810,11 @@ impl<'a> Parser<'a> {
 
     fn parse_lambda(&mut self, span: Span) -> Result<Expr, CompileError> {
         if self.is(&TokenKind::Lt) {
-            return Err(CompileError::at(self.source, span.start, "generic lambdas are not implemented yet"));
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "generic lambdas are not implemented yet",
+            ));
         }
         self.expect(&TokenKind::LParen, "'('")?;
         let mut params = Vec::new();
@@ -642,9 +832,18 @@ impl<'a> Parser<'a> {
             self.parse_expr()?
         } else {
             let block = self.parse_block()?;
-            Expr { span: block.span, kind: ExprKind::Block(Box::new(block)) }
+            Expr {
+                span: block.span,
+                kind: ExprKind::Block(Box::new(block)),
+            }
         };
-        Ok(Expr { span: span.to(body.span), kind: ExprKind::Lambda { params, body: Box::new(body) } })
+        Ok(Expr {
+            span: span.to(body.span),
+            kind: ExprKind::Lambda {
+                params,
+                body: Box::new(body),
+            },
+        })
     }
 
     fn parse_block(&mut self) -> Result<Block, CompileError> {
@@ -686,7 +885,8 @@ impl<'a> Parser<'a> {
                 continue;
             }
             if self.tolerant && !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
-                self.errors.push(CompileError::at(self.source, expr.span.end, "expected ';'"));
+                self.errors
+                    .push(CompileError::at(self.source, expr.span.end, "expected ';'"));
                 stmts.push(Stmt::Expr(expr));
                 continue;
             }
@@ -694,18 +894,32 @@ impl<'a> Parser<'a> {
             break;
         }
         let close = self.expect(&TokenKind::RBrace, "'}'")?;
-        Ok(Block { span: open.span.to(close.span), stmts, tail })
+        Ok(Block {
+            span: open.span.to(close.span),
+            stmts,
+            tail,
+        })
     }
 
     fn parse_let(&mut self) -> Result<Stmt, CompileError> {
         let keyword = self.expect(&TokenKind::Let, "let")?;
         let mutable = self.eat(&TokenKind::Mut);
         let pattern = self.parse_pat()?;
-        let ty = if self.eat(&TokenKind::Colon) { Some(self.parse_type()?) } else { None };
+        let ty = if self.eat(&TokenKind::Colon) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
         self.expect(&TokenKind::Eq, "'='")?;
         let init = self.parse_expr()?;
         let semi = self.expect(&TokenKind::Semi, "';'")?;
-        Ok(Stmt::Let { span: keyword.span.to(semi.span), pattern, mutable, ty, init })
+        Ok(Stmt::Let {
+            span: keyword.span.to(semi.span),
+            pattern,
+            mutable,
+            ty,
+            init,
+        })
     }
 
     fn parse_assign(&mut self) -> Result<Stmt, CompileError> {
@@ -716,20 +930,36 @@ impl<'a> Parser<'a> {
         let value = match op {
             None => rhs,
             Some(op) => {
-                let lhs = Expr { span: name_span, kind: ExprKind::Name(name.clone()) };
+                let lhs = Expr {
+                    span: name_span,
+                    kind: ExprKind::Name(name.clone()),
+                };
                 self.binary(op, lhs, rhs)
             }
         };
-        Ok(Stmt::Assign { name, name_span, value })
+        Ok(Stmt::Assign {
+            name,
+            name_span,
+            value,
+        })
     }
 
     fn finish_place_assign(&mut self, expr: Expr) -> Result<Stmt, CompileError> {
         if let ExprKind::Deref(_) = &expr.kind {
-            let ExprKind::Deref(inner) = expr.kind.clone() else { unreachable!() };
+            let ExprKind::Deref(inner) = expr.kind.clone() else {
+                unreachable!()
+            };
             let op = self.compound_op()?;
             let rhs = self.parse_expr()?;
             self.expect(&TokenKind::Semi, "';'")?;
-            let value = self.compound_value(op, Expr { span: expr.span, kind: ExprKind::Deref(inner.clone()) }, rhs);
+            let value = self.compound_value(
+                op,
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Deref(inner.clone()),
+                },
+                rhs,
+            );
             return Ok(Stmt::DerefAssign { ptr: *inner, value });
         }
         if let ExprKind::Field { .. } = &expr.kind {
@@ -744,7 +974,11 @@ impl<'a> Parser<'a> {
                     }
                     ExprKind::Name(name) => break (name, cursor.span),
                     _ => {
-                        return Err(CompileError::at(self.source, cursor.span.start, "field assignment needs a name"));
+                        return Err(CompileError::at(
+                            self.source,
+                            cursor.span.start,
+                            "field assignment needs a name",
+                        ));
                     }
                 }
             };
@@ -753,7 +987,12 @@ impl<'a> Parser<'a> {
             let rhs = self.parse_expr()?;
             self.expect(&TokenKind::Semi, "';'")?;
             let value = self.compound_value(op, lhs, rhs);
-            return Ok(Stmt::FieldAssign { name: root.0, name_span: root.1, fields, value });
+            return Ok(Stmt::FieldAssign {
+                name: root.0,
+                name_span: root.1,
+                fields,
+                value,
+            });
         }
         self.finish_index_assign(expr)
     }
@@ -761,16 +1000,29 @@ impl<'a> Parser<'a> {
     fn finish_index_assign(&mut self, expr: Expr) -> Result<Stmt, CompileError> {
         let lhs = expr.clone();
         let ExprKind::Index { base, index } = expr.kind else {
-            return Err(CompileError::at(self.source, expr.span.start, "expected an index before '='"));
+            return Err(CompileError::at(
+                self.source,
+                expr.span.start,
+                "expected an index before '='",
+            ));
         };
         let ExprKind::Name(name) = base.kind else {
-            return Err(CompileError::at(self.source, base.span.start, "index assignment needs a name"));
+            return Err(CompileError::at(
+                self.source,
+                base.span.start,
+                "index assignment needs a name",
+            ));
         };
         let op = self.compound_op()?;
         let rhs = self.parse_expr()?;
         self.expect(&TokenKind::Semi, "';'")?;
         let value = self.compound_value(op, lhs, rhs);
-        Ok(Stmt::IndexAssign { name, name_span: base.span, index: *index, value })
+        Ok(Stmt::IndexAssign {
+            name,
+            name_span: base.span,
+            index: *index,
+            value,
+        })
     }
 
     fn compound_value(&self, op: Option<BinOp>, lhs: Expr, rhs: Expr) -> Expr {
@@ -789,7 +1041,13 @@ impl<'a> Parser<'a> {
             TokenKind::StarEq => Some(BinOp::Mul),
             TokenKind::SlashEq => Some(BinOp::Div),
             TokenKind::PercentEq => Some(BinOp::Rem),
-            _ => return Err(CompileError::at(self.source, token.span.start, "expected '='")),
+            _ => {
+                return Err(CompileError::at(
+                    self.source,
+                    token.span.start,
+                    "expected '='",
+                ))
+            }
         };
         Ok(op)
     }
@@ -909,7 +1167,11 @@ impl<'a> Parser<'a> {
             let end = self.parse_shift()?;
             return Ok(Expr {
                 span: expr.span.to(end.span),
-                kind: ExprKind::Range { start: Box::new(expr), end: Box::new(end), inclusive },
+                kind: ExprKind::Range {
+                    start: Box::new(expr),
+                    end: Box::new(end),
+                    inclusive,
+                },
             });
         }
         Ok(expr)
@@ -969,20 +1231,32 @@ impl<'a> Parser<'a> {
         if self.eat(&TokenKind::Star) {
             let span = self.prev_span();
             let expr = self.parse_unary()?;
-            return Ok(Expr { span: span.to(expr.span), kind: ExprKind::Deref(Box::new(expr)) });
+            return Ok(Expr {
+                span: span.to(expr.span),
+                kind: ExprKind::Deref(Box::new(expr)),
+            });
         }
         if self.eat(&TokenKind::Amp) {
             let span = self.prev_span();
             let mutable = self.eat(&TokenKind::Mut);
             let expr = self.parse_unary()?;
-            return Ok(Expr { span: span.to(expr.span), kind: ExprKind::Borrow { mutable, expr: Box::new(expr) } });
+            return Ok(Expr {
+                span: span.to(expr.span),
+                kind: ExprKind::Borrow {
+                    mutable,
+                    expr: Box::new(expr),
+                },
+            });
         }
         if self.eat(&TokenKind::Minus) {
             let span = self.prev_span();
             let expr = self.parse_unary()?;
             return Ok(Expr {
                 span: span.to(expr.span),
-                kind: ExprKind::Unary { op: UnaryOp::Neg, expr: Box::new(expr) },
+                kind: ExprKind::Unary {
+                    op: UnaryOp::Neg,
+                    expr: Box::new(expr),
+                },
             });
         }
         if self.eat(&TokenKind::Not) {
@@ -990,7 +1264,10 @@ impl<'a> Parser<'a> {
             let expr = self.parse_unary()?;
             return Ok(Expr {
                 span: span.to(expr.span),
-                kind: ExprKind::Unary { op: UnaryOp::Not, expr: Box::new(expr) },
+                kind: ExprKind::Unary {
+                    op: UnaryOp::Not,
+                    expr: Box::new(expr),
+                },
             });
         }
         if self.eat(&TokenKind::Tilde) {
@@ -998,7 +1275,10 @@ impl<'a> Parser<'a> {
             let expr = self.parse_unary()?;
             return Ok(Expr {
                 span: span.to(expr.span),
-                kind: ExprKind::Unary { op: UnaryOp::BitNot, expr: Box::new(expr) },
+                kind: ExprKind::Unary {
+                    op: UnaryOp::BitNot,
+                    expr: Box::new(expr),
+                },
             });
         }
         self.parse_postfix()
@@ -1037,7 +1317,14 @@ impl<'a> Parser<'a> {
                         }
                     }
                     self.expect(&TokenKind::RParen, "')'")?;
-                    expr = Expr { span: expr.span.to(self.prev_span()), kind: ExprKind::Assoc { ty_name, method, args } };
+                    expr = Expr {
+                        span: expr.span.to(self.prev_span()),
+                        kind: ExprKind::Assoc {
+                            ty_name,
+                            method,
+                            args,
+                        },
+                    };
                     continue;
                 }
             }
@@ -1064,14 +1351,32 @@ impl<'a> Parser<'a> {
                     }
                 };
                 let callee_span = expr.span;
-                expr = Expr { span: callee_span, kind: ExprKind::Call { callee, callee_span, type_args: Vec::new(), args } };
+                expr = Expr {
+                    span: callee_span,
+                    kind: ExprKind::Call {
+                        callee,
+                        callee_span,
+                        type_args: Vec::new(),
+                        args,
+                    },
+                };
             } else if self.eat(&TokenKind::LBracket) {
                 let inside = self.parse_expr()?;
-                if let ExprKind::Range { start, end, inclusive } = inside.kind {
+                if let ExprKind::Range {
+                    start,
+                    end,
+                    inclusive,
+                } = inside.kind
+                {
                     self.expect(&TokenKind::RBracket, "']'")?;
                     expr = Expr {
                         span: expr.span,
-                        kind: ExprKind::Slice { base: Box::new(expr), start, end, inclusive },
+                        kind: ExprKind::Slice {
+                            base: Box::new(expr),
+                            start,
+                            end,
+                            inclusive,
+                        },
                     };
                 } else {
                     let inclusive = self.eat(&TokenKind::DotDotEq);
@@ -1091,7 +1396,10 @@ impl<'a> Parser<'a> {
                         self.expect(&TokenKind::RBracket, "']'")?;
                         expr = Expr {
                             span: expr.span,
-                            kind: ExprKind::Index { base: Box::new(expr), index: Box::new(inside) },
+                            kind: ExprKind::Index {
+                                base: Box::new(expr),
+                                index: Box::new(inside),
+                            },
                         };
                     }
                 }
@@ -1101,12 +1409,17 @@ impl<'a> Parser<'a> {
                     if !self.tolerant {
                         return Err(CompileError::at(self.source, dot.end, "expected a name"));
                     }
-                    self.errors.push(CompileError::at(self.source, dot.end, "expected a name"));
+                    self.errors
+                        .push(CompileError::at(self.source, dot.end, "expected a name"));
                     let base_span = expr.span;
                     let name_span = Span::new(dot.end, dot.end);
                     expr = Expr {
                         span: base_span.to(name_span),
-                        kind: ExprKind::Field { base: Box::new(expr), name: String::new(), name_span },
+                        kind: ExprKind::Field {
+                            base: Box::new(expr),
+                            name: String::new(),
+                            name_span,
+                        },
                     };
                     continue;
                 }
@@ -1115,7 +1428,11 @@ impl<'a> Parser<'a> {
                     let base_span = expr.span;
                     expr = Expr {
                         span: base_span.to(span),
-                        kind: ExprKind::Field { base: Box::new(expr), name: method, name_span: span },
+                        kind: ExprKind::Field {
+                            base: Box::new(expr),
+                            name: method,
+                            name_span: span,
+                        },
                     };
                     continue;
                 }
@@ -1134,15 +1451,27 @@ impl<'a> Parser<'a> {
                 let base_span = expr.span;
                 expr = Expr {
                     span: base_span.to(self.prev_span()),
-                    kind: ExprKind::Method { receiver: Box::new(expr), resolved: method.clone(), method, method_span: span, args },
+                    kind: ExprKind::Method {
+                        receiver: Box::new(expr),
+                        resolved: method.clone(),
+                        method,
+                        method_span: span,
+                        args,
+                    },
                 };
             } else if self.eat(&TokenKind::Question) {
-                expr = Expr { span: expr.span, kind: ExprKind::Try(Box::new(expr)) };
+                expr = Expr {
+                    span: expr.span,
+                    kind: ExprKind::Try(Box::new(expr)),
+                };
             } else if self.eat(&TokenKind::As) {
                 let ty = self.parse_type()?;
                 expr = Expr {
                     span: expr.span,
-                    kind: ExprKind::Cast { expr: Box::new(expr), ty },
+                    kind: ExprKind::Cast {
+                        expr: Box::new(expr),
+                        ty,
+                    },
                 };
             } else {
                 break;
@@ -1155,14 +1484,38 @@ impl<'a> Parser<'a> {
     fn parse_primary(&mut self) -> Result<Expr, CompileError> {
         let token = self.bump();
         match token.kind.clone() {
-            TokenKind::Int(value) => Ok(Expr { span: token.span, kind: ExprKind::Int(value) }),
-            TokenKind::Float(text) => Ok(Expr { span: token.span, kind: ExprKind::Float(text) }),
-            TokenKind::Str(chars) => Ok(Expr { span: token.span, kind: ExprKind::Str(chars) }),
-            TokenKind::CStr(chars) => Ok(Expr { span: token.span, kind: ExprKind::CStr(chars) }),
-            TokenKind::Char(scalar) => Ok(Expr { span: token.span, kind: ExprKind::Char(scalar) }),
-            TokenKind::True => Ok(Expr { span: token.span, kind: ExprKind::Bool(true) }),
-            TokenKind::False => Ok(Expr { span: token.span, kind: ExprKind::Bool(false) }),
-            TokenKind::Ident(name) => Ok(Expr { span: token.span, kind: ExprKind::Name(name) }),
+            TokenKind::Int(value) => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::Int(value),
+            }),
+            TokenKind::Float(text) => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::Float(text),
+            }),
+            TokenKind::Str(chars) => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::Str(chars),
+            }),
+            TokenKind::CStr(chars) => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::CStr(chars),
+            }),
+            TokenKind::Char(scalar) => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::Char(scalar),
+            }),
+            TokenKind::True => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::Bool(true),
+            }),
+            TokenKind::False => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::Bool(false),
+            }),
+            TokenKind::Ident(name) => Ok(Expr {
+                span: token.span,
+                kind: ExprKind::Name(name),
+            }),
             TokenKind::Fn => self.parse_lambda(token.span),
             TokenKind::If => self.parse_if(token.span),
             TokenKind::While => self.parse_while(token.span),
@@ -1172,12 +1525,18 @@ impl<'a> Parser<'a> {
             TokenKind::LBracket => self.parse_array(token.span),
             TokenKind::Unsafe => {
                 let block = self.parse_block()?;
-                Ok(Expr { span: token.span.to(block.span), kind: ExprKind::Unsafe(Box::new(block)) })
+                Ok(Expr {
+                    span: token.span.to(block.span),
+                    kind: ExprKind::Unsafe(Box::new(block)),
+                })
             }
             TokenKind::LBrace => {
                 self.index -= 1;
                 let block = self.parse_block()?;
-                Ok(Expr { span: block.span, kind: ExprKind::Block(Box::new(block)) })
+                Ok(Expr {
+                    span: block.span,
+                    kind: ExprKind::Block(Box::new(block)),
+                })
             }
             other => Err(self.unexpected(&token, &other)),
         }
@@ -1198,7 +1557,10 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect(&TokenKind::RBracket, "']'")?;
-        Ok(Expr { span: span.to(self.prev_span()), kind: ExprKind::Array(elems) })
+        Ok(Expr {
+            span: span.to(self.prev_span()),
+            kind: ExprKind::Array(elems),
+        })
     }
 
     fn parse_if(&mut self, span: Span) -> Result<Expr, CompileError> {
@@ -1212,14 +1574,21 @@ impl<'a> Parser<'a> {
                 Some(Box::new(self.parse_if(else_span)?))
             } else {
                 let block = self.parse_block()?;
-                Some(Box::new(Expr { span: block.span, kind: ExprKind::Block(Box::new(block)) }))
+                Some(Box::new(Expr {
+                    span: block.span,
+                    kind: ExprKind::Block(Box::new(block)),
+                }))
             }
         } else {
             None
         };
         Ok(Expr {
             span: span.to(self.prev_span()),
-            kind: ExprKind::If { cond: Box::new(cond), then_body: Box::new(then_body), else_body },
+            kind: ExprKind::If {
+                cond: Box::new(cond),
+                then_body: Box::new(then_body),
+                else_body,
+            },
         })
     }
 
@@ -1229,7 +1598,11 @@ impl<'a> Parser<'a> {
         let mut arms = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
             let pat = self.parse_pat()?;
-            let guard = if self.eat(&TokenKind::If) { Some(self.parse_expr()?) } else { None };
+            let guard = if self.eat(&TokenKind::If) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
             self.expect(&TokenKind::FatArrow, "'=>'")?;
             let body = self.parse_expr()?;
             self.eat(&TokenKind::Comma);
@@ -1237,17 +1610,25 @@ impl<'a> Parser<'a> {
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
         if arms.is_empty() {
-            return Err(CompileError::at(self.source, span.start, "match has no arms"));
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "match has no arms",
+            ));
         }
         Ok(Expr {
             span: span.to(self.prev_span()),
-            kind: ExprKind::Match { scrutinee: Box::new(scrutinee), arms },
+            kind: ExprKind::Match {
+                scrutinee: Box::new(scrutinee),
+                arms,
+            },
         })
     }
 
     /// `{ field` followed by `:`, `,`, or `}` is a struct literal. A match arm is `{ Name =>`.
     fn looks_like_struct_body(&self) -> bool {
-        let Some(TokenKind::Ident(_)) = self.tokens.get(self.index + 1).map(|token| &token.kind) else {
+        let Some(TokenKind::Ident(_)) = self.tokens.get(self.index + 1).map(|token| &token.kind)
+        else {
             return false;
         };
         matches!(
@@ -1264,7 +1645,10 @@ impl<'a> Parser<'a> {
             let value = if self.eat(&TokenKind::Colon) {
                 self.parse_expr()?
             } else {
-                Expr { span, kind: ExprKind::Name(field.clone()) }
+                Expr {
+                    span,
+                    kind: ExprKind::Name(field.clone()),
+                }
             };
             fields.push((field, value));
             if !self.eat(&TokenKind::Comma) {
@@ -1272,12 +1656,19 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
-        Ok(Expr { span, kind: ExprKind::StructLit { name, fields } })
+        Ok(Expr {
+            span,
+            kind: ExprKind::StructLit { name, fields },
+        })
     }
 
     fn parse_paren(&mut self, span: Span) -> Result<Expr, CompileError> {
         if self.eat(&TokenKind::RParen) {
-            return Err(CompileError::at(self.source, span.start, "expected an expression"));
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "expected an expression",
+            ));
         }
         let first = self.parse_expr()?;
         if self.eat(&TokenKind::Comma) {
@@ -1295,7 +1686,10 @@ impl<'a> Parser<'a> {
                 }
             }
             self.expect(&TokenKind::RParen, "')'")?;
-            return Ok(Expr { span, kind: ExprKind::Tuple(fields) });
+            return Ok(Expr {
+                span,
+                kind: ExprKind::Tuple(fields),
+            });
         }
         self.expect(&TokenKind::RParen, "')'")?;
         Ok(first)
@@ -1308,7 +1702,14 @@ impl<'a> Parser<'a> {
         let iter = self.parse_expr()?;
         self.expect(&TokenKind::RParen, "')'")?;
         let body = self.parse_block()?;
-        Ok(Expr { span: span.to(body.span), kind: ExprKind::For { pat, iter: Box::new(iter), body: Box::new(body) } })
+        Ok(Expr {
+            span: span.to(body.span),
+            kind: ExprKind::For {
+                pat,
+                iter: Box::new(iter),
+                body: Box::new(body),
+            },
+        })
     }
 
     fn parse_pat(&mut self) -> Result<Pat, CompileError> {
@@ -1323,7 +1724,10 @@ impl<'a> Parser<'a> {
         }
         if self.is(&TokenKind::True) || self.is(&TokenKind::False) {
             let token = self.bump();
-            return Ok(Pat::Bool { value: token.kind == TokenKind::True, span: token.span });
+            return Ok(Pat::Bool {
+                value: token.kind == TokenKind::True,
+                span: token.span,
+            });
         }
         if let TokenKind::Char(scalar) = &self.tokens[self.index].kind {
             let scalar = *scalar;
@@ -1354,7 +1758,11 @@ impl<'a> Parser<'a> {
 
     fn parse_tuple_pat(&mut self, span: Span) -> Result<Pat, CompileError> {
         if self.eat(&TokenKind::RParen) {
-            return Err(CompileError::at(self.source, span.start, "expected a pattern"));
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "expected a pattern",
+            ));
         }
         let first = self.parse_pat()?;
         if self.eat(&TokenKind::Comma) {
@@ -1385,7 +1793,10 @@ impl<'a> Parser<'a> {
             let pat = if self.eat(&TokenKind::Colon) {
                 self.parse_pat()?
             } else {
-                Pat::Name { name: field.clone(), span: field_span }
+                Pat::Name {
+                    name: field.clone(),
+                    span: field_span,
+                }
             };
             fields.push((field, field_span, pat));
             if !self.eat(&TokenKind::Comma) {
@@ -1403,14 +1814,21 @@ impl<'a> Parser<'a> {
         let body = self.parse_block()?;
         Ok(Expr {
             span: span.to(body.span),
-            kind: ExprKind::While { cond: Box::new(cond), body: Box::new(body) },
+            kind: ExprKind::While {
+                cond: Box::new(cond),
+                body: Box::new(body),
+            },
         })
     }
 
     fn binary(&self, op: BinOp, lhs: Expr, rhs: Expr) -> Expr {
         Expr {
             span: lhs.span.to(rhs.span),
-            kind: ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) },
+            kind: ExprKind::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
         }
     }
 
@@ -1431,7 +1849,11 @@ impl<'a> Parser<'a> {
         let token = self.bump();
         match token.kind {
             TokenKind::Ident(name) => Ok((name, token.span)),
-            _ => Err(CompileError::at(self.source, token.span.start, "expected a name")),
+            _ => Err(CompileError::at(
+                self.source,
+                token.span.start,
+                "expected a name",
+            )),
         }
     }
 
@@ -1457,7 +1879,11 @@ impl<'a> Parser<'a> {
             Ok(())
         } else {
             let token = self.current();
-            Err(CompileError::at(self.source, token.span.start, "expected '>'"))
+            Err(CompileError::at(
+                self.source,
+                token.span.start,
+                "expected '>'",
+            ))
         }
     }
 
@@ -1466,7 +1892,11 @@ impl<'a> Parser<'a> {
         if &token.kind == kind {
             Ok(token)
         } else {
-            Err(CompileError::at(self.source, token.span.start, format!("expected {what}")))
+            Err(CompileError::at(
+                self.source,
+                token.span.start,
+                format!("expected {what}"),
+            ))
         }
     }
 
@@ -1528,5 +1958,8 @@ impl<'a> Parser<'a> {
 }
 
 fn decode_path(chars: &[u16]) -> String {
-    chars.iter().map(|cell| char::from_u32(u32::from(*cell)).unwrap_or('\u{FFFD}')).collect()
+    chars
+        .iter()
+        .map(|cell| char::from_u32(u32::from(*cell)).unwrap_or('\u{FFFD}'))
+        .collect()
 }

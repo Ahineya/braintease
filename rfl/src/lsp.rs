@@ -26,14 +26,21 @@ pub fn serve() {
         let Some(message) = read_message(&mut reader) else {
             break;
         };
-        let method = message.get("method").and_then(Value::as_str).unwrap_or("").to_string();
+        let method = message
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         let id = message.get("id").cloned();
         let params = message.get("params").cloned().unwrap_or(Value::Null);
         if method == "exit" {
             break;
         }
         if method == "shutdown" {
-            send(&mut stdout, &json!({ "jsonrpc": "2.0", "id": id, "result": Value::Null }));
+            send(
+                &mut stdout,
+                &json!({ "jsonrpc": "2.0", "id": id, "result": Value::Null }),
+            );
             continue;
         }
         if id.is_none() {
@@ -41,7 +48,10 @@ pub fn serve() {
             continue;
         }
         let result = request(&mut docs, &method, &params);
-        send(&mut stdout, &json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+        send(
+            &mut stdout,
+            &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+        );
     }
 }
 
@@ -55,8 +65,12 @@ fn notify(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) {
         }
         "textDocument/didChange" => {
             let uri = text_of(&params["textDocument"]["uri"]);
-            let Some(changes) = params["contentChanges"].as_array() else { return };
-            let Some(text) = changes.first().and_then(|change| change["text"].as_str()) else { return };
+            let Some(changes) = params["contentChanges"].as_array() else {
+                return;
+            };
+            let Some(text) = changes.first().and_then(|change| change["text"].as_str()) else {
+                return;
+            };
             open_doc(docs, uri, text.to_string());
         }
         "textDocument/didClose" => {
@@ -70,7 +84,15 @@ fn open_doc(docs: &mut HashMap<String, Doc>, uri: String, text: String) {
     let path = uri_path(&uri);
     let analysis = Analysis::open(path.as_deref(), &text);
     publish(&uri, &analysis, &text);
-    docs.insert(uri, Doc { lines: line_starts(&text), source: text, path, analysis });
+    docs.insert(
+        uri,
+        Doc {
+            lines: line_starts(&text),
+            source: text,
+            path,
+            analysis,
+        },
+    );
 }
 
 fn request(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) -> Value {
@@ -114,15 +136,25 @@ fn initialize() -> Value {
 }
 
 fn hover(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return Value::Null };
-    let Some(offset) = offset_of(doc, &params["position"]) else { return Value::Null };
-    let Some(text) = doc.analysis.hover(offset) else { return Value::Null };
+    let Some(doc) = document(docs, params) else {
+        return Value::Null;
+    };
+    let Some(offset) = offset_of(doc, &params["position"]) else {
+        return Value::Null;
+    };
+    let Some(text) = doc.analysis.hover(offset) else {
+        return Value::Null;
+    };
     json!({ "contents": { "kind": "markdown", "value": format!("```rfl\n{text}\n```") } })
 }
 
 fn completion(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return json!([]) };
-    let Some(offset) = offset_of(doc, &params["position"]) else { return json!([]) };
+    let Some(doc) = document(docs, params) else {
+        return json!([]);
+    };
+    let Some(offset) = offset_of(doc, &params["position"]) else {
+        return json!([]);
+    };
     let items: Vec<Value> = doc.analysis.completions(offset).into_iter().map(|item| {
         json!({
             "label": item.label,
@@ -145,28 +177,57 @@ fn completion(docs: &HashMap<String, Doc>, params: &Value) -> Value {
 }
 
 fn definition(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return Value::Null };
-    let Some(offset) = offset_of(doc, &params["position"]) else { return Value::Null };
-    let Some((path, span)) = doc.analysis.definition(offset) else { return Value::Null };
-    json!(place(doc, &text_of(&params["textDocument"]["uri"]), path.as_deref(), span.start, span.end))
+    let Some(doc) = document(docs, params) else {
+        return Value::Null;
+    };
+    let Some(offset) = offset_of(doc, &params["position"]) else {
+        return Value::Null;
+    };
+    let Some((path, span)) = doc.analysis.definition(offset) else {
+        return Value::Null;
+    };
+    json!(place(
+        doc,
+        &text_of(&params["textDocument"]["uri"]),
+        path.as_deref(),
+        span.start,
+        span.end
+    ))
 }
 
 fn references(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return json!([]) };
-    let Some(offset) = offset_of(doc, &params["position"]) else { return json!([]) };
+    let Some(doc) = document(docs, params) else {
+        return json!([]);
+    };
+    let Some(offset) = offset_of(doc, &params["position"]) else {
+        return json!([]);
+    };
     let uri = text_of(&params["textDocument"]["uri"]);
-    let locs: Vec<Value> = doc.analysis.references(offset).into_iter().map(|loc| place(doc, &uri, loc.path.as_deref(), loc.span.start, loc.span.end)).collect();
+    let locs: Vec<Value> = doc
+        .analysis
+        .references(offset)
+        .into_iter()
+        .map(|loc| place(doc, &uri, loc.path.as_deref(), loc.span.start, loc.span.end))
+        .collect();
     json!(locs)
 }
 
 fn rename(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return Value::Null };
-    let Some(offset) = offset_of(doc, &params["position"]) else { return Value::Null };
+    let Some(doc) = document(docs, params) else {
+        return Value::Null;
+    };
+    let Some(offset) = offset_of(doc, &params["position"]) else {
+        return Value::Null;
+    };
     let new_name = text_of(&params["newName"]);
     let uri = text_of(&params["textDocument"]["uri"]);
     let mut changes: HashMap<String, Vec<Value>> = HashMap::new();
     for loc in doc.analysis.references(offset) {
-        let target = loc.path.as_ref().map(|path| path_uri(path)).unwrap_or_else(|| uri.clone());
+        let target = loc
+            .path
+            .as_ref()
+            .map(|path| path_uri(path))
+            .unwrap_or_else(|| uri.clone());
         let edit = json!({ "range": place_range(doc, loc.path.as_deref(), loc.span.start, loc.span.end), "newText": new_name });
         changes.entry(target).or_default().push(edit);
     }
@@ -174,38 +235,61 @@ fn rename(docs: &HashMap<String, Doc>, params: &Value) -> Value {
 }
 
 fn symbols(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return json!([]) };
-    let items: Vec<Value> = doc.analysis.symbols.iter().map(|symbol| {
-        json!({
-            "name": symbol.name,
-            "kind": match symbol.kind {
-                SymbolKind::Function => 12,
-                SymbolKind::Method => 6,
-                SymbolKind::Struct => 23,
-                SymbolKind::Enum => 10,
-                SymbolKind::Const => 14,
-                SymbolKind::Field => 8,
-            },
-            "detail": symbol.detail,
-            "range": range(doc, symbol.span.start, symbol.span.end),
-            "selectionRange": range(doc, symbol.span.start, symbol.span.end),
+    let Some(doc) = document(docs, params) else {
+        return json!([]);
+    };
+    let items: Vec<Value> = doc
+        .analysis
+        .symbols
+        .iter()
+        .map(|symbol| {
+            json!({
+                "name": symbol.name,
+                "kind": match symbol.kind {
+                    SymbolKind::Function => 12,
+                    SymbolKind::Method => 6,
+                    SymbolKind::Struct => 23,
+                    SymbolKind::Enum => 10,
+                    SymbolKind::Const => 14,
+                    SymbolKind::Field => 8,
+                },
+                "detail": symbol.detail,
+                "range": range(doc, symbol.span.start, symbol.span.end),
+                "selectionRange": range(doc, symbol.span.start, symbol.span.end),
+            })
         })
-    }).collect();
+        .collect();
     json!(items)
 }
 
 fn signature(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return Value::Null };
-    let Some(offset) = offset_of(doc, &params["position"]) else { return Value::Null };
-    let Some((label, active)) = doc.analysis.signature(offset) else { return Value::Null };
-    let parameters: Vec<Value> = signature_parameters(&label).into_iter().map(|part| json!({ "label": part })).collect();
+    let Some(doc) = document(docs, params) else {
+        return Value::Null;
+    };
+    let Some(offset) = offset_of(doc, &params["position"]) else {
+        return Value::Null;
+    };
+    let Some((label, active)) = doc.analysis.signature(offset) else {
+        return Value::Null;
+    };
+    let parameters: Vec<Value> = signature_parameters(&label)
+        .into_iter()
+        .map(|part| json!({ "label": part }))
+        .collect();
     json!({ "signatures": [{ "label": label, "parameters": parameters }], "activeSignature": 0, "activeParameter": active })
 }
 
 fn signature_parameters(label: &str) -> Vec<String> {
-    let Some(inside) = label.strip_prefix("fn(") else { return Vec::new() };
-    let Some(close) = inside.find(')') else { return Vec::new() };
-    split_params(&inside[..close]).into_iter().map(str::to_string).collect()
+    let Some(inside) = label.strip_prefix("fn(") else {
+        return Vec::new();
+    };
+    let Some(close) = inside.find(')') else {
+        return Vec::new();
+    };
+    split_params(&inside[..close])
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 fn split_params(text: &str) -> Vec<&str> {
@@ -231,7 +315,9 @@ fn split_params(text: &str) -> Vec<&str> {
 }
 
 fn inlays(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return json!([]) };
+    let Some(doc) = document(docs, params) else {
+        return json!([]);
+    };
     let hints: Vec<Value> = doc.analysis.inlay_hints().into_iter().map(|(offset, label)| {
         json!({ "position": position(doc, offset), "label": label, "paddingLeft": false })
     }).collect();
@@ -239,20 +325,30 @@ fn inlays(docs: &HashMap<String, Doc>, params: &Value) -> Value {
 }
 
 fn semantic_tokens(docs: &HashMap<String, Doc>, params: &Value) -> Value {
-    let Some(doc) = document(docs, params) else { return json!({ "data": [] }) };
-    let Ok(tokens) = lexer::tokenize_with_trivia(&doc.source) else { return json!({ "data": [] }) };
+    let Some(doc) = document(docs, params) else {
+        return json!({ "data": [] });
+    };
+    let Ok(tokens) = lexer::tokenize_with_trivia(&doc.source) else {
+        return json!({ "data": [] });
+    };
     let mut data = Vec::new();
     let mut prev_line = 0u32;
     let mut prev_col = 0u32;
     for token in tokens {
-        let Some(kind) = token_kind(&doc.analysis, &token) else { continue };
+        let Some(kind) = token_kind(&doc.analysis, &token) else {
+            continue;
+        };
         let (line, col) = line_col(doc, token.span.start);
         let length = utf16_len(&doc.source[token.span.start..token.span.end.min(doc.source.len())]);
         if length == 0 {
             continue;
         }
         let delta_line = line - prev_line;
-        let delta_col = if delta_line == 0 { col.saturating_sub(prev_col) } else { col };
+        let delta_col = if delta_line == 0 {
+            col.saturating_sub(prev_col)
+        } else {
+            col
+        };
         data.extend([delta_line, delta_col, length, kind, 0]);
         prev_line = line;
         prev_col = col;
@@ -262,16 +358,61 @@ fn semantic_tokens(docs: &HashMap<String, Doc>, params: &Value) -> Value {
 
 fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
     Some(match &token.kind {
-        TokenKind::Fn | TokenKind::Let | TokenKind::Mut | TokenKind::If | TokenKind::Else | TokenKind::Return | TokenKind::As
-        | TokenKind::While | TokenKind::Break | TokenKind::Continue | TokenKind::Match | TokenKind::For | TokenKind::In
-        | TokenKind::Type | TokenKind::Impl | TokenKind::Const | TokenKind::Struct | TokenKind::Export | TokenKind::Import
-        | TokenKind::Extern | TokenKind::Unsafe | TokenKind::True | TokenKind::False => 0,
+        TokenKind::Fn
+        | TokenKind::Let
+        | TokenKind::Mut
+        | TokenKind::If
+        | TokenKind::Else
+        | TokenKind::Return
+        | TokenKind::As
+        | TokenKind::While
+        | TokenKind::Break
+        | TokenKind::Continue
+        | TokenKind::Match
+        | TokenKind::For
+        | TokenKind::In
+        | TokenKind::Type
+        | TokenKind::Impl
+        | TokenKind::Const
+        | TokenKind::Struct
+        | TokenKind::Export
+        | TokenKind::Import
+        | TokenKind::Extern
+        | TokenKind::Unsafe
+        | TokenKind::True
+        | TokenKind::False => 0,
         TokenKind::LineComment | TokenKind::BlockComment => 9,
         TokenKind::Ident(name) => {
             let from_types = analysis.token_type(token.span);
             if from_types != 4 {
                 from_types
-            } else if matches!(name.as_str(), "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" | "f32" | "f64" | "bool" | "char" | "String" | "usize" | "unit" | "Vec" | "Slice" | "Option" | "Result" | "c_int" | "c_char" | "c_short" | "c_uint" | "c_long" | "c_size_t") {
+            } else if matches!(
+                name.as_str(),
+                "i8" | "u8"
+                    | "i16"
+                    | "u16"
+                    | "i32"
+                    | "u32"
+                    | "i64"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+                    | "usize"
+                    | "unit"
+                    | "Vec"
+                    | "Slice"
+                    | "Option"
+                    | "Result"
+                    | "c_int"
+                    | "c_char"
+                    | "c_short"
+                    | "c_uint"
+                    | "c_long"
+                    | "c_size_t"
+            ) {
                 2
             } else if matches!(name.as_str(), "Some" | "None" | "Ok" | "Err") {
                 8
@@ -281,10 +422,34 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
         }
         TokenKind::Str(_) | TokenKind::CStr(_) | TokenKind::Char(_) => 5,
         TokenKind::Int(_) | TokenKind::Float(_) => 6,
-        TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Slash | TokenKind::Percent | TokenKind::Eq | TokenKind::EqEq
-        | TokenKind::NotEq | TokenKind::Lt | TokenKind::Le | TokenKind::Gt | TokenKind::Ge | TokenKind::Amp
-        | TokenKind::Pipe | TokenKind::OrOr | TokenKind::Not | TokenKind::Arrow | TokenKind::FatArrow | TokenKind::Shl | TokenKind::Shr
-        | TokenKind::AndAnd | TokenKind::Caret | TokenKind::Tilde | TokenKind::PlusEq | TokenKind::MinusEq | TokenKind::StarEq | TokenKind::SlashEq | TokenKind::PercentEq => 7,
+        TokenKind::Plus
+        | TokenKind::Minus
+        | TokenKind::Star
+        | TokenKind::Slash
+        | TokenKind::Percent
+        | TokenKind::Eq
+        | TokenKind::EqEq
+        | TokenKind::NotEq
+        | TokenKind::Lt
+        | TokenKind::Le
+        | TokenKind::Gt
+        | TokenKind::Ge
+        | TokenKind::Amp
+        | TokenKind::Pipe
+        | TokenKind::OrOr
+        | TokenKind::Not
+        | TokenKind::Arrow
+        | TokenKind::FatArrow
+        | TokenKind::Shl
+        | TokenKind::Shr
+        | TokenKind::AndAnd
+        | TokenKind::Caret
+        | TokenKind::Tilde
+        | TokenKind::PlusEq
+        | TokenKind::MinusEq
+        | TokenKind::StarEq
+        | TokenKind::SlashEq
+        | TokenKind::PercentEq => 7,
         _ => return None,
     })
 }
@@ -292,29 +457,48 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
 fn publish(uri: &str, analysis: &Analysis, source: &str) {
     let lines = line_starts(source);
     let tokens = lexer::tokenize_with_trivia(source).unwrap_or_default();
-    let diagnostics: Vec<Value> = analysis.diagnostics.iter().map(|err| {
-        let offset = err.offset.unwrap_or(0);
-        let (start, end) = tokens.iter().find(|token| token.span.contains(offset)).map(|token| (token.span.start, token.span.end)).unwrap_or((offset, (offset + 1).min(source.len())));
-        json!({
-            "range": range_of(&lines, source, start, end.max(start)),
-            "severity": 1,
-            "source": "rfl",
-            "message": err.detail,
+    let diagnostics: Vec<Value> = analysis
+        .diagnostics
+        .iter()
+        .map(|err| {
+            let offset = err.offset.unwrap_or(0);
+            let (start, end) = tokens
+                .iter()
+                .find(|token| token.span.contains(offset))
+                .map(|token| (token.span.start, token.span.end))
+                .unwrap_or((offset, (offset + 1).min(source.len())));
+            json!({
+                "range": range_of(&lines, source, start, end.max(start)),
+                "severity": 1,
+                "source": "rfl",
+                "message": err.detail,
+            })
         })
-    }).collect();
-    send(&mut io::stdout().lock(), &json!({
-        "jsonrpc": "2.0",
-        "method": "textDocument/publishDiagnostics",
-        "params": { "uri": uri, "diagnostics": diagnostics }
-    }));
+        .collect();
+    send(
+        &mut io::stdout().lock(),
+        &json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/publishDiagnostics",
+            "params": { "uri": uri, "diagnostics": diagnostics }
+        }),
+    );
 }
 
 fn document<'a>(docs: &'a HashMap<String, Doc>, params: &Value) -> Option<&'a Doc> {
     docs.get(&text_of(&params["textDocument"]["uri"]))
 }
 
-fn place(doc: &Doc, current_uri: &str, path: Option<&std::path::Path>, start: usize, end: usize) -> Value {
-    let uri = path.map(path_uri).unwrap_or_else(|| current_uri.to_string());
+fn place(
+    doc: &Doc,
+    current_uri: &str,
+    path: Option<&std::path::Path>,
+    start: usize,
+    end: usize,
+) -> Value {
+    let uri = path
+        .map(path_uri)
+        .unwrap_or_else(|| current_uri.to_string());
     json!({ "uri": uri, "range": place_range(doc, path, start, end) })
 }
 
@@ -322,7 +506,9 @@ fn place_range(doc: &Doc, path: Option<&std::path::Path>, start: usize, end: usi
     if path.is_none() || path == doc.path.as_deref() {
         return range(doc, start, end);
     }
-    let text = path.and_then(|path| std::fs::read_to_string(path).ok()).unwrap_or_default();
+    let text = path
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .unwrap_or_default();
     let lines = line_starts(&text);
     range_of(&lines, &text, start, end)
 }
@@ -365,7 +551,9 @@ fn line_col(doc: &Doc, offset: usize) -> (u32, u32) {
 }
 
 fn line_col_at(lines: &[usize], source: &str, offset: usize) -> (u32, u32) {
-    let line = lines.partition_point(|start| *start <= offset).saturating_sub(1);
+    let line = lines
+        .partition_point(|start| *start <= offset)
+        .saturating_sub(1);
     let start = lines.get(line).copied().unwrap_or(0);
     let slice = source.get(start..offset.min(source.len())).unwrap_or("");
     let character = slice.chars().map(|ch| ch.len_utf16()).sum::<usize>() as u32;

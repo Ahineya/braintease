@@ -4,7 +4,7 @@ pub enum VMState {
     Setup,
     Running,
     Halted,
-    Breakpoint,  // Hit a BRK instruction in debug mode
+    Breakpoint, // Hit a BRK instruction in debug mode
     Error(String),
 }
 
@@ -17,5 +17,5 @@ pub struct KeyboardState {
     pub right: bool,
     pub z: bool,
     pub x: bool,
-    pub last_read_counter: u32,  // Counter to track when keys were last read
+    pub last_read_counter: u32, // Counter to track when keys were last read
 }

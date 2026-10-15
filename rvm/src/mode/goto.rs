@@ -1,5 +1,5 @@
-use crossterm::event::KeyCode;
 use crate::tui_debugger::{DebuggerMode, TuiDebugger};
+use crossterm::event::KeyCode;
 
 impl TuiDebugger {
     pub(crate) fn handle_goto_mode(&mut self, key: KeyCode) {
@@ -33,5 +33,4 @@ impl TuiDebugger {
             _ => {}
         }
     }
-    
 }
