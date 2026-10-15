@@ -29,3 +29,5 @@
 # Linker archives built by make all.
 /libruntime.par
 /libros.par
+# Guest protocol library assembly.
+/net/*.asm

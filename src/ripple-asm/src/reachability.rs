@@ -153,6 +153,7 @@ pub(crate) fn collect(objects: &mut [ObjectFile]) -> Result<(), Vec<String>> {
             }
         }
     }
+    let movable: Vec<_> = ranges.iter().map(Option::is_some).collect();
     for (o, segments) in objects.iter_mut().zip(ranges) {
         let Some(segments) = segments else {
             continue;
@@ -196,10 +197,8 @@ pub(crate) fn collect(objects: &mut [ObjectFile]) -> Result<(), Vec<String>> {
         if let Some(meta) = &mut o.rcc {
             meta.code.retain(|n| live.contains(n));
         }
-        // Keep the TU's GP reservation: emitted offsets may refer to any cell in
-        // it. Only initialization code is collected; data addresses never move
-        // relative to their compiler-assigned TU base.
     }
+    crate::data_collection::collect(objects, &live, &movable)?;
     Ok(())
 }
 
@@ -219,6 +218,7 @@ mod tests {
                 .collect(),
             code: code.iter().map(|s| s.to_string()).collect(),
             roots: vec![],
+            data: None,
         });
         o
     }

@@ -526,6 +526,10 @@ pub struct CompilerMetadata {
     pub symbols: HashMap<String, Vec<String>>,
     pub code: Vec<String>,
     pub roots: Vec<String>,
+    /// Independent, symbol-relocated data objects and their cell sizes.
+    /// None denotes legacy fixed-layout TU data, which must not be compacted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<HashMap<String, u32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

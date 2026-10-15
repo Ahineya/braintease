@@ -4,6 +4,8 @@ pub mod encoder;
 pub mod assembler;
 pub mod linker;
 mod reachability;
+mod data_collection;
+mod archive_selection;
 pub mod macro_formatter;
 mod compact_bf;
 pub mod virtual_instructions;

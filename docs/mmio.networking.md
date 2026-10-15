@@ -1,11 +1,16 @@
 # Networking through the device mailbox
 
 Status: v1 Ethernet commands, bounded queues, a local Unix-datagram transport,
-macOS vmnet attachment and a freestanding ARP/IPv4/ICMP guest are implemented.
-RVM, RBF and the native runtime share the device. Local bidirectional ping has
-been validated on all three on macOS. Guest-generated ping to the IPv4 address
-of `syma-lang.org` has also passed on all three. Guest-side DNS remains future
-work; its acceptance requirements are retained below.
+macOS vmnet attachment and a freestanding ARP/IPv4/ICMP/UDP/DNS guest library
+are implemented. RVM, RBF and the native runtime share the device. Local
+bidirectional ping and guest-generated ping to the VPS IPv4 address have been
+validated on all three on macOS. Guest-side DNS followed by three validated
+pings to `syma-lang.org` has passed on RVM and native. RBF execution of the new
+DNS client remains opt-in and was not repeated for this milestone.
+
+See [the guest library guide](net-library.md) for the C API, UDP/DNS examples,
+limits and `scripts/run-net-dns.sh`, which builds and runs the complete guest
+DNS-to-ping demonstration without a separately managed helper.
 
 The existing [device mailbox](../rvm/mmio.md#device-command-abi-version-1)
 exposes a virtual Ethernet card to RVM, RBF and the native runtime. Guest C code
@@ -16,7 +21,7 @@ between guest memory, bounded queues and a selectable network backend.
 
 - Use `DEVICE_*` at bank-0 addresses 27–31. Networking needs no new instruction
   or dedicated MMIO registers, and works independently of display mode.
-- Expose Ethernet frames. The guest owns ARP, IP, ICMP and eventually UDP/TCP;
+- Expose Ethernet frames. The guest owns ARP, IP, ICMP, UDP and eventually TCP;
   the device does not offer host socket operations or secretly implement the
   guest's protocol stack.
 - Store **one eight-bit octet per 16-bit guest cell**. Packing two octets into
@@ -300,7 +305,7 @@ Invalid IP/ICMP checksums receive no reply. The IP is compile-time configuration
 not DHCP or the Mac's LAN address. Stop the monitor with Ctrl-C; its private
 helper, interface and socket are cleaned up too. Run one monitor at a time with
 the default IP.
-At startup the monitor sends a gratuitous ARP announcement, so restarting it
+At startup the guest library sends a gratuitous ARP announcement, so restarting it
 with a newly assigned MAC refreshes the host's cached entry for that static IP.
 
 The same guest protocol implementation also runs on the VMs:
@@ -340,8 +345,9 @@ device helpers, it returns mailbox status first and updates output objects only
 on success. Applications must then check the operation outcome. The equivalent
 raw command/outcome constants are exported by `rfl/std/mmio.rfl`.
 
-[`ping.c`](../c-test/examples/network/ping.c) constructs and validates all ARP,
-IPv4 and ICMP packets in guest C, including checksums, odd-length payloads and
+[`ping.c`](../c-test/examples/network/ping.c) uses the guest
+[`<net.h>` library](net-library.md), which constructs and validates ARP, IPv4
+and ICMP packets in guest C, including checksums, odd-length payloads and
 zero/255 octets. It polls independently of ticks and waits for accepted TX work
 to be handed to the backend before exiting. It expects one outgoing ping reply
 and one incoming echo request by default. Its compile-time configuration can
@@ -472,39 +478,33 @@ VPS/network firewall must allow echo requests and replies. For the hostname
 stage, the guest constructs and parses DNS over UDP; host-side name resolution
 does not establish guest DNS support.
 
-The IPv4 stage is implemented by
-[`scripts/test-net-vps.py`](../scripts/test-net-vps.py). It resolves the hostname
-on the host (or accepts an explicit `--ipv4`), builds the guest with that address
-and no inbound-ping requirement, and verifies three echo replies per runtime by
-default. Each reply is checked by guest C for checksum, source, identifier,
-sequence and the 17-octet payload. The guest routes through its configured
-gateway and uses ARP to learn that gateway's MAC.
-
-Start a shared-mode helper in its own terminal, with capture disabled:
+The hostname stage is implemented by the reusable [guest networking
+library](net-library.md) and
+[`dns-ping.c`](../c-test/examples/network/dns-ping.c). Run:
 
 ```sh
-NET_VPS_DIR="$(mktemp -d /tmp/ripple-vps.XXXXXX)"
-sudo build/network/ripple-net-vmnet "$NET_VPS_DIR/nic.sock" shared
+scripts/run-net-dns.sh native syma-lang.org
+scripts/run-net-dns.sh rvm syma-lang.org --jit
 ```
 
-In another terminal, substitute the actual socket path printed by the helper:
+The launcher selects shared-mode vmnet with capture disabled. The guest queries
+its configured DNS server over UDP, validates the reply and CNAME chain, and
+pings the returned address three times with checksum, source, identifier,
+sequence and binary payload validation. Native and RVM runs have both passed
+this complete exchange. Use `--ip 192.168.64.249` if the default `.250` is
+already in use. DNS and echo failures are reported separately. The helper is
+owned and cleaned up by the runtime; no second terminal is needed for setup.
 
-```sh
-scripts/test-net-vps.py --socket /tmp/ripple-vps.XXXXXX/nic.sock --jit
-```
+The earlier IPv4-only tool
+[`scripts/test-net-vps.py`](../scripts/test-net-vps.py) remains useful for
+isolating ICMP/routing failures with an explicit `--ipv4`. Its hostname option
+uses **host-side** resolution and therefore does not test guest DNS. It expects
+an existing `--socket` backend and saves its logs/results separately under
+`build/network/vps/<mode>/`.
 
-This runs RVM and native sequentially. `--mode rvm`, `--mode native`, or
-`--mode rbf` selects individual hosts; omit `--jit` for interpreter execution.
-`--count` and `--timeout` bound each test. Results, target-resolution metadata,
-binary hashes, backend counters and guest logs go to `build/network/vps/<mode>/`.
-Execution time includes startup and the full exchange, not an individual-packet
-round-trip measurement. The script requests no packet capture. Stop the helper
-with Ctrl-C after testing to remove the shared interface.
-
-Capture evidence that the guest constructed the request and validated the
-returned echo reply. Report routing, DNS, firewall and timeout failures
-separately from device/protocol failures. External connectivity is a separate
-integration test, not a prerequisite for local deterministic tests to pass.
+External connectivity is a separate integration test, not a prerequisite for
+local deterministic tests to pass. The [DNS packet fixture](net-library.md#linking-and-regression-checks)
+exercises successful and malformed responses without relying on Internet DNS.
 
 ## Legacy MMIO and later work
 
@@ -514,7 +514,7 @@ input separately, including TEXT40 behavior. Retain compatibility reads or leave
 deprecated addresses reserved until an explicit memory-map revision defines
 reuse; old binaries must not silently reinterpret key reads as other devices.
 
-Later work includes guest DNS, a Linux TAP helper,
+Later work includes DNS TCP fallback, DHCP, a Linux TAP helper,
 controlled-time packet replay files, additional NICs, optional batching and a
 future OS's driver/serialization policy. These additions must preserve the
 queue, octet representation and mailbox-sharing requirements above.

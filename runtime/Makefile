@@ -8,11 +8,11 @@ RLINK = ../src/ripple-asm/target/release/rlink
 # Assembler settings (can be overridden from command line)
 BANK_SIZE ?= 64000  # Addressable 16-bit cells per bank
 MAX_IMMEDIATE = 65535
-RUNTIME_HEADERS = $(wildcard include/*.h)
+RUNTIME_HEADERS = $(wildcard include/*.h) $(wildcard net/*.h)
 BANK_SIZE_STAMP = .bank-size
 
 # Source files
-C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c vm_devices.c vm_network.c rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
+C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c vm_devices.c vm_network.c $(wildcard net/*.c) rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
 ASM_SOURCES = crt0.asm
 
 # qfixed lives in src/ and is compiled via the qfixed.asm rule below
@@ -88,7 +88,7 @@ $(LIBROS): $(LIBROS_OBJ) $(RLINK)
 
 # Clean generated files (but not hand-written .asm)
 clean:
-	rm -f $(ASM_FILES) $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
+	rm -f $(ASM_FILES) $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm $(C_OBJ_FILES) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
 	@echo "Cleaned runtime directory"
 
 # Test target - build a test program with runtime

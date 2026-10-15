@@ -1,0 +1,114 @@
+package org.ripple.rfl;
+
+import com.intellij.psi.TokenType;
+import com.intellij.psi.tree.IElementType;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+/** Small dependency-free checks, run by build.py --test or Gradle checkEditor. */
+public final class EditorTest {
+    public static void main(String[] args) throws Exception {
+        lexer();
+        Path build = Path.of(args.length == 0 ? "build" : args[0]);
+        Files.createDirectories(build);
+        Path temporary = Files.createTempDirectory(build, "editor-test-");
+        try {
+            // Bound ancestor discovery to the fixture, away from real workspace binaries.
+            discovery(Path.of("").toAbsolutePath().relativize(temporary.toAbsolutePath()));
+        } finally {
+            try (var files = Files.walk(temporary)) {
+                for (Path path : files.sorted(Comparator.reverseOrder()).toList()) Files.delete(path);
+            }
+        }
+        System.out.println("Editor checks passed: lexer recovery/restarts, bracket/comment isolation, executable discovery.");
+    }
+
+    private static void lexer() {
+        List<IElementType> kinds = tokens("fn main() -> i16 { let s = c\"[\\\"]\"; // }\n/* (\n) */ 'x' 1..2 1.5e-2 }");
+        require(kinds.get(0) == RflTokens.KEYWORD, "fn keyword");
+        require(kinds.stream().filter(t -> t == RflTokens.LBRACKET).count() == 0, "brackets in strings are not code");
+        require(kinds.stream().filter(t -> t == RflTokens.RBRACE).count() == 1, "braces in comments are not code");
+        require(kinds.contains(RflTokens.BLOCK_COMMENT), "multiline block comment");
+        require(kinds.contains(RflTokens.CHARACTER), "character literal");
+        require(kinds.stream().filter(t -> t == RflTokens.NUMBER).count() == 3, "range versus fractional/exponent numbers");
+        require(tokens("\"unfinished\nfn").equals(List.of(RflTokens.STRING, RflTokens.KEYWORD)), "unterminated string recovers at newline");
+        require(tokens("/* unfinished").equals(List.of(RflTokens.BLOCK_COMMENT)), "unterminated comment extends to EOF");
+        require(tokens("🙂").equals(List.of(TokenType.BAD_CHARACTER, TokenType.BAD_CHARACTER)), "invalid Unicode always advances");
+        // Check every token boundary can be used to restart incremental highlighting.
+        String text = "/* two\nlines */ fn x() { c\"hi\"; '\\n'; 42 }";
+        RflLexer full = new RflLexer();
+        full.start(text);
+        while (full.getTokenType() != null) {
+            RflLexer restarted = new RflLexer();
+            restarted.start(text, full.getTokenStart(), text.length(), full.getState());
+            require(restarted.getTokenType() == full.getTokenType() && restarted.getTokenEnd() == full.getTokenEnd(), "lexer restart");
+            full.advance();
+        }
+    }
+
+    private static List<IElementType> tokens(String text) {
+        RflLexer lexer = new RflLexer();
+        lexer.start(text);
+        List<IElementType> kinds = new ArrayList<>();
+        int end = 0;
+        while (lexer.getTokenType() != null) {
+            require(lexer.getTokenStart() == end && lexer.getTokenEnd() > end, "complete progressing token coverage");
+            end = lexer.getTokenEnd();
+            if (lexer.getTokenType() != TokenType.WHITE_SPACE) kinds.add(lexer.getTokenType());
+            lexer.advance();
+        }
+        require(end == text.length(), "complete source coverage");
+        return kinds;
+    }
+
+    private static void discovery(Path root) throws Exception {
+        String name = System.getProperty("os.name").startsWith("Windows") ? "rfl.exe" : "rfl";
+        Path workspace = root.resolve("project with spaces");
+        Path project = Files.createDirectories(workspace.resolve("rfl/examples"));
+        Path debug = executable(workspace.resolve("target/debug/" + name));
+        Path release = executable(workspace.resolve("target/release/" + name));
+        Path onPath = executable(root.resolve("bin/" + name));
+        require(ServerExecutable.resolve("", project, onPath.getParent().toString()).equals(onPath), "PATH precedes workspace release and debug builds");
+        require(ServerExecutable.resolve("", project, "").equals(release), "release precedes debug when PATH has no rfl");
+        require(ServerExecutable.resolve(release.toString(), project, "").equals(release), "explicit path overrides discovery, including spaces");
+        require(ServerExecutable.resolve(debug.toString(), project, onPath.getParent().toString()).equals(debug), "explicit path overrides PATH and release preference");
+        require(ServerExecutable.resolve("../../target/release/" + name, project, "").equals(release), "project-relative executable");
+        require(ServerExecutable.resolve(name, project, onPath.getParent().toString()).equals(onPath), "explicit command searches PATH");
+        Path nearerDebug = executable(project.resolve("target/debug/" + name));
+        require(ServerExecutable.resolve("", project, "").equals(release), "ancestor release precedes nearer debug");
+        Files.delete(release);
+        require(ServerExecutable.resolve("", project, "").equals(nearerDebug), "debug fallback after all release candidates are absent");
+        Files.delete(nearerDebug);
+        require(ServerExecutable.resolve("", project, "").equals(debug), "ancestor debug fallback");
+        Files.delete(debug);
+        require(ServerExecutable.resolve("", null, onPath.getParent().toString()).equals(onPath), "PATH fallback without a workspace");
+        try {
+            ServerExecutable.resolve("", null, "");
+            throw new AssertionError("Missing executable must fail");
+        } catch (IOException expected) {
+            require(expected.getMessage().contains("Settings"), "missing executable provides recovery instructions");
+        }
+        try {
+            ServerExecutable.resolve(workspace.resolve("does-not-exist").toString(), project, onPath.getParent().toString());
+            throw new AssertionError("Explicit invalid path must not silently fall back");
+        } catch (IOException expected) {
+            require(expected.getMessage().contains("not executable"), "invalid explicit executable reported");
+        }
+    }
+
+    private static Path executable(Path path) throws IOException {
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, "placeholder");
+        require(path.toFile().setExecutable(true), "make fixture executable");
+        return path.toAbsolutePath().normalize();
+    }
+
+    private static void require(boolean condition, String message) {
+        if (!condition) throw new AssertionError(message);
+    }
+}

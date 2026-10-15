@@ -48,7 +48,7 @@ def run_case(mode, jit, timeout, monitor=False):
     label = mode + ('-jit' if jit else '')
     log = build / (label + '-fixture.log')
     packets = []
-    flags = {'arp_request': False, 'arp_reply': False, 'echo_request': False, 'echo_reply': False}
+    flags = {'announcement': False, 'arp_request': False, 'arp_reply': False, 'echo_request': False, 'echo_reply': False}
     if monitor:
         flags = {'announcement': False, 'arp_reply': False, 'echo_reply': False}
     replies = set()
@@ -128,7 +128,7 @@ def run_case(mode, jit, timeout, monitor=False):
                     assert len(frame) >= 42 and frame[14:20] == struct.pack('!HHBB', 1, 0x800, 6, 4)
                     assert frame[22:28] == GUEST_MAC and frame[28:32] == GUEST_IP
                     operation = struct.unpack('!H', frame[20:22])[0]
-                    if monitor and operation == 1:
+                    if operation == 1 and frame[38:42] == GUEST_IP:
                         assert frame[:6] == b'\xff' * 6 and frame[32:38] == b'\0' * 6
                         assert frame[38:42] == GUEST_IP, 'monitor probed an unrelated address'
                         assert not flags['announcement'], 'repeated startup announcement'

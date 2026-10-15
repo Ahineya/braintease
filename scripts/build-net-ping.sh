@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODE="${1:-rvm}"
 DEMO="${NET_DEMO:-ping}"
-case "$DEMO" in ping|monitor) ;; *) echo "NET_DEMO must be ping or monitor" >&2; exit 2 ;; esac
+case "$DEMO" in ping|monitor|dns-ping) ;; *) echo "NET_DEMO must be ping, monitor or dns-ping" >&2; exit 2 ;; esac
 OUT="${2:-$ROOT/build/network/$MODE}"
 if [[ $# -ge 2 ]]; then shift 2; else shift "$#"; fi
 mkdir -p "$OUT"
@@ -12,9 +12,10 @@ OUT="$(cd "$OUT" && pwd)"
 RCC="$ROOT/target/release/rcc"
 RASM="$ROOT/src/ripple-asm/target/release/rasm"
 RLINK="$ROOT/src/ripple-asm/target/release/rlink"
-sources=("$ROOT/c-test/examples/network/$DEMO.c" "$ROOT/runtime/vm_devices.c" "$ROOT/runtime/vm_network.c")
+sources=("$ROOT/c-test/examples/network/$DEMO.c")
 case "$MODE" in
     native)
+        sources+=("$ROOT/runtime/vm_devices.c" "$ROOT/runtime/vm_network.c" "$ROOT"/runtime/net/*.c "${ROOT}/runtime/string.c")
         objects=()
         for source in "${sources[@]}"; do
             unit="$(basename "${source%.c}")"
@@ -30,7 +31,8 @@ case "$MODE" in
         echo "$bank" > "$OUT/bank-size"
         objects=("$OUT/crt0.pobj")
         "$RASM" assemble "$ROOT/runtime/crt0.asm" -o "$OUT/crt0.pobj" --bank-size "$bank" --max-immediate 65535
-        sources+=("$ROOT/runtime/putchar.c" "$ROOT/runtime/puts.c")
+        make -s -C "$ROOT/runtime" BANK_SIZE="$bank" libruntime.par
+        objects+=("$ROOT/runtime/libruntime.par")
         for source in "${sources[@]}"; do
             unit="$(basename "${source%.c}")"
             "$RCC" compile "$source" -o "$OUT/$unit.asm" -I "$ROOT/runtime/include" --bank-size "$bank" "$@"

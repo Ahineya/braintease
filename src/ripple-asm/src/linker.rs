@@ -102,6 +102,7 @@ impl Linker {
 
         // Concatenate data independently of code banking
         let mut all_data = Vec::new();
+        let mut gp_extent = 0usize;
         // RCC's .space blocks reserve GP-bank addresses; they are initialized
         // by generated code, not by loading bytes into bank-zero legacy data.
         // Track this per object so mixing in a legacy .data object stays visible.
@@ -117,6 +118,15 @@ impl Linker {
 
         for (file_idx, obj) in object_files.iter().enumerate() {
             let file_data_start = all_data.len() as u32;
+            if !obj.data.is_empty() {
+                if let Some(base) = obj.data_labels.iter().find_map(|(name, &offset)|
+                    name.starts_with("__gp_").then_some(offset as usize))
+                {
+                    // Data label coordinates include rasm's origin (normally
+                    // two cells), while the reservation vector excludes it.
+                    gp_extent = gp_extent.max(file_data_start as usize + base + obj.data.len());
+                }
+            }
             all_data.extend_from_slice(&obj.data);
 
             for (name, label) in &obj.labels {
@@ -142,8 +152,9 @@ impl Linker {
             }
         }
 
-        if all_data.len() > bank_size {
-            errors.push(format!("global data needs {} cells, exceeds GP bank capacity {} (would overlap the stack bank)", all_data.len(), bank_size));
+        let data_extent = all_data.len().max(gp_extent);
+        if data_extent > bank_size {
+            errors.push(format!("global data needs {} cells, exceeds GP bank capacity {} (would overlap the stack bank)", data_extent, bank_size));
         }
         if !errors.is_empty() {
             return Err(errors);
@@ -745,6 +756,15 @@ mod tests {
     use super::*;
     use crate::assembler::RippleAssembler;
     use crate::types::{AssemblerOptions, Opcode};
+
+    #[test]
+    fn gp_capacity_includes_the_assembler_data_origin() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let object = assembler.assemble(".data\n__gp_bounds:\n.space 16\n.code\nstart:\nLI T0, __gp_bounds\nHALT\n").unwrap();
+        assert_eq!(object.data_labels["__gp_bounds"], 2);
+        let errors = Linker::new(16).link(vec![object]).unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("18 cells")));
+    }
 
     #[test]
     fn code_pointer_components_follow_packing_and_existing_bank_relocation() {

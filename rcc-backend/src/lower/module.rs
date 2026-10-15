@@ -40,8 +40,8 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
     let total_words: u64 = module.globals.iter()
         .filter(|g| g.linkage != Linkage::Declaration)
         .map(|g| g.var_type.size_in_words().unwrap_or(1)).sum();
-    if total_words > bank_size as u64 {
-        return Err(format!("global storage needs {total_words} cells, exceeds one data bank ({bank_size}); split or dynamically allocate these objects"));
+    if total_words > u16::MAX as u64 {
+        return Err(format!("translation unit global storage needs {total_words} cells, exceeds the 16-bit object offset space"));
     }
     for global in &module.globals {
         global_manager.allocate_global(global);
@@ -170,6 +170,9 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
         "symbols": symbols,
         "code": link_code.iter().map(|n| rename(n)).collect::<Vec<_>>(),
         "roots": link_roots,
+        "data": module.globals.iter().filter(|g| g.linkage != Linkage::Declaration)
+            .map(|g| (rename(&g.name), g.var_type.size_in_words().unwrap_or(1)))
+            .collect::<std::collections::BTreeMap<_, _>>(),
     });
     all_instructions.insert(0, AsmInst::Comment(format!("rcc-link-v1 {metadata}")));
     info!("V2: Module lowering complete, generated {} instructions", all_instructions.len());

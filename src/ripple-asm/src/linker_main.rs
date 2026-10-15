@@ -69,6 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Load all object files (with names for archive)
     let mut object_files = Vec::new();
+    let mut archives = Vec::new();
     let mut named_object_files = Vec::new();
     for input_path in &cli.inputs {
         let content = fs::read_to_string(input_path)?;
@@ -76,11 +77,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Try to load as archive first
         if let Ok(archive) = serde_json::from_str::<Archive>(&content) {
             println!("Loaded archive {}", input_path.display());
-            let extracted = Linker::extract_from_archive(&archive);
-            object_files.extend(extracted);
-            // For archive creation, preserve the archive name
-            for entry in archive.objects {
-                named_object_files.push((entry.name, entry.object));
+            if cli.format == "archive" {
+                named_object_files.extend(archive.objects.into_iter().map(|entry| (entry.name, entry.object)));
+            } else {
+                archives.push(archive);
             }
         } else {
             // Try as regular object file
@@ -91,8 +91,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .unwrap_or_default()
                         .to_string_lossy()
                         .into_owned();
-                    named_object_files.push((name, obj.clone()));
-                    object_files.push(obj);
+                    if cli.format == "archive" {
+                        named_object_files.push((name, obj));
+                    } else {
+                        object_files.push(obj);
+                    }
                 }
                 Err(e) => {
                     eprintln!("Failed to parse {}: {}", input_path.display(), e);
@@ -118,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Link the object files
     let linker = Linker::new(cli.bank_size);
-    match linker.link(object_files) {
+    match linker.link_archives(object_files, archives) {
         Ok(mut program) => {
             if cli.format == "sys" {
                 program.apply_code_bank_base(cli.code_bank_base);

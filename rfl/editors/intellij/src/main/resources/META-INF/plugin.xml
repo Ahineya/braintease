@@ -1,0 +1,46 @@
+<idea-plugin>
+    <id>org.ripple.rfl</id>
+    <name>RFL</name>
+    <version>0.2.1</version>
+    <vendor>Ripple</vendor>
+    <description><![CDATA[
+        Ripple Functional Language support using the existing <code>rfl lsp</code> server.
+        Provides diagnostics, completion, navigation, hover documentation, rename,
+        symbols, parameter hints, inlay hints and semantic highlighting, plus local
+        syntax highlighting, comment actions and bracket matching. Run, compile or
+        check RFL programs through run configurations and the editor's run gutter.
+        Configure the executable under Settings | Languages &amp; Frameworks | RFL.
+    ]]></description>
+    <idea-version since-build="261.27258.48" until-build="261.*"/>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lsp</depends>
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType name="RFL" language="RFL" extensions="rfl"
+                  implementationClass="org.ripple.rfl.RflFileType" fieldName="INSTANCE"/>
+        <lang.parserDefinition language="RFL" implementationClass="org.ripple.rfl.RflParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="RFL" implementationClass="org.ripple.rfl.RflSyntaxHighlighter$Factory"/>
+        <lang.commenter language="RFL" implementationClass="org.ripple.rfl.RflCommenter"/>
+        <lang.braceMatcher language="RFL" implementationClass="org.ripple.rfl.RflBraceMatcher"/>
+        <projectService serviceImplementation="org.ripple.rfl.RflSettings"/>
+        <projectConfigurable id="org.ripple.rfl.settings" parentId="language"
+                             displayName="RFL" instance="org.ripple.rfl.RflConfigurable"/>
+        <platform.lsp.integrationProvider implementation="org.ripple.rfl.RflLspSupportProvider"/>
+        <configurationType implementation="org.ripple.rfl.RflRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.ripple.rfl.RflRunConfigurationProducer"/>
+        <runLineMarkerContributor language="RFL" implementationClass="org.ripple.rfl.RflRunLineMarkerContributor"/>
+    </extensions>
+    <actions>
+        <action id="RFL.CompileFile" class="org.ripple.rfl.RflFileAction$Compile"
+                text="Compile RFL File" description="Compile the selected RFL file using an RFL run configuration">
+            <add-to-group group-id="BuildMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="RFL.CheckFile" class="org.ripple.rfl.RflFileAction$Check"
+                text="Check RFL File" description="Check the selected RFL file without generating an executable">
+            <add-to-group group-id="BuildMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
