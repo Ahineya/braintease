@@ -23,6 +23,7 @@ mod patterns;
 mod products;
 mod register;
 mod statements;
+mod traits;
 mod types;
 
 use captures::*;
@@ -34,12 +35,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
     Adt, BinOp, Block, Ctor, Expr, ExprKind, Function, Impl, Module, Param, ParsedTy, Pat, Recv,
-    Span, Stmt, TypeParam, UnaryOp,
+    Span, Stmt, Trait, TraitScope, TypeParam, UnaryOp,
 };
 use crate::error::CompileError;
 use crate::ty::Ty;
 use crate::typed::*;
 
+#[derive(Clone)]
 struct Sig {
     params: Vec<Ty>,
     ret: Option<Ty>,
@@ -94,12 +96,15 @@ pub struct NameUse {
     pub ty: String,
 }
 
+#[derive(Clone)]
 struct AdtSchema {
     name: String,
     params: Vec<String>,
+    type_params: Vec<TypeParam>,
     ctors: Vec<Vec<ParsedTy>>,
 }
 
+#[derive(Clone)]
 struct FnSchema {
     index: usize,
     type_params: Vec<String>,
@@ -122,15 +127,23 @@ pub struct ProgramInfo {
 }
 
 pub(crate) fn completion_function(func: &Function) -> Option<crate::completion::ExtensionFunction> {
-    if func.params.is_empty() { return None; }
+    if func.params.is_empty() {
+        return None;
+    }
     Some(crate::completion::ExtensionFunction {
         name: func.name.clone(),
         signature: parsed_signature(func, false),
-        generics: func.type_params.iter().map(|param| param.name.clone()).collect(),
+        generics: func
+            .type_params
+            .iter()
+            .map(|param| param.name.clone())
+            .collect(),
     })
 }
 
-pub(crate) fn completion_type_name(ty: &ParsedTy) -> String { parsed_brief(ty) }
+pub(crate) fn completion_type_name(ty: &ParsedTy) -> String {
+    parsed_brief(ty)
+}
 
 pub fn check(source: &str, module: &Module) -> Result<TModule, CompileError> {
     analyze(source, module).1
@@ -166,6 +179,16 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
         refs: Vec::new(),
         borrows: Vec::new(),
         methods: Vec::new(),
+        traits: Vec::new(),
+        trait_sigs: HashMap::new(),
+        trait_impls: Vec::new(),
+        trait_scopes: module.trait_scopes.clone(),
+        opaque: HashMap::new(),
+        subst: HashMap::new(),
+        generic_check: false,
+        trait_dispatch: HashMap::new(),
+        declarations_checked: HashSet::new(),
+        declarations_active: HashSet::new(),
         loose_receiver: false,
         consts: HashMap::new(),
         structs: Vec::new(),
@@ -186,12 +209,55 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
     };
     let result = (|| -> Result<TModule, CompileError> {
         let mut owned = module.clone();
-        owned.adts.insert(0, prelude_option());
-        owned.adts.insert(0, prelude_result());
+        crate::modules::isolate_prelude_types(&mut owned);
+        if checker.trait_scopes.is_empty() {
+            let mut visible: Vec<_> = owned.traits.iter().map(|t| t.name.clone()).collect();
+            if !visible.iter().any(|n| n == "Printable") {
+                visible.push("$std$Printable".into());
+            }
+            let owned_names = owned
+                .traits
+                .iter()
+                .map(|t| t.name.clone())
+                .chain(owned.adts.iter().map(|a| a.name.clone()))
+                .chain(owned.structs.iter().map(|s| s.name.clone()))
+                .collect();
+            checker.trait_scopes.push(TraitScope {
+                span: Span::new(0, source.len()),
+                visible,
+                owned: owned_names,
+                core: false,
+            });
+        }
+        if !owned.adts.iter().any(|a| a.name == "Option") {
+            owned.adts.insert(0, prelude_option());
+        }
+        if !owned.adts.iter().any(|a| a.name == "Result") {
+            owned.adts.insert(0, prelude_result());
+        }
+        if !owned.traits.iter().any(|t| t.name == "$std$Printable") {
+            let mut prelude = crate::modules::printing_prelude(source.len() + 1)?;
+            owned.traits.append(&mut prelude.traits);
+            owned.impls.append(&mut prelude.impls);
+            owned.functions.append(&mut prelude.functions);
+            checker.trait_scopes.append(&mut prelude.trait_scopes);
+        }
+        checker.prepare_traits(&mut owned)?;
         checker.methods = expand_impls(source, &mut owned)?;
         checker.ast_fns = owned.functions.clone();
         checker.eval_consts(&owned.consts)?;
         checker.register(&mut owned)?;
+        checker.register_trait_signatures()?;
+        // Rigid generic types are a checking-only universe. They must not
+        // contaminate runtime layouts or force unreachable monomorphizations.
+        let mut declarations = checker.clone();
+        declarations.validate_traits()?;
+        declarations.check_generic_declarations()?;
+        checker.trait_dispatch = declarations.trait_dispatch;
+        checker.facts = declarations.facts;
+        checker.uses = declarations.uses;
+        checker.expr_types = declarations.expr_types;
+        checker.call_sigs = declarations.call_sigs;
         for item in &owned.consts {
             if checker.ctor_schema.contains_key(&item.name) {
                 return Err(CompileError::at(
@@ -208,7 +274,9 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
             .cloned()
             .collect();
         for func in &concrete {
-            checker.check_fn(func, &func.name, true, false)?;
+            if !checker.typed.iter().any(|f| f.name == func.name) {
+                checker.check_fn(func, &func.name, true, false)?;
+            }
         }
         let structs = checker
             .structs
@@ -246,21 +314,24 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
 
 /// Globally available compiler functions, shared with editor completion.
 pub(crate) const BUILTIN_FUNCTIONS: &[(&str, &str)] = &[
-    ("print", "fn(integer | bool | char | float | String) -> ()"),
-    ("println", "fn(integer | bool | char | float | String) -> ()"),
+    ("print", "fn<T: Printable>(T) -> ()"),
+    ("println", "fn<T: Printable>(T) -> ()"),
     ("putc", "fn(integer | char) -> ()"),
     ("from_char", "fn(char) -> String"),
     ("from_byte", "fn(u8) -> String"),
 ];
 
 fn builtin_signature(name: &str) -> Option<&'static str> {
+    if name == "__write_value" {
+        return Some("fn(scalar | String) -> ()");
+    }
     BUILTIN_FUNCTIONS
         .iter()
         .find_map(|(builtin, signature)| (*builtin == name).then_some(*signature))
 }
 
 fn is_builtin(name: &str) -> bool {
-    builtin_signature(name).is_some()
+    !matches!(name, "print" | "println") && builtin_signature(name).is_some()
 }
 
 fn always_returns(block: &Block) -> bool {
@@ -283,6 +354,7 @@ fn expr_returns(expr: &Expr) -> bool {
     }
 }
 
+#[derive(Clone)]
 struct Checker<'a> {
     source: &'a str,
     sigs: HashMap<String, Sig>,
@@ -311,6 +383,17 @@ struct Checker<'a> {
     refs: Vec<RefTy>,
     borrows: Vec<LiveBorrow>,
     methods: Vec<Inherent>,
+    traits: Vec<Trait>,
+    trait_sigs: HashMap<(String, String), FuncSig>,
+    trait_impls: Vec<std::rc::Rc<traits::TraitImpl>>,
+    trait_scopes: Vec<TraitScope>,
+    /// Rigid declaration-time parameters, represented by opaque nominal types.
+    opaque: HashMap<Ty, (String, Vec<String>)>,
+    subst: HashMap<String, Ty>,
+    generic_check: bool,
+    trait_dispatch: HashMap<usize, String>,
+    declarations_checked: HashSet<String>,
+    declarations_active: HashSet<String>,
     /// The receiver argument of an inherent `&self` method accepts `&mut T`.
     loose_receiver: bool,
     /// Module constants, in source order. A name maps to its type and value.
@@ -345,6 +428,7 @@ struct Checker<'a> {
     type_defs: HashMap<String, Span>,
 }
 
+#[derive(Clone)]
 struct StructInfo {
     name: String,
     fields: Vec<(String, Ty)>,
@@ -360,16 +444,19 @@ struct Inherent {
     receiver: Option<Recv>,
 }
 
+#[derive(Clone)]
 struct ArrayInfo {
     elem: Ty,
     len: u16,
 }
 
+#[derive(Clone)]
 struct RefTy {
     mutable: bool,
     inner: Ty,
 }
 
+#[derive(Clone)]
 struct LiveBorrow {
     binding: u32,
     mutable: bool,

@@ -283,3 +283,39 @@ test('replacing a managed executable preserves hard-linked user copies', () => {
   }
   assert.deepEqual(checkRoot(upgraded).issues, []);
 });
+
+test('managed vi aliases share Levee and preserve older user hard links during upgrades', () => {
+  const base = ino => (2 + (ino >> 3)) * 256 + (ino & 7) * 32;
+  const w = (b, p) => b.readUInt16LE(p * 2);
+  const entry = (b, name) => {
+    const block = w(b, base(2) + 12), size = w(b, base(2) + 4);
+    for (let i = 0; i < size; i += 32) {
+      const pos = block * 256 + i;
+      let n = '';
+      for (let j = 1; j <= 30 && w(b, pos + j); j++) n += String.fromCharCode(w(b, pos + j));
+      if (n === name) return w(b, pos);
+    }
+    throw Error('missing ' + name);
+  };
+  const files = [{name:'/bin/levee',data:Buffer.from('levee one')},
+                 {name:'/bin/vi',link:'/bin/levee'}];
+  const seeded = rootImage(files);
+  assert.equal(entry(seeded,'vi'),entry(seeded,'levee'));
+  assert.deepEqual(checkRoot(seeded).issues,[]);
+  let root = rootImage([{name:'/bin/vi',data:Buffer.from('old vi')},
+                        {name:'/bin/saved',link:'/bin/vi'}]);
+  const saved = entry(root,'saved');
+  root = installRoot(root, files);
+  assert.equal(entry(root,'saved'),saved);
+  assert.notEqual(entry(root,'vi'),saved);
+  assert.equal(w(root,base(saved)+1),1);
+  assert.equal(entry(root,'vi'),entry(root,'levee'));
+  assert.equal(w(root,base(entry(root,'vi'))+1),2);
+  assert.deepEqual(checkRoot(root).issues,[]);
+  assert.equal(installRoot(root,files),root);
+  const next = installRoot(root,[{name:'/bin/levee',data:Buffer.from('levee two')},files[1]]);
+  assert.equal(entry(next,'vi'),entry(next,'levee'));
+  assert.equal(entry(next,'saved'),saved);
+  assert.deepEqual(checkRoot(next).issues,[]);
+  assert.throws(()=>installRoot(next,[{name:'/bin/oops',link:'/bin/missing'}]),/missing.*target/);
+});

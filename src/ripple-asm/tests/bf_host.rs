@@ -363,9 +363,10 @@ fn signed_comparison_and_branch_maximum_edges() {
 // not spend most of its time fetching registers and dispatching instructions.
 // The evaluator only implements literal wrapping Brainfuck operations.
 fn comparison_helper_ops() -> Vec<Op> {
-    let (header, _) = include_str!("../src/cpu_header.bfm")
-        .split_once("#define PROGRAM {")
-        .unwrap();
+    let object = RippleAssembler::new(AssemblerOptions::default()).assemble("HALT").unwrap();
+    let image = Linker::new(64).link(vec![object]).unwrap();
+    let template = MacroFormatter::new().format_linked_program_standalone(&image, false);
+    let (header, _) = template.split_once("#define PROGRAM {").unwrap();
     let (_, definitions) = include_str!("../src/cpu_footer.bfm")
         .split_once("// MARK: ----------- CODE END ----------")
         .unwrap();
@@ -512,11 +513,11 @@ fn immediate_load_edges_overwrite_without_disturbing_registers_or_scratch() {
 
 #[test]
 fn unsupported_images_fail_before_expansion() {
-    for opcode in ["LOADC", "STORC"] {
+    for opcode in ["IRET", "CSRR R0, 11", "CSRW R0, 3"] {
         assert!(
-            expand(&format!("start:\n{opcode} R0, T0, T1\nHALT\n"), 64, 4)
+            expand(&format!("start:\n{opcode}\nHALT\n"), 64, 4)
                 .unwrap_err()
-                .contains("LOADC/STORC")
+                .contains("--bf-irq")
         );
     }
     assert!(expand("HALT", 16, 4).unwrap_err().contains("at least 32"));

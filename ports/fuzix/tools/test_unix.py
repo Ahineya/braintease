@@ -12,14 +12,16 @@ p.add_argument('--build',type=Path,default=ROOT/'build/fuzix')
 a=p.parse_args();build=a.build.resolve()
 
 def run(image,commands,jit=True):
-    args=[str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),'--memory','4608000','--headless','--input',commands,'--timeout','180']
+    args=[str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),'--memory','5120000','--headless','--input',commands,'--timeout','180']
     if jit:args+=['--jit']
     live=Path('/tmp/fuzix-unix-live.log')
     with live.open('w') as log:
         r=subprocess.run(args,text=True,stdout=log,stderr=subprocess.STDOUT,timeout=190)
     output=live.read_text().replace('\r','')
     assert r.returncode==0 and 'Ripple: disk synced; power off.' in output,output
-    output=output.split('fuzix# ',1)[1]
+    output=output.split('Starting /init\n')[-1]
+    output='\n'.join(line for line in output.splitlines()
+                     if not line.startswith(('fuzix# ', '> ')))
     assert 'FAILED' not in output and 'panic:' not in output,output
     return output
 
@@ -129,7 +131,7 @@ shutdown
     for wanted in ['libccheck passed','/work/nested','alpha','Files are identical','/bin','hello','uid=0(root)','root','FUZIX','Ripple','/bin/sed','/bin/sh','STATUS:1','STATUS:0','TEST:0','TEST:1','CAT:1','No such file or directory','CHILD','SHELL:7','edited line','SLEPT:0','KILL:0','FIFO:0','MKNOD:0','UTC']:
         assert wanted in out,(wanted,out)
     assert 'syntax error' not in out and '???' not in out,out
-    assert ' ps\n' in out and ' /init\n' in out,out
+    assert ' ps\n' in out and ' sh\n' in out,out
     assert section(out,'CUTBEGIN','CUTEND') == 'be\nal\nbe\n',out
     assert section(out,'EXPANDBEGIN','EXPANDEND') == 'a   b\n',out
     assert section(out,'COLRMBEGIN','COLRMEND') == 'aef\n',out

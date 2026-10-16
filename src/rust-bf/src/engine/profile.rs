@@ -29,6 +29,8 @@ pub(super) enum Kind {
 impl Kind {
     pub(super) fn fast(operation: &FastOp) -> Self {
         match operation {
+            FastOp::Halve(_) => Self::Affine,
+            FastOp::Transport(_) => Self::Walk,
             FastOp::Search(_) => Self::Search,
             FastOp::Routed(_) => Self::Routed,
             FastOp::Block { .. } => Self::Block,

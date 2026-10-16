@@ -35,6 +35,7 @@ impl<'a> Checker<'a> {
             }
             self.schemas.push(AdtSchema {
                 name: adt.name.clone(),
+                type_params: adt.params.clone(),
                 params,
                 ctors: Vec::new(),
             });
@@ -118,6 +119,18 @@ impl<'a> Checker<'a> {
             .collect();
         for index in plain {
             self.monomorphize(index, &[])?;
+        }
+        for func in &mut module.functions {
+            if func.ret.is_none()
+                && func.body.tail.is_none()
+                && (!func.type_params.is_empty() || !always_returns(&func.body))
+            {
+                func.ret = Some(ParsedTy::Named {
+                    span: func.name_span,
+                    name: "unit".into(),
+                    args: Vec::new(),
+                });
+            }
         }
         self.infer_omitted(&mut module.functions)?;
         self.ast_fns = module.functions.clone();

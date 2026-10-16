@@ -390,11 +390,6 @@ fn compact_validation_matches_macro_export_and_writes_nothing_on_invalid_input()
     let mut case = valid();
     case.instructions.clear();
     invalid.push((case, 1));
-    for opcode in [Opcode::Loadc, Opcode::Storc] {
-        let mut case = valid();
-        case.instructions[0] = Instruction::new(opcode, 0, 0, 0);
-        invalid.push((case, 1));
-    }
     for instruction in [
         Instruction::new(Opcode::Li, 32, 0, 0),
         Instruction::new(Opcode::Add, 7, 7, 32),

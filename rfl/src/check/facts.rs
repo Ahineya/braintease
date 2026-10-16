@@ -83,6 +83,9 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn show(&self, ty: Ty) -> String {
+        if let Some((name, _)) = self.opaque.get(&ty) {
+            return name.clone();
+        }
         match ty {
             Ty::Adt(id) => self.adts[id as usize].name.clone(),
             Ty::Vec(id) => format!("Vec<{}>", self.show(self.vec_elems[id as usize])),
@@ -190,9 +193,21 @@ impl<'a> Checker<'a> {
                 .or_else(|| self.consts.get(name).map(|(ty, _)| *ty)),
             ExprKind::Borrow { .. }
             | ExprKind::Try(_)
-            | ExprKind::Assoc { .. }
             | ExprKind::Slice { .. }
             | ExprKind::Deref(_) => None,
+            ExprKind::Assoc {
+                ty_name, method, ..
+            } => {
+                if let Some(name) = self.trait_name(ty_name) {
+                    self.trait_return_hint(&name, method)
+                } else {
+                    let found = self
+                        .methods
+                        .iter()
+                        .find(|m| m.type_name == *ty_name && m.method == *method)?;
+                    self.sigs.get(&found.func).and_then(|s| s.ret)
+                }
+            }
             ExprKind::Unary {
                 op: UnaryOp::Not, ..
             } => Some(Ty::Bool),
@@ -213,7 +228,10 @@ impl<'a> Checker<'a> {
             ExprKind::Call { callee, .. } if is_builtin(callee) => Some(Ty::Unit),
             ExprKind::Call { callee, .. } => self.sigs.get(callee).and_then(|sig| sig.ret),
             ExprKind::Method {
-                receiver, method, ..
+                receiver,
+                method,
+                resolved,
+                ..
             } => {
                 if method == "len" && self.vec_elem_of(receiver).is_some() {
                     Some(Ty::Usize)
@@ -224,7 +242,23 @@ impl<'a> Checker<'a> {
                 {
                     Some(Ty::Unit)
                 } else {
-                    self.sigs.get(method).and_then(|sig| sig.ret)
+                    if let Some(ty) = self.peek(receiver) {
+                        if let Some(key) = self.type_key(ty) {
+                            if let Some(found) = self
+                                .methods
+                                .iter()
+                                .find(|m| m.type_name == key && m.method == *method)
+                            {
+                                return self.sigs.get(&found.func).and_then(|s| s.ret);
+                            }
+                        }
+                        if let Ok(candidates) = self.trait_candidates(expr.span.start, ty, method) {
+                            if candidates.len() == 1 {
+                                return self.trait_return_hint(&candidates[0], method);
+                            }
+                        }
+                    }
+                    self.sigs.get(resolved).and_then(|sig| sig.ret)
                 }
             }
             ExprKind::Index { base, .. } => self

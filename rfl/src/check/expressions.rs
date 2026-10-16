@@ -145,13 +145,22 @@ impl<'a> Checker<'a> {
                     kind: TExprKind::Name(id),
                 })
             }
-            ExprKind::Borrow { mutable, expr } => self.check_borrow(span, *mutable, expr, expected),
+            ExprKind::Borrow {
+                mutable,
+                temporary,
+                expr,
+            } => self.check_borrow(span, *mutable, *temporary, expr, expected),
             ExprKind::Deref(inner) => self.check_deref(span, inner, expected),
             ExprKind::Assoc {
                 ty_name,
                 method,
                 args,
-            } => self.check_assoc(span, ty_name, method, args, expected),
+            } => {
+                let mark = self.borrows.len();
+                let result = self.check_assoc(span, ty_name, method, args, expected);
+                self.borrows.truncate(mark);
+                result
+            }
             ExprKind::Try(expr) => self.check_try(span, expr, expected),
             ExprKind::Unary { op, expr: inner } => self.check_unary(span, *op, inner, expected),
             ExprKind::Binary { op, lhs, rhs } => self.check_binary(span, *op, lhs, rhs, expected),

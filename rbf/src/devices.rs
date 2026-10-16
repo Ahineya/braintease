@@ -247,9 +247,9 @@ impl BfDevices {
                 }
             }
             HDR_STORE_CTL => self.storage.as_ref().map_or(0, Storage::get_control),
-            // The BF CPU has no interrupt dispatcher. Zero denotes no pending
-            // or configured interrupts; nonzero writes are rejected below.
-            HDR_IRQ_STATUS..=HDR_IRQ_CAUSE => 0,
+            // The Brainfuck CPU owns the interrupt controller, including its
+            // MMIO shadow. Device callbacks must not alter trap state.
+            HDR_IRQ_STATUS..=HDR_IRQ_CAUSE => memory.read(address),
             27..=31 => self
                 .devices
                 .read_register(address)
@@ -333,11 +333,7 @@ impl BfDevices {
                         .map_err(|e| format!("Storage control: {e}"))?;
                 }
             }
-            HDR_IRQ_STATUS..=HDR_IRQ_CAUSE => {
-                if value != 0 {
-                    return Err("Interrupts are unsupported by the Brainfuck CPU".into());
-                }
-            }
+            HDR_IRQ_STATUS..=HDR_IRQ_CAUSE => {} // CPU microcode commits this store.
             27..=31 => {
                 if self.devices.is_input_request(address, value) {
                     self.poll_device_input();
@@ -486,7 +482,9 @@ mod tests {
         for address in HDR_IRQ_STATUS..=HDR_IRQ_CAUSE {
             assert_eq!(host.read_mmio(address, &mut memory).unwrap(), 0);
             assert!(host.write_mmio(address, 0, &mut memory).is_ok());
-            assert!(host.write_mmio(address, 1, &mut memory).is_err());
+            memory[address] = 0xa55a;
+            assert!(host.write_mmio(address, 1, &mut memory).is_ok());
+            assert_eq!(host.read_mmio(address, &mut memory).unwrap(), 0xa55a);
         }
         assert!(host.write_mmio(HDR_DISP_MODE, 5, &mut memory).is_err());
         assert_eq!(host.display_mode(), DISP_OFF);

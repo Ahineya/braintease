@@ -11,6 +11,18 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let scrutinee = self.check_expr(scrutinee, None)?;
+        let borrowed = scrutinee.ty.is_ref();
+        let scrutinee = if borrowed {
+            TExpr {
+                ty: self.referent(scrutinee.ty),
+                kind: TExprKind::Field {
+                    base: Box::new(scrutinee),
+                    offset: 0,
+                },
+            }
+        } else {
+            scrutinee
+        };
         match scrutinee.ty {
             Ty::Adt(_) | Ty::Bool | Ty::Char | Ty::Struct { .. } | Ty::Tuple { .. } => {}
             ty if ty.is_int() => {}
@@ -29,7 +41,11 @@ impl<'a> Checker<'a> {
             self.scopes.push(HashMap::new());
             let arm_scope = Span::new(arm.pat.span().end, arm.body.span.end);
             self.scope_spans.push(arm_scope);
-            let pat = self.check_pat(&arm.pat, scrutinee.ty, false)?;
+            let mut pat = self.check_pat(&arm.pat, scrutinee.ty, false)?;
+            let mut borrowed_bindings = Vec::new();
+            if borrowed {
+                self.borrow_pattern_bindings(&mut pat, &mut borrowed_bindings);
+            }
             let previous: Vec<_> = covering
                 .iter()
                 .map(|index: &usize| &typed[*index])
@@ -52,6 +68,18 @@ impl<'a> Checker<'a> {
                             format!("a guard must be bool, found {}", self.show(guard.ty)),
                         ));
                     }
+                    let guard = if borrowed_bindings.is_empty() {
+                        guard
+                    } else {
+                        let ty = guard.ty;
+                        TExpr {
+                            ty,
+                            kind: TExprKind::Block(Box::new(TBlock {
+                                stmts: std::mem::take(&mut borrowed_bindings),
+                                tail: Some(guard),
+                            })),
+                        }
+                    };
                     Some(guard)
                 }
                 None => None,
@@ -59,7 +87,7 @@ impl<'a> Checker<'a> {
             if guard.is_none() {
                 covering.push(typed.len());
             }
-            let body = match &arm.body.kind {
+            let mut body = match &arm.body.kind {
                 ExprKind::Block(block) => self.check_block(block, result)?,
                 _ => {
                     let expr = self.check_expr(&arm.body, result)?;
@@ -69,6 +97,7 @@ impl<'a> Checker<'a> {
                     }
                 }
             };
+            body.stmts.splice(0..0, borrowed_bindings);
             self.pop_scope();
             self.scope_spans.pop();
             let diverges = expr_returns(&arm.body);
@@ -110,6 +139,39 @@ impl<'a> Checker<'a> {
                 arms: typed,
             },
         })
+    }
+
+    /// Bind shared payload views backed by an owned match snapshot. The
+    /// snapshot keeps managed payloads alive without moving from the source.
+    fn borrow_pattern_bindings(&mut self, pat: &mut TPat, prefix: &mut Vec<TStmt>) {
+        match pat {
+            TPat::Bind(id) => {
+                let original = *id;
+                let value_ty = self.bindings[original as usize].ty;
+                let hidden = self.bind(format!("$match{}", self.bindings.len()), value_ty, false);
+                let ty = self.intern_ref(false, value_ty);
+                self.bindings[original as usize].ty = ty;
+                *id = hidden;
+                prefix.push(TStmt::Let {
+                    binding: original,
+                    init: TExpr {
+                        ty,
+                        kind: TExprKind::Borrow { binding: hidden },
+                    },
+                });
+            }
+            TPat::Ctor { fields, .. } => {
+                for f in fields {
+                    self.borrow_pattern_bindings(&mut f.pat, prefix);
+                }
+            }
+            TPat::Product { fields } => {
+                for f in fields {
+                    self.borrow_pattern_bindings(&mut f.pat, prefix);
+                }
+            }
+            TPat::Wild | TPat::Lit(_) => {}
+        }
     }
 
     pub(super) fn check_pat(

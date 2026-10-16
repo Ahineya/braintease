@@ -87,6 +87,7 @@ impl<'a> Checker<'a> {
                 .iter()
                 .enumerate()
                 .map(|(slot, _)| TypeParam {
+                    bounds: Vec::new(),
                     name: type_var_name(slot),
                     span: func.name_span,
                 })

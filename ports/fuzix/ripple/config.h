@@ -9,7 +9,7 @@
 #define CONFIG_SMALL
 #define CONFIG_BANKS 1
 #define CONFIG_STACKSIZE 2048
-#define PTABSIZE 4
+#define PTABSIZE 8
 #define NBUFS 8
 #define NMOUNTS 2
 #define NUM_DEV_TTY 1

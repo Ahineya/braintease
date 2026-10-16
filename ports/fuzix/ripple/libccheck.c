@@ -5,9 +5,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
 static int failed;
+static jmp_buf jump;
+static volatile int caught;
+static void jump_back(void) { longjmp(jump, 23); }
+static void catch_signal(int sig) { caught = sig; }
+static void jump_signal(int sig) { longjmp(jump, sig); }
+static int stack_jump(void) {
+    jmp_buf local;
+    int value = setjmp(local);
+    if (!value)
+        longjmp(local, 0);
+    return value;
+}
 static void check(int ok, const char *s) {
     if (!ok) {
         printf("FAILED %s errno=%d\n", s, errno);
@@ -22,6 +36,27 @@ int main(void) {
     struct dirent *e;
     int found = 0;
     long before;
+    int jumped = setjmp(jump);
+    if (!jumped)
+        jump_back();
+    check(jumped == 23, "setjmp/longjmp");
+    check(stack_jump() == 1, "stack jmp_buf and longjmp zero");
+    jumped = setjmp(jump);
+    if (!jumped) {
+        signal(SIGUSR2, jump_signal);
+        kill(getpid(), SIGUSR2);
+        check(0, "signal longjmp did not jump");
+    }
+    check(jumped == SIGUSR2, "longjmp out of signal handler");
+    check(signal(SIGUSR1, catch_signal) != SIG_ERR, "install signal handler");
+    check(kill(getpid(), SIGUSR1) == 0 && caught == SIGUSR1,
+          "caught signal and return");
+    caught = 0;
+    check(signal(SIGALRM, catch_signal) != SIG_ERR, "install timer handler");
+    alarm(1);
+    while (!caught)
+        ;
+    check(caught == SIGALRM, "asynchronous user signal");
 
     before = (long)sbrk(0);
     p = malloc(7000);

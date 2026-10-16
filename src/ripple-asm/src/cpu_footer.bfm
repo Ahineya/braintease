@@ -136,6 +136,11 @@
 #define OP_MULI  0x1D
 #define OP_DIVI  0x1E
 #define OP_MODI  0x1F
+#define OP_LOADC 0x20
+#define OP_STORC 0x21
+#define OP_IRET  0x22
+#define OP_CSRR  0x23
+#define OP_CSRW  0x24
 
 // MARK: ----- Register Constants
 #define REG_ZONE_W  36
@@ -402,102 +407,78 @@
 #define copy_reg_to_A_via_B @lane(@L_REG, [->>>>+>+<<<<<] >>>>> [-<<<<<+>>>>>] <<<<<)
 
 // MARK: -- Registers fetch
-#define mark_register(offs) {
-  @lane(@L_SA,
-    @times(
-      @lane_end(@L_SA)
-      @goto_start
+// Carry a whole value through lane zero. The fast-lane sentinel stops the
+// leftward walk at word one, so the CPU run-state at word zero is untouched.
+// Each hop is a local affine transfer; no value-sized loop contains a scan.
+#define carry_start_to_first_word {
+  @prevword
+  @fl([
+    @fastlane_end @nextword @move_l @prevword @fastlane
+  ])
+  @nextword
+}
+#define carry_start_to_ip {
+  @fl([ @fastlane_end @move_r @fastlane ])
+}
 
-      @nextword
-
-      @lane(@L_PTR, [@nextword]+)
-
-      @goto_start
-      @nextword
-
-      @goto_ip_word
-      offs
-      @lane_start(@L_SA)
-    )
-  )
+// Consume the selector in scratch A, leaving the head on the selected word.
+#define mark_register {
+  @lane(@L_SA, [-<<<<<+>>>>>])
+  [
+    @carry_start_to_first_word
+    [ - @lane(@L_PTR, +) @move_r ]
+  ]
+  @goto_marked_register
 }
 
 #define goto_marked_register {
-  @goto_start
-  @nextword
-  @goto_ptr_end
+  @goto_start @nextword @goto_ptr_end
 }
 
-#define move_register_to_ip_sA(offs) {
-  @lane(@L_REG,
-    [->>>>+>+@nextword+@prevword<<<<<]>>>>>@nextword[-@prevword<<<<<+>>>>>@nextword]@prevword<<<<<
-  )
-
-  @lane(@L_SA,
-    @times(
-      @lane_end(@L_SA)
-      @goto_start
-      @nextword
-      @goto_ip_word
-
-      offs
-      @lane(@L_SA, +)
-      @lane(@L_SB, @goto_nonzero_left_lane)
-      @lane_start(@L_SA)
-    )
-  )
+#define move_register_to_ip_sA(n) {
+  // Copy REG to START, restoring REG through the adjacent scratch-A cell.
+  @lane(@L_REG, [-<+>>>>>+<<<<] >>>> [-<<<<+>>>>] <<<<)
+  // Zero sources need no transport. Cleanup accepts either the selected
+  // register or the opcode as its starting word.
+  [
+    @carry_start_to_ip
+    [- @prevwords(n) @lane(@L_SA, +) @nextwords(n)]
+  ]
 }
 
-
-#define fetch_from_register(offs_from_ip) {
-    offs_from_ip
-    @copy_value_to_A
-    @mark_register(offs_from_ip)
-    @goto_marked_register
-    @move_register_to_ip_sA(offs_from_ip)
-    @fetch_register_cleanup
+#define fetch_from_register(n) {
+  @prevwords(n) @copy_value_to_A
+  @mark_register
+  @move_register_to_ip_sA(n)
+  @fetch_register_cleanup
 }
 
 #define fetch_register_cleanup {
-    @lane(@L_SB, @clear)
-    @goto_start
-    @nextword
-    @ptr_cleanup
-    @nextword
-    @goto_ip_word
+  @prevword @goto_start @nextword @ptr_cleanup
+  @nextword @goto_ip_word
 }
 
 #define clear_and_mark_destination_register {
-    @prevword
-    @copy_value_to_A
-    @mark_register(@prevword)
-    @goto_marked_register
-    @lane(@L_REG, @clear)
-    @goto_ip_word
+  @prevword @copy_value_to_A
+  @mark_register
+  @lane(@L_REG, @clear)
+  @goto_ip_word
 }
 
 #define move_result_to_destination_register {
-  @lane(@L_SB,
-    @times(
-      @lane_end(@L_SB)
-      @prevword
-      @goto_marked_register
-      @lane(@L_REG, +)
-      @goto_ip_word
-      @lane_start(@L_SB)
-    )
-  )
+  @lane(@L_SB, [-<<<<<<+>>>>>>])
+  // The destination is already clear, so a zero result needs no walk.
+  [
+    @carry_start_to_first_word
+    @lane(@L_PTR, [ @lane_end(@L_PTR) @move_r @lane_start(@L_PTR) ])
+    [->+<]
+    @goto_ip_word
+  ]
 }
 
 #define reset_register_mark {
-    @prevword
-
-    @goto_start
-    @nextword
-
-    @ptr_cleanup
-    @nextword
-    @goto_ip_word
+  @prevword @goto_start @nextword @ptr_cleanup
+  @nextword @goto_ip_word
 }
 
 // MARK: -- math and logic
@@ -547,8 +528,8 @@
 // MARK: -- simple_register_op
 
 #define two_registers_op(op) {
-    @fetch_from_register(@prevword @prevword)
-    @fetch_from_register(@prevword @prevword @prevword)
+    @fetch_from_register(2)
+    @fetch_from_register(3)
     op
     @clear_and_mark_destination_register
     @move_result_to_destination_register
@@ -556,19 +537,19 @@
 }
 
 #define two_registers_op_no_set(op) {
-    @fetch_from_register(@prevword @prevword)
-    @fetch_from_register(@prevword @prevword @prevword)
+    @fetch_from_register(2)
+    @fetch_from_register(3)
     op
 }
 
 #define two_registers_branch_op(op) {
-  @fetch_from_register(@prevword)
-  @fetch_from_register(@prevword @prevword)
+  @fetch_from_register(1)
+  @fetch_from_register(2)
   op
 }
 
 #define one_register_op(op) {
-    @fetch_from_register(@prevwords(2))
+    @fetch_from_register(2)
     // Load immediate
     @prevwords(3)
     @copy_value_to_A
@@ -632,35 +613,9 @@
   )
 }
 
-#define alu_mod {
-  @prevword @prevword @prevword
-  @lane(@L_SA,
-
-    @move_r_n(3) @prevwords(2)
-    @divmod
-    @nextword @clear
-    @nextword @clear
-    @nextword
-    @nextword @clear
-    @prevword
-    @move_to(@prevword >, < @nextword) <
-  )
-}
-
-#define alu_div {
-  @prevword @prevword @prevword
-  @lane(@L_SA,
-
-    @move_r_n(3) @prevwords(2)
-    @divmod
-    @nextword @clear
-    @nextword @clear
-    @nextword @clear // mod here
-    @nextword
-    @move_to(@prevwords(2) >, < @nextwords(2)) <
-  )
-}
-
+// Local generated ALU routines share the original operand/result convention.
+#define alu_mod @prevwords(3) @cpu_alu_mod @nextwords(3)
+#define alu_div @prevwords(3) @cpu_alu_div @nextwords(3)
 
 #define alu_mul {
   @prevword @prevword
@@ -678,118 +633,11 @@
   )
 }
 
-#define _alu_bin(binop) {
-  @prevwords(3)
-  @lane(@L_SA,
-    @move_to(@nextwords(3), @prevwords(3))
-    @prevwords(2)
-    @move_to(@nextwords(2) >, < @prevwords(2)) <
-  )
-  @dec2bin(@sA)
-  @dec2bin(@sB)
-  @nextwords(9)
-  @prefill_fastlane(15)
-  @nextword
-  @goto_zero_right_lane
-  @set(1)
-  [
-    binop
-    @prevword
-  ]
-  @prevwords(9)
-  @bin2dec
-  @lane(@L_SA, [->+<])
-}
-
-#define alu_and @_alu_bin(@bit_and)
-#define alu_or @_alu_bin(@bit_or)
-#define alu_xor @_alu_bin(@bit_xor)
-
-#define setup_alu_shift {
-  @lane(@L_SA,
-    @prevwords(2)
-    @move_to(@nextwords(2),  @prevwords(2))
-  )
-  @dec2bin(@sA)
-  @prevwords(3)
-  @lane(@L_SA,
-    @move_to(@nextwords(3), @prevwords(3))
-  )
-}
-
-#define alu_sl {
-  @setup_alu_shift
-
-  @lane(@L_SA,
-    @times(
-      @lane_end(@L_SA)
-      @nextwords(9)
-      @prefill_fastlane(16) // Yes, 16 to capture the LSB
-
-      @nextword
-      @times(
-
-        @lane(@L_SA,
-          @move_l
-          @nextword
-        )
-
-        @nextword
-      )
-
-      @goto_ip_left
-      @lane_start(@L_SA)
-    )
-  )
-
-  @lane(@L_SA,
-    @nextwords(9)
-    @clear
-    @prevwords(9)
-  )
-
-  @bin2dec
-
-  @lane(@L_SA, [->+<]) // TODO: Candidate for extract
-}
-
-#define alu_sr {
-  @setup_alu_shift
-
-  @lane(@L_SA,
-    @times(
-      @lane_end(@L_SA)
-      @nextwords(9)
-      @prefill_fastlane(16) // Yes, 16 to capture the LSB
-      @nextword
-      @goto_zero_right_lane
-
-      @prevword
-
-      @times(
-        @lane(@L_SA,
-          @move_r
-          @prevword
-        )
-
-        @prevword
-      )
-
-      @goto_ip_left
-      @lane_start(@L_SA)
-    )
-  )
-
-  @lane(@L_SA,
-    @nextwords(26)
-    @clear
-    @prevwords(26)
-  )
-
-  @bin2dec
-
-  @lane(@L_SA, [->+<])
-}
+#define alu_and @prevwords(3) @cpu_alu_and @nextwords(3)
+#define alu_or  @prevwords(3) @cpu_alu_or @nextwords(3)
+#define alu_xor @prevwords(3) @cpu_alu_xor @nextwords(3)
+#define alu_sl  @prevwords(3) @cpu_alu_sl @nextwords(3)
+#define alu_sr  @prevwords(3) @cpu_alu_sr @nextwords(3)
 
 #define alu_slt {
   // Unsigned comparison is the same as signed minus bias
@@ -1176,390 +1024,81 @@
   @endif
 }
 
-#define mem_ptr_fill_banks(offs_from_ip) {
-  @lane(@L_SA,
-    @times(
-      >
-      @set(@BANK_SIZE)
-      @times(
-        @lane_end(@L_SB)
-        @goto_start
-        @lane(@L_PTR, @goto_zero_right_lane @inc(1))
-
-        @goto_ptr_start @nextword
-        @nextword @goto_ip_word
-        offs_from_ip
-        @lane_start(@L_SB)
-      )
-      <
-    )
-  )
-  @lane(@L_SB, @clear)
+// Snapshot address/value before clearing operands or writing a destination.
+// The generated RAM walker consumes only temporary START/PTR/scratch lanes.
+#define capture_memory_address {
+  @cpu_capture_A(@prevwords(2), 65)
+  @cpu_capture_A(@prevwords(3), 66)
+  @prevwords(2) @lane(@L_SA, @clear)
+  @prevword @lane(@L_SA, @clear) @nextwords(3)
 }
-
-#define mem_ptr_fill(offs_from_ip) {
-  @lane(@L_SA,
-    @times(
-      @lane_end(@L_SA)
-      @goto_start
-
-      @lane(@L_PTR, @goto_zero_right_lane @inc(1))
-
-      @goto_ptr_start @nextword
-      @nextword @goto_ip_word
-      offs_from_ip
-      @lane_start(@L_SA)
-    )
-  )
-}
-
 #define ins_stor {
-  @fetch_from_register(@prevword)
-
-  @prevwords(2)
-
-  // Snapshot the bank and offset for the TTY check. The scratch-A operands
-  // remain intact for the memory address calculation below.
-
-  @lane(@L_SA,
-    // copy via sB prevword
-    [->+@prevword+@nextword<] >@prevword [-@nextword<+>@prevword] @nextword <
-  )
-
-  // Native TTY output is mapped only at bank 0, offset 0.
-  @prevword
-    @lane(@L_SA,
-      [->+@prevword+@nextword<] >@prevword [-@nextword<+>@prevword] @nextword <
-    )
-
-    @lane(@L_SB,
-      // A nonzero bank makes this a RAM store, even when the offset is zero.
-      // Consume the bank copy and force the copied offset nonzero in that
-      // case. Do not add them: two nonzero 16-bit values could wrap to zero.
-      @nextword
-      @if
-        @prevword @set(1) @nextword
-      @endif
-      @prevword
-      @eq(@nextword, @prevword)
-      [-@prevword+@prevword+@nextword @nextword] @prevword @prevword [-@nextword @nextword+ @prevword @prevword] @nextword @nextword
-
-      @if
-        @nextwords(2) <
-          @HOST_TTY
-        > @prevwords(2)
-      @endif
-    )
-  @nextword
-
-  @mem_ptr_fill_banks(@prevwords(2))
-
-  // Filling ptr lane up to the needed cell
-  @prevword
-  @mem_ptr_fill(@prevwords(3))
-  @nextwords(3)
-
-  // clear mem
-  @prevword
-  @goto_start
-  @goto_ptr_end
-    @lane(@L_RAM, @clear)
-
-  @prevword
-  @goto_ptr_start
-  @nextword
-  @goto_ip_word
-
-  // memset
-  @prevword
-  @lane(@L_SA,
-    @times(
-      @lane_end(@L_SA)
-
-      @goto_start
-      @goto_ptr_end
-        @lane(@L_RAM, @inc(1))
-        @prevword
-      @goto_ptr_start
-      @nextword
-      @goto_ip_word
-
-      @prevword
-      @lane_start(@L_SA)
-    )
-  )
-
-  // A host sees the completed store, never its intermediate clear/increments.
-  {if(#HOST_MODE, @notify_host_store, @nop)}
-
-  @prevwords(3)
-  @lane(@L_SB,
-    @if
-      @lane_end(@L_SB)
-      @goto_start
-        @lane(@L_RAM, @nextword @clear @inc(1) @prevword)
-      @nextword
-      @goto_ip_word
-      @prevwords(3)
-      @lane_start(@L_SB)
-    @endif
-  )
-  @nextwords(2)
-
-  @goto_start
-  @ptr_cleanup
-  @nextword
-  @goto_ip_word
+  @fetch_from_register(1)
+  @capture_memory_address
+  @cpu_capture_A(@prevword, 61)
+  @prevword @lane(@L_SA, @clear) @goto_start
+  @cpu_ram_store
+  {if(#ENABLE_IRQ, @cpu_irq_store, {repeat(0, +)})}
+  @nextword @goto_ip_word
 }
-
-#define notify_host_store {
-  @goto_start
-  @goto_ptr_end
-  @lane(@L_RAM, @HOST_STORE)
-  @prevword @goto_ptr_start @nextword @goto_ip_word @prevword
-}
-
 #define ins_load {
-  @prevwords(2)
-  @mem_ptr_fill_banks(@prevwords(2))
-
-  // Filling ptr lane up to the needed cell
-  @prevword
-  @mem_ptr_fill(@prevwords(3))
-  @nextwords(3)
-
-  // memget
-  @prevword
-  @goto_start
-  @goto_ptr_end
-
-  @lane(@L_RAM,
-    @HOST_LOAD
-    // Duplicate RAM into scratch A/B, then restore RAM from B. Only the
-    // scratch-A copy is consumed below; repeated LOADs preserve the source.
-    [->+>+<<] >> [-<<+>>] <<
-  )
-
-  @lane(@L_SA,
-    @times(
-      @lane_end(@L_SA)
-
-      @prevword @goto_ptr_start
-
-      @nextword @nextword
-      @goto_ip_word
-      @lane(@L_SB, @inc(1))
-      @prevword
-      @goto_start
-
-      @goto_ptr_end
-      @lane_start(@L_SA)
-    )
-  )
-
-  @goto_start
-  @ptr_cleanup
+  @capture_memory_address
+  @prevword @goto_start @cpu_ram_load
+  // The load leaves its copied value in START at word one.
   @nextword
-  @goto_ip_word
+  [ @carry_start_to_ip [->>>>>>+<<<<<<] ]
+  @prevword @goto_start @nextword @goto_ip_word
 }
 
 // MARK: --------Instructions end --------
 
-// MARK: -- Bin ops
-#define bit_and {
-  @lane(@L_SA,
-    [->+<]>+[-<+>]<
-    @switch(3, @default, @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(3, @set_lane(@L_SB, 1), @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(2, @clear, @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(1, @clear, @lane_end(@L_SA), @lane_start(@L_SA))
-  )
-  @lane(@L_SB, [-<+>]) // copy b to a
-}
-
-#define bit_or {
-  @lane(@L_SA,
-    [->+<]>+[-<+>]<
-    @switch(3, @default, @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(3, @set_lane(@L_SB, 1), @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(2, @set_lane(@L_SB, 1), @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(1, @clear, @lane_end(@L_SA), @lane_start(@L_SA))
-  )
-
-  @lane(@L_SB, [-<+>])
-}
-
-#define bit_xor {
-  @lane(@L_SA,
-    [->+<]>+[-<+>]<
-    @switch(3, @default, @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(3, @clear, @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(2, @set_lane(@L_SB, 1), @lane_end(@L_SA), @lane_start(@L_SA))
-    @case(1, @clear, @lane_end(@L_SA), @lane_start(@L_SA))
-  )
-  @lane(@L_SB, [-<+>])
-}
-
-#define POWERS_OF_2 {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768}
-
-// MARK: -- Helpers
+// MARK: -- Fast-lane helpers
 #define prefill_fastlane(n) @clear {repeat(n, @nextword +)} @prevwords(n)
 #define clear_fastlane(n) @clear {repeat(n, @nextword @clear)} @prevwords(n)
 
-#define set_bit_1(lane_start, lane_end) {
-    lane_end
-    @goto_zero_right_lane
-    lane_start
-    +
-    lane_end
-    @prevword
-    @clear
-    @prevword
-    @goto_zero_left_lane
-    lane_start
-    @nextwords(2)
-}
-
-#define set_bit_0(lane_start, lane_end) {
-    lane_end
-    @goto_zero_right_lane
-    @prevword
-    @clear
-    @prevword
-    @goto_zero_left_lane
-    lane_start
-    @nextwords(2)
-}
-
-#define sb0a @set_bit_0(@lane_start(@L_SA), @lane_end(@L_SA))
-#define sb1a @set_bit_1(@lane_start(@L_SA), @lane_end(@L_SA))
-
-#define sb0b @set_bit_0(@lane_start(@L_SB), @lane_end(@L_SB))
-#define sb1b @set_bit_1(@lane_start(@L_SB), @lane_end(@L_SB))
-
-// TODO: Think if this is really necessary.
-#define scratch_lane(n) {if(n, @lane_start(@L_SA), @lane_start(@L_SB))}
-#define scratch_lane_end(n) {if(n, @lane_end(@L_SA), @lane_end(@L_SB))}
-
-#define sA 1
-#define sB 0
-
-#define set_next_bit(lane, bit) {if(lane, {if(bit, @sb1a, @sb0a)}, {if(bit, @sb1b, @sb0b)})}
-
-#define set_and_nextword(v) @set(v) @nextword
-
-#define b2d_add_dec {
-  @lane(#L_SB,
-    @times(
-      @lane_end(#L_SB)
-      @set(1)
-      @goto_zero_left_lane
-      @lane(#L_SA, @inc(1))
-      @nextword
-      @goto_zero_right_lane
-      @prevword
-      @lane_start(#L_SB)
-    )
-  )
-}
-
-#define b2d_skip_bit @lane(@L_SB, @clear)
-
-// Division layout is n, 0, d, 0, 0, 0, 0
-// Result layout is >0, n, d-n%d, n%d, n/d
-#define divmod [-@nextword+@nextword-[@nextword+@nextwords(2)]@nextword[+[-@prevword+@nextword]@nextword+@nextwords(2)]@prevwords(6)]
-
-// Result will be stored in scratch lane 16 cells starting from current_word + 9
-#define dec2bin(sl) {
-  @prefill_fastlane(24)
-  @scratch_lane(sl)
+// Copy a scratch-A operand into persistent CPU state without consuming it.
+// All captures finish at the current opcode and leave lane zero clear.
+#define cpu_capture_A(offs, word) {
+  @prevword @goto_start @nextwords(word) @lane(@L_REG, @clear)
+  @prevwords(word) @nextword @goto_ip_word
+  offs @lane(@L_SA, [-<<<<<+>>>>>>+<] >[-<+>]<)
   [
-  @nextwords(2)
-  @set(2)
-  @prevwords(2)
-  @divmod
-  @nextword @clear
-  @nextword @clear
-  @nextword
-  +
-  @switch(2, @default, @prevword, @nextword)
-  @case(2, @set_next_bit(sl, 1), @prevword, @nextword)
-  @case(1, @set_next_bit(sl, 0), @prevword, @nextword)
-  @nextword
-  @move_l_n(4)
+    @carry_start_to_first_word
+    [- @prevword @nextwords(word) @lane(@L_REG, +) @prevwords(word) @nextword]
   ]
-  @scratch_lane_end(sl)
-  @clear_fastlane(24)
+  @prevword @goto_start @nextword @goto_ip_word
 }
-
-#define b2d_setup {
-  @prefill_fastlane(24)
-  @nextwords(10)
-  @scratch_lane(@sB)
-  {for(v in {reverse(@POWERS_OF_2)}, @set_and_nextword(v))}
-  @prevword
-  @scratch_lane_end(@sB)
+#define cpu_capture_code(offs, back, word) {
+  offs @copy_value_to_A back
+  @cpu_capture_A(offs, word)
+  offs @lane(@L_SA, @clear) back
 }
-
-#define b2d_cleanup @goto_zero_left_lane @clear_fastlane(24)
-
-// bin2dec requires binary value to be in sA, and uses sB and lane 0 as helper lanes
-#define bin2dec {
-  @b2d_setup
-  @scratch_lane(@sB)
-  @while(
-    @prev(1)
-    @inc(1)
-    @switch(2, @default, @scratch_lane_end(@sA), @scratch_lane(@sA))
-      @case(2, @b2d_add_dec, @scratch_lane_end(@sA), @scratch_lane(@sA))
-      @case(1, @b2d_skip_bit, @scratch_lane_end(@sA), @scratch_lane(@sA))
-    @prevword
-    @next(1)
-  )
-  @scratch_lane_end(@sB)
-  @b2d_cleanup
+#define cpu_capture_words {
+  @cpu_capture_code(@prevword, @nextword, 58)
+  @cpu_capture_code(@prevwords(2), @nextwords(2), 59)
+  @cpu_capture_code(@prevwords(3), @nextwords(3), 60)
 }
-
-// TODO: NEVER! NEVER CALL THIS ONE DIRECTLY WITHOUT
-// CHECKING THAT B IS 0!
-#define _cmp_unsigned_neq_lt {
-  <
-  @nextword
-  @move_r_n(4)
-  @prevwords(4)
-  >[-<+>]<
-
-  @move_r_n(3)
-  // Careful here — this will never run if b is 0.
-  [-[@nextword-[@prevword @prevword-@prevword]@prevword[-]@nextwords(2)+@nextword @prevwords(3)]@nextword @clear @nextwords(2)]
-  @prevword @move_l_n(5)
-
-  @prevword
-  >
+// Reuse the existing physical bank seek, leaving all ordinary registers intact.
+#define cpu_reseek {
+  @prevword @goto_start @nextwords(56) @lane(@L_REG, @clear)
+  @prevwords(56) @nextword @goto_ip_word
+  @copy_register_to_ip_B(@goto_PCB, @prevwords(2))
+  @copy_register_to_ip_B(@goto_PC, @prevwords(3))
+  @_jump_to_bank_addr
 }
-
-#define _cmp_unsigned_lt { // TODO: Replace with @lt
-// Requires [0, 0, 0, b, a, 0, 0]
-  @lane(#L_SA,
-
-    // If one of them is zero, then the other one is zero too.
-    // So we can just gtfo.
-    // Let's copy b to scratch
-    >
-    [-@prevword+@prevword+@nextwords(2)] @prevwords(2) @move_r_n(2)
-    <
-    @prevword
-
-    [->-<]+>[<->[-]]< // What the fuck is this sorcery?
-    +
-    // Now, if b was equal to 0, we stand at 2. Otherwise at 1.
-    @switch(2, @default, >, <)
-      @case(2, @nextword @clear < @clear > @prevword, >, <) // Both were 0, gtfo
-      @case(1, @_cmp_unsigned_neq_lt, >, <) // They were not, compare
-    @nextword
-
-  )
+#define cpu_system(handler) {
+  @cpu_capture_words
+  @prevword @goto_start handler @nextword @goto_ip_word
 }
+#define ins_iret {
+  @prevword @goto_start @cpu_iret @nextword @goto_ip_word
+  @cpu_reseek @set_noinc_pc_flag
+}
+#define loadc @ophandler(@cpu_system(@cpu_loadc))
+#define storc @ophandler(@cpu_system(@cpu_storc))
+#define csrr @ophandler(@cpu_system(@cpu_csrr))
+#define csrw @ophandler(@cpu_system(@cpu_csrw))
+#define iret @ophandler(@ins_iret)
 
 // MARK: ------ Opcode Handlers ---------
 
@@ -1659,6 +1198,7 @@
 // around the tape while searching for a zero to the left of the state flag.
 {if(#PROGRAM_WORDS, {repeat(#PROGRAM_WORDS, @clear @prevword)}, @clear_to_zero_left_lane @nextword)}
 @set(#STATE_RUNNING)
+@cpu_boot
 
 // MARK: -- Main loop
 @while(
@@ -1672,6 +1212,16 @@
 
 // MARK: ---- Executor
 #define execute {
+  {if(#ENABLE_IRQ,
+    @cpu_irq_boundary
+    @nextwords(56) @lane(@L_REG,
+      @if
+        @lane_reg_end @prevwords(56) @nextword @goto_ip_word
+        @cpu_reseek
+        @prevword @goto_start @nextwords(56) @lane_reg
+      @endif
+    ) @prevwords(56)
+  , {repeat(0, +)})}
   @nextword
 
   @goto_ip_word #BRK_IF_DEBUG
@@ -1680,8 +1230,13 @@
     @inc(1) // To properly work with switch statement
 
     // MARK: ------- Opcode Switch
-    @switch(33, @default, >, <)
-      @opcase(#OP_NOP,    @opnop )
+    @switch(38, @default, >, <)
+      @opcase(#OP_NOP, @opnop)
+      @opcase(#OP_CSRW, {if(#ENABLE_IRQ, @csrw, @ophandler(@prevword @goto_start @cpu_irq_disabled @nextword @goto_ip_word))})
+      @opcase(#OP_CSRR, {if(#ENABLE_IRQ, @csrr, @ophandler(@prevword @goto_start @cpu_irq_disabled @nextword @goto_ip_word))})
+      @opcase(#OP_IRET, {if(#ENABLE_IRQ, @iret, @ophandler(@prevword @goto_start @cpu_irq_disabled @nextword @goto_ip_word))})
+      @opcase(#OP_STORC, @storc)
+      @opcase(#OP_LOADC, @loadc)
 
       @opcase(#OP_MODI,   @modi )
       @opcase(#OP_DIVI,   @divi )
@@ -1728,4 +1283,5 @@
   @goto_start
   // Every guest instruction preserves the architectural zero register.
   @nextword @lane(@L_REG, @clear) @prevword
+  {if(#ENABLE_IRQ, @cpu_timer_tick, {repeat(0, +)})}
 }

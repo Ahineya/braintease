@@ -1,9 +1,9 @@
 # RFL — Traits
 **Language Specification · Draft 0.2**
 
-**Status:** Proposed specification  
+**Status:** Implemented in `rfl` (16 October 2026); see [implementation notes](IMPLEMENTATION.md#static-traits-and-library-printing)
 **Compiler:** `rfl`  
-**Target:** Ripple IR  
+**Target:** Shared IR (Ripple VM/BF and native)
 **Dependencies:** Generics, monomorphization, inherent methods, extension methods, module system
 
 This specification extends RFL 0.1.

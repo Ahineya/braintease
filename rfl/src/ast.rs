@@ -32,6 +32,9 @@ pub struct Module {
     pub adts: Vec<Adt>,
     pub structs: Vec<StructItem>,
     pub impls: Vec<Impl>,
+    pub traits: Vec<Trait>,
+    /// Lexical visibility and declaration ownership retained after module flattening.
+    pub trait_scopes: Vec<TraitScope>,
     pub consts: Vec<Const>,
     pub functions: Vec<Function>,
     /// `extern "C" { fn ...; }` declarations. The bodies live in C.
@@ -93,6 +96,7 @@ pub enum Recv {
 
 #[derive(Debug, Clone)]
 pub struct Impl {
+    pub trait_name: Option<(String, Span)>,
     pub span: Span,
     pub type_params: Vec<TypeParam>,
     pub ty: ParsedTy,
@@ -128,6 +132,7 @@ pub struct Ctor {
 
 #[derive(Debug, Clone)]
 pub struct TypeParam {
+    pub bounds: Vec<(String, Span)>,
     pub name: String,
     pub span: Span,
 }
@@ -386,6 +391,9 @@ pub enum ExprKind {
     /// `&expr` or `&mut expr`.
     Borrow {
         mutable: bool,
+        /// Compiler-inserted receiver borrowing may keep an rvalue snapshot.
+        /// Explicit source borrows still require a supported place.
+        temporary: bool,
         expr: Box<Expr>,
     },
     /// `*expr`. The operand is a raw pointer. Legal only in `unsafe`.
@@ -533,4 +541,21 @@ impl BinOp {
             Self::BitAnd | Self::BitOr | Self::BitXor | Self::Shl | Self::Shr
         )
     }
+}
+
+/// A statically dispatched interface. Signatures deliberately have no bodies.
+#[derive(Debug, Clone)]
+pub struct Trait {
+    pub name: String,
+    pub name_span: Span,
+    pub exported: bool,
+    pub methods: Vec<ImplItem>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TraitScope {
+    pub span: Span,
+    pub visible: Vec<String>,
+    pub owned: Vec<String>,
+    pub core: bool,
 }

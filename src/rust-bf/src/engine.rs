@@ -9,11 +9,13 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 mod checkpoint;
+mod halve;
 mod profile;
 mod routed;
 mod scan;
 mod search;
 mod tape;
+mod transport;
 
 #[cfg(all(feature = "jit", any(target_arch = "aarch64", target_arch = "x86_64")))]
 pub mod jit;
@@ -100,6 +102,8 @@ struct Arithmetic {
 
 #[derive(Debug)]
 enum FastOp {
+    Halve(halve::Halve),
+    Transport(transport::Transport),
     Search(search::Search),
     Routed(routed::Routed),
     Block {
@@ -265,6 +269,15 @@ impl Program {
             let Op::Open(next) = self.code[at].op else {
                 continue;
             };
+            if let Some(halve) = halve::Halve::parse(self, at) {
+                self.install(at, FastOp::Halve(halve))?;
+                continue;
+            }
+            if let Some(transport) = transport::Transport::parse(self, at) {
+                self.install(at, FastOp::Transport(transport))?;
+                self.fast_at[next - 1] = self.fast_at[at];
+                continue;
+            }
             if let Some(search) = search::Search::parse(self, at) {
                 self.install(at, FastOp::Search(search))?;
                 continue;
@@ -481,6 +494,8 @@ impl Machine {
 
     fn fast(&mut self, operation: &FastOp) -> bool {
         match operation {
+            FastOp::Halve(halve) => return halve.execute(self),
+            FastOp::Transport(transport) => return transport.execute(self),
             FastOp::Search(search) => return search.execute(self),
             FastOp::Routed(routed) => return routed.execute(self),
             FastOp::Block { arithmetic, next } => {

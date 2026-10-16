@@ -98,11 +98,55 @@ ripple_sys_resolved:
     LI T0, ripple_kernel_stack
     LOAD SB, GP, T0
     LI SP, 1
-    STORE T2, SB, SP
+    STORE R3, SB, SP
     ADDI SP, SP, 1
-    STORE T3, SB, SP
+    STORE R4, SB, SP
     ADDI SP, SP, 1
-    STORE T4, SB, SP
+    STORE R5, SB, SP
+    ADDI SP, SP, 1
+    STORE R6, SB, SP
+    ADDI SP, SP, 1
+    STORE R7, SB, SP
+    ADDI SP, SP, 1
+    STORE R8, SB, SP
+    ADDI SP, SP, 1
+    STORE R9, SB, SP
+    ADDI SP, SP, 1
+    STORE R10, SB, SP
+    ADDI SP, SP, 1
+    STORE R11, SB, SP
+    ADDI SP, SP, 1
+    STORE R12, SB, SP
+    ADDI SP, SP, 1
+    STORE R13, SB, SP
+    ADDI SP, SP, 1
+    STORE R14, SB, SP
+    ADDI SP, SP, 1
+    STORE R15, SB, SP
+    ADDI SP, SP, 1
+    STORE R16, SB, SP
+    ADDI SP, SP, 1
+    STORE R17, SB, SP
+    ADDI SP, SP, 1
+    STORE R18, SB, SP
+    ADDI SP, SP, 1
+    STORE R19, SB, SP
+    ADDI SP, SP, 1
+    STORE R20, SB, SP
+    ADDI SP, SP, 1
+    STORE R21, SB, SP
+    ADDI SP, SP, 1
+    STORE R22, SB, SP
+    ADDI SP, SP, 1
+    STORE R23, SB, SP
+    ADDI SP, SP, 1
+    STORE R24, SB, SP
+    ADDI SP, SP, 1
+    STORE R25, SB, SP
+    ADDI SP, SP, 1
+    STORE R26, SB, SP
+    ADDI SP, SP, 1
+    STORE R27, SB, SP
     ADDI SP, SP, 1
     STORE T5, SB, SP
     ADDI SP, SP, 1
@@ -110,38 +154,79 @@ ripple_sys_resolved:
     ADDI SP, SP, 1
     STORE RAB, SB, SP
     ADDI SP, SP, 1
-    STORE S0, SB, SP
+    LI T0, 2
+    STORE T0, SB, SP
     ADDI SP, SP, 1
-    STORE S1, SB, SP
+    STORE T2, SB, SP
     ADDI SP, SP, 1
-    STORE S2, SB, SP
+    STORE T3, SB, SP
     ADDI SP, SP, 1
-    STORE S3, SB, SP
+    STORE T4, SB, SP
     ADDI SP, SP, 1
     ADD FP, SP, R0
     CALL ripple_dispatch
-    LI SP, 11
+    LI T0, 3
+    STORE RV0, SB, T0
+    ADDI T0, T0, 1
+    STORE RV1, SB, T0
+    CALL ripple_signal_frame
+    BNE RV0, R0, ripple_resume_user
+    LI T0, 30
+    LOAD T2, SB, T0
+    ADDI T0, T0, 1
+    LOAD T3, SB, T0
+    ADDI T0, T0, 1
+    LOAD T4, SB, T0
+    LI SP, 27
     ADDI SP, SP, -1
-    LOAD S3, SB, SP
+    LOAD GP, SB, SP
     ADDI SP, SP, -1
-    LOAD S2, SB, SP
+    LOAD R27, SB, SP
     ADDI SP, SP, -1
-    LOAD S1, SB, SP
+    LOAD R26, SB, SP
     ADDI SP, SP, -1
-    LOAD S0, SB, SP
+    LOAD R25, SB, SP
     ADDI SP, SP, -1
-    LOAD RAB, SB, SP
+    LOAD R24, SB, SP
     ADDI SP, SP, -1
-    LOAD RA, SB, SP
+    LOAD R23, SB, SP
     ADDI SP, SP, -1
-    LOAD T5, SB, SP
+    LOAD R22, SB, SP
     ADDI SP, SP, -1
-    LOAD T4, SB, SP
+    LOAD R21, SB, SP
     ADDI SP, SP, -1
-    LOAD T3, SB, SP
+    LOAD R20, SB, SP
     ADDI SP, SP, -1
-    LOAD T2, SB, SP
-    ADD GP, T5, R0
+    ADDI SP, SP, -1
+    ADDI SP, SP, -1
+    ADDI SP, SP, -1
+    LOAD R16, SB, SP
+    ADDI SP, SP, -1
+    LOAD R15, SB, SP
+    ADDI SP, SP, -1
+    LOAD R14, SB, SP
+    ADDI SP, SP, -1
+    LOAD R13, SB, SP
+    ADDI SP, SP, -1
+    LOAD R12, SB, SP
+    ADDI SP, SP, -1
+    LOAD R11, SB, SP
+    ADDI SP, SP, -1
+    LOAD R10, SB, SP
+    ADDI SP, SP, -1
+    LOAD R9, SB, SP
+    ADDI SP, SP, -1
+    LOAD R8, SB, SP
+    ADDI SP, SP, -1
+    LOAD R7, SB, SP
+    ADDI SP, SP, -1
+    LOAD R6, SB, SP
+    ADDI SP, SP, -1
+    LOAD R5, SB, SP
+    ADDI SP, SP, -1
+    LOAD R4, SB, SP
+    ADDI SP, SP, -1
+    LOAD R3, SB, SP
     ADD FP, T4, R0
     ADD SP, T3, R0
     ADD SB, T2, R0

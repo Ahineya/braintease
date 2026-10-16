@@ -19,7 +19,7 @@ impl CollectionTypes {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TModule {
     pub collections: CollectionTypes,
     pub functions: Vec<TFn>,
@@ -59,7 +59,7 @@ pub struct CtorDef {
     pub fields: Vec<Ty>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TFn {
     pub name: String,
     /// Binding indexes of the parameters, in order.
@@ -91,13 +91,13 @@ pub struct Capture {
     pub shared: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TBlock {
     pub stmts: Vec<TStmt>,
     pub tail: Option<TExpr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TStmt {
     Let {
         binding: u32,
@@ -141,13 +141,13 @@ pub enum TStmt {
     Continue,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TExpr {
     pub ty: Ty,
     pub kind: TExprKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TExprKind {
     Int(i64),
     /// IEEE bits. `f32` uses the low 32 bits.
@@ -372,14 +372,14 @@ pub enum TExprKind {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TArm {
     pub pat: TPat,
     pub guard: Option<TExpr>,
     pub body: TBlock,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TPat {
     Wild,
     Bind(u32),
@@ -395,14 +395,14 @@ pub enum TPat {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProductField {
     pub offset: i64,
     pub ty: Ty,
     pub pat: Box<TPat>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FieldPat {
     pub ty: Ty,
     pub pat: Box<TPat>,

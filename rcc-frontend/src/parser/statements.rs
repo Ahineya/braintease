@@ -14,6 +14,7 @@ impl Parser {
         
         self.expect(TokenType::LeftBrace, "compound statement")?;
         self.constant_scopes.push(Default::default());
+        self.tag_scopes.push(Default::default());
         
         let mut statements = Vec::new();
         while !self.check(&TokenType::RightBrace) && !self.check(&TokenType::EndOfFile) {
@@ -22,6 +23,7 @@ impl Parser {
         
         self.expect(TokenType::RightBrace, "compound statement")?;
         self.constant_scopes.pop();
+        self.tag_scopes.pop();
         
         let end_location = self.current_location();
         
@@ -158,6 +160,7 @@ impl Parser {
     pub fn parse_for_statement(&mut self) -> Result<StatementKind, CompilerError> {
         self.expect(TokenType::LeftParen, "for statement")?;
         self.constant_scopes.push(Default::default());
+        self.tag_scopes.push(Default::default());
         
         // Parse init (can be declaration or expression)
         let init = if self.check(&TokenType::Semicolon) {
@@ -201,6 +204,7 @@ impl Parser {
         let body = Box::new(self.parse_statement()?);
         
         self.constant_scopes.pop();
+        self.tag_scopes.pop();
         Ok(StatementKind::For { init, condition, update, body })
     }
     

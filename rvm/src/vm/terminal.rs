@@ -80,6 +80,13 @@ impl VM {
                 KeyCode::Enter => self.input_buffer.push_back(b'\n'),
                 KeyCode::Backspace => self.input_buffer.push_back(8),
                 KeyCode::Tab => self.input_buffer.push_back(b'\t'),
+                KeyCode::Up => self.input_buffer.extend(b"\x1b[A"),
+                KeyCode::Down => self.input_buffer.extend(b"\x1b[B"),
+                KeyCode::Right => self.input_buffer.extend(b"\x1b[C"),
+                KeyCode::Left => self.input_buffer.extend(b"\x1b[D"),
+                KeyCode::Home => self.input_buffer.extend(b"\x1b[H"),
+                KeyCode::End => self.input_buffer.extend(b"\x1b[F"),
+                KeyCode::Delete => self.input_buffer.extend(b"\x1b[3~"),
                 KeyCode::Esc => self.input_buffer.push_back(27),
                 _ => {}
             }
@@ -253,6 +260,17 @@ mod tests {
         vm.accept_terminal_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::CONTROL));
         assert!(vm.poll_host_terminal());
         assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), [3]);
+    }
+
+    #[test]
+    fn tty_navigation_keys_use_ansi_sequences() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        for key in [KeyCode::Tab, KeyCode::Up, KeyCode::Down, KeyCode::Right,
+                    KeyCode::Left, KeyCode::Home, KeyCode::End, KeyCode::Delete] {
+            vm.accept_terminal_key(KeyEvent::new(key, KeyModifiers::NONE));
+        }
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(),
+                   b"\t\x1b[A\x1b[B\x1b[C\x1b[D\x1b[H\x1b[F\x1b[3~");
     }
 
     #[test]

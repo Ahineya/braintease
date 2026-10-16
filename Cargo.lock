@@ -2025,6 +2025,7 @@ version = "0.1.0"
 dependencies = [
  "bf",
  "clap",
+ "ripple-asm",
  "rvm",
  "serde",
  "serde_json",

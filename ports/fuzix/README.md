@@ -32,19 +32,35 @@ Start it again and `cat note`. Use **shutdown** to save and stop normally.
 `sync` commits filesystem changes without stopping. `exit` shuts down PID 1;
 inside a child `sh`, it returns to its caller.
 
+Select the Brainfuck CPU with `scripts/run-fuzix.sh --rbf` (or positional `rbf`).
+`--rvm` selects the default native VM. Both use the same persistent disk and
+kernel/userspace binaries; the RBF build additionally exports `bios.bf` with
+LOADC/STORC, IRQs and the instruction timer enabled. `--rbf --run-only` reuses
+that export, and `--rbf --build-only` prepares it without starting the host.
+The JIT remains enabled by default on either host; use `--no-jit` to disable it.
+
+The BF tape reserves 80 data banks and 68 code banks for dynamically loaded
+executables, requiring about **266 MiB for the tape alone**. Brainfuck execution
+can be much slower than RVM, including BIOS disk loading. `--telemetry-lite`
+shows RBF progress. Interactive launches stream raw terminal bytes to the guest,
+including Ctrl-C, Tab and arrow keys; Ctrl-] stops the host and restores the
+terminal. `--headless --input TEXT` runs without live terminal input. Use
+`shutdown` to save cleanly before switching hosts.
+
 ## Unix userspace
 
-The image now includes **58 Unix utility commands**, built from the pinned
-upstream sources and adapted where needed, plus the Ripple shell at `/bin/sh`.
+The image now includes **68 utility and scripting command names**, built from the pinned
+upstream sources and adapted where needed, plus the upstream V7 Bourne shell at `/bin/sh`.
 They are real executables using FUZIX system calls:
 
 | Purpose | Commands |
 | --- | --- |
-| Files and directories | `ls`, `cat`, `cp`, `mv`, `ln`, `rm`, `mkdir`, `rmdir`, `pwd`, `touch`, `chmod`, `chown`, `chgrp`, `mkfifo`, `mknod`, `basename`, `dirname` |
-| Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp` |
-| Editing | `ed`, `vi`, `vile` |
+| Files and directories | `ls`, `cat`, `cp`, `mv`, `ln`, `rm`, `mkdir`, `rmdir`, `pwd`, `touch`, `chmod`, `chown`, `chgrp`, `mkfifo`, `mknod`, `basename`, `dirname`, `find`, `dd`, `tar` |
+| Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp`, `diff`, `diffh` |
+| Editing | `ed`, `vi` (Levee), `levee`, `vile` |
 | Processes and environment | `ps`, `kill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs` |
 | Filesystem information | `df`, `du`, `sync` |
+| Fun and scripting | `cowsay`, `picol`, `tcl`, `tclsh` |
 | Shell helpers | `test`, `true`, `false`, `seq`, `yes` |
 
 Try:
@@ -65,59 +81,154 @@ df /
 sh -c 'echo child shell; exit 7'; echo $?
 ```
 
-The shell supports single/double quotes, backslash escapes, `$NAME` and `$?`,
-`;`, `<`, `>`, `>>`, `2>`, and up to three foreground external pipeline stages
-(the kernel currently has four process slots, including the shell). `sh -c`
-and `sh scriptfile` work. `cd`, `sync`, `help`, `shutdown`, and `exit` are built in;
-other commands execute `/bin` programs. Enter/Ctrl-J submits a line, Ctrl-U
-clears it, and Ctrl-D at an empty PID 1 prompt shuts down cleanly.
+`/bin/sh` is the upstream V7 Bourne shell, compiled with RCC using the existing
+Ripple ABI. It supports quotes and escapes, variables and positional parameters,
+assignments/export, globbing (`*`, `?`, `[a-z]`), backtick command substitution,
+`;`, `&&`/`||`, pipelines, redirection, here-documents, subshells, `if`/`elif`,
+`for`, `while`, `until`, `case`, `read`, `eval`, `.`, traps and background/wait.
+Both `sh -c` and `sh scriptfile` work. Executable text scripts fall back to the
+shell after `execve` reports ENOEXEC. For example:
 
-Ctrl-C interrupts foreground programs and pipelines, returning to the shell;
-it does not stop RVM. The shell restores terminal settings after commands and
-reaps adopted children. Ctrl-] is the emergency VM-stop key; use `shutdown` for
-a clean stop.
+```sh
+for file in /bin/s*; do echo "$file"; done
+if test -f note; then cat note; else echo missing; fi
+echo "Today: `date`"
+```
 
-This remains the port's small shell, not the full upstream Bourne shell.
-Globbing, `&&`/`||`, background jobs, job control, here documents, and executable
-shebang scripts are not implemented. Use `sh file` for scripts and `env NAME=value
-command` for an altered environment. The utilities retain their upstream option
-sets; `ed` provides a line editor. ASCII text is the supported text-processing
-interchange; file lengths and `od` addresses count native 16-bit C characters.
+`help`, `sync`, and `shutdown` remain small Ripple additions. PID 1 bootstraps
+straight into the shell, so it consumes one process slot. The kernel currently
+has eight slots; pipelines, subshells, command substitutions and background tasks
+share that limit. Interactive prompts now provide Tab completion for shell builtins, executable
+commands in `PATH`, and filenames/directories. Tab extends a common prefix;
+press it again to list ambiguous matches. Spaces and shell metacharacters are
+escaped, and quoted filenames work. Completion does not evaluate `$` variables,
+backticks, or glob expressions. The input limit is 255 characters.
+
+Up/Down (or Ctrl-P/Ctrl-N) recalls session history: up to 32 commands in a
+4,096-character buffer. Left/Right, Home/End, Delete, Backspace, Ctrl-A/Ctrl-E,
+Ctrl-B/Ctrl-F, Ctrl-K, and Ctrl-W edit the line. Ctrl-U clears it and Ctrl-C
+cancels pending input. Enter/Ctrl-J submits a line, and Ctrl-D at
+an empty PID 1 prompt shuts down cleanly. Ctrl-C interrupts foreground programs
+and pipelines and returns to the prompt. Terminal settings are restored after
+commands, and PID 1 reaps adopted children. Ctrl-] is the emergency VM-stop key;
+use `shutdown` for a clean stop.
+
+This is a historical Bourne shell, not a modern POSIX shell: shell functions,
+`$()`/arithmetic expansion, modern `set` options, and terminal job control are
+not provided. Builtin I/O redirection retains upstream restrictions; use a
+compound command/subshell when needed. Shebang interpreter selection is not
+implemented; executable text uses the Bourne fallback. Utilities retain their
+upstream option sets. ASCII text is the supported interchange; file lengths and
+`od` addresses count native 16-bit C characters.
 
 The libc layer provides syscall wrappers, buffered file I/O, integer/string
 formatting, directories, environment lookup, UTC time conversion, and a reusable
 process-local `brk` allocator. Upstream portable string, option, sorting, regular
 expression, passwd/group, and mount-table routines are reused. It is not yet the
-complete upstream libc; floating formatted I/O, arbitrary signal handlers,
+complete upstream libc; floating formatted I/O,
 networking, hardware-specific applications, compilers, and the rest of the
 application collection remain later porting work.
 
 ## Full-screen editing
 
-`vi filename` and `vile filename` run the upstream **VILE** editor. VILE is the
-smaller of the two bundled vi clones; Levee remains unported. Use `i` to insert
-text, Escape to return to command mode, `h`/`j`/`k`/`l` to move, `x` to delete a
-character, `dd` to delete a line, and `r` followed by a character to replace one.
-`:w` saves, `:wq` saves and exits, and `:q!` discards unsaved edits. Ctrl-C also
-cancels insert/command input. Starting with
-`vi` alone works too: `:w filename` assigns a name for subsequent saves.
-Existing files keep their permissions; the first overwrite keeps a `filename~`
-backup. The editor uses the terminal's alternate screen and restores its input
-settings when it exits.
+`vi filename` now runs **Levee**, developed by David L Parsons. It is also
+available as `levee filename`. It supports undo (`u`), yank/put (`yy`, `p`, `P`),
+regex searches (`/pattern`, `?pattern`, `n`), substitutions (`:%s/old/new/g`),
+marks, repeat (`.`), counts, and the upstream ex command set. Use `i` to insert,
+Escape to return to command mode, `h`/`j`/`k`/`l` to move, `:w` to save, `:wq`
+to save and exit, and `:q!` to discard changes. Ctrl-C cancels insert/command
+input. Starting with `vi` alone works too; `:w filename` names the buffer for
+subsequent saves. Levee's buffer holds at most 29,999 native characters; overflowing reads
+are marked read-only. Undo and larger yanks spill to temporary disk files.
+Writes use a temporary file before replacing the destination and preserve
+existing permissions. Replacement gives the saved file a new inode; other hard
+links retain the earlier contents. `:set autocopy` enables `filename~` backups.
 
-The console uses ANSI cursor controls. The default size is 80 columns by 24 rows;
-valid guest window dimensions and explicit environment overrides are supported:
+The simpler **VILE** remains available as `vile filename`. Its buffer holds
+30,000 native characters; its supported commands and limits are unchanged.
+Both editors use an alternate screen and restore terminal input settings on
+exit. Native characters outside ASCII are displayed as `\u1234` escapes.
+The console defaults to 80 columns by 24 rows. Guest window dimensions and
+explicit environment overrides are supported, for example:
 
 ```text
 env LINES=30 COLUMNS=100 vi note
 ```
 
-Host window resizing is not forwarded to the guest. VILE's buffer holds up to
-30,000 native characters; larger files are rejected without changing them. This
-is a small vi-style editor: arrow keys, undo, regex search, and yank/put are not
-implemented by this port. Use `ed` for its existing search/substitution commands.
-In `ed`, enter `q` to quit (confirm with `y` if prompted), or `Q` to discard
-changes and quit immediately. Ctrl-C terminates `ed` and returns to the shell.
+Host window resizing is not forwarded to the guest. Use the traditional
+`h`/`j`/`k`/`l` movement keys in the editors; the shell's cursor-key support does
+not add arrow-key bindings to the upstream editors. In `ed`, enter `q` to quit
+(confirm with `y` if prompted), or `Q` to discard changes and quit immediately.
+Ctrl-C terminates `ed` and returns to the shell.
+
+The launcher now allocates 5,120,000 native memory cells (10,000 KiB of data
+memory), up from 4,608,000. This funds eight process slots, each with private
+snapshots of its data and stack banks, and a spare executable slot allows `exec`
+when all process slots are occupied. The current per-process layout remains
+one 64,000-character data/heap bank and one 64,000-character stack bank. Larger
+individual heaps need a separate allocator/loader change; raising VM memory
+alone does not enlarge them.
+
+## Cows and small Tcl scripts
+
+`cowsay` is the bundled Fedux/FUZIX C version. It accepts a message or standard
+input, wraps at 40 columns by default, and supports its eight cow designs:
+
+```sh
+cowsay Hello from Ripple
+echo 'the cow has entered userspace' | cowsay -d
+cowsay -W 20 'a longer message that wraps onto several lines'
+```
+
+`-W` accepts widths from 1 to 200. Input is bounded at 4,096 characters; oversized
+messages fail with a nonzero status. `--help` lists the designs.
+
+`picol`, `tcl`, and `tclsh` run the same **Picol Tcl subset**, derived from
+Salvatore Sanfilippo's implementation bundled with FUZIX. Start `tcl` for an
+interactive prompt, run `tcl filename arguments...`, pipe a script into it, or
+use `tcl -c 'script'`. `exit` returns to the shell; Ctrl-C interrupts the program.
+Interactive input supports multiple lines for braced procedure/loop bodies.
+
+```sh
+tcl -c 'puts [expr {2 + 3 * 4}]'
+tcl /hello.tcl Ripple
+cat /tcl-visits
+```
+
+The installed `/hello.tcl` example calls cowsay, calculates squares, and appends
+a visit to `/tcl-visits`. Both files survive later image updates; editing the
+example does not cause your copy to be overwritten.
+
+Supported commands include `set`, `incr`, `append`, `puts`, `expr`, `if`/`else`,
+`while`, `for`, single-variable `foreach`, `break`, `continue`, `proc`, `return`,
+`list`, `llength`, `lindex`, `lappend`, `string length/equal/index`, `source`,
+`eval`, `catch`, `error`, `exit`, and `exec`. Procedures have local variables,
+fixed positional parameters or a final `args` parameter. Script arguments are
+available as `argc`, `argv`, and `argv0`. The bundled Picol's prefix arithmetic
+commands (`+`, `-`, `*`, `/`, comparisons) remain available, with `%` fixed/added.
+
+Integer expressions support parentheses, variables, arithmetic, comparisons,
+boolean operators and short-circuit evaluation. They use checked signed
+32-bit integers; division rounds down, and overflow or division by zero raises
+an error. Braced expressions do not perform nested command substitutions;
+calculate those values first in a variable. `if` supports one body and an
+optional `else`; `elseif`, default procedure parameters, arrays, namespaces,
+packages, floating point, Tk and the complete Tcl standard library are absent.
+This is a small interpreter rather than a full Tcl distribution.
+
+`open`, `close`, `read`, `gets`, `eof` and `flush` support text files. Use
+`puts $channel text` to write and modes `r`, `w`, `a` (or their `+` variants).
+`exec` runs one program with explicit arguments and captures stdout; it does
+not interpret shell metacharacters or pipeline syntax. External nonzero exit
+statuses become catchable errors. File writes and subprocesses use ordinary
+FUZIX system calls and the persistent filesystem.
+
+Scripts/strings are bounded at 12,000 native characters, nesting at 32 evaluator
+levels, lists/commands at 128 elements/arguments, and open file channels at eight.
+The current process heap can impose a smaller limit when several large values
+are live at once. Text cannot contain NUL characters; ASCII is the supported
+interchange. Malformed input, oversized scripts and script errors return nonzero
+status without stopping the OS.
 
 ## Builds and persistent disks
 
@@ -148,7 +259,9 @@ keep their old content when its managed pathname is replaced. Before an update,
 the launcher checks the filesystem while holding the disk lock. Recoverable
 shutdown/free-list metadata is repaired automatically after saving a backup;
 ambiguous structural damage stops the update with a readable error. Executable
-updates also save a backup before writing. No-op updates leave the
+updates also save a backup before writing. `/bin/vi` and `/bin/levee`
+share an inode to avoid storing the editor twice. The `cp`/`mv`/`ln`
+executables and the three Picol names likewise share their respective binaries. No-op updates leave the
 image and its modification time untouched. An exclusive companion lock covers
 updates, VM execution, and offline checks.
 
@@ -219,8 +332,8 @@ Each process has a 64,000-cell global/data bank and a separate 64,000-cell stack
 bank. Fork snapshots both banks into backing RAM; scheduling restores them at
 the same execution addresses, preserving pointers. Kernel continuations use a
 separate stack bank per process. Code images are reference-counted across fork
-and relocated into separate IMEM slots on exec. This currently supports four
-process table entries, eight live code images, and up to four IMEM banks per
+and relocated into separate IMEM slots on exec. This currently supports eight
+process table entries, nine live code images, and up to four IMEM banks per
 userspace executable. Userspace allocation must use FUZIX brk/sbrk within its
 data bank; RCC's generic multi-bank runtime malloc is not a process allocator.
 
@@ -232,10 +345,15 @@ executed VM instructions (100,000 per tick), not a host wall-clock RTC.
 
 The launcher allocates 4,608,000 DMEM cells, enough for banks 0–71, rather than
 using RVM's very large general-purpose default. The port has no MMU or privilege
-isolation. Networking, the remaining upstream libc/application collection, custom user
-signal handlers, swap, dynamic multi-bank user heaps, and RBF execution remain
-future work. Default signal handling is in the FUZIX kernel; arbitrary code-pointer
-handlers are not supported by the current user-memory validator.
+isolation. Networking, the remaining upstream libc/application collection, swap,
+dynamic multi-bank user heaps, and RBF execution remain future work.
+
+Caught signals use validated IMEM code pointers and a user-stack register frame.
+The kernel enters a userspace trampoline after a syscall or timer preemption;
+return restores the interrupted state, while `longjmp` can abandon the frame.
+No suspended kernel call remains beneath a handler. `signal()` has the FUZIX
+one-shot semantics: a handler re-registers itself when needed. `setjmp`/`longjmp`
+preserve RCC callee state including stack/global banks.
 
 ## Validation
 
@@ -249,6 +367,10 @@ node --test ports/fuzix/tools/disk.test.mjs
 python3 ports/fuzix/tools/test_terminal.py --build build/fuzix
 python3 ports/fuzix/tools/test_unix.py --build build/fuzix
 python3 ports/fuzix/tools/test_editor.py --build build/fuzix
+python3 ports/fuzix/tools/test_interactive.py --build build/fuzix
+python3 ports/fuzix/tools/test_shell.py --build build/fuzix
+python3 ports/fuzix/tools/test_filetools.py --build build/fuzix
+python3 ports/fuzix/tools/test_fun.py --build build/fuzix
 ```
 
 The integration test boots real disks with both JIT and interpreter, verifies
@@ -277,6 +399,73 @@ Ctrl-C under both engines, then verify that the shell and process slots still
 work and the disk shuts down cleanly. Host tests exercise automatic recovery,
 backup preservation, unchanged clean images, and refusal of structural damage.
 
+The shell suite checks control flow, positional parameters, eval/source,
+globbing, command substitution, here-documents, executable text fallback,
+background/wait, traps, syntax recovery and reboot persistence. Libc checks
+cover non-local jumps, jumps out of handlers, synchronous signal return and an
+alarm delivered to a computation that makes no syscalls.
+
+The file-tools suite checks expressions and direct `find -exec`, deep paths,
+`dd` count/seek/large-file behavior, normal diff output against the host tool,
+stdin and final-line handling, USTAR exchange with the host, native character
+round trips, pipes, blocking, metadata, malformed archives and reboot persistence.
+
+## File search, comparison and archives
+
+`find` evaluates the upstream MWC expression grammar: implicit/explicit `-a`,
+`-o`, `!`, parentheses, `-name`, `-type`, `-perm`, `-size`, `-links`, `-inum`,
+`-user`, `-group`, date predicates, `-newer`, `-print`, `-exec`, and `-ok`.
+Traversal closes directories before descending, avoiding depth-related descriptor
+or process exhaustion. `-exec` passes an argument vector directly, preserving
+spaces and metacharacters in filenames. The small C99 parser is built from the
+upstream C portions and token names by `tools/generate_find.py`; building requires
+no yacc/bison installation. Paths are bounded to 599 characters. `-size` counts
+512 native-character blocks, or individual characters with the `c` suffix.
+
+`dd` supports `if=`, `of=`, `bs=`, `count=`, `skip=`, and `seek=`, with native
+character counts and checked 32-bit offsets. Block sizes are 1..32767 characters.
+`count=0` creates an empty output without reading input; `seek=` preserves the
+existing prefix and truncates at the final output position. Record statistics go
+to stderr so stdout remains usable in pipelines. Numeric suffixes are `k` (1024),
+`b` (512), and `w` (one native int). Other dd conversions are not implemented.
+
+`diff` is the V7 line comparison tool: normal change records, `-b`, `-e`, `-f`,
+and `-h` are available. It compares stdin through `-`, handles unterminated final
+lines, and returns 0 for equal files, 1 for differences, and 2 for errors.
+`diffh` supplies the bounded-memory heuristic comparison used by `diff -h`.
+Unified/context output and recursive directory comparison are not provided.
+
+`tar` creates, lists and extracts USTAR archives, including recursive directories,
+file metadata, hard-link extraction, FIFO/device entries, long USTAR names and
+archive streams. It accepts `tar -cf archive path`, `tar cf archive path`, or
+`-f -` for stdin/stdout. Blocking factors are 1..32; `-k` keeps existing files.
+Extraction checks header checksums and rejects parent traversal/absolute names.
+Symbolic links, compressed archives and GNU/PAX extensions are not supported.
+
+Tar records contain **512 native C characters**. ASCII/octet-valued streams have
+standard USTAR layout when exported as one octet per cell. Native character
+values above 255 survive guest archive round trips; such content requires a
+C16-aware transport rather than conversion to ordinary host octets. The ABI and
+filesystem representation remain unchanged.
+
+```sh
+find / -name '*.c' -type f
+find work -type f -exec wc -c {} \;
+dd if=note of=prefix bs=1 count=5
+diff note saved; echo $?
+tar -cf backup.tar work
+tar -tf backup.tar
+mkdir restored; cd restored
+tar -xf /backup.tar
+```
+
+## Next userspace batches
+
+The next useful batch is the remaining text tools, including `awk`, followed by
+system administration tools. Larger applications, languages/build tools and
+networking depend on further libc, process-capacity and device work; the complete
+upstream archive is retained.
+
 ## Upstream and licensing
 
 The complete upstream source archive is in `vendor/`, pinned to the latest master
@@ -288,3 +477,16 @@ variants. Port-authored kernel platform code is GPL-2.0-only; port-authored
 userspace support is GPL-2.0-or-later so it can accompany utilities using later
 GPL versions. See [upstream/LICENCE](upstream/LICENCE),
 [upstream/Library/COPYING](upstream/Library/COPYING), and source-file notices.
+
+The interactive suite covers command/path completion (including quoting),
+ambiguous listings, history eviction, wrapped-line editing, prompt cancellation,
+six-stage pipelines, and Levee search/substitution, yank/put, native-character
+and disk-backed undo, saved permissions, overflow handling and reboot
+persistence under both engines. RVM unit tests check Tab and navigation-key
+forwarding; disk tests check the shared `vi`/`levee` inode and preservation of
+older user hard links during upgrades.
+
+The fun-tool suite checks cowsay wrapping, designs, stdin and input limits;
+Picol arithmetic, procedures, lists, channels, subprocesses, malformed input,
+large scripts and error statuses; interactive multiline input and Ctrl-C; and
+files across upgrades/reboots under both engines.

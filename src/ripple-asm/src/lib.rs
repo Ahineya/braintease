@@ -8,6 +8,7 @@ mod data_collection;
 mod archive_selection;
 pub mod macro_formatter;
 mod compact_bf;
+pub mod bf_cpu;
 pub mod virtual_instructions;
 pub mod disassembler;
 

@@ -336,7 +336,8 @@ arg_t _waitpid(void)
 		   then all is good. If not then we ECHILD out */
 		found = 0;
 		for (p = ptab; p < ptab_end; ++p) {
-			if (p->p_status && p->p_pptr == udata.u_ptab) {
+			/* PID 1's bootstrap parent is itself, not a waitable child. */
+			if (p != udata.u_ptab && p->p_status && p->p_pptr == udata.u_ptab) {
 				if (pid == -1 || p->p_pid == pid ||
 					p->p_pgrp == -pid) {
 					found = 1;
@@ -532,13 +533,25 @@ arg_t _signal(void)
 		if (sig != SIGKILL && sig != SIGSTOP)
 			sb->s_ignored |= m;
 	} else {
+#ifdef CONFIG_RIPPLE
+		extern int ripple_valid_code(unsigned long);
+		if (func != SIG_DFL &&
+		    (!ripple_valid_code((unsigned long)func) ||
+		     !ripple_valid_code((unsigned long)udata.u_argn2))) {
+			udata.u_error = EFAULT;
+#else
 		if (func != SIG_DFL && !valaddr_r((uint8_t *) func, 1, 1)) {
+#endif
 			irqrestore(irq);
 			return -1;
 		}
 		sb->s_ignored &= ~m;
 	}
 	retval = (arg_t) udata.u_sigvec[sig];
+#ifdef CONFIG_RIPPLE
+	if (func != SIG_DFL && func != SIG_IGN)
+		udata.u_sigtramp = udata.u_argn2;
+#endif
 	if (sig != SIGKILL && sig != SIGSTOP)
 		udata.u_sigvec[sig] = func;
 	/* Force recalculation of signal pending in the syscall return path */

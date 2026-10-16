@@ -425,26 +425,63 @@ and inlining small scalar RFL functions. Common-entry scalar reloads remain a
 source of register pressure in large procedures; selecting reloads at each resume
 entry is a separate optimization from the live-value publication implemented here.
 
+## Static traits and library printing
+
+The [traits 0.2 specification](traits.md) is implemented for static traits:
+required method signatures, concrete and generic implementations, explicit
+`T: A + B` bounds, inferred call type arguments, qualified calls, module imports
+and aliases, lexical method visibility, coherence, and orphan checking. Inherent
+methods win by name; traits are considered before receiver-first free functions.
+Ambiguity is diagnosed without overloading by argument type.
+
+Generic declarations are checked with rigid nominal placeholders in an isolated
+checker, including unused declarations. Each bound method selection is retained
+for concrete specialization, so an eventual inherent method cannot change a
+generic function's meaning. Placeholder layouts and signature-only calls never
+reach IR. Existing numeric generic operations retain their specialization-time
+operand checks; operator traits are outside this specification.
+
+`std/io` defines `Printable` and ordinary generic `print`/`println`. The prelude
+and explicit imports share the same definitions. Implementations cover signed
+and unsigned integers, `usize`, bool, char, String, f32/f64, Vec, Option, and
+Result, with recursive payload bounds. The compiler supplies only the
+`__write_value` scalar/text formatting leaf and byte output. New user types need
+no changes to the checker or lowerer. `println` writes its newline with `putc`,
+without re-entering generic printing. See [examples/traits.rfl](examples/traits.rfl).
+
+Borrowed matches bind shared payload references backed by an owned snapshot;
+managed payloads remain alive and are released through ordinary frame cleanup.
+Guards receive initialized references too. Safe `*reference` reads and mutable
+reference writes reuse the existing ownership-aware field operations. Shared
+receiver borrows of temporary values use frame-local snapshots. Explicit borrows
+still require names; field and index borrowing needs a common place representation.
+
+Calls lower to ordinary monomorphized functions, preserving the current frame
+ABI and all targets. There are no vtables, runtime trait tags, or new VM opcodes.
+Associated types, generic trait parameters, generic trait methods, default
+methods, and dynamic dispatch remain outside this implementation.
+
+Trait conformance and rejection cases live in `tests/traits.rs`, including the
+spec's acceptance program, declaration-time bounds versus inherent methods,
+nested managed printing, borrowed guards, modules/aliases/orphans, conservative
+overlap unification, and C calls from traits on `#[repr(C)]` types. The complete
+release suite passes 221 tests, including 21 trait tests and a small compiled
+Brainfuck CPU execution test (16 October 2026).
+
 ## Remaining specification gaps
 
 These are still unsupported; passing regression tests do not imply conformance.
 
 | Requirement | Current behavior | Relevant implementation |
 |---|---|---|
-| Traits, bounds, coherence, qualified trait calls, `Printable` | Trait declarations are rejected; printing is compiler-built-in scalar/string output | `src/ast.rs`, `src/parser.rs`, `src/check/control.rs` |
 | `defer`, including cleanup on `?`, return, break, and continue | No defer AST or lowering | `src/ast.rs`, `src/parser.rs`, `src/lower/build.rs` |
-| General reference places and safe dereference | `&point.x` is rejected; dereferencing `&i16` is treated as an unsafe raw-pointer operation | `src/check/borrows.rs`, `src/check/ffi.rs` |
+| General reference places | Explicit field/index borrowing still requires a common place representation; safe named dereferences are implemented | `src/check/borrows.rs`, `src/check/ffi.rs` |
 | Constructors as callable values | `let cons = Cons` is rejected for a payload constructor | `src/check/constructors.rs`, `src/check/control.rs` |
 | Polymorphic immutable local callables | A local identity lambda used first on an integer cannot also be called on a boolean | `src/check/closures.rs`, `src/check/inference.rs` |
 | Full unsigned 64-bit literal range | `18446744073709551615` is rejected because integer tokens store signed `i64` | `src/lexer.rs`, `src/ast.rs` |
 | Machine limits hidden from source values | Fixed-array lengths, frame metadata, reference counts, and root-frame storage still have machine-width or stack constraints | `src/ty.rs`, `src/lower/{frames,ownership}.rs` |
 | Source locations on runtime faults | Fault reasons are printed, but faults do not carry the original expression location | `src/typed.rs`, `src/lower/faults.rs` |
 | Complete build/link CLI | Only `check`, `compile`, `run`, and `lsp` exist; documented `build --link` is absent | `src/main.rs`, `src/run.rs` |
-
-Similarly, traits need a registry and bound-aware generic checking, not just
-rewriting methods after concrete substitution. Generic trait methods must retain
-the meaning of their declared bounds even when a concrete type has an inherent
-method with the same name.
 
 ## Follow-up order
 
@@ -453,8 +490,8 @@ method with the same name.
 2. Extend lifetime analysis beyond single-use temporaries and optimize checked
    collection accesses while preserving evaluation order and aliasing.
 3. Unify scope exits and cleanup before implementing `defer`.
-4. Implement the trait registry, explicit bounds, coherence, lexical trait
-   visibility, qualified calls, and standard `Printable` implementations.
+4. Design associated types and writer-oriented I/O interfaces on top of static
+   traits before introducing async syntax.
 5. Complete generic local-value inference, numeric literal representation, and
    large-value storage; add conformance cases alongside each extension.
 

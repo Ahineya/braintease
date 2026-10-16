@@ -8,11 +8,12 @@ build_only=0
 fresh=0
 install_apps=0
 jit=1
+target=rvm
 disk=""
 args=()
 usage() {
     cat <<'HELP'
-Usage: scripts/run-fuzix.sh [options] [rvm options...]
+Usage: scripts/run-fuzix.sh [rvm|rbf] [options] [host options...]
 
 Boot FUZIX/Ripple. Try help, ls, cat README, echo hello > note, hello,
 forkcheck, preemptcheck, and shutdown. Use shutdown before closing the VM.
@@ -21,6 +22,8 @@ Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
 
   --build-only     Build/update the default disk without booting
   --run-only       Boot existing artifacts without building or updating
+  --rbf            Run the Brainfuck CPU (also accepts positional rbf)
+  --rvm            Run the native VM (default; also accepts positional rvm)
   --no-jit         Use the interpreter; the JIT is enabled by default
   --fresh          Reformat the default disk (saves the old disk as a backup)
   --disk IMAGE     Use an existing image without updating its contents
@@ -36,11 +39,20 @@ Normal launches check the disk and back up and repair recoverable shutdown
 metadata before updating. Structural damage stops the update. --disk skips
 updates unless --install-apps is supplied. Set FUZIX_BUILD for another build
 directory. Root disks use the Ripple C16 filesystem ABI.
+RBF uses the same disk and needs about 266 MiB for its BF tape alone. Booting
+can take much longer; --telemetry-lite shows progress on RBF.
 HELP
 }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
+        --rvm) target=rvm; shift ;;
+        --rbf) target=rbf; shift ;;
+        rvm|rbf)
+            # A bare target precedes forwarded host options; their values may
+            # themselves be "rvm" or "rbf" (for example --input rbf).
+            if [[ ${#args[@]} == 0 ]]; then target="$1"; else args+=("$1"); fi
+            shift ;;
         --run-only) run_only=1; shift ;;
         --build-only) build_only=1; shift ;;
         --fresh) fresh=1; shift ;;
@@ -65,11 +77,14 @@ if [[ "$run_only" == 0 ]]; then
         export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
     fi
     printf 'Checking compiler, assembler and VM...\n' >&2
-    cargo build --quiet --release --manifest-path "$ROOT/Cargo.toml" -p rcc-driver -p rvm
+    cargo build --quiet --release --manifest-path "$ROOT/Cargo.toml" -p rcc-driver -p "$target"
     cargo build --quiet --release --manifest-path "$ROOT/src/ripple-asm/Cargo.toml" --bin rasm --bin rlink
     mkdir -p "$OUT"
     OUT="$(cd "$OUT" && pwd)"
     make -C "$ROOT/ports/fuzix" "BUILD=$OUT" -j4 images >&2
+    if [[ "$target" == rbf ]]; then
+        make -C "$ROOT/ports/fuzix" "BUILD=$OUT" -j4 bf >&2
+    fi
 fi
 update=0
 if [[ -z "$disk" ]]; then
@@ -77,11 +92,13 @@ if [[ -z "$disk" ]]; then
     if [[ "$run_only" == 0 ]]; then update=1; fi
 fi
 if [[ "$install_apps" == 1 ]]; then update=1; fi
-for required in "$OUT/bios.bin" "$ROOT/target/release/rvm"; do
+program=bios.bin
+if [[ "$target" == rbf ]]; then program=bios.bf; fi
+for required in "$OUT/$program" "$ROOT/target/release/$target"; do
     if [[ ! -f "$required" ]]; then echo "error: missing $required; run without --run-only first" >&2; exit 1; fi
 done
 if [[ "$update" == 0 && ! -f "$disk" ]]; then echo "error: disk not found: $disk" >&2; exit 1; fi
-launch=(--build "$OUT" --disk "$disk" --vm "$ROOT/target/release/rvm")
+launch=(--build "$OUT" --disk "$disk" --backend "$target" --vm "$ROOT/target/release/$target")
 if [[ "$update" == 1 ]]; then launch+=(--update); fi
 if [[ "$fresh" == 1 ]]; then launch+=(--fresh); fi
 if [[ "$build_only" == 1 ]]; then launch+=(--build-only); fi

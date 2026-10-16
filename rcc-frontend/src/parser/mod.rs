@@ -26,6 +26,7 @@ pub struct Parser {
     pub(crate) constant_scopes: Vec<HashMap<String, Option<i64>>>,
     pub(crate) typedef_names: HashMap<String, Type>, // Typedef name -> type, for parsing and sizeof
     pub(crate) pending_volatile: bool,
+    pub(crate) tag_scopes: Vec<HashMap<String, Type>>,
 }
 
 impl Parser {
@@ -48,6 +49,7 @@ impl Parser {
             typedef_names: HashMap::new(),
             pending_volatile: false,
             constant_scopes: vec![HashMap::new()],
+            tag_scopes: vec![HashMap::new()],
         }
     }
     
@@ -151,6 +153,51 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
+
+    #[test]
+    fn aggregate_sizeof_array_bounds_use_visible_definitions() {
+        let ast = crate::Frontend::parse_source(
+            "typedef struct item Item; struct item { long n; char name[30]; }; \
+             union value { Item item; int small; }; \
+             char a[sizeof(struct item) + 1]; char b[sizeof(Item)]; \
+             char c[sizeof(union value)];"
+        ).unwrap();
+        for (item, expected) in ast.items.iter().skip(3).zip([33, 32, 32]) {
+            match item {
+                TopLevelItem::Declarations(decls) => assert!(matches!(
+                    decls[0].decl_type, Type::Array { size: Some(n), .. } if n == expected
+                )),
+                _ => panic!("expected array declaration"),
+            }
+        }
+    }
+
+    #[test]
+    fn aggregate_sizeof_respects_block_scope() {
+        let ast = crate::Frontend::parse_source(
+            "struct item { long n; }; void f(void) { \
+             { struct item { char n; }; char inner[sizeof(struct item)]; } \
+             char outer[sizeof(struct item)]; }"
+        ).unwrap();
+        let TopLevelItem::Function(f) = &ast.items[1] else { panic!() };
+        let StatementKind::Compound(stmts) = &f.body.kind else { panic!() };
+        let StatementKind::Compound(inner) = &stmts[0].kind else { panic!() };
+        for (statement, expected) in [(&inner[1], 1), (&stmts[1], 2)] {
+            let StatementKind::Declaration { declarations } = &statement.kind else { panic!() };
+            assert!(matches!(declarations[0].decl_type,
+                Type::Array { size: Some(n), .. } if n == expected));
+        }
+    }
+
+    #[test]
+    fn incomplete_structure_array_bounds_are_rejected() {
+        for source in [
+            "struct missing; char a[sizeof(struct missing) + 1];",
+            "struct item { long n; }; void f(void) { struct item; char a[sizeof(struct item)]; }",
+        ] {
+            assert!(crate::Frontend::parse_source(source).is_err(), "{source}");
+        }
+    }
 
     #[test]
     fn enum_constants_complete_array_bounds() {

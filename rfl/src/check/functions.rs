@@ -191,6 +191,9 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn instantiate(&mut self, name: &str, args: &[Ty]) -> Result<String, CompileError> {
+        if self.generic_check {
+            self.check_declaration(name)?;
+        }
         let key = (name.to_string(), args.to_vec());
         if let Some(mangled) = self.fn_mono.get(&key) {
             return Ok(mangled.clone());
@@ -200,6 +203,7 @@ impl<'a> Checker<'a> {
         let index = self.fn_schemas[name].index;
         let type_params = self.fn_schemas[name].type_params.clone();
         let func = self.ast_fns[index].clone();
+        self.check_bounds(&func.type_params, args, func.name_span.start)?;
         let mut subst = HashMap::new();
         for (param, arg) in type_params.iter().zip(args) {
             subst.insert(param.clone(), *arg);
@@ -218,7 +222,9 @@ impl<'a> Checker<'a> {
                 variadic: false,
             },
         );
+        let saved_subst = std::mem::replace(&mut self.subst, subst);
         self.check_fn(&func, &mangled, true, false)?;
+        self.subst = saved_subst;
         Ok(mangled)
     }
 

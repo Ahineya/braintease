@@ -83,7 +83,7 @@ def exercise(image, jit):
             assert contents('/edit-note') == b'Yello Ripple\n'
             assert contents('/named') == b'unnamed\nagain\n'
             shell('rm /edit-note /named')
-        enter('env LINES=0 COLUMNS=999 vi /edit-note')
+        enter('env LINES=0 COLUMNS=999 vile /edit-note')
         leave(b'iHello Ripplx\x7fe\rsecond line\r\x1b:wq\r')
         assert contents('/edit-note') == b'Hello Ripple\nsecond line\n'
         shell('chmod 640 /edit-note')
@@ -94,14 +94,14 @@ def exercise(image, jit):
         assert contents('/edit-note~') == b'Hello Ripple\nsecond line\n'
         assert b'-rw-r-----' in shell('ls -l /edit-note')
 
-        enter('vi /edit-note')
+        enter('vile /edit-note')
         send(b'r\x03li\x08\x03:q\r')
         until(b'No write since last change.')
         leave(b':q!\r')
         assert contents('/edit-note') == b'Yello Ripple\n'
 
         # A filename supplied by :w must remain usable by the next :wq.
-        enter('vi')
+        enter('vile')
         leave(b'iunnamed\r\x1b:w /named\riagain\r\x1b:wq\r')
         assert contents('/named') == b'unnamed\nagain\n'
 
@@ -110,12 +110,12 @@ def exercise(image, jit):
         until(b'fuzix# ')
         assert contents('/tty-after') == b'restored\n'
 
-        enter('vi /limit')
+        enter('vile /limit')
         leave(b':q\r')
-        enter('vi /native-char')
+        enter('vile /native-char')
         leave(b':q\r')
         assert b'\\u1234' in transcript
-        output = shell('vi /oversize; echo EDITOR:$?')
+        output = shell('vile /oversize; echo EDITOR:$?')
         assert b'vile: file too large' in output and b'EDITOR:2' in output, output
 
         send(b'shutdown\r')

@@ -24,9 +24,11 @@ static void load_user(unsigned i) {
     ripple_bank_copy(64 + 2 * i, USER_GP);
     ripple_bank_copy(65 + 2 * i, USER_SB);
 }
+extern void ripple_code_init(void);
 void pagemap_init(void) {
-    ramsize = 9000;
-    procmem = 1000;
+    ripple_code_init();
+    ramsize = (64UL + 2 * PTABSIZE) * BANK_CELLS / 512;
+    procmem = PTABSIZE * 250;
 }
 void map_init(void) {}
 int pagemap_alloc(ptptr p) {
@@ -113,12 +115,64 @@ void ripple_shutdown(void) {
 void plt_monitor(void) { ripple_shutdown(); }
 void plt_reboot(void) { ripple_shutdown(); }
 void device_init(void) { ripple_disk_init(); }
+extern int ripple_valid_code(unsigned long);
+extern void ripple_resume_user(void);
+/* Kernel frames: R3..R27, GP, PC, PCB, flags, SB, SP, FP (32 cells).
+ * Put a copy on the user stack before entering a handler. This leaves no
+ * suspended kernel call underneath user code, including handlers that jump
+ * out with longjmp, fork, exec, or make another blocking syscall. */
+unsigned ripple_signal_frame(void) {
+    unsigned *f = (unsigned *)((unsigned long)ripple_kernel_stack << 16);
+    unsigned sig = udata.u_cursig, sp, i;
+    unsigned long handler;
+    if (!sig)
+        return 0;
+    handler = (unsigned long)udata.u_sigvec[sig];
+    if (!ripple_valid_code(handler) || !ripple_valid_code(udata.u_sigtramp))
+        doexit(SIGSEGV);
+    sp = f[31];
+    if (f[30] != USER_SB || sp > BANK_CELLS - 64)
+        doexit(SIGSEGV);
+    for (i = 0; i < 32; i++)
+        dmem_store(USER_SB, sp + i, f[i + 1]);
+    f[5] = sig;                       /* A0 */
+    f[6] = (unsigned)handler;         /* A1: code offset */
+    f[7] = handler >> 16;             /* A2: code bank */
+    f[8] = sp;                        /* A3: saved frame offset */
+    f[27] = (unsigned)udata.u_sigtramp;
+    f[28] = udata.u_sigtramp >> 16;
+    f[31] = sp + 32;
+    udata.u_cursig = 0;
+    udata.u_sigvec[sig] = SIG_DFL;     /* FUZIX/System V one-shot signal() */
+    return 1;
+}
+static void signal_return(unsigned long ptr) {
+    unsigned *f = (unsigned *)((unsigned long)ripple_kernel_stack << 16);
+    unsigned off = (unsigned)ptr, i;
+    unsigned frame[32];
+    if ((ptr >> 16) != USER_SB || off > BANK_CELLS - 32)
+        doexit(SIGSEGV);
+    for (i = 0; i < 32; i++)
+        frame[i] = dmem_load(USER_SB, off + i);
+    if (frame[25] != USER_GP || frame[29] != USER_SB ||
+        frame[30] > BANK_CELLS - 1 || frame[31] > BANK_CELLS - 1 ||
+        !ripple_valid_code(((unsigned long)frame[27] << 16) | frame[26]))
+        doexit(SIGSEGV);
+    __hard_di();
+    for (i = 0; i < 32; i++)
+        f[i + 1] = frame[i];
+    f[29] = 2; /* Restore ordinary user interrupt state, never IRQ_BUSY. */
+    udata.u_insys = 0;
+    ripple_resume_user();
+}
 long ripple_dispatch(struct ripple_request *user) {
     struct ripple_request req;
     if (uget(user, &req, sizeof(req)))
         return -1;
     udata.u_insys = 1;
     __hard_ei();
+    if (req.call == 100)
+        signal_return(req.arg[0]);
     udata.u_callno = req.call;
     udata.u_argn = req.arg[0];
     udata.u_argn1 = req.arg[1];
@@ -155,7 +209,6 @@ int main(void) {
     return 0;
 }
 
-extern void ripple_resume_user(void);
 void ripple_preempt(void) {
     udata.u_insys = 1;
     udata.u_ptab->p_status = P_READY;
@@ -163,6 +216,7 @@ void ripple_preempt(void) {
     __hard_ei();
     chksigs();
     __hard_di();
+    ripple_signal_frame();
     udata.u_insys = 0;
     ripple_resume_user();
 }

@@ -572,16 +572,21 @@ bounded check stops at the first frame; it does not need a window or key input.
 Multiple code and RAM banks are supported. Fetch uses `PCB*BANK_SIZE+PC`,
 matching RVM even for raw jump/return offsets beyond a bank's size. Sequential
 rollover, cross-bank calls/returns, and nonzero-bank entry execute in BF.
-The linker's one-bank-per-function limit still applies. LOADC/STORC,
-legacy assembler `.data` placement, and invalid entry/layout configurations
+The linker's one-bank-per-function limit still applies. Legacy assembler
+`.data` placement and invalid entry/layout configurations
 are rejected explicitly. C globals initialized through GP-bank stores work.
 The BF CPU's supported arithmetic/call subset has regression coverage; shift
 counts outside 0..15 and division/modulo by zero remain unverified against RVM.
 General ALU/LOAD writes directly to PC/PCB still do not reliably reposition the
 BF instruction pointer; control flow should use branches, JAL and JALR.
 
-CPU interrupts are not implemented by this host.
-Nonzero IRQ configuration fails explicitly; IRQ reads report no pending state.
+LOADC/STORC, including bounded code growth and self-modification, execute in BF.
+CPU interrupts are opt-in: use `BF_IRQ=1 scripts/build-bf.sh ...`, add
+`--bf-irq` to `rlink`, or set `ENABLE_IRQ=1` in
+its standalone macro output. The default expanded CPU contains no IRQ polling
+or timer accounting. The enabled variant implements RVM's IRQ ABI 2, IRET,
+CSRR/CSRW, stack switching and guest-instruction timer entirely in Brainfuck.
+See [CPU configuration and code-memory limits](../src/ripple-asm/BF_HOST.md#code-memory-and-optional-interrupts).
 BRK is a no-op in the non-debug BF host. These limitations do not change the
 Rust VM or its instruction set. Doom's first title frame has been confirmed by
 a user; full BF gameplay remains outside automated validation. Only the small

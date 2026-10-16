@@ -19,10 +19,12 @@ pub(super) fn prelude_result() -> Adt {
         name_span: span,
         params: vec![
             TypeParam {
+                bounds: Vec::new(),
                 name: "T".to_string(),
                 span,
             },
             TypeParam {
+                bounds: Vec::new(),
                 name: "E".to_string(),
                 span,
             },
@@ -50,6 +52,9 @@ pub(super) fn expand_impls(
     let impls = std::mem::take(&mut module.impls);
     let mut methods = Vec::new();
     for item in impls {
+        if item.trait_name.is_some() {
+            continue;
+        }
         let type_name = impl_type_name(source, &item)?;
         for method in item.items {
             if methods
@@ -177,6 +182,7 @@ pub(super) fn prelude_option() -> Adt {
         name: "Option".to_string(),
         name_span: span,
         params: vec![TypeParam {
+            bounds: Vec::new(),
             name: "T".to_string(),
             span,
         }],

@@ -112,6 +112,8 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn monomorphize(&mut self, schema: usize, args: &[Ty]) -> Result<u32, CompileError> {
+        let params = self.schemas[schema].type_params.clone();
+        self.check_bounds(&params, args, params.first().map_or(0, |p| p.span.start))?;
         let key = (schema, args.to_vec());
         if let Some(id) = self.mono.get(&key) {
             return Ok(*id);
@@ -211,7 +213,7 @@ impl<'a> Checker<'a> {
                 self.intern_tuple(span.start, typed)
             }
             ParsedTy::Named { span, name, args } => {
-                if let Some(found) = subst.get(name) {
+                if let Some(found) = subst.get(name).or_else(|| self.subst.get(name)) {
                     if !args.is_empty() {
                         return Err(CompileError::at(
                             self.source,

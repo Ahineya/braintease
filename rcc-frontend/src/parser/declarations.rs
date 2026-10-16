@@ -154,6 +154,7 @@ impl Parser {
         
         // Parameters hide outer enumeration constants throughout the body.
         self.constant_scopes.push(Default::default());
+        self.tag_scopes.push(Default::default());
         for parameter in &parameters {
             if let Some(name) = &parameter.name {
                 self.declare_constant_name(name.clone(), None);
@@ -161,6 +162,7 @@ impl Parser {
         }
         let body = self.parse_compound_statement()?;
         self.constant_scopes.pop();
+        self.tag_scopes.pop();
         
         let end_location = self.current_location();
         

@@ -1,0 +1,18 @@
+include $(FUZIX_ROOT)/Applications/rules.6809
+
+SRCS = picol.c
+
+OBJS = picol.o
+
+.SUFFIXES: .c .o
+
+all: picol
+
+.c.o:
+	$(CC) $(CFLAGS) $(CCOPTS) -c $<
+
+picol:  $(OBJS) $(CRT0)
+	$(LINKER) -o $@ $(LINKER_OPT) $^
+
+clean:
+	rm -f $(OBJS) $(APPS) $(SRCS:.c=) core *~ *.sym *.map *.noi *.lk *.ihx *.tmp *.bin size.report *.o

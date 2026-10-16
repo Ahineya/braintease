@@ -563,6 +563,9 @@ typedef struct u_data {
     uaddr_t	u_break;	/* Top of data space */
     uaddr_t	u_codebase;	/* Platform base pointers */
     int     (*u_sigvec[NSIGS])(int);   /* Array of signal vectors */
+#ifdef CONFIG_RIPPLE
+    unsigned long u_sigtramp; /* RXE user signal entry in separate IMEM */
+#endif
 
     uint8_t *   u_base;         /* Source or dest for I/O */
     usize_t     u_count;        /* Amount for I/O */

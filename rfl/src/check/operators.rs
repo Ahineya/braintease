@@ -35,9 +35,21 @@ impl<'a> Checker<'a> {
                 if let ExprKind::Int(value) = &inner.kind {
                     let ty = want.unwrap_or(Ty::I16);
                     if ty.is_signed() {
-                        let value = value.checked_neg().filter(|v| ty.in_range(*v))
-                            .ok_or_else(|| CompileError::at(self.source, span, format!("-{value} does not fit in {ty}")))?;
-                        return Ok(TExpr { ty, kind: TExprKind::Int(value) });
+                        let value =
+                            value
+                                .checked_neg()
+                                .filter(|v| ty.in_range(*v))
+                                .ok_or_else(|| {
+                                    CompileError::at(
+                                        self.source,
+                                        span,
+                                        format!("-{value} does not fit in {ty}"),
+                                    )
+                                })?;
+                        return Ok(TExpr {
+                            ty,
+                            kind: TExprKind::Int(value),
+                        });
                     }
                 }
                 let inner = self.check_expr(inner, want)?;
@@ -260,7 +272,9 @@ impl<'a> Checker<'a> {
             if op == BinOp::Rem {
                 return Err(CompileError::at(self.source, span, "`%` expects integers"));
             }
-        } else if !operand_ty.is_int() {
+        } else if !operand_ty.is_int()
+            && !(self.generic_check && self.opaque.contains_key(&operand_ty))
+        {
             return Err(CompileError::at(
                 self.source,
                 span,

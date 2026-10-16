@@ -3,6 +3,8 @@
 // MARK: ------------- START -------------
 
 #define DEBUG 0
+// Opt in to exact instruction-boundary IRQ/timer accounting.
+#define ENABLE_IRQ 0
 
 #define BRK_IF_DEBUG {if(#DEBUG, $, @nop)}
 #define HOST_MODE 0

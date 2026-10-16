@@ -112,20 +112,43 @@ impl Parser {
     }
 
     pub(crate) fn resolve_known_typedefs(&self, ty: &Type) -> Type {
+        self.resolve_parser_type(ty, 0)
+    }
+
+    fn resolve_parser_type(&self, ty: &Type, depth: usize) -> Type {
+        // Only sizeof needs a completed value layout here. Stop at pointers:
+        // recursive structures have fixed-size pointers, not recursive sizes.
+        if depth > 64 {
+            return Type::Error;
+        }
         match ty {
-            Type::Volatile(inner) => self.resolve_known_typedefs(inner).with_volatile(),
-            Type::Typedef(name) => self
-                .typedef_names
-                .get(name)
-                .cloned()
+            Type::Volatile(inner) => self.resolve_parser_type(inner, depth + 1).with_volatile(),
+            Type::Typedef(name) => self.typedef_names.get(name)
+                .map(|t| self.resolve_parser_type(t, depth + 1))
                 .unwrap_or_else(|| ty.clone()),
-            Type::Pointer { target, bank } => Type::Pointer {
-                target: Box::new(self.resolve_known_typedefs(target)),
-                bank: *bank,
-            },
             Type::Array { element_type, size } => Type::Array {
-                element_type: Box::new(self.resolve_known_typedefs(element_type)),
+                element_type: Box::new(self.resolve_parser_type(element_type, depth + 1)),
                 size: *size,
+            },
+            Type::Struct { name, fields } | Type::Union { name, fields } => {
+                if fields.is_empty() {
+                    if let Some(definition) = name.as_ref().and_then(|name|
+                        self.tag_scopes.iter().rev().find_map(|scope| scope.get(name))) {
+                        if definition != ty {
+                            return self.resolve_parser_type(definition, depth + 1);
+                        }
+                    }
+                    return ty.clone();
+                }
+                let resolved = fields.iter().map(|field| StructField {
+                    name: field.name.clone(),
+                    field_type: self.resolve_parser_type(&field.field_type, depth + 1),
+                    offset: field.offset,
+                }).collect();
+                match ty {
+                    Type::Struct { .. } => Type::Struct { name: name.clone(), fields: resolved },
+                    _ => Type::Union { name: name.clone(), fields: resolved },
+                }
             },
             _ => ty.clone(),
         }
@@ -301,6 +324,7 @@ impl Parser {
         &mut self,
     ) -> Result<(Vec<Type>, Vec<(Option<String>, Type, SourceSpan)>, bool), CompilerError> {
         self.constant_scopes.push(Default::default());
+        self.tag_scopes.push(Default::default());
         let mut parameter_types = Vec::new();
         let mut parameter_info = Vec::new();
         let mut is_variadic = false;
@@ -364,6 +388,7 @@ impl Parser {
         }
 
         self.constant_scopes.pop();
+        self.tag_scopes.pop();
         Ok((parameter_types, parameter_info, is_variadic))
     }
     
@@ -404,7 +429,15 @@ impl Parser {
             Vec::new() // Forward declaration
         };
         
-        Ok(Type::Struct { name, fields })
+        let ty = Type::Struct { name: name.clone(), fields };
+        if let Some(tag) = name {
+            if matches!(&ty, Type::Struct { fields, .. } if !fields.is_empty()) {
+                self.tag_scopes.last_mut().unwrap().insert(tag, ty.clone());
+            } else if self.check(&TokenType::Semicolon) {
+                self.tag_scopes.last_mut().unwrap().entry(tag).or_insert_with(|| ty.clone());
+            }
+        }
+        Ok(ty)
     }
     
     /// Parse union type
@@ -445,7 +478,15 @@ impl Parser {
             Vec::new()
         };
         
-        Ok(Type::Union { name, fields })
+        let ty = Type::Union { name: name.clone(), fields };
+        if let Some(tag) = name {
+            if matches!(&ty, Type::Union { fields, .. } if !fields.is_empty()) {
+                self.tag_scopes.last_mut().unwrap().insert(tag, ty.clone());
+            } else if self.check(&TokenType::Semicolon) {
+                self.tag_scopes.last_mut().unwrap().entry(tag).or_insert_with(|| ty.clone());
+            }
+        }
+        Ok(ty)
     }
     
     /// Parse enum type

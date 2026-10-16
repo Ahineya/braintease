@@ -222,6 +222,37 @@ export function installRoot(input, files) {
       throw Error(`refusing to replace nonregular ${f.name}`);
     if (old && f.preserve)
       continue;
+    if (f.link) {
+      const targetParts = f.link.split('/').filter(Boolean);
+      let target = nodes.get(1);
+      if (!targetParts.length || targetParts.some(n => n === '.' || n === '..'))
+        throw Error('invalid install link target');
+      for (const part of targetParts) {
+        if ((w(target.base) & 0xf000) !== 0x4000)
+          throw Error(`not an install link directory: ${f.link}`);
+        const next = lookup(target, part);
+        if (!next) throw Error(`missing install link target: ${f.link}`);
+        target = nodes.get(next.ino);
+      }
+      if ((w(target.base) & 0xf000) !== 0x8000)
+        throw Error(`not a regular install link target: ${f.link}`);
+      if (old === target) continue;
+      if (checked.issues.length)
+        throw Error('userspace upgrade requires a clean root; shut down or run fsck first');
+      if (old) {
+        const links = w(old.base + 1) - 1;
+        put(old.base + 1, links);
+        if (!links) {
+          writeNode(old, []);
+          image.fill(0, old.base * 2, (old.base + 32) * 2);
+          nodes.delete(old.ino);
+        }
+      }
+      put(target.base + 1, w(target.base + 1) + 1);
+      setEntry(parent, name, target.ino, entry ? entry.offset : -1);
+      changed = true;
+      continue;
+    }
     const data = Array.from(f.data), mode = f.mode ?? 0o100755;
     if (old && w(old.base) === mode && old.size === data.length &&
         cells(old).every((c, i) => c === data[i]))

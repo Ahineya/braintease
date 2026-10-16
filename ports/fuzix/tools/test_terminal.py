@@ -88,8 +88,8 @@ with tempfile.TemporaryDirectory(prefix='ripple-fuzix-terminal-') as temporary:
         os.write(master, b'a\rdiscard me\r.\rQ\r')
         until(b'fuzix# ')
         # Both stages of a foreground pipeline must receive the interrupt.
-        os.write(master, b'cat | cat\r')
-        until(b'cat | cat')
+        os.write(master, b"cat | sh -c 'echo PIPE_STARTED; exec cat'\r")
+        until(b'\nPIPE_STARTED\r')
         os.write(master, b'pipeline_ready\r')
         until(b'pipeline_ready')
         until(b'pipeline_ready')

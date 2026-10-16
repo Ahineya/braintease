@@ -12,6 +12,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 signal-hook = "0.3"
 sha2 = "0.10"
+ripple-asm = { path = "../src/ripple-asm" }
 
 [lints]
 workspace = true

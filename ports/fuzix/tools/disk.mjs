@@ -95,11 +95,17 @@ export function rootImage(files, blocks = 65535, inodeCount = 1024) {
         binaries = [ [ '.', 2 ], [ '..', 1 ] ],
         config = [ [ '.', etc.ino ], [ '..', 1 ] ],
         devices = [ [ '.', 3 ], [ '..', 1 ], [ 'tty1', tty.ino ] ];
+  const named = new Map();
   for (const f of files) {
     if (f.directory)
       continue;
-    const node =
-        inode(f.mode ?? 0o100755, Array.from(f.data), 1, f.device ?? 0);
+    let node;
+    if (f.link) {
+      node = named.get(f.link);
+      if (!node) throw Error(`missing seed link target: ${f.link}`);
+      word(node.base + 1, image.readUInt16LE((node.base + 1) * 2) + 1);
+    } else node = inode(f.mode ?? 0o100755, Array.from(f.data), 1, f.device ?? 0);
+    named.set(f.name, node);
     if (path.dirname(f.name) === '/')
       entries.push([ path.basename(f.name), node.ino ]);
     else if (path.dirname(f.name) === '/dev')
@@ -190,11 +196,27 @@ export function seedNames(build) {
              : [ 'init', 'hello', 'forkcheck', 'preemptcheck', 'iotest' ];
 }
 export function buildDisk(build, filename, fresh = false, install = false) {
+  const aliases = {vi: '/bin/levee', mv: '/bin/cp', ln: '/bin/cp',
+                   tcl: '/bin/picol', tclsh: '/bin/picol'};
+  // Switch aliases immediately after their target. This releases an older
+  // shared executable before allocating the next large program during upgrades.
+  const installedNames = seedNames(build), orderedNames = [];
+  for (const name of installedNames)
+    if (aliases[name] && !installedNames.includes(path.basename(aliases[name])))
+      throw Error(`missing executable alias target: ${aliases[name]}`);
+  for (const name of installedNames) {
+    if (aliases[name]) continue;
+    orderedNames.push(name);
+    for (const [alias, target] of Object.entries(aliases))
+      if (target === `/bin/${name}` && installedNames.includes(alias))
+        orderedNames.push(alias);
+  }
   const seedFiles = () =>
-      [...seedNames(build).map(
+      [...orderedNames.map(
            name => ({
              name : name === 'init' ? '/init' : `/bin/${name}`,
-             data : fs.readFileSync(path.join(build, `${name}.rxe`))
+             ...(aliases[name] ? {link: aliases[name]} :
+                  {data : fs.readFileSync(path.join(build, `${name}.rxe`))})
            })),
        {
          name : '/tmp',
@@ -226,6 +248,10 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          mode : 0o100644,
          preserve : true,
          data : Buffer.from('/dev/root / fuzix rw 0 0\n')
+       },
+       {
+         name: '/hello.tcl', mode: 0o100644, preserve: true,
+         data: fs.readFileSync(fileURLToPath(new URL('../examples/hello.tcl', import.meta.url)))
        }];
   const kernel = {
     name : 'FUZIX.SYS',

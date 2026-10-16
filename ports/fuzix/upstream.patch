@@ -1,3 +1,2047 @@
+--- a/Applications/MWC/cmd/find.y
++++ b/Applications/MWC/cmd/find.y
+@@ -16,0 +17,2 @@
++#include <errno.h>
++#include <sys/wait.h>
+@@ -32,0 +35,2 @@
++int yylex(void);
++void yyerror(const char *);
+@@ -33,0 +38 @@
++int	failed;
+@@ -39 +44 @@
+-NODE	*lnode(int op, int (*fn)(NODE *), int val, char *str);
++NODE	*lnode(int op, int (*fn)(NODE *), unsigned long val, char *str);
+@@ -171,0 +177 @@
++    return failed;
+@@ -237 +243 @@
+-	register int num;
++	unsigned long num;
+@@ -251,2 +257,4 @@
+-	while (*ap>='0' && *ap<='7')
+-		num = num*8 + *ap++-'0';
++	while (*ap>='0' && *ap<='7') {
++        num = num*8 + *ap++-'0';
++        if (num > 07777) errx(1, "%s: bad octal permission", aap);
++    }
+@@ -270 +278 @@
+-	register int num = 0;
++	unsigned long num = 0;
+@@ -284,0 +293,2 @@
++    if (*ap < '0' || *ap > '9')
++        errx(1, "%s: invalid number", aap);
+@@ -286,3 +296,8 @@
+-		num = num*10 + *ap++ - '0';
+-	if (*ap != '\0')
+-		errx(1, "%s: invalid number", aap);
++		{
++        unsigned digit = *ap++ - '0';
++        if (num > (4294967295UL - digit) / 10)
++            errx(1, "%s: number too large", aap);
++        num = num*10 + digit;
++    }
++	if (*ap && !(fun == xsize && *ap == 'c' && !ap[1]))
++        errx(1, "%s: invalid number", aap);
+@@ -290,0 +306 @@
++    np->n_chars = *ap == 'c';
+@@ -366,0 +383,2 @@
++    np->n_chars = 0;
++    np->n_type = 0;
+@@ -373 +391 @@
+-NODE *lnode(int op, int (*fn)(NODE *), int val, char *str)
++NODE *lnode(int op, int (*fn)(NODE *), unsigned long val, char *str)
+@@ -380,0 +399,2 @@
++    np->n_chars = 0;
++    np->n_type = 0;
+@@ -424,0 +445,2 @@
++/* Ripple: close each directory before descending, so depth consumes stack
++ * and pathname space rather than descriptors or extra process slots. */
+@@ -427,20 +449,17 @@
+-	register char *ep, *cp;
+-
+-	cp = dir;
+-	ep = fname;
+-	while (*cp)
+-		*ep++ = *cp++;
+-	*ep = '\0';
+-	if (stat(dir, &sb) < 0)
+-		err(1, "Cannot find directory `%s'", dir);
+-	if ((sb.st_mode&S_IFMT) != S_IFDIR)
+-		errx(1, "%s: not a directory", dir);
+-	fentry(ep, &sb);
+-}
+-
+-/*
+- * The pointer is the end pointer
+- * into the fname buffer.
+- * And the stat buffer is passed to this
+- * which traverses the directory hierarchy.
+- */
++    size_t n = strlen(dir);
++    if (n >= sizeof(fname)) {
++        warnx("%s: pathname too long", dir);
++        failed = 1;
++        return;
++    }
++    strcpy(fname, dir);
++    while (n > 1 && fname[n-1] == '/')
++        fname[--n] = 0;
++    if (stat(fname, &sb) < 0) {
++        warn("%s", fname);
++        failed = 1;
++        return;
++    }
++    fentry(fname+n, &sb);
++}
++
+@@ -449,72 +468,58 @@
+-	register char *np;
+-	struct dirent *dp;
+-	DIR *dir;
+-	register int nb;
+-	int fd;
+-	int dirflag;
+-	char *iobuf;
+-
+-	if (sbp != NULL) {
+-		dirflag = (sbp->st_mode&S_IFMT)==S_IFDIR;
+-		execute(code);
+-	} else
+-		dirflag = 1;
+-	if (dirflag) {
+-		if (++depth >= NRECUR) {
+-			depth = 0;
+-			ffork(ep, sbp);
+-			return;
+-		}
+-		if ((dir = opendir(fname)) == NULL) {
+-			warn("%s: cannot open directory", fname);
+-			return;
+-		}
+-		while ((dp = readdir(dir)) != NULL) {
+-			if (dp->d_ino == 0)
+-				continue;
+-			np = dp->d_name;
+-			if (*np++=='.'
+-			  && (*np=='\0' || (*np++=='.' && *np=='\0')))
+-				continue;
+-			np = buildname(dp, ep);
+-			if (stat(fname, &sb) < 0) {
+-				warn("%s: cannot stat", fname);
+-				continue;
+-			}
+-			fentry(np, &sb);
+-		}
+-		*ep = '\0';
+-		closedir(dir);
+-		depth--;
+-	}
+-}
+-
+-/*
+- * Fork to do a find on recursive directory
+- * structure that is too deep to fit into
+- * user's open files.
+- */
+-void ffork(char *ep, struct stat *sbp)
+-{
+-	register int i;
+-	register int pid;
+-	int status;
+-	int nfile = sysconf(_SC_OPEN_MAX);
+-
+-	fflush(stdout);
+-	if ((pid = fork()) < 0) {
+-		warn(toodeep);
+-		return;
+-	}
+-	if (pid) {
+-		while (wait(&status) >= 0)
+-			;
+-		if (status)
+-			warn("panic: child failed: %o", status);
+-		return;
+-	}
+-	for (i=3; i<nfile; i++)
+-		close(i);
+-	fentry(ep, (struct stat *)NULL);
+-	fflush(stdout);
+-	exit(0);
++    DIR *dir;
++    struct dirent *dp;
++    int isdir = S_ISDIR(sbp->st_mode);
++    execute(code);
++    if (!isdir)
++        return;
++    if (++depth > 128) {
++        warnx("%s: %s", fname, toodeep);
++        failed = 1;
++        depth--;
++        return;
++    }
++    dir = opendir(fname);
++    if (!dir) {
++        warn("%s", fname);
++        failed = 1;
++        depth--;
++        return;
++    }
++    for (;;) {
++        char *end;
++        off_t position;
++        errno = 0;
++        dp = readdir(dir);
++        if (!dp) {
++            if (errno) {
++                warn("%s", fname);
++                failed = 1;
++            }
++            break;
++        }
++        if (!strcmp(dp->d_name,".") || !strcmp(dp->d_name,".."))
++            continue;
++        end = buildname(dp, ep);
++        if (!end) {
++            failed = 1;
++            continue;
++        }
++        position = telldir(dir);
++        closedir(dir);
++        if (stat(fname, &sb) < 0) {
++            warn("%s", fname);
++            failed = 1;
++        } else
++            fentry(end, &sb);
++        *ep = 0;
++        dir = opendir(fname);
++        if (!dir) {
++            warn("%s", fname);
++            failed = 1;
++            break;
++        }
++        seekdir(dir, position);
++    }
++    *ep = 0;
++    if (dir)
++        closedir(dir);
++    depth--;
+@@ -572 +577 @@
+-	/* NOTREACHED */
++	return 0; /* NOTREACHED */
+@@ -686 +691 @@
+-	mode = np->n_type<0 ? sb.st_mode&017777 : sb.st_mode&0777;
++	mode = np->n_type<0 ? sb.st_mode&017777 : sb.st_mode&07777;
+@@ -724,0 +730 @@
++    return 0;
+@@ -730 +736 @@
+-int ncomp(NODE *np, unsigned int val)
++int ncomp(NODE *np, unsigned long val)
+@@ -769,4 +775,4 @@
+-	register int fsize;
+-
+-	fsize = (sb.st_size+BUFSIZ-1)/BUFSIZ;
+-	return (ncomp(np, fsize));
++    unsigned long size = sb.st_size;
++    if (!np->n_chars)
++        size = (size + 511) / 512;
++    return ncomp(np, size);
+@@ -789,4 +795,5 @@
+-	register int days;
+-
+-	days = (curtime-t+DAYSEC/2)/DAYSEC;
+-	return (ncomp(np, days));
++    long delta=(long)curtime-(long)t;
++    /* Future timestamps have negative ages, not wrapped unsigned ages. */
++    if (delta<0)
++        return np->n_type<0;
++    return ncomp(np,delta/DAYSEC);
+@@ -825,0 +833 @@
++/* Pass arguments directly: spaces/metacharacters in a pathname are data. */
+@@ -828,23 +836,44 @@
+-	static char command[200];
+-	register char *ap, **app;
+-	register int c;
+-	int ok;
+-
+-	command[0] = '\0';
+-	app = np->n_un.n_strp;
+-	while (*app != NULL) {
+-		if ((ap = *app++) == FILEARG)
+-			ap = fname;
+-		strcat(command, ap);
+-		if (*app != NULL)
+-			strcat(command, " ");
+-	}
+-	if (np->n_type) {
+-		printf("%s%s? ", prompt, command);
+-		ok = (c = getchar()) == 'y';
+-		while (c!='\n' && c!=EOF)
+-			c = getchar();
+-		if (!ok)
+-			return (0);
+-	}
+-	return (!system(command));
++    char *args[NARG];
++    char **src = np->n_un.n_strp;
++    int n = 0, pid, status, result;
++    while (*src) {
++        args[n++] = *src == FILEARG ? fname : *src;
++        src++;
++    }
++    args[n] = NULL;
++    if (!n)
++        errx(1, "empty -exec command");
++    if (np->n_type) {
++        int c;
++        for (n = 0; args[n]; n++)
++            printf("%s ", args[n]);
++        printf("? ");
++        fflush(stdout);
++        c = getchar();
++        result = c == 'y';
++        while (c != '\n' && c != EOF)
++            c = getchar();
++        if (!result)
++            return 0;
++    }
++    fflush(NULL);
++    pid = fork();
++    if (pid < 0) {
++        warn("fork");
++        failed = 1;
++        return 0;
++    }
++    if (!pid) {
++        execvp(args[0], args);
++        warn("%s", args[0]);
++        _exit(127);
++    }
++    do {
++        result = waitpid(pid, &status, 0);
++    } while (result < 0 && errno == EINTR);
++    if (result < 0) {
++        warn("waitpid");
++        failed = 1;
++        return 0;
++    }
++    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+@@ -879,2 +908,3 @@
+-	fprintf(stderr, "Usage: find directory ... [ expression ]\n");
+-}
++	fprintf(stderr, "Usage: find path ... [ expression ]\n");
++    exit(1);
++}
+--- a/Applications/MWC/cmd/findnode.h
++++ b/Applications/MWC/cmd/findnode.h
+@@ -6 +6 @@
+-		unsigned n_val;
++		unsigned long n_val;
+@@ -13,0 +14 @@
++    int n_chars;
+--- a/Applications/TCL/picol.c
++++ b/Applications/TCL/picol.c
+@@ -30,0 +31,5 @@
++#include <errno.h>
++#include <limits.h>
++#include <ctype.h>
++#define PICOL_LIMIT 12000
++#define PICOL_DEPTH 32
+@@ -41,0 +47,2 @@
++    const char *error;
++    int haveword;
+@@ -54,0 +62 @@
++    int active;
+@@ -65,0 +74 @@
++    int exiting, exitcode;
+@@ -80 +89,3 @@
+-    void *p = malloc(s);
++    void *p;
++    if (s > PICOL_LIMIT + 1) picol_oom();
++    p = malloc(s);
+@@ -86,5 +97,4 @@
+-char *picol_strdup(const char *p)
+-{
+-    char *r = strdup(p);
+-    if (r == NULL)
+-        picol_oom();
++char *picol_strdup(const char *p) {
++    size_t n = strlen(p) + 1;
++    char *r = picol_malloc(n);
++    memcpy(r, p, n);
+@@ -92,0 +103,13 @@
++void *picol_realloc(void *p, size_t n) {
++    void *q;
++    if (n > PICOL_LIMIT + 1) picol_oom();
++    q = realloc(p, n);
++    if (!q) picol_oom();
++    return q;
++}
++static int picolCondition(struct picolInterp *, char *);
++static int splitList(struct picolInterp *, const char *, int *, char ***);
++static void freeWords(int, char **);
++static char *makeList(int, char **);
++static int picolInteger(struct picolInterp *, const char *, long *);
++static int picolMath(struct picolInterp *, const char *, long, long, long *);
+@@ -97,0 +121 @@
++    p->error = NULL; p->haveword = 0;
+@@ -103 +127 @@
+-    while(*p->p == ' ' || *p->p == '\t' || *p->p == '\n' || *p->p == '\r') {
++    while(*p->p == ' ' || *p->p == '\t' || *p->p == '\r') {
+@@ -129 +153,2 @@
+-            break;
++            p->error = "missing close-bracket";
++            return PICOL_ERR;
+@@ -134 +159 @@
+-        } else if (*p->p == '\\') {
++        } else if (*p->p == '\\' && p->len >= 2) {
+@@ -152,16 +177,12 @@
+-    p->start = ++p->p; p->len--; /* skip the $ */
+-    while(1) {
+-        if ((*p->p >= 'a' && *p->p <= 'z') || (*p->p >= 'A' && *p->p <= 'Z') ||
+-            (*p->p >= '0' && *p->p <= '9') || *p->p == '_')
+-        {
+-            p->p++; p->len--; continue;
+-        }
+-        break;
+-    }
+-    if (p->start == p->p) { /* It's just a single char string "$" */
+-        p->start = p->end = p->p-1;
+-        p->type = PT_STR;
+-    } else {
+-        p->end = p->p-1;
+-        p->type = PT_VAR;
+-    }
++    p->start = ++p->p; p->len--;
++    if (*p->p == '{') {
++        p->start = ++p->p; p->len--;
++        while (p->len && *p->p != '}') { p->p++; p->len--; }
++        if (!p->len) { p->error = "missing variable close-brace"; return PICOL_ERR; }
++        p->end = p->p - 1; p->p++; p->len--; p->type = PT_VAR;
++        return PICOL_OK;
++    }
++    while (p->len && (isalnum(*p->p) || *p->p == '_')) { p->p++; p->len--; }
++    if (p->start == p->p) {
++        p->start = p->end = p->p - 1; p->type = PT_STR;
++    } else { p->end = p->p - 1; p->type = PT_VAR; }
+@@ -177 +198,4 @@
+-        } else if (p->len == 0 || *p->p == '}') {
++        } else if (p->len == 0) {
++            p->error = "missing close-brace";
++            return PICOL_ERR;
++        } else if (*p->p == '}') {
+@@ -247 +271 @@
+-int picolGetToken(struct picolParser *p) {
++static int picolNextToken(struct picolParser *p) {
+@@ -249,0 +274,4 @@
++            if (p->insidequote) {
++                p->error = "missing close-quote";
++                return PICOL_ERR;
++            }
+@@ -268 +296 @@
+-            if (p->type == PT_EOL) {
++            if (!p->haveword) {
+@@ -279,0 +308,7 @@
++int picolGetToken(struct picolParser *p) {
++    int code = picolNextToken(p);
++    if (p->type == PT_EOL) p->haveword = 0;
++    else if (p->type != PT_SEP && p->type != PT_EOF) p->haveword = 1;
++    return code;
++}
++
+@@ -281 +316 @@
+-    i->level = 0;
++    i->level = i->exiting = i->exitcode = 0;
+@@ -286 +321 @@
+-    i->result = strdup("");
++    i->result = picol_strdup("");
+@@ -289,0 +325 @@
++    char *copy = picol_strdup(s);
+@@ -291 +327 @@
+-    i->result = strdup(s);
++    i->result = copy;
+@@ -305,0 +342 @@
++        char *copy = picol_strdup(val);
+@@ -307 +344 @@
+-        v->val = strdup(val);
++        v->val = copy;
+@@ -310,2 +347,2 @@
+-        v->name = strdup(name);
+-        v->val = strdup(val);
++        v->name = picol_strdup(name);
++        v->val = picol_strdup(val);
+@@ -329 +366 @@
+-    char errbuf[1024];
++    char errbuf[256];
+@@ -331 +368 @@
+-        snprintf(errbuf,1024,"Command '%s' already defined",name);
++        snprintf(errbuf,sizeof(errbuf),"Command '%s' already defined",name);
+@@ -336,0 +374 @@
++    c->active = 0;
+@@ -344,2 +382,20 @@
+-/* EVAL! */
+-int picolEval(struct picolInterp *i, char *t) {
++/* EVAL! Escape decoding happens only on substituting words, never braces. */
++static void picolUnescape(char *s) {
++    char *r = s, *w = s;
++    while (*r) {
++        char c = *r++;
++        if (c == '\\' && *r) {
++            c = *r++;
++            if (c == 'n') c = '\n';
++            else if (c == 'r') c = '\r';
++            else if (c == 't') c = '\t';
++            else if (c == '\n') {
++                while (*r == ' ' || *r == '\t') r++;
++                c = ' ';
++            }
++        }
++        *w++ = c;
++    }
++    *w = 0;
++}
++int picolEval(struct picolInterp *i, char *script) {
+@@ -347,11 +403,17 @@
+-    int argc = 0, j;
+-    char **argv = NULL;
+-    char errbuf[1024];
+-    int retcode = PICOL_OK;
+-    picolSetResult(i,"");
+-    picolInitParser(&p,t);
+-    while(1) {
+-        char *t;
+-        int tlen;
+-        int prevtype = p.type;
+-        picolGetToken(&p);
++    int argc = 0, j, retcode = PICOL_OK;
++    char **argv = NULL, errbuf[256];
++    if (i->level >= PICOL_DEPTH) {
++        picolSetResult(i, "evaluation nesting limit exceeded"); return PICOL_ERR;
++    }
++    if (strlen(script) > PICOL_LIMIT) {
++        picolSetResult(i, "script exceeds 12000 characters"); return PICOL_ERR;
++    }
++    i->level++;
++    picolSetResult(i, "");
++    picolInitParser(&p, script);
++    while (1) {
++        char *token;
++        int len, previous = p.type;
++        if (picolGetToken(&p) != PICOL_OK) {
++            picolSetResult(i, (char *)p.error); retcode = PICOL_ERR; break;
++        }
+@@ -359,29 +421 @@
+-        tlen = p.end-p.start+1;
+-        if (tlen < 0) tlen = 0;
+-        t = picol_malloc(tlen+1);
+-        memcpy(t, p.start, tlen);
+-        t[tlen] = '\0';
+-        if (p.type == PT_VAR) {
+-            struct picolVar *v = picolGetVar(i,t);
+-            if (!v) {
+-                snprintf(errbuf,1024,"No such variable '%s'",t);
+-                free(t);
+-                picolSetResult(i,errbuf);
+-                retcode = PICOL_ERR;
+-                goto err;
+-            }
+-            free(t);
+-            t = strdup(v->val);
+-        } else if (p.type == PT_CMD) {
+-            retcode = picolEval(i,t);
+-            free(t);
+-            if (retcode != PICOL_OK) goto err;
+-            t = strdup(i->result);
+-        } else if (p.type == PT_ESC) {
+-            /* XXX: escape handling missing! */
+-        } else if (p.type == PT_SEP) {
+-            prevtype = p.type;
+-            free(t);
+-            continue;
+-        }
+-        /* We have a complete command + args. Call it! */
++        if (p.type == PT_SEP) continue;
+@@ -390,2 +423,0 @@
+-            free(t);
+-            prevtype = p.type;
+@@ -393,5 +425,4 @@
+-                if ((c = picolGetCommand(i,argv[0])) == NULL) {
+-                    snprintf(errbuf,1024,"No such command '%s'",argv[0]);
+-                    picolSetResult(i,errbuf);
+-                    retcode = PICOL_ERR;
+-                    goto err;
++                c = picolGetCommand(i, argv[0]);
++                if (!c) {
++                    snprintf(errbuf, sizeof(errbuf), "No such command '%s'", argv[0]);
++                    picolSetResult(i, errbuf); retcode = PICOL_ERR; break;
+@@ -399,4 +430,6 @@
+-                retcode = c->func(i,argc,argv,c->privdata);
+-                if (retcode != PICOL_OK) goto err;
+-            }
+-            /* Prepare for the next command */
++                c->active++;
++                retcode = c->func(i, argc, argv, c->privdata);
++                c->active--;
++                if (i->exiting) retcode = PICOL_RETURN;
++                if (retcode != PICOL_OK) break;
++            }
+@@ -404,3 +437 @@
+-            free(argv);
+-            argv = NULL;
+-            argc = 0;
++            free(argv); argv = NULL; argc = 0;
+@@ -409,15 +440,28 @@
+-        /* We have a new token, append to the previous or as new arg? */
+-        if (prevtype == PT_SEP || prevtype == PT_EOL) {
+-            argv = realloc(argv, sizeof(char*)*(argc+1));
+-            argv[argc] = t;
+-            argc++;
+-        } else { /* Interpolation */
+-            int oldlen = strlen(argv[argc-1]), tlen = strlen(t);
+-            argv[argc-1] = realloc(argv[argc-1], oldlen+tlen+1);
+-            memcpy(argv[argc-1]+oldlen, t, tlen);
+-            argv[argc-1][oldlen+tlen]='\0';
+-            free(t);
+-        }
+-        prevtype = p.type;
+-    }
+-err:
++        len = p.end - p.start + 1;
++        if (len < 0) len = 0;
++        token = picol_malloc(len + 1);
++        memcpy(token, p.start, len); token[len] = 0;
++        if (p.type == PT_VAR) {
++            struct picolVar *v = picolGetVar(i, token);
++            if (!v) {
++                snprintf(errbuf, sizeof(errbuf), "No such variable '%s'", token);
++                free(token); picolSetResult(i, errbuf); retcode = PICOL_ERR; break;
++            }
++            free(token); token = picol_strdup(v->val);
++        } else if (p.type == PT_CMD) {
++            retcode = picolEval(i, token); free(token);
++            if (retcode != PICOL_OK) break;
++            token = picol_strdup(i->result);
++        } else if (p.type == PT_ESC) picolUnescape(token);
++        if (previous == PT_SEP || previous == PT_EOL) {
++            if (argc >= 128) {
++                free(token); picolSetResult(i, "too many arguments"); retcode = PICOL_ERR; break;
++            }
++            argv = picol_realloc(argv, sizeof(char *) * (argc + 1));
++            argv[argc++] = token;
++        } else {
++            size_t old = strlen(argv[argc - 1]), add = strlen(token);
++            argv[argc - 1] = picol_realloc(argv[argc - 1], old + add + 1);
++            memcpy(argv[argc - 1] + old, token, add + 1); free(token);
++        }
++    }
+@@ -425 +469 @@
+-    free(argv);
++    free(argv); i->level--;
+@@ -431,2 +475,2 @@
+-    char buf[1024];
+-    snprintf(buf,1024,"Wrong number of args for %s",name);
++    char buf[256];
++    snprintf(buf,sizeof(buf),"Wrong number of args for %s",name);
+@@ -438,20 +482,5 @@
+-    char buf[64]; long a, b, c;
+-    if (argc != 3) return picolArityErr(i,argv[0]);
+-    a = atol(argv[1]); b = atol(argv[2]);
+-    if (b == 0 && argv[0][0] == '/' || argv[0][0] == '%') {
+-        picolSetResult(i,"Division by zero");
+-        return PICOL_ERR;
+-    }
+-    if (argv[0][0] == '+') c = a+b;
+-    else if (argv[0][0] == '-') c = a-b;
+-    else if (argv[0][0] == '*') c = a*b;
+-    else if (argv[0][0] == '/') c = a/b;
+-    else if (argv[0][0] == '>' && argv[0][1] == '\0') c = a > b;
+-    else if (argv[0][0] == '>' && argv[0][1] == '=') c = a >= b;
+-    else if (argv[0][0] == '<' && argv[0][1] == '\0') c = a < b;
+-    else if (argv[0][0] == '<' && argv[0][1] == '=') c = a <= b;
+-    else if (argv[0][0] == '=' && argv[0][1] == '=') c = a == b;
+-    else if (argv[0][0] == '!' && argv[0][1] == '=') c = a != b;
+-    else c = 0; /* I hate warnings */
+-    snprintf(buf,64,"%ld",c);
+-    picolSetResult(i,buf);
++    char buf[40]; long a, b, c;
++    if (argc != 3) return picolArityErr(i, argv[0]);
++    if (picolInteger(i, argv[1], &a) || picolInteger(i, argv[2], &b) ||
++        picolMath(i, argv[0], a, b, &c)) return PICOL_ERR;
++    snprintf(buf, sizeof(buf), "%ld", c); picolSetResult(i, buf);
+@@ -461,0 +491,5 @@
++    if (argc == 2) {
++        struct picolVar *v = picolGetVar(i, argv[1]);
++        if (!v) { picolSetResult(i, "No such variable"); return PICOL_ERR; }
++        picolSetResult(i, v->val); return PICOL_OK;
++    }
+@@ -468,6 +501,0 @@
+-int picolCommandPuts(struct picolInterp *i, int argc, char **argv, void *pd) {
+-    if (argc != 2) return picolArityErr(i,argv[0]);
+-    printf("%s\n", argv[1]);
+-    return PICOL_OK;
+-}
+-
+@@ -475,8 +503,11 @@
+-    int retcode;
+-    if (argc != 3 && argc != 5) return picolArityErr(i,argv[0]);
+-    if ((retcode = picolEval(i,argv[1])) != PICOL_OK) return retcode;
+-    if (atol(i->result)) return picolEval(i,argv[2]);
+-    else if (argc == 5) return picolEval(i,argv[4]);
+-    return PICOL_OK;
+-}
+-
++    int truth;
++    if (argc != 3 && argc != 5) return picolArityErr(i, argv[0]);
++    if (argc == 5 && strcmp(argv[3], "else")) {
++        picolSetResult(i, "expected else"); return PICOL_ERR;
++    }
++    truth = picolCondition(i, argv[1]);
++    if (truth < 0) return PICOL_ERR;
++    if (truth) return picolEval(i, argv[2]);
++    if (argc == 5) return picolEval(i, argv[4]);
++    picolSetResult(i, ""); return PICOL_OK;
++}
+@@ -484,12 +515,8 @@
+-    if (argc != 3) return picolArityErr(i,argv[0]);
+-    while(1) {
+-        int retcode = picolEval(i,argv[1]);
+-        if (retcode != PICOL_OK) return retcode;
+-        if (atol(i->result)) {
+-            if ((retcode = picolEval(i,argv[2])) == PICOL_CONTINUE) continue;
+-            else if (retcode == PICOL_OK) continue;
+-            else if (retcode == PICOL_BREAK) return PICOL_OK;
+-            else return retcode;
+-        } else {
+-            return PICOL_OK;
+-        }
++    if (argc != 3) return picolArityErr(i, argv[0]);
++    while (1) {
++        int truth = picolCondition(i, argv[1]), code;
++        if (truth < 0) return PICOL_ERR;
++        if (!truth) { picolSetResult(i, ""); return PICOL_OK; }
++        code = picolEval(i, argv[2]);
++        if (code == PICOL_BREAK) { picolSetResult(i, ""); return PICOL_OK; }
++        if (code != PICOL_OK && code != PICOL_CONTINUE) return code;
+@@ -521,32 +548,18 @@
+-    char **x=pd, *alist=x[0], *body=x[1], *p=strdup(alist), *tofree;
+-    struct picolCallFrame *cf = picol_malloc(sizeof(*cf));
+-    int arity = 0, done = 0, errcode = PICOL_OK;
+-    char errbuf[1024];
+-    cf->vars = NULL;
+-    cf->parent = i->callframe;
+-    i->callframe = cf;
+-    tofree = p;
+-    while(1) {
+-        char *start = p;
+-        while(*p != ' ' && *p != '\0') p++;
+-        if (*p != '\0' && p == start) {
+-            p++; continue;
+-        }
+-        if (p == start) break;
+-        if (*p == '\0') done=1; else *p = '\0';
+-        if (++arity > argc-1) goto arityerr;
+-        picolSetVar(i,start,argv[arity]);
+-        p++;
+-        if (done) break;
+-    }
+-    free(tofree);
+-    if (arity != argc-1) goto arityerr;
+-    errcode = picolEval(i,body);
+-    if (errcode == PICOL_RETURN) errcode = PICOL_OK;
+-    picolDropCallFrame(i); /* remove the called proc callframe */
+-    return errcode;
+-arityerr:
+-    snprintf(errbuf,1024,"Proc '%s' called with wrong arg num",argv[0]);
+-    picolSetResult(i,errbuf);
+-    picolDropCallFrame(i); /* remove the called proc callframe */
+-    return PICOL_ERR;
++    char **data = pd, **formals;
++    int n, arg, code;
++    struct picolCallFrame *cf;
++    if (splitList(i, data[0], &n, &formals)) return PICOL_ERR;
++    if (n != argc - 1 && !(n && !strcmp(formals[n - 1], "args") && argc - 1 >= n - 1)) {
++        freeWords(n, formals); return picolArityErr(i, argv[0]);
++    }
++    cf = picol_malloc(sizeof(*cf)); cf->vars = NULL;
++    cf->parent = i->callframe; i->callframe = cf;
++    for (arg = 0; arg < n; arg++) {
++        if (arg == n - 1 && !strcmp(formals[arg], "args")) {
++            char *tail = makeList(argc - 1 - arg, argv + 1 + arg);
++            picolSetVar(i, formals[arg], tail); free(tail);
++        } else picolSetVar(i, formals[arg], argv[arg + 1]);
++    }
++    freeWords(n, formals); code = picolEval(i, data[1]);
++    if (code == PICOL_RETURN && !i->exiting) code = PICOL_OK;
++    picolDropCallFrame(i); return code;
+@@ -556,5 +569,15 @@
+-    char **procdata = picol_malloc(sizeof(char*)*2);
+-    if (argc != 4) return picolArityErr(i,argv[0]);
+-    procdata[0] = strdup(argv[2]); /* arguments list */
+-    procdata[1] = strdup(argv[3]); /* procedure body */
+-    return picolRegisterCommand(i,argv[1],picolCommandCallProc,procdata);
++    char **procdata;
++    struct picolCmd *c;
++    if (argc != 4) return picolArityErr(i, argv[0]);
++    c = picolGetCommand(i, argv[1]);
++    if (c && (c->func != picolCommandCallProc || c->active)) {
++        picolSetResult(i, "cannot replace a builtin or active procedure"); return PICOL_ERR;
++    }
++    procdata = picol_malloc(sizeof(char *) * 2);
++    procdata[0] = picol_strdup(argv[2]); procdata[1] = picol_strdup(argv[3]);
++    if (c) {
++        char **old = c->privdata;
++        free(old[0]); free(old[1]); free(old); c->privdata = procdata;
++        picolSetResult(i, ""); return PICOL_OK;
++    }
++    return picolRegisterCommand(i, argv[1], picolCommandCallProc, procdata);
+@@ -570 +593 @@
+-    int j; char *name[] = {"+","-","*","/",">",">=","<","<=","==","!="};
++    int j; char *name[] = {"+","-","*","/","%",">",">=","<","<=","==","!="};
+@@ -574 +596,0 @@
+-    picolRegisterCommand(i,"puts",picolCommandPuts,NULL);
+@@ -583,27 +605,2 @@
+-int main(int argc, char **argv) {
+-    struct picolInterp interp;
+-    picolInitInterp(&interp);
+-    picolRegisterCoreCommands(&interp);
+-    if (argc == 1) {
+-        while(1) {
+-            char clibuf[1024];
+-            int retcode;
+-            printf("picol> "); fflush(stdout);
+-            if (fgets(clibuf,1024,stdin) == NULL) return 0;
+-            retcode = picolEval(&interp,clibuf);
+-            if (interp.result[0] != '\0')
+-                printf("[%d] %s\n", retcode, interp.result);
+-        }
+-    } else if (argc == 2) {
+-        /* FIXME: tidy up buffering ? */
+-        char buf[1024*8];
+-        FILE *fp = fopen(argv[1],"r");
+-        if (!fp) {
+-            perror("open"); exit(1);
+-        }
+-        buf[fread(buf,1,1024*8,fp)] = '\0';
+-        fclose(fp);
+-        if (picolEval(&interp,buf) != PICOL_OK) printf("%s\n", interp.result);
+-    }
+-    return 0;
+-}
++/* Ripple CLI, expression, list and file-channel support. */
++#include "picol-extra.inc"
+--- a/Applications/V7/cmd/diff.c
++++ b/Applications/V7/cmd/diff.c
+@@ -75,0 +76 @@
++#include <errno.h>
+@@ -111,0 +113 @@
++static int made_temp;
+@@ -116 +118,3 @@
+-	exit(status);
++	if (made_temp)
++        unlink(tempfilebuf);
++    exit(status);
+@@ -198,3 +202,10 @@
+-	register int i;
+-	for (i = 1; getc(input[f]) != '\n'; i++);
+-	return (i);
++    int c;
++    long n = 0;
++    while ((c = getc(input[f])) != EOF) {
++        n++;
++        if (c == '\n')
++            break;
++    }
++    if (n > 32767)
++        noroom();
++    return n;
+@@ -229,4 +240,11 @@
+-		unlink(tempfilebuf);
+-		while ((i = read(0, buf, 512)) > 0)
+-			write(f, buf, i);
+-		close(f);
++        made_temp = 1;
++        *pa1 = tempfilebuf;
++        while ((i = read(0, buf, sizeof(buf))) > 0) {
++            int off = 0;
++            while (off < i) {
++                long n = write(f, buf+off, i-off);
++                if (n <= 0) { mesg("cannot write temporary file", empty); done(); }
++                off += n;
++            }
++        }
++        if (i < 0 || close(f) < 0) { mesg("cannot read stdin", empty); done(); }
+@@ -244,0 +263 @@
++    int have = 0;
+@@ -251,2 +270,2 @@
+-			if (t == -1)
+-				return (0);
++			if (t == EOF) { if (!have) return 0; break; }
++            have = 1;
+@@ -258 +277,2 @@
+-				return (0);
++                if (!have) return 0;
++                goto hash_done;
+@@ -260,0 +281 @@
++                have = 1;
+@@ -263,0 +285 @@
++                have = 1;
+@@ -276,2 +298,4 @@
+-	sum = low(sum) + high(sum);
+-	return ((short) low(sum) + (short) high(sum));
++hash_done:
++    sum = low(sum) + high(sum);
++    t = (short)low(sum) + (short)high(sum);
++    return t ? t : 1;
+@@ -290,2 +314,2 @@
+-		p = (struct line *) ralloc((char *) p,
+-					   (++j + 3) * sizeof(line));
++		if (j >= 30000) noroom();
++        p = (struct line *) ralloc((char *)p, (++j + 3) * sizeof(line));
+@@ -433 +457 @@
+-	char c, d;
++	int c, d;
+@@ -452,2 +476,4 @@
+-			ctold++;
+-			ctnew++;
++            if (c == EOF && d == EOF)
++                break;
++            if (c != EOF) ctold++;
++            if (d != EOF) ctnew++;
+@@ -469 +495 @@
+-				if (c != '\n')
++				if (c != '\n' && c != EOF)
+@@ -471 +497 @@
+-				if (d != '\n')
++				if (d != '\n' && d != EOF)
+@@ -503,2 +529,2 @@
+-	register int i, j;
+-	register int nc;
++	register int i;
++    long j, nc;
+@@ -510 +536,3 @@
+-			putchar(getc(lb));
++            putchar(getc(lb));
++        if (nc && fseek(lb, f[i]-1, SEEK_SET) == 0 && getc(lb) != '\n')
++            prints("\n\\ No newline at end of file\n");
+@@ -598,3 +626,6 @@
+-				execv("/usr/lib/diffh", (char**)args);
+-				mesg("cannot find diffh", empty);
+-				done();
++				execv("/bin/diffh", (char**)args);
++                mesg("cannot find diffh", empty);
++                done();
++            default:
++                mesg("unsupported option", empty);
++                done();
+@@ -609 +640,5 @@
+-	filename(&argv[1], &argv[2]);
++	if (!strcmp(argv[1], "-") && !strcmp(argv[2], "-")) {
++        mesg("cannot compare stdin with itself", empty);
++        done();
++    }
++    filename(&argv[1], &argv[2]);
+--- a/Applications/V7/cmd/diffh.c
++++ b/Applications/V7/cmd/diffh.c
+@@ -23,0 +24 @@
++int changed;
+@@ -29 +30 @@
+-	exit(1);
++	exit(2);
+@@ -57,0 +59 @@
++	changed = 1;
+@@ -151,0 +154,2 @@
++	if (!s || !t)
++        return s == t ? 0 : s ? 1 : -1;
+@@ -240 +244 @@
+-	if (*argv[1] == '-') {
++	if (argc > 3 && *argv[1] == '-') {
+@@ -265 +269 @@
+-		return 0;
++		return changed;
+@@ -270,2 +274,2 @@
+-	return 0;
+-}
++	return changed;
++}
+--- a/Applications/V7/cmd/sh/args.c
++++ b/Applications/V7/cmd/sh/args.c
+@@ -4 +3,0 @@
+-#
+--- a/Applications/V7/cmd/sh/blok.c
++++ b/Applications/V7/cmd/sh/blok.c
+@@ -4 +3,0 @@
+-#
+@@ -33 +32 @@
+-        if (((uint8_t)end) & 1)
++        if (((uintptr_t)end) & 1)
+--- a/Applications/V7/cmd/sh/builtin.c
++++ b/Applications/V7/cmd/sh/builtin.c
+@@ -7 +7,15 @@
+-	return (0);
++	if (eq(cmd[0], "shutdown")) {
++        uadmin(1, 0, NULL);
++        error("shutdown failed");
++    }
++    if (eq(cmd[0], "sync")) {
++        sync();
++        prs("synced\n");
++        return 1;
++    }
++    if (eq(cmd[0], "help")) {
++        prs("Shell: cd, set, export, read, eval, trap, wait, exit, shutdown.\n");
++        prs("Scripts: if/for/while/case, pipes, redirection, globbing, `commands`.\n");
++        return 1;
++    }
++    return 0;
+--- a/Applications/V7/cmd/sh/cmd.c
++++ b/Applications/V7/cmd/sh/cmd.c
+@@ -4 +3,0 @@
+-#
+@@ -220,3 +219,8 @@
+-		((IFPTR) t)->eltre = ((w = wdval) == ELSYM ?
+-				cmd(FISYM, NLFLG) :
+-				(w == EFSYM ? (wdval = IFSYM, item(0)) : 0));
++		w = wdval;
++		if (w == ELSYM)
++			((IFPTR)t)->eltre = cmd(FISYM, NLFLG);
++		else if (w == EFSYM) {
++			wdval = IFSYM;
++			((IFPTR)t)->eltre = item(0);
++		} else
++			((IFPTR)t)->eltre = 0;
+--- a/Applications/V7/cmd/sh/ctype.c
++++ b/Applications/V7/cmd/sh/ctype.c
+@@ -4 +3,0 @@
+-#
+--- a/Applications/V7/cmd/sh/ctype.h
++++ b/Applications/V7/cmd/sh/ctype.h
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/defs.h
++++ b/Applications/V7/cmd/sh/defs.h
+@@ -110 +110 @@
+-#define round(a,b)	(((int)((ADR(a)+b)-1))&~((b)-1))
++#define round(a,b)	(((uintptr_t)(a)+(b)-1)&~((uintptr_t)(b)-1))
+@@ -376,0 +377 @@
++extern void reapchildren(void);
+@@ -402 +403 @@
+-extern void execexp(char *s, UFD f);
++extern void execexp(char *s, intptr_t f);
+--- a/Applications/V7/cmd/sh/error.c
++++ b/Applications/V7/cmd/sh/error.c
+@@ -3 +2,0 @@
+-#
+@@ -28,2 +27,7 @@
+-	if (trapnote & SIGSET)
+-		exitsh(SIGFAIL);
++	if (trapnote & SIGSET) {
++        int sig;
++        for (sig = 1; sig < MAXTRAP; sig++)
++            if (trapflg[sig] & SIGSET)
++                exitsh(128 + sig);
++        exitsh(SIGFAIL);
++    }
+@@ -72,0 +77 @@
++		int status = exitval;
+@@ -74,0 +80 @@
++		exitval = status;
+@@ -78 +84,3 @@
+-	exit(exitval);
++	if (getpid() == 1)
++        uadmin(1, 0, NULL);
++    exit(exitval);
+--- a/Applications/V7/cmd/sh/expand.c
++++ b/Applications/V7/cmd/sh/expand.c
+@@ -4 +3,0 @@
+-#
+--- a/Applications/V7/cmd/sh/fault.c
++++ b/Applications/V7/cmd/sh/fault.c
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/io.c
++++ b/Applications/V7/cmd/sh/io.c
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/mac.h
++++ b/Applications/V7/cmd/sh/mac.h
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/macro.c
++++ b/Applications/V7/cmd/sh/macro.c
+@@ -4 +3,0 @@
+-#
+--- a/Applications/V7/cmd/sh/main.c
++++ b/Applications/V7/cmd/sh/main.c
+@@ -4 +3,0 @@
+-#
+@@ -23 +22,5 @@
+-#include	<readline/readline.h>
++#include <termios.h>
++#include <sys/wait.h>
++#ifdef BUILD_FSH
++#include <readline/readline.h>
++#endif
+@@ -32,0 +36,2 @@
++static struct termios terminal;
++static int restore_terminal;
+@@ -35 +40 @@
+-static char history[1024];
++static char history[4096];
+@@ -80,0 +86 @@
++	if (bias) return bias;
+@@ -206 +212,2 @@
+-	if (setjmp(errshell) && prof) {
++	restore_terminal = (flags & prompt) && tcgetattr(input, &terminal) == 0;
++    if (setjmp(errshell) && prof) {
+@@ -218,0 +226,4 @@
++        if (restore_terminal)
++            tcsetattr(input, TCSANOW, &terminal);
++        if (getpid() == 1)
++            reapchildren();
+--- a/Applications/V7/cmd/sh/mode.h
++++ b/Applications/V7/cmd/sh/mode.h
+@@ -4 +3,0 @@
+-#
+@@ -51 +50 @@
+-#define Lcheat(a)	(*(int *)&(a))
++#define Lcheat(a)	(*(intptr_t *)&(a))
+--- a/Applications/V7/cmd/sh/msg.c
++++ b/Applications/V7/cmd/sh/msg.c
+@@ -4 +3,0 @@
+-#
+--- a/Applications/V7/cmd/sh/name.c
++++ b/Applications/V7/cmd/sh/name.c
+@@ -4 +3,0 @@
+-#
+--- a/Applications/V7/cmd/sh/name.h
++++ b/Applications/V7/cmd/sh/name.h
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/print.c
++++ b/Applications/V7/cmd/sh/print.c
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/service.c
++++ b/Applications/V7/cmd/sh/service.c
+@@ -4 +3,0 @@
+-#
+@@ -14,0 +14 @@
++#include <sys/wait.h>
+@@ -115 +115 @@
+-	path = (*scanp ? scanp : 0);
++	path = (*scanp ? scanp : (char *)0);
+@@ -185,0 +186,35 @@
++/* Keep exit statuses when PID 1 reaps background/adopted children, or a
++ * foreground wait happens to reap an unrelated background child first. */
++static int deadpid[MAXP], deadstatus[MAXP], deadnext;
++static void remember(int pid, int status)
++{
++    int i;
++    for (i = 0; i < MAXP; i++)
++        if (!deadpid[i])
++            break;
++    if (i == MAXP) {
++        i = deadnext++;
++        if (deadnext == MAXP)
++            deadnext = 0;
++    }
++    deadpid[i] = pid;
++    deadstatus[i] = status;
++}
++static int remembered(int pid, int *status)
++{
++    int i;
++    for (i = 0; i < MAXP; i++)
++        if (deadpid[i] && (pid <= 0 || deadpid[i] == pid)) {
++            pid = deadpid[i];
++            *status = deadstatus[i];
++            deadpid[i] = 0;
++            return pid;
++        }
++    return 0;
++}
++void reapchildren(void)
++{
++    int pid, status;
++    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
++        remember(pid, status);
++}
+@@ -192,0 +228 @@
++    memset(deadpid, 0, sizeof(deadpid));
+@@ -218,0 +255 @@
++        int tracked = 0;
+@@ -224 +261,3 @@
+-			p = wait(&w);
++			p = remembered(i, &w);
++            if (!p)
++                p = wait(&w);
+@@ -228,0 +268 @@
++                    tracked = 1;
+@@ -236,2 +276,10 @@
+-		if (p == -1)
+-			continue;
++		if (p == -1) {
++            if (errno == EINTR)
++                continue;
++            memset(pwlist, 0, sizeof(pwlist));
++            pwc = 0;
++            break;
++        }
++
++        if (!tracked && i > 0)
++            remember(p, w);
+@@ -260 +308,3 @@
+-		if (rc == 0)
++		/* A foreground pipeline reports its final command's status,
++		 * regardless of the order in which the children are reaped. */
++		if (p == i || i <= 0)
+--- a/Applications/V7/cmd/sh/stak.c
++++ b/Applications/V7/cmd/sh/stak.c
+@@ -4 +3,0 @@
+-#
+--- a/Applications/V7/cmd/sh/stak.h
++++ b/Applications/V7/cmd/sh/stak.h
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/string.c
++++ b/Applications/V7/cmd/sh/string.c
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/sym.h
++++ b/Applications/V7/cmd/sh/sym.h
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/timeout.h
++++ b/Applications/V7/cmd/sh/timeout.h
+@@ -3 +2,0 @@
+-#
+--- a/Applications/V7/cmd/sh/word.c
++++ b/Applications/V7/cmd/sh/word.c
+@@ -4 +3,0 @@
+-#
+@@ -136 +135,2 @@
+-		c = peekc;
++		/* Ripple char is 16 bits: discard the int-only lookahead marker. */
++		c = peekc & ~MARK;
+--- a/Applications/V7/cmd/sh/xec.c
++++ b/Applications/V7/cmd/sh/xec.c
+@@ -4 +3,0 @@
+-#
+@@ -96 +95,2 @@
+-						exitsh(a1 ? stoi(a1) : oldexit);
++						exitval = a1 ? stoi(a1) : oldexit;
++						done();
+@@ -176 +176 @@
+-						await(-1);
++						await(a1 ? stoi(a1) : -1);
+@@ -217 +217 @@
+-							execexp(a1, (UFD)&com[2]);	/* FIXME */
++							execexp(a1, (intptr_t)&com[2]);	/* FIXME */
+@@ -439 +439 @@
+-void execexp(char *s, UFD f)
++void execexp(char *s, intptr_t f)
+--- a/Applications/games/cowsay.c
++++ b/Applications/games/cowsay.c
+@@ -11,0 +12 @@
++/* Ripple adaptation: bounded stdin/argv input, wrapping and checked options. */
+@@ -12,0 +14 @@
++#include <stdlib.h>
+@@ -14,3 +16 @@
+-
+-#define MULTILINE_WARNING   "Blah blah blah, try something shorter."
+-#define BLANK_WARNING       "Nothing to say."
++#include <ctype.h>
+@@ -38,6 +38,17 @@
+-static int args_shift(int n, int *argc, char ***argv)
+-{
+-    if (*argc >= n)
+-    {
+-        *argc -= n;
+-        *argv += n;
++#define MAX_MESSAGE 4096
++static char message[MAX_MESSAGE + 1];
++static unsigned used;
++
++static int append(int c) {
++    if (used == MAX_MESSAGE) return -1;
++    message[used++] = c; message[used] = 0;
++    return 0;
++}
++/* Return a slice without allocating a second copy of the message. */
++static int nextline(unsigned *position, unsigned width, unsigned *start, unsigned *length) {
++    unsigned p = *position, lastspace = 0, end;
++    if (p >= used) return 0;
++    *start = p;
++    while (p < used && message[p] != '\n' && p - *start < width) {
++        if (message[p] == ' ') lastspace = p;
++        p++;
+@@ -45 +56,8 @@
+-    return *argc - n;
++    end = p;
++    if (p < used && message[p] != '\n' && lastspace > *start) {
++        end = lastspace; p = lastspace + 1;
++        while (p < used && message[p] == ' ') p++;
++    } else if (p < used && message[p] == '\n') p++;
++    else if (p < used && message[p] == ' ') while (p < used && message[p] == ' ') p++;
++    *length = end - *start; *position = p;
++    return 1;
+@@ -47,17 +65,6 @@
+-
+-int
+-cowsay_get_length(int argc, char **argv)
+-{
+-    int i;
+-    int sum = 0;
+-
+-    for (i = 0; i < argc; i++)
+-        sum += strlen(argv[i]);
+-    sum += argc - 1;
+-    return sum;
+-}
+-
+-void
+-cowsay_print_singleline(int argc, char **argv, int length)
+-{
+-    int i;
++static void bubble(unsigned width) {
++    unsigned p = 0, start, length, maximum = 0, rows = 0, row = 0, j;
++    while (nextline(&p, width, &start, &length)) {
++        if (length > maximum) maximum = length;
++        rows++;
++    }
+@@ -65,7 +72,5 @@
+-    for (i = 0; i < length + 2; i++)
+-        putchar('_');
+-    printf("\n< ");
+-
+-    for (i = 0; i < argc; i++)
+-    {
+-        printf("%s", argv[i]);
++    for (j = 0; j < maximum + 2; j++) putchar('_');
++    putchar('\n');
++    p = 0;
++    while (nextline(&p, width, &start, &length)) {
++        putchar(rows == 1 ? '<' : row == 0 ? '/' : row == rows - 1 ? '\\' : '|');
+@@ -72,0 +78,5 @@
++        fwrite(message + start, 1, length, stdout);
++        for (j = length; j < maximum; j++) putchar(' ');
++        putchar(' ');
++        putchar(rows == 1 ? '>' : row == 0 ? '\\' : row == rows - 1 ? '/' : '|');
++        putchar('\n'); row++;
+@@ -74,3 +84,2 @@
+-    printf(">\n ");
+-    for (i = 0; i < length + 2; i++)
+-        putchar('-');
++    putchar(' ');
++    for (j = 0; j < maximum + 2; j++) putchar('-');
+@@ -78,36 +86,0 @@
+-}
+-
+-void
+-cowsay_print_string(char *str)
+-{
+-    int i;
+-    int length = strlen(str);
+-    putchar(' ');
+-    for (i = 0; i < length + 2; i++)
+-        putchar('_');
+-    printf("\n< ");
+-
+-    printf("%s", str);
+-    putchar(' ');
+-
+-    printf(">\n ");
+-    for (i = 0; i < length + 2; i++)
+-        putchar('-');
+-    putchar('\n');
+-}
+-
+-void
+-cowsay_print_multiline(int argc, char **argv)
+-{
+-    /* TODO: Add multiline support */
+-    cowsay_print_string(MULTILINE_WARNING);
+-}
+-
+-void
+-cowsay_print_bubble(int argc, char **argv)
+-{
+-    int length = cowsay_get_length(argc, argv);
+-    if (length < 40)
+-        cowsay_print_singleline(argc, argv, length);
+-    else
+-        cowsay_print_multiline(argc, argv);
+@@ -127,4 +100 @@
+-int
+-main(int argc, char **argv)
+-{
+-    int i;
++int main(int argc, char **argv) {
+@@ -132,8 +102,25 @@
+-
+-    args_shift(1, &argc, &argv);
+-
+-    if (argc == 1 && strcmp(argv[0], "--version") == 0)
+-    {
+-        printf("cowsay 1.0 (Fedux release 1.0)\n");
+-        printf("Copyright (C) 2012 Federico Pomar & Federico Bond\n");
+-        return 0;
++    unsigned width = 40;
++    int arg = 1, j, c;
++    while (arg < argc && argv[arg][0] == '-') {
++        if (!strcmp(argv[arg], "--")) { arg++; break; }
++        if (!strcmp(argv[arg], "--version")) {
++            puts("cowsay 1.0 (Fedux/FUZIX)"); return 0;
++        }
++        if (!strcmp(argv[arg], "--help") || !strcmp(argv[arg], "-h")) {
++            puts("Usage: cowsay [-b|-d|-g|-p|-s|-t|-w|-y] [-W width] [--] [message ...]\n"
++                 "With no message, read standard input. Default wrap width: 40.\n"
++                 "Designs: borg, dead, greedy, paranoid, stoned, tired, wired, youthful.");
++            return 0;
++        }
++        if (!strcmp(argv[arg], "-W")) {
++            char *end; long n;
++            if (++arg == argc) { fputs("cowsay: -W needs a width\n", stderr); return 2; }
++            n = strtol(argv[arg], &end, 10);
++            if (!*argv[arg] || *end || n < 1 || n > 200) {
++                fputs("cowsay: width must be 1..200\n", stderr); return 2;
++            }
++            width = n; arg++; continue;
++        }
++        for (j = 0; designs[j].opt; j++) if (!strcmp(argv[arg], designs[j].opt)) break;
++        if (!designs[j].opt) { fprintf(stderr, "cowsay: unknown option %s\n", argv[arg]); return 2; }
++        current = designs + j; arg++;
+@@ -141,19 +128,13 @@
+-
+-    if (argc == 1 && strcmp(argv[0], "--help") == 0)
+-    {
+-        /* Texts stolen from the Wikipedia article on cowsay: */
+-        /* http://en.wikipedia.org/wiki/Cowsay */
+-        printf("Usage: cowsay [OPTION] MESSAGE\n"
+-               "Prints a cute cow with the message in a speech bubble.\n\n"
+-               "Available designs:\n"
+-               "  -b    \"Borg\" mode, uses == in place of oo for the cow eyes.\n"
+-               "  -d    \"Dead\", uses XX.\n"
+-               "  -g    \"Greedy\", uses $$.\n"
+-               "  -p    \"Paranoid\", uses @@.\n"
+-               "  -s    \"Stoned\", uses ** to represent bloodshot eyes, plus a descending U to\n"
+-               "        represent an extruded tongue.\n"
+-               "  -t    \"Tired\", uses --.\n"
+-               "  -w    \"Wired\", uses OO.\n"
+-               "  -y    \"Youthful\", uses .. to represent smaller eyes.\n\n"
+-               "General help available by running 'help' command.\n");
+-        return 0;
++    if (arg < argc) {
++        while (arg < argc) {
++            const char *p = argv[arg++];
++            while (*p) if (append(*p++)) goto too_long;
++            if (arg < argc && append(' ')) goto too_long;
++        }
++    } else {
++        while ((c = getchar()) != EOF) {
++            if (c == '\r') continue;
++            if (c == '\t') c = ' ';
++            if (append(c)) goto too_long;
++        }
++        if (ferror(stdin)) { perror("cowsay"); return 1; }
+@@ -161,18 +142,10 @@
+-
+-    for (i = 0; designs[i].opt != NULL; i++)
+-    {
+-        if (strcmp(argv[0], designs[i].opt) == 0)
+-        {
+-            current = designs + i;
+-            args_shift(1, &argc, &argv);
+-        }
+-    }
+-
+-    if (argc > 0)
+-        cowsay_print_bubble(argc, argv);
+-    else
+-        cowsay_print_string(BLANK_WARNING);
+-
+-    cowsay_print_cow(current);
+-
+-    return 0;
++    /* Keep terminal control codes out of the bubble. */
++    for (j = 0; j < used; j++)
++        if (message[j] != '\n' && (message[j] < 32 || message[j] >= 127)) message[j] = '?';
++    while (used && message[used - 1] == '\n') message[--used] = 0;
++    if (!used) { strcpy(message, "Nothing to say."); used = strlen(message); }
++    bubble(width); cowsay_print_cow(current);
++    return fflush(stdout) == EOF ? 1 : 0;
++too_long:
++    fprintf(stderr, "cowsay: message exceeds %d characters\n", MAX_MESSAGE);
++    return 1;
+--- a/Applications/levee/blockio.c
++++ b/Applications/levee/blockio.c
+@@ -29,6 +29,12 @@
+-    register int chunk;
+-
+-    chunk = read(fileno(f), core+start, (endd-start)-1);
+-
+-    *size = chunk;
+-    return chunk < (endd-start)-1;
++    int n, total = 0, room = endd - start - 1;
++    char extra;
++    while (total < room) {
++        n = read(fileno(f), core + start + total, room - total);
++        if (n < 0) { *size = -1; return FALSE; }
++        if (!n) { *size = total; return TRUE; }
++        total += n;
++    }
++    *size = total;
++    n = read(fileno(f), &extra, 1);
++    if (n < 0) { *size = -1; return FALSE; }
++    return n == 0;
+@@ -42 +48,8 @@
+-    write(fileno(f), core+start, endd-start);
++    int n;
++    while (start < endd) {
++        n = write(fileno(f), core + start, endd - start);
++        if (n <= 0)
++            return FALSE;
++        start += n;
++    }
++    return TRUE;
+--- a/Applications/levee/display.c
++++ b/Applications/levee/display.c
+@@ -37,5 +37,5 @@
+-#define MAXCOLS COLS
+-
+-#endif
+-
+-PROC
++#define MAXCOLS 160
++
++#endif
++
++int PROC
+@@ -85,3 +85,4 @@
+-}
+-
+-PROC numtoa(char *str, int num)
++    return 0;
++}
++
++int PROC numtoa(char *str, int num)
+@@ -103,3 +104,4 @@
+-}
+-
+-PROC
++    return 0;
++}
++
++int PROC
+@@ -119 +121 @@
+-PROC
++int PROC
+@@ -124,0 +127 @@
++    return 0;
+@@ -162,8 +165,11 @@
+-	out[1] = hexdig[(c>>4)&017];
+-	out[2] = hexdig[c&017];
+-	return 3;
+-#endif
+-    }
+-}
+-
+-PROC
++        out[1] = 'u';
++        out[2] = hexdig[(c >> 12) & 15];
++        out[3] = hexdig[(c >> 8) & 15];
++        out[4] = hexdig[(c >> 4) & 15];
++        out[5] = hexdig[c & 15];
++        return 6;
++#endif
++    }
++}
++
++int PROC
+@@ -173 +179 @@
+-    char buf[MAXCOLS];
++    char buf[MAXCOLS+16];
+@@ -182 +188 @@
+-PROC
++int PROC
+@@ -186 +192 @@
+-    char buf[MAXCOLS+1];
++    char buf[MAXCOLS+16];
+@@ -199 +205 @@
+-PROC
++int PROC
+@@ -204 +210 @@
+-    char buf[MAXCOLS+1];
++    char buf[MAXCOLS+16];
+@@ -233 +239 @@
+-PROC
++int PROC
+@@ -270 +276 @@
+-PROC
++int PROC
+@@ -276,3 +282,4 @@
+-}
+-
+-PROC
++    return 0;
++}
++
++int PROC
+@@ -288,3 +295,4 @@
+-}
+-
+-PROC
++    return 0;
++}
++
++int PROC
+@@ -316 +324 @@
+-PROC
++int PROC
+@@ -321,3 +329,4 @@
+-}
+-
+-PROC
++    return 0;
++}
++
++int PROC
+@@ -330 +339,2 @@
+-}
++    return 0;
++}
+--- a/Applications/levee/editcor.c
++++ b/Applications/levee/editcor.c
+@@ -36 +36 @@
+-PROC
++int PROC
+@@ -81,0 +82 @@
++    return 0;
+@@ -86 +87 @@
+-PROC
++int PROC
+@@ -115 +116 @@
+-PROC
++int PROC
+@@ -138 +139 @@
+-PROC
++int PROC
+@@ -169 +170 @@
+-PROC
++int PROC
+@@ -179 +180 @@
+-PROC
++int PROC
+@@ -374,0 +376 @@
++    return 0;
+@@ -379 +381 @@
+-PROC
++int PROC
+@@ -396 +398 @@
+-PROC
++int PROC
+@@ -420 +422 @@
+-PROC
++int PROC
+@@ -455,0 +458 @@
++    return 0;
+@@ -460 +463 @@
+-PROC
++int PROC
+@@ -489,0 +493 @@
++    return 0;
+--- a/Applications/levee/exec.c
++++ b/Applications/levee/exec.c
+@@ -20,0 +21,2 @@
++#include <sys/stat.h>
++#include <errno.h>
+@@ -30 +32 @@
+-PROC
++int PROC
+@@ -40 +42 @@
+-PROC
++int PROC
+@@ -44,0 +47 @@
++    return 0;
+@@ -48 +51 @@
+-PROC
++int PROC
+@@ -53,0 +57 @@
++    return 0;
+@@ -76 +80 @@
+-PROC
++int PROC
+@@ -80,0 +85 @@
++    return 0;
+@@ -84 +89 @@
+-PROC
++int PROC
+@@ -113 +118 @@
+-PROC
++int PROC
+@@ -159 +164,3 @@
+-			if (*num && (j=atoi(num)) >= 0)
++			if (*num && (j=atoi(num)) >= 0 &&
++                            (vp->u != (void *)&tabsize || (j >= 1 && j <= 8)) &&
++                            (vp->u != (void *)&dofscroll || j >= 1))
+@@ -204 +211 @@
+-PROC
++int PROC
+@@ -221 +228 @@
+-PROC
++int PROC
+@@ -232 +239 @@
+-PROC
++int PROC
+@@ -270 +277 @@
+-PROC
++int PROC
+@@ -284 +291 @@
+-PROC
++int PROC
+@@ -364 +371 @@
+-PROC
++int PROC
+@@ -426,0 +434 @@
++    return 0;
+@@ -430 +438 @@
+-PROC
++int PROC
+@@ -501,0 +510 @@
++    return 0;
+@@ -506 +515 @@
+-PROC
++int PROC
+@@ -509 +518 @@
+-    char back[80];
++    char back[82];
+@@ -524 +533 @@
+-    rename(name, back);
++    return rename(name, back);
+@@ -532,3 +541,5 @@
+-    register FILE *f;
+-    int status;
+-    zerostack(&undo);		/* undo doesn't survive past write */
++    FILE *f;
++    struct stat st;
++    char temporary[] = "/tmp/lvXXXXXX";
++    int fd, status, exists;
++    zerostack(&undo);
+@@ -536,26 +547,33 @@
+-	high = (low < 0) ? bufmax : (1+fseekeol(low));
+-    if (low < 0)
+-	low  = 0;
+-    printch('"');
+-    prints(fname);
+-    prints("\" ");
+-    whole = (low == 0 && high >= bufmax-1);
+-    if (whole && autocopy)
+-	backup(fname);
+-    if (f=fopen(fname, "w")) {
+-	status = putfile(f, low, high);
+-	fclose(f);
+-	if (status) {
+-	    plural(high-low," byte");
+-	    if (whole)
+-		modified = NO;
+-	    return(YES);
+-	}
+-	else {
+-	    prints("[write error]");
+-	    unlink(fname);
+-	}
+-    }
+-    else
+-	prints(fisro);
+-    return(NO);
++        high = (low < 0) ? bufmax : (1 + fseekeol(low));
++    if (low < 0) low = 0;
++    if (high > bufmax || high < low) return NO;
++    printch('"'); prints(fname); prints("\" ");
++    whole = low == 0 && high >= bufmax - 1;
++    exists = stat(fname, &st) == 0;
++    if ((exists && !S_ISREG(st.st_mode)) || strlen(fname) >= 79) {
++        prints("[invalid file]"); return NO;
++    }
++    fd = mkstemp(temporary);
++    if (fd < 0) { prints("[cannot create temporary file]"); return NO; }
++    if (exists) status = fchmod(fd, st.st_mode & 07777) == 0;
++    else {
++        mode_t mask = umask(0);
++        umask(mask);
++        status = fchmod(fd, 0666 & ~mask) == 0;
++    }
++    f = fdopen(fd, "w");
++    if (!f) { close(fd); unlink(temporary); return NO; }
++    if (status) status = putfile(f, low, high);
++    if (fclose(f)) status = NO;
++    if (!status) {
++        unlink(temporary); prints("[write error; original kept]"); return NO;
++    }
++    if (whole && autocopy && exists && backup(fname) < 0) {
++        unlink(temporary); prints("[backup failed]"); return NO;
++    }
++    if (rename(temporary, fname)) {
++        unlink(temporary); prints("[rename failed]"); return NO;
++    }
++    plural(high - low, " byte");
++    if (whole) modified = NO;
++    return YES;
+@@ -565 +583 @@
+-PROC
++int PROC
+@@ -597,0 +616,2 @@
++            if (!*filenm) strcpy(filenm, name);
++            newfile = NO;
+@@ -610 +630 @@
+-PROC
++int PROC
+@@ -644 +664 @@
+-PROC
++int PROC
+@@ -650,4 +670,5 @@
+-}
+-
+-
+-PROC
++    return 0;
++}
++
++
++int PROC
+@@ -663 +684 @@
+-PROC
++int PROC
+@@ -675 +696 @@
+-PROC
++int PROC
+@@ -731 +752 @@
+-PROC
++int PROC
+@@ -755 +776 @@
+-PROC
++int PROC
+@@ -766 +787 @@
+-PROC
++int PROC
+@@ -774,0 +796 @@
++    return 0;
+@@ -802 +824 @@
+-PROC doins(bool flag)
++int PROC doins(bool flag)
+@@ -810,0 +833 @@
++    return 0;
+@@ -837 +860 @@
+-PROC parse(char *inp)
++int PROC parse(char *inp)
+@@ -844,4 +867,3 @@
+-	moveright(inp, 2+inp, 1+strlen(inp));
+-	inp[0]='1';
+-	inp[1]=',';
+-	inp[2]='$';
++        low = 0;
++        high = fseekeol(bufmax - 1);
++        inp++;
+@@ -883 +905 @@
+-PROC
++int PROC
+--- a/Applications/levee/extern.h
++++ b/Applications/levee/extern.h
+@@ -83 +83 @@
+-#if ST | TERMCAP
++#if ST | TERMCAP | RIPPLE
+--- a/Applications/levee/find.c
++++ b/Applications/levee/find.c
+@@ -131 +131 @@
+-PROC
++int PROC
+@@ -151 +151 @@
+-PROC
++int PROC
+@@ -167 +167 @@
+-PROC
++int PROC
+@@ -308 +308 @@
+-PROC
++int PROC
+@@ -322 +322 @@
+-PROC
++int PROC
+--- a/Applications/levee/globals.c
++++ b/Applications/levee/globals.c
+@@ -88 +88,3 @@
+-#if ST | TERMCAP
++#if RIPPLE
++int LINES = 24, COLS = 79;
++#elif ST | TERMCAP
+@@ -218 +220 @@
+-#if TERMCAP | ST
++#if TERMCAP | ST | RIPPLE
+--- a/Applications/levee/insert.c
++++ b/Applications/levee/insert.c
+@@ -136 +136 @@
+-	if ((count-1)*len < endd-cp)
++	if ((long)(count-1)*len < endd-cp)
+--- a/Applications/levee/levee.h
++++ b/Applications/levee/levee.h
+@@ -166 +166 @@
+-#if !(ST | TERMCAP)
++#if !(ST | TERMCAP | RIPPLE)
+--- a/Applications/levee/main.c
++++ b/Applications/levee/main.c
+@@ -24,0 +25 @@
++#include <termios.h>
+@@ -75,0 +77 @@
++    return 0;
+@@ -118,0 +121,12 @@
++    {
++        struct winsize ws;
++        char *v;
++        int n;
++        if (!ioctl(0, TIOCGWINSZ, &ws)) {
++            if (ws.ws_row >= 6 && ws.ws_row <= 60) LINES = ws.ws_row;
++            if (ws.ws_col >= 20 && ws.ws_col <= 160) COLS = ws.ws_col - 1;
++        }
++        if ((v = getenv("LINES")) && (n = atoi(v)) >= 6 && n <= 60) LINES = n;
++        if ((v = getenv("COLUMNS")) && (n = atoi(v)) >= 20 && n <= 160) COLS = n - 1;
++        dofscroll = LINES / 2;
++    }
+@@ -205 +219 @@
+-	if (p=getenv("LVRC")) {
++	if ((p=getenv("LVRC")) && strlen(p) < 80) {
+@@ -216 +230,4 @@
+-	strcpy(startcmd, p[1] ? (1+p) : "$");
++	if (strlen(p) >= 80) {
++            fixcon(); strput("levee: initial command too long\n"); exit(2);
++        }
++        strcpy(startcmd, p[1] ? (1+p) : "$");
+@@ -285,0 +303 @@
++    zerostack(&undo);
+@@ -286,0 +305 @@
++    unlink(undotmp);
+--- a/Applications/levee/misc.c
++++ b/Applications/levee/misc.c
+@@ -28 +28 @@
+-    flag = line(str, 0, COLS-curpos.x, &len);
++    flag = line(str, 0, min(79, COLS-curpos.x), &len);
+@@ -112 +112 @@
+-	    case 3 : xp += 3; break;
++	    case 3 : xp += 6; break;
+@@ -192 +192 @@
+-    if (c & 0x80)
++    if (c >= 128)
+@@ -228 +228 @@
+-PROC
++int PROC
+@@ -246 +246 @@
+-PROC insertmacro(char *cmdstr, int count)
++int PROC insertmacro(char *cmdstr, int count)
+@@ -314 +314 @@
+-	    tabstack[20],
++	    tabstack[160],
+@@ -349 +349 @@
+-	if (movemap[c] == INSMACRO)	/* map!ped macro */
++	if (c < 128 && movemap[c] == INSMACRO)	/* map!ped macro */
+@@ -352 +352 @@
+-	    while (!wc(s[ip-1]) && ip > start)
++	    while (ip > start && !wc(s[ip-1]))
+@@ -354 +354 @@
+-	    while (wc(s[ip-1]) && ip > start)
++	    while (ip > start && wc(s[ip-1]))
+@@ -370 +370 @@
+-	else if (c=='\n' || c=='\r' || c==ESC) {
++	else if (c=='\n' || c=='\r' || c==ESC || c==3) {
+@@ -372 +372 @@
+-            return (c==ESC) ? ESC : EOL;
++            return (c==ESC || c==3) ? ESC : EOL;
+@@ -382,0 +383 @@
++                        if (tabptr >= 160) { error(); continue; }
+@@ -386 +387 @@
+-		    case 3 : ixp += 3; break;
++		    case 3 : ixp += 6; break;
+--- a/Applications/levee/modify.c
++++ b/Applications/levee/modify.c
+@@ -68 +68 @@
+-    if (yank.size+bufmax < SIZE && yank.size > 0) {
++    if ((long)yank.size + bufmax < SIZE && yank.size > 0) {
+@@ -179 +179 @@
+-	if (dlen >= 0 && bufmax-(int)(len+dlen) < SIZE
++	if (dlen >= 0 && (long)bufmax - len + dlen < SIZE
+--- a/Applications/levee/move.c
++++ b/Applications/levee/move.c
+@@ -183 +183 @@
+-PROC
++int PROC
+@@ -232,0 +233 @@
++    return 0;
+--- a/Applications/levee/ucsd.c
++++ b/Applications/levee/ucsd.c
+@@ -24 +24 @@
+-PROC
++int PROC
+@@ -35 +35 @@
+-PROC
++int PROC
+@@ -48 +48 @@
+-PROC
++int PROC
+--- a/Applications/levee/undo.c
++++ b/Applications/levee/undo.c
+@@ -25,2 +25,2 @@
+-#define AVAIL(x)	((x)<<1)
+-#define INDEX(x)	((1+x)>>1)
++#define AVAIL(x) ((x) * (int)sizeof(int))
++#define INDEX(x) (((x) + sizeof(int) - 1) / sizeof(int))
+@@ -71 +71 @@
+-PROC
++int PROC
+@@ -77,0 +78 @@
++    return 0;
+@@ -86 +87 @@
+-PROC
++int PROC
+@@ -192 +193 @@
+-    if (popw(&undo,curp) && popw(&undo,&lump) && (bufmax+lump < SIZE)) {
++    if (popw(&undo,curp) && popw(&undo,&lump) && ((long)bufmax + lump < SIZE)) {
+--- a/Applications/levee/unixcall.c
++++ b/Applications/levee/unixcall.c
+@@ -29,0 +30 @@
++#include <stdlib.h>
+@@ -43 +44 @@
+-strput(char *s)
++int strput(char *s)
+@@ -77 +78 @@
+-	new.c_iflag &= ~(IXOFF|IXANY|ICRNL|INLCR);
++	new.c_iflag &= ~(IXON|IXOFF|IXANY|ICRNL|INLCR);
+@@ -79,0 +81,2 @@
++        new.c_cc[VMIN] = 1;
++        new.c_cc[VTIME] = 0;
+@@ -80,0 +84 @@
++        strput("\033[?1049h\033[H");
+@@ -88,0 +93 @@
++         strput("\033[?1049l");
+@@ -98,2 +103,4 @@
+-    read(0,&c,1);
+-    return c;
++    if (read(0, &c, 1) != 1) {
++        fixcon(); exit(1);
++    }
++    return c < 128 ? c : 0;
+--- a/Applications/levee/wildargs.c
++++ b/Applications/levee/wildargs.c
+@@ -31 +31 @@
+-PROC
++int PROC
+@@ -59 +59 @@
+-PROC
++int PROC
+@@ -62,0 +63,3 @@
++    if (strlen(token) >= 79) {
++        errmsg("filename too long"); return -1;
++    }
+@@ -86 +89 @@
+-PROC
++int PROC
+@@ -96,0 +100 @@
++    return 0;
 --- a/Applications/util/basename.c
 +++ b/Applications/util/basename.c
 @@ -30 +30,2 @@
@@ -163,6 +2207,139 @@
 +        else fd = fopen(argv[i], "r");
 +        if (!fd) warn(FILE_NOT_READABLE, argv[i]);
 +        else { cut(); if (fd != stdin) fclose(fd); }
+--- a/Applications/util/dd.c
++++ b/Applications/util/dd.c
+@@ -14,0 +15,3 @@
++#include <errno.h>
++#include <limits.h>
++#include <sys/stat.h>
+@@ -74 +77,3 @@
+-    long inmax;
++    long records;
++    struct stat inputstat, outputstat;
++    unsigned long infull=0, inpart=0, outfull=0, outpart=0;
+@@ -84 +89 @@
+-    inmax = 0;
++    records = 0;
+@@ -118 +123,2 @@
+-	    blocksize = getnum(cp);
++	    { long size = getnum(cp);
++              blocksize = size > 0 && size <= 32767 ? (int)size : 0; }
+@@ -154,0 +161,5 @@
++    if (skipval > 2147483647L / blocksize ||
++        seekval > 2147483647L / blocksize) {
++        fprintf(stderr, "dd: offset too large\n");
++        return 1;
++    }
+@@ -169 +180 @@
+-	    perror(infile);
++	    perror(infile ? infile : "stdin");
+@@ -178 +189,8 @@
+-        outfd = creat(outfile, 0666);
++        if (fstat(infd, &inputstat) == 0 && stat(outfile, &outputstat) == 0 &&
++            inputstat.st_dev == outputstat.st_dev &&
++            inputstat.st_ino == outputstat.st_ino) {
++            fprintf(stderr, "dd: input and output are the same file\n");
++            close(infd);
++            return 1;
++        }
++        outfd = open(outfile, O_WRONLY | O_CREAT | (seekval ? 0 : O_TRUNC), 0666);
+@@ -196 +214 @@
+-		    perror(infile);
++		    perror(infile ? infile : "stdin");
+@@ -212,3 +230,5 @@
+-    if(count != 0x7fffffff)
+-        inmax = count * blocksize;
+-    while ((incc = read(infd, buf, blocksize)) > 0) {
++    incc = 0;
++    while (records < count && (incc = read(infd, buf, blocksize)) > 0) {
++        records++;
++        if (incc == blocksize) infull++; else inpart++;
++        if (incc == blocksize) outfull++; else outpart++;
+@@ -224 +244 @@
+-	    if (outcc < 0) {
++	    if (outcc <= 0) {
+@@ -232,2 +252 @@
+-        if(inmax && intotal >= inmax)
+-            break;
++
+@@ -237 +256 @@
+-	perror(infile);
++	perror(infile ? infile : "stdin");
+@@ -240,0 +260,6 @@
++    if (outfile && strcmp(outfile, "-") && fstat(outfd, &outputstat) == 0 &&
++        S_ISREG(outputstat.st_mode) &&
++        ftruncate(outfd, seekval * blocksize + outtotal) < 0) {
++        perror(outfile);
++        goto cleanup;
++    }
+@@ -254,5 +279,2 @@
+-    printf("%d+%d records in\n", intotal / blocksize,
+-	   (intotal % blocksize) != 0);
+-
+-    printf("%d+%d records out\n", outtotal / blocksize,
+-	   (outtotal % blocksize) != 0);
++    fprintf(stderr, "%lu+%lu records in\n", infull, inpart);
++    fprintf(stderr, "%lu+%lu records out\n", outfull, outpart);
+@@ -267,0 +290 @@
++/* Native file lengths/counts use 32-bit long; reject overflow explicitly. */
+@@ -270,2 +293 @@
+-    long value;
+-
++    unsigned long value = 0, scale = 1;
+@@ -273,30 +295,18 @@
+-	return -1;
+-
+-    value = 0;
+-    while (isdigit(*cp))
+-	value = value * 10 + *cp++ - '0';
+-
+-    switch (*cp++) {
+-    case 'k':
+-	value *= 1024;
+-	break;
+-
+-    case 'b':
+-	value *= 512;
+-	break;
+-
+-    case 'w':
+-	value *= 2;
+-	break;
+-
+-    case '\0':
+-	return value;
+-
+-    default:
+-	return -1;
+-    }
+-
+-    if (*cp)
+-	return -1;
+-
+-    return value;
++        return -1;
++    while (isdigit(*cp)) {
++        unsigned digit = *cp++ - '0';
++        if (value > (2147483647UL - digit) / 10)
++            return -1;
++        value = value * 10 + digit;
++    }
++    if (*cp) {
++        switch (*cp++) {
++        case 'k': scale=1024; break;
++        case 'b': scale=512; break;
++        case 'w': scale=sizeof(int); break;
++        default: return -1;
++        }
++        if (*cp || value > 2147483647UL / scale)
++            return -1;
++    }
++    return value * scale;
+@@ -304,3 +313,0 @@
+-
+-
+-/* END CODE */
 --- a/Applications/util/df.c
 +++ b/Applications/util/df.c
 @@ -132 +132,2 @@
@@ -412,6 +2589,1138 @@
 +    /* Ripple: reject missing operands before reading argv[1]. */
 +    if (argc < 2) { fputs("usage: rmdir file...\n",stderr); return 1; }
 +
+--- a/Applications/util/tar.c
++++ b/Applications/util/tar.c
+@@ -26,0 +27,2 @@
++/* Ripple adaptation: native-character records, bounded USTAR paths, streaming
++ * input, checked I/O and numeric fields, and preservation of file metadata. */
+@@ -32 +33,0 @@
+-#include <fcntl.h>
+@@ -36 +36,0 @@
+-/* #include <time.h> */
+@@ -39,2 +39,2 @@
+-
+-/* tar header format, with ustar extension */
++#include <utime.h>
++
+@@ -42,709 +42,408 @@
+-	char name[100];
+-	char mode[8];
+-	char uid[8];
+-	char gid[8];
+-	char size[12];
+-	char mtime[12];
+-	char cksum[8];
+-	char type;
+-	char lname[100];
+-	char ustar[6];
+-	char version[2];
+-	char uname[32];
+-	char gname[32];
+-	char major[8];
+-	char minor[8];
+-	char prefix[155];
+-	char pad[12];
+-} h;
+-
+-
+-uint8_t buffer[512];		/* buffer for data blocks */
+-int infile;			/* input file: a tar file */
+-int outfile;			/* output file: a tar file */
+-int verbose;			/* verbose flag */
+-int uflag;			/* ustar flag */
+-int bf = 1;                     /* blocking factor */
+-char *rec;                      /* alloced record buffer */
+-char *recptr;                   /* ptr to next write */
+-char *recend;                   /* ptr to end of buffer */
+-int recz;                       /* size of record in bytes */
+-char *ofile = NULL;		/* pointer to archive name from cmd line */
+-char key = 0;			/* key mode of command (t,x,c) */
+-int noreplace = 0;		/* replace old files? */
+-int cksum = 1;			/* don't worry about cksums */
+-struct stat astat;		/* stat of archive file */
+-
+-
+-/* read blk from record */
+-void blkread(void *buf) {
+-	int ret;
+-	if (recptr == recend) {
+-		ret = read(infile, rec, recz);
+-		if (ret < recz) {
+-			fprintf(stderr,"wrong blocking factor\n");
+-			exit(1);
+-		}
+-		recptr = rec;
+-	}
+-	memcpy(buf,recptr,512);
+-	recptr += 512;
+-}
+-
+-/* write a block to record */
+-int blkwrite(char *buf) {
+-	int ret;
+-	memcpy(recptr, buf, 512);
+-	recptr += 512;
+-	if (recptr == recend) {
+-		ret = write(outfile, rec, recz);
+-		if (ret < recz) {
+-			fprintf(stderr,"wrong blocking factor\n");
+-			exit(1);
+-		}
+-		recptr = rec;
+-	}
+-	return 512;
+-}
+-
+-/* flush any partial record */
+-int blkflush(void) {
+-	if (recptr != rec) {
+-		bzero(recptr, recend - recptr);
+-		return write(outfile, rec, recz);
+-	}
+-	return 0;
+-}
+-
+-/* Return a number from an octal string */
+-static uint32_t b8get(char *ptr, unsigned int n)
+-{
+-	uint32_t ret = 0;
+-	while (*ptr && n) {
+-		ret *= 8;
+-		ret += (*ptr++) - '0';
+-		n--;
+-	}
+-	return ret;
+-}
+-
+-/* Put a number in octal to string */
+-static void b8put(uint32_t x, char *ptr)
+-{
+-	int digit;
+-
+-	*--ptr = 0;
+-	while (x) {
+-		digit = x & 7;
+-		x /= 8;
+-		*--ptr = '0' + digit;
+-	}
+-}
+-
+-/* Print filename for error reporting */
+-static void pname(void)
+-{
+-	fprintf(stderr, "%s ", h.name);
+-	perror("");
+-}
+-
+-
+-/* Change owner/group of file to match tar file */
+-static void my_chown(void)
+-{
+-	int x = chown(h.name, b8get(h.uid, 8),
+-		      b8get(h.gid, 8));
+-	if (x < 0)
+-		pname();
+-}
+-
+-
+-/* Change mod of file to match tar file */
+-static void my_chmod(void)
+-{
+-	int x = chmod(h.name, b8get(h.mode, 8));
+-	if (x < 0)
+-		pname();
+-}
+-
+-static void printusage(void)
+-{
+-	fprintf(stderr, "usage: tar [-cbkxntv] [-f archive] [file]...\n");
+-	exit(1);
+-}
+-
+-/* skip data blocks of regular type file */
+-static void skip(void)
+-{
+-	uint32_t size = b8get(h.size, 12);
+-	uint32_t count = size / 512;
+-	uint16_t rem = size % 512;
+-
+-	if (h.type == 0 || h.type == '0') {
+-		off_t x;
+-		if (rem)
+-			count++;
+-		x = lseek(infile, count * 512, SEEK_CUR);
+-		if (x < 0) {
+-			pname();
+-			exit(1);
+-		}
+-
+-	}
+-}
+-
+-/* Calculate sum of header */
+-static uint32_t cksum_calc(void)
+-{
+-	uint32_t acc = 0;
+-	unsigned char *ptr = (unsigned char *) h.name;
+-	while (ptr != (unsigned char *) h.cksum)
+-		acc += *ptr++;
+-	acc += 32 * 8;
+-	ptr = (unsigned char *)&(h.type);
+-	while (ptr != (unsigned char *) h.pad)
+-		acc += *ptr++;
+-	return acc;
+-}
+-
+-
+-/* Prints information in header to stdout (if applicable) */
+-static void printheader(void)
+-{
+-	char pad[11];
+-	int pindex = 10;
+-	unsigned int m;
+-	int x;
+-
+-	pad[10] = 0;
+-
+-	/* don't print if creating to stdout */
+-	if (!ofile && key == 'c')
+-		return;
+-
+-	/* print verbosely */
+-	if (verbose && key == 't') {
+-		/* print type */
+-		switch (h.type) {
+-		case '0':
+-		case 0:
+-			printf("-");
+-			break;
+-		case '1':
+-			printf("h");
+-			break;
+-		case '2':
+-			printf("s");
+-			break;
+-		case '3':
+-			printf("c");
+-			break;
+-		case '4':
+-			printf("b");
+-			break;
+-		case '5':
+-			printf("d");
+-			break;
+-		case '6':
+-			printf("f");
+-			break;
+-		default:
+-			printf("?");
+-			break;
+-		}
+-		/* print mode */
+-		m = b8get(h.mode, 8);
+-		for (x = 0; x < 3; x++) {
+-			if (m & 1)
+-				pad[--pindex] = 'x';
+-			else
+-				pad[--pindex] = '-';
+-			m = m / 2;
+-			if (m & 1)
+-				pad[--pindex] = 'w';
+-			else
+-				pad[--pindex] = '-';
+-			m = m / 2;
+-
+-			if (m & 1)
+-				pad[--pindex] = 'r';
+-			else
+-				pad[--pindex] = '-';
+-			m = m / 2;
+-		}
+-		printf(&(pad[pindex]));
+-		/* print uid gid */
+-		printf(" %4ld %4ld", b8get(h.uid, 8), b8get(h.gid, 8));
+-		/* print file size */
+-		printf(" %8ld ", b8get(h.size, 12));
+-		/* print maj/min */
+-
+-		/* This make binary big... disabling */
+-		/*
+-		   printf( " %2ld,%2ld", b8get( h.major, 8 ),
+-		   b8get( h.minor, 8 ) );
+-		   {
+-		   char *s;
+-		   time_t time=b8get( h.mtime, 12 );
+-		   s=&( ctime( &time )[4] );
+-		   s[16]=0;
+-		   printf( " %-12s", s );
+-		   }
+-		 */
+-
+-	}
+-	if (key == 't' || verbose)
+-		printf("%s\n", h.name);
+-}
+-
+-
+-/* process a file name
+-   This is called recursively as new subdirs are found */
+-static void storedir(char *name)
+-{
+-	struct stat s;
+-	int fd;
+-	int ret;
+-	DIR *dirstream;
+-	struct dirent *dir;
+-	char cname[100];
+-	uint32_t count = 0;
+-	uint16_t rem;
+-	char *aname;
+-
+-	/* stat file */
+-	ret = stat(name, &s);
+-	if (ret < 0) {
+-		fprintf(stderr, "%s ", name);
+-		perror("");
+-		return;
+-	}
+-
+-	/* check to make sure we're not trying to archive
+-	   the archive */
+-	if ((s.st_ino == astat.st_ino) && (s.st_dev == astat.st_dev))
+-		return;
+-
+-	if (S_ISREG(s.st_mode)) {
+-		count = s.st_size / 512;
+-		rem = s.st_size % 512;
+-		if (rem)
+-			count++;
+-	}
+-
+-	/* build a new header in mem */
+-	bzero(h.name, sizeof(h));
+-	memset(h.mode, '0', 57);
+-	memset(h.major, '0', 16);
+-	/* Archive member names never carry leading slashes; the file
+-	 * itself is still opened by its given path. */
+-	aname = name;
+-	while (*aname == '/')
+-		aname++;
+-	if (*aname == 0)
+-		aname = ".";
+-	strcpy(h.name, aname);
+-	b8put(s.st_mode & 07777, h.mode + 8);
+-	b8put(s.st_uid, h.uid + 8);
+-	b8put(s.st_gid, h.gid + 8);
+-	b8put(s.st_size, h.size + 12);
+-	b8put(s.st_mtime, h.mtime + 12);
+-	switch (s.st_mode & S_IFMT) {
+-	case S_IFREG:
+-		h.type = '0';
+-		break;
+-	case S_IFDIR:
+-		h.type = '5';
+-		if (S_ISDIR(s.st_mode))
+-			h.name[strlen(aname)] = '/';
+-		break;
+-	case S_IFCHR:
+-		h.type = '3';
+-		b8put(s.st_rdev >> 8, h.major + 8);
+-		b8put(s.st_rdev & 255, h.minor + 8);
+-		break;
+-	case S_IFBLK:
+-		h.type = '4';
+-		b8put(s.st_rdev >> 8, h.major + 8);
+-		b8put(s.st_rdev & 255, h.minor + 8);
+-		break;
+-	case S_IFIFO:
+-		h.type = '6';
+-		break;
+-	default:
+-		fprintf(stderr, "unhandled file type error\n");
+-		exit(1);
+-	}
+-
+-	strcpy(h.ustar, "ustar");
+-	b8put(0, h.version + 2);
+-
+-	/* calculate checksum */
+-	h.cksum[7] = 32;
+-	b8put(cksum_calc(), h.cksum + 7);
+-
+-	/* write header to file */
+-	ret = blkwrite(h.name);
+-	if (ret < 512) {
+-		pname();
+-		exit(1);
+-	}
+-	printheader();
+-
+-	switch (s.st_mode & S_IFMT) {
+-	case S_IFREG:
+-		/* open subject file */
+-		fd = open(name, O_RDONLY);
+-		if (fd < 0) {
+-			fprintf(stderr, "%s ", name);
+-			perror("");
+-			return;
+-		}
+-		while (count--) {
+-			ret = read(fd, buffer, 512);
+-			if (ret < 0) {
+-				fprintf(stderr, "cannot read source file\n");
+-				exit(1);
+-			}
+-			if (ret < 512)
+-				bzero(buffer + ret, 512 - ret);
+-			ret = blkwrite((char *)buffer);
+-		}
+-		close(fd);
+-		break;
+-	case S_IFDIR:
+-		/* open the directory */
+-		if ((dirstream = opendir(name)) == NULL) {
+-			pname();
+-			break;
+-		}
+-		while ((dir = readdir(dirstream)) != NULL) {
+-			/* dont arch .. or . */
+-			if (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..")
+-			    )
+-				continue;
+-			strncpy(cname, name, 100);
+-			strncat(cname, "/", 100);
+-			strncat(cname, dir->d_name, 100);
+-			{
+-				/* save state of files */
+-				uint32_t tell = telldir(dirstream);
+-				closedir(dirstream);
+-				/* recursive call to this dir */
+-				storedir(cname);
+-				/* restore state of files */
+-				if ((dirstream = opendir(name)) == NULL) {
+-					pname();
+-					break;
+-				}
+-				seekdir(dirstream, tell);
+-			}
+-		}
+-		closedir(dirstream);
+-		break;
+-	}
+-}
+-
+-
+-/* list all the files in an archive */
+-static void list(void)
+-{
+-	int zcount = 2;
+-
+-
+-	if (ofile)
+-		infile = open(ofile, O_RDONLY);
+-	else
+-		infile = 0;
+-	if (infile < 0) {
+-		perror("Cannot open archive");
+-		exit(1);
+-	}
+-
+-	while (1) {
+-		blkread(&h);
+-		/* check for zero block */
+-		if (h.name[0] == 0) {
+-			if (!--zcount)
+-				exit(0);
+-			continue;
+-		}
+-
+-		uflag = !strncmp(h.ustar, "ustar", 5);
+-
+-		printheader();
+-
+-		skip();
+-	}			/* block while */
+-}
+-
+-/* Attempt to make all parent directories */
+-static void makeparents(char *path)
+-{
+-	static char c[100];
+-	char *s = path;
+-	int l;
+-	while (1){
+-		char *e = index(s,'/');
+-		if (!e)
+-			return;
+-		l = e - path;
+-		memcpy(c,path,l);
+-		c[l] = 0;
+-		mkdir(c,0755);
+-		s = e + 1;
+-	}
+-}
+-
+-/* Extract all file in archive */
+-static void extract(char *argv[])
+-{
+-	int x;
+-	int zcount = 2;
+-
+-	if (ofile)
+-		infile = open(ofile, O_RDONLY);
+-	else
+-		infile = 0;
+-
+-	if (infile < 0) {
+-		fprintf(stderr, "cannot open infile\n");
+-		exit(1);
+-	}
+-
+-	while (1) {
+-		blkread(&h);
+-		/* check for zero block */
+-		if (h.name[0] == 0) {
+-			if (!--zcount)
+-				exit(0);
+-			continue;
+-		}
+-
+-		/* check cksum */
+-		if (cksum && (cksum_calc() != b8get(h.cksum, 8))) {
+-			fprintf(stderr, "%s: bad chksum\n", h.name);
+-			exit(1);
+-		}
+-
+-		/* remove trailing '/' */
+-		while (h.name[strlen(h.name) - 1] == '/')
+-			h.name[strlen(h.name) - 1] = 0;
+-
+-		/* does entry match any cmd line args? */
+-		if (argv[optind]) {
+-			for (x = optind; argv[x]; x++) {
+-				if (!strcmp(h.name, argv[x]))
+-					goto cont;
+-			}
+-			skip();
+-			continue;
+-		}
+-	      cont:
+-		printheader();
+-
+-		uflag = !strncmp(h.ustar, "ustar", 5);
+-
+-		makeparents(h.name);
+-
+-		switch (h.type) {
+-		case '1':	/* a hard link */
+-			x = link(h.lname, h.name);
+-			if (x < 0) {
+-				pname();
+-				break;
+-			}
+-			my_chmod();
+-			my_chown();
+-			break;
+-		case '2':	/* a soft link */
+-			fprintf(stderr, "soft links not supported\n");
+-			break;
+-		case '3':	/* a charactor device */
+-			x = mknod(h.name, b8get(h.mode, 8) | S_IFCHR, (b8get(h.major, 8) << 8) + b8get(h.minor, 8));
+-			if (x > 0) {
+-				pname();
+-				break;
+-			}
+-			my_chown();
+-			break;
+-		case '4':	/* a block device */
+-			x = mknod(h.name, b8get(h.mode, 8) | S_IFBLK, (b8get(h.major, 8) << 8) + b8get(h.minor, 8));
+-			if (x < 0) {
+-				pname();
+-				break;
+-			}
+-			my_chown();
+-			break;
+-		case '5':	/* a directory */
+-			x = mkdir(h.name, b8get(h.mode, 8));
+-			if (x) {
+-				pname();
+-				break;
+-			}
+-			my_chown();
+-			break;
+-		case '6':	/* a FIFO */
+-			x = mkfifo(h.name, b8get(h.mode, 8));
+-			if (x < 0) {
+-				pname();
+-				break;
+-			}
+-			my_chown();
+-			break;
+-		case '0':	/* regular file */
+-		case 0:
+-			{
+-				int i;
+-				uint16_t rem;
+-				/* get a printable size */
+-				uint32_t size = b8get(h.size, 12);
+-				uint32_t count;
+-				/* count how many blocks we need */
+-				count = size / 512;
+-				rem = size % 512;
+-				/* check for existance of file */
+-				if (noreplace && !access(h.name, F_OK)) {
+-					errno = EEXIST;
+-					pname();
+-					continue;
+-				}
+-				/* open output file */
+-				outfile = open(h.name, O_CREAT | O_WRONLY | O_TRUNC, 0700);
+-				if (outfile < 0) {
+-					pname();
+-					break;
+-				}
+-				/* send buffers to file */
+-				for (x = 0; x < count; x++) {
+-					blkread(buffer);
+-					i = write(outfile, buffer, 512);
+-					if (i < 512) {
+-						fprintf(stderr, "cannot write out file\n");
+-						exit(1);
+-					}
+-				}
+-				if (rem) {
+-					blkread(buffer);
+-					i = write(outfile, buffer, rem);
+-					if (i < rem) {
+-						fprintf(stderr, "cannot write out file\n");
+-						exit(1);
+-					}
+-				}
+-				close(outfile);
+-				my_chmod();
+-				my_chown();
+-				continue;
+-			}
+-			break;
+-		default:
+-			fprintf(stderr, "unsupported flag\n");
+-			break;
+-		}
+-	}			/* block while */
+-}
+-
+-
+-/* Create a archive */
+-static void create(char *argv[])
+-{
+-	int x;
+-
+-	/* open outfile */
+-	if (ofile)
+-		outfile = open(ofile, O_CREAT | O_WRONLY, 0666);
+-	else
+-		outfile = 1;
+-	if (outfile < 0) {
+-		pname();
+-		exit(1);
+-	}
+-	/* get dev / inode numbers of created tar file for comparing to
+-	   added files, in order to skip adding a tar file to itself */
+-	if (fstat(outfile, &astat)) {
+-		pname();
+-		exit(1);
+-	}
+-	/* put each file on cmdline to file */
+-	while (argv[optind]) {
+-		char *s = argv[optind++];
+-		/* remove any trailing / */
+-		if (s[strlen(s) - 1] == '/')
+-			s[strlen(s) - 1] = 0;
+-		storedir(s);
+-	}
+-	/* write out 2 zero blocks */
+-	bzero(buffer, 512);
+-	x = blkwrite((char *)buffer);
+-	x += blkwrite((char *)buffer);
+-	if (x != 1024)
+-		perror("writing end of archive");
+-	/* close outfile */
+-	blkflush();
+-	close(outfile);
+-}
+-
+-
+-int main(int argc, char *argv[])
+-{
+-	int o;
+-
+-	ofile = getenv("TAPE");
+-	
+-	while ((o = getopt(argc, argv, "xtcvnkf:b:")) > 0) {
+-		switch (o) {
+-		case 'x':
+-		case 't':
+-		case 'c':
+-			key = o;
+-			break;
+-		case 'v':
+-			verbose = 1;
+-			break;
+-		case 'f':
+-			ofile = optarg;
+-			break;
+-		case 'k':
+-			noreplace = 1;
+-			break;
+-		case 'n':
+-			cksum = 0;
+-			break;
+-		case 'b':
+-			bf = atoi(optarg);
+-			if (bf < 1) {
+-				fprintf(stderr,"bad blocking factor\n");
+-				exit(1);
+-			}
+-			break;
+-		default:
+-			printusage();
+-		}
+-	}
+-	/* setup record buffer */
+-	recz = bf * 512;
+-	recptr = rec = sbrk(recz);
+-	if (rec == (void *)-1) {
+-		fprintf(stderr,"block buffer too large\n");
+-		exit(1);
+-	}
+-	recend = rec + recz;
+-	switch (key) {
+-	case 'x':
+-		recptr = recend;
+-		extract(argv);
+-		break;
+-	case 't':
+-		recptr = recend;
+-		list();
+-		break;
+-	case 'c':
+-		create(argv);
+-		break;
+-	default:
+-		fprintf(stderr, "tar: option x,c, or t must be used\n");
+-		exit(1);
+-	}
+-	return 0;
+-}
++    char name[100], mode[8], uid[8], gid[8], size[12], mtime[12], cksum[8];
++    char type, lname[100], ustar[6], version[2], uname[32], gname[32];
++    char major[8], minor[8], prefix[155], pad[12];
++};
++static struct header h;
++static char buffer[512], member[257];
++static char *rec, *recptr, *recend;
++static unsigned recz = 512;
++static int infile, outfile, verbose, noreplace, check_sum = 1, failed;
++static char key, *ofile;
++static struct stat astat;
++struct dirfix {
++    struct dirfix *next;
++    unsigned mode, uid, gid;
++    uint32_t mtime;
++    char name[257];
++};
++static struct dirfix *directories;
++
++static void fatal(const char *message) {
++    fprintf(stderr, "tar: %s\n", message);
++    exit(1);
++}
++static void problem(const char *name) {
++    fprintf(stderr, "tar: %s: ", name);
++    perror("");
++    failed = 1;
++}
++static void writeall(int fd, const char *p, unsigned n) {
++    while (n) {
++        long r = write(fd, p, n);
++        if (r < 0 && errno == EINTR)
++            continue;
++        if (r <= 0) {
++            problem(key == 'x' ? member : ofile ? ofile : "stdout");
++            exit(1);
++        }
++        p += r;
++        n -= r;
++    }
++}
++static void blkread(void *buf) {
++    if (recptr == recend) {
++        unsigned n = 0;
++        while (n < recz) {
++            long r = read(infile, rec+n, recz-n);
++            if (r < 0 && errno == EINTR)
++                continue;
++            if (r < 0) { problem(ofile ? ofile : "stdin"); exit(1); }
++            if (!r)
++                break;
++            n += r;
++        }
++        if (!n || n % 512)
++            fatal("truncated archive");
++        recptr = rec;
++        recend = rec+n;
++    }
++    memcpy(buf, recptr, 512);
++    recptr += 512;
++}
++static void blkwrite(const void *buf) {
++    memcpy(recptr, buf, 512);
++    recptr += 512;
++    if (recptr == recend) {
++        writeall(outfile, rec, recz);
++        recptr = rec;
++    }
++}
++static void blkflush(void) {
++    if (recptr != rec) {
++        memset(recptr, 0, recend-recptr);
++        writeall(outfile, rec, recz);
++        recptr = rec;
++    }
++}
++static uint32_t octal(const char *p, unsigned n) {
++    uint32_t value = 0;
++    while (n && *p == ' ') { p++; n--; }
++    while (n && *p >= '0' && *p <= '7') {
++        unsigned digit = *p++ - '0';
++        if (value > (0xffffffffUL-digit)/8)
++            fatal("numeric field too large");
++        value = value*8+digit;
++        n--;
++    }
++    while (n--) {
++        if (*p && *p != ' ')
++            fatal("invalid octal header field");
++        p++;
++    }
++    return value;
++}
++static void putoctal(uint32_t value, char *p, unsigned n) {
++    memset(p, '0', n);
++    p[--n] = 0;
++    while (value && n) {
++        p[--n] = '0' + (value & 7);
++        value >>= 3;
++    }
++    if (value)
++        fatal("numeric field does not fit header");
++}
++static uint32_t checksum(void) {
++    const unsigned char *p = (const unsigned char *)&h;
++    uint32_t sum = 0;
++    unsigned i;
++    for (i = 0; i < 512; i++)
++        sum += i >= 148 && i < 156 ? 32 : p[i];
++    return sum;
++}
++/* The filesystem has no symbolic links. Reject parent traversal and absolute
++ * extraction paths before creating any directory or file. */
++static int safe_path(const char *p) {
++    const char *start;
++    if (!*p || *p == '/')
++        return 0;
++    while (*p) {
++        start = p;
++        while (*p && *p != '/') p++;
++        if (p-start == 2 && start[0] == '.' && start[1] == '.')
++            return 0;
++        if (*p) p++;
++    }
++    return 1;
++}
++static unsigned fieldlen(const char *p, unsigned max) {
++    unsigned n=0;
++    while (n<max && p[n]) n++;
++    return n;
++}
++static void readname(void) {
++    unsigned prefix=0, name=fieldlen(h.name,100), n=0;
++    if (!strncmp(h.ustar,"ustar",5))
++        prefix=fieldlen(h.prefix,155);
++    if (prefix) {
++        memcpy(member,h.prefix,prefix);
++        n=prefix;
++        member[n++]='/';
++    }
++    memcpy(member+n,h.name,name);
++    n+=name;
++    member[n]=0;
++    while (n>1 && member[n-1]=='/') member[--n]=0;
++}
++static int putname(const char *name) {
++    unsigned n=strlen(name), i;
++    if (n>256) return 0;
++    if (n<=100) { memcpy(h.name,name,n); return 1; }
++    for (i=n; i; i--)
++        if (name[i-1]=='/' && i-1<=155 && n-i<=100 && n-i) {
++            memcpy(h.prefix,name,i-1);
++            memcpy(h.name,name+i,n-i);
++            return 1;
++        }
++    return 0;
++}
++static void printheader(void) {
++    if (key=='c' && !ofile) return;
++    if (key=='t' && verbose)
++        printf("%c %04lo %lu/%lu %lu ", h.type=='5'?'d':'-',
++               octal(h.mode,8),octal(h.uid,8),octal(h.gid,8),octal(h.size,12));
++    if (key=='t' || verbose)
++        printf("%s\n",member);
++}
++static void metadata(void) {
++    struct utimbuf times;
++    if (octal(h.uid,8)>65535UL || octal(h.gid,8)>65535UL) {
++        fprintf(stderr,"tar: owner id out of range: %s\n",member);
++        failed=1;
++        return;
++    }
++    if (chown(member,octal(h.uid,8),octal(h.gid,8))<0)
++        problem(member);
++    if (chmod(member,octal(h.mode,8)&07777)<0)
++        problem(member);
++    times.actime=times.modtime=octal(h.mtime,12);
++    if (utime(member,&times)<0)
++        problem(member);
++}
++static void defer_directory(void) {
++    struct dirfix *d=malloc(sizeof(*d));
++    if (!d) fatal("out of memory for directory metadata");
++    if (octal(h.uid,8)>65535UL || octal(h.gid,8)>65535UL)
++        fatal("directory owner id out of range");
++    strcpy(d->name,member);
++    d->mode=octal(h.mode,8); d->uid=octal(h.uid,8); d->gid=octal(h.gid,8);
++    d->mtime=octal(h.mtime,12);
++    d->next=directories; directories=d;
++}
++static void finish_directories(void) {
++    while (directories) {
++        struct dirfix *d=directories;
++        directories=d->next;
++        strcpy(member,d->name);
++        putoctal(d->mode,h.mode,8); putoctal(d->uid,h.uid,8);
++        putoctal(d->gid,h.gid,8); putoctal(d->mtime,h.mtime,12);
++        metadata();
++        free(d);
++    }
++}
++static void store(const char *name, unsigned depth) {
++    struct stat s;
++    unsigned long remaining;
++    int fd=-1;
++    const char *aname=name;
++    if (depth>128) fatal("directory nesting too deep");
++    if (stat(name,&s)<0) { problem(name); return; }
++    if (s.st_dev==astat.st_dev && s.st_ino==astat.st_ino) return;
++    while (*aname=='/') aname++;
++    if (!*aname) aname=".";
++    if (!safe_path(aname)) { fprintf(stderr,"tar: unsafe name: %s\n",name); failed=1; return; }
++    memset(&h,0,sizeof(h));
++    if (!putname(aname)) { fprintf(stderr,"tar: name too long: %s\n",name); failed=1; return; }
++    if (S_ISREG(s.st_mode)) {
++        fd=open(name,O_RDONLY);
++        if (fd<0) { problem(name); return; }
++        h.type='0';
++    } else if (S_ISDIR(s.st_mode)) h.type='5';
++    else if (S_ISCHR(s.st_mode)) h.type='3';
++    else if (S_ISBLK(s.st_mode)) h.type='4';
++    else if (S_ISFIFO(s.st_mode)) h.type='6';
++    else { fprintf(stderr,"tar: unsupported file: %s\n",name); failed=1; return; }
++    putoctal(s.st_mode&07777,h.mode,8);
++    putoctal(s.st_uid,h.uid,8); putoctal(s.st_gid,h.gid,8);
++    putoctal(S_ISREG(s.st_mode)?s.st_size:0,h.size,12);
++    putoctal(s.st_mtime,h.mtime,12);
++    putoctal(major(s.st_rdev),h.major,8); putoctal(minor(s.st_rdev),h.minor,8);
++    memcpy(h.ustar,"ustar",5); memcpy(h.version,"00",2);
++    putoctal(checksum(),h.cksum,7); h.cksum[7]=' ';
++    readname(); printheader(); blkwrite(&h);
++    if (fd>=0) {
++        remaining=s.st_size;
++        while (remaining) {
++            unsigned want=remaining>512?512:remaining, n=0;
++            memset(buffer,0,512);
++            while (n<want) {
++                long r=read(fd,buffer+n,want-n);
++                if (r<0 && errno==EINTR) continue;
++                if (r<=0) fatal("source file changed or could not be read");
++                n+=r;
++            }
++            blkwrite(buffer);
++            remaining-=want;
++        }
++        if (close(fd)<0) problem(name);
++    } else if (S_ISDIR(s.st_mode)) {
++        DIR *dir=opendir(name);
++        struct dirent *entry;
++        char child[258];
++        if (!dir) { problem(name); return; }
++        for (;;) {
++            off_t position;
++            errno=0;
++            entry=readdir(dir);
++            if (!entry) { if (errno) problem(name); break; }
++            if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,"..")) continue;
++            if (strlen(name)+strlen(entry->d_name)+2>sizeof(child)) {
++                failed=1; fprintf(stderr,"tar: pathname too long\n"); continue;
++            }
++            strcpy(child,name); strcat(child,"/"); strcat(child,entry->d_name);
++            position=telldir(dir); closedir(dir);
++            store(child,depth+1);
++            dir=opendir(name);
++            if (!dir) { problem(name); break; }
++            seekdir(dir,position);
++        }
++        if (dir) closedir(dir);
++    }
++}
++static void skipdata(uint32_t size) {
++    while (size) { blkread(buffer); size=size>512?size-512:0; }
++}
++static int selected(char **args) {
++    if (!*args) return 1;
++    while (*args) {
++        unsigned n=strlen(*args);
++        while (n && (*args)[n-1]=='/') n--;
++        if (!strncmp(member,*args,n) && (!member[n] || member[n]=='/')) return 1;
++        args++;
++    }
++    return 0;
++}
++static int parents(void) {
++    char path[257];
++    unsigned i;
++    strcpy(path,member);
++    for (i=1; path[i]; i++)
++        if (path[i]=='/') {
++            struct stat s;
++            path[i]=0;
++            if (mkdir(path,0755)<0 && (errno!=EEXIST || stat(path,&s)<0 || !S_ISDIR(s.st_mode))) {
++                problem(path); return 0;
++            }
++            path[i]='/';
++        }
++    return 1;
++}
++static void unpack(char **args) {
++    unsigned zeros=0;
++    for (;;) {
++        uint32_t size;
++        unsigned i;
++        int empty=1, fd=-1;
++        blkread(&h);
++        for (i=0;i<512;i++) if (((char *)&h)[i]) { empty=0; break; }
++        if (empty) { if (++zeros==2) break; continue; }
++        zeros=0;
++        if (check_sum && checksum()!=octal(h.cksum,8)) fatal("bad header checksum");
++        if (h.type=='x' || h.type=='g' || h.type=='L' || h.type=='K')
++            fatal("GNU/PAX extended headers are not supported");
++        size=octal(h.size,12);
++        readname();
++        if (!selected(args)) { skipdata(size); continue; }
++        printheader();
++        if (key=='t') { skipdata(size); continue; }
++        if (!safe_path(member)) {
++            fprintf(stderr,"tar: unsafe name: %s\n",member); failed=1; skipdata(size); continue;
++        }
++        if (!parents()) { skipdata(size); continue; }
++        if (h.type=='0' || !h.type) {
++            int flags=O_CREAT|O_WRONLY|(noreplace?O_EXCL:O_TRUNC);
++            fd=open(member,flags,0600);
++            if (fd<0) { problem(member); skipdata(size); continue; }
++            while (size) {
++                unsigned n=size>512?512:size;
++                blkread(buffer);
++                writeall(fd,buffer,n);
++                size-=n;
++            }
++            if (close(fd)<0) problem(member);
++            metadata();
++            continue;
++        }
++        if (h.type=='5') {
++            struct stat s;
++            if (mkdir(member,0700)<0 && (errno!=EEXIST || stat(member,&s)<0 || !S_ISDIR(s.st_mode)))
++                problem(member);
++            else defer_directory();
++        } else if (h.type=='1') {
++            char target[101];
++            memcpy(target,h.lname,100); target[100]=0;
++            if (!safe_path(target)) { failed=1; fprintf(stderr,"tar: unsafe link target\n"); }
++            else if (link(target,member)<0) problem(member);
++            else metadata();
++        } else if (h.type=='3' || h.type=='4' || h.type=='6') {
++            unsigned type=h.type=='3'?S_IFCHR:h.type=='4'?S_IFBLK:S_IFIFO;
++            if (octal(h.major,8)>255 || octal(h.minor,8)>255) {
++                failed=1; fprintf(stderr,"tar: device number out of range\n");
++            } else if (mknod(member,(octal(h.mode,8)&07777)|type,
++                       makedev(octal(h.major,8),octal(h.minor,8)))<0) problem(member);
++            else metadata();
++        } else { fprintf(stderr,"tar: unsupported member type: %c\n",h.type); failed=1; }
++        skipdata(size);
++    }
++}
++int main(int argc, char **argv) {
++    int option;
++    unsigned bf=1;
++    char *traditional=NULL;
++    ofile=getenv("TAPE");
++    if (argc>1 && argv[1][0]!='-') {
++        traditional=malloc(strlen(argv[1])+2);
++        if (!traditional) fatal("out of memory");
++        traditional[0]='-'; strcpy(traditional+1,argv[1]); argv[1]=traditional;
++    }
++    while ((option=getopt(argc,argv,"ctxvknf:b:"))!=-1) {
++        switch (option) {
++        case 'c': case 't': case 'x':
++            if (key && key!=option) fatal("choose one of c, t, x");
++            key=option; break;
++        case 'v': verbose=1; break;
++        case 'k': noreplace=1; break;
++        case 'n': check_sum=0; break;
++        case 'f': ofile=optarg; break;
++        case 'b': {
++            char *end;
++            long n=strtol(optarg,&end,10);
++            if (*end || n<1 || n>32) fatal("blocking factor must be 1..32");
++            bf=n; break;
++        }
++        default: fatal("usage: tar -c|-t|-x [-vk] [-b factor] [-f archive] [path ...]");
++        }
++    }
++    if (!key) fatal("choose one of c, t, x");
++    if (ofile && !strcmp(ofile,"-")) ofile=NULL;
++    recz=bf*512;
++    rec=malloc(recz);
++    if (!rec) fatal("out of memory");
++    recptr=rec; recend=rec+recz;
++    if (key=='c') {
++        outfile=ofile?open(ofile,O_WRONLY|O_CREAT|O_TRUNC,0666):1;
++        if (outfile<0) { problem(ofile); return 1; }
++        if (fstat(outfile,&astat)<0) { problem("archive"); return 1; }
++        while (optind<argc) store(argv[optind++],0);
++        memset(buffer,0,512); blkwrite(buffer); blkwrite(buffer); blkflush();
++        if (close(outfile)<0) problem(ofile?ofile:"stdout");
++    } else {
++        infile=ofile?open(ofile,O_RDONLY):0;
++        if (infile<0) { problem(ofile); return 1; }
++        recptr=recend;
++        unpack(argv+optind);
++        if (key=='x') finish_directories();
++        close(infile);
++    }
++    free(traditional); free(rec);
++    return failed;
++}
 --- a/Applications/util/touch.c
 +++ b/Applications/util/touch.c
 @@ -14,0 +15,3 @@
@@ -645,6 +3954,10 @@
 +#ifdef CONFIG_RIPPLE
 +    uint16_t d_padding; /* DIR_LEN characters, 64 physical octets */
 +#endif
+@@ -562,0 +566,3 @@
++#ifdef CONFIG_RIPPLE
++    unsigned long u_sigtramp; /* RXE user signal entry in separate IMEM */
++#endif
 --- a/Kernel/inode.c
 +++ b/Kernel/inode.c
 @@ -400 +400,11 @@
@@ -685,6 +3998,25 @@
 +	return (arg_t)oldbrk;
 +#else
 @@ -298,0 +303 @@
++#endif
+@@ -334 +339,2 @@
+-			if (p->p_status && p->p_pptr == udata.u_ptab) {
++			/* PID 1's bootstrap parent is itself, not a waitable child. */
++			if (p != udata.u_ptab && p->p_status && p->p_pptr == udata.u_ptab) {
+@@ -529,0 +536,7 @@
++#ifdef CONFIG_RIPPLE
++		extern int ripple_valid_code(unsigned long);
++		if (func != SIG_DFL &&
++		    (!ripple_valid_code((unsigned long)func) ||
++		     !ripple_valid_code((unsigned long)udata.u_argn2))) {
++			udata.u_error = EFAULT;
++#else
+@@ -530,0 +544 @@
++#endif
+@@ -536,0 +551,4 @@
++#ifdef CONFIG_RIPPLE
++	if (func != SIG_DFL && func != SIG_IGN)
++		udata.u_sigtramp = udata.u_argn2;
 +#endif
 --- a/Kernel/usermem.c
 +++ b/Kernel/usermem.c

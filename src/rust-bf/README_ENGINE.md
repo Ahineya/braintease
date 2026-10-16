@@ -106,6 +106,28 @@ so returning through a long freshly filled run needs no second traversal.
 They resume at the closing bracket, so a host mutation after a budget yield is
 observed by the next proof. Failed proofs retain the original BF instructions.
 
+Moving state loops can carry up to eight cells through zero storage, either
+along an independent nonzero predicate or a migrating decrementing counter.
+The parser derives the movement, source order, complete excursions and optional
+marker progression from local affine transfers. Guards prove the destination
+cells zero and predicates invariant; overlapping state vectors must move in the
+correct order. Occupied cells, wrapping aliases or failed bounds checks use the
+original BF. Cold proofs inspect at most 256 cells; a physical marker prefix is
+limited to 64 writes, in addition to at most sixteen state writes. Exact cached
+zero/nonzero runs permit longer progress without visiting every intermediate
+cell. Partial batches resume at the literal closing bracket, so budget pauses,
+host mutations and checkpoints retain the exact continuation. The interpreter
+and JIT share this Rust summary.
+
+The four-cell halving idiom `[->>+<[->>+<[-]<]>[-<+>]<<]` also has a guarded
+summary, with either direction and any fixed nonzero cell spacing. With a
+one-bit remainder and a zero flag, its closed form consumes the input, adds the
+quotient to its accumulator and leaves the remainder bit. The control-zero
+case skips without requiring body bounds. Other states retain literal BF.
+Tests exhaust all 65,536 inputs with both remainder states and check scaled,
+reversed, malformed, wrapping and bounds cases against independent execution.
+This is a BF algorithm optimization, like affine transfer strength reduction.
+
 These optimizations recognize BF algorithms, without Ripple opcodes, register
 numbers, memory banks, or CPU lane constants. They do not change exported BF or
 its requirements for ordinary 16-bit wrapping interpreters.

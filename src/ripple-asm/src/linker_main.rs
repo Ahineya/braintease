@@ -48,13 +48,27 @@ struct Cli {
     #[arg(long)]
     bf_host: bool,
 
+    /// Enable Brainfuck CPU interrupts, CSRs and instruction-count timer (off by default)
+    #[arg(long)]
+    bf_irq: bool,
+
     /// RAM banks declared by --bf-host; this is a limit, not inferred usage
     #[arg(long, default_value = "16")]
     memory_banks: u16,
+
+    /// Reserve additional code banks for STORC-loaded programs (host BF only)
+    #[arg(long, default_value = "0")]
+    code_banks: u16,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    if cli.code_banks != 0 && (!cli.bf_host || !cli.standalone || !matches!(cli.format.as_str(), "macro" | "bf")) {
+        return Err("--code-banks requires --bf-host --standalone with macro or bf output".into());
+    }
+    if cli.bf_irq && (!cli.standalone || !matches!(cli.format.as_str(), "macro" | "bf")) {
+        return Err("--bf-irq requires standalone Brainfuck or macro output".into());
+    }
     if cli.bf_host && (!matches!(cli.format.as_str(), "macro" | "bf") || !cli.standalone) {
         return Err("--bf-host requires --format macro or bf with --standalone".into());
     }
@@ -162,7 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if program.instructions.len() >= usize::from(program.bank_size.max(1)) * 65536 {
                         return Err("BF code image and final HALT must fit the 16-bit PC/PCB address space".into());
                     }
-                    let formatter = MacroFormatter::new();
+                    let formatter = MacroFormatter::new().with_irq(cli.bf_irq).with_code_banks(cli.code_banks);
                     let macro_output = if cli.bf_host {
                         formatter.format_linked_program_host(&program, cli.memory_banks)?
                     } else if cli.standalone {
@@ -185,7 +199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
                         let file = fs::File::create(&temporary)?;
                         let mut writer = BufWriter::new(file);
-                        MacroFormatter::new().write_linked_program_host_bf(&program, cli.memory_banks, &mut writer)?;
+                        MacroFormatter::new().with_irq(cli.bf_irq).with_code_banks(cli.code_banks).write_linked_program_host_bf(&program, cli.memory_banks, &mut writer)?;
                         writer.flush()?;
                         drop(writer);
                         fs::rename(&temporary, &output_path)?;

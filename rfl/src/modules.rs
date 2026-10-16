@@ -68,7 +68,13 @@ pub(crate) fn check_root(
     }];
     let mut cmods = Vec::new();
     let mut stack = vec![canon];
-    resolve_imports(0, &mut stack, &mut rfls, &mut cmods, rcc_ir::target::Target::Ripple)?;
+    resolve_imports(
+        0,
+        &mut stack,
+        &mut rfls,
+        &mut cmods,
+        rcc_ir::target::Target::Ripple,
+    )?;
     stack.pop();
     let mut taken_c = HashSet::new();
     let mut bindings = Vec::new();
@@ -145,6 +151,10 @@ pub(crate) fn check_root(
             bases[index],
         );
         rename_defs(&mut unit.ast, &bindings[index]);
+        if let Some(scope) = unit.ast.trait_scopes.last_mut() {
+            scope.span.end = bases[index] + unit.source.len();
+            scope.core = unit.path.parent() == Some(std_dir().as_path());
+        }
     }
     // The checker sees the linked program, but editor queries must see only
     // declarations available in the root module, using their imported aliases.
@@ -191,13 +201,27 @@ pub(crate) fn check_root(
             }
         }
         for item in &unit.ast.structs {
-            declaration(&item.name, item.name_span, Some(format!("type {}", item.name)));
+            declaration(
+                &item.name,
+                item.name_span,
+                Some(format!("type {}", item.name)),
+            );
+        }
+        for item in &unit.ast.traits {
+            declaration(
+                &item.name,
+                item.name_span,
+                Some(format!("trait {}", item.name)),
+            );
         }
         for item in &unit.ast.consts {
             declaration(
                 &item.name,
                 item.name_span,
-                Some(format!("const {}", crate::check::completion_type_name(&item.ty))),
+                Some(format!(
+                    "const {}",
+                    crate::check::completion_type_name(&item.ty)
+                )),
             );
         }
     }
@@ -205,6 +229,8 @@ pub(crate) fn check_root(
         adts: Vec::new(),
         structs: Vec::new(),
         impls: Vec::new(),
+        traits: Vec::new(),
+        trait_scopes: Vec::new(),
         consts: Vec::new(),
         functions: Vec::new(),
         externs: Vec::new(),
@@ -214,6 +240,8 @@ pub(crate) fn check_root(
         merged.adts.append(&mut unit.ast.adts);
         merged.structs.append(&mut unit.ast.structs);
         merged.impls.append(&mut unit.ast.impls);
+        merged.traits.append(&mut unit.ast.traits);
+        merged.trait_scopes.append(&mut unit.ast.trait_scopes);
         merged.consts.append(&mut unit.ast.consts);
         merged.functions.append(&mut unit.ast.functions);
         for ext in unit.ast.externs.drain(..) {
@@ -356,7 +384,10 @@ pub fn compile_path(path: &Path) -> Result<IrModule, CompileError> {
     compile_path_for_target(path, rcc_ir::target::Target::Ripple)
 }
 
-pub fn compile_path_for_target(path: &Path, target: rcc_ir::target::Target) -> Result<IrModule, CompileError> {
+pub fn compile_path_for_target(
+    path: &Path,
+    target: rcc_ir::target::Target,
+) -> Result<IrModule, CompileError> {
     let (typed, mut cmods) = check_path_for_target(path, target)?;
     let mut ir = crate::lower::lower("program", &typed)?;
     ir.target = target;
@@ -371,7 +402,10 @@ pub(super) fn check_path(path: &Path) -> Result<(crate::typed::TModule, Vec<CMod
     check_path_for_target(path, rcc_ir::target::Target::Ripple)
 }
 
-pub(super) fn check_path_for_target(path: &Path, target: rcc_ir::target::Target) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
+pub(super) fn check_path_for_target(
+    path: &Path,
+    target: rcc_ir::target::Target,
+) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
     let canon = std::fs::canonicalize(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     let source = read_text(&canon)?;
@@ -478,12 +512,18 @@ fn link(
             bases[index],
         );
         rename_defs(&mut unit.ast, &bindings[index]);
+        if let Some(scope) = unit.ast.trait_scopes.last_mut() {
+            scope.span.end = bases[index] + unit.source.len();
+            scope.core = unit.path.parent() == Some(std_dir().as_path());
+        }
     }
 
     let mut merged = Module {
         adts: Vec::new(),
         structs: Vec::new(),
         impls: Vec::new(),
+        traits: Vec::new(),
+        trait_scopes: Vec::new(),
         consts: Vec::new(),
         functions: Vec::new(),
         externs: Vec::new(),
@@ -493,6 +533,8 @@ fn link(
         merged.adts.append(&mut unit.ast.adts);
         merged.structs.append(&mut unit.ast.structs);
         merged.impls.append(&mut unit.ast.impls);
+        merged.traits.append(&mut unit.ast.traits);
+        merged.trait_scopes.append(&mut unit.ast.trait_scopes);
         merged.consts.append(&mut unit.ast.consts);
         merged.functions.append(&mut unit.ast.functions);
         for ext in unit.ast.externs.drain(..) {
@@ -640,7 +682,15 @@ fn own_bindings(
     taken_c: &mut HashSet<String>,
 ) -> Result<HashMap<String, Binding>, CompileError> {
     let mut table = HashMap::new();
-    let mangle = |name: &str| format!("m{index}${name}");
+    let mangle = |name: &str| {
+        if unit.path == std_dir().join("io.rfl")
+            && matches!(name, "Printable" | "print" | "println")
+        {
+            format!("$std${name}")
+        } else {
+            format!("m{index}${name}")
+        }
+    };
     for func in &unit.ast.functions {
         if func.name == "main" {
             if !entry {
@@ -720,6 +770,24 @@ fn own_bindings(
         );
     }
     for item in &unit.ast.structs {
+        table.insert(
+            item.name.clone(),
+            Binding {
+                mangled: mangle(&item.name),
+                exported: item.exported,
+                ctors: Vec::new(),
+                is_ctor: false,
+                is_fn: false,
+            },
+        );
+    }
+    for item in &unit.ast.traits {
+        if table.contains_key(&item.name) {
+            return Err(CompileError::plain(format!(
+                "duplicate declaration `{}`",
+                item.name
+            )));
+        }
         table.insert(
             item.name.clone(),
             Binding {
@@ -859,29 +927,39 @@ const STRING_FACADE: &[Facade] = &[
     },
 ];
 
-const IO_FACADE: &[Facade] = &[
-    Facade {
-        name: "print",
-        mangled: "print",
-        ctors: &[],
-        is_ctor: false,
-        is_fn: true,
-    },
-    Facade {
-        name: "println",
-        mangled: "println",
-        ctors: &[],
-        is_ctor: false,
-        is_fn: true,
-    },
-    Facade {
-        name: "putc",
-        mangled: "putc",
-        ctors: &[],
-        is_ctor: false,
-        is_fn: true,
-    },
-];
+const IO_FACADE: &[Facade] = &[Facade {
+    name: "putc",
+    mangled: "putc",
+    ctors: &[],
+    is_ctor: false,
+    is_fn: true,
+}];
+
+/// The same std/io definitions supply implicit printing for standalone sources.
+/// Imports and the prelude share canonical symbols, so there is only one impl.
+pub(crate) fn printing_prelude(base: usize) -> Result<Module, CompileError> {
+    let source = include_str!("../std/io.rfl");
+    let mut ast = parse_source(source)?;
+    ast.functions
+        .retain(|f| matches!(f.name.as_str(), "print" | "println"));
+    ast.externs.clear();
+    let unit = RflUnit {
+        path: std_dir().join("io.rfl"),
+        source: source.into(),
+        ast: ast.clone(),
+        resolved: Vec::new(),
+    };
+    let bindings = own_bindings(&unit, 0, false, &mut HashSet::new())?;
+    let map = bindings
+        .iter()
+        .map(|(n, b)| (n.clone(), b.mangled.clone()))
+        .collect();
+    rewrite_uses(&mut ast, &map, &HashSet::new(), &HashSet::new(), base);
+    rename_defs(&mut ast, &bindings);
+    ast.trait_scopes[0].core = true;
+    ast.trait_scopes[0].span.end = base + source.len();
+    Ok(ast)
+}
 
 fn apply_import(
     index: usize,
@@ -1101,6 +1179,11 @@ fn rename_defs(ast: &mut Module, bindings: &HashMap<String, Binding>) {
             item.name = binding.mangled.clone();
         }
     }
+    for item in &mut ast.traits {
+        if let Some(binding) = bindings.get(&item.name) {
+            item.name = binding.mangled.clone();
+        }
+    }
     for item in &mut ast.consts {
         if let Some(binding) = bindings.get(&item.name) {
             item.name = binding.mangled.clone();
@@ -1124,6 +1207,25 @@ fn rewrite_uses(
     fns: &HashSet<String>,
     base: usize,
 ) {
+    let owned: Vec<_> = ast
+        .traits
+        .iter()
+        .map(|t| t.name.clone())
+        .chain(ast.structs.iter().map(|s| s.name.clone()))
+        .chain(ast.adts.iter().map(|a| a.name.clone()))
+        .filter_map(|name| map.get(&name).cloned())
+        .collect();
+    let mut visible: Vec<_> = map.values().cloned().collect();
+    if !map.contains_key("Printable") {
+        visible.push("$std$Printable".into());
+    }
+    // The span covers this source module, including methods expanded later.
+    ast.trait_scopes.push(TraitScope {
+        span: Span::new(base, usize::MAX),
+        visible,
+        owned,
+        core: false,
+    });
     let mut walk = Rewriter {
         map,
         ctors,
@@ -1138,6 +1240,10 @@ fn rewrite_uses(
             .push(adt.params.iter().map(|param| param.name.clone()).collect());
         for param in &mut adt.params {
             walk.bump(&mut param.span);
+            for (name, span) in &mut param.bounds {
+                walk.rewrite_type(name);
+                walk.bump(span);
+            }
         }
         for ctor in &mut adt.ctors {
             walk.bump(&mut ctor.name_span);
@@ -1159,8 +1265,24 @@ fn rewrite_uses(
         walk.ty(&mut item.ty);
         walk.expr(&mut item.init);
     }
+    for tr in &mut ast.traits {
+        walk.bump(&mut tr.name_span);
+        for method in &mut tr.methods {
+            walk.function_like(
+                &mut method.name_span,
+                &mut method.type_params,
+                &mut method.params,
+                &mut method.ret,
+                &mut method.body,
+            );
+        }
+    }
     for item in &mut ast.impls {
         walk.bump(&mut item.span);
+        if let Some((name, span)) = &mut item.trait_name {
+            walk.rewrite_type(name);
+            walk.bump(span);
+        }
         walk.types.push(
             item.type_params
                 .iter()
@@ -1169,6 +1291,10 @@ fn rewrite_uses(
         );
         for param in &mut item.type_params {
             walk.bump(&mut param.span);
+            for (name, span) in &mut param.bounds {
+                walk.rewrite_type(name);
+                walk.bump(span);
+            }
         }
         walk.ty(&mut item.ty);
         for method in &mut item.items {
@@ -1259,6 +1385,10 @@ impl Rewriter<'_> {
             .push(type_params.iter().map(|param| param.name.clone()).collect());
         for param in type_params.iter_mut() {
             self.bump(&mut param.span);
+            for (name, span) in &mut param.bounds {
+                self.rewrite_type(name);
+                self.bump(span);
+            }
         }
         for param in params.iter_mut() {
             self.bump(&mut param.name_span);
@@ -1563,18 +1693,29 @@ fn std_dir() -> PathBuf {
 pub(crate) fn std_import_candidates(name: &str) -> Vec<String> {
     let mut candidates = Vec::new();
     for (module, unit) in std_units() {
-        let Ok(bindings) = own_bindings(&unit, 0, false, &mut HashSet::new()) else { continue };
-        if bindings.get(name).is_some_and(|binding| binding.exported) { candidates.push(module); }
+        let Ok(bindings) = own_bindings(&unit, 0, false, &mut HashSet::new()) else {
+            continue;
+        };
+        if bindings.get(name).is_some_and(|binding| binding.exported) {
+            candidates.push(module);
+        }
     }
     candidates
 }
 
 pub(crate) fn std_completion_functions() -> Vec<(String, crate::completion::ExtensionFunction)> {
-    std_units().into_iter().flat_map(|(module, unit)| {
-        unit.ast.functions.iter().filter(|function| function.exported)
-            .filter_map(crate::check::completion_function)
-            .map(|function| (module.clone(), function)).collect::<Vec<_>>()
-    }).collect()
+    std_units()
+        .into_iter()
+        .flat_map(|(module, unit)| {
+            unit.ast
+                .functions
+                .iter()
+                .filter(|function| function.exported)
+                .filter_map(crate::check::completion_function)
+                .map(|function| (module.clone(), function))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 fn std_units() -> Vec<(String, RflUnit)> {
@@ -1590,10 +1731,17 @@ fn std_units() -> Vec<(String, RflUnit)> {
         let Some(module) = path.file_stem().and_then(|stem| stem.to_str()) else {
             continue;
         };
-        let Ok(source) = read_text(&path) else { continue };
-        let Ok(ast) = parse_source(&source) else { continue };
+        let Ok(source) = read_text(&path) else {
+            continue;
+        };
+        let Ok(ast) = parse_source(&source) else {
+            continue;
+        };
         let unit = RflUnit {
-            path: path.clone(), source, ast, resolved: Vec::new(),
+            path: path.clone(),
+            source,
+            ast,
+            resolved: Vec::new(),
         };
         candidates.push((format!("std/{module}"), unit));
     }
@@ -1645,6 +1793,7 @@ pub(crate) fn import_definition(
         .chain(ast.consts.iter().map(|item| (&item.name, item.name_span)))
         .chain(ast.structs.iter().map(|item| (&item.name, item.name_span)))
         .chain(ast.adts.iter().map(|item| (&item.name, item.name_span)))
+        .chain(ast.traits.iter().map(|item| (&item.name, item.name_span)))
         .chain(
             ast.adts
                 .iter()
@@ -1702,7 +1851,10 @@ fn parse_source(source: &str) -> Result<Module, CompileError> {
     parse_source_for_target(source, rcc_ir::target::Target::Ripple)
 }
 
-fn parse_source_for_target(source: &str, target: rcc_ir::target::Target) -> Result<Module, CompileError> {
+fn parse_source_for_target(
+    source: &str,
+    target: rcc_ir::target::Target,
+) -> Result<Module, CompileError> {
     let tokens = lexer::tokenize(source)?;
     parser::parse_for_target(source, &tokens, target)
 }
@@ -1924,5 +2076,37 @@ fn rewrite_value(value: &mut Value, names: &HashMap<String, String>) {
         | Value::Function(_)
         | Value::ConstantArray(_)
         | Value::Undef => {}
+    }
+}
+
+/// Keep a user declaration named Option/Result distinct from core prelude types,
+/// including in standalone sources that do not pass through module mangling.
+pub(crate) fn isolate_prelude_types(ast: &mut Module) {
+    let mut map = HashMap::new();
+    let mut ctors = HashSet::new();
+    for adt in &ast.adts {
+        if matches!(adt.name.as_str(), "Option" | "Result") {
+            map.insert(adt.name.clone(), format!("$local${}", adt.name));
+            for ctor in &adt.ctors {
+                ctors.insert(ctor.name.clone());
+                map.insert(ctor.name.clone(), format!("$local${}", ctor.name));
+            }
+        }
+    }
+    if map.is_empty() {
+        return;
+    }
+    let scopes = std::mem::take(&mut ast.trait_scopes);
+    rewrite_uses(ast, &map, &ctors, &HashSet::new(), 0);
+    ast.trait_scopes = scopes;
+    for adt in &mut ast.adts {
+        if let Some(name) = map.get(&adt.name) {
+            adt.name = name.clone();
+        }
+        for ctor in &mut adt.ctors {
+            if let Some(name) = map.get(&ctor.name) {
+                ctor.name = name.clone();
+            }
+        }
     }
 }

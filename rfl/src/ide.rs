@@ -74,7 +74,10 @@ impl Analysis {
             let (info, result) = check::analyze(source, &parsed);
             (info, result.err().into_iter().collect())
         };
-        if parse_errors.iter().any(|error| error.detail == parser::EXPECTED_MEMBER_NAME) {
+        if parse_errors
+            .iter()
+            .any(|error| error.detail == parser::EXPECTED_MEMBER_NAME)
+        {
             // The parser creates an empty Field node to retain the receiver.
             // Its missing name is already reported at the dot; the checker
             // cannot meaningfully diagnose a field called the empty string.
@@ -175,7 +178,7 @@ impl Analysis {
                 CompletionKind::EnumMember
             } else if fact.ty.starts_with("fn(") {
                 CompletionKind::Function
-            } else if fact.ty.starts_with("type ") {
+            } else if fact.ty.starts_with("type ") || fact.ty.starts_with("trait ") {
                 CompletionKind::Type
             } else if fact.ty.starts_with("const ") {
                 CompletionKind::Constant
@@ -194,9 +197,11 @@ impl Analysis {
             fact.scope.contains(offset)
                 && offset >= fact.visible_from
                 && (fact.ty.starts_with("fn(") || fact.variant)
-                && !self.ast.impls.iter().any(|item| {
-                    item.items.iter().any(|method| method.name_span == fact.def)
-                })
+                && !self
+                    .ast
+                    .impls
+                    .iter()
+                    .any(|item| item.items.iter().any(|method| method.name_span == fact.def))
         }) {
             if seen.contains(&fact.name) {
                 continue;
@@ -304,7 +309,7 @@ impl Analysis {
             return 2;
         }
         if let Some(name) = self.uses().find(|name| name.span == span) {
-            if name.ty.starts_with("type ") {
+            if name.ty.starts_with("type ") || name.ty.starts_with("trait ") {
                 return 2;
             }
             if self
@@ -566,7 +571,17 @@ impl Analysis {
     }
 
     fn function_bodies(&self) -> Vec<&Block> {
-        self.ast.functions.iter().map(|func| &func.body).collect()
+        self.ast
+            .functions
+            .iter()
+            .map(|func| &func.body)
+            .chain(
+                self.ast
+                    .impls
+                    .iter()
+                    .flat_map(|item| item.items.iter().map(|m| &m.body)),
+            )
+            .collect()
     }
 
     fn find_call(&self, offset: usize, blocks: &[&Block]) -> Option<CallAt> {
@@ -1024,8 +1039,8 @@ pub enum CompletionKind {
 
 const KEYWORDS: &[&str] = &[
     "fn", "let", "mut", "if", "else", "return", "as", "while", "break", "continue", "match", "for",
-    "in", "type", "impl", "const", "struct", "export", "import", "extern", "unsafe", "true",
-    "false",
+    "in", "type", "trait", "impl", "const", "struct", "export", "import", "extern", "unsafe",
+    "true", "false",
 ];
 
 fn symbols_of(module: &Module) -> Vec<Symbol> {
@@ -1040,6 +1055,22 @@ fn symbols_of(module: &Module) -> Vec<Symbol> {
                 kind: SymbolKind::Method,
                 span: crate::ast::Span::new(method.name_span.start, method.body.span.end),
                 detail: String::new(),
+            });
+        }
+    }
+    for tr in &module.traits {
+        symbols.push(Symbol {
+            name: tr.name.clone(),
+            kind: SymbolKind::Struct,
+            span: tr.name_span,
+            detail: format!("trait {}", tr.name),
+        });
+        for method in &tr.methods {
+            symbols.push(Symbol {
+                name: method.name.clone(),
+                kind: SymbolKind::Method,
+                span: method.name_span,
+                detail: tr.name.clone(),
             });
         }
     }
@@ -1105,6 +1136,8 @@ fn empty_module() -> Module {
         adts: Vec::new(),
         structs: Vec::new(),
         impls: Vec::new(),
+        traits: Vec::new(),
+        trait_scopes: Vec::new(),
         consts: Vec::new(),
         functions: Vec::new(),
         externs: Vec::new(),
@@ -1145,12 +1178,20 @@ mod tests {
         assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
         for (name, signature) in crate::check::BUILTIN_FUNCTIONS {
             let at = source.find(&format!("{name}(")).unwrap() + name.len() + 1;
-            assert_eq!(doc.signature(at).unwrap().0, *signature);
+            let expected = match *name {
+                "print" => "fn(i16) -> unit",
+                "println" => "fn(String) -> unit",
+                _ => signature,
+            };
+            assert_eq!(doc.signature(at).unwrap().0, expected);
         }
         let source = "fn main() { let text = \"hi\"; text. }";
         let doc = Analysis::open(None, source);
         let items = doc.completions(source.find("text.").unwrap() + 5);
         for (name, _) in crate::check::BUILTIN_FUNCTIONS {
+            if matches!(*name, "print" | "println") {
+                continue;
+            } // Printable/extension methods.
             assert!(!items.iter().any(|item| item.label == *name), "{name}");
         }
     }

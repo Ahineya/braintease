@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <errno.h>
+#include <fcntl.h>
 #include <grp.h>
 #include <pwd.h>
 #include <stdio.h>
@@ -239,3 +240,40 @@ int uname(struct utsname *s) {
 char *tzname[2] = {"UTC", "UTC"};
 int daylight;
 long timezone;
+char *stpcpy(char *dest, const char *src) {
+    while ((*dest = *src++))
+        dest++;
+    return dest;
+}
+/* Atomic exclusive creation; the name is not an access-control boundary. */
+int mkstemp(char *pattern) {
+    static unsigned long serial;
+    size_t len = strlen(pattern);
+    unsigned attempt, i;
+    if (len < 6 || strcmp(pattern + len - 6, "XXXXXX")) {
+        errno = EINVAL;
+        return -1;
+    }
+    for (attempt = 0; attempt < 256; attempt++) {
+        unsigned long n = ((unsigned long)getpid() * 257 + serial++) % 1000000UL;
+        int fd;
+        for (i = 0; i < 6; i++) {
+            pattern[len - 1 - i] = '0' + n % 10;
+            n /= 10;
+        }
+        fd = open(pattern, O_RDWR | O_CREAT | O_EXCL, 0600);
+        if (fd >= 0 || errno != EEXIST)
+            return fd;
+    }
+    errno = EEXIST;
+    return -1;
+}
+const char *strsignal(int sig) {
+    static const char *names[] = {
+        "Unknown signal", "Hangup", "Interrupt", "Quit", "Illegal instruction",
+        "Trace trap", "Aborted", "Bus error", "Arithmetic exception", "Killed",
+        "User signal 1", "Segmentation fault", "User signal 2", "Broken pipe",
+        "Alarm", "Terminated"
+    };
+    return sig >= 0 && sig < 16 ? names[sig] : names[0];
+}

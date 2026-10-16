@@ -16,7 +16,7 @@ vm = ROOT/'target/release/rvm'
 
 
 def run(image, commands, jit):
-    cmd = [str(vm), str(build/'bios.bin'), '--disk', str(image), '--memory', '4608000', '--headless', '--input', commands, '--timeout', '120']
+    cmd = [str(vm), str(build/'bios.bin'), '--disk', str(image), '--memory', '5120000', '--headless', '--input', commands, '--timeout', '120']
     if jit:
         cmd.append('--jit')
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=130)
@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='ripple-fuzix-test-') as temporary:
     # An actual host timeout after guest sync leaves a dirty superblock,
     # without losing the committed file. Recover it, then boot again.
     interrupted = subprocess.run([str(vm), str(build/'bios.bin'), '--disk', str(image),
-        '--memory', '4608000', '--jit', '--headless', '--input',
+        '--memory', '5120000', '--jit', '--headless', '--input',
         'echo crash_safe > /crashnote\nsync\n', '--timeout', '10'],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
     assert 'synced' in interrupted.stdout, interrupted.stdout

@@ -10,7 +10,11 @@ pub fn parse(source: &str, tokens: &[Token]) -> Result<Module, CompileError> {
     parse_for_target(source, tokens, rcc_ir::target::Target::Ripple)
 }
 
-pub fn parse_for_target(source: &str, tokens: &[Token], target: rcc_ir::target::Target) -> Result<Module, CompileError> {
+pub fn parse_for_target(
+    source: &str,
+    tokens: &[Token],
+    target: rcc_ir::target::Target,
+) -> Result<Module, CompileError> {
     let mut parser = Parser {
         target,
         source,
@@ -44,6 +48,8 @@ pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileErro
                     adts: Vec::new(),
                     structs: Vec::new(),
                     impls: Vec::new(),
+                    traits: Vec::new(),
+                    trait_scopes: Vec::new(),
                     consts: Vec::new(),
                     functions: Vec::new(),
                     externs: Vec::new(),
@@ -72,6 +78,7 @@ impl<'a> Parser<'a> {
         let mut adts = Vec::new();
         let mut structs = Vec::new();
         let mut impls = Vec::new();
+        let mut traits = Vec::new();
         let mut consts = Vec::new();
         let mut functions = Vec::new();
         let mut externs = Vec::new();
@@ -85,13 +92,26 @@ impl<'a> Parser<'a> {
                 enabled &= self.cfg_attributes()?;
                 if self.index == before {
                     if repr_c {
-                        return Err(CompileError::at(self.source, self.current().span.start, "duplicate repr attribute"));
+                        return Err(CompileError::at(
+                            self.source,
+                            self.current().span.start,
+                            "duplicate repr attribute",
+                        ));
                     }
                     self.parse_repr_c()?;
                     repr_c = true;
                 }
             }
-            let counts = (adts.len(), structs.len(), impls.len(), consts.len(), functions.len(), externs.len(), imports.len());
+            let trait_count = traits.len();
+            let counts = (
+                adts.len(),
+                structs.len(),
+                impls.len(),
+                consts.len(),
+                functions.len(),
+                externs.len(),
+                imports.len(),
+            );
             parsed_any = true;
             if repr_c {
                 let exported = self.eat(&TokenKind::Export);
@@ -103,12 +123,23 @@ impl<'a> Parser<'a> {
                 adts.push(self.parse_adt()?);
             } else if self.is(&TokenKind::Struct) {
                 structs.push(self.parse_struct()?);
+            } else if self.is(&TokenKind::Trait) {
+                traits.push(self.parse_trait(false)?);
             } else if self.is(&TokenKind::Impl) {
                 impls.push(self.parse_impl()?);
             } else if self.is(&TokenKind::Const) {
                 consts.push(self.parse_const()?);
             } else if self.is(&TokenKind::Export) {
-                self.parse_exported(&mut adts, &mut structs, &mut consts, &mut functions)?;
+                if self
+                    .tokens
+                    .get(self.index + 1)
+                    .is_some_and(|t| t.kind == TokenKind::Trait)
+                {
+                    self.bump();
+                    traits.push(self.parse_trait(true)?);
+                } else {
+                    self.parse_exported(&mut adts, &mut structs, &mut consts, &mut functions)?;
+                }
             } else if self.is(&TokenKind::Extern) {
                 externs.extend(self.parse_extern_block()?);
             } else if self.is(&TokenKind::Fn) {
@@ -120,10 +151,11 @@ impl<'a> Parser<'a> {
                 return Err(CompileError::at(
                     self.source,
                     token.span.start,
-                    "expected `fn`, `type`, `struct`, `impl`, or `const`",
+                    "expected `fn`, `type`, `struct`, `trait`, `impl`, or `const`",
                 ));
             }
             if !enabled {
+                traits.truncate(trait_count);
                 adts.truncate(counts.0);
                 structs.truncate(counts.1);
                 impls.truncate(counts.2);
@@ -133,7 +165,8 @@ impl<'a> Parser<'a> {
                 imports.truncate(counts.6);
             }
         }
-        if !parsed_any && functions.is_empty()
+        if !parsed_any
+            && functions.is_empty()
             && adts.is_empty()
             && structs.is_empty()
             && consts.is_empty()
@@ -147,6 +180,8 @@ impl<'a> Parser<'a> {
             adts,
             structs,
             impls,
+            traits,
+            trait_scopes: Vec::new(),
             consts,
             functions,
             externs,
@@ -341,7 +376,9 @@ impl<'a> Parser<'a> {
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
             let enabled = self.cfg_attributes()?;
             let declaration = self.parse_extern_fn()?;
-            if enabled { decls.push(declaration); }
+            if enabled {
+                decls.push(declaration);
+            }
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
         Ok(decls)
@@ -404,20 +441,77 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_trait(&mut self, exported: bool) -> Result<Trait, CompileError> {
+        self.expect(&TokenKind::Trait, "trait")?;
+        let (name, name_span) = self.expect_ident()?;
+        self.expect(
+            &TokenKind::LBrace,
+            "'{' (trait parameters are not supported)",
+        )?;
+        let mut methods = Vec::new();
+        while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
+            let method = self.parse_method(true)?;
+            if method.receiver.is_none() {
+                return Err(CompileError::at(
+                    self.source,
+                    method.name_span.start,
+                    "a trait method needs self, &self, or &mut self",
+                ));
+            }
+            if !method.type_params.is_empty() {
+                return Err(CompileError::at(
+                    self.source,
+                    method.name_span.start,
+                    "generic trait methods are not supported",
+                ));
+            }
+            methods.push(method);
+        }
+        self.expect(&TokenKind::RBrace, "'}'")?;
+        Ok(Trait {
+            name,
+            name_span,
+            exported,
+            methods,
+        })
+    }
+
     fn parse_impl(&mut self) -> Result<Impl, CompileError> {
         let span = self.expect(&TokenKind::Impl, "impl")?.span;
         let type_params = self.parse_generic_params()?;
-        let ty = self.parse_type()?;
+        let first = self.parse_type()?;
+        let (trait_name, ty) = if self.eat(&TokenKind::For) {
+            let ParsedTy::Named { name, span, args } = first else {
+                return Err(CompileError::at(
+                    self.source,
+                    span.start,
+                    "expected a trait name",
+                ));
+            };
+            if !args.is_empty() {
+                return Err(CompileError::at(
+                    self.source,
+                    span.start,
+                    "trait arguments are not supported",
+                ));
+            }
+            (Some((name, span)), self.parse_type()?)
+        } else {
+            (None, first)
+        };
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut items = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
             let enabled = self.cfg_attributes()?;
             self.eat(&TokenKind::Export);
-            let method = self.parse_method()?;
-            if enabled { items.push(method); }
+            let method = self.parse_method(false)?;
+            if enabled {
+                items.push(method);
+            }
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
         Ok(Impl {
+            trait_name,
             span,
             type_params,
             ty,
@@ -425,7 +519,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_method(&mut self) -> Result<ImplItem, CompileError> {
+    fn parse_method(&mut self, signature: bool) -> Result<ImplItem, CompileError> {
         self.expect(&TokenKind::Fn, "fn")?;
         let (name, name_span) = self.expect_ident()?;
         let type_params = self.parse_generic_params()?;
@@ -460,7 +554,16 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-        let body = self.parse_block()?;
+        let body = if signature {
+            self.expect(&TokenKind::Semi, "';' (trait methods have signatures only)")?;
+            Block {
+                span: name_span,
+                stmts: Vec::new(),
+                tail: None,
+            }
+        } else {
+            self.parse_block()?
+        };
         Ok(ImplItem {
             name,
             name_span,
@@ -533,7 +636,16 @@ impl<'a> Parser<'a> {
         let mut params = Vec::new();
         loop {
             let (name, span) = self.expect_ident()?;
-            params.push(TypeParam { name, span });
+            let mut bounds = Vec::new();
+            if self.eat(&TokenKind::Colon) {
+                loop {
+                    bounds.push(self.expect_ident()?);
+                    if !self.eat(&TokenKind::Plus) {
+                        break;
+                    }
+                }
+            }
+            params.push(TypeParam { name, span, bounds });
             if self.eat(&TokenKind::Comma) {
                 continue;
             }
@@ -1303,6 +1415,7 @@ impl<'a> Parser<'a> {
                 span: span.to(expr.span),
                 kind: ExprKind::Borrow {
                     mutable,
+                    temporary: false,
                     expr: Box::new(expr),
                 },
             });
@@ -1468,8 +1581,11 @@ impl<'a> Parser<'a> {
                     if !self.tolerant {
                         return Err(CompileError::at(self.source, dot.end, "expected a name"));
                     }
-                    self.errors
-                        .push(CompileError::at(self.source, dot.start, EXPECTED_MEMBER_NAME));
+                    self.errors.push(CompileError::at(
+                        self.source,
+                        dot.start,
+                        EXPECTED_MEMBER_NAME,
+                    ));
                     let base_span = expr.span;
                     let name_span = Span::new(dot.end, dot.end);
                     expr = Expr {
@@ -1960,6 +2076,13 @@ impl<'a> Parser<'a> {
     }
 
     fn eat(&mut self, kind: &TokenKind) -> bool {
+        if self.pending_gt {
+            if *kind == TokenKind::Gt {
+                self.pending_gt = false;
+                return true;
+            }
+            return false;
+        }
         if self.is(kind) {
             self.index += 1;
             true
@@ -1969,6 +2092,9 @@ impl<'a> Parser<'a> {
     }
 
     fn is(&self, kind: &TokenKind) -> bool {
+        if self.pending_gt {
+            return *kind == TokenKind::Gt;
+        }
         self.current().kind == *kind
     }
 

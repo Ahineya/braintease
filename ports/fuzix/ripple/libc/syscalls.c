@@ -104,6 +104,9 @@ int execve(const char *p, char *const a[], char *const e[]) {
     return call(23, (long)p, (long)a, (long)e, 0);
 }
 int execv(const char *p, char *const a[]) { return execve(p, a, environ); }
+int _getdirent(int fd, void *buf, size_t len) {
+    return call(24, fd, (long)buf, len, 0);
+}
 int execvp(const char *p, char *const a[]) {
     char name[512];
     const char *search = getenv("PATH"), *end;
@@ -191,8 +194,17 @@ int remove(const char *p) {
     return S_ISDIR(s.st_mode) ? rmdir(p) : unlink(p);
 }
 sighandler_t signal(int n, sighandler_t f) {
-    return (sighandler_t)call(35, n, (long)f, 0, 0);
+    extern void ripple_signal_entry(void);
+    return (sighandler_t)call(35, n, (long)f, (long)ripple_signal_entry, 0);
 }
+void ripple_sigreturn(void *frame) { call(100, (long)frame, 0, 0, 0); }
+unsigned alarm(unsigned seconds) {
+    unsigned ticks = seconds > 6553 ? 65535 : seconds * 10;
+    long previous = call(38, ticks, 0, 0, 0);
+    return previous < 0 ? 0 : (previous + 9) / 10;
+}
+int pause(void) { return call(37, 0, 0, 0, 0); }
+int times(struct tms *t) { return call(42, (long)t, 0, 0, 0); }
 int ioctl(int fd, int req, ...) {
     va_list a;
     void *p;

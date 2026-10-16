@@ -106,7 +106,7 @@ fn run(image: &LinkedProgram, host: bool) -> State {
         .map_or(expanded.expanded.as_str(), |(_, body)| body);
     let ops = parse(code);
     let cells =
-        (usize::from(image.bank_size).max(40 + 4 * image.instructions.len() + 36) + 33) * LANES;
+        (usize::from(image.bank_size).max(40 + 4 * image.instructions.len() + 36).max(224) + 33) * LANES;
     // Plain exports retain the original zero origin and wrapping tape contract.
     // Host exports add an eight-cell guard and require strict pointer bounds.
     let mut state = State {
@@ -269,9 +269,10 @@ fn backward_branch_near_bank_start_uses_wrapping_signed_displacement() {
 // sole extra shortcut folds single-destination decrement/transfer loops.
 // That keeps the full 16-bit wrap cases bounded while checking every cell.
 fn branch_helper_ops() -> Vec<Op> {
-    let (header, _) = include_str!("../src/cpu_header.bfm")
-        .split_once("#define PROGRAM {")
-        .unwrap();
+    let object = RippleAssembler::new(AssemblerOptions::default()).assemble("HALT").unwrap();
+    let image = Linker::new(64).link(vec![object]).unwrap();
+    let template = MacroFormatter::new().format_linked_program_standalone(&image, false);
+    let (header, _) = template.split_once("#define PROGRAM {").unwrap();
     let (_, definitions) = include_str!("../src/cpu_footer.bfm")
         .split_once("// MARK: ----------- CODE END ----------")
         .unwrap();

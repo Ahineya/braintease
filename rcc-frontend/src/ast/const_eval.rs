@@ -22,6 +22,9 @@ pub fn eval_integer_constant_with(
             ConstEvalError(format!("'{name}' is not an integer constant"))
         }),
         ExpressionKind::CharLiteral(v) => Ok(*v as i64),
+        ExpressionKind::SizeofType(crate::Type::Struct { fields, .. }) if fields.is_empty() => {
+            Err(ConstEvalError("sizeof of incomplete structure".to_string()))
+        }
         ExpressionKind::SizeofType(ty) => ty
             .size_in_bytes()
             .map(|s| s as i64)

@@ -136,4 +136,11 @@ There is no extra timer work when disabled beyond the boundary check.
 The rOS handler and application-return path use IRET. rOS remains a synchronous
 software-call example; this change does not add a scheduler or complete its
 unimplemented file syscalls. Preserve existing disks and build a new rOS image
-to test the new ABI. Brainfuck IRQ/instruction support is outside this change.
+to test the new ABI.
+
+The Brainfuck CPU also implements IRQ ABI 2. Its interrupt machinery is compiled
+out by default: `rlink --bf-irq` enables it, or set `ENABLE_IRQ=1` in standalone
+macro output before expansion. The disabled variant contains no boundary polling
+or timer accounting. The enabled variant counts guest instructions and keeps
+interrupt state on the BF tape; RBF's host and JIT do not execute IRQ instructions
+on its behalf. See [Brainfuck CPU configuration](../../src/ripple-asm/BF_HOST.md#code-memory-and-optional-interrupts).

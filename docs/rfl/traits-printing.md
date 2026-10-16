@@ -1,6 +1,8 @@
 # RFL traits milestone: Printable and library printing
 
-**Status: planned; no compiler or standard-library implementation in this change.**
+**Status: implemented, 16 October 2026.** See [implementation notes](../../rfl/IMPLEMENTATION.md#static-traits-and-library-printing), [the runnable example](../../rfl/examples/traits.rfl), and [conformance tests](../../rfl/tests/traits.rs).
+
+The staged plan below records the design and acceptance criteria.
 Make `Printable`-based `print` and `println` the first complete, user-visible
 traits milestone, before generic networking I/O abstractions or async support.
 This puts the existing [traits draft](../../rfl/traits.md) into practical use;
@@ -25,7 +27,7 @@ export fn print<T: Printable>(value: T) {
 
 export fn println<T: Printable>(value: T) {
     value.print();
-    write_text("\n");
+    putc('\n');
 }
 ```
 
@@ -33,7 +35,7 @@ export fn println<T: Printable>(value: T) {
 [`std/io`](../../rfl/std/io.rfl); the trait draft calls the equivalent leaf
 primitive `write_str`. Use a consistent final name when implementing the
 library. Writing the newline must not recursively call generic `print`.
-This is an implementation sketch, not code accepted by today's compiler.
+The code above is now accepted; the shipped `println` uses the byte-output leaf `putc` for its newline.
 
 The trait receiver borrows the value for printing. The generic entry points
 above take `T` as in the draft; check their call/ownership behavior against

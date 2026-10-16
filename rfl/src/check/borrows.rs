@@ -58,15 +58,72 @@ impl<'a> Checker<'a> {
         &mut self,
         span: usize,
         mutable: bool,
+        temporary: bool,
         expr: &Expr,
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let ExprKind::Name(name) = &expr.kind else {
-            return Err(CompileError::at(
-                self.source,
-                span,
-                "only a name can be borrowed",
-            ));
+            if !temporary {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "only a name can be borrowed",
+                ));
+            }
+            if mutable {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "a mutable borrow needs a name",
+                ));
+            }
+            let value = self.check_expr(expr, None)?;
+            if value.ty.is_ref() {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "cannot borrow a reference",
+                ));
+            }
+            // Even when an automatic receiver uses a snapshot, protect its
+            // named source from writes by the remaining call arguments.
+            let mut root = expr;
+            while let ExprKind::Field { base, .. } | ExprKind::Index { base, .. } = &root.kind {
+                root = base;
+            }
+            if let ExprKind::Name(name) = &root.kind {
+                if let Some(binding) = self.resolve(name) {
+                    self.note_borrow(span, binding, false)?;
+                }
+            }
+            let ty = self.intern_ref(false, value.ty);
+            if expected.is_some_and(|want| want != ty) {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {}, found {}",
+                        self.show(expected.unwrap()),
+                        self.show(ty)
+                    ),
+                ));
+            }
+            // A frame-local snapshot lives through the call and is released by
+            // the same ownership machinery as an explicit local variable.
+            let id = self.bind(format!("$borrow{}", self.bindings.len()), value.ty, false);
+            return Ok(TExpr {
+                ty,
+                kind: TExprKind::Block(Box::new(TBlock {
+                    stmts: vec![TStmt::Let {
+                        binding: id,
+                        init: value,
+                    }],
+                    tail: Some(TExpr {
+                        ty,
+                        kind: TExprKind::Borrow { binding: id },
+                    }),
+                })),
+            });
         };
         let Some(id) = self.resolve(name) else {
             return Err(CompileError::at(

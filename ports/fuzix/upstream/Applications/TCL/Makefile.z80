@@ -1,0 +1,33 @@
+LINKER = sdcc
+FCC = ../../Library/tools/fcc
+FCCOPTS = -O2
+
+.SUFFIXES: .c .rel
+
+SRCS  = picol.c
+
+OBJS = $(SRCS:.c=.rel)
+
+LIBS = ../../Library/libs/syslib.lib
+
+APPS = $(OBJS:.rel=)
+
+all: $(APPS) sizes
+
+$(OBJS): %.rel: %.c
+
+.c.rel:
+	$(FCC) $(Z80_PLATFORM) $(FCCOPTS) -c $<
+
+%: %.rel
+	$(FCC) $(Z80_PLATFORM) $(OPTS) $< -o $@
+
+sizes: $(APPS)
+	ls -l $(APPS) >size.report
+
+clean:
+	rm -f $(OBJS) $(APPS) $(SRCS:.c=) core *~ *.asm *.lst *.sym *.map *.noi *.lk *.ihx *.tmp *.bin size.report *.o
+
+rmbak:
+	rm -f *~ core
+

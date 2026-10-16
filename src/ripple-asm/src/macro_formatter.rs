@@ -6,6 +6,8 @@ const CPU_HEADER: &str = include_str!("cpu_header.bfm");
 pub(crate) const CPU_FOOTER: &str = include_str!("cpu_footer.bfm");
 
 pub struct MacroFormatter {
+    irq: bool,
+    code_banks: u16,
     opcode_to_macro: HashMap<u8, &'static str>,
 }
 
@@ -49,8 +51,17 @@ impl MacroFormatter {
         opcode_to_macro.insert(Opcode::Loadc as u8, "@OP_LOADC");
         opcode_to_macro.insert(Opcode::Storc as u8, "@OP_STORC");
         
-        Self { opcode_to_macro }
+        opcode_to_macro.insert(Opcode::Iret as u8, "@OP_IRET");
+        opcode_to_macro.insert(Opcode::Csrr as u8, "@OP_CSRR");
+        opcode_to_macro.insert(Opcode::Csrw as u8, "@OP_CSRW");
+        Self { opcode_to_macro, irq: false, code_banks: 0 }
     }
+
+    /// Interrupt microcode is opt-in; disabled images have no boundary polling.
+    pub fn with_irq(mut self, enabled: bool) -> Self { self.irq = enabled; self }
+
+    /// Reserve Harvard code space for programs loaded with STORC after boot.
+    pub fn with_code_banks(mut self, banks: u16) -> Self { self.code_banks = banks; self }
 
     fn register_to_macro(&self, reg: u16) -> String {
         // The existing BF CPU has the same 32 physical registers as the ISA.
@@ -344,8 +355,8 @@ impl MacroFormatter {
             return Err("BF host entry point is outside the instruction image".into());
         }
         for instruction in &program.instructions {
-            if matches!(instruction.opcode, x if x == Opcode::Loadc as u8 || x == Opcode::Storc as u8) {
-                return Err("BF CPU does not implement LOADC/STORC code-memory access".into());
+            if !self.irq && matches!(instruction.opcode, 0x22..=0x24) {
+                return Err("BF IRQ instructions require --bf-irq (ENABLE_IRQ=1)".into());
             }
             if !self.opcode_to_macro.contains_key(&instruction.opcode) {
                 return Err(format!("Unknown opcode {} in BF image", instruction.opcode));
@@ -353,7 +364,8 @@ impl MacroFormatter {
             // Macro exports used #Rn names for register operands; malformed
             // indices failed during expansion. Direct BF must reject them too.
             let registers: &[u16] = match Opcode::from_u8(instruction.opcode).unwrap() {
-                Opcode::Halt | Opcode::Nop | Opcode::Brk => &[],
+                Opcode::Halt | Opcode::Nop | Opcode::Brk | Opcode::Iret => &[],
+                Opcode::Csrr | Opcode::Csrw => std::slice::from_ref(&instruction.word1),
                 Opcode::Li | Opcode::Jal => std::slice::from_ref(&instruction.word1),
                 Opcode::Addi | Opcode::Andi | Opcode::Ori | Opcode::Xori
                 | Opcode::Slli | Opcode::Srli | Opcode::Muli | Opcode::Divi | Opcode::Modi
@@ -384,7 +396,8 @@ impl MacroFormatter {
             // Include the implicit HALT and the ALU's temporary words beyond
             // the last instruction, plus a guard for lane seeking.
             let words = (usize::from(banks) * usize::from(program.bank_size))
-                .max(40 + 4 * program.instructions.len() + 36) + 32;
+                .max(76 + 4 * usize::from(self.code_banks) * usize::from(program.bank_size))
+                .max(40 + 4 * program.instructions.len() + 36).max(crate::bf_cpu::MIN_WORDS) + 32;
             output.push_str(&format!("{{preserve(BFHOST 1 BANK_SIZE {} MEMORY_BANKS {} INSTRUCTIONS {} ENTRY {} ORIGIN 8 TAPE_CELLS {} END_BFHOST)}}\n>>>>>>>>\n",
                 program.bank_size, banks, program.instructions.len(), entry, (words + 1) * 8));
         }
@@ -406,6 +419,9 @@ impl MacroFormatter {
                 .replace("#define HOST_TTY @print", "#define HOST_TTY @nop")
                 .replace("#define HOST_BREAK $", "#define HOST_BREAK @nop");
         }
+        header = header.replace("#define ENABLE_IRQ 0", &format!("#define ENABLE_IRQ {}", u8::from(self.irq)));
+        let definitions = crate::bf_cpu::definitions(program.bank_size, memory_banks, program.instructions.len(), self.code_banks);
+        header = header.replace("#define PROGRAM {", &format!("{definitions}\n#define PROGRAM {{"));
         output.push_str(&header);
         output.push('\n');
         output

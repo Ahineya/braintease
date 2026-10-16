@@ -254,6 +254,27 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let ptr = self.check_expr(inner, None)?;
+        if ptr.ty.is_ref() {
+            let ty = self.referent(ptr.ty);
+            if expected.is_some_and(|want| want != ty) {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {}, found {}",
+                        self.show(expected.unwrap()),
+                        self.show(ty)
+                    ),
+                ));
+            }
+            return Ok(TExpr {
+                ty,
+                kind: TExprKind::Field {
+                    base: Box::new(ptr),
+                    offset: 0,
+                },
+            });
+        }
         self.check_ptr_load(span, ptr, None, expected)
     }
 
@@ -325,6 +346,48 @@ impl<'a> Checker<'a> {
         index: Option<&Expr>,
         value: &Expr,
     ) -> Result<TStmt, CompileError> {
+        if let Ty::Ref(id) = ptr.ty {
+            let info = &self.refs[id as usize];
+            if !info.mutable {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "cannot store through a shared reference",
+                ));
+            }
+            if index.is_some() {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "a reference is not an indexed pointer",
+                ));
+            }
+            let elem = info.inner;
+            let TExprKind::Name(binding) = ptr.kind else {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "a reference store needs a name",
+                ));
+            };
+            let value = self.check_expr(value, Some(elem))?;
+            if value.ty != elem {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {}, found {}",
+                        self.show(elem),
+                        self.show(value.ty)
+                    ),
+                ));
+            }
+            return Ok(TStmt::FieldAssign {
+                binding,
+                offset: 0,
+                value,
+            });
+        }
         self.require_unsafe(span)?;
         let Ty::Ptr(id) = ptr.ty else {
             return Err(CompileError::at(

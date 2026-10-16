@@ -1,0 +1,34 @@
+// Printable is in the prelude; the implementation is ordinary RFL code.
+struct Point { x: i16, y: i16 }
+
+impl Printable for Point {
+    fn print(&self) {
+        print("Point(");
+        print(self.x);
+        print(", ");
+        print(self.y);
+        print(")");
+    }
+}
+
+trait Magnitude { fn squared(&self) -> i32; }
+impl Magnitude for Point {
+    fn squared(&self) -> i32 {
+        let x = self.x as i32;
+        let y = self.y as i32;
+        x * x + y * y
+    }
+}
+
+fn show<T: Printable + Magnitude>(value: T) {
+    println(value);
+    println(value.squared());
+}
+
+fn main() {
+    let point = Point { x: 3, y: 4 };
+    show(point);
+    println([Some(point), None]);
+    let result: Result<Vec<Option<Point>>, String> = Ok([Some(point)]);
+    println(result);
+}

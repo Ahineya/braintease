@@ -94,24 +94,39 @@ def measure(args):
     disk = args.output / "empty.img"
     disk.write_bytes(bytes(1024)) # Fixtures never access disk; avoid RVM's default user disk.
     variants = [("interpreter", args.rbf, False), ("jit", args.rbf, True)]
-    if args.baseline:
-        variants = [("before-interpreter", args.baseline, False), ("before-jit", args.baseline, True)] + variants
+    if args.baseline or args.baseline_inputs:
+        baseline_binary = args.baseline or args.rbf
+        variants = [("before-interpreter", baseline_binary, False), ("before-jit", baseline_binary, True)] + variants
+    baseline_manifest = (json.loads((args.baseline_inputs / "manifest.json").read_text())
+                         if args.baseline_inputs else manifest)
     results = []
     binaries = {"rbf": args.rbf, "rvm": args.rvm}
     if args.baseline:
         binaries["baseline"] = args.baseline
     environment = dict(platform=platform.platform(), machine=platform.machine(),
                        python=platform.python_version(), inputs=manifest,
+                       baseline_inputs=baseline_manifest if args.baseline_inputs else None,
                        binaries={key: dict(path=str(path), sha256=sha(path))
                                  for key, path in binaries.items()})
     (args.output / "environment.json").write_text(json.dumps(environment, indent=2) + "\n")
-    for name in args.cases or list(CASES):
+    for name in args.cases or list(manifest):
         metadata = manifest[name]
         prefix = args.inputs / name
         if (sha(Path(metadata["source"])) != metadata["source_sha256"] or
             sha(prefix.with_suffix(".bf")) != metadata["bf_sha256"] or
             sha(prefix.with_suffix(".bin")) != metadata["binary_sha256"]):
             raise RuntimeError(f"{name}: source or image changed; rebuild the suite")
+        if args.baseline_inputs:
+            before = baseline_manifest[name]
+            # Compare CPU/engine changes on the same compiled guest program.
+            for field in ("bank_size", "memory_banks", "source_sha256", "binary_sha256"):
+                if before[field] != metadata[field]:
+                    raise RuntimeError(f"{name}: baseline guest differs ({field})")
+            before_prefix = args.baseline_inputs / name
+            if (sha(Path(before["source"])) != before["source_sha256"] or
+                sha(before_prefix.with_suffix(".bf")) != before["bf_sha256"] or
+                sha(before_prefix.with_suffix(".bin")) != before["binary_sha256"]):
+                raise RuntimeError(f"{name}: baseline source or image changed")
         ref = args.output / f"{name}-rvm"
         reference = run([args.rvm, prefix.with_suffix(".bin"), "--headless", "--bank-size", metadata["bank_size"],
                          "--memory", metadata["bank_size"] * metadata["memory_banks"], "--disk", disk,
@@ -125,7 +140,9 @@ def measure(args):
             order = variants if repetition % 2 == 0 else list(reversed(variants))
             for label, binary, jit in order:
                 output = args.output / f"{name}-{label}-{repetition}"
-                command = [binary, prefix.with_suffix(".bf"), "--headless", "--timeout", args.timeout,
+                selected = ((args.baseline_inputs / name)
+                            if args.baseline_inputs and label.startswith("before-") else prefix)
+                command = [binary, selected.with_suffix(".bf"), "--headless", "--timeout", args.timeout,
                            "--max-instructions", 1_000_000, "--max-dispatches", 500_000_000,
                            "--exit-code", "--report", output.with_suffix(".json")]
                 if jit:
@@ -135,6 +152,8 @@ def measure(args):
                 wall = time.perf_counter() - begun
                 report = json.loads(output.with_suffix(".json").read_text())
                 current = {k: v for k, v in report.items() if k not in ("jit", "bf_dispatches", "elapsed_seconds")}
+                if args.baseline_inputs:
+                    current.pop("source_sha256", None) # Each frozen image's hash was checked above.
                 if result.stdout != b"Y" or report["guest_result"] != 0 or report["ripple_instructions"] != instructions:
                     raise RuntimeError(f"{name}/{label}: checksum, return value or guest instruction mismatch")
                 if stable is not None and current != stable:
@@ -165,6 +184,8 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "build/bf-jit-cases/results")
     parser.add_argument("--rbf", type=Path, default=ROOT / "target/release/rbf")
     parser.add_argument("--baseline", type=Path, help="Optional saved older RBF executable")
+    parser.add_argument("--baseline-inputs", type=Path,
+                        help="Optional frozen BF images from an older CPU; guest binaries must match")
     parser.add_argument("--rvm", type=Path, default=ROOT / "target/release/rvm")
     parser.add_argument("--case", dest="cases", action="append", choices=CASES)
     parser.add_argument("--repetitions", type=int, default=3)
@@ -178,6 +199,7 @@ def main():
     args.rbf = args.rbf.resolve()
     args.rvm = args.rvm.resolve()
     if args.baseline: args.baseline = args.baseline.resolve()
+    if args.baseline_inputs: args.baseline_inputs = args.baseline_inputs.resolve()
     args.inputs.mkdir(parents=True, exist_ok=True)
     args.output.mkdir(parents=True, exist_ok=True)
     if args.build: build(args)

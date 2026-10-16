@@ -13,10 +13,32 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let recv = self.check_expr(receiver, None)?;
+        if let Some(trait_name) = self.trait_dispatch.get(&span).cloned() {
+            return self.check_trait_method(
+                span,
+                &trait_name,
+                receiver,
+                recv.ty,
+                method,
+                args,
+                expected,
+            );
+        }
         if let Ty::Ptr(_) = recv.ty {
             return self.check_ptr_method(span, recv, method, args, expected);
         }
-        if recv.ty == Ty::String && matches!(method, "len" | "is_empty") {
+        if self.referent(recv.ty) == Ty::String && matches!(method, "len" | "is_empty") {
+            let recv = if recv.ty.is_ref() {
+                TExpr {
+                    ty: Ty::String,
+                    kind: TExprKind::Field {
+                        base: Box::new(recv),
+                        offset: 0,
+                    },
+                }
+            } else {
+                recv
+            };
             return self.check_vec_method(span, recv, method, args, Ty::U8, expected);
         }
         let place = self.referent(recv.ty);
@@ -60,6 +82,21 @@ impl<'a> Checker<'a> {
                 }
                 return self.check_inherent(span, receiver, recv.ty, &info, args, expected);
             }
+        }
+        let candidates = self.trait_candidates(span, recv.ty, method)?;
+        if candidates.len() > 1 {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                format!("ambiguous method `{method}`: {}", candidates.join(", ")),
+            ));
+        }
+        if let Some(trait_name) = candidates.first() {
+            if self.generic_check && self.opaque.contains_key(&self.referent(recv.ty)) {
+                self.trait_dispatch.insert(span, trait_name.clone());
+            }
+            return self
+                .check_trait_method(span, trait_name, receiver, recv.ty, method, args, expected);
         }
         let mut all = vec![receiver.clone()];
         all.extend(args.iter().cloned());
@@ -144,6 +181,7 @@ impl<'a> Checker<'a> {
                     span: expr.span,
                     kind: ExprKind::Borrow {
                         mutable: false,
+                        temporary: true,
                         expr: Box::new(expr.clone()),
                     },
                 }
@@ -163,6 +201,7 @@ impl<'a> Checker<'a> {
                     span: expr.span,
                     kind: ExprKind::Borrow {
                         mutable: true,
+                        temporary: true,
                         expr: Box::new(expr.clone()),
                     },
                 })
@@ -172,6 +211,9 @@ impl<'a> Checker<'a> {
 
     pub(super) fn type_key(&self, ty: Ty) -> Option<String> {
         let ty = self.referent(ty);
+        if self.opaque.contains_key(&ty) {
+            return None;
+        }
         Some(match ty {
             Ty::Adt(id) => self.schemas[self.adts[id as usize].schema].name.clone(),
             Ty::Vec(_) => "Vec".to_string(),
@@ -221,6 +263,9 @@ impl<'a> Checker<'a> {
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
+        if let Some(trait_name) = self.trait_name(ty_name) {
+            return self.check_trait_assoc(span, &trait_name, method, args, expected);
+        }
         let Some(info) = self
             .methods
             .iter()

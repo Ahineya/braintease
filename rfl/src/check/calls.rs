@@ -11,6 +11,13 @@ impl<'a> Checker<'a> {
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
+        if matches!(callee, "print" | "println")
+            && self.resolve(callee).is_none()
+            && !self.fn_schemas.contains_key(callee)
+            && !self.sigs.contains_key(callee)
+        {
+            return self.check_call(span, &format!("$std${callee}"), type_args, args, expected);
+        }
         let skip_self = std::mem::replace(&mut self.sig_skip_self, false);
         if is_builtin(callee) {
             if !type_args.is_empty() {
@@ -39,13 +46,25 @@ impl<'a> Checker<'a> {
                 format!("`{callee}` does not take type arguments"),
             ));
         }
-        let Some(sig) = self.sigs.get(callee) else {
+        let Some(mut sig) = self.sigs.get(callee).cloned() else {
             return Err(CompileError::at(
                 self.source,
                 span,
                 format!("unknown function `{callee}`"),
             ));
         };
+        if !sig.c_abi && sig.ret.is_none() {
+            let func = self
+                .ast_fns
+                .iter()
+                .find(|f| f.name == callee)
+                .unwrap()
+                .clone();
+            let saved_subst = std::mem::take(&mut self.subst);
+            self.check_fn(&func, callee, true, false)?;
+            self.subst = saved_subst;
+            sig = self.sigs[callee].clone();
+        }
         let c_abi = sig.c_abi;
         let variadic = sig.variadic;
         let ret = if c_abi {
@@ -374,6 +393,7 @@ impl<'a> Checker<'a> {
             ));
         }
         let concrete: Vec<Ty> = solved.into_iter().map(Option::unwrap).collect();
+        self.check_bounds(&func.type_params, &concrete, span)?;
         let mangled = self.instantiate(callee, &concrete)?;
         let concrete_params = self.sigs[&mangled].params.clone();
         let ret = self.sigs[&mangled].ret.unwrap();

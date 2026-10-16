@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::Path;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompileError {
     /// Full diagnostic, including the source line.
     pub message: String,

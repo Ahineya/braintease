@@ -3,13 +3,30 @@
 #include "platform.h"
 #include <kdata.h>
 #include <printf.h>
-static uint8_t code_refs[8];
-static int task_code[PTABSIZE] = {-1, -1, -1, -1};
+/* One spare code slot lets exec replace an image with every task occupied. */
+#define CODE_SLOTS (PTABSIZE + 1)
+static uint8_t code_refs[CODE_SLOTS];
+static uint32_t code_size[CODE_SLOTS];
+static int task_code[PTABSIZE];
+void ripple_code_init(void) {
+    unsigned i;
+    for (i = 0; i < PTABSIZE; i++) task_code[i] = -1;
+}
 static uint8_t stream[BLKSIZE];
 static uint32_t stream_base;
 static uint16_t stream_count;
 static inoptr stream_inode;
 extern void imem_add_word2(unsigned, unsigned, unsigned);
+int ripple_valid_code(unsigned long p) {
+    int slot = task_code[(unsigned)(udata.u_ptab - ptab)];
+    unsigned bank = p >> 16, off = (unsigned)p;
+    unsigned base;
+    if (slot < 0 || off >= BANK_CELLS)
+        return 0;
+    base = 32 + slot * 4;
+    return bank >= base && bank < base + 4 &&
+           (unsigned long)(bank - base) * BANK_CELLS + off < code_size[slot];
+}
 void ripple_code_free(ptptr p) {
     unsigned i = (unsigned)(p - ptab);
     if (task_code[i] >= 0) {
@@ -96,9 +113,9 @@ arg_t _execve(void) {
             goto bad;
         }
     }
-    for (slot = 0; slot < 8 && code_refs[slot]; slot++)
+    for (slot = 0; slot < CODE_SLOTS && code_refs[slot]; slot++)
         ;
-    if (slot == 8) {
+    if (slot == CODE_SLOTS) {
         udata.u_error = ENOMEM;
         goto bad;
     }
@@ -153,6 +170,7 @@ arg_t _execve(void) {
             doclose(i);
     udata.u_cloexec = 0;
     memset(udata.u_sigvec, 0, sizeof(udata.u_sigvec));
+    udata.u_sigtramp = 0;
     udata.u_cursig = 0;
     udata.u_error = 0;
     memset(udata.u_name, 0, sizeof(udata.u_name));
@@ -175,6 +193,7 @@ arg_t _execve(void) {
     i_deref(ino);
     ripple_code_free(udata.u_ptab);
     code_refs[slot] = 1;
+    code_size[slot] = nins;
     task_code[(unsigned)(udata.u_ptab - ptab)] = slot;
     ripple_exec_bank = base + (unsigned)(entry / 64000UL);
     ripple_exec_pc = (unsigned)(entry % 64000UL);

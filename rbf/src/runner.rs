@@ -11,6 +11,7 @@ use rvm::{
     runner::{ClockPolicy, ControlCommand, Controller},
 };
 use serde::Serialize;
+use ripple_asm::bf_cpu::{ERROR_WORD, MAGIC_WORD, MAGIC, EXTENT_BANK_WORD, EXTENT_OFF_WORD, EXTENT_FULL_WORD};
 use std::{
     io::Write,
     path::{Path, PathBuf},
@@ -482,7 +483,26 @@ impl Host {
             }
             .map_err(|e| e.to_string())?;
             match stop {
-                Stop::Halted => halted = true,
+                Stop::Halted => {
+                    if self.machine.read_cell(self.layout.origin + 8 * MAGIC_WORD + 1) == MAGIC {
+                        let code = self.machine.read_cell(self.layout.origin + 8 * ERROR_WORD + 1);
+                        if code != 0 {
+                            let detail = match code {
+                                1 => "invalid register index or CSRR destination",
+                                2 => "unknown or read-only CPU control register",
+                                3 => "trap state write outside an interrupt",
+                                4 => "interrupt stack is outside declared RAM",
+                                5 => "IRET outside an interrupt",
+                                6 => "instruction address exceeds reserved code capacity",
+                                7 => "LOADC address is outside the loaded code image",
+                                8 => "interrupts are compiled out; rebuild with --bf-irq",
+                                _ => "unknown CPU fault",
+                            };
+                            return Err(format!("BF CPU execution fault {code}: {detail}"));
+                        }
+                    }
+                    halted = true;
+                },
                 Stop::Budget => {},
                 Stop::Input => return Err("Unexpected BF input opcode in Ripple host image".into()),
                 Stop::Output(_) => return Err("Unexpected BF output opcode; rebuild with --bf-host to avoid duplicate TTY output".into()),
@@ -494,7 +514,23 @@ impl Host {
                     // RVM fetch uses the same flattened address. I is the
                     // template's implicit final HALT.
                     let index = bank * usize::from(self.layout.bank_size) + pc;
-                    if index > self.layout.instructions {
+                    let mut extent = self.layout.instructions + 1;
+                    if self.machine.read_cell(self.layout.origin + 8 * MAGIC_WORD + 1) == MAGIC {
+                        let extent_bank = usize::from(self.machine.read_cell(self.layout.origin + 8 * EXTENT_BANK_WORD + 1));
+                        let extent_off = usize::from(self.machine.read_cell(self.layout.origin + 8 * EXTENT_OFF_WORD + 1));
+                        extent = extent_bank * usize::from(self.layout.bank_size) + extent_off;
+                        let full = self.machine.read_cell(self.layout.origin + 8 * EXTENT_FULL_WORD + 1);
+                        if full != 0 {
+                            if full != 1 || extent != 0 { return Err("Invalid BF CPU code extent".into()); }
+                            extent = usize::from(self.layout.bank_size) * 65536;
+                        }
+                        let words = (self.layout.tape_cells - self.layout.origin) / 8;
+                        let capacity = words.saturating_sub(32 + 76) / 4 + 1;
+                        if extent_off >= usize::from(self.layout.bank_size) || extent == 0 || extent > capacity {
+                            return Err("Invalid BF CPU code extent".into());
+                        }
+                    }
+                    if index >= extent && !(index == self.layout.instructions && extent == self.layout.instructions) {
                         return Err(format!("BF CPU target {bank}:{pc} is outside its code image"));
                     }
                     if self.machine.pointer() != self.layout.origin + 8 * (40 + 4 * index) {

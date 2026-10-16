@@ -151,3 +151,27 @@ The runner's `--baseline` option compares BF host binaries on one frozen image;
 it is not a compiler-before/after switch. The compiler comparison preserved
 separate before/after images and reports under ignored
 `build/network/tcp-analysis/bench/`.
+
+
+## Comparing BF CPU implementations
+
+`--baseline-inputs` compares separately frozen BF exports of the **same guest**.
+It checks matching source/binary hashes and bank settings, and validates each
+BF image against its own manifest. This complements `--baseline`, which selects
+the older host executable. Without `--baseline`, both exports use the current
+host; without `--baseline-inputs`, both hosts use the same BF export.
+
+```sh
+python3 rbf/benchmarks/jit/run.py \
+  --inputs build/bf-cpu-opt/after \
+  --baseline-inputs build/bf-cpu-opt/before \
+  --rbf build/bf-cpu-opt/after/rbf \
+  --baseline build/bf-cpu-opt/before/rbf \
+  --output build/bf-cpu-opt/final
+```
+
+Freeze matching `.pobj`/`.bin` files before changing the CPU, then export those
+same objects with each linker. Preserve both manifests and host binaries. The
+runner requires identical guest instruction counts and successful checksums;
+BF source hashes are expected to differ and remain recorded in the reports.
+See the [CPU performance notes](../../../docs/arch/bf-cpu-performance.md).
