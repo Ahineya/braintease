@@ -24,18 +24,24 @@ function canon83(name) {
   return result;
 }
 
-export function fat16Image(files) {
+export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SECS_PER_FAT} = {}) {
   const rootSecs = Math.ceil(ROOT_ENT * 32 / BPS);
   const fatOffset = RESERVED * BPS;
-  const rootOffset = (RESERVED + NUM_FATS * SECS_PER_FAT) * BPS;
+  const rootOffset = (RESERVED + NUM_FATS * sectorsPerFat) * BPS;
   const dataOffset = rootOffset + rootSecs * BPS;
   const clusterBytes = SPC * BPS;
-  const clusterCount = Math.floor((TOTAL_SECS * BPS - dataOffset) / clusterBytes);
+  const clusterCount = Math.floor((totalSectors * BPS - dataOffset) / clusterBytes);
+  if (!Number.isInteger(totalSectors) || !Number.isInteger(sectorsPerFat)
+      || totalSectors < 1 || totalSectors > 0xffffffff || sectorsPerFat < 1 || sectorsPerFat > 65535
+      || clusterCount < 4085 || clusterCount >= 0xffee
+      || clusterCount + 2 > sectorsPerFat * BPS / 2) {
+    throw new Error('Invalid FAT16 geometry');
+  }
   if (files.length > ROOT_ENT) throw new Error(`FAT root directory holds at most ${ROOT_ENT} files`);
   const requiredClusters = files.reduce((total, file) => total + Math.ceil(file.data.length / clusterBytes), 0);
   if (requiredClusters > clusterCount) throw new Error('Files exceed FAT16 image capacity');
 
-  const image = Buffer.alloc(TOTAL_SECS * BPS);
+  const image = Buffer.alloc(totalSectors * BPS);
   image.set([0xeb, 0x3c, 0x90], 0);
   image.write('MSDOS5.0', 3, 'ascii');
   image.writeUInt16LE(BPS, 11);
@@ -43,13 +49,13 @@ export function fat16Image(files) {
   image.writeUInt16LE(RESERVED, 14);
   image[16] = NUM_FATS;
   image.writeUInt16LE(ROOT_ENT, 17);
-  image.writeUInt16LE(TOTAL_SECS, 19);
+  image.writeUInt16LE(totalSectors <= 65535 ? totalSectors : 0, 19);
   image[21] = MEDIA;
-  image.writeUInt16LE(SECS_PER_FAT, 22);
+  image.writeUInt16LE(sectorsPerFat, 22);
   image.writeUInt16LE(32, 24);
   image.writeUInt16LE(2, 26);
   // Preserve the existing image layout, including its total-sector mirror.
-  image.writeUInt32LE(TOTAL_SECS, 32);
+  image.writeUInt32LE(totalSectors, 32);
   image[36] = 0x80;
   image[38] = 0x29;
   image.writeUInt32LE(0x12345678, 39);
@@ -59,7 +65,7 @@ export function fat16Image(files) {
 
   function fatSet(cluster, value) {
     for (let fat = 0; fat < NUM_FATS; ++fat) {
-      image.writeUInt16LE(value, fatOffset + fat * SECS_PER_FAT * BPS + cluster * 2);
+      image.writeUInt16LE(value, fatOffset + fat * sectorsPerFat * BPS + cluster * 2);
     }
   }
   fatSet(0, 0xff00 | MEDIA);

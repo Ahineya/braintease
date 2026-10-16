@@ -463,6 +463,20 @@ impl CallingConvention {
         
         // 1. Setup arguments
         trace!("  Setting up call arguments");
+        // Argument pins protect values only until the call consumes them. In
+        // particular, a full register file of variadic pointer arguments must
+        // be released before allocating a register for the return value.
+        let mut consumed = Vec::new();
+        for arg in &args {
+            match arg {
+                CallArg::Scalar(r) => consumed.push(*r),
+                CallArg::FatPointer { addr, bank } => consumed.extend([*addr, *bank]),
+                CallArg::I64 { words } => consumed.extend(*words),
+            }
+        }
+        if let CallTarget::Registers { addr, bank } = &target {
+            consumed.extend([*addr, *bank]);
+        }
         let setup = self.setup_call_args(pressure_manager, naming, args, stack_args_from);
         insts.extend(setup);
         
@@ -483,6 +497,8 @@ impl CallingConvention {
             }
         }
         
+        for register in consumed { pressure_manager.unpin_register(register); }
+
         // 3. Handle return value (if any)
         let (ret_insts, return_regs) = self.handle_return_value(
             pressure_manager, 

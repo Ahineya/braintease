@@ -1,7 +1,7 @@
 //! `rfl lsp` speaks Language Server Protocol on stdin/stdout.
 //! Analysis uses the parser spans and the type checker.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
@@ -21,6 +21,7 @@ struct Doc {
 pub fn serve() {
     let mut docs: HashMap<String, Doc> = HashMap::new();
     let mut versioned_edits = false;
+    let mut workspace_roots = Vec::new();
     let stdin = io::stdin();
     let mut reader = stdin.lock();
     let mut stdout = io::stdout().lock();
@@ -40,6 +41,18 @@ pub fn serve() {
                 ["documentChanges"]
                 .as_bool()
                 .unwrap_or(false);
+            if let Some(folders) = params["workspaceFolders"].as_array() {
+                workspace_roots.extend(
+                    folders
+                        .iter()
+                        .filter_map(|folder| uri_path(folder["uri"].as_str()?)),
+                );
+            }
+            if workspace_roots.is_empty() {
+                if let Some(root) = params["rootUri"].as_str().and_then(uri_path) {
+                    workspace_roots.push(root);
+                }
+            }
         }
         if method == "exit" {
             break;
@@ -55,7 +68,27 @@ pub fn serve() {
             notify(&mut docs, &method, &params);
             continue;
         }
-        let result = request(&mut docs, &method, &params, versioned_edits);
+        let result = if method == "textDocument/rename" {
+            match rename(&docs, &params, &workspace_roots, versioned_edits) {
+                Ok(result) => result,
+                Err(message) => {
+                    send(
+                        &mut stdout,
+                        &json!({ "jsonrpc": "2.0", "id": id,
+                        "error": { "code": -32803, "message": message } }),
+                    );
+                    continue;
+                }
+            }
+        } else {
+            request(
+                &mut docs,
+                &method,
+                &params,
+                versioned_edits,
+                &workspace_roots,
+            )
+        };
         send(
             &mut stdout,
             &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
@@ -114,6 +147,7 @@ fn request(
     method: &str,
     params: &Value,
     versioned_edits: bool,
+    roots: &[PathBuf],
 ) -> Value {
     match method {
         "initialize" => initialize(),
@@ -121,7 +155,7 @@ fn request(
         "textDocument/completion" => completion(docs, params),
         "textDocument/definition" => definition(docs, params),
         "textDocument/references" => references(docs, params),
-        "textDocument/rename" => rename(docs, params),
+        "textDocument/prepareRename" => prepare_rename(docs, params, roots),
         "textDocument/documentSymbol" => symbols(docs, params),
         "textDocument/signatureHelp" => signature(docs, params),
         "textDocument/inlayHint" => inlays(docs, params),
@@ -139,7 +173,7 @@ fn initialize() -> Value {
             "completionProvider": { "triggerCharacters": [".", ":"] },
             "definitionProvider": true,
             "referencesProvider": true,
-            "renameProvider": true,
+            "renameProvider": { "prepareProvider": true },
             "codeActionProvider": { "codeActionKinds": ["quickfix"], "resolveProvider": false },
             "documentSymbolProvider": true,
             "signatureHelpProvider": { "triggerCharacters": ["(", ","] },
@@ -282,26 +316,87 @@ fn references(docs: &HashMap<String, Doc>, params: &Value) -> Value {
     json!(locs)
 }
 
-fn rename(docs: &HashMap<String, Doc>, params: &Value) -> Value {
+fn doc_path(uri: &str, doc: &Doc) -> PathBuf {
+    crate::rename::canonical(
+        doc.path
+            .as_deref()
+            .unwrap_or_else(|| std::path::Path::new(uri)),
+    )
+}
+
+fn rename_workspace(docs: &HashMap<String, Doc>, roots: &[PathBuf]) -> crate::rename::Workspace {
+    let sources = docs
+        .iter()
+        .map(|(uri, doc)| (doc_path(uri, doc), doc.source.clone()))
+        .collect();
+    crate::rename::Workspace::load(roots, sources)
+}
+
+fn rename_roots(path: &std::path::Path, roots: &[PathBuf]) -> Vec<PathBuf> {
+    if roots.is_empty() {
+        path.parent()
+            .map(|p| vec![p.to_path_buf()])
+            .unwrap_or_default()
+    } else {
+        roots.to_vec()
+    }
+}
+
+fn prepare_rename(docs: &HashMap<String, Doc>, params: &Value, roots: &[PathBuf]) -> Value {
     let Some(doc) = document(docs, params) else {
         return Value::Null;
     };
     let Some(offset) = offset_of(doc, &params["position"]) else {
         return Value::Null;
     };
-    let new_name = text_of(&params["newName"]);
-    let uri = text_of(&params["textDocument"]["uri"]);
-    let mut changes: HashMap<String, Vec<Value>> = HashMap::new();
-    for loc in doc.analysis.references(offset) {
-        let target = loc
-            .path
-            .as_ref()
-            .map(|path| path_uri(path))
-            .unwrap_or_else(|| uri.clone());
-        let edit = json!({ "range": place_range(doc, loc.path.as_deref(), loc.span.start, loc.span.end), "newText": new_name });
-        changes.entry(target).or_default().push(edit);
+    let path = doc_path(&text_of(&params["textDocument"]["uri"]), doc);
+    let workspace = rename_workspace(docs, &rename_roots(&path, roots));
+    workspace.prepare(&path, offset).map_or(
+        Value::Null,
+        |(span, name)| json!({ "range": range(doc, span.start, span.end), "placeholder": name }),
+    )
+}
+
+fn rename(
+    docs: &HashMap<String, Doc>,
+    params: &Value,
+    roots: &[PathBuf],
+    versioned_edits: bool,
+) -> Result<Value, String> {
+    let doc = document(docs, params).ok_or("The document is not open")?;
+    let offset = offset_of(doc, &params["position"]).ok_or("Invalid rename position")?;
+    let name = params["newName"].as_str().ok_or("Expected a new name")?;
+    let path = doc_path(&text_of(&params["textDocument"]["uri"]), doc);
+    let roots = rename_roots(&path, roots);
+    let workspace = rename_workspace(docs, &roots);
+    let edits = workspace.rename(&path, offset, name)?;
+    let mut changes: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    let mut versions = HashMap::new();
+    for edit in edits {
+        let open = docs
+            .iter()
+            .find(|(uri, doc)| doc_path(uri, doc) == edit.path);
+        let uri = open
+            .map(|(uri, _)| uri.clone())
+            .unwrap_or_else(|| path_uri(&edit.path));
+        versions.insert(uri.clone(), open.and_then(|(_, doc)| doc.version));
+        let source = workspace
+            .source(&edit.path)
+            .ok_or("Cannot read rename target")?;
+        let range = range_of(&line_starts(source), source, edit.span.start, edit.span.end);
+        changes
+            .entry(uri)
+            .or_default()
+            .push(json!({ "range": range, "newText": edit.text }));
     }
-    json!({ "changes": changes })
+    if versioned_edits {
+        let changes: Vec<_> = changes.into_iter().map(|(uri, edits)| {
+            json!({ "textDocument": { "uri": uri, "version": versions[&uri] }, "edits": edits })
+        }).collect();
+        Ok(json!({ "documentChanges": changes }))
+    } else {
+        Ok(json!({ "changes": changes }))
+    }
 }
 
 fn symbols(docs: &HashMap<String, Doc>, params: &Value) -> Value {
@@ -842,5 +937,102 @@ mod tests {
                 .unwrap()
                 .contains(&json!("quickfix"))
         );
+    }
+}
+
+#[cfg(test)]
+mod rename_tests {
+    use super::*;
+
+    fn document(path: &std::path::Path, text: &str, version: i64) -> Doc {
+        Doc {
+            source: text.into(),
+            version: Some(version),
+            path: Some(path.to_path_buf()),
+            lines: line_starts(text),
+            analysis: Analysis::open(Some(path), text),
+        }
+    }
+
+    #[test]
+    fn rename_prepares_utf16_and_versions_all_open_buffers() {
+        let root = std::env::temp_dir().join(format!("rfl-rename-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let lib = root.join("library #é.rfl");
+        let main = root.join("main.rfl");
+        let closed = root.join("closed.rfl");
+        let original = "export fn wave(x: i16) -> i16 { x }\n";
+        let unsaved = "// 🦀 unsaved\r\nexport fn wave(x: i16) -> i16 { x + 1 }\r\n";
+        let source="import { wave } from \"./library #é\";\r\nfn main() { /* 🦀 */ println(wave(2)); }\r\n";
+        let aliased =
+            "import { wave as play } from \"./library #é\"; fn other() -> i16 { play(3) }\n";
+        std::fs::write(&lib, original).unwrap();
+        std::fs::write(&closed, aliased).unwrap();
+        let uri = path_uri(&main);
+        let lib_uri = path_uri(&lib);
+        let docs = HashMap::from([
+            (uri.clone(), document(&main, source, 8)),
+            (lib_uri.clone(), document(&lib, unsaved, 12)),
+        ]);
+        let at = source.rfind("wave").unwrap();
+        let params = json!({"textDocument":{"uri":uri},"position":position(&docs[&uri],at+4),"newName":"signal"});
+        let prepared = prepare_rename(&docs, &params, &[root.clone()]);
+        assert_eq!(prepared["placeholder"], "wave");
+        assert_eq!(prepared["range"], range(&docs[&uri], at, at + 4));
+        let result = rename(&docs, &params, &[root.clone()], true).unwrap();
+        let changes = result["documentChanges"].as_array().unwrap();
+        assert_eq!(changes.len(), 3);
+        for change in changes {
+            let target = change["textDocument"]["uri"].as_str().unwrap();
+            let text = if target == uri {
+                source
+            } else if target == lib_uri {
+                unsaved
+            } else {
+                aliased
+            };
+            let version = if target == uri {
+                json!(8)
+            } else if target == lib_uri {
+                json!(12)
+            } else {
+                Value::Null
+            };
+            assert_eq!(change["textDocument"]["version"], version);
+            let doc = document(&uri_path(target).unwrap(), text, 0);
+            let mut edited = text.to_string();
+            for edit in change["edits"].as_array().unwrap().iter().rev() {
+                let start = offset_of(&doc, &edit["range"]["start"]).unwrap();
+                let end = offset_of(&doc, &edit["range"]["end"]).unwrap();
+                assert_eq!(&text[start..end], "wave");
+                edited.replace_range(start..end, edit["newText"].as_str().unwrap());
+            }
+            assert_eq!(edited, text.replace("wave", "signal"));
+        }
+        assert_eq!(
+            std::fs::read_to_string(&lib).unwrap(),
+            original,
+            "server only returns edits"
+        );
+        let legacy = rename(&docs, &params, &[root.clone()], false).unwrap();
+        assert_eq!(legacy["changes"].as_object().unwrap().len(), 3);
+        // prepareRename must use the same workspace as rename, so a member
+        // declared in an unopened project module is offered by IDEA as well.
+        std::fs::write(root.join("shape.rfl"), "export struct Point { value: i16 }").unwrap();
+        let source = "import { Point } from \"./shape\"; fn main() { let p = Point { value: 2 }; println(p.value); }";
+        let member_docs = HashMap::from([(uri.clone(), document(&main, source, 9))]);
+        let member = json!({ "textDocument": { "uri": uri }, "position": position(&member_docs[&uri], source.rfind("value").unwrap()), "newName": "count" });
+        assert_eq!(
+            prepare_rename(&member_docs, &member, &[root.clone()])["placeholder"],
+            "value"
+        );
+        assert_eq!(
+            rename(&member_docs, &member, &[root.clone()], true).unwrap()["documentChanges"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

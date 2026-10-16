@@ -18,7 +18,7 @@ impl VM {
     }
 
     /// Poll independently of guest MMIO reads, so a busy or broken guest cannot
-    /// swallow Ctrl-C while raw mode disables the host terminal's SIGINT.
+    /// swallow the host stop key while raw mode disables host signals.
     pub fn poll_host_terminal(&mut self) -> bool {
         if self.host_input_enabled && !self.debug_mode && !self.verbose
             && (self.tty_input_enabled || self.terminal_raw_mode)
@@ -41,7 +41,9 @@ impl VM {
             return;
         }
         if key.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(key.code, KeyCode::Char('c' | 'C'))
+            && ((matches!(key.code, KeyCode::Char('c' | 'C'))
+                && (!self.guest_ctrl_c || self.display_mode == DISP_TEXT40))
+                || (self.guest_ctrl_c && key.code == KeyCode::Char(']')))
         {
             self.terminal_quit_requested = true;
             return;
@@ -58,6 +60,15 @@ impl VM {
                 _ => {}
             }
         } else {
+            // Crossterm also represents a quickly typed Esc followed by a
+            // character as Alt+character. Preserve that escape for terminal
+            // applications which use Esc to leave an input mode.
+            if key.modifiers.contains(KeyModifiers::ALT)
+                && matches!(key.code, KeyCode::Char(_) | KeyCode::Enter
+                    | KeyCode::Backspace | KeyCode::Tab | KeyCode::Esc)
+            {
+                self.input_buffer.push_back(27);
+            }
             match key.code {
                 KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) && c.is_ascii() => {
                     // Crossterm reports e.g. LF as Ctrl-J and EOF as Ctrl-D.
@@ -227,6 +238,32 @@ mod tests {
             vm.accept_terminal_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL));
         }
         assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), [10, 4, 21, 127]);
+        assert!(!vm.terminal_quit_requested);
+    }
+
+    #[test]
+    fn guest_interrupt_does_not_stop_the_vm_and_has_a_separate_host_escape() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        vm.host_input_enabled = false;
+        vm.guest_ctrl_c = true;
+        vm.display_mode = DISP_TTY;
+        vm.accept_terminal_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), [3]);
+        assert!(!vm.poll_host_terminal());
+        vm.accept_terminal_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::CONTROL));
+        assert!(vm.poll_host_terminal());
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), [3]);
+    }
+
+    #[test]
+    fn tty_alt_keys_preserve_the_escape_prefix() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        vm.accept_terminal_key(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::ALT));
+        vm.accept_terminal_key(KeyEvent::new(
+            KeyCode::Char('f'), KeyModifiers::ALT | KeyModifiers::CONTROL));
+        vm.accept_terminal_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::ALT));
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(),
+                   [27, b':', 27, 6, 27, 27]);
         assert!(!vm.terminal_quit_requested);
     }
 }

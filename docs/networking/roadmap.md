@@ -2,8 +2,8 @@
 
 Agreed sequence: **DHCP → stack reliability → TCP → HTTP client → HTTP server
 → high-level RFL networking**.
-DHCP, stack reliability and the active-open TCP client are implemented. Next is
-the HTTP client; TCP listeners must follow before the HTTP server. Current behavior
+DHCP, stack reliability, TCP active/passive opens and HTTP client/server are
+implemented. High-level RFL networking is the next milestone. Current behavior
 and limits are in the
 [overview](README.md) and [library guide](library.md). It does not define new
 public function signatures or imply those functions exist.
@@ -107,16 +107,16 @@ parts of this completed guest lifecycle milestone.
 
 ## 3. Minimal TCP library
 
-**Outcome:** guest applications can connect to a host service and later accept
+**Outcome:** guest applications can connect to a host service and accept
 connections using the same reusable TCP implementation.
 
-**Status: active-open client implemented and validated on native, RVM interpreter
+**Status: active/passive TCP implemented and validated on native, RVM interpreter
 and RVM JIT.** See the [TCP guide](tcp.md) for ownership, timers and the exact
 supported subset, and [TCP tests](testing.md#tcp) for evidence. The guest
 exchanges 4,097 binary octets against both an independent packet peer and an
 ordinary host TCP socket. Four caller-owned connections fit a bounded table,
-each with 512-octet TX/RX buffers and one segment in flight. Passive listening
-and accept remain outstanding and are required before phase 5.
+each with 512-octet TX/RX buffers and one segment in flight. Passive listening and accept are now implemented too; the
+[HTTP server guide](http-server.md) documents their first application.
 
 The design and acceptance requirements for this phase are:
 
@@ -154,7 +154,7 @@ initial-sequence-number policy appropriate to the intended test scope.
   advertises small/zero windows, closes early and resets connections.
 - Tests cover corruption, invalid ACKs/tuples, sequence wrap, idle timeouts,
   repeated connection reuse and bounded cleanup after failure.
-- Passive open later adds a bounded listener/backlog and host-to-guest echo
+- Passive open adds a bounded listener/backlog and host-to-guest echo
   using the same core. Slow or abandoned clients cannot exhaust state forever.
 
 Reference: [TCP, RFC 9293](https://www.rfc-editor.org/rfc/rfc9293.html). Select and
@@ -164,6 +164,15 @@ document the initial supported subset against that specification during design.
 
 **Outcome:** a guest resolves a name, connects over TCP, requests a plain HTTP
 resource and prints or streams its response body.
+
+**Status: implemented on native, RVM interpreter and JIT.** The
+[HTTP guide](http.md) defines ownership, deadlines, bounded framing and the
+one-command temporary host service. Independent guest DNS → TCP → HTTP tests
+verify a 10,230-octet body, and ordinary host HTTP tests stream 13,033 octets
+through a 173-cell reader. The response decoder and ASCII/decimal utilities are
+separate from connection orchestration. [Coverage](testing.md#http) includes
+split boundaries, invalid lengths, early close and stalls. RBF and public VPS
+HTTP are not claimed as tested. TCP listener/accept and phase 5 are now implemented as well. The original design/acceptance requirements follow.
 
 Begin with a controlled host HTTP service and a small HTTP/1.0 request, explicit
 connection closure and a `Host` header for virtual hosting. Parse status and
@@ -193,6 +202,17 @@ References: [HTTP/1.0, RFC 1945](https://www.rfc-editor.org/rfc/rfc1945.html),
 **Outcome:** an ordinary host browser or `curl` fetches a page served by guest
 C over the raw NIC and guest TCP stack. This is an agreed goal after the client,
 not an optional host-side mock of HTTP.
+
+**Status: implemented.** Native, RVM interpreter and RVM JIT serve the hardcoded 984-octet HTML
+page to ordinary host curl clients; a browser also rendered the native page.
+The shared library handles bounded incremental requests, partial responses and
+phase deadlines. Caller-owned listen/accept pools and an optional compact
+TIME_WAIT table permit normal repeated requests without aborting successful
+closes. [The guide](http-server.md) defines ownership and the supported subset;
+[testing](testing.md#tcp-listeners-and-http-server) records malformed/split/stalled
+host requests, pool reuse, independent packet loss/reorder/window tests and
+existing-stack regressions. RBF and public Internet serving are not claimed as
+tested. The original design/acceptance requirements follow.
 
 Add the TCP listener/accept path if it was deferred during the active-open
 prototype. Begin with one serviced connection at a time, fixed resource limits

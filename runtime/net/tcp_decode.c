@@ -33,7 +33,7 @@ int tcp_decode(NetContext *net, unsigned short header, unsigned short length, Tc
     segment->data = p + tcp_header; segment->length = length - tcp_header;
     return 1;
 }
-static int closed_port(NetContext *net, const TcpSegment *segment) {
+int tcp_reset_segment(NetContext *net, const TcpSegment *segment) {
     unsigned char *p;
     unsigned short flags = TCP_RST;
     unsigned long sequence = 0, acknowledgement = 0;
@@ -65,5 +65,7 @@ int net_tcp_input(NetContext *net, unsigned short header, unsigned short length)
             return NET_OK;
         }
     }
-    return closed_port(net, &segment);
+    if (tcp_wait_input(net, &segment)) return NET_OK;
+    if (net->tcp_listen_driver && net->tcp_listen_driver->input(net, &segment)) return NET_OK;
+    return tcp_reset_segment(net, &segment);
 }

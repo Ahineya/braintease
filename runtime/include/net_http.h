@@ -67,7 +67,8 @@ typedef struct NetHttp {
 int net_http_start(NetContext *net, NetHttp *http, const NetHttpConfig *config, unsigned long now_ms);
 int net_http_poll(NetHttp *http, unsigned long now_ms);
 /* Partial binary body reads. Status is in response.status once headers complete.
- * A non-2xx HTTP status is still a valid response, and its body is readable. */
+ * A non-2xx HTTP status is still a valid response, and its body is readable.
+ * Consume *received even when this call also returns EOF or an error. */
 int net_http_read(NetHttp *http, unsigned char *output, unsigned short capacity, unsigned short *received);
 /* Explicit cancellation, including TCP TIME_WAIT. Discards unread body. */
 void net_http_cancel(NetHttp *http);

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "user.h"
 int main(int argc, char **argv, char **envp) {
     (void)envp;

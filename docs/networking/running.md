@@ -1,7 +1,8 @@
 # Build and run networking examples
 
 Run commands below from the repository root. This guide describes existing
-launchers; the [TCP client](tcp.md) is available and HTTP remains planned.
+launchers, including [TCP streams/listeners](tcp.md), the [HTTP GET client](http.md)
+and the [guest HTTP server](http-server.md).
 
 ## Build prerequisites
 
@@ -17,6 +18,35 @@ cargo build --release --manifest-path src/ripple-asm/Cargo.toml --bin rasm --bin
 RBF additionally needs `target/release/rbf` and
 `src/bf-macro-expander/target/release/bfm`; those builds are only needed when
 explicitly selecting RBF. Networking needs neither Doom nor rOS to be built.
+
+## Serve a page from the guest
+
+```sh
+scripts/run-net-http-server.sh
+scripts/run-net-http-server.sh rvm --jit
+```
+
+The guest acquires DHCP, starts its TCP listener and prints its actual HTTP URL.
+Open that URL in your browser; no host HTTP service or manual network setup is
+required. Ctrl-C stops it. `--port 8081` changes the guest port, `--build-only`
+only compiles, and `--test` runs automatic curl/error/reuse tests then exits.
+See the [server guide](http-server.md) for its bounded API, pool ownership,
+TIME_WAIT preservation and supported methods/framing.
+
+## Fetch HTTP
+
+```sh
+scripts/run-net-http.sh
+scripts/run-net-http.sh rvm --jit
+```
+
+The launcher acquires a guest DHCP lease and fetches/prints a 13,033-octet HTML
+page from a temporary ordinary host HTTP service. Host-only networking and
+service cleanup are automatic; capture is disabled. `--port 8081` selects
+another temporary port, and `--build-only` only compiles. See the
+[HTTP guide](http.md) for an explicitly supplied external cleartext endpoint,
+guest DNS, build-time host/path configuration and supported framing/limits.
+The guest [HTTP server](http-server.md) uses the same TCP/HTTP utility layers.
 
 ## Try guest TCP
 

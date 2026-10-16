@@ -215,7 +215,6 @@ pub fn lower_instruction(
         Instruction::Call { result, function: func, args, result_type, stack_args_from } => {
             debug!("V2: Call: {:?} = call {}({})", result, func, args.len());
             
-            let mut target_regs = Vec::new();
             let target = match func {
                 Value::Function(name) | Value::Global(name) => CallTarget::Label(name.clone()),
                 _ => {
@@ -233,7 +232,6 @@ pub fn lower_instruction(
                     let (bank, code) = crate::instr::helpers::get_bank_value_for_argument(&bank_info, mgr, naming, "indirect_call");
                     insts.extend(code);
                     mgr.pin_register(bank);
-                    target_regs.extend([addr, bank]);
                     CallTarget::Registers { addr, bank }
                 }
             };
@@ -268,7 +266,6 @@ pub fn lower_instruction(
             }
 
             let mut call_args = Vec::new();
-            let mut pinned_stack_regs: Vec<Reg> = Vec::new();
             let mut reg_slot = 0usize;
             for (idx, arg) in args.iter().enumerate() {
                 let this_arg = match arg {
@@ -394,7 +391,6 @@ pub fn lower_instruction(
                     reg_slot += n;
                     call_args.push(parked);
                 } else {
-                    pinned_stack_regs.extend(src_regs);
                     call_args.push(this_arg);
                 }
             }
@@ -417,10 +413,6 @@ pub fn lower_instruction(
             );
             
             insts.extend(call_insts);
-            for r in target_regs { mgr.unpin_register(r); }
-            for r in pinned_stack_regs {
-                mgr.unpin_register(r);
-            }
             mgr.invalidate_alloca_bindings();
             insts.extend(mgr.take_instructions());
             if let Some(name) = result_name {

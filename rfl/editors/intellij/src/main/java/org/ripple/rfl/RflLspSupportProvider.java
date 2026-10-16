@@ -26,7 +26,9 @@ public final class RflLspSupportProvider implements LspIntegrationProvider {
     }
 
     private static final class Descriptor extends ProjectWideLspClientDescriptor {
+        private final RflLspCustomization customization = new RflLspCustomization();
         Descriptor(Project project) { super(project, "RFL"); }
+        @Override public @NotNull RflLspCustomization getLspCustomization() { return customization; }
         @Override public boolean isSupportedFile(@NotNull VirtualFile file) { return supported(file); }
         @Override public @NotNull String getLanguageId(@NotNull VirtualFile file) { return "rfl"; }
 

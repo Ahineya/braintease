@@ -295,7 +295,12 @@ arg_t _sbrk(void)
 	if (_brk())		/* brk (udata.u_argn) */
 		return (-1);
 
+	/* Ripple syscall values carry the complete banked pointer. */
+#ifdef CONFIG_RIPPLE
+	return (arg_t)oldbrk;
+#else
 	return ((unsigned) oldbrk);
+#endif
 }
 
 #undef incr

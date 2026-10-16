@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>org.ripple.rfl</id>
     <name>RFL</name>
-    <version>0.2.2</version>
+    <version>0.2.3</version>
     <vendor>Ripple</vendor>
     <description><![CDATA[
         Ripple Functional Language support using the existing <code>rfl lsp</code> server.

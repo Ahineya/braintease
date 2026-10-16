@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODE="${1:-rvm}"
 DEMO="${NET_DEMO:-ping}"
-case "$DEMO" in ping|monitor|dns-ping|dhcp-ping|dhcp-monitor|tcp-echo|http-get) ;; *) echo "Unknown NET_DEMO: $DEMO" >&2; exit 2 ;; esac
+case "$DEMO" in ping|monitor|dns-ping|dhcp-ping|dhcp-monitor|tcp-echo|http-get|http-server) ;; *) echo "Unknown NET_DEMO: $DEMO" >&2; exit 2 ;; esac
 OUT="${2:-$ROOT/build/network/$MODE}"
 if [[ $# -ge 2 ]]; then shift 2; else shift "$#"; fi
 mkdir -p "$OUT"

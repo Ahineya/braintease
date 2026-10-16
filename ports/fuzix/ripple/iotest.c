@@ -1,10 +1,10 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "user.h"
 static char buffer[257];
 static char pattern(unsigned long pos) { return (char)(33 + (pos % 90)); }
 static int fail(void) {
     out("iotest FAILED errno=");
-    number(error);
+    number(ripple_error);
     out("\n");
     return 1;
 }

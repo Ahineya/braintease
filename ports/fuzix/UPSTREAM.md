@@ -9,25 +9,37 @@
 
 The **complete, unmodified archive** is committed in `vendor/`. The portable
 working tree in `upstream/` contains the kernel C sources, kernel/device headers,
-minimal memory-allocation stub, README, credits, version, and license used by
-this port. This avoids losing upstream `.S`/`.s` pairs on macOS filesystems and
+minimal memory-allocation stub, selected application sources, portable library
+routines/headers, README, credits, version, and licenses used by this port. This avoids losing upstream `.S`/`.s` pairs on macOS filesystems and
 avoids treating upstream's tracked generated assembly as ignored local files.
 To explore/build other upstream platforms, extract the full archive on a
 case-sensitive filesystem. No network fetch is required to build this port.
 
-Seven core adaptations are recorded in `upstream.patch`, with paths relative to
-`upstream/`:
+Adaptations to files that exist in the archive are recorded in `upstream.patch`,
+with paths relative to `upstream/`. Hunks omit context; use
+`git apply --unidiff-zero` when replaying against the pristine archive. The kernel changes cover block/directory C16
+layout, scalar user-memory validation, integer formatting, durable sync/error
+handling, panic shutdown, the complete 32-bit `sbrk` return value, and clearing
+recycled inodes before a pipe can reinterpret a deleted device number as a block.
 
-- `Kernel/blk512.c`
-- `Kernel/devio.c`
-- `Kernel/include/kernel.h`
-- `Kernel/inode.c`
-- `Kernel/usermem.c`
-- `Kernel/process.c`
-- `Kernel/filesys.c`
+`Library/libs/qsort.c` selects its specialized element paths using C `sizeof`
+instead of physical-octet constants. Utility changes add bounded recursive
+`mkdir`/`rm`, standard `cut` option parsing, error statuses, trailing-word counts,
+`head -n`, missing-operand guards, C16 dump/usage calculations, and matching
+format widths. Original copyright and license notices remain with imported
+sources; newly rewritten adaptations are marked as such.
 
-These adapt block geometry/directory layout to C16, use sizeof for scalar
-user-memory validation, avoid treating 16-bit int as 32-bit in kernel decimal
-formatting, retain dirty buffers on failed writes, and add the VM durability
-barrier to kernel sync. The panic path deliberately avoids marking a damaged
-filesystem clean. Everything else is in `ripple/` and `tools/`.
+`Applications/util/vile.c` uses a direct ANSI terminal backend on Ripple, with
+validated dimensions, alternate-screen cleanup, and bounded storage compatible
+with its signed 16-bit movement offsets. Adaptations also bound file reads,
+remember names supplied to `:w`, and mark backspace-only edits as modified.
+Ctrl-C cancels raw-mode input, while `ed` supports the standard `Q` discard/quit
+command. The upstream `tcgetattr`/`tcsetattr` wrappers are reused. `vile.doc` is retained
+as upstream's historical document; current supported usage is in this port's
+README.
+
+Ripple ABI headers, syscall/stdio/format/allocator/directory support, the small
+shell, platform drivers, and build/image tools live in `ripple/` and `tools/`.
+The executable list is defined by `APPS` in the port Makefile and exported to
+`build/apps.json`. This remains a curated userspace port; the complete archive
+also contains applications and libraries that are not built yet.

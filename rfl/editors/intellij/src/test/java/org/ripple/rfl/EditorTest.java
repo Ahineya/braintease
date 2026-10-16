@@ -14,6 +14,7 @@ import java.util.List;
 public final class EditorTest {
     public static void main(String[] args) throws Exception {
         lexer();
+        rename();
         Path build = Path.of(args.length == 0 ? "build" : args[0]);
         Files.createDirectories(build);
         Path temporary = Files.createTempDirectory(build, "editor-test-");
@@ -48,6 +49,27 @@ public final class EditorTest {
             restarted.start(text, full.getTokenStart(), text.length(), full.getState());
             require(restarted.getTokenType() == full.getTokenType() && restarted.getTokenEnd() == full.getTokenEnd(), "lexer restart");
             full.advance();
+        }
+    }
+
+    private static void rename() {
+        var support = new RflLspCustomization().getRenameCustomizer();
+        require(support instanceof com.intellij.platform.lsp.api.customization.LspRenameSupport, "native LSP rename enabled");
+        var file = (com.intellij.psi.PsiFile) java.lang.reflect.Proxy.newProxyInstance(
+            EditorTest.class.getClassLoader(), new Class<?>[] {com.intellij.psi.PsiFile.class},
+            (proxy, method, arguments) -> {
+                if (method.getName().equals("getLanguage")) return RflLanguage.INSTANCE;
+                throw new UnsupportedOperationException(method.getName());
+            });
+        require(((com.intellij.platform.lsp.api.customization.LspRenameSupport) support).shouldRunRename(file), "rename handles RFL PSI instead of only plain text");
+        String text = "// frequency\nfn main() { let frequency = 1; println(\"frequency\"); frequency }";
+        int start = text.indexOf("frequency =");
+        for (int caret : new int[] {start, start + 3, start + "frequency".length()}) {
+            var range = RflLspCustomization.identifierRange(text, caret);
+            require(range != null && range.getStartOffset() == start && range.getLength() == "frequency".length(), "identifier and end-caret range");
+        }
+        for (int caret : new int[] {-1, text.length() + 1, 4, text.indexOf("fn"), text.indexOf("1;"), text.indexOf("\"frequency\"") + 3}) {
+            require(RflLspCustomization.identifierRange(text, caret) == null, "comments, strings, keywords and numbers cannot rename");
         }
     }
 

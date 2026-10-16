@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
 _start:
     STORE A0, SB, SP
     ADDI SP, SP, 1
@@ -16,13 +17,33 @@ _start:
     LOAD A2, SB, T0
     ADDI T0, T0, 1
     LOAD A3, SB, T0
-    LI SP, 2
     LI X2, 1
+    LI T0, 1
+    LOAD T1, SB, T0
+    STORE T1, SB, SP
+    ADDI SP, SP, 1
+    STORE A3, SB, SP
+    ADDI SP, SP, 1
+    CALL ripple_libc_init
+    ADDI SP, SP, -2
+    LI T0, 2
+    LOAD A0, SB, T0
+    ADDI T0, T0, 1
+    LOAD A1, SB, T0
+    ADDI T0, T0, 1
+    LOAD A2, SB, T0
+    ADDI T0, T0, 1
+    LOAD A3, SB, T0
+    LI T0, 1
+    LOAD T1, SB, T0
+    STORE T1, SB, SP
+    ADDI SP, SP, 1
+    STORE A3, SB, SP
+    ADDI SP, SP, 1
     CALL main
-    CALL user_exit
-    HALT
-_exit:
-    CALL user_exit
+    ADDI SP, SP, -2
+    ADD A0, RV0, R0
+    CALL exit
     HALT
 ripple_syscall:
     STORE RA, SB, SP

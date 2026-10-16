@@ -21,7 +21,7 @@
 #define PROGBASE 0x00080000UL
 #define PROGLOAD 0x00080000UL
 #define PROGTOP (PROGBASE + 64000UL)
-#define plt_copyright() kputs("Ripple RCC port; 16-bit characters, 32-bit banked pointers\n")
+#define plt_copyright() ((void)0)
 /* A disk block is 256 C characters / 512 physical octets. */
 #define BLKSIZE 256
 #define INO_PER_BLOCK 8

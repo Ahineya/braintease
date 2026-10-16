@@ -44,14 +44,15 @@ void tcp_flight(NetTcp *tcp, unsigned short flags, unsigned short length) {
 static int local_port_used(NetContext *net, unsigned short port) {
     unsigned short i;
     for (i = 0; i < NET_TCP_CONNECTIONS; ++i) if (net->tcp[i] && net->tcp[i]->local_port == port) return 1;
-    return 0;
+    for (i = 0; i < NET_TCP_LISTENERS; ++i) if (net->listeners[i] && net->listeners[i]->port == port) return 1;
+    return tcp_wait_port(net, port);
 }
 int net_tcp_connect(NetContext *net, NetTcp *tcp, const NetTcpConfig *config, unsigned long now_ms) {
     NetTcpConfig saved;
     unsigned short i, slot = NET_TCP_CONNECTIONS, port, tries;
     if (!net || !tcp || !config || !config->remote_port || !config->peer[0] || config->peer[0] >= 224 || config->peer[0] == 127 ||
         !config->timeout_ms || config->timeout_ms > 600000UL) return NET_BAD_ARGUMENT;
-    if (tcp->active || tcp->rx_used) return NET_BUSY;
+    if (tcp->active || tcp->rx_used || tcp->accepted) return NET_BUSY;
     if (!net->link) return NET_LINK_DOWN;
     if (!net->config.address[0]) return NET_UNREACHABLE;
     for (i = 0; i < NET_TCP_CONNECTIONS; ++i) if (!net->tcp[i]) { slot = i; break; }
@@ -59,11 +60,11 @@ int net_tcp_connect(NetContext *net, NetTcp *tcp, const NetTcpConfig *config, un
     port = config->local_port;
     if (port && local_port_used(net, port)) return NET_NO_PORT;
     if (!port) {
-        for (tries = 0; tries < NET_TCP_CONNECTIONS + 1; ++tries) {
+        for (tries = 0; tries < NET_TCP_CONNECTIONS + NET_TCP_LISTENERS + NET_TCP_WAIT_SLOTS + 1; ++tries) {
             port = 49152U + net_random(net) % 16384U;
             if (!local_port_used(net, port)) break;
         }
-        if (tries == NET_TCP_CONNECTIONS + 1) return NET_NO_PORT;
+        if (tries == NET_TCP_CONNECTIONS + NET_TCP_LISTENERS + NET_TCP_WAIT_SLOTS + 1) return NET_NO_PORT;
     }
     saved = *config; memset(tcp, 0, sizeof(*tcp));
     tcp->net = net; memcpy(tcp->peer, saved.peer, 4);

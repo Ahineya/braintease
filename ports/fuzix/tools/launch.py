@@ -26,13 +26,29 @@ def main():
     except BlockingIOError:
         sys.exit(f'Disk is already in use: {image}')
     if args.update:
-        cmd = ['node', str(Path(__file__).with_name('disk.mjs')), args.build, str(image)]
+        if image.exists() and not args.fresh:
+            # The caller already owns the image lock. The checker validates
+            # all ownership and directory links before repairing metadata.
+            checked = subprocess.run(
+                ['node', str(Path(__file__).with_name('fsck.mjs')),
+                 '--locked', str(image), '--repair'],
+                capture_output=True, text=True)
+            if checked.returncode:
+                sys.stderr.write(checked.stderr)
+                sys.exit(checked.returncode)
+            if '; repaired' in checked.stdout:
+                print('Recovered the filesystem; a backup was saved.', flush=True)
+        cmd = ['node', str(Path(__file__).with_name('disk.mjs')), args.build, str(image), '--install']
         if args.fresh:
             cmd.append('--fresh')
-        subprocess.run(cmd, check=True)
+        updated = subprocess.run(cmd)
+        if updated.returncode:
+            sys.exit(updated.returncode)
     if args.build_only:
         return
     vm_args = args.vm_args[1:] if args.vm_args[:1] == ['--'] else args.vm_args
+    if '--guest-ctrl-c' not in vm_args:
+        vm_args = ['--guest-ctrl-c', *vm_args]
     if not any(v in ("--memory", "-m") or v.startswith("--memory=") for v in vm_args):
         vm_args = ["--memory", "4608000", *vm_args]
     os.set_inheritable(lock, True)

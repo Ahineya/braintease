@@ -138,7 +138,8 @@ mod tests {
             *offset += 2;
         }
         let linked = Linker::new(16).link(vec![entry, prefix, body]).unwrap();
-        assert_eq!(linked.data.len(), 5);
+        // The last two GP cells must be covered by the loader reservation.
+        assert_eq!(linked.data.len(), 7);
         assert_eq!(linked.data_labels["live"], 5);
         assert_eq!(linked.data_labels["__gp_fixture"], 5);
         let main = linked.labels["main"].absolute_address as usize / 4;

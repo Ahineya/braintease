@@ -224,6 +224,10 @@ impl Linker {
             .map(|label| label.absolute_address)
             .unwrap_or(0);
 
+        // GP labels include rasm's origin. The serialized reservation must
+        // cover that complete extent too: an RXE loader uses it as brk/BSS end.
+        // Omitting the final origin cells lets the heap overwrite live globals.
+        all_data.resize(data_extent, 0);
         Ok(LinkedProgram {
             instructions: resolved_instructions,
             data: all_data,
@@ -756,6 +760,19 @@ mod tests {
     use super::*;
     use crate::assembler::RippleAssembler;
     use crate::types::{AssemblerOptions, Opcode};
+
+    #[test]
+    fn executable_data_reservation_covers_the_last_gp_cell() {
+        let assembler = RippleAssembler::new(AssemblerOptions::default());
+        let object = assembler.assemble(".data\n__gp_tail:\nfirst:\n.space 1\nlast:\n.space 1\n.code\nstart:\nLI T0, last\nHALT\n").unwrap();
+        let linked = Linker::new(64000).link(vec![object]).unwrap();
+        let last = linked.data_labels["last"] as usize;
+        assert!(linked.data.len() > last);
+        let rxe = linked.to_rxe();
+        assert!(u32::from_le_bytes(rxe[16..20].try_into().unwrap()) as usize > last);
+        let sys = linked.to_sys(1,3,32);
+        assert!(u32::from_le_bytes(sys[20..24].try_into().unwrap()) as usize > last);
+    }
 
     #[test]
     fn gp_capacity_includes_the_assembler_data_origin() {

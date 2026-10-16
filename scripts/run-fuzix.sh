@@ -6,6 +6,7 @@ OUT="${FUZIX_BUILD:-$ROOT/build/fuzix}"
 run_only=0
 build_only=0
 fresh=0
+install_apps=0
 jit=1
 disk=""
 args=()
@@ -16,20 +17,25 @@ Usage: scripts/run-fuzix.sh [options] [rvm options...]
 Boot FUZIX/Ripple. Try help, ls, cat README, echo hello > note, hello,
 forkcheck, preemptcheck, and shutdown. Use shutdown before closing the VM.
 Files persist across launches and kernel rebuilds.
+Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
 
   --build-only     Build/update the default disk without booting
   --run-only       Boot existing artifacts without building or updating
   --no-jit         Use the interpreter; the JIT is enabled by default
   --fresh          Reformat the default disk (saves the old disk as a backup)
   --disk IMAGE     Use an existing image without updating its contents
+  --install-apps   Also update an explicit --disk image, preserving saved files
   --headless       Disable interactive terminal input
   --input TEXT     Preload commands, e.g. --input $'ls\nshutdown\n'
   --timeout N      Stop after N host seconds (not a clean guest shutdown)
 
 The first build imports no network dependencies beyond the normal Rust tools.
-Normal builds update FUZIX.SYS and preserve ROOTFS.IMG exactly. Newly built
-userspace programs are installed when creating a fresh disk. Set FUZIX_BUILD
-to choose another build directory. Root disks use the Ripple C16 filesystem ABI.
+Normal builds update the kernel and managed Unix executables on the default
+disk, preserving user files. Old roots gain space and inodes automatically.
+Normal launches check the disk and back up and repair recoverable shutdown
+metadata before updating. Structural damage stops the update. --disk skips
+updates unless --install-apps is supplied. Set FUZIX_BUILD for another build
+directory. Root disks use the Ripple C16 filesystem ABI.
 HELP
 }
 while [[ $# -gt 0 ]]; do
@@ -38,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --run-only) run_only=1; shift ;;
         --build-only) build_only=1; shift ;;
         --fresh) fresh=1; shift ;;
+        --install-apps) install_apps=1; shift ;;
         --jit) jit=1; shift ;;
         --no-jit) jit=0; shift ;;
         --disk) disk="${2:?--disk requires an existing image}"; shift 2 ;;
@@ -46,8 +53,8 @@ while [[ $# -gt 0 ]]; do
         *) args+=("$1"); shift ;;
     esac
 done
-if [[ "$run_only" == 1 && ( "$fresh" == 1 || "$build_only" == 1 ) ]]; then
-    echo 'error: --run-only cannot be combined with --fresh or --build-only' >&2; exit 1
+if [[ "$run_only" == 1 && ( "$fresh" == 1 || "$build_only" == 1 || "$install_apps" == 1 ) ]]; then
+    echo 'error: --run-only cannot be combined with --fresh, --build-only, or --install-apps' >&2; exit 1
 fi
 if [[ -n "$disk" && ( "$fresh" == 1 || ! -f "$disk" ) ]]; then
     echo 'error: --disk requires an existing image and cannot be combined with --fresh' >&2; exit 1
@@ -69,6 +76,7 @@ if [[ -z "$disk" ]]; then
     disk="$OUT/fuzix.img"
     if [[ "$run_only" == 0 ]]; then update=1; fi
 fi
+if [[ "$install_apps" == 1 ]]; then update=1; fi
 for required in "$OUT/bios.bin" "$ROOT/target/release/rvm"; do
     if [[ ! -f "$required" ]]; then echo "error: missing $required; run without --run-only first" >&2; exit 1; fi
 done

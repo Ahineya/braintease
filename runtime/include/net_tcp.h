@@ -14,6 +14,7 @@
 #define NET_TCP_LAST_ACK 7
 #define NET_TCP_TIME_WAIT 8
 #define NET_TCP_FAILED 9
+#define NET_TCP_SYN_RECEIVED 10
 
 typedef struct NetTcpConfig {
     unsigned char peer[4];
@@ -39,7 +40,61 @@ struct NetTcp {
     unsigned long challenge_at;
     unsigned long zero_at, zero_delay;
     unsigned short challenge_sent, icmp_type, icmp_code, mtu;
+    unsigned short accepted;
 };
+/* Optional caller-owned compact TIME_WAIT storage. Zero before first use and
+ * keep attached storage stable for the context lifetime or explicit detach.
+ * Without it, release returns BUSY until the full TCB's TIME_WAIT expires. */
+typedef struct NetTcpWait {
+    unsigned char peer[4];
+    unsigned short local_port, remote_port, used;
+    unsigned long snd_nxt, rcv_nxt, started;
+} NetTcpWait;
+struct NetTcpWaitTable {
+    NetContext *net;
+    NetTcpWait entries[NET_TCP_WAIT_SLOTS];
+    unsigned short used;
+    unsigned long generation, link_epoch;
+};
+/* NULL detaches only an empty/expired table. Never evicts a live tuple. */
+int net_tcp_wait_attach(NetContext *net, NetTcpWaitTable *table);
+
+/* Called synchronously for each new passive open. Supply fresh, unpredictable
+ * ISNs for untrusted networks. Do not recursively poll or mutate the context. */
+typedef unsigned long (*NetTcpSequence)(void *, const unsigned char *, unsigned short, unsigned long);
+typedef struct NetTcpListenConfig {
+    unsigned short port;
+    unsigned long timeout_ms;
+    NetTcpSequence sequence;
+    void *user;
+} NetTcpListenConfig;
+/* Zero the listener AND its exclusive pool before first use. Do not use pool
+ * objects for active connects/another context while reserved. Storage stays stable
+ * until unlisten and all accepted connections have been released. */
+struct NetTcpListener {
+    NetContext *net;
+    NetTcp *pool;
+    NetTcpSequence sequence;
+    void *user;
+    unsigned short port, capacity, active, error;
+    unsigned long timeout, generation, link_epoch, accepted, refused;
+};
+int net_tcp_listen(NetContext *net, NetTcpListener *listener, NetTcp *pool,
+    unsigned short capacity, const NetTcpListenConfig *config);
+/* Drive every pool connection, including closing/TIME_WAIT and unaccepted
+ * handshakes. Network/DHCP poll still comes first. */
+int net_tcp_listener_poll(NetTcpListener *listener, unsigned long now_ms);
+/* Returns a borrowed pool object after handshake; data/FIN can already be queued.
+ * Keep it until explicitly released, including after failure/close. */
+int net_tcp_accept(NetTcpListener *listener, NetTcp **connection);
+/* Release inactive accepted objects, or move TIME_WAIT into a compact context
+ * record. Other active states/full record table return NET_BUSY. Old tuples stay
+ * protected; no buffer is reused until release succeeds. */
+int net_tcp_release(NetTcpListener *listener, NetTcp *connection);
+/* Stop new opens and abort unaccepted work. Accepted connections remain alive
+ * and owned by the application: continue polling/release them. */
+void net_tcp_unlisten(NetTcpListener *listener);
+
 /* Optional: enable closed-port RST handling without opening a connection.
  * connect enables the protocol automatically; other applications link no TCP. */
 void net_tcp_enable(NetContext *net);

@@ -22,6 +22,8 @@
 #define NET_CANCELLED 15
 #define NET_UNSUPPORTED 16
 #define NET_TCP_CONNECTIONS 4
+#define NET_TCP_LISTENERS 2
+#define NET_TCP_WAIT_SLOTS 32
 #define NET_FRAME_SIZE 1514
 #define NET_ARP_ENTRIES 4
 #define NET_UDP_PORTS 4
@@ -44,6 +46,9 @@ typedef struct NetConfig {
 typedef struct NetContext NetContext;
 typedef struct NetTcp NetTcp;
 typedef struct NetTcpDriver NetTcpDriver;
+typedef struct NetTcpListener NetTcpListener;
+typedef struct NetTcpListenDriver NetTcpListenDriver;
+typedef struct NetTcpWaitTable NetTcpWaitTable;
 typedef struct NetError {
     unsigned char reporter[4], destination[4];
     unsigned short type, code, protocol, packet_id, mtu;
@@ -103,6 +108,9 @@ struct NetContext {
     unsigned long tcp_reset_at;
     unsigned short tcp_reset_sent;
     const NetTcpDriver *tcp_driver;
+    NetTcpListener *listeners[NET_TCP_LISTENERS];
+    const NetTcpListenDriver *tcp_listen_driver;
+    NetTcpWaitTable *tcp_wait;
 };
 
 /* Initializes the NIC and installs static configuration, announcing when up.

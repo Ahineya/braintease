@@ -1,8 +1,9 @@
 # Guest networking library
 
-`<net.h>`, `<net_dns.h>`, `<net_dhcp.h>` and `<net_tcp.h>` are part of `runtime/libruntime.par`.
+`<net.h>`, `<net_dns.h>`, `<net_dhcp.h>`, `<net_tcp.h>`, `<net_http.h>` and `<net_http_server.h>` are part of `runtime/libruntime.par`.
 They implement Ethernet, ARP, IPv4, ICMP echo, UDP, DHCP, a small DNS A
-resolver and active-open TCP streams in guest C. The host moves raw Ethernet frames through [DEVICE_*](device.md); it never
+resolver, active/passive TCP streams, an HTTP GET client and an HTTP server
+in guest C. The host moves raw Ethernet frames through [DEVICE_*](device.md); it never
 resolves guest names or supplies guest TCP/IP. Each wire octet occupies one
 16-bit Ripple cell, including zero and 255.
 
@@ -201,6 +202,32 @@ frames independently.
 closed-port reset handling without opening a connection. Applications that use
 neither function do not link the TCP implementation: base IPv4, ARP and ICMP
 code call an optional internal driver rather than directly referencing TCP.
+
+## Passive TCP and HTTP server
+
+`net_tcp_listen`, `net_tcp_listener_poll`, `net_tcp_accept` and
+`net_tcp_release` expose caller-owned bounded pools over the same stream core.
+The context supports two listeners and four live connections. Accepted pointers
+remain claimed through failure/close until explicit release. An optional
+caller-owned `NetTcpWaitTable` preserves 32 compact old tuples while releasing
+large TIME_WAIT buffers; no ordinary ping/DNS application allocates that table.
+See [TCP ownership](tcp.md#listen-and-accept) for backpressure and teardown.
+
+`<net_http_server.h>` supplies a standalone incremental request decoder,
+response serializer and polling session. The application chooses routes and
+immutable HTML; the library manages split requests, partial writes, framing,
+errors and deadlines. Drive network, listener/TCP, then HTTP session progress.
+The session borrows its TCB and leaves pool release to the application. See the
+[server guide](http-server.md) and runnable `http-server.c` example.
+
+## HTTP GET
+
+See the [HTTP client guide](http.md) for `NetHttp`, partial binary body reads,
+guest DNS, response status/framing, explicit limits and total deadlines. Its
+standalone decoder can be used without TCP. Network/DHCP polling still comes
+first, followed by HTTP polling and body reads. Body EOF does not release an
+active TCP close/TIME_WAIT: keep polling or explicitly cancel before freeing
+the object. No host sockets or HTTP implementation replace the guest stack.
 
 ## Linking
 

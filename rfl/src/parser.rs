@@ -1700,12 +1700,12 @@ impl<'a> Parser<'a> {
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut fields = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
-            let (field, _) = self.expect_ident()?;
+            let (field, field_span) = self.expect_ident()?;
             let value = if self.eat(&TokenKind::Colon) {
                 self.parse_expr()?
             } else {
                 Expr {
-                    span,
+                    span: field_span,
                     kind: ExprKind::Name(field.clone()),
                 }
             };

@@ -54,6 +54,9 @@ pub struct Cli {
     /// Run without a window or live terminal/keyboard input
     #[arg(long, conflicts_with_all = ["visual", "debug", "tui"])]
     pub headless: bool,
+    /// Send Ctrl-C to the guest TTY; Ctrl-] remains an emergency host stop.
+    #[arg(long)]
+    pub guest_ctrl_c: bool,
     /// Save a native-resolution PNG and stop at the requested presentation
     #[arg(long, conflicts_with_all = ["debug", "tui"])]
     pub screenshot: Option<PathBuf>,

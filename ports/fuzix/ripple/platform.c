@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include "platform.h"
+#include <irq.h>
 #include <kdata.h>
+#include <mmio.h>
 #include <printf.h>
 #include <tty.h>
-#include <mmio.h>
-#include <irq.h>
 struct u_data udata;
 unsigned ripple_kernel_stack = 32;
 unsigned ripple_exec_bank, ripple_exec_pc, ripple_argc;
@@ -45,7 +45,7 @@ int pagemap_realloc(struct exec *h, usize_t m) {
     used(m);
     return 0;
 }
-usize_t pagemap_mem_used(void) { return nproc * 125UL; }
+usize_t pagemap_mem_used(void) { return nproc * 250UL; }
 void program_vectors(uint16_t *p) { used(p); }
 void set_cpu_type(void) {}
 void install_vdso(void) {}
@@ -125,7 +125,8 @@ long ripple_dispatch(struct ripple_request *user) {
     udata.u_argn2 = req.arg[2];
     udata.u_argn3 = req.arg[3];
     unix_syscall();
-    _uputw(udata.u_error, (uint16_t *)((uint8_t *)user + offsetof(struct ripple_request, error)));
+    _uputw(udata.u_error, (uint16_t *)((uint8_t *)user +
+                                       offsetof(struct ripple_request, error)));
     __hard_di();
     udata.u_insys = 0;
     return udata.u_retval;
@@ -136,7 +137,11 @@ unsigned ripple_tick(void) {
     timer_interrupt();
     udata.u_ininterrupt = 0;
     irq_ack();
-    return !udata.u_insys && need_resched && nready > 1;
+    /* Signals must also reach a user computation which makes no syscalls.
+     * The normal trampoline leaves IRQ_BUSY with IRET before entering C. */
+    return !udata.u_insys &&
+           ((need_resched && nready > 1) ||
+            (udata.u_ptab->p_flags & PFL_CHKSIG));
 }
 int main(void) {
     void (*handler)(void) = ripple_irq;
@@ -155,12 +160,15 @@ void ripple_preempt(void) {
     udata.u_insys = 1;
     udata.u_ptab->p_status = P_READY;
     plt_switchout();
+    __hard_ei();
+    chksigs();
     __hard_di();
     udata.u_insys = 0;
     ripple_resume_user();
 }
 
-/* Unlike an explicit shutdown, a panic cannot certify filesystem consistency. */
+/* Unlike an explicit shutdown, a panic cannot certify filesystem consistency.
+ */
 void ripple_panic_stop(void) {
     __hard_di();
     kputs("\nKernel stopped; filesystem was not marked clean.\n");

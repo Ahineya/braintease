@@ -1,26 +1,12 @@
-#include <net_http.h>
-#include <string.h>
+#include "http_internal.h"
 
 static int fail(NetHttpParser *p, int status) {
     p->state = NET_HTTP_PARSE_FAILED; p->error = status; return status;
 }
 static int digit(unsigned short c) { return c >= '0' && c <= '9'; }
-static int token(unsigned short c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || digit(c) ||
-        (c && strchr("!#$%&'*+-.^_`|~", c) != 0);
-}
-static int equal(const char *a, const char *b) {
-    unsigned short c;
-    while (*a && *b) {
-        c = *a++; if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
-        if (c != *b++) return 0;
-    }
-    return !*a && !*b;
-}
 static int line(NetHttpParser *p) {
-    char *value, *end;
+    char *value;
     unsigned short i;
-    unsigned long length = 0;
     p->line[p->used] = 0;
     if (p->state == NET_HTTP_STATUS) {
         if (p->used < 13 || (memcmp(p->line, "HTTP/1.0 ", 9) && memcmp(p->line, "HTTP/1.1 ", 9)) ||
@@ -40,27 +26,15 @@ static int line(NetHttpParser *p) {
         }
         return NET_OK;
     }
-    if (++p->fields > 64) return fail(p, NET_HTTP_LIMIT);
-    i = 0; while (i < p->used && token(p->line[i])) ++i;
-    if (!i || p->line[i] != ':') return fail(p, NET_HTTP_BAD_RESPONSE);
-    p->line[i] = 0; value = p->line + i + 1;
-    while (*value == ' ' || *value == '\t') ++value;
-    end = p->line + p->used;
-    while (end > value && (end[-1] == ' ' || end[-1] == '\t')) --end;
-    *end = 0;
+    i = http_field(p, &value); if (i) return fail(p, i);
     /* No transfer/content decoding in v1. Never mistake chunk syntax or encoded
      * representation data for the requested identity body. */
-    if (equal(p->line, "transfer-encoding")) return fail(p, NET_UNSUPPORTED);
-    if (equal(p->line, "content-encoding") && !equal(value, "identity")) return fail(p, NET_UNSUPPORTED);
-    if (equal(p->line, "content-length")) {
+    if (http_equal(p->line, "transfer-encoding")) return fail(p, NET_UNSUPPORTED);
+    if (http_equal(p->line, "content-encoding") && !http_equal(value, "identity")) return fail(p, NET_UNSUPPORTED);
+    if (http_equal(p->line, "content-length")) {
         if (p->has_length || !*value) return fail(p, NET_HTTP_BAD_RESPONSE);
-        while (*value) {
-            if (!digit(*value)) return fail(p, NET_HTTP_BAD_RESPONSE);
-            i = *value++ - '0';
-            if (length > 429496729UL || (length == 429496729UL && i > 5)) return fail(p, NET_HTTP_BAD_RESPONSE);
-            length = length * 10UL + i;
-        }
-        p->has_length = 1; p->length = length;
+        if (!http_decimal(value, &p->length)) return fail(p, NET_HTTP_BAD_RESPONSE);
+        p->has_length = 1;
     }
     return NET_OK;
 }
@@ -83,17 +57,9 @@ int net_http_parser_feed(NetHttpParser *p, const unsigned char *input, unsigned 
             if (p->has_length && p->received == p->length) p->state = NET_HTTP_DONE;
         } else {
             c = input[(*consumed)++];
-            if (++p->headers > NET_HTTP_HEADERS) return fail(p, NET_HTTP_LIMIT);
-            if (p->cr) {
-                if (c != '\n') return fail(p, NET_HTTP_BAD_RESPONSE);
-                p->cr = 0; status = line(p); p->used = 0;
-                if (status) return status;
-            } else if (c == '\r') p->cr = 1;
-            else {
-                if ((c < 32 && c != '\t') || c == 127 || c > 255) return fail(p, NET_HTTP_BAD_RESPONSE);
-                if (p->used == NET_HTTP_LINE - 1) return fail(p, NET_HTTP_LIMIT);
-                p->line[p->used++] = c;
-            }
+            status = http_line_octet(p, c);
+            if (status == NET_OK) { status = line(p); p->used = 0; if (status) return status; }
+            else if (status != NET_AGAIN) return fail(p, status);
         }
     }
     return p->state == NET_HTTP_DONE ? NET_EOF : NET_AGAIN;

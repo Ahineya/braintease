@@ -13,6 +13,17 @@ typedef struct TcpSegment {
     unsigned long sequence, acknowledgement;
     unsigned short source_port, destination_port, flags, window, length, mss;
 } TcpSegment;
+struct NetTcpListenDriver {
+    int (*input)(NetContext *, const TcpSegment *);
+};
+int tcp_wait_save(NetTcp *tcp);
+int tcp_wait_input(NetContext *net, const TcpSegment *segment);
+int tcp_wait_port(NetContext *net, unsigned short port);
+int tcp_passive_input(NetContext *net, const TcpSegment *segment);
+void tcp_passive_receive(NetTcp *tcp, const TcpSegment *segment);
+void tcp_established(NetTcp *tcp, const TcpSegment *segment);
+int tcp_acceptable(NetTcp *tcp, const TcpSegment *segment);
+int tcp_reset_segment(NetContext *net, const TcpSegment *segment);
 unsigned long tcp_read32(const unsigned char *p);
 void tcp_write32(unsigned char *p, unsigned long value);
 int tcp_before(unsigned long a, unsigned long b);

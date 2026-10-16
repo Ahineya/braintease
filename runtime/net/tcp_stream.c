@@ -5,7 +5,7 @@ int net_tcp_write(NetTcp *tcp, const unsigned char *data, unsigned short length,
     int status;
     if (!written || (length && !data)) return NET_BAD_ARGUMENT;
     *written = 0; status = tcp_lifecycle(tcp); if (status) return status;
-    if (tcp->state == NET_TCP_SYN_SENT) return NET_AGAIN;
+    if (tcp->state == NET_TCP_SYN_SENT || tcp->state == NET_TCP_SYN_RECEIVED) return NET_AGAIN;
     if ((tcp->state != NET_TCP_ESTABLISHED && tcp->state != NET_TCP_CLOSE_WAIT) || tcp->shutting) return NET_CLOSED;
     size = NET_TCP_BUFFER - tcp->tx_used; if (size > length) size = length;
     if (size) memcpy(tcp->tx + tcp->tx_used, data, size);

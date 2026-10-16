@@ -20,8 +20,7 @@ static void append(NetHttp *h, const char *s) {
     while (*s) h->request[h->request_length++] = *s++;
 }
 int http_request(NetHttp *h, const char *host, const char *path, unsigned short port) {
-    unsigned short i, c, label = 0, count = 0;
-    char digits[5];
+    unsigned short i, c, label = 0;
     if (!host || !*host || !path || *path != '/' || !port) return NET_BAD_ARGUMENT;
     for (i = 0; host[i]; ++i) {
         c = host[i];
@@ -40,8 +39,7 @@ int http_request(NetHttp *h, const char *host, const char *path, unsigned short 
     append(h, "GET "); append(h, path); append(h, " HTTP/1.0\r\nHost: "); append(h, host);
     if (port != 80) {
         append(h, ":");
-        do { digits[count++] = '0' + port % 10; port /= 10; } while (port);
-        while (count) h->request[h->request_length++] = digits[--count];
+        h->request_length += http_format_decimal(h->request + h->request_length, port);
     }
     append(h, "\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n");
     h->request[h->request_length] = 0;

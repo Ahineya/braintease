@@ -9,7 +9,6 @@ static NetHttpConfig config = {"192.168.64.1", "/hello?q=1", 8080, 123, 1000, 50
 static char wire[1024], sent[1024];
 static unsigned short wire_used, wire_head, sent_used, chunk, eof, stall, connect_stall, shutdowns, aborts, read_error;
 static int dns_result;
-unsigned short unused;
 int net_tcp_connect(NetContext *n, NetTcp *t, const NetTcpConfig *c, unsigned long now) {
     t->net = n; t->active = 1; t->state = NET_TCP_SYN_SENT; t->snd_nxt = c->initial_sequence;
     memcpy(t->peer, c->peer, 4); t->remote_port = c->remote_port; return NET_OK;
@@ -65,7 +64,8 @@ static int run(void) {
     return status;
 }
 int main(void) {
-    char big[257];
+    char big[257], long_path[256];
+    unsigned char expected_peer[4] = {192, 168, 64, 1};
     unsigned short count;
     reset("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello");
     check(net_http_start(&net, &http, &config, 0) == NET_OK && http.state == NET_HTTP_CONNECTING);
@@ -84,7 +84,7 @@ int main(void) {
     net_http_start(&net, &http, &config, 0); check(run() == NET_TIMEOUT && received == 2 && aborts == 1);
     reset("HTTP/1.0 204 Empty\r\n\r\n"); config.host = "Example.test"; config.port = 80;
     check(net_http_start(&net, &http, &config, 0) == NET_OK && http.state == NET_HTTP_RESOLVING && !strcmp(http.dns.name, "Example.test"));
-    check(run() == NET_EOF && !received && !memcmp(http.tcp.peer, "\300\250\100\001", 4));
+    check(run() == NET_EOF && !received && !memcmp(http.tcp.peer, expected_peer, 4));
     check(strchr(sent, ':') != 0 && !strcmp(http.request, "GET /hello?q=1 HTTP/1.0\r\nHost: Example.test\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n"));
     reset(""); config.host = "missing.test"; dns_result = NET_DNS_NXDOMAIN;
     net_http_start(&net, &http, &config, 0); check(run() == NET_HTTP_DNS_ERROR && http.dns.status == NET_DNS_NXDOMAIN && !http.dns.port);
@@ -104,6 +104,12 @@ int main(void) {
     reset(""); memset(big, 'a', 256); big[0] = '/'; big[256] = 0; config.path = big;
     check(net_http_start(&net, &http, &config, 0) == NET_BAD_ARGUMENT);
     reset(""); big[255] = 0; config.path = big; check(net_http_start(&net, &http, &config, 0) == NET_OK);
+    reset(""); config.port = 65535;
+    check(net_http_start(&net, &http, &config, 0) == NET_OK && !strcmp(http.request, "GET /hello?q=1 HTTP/1.0\r\nHost: 192.168.64.1:65535\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n"));
+    reset(""); memset(big, 'a', 253); big[63] = '.'; big[127] = '.'; big[191] = '.'; big[253] = 0;
+    memset(long_path, 'a', 255); long_path[0] = '/'; long_path[255] = 0;
+    config.host = big; config.path = long_path; config.port = 65535;
+    check(net_http_start(&net, &http, &config, 0) == NET_OK && http.request_length < NET_HTTP_REQUEST && !http.request[http.request_length]);
     reset(""); config.port = 0; check(net_http_start(&net, &http, &config, 0) == NET_BAD_ARGUMENT);
     reset(""); config.timeout_ms = 0; check(net_http_start(&net, &http, &config, 0) == NET_BAD_ARGUMENT);
     reset(""); net.link = 0; check(net_http_start(&net, &http, &config, 0) == NET_LINK_DOWN);

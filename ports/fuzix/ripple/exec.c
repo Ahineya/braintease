@@ -76,7 +76,8 @@ arg_t _execve(void) {
     nins = longat(12);
     data = longat(16);
     nr = longat(20);
-    if (!nins || nins > 256000UL || entry >= nins || data > 60000UL || nr > nins * 2) {
+    if (!nins || nins > 256000UL || entry >= nins || data > 60000UL ||
+        nr > nins * 2) {
         udata.u_error = ENOEXEC;
         goto bad;
     }
@@ -103,7 +104,8 @@ arg_t _execve(void) {
     }
     abuf = tmpbuf();
     ebuf = tmpbuf();
-    if (rargs((uint8_t **)udata.u_argn1, abuf) || rargs((uint8_t **)udata.u_argn2, ebuf)) {
+    if (rargs((uint8_t **)udata.u_argn1, abuf) ||
+        rargs((uint8_t **)udata.u_argn2, ebuf)) {
         tmpfree(abuf);
         tmpfree(ebuf);
         goto bad;
@@ -131,7 +133,8 @@ arg_t _execve(void) {
         kind = wordat(pos);
         idx = longat(pos + 4);
         if (kind == 0)
-            imem_add_word2(base + (unsigned)(idx / 64000UL), (unsigned)(idx % 64000UL), base);
+            imem_add_word2(base + (unsigned)(idx / 64000UL),
+                           (unsigned)(idx % 64000UL), base);
     }
     uzero((void *)PROGBASE, 64000);
     for (i = 0; i < data; i++)
@@ -152,9 +155,21 @@ arg_t _execve(void) {
     memset(udata.u_sigvec, 0, sizeof(udata.u_sigvec));
     udata.u_cursig = 0;
     udata.u_error = 0;
-    if (argc)
-        uget((void *)ugetp(av), udata.u_name, 8);
-    memcpy(udata.u_ptab->p_name, udata.u_name, 8);
+    memset(udata.u_name, 0, sizeof(udata.u_name));
+    if (argc) {
+        uint8_t *name = (uint8_t *)ugetp(av);
+        /* Short argv[0] can end at the very top of the GP bank. */
+        for (i = 0; i < sizeof(udata.u_name); i++) {
+            int c = ugetc(name + i);
+            if (c < 0)
+                break;
+            udata.u_name[i] = c;
+            if (!c)
+                break;
+        }
+    }
+    memcpy(udata.u_ptab->p_name, udata.u_name, sizeof(udata.u_name));
+    udata.u_ptab->p_size = 250;
     tmpfree(abuf);
     tmpfree(ebuf);
     i_deref(ino);

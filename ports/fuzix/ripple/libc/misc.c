@@ -1,0 +1,241 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include <errno.h>
+#include <grp.h>
+#include <pwd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#undef isascii
+int isascii(int c) { return (unsigned)c < 128; }
+int isupper(int c) { return c >= 'A' && c <= 'Z'; }
+int islower(int c) { return c >= 'a' && c <= 'z'; }
+int isalpha(int c) { return isupper(c) || islower(c); }
+int isdigit(int c) { return c >= '0' && c <= '9'; }
+int isalnum(int c) { return isalpha(c) || isdigit(c); }
+int isspace(int c) { return c == ' ' || (c >= '\t' && c <= '\r'); }
+int isblank(int c) { return c == ' ' || c == '\t'; }
+int iscntrl(int c) { return (unsigned)c < 32 || c == 127; }
+int isprint(int c) { return c >= 32 && c < 127; }
+int isgraph(int c) { return c > 32 && c < 127; }
+int ispunct(int c) { return isgraph(c) && !isalnum(c); }
+int isxdigit(int c) {
+    return isdigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+int toupper(int c) { return islower(c) ? c - 'a' + 'A' : c; }
+int tolower(int c) { return isupper(c) ? c - 'A' + 'a' : c; }
+char *strerror(int e) {
+    switch (e) {
+    case 0:
+        return "Success";
+    case EPERM:
+        return "Operation not permitted";
+    case ENOENT:
+        return "No such file or directory";
+    case ESRCH:
+        return "No such process";
+    case EINTR:
+        return "Interrupted system call";
+    case EIO:
+        return "Input/output error";
+    case EBADF:
+        return "Bad file descriptor";
+    case ECHILD:
+        return "No child processes";
+    case EAGAIN:
+        return "Resource temporarily unavailable";
+    case ENOMEM:
+        return "Out of memory";
+    case EFAULT:
+        return "Bad address";
+    case EACCES:
+        return "Permission denied";
+    case EEXIST:
+        return "File exists";
+    case EXDEV:
+        return "Cross-device link";
+    case ENOTDIR:
+        return "Not a directory";
+    case EISDIR:
+        return "Is a directory";
+    case EINVAL:
+        return "Invalid argument";
+    case EMFILE:
+        return "Too many open files";
+    case ENOSPC:
+        return "No space left on device";
+    case ESPIPE:
+        return "Illegal seek";
+    case EROFS:
+        return "Read-only filesystem";
+    case ENOTEMPTY:
+        return "Directory not empty";
+    case ENOEXEC:
+        return "Exec format error";
+    default:
+        return "System error";
+    }
+}
+void perror(const char *p) {
+    int e = errno;
+    if (p && *p)
+        fprintf(stderr, "%s: ", p);
+    fprintf(stderr, "%s\n", strerror(e));
+    errno = e;
+}
+char *getenv(char *name) {
+    size_t n = strlen(name);
+    char **p = environ;
+    if (p)
+        for (; *p; p++)
+            if (!strncmp(*p, name, n) && (*p)[n] == '=')
+                return *p + n + 1;
+    return NULL;
+}
+/* UTC until this platform has a timezone database. */
+struct tm *localtime(time_t *t) { return gmtime(t); }
+struct tm *localtime_r(time_t *t, struct tm *r) { return gmtime_r(t, r); }
+const char *_ultoa(unsigned long n) {
+    static char b[34];
+    sprintf(b, "%lu", n);
+    return b;
+}
+const char *_ltoa(long n) {
+    static char b[34];
+    sprintf(b, "%ld", n);
+    return b;
+}
+const char *_uitoa(unsigned n) { return _ultoa(n); }
+const char *_itoa(int n) { return _ltoa(n); }
+char *ltoa(long n, char *b, int base) {
+    char t[34];
+    unsigned i = 0, j = 0;
+    unsigned long v = n;
+    if (base < 2 || base > 36) {
+        b[0] = 0;
+        return b;
+    }
+    if (n < 0 && base == 10) {
+        b[j++] = '-';
+        v = 0UL - v;
+    }
+    do {
+        unsigned d = v % base;
+        t[i++] = d < 10 ? '0' + d : 'a' + d - 10;
+        v /= base;
+    } while (v);
+    while (i)
+        b[j++] = t[--i];
+    b[j] = 0;
+    return b;
+}
+char *ultoa(unsigned long n, char *b, int base) {
+    char t[34];
+    unsigned i = 0, j = 0;
+    if (base < 2 || base > 36) {
+        b[0] = 0;
+        return b;
+    }
+    do {
+        unsigned d = n % base;
+        t[i++] = d < 10 ? '0' + d : 'a' + d - 10;
+        n /= base;
+    } while (n);
+    while (i)
+        b[j++] = t[--i];
+    b[j] = 0;
+    return b;
+}
+int readlink(const char *p, char *b, int n) {
+    (void)p;
+    (void)b;
+    (void)n;
+    errno = EINVAL;
+    return -1;
+}
+char *setlocale(int c, const char *s) {
+    (void)c;
+    if (!s || !*s || !strcmp(s, "C") || !strcmp(s, "POSIX"))
+        return "C";
+    return NULL;
+}
+static void diagnostic(int with_errno, const char *fmt, va_list a) {
+    int e = errno;
+    if (_argv && _argv[0])
+        fprintf(stderr, "%s: ", _argv[0]);
+    if (fmt)
+        vfprintf(stderr, fmt, a);
+    if (with_errno)
+        fprintf(stderr, "%s%s", fmt ? ": " : "", strerror(e));
+    fputc('\n', stderr);
+    errno = e;
+}
+void warn(const char *fmt, ...) {
+    va_list a;
+    va_start(a, fmt);
+    diagnostic(1, fmt, a);
+    va_end(a);
+}
+void warnx(const char *fmt, ...) {
+    va_list a;
+    va_start(a, fmt);
+    diagnostic(0, fmt, a);
+    va_end(a);
+}
+void err(int status, const char *fmt, ...) {
+    va_list a;
+    va_start(a, fmt);
+    diagnostic(1, fmt, a);
+    va_end(a);
+    exit(status);
+}
+void errx(int status, const char *fmt, ...) {
+    va_list a;
+    va_start(a, fmt);
+    diagnostic(0, fmt, a);
+    va_end(a);
+    exit(status);
+}
+
+void regerror(char *s) {
+    fprintf(stderr, "regexp: %s\n", s);
+    exit(2);
+}
+#include <sys/mount.h>
+#include <sys/statvfs.h>
+#include <sys/utsname.h>
+int statvfs(const char *path, struct statvfs *v) {
+    struct {
+        struct _uzifilesys fs;
+        unsigned flags;
+    } k;
+    if (_statfs(path, (uint8_t *)&k) < 0)
+        return -1;
+    if (k.fs.s_mounted != 0x7252) {
+        errno = EINVAL;
+        return -1;
+    }
+    v->f_bsize = v->f_frsize =
+        512; /* Physical octets, as expected by upstream df. */
+    v->f_blocks = k.fs.s_fsize - k.fs.s_isize;
+    v->f_bfree = v->f_bavail = k.fs.s_tfree;
+    v->f_files = (k.fs.s_isize - 2) * 8;
+    v->f_ffree = v->f_favail = k.fs.s_tinode;
+    v->f_fsid = 0;
+    v->f_namemax = 30;
+    v->f_flag = (k.flags & MS_RDONLY ? ST_RDONLY : 0) |
+                (k.flags & MS_NOSUID ? ST_NOSUID : 0) |
+                (k.flags & MS_NOEXEC ? ST_NOEXEC : 0);
+    return 0;
+}
+int uname(struct utsname *s) {
+    strcpy(s->sysname, "FUZIX");
+    strcpy(s->nodename, "ripple");
+    strcpy(s->release, "0.5");
+    strcpy(s->version, "RCC");
+    strcpy(s->machine, "Ripple");
+    return 0;
+}
+char *tzname[2] = {"UTC", "UTC"};
+int daylight;
+long timezone;

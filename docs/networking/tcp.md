@@ -1,10 +1,10 @@
-# Guest TCP client
+# Guest TCP streams and listeners
 
-`<net_tcp.h>` implements a bounded IPv4 TCP **active-open client** in the shared
-guest C stack. It constructs/checks segments, manages sequence numbers, buffers
+`<net_tcp.h>` implements bounded IPv4 TCP streams and passive listeners in the
+shared guest C stack. It constructs/checks segments, manages sequence numbers, buffers
 streams and performs retransmission itself. RVM/RBF/native carry Ethernet frames;
 no execution host substitutes sockets for guest TCP. No instruction or DEVICE_*
-command was added. Passive listeners are a later extension before the HTTP server.
+command was added. The [HTTP server](http-server.md) uses the passive listener API.
 
 ## Run the echo demo
 
@@ -124,6 +124,93 @@ timeout. `net_tcp_abort` explicitly cancels, discards buffers, releases the slot
 and sends RST if it can do so immediately. Aborting TIME_WAIT gives up its
 tuple-reuse guard; do not free/move a still-active object instead of cancelling it.
 
+## Listen and accept
+
+`net_tcp_listen` registers an IPv4 local port and a caller-owned TCB pool, with
+capacity 1..4. At most two listeners and four live connections share a context.
+Pending handshakes, established connections and full-TCB TIME_WAIT all count
+toward that connection limit; pool memory is reserved by its caller, not a heap.
+Listening itself does not consume a connection slot. Active connects cannot
+claim a listener port, and listeners cannot bind an active-open local port.
+Accepted children share their listener's port and are distinguished by full
+peer/local tuples.
+
+```c
+static NetTcpListener listener;
+static NetTcp clients[2];
+static NetTcpWaitTable closing;
+extern unsigned long make_sequence(void *, const unsigned char *,
+                                   unsigned short, unsigned long);
+static NetTcpListenConfig settings = {8080, 15000UL, make_sequence, 0};
+
+int listen_to_http(NetContext *network) {
+    int status = net_tcp_wait_attach(network, &closing);
+    if (status) return status;
+    return net_tcp_listen(network, &listener, clients, 2, &settings);
+}
+```
+
+Zero the listener and pool before first use, and keep them at stable addresses.
+The pool belongs exclusively to that listener until it is stopped and all
+accepted objects are released; do not pass its objects to active connect or
+another context during that lifetime.
+The synchronous ISN callback receives user data, peer IPv4/port and current
+milliseconds for each new passive open. Supply unpredictable sequences for
+untrusted networks; do not recursively poll/mutate the context in that callback.
+Repeated SYNs reuse the original ISN and do not restart the handshake deadline.
+SYN-ACK is retransmitted through the same reliable-flight machinery as active
+TCP. Final ACKs must acknowledge an actually transmitted SYN-ACK; invalid ACKs
+cannot establish a connection. Final-ACK data/FIN is delivered through the normal
+ordered stream path. TCP Fast Open/SYN data is not supported and such new opens
+are dropped without allocating a slot.
+
+After network/DHCP poll, call `net_tcp_listener_poll` to drive **all** pool
+members, including unaccepted handshakes, accepted streams and close/TIME_WAIT.
+Then `net_tcp_accept(listener, &connection)` returns NET_OK and a borrowed TCB
+when its handshake completes, or NET_AGAIN with a null output. A peer may
+already have queued data or half-closed. Existing read/write/shutdown APIs apply.
+Pool/global-table exhaustion drops new SYNs and increments `listener.refused`;
+it does not overwrite an existing connection or allocate additional storage.
+Unaccepted state has an absolute `timeout_ms` lifetime, including a completed
+connection that the application never accepts. Duplicate traffic cannot keep a
+half-open slot forever.
+
+Accepted objects remain claimed until **explicitly** released, including after
+failure or orderly close. Call `net_tcp_release(listener, connection)` when the
+application is done. Active states return NET_BUSY; abort explicitly only when
+cancelling. Release discards any remaining unread data and returns the object
+to its pool. Never retain/use that pointer after release: a new connection can
+reuse its address on the next received SYN. Starting/stopping a listener does
+not silently transfer ownership of an accepted object.
+
+`net_tcp_unlisten` stops new opens and aborts unaccepted work. Accepted streams
+remain alive; keep polling/release them. The listener and pool must stay stable
+until all accepted objects are released. Configuration/link changes stop the
+listener with NET_CONFIG_CHANGED/NET_LINK_DOWN and terminate affected streams.
+There is no automatic relisten on a different lease. Explicit rebind after
+recovery is an application decision.
+
+### Compact TIME_WAIT storage
+
+`net_tcp_wait_attach(network, &table)` optionally attaches a zeroed caller-owned
+`NetTcpWaitTable`. Without one, the full TCB remains active for normal TIME_WAIT.
+With one, release can preserve an accepted TIME_WAIT tuple/sequence/timer in one
+of 32 compact records, detach the full connection, and immediately reuse its
+large buffers. Duplicate FINs still get their last ACK and restart the record's
+120-second timer. Delayed SYN/data/RST cannot create the same old tuple, while
+other tuples can reuse the local listening port. Outgoing active opens also
+respect protected local ports.
+
+This storage belongs to the context independently of any listener, so it must
+outlive retained records even after unlisten. Empty/expired storage can be
+replaced or detached with `net_tcp_wait_attach(network, 0)`; live records return
+NET_BUSY. A full compact table leaves the full TCB in TIME_WAIT and release
+returns NET_BUSY: records are never evicted to make a request look successful.
+Keep polling and retry release, or deliberately abort if giving up tuple
+protection is acceptable. Changed configuration/link epochs invalidate old
+records. Ordinary UDP/DNS/ping clients allocate no table; the receive/port paths
+return immediately when no table is attached.
+
 ## Timers, windows and lifecycle
 
 `timeout_ms`, 1..600000, bounds handshake or idle progress. New received bytes,
@@ -206,10 +293,10 @@ so compare the resulting assembly too when checking an optimization.
 
 ## Supported subset and security
 
-This is a small active client, not a claim of complete TCP conformance. It
+This is a small bounded implementation, not a claim of complete TCP conformance. It
 supports MSS and bounded parsing/skipping of other options, but does not offer
 window scaling, SACK, timestamps or ECN. There is no Nagle buffering, fast
-retransmit, growing congestion window, passive listen, simultaneous open,
+retransmit, growing congestion window, simultaneous open,
 IPv6, IP reassembly, path-MTU adaptation or TLS. Its fixed one-segment cap is
 deliberately conservative and limits throughput. Urgent-data semantics are
 unsupported and fail explicitly with NET_UNSUPPORTED.

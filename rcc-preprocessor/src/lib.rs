@@ -125,8 +125,10 @@ impl Preprocessor {
         self.current_file = Some(source_file);
         self.current_line = 1;
         
-        // Tokenize the input
-        let tokens = lexer::tokenize(input)?;
+        // C translation phase 2 precedes tokenization, including inside strings
+        // and comments. Handle both Unix and Windows physical line endings.
+        let logical = input.replace("\\\r\n", "").replace("\\\n", "");
+        let tokens = lexer::tokenize(&logical)?;
         
         // Parse directives
         let directives = parser::parse(&tokens)?;

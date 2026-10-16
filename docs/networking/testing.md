@@ -25,6 +25,8 @@ relevant matrix after compiler, runtime or protocol changes.
 | Host ping to DHCP lease and automatic helper cleanup | JIT/live passed | Live passed, executable copied outside repository | Not repeated for DHCP |
 | Independent UDP/DNS packet fixture | Interpreter and JIT passed | Passed | Opt-in; not part of routine DNS matrix |
 | TCP active-open, nine independent wire cases and ordinary host TCP echo | Interpreter/JIT passed | Passed | Live JIT DHCP/connection/traffic confirmed; full echo exceeded 600-second check |
+| TCP listeners + guest HTTP server | Interpreter/JIT C units, five wire cases and curl/host matrix passed | C units, five wire cases, curl/host matrix and browser rendered | Not repeated for server |
+| HTTP GET: incremental parser/stream units, guest DNS → TCP → HTTP and ordinary host HTTP | Interpreter/JIT units and DNS wire fixture; JIT live matrix and three interpreter live cases passed | Units, wire fixture and live HTTP passed | Not repeated for HTTP |
 | Refactored persistent monitor and automatic helper cleanup | JIT/live host ping passed | Live host ping and executable outside repository passed | Not repeated for this refactor |
 
 The DNS milestone included malformed/mismatched replies, compression failures,
@@ -281,6 +283,169 @@ on termination. This is partial interoperability evidence, not a full RBF echo
 pass; the launcher now allows 1800 seconds for an explicit run. The native/RVM
 full-stream results above remain separate.
 
+## HTTP
+
+The registered `test_net_http_parser` and `test_net_http_client` tests have
+81 assertions (43 parser, 38 client). They cover every two-part split of a
+response, single-octet input, zero output capacity/backpressure, binary body
+cells, status handling, Content-Length/close framing, EOF, header/line/count/body
+limits, decimal overflow, duplicate/conflicting lengths, unsupported encodings,
+malformed CRLF/field syntax, partial writes/reads, DNS success/failure,
+cancellation, request injection/length bounds, maximum port/host/path sizes,
+clock wrap and a total deadline even while the caller stops reading.
+
+```sh
+./rct test_net_http_parser test_net_http_client --backend rvm --timeout 30
+scripts/test-net-http-unit.py
+scripts/test-net-http-unit.py --mode rvm --jit
+```
+
+The private unit runner links only the needed protocol C modules, explicitly
+supporting native (the native single-file rct runner does not link them). It
+uses 16384-cell banks because the stream test also owns a fake network, request,
+response, capture buffers and many test strings. The actual HTTP demo uses
+8192-cell banks. Results/build logs are under `build/network/http-unit/`.
+
+An independent Ethernet peer supplies a synthetic DNS answer, then exchanges
+TCP packets and a 10,230-octet HTTP body. It verifies guest DNS question/ports/
+checksums, a compressed A answer, Host/request serialization, sequence wrap,
+MSS 137, variable read boundaries, exact body output and guest close. It never
+opens a host TCP socket or calls a host resolver:
+
+```sh
+NET_DEMO=http-get NET_PRIVATE_RUNTIME=1 BANK_SIZE=8192 \
+  scripts/build-net-ping.sh native build/network/http-dns/native \
+  -DHTTP_DHCP=0 '-DHTTP_HOST="web.ripple.test"'
+NET_DEMO=http-get NET_PRIVATE_RUNTIME=1 BANK_SIZE=8192 \
+  scripts/build-net-ping.sh rvm build/network/http-dns/rvm \
+  -DHTTP_DHCP=0 '-DHTTP_HOST="web.ripple.test"'
+scripts/test-net-http.py
+scripts/test-net-http.py --mode rvm --jit
+```
+
+Native, RVM interpreter and RVM JIT pass the DNS → TCP → HTTP wire test.
+These controlled configurations are separate builds from the DHCP-enabled live
+client and do not require vmnet, Internet access or administrator rights.
+Unix socket binding must be allowed by the execution environment.
+
+A separate **ordinary host kernel TCP service** validates interoperability with
+DHCP-enabled native and RVM guests. Build/run the launchers, then exercise the
+service's response cases sequentially (one server uses port 8080):
+
+```sh
+scripts/run-net-http.sh
+scripts/run-net-http.sh rvm --jit
+scripts/test-net-http-live.py --mode native
+scripts/test-net-http-live.py --mode rvm --jit
+```
+
+All 11 cases passed on native and RVM JIT: `length`, `close`, `split`,
+`hold-open`, `empty`, `not-found`, `conflict`, `early`, `chunked`, `limit` and
+`stall`. Success compares the complete 13,033-octet HTML body (larger than one
+8192-cell bank), not only a checksum. Error cases require a specific failure
+and prohibit `HTTP OK`. Holding the socket open after the declared length must
+still complete the body. A truncated length fails with status 34, conflicting
+lengths with 32, unsupported transfer coding with 16, limits with 33 and a
+stalled body with 8. RVM interpreter also passed the live `length`, `close` and
+`early` cases. The split live case paces individual header octets; exact
+boundary coverage comes from deterministic decoder tests since a host TCP
+stack can coalesce writes. Service threads, guest processes and owned vmnet
+helpers are cleaned up on success and failure. Capture remains disabled.
+
+The live fixture uses a numeric host address because host-only vmnet does not
+advertise recursive DNS. The independent packet fixture separately proves the
+complete guest name-to-HTTP chain. A named public VPS cleartext endpoint has
+not been configured/tested; the previous guest DNS-to-ping evidence is separate.
+RBF was not rebuilt or run for HTTP.
+
+Existing protocol, DNS-name, DHCP, lifecycle and TCP handshake/receive/error
+regressions also passed on RVM after adding HTTP. A compiler defect discovered
+by a test is recorded as the intentionally red correct-behavior regression
+`string_escape_octets`: numeric C string escapes above 127 expand as UTF-8.
+HTTP uses explicit byte arrays where such data is needed; its tests pass.
+The frontend fix is separate from this networking milestone.
+
+## TCP listeners and HTTP server
+
+The new registered units add 52 listener assertions, 37 request-parser assertions
+and 23 server-session assertions. Together with the 81 HTTP client/parser
+assertions, all 193 pass on native, RVM interpreter and RVM JIT. The standalone
+unit runner now includes both HTTP directions:
+
+```sh
+scripts/test-net-http-unit.py
+scripts/test-net-http-unit.py --mode rvm --jit
+./rct test_net_tcp_listen test_net_http_request test_net_http_server --backend rvm --timeout 30
+```
+
+The listener uses a fake NIC and real TCP frames. It checks bind/pool conflicts,
+bounded half-open/global slots, SYN-ACK retransmission and stable ISNs, invalid
+ACKs, final-ACK data/FIN, accept ownership, explicit release, stop/rebind,
+configuration/link loss, locally blocked TX, TIME_WAIT, full compact-table
+backpressure, duplicate FIN ACKs, delayed-SYN protection, expiration and safe
+attach/detach of the optional caller-owned table. Private listener builds use
+16384-cell banks. The HTTP units check every two-part request split and
+single-octet input, Host/length/version validation, malformed/oversized fields,
+unsupported bodies/encodings, partial binary writes, exact serialization,
+cancellation, session reuse at the same pool address, clock wrap, trickles and
+request/send/close deadlines. The existing 107 TCP assertions also pass across
+native, RVM interpreter and JIT after adding passive open. A private archive-linked
+listener passes all 52 checks, and the existing monitor still links in 4096-cell
+banks (3843 data cells), without allocating a compact closing table.
+
+An independent Ethernet active-open peer checks the guest server over a local
+Unix socket, using no host TCP stack or host HTTP implementation:
+
+```sh
+NET_DEMO=http-server NET_PRIVATE_RUNTIME=1 BANK_SIZE=16384 \
+  scripts/build-net-ping.sh native build/network/http-server-wire/native \
+  -DHTTP_SERVER_DHCP=0 -DHTTP_SERVER_TIMEOUT=15000UL
+NET_DEMO=http-server NET_PRIVATE_RUNTIME=1 BANK_SIZE=16384 \
+  scripts/build-net-ping.sh rvm build/network/http-server-wire/rvm \
+  -DHTTP_SERVER_DHCP=0 -DHTTP_SERVER_TIMEOUT=15000UL
+scripts/test-net-http-server.py
+scripts/test-net-http-server.py --mode rvm --jit
+```
+
+All five cases (`success`, `loss`, `reorder`, `zero`, `malformed`) pass on native,
+RVM interpreter and JIT. The peer checks outgoing checksums, MSS 113, wrapped
+request sequences and exact headers/984-octet HTML. Loss drops the first SYN-ACK,
+response data, data ACK, FIN and last ACK; retransmitting the peer's FIN after
+pool release must get an ACK from compact TIME_WAIT state. Reordering injects
+future request bytes before the expected prefix. A zero window requires actual
+one-octet probes before opening a small window. A corrupt SYN cannot create a
+connection. The longer 15-second HTTP phase budget is fixture configuration
+for the combined loss scenario; the normal application keeps five-second phases.
+
+Actual macOS host checks use the default DHCP-enabled builds and capture-disabled
+host-only vmnet. The host connects to the leased address printed by the guest:
+
+```sh
+scripts/run-net-http-server.sh --test
+scripts/run-net-http-server.sh rvm --jit --test
+# Reuse those builds for the interpreter/individual modes:
+scripts/test-net-http-server-live.py --mode native
+scripts/test-net-http-server-live.py --mode rvm --jit
+```
+
+Native, RVM interpreter and RVM JIT pass curl plus 18 named HTTP/stream checks, with 26 completed
+connections per run. This exceeds the four-live-connection table without
+aborting successful closes. The checks compare the exact hardcoded page,
+Content-Length, Content-Type, Connection and Allow fields, then cover split and
+half-closed requests, 404/405, missing/duplicate Host, invalid/nonzero lengths,
+chunked requests, Expect, oversized header/target, unsupported version, early
+EOF, request stall, withheld client FIN, reset and eight further valid requests.
+The live stall caught a TCP idle deadline racing the 408 response: the demo now
+allows 15 seconds at TCP while keeping a five-second HTTP request deadline.
+Timeouts are explicit and ordinary subsequent requests must still succeed.
+Guest processes and owned helpers are removed after every test.
+
+A real browser also rendered the native page from its DHCP address, including
+its title, text and inline CSS; the browser's favicon request received 404.
+No host web server supplied that page. RBF was not built/run for this milestone,
+and no public HTTP service or NAT port mapping was configured. The shared C
+implementation and original ISA remain the intended execution path on RBF.
+
 ## Live host and VPS tests
 
 On macOS, after building the monitor variants above:
@@ -329,6 +494,11 @@ Existing fixtures save logs and JSON results under:
 | DHCP → DNS → ping launcher/build | `build/network/dhcp-ping/<mode>/` |
 | TCP C regressions / independent packet peer | `build/network/tcp/` |
 | TCP live host echo | `build/network/tcp-echo/<mode>/` |
+| HTTP private parser/client units | `build/network/http-unit/` |
+| HTTP independent guest DNS/TCP peer | `build/network/http-dns/<mode>/` |
+| HTTP live service/launcher | `build/network/http-get/<mode>/` |
+| HTTP server independent wire peer | `build/network/http-server-wire/<mode>/` |
+| HTTP server live curl/browser/host tests | `build/network/http-server/<mode>/` |
 | Earlier IPv4-only VPS test | `build/network/vps/<mode>/` |
 
 The ICMP packet fixture also writes generated-test captures. This does not

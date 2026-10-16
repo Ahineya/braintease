@@ -322,6 +322,10 @@ found:
     if(isnew) {
         if(nindex->c_node.i_nlink || nindex->c_node.i_mode & F_MASK)
             goto badino;
+        /* A deleted device retains its device number in i_addr[0].
+           Anonymous pipes also allocate here, without going through
+           newfile(), so clear the complete recycled on-disk inode. */
+        memset(&nindex->c_node, 0, sizeof(nindex->c_node));
     } else {
         if(!(nindex->c_node.i_nlink && nindex->c_node.i_mode & F_MASK))
             goto badino;

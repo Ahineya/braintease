@@ -18,7 +18,8 @@ export function checkRoot(input, repair = false) {
     throw Error('invalid root geometry');
   function claim(b, ino) {
     if (b < isize || b >= blocks) throw Error(`inode ${ino}: block outside data area`);
-    if (owners.has(b)) throw Error(`block ${b} is multiply allocated`);
+    if (owners.has(b))
+      throw Error(`block ${b} is multiply allocated by inodes ${owners.get(b)} and ${ino}`);
     owners.set(b, ino);
   }
   function indirect(b, level, start, map, ino) {
@@ -41,7 +42,8 @@ export function checkRoot(input, repair = false) {
     const type = mode & 0xf000;
     if (![0x8000, 0x4000, 0x2000, 0x6000, 0x1000].includes(type))
       throw Error(`inode ${ino}: invalid type`);
-    if (type === 0x8000 || type === 0x4000) {
+    // FUZIX stores named-pipe buffers in ordinary filesystem blocks too.
+    if (type === 0x8000 || type === 0x4000 || type === 0x1000) {
       for (let j = 0; j < 18; j++) {
         const b = w(base + 12 + j);
         if (b) {
@@ -178,6 +180,11 @@ export function checkDisk(filename, repair = false) {
   return !result.issues.length || repair;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv[2] !== '--locked') throw Error('use tools/fsck.py so the disk is locked');
-  if (!checkDisk(process.argv[3], process.argv[4] === '--repair')) process.exitCode = 1;
+  try {
+    if (process.argv[2] !== '--locked') throw Error('use tools/fsck.py so the disk is locked');
+    if (!checkDisk(process.argv[3], process.argv[4] === '--repair')) process.exitCode = 1;
+  } catch (error) {
+    console.error(`Filesystem check failed: ${error.message}`);
+    process.exitCode = 1;
+  }
 }

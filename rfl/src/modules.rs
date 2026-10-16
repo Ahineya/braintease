@@ -1656,7 +1656,7 @@ pub(crate) fn import_definition(
     Some((path, span))
 }
 
-fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileError> {
+pub(crate) fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileError> {
     if spec == "std" || spec.starts_with("std/") {
         let Some(name) = std_module_name(spec) else {
             return Err(CompileError::plain(

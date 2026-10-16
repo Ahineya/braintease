@@ -25,7 +25,7 @@ The default installation is `/Applications/IntelliJ IDEA.app`. Elsewhere, pass
 accepted. If the IDE has no compiler, set `JAVA_HOME` to a JDK 21 or later.
 
 In IDEA, open **Settings → Plugins → gear menu → Install Plugin from Disk** and
-select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.2.zip`. Restart
+select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.3.zip`. Restart
 if IDEA requests it, then open an `.rfl` file.
 
 To update an installed version, use the same **Install Plugin from Disk** action
@@ -78,6 +78,25 @@ libraries when used). Native compilation requires the host toolchain used by
 `rfl compile --target native`.
 
 ## Language server
+
+Use **Refactor → Rename** (usually **Shift+F6**) on an RFL declaration or use.
+IDEA uses the server's symbol ranges and workspace edits, with its normal rename
+dialog, preview and undo. Rename covers local variables, parameters, functions,
+constants, types, constructors, fields, methods and import aliases. Project
+exports update imports and uses in other `.rfl` files, including unopened files;
+open files use their unsaved contents and document versions. Explicit import
+aliases keep their local spelling when the exported declaration is renamed.
+
+Renaming an unaliased stdlib or external import creates a local alias, for
+example `sin` becomes `sin as sine`, and updates calls in that file. The stdlib,
+compiler builtins, `main`, and C linkage declarations cannot be renamed.
+Comments, strings and import paths are left alone. Struct shorthand expands
+when needed to preserve the field or local binding. Invalid names, name capture,
+syntax errors affecting the refactor and unresolved member receivers produce
+an error instead of partial edits. Workspace searches skip hidden directories,
+`target`, `build`, `node_modules` and `vendor`; files outside the workspace are
+treated as library imports unless open in the editor. File/module moves are not
+part of symbol rename. Rebuild the server when updating this plugin.
 
 An empty **Settings → Languages & Frameworks → RFL → RFL executable** setting
 first tries `rfl` on IDEA's PATH (`rfl.exe` on Windows), then searches the project

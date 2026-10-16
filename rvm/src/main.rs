@@ -107,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .set_script(devices::InputScript::from_path(path)?)?;
     }
     vm.host_input_enabled = !options.deterministic && !cli.control_stdin;
+    vm.guest_ctrl_c = cli.guest_ctrl_c;
 
     // Set verbose mode if requested
     vm.verbose = verbose;

@@ -28,6 +28,8 @@ pub struct VM {
     pub presented_frames: u64,
     pub device_error: Option<String>,
     pub host_input_enabled: bool,
+    /// Forward Ctrl-C to a guest terminal rather than stopping the host.
+    pub guest_ctrl_c: bool,
 
     // Program memory - stores instructions
     pub instructions: Vec<Instr>,
@@ -164,6 +166,7 @@ impl VM {
             presented_frames: 0,
             device_error: None,
             host_input_enabled: true,
+            guest_ctrl_c: false,
             instructions: Vec::new(),
             memory: vec![0; memory_size],
             registers: [0; 32],

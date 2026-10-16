@@ -35,6 +35,9 @@ def main():
     send("textDocument/definition", {"textDocument": doc, "position": position}, 4)
     send("textDocument/references", {"textDocument": doc, "position": position, "context": {"includeDeclaration": True}}, 5)
     send("textDocument/rename", {"textDocument": doc, "position": position, "newName": "increment"}, 6)
+    send("textDocument/prepareRename", {"textDocument": doc, "position": position}, 31)
+    send("textDocument/rename", {"textDocument": doc, "position": position, "newName": "let"}, 32)
+    send("textDocument/prepareRename", {"textDocument": doc, "position": {"line": 0, "character": 0}}, 33)
     send("textDocument/documentSymbol", {"textDocument": doc}, 7)
     send("textDocument/semanticTokens/full", {"textDocument": doc}, 8)
     send("textDocument/inlayHint", {"textDocument": doc, "range": {"start": {"line": 0, "character": 0}, "end": {"line": 2, "character": 0}}}, 9)
@@ -126,6 +129,11 @@ fn main() {
         length = int(header.split(b":", 1)[1])
         assert stream.readline() == b"\r\n"
         message = json.loads(stream.read(length))
+        if message.get("id") == 32:
+            assert message["error"]["code"] == -32803, message
+            assert "identifier" in message["error"]["message"], message
+            responses[32] = message["error"]
+            continue
         assert "error" not in message, message
         if "id" in message:
             responses[message["id"]] = message["result"]
@@ -137,7 +145,12 @@ fn main() {
     assert any(item["label"] == "answer" for item in responses[3]), responses[3]
     assert responses[4]["range"]["start"]["line"] == 0
     assert responses[5]
-    assert len(responses[6]["changes"][uri]) >= 2
+    assert len(responses[6]["documentChanges"][0]["edits"]) >= 2
+    assert responses[6]["documentChanges"][0]["textDocument"] == {"uri": uri, "version": 1}
+    assert responses[1]["capabilities"]["renameProvider"] == {"prepareProvider": True}
+    assert responses[31]["placeholder"] == "answer"
+    assert responses[31]["range"]["end"]["character"] - responses[31]["range"]["start"]["character"] == 6
+    assert responses[32] and responses[33] is None
     assert {item["name"] for item in responses[7]} >= {"answer", "main"}
     assert responses[8]["data"]
     assert responses[9]

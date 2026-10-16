@@ -14,6 +14,7 @@ PORT = Path(__file__).resolve().parents[1]
 ROOT = PORT.parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build', type=Path, default=PORT/'build')
+parser.add_argument('--no-jit', action='store_true')
 args = parser.parse_args()
 build = args.build.resolve()
 env = dict(os.environ, FUZIX_BUILD=str(build))
@@ -23,6 +24,8 @@ with tempfile.TemporaryDirectory(prefix='ripple-fuzix-terminal-') as temporary:
     subprocess.run(['node', str(PORT/'tools/disk.mjs'), str(build), str(disk)], check=True)
     master, slave = pty.openpty()
     command = [str(ROOT/'scripts/run-fuzix.sh'), '--run-only', '--disk', str(disk)]
+    if args.no_jit:
+        command.append('--no-jit')
     process = subprocess.Popen(command, cwd=ROOT, env=env, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
     os.close(slave)
     buffer = b''
@@ -65,6 +68,51 @@ with tempfile.TemporaryDirectory(prefix='ripple-fuzix-terminal-') as temporary:
         os.write(master, b'hello terminal-argument\r')
         output = until(b'fuzix# ')
         assert b'argument: terminal-argument' in output, output
+        # Ctrl-C is a guest interrupt, never an ordinary VM exit.
+        for _ in range(3):
+            os.write(master, b'ed\r')
+            until(b': ')
+            os.write(master, b'\x03')
+            output = until(b'fuzix# ')
+            assert process.poll() is None, output
+            os.write(master, b'echo INTERRUPT:$?\r')
+            output = until(b'fuzix# ')
+            assert b'INTERRUPT:130' in output, output
+        # ed's explicit quit commands work with empty and modified buffers.
+        os.write(master, b'ed\r')
+        until(b': ')
+        os.write(master, b'q\r')
+        until(b'fuzix# ')
+        os.write(master, b'ed\r')
+        until(b': ')
+        os.write(master, b'a\rdiscard me\r.\rQ\r')
+        until(b'fuzix# ')
+        # Both stages of a foreground pipeline must receive the interrupt.
+        os.write(master, b'cat | cat\r')
+        until(b'cat | cat')
+        os.write(master, b'pipeline_ready\r')
+        until(b'pipeline_ready')
+        until(b'pipeline_ready')
+        os.write(master, b'\x03')
+        until(b'fuzix# ')
+        os.write(master, b'echo PIPE_INTERRUPT:$?\r')
+        output = until(b'fuzix# ')
+        assert b'PIPE_INTERRUPT:130' in output, output
+        # Pending signals also interrupt computation without a system call.
+        os.write(master, b'preemptcheck\r')
+        until(b'child ran while parent computed')
+        os.write(master, b'\x03')
+        output = until(b'fuzix# ')
+        assert b'parent computation finished' not in output, output
+        os.write(master, b'echo COMPUTE_INTERRUPT:$?\r')
+        output = until(b'fuzix# ')
+        assert b'COMPUTE_INTERRUPT:130' in output, output
+        # Repeated interrupts must not leave zombies occupying process slots.
+        os.write(master, b'seq 1 2 | cat | wc -l\r')
+        until(b'fuzix# ')
+        os.write(master, b'echo PIPE_STATUS:$?\r')
+        output = until(b'fuzix# ')
+        assert b'PIPE_STATUS:0' in output, output
         # Ctrl-D at an empty prompt is a real guest EOF and clean shutdown.
         os.write(master, b'\x04')
         until(b'disk synced; power off.')
@@ -75,4 +123,4 @@ with tempfile.TemporaryDirectory(prefix='ripple-fuzix-terminal-') as temporary:
             process.wait()
         os.close(master)
     subprocess.run(['python3', str(PORT/'tools/fsck.py'), str(disk)], check=True)
-print('Live terminal passed: ordered input, Enter/Ctrl-J, Ctrl-U, Ctrl-D, exec, run-only launcher and exclusive disk lock')
+print('Live terminal passed: input/control keys, ed quit, foreground/pipeline/compute interrupts, process reaping, clean shutdown and disk lock')

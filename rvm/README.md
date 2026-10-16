@@ -20,6 +20,11 @@ cargo build --release
 
 ## Execution and display performance
 
+By default, Ctrl-C stops an interactive VM. `--guest-ctrl-c` instead delivers
+ASCII ETX to the guest TTY, allowing an operating system to interrupt foreground
+programs. In that mode, Ctrl-] remains an emergency host stop. The FUZIX launcher
+selects this mode automatically; `shutdown` remains its clean way to stop.
+
 Normal CLI execution batches up to the next 1,024-instruction host-poll boundary.
 The batch stops earlier at a bank-zero MMIO write, HALT, BRK, execution error,
 or the exact instruction budget. Tick grants and frame capture remain controlled

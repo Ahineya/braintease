@@ -23,7 +23,7 @@ test('BPB, both FAT copies, root entries and cluster chains preserve file data',
   assert.equal(image.readUInt16LE(22), 32);
   assert.equal(image.readUInt32LE(32), 20480);
   assert.equal(image.readUInt32LE(39), 0x12345678);
-  assert.equal(image.subarray(43, 54).toString(), 'RIPPLEOS  ');
+  assert.equal(image.subarray(43, 54).toString(), 'RIPPLEOS  \0');
   assert.equal(image.subarray(54, 62).toString(), 'FAT16   ');
   assert.equal(image.readUInt16LE(510), 0xaa55);
 

@@ -17,6 +17,8 @@ rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 | Page | Contents |
 |------|----------|
 | [Build and run](running.md) | Ping monitor, DNS/ping launcher, configuration, host backends and troubleshooting setup |
+| [HTTP server](http-server.md) | Guest TCP listen/accept, hardcoded HTML, browser/curl and bounded request handling |
+| [HTTP client](http.md) | Streaming GET, bounded response parsing, guest DNS and the automatic host HTTP demo |
 | [TCP client](tcp.md) | Streams, retransmission, flow control, half-close and the automatic host echo demo |
 | [DHCP](dhcp.md) | Lease acquisition, renewal/rebinding, conflict detection, configuration changes and examples |
 | [Reliability and lifecycle](reliability.md) | Neighbor expiration/retry, link changes, pending sends and matched ICMP errors |
@@ -31,12 +33,16 @@ rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 From the repository root, with the release toolchain built:
 
 ```sh
+scripts/run-net-http-server.sh
+scripts/run-net-http.sh
 scripts/run-net-tcp.sh
 scripts/run-net-dhcp.sh --monitor
 scripts/run-net-dhcp.sh rvm syma-lang.org --jit
 ```
 
-The TCP demo acquires a lease and exchanges 4,097 binary octets with a temporary
+The HTTP server prints its leased URL for your browser and keeps serving the
+guest page. The HTTP client demo acquires a lease and streams a 13,033-octet HTML page from a
+temporary ordinary host HTTP service. The TCP demo exchanges 4,097 binary octets with a temporary
 ordinary host TCP echo service. The monitor defaults to native execution with
 host-only Ethernet. The DNS/ping
 launcher explicitly selects shared-mode vmnet/NAT. On macOS the runtime starts
@@ -56,8 +62,8 @@ for prerequisites, native execution and selecting another guest IP.
 | ICMP | Echo and matched unreachable/time-exceeded/parameter errors; UDP callbacks, DNS and TCP diagnostics | Eight recent accepted packets, 30-second history; no path-MTU adaptation |
 | UDP | Four bindings, callbacks, checksums, empty/binary payloads and backpressure | Payload limit 1472 octets; no reliability guarantee |
 | DNS | IPv4 A queries, compressed names, bounded in-answer CNAME chains, matching, retries and timeouts | Classic 512-octet UDP; no TCP fallback, EDNS, AAAA or cache |
-| TCP | Active-open streams, MSS, bounded retransmission, flow control, half-close, reset and lifecycle cleanup | Four connections, 512-octet buffers, one segment in flight; no listener yet |
-| HTTP | Planned | No HTTP client or server library |
+| TCP | Active/passive opens, bounded pools, retransmission, flow control, half-close and compact TIME_WAIT | Four live connections, two listeners, 512-octet buffers, one segment in flight |
+| HTTP | Streaming GET client and bounded single-request server, incremental parsing and exact response lengths | Plain HTTP; no request bodies, chunking, TLS, persistent connections or redirect following |
 
 The DNS demo's hostname is compiled into the guest with `DNS_NAME`; the
 launcher rebuilds it when a different name is supplied. The guest resolves
@@ -67,7 +73,7 @@ is [deferred](roadmap.md#separate-and-later-work).
 ## Architecture and constraints
 
 ```text
-application (DHCP/DNS/ping/TCP now; HTTP applications later)
+application (DHCP/DNS/ping/TCP/HTTP client and server)
     ↕ guest protocol libraries in libruntime.par
     ↕ vm_network.h: NET_INFO / NET_TX / NET_RX / NET_STATS
     ↕ existing DEVICE_* mailbox, bank 0 cells 27–31
@@ -95,8 +101,9 @@ Keep these decisions when extending the stack:
   faster, but does not replace guest TCP/IP with host sockets.
 
 DHCP and the [stack reliability milestone](reliability.md) are implemented.
-The [active-open TCP client](tcp.md) is implemented too. Next are an HTTP client,
-TCP listeners and a small HTTP server serving hardcoded HTML, followed by a
-high-level RFL networking library. Traits are preparatory work for RFL I/O
+The [active-open TCP client](tcp.md) and [streaming HTTP client](http.md) are
+implemented too, together with passive TCP listeners and the
+[HTTP server serving hardcoded HTML](http-server.md). Next is a high-level RFL
+networking library. Traits are preparatory work for RFL I/O
 abstractions; async/await needs a separate design. These are planned milestones,
 not features available in the current library.

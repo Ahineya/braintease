@@ -1,8 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifndef RIPPLE_FUZIX_USER_H
 #define RIPPLE_FUZIX_USER_H
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 struct request {
     unsigned call;
     long arg[4];
@@ -14,9 +14,9 @@ struct dirent {
     unsigned padding;
 };
 extern long ripple_syscall(struct request *);
-extern int error;
+extern int ripple_error;
 long call(unsigned, long, long, long, long);
-int open(const char *, unsigned, unsigned);
+int open(const char *, int, ...);
 int close(int);
 long read(int, void *, unsigned long);
 long write(int, const void *, unsigned long);

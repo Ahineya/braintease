@@ -13,6 +13,7 @@ mod lsp;
 mod modules;
 mod native;
 mod parser;
+mod rename;
 mod run;
 mod ty;
 mod typed;
