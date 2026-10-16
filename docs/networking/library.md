@@ -1,8 +1,8 @@
 # Guest networking library
 
-`<net.h>` and `<net_dns.h>` are part of `runtime/libruntime.par`. They implement
-Ethernet, ARP, IPv4, ICMP echo, UDP and a small DNS A resolver in guest C. The host
-moves raw Ethernet frames through [DEVICE_*](device.md); it never
+`<net.h>`, `<net_dns.h>` and `<net_dhcp.h>` are part of `runtime/libruntime.par`.
+They implement Ethernet, ARP, IPv4, ICMP echo, UDP, DHCP and a small DNS A
+resolver in guest C. The host moves raw Ethernet frames through [DEVICE_*](device.md); it never
 resolves guest names or supplies guest TCP/IP. Each wire octet occupies one
 16-bit Ripple cell, including zero and 255.
 
@@ -15,10 +15,14 @@ not specified here.
 
 The application owns all memory; the library allocates no heap and has no
 hidden global packet buffers. A context contains two 1514-cell frame buffers,
-four ARP entries and four UDP bindings. Allocate it in static storage if the
+four ARP entries, four UDP bindings and eight recent transmission records. Allocate it in static storage if the
 stack is small. `net_init` discovers the MAC, checks the link/MTU, initializes
-the context and sends a gratuitous ARP announcement to refresh neighbors.
-Addresses, gateway, mask and DNS server are static configuration, not DHCP:
+the context and sends a gratuitous ARP announcement when the link is up.
+Initialization also works while disconnected; sends then return `NET_LINK_DOWN`.
+Use `net_init` for explicit static configuration, as below. For dynamic
+configuration, use `net_open` and the [DHCP client](dhcp.md); continue driving
+`net_dhcp_poll` in place of `net_poll` throughout the application lifetime.
+The following example uses static configuration:
 
 ```c
 #include <net.h>
@@ -42,17 +46,35 @@ to the application for query IDs and source ports. The small PRNG is not
 cryptographically secure; tuple/ID/question matching does not provide DNSSEC
 or protection equivalent to a hardened general-purpose resolver.
 
-`net_poll(&network, now_ms)` flushes a pending transmission, then handles at
+`net_poll(&network, now_ms)` checks link/timers, flushes a pending transmission, then handles at
 most one frame. It automatically answers valid ARP and ICMP echo requests and
 delivers UDP callbacks. Invalid IP/ICMP/UDP packets return `NET_REJECTED` and
 increment `network.rejected`; they are ordinary rejected traffic, not fatal I/O
-errors. `NET_AGAIN` means no packet or transient TX backpressure. Treat
-`NET_IO_ERROR` as a failed NIC/backend. Echo events expose peer, identifier,
+errors. `NET_AGAIN` means no packet or transient TX backpressure. `NET_LINK_DOWN`
+is a recoverable link state; `NET_IO_ERROR` reports a failed device operation.
+See [reliability and lifecycle](reliability.md) for recovery and ICMP errors.
+Echo events expose peer, identifier,
 sequence and payload until the next poll.
 
 Serialize access to a context. Callbacks execute synchronously inside
 `net_poll`; never recursively poll the same context. Other device commands
 may be used between calls, since the mailbox transaction has already completed.
+
+## Configuration changes
+
+`net_open` initializes an unconfigured NIC without announcing an address.
+`net_configure` validates and installs a configuration; `net_unconfigure`
+removes it. Changed IP, mask, gateway or DNS increments `network.generation`,
+clears ARP, drops the context's pending TX and clears stale echo events. UDP
+bindings survive; frames already accepted by the host cannot be recalled.
+Identical configuration is a no-op, so an unchanged DHCP renewal preserves
+in-flight operations. Do not reset an active context with `net_init`/`net_open`;
+stop its protocol operations before reinitializing it.
+
+Active DNS work observes the generation and finishes with
+`NET_DNS_CONFIG_CHANGED` on a change. Applications must likewise invalidate
+other operations that depend on the old configuration. Explicit reconfiguration
+terminates DHCP ownership on its next poll while preserving the replacement IP.
 
 ## Receive and send UDP
 
@@ -80,7 +102,9 @@ int send_packet(void) {
 Ports are unsigned 16-bit values in host integer order. Destination port zero,
 null nonempty payloads, and payloads above 1472 octets are rejected. Empty UDP
 payloads are supported. `NET_NO_PORT` reports an occupied port or full binding
-table; `net_udp_unbind` releases a binding. Unbound incoming ports are ignored.
+table; `net_udp_unbind` releases a binding and cancels its pending UDP frame and
+recent ICMP correlation history. Unbound incoming ports are ignored. Attach
+`net_udp_on_error` to receive [matched ICMP notifications](reliability.md#icmp-error-matching).
 
 Sending may first require ARP for the destination or default gateway. On
 `NET_AGAIN`, keep polling and retry the original send. `NET_OK` means the
@@ -93,7 +117,9 @@ Outgoing UDP always includes a pseudoheader checksum; a computed zero is
 encoded as 65535. Incoming nonzero checksums are verified, and IPv4 UDP's zero
 checksum is accepted. UDP length is bounded by the validated IP payload;
 Ethernet padding is excluded. IPv4 fragments are rejected rather than partially
-interpreted. UDP offers no retransmission or delivery guarantee.
+interpreted. UDP offers no retransmission or delivery guarantee. General-purpose
+broadcast/multicast is unsupported; DHCP alone has a limited-broadcast path
+for ports 68 → 67 and bootstrap replies from port 67.
 
 ## Resolve a name
 
@@ -137,7 +163,8 @@ up to 253, optional trailing dot), reserves an ephemeral UDP port and initialize
 a query. `timeout_ms` is 1..60000 per attempt, including address discovery;
 `retries` is 0..4 additional attempts. Retries use a fresh transaction ID.
 `net_dns_poll` submits work and handles deadlines; receiving still requires
-`net_poll`. Completion and `net_dns_cancel` release the UDP binding. Reuse a
+`net_poll` (or `net_dhcp_poll` for an active DHCP client). Completion and
+`net_dns_cancel` release the UDP binding. Reuse a
 completed object, or keep separate objects for concurrent queries within the
 four-binding limit. Do not move an active object: its callback points to it.
 
@@ -151,14 +178,16 @@ the minimum TTL along the selected chain. Malformed matched replies are counted
 in `lookup.malformed` and ignored while the query waits or retries.
 
 Statuses distinguish success, NXDOMAIN, no matching A address, server error,
-truncation, timeout, network failure and cancellation; constants live in
+truncation, timeout, network failure, cancellation, configuration/link changes
+and matched ICMP errors; constants live in
 [`net_dns.h`](../../runtime/include/net_dns.h). This first version uses classic
 512-octet UDP DNS. It has no EDNS, TCP fallback, AAAA, DNSSEC or cache. A
 truncated reply fails explicitly; a CNAME-only answer without its terminal A
 record returns `NET_DNS_NO_ADDRESS` rather than starting another lookup. The
-configured recursive server normally supplies both. ARP also uses a small
-fixed table without entry expiration; reinitialize the context after network
-configuration changes. IPv4 reassembly, multicast and TCP are separate work.
+configured recursive server normally supplies both. ARP uses a small expiring
+table with bounded retries and cooldown recovery. Configuration/link changes
+clear it; [the lifecycle guide](reliability.md) documents timers and counters.
+IPv4 reassembly, multicast and TCP are separate work.
 
 ## Linking
 

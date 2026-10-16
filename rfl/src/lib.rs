@@ -2,7 +2,9 @@
 //! so RFL recursion does not grow the hardware stack. See `lowering.md`.
 
 mod ast;
+mod auto_import;
 mod check;
+mod completion;
 mod error;
 mod ide;
 mod lexer;

@@ -12,6 +12,7 @@ use crate::lexer::{self, TokenKind};
 
 struct Doc {
     source: String,
+    version: Option<i64>,
     path: Option<PathBuf>,
     lines: Vec<usize>,
     analysis: Analysis,
@@ -19,6 +20,7 @@ struct Doc {
 
 pub fn serve() {
     let mut docs: HashMap<String, Doc> = HashMap::new();
+    let mut versioned_edits = false;
     let stdin = io::stdin();
     let mut reader = stdin.lock();
     let mut stdout = io::stdout().lock();
@@ -33,6 +35,12 @@ pub fn serve() {
             .to_string();
         let id = message.get("id").cloned();
         let params = message.get("params").cloned().unwrap_or(Value::Null);
+        if method == "initialize" {
+            versioned_edits = params["capabilities"]["workspace"]["workspaceEdit"]
+                ["documentChanges"]
+                .as_bool()
+                .unwrap_or(false);
+        }
         if method == "exit" {
             break;
         }
@@ -47,7 +55,7 @@ pub fn serve() {
             notify(&mut docs, &method, &params);
             continue;
         }
-        let result = request(&mut docs, &method, &params);
+        let result = request(&mut docs, &method, &params, versioned_edits);
         send(
             &mut stdout,
             &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
@@ -61,7 +69,7 @@ fn notify(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) {
         "textDocument/didOpen" => {
             let uri = text_of(&params["textDocument"]["uri"]);
             let text = text_of(&params["textDocument"]["text"]);
-            open_doc(docs, uri, text);
+            open_doc(docs, uri, text, params["textDocument"]["version"].as_i64());
         }
         "textDocument/didChange" => {
             let uri = text_of(&params["textDocument"]["uri"]);
@@ -71,7 +79,12 @@ fn notify(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) {
             let Some(text) = changes.first().and_then(|change| change["text"].as_str()) else {
                 return;
             };
-            open_doc(docs, uri, text.to_string());
+            open_doc(
+                docs,
+                uri,
+                text.to_string(),
+                params["textDocument"]["version"].as_i64(),
+            );
         }
         "textDocument/didClose" => {
             docs.remove(&text_of(&params["textDocument"]["uri"]));
@@ -80,13 +93,14 @@ fn notify(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) {
     }
 }
 
-fn open_doc(docs: &mut HashMap<String, Doc>, uri: String, text: String) {
+fn open_doc(docs: &mut HashMap<String, Doc>, uri: String, text: String, version: Option<i64>) {
     let path = uri_path(&uri);
     let analysis = Analysis::open(path.as_deref(), &text);
     publish(&uri, &analysis, &text);
     docs.insert(
         uri,
         Doc {
+            version,
             lines: line_starts(&text),
             source: text,
             path,
@@ -95,7 +109,12 @@ fn open_doc(docs: &mut HashMap<String, Doc>, uri: String, text: String) {
     );
 }
 
-fn request(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) -> Value {
+fn request(
+    docs: &mut HashMap<String, Doc>,
+    method: &str,
+    params: &Value,
+    versioned_edits: bool,
+) -> Value {
     match method {
         "initialize" => initialize(),
         "textDocument/hover" => hover(docs, params),
@@ -107,6 +126,7 @@ fn request(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) -> Val
         "textDocument/signatureHelp" => signature(docs, params),
         "textDocument/inlayHint" => inlays(docs, params),
         "textDocument/semanticTokens/full" => semantic_tokens(docs, params),
+        "textDocument/codeAction" => code_actions(docs, params, versioned_edits),
         _ => Value::Null,
     }
 }
@@ -120,6 +140,7 @@ fn initialize() -> Value {
             "definitionProvider": true,
             "referencesProvider": true,
             "renameProvider": true,
+            "codeActionProvider": { "codeActionKinds": ["quickfix"], "resolveProvider": false },
             "documentSymbolProvider": true,
             "signatureHelpProvider": { "triggerCharacters": ["(", ","] },
             "inlayHintProvider": true,
@@ -133,6 +154,51 @@ fn initialize() -> Value {
         },
         "serverInfo": { "name": "rfl", "version": "0.1.0" }
     })
+}
+
+fn code_actions(docs: &HashMap<String, Doc>, params: &Value, versioned_edits: bool) -> Value {
+    if let Some(only) = params["context"]["only"].as_array() {
+        if !only
+            .iter()
+            .any(|kind| matches!(kind.as_str(), Some("" | "quickfix")))
+        {
+            return json!([]);
+        }
+    }
+    let Some(doc) = document(docs, params) else {
+        return json!([]);
+    };
+    let Some(start) = offset_of(doc, &params["range"]["start"]) else {
+        return json!([]);
+    };
+    let Some(end) = offset_of(doc, &params["range"]["end"]) else {
+        return json!([]);
+    };
+    if end < start {
+        return json!([]);
+    }
+    let fixes = doc.analysis.import_fixes(start, end);
+    let uri = text_of(&params["textDocument"]["uri"]);
+    let actions: Vec<Value> = fixes.iter().map(|fix| {
+        let edits = json!([{ "range": range(doc, fix.edit_span.start, fix.edit_span.end), "newText": fix.new_text }]);
+        let edit = if versioned_edits {
+            json!({ "documentChanges": [{ "textDocument": { "uri": uri, "version": doc.version }, "edits": edits }] })
+        } else {
+            json!({ "changes": { uri.clone(): edits } })
+        };
+        let preferred = fixes.iter().filter(|other| other.name == fix.name).count() == 1;
+        json!({
+            "title": format!("Import `{}` from `{}`", fix.name, fix.module),
+            "kind": "quickfix",
+            "isPreferred": preferred,
+            "diagnostics": [{
+                "range": range(doc, fix.symbol_span.start, fix.symbol_span.end),
+                "severity": 1, "source": "rfl", "message": fix.diagnostic,
+            }],
+            "edit": edit,
+        })
+    }).collect();
+    json!(actions)
 }
 
 fn hover(docs: &HashMap<String, Doc>, params: &Value) -> Value {
@@ -156,7 +222,7 @@ fn completion(docs: &HashMap<String, Doc>, params: &Value) -> Value {
         return json!([]);
     };
     let items: Vec<Value> = doc.analysis.completions(offset).into_iter().map(|item| {
-        json!({
+        let mut completion = json!({
             "label": item.label,
             "kind": match item.kind {
                 CompletionKind::Keyword => 14,
@@ -171,7 +237,11 @@ fn completion(docs: &HashMap<String, Doc>, params: &Value) -> Value {
             "detail": item.detail,
             "filterText": item.label,
             "textEdit": { "range": range(doc, item.replace.start, item.replace.end), "newText": item.label },
-        })
+        });
+        if let Some((span, text)) = item.import_edit {
+            completion["additionalTextEdits"] = json!([{ "range": range(doc, span.start, span.end), "newText": text }]);
+        }
+        completion
     }).collect();
     json!(items)
 }
@@ -630,4 +700,138 @@ fn send(stdout: &mut impl Write, message: &Value) {
     let body = message.to_string();
     let _ = write!(stdout, "Content-Length: {}\r\n\r\n{body}", body.len());
     let _ = stdout.flush();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn doc(source: &str) -> Doc {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/auto-import-lsp.rfl");
+        Doc {
+            source: source.to_string(),
+            version: Some(7),
+            path: Some(path.clone()),
+            lines: line_starts(source),
+            analysis: Analysis::open(Some(&path), source),
+        }
+    }
+
+    #[test]
+    fn method_completion_returns_import_edit_and_preserves_existing_call() {
+        let source = "// 🦀\r\nimport { replace } from \"std/string\"; // keep\r\nfn main() { let a = \"something\"; let b = a.replace(\"some\", \"oth\"); println(b); b.tr(); }\r\n";
+        let document = doc(source);
+        let at = source.find("b.tr").unwrap() + 4;
+        let params = json!({ "textDocument": { "uri": "file:///source.rfl" }, "position": position(&document, at) });
+        let docs = HashMap::from([("file:///source.rfl".to_string(), document)]);
+        let response = completion(&docs, &params);
+        let items = response.as_array().unwrap();
+        let item = items.iter().find(|item| item["label"] == "trim").unwrap();
+        assert_eq!(item["kind"], 2);
+        let mut edits = vec![item["textEdit"].clone()];
+        edits.extend(
+            item["additionalTextEdits"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .cloned(),
+        );
+        let document = &docs["file:///source.rfl"];
+        let mut edits: Vec<_> = edits
+            .iter()
+            .map(|edit| {
+                (
+                    offset_of(document, &edit["range"]["start"]).unwrap(),
+                    offset_of(document, &edit["range"]["end"]).unwrap(),
+                    edit["newText"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        edits.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+        let mut edited = source.to_string();
+        for (start, end, text) in edits {
+            edited.replace_range(start..end, text);
+        }
+        assert!(edited.contains("{ trim, replace }"));
+        assert!(edited.contains("b.trim()"));
+        let after = Analysis::open(document.path.as_deref(), &edited);
+        assert!(
+            after.diagnostics.is_empty(),
+            "{edited}\n{:?}",
+            after.diagnostics
+        );
+        let imported = items
+            .iter()
+            .find(|item| item["label"] == "replace")
+            .unwrap();
+        assert!(imported.get("additionalTextEdits").is_none());
+        assert!(!items
+            .iter()
+            .any(|item| item["label"] == "region_eq" || item["label"] == "push"));
+    }
+
+    #[test]
+    fn import_action_uses_utf16_positions_and_versioned_edits() {
+        let source = "// header 🦀\r\nimport { cos as cosine } from \"std/math\";\r\nfn value() -> f64 { sin(0.0) }\r\n";
+        let document = doc(source);
+        let at = source.find("sin(").unwrap();
+        let params = json!({
+            "textDocument": { "uri": "file:///tmp/source%20file.rfl" },
+            "range": range(&document, at, at), "context": { "diagnostics": [] },
+        });
+        let docs = HashMap::from([("file:///tmp/source%20file.rfl".to_string(), document)]);
+        let result = code_actions(&docs, &params, true);
+        let actions = result.as_array().unwrap();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0]["title"], "Import `sin` from `std/math`");
+        assert_eq!(actions[0]["isPreferred"], true);
+        assert_eq!(actions[0]["kind"], "quickfix");
+        let change = &actions[0]["edit"]["documentChanges"][0];
+        assert_eq!(change["textDocument"]["version"], 7);
+        assert_eq!(
+            change["textDocument"]["uri"],
+            "file:///tmp/source%20file.rfl"
+        );
+        let edit = &change["edits"][0];
+        let document = &docs["file:///tmp/source%20file.rfl"];
+        let start = offset_of(document, &edit["range"]["start"]).unwrap();
+        let end = offset_of(document, &edit["range"]["end"]).unwrap();
+        let mut edited = source.to_string();
+        edited.replace_range(start..end, edit["newText"].as_str().unwrap());
+        assert!(edited.contains("{ sin, cos as cosine }"));
+        assert!(Analysis::open(document.path.as_deref(), &edited)
+            .diagnostics
+            .is_empty());
+        // Clients without documentChanges support receive plain WorkspaceEdit.changes.
+        let legacy = code_actions(&docs, &params, false);
+        assert_eq!(
+            legacy[0]["edit"]["changes"]["file:///tmp/source%20file.rfl"][0],
+            *edit
+        );
+        let mut filtered = params.clone();
+        filtered["context"]["only"] = json!(["source.organizeImports"]);
+        assert_eq!(code_actions(&docs, &filtered, true), json!([]));
+    }
+
+    #[test]
+    fn ambiguous_import_actions_are_not_preferred() {
+        let source = "fn value() -> bool { is_ascii('a') }";
+        let document = doc(source);
+        let at = source.find("is_ascii").unwrap();
+        let params = json!({ "textDocument": { "uri": "file:///source.rfl" },
+            "range": range(&document, at, at + "is_ascii".len()),
+            "context": { "only": ["quickfix"], "diagnostics": [] } });
+        let docs = HashMap::from([("file:///source.rfl".to_string(), document)]);
+        let actions = code_actions(&docs, &params, true);
+        assert_eq!(actions.as_array().unwrap().len(), 2);
+        for action in actions.as_array().unwrap() {
+            assert_eq!(action["isPreferred"], false);
+        }
+        assert!(
+            initialize()["capabilities"]["codeActionProvider"]["codeActionKinds"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("quickfix"))
+        );
+    }
 }

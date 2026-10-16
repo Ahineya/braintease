@@ -33,10 +33,14 @@ void net_ethernet(NetContext *net, const unsigned char *destination, unsigned sh
 }
 int net_transmit(NetContext *net, unsigned short length) {
     unsigned short outcome;
+    if (!net->link) return NET_LINK_DOWN;
     while (length < 60) net->tx[length++] = 0;
     if (vm_net_tx(net->config.interface, net->tx, length, &outcome)) return NET_IO_ERROR;
-    if (outcome == VM_NET_WOULD_BLOCK) { net->pending = length; return NET_OK; }
+    if (outcome == VM_NET_WOULD_BLOCK) { net_count(&net->counters.tx_blocked); net->pending = length; return NET_OK; }
+    if (outcome == VM_NET_LINK_DOWN) { net_link_lost(net); return NET_LINK_DOWN; }
     if (outcome != VM_NET_OK) return NET_IO_ERROR;
     net->pending = 0;
+    net_arp_sent(net);
+    net_remember_packet(net, length);
     return NET_OK;
 }

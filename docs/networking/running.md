@@ -1,7 +1,7 @@
 # Build and run networking examples
 
 Run commands below from the repository root. This guide describes existing
-launchers; [DHCP, TCP and HTTP](roadmap.md) are future work.
+launchers; [TCP and HTTP](roadmap.md) remain future work.
 
 ## Build prerequisites
 
@@ -17,6 +17,28 @@ cargo build --release --manifest-path src/ripple-asm/Cargo.toml --bin rasm --bin
 RBF additionally needs `target/release/rbf` and
 `src/bf-macro-expander/target/release/bfm`; those builds are only needed when
 explicitly selecting RBF. Networking needs neither Doom nor rOS to be built.
+
+## Acquire configuration through DHCP
+
+```sh
+scripts/run-net-dhcp.sh
+scripts/run-net-dhcp.sh rvm syma-lang.org --jit
+scripts/run-net-dhcp.sh --monitor
+```
+
+These run the guest DHCP client without a compiled-in IP, mask, router or DNS
+server. The first two use shared-mode vmnet, print the lease, then perform guest
+DNS and three pings. The monitor uses host-only vmnet, prints its leased address
+and keeps renewing while answering/logging host pings. Ping that printed IP to
+generate traffic; no host setup commands or static IP selection are required.
+Capture remains disabled. Builds are isolated under
+`build/network/dhcp-ping/<mode>/` and `build/network/dhcp-monitor/<mode>/`.
+
+Acquisition includes a randomized initial delay and ARP conflict probes, so
+allow several seconds before the bound line. A missing DHCP server produces
+an explicit acquisition failure after the configured 60-second budget, with no
+static fallback. See [DHCP](dhcp.md) for the API, lease lifecycle, options and
+limitations. The following older launchers retain explicit static configuration.
 
 ## Try guest DNS and ping
 
@@ -64,11 +86,11 @@ the same guest memory layout and device ABI.
 
 ## Where the addresses and hostname come from
 
-The Ethernet backend supplies the guest MAC through `NET_INFO`. Today the
-application supplies a static IPv4 address, subnet mask, gateway and DNS server
-through `NetConfig`: the demo defaults are `192.168.64.250/24`, gateway
+The Ethernet backend supplies the guest MAC through `NET_INFO`. The DHCP
+launcher obtains IPv4, mask, gateway and DNS through guest DHCP packets. The
+static launchers instead supply `NetConfig`: their defaults are `192.168.64.250/24`, gateway
 `192.168.64.1` and DNS `1.1.1.1`. The host-only/shared backend selection does
-not configure the guest IP stack. [DHCP](roadmap.md#1-dhcp-client) is planned.
+not itself configure the guest IP stack. [DHCP](dhcp.md) runs in guest C.
 
 The DNS/ping launcher's positional hostname is a **build-time** setting. For
 `scripts/run-net-dns.sh rvm example.org`, it compiles the C demo with
@@ -97,8 +119,8 @@ ordinary polling does not repeatedly prompt or restart the connection.
 For an already built monitor, simply run:
 
 ```sh
-build/network/monitor/native/monitor
-target/release/rvm build/network/monitor/rvm/monitor.bin --bank-size 4096 --memory 32768 --jit
+RCC_NATIVE_PACED=1 build/network/monitor/native/monitor
+target/release/rvm build/network/monitor/rvm/monitor.bin --bank-size 4096 --memory 32768 --clock paced --jit
 ```
 
 Host policies can be selected with `rvm ... --net POLICY` or
@@ -115,8 +137,9 @@ when no runtime-specific selection is supplied:
 
 Use a qualified path such as `./host` if an external socket is named like a
 policy. Automatic attachment disables packet capture and never enables Internet
-sharing implicitly. The guest still configures its own IPv4 address; the demo
-uses `192.168.64.250/24` with host/gateway `192.168.64.1`.
+sharing implicitly. The guest still configures its own IPv4 address, through DHCP or explicit
+static configuration. The static demo uses `192.168.64.250/24` with host/gateway
+`192.168.64.1`.
 
 Orderly exit detaches and stops the owned helper. If a guest process dies without
 running destructors, the managed helper stops after its five-second heartbeat
@@ -168,6 +191,12 @@ Invalid IP/ICMP checksums receive no reply. The IP is compile-time configuration
 not DHCP or the Mac's LAN address. Stop the monitor with Ctrl-C; its private
 helper, interface and socket are cleaned up too. Run one monitor at a time with
 the default IP.
+
+Monitors now advance the supplied clock through paced ticks, allowing neighbor
+expiry and periodic link checks. Static monitors keep their configured IP across
+an outage, log the transition and resolve neighbors again after restoration.
+DHCP monitors remove the lease and acquire a fresh one. See
+[reliability and lifecycle](reliability.md) for operation cancellation and limits.
 
 At startup the guest library sends a gratuitous ARP announcement, so restarting it
 with a newly assigned MAC refreshes the host's cached entry for that static IP.

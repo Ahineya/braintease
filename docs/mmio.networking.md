@@ -4,9 +4,10 @@ Networking documentation now lives in [docs/networking](networking/README.md).
 
 - [Ethernet device contract](networking/device.md)
 - [Guest library and C examples](networking/library.md)
+- [Guest DHCP client](networking/dhcp.md)
 - [Build and run](networking/running.md)
 - [Testing](networking/testing.md)
-- [Roadmap: DHCP, TCP and HTTP](networking/roadmap.md)
+- [Roadmap: stack reliability, TCP and HTTP](networking/roadmap.md)
 
 ## Sharing the mailbox with other devices
 

@@ -53,8 +53,8 @@ struct Binding {
 pub(crate) fn check_root(
     path: &Path,
     source: &str,
+    ast: Module,
 ) -> Result<(crate::check::ProgramInfo, Vec<CompileError>), CompileError> {
-    let ast = parse_source(source)?;
     if ast.imports.is_empty() {
         let (info, result) = crate::check::analyze(source, &ast);
         return Ok((info, result.err().into_iter().collect()));
@@ -1474,6 +1474,49 @@ impl Rewriter<'_> {
 
 fn std_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std")
+}
+
+/// Find importable standard-library exports using the same bindings as imports.
+/// Read the sources on demand so edits to the library do not leave a stale index.
+pub(crate) fn std_import_candidates(name: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    for (module, unit) in std_units() {
+        let Ok(bindings) = own_bindings(&unit, 0, false, &mut HashSet::new()) else { continue };
+        if bindings.get(name).is_some_and(|binding| binding.exported) { candidates.push(module); }
+    }
+    candidates
+}
+
+pub(crate) fn std_completion_functions() -> Vec<(String, crate::completion::ExtensionFunction)> {
+    std_units().into_iter().flat_map(|(module, unit)| {
+        unit.ast.functions.iter().filter(|function| function.exported)
+            .filter_map(crate::check::completion_function)
+            .map(|function| (module.clone(), function)).collect::<Vec<_>>()
+    }).collect()
+}
+
+fn std_units() -> Vec<(String, RflUnit)> {
+    let Ok(entries) = std::fs::read_dir(std_dir()) else {
+        return Vec::new();
+    };
+    let mut candidates = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rfl") {
+            continue;
+        }
+        let Some(module) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            continue;
+        };
+        let Ok(source) = read_text(&path) else { continue };
+        let Ok(ast) = parse_source(&source) else { continue };
+        let unit = RflUnit {
+            path: path.clone(), source, ast, resolved: Vec::new(),
+        };
+        candidates.push((format!("std/{module}"), unit));
+    }
+    candidates.sort_by(|left, right| left.0.cmp(&right.0));
+    candidates
 }
 
 fn std_module_name(spec: &str) -> Option<&str> {

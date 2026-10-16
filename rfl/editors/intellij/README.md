@@ -25,7 +25,7 @@ The default installation is `/Applications/IntelliJ IDEA.app`. Elsewhere, pass
 accepted. If the IDE has no compiler, set `JAVA_HOME` to a JDK 21 or later.
 
 In IDEA, open **Settings → Plugins → gear menu → Install Plugin from Disk** and
-select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.1.zip`. Restart
+select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.2.zip`. Restart
 if IDEA requests it, then open an `.rfl` file.
 
 To update an installed version, use the same **Install Plugin from Disk** action
@@ -90,8 +90,14 @@ on PATH to override discovery. Paths containing spaces need no quoting. Supply
 only the executable: the plugin adds `lsp` and uses stdio, with the project
 directory as the working directory. Applying a changed setting restarts the
 server. The editor's language-service widget also provides status, restart and
-a shortcut to settings. After building or replacing a server binary, restart
-it through that widget.
+a shortcut to settings.
+
+To restart manually, use **Tools → Restart RFL Language Server**, or search for
+**Restart RFL Language Server** in **Find Action**. This restarts RFL in the
+current project and picks up the configured executable or discovery order again.
+Open an `.rfl` file if none is open. The language-service widget's restart button
+is also available while editing an RFL file. Applying a changed executable setting
+restarts the server automatically.
 
 ## Features
 
@@ -102,6 +108,37 @@ it through that widget.
   including when the server is unavailable.
 - Run gutter and reusable configurations for running, compilation and checks,
   with Ripple/native targets, JIT, terminal input and compiler diagnostic links.
+- Alt+Enter import quick fixes for unresolved standard-library functions,
+  constants, types and constructors, supplied by the RFL language server.
+- Dot completion for stdlib extension functions, with automatic imports when
+  selecting an extension that is not yet in scope.
+
+## Import quick fixes
+
+Put the caret on an unresolved standard-library name (for example `sin`, `PI`,
+or `List`), press **Alt+Enter**, and choose **Import `sin` from `std/math`**.
+The fix inserts a selective import or adds the symbol to an existing import from
+the same module. Existing aliases, comments and line endings are preserved.
+If several modules export the name, IDEA offers a separate choice for each.
+Only exported standard-library names are suggested; project-local import discovery
+is not included.
+
+After a receiver such as `b.`, completion includes built-in/inherent methods and
+compatible exported stdlib extension functions. A string offers `replace`, `trim`,
+`contains`, `split`, and other matching functions from `std/string` even before
+they are imported. Selecting one adds its import or merges it into an existing
+import. Existing aliases are suggested under the alias with no duplicate import.
+Extension discovery is limited to stdlib functions. Private helpers and arbitrary
+project free functions are not suggested. This uses the existing extension-call
+semantics and does not require traits or changes to the stdlib's declarations.
+
+These actions require the updated **RFL executable**. The existing plugin already
+displays LSP quick fixes, so a plugin reinstall is unnecessary. If you installed
+an older `rfl` on PATH, rebuild it with `cargo build --release -p rfl`, then update
+that PATH installation or point **Languages & Frameworks → RFL → RFL executable**
+at the new `target/release/rfl`. Restart the language server through its editor
+widget or **Tools → Restart RFL Language Server** after replacing the executable.
+Leaving the setting empty still gives a PATH installation priority over local builds.
 
 Semantic features have the same scope and limitations as the existing RFL
 server. Compilation and execution use the existing CLI. Formatting and debugging

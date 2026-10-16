@@ -2,7 +2,8 @@
 
 Agreed sequence: **DHCP → stack reliability → TCP → HTTP client → HTTP server
 → high-level RFL networking**.
-This page records future work; current behavior and limits are in the
+DHCP and stack reliability are implemented; the next milestone is TCP. Current behavior
+and limits are in the
 [overview](README.md) and [library guide](library.md). It does not define new
 public function signatures or imply those functions exist.
 
@@ -47,28 +48,18 @@ Keep explicit static configuration available for deterministic fixtures and
 networks without DHCP. Failure to acquire a lease must be visible; do not
 silently choose a potentially conflicting static address.
 
-The current code is not ready to send DHCP through its ordinary unicast path:
-[`net_init`](../../runtime/net/core.c) requires a configured nonzero address,
-[`net_route`](../../runtime/net/arp.c) rejects the limited broadcast address,
-and [`net_ipv4_input`](../../runtime/net/ipv4.c) accepts only packets addressed
-to the configured local IP. Add a deliberate unconfigured/bootstrap state,
-Ethernet/IPv4 broadcast transmission and the receive rules needed before an
-address is assigned. Broadcast must not trigger ARP for `255.255.255.255`.
-Preserve normal unicast validation outside that state.
+**Status: implemented and validated on RVM and native.** The
+[DHCP guide](dhcp.md) documents the public API and its limits. An explicit
+unconfigured context supports bounded DHCP broadcast bootstrap without widening
+ordinary application delivery. The guest handles DISCOVER/OFFER/REQUEST/ACK,
+NAK, retries, option validation/overload, ARP probes and DECLINE, T1 renewal,
+T2 rebinding and expiry. Lease accounting uses seconds across wrapping
+millisecond clock readings. Static configuration remains available.
 
-Implement a client using UDP ports 68 and 67, with DISCOVER/OFFER/REQUEST/ACK,
-NAK handling and bounded retries. Validate message framing, hardware identity,
-transaction ID, server identity and option lengths. Parse address, subnet,
-router, DNS server and lease/timer options; define behavior for missing options
-and multiple offers. Keep lease timers separate from the stack's wrapping
-millisecond clock so long leases cannot overflow a short deadline calculation.
-
-An acquisition-only prototype can be an intermediate checkpoint. The milestone
-also needs renewal, rebinding and expiry behavior: an expired address must stop
-being used. Address changes invalidate routes/ARP and notify or terminate
-operations tied to the old address. Include conflict detection and a defined
-response before accepting a conflicting lease. Apply new configuration through
-a shared operation rather than allowing examples to patch context fields.
+Shared `net_configure`/`net_unconfigure` operations clear ARP and pending sends
+and advance a configuration generation. Active DNS lookups cancel on a changed
+configuration, while unchanged lease renewals preserve them. No saved-lease
+restore or DHCPRELEASE is provided in this version.
 
 **Acceptance:**
 
@@ -80,6 +71,9 @@ a shared operation rather than allowing examples to patch context fields.
 - The host can ping the leased address; existing static ping/DNS tests still
   pass. No host API supplies a pre-decoded lease in place of guest DHCP.
 
+Recorded coverage: [DHCP tests](testing.md#dhcp), including two guests, malformed
+traffic, simulated long leases and live guest DHCP → DNS → VPS ping.
+
 Reference: [DHCP, RFC 2131](https://www.rfc-editor.org/rfc/rfc2131.html).
 
 ## 2. Stack reliability and shared lifecycle
@@ -87,24 +81,28 @@ Reference: [DHCP, RFC 2131](https://www.rfc-editor.org/rfc/rfc2131.html).
 **Outcome:** configuration changes, a long-running application and common
 network failures have explicit behavior before TCP depends on them.
 
-Add ARP expiration/re-resolution, bounded retry/backoff, and a way to invalidate
-neighbors after a lease or link change. Distinguish local queue backpressure
-from remote silence. Track useful protocol counters without adding unbounded
-logging or per-packet heap allocation.
+**Status: implemented and validated on RVM and native.** The
+[lifecycle guide](reliability.md) specifies expiring neighbors, bounded ARP
+retry/cooldown, explicit cache invalidation, link epochs, pending-send cleanup,
+DHCP reacquisition and DNS cancellation. Local queue backpressure does not
+consume an ARP peer's response window. Counters remain fixed and saturating.
 
-Handle relevant ICMP errors, such as destination/port unreachable, with careful
-validation of the quoted original packet before notifying a matching UDP/TCP
-operation. A random or truncated ICMP message must not cancel unrelated work.
-Define what pending sends and DNS lookups do after link loss, reconnection or
-address changes. Keep display/input mailbox use independent of network progress.
+Validated ICMP unreachable, time-exceeded and parameter errors correlate the
+quoted packet against bounded recent accepted transmissions before notifying
+UDP/echo work. DNS reports specific network/path errors; a malformed, unrelated,
+cancelled or previous-attempt quote cannot cancel a current query. No new
+DEVICE_* pins, host protocol substitution or scheduler were introduced.
 
 **Acceptance:** deterministic tests change a peer's MAC, expire a route, lose
-the link, fill queues, inject relevant/unrelated ICMP errors and change the
-local configuration. Operations either recover or report a documented error;
-timers and memory usage remain bounded. Repeat basic host ping and guest DNS.
+and restore the link, fill queues, inject relevant/unrelated ICMP errors and
+change local configuration. Tests cover retry cooldown, pending-send
+cancellation, history/cache bounds, clock wrap and DHCP lease removal/reacquisition.
+[Recorded checks](testing.md#stack-reliability) include independent wire fixtures
+and live host/DNS-to-VPS regressions. RBF remains opt-in.
 
-Some lifecycle support will be needed during DHCP itself; finish the shared
-behavior here rather than making a second application-specific implementation.
+IPv4 reassembly, path-MTU adaptation, outbound ICMP error generation and host
+transport/helper reconnection remain explicit limitations; they are not hidden
+parts of this completed guest lifecycle milestone.
 
 ## 3. Minimal TCP library
 

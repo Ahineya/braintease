@@ -20,7 +20,7 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 | Document | Topic |
 |----------|-------|
 | [rfl/traits-printing.md](rfl/traits-printing.md) | Planned first RFL traits milestone: Printable-based library print/println |
-| [networking/README.md](networking/README.md) | Guest Ethernet, UDP/DNS, running examples, tests and DHCP/TCP/HTTP roadmap |
+| [networking/README.md](networking/README.md) | Guest Ethernet, DHCP, UDP/DNS, running examples, tests and TCP/HTTP roadmap |
 | [ir.md](ir.md) | Textual IR syntax, tutorials, and lowering rules |
 | [c-testsuite.md](c-testsuite.md) | Vendored c-testsuite vs Ripple data model |
 | [compiler-trace-formats.md](compiler-trace-formats.md) | `rcc --trace` JSON |

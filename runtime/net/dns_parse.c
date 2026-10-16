@@ -50,6 +50,8 @@ void net_dns_receive(NetContext *net, const NetDatagram *packet, void *user) {
     const unsigned char *p = packet->data;
     char question[254];
     unsigned short length = packet->length, flags, next, an, ns, ar;
+    if (!net->link || dns->link_epoch != net->link_epoch) { net_dns_finish(dns, NET_DNS_LINK_DOWN); return; }
+    if (dns->generation != net->generation) { net_dns_finish(dns, NET_DNS_CONFIG_CHANGED); return; }
     if (!dns->sent || packet->source_port != 53 || memcmp(packet->source, net->config.dns, 4) ||
         length < 12 || net_read16(p) != dns->identifier) return;
     flags = net_read16(p + 2);

@@ -37,6 +37,14 @@ pub struct Analysis {
 }
 
 impl Analysis {
+    pub(crate) fn import_fixes(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Vec<crate::auto_import::ImportFix> {
+        crate::auto_import::fixes(&self.source, &self.ast, &self.diagnostics, start, end)
+    }
+
     pub fn open(path: Option<&Path>, source: &str) -> Self {
         let (parsed, parse_errors) = match lexer::tokenize(source) {
             Ok(tokens) => parser::parse_for_ide(source, &tokens),
@@ -52,21 +60,26 @@ impl Analysis {
             }
         };
         let symbols = symbols_of(&parsed);
-        let recover = !parse_errors.is_empty();
-        let (info, mut diagnostics) = if !recover && !parsed.imports.is_empty() && path.is_some() {
-            match crate::modules::check_root(path.unwrap(), source) {
+        let (info, mut diagnostics) = if !parsed.imports.is_empty() && path.is_some() {
+            match crate::modules::check_root(path.unwrap(), source, parsed.clone()) {
                 Ok(checked) => checked,
                 Err(err) => {
-                    let (info, result) = check::analyze(source, &parsed);
-                    let mut diagnostics = vec![err];
-                    diagnostics.extend(result.err());
-                    (info, diagnostics)
+                    // Local facts remain useful if an import fails, but checking
+                    // without its bindings invents unknown-name diagnostics.
+                    let (info, _) = check::analyze(source, &parsed);
+                    (info, vec![err])
                 }
             }
         } else {
             let (info, result) = check::analyze(source, &parsed);
             (info, result.err().into_iter().collect())
         };
+        if parse_errors.iter().any(|error| error.detail == parser::EXPECTED_MEMBER_NAME) {
+            // The parser creates an empty Field node to retain the receiver.
+            // Its missing name is already reported at the dot; the checker
+            // cannot meaningfully diagnose a field called the empty string.
+            diagnostics.retain(|error| !error.detail.ends_with(" has no field ``"));
+        }
         diagnostics.splice(0..0, parse_errors);
         Self {
             source: source.to_string(),
@@ -156,6 +169,7 @@ impl Analysis {
                 kind,
                 detail: fact.ty.clone(),
                 replace,
+                import_edit: None,
             });
         }
         for fact in self.facts().filter(|fact| {
@@ -177,6 +191,7 @@ impl Analysis {
                 kind,
                 detail: fact.ty.clone(),
                 replace,
+                import_edit: None,
             });
         }
         for symbol in &self.symbols {
@@ -194,6 +209,7 @@ impl Analysis {
                 },
                 detail: symbol.detail.clone(),
                 replace,
+                import_edit: None,
             });
         }
         for word in KEYWORDS {
@@ -203,6 +219,7 @@ impl Analysis {
                     kind: CompletionKind::Keyword,
                     detail: String::new(),
                     replace,
+                    import_edit: None,
                 });
             }
         }
@@ -282,17 +299,80 @@ impl Analysis {
     }
 
     fn method_completions(&self, dot: usize, replace: crate::ast::Span) -> Vec<Completion> {
+        // An unfinished member at a function's tail can prevent return inference
+        // before any local type facts are recorded. Check the receiver without
+        // that member, preserving source offsets and all imports.
+        let mut member_end = replace.end;
+        let mut receiver_end = dot;
+        if let Ok(tokens) = lexer::tokenize(&self.source) {
+            if let Some(last) = tokens
+                .iter()
+                .rev()
+                .find(|token| token.span.end <= dot && !matches!(token.kind, lexer::TokenKind::Eof))
+            {
+                receiver_end = last.span.end;
+            }
+            let rest: Vec<_> = tokens
+                .iter()
+                .filter(|token| token.span.start >= replace.end)
+                .collect();
+            if rest
+                .first()
+                .is_some_and(|token| matches!(token.kind, lexer::TokenKind::LParen))
+            {
+                let (mut parens, mut braces) = (0, 0);
+                for token in rest {
+                    match token.kind {
+                        lexer::TokenKind::LParen => parens += 1,
+                        lexer::TokenKind::RParen => {
+                            parens -= 1;
+                            if parens == 0 {
+                                member_end = token.span.end;
+                                break;
+                            }
+                        }
+                        lexer::TokenKind::LBrace => braces += 1,
+                        lexer::TokenKind::RBrace if braces == 0 => {
+                            member_end = token.span.start;
+                            break;
+                        }
+                        lexer::TokenKind::RBrace => braces -= 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        let mut repaired = self.source.clone();
+        let mask: String = repaired[dot..member_end]
+            .chars()
+            .map(|ch| {
+                if matches!(ch, '\r' | '\n') {
+                    ch.to_string()
+                } else {
+                    " ".repeat(ch.len_utf8())
+                }
+            })
+            .collect();
+        repaired.replace_range(dot..member_end, &mask);
+        let recovered = Analysis::open(self.path.as_deref(), &repaired);
+        let info = &recovered.info;
         let bytes = self.source.as_bytes();
-        let mut end = dot;
+        let mut end = receiver_end;
         while end > 0 && bytes[end - 1].is_ascii_whitespace() {
             end -= 1;
         }
-        let Some(expr) = self
-            .info
+        let Some(expr) = info
             .expr_types
             .iter()
             .filter(|expr| expr.span.end == end)
             .min_by_key(|expr| expr.span.end - expr.span.start)
+            .or_else(|| {
+                self.info
+                    .expr_types
+                    .iter()
+                    .filter(|expr| expr.span.end == end)
+                    .min_by_key(|expr| expr.span.end - expr.span.start)
+            })
         else {
             return Vec::new();
         };
@@ -304,15 +384,78 @@ impl Analysis {
                 kind: CompletionKind::Method,
                 detail,
                 replace,
+                import_edit: None,
             });
         }
-        for (type_name, method) in &self.info.methods {
+        for (type_name, method) in &info.methods {
             if ty == *type_name || ty.starts_with(&format!("{type_name}<")) {
                 items.push(Completion {
                     label: method.clone(),
                     kind: CompletionKind::Method,
                     detail: type_name.clone(),
                     replace,
+                    import_edit: None,
+                });
+            }
+        }
+        for (module, function) in crate::modules::std_completion_functions() {
+            let imported = self
+                .ast
+                .imports
+                .iter()
+                .filter(|import| import.path.strip_suffix(".rfl").unwrap_or(&import.path) == module)
+                .flat_map(|import| import.names.iter())
+                .find(|name| name.name == function.name);
+            let label = imported.map_or_else(|| function.name.clone(), |name| name.alias.clone());
+            if items.iter().any(|item| item.label == label) {
+                continue;
+            }
+            let shadowed = info.facts.iter().any(|fact| {
+                fact.name == label
+                    && fact.scope.start > 0
+                    && fact.scope.contains(dot)
+                    && dot >= fact.visible_from
+            });
+            let conflicts = self
+                .ast
+                .functions
+                .iter()
+                .any(|function| function.name == label)
+                || self.ast.consts.iter().any(|item| item.name == label)
+                || imported.is_none()
+                    && self
+                        .ast
+                        .imports
+                        .iter()
+                        .any(|import| import.names.iter().any(|name| name.alias == label));
+            if shadowed || conflicts {
+                continue;
+            }
+            if let Some(detail) = function.method_signature(&ty) {
+                let import_edit = if imported.is_some() {
+                    None
+                } else {
+                    crate::auto_import::completion_edit(
+                        &self.source,
+                        &self.ast,
+                        &module,
+                        &function.name,
+                    )
+                };
+                if imported.is_none() && import_edit.is_none() {
+                    continue;
+                }
+                let detail = if import_edit.is_some() {
+                    format!("{detail} — from {module}")
+                } else {
+                    detail
+                };
+                items.push(Completion {
+                    label,
+                    kind: CompletionKind::Method,
+                    detail,
+                    replace,
+                    import_edit,
                 });
             }
         }
@@ -768,6 +911,8 @@ pub struct Completion {
     pub detail: String,
     /// The identifier being typed. Empty when the cursor is directly after `.`.
     pub replace: crate::ast::Span,
+    /// An import to apply atomically with selection of an out-of-scope stdlib method.
+    pub import_edit: Option<(crate::ast::Span, String)>,
 }
 
 fn ident_around(source: &str, offset: usize) -> crate::ast::Span {
@@ -933,6 +1078,125 @@ fn empty_module() -> Module {
 #[cfg(test)]
 mod tests {
     use super::Analysis;
+
+    #[test]
+    fn imported_extensions_complete_after_inferred_string_and_partial_member() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/completion-test.rfl");
+        for member in ["", "rep"] {
+            let source = format!("import {{ replace }} from \"std/string\";\nfn main() {{\n let a = \"something\";\n let b = a.replace(\"some\", \"oth\");\n println(b);\n b.{member}\n}}\n");
+            let at = source.rfind("b.").unwrap() + 2 + member.len();
+            let doc = Analysis::open(Some(&path), &source);
+            let items = doc.completions(at);
+            let labels: Vec<_> = items.iter().map(|item| item.label.as_str()).collect();
+            assert!(
+                labels.contains(&"replace"),
+                "{member}: {labels:?}; {:?}",
+                doc.diagnostics
+            );
+            assert!(
+                labels.contains(&"len") && labels.contains(&"is_empty"),
+                "{labels:?}"
+            );
+            assert!(
+                !labels.contains(&"region_eq") && !labels.contains(&"reverse"),
+                "{labels:?}"
+            );
+            let replace = items.iter().find(|item| item.label == "replace").unwrap();
+            assert_eq!(replace.detail, "fn(String, String) -> String");
+            assert_eq!(&source[replace.replace.start..replace.replace.end], member);
+            assert!(!labels.contains(&"push"), "{labels:?}");
+        }
+    }
+
+    #[test]
+    fn extension_completion_preserves_aliases_and_filters_receiver_types() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/completion-test.rfl");
+        let source = "import { replace as substitute } from \"std/string\";\nimport { abs } from \"std/math\";\nfn main() { let text = \"x\"; text. }";
+        let doc = Analysis::open(Some(&path), source);
+        let labels: Vec<_> = doc
+            .completions(source.rfind("text.").unwrap() + 5)
+            .into_iter()
+            .map(|item| item.label)
+            .collect();
+        assert!(
+            labels.iter().any(|name| name == "substitute"),
+            "{labels:?}; {:?}",
+            doc.diagnostics
+        );
+        assert!(
+            !labels
+                .iter()
+                .any(|name| matches!(name.as_str(), "replace" | "abs" | "region_eq")),
+            "{labels:?}"
+        );
+    }
+
+    #[test]
+    fn extensions_are_stdlib_only_and_builtins_keep_priority() {
+        let source = "fn identity<T>(value: T) -> T { value }\nfn size(value: String) -> usize { value.len() }\nfn number(value: i16) -> i16 { value }\nfn len(value: String) -> i16 { 1 }\nfn main() { let text = \"x\"; text. }";
+        let doc = Analysis::open(None, source);
+        let items = doc.completions(source.rfind("text.").unwrap() + 5);
+        assert!(!items
+            .iter()
+            .any(|item| matches!(item.label.as_str(), "identity" | "size" | "number")));
+        assert!(items
+            .iter()
+            .any(|item| item.label == "trim" && item.import_edit.is_some()));
+        assert_eq!(items.iter().filter(|item| item.label == "len").count(), 1);
+        assert_eq!(
+            items
+                .iter()
+                .find(|item| item.label == "len")
+                .unwrap()
+                .detail,
+            "fn() -> usize"
+        );
+        let source = source.replace("let text", "let trim = 1; let text");
+        let doc = Analysis::open(None, &source);
+        assert!(!doc
+            .completions(source.rfind("text.").unwrap() + 5)
+            .iter()
+            .any(|item| item.label == "trim"));
+    }
+
+    #[test]
+    fn selecting_a_stdlib_method_completes_the_name_and_import() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/completion-test.rfl");
+        let source = "// header 🦀\r\nimport { replace } from \"std/string\"; // keep\r\nfn main() { let b = \"x\".replace(\"x\", \"a\"); println(b); b.tr; }\r\n";
+        let at = source.find("b.tr").unwrap() + 4;
+        let doc = Analysis::open(Some(&path), source);
+        let items = doc.completions(at);
+        let completion = items.iter().find(|item| item.label == "trim").unwrap();
+        assert!(completion.detail.contains("std/string"));
+        let (import_span, import_text) = completion.import_edit.as_ref().unwrap();
+        let mut edited = source.to_string();
+        // Apply from the end of the document so earlier offsets remain valid.
+        edited.replace_range(completion.replace.start..completion.replace.end, "trim()");
+        edited.replace_range(import_span.start..import_span.end, import_text);
+        assert!(edited.contains("import { trim, replace }"));
+        assert!(edited.contains("; // keep\r\n"));
+        let after = Analysis::open(Some(&path), &edited);
+        assert!(
+            after.diagnostics.is_empty(),
+            "{edited}\n{:?}",
+            after.diagnostics
+        );
+        let imported = items.iter().find(|item| item.label == "replace").unwrap();
+        assert!(imported.import_edit.is_none());
+        let first = "fn value() { let b = \"hi\"; b.tr }";
+        let doc = Analysis::open(Some(&path), first);
+        let item = doc
+            .completions(first.find("b.tr").unwrap() + 4)
+            .into_iter()
+            .find(|item| item.label == "trim")
+            .unwrap();
+        let (span, text) = item.import_edit.unwrap();
+        assert_eq!(span.start, 0);
+        assert_eq!(text, "import { trim } from \"std/string\";\n\n");
+    }
 
     #[test]
     fn a_let_stays_inside_its_block() {

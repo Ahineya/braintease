@@ -6,10 +6,14 @@ Build and launch from the repository root:
 scripts/run-ros.sh
 ```
 
-This checks the release toolchain and rebuilds the BIOS and separate OS images
-in `build/ros`, then boots the Rust VM in the
-terminal. At the `C:\>` prompt, try `HELP`, `DIR`, `HELLO`, and `EXIT`.
-Each launch installs current `IO.SYS`, `KERNEL.SYS`, `COMMAND.COM` and `HELLO.RXE`
+This checks the release toolchain and incrementally builds the BIOS and separate
+OS images in `build/ros`, then boots the Rust VM with the JIT enabled in the
+terminal. At the `C:\>` prompt, try `HELP`, `DIR`, `HELLO`, `SIERP`, `BF`,
+`TYPE README.TXT`, and `EXIT`. `SIERP.RXE` builds the existing Sierpinski example;
+`BF.RXE` builds the existing one-line Brainfuck interpreter with INT21 input/output.
+For example, enter `++++++++[>++++++++<-]>+.` at the BF prompt to print `A`.
+Each launch installs current `IO.SYS`, `KERNEL.SYS`, `COMMAND.COM`, `HELLO.RXE`,
+`SIERP.RXE`, `BF.RXE` and `README.TXT`
 into the default `ros.img`. Other files, directories and their metadata are
 preserved. Before changing an existing image, the launcher saves its previous
 contents to `ros.img.bak` (or `.bak.1`, `.bak.2`, etc.), then replaces the image
@@ -19,9 +23,19 @@ Use `--fresh` to reset the default disk, erasing its existing files. `--disk PAT
 existing rOS image without rebuilding that disk and cannot be combined with
 `--fresh`. `ROS_BUILD` selects another build directory.
 Ctrl+C stops the VM even when the guest is busy and does not read keyboard input.
+Unchanged launches do not recompile or relink images. Sources, headers, compiler,
+assembler, linker, runtime inputs and build settings participate in dependency
+checks; only the runtime components rOS uses are built.
+
+`--run-only` boots the existing BIOS and disk without checking tools, building
+anything or updating disk contents. It requires a previous build and deliberately
+ignores newer source changes. `--no-jit` selects the interpreter instead of the
+default JIT. These options can be combined with `--disk` and normal VM options.
 
 ```bash
 scripts/run-ros.sh --build-only
+scripts/run-ros.sh --run-only
+scripts/run-ros.sh --run-only --no-jit
 scripts/run-ros.sh --fresh
 scripts/run-ros.sh --headless --input $'DIR\nHELLO\nEXIT\n' --timeout 30
 scripts/run-ros.sh --disk disks/ros.img
@@ -29,7 +43,7 @@ scripts/run-ros.sh --disk disks/ros.img
 
 Additional options pass through to `rvm`, such as `--frequency 2MHz` or `--tui`.
 The equivalent direct VM invocation after a default build is
-`target/release/rvm build/ros/bios.bin --disk build/ros/ros.img`.
+`target/release/rvm build/ros/bios.bin --disk build/ros/ros.img --jit`.
 This OS uses interrupts and writable instruction memory, so it currently runs
 on the Rust VM rather than the Brainfuck host.
 

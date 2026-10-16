@@ -4,6 +4,8 @@ use crate::ast::*;
 use crate::error::CompileError;
 use crate::lexer::{Token, TokenKind};
 
+pub(crate) const EXPECTED_MEMBER_NAME: &str = "expected a member name after '.'";
+
 pub fn parse(source: &str, tokens: &[Token]) -> Result<Module, CompileError> {
     parse_for_target(source, tokens, rcc_ir::target::Target::Ripple)
 }
@@ -1462,7 +1464,7 @@ impl<'a> Parser<'a> {
                         return Err(CompileError::at(self.source, dot.end, "expected a name"));
                     }
                     self.errors
-                        .push(CompileError::at(self.source, dot.end, "expected a name"));
+                        .push(CompileError::at(self.source, dot.start, EXPECTED_MEMBER_NAME));
                     let base_span = expr.span;
                     let name_span = Span::new(dot.end, dot.end);
                     expr = Expr {

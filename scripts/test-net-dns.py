@@ -21,7 +21,8 @@ wire = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wire)
 DNS = bytes([1, 1, 1, 1])
 TARGET = bytes([203, 0, 113, 9])
-CASES = ['success', 'retry', 'timeout', 'nxdomain', 'truncated', 'servfail', 'no-address']
+CASES = ['success', 'retry', 'timeout', 'nxdomain', 'truncated', 'servfail', 'no-address',
+         'icmp-unreachable', 'icmp-time-exceeded', 'icmp-parameter', 'icmp-mtu', 'icmp-old-retry']
 
 
 def name(value):
@@ -53,6 +54,29 @@ def response(query, answers=b'', count=0, flags=0x8180, identifier=None, questio
                        flags, 1, count, 0, 0) + (query[12:] if question is None else question) + answers
 
 
+def icmp_error(frame, kind=3, code=3, change=None):
+    quote = bytearray(frame[14:42])
+    quote[8] = 1  # A router can change TTL and the quoted IP checksum.
+    if change == 'identifier':
+        quote[5] ^= 1
+    elif change == 'port':
+        quote[21] ^= 1
+    elif change == 'source':
+        quote[12] = 10
+    elif change == 'fragment':
+        quote[6] = 0x20
+    quote[10:12] = b'\0\0'
+    quote[10:12] = struct.pack('!H', wire.checksum(quote[:20]))
+    if change == 'ip-checksum':
+        quote[10] ^= 1
+    if change == 'short':
+        quote = quote[:-1]
+    data = struct.pack('!BBHHH', kind, code, 0, 0, 1400 if (kind, code) == (3, 4) else 0) + quote
+    check = wire.checksum(data) ^ (1 if change == 'icmp-checksum' else 0)
+    data = data[:2] + struct.pack('!H', check) + data[4:]
+    return ip_packet(data, 1, wire.HOST_IP)
+
+
 def run_case(mode, case, timeout, jit):
     build = ROOT / 'build/network/dns' / mode
     label = mode + ('-jit' if jit else '') + '-' + case
@@ -78,6 +102,7 @@ def run_case(mode, case, timeout, jit):
         guest = subprocess.Popen(command, env=env, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT)
         client = None
         replies = []
+        first_query_frame = None
         try:
             while guest.poll() is None:
                 if time.monotonic() - start > timeout:
@@ -129,10 +154,13 @@ def run_case(mode, case, timeout, jit):
                 assert query[12:] == name('syma-lang.org') + b'\0\x01\0\x01'
                 assert identifier not in result['queries'], 'retry reused transaction ID'
                 result['queries'].append(identifier)
-                if case == 'timeout' or (case == 'retry' and len(result['queries']) == 1):
+                if case == 'timeout' or (case in ['retry', 'icmp-old-retry'] and len(result['queries']) == 1):
+                    first_query_frame = frame
                     continue
                 pointer = b'\xc0\x0c'
-                if case in ['success', 'retry']:
+                if case in ['success', 'retry', 'icmp-old-retry']:
+                    if case == 'icmp-old-retry':
+                        peer.sendto(icmp_error(first_query_frame), client)
                     if case == 'success':
                         # Correct checksums but wrong tuple, ID or question must be ignored.
                         valid = response(query, rr(pointer, 1, TARGET), 1)
@@ -166,14 +194,21 @@ def run_case(mode, case, timeout, jit):
                     peer.sendto(udp_packet(response(query, flags=0x8182), port), client)
                 elif case == 'no-address':
                     peer.sendto(udp_packet(response(query, rr(name('unrelated.example'), 1, TARGET), 1), port), client)
+                elif case.startswith('icmp-'):
+                    for change in ['identifier', 'port', 'source', 'fragment', 'ip-checksum', 'short', 'icmp-checksum']:
+                        peer.sendto(icmp_error(frame, change=change), client)
+                    kind, code = {'icmp-unreachable': (3, 3), 'icmp-time-exceeded': (11, 0),
+                                  'icmp-parameter': (12, 0), 'icmp-mtu': (3, 4)}[case]
+                    peer.sendto(icmp_error(frame, kind, code), client)
             content = log.read_text()
-            if case in ['success', 'retry']:
+            if case in ['success', 'retry', 'icmp-old-retry']:
                 assert guest.returncode == 0, content
                 assert 'DNS answer name=syma-lang.org address=203.0.113.9 ttl=45' in content, content
                 assert replies == [1, 2, 3] and 'PING OK received=3 responded=0' in content, content
-                assert len(result['queries']) == (2 if case == 'retry' else 1)
+                assert len(result['queries']) == (2 if case in ['retry', 'icmp-old-retry'] else 1)
             else:
-                status = {'nxdomain': 2, 'truncated': 5, 'servfail': 4, 'no-address': 3, 'timeout': 6}[case]
+                status = {'nxdomain': 2, 'truncated': 5, 'servfail': 4, 'no-address': 3, 'timeout': 6,
+                          'icmp-unreachable': 11, 'icmp-mtu': 11, 'icmp-time-exceeded': 12, 'icmp-parameter': 12}[case]
                 assert guest.returncode == 6 and f'DNS failed status={status} ' in content, content
                 assert len(result['queries']) == (3 if case == 'timeout' else 1)
                 assert not replies

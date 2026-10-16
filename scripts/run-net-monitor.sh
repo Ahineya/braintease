@@ -26,20 +26,20 @@ fi
 OUT="$ROOT/build/network/monitor/$MODE"
 mkdir -p "$OUT"
 echo "Building C ping monitor for $MODE (log: $OUT/build.log)..."
-if ! NET_DEMO=monitor "$ROOT/scripts/build-net-ping.sh" "$MODE" "$OUT" > "$OUT/build.log" 2>&1; then
+if ! NET_DEMO=monitor NET_PRIVATE_RUNTIME=1 "$ROOT/scripts/build-net-ping.sh" "$MODE" "$OUT" > "$OUT/build.log" 2>&1; then
     cat "$OUT/build.log" >&2; exit 1
 fi
 case "$MODE" in
     native)
         if [[ -n "$NET_SOCKET" ]]; then export RCC_NATIVE_NET="$NET_SOCKET"; fi
-        exec env RCC_NATIVE_HEADLESS=1 "$OUT/monitor"
+        exec env RCC_NATIVE_HEADLESS=1 RCC_NATIVE_PACED=1 "$OUT/monitor"
         ;;
     rvm)
         bank="$(cat "$OUT/bank-size")"
-        command=("$ROOT/target/release/rvm" "$OUT/monitor.bin" --headless --exit-code
+        command=("$ROOT/target/release/rvm" "$OUT/monitor.bin" --headless --exit-code --clock paced
             --bank-size "$bank" --memory "$((bank * 8))" --disk "$OUT/disk.img")
         ;;
-    rbf) command=("$ROOT/target/release/rbf" "$OUT/monitor.bf" --headless --exit-code) ;;
+    rbf) command=("$ROOT/target/release/rbf" "$OUT/monitor.bf" --headless --exit-code --clock paced) ;;
 esac
 if [[ -n "$NET_SOCKET" ]]; then command+=(--net "$NET_SOCKET"); fi
 if [[ "$JIT" == 1 ]]; then command+=(--jit); fi

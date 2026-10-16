@@ -1,7 +1,7 @@
 # Guest networking library
 
 The guide has moved to [networking/library.md](networking/library.md).
-See also [running examples](networking/running.md) and the
+See also [guest DHCP](networking/dhcp.md), [running examples](networking/running.md) and the
 [networking roadmap](networking/roadmap.md).
 
 ## Linking and regression checks

@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -24,21 +25,23 @@ def run_case(args, mode):
     result = {'success': False, 'mode': mode, 'jit': args.jit and mode == 'rvm'}
     started = time.monotonic()
     guest = None
+    program = "dhcp-monitor" if args.dhcp else "monitor"
     try:
         with tempfile.TemporaryDirectory(prefix='ripple-auto-', dir='/tmp') as temporary, log.open('w') as output:
             env = os.environ.copy()
             env.pop('RCC_NATIVE_NET', None)
             env.pop('RIPPLE_NET', None)
             if mode == 'native':
-                executable = Path(temporary) / 'monitor'
-                shutil.copy2(build / 'monitor', executable)
+                executable = Path(temporary) / program
+                shutil.copy2(build / program, executable)
                 command = [str(executable)]
-                env.update(RCC_NATIVE_HEADLESS='1', RCC_NATIVE_TIMEOUT=str(args.timeout))
+                env.update(RCC_NATIVE_HEADLESS='1', RCC_NATIVE_TIMEOUT=str(args.timeout), RCC_NATIVE_PACED='1')
             else:
                 bank = int((build / 'bank-size').read_text())
-                command = [str(ROOT / 'target/release/rvm'), str(build / 'monitor.bin'),
+                command = [str(ROOT / 'target/release/rvm'), str(build / (program + '.bin')),
                            '--bank-size', str(bank), '--memory', str(bank * 8), '--headless',
                            '--timeout', str(args.timeout), '--disk', str(build / 'auto.disk.img')]
+                command += ['--clock', 'paced']
                 if args.jit:
                     command.append('--jit')
             result['guest_command'] = command
@@ -46,14 +49,19 @@ def run_case(args, mode):
                                      stderr=subprocess.STDOUT, start_new_session=True)
             directory = Path(f'/tmp/ripple-vmnet-{guest.pid}-0')
             try:
-                while 'Waiting for pings;' not in log.read_text():
+                ready = 'DHCP bound address=' if args.dhcp else 'Waiting for pings;'
+                while ready not in log.read_text():
                     if guest.poll() is not None:
                         raise RuntimeError('guest stopped before network readiness: ' + log.read_text())
                     if time.monotonic() - started > args.timeout:
                         raise RuntimeError('automatic network readiness timeout: ' + log.read_text())
                     time.sleep(0.05)
                 assert directory.is_dir(), 'runtime did not own an embedded helper directory'
-                ping = subprocess.run(['/sbin/ping', '-n', '-c', str(args.count), '-W', '3000', args.guest_ip],
+                guest_ip = args.guest_ip
+                if args.dhcp:
+                    guest_ip = str(ipaddress.IPv4Address(re.search(r'DHCP bound address=([0-9.]+)', log.read_text())[1]))
+                    result['leased_ipv4'] = guest_ip
+                ping = subprocess.run(['/sbin/ping', '-n', '-c', str(args.count), '-W', '3000', guest_ip],
                                       capture_output=True, text=True, timeout=args.timeout)
                 (build / 'auto-host-ping.log').write_text(ping.stdout + ping.stderr)
                 if ping.returncode or f'{args.count} packets received' not in ping.stdout:
@@ -95,12 +103,15 @@ def run_case(args, mode):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode', choices=['rvm', 'native'], action='append')
-    parser.add_argument('--build-root', type=Path, default=ROOT / 'build/network/monitor')
+    parser.add_argument('--build-root', type=Path, default=None)
+    parser.add_argument('--dhcp', action='store_true', help='discover the guest IP from the DHCP monitor instead of a static address')
     parser.add_argument('--jit', action='store_true')
     parser.add_argument('--count', type=int, default=3)
     parser.add_argument('--timeout', type=int, default=40)
     parser.add_argument('--guest-ip', type=lambda value: str(ipaddress.IPv4Address(value)), default='192.168.64.250')
     args = parser.parse_args()
+    if args.build_root is None:
+        args.build_root = ROOT / 'build/network' / ('dhcp-monitor' if args.dhcp else 'monitor')
     if platform.system() != 'Darwin':
         parser.error('automatic live attachment currently requires macOS')
     if args.timeout <= 0 or not 1 <= args.count <= 10:

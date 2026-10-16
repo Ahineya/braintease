@@ -66,6 +66,8 @@ function complete(connection, doc, pos) {
       const converted = new vscode.CompletionItem(item.label, kind);
       converted.detail = item.detail || undefined;
       converted.filterText = item.filterText || item.label;
+      converted.additionalTextEdits = (item.additionalTextEdits || []).map((edit) =>
+        vscode.TextEdit.replace(toRange(edit.range), edit.newText));
       if (item.textEdit && item.textEdit.range) {
         converted.range = toRange(item.textEdit.range);
         converted.insertText = item.textEdit.newText;

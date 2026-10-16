@@ -19,8 +19,10 @@ int main(void) {
     VmClock clock;
     unsigned char payload[17];
     unsigned short i, sent = 0, received = 0;
+    unsigned long link_epoch;
     int status;
     if (net_init(&net, &config)) return fail("NIC unavailable or invalid configuration", 2);
+    link_epoch = net.link_epoch;
     for (i = 0; i < 17; ++i) payload[i] = i == 1 ? 255 : i;
 #if PING_MONITOR
     text("PING monitor local="); ip_text(config.address); text(" mask="); ip_text(config.mask); putchar('\n');
@@ -39,12 +41,20 @@ int main(void) {
         status = net_poll(&net, clock.ms);
         if (status == NET_IO_ERROR) return fail("network polling failed", 4);
 #if PING_MONITOR
+        if (net.link_epoch != link_epoch) {
+            link_epoch = net.link_epoch;
+            puts(net.link ? "NET link restored" : "NET link down; waiting");
+        }
         if (net.event == NET_EVENT_ECHO_REQUEST) {
             text("PING request from="); ip_text(net.peer); text(" id="); number(net.identifier);
             text(" seq="); number(net.sequence); text(" octets="); number(net.payload_length); putchar('\n');
             puts(net.pending ? "PING reply waiting for TX space" : "PING reply queued");
         }
 #endif
+        if (net.event == NET_EVENT_ICMP_ERROR && net.error.protocol == 1 && net.error.identifier == 0x5246 && !memcmp(net.error.destination, target_ip, 4)) {
+            text("PING ICMP error type="); number(net.error.type); text(" code="); number(net.error.code); putchar('\n');
+            return 6;
+        }
         if (net.event == NET_EVENT_ECHO_REPLY && !memcmp(net.peer, target_ip, 4) && net.identifier == 0x5246) {
             if (net.payload_length != 17 || net.sequence != received + 1 || net.sequence > sent || memcmp(net.payload, payload, 17)) ++net.rejected;
             else { ++received; text("PING reply seq="); number(net.sequence); puts(" octets=17"); }
@@ -54,6 +64,9 @@ int main(void) {
             if (status == NET_OK) ++sent;
             else if (status != NET_AGAIN) return fail("echo request failed", 5);
         }
+#if PING_MONITOR
+        if (vm_next_tick(&clock)) return fail("clock tick failed", 7);
+#endif
     }
     do {
         if (vm_net_stats(0, &stats) || stats.tx_failed || stats.backend_errors) return fail("backend failed while draining TX", 9);

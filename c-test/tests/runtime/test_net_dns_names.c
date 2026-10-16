@@ -31,7 +31,7 @@ int main(void) {
     check(net_dns_name(packet, offset, 12, result, &next) && strlen(result) == 253 && next == offset);
     packet[offset - 63] = 62; packet[offset - 1] = 'a'; packet[offset++] = 0;
     check(!net_dns_name(packet, offset, 12, result, &next));
-    memset(&net, 0, sizeof(net)); net.config.dns[0] = 1;
+    memset(&net, 0, sizeof(net)); net.config.dns[0] = 1; net.link = 1;
     check(net_dns_start(&net, &dns, "Syma-Lang.Org.", 0xfffffff0UL, 100UL, 0) == NET_OK && !strcmp(dns.name, "syma-lang.org"));
     /* Unsigned 32-bit subtraction crosses clock wrap without a CPU-loop timer. */
     check(net_dns_poll(&dns, 0x54UL) == NET_DNS_TIMEOUT && !dns.port);

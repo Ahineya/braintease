@@ -33,15 +33,17 @@ ROS_C_OBJ = $(ROS_C_SOURCES:.c=.pobj)
 ROS_ASM_OBJ = ros/int21.pobj ros/crt0_ros.pobj ros/crt0_sys.pobj
 LIBROS_OBJ = ros/int21.pobj ros/putchar.pobj ros/getchar.pobj puts.pobj
 LIBROS = libros.par
+BUILD_RULES := $(abspath $(lastword $(MAKEFILE_LIST)))
 
 # Default target
 all: $(RUNTIME_LIB) $(LIBROS) crt0.pobj $(ROS_ASM_OBJ)
 
-# Rebuild when bank size or stack calling convention changes. Objects from
-# different settings must not be mixed.
+# Rebuild for changes to bank size, calling convention, assembler limits or
+# tool paths. Objects from different settings must not be mixed.
 $(BANK_SIZE_STAMP): FORCE
-	@if test "$$(cat $@ 2>/dev/null)" != "$(strip $(BANK_SIZE)):$(SEGMENTED_STACK)"; then \
-		printf '%s\n' "$(strip $(BANK_SIZE)):$(SEGMENTED_STACK)" > $@; \
+	@settings='$(strip $(BANK_SIZE)):$(SEGMENTED_STACK):$(MAX_IMMEDIATE):$(abspath $(RCC)):$(abspath $(RASM)):$(abspath $(RLINK))'; \
+	if test "$$(cat $@ 2>/dev/null)" != "$$settings"; then \
+		printf '%s\n' "$$settings" > $@; \
 	fi
 
 FORCE:
@@ -103,6 +105,8 @@ $(LIBROS): $(LIBROS_OBJ) $(RLINK)
 	@$(RLINK) $(LIBROS_OBJ) -f archive -o $(LIBROS)
 
 # Clean generated files (but not hand-written .asm)
+$(ASM_FILES) $(ROS_C_ASM) stack_segments.asm $(ALL_OBJ_FILES) $(ROS_ASM_OBJ) $(ROS_C_OBJ) $(RUNTIME_LIB) $(LIBROS): $(BUILD_RULES)
+
 clean:
 	rm -f stack_segments.asm $(ASM_FILES) $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm $(C_OBJ_FILES) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
 	@echo "Cleaned runtime directory"

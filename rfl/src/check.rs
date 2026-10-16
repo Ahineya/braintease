@@ -121,6 +121,17 @@ pub struct ProgramInfo {
     pub call_sigs: Vec<CallSig>,
 }
 
+pub(crate) fn completion_function(func: &Function) -> Option<crate::completion::ExtensionFunction> {
+    if func.params.is_empty() { return None; }
+    Some(crate::completion::ExtensionFunction {
+        name: func.name.clone(),
+        signature: parsed_signature(func, false),
+        generics: func.type_params.iter().map(|param| param.name.clone()).collect(),
+    })
+}
+
+pub(crate) fn completion_type_name(ty: &ParsedTy) -> String { parsed_brief(ty) }
+
 pub fn check(source: &str, module: &Module) -> Result<TModule, CompileError> {
     analyze(source, module).1
 }

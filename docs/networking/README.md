@@ -9,13 +9,16 @@ no host socket or hostname-resolution shortcuts in the guest protocol stack.
 guest DNS resolution of `syma-lang.org` and ping to its returned IPv4 address.
 The complete DNS-to-ping exchange was validated on RVM and native. Earlier
 ICMP/device milestones were also validated on RBF; new DNS execution there
-remains opt-in.
+remains opt-in. DHCP now supplies guest configuration too, including renewal,
+rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 
 ## Guide
 
 | Page | Contents |
 |------|----------|
 | [Build and run](running.md) | Ping monitor, DNS/ping launcher, configuration, host backends and troubleshooting setup |
+| [DHCP](dhcp.md) | Lease acquisition, renewal/rebinding, conflict detection, configuration changes and examples |
+| [Reliability and lifecycle](reliability.md) | Neighbor expiration/retry, link changes, pending sends and matched ICMP errors |
 | [Guest library](library.md) | Current C APIs, ownership, UDP callbacks, DNS, timeouts and linking |
 | [Device contract](device.md) | DEVICE_* sharing, descriptor layouts, frame queues, transport and checkpoints |
 | [Testing](testing.md) | Reproducible commands, existing coverage, recorded validation and evidence requirements |
@@ -27,8 +30,8 @@ remains opt-in.
 From the repository root, with the release toolchain built:
 
 ```sh
-scripts/run-net-monitor.sh
-scripts/run-net-dns.sh rvm syma-lang.org --jit
+scripts/run-net-dhcp.sh --monitor
+scripts/run-net-dhcp.sh rvm syma-lang.org --jit
 ```
 
 The monitor defaults to native execution with host-only Ethernet. The DNS/ping
@@ -43,10 +46,10 @@ for prerequisites, native execution and selecting another guest IP.
 |-------|----------------------|-----------------|
 | NIC/device | Discover MAC/link/MTU; TX/RX queues; statistics; synchronous guest-memory copies | One interface, Ethernet MTU 1500 |
 | Host attachment | Lazy macOS host-only or shared vmnet; external Unix-datagram peer | No bundled Linux TAP helper |
-| Configuration | Application-owned `NetConfig` | Static IP, mask, gateway and DNS server; no DHCP |
-| Ethernet/ARP | Discovery, replies, startup announcement, four-entry route cache | No cache expiration or automatic recovery after configuration changes |
-| IPv4 | Local unicast and default-gateway routing, bounded parsing/checksums | No fragment reassembly or DHCP broadcast bootstrap |
-| ICMP | Echo requests/replies and validation | No general ICMP error reporting |
+| Configuration / DHCP | Static `NetConfig` or guest DHCP acquisition, renewal, rebinding, expiry and ARP conflict detection | One lease per context; no saved-lease restore or DHCPRELEASE |
+| Ethernet/ARP | Four-entry expiring cache, bounded retry/backoff, MAC refresh and explicit invalidation | Fixed 60-second lifetime; no arbitrary unsolicited neighbor learning |
+| IPv4 | Local unicast and default-gateway routing, bounded parsing/checksums | No fragment reassembly; broadcast restricted to DHCP bootstrap |
+| ICMP | Echo and matched unreachable/time-exceeded/parameter errors; UDP callbacks and DNS diagnostics | Eight recent accepted packets, 30-second history; no path-MTU adaptation |
 | UDP | Four bindings, callbacks, checksums, empty/binary payloads and backpressure | Payload limit 1472 octets; no reliability guarantee |
 | DNS | IPv4 A queries, compressed names, bounded in-answer CNAME chains, matching, retries and timeouts | Classic 512-octet UDP; no TCP fallback, EDNS, AAAA or cache |
 | TCP / HTTP | Planned | No current TCP, HTTP client or HTTP server library |
@@ -59,7 +62,7 @@ is [deferred](roadmap.md#separate-and-later-work).
 ## Architecture and constraints
 
 ```text
-application (ping now; DHCP/TCP/HTTP applications later)
+application (DHCP/DNS/ping now; TCP/HTTP applications later)
     ↕ guest protocol libraries in libruntime.par
     ↕ vm_network.h: NET_INFO / NET_TX / NET_RX / NET_STATS
     ↕ existing DEVICE_* mailbox, bank 0 cells 27–31
@@ -86,8 +89,8 @@ Keep these decisions when extending the stack:
 - Keep native and VM behavior aligned. Native execution can run the same C
   faster, but does not replace guest TCP/IP with host sockets.
 
-The next agreed work is [DHCP](roadmap.md#1-dhcp-client), then stack reliability,
-TCP, an HTTP client, a small HTTP server serving hardcoded HTML, and then a
+DHCP and the [stack reliability milestone](reliability.md) are implemented.
+The next agreed work is TCP, an HTTP client, a small HTTP server serving hardcoded HTML, and a
 high-level RFL networking library. Traits are preparatory work for RFL I/O
 abstractions; async/await needs a separate design. These are planned milestones,
 not features available in the current library.
