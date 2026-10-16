@@ -16,10 +16,11 @@ RUNTIME_HEADERS := $(addprefix $(R)/include/,$(addsuffix .h,stdint stddef stdarg
 U := $(PORT)/upstream/Library
 USERFLAGS := --bank-size 64000 -I$(PORT)/ripple/include -I$(U)/include -I$(R)/include -I$(PORT)/ripple -DNO_64BIT
 USERHEADERS := $(shell find ripple/include $(U)/include -name '*.h') $(RUNTIME_HEADERS) $(K)/include/userstructs.h
-LIBC_LOCAL := syscalls stdio format dirent misc heap
-LIBC_UPSTREAM := $(filter-out regerror malloc calloc realloc readline readline_fn,$(basename $(notdir $(wildcard upstream/Library/libs/*.c))))
+LIBC_LOCAL := syscalls stdio format dirent misc heap pipe
+AWK_MATH_SRC := __sin __cos __rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow sin cos atan atan2 strtod ecvt fmod frexp ldexp modf
+LIBC_UPSTREAM := $(filter-out regerror malloc calloc realloc readline readline_fn $(AWK_MATH_SRC),$(basename $(notdir $(wildcard upstream/Library/libs/*.c))))
 LIBC_OBJS := $(addprefix $(BUILD)/libc/,$(addsuffix .pobj,$(LIBC_LOCAL))) $(addprefix $(BUILD)/ulib/,$(addsuffix .pobj,$(LIBC_UPSTREAM)))
-APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol more less mktemp groups logname nohup fmt column cksum stty join split tsort tty nice time clear pr col man wump hamurabi
+APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol more less mktemp groups logname nohup fmt column cksum stty join split tsort tty nice time clear pr col man wump hamurabi expr awk make m4 dc
 
 CORE := start devio filesys inode kdata process mm syscall_exec syscall_fs syscall_fs2 syscall_fs3 syscall_other syscall_proc timer tty blk512
 HEADERS := $(filter-out ripple/user.h,$(wildcard ripple/*.h)) $(wildcard $(K)/include/*.h) $(RUNTIME_HEADERS) $(ROS)/disk.h $(ROS)/fat16.h
@@ -36,7 +37,7 @@ $(BUILD)/kernel/%.pobj: $(BUILD)/kernel/%.asm $(RASM)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
 # Persistent disks and backups deliberately survive clean.
 clean:
-	rm -rf "$(BUILD)/kernel" "$(BUILD)/port" "$(BUILD)/rt" "$(BUILD)/ros" "$(BUILD)/user" "$(BUILD)/apps" "$(BUILD)/libc" "$(BUILD)/ulib" "$(BUILD)/sh" "$(BUILD)/levee"
+	rm -rf "$(BUILD)/kernel" "$(BUILD)/port" "$(BUILD)/rt" "$(BUILD)/ros" "$(BUILD)/user" "$(BUILD)/apps" "$(BUILD)/libc" "$(BUILD)/ulib" "$(BUILD)/sh" "$(BUILD)/levee" "$(BUILD)/awk" "$(BUILD)/math"
 	rm -f "$(BUILD)/FUZIX.SYS" "$(BUILD)/bios.bin" "$(BUILD)/bios.bf" "$(BUILD)"/*.rxe "$(BUILD)/apps.json"
 
 PORT_CORE := platform devices usermem exec version
@@ -75,9 +76,9 @@ $(BUILD)/bios.bin: $(BUILD)/port/boot-entry.pobj $(BUILD)/port/boot.pobj $(RT_OB
 	@$(RLINK) $^ -f binary --bank-size 64000 -o $@ >$(BUILD)/bios-link.log 2>&1 || { cat $(BUILD)/bios-link.log; exit 1; }
 
 # Dynamic kernel/user code is loaded from the same disk as the native VM.
-# Eight process slots plus one spare exec slot occupy code banks 32..67.
+# Eight process slots plus one spare exec slot reserve twelve banks each, occupying code banks 32..139.
 $(BUILD)/bios.bf: $(BUILD)/port/boot-entry.pobj $(BUILD)/port/boot.pobj $(RT_OBJS) $(BUILD)/ros/disk.pobj $(BUILD)/ros/fat16.pobj $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f bf --standalone --bf-host --bf-irq --bank-size 64000 --memory-banks 80 --code-banks 68 -o $@ >$(BUILD)/bios-bf-link.log 2>&1 || { cat $(BUILD)/bios-bf-link.log; exit 1; }
+	@$(RLINK) $(filter %.pobj,$^) -f bf --standalone --bf-host --bf-irq --bank-size 64000 --memory-banks 80 --code-banks 140 -o $@ >$(BUILD)/bios-bf-link.log 2>&1 || { cat $(BUILD)/bios-bf-link.log; exit 1; }
 .PHONY: bf
 bf: $(BUILD)/bios.bf
 
@@ -113,6 +114,7 @@ test: images
 	python3 tools/test_pagers.py --build $(BUILD)
 	python3 tools/test_fun.py --build $(BUILD)
 	python3 tools/test_manual_games.py --build $(BUILD)
+	python3 tools/test_devtools.py --build $(BUILD)
 
 $(BUILD)/libc/%.asm: ripple/libc/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
@@ -126,7 +128,7 @@ $(BUILD)/apps/%.asm: upstream/Applications/util/%.c $(USERHEADERS) $(RCC) Makefi
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -DUIDGID=0 $(if $(filter cut,$*),-Dwarn=cut_warn) $(if $(filter grep,$*),-Dregerror=grep_regerror) $(if $(filter vile,$*),-DRIPPLE) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(addprefix $(BUILD)/,$(addsuffix .rxe,$(filter-out levee,$(APPS)))): $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/apps/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
+$(addprefix $(BUILD)/,$(addsuffix .rxe,$(filter-out levee awk,$(APPS)))): $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/apps/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
 	@$(RLINK) $^ -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 userspace: $(addprefix $(BUILD)/,$(addsuffix .rxe,$(APPS)))
 
@@ -194,3 +196,35 @@ $(BUILD)/apps/picol.asm: upstream/Applications/TCL/picol.c ripple/picol-extra.in
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/tcl.rxe $(BUILD)/tclsh.rxe: $(BUILD)/picol.rxe
 	@cp $< $@
+
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,expr make m4)): $(BUILD)/apps/%.asm: upstream/Applications/MWC/cmd/%.c upstream/Applications/MWC/cmd/make.h $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@printf "  RCC %s\n" "$<"
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/apps/dc.asm: upstream/Applications/V7/cmd/dc.c $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+
+AWK_SRC := awkgram.tab b main parse proctab tran lib run lex
+AWKFLAGS := $(filter-out -DNO_64BIT,$(USERFLAGS)) -I$(PORT)/awk
+AWK_OBJS := $(addprefix $(BUILD)/awk/,$(addsuffix .pobj,$(AWK_SRC) support format softfloat)) $(addprefix $(BUILD)/math/,$(addsuffix .pobj,$(AWK_MATH_SRC)))
+$(BUILD)/awk/%.asm: awk/%.c $(wildcard awk/*.h) $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@printf "  RCC %s\n" "$<"
+	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/math/%.asm: upstream/Library/libs/%.c upstream/Library/libs/libm.h $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@printf "  RCC %s\n" "$<"
+	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/awk/support.asm: ripple/awk-support.c $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/awk/format.asm: ripple/libc/format.c ripple/float-format.inc $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(AWKFLAGS) -DRIPPLE_FLOAT_FORMAT >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/awk/softfloat.asm: $(R)/softfloat.c $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/awk.rxe: $(BUILD)/user/entry.pobj $(AWK_OBJS) $(BUILD)/user/userlib.pobj $(filter-out $(BUILD)/libc/format.pobj,$(LIBC_OBJS))
+	@$(RLINK) $^ -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+.PRECIOUS: $(BUILD)/awk/%.asm $(BUILD)/math/%.asm

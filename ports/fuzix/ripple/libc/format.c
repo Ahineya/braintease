@@ -5,6 +5,9 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef RIPPLE_FLOAT_FORMAT
+#include "../float-format.inc"
+#endif
 struct output {
     FILE *f;
     char *s;
@@ -24,6 +27,9 @@ static int format(struct output *o, const char *fmt, va_list ap) {
         int left = 0, zero = 0, plus = 0, space = 0, hash = 0, width = 0,
             prec = -1, wide = 0, base = 10, upper = 0;
         char digits[34], prefix[3], *s;
+#ifdef RIPPLE_FLOAT_FORMAT
+        char floating[400];
+#endif
         size_t n, i, np = 0, z = 0;
         unsigned long value = 0;
         long signed_value;
@@ -143,6 +149,17 @@ static int format(struct output *o, const char *fmt, va_list ap) {
             if (zero && !left && prec < 0 && width > 0 &&
                 (unsigned)width > np + n)
                 z = width - np - n;
+#ifdef RIPPLE_FLOAT_FORMAT
+        } else if (*fmt && strchr("fFeEgG", *fmt)) {
+            double number = va_arg(ap, double);
+            if (signbit(number)) { prefix[np++] = '-'; number = -number; }
+            else if (plus) prefix[np++] = '+';
+            else if (space) prefix[np++] = ' ';
+            n = float_text(floating, number, prec, *fmt, hash);
+            s = floating;
+            if (zero && !left && width > 0 && (unsigned)width > np + n)
+                z = width - np - n;
+#endif
         } else {
             errno = EINVAL;
             return -1;

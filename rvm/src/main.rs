@@ -106,6 +106,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vm.devices
             .set_script(devices::InputScript::from_path(path)?)?;
     }
+    if let Some(output) = cli.audio_wav.as_ref() {
+        for input in [
+            Some(&file_path),
+            cli.disk.as_ref(),
+            cli.input_script.as_ref(),
+            cli.expect_frame.as_ref(),
+            cli.screenshot.as_ref(),
+            cli.raw_frame.as_ref(),
+            cli.report.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if output == input
+                || output
+                    .canonicalize()
+                    .ok()
+                    .zip(input.canonicalize().ok())
+                    .is_some_and(|(a, b)| a == b)
+            {
+                return Err(
+                    "Audio capture must use a path distinct from guest inputs and other outputs"
+                        .into(),
+                );
+            }
+        }
+    }
+    vm.devices.audio.set_output(
+        cli.audio == rvm::audio::AudioMode::Auto
+            && !cli.headless
+            && cli.clock == runner::ClockPolicy::Paced,
+        cli.audio_wav.as_deref(),
+    )?;
     vm.host_input_enabled = !options.deterministic && !cli.control_stdin;
     vm.guest_ctrl_c = cli.guest_ctrl_c;
 

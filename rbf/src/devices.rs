@@ -92,7 +92,8 @@ impl BfDevices {
         {
             return Err("invalid BF device checkpoint configuration".into());
         }
-        let devices = DeviceState::restore_checkpoint(snapshot.devices)?;
+        let mut devices = DeviceState::restore_checkpoint(snapshot.devices)?;
+        devices.audio.disable();
         let display =
             RGB565Display::restore_checkpoint(snapshot.display, usize::from(snapshot.bank_size))?;
         let text_display = Text40Display::restore_checkpoint(snapshot.text_display)?;
@@ -134,7 +135,11 @@ impl BfDevices {
             return Err("Brainfuck host banks must hold all 32 MMIO registers".into());
         }
         Ok(Self {
-            devices: DeviceState::new(tick_hz)?,
+            devices: {
+                let mut devices = DeviceState::new(tick_hz)?;
+                devices.audio.disable();
+                devices
+            },
             display: RGB565Display::new(),
             text_display: Text40Display::default(),
             presented_frames: 0,
@@ -428,6 +433,30 @@ mod tests {
     use super::*;
     use rvm::devices::*;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn pcm_is_not_advertised_and_audio_commands_are_explicitly_unsupported() {
+        let mut host = host();
+        let mut ram = vec![0; 256];
+        assert!(!host.devices.audio.supported());
+        command(&mut host, &mut ram, COMMAND_CAPABILITIES, 4);
+        assert_eq!(ram[65] & rvm::audio::CAP_PCM, 0);
+        assert_eq!(ram[65] & rvm::audio::CAP_MUSIC, 0);
+        let before = ram.clone();
+        store(&mut host, &mut ram, REGISTER_COMMAND, rvm::audio::CONFIGURE);
+        assert_eq!(host.devices.status(), STATUS_UNSUPPORTED);
+        assert_eq!(ram[63..], before[63..]);
+        for command in [rvm::audio::MUSIC_BANK, rvm::audio::MUSIC_SCORE,
+                        rvm::audio::MUSIC_CONTROL, rvm::audio::MUSIC_STATE] {
+            store(&mut host, &mut ram, REGISTER_COMMAND, command);
+            assert_eq!(host.devices.status(), STATUS_UNSUPPORTED);
+            assert_eq!(ram[63..], before[63..]);
+        }
+        host.devices.reset();
+        assert!(!host.devices.audio.supported());
+        let restored = BfDevices::restore_checkpoint(host.checkpoint().unwrap(), None).unwrap();
+        assert!(!restored.devices.audio.supported());
+    }
 
     #[test]
     fn device_checkpoint_matches_continuous_rng_tty_frame_and_pending_tick() {

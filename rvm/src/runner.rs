@@ -193,13 +193,17 @@ impl Controller {
 }
 
 pub fn run(vm: &mut VM, options: &RunOptions) -> Result<String, String> {
-    run_with_execution(vm, options, true)
+    let result = run_with_execution(vm, options, true);
+    vm.devices.audio.finish()?;
+    result
 }
 
 /// The original instruction-at-a-time runner, retained as an execution oracle
 /// and for A/B measurements with the same guest binary and host policies.
 pub fn run_reference(vm: &mut VM, options: &RunOptions) -> Result<String, String> {
-    run_with_execution(vm, options, false)
+    let result = run_with_execution(vm, options, false);
+    vm.devices.audio.finish()?;
+    result
 }
 
 fn run_with_execution(vm: &mut VM, options: &RunOptions, batched: bool) -> Result<String, String> {
@@ -247,6 +251,9 @@ fn run_with_execution(vm: &mut VM, options: &RunOptions, batched: bool) -> Resul
         Ok(vm.poll_host_terminal() || vm.window_closed())
     };
     loop {
+        if let Some(error) = vm.devices.audio.error() {
+            return Err(format!("Audio output: {error}"));
+        }
         if let Some(error) = vm.device_error.as_ref() {
             return Err(error.clone());
         }

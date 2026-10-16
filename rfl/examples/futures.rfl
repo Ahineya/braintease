@@ -1,0 +1,34 @@
+// A deterministic polling example. No host clock or network reactor is installed.
+import { ready, sleep } from "std/future";
+import { Reactor, join_with_budget } from "std/executor";
+
+struct Clock { milliseconds: u32, turns: u32 }
+impl Reactor for Clock {
+    fn now(&self) -> u32 { self.milliseconds }
+    fn turn(&mut self, wait: Option<u32>) -> bool {
+        self.turns += 1;
+        match wait {
+            Some(delay) => { self.milliseconds += delay; },
+            None => { self.milliseconds += 1; },
+        }
+        true
+    }
+}
+
+fn main() -> i16 {
+    let mut clock = Clock { milliseconds: 100, turns: 0 };
+    let mut greeting = ready("hello from a future");
+    let mut timer = match sleep(25) {
+        Ok(value) => value,
+        Err(_) => { println("invalid timer interval"); return 1; },
+    };
+    match join_with_budget(&mut greeting, &mut timer, &mut clock, 10) {
+        Ok((text, _)) => {
+            println(text);
+            println(clock.milliseconds);
+            println(clock.turns);
+            0
+        },
+        Err(_) => { println("executor stopped; unfinished work cancelled"); 1 },
+    }
+}

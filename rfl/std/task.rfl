@@ -1,0 +1,133 @@
+// Single-thread wake registry. Each slot owns a closure with shared scalar state.
+// Copies share that state; no pointer into a movable RFL value is retained.
+export type TaskError = InvalidCapacity | NoTaskSlot | InvalidDuration;
+export struct Waker {
+    dispatch: fn(u16, u32, u32) -> u32,
+    generation: u32,
+}
+export struct TaskSet {
+    slots: Vec<fn(u16, u32, u32) -> u32>,
+    clock: fn(Option<u32>) -> u32,
+}
+export struct Context { waker: Waker, now: u32 }
+
+// Private command tags keep wake tokens independent of public trait objects.
+const ALLOCATE:u16 = 1;
+const WAKE:u16 = 2;
+const TAKE:u16 = 3;
+const RETIRE:u16 = 4;
+const LIVE:u16 = 5;
+const ARM:u16 = 6;
+const TICK:u16 = 7;
+const HINT:u16 = 8;
+fn make_slot(now:u32) -> fn(u16, u32, u32) -> u32 {
+    let mut generation:u32 = 0;
+    let mut active = false;
+    let mut ready = false;
+    let mut armed = false;
+    let mut deadline:u32 = 0;
+    let mut clock = now;
+    fn(op:u16, token:u32, value:u32) => {
+        if (op == TICK) {
+            clock = value;
+            if (active && armed && ((clock - deadline) as i32) >= 0) {
+                armed = false; ready = true;
+            }
+            return 1;
+        }
+        if (op == HINT) {
+            if (!active) { return 4294967295; }
+            if (ready) { return 0; }
+            return if (armed) { deadline - clock } else { 4294967295 };
+        }
+        if (op == ALLOCATE) {
+            // Retire exhausted generations permanently instead of wrapping ABA.
+            if (active || generation == 4294967295) { return 0; }
+            generation += 1;
+            active = true; ready = true; armed = false;
+            return generation;
+        }
+        if (!active || generation != token) { return 0; }
+        if (op == WAKE) { ready = true; return 1; }
+        if (op == TAKE) { let found = ready; ready = false; return if (found) { 1 } else { 0 }; }
+        if (op == RETIRE) { active = false; ready = false; armed = false; return 1; }
+        if (op == LIVE) { return 1; }
+        if (op == ARM) {
+            if (((clock - value) as i32) >= 0) { ready = true; return 1; }
+            if (!armed || value - clock < deadline - clock) { deadline = value; armed = true; }
+            return 1;
+        }
+        0
+    }
+}
+
+export fn task_set(capacity:usize, now:u32) -> Result<TaskSet, TaskError> {
+    if (capacity == 0 || capacity > 1024) { return Err(InvalidCapacity); }
+    let mut slots:Vec<fn(u16, u32, u32)->u32> = [];
+    let mut i:usize = 0;
+    while (i < capacity) { slots.push(make_slot(now)); i += 1; }
+    let mut clock = now;
+    let access:fn(Option<u32>)->u32 = fn(value:Option<u32>) => {
+        match value { Some(now)=>{ clock = now; }, None=>{} }
+        clock
+    };
+    Ok(TaskSet { slots:slots, clock:access })
+}
+
+impl TaskSet {
+    export fn allocate(&self) -> Result<Waker, TaskError> {
+        let mut slot:usize = 0;
+        while (slot < self.slots.len()) {
+            let call = self.slots[slot];
+            let generation = call(ALLOCATE, 0, 0);
+            if (generation != 0) { return Ok(Waker { dispatch:call, generation:generation }); }
+            slot += 1;
+        }
+        Err(NoTaskSlot)
+    }
+    export fn tick(&self, now:u32) -> bool {
+        let access = self.clock;
+        if (now - access(None) > 2147483647) { return false; }
+        access(Some(now));
+        let mut slot:usize = 0;
+        while (slot < self.slots.len()) { let call=self.slots[slot]; call(TICK, 0, now); slot += 1; }
+        true
+    }
+    // Some(0) means runnable work; None means no registered timer or wakeup.
+    export fn wait_hint(&self) -> Option<u32> {
+        let mut delay:u32 = 4294967295;
+        let mut slot:usize = 0;
+        while (slot < self.slots.len()) {
+            let call = self.slots[slot];
+            let next = call(HINT, 0, 0);
+            if (next < delay) { delay = next; }
+            slot += 1;
+        }
+        if (delay == 4294967295) { None } else { Some(delay) }
+    }
+}
+
+impl Waker {
+    export fn wake(&self) -> bool {
+        let call = self.dispatch;
+        call(WAKE, self.generation, 0) != 0
+    }
+    // Executor use: clear BEFORE polling, preserving wakes during that poll.
+    export fn take_ready(&self) -> bool {
+        let call = self.dispatch;
+        call(TAKE, self.generation, 0) != 0
+    }
+    export fn retire(&self) -> bool {
+        let call = self.dispatch;
+        call(RETIRE, self.generation, 0) != 0
+    }
+    export fn is_live(&self) -> bool {
+        let call = self.dispatch;
+        call(LIVE, self.generation, 0) != 0
+    }
+    // Deadline must be within the wrapping clock's half-range window.
+    export fn wake_at(&self, deadline:u32) -> bool {
+        let call = self.dispatch;
+        call(ARM, self.generation, deadline) != 0
+    }
+}

@@ -73,6 +73,8 @@ pub fn compile_executable(module: &Module, output: &Path) -> Result<(), String> 
         for framework in [
             "CoreFoundation",
             "CoreGraphics",
+            "CoreAudio",
+            "AudioToolbox",
             "AppKit",
             "QuartzCore",
             "Metal",
@@ -84,7 +86,7 @@ pub fn compile_executable(module: &Module, output: &Path) -> Result<(), String> 
         }
         command.args(["-liconv", "-lSystem"]);
     } else if cfg!(target_os = "linux") {
-        command.args(["-ldl", "-lpthread", "-lm"]);
+        command.args(["-ldl", "-lpthread", "-lm", "-lasound"]);
     } else {
         return Err("native executable linking currently supports macOS and Linux".into());
     }

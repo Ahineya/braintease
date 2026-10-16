@@ -290,11 +290,11 @@ Multiword integers use the low cell first.
 
 Assume bank 2, offsets 100–103 are available guest RAM. First write this record:
 
-| Guest location | Before submission | Meaning | After successful `CAPS` on current hosts |
+| Guest location | Before submission | Meaning | After successful `CAPS` on RVM/native hosts |
 |----------------|-------------------|---------|-----------------------------------------|
 | `(2, 100)` | 1 | descriptor version | 1 |
 | `(2, 101)` | 4 | descriptor length, including these first two cells | 4 |
-| `(2, 102)` | 0 | capability bits, output | 127 |
+| `(2, 102)` | 0 | capability bits, output | 511 |
 | `(2, 103)` | 0 | key count, output | 256 |
 
 Then perform these bank-0 MMIO operations, in order:
@@ -309,7 +309,7 @@ read  address 30          # 0 means success
 The host obtains the descriptor address from registers 27/28, reads its header,
 validates the four-cell range, and writes results at `(2, 102)` and `(2, 103)`.
 Read those cells only after checking status. Test capability bits with a mask;
-future hosts may return additional bits rather than exactly 127.
+future hosts may return additional bits rather than exactly 511.
 
 Here is a complete Ripple C program doing the same operation with a stack array
 instead of a hard-coded address. `volatile` ensures the descriptor's memory
@@ -383,13 +383,20 @@ guest may then reuse the framebuffer; presentation has not advanced the clock.
 | 4 | guest-memory bounds error |
 | 5 | wrong display mode |
 | 6 | input queue overflow during a tick grant |
+| 7 | unsupported device on this backend |
+| 8 | bounded queue would block |
+| 9 | invalid device state |
+| 10 | host audio capture I/O error |
 | 0x8000 | pending host tick grant |
 
-`CAPS` returns bits 0–6 set (127): extended RGB565, logical clock, input events,
+`CAPS` returns bits 0–8 set (511) in RVM and the RCC native runtime: extended
+RGB565, logical clock, input events,
 held-key state, independent live-input polling (`VM_CAP_INPUT_POLL`, 0x0010),
-Ethernet networking (`VM_CAP_NETWORK`, 0x0020), and pointer input (`VM_CAP_POINTER`,
-0x0040). Key count is 256. Ignore unknown capability bits and check status before
-consuming output fields.
+Ethernet networking (`VM_CAP_NETWORK`, 0x0020), pointer input (`VM_CAP_POINTER`,
+0x0040), PCM audio (`VM_CAP_PCM`, 0x0080), and OPL3 music (`VM_CAP_MUSIC`, 0x0100).
+RBF reports bits 0–6 (127) and leaves audio unsupported.
+See [audio](../docs/arch/audio.md). Key count is 256. Ignore unknown capability
+bits and check status before consuming output fields.
 
 Networking uses additional command IDs in this same mailbox: `NET_INFO` 0x0100
 (18 cells), `NET_TX` 0x0101 (8), `NET_RX` 0x0102 (9), and `NET_STATS` 0x0103 (27).

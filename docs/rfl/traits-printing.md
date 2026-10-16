@@ -132,11 +132,12 @@ or network streams is later work: introduce writer-oriented interfaces with
 explicit I/O errors/progress instead of stretching stdout-oriented `Printable`
 into every output abstraction.
 
-After the foundation, associated types are the recommended preparation for a
-general future's output type. Generic trait parameters can follow concrete
-library needs. Polling I/O, an executor, suspension lifetimes and cancellation
-still need their own design before async syntax. See
-[RFL networking and async direction](../networking/rfl.md).
+Associated types and the first polling foundation are now implemented. The
+next required language stages are general places, resource ownership and
+automatic cleanup, followed by task composition and suspension lifetimes before
+async syntax. Generic trait parameters can follow concrete library needs. See
+[RFL networking and general-purpose async](../networking/rfl.md) for the current
+library contracts, limitations and acceptance targets.
 
 This plan is preparatory language work and does not block the C DHCP/TCP/HTTP
 milestones. Implementation should be coordinated with the other agent's ongoing

@@ -96,6 +96,9 @@ impl Runtime {
                             .unwrap_or_else(|e| fatal(&e));
                         self.capture();
                     }
+                    if let Some(error) = self.devices.audio.error() {
+                        fatal(error);
+                    }
                     rvm::input::sync_display_input(&self.devices, &self.display);
                     if self.devices.has_pending_tick() {
                         if self.host.paced() {

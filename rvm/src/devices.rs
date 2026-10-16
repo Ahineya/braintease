@@ -19,7 +19,8 @@ pub const REGISTER_VERSION: usize = 31;
 pub const DISPLAY_MODE_EXTENDED: u16 = 4;
 /// INPUT_READ/INPUT_STATE collect live input without a clock grant.
 pub const CAP_INPUT_POLL: u16 = 0x0010;
-pub const CAPABILITIES: u16 = 15 | CAP_INPUT_POLL | crate::network::CAP_NETWORK | 0x0040;
+pub const CAPABILITIES: u16 =
+    15 | CAP_INPUT_POLL | crate::network::CAP_NETWORK | 0x0040 | crate::audio::CAP_PCM | crate::audio::CAP_MUSIC;
 pub const KEY_COUNT: usize = 256;
 pub const INPUT_QUEUE_CAPACITY: usize = 256;
 
@@ -38,6 +39,10 @@ pub const STATUS_BAD_DESCRIPTOR: u16 = 3;
 pub const STATUS_BOUNDS: u16 = 4;
 pub const STATUS_DISPLAY_MODE: u16 = 5;
 pub const STATUS_INPUT_OVERFLOW: u16 = 6;
+pub const STATUS_UNSUPPORTED: u16 = 7;
+pub const STATUS_WOULD_BLOCK: u16 = 8;
+pub const STATUS_BAD_STATE: u16 = 9;
+pub const STATUS_IO: u16 = 10;
 pub const STATUS_PENDING: u16 = 0x8000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -326,6 +331,8 @@ struct DescriptorPointer {
 pub struct DeviceState {
     #[serde(default)]
     pub network: crate::network::NetworkDevice,
+    #[serde(default)]
+    pub audio: crate::audio::AudioDevice,
     descriptor: DescriptorPointer,
     command: u16,
     status: u16,
@@ -351,10 +358,11 @@ impl DeviceState {
 
     pub fn restore_checkpoint(snapshot: Self) -> Result<Self, String> {
         snapshot.network.validate_checkpoint()?;
+        snapshot.audio.validate(snapshot.tick_hz)?;
         if snapshot.tick_hz == 0
             || !snapshot.input.validate(snapshot.tick)
             || snapshot.script_position > snapshot.script.events.len()
-            || !matches!(snapshot.status, 0..=6 | STATUS_PENDING)
+            || !matches!(snapshot.status, 0..=10 | STATUS_PENDING)
             || snapshot.pending_tick.is_some() != (snapshot.status == STATUS_PENDING)
             || snapshot.pending_tick.is_some() && snapshot.command != COMMAND_NEXT_TICK
         {
@@ -380,6 +388,7 @@ impl DeviceState {
         }
         Ok(Self {
             network: crate::network::NetworkDevice::default(),
+            audio: crate::audio::AudioDevice::default(),
             descriptor: DescriptorPointer { bank: 0, offset: 0 },
             command: 0,
             status: STATUS_OK,
@@ -394,11 +403,14 @@ impl DeviceState {
 
     pub fn reset(&mut self) {
         let script = self.script.clone();
+        let mut audio = std::mem::take(&mut self.audio);
+        audio.reset();
         let network = std::mem::take(&mut self.network);
         network.reset();
         *self = Self::new(self.tick_hz).expect("an initialized tick rate is nonzero");
         self.script = script;
         self.network = network;
+        self.audio = audio;
     }
 
     pub fn set_tick_hz(&mut self, tick_hz: u16) -> Result<(), String> {
@@ -541,9 +553,19 @@ impl DeviceState {
             COMMAND_INPUT_CONFIGURE => 4,
             COMMAND_CAPABILITIES => 4,
             COMMAND_INPUT_STATE => STATE_CELLS,
-            _ => crate::network::descriptor_length(command).ok_or(STATUS_UNKNOWN_COMMAND)?,
+            _ => crate::network::descriptor_length(command)
+                .or_else(|| crate::audio::descriptor_length(command))
+                .ok_or(STATUS_UNKNOWN_COMMAND)?,
         };
+        if crate::audio::descriptor_length(command).is_some() && !self.audio.supported() {
+            return Err(STATUS_UNSUPPORTED);
+        }
         let range = Self::descriptor_range(self.descriptor, memory, bank_size, length)?;
+        if crate::audio::descriptor_length(command).is_some() {
+            self.audio.execute(command, memory, range, bank_size)?;
+            self.status = STATUS_OK;
+            return Ok(None);
+        }
         if crate::network::descriptor_length(command).is_some() {
             self.network.execute(command, memory, range, bank_size)?;
             self.status = STATUS_OK;
@@ -588,7 +610,12 @@ impl DeviceState {
                 }));
             }
             COMMAND_CAPABILITIES => {
-                descriptor[2] = CAPABILITIES;
+                descriptor[2] = (CAPABILITIES & !(crate::audio::CAP_PCM | crate::audio::CAP_MUSIC))
+                    | if self.audio.supported() {
+                        crate::audio::CAP_PCM | crate::audio::CAP_MUSIC
+                    } else {
+                        0
+                    };
                 descriptor[3] = KEY_COUNT as u16;
             }
             COMMAND_NEXT_TICK => {
@@ -710,6 +737,13 @@ impl DeviceState {
             self.input.apply(transition, self.tick);
         }
         self.accept_events(tick_events.iter().copied());
+        self.audio.advance_tick(self.tick_hz).map_err(|status| {
+            self.status = status;
+            format!(
+                "PCM rendering failed: {}",
+                self.audio.error().unwrap_or("audio timeline overflow")
+            )
+        })?;
         let mut descriptor = [0u16; 8];
         self.write_time(&mut descriptor);
         for offset in 2..8 {

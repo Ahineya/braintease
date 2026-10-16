@@ -30,6 +30,12 @@
 #include "gusconf.h"
 #endif
 #include "i_sound.h"
+#if DOOM_MUSIC
+extern music_module_t doom_music_module;
+#endif
+#if DOOM_PCM
+#include "pcm_sound.h"
+#endif
 #include "i_video.h"
 #include "m_argv.h"
 #include "m_config.h"
@@ -73,6 +79,9 @@ static int snd_mport = 0;
 
 static sound_module_t *sound_modules[] = 
 {
+#if DOOM_PCM
+    &doom_pcm_module,
+#endif
     #ifdef FEATURE_SOUND
     &DG_sound_module,
     #endif
@@ -130,6 +139,11 @@ static void InitSfxModule(boolean use_sfx_prefix)
 
 static void InitMusicModule(void)
 {
+#if DOOM_MUSIC
+    if (SndDeviceInList(snd_musicdevice, doom_music_module.sound_devices,
+                       doom_music_module.num_sound_devices))
+        music_module = &doom_music_module;
+#endif
 #ifdef FEATURE_SOUND
     music_module = &DG_music_module;
 #endif /* FEATURE_SOUND */
@@ -310,7 +324,11 @@ void I_InitMusic(void)
 {
     if(music_module != NULL)
     {
+#if DOOM_MUSIC
+        if (!music_module->Init()) music_module = NULL;
+#else
         music_module->Init();
+#endif
     }
 }
 

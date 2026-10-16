@@ -24,6 +24,8 @@ clean_only=0
 rebuild=0
 jit=0
 target=ripple
+audio=auto
+audio_wav=""
 usage() {
   cat <<'EOF'
 Usage: ports/doom/run.sh [options]
@@ -43,6 +45,8 @@ Usage: ports/doom/run.sh [options]
   --input-script FILE     Deterministic keyboard input
   --output DIRECTORY      Captures, disk copy and reports (default: build/run)
   --clock MODE            paced, unthrottled or stepped
+  --audio MODE            auto (default) or off for speaker playback
+  --audio-wav FILE        Capture deterministic stereo PCM to WAV
   --jit                   Run the guest with rvm's Cranelift JIT
   --max-instructions N    Headless instruction budget (default: 100000000000)
   --timeout SECONDS       Headless time budget (default: 300)
@@ -70,6 +74,8 @@ while [[ $# -gt 0 ]]; do
     --output) value "$@"; out="$2"; shift 2;;
     --clock) value "$@"; clock="$2"; shift 2;;
     --jit) jit=1; shift;;
+    --audio) value "$@"; audio="$2"; shift 2;;
+    --audio-wav) value "$@"; audio_wav="$2"; shift 2;;
     --max-instructions) value "$@"; instructions="$2"; shift 2;;
     --timeout) value "$@"; timeout="$2"; shift 2;;
     --jobs) value "$@"; jobs="$2"; shift 2;;
@@ -78,6 +84,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$clean_only" == 0 || "$rebuild" == 0 ]] || fail '--clean and --rebuild cannot be combined'
+[[ "$audio" == auto || "$audio" == off ]] || fail "audio must be auto or off"
 [[ "$target" == ripple || "$target" == native ]] || fail 'target must be ripple or native'
 if [[ "$target" == native ]]; then
   [[ "$jit" == 0 ]] || fail '--jit applies to the Ripple VM; native code is compiled ahead of time'
@@ -96,6 +103,9 @@ if [[ "$clean_only" == 1 ]]; then
 fi
 [[ -f "$wad" ]] || fail "WAD not found: $wad"
 wad="$(cd "$(dirname "$wad")" && pwd)/$(basename "$wad")"
+if [[ -n "$audio_wav" ]]; then
+  audio_wav="$(node "$PORT/tools/build-support.mjs" audio-output "$wad" "$audio_wav")"
+fi
 if [[ "$scene" == menu ]]; then
   [[ -z "$input" ]] || fail '--scene menu supplies its own input script; use --scene title for a custom replay'
   input="$PORT/tests/menu-open.json"
@@ -132,7 +142,8 @@ if [[ -z "$clock" ]]; then
   if [[ "$headless" == 1 ]]; then clock=unthrottled; else clock=paced; fi
 fi
 if [[ "$target" == native ]]; then
-  command=(env "RCC_NATIVE_FRAME_NUMBER=$frame")
+  command=(env "RCC_NATIVE_FRAME_NUMBER=$frame" "RCC_NATIVE_AUDIO=$audio")
+  [[ -z "$audio_wav" ]] || command+=("RCC_NATIVE_AUDIO_WAV=$audio_wav")
   if [[ "$headless" == 1 ]]; then
     command+=(RCC_NATIVE_HEADLESS=1 "RCC_NATIVE_FRAME=$out/$scene.rgb565" "RCC_NATIVE_TIMEOUT=$timeout")
   fi
@@ -148,7 +159,8 @@ fi
 node "$PORT/tools/build-support.mjs" disk "$wad" "$out/doom1.wad" "$wad_mode" "$build/manifest.json" > "$out/disk-image.json"
 command=("$ROOT/target/release/rvm" "$build/ripple/engine/engine.bin"
   --bank-size 64000 --memory 16384000 --disk "$out/doom1.wad" --seed 1
-  --clock "$clock" --report "$out/$scene.json")
+  --clock "$clock" --report "$out/$scene.json" --audio "$audio")
+[[ -z "$audio_wav" ]] || command+=(--audio-wav "$audio_wav")
 if [[ "$headless" == 1 ]]; then
   command+=(--headless --capture-frame "$frame" --screenshot "$out/$scene.png"
     --raw-frame "$out/$scene.rgb565" --max-instructions "$instructions" --timeout "$timeout")

@@ -196,6 +196,13 @@ impl<'a> Checker<'a> {
             ExprKind::Str(_) => Some(Ty::String),
             ExprKind::Char(_) => Some(Ty::Char),
             ExprKind::CStr(_) | ExprKind::Lambda { .. } => None,
+            ExprKind::Call { callee, .. } if self.binding_ty(callee).is_some() => {
+                match self.binding_ty(callee)? {
+                    Ty::Func(id) => Some(self.funcs[id as usize].ret),
+                    Ty::CFn(id) => Some(self.cfns[id as usize].ret),
+                    _ => None,
+                }
+            }
             ExprKind::Call { callee, .. }
                 if matches!(callee.as_str(), "from_char" | "from_byte") =>
             {

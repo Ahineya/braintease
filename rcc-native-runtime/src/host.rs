@@ -64,7 +64,8 @@ impl Host {
 pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
     let entry: unsafe extern "C" fn(*mut Runtime) -> u64 = unsafe { std::mem::transmute(entry) };
     let mut runtime = Runtime::new();
-    let network_setting = std::env::var_os("RCC_NATIVE_NET").or_else(|| std::env::var_os("RIPPLE_NET"));
+    let network_setting =
+        std::env::var_os("RCC_NATIVE_NET").or_else(|| std::env::var_os("RIPPLE_NET"));
     runtime
         .devices
         .network
@@ -77,12 +78,25 @@ pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
             .set_script(script)
             .unwrap_or_else(|e| fatal(&e));
     }
+    runtime
+        .devices
+        .audio
+        .set_output(
+            !runtime.host.headless
+                && std::env::var("RCC_NATIVE_AUDIO").as_deref() != Ok("off")
+                && runtime.host.pacing != Some(false),
+            std::env::var_os("RCC_NATIVE_AUDIO_WAV")
+                .as_deref()
+                .map(std::path::Path::new),
+        )
+        .unwrap_or_else(|e| fatal(&e));
     let state = runtime.display.get_state();
     let (events, receiver) = mpsc::channel();
     runtime.host.events = Some(events);
     let worker = std::thread::spawn(move || {
         let status = unsafe { entry(&mut runtime) };
         runtime.flush();
+        runtime.devices.audio.finish().unwrap_or_else(|e| fatal(&e));
         if std::env::var_os("RCC_NATIVE_FRAME").is_some() {
             fatal("requested native frame was never presented");
         }

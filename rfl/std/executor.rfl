@@ -1,0 +1,84 @@
+import { Context, Waker, task_set } from "std/task";
+import { Future, Poll, Pending, Ready } from "std/future";
+
+// turn pumps bounded external work even with runnable tasks. Some(0) forbids
+// sleeping; other hints bound idle waiting. None still requires servicing I/O.
+// false requests orderly stop. now is wrapping, monotonic milliseconds.
+export trait Reactor {
+    fn now(&self) -> u32;
+    fn turn(&mut self, wait:Option<u32>) -> bool;
+}
+export type RunError = ReactorStopped | TurnBudgetExceeded | InvalidClock | TaskCapacity;
+
+export fn block_on<F:Future, R:Reactor>(future:&mut F, reactor:&mut R) -> Result<F::Output, RunError> {
+    drive(future, reactor, None)
+}
+export fn block_on_with_budget<F:Future, R:Reactor>(future:&mut F, reactor:&mut R, turns:u32) -> Result<F::Output, RunError> {
+    drive(future, reactor, Some(turns))
+}
+fn drive<F:Future, R:Reactor>(future:&mut F, reactor:&mut R, limit:Option<u32>) -> Result<F::Output, RunError> {
+    let queue=match task_set(1, reactor.now()) { Ok(q)=>q, Err(_)=>{ future.cancel(); return Err(TaskCapacity); } };
+    let waker=match queue.allocate() { Ok(w)=>w, Err(_)=>{ future.cancel(); return Err(TaskCapacity); } };
+    let mut used:u32=0;
+    let mut error=ReactorStopped;
+    while (true) {
+        match limit { Some(max)=>{ if (used == max) { error=TurnBudgetExceeded; break; } used += 1; }, None=>{} }
+        if (!reactor.turn(queue.wait_hint())) { break; }
+        let now=reactor.now();
+        if (!queue.tick(now)) { error=InvalidClock; break; }
+        if (waker.take_ready()) {
+            let mut cx=Context { waker:waker, now:now };
+            match future.poll(&mut cx) {
+                Ready(value)=>{ waker.retire(); return Ok(value); },
+                Pending=>{},
+            }
+        }
+    }
+    waker.retire();
+    future.cancel();
+    Err(error)
+}
+
+// Two independently scheduled roots; no type erasure, public trait objects,
+// suspended references, or requirement that their output types match.
+export fn join_with_budget<A:Future, B:Future, R:Reactor>(left:&mut A, right:&mut B, reactor:&mut R, turns:u32) -> Result<(A::Output, B::Output), RunError> {
+    let queue=match task_set(2, reactor.now()) { Ok(q)=>q, Err(_)=>{ left.cancel(); right.cancel(); return Err(TaskCapacity); } };
+    let a=match queue.allocate() { Ok(w)=>w, Err(_)=>{ left.cancel(); right.cancel(); return Err(TaskCapacity); } };
+    let b=match queue.allocate() { Ok(w)=>w, Err(_)=>{ a.retire(); left.cancel(); right.cancel(); return Err(TaskCapacity); } };
+    let mut first:Option<A::Output> = None;
+    let mut second:Option<B::Output> = None;
+    let mut reverse=false;
+    let mut used:u32=0;
+    let mut error=TurnBudgetExceeded;
+    while (used < turns) {
+        used += 1;
+        if (!reactor.turn(queue.wait_hint())) { error=ReactorStopped; break; }
+        let now=reactor.now();
+        if (!queue.tick(now)) { error=InvalidClock; break; }
+        if (reverse) {
+            second=step(right, b, now, second);
+            first=step(left, a, now, first);
+        } else {
+            first=step(left, a, now, first);
+            second=step(right, b, now, second);
+        }
+        reverse = !reverse;
+        match first {
+            Some(x)=>match second { Some(y)=>{ return Ok((x, y)); }, None=>{} },
+            None=>{},
+        }
+    }
+    a.retire(); b.retire();
+    match first { None=>left.cancel(), Some(_)=>{} }
+    match second { None=>right.cancel(), Some(_)=>{} }
+    Err(error)
+}
+fn step<F:Future>(future:&mut F, waker:Waker, now:u32, result:Option<F::Output>) -> Option<F::Output> {
+    match result { Some(value)=>{ return Some(value); }, None=>{} }
+    if (!waker.take_ready()) { return None; }
+    let mut cx=Context { waker:waker, now:now };
+    match future.poll(&mut cx) {
+        Ready(value)=>{ waker.retire(); Some(value) },
+        Pending=>None,
+    }
+}

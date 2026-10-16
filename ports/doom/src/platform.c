@@ -67,10 +67,16 @@ static void read_native_input(void)
 }
 #endif
 
+#if DOOM_PCM
+void Doom_PcmBeforeTick(void);
+#endif
 uint32_t Doom_Tick(void) { return logical_tick; }
 
 void Doom_NextTick(void)
 {
+#if DOOM_PCM
+    Doom_PcmBeforeTick();
+#endif
 #if defined(RIPPLE) || defined(RCC_NATIVE)
     VmClock clock;
     if (vm_next_tick(&clock) != VM_DEVICE_OK) I_Error("VM tick failed");

@@ -265,6 +265,10 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          name: '/hello.tcl', mode: 0o100644, preserve: true,
          data: fs.readFileSync(fileURLToPath(new URL('../examples/hello.tcl', import.meta.url)))
        },
+       ...['makeactions', 'makemacros'].map(name => ({
+         name: `/usr/lib/${name}`, mode: 0o100644, preserve: true,
+         data: fs.readFileSync(fileURLToPath(new URL(`../upstream/Applications/MWC/cmd/${name}`, import.meta.url)))
+       })),
        ...manualFiles()];
   const kernel = {
     name : 'FUZIX.SYS',

@@ -34,6 +34,8 @@ int ungetc(int, FILE *);
 FILE *fopen(const char *, const char *);
 FILE *fdopen(int, const char *);
 FILE *freopen(const char *, const char *, FILE *);
+FILE *popen(const char *, const char *);
+int pclose(FILE *);
 int fclose(FILE *);
 int fflush(FILE *);
 char *fgets(char *, size_t, FILE *);

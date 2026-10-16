@@ -1,0 +1,72 @@
+import { Context, TaskError, InvalidDuration } from "std/task";
+import { write_text } from "std/io";
+extern "C" { fn rfl_halt(); }
+
+export type Poll<T> = Pending | Ready(T);
+export trait Future {
+    type Output;
+    fn poll(&mut self, cx:&mut Context) -> Poll<Self::Output>;
+    // Idempotent and synchronous. Never needs a borrowed executor context.
+    fn cancel(&mut self);
+}
+
+// Copies alias one operation: wrapper state prevents duplicate completion.
+export type CallbackFuture<T> = CallbackFuture(fn(Context)->Poll<T>, fn()->unit);
+impl<T> Future for CallbackFuture<T> {
+    type Output = T;
+    fn poll(&mut self, cx:&mut Context) -> Poll<T> {
+        match self { CallbackFuture(poll, _) => { let call=*poll; call(*cx) } }
+    }
+    fn cancel(&mut self) {
+        match self { CallbackFuture(_, cancel) => { let call=*cancel; call(); } }
+    }
+}
+
+fn invalid_poll() {
+    write_text("error: future polled after completion or cancellation\n");
+    rfl_halt();
+}
+
+export fn poll_fn<T>(poll:fn(Context)->Poll<T>, cancel:fn()->unit) -> CallbackFuture<T> {
+    let mut state:u16 = 0;
+    let checked:fn(Context)->Poll<T> = fn(cx:Context) => {
+        if (state != 0) { invalid_poll(); return Pending; }
+        match poll(cx) {
+            Pending => Pending,
+            Ready(value) => { state = 1; Ready(value) },
+        }
+    };
+    let cleanup:fn()->unit = fn() => {
+        if (state == 0) { state = 2; cancel(); }
+    };
+    CallbackFuture(checked, cleanup)
+}
+
+// No Printable bound. The captured value lives until the last wrapper is released.
+export fn ready<T>(value:T) -> CallbackFuture<T> {
+    let poll:fn(Context)->Poll<T> = fn(cx:Context) => Ready(value);
+    poll_fn(poll, fn()=>{})
+}
+
+export fn yield_now() -> CallbackFuture<unit> {
+    let mut yielded = false;
+    let poll:fn(Context)->Poll<unit> = fn(cx:Context) => {
+        if (yielded) { Ready({}) }
+        else { yielded = true; cx.waker.wake(); Pending }
+    };
+    poll_fn(poll, fn()=>{})
+}
+
+// The wrapping millisecond clock requires all intervals to be < 2^31.
+// Starts on FIRST POLL, not construction. The executor owns timer registration.
+export fn sleep(milliseconds:u32) -> Result<CallbackFuture<unit>, TaskError> {
+    if (milliseconds > 2147483647) { return Err(InvalidDuration); }
+    let mut started = false;
+    let mut deadline:u32 = 0;
+    let poll:fn(Context)->Poll<unit> = fn(cx:Context) => {
+        if (!started) { started = true; deadline = cx.now + milliseconds; }
+        if (((cx.now - deadline) as i32) >= 0) { Ready({}) }
+        else { cx.waker.wake_at(deadline); Pending }
+    };
+    Ok(poll_fn(poll, fn()=>{}))
+}

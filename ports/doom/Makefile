@@ -50,6 +50,31 @@ endif
 $(GENERATED)/sources.mk: engine/tables.c engine/info.c tools/generate-data.mjs
 	@node tools/generate-data.mjs engine "$(GENERATED)"
 
+# BF guests retain the silent sound path: no mixer, sample reads, or PCM calls.
+ifneq ($(filter bf _bf,$(TARGET) $(MAKECMDGOALS)),)
+override PCM_AUDIO := 0
+override MUSIC_AUDIO := 0
+else
+PCM_AUDIO ?= 1
+MUSIC_AUDIO ?= 0
+endif
+ifneq ($(words $(PCM_AUDIO)),1)
+$(error PCM_AUDIO must be 0 or 1)
+endif
+ifeq ($(filter $(PCM_AUDIO),0 1),)
+$(error PCM_AUDIO must be 0 or 1)
+endif
+
+ifneq ($(words $(MUSIC_AUDIO)),1)
+$(error MUSIC_AUDIO must be 0 or 1)
+endif
+ifeq ($(filter $(MUSIC_AUDIO),0 1),)
+$(error MUSIC_AUDIO must be 0 or 1)
+endif
+ifeq ($(MUSIC_AUDIO):$(PCM_AUDIO),1:0)
+$(error MUSIC_AUDIO requires PCM_AUDIO=1)
+endif
+
 ENGINE_NAMES := dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_loop d_main d_mode d_net \
  f_finale g_game hu_lib hu_stuff info i_cdmus i_endoom i_joystick i_sound memio \
  m_argv m_bbox m_cheat m_controls m_fixed m_menu m_misc m_random \
@@ -59,7 +84,7 @@ ENGINE_NAMES := dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_
  sounds statdump st_lib st_stuff s_sound tables v_video wi_stuff w_file w_main w_wad z_zone
 SOURCES_engine = $(addprefix engine/,$(addsuffix .c,$(ENGINE_NAMES))) $(TABLE_SOURCES) $(INFO_SOURCES) \
  src/main.c src/platform.c src/config_port.c src/wad_io.c src/w_file_port.c src/patch_cache.c src/alloc_fast.c src/asset_metadata.c \
- src/render_fast.asm src/raster_fast.asm src/memory_fast.asm
+ src/render_fast.asm src/raster_fast.asm src/memory_fast.asm $(if $(filter 1,$(PCM_AUDIO)),src/pcm_sound.c) $(if $(filter 1,$(MUSIC_AUDIO)),src/music_sound.c)
 include tests/programs.mk
 
 SOURCES := $(SOURCES_$(PROGRAM))
@@ -92,7 +117,7 @@ endif
 source_stem = $(if $(filter tests/%,$(1)),test_)$(basename $(notdir $(1)))
 OBJECTS := $(foreach source,$(RIPPLE_SOURCES),$(ROUT)/$(call source_stem,$(source)).pobj)
 INCLUDES := -Isrc -I$(GENERATED) -Iengine
-DEFINES := -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -DDOOM_PORT=1 -DDOOM_RESOLUTION_SCALE=$(RESOLUTION_SCALE) \
+DEFINES := -DDOOM_PCM=$(PCM_AUDIO) -DDOOM_MUSIC=$(MUSIC_AUDIO) -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -DDOOM_PORT=1 -DDOOM_RESOLUTION_SCALE=$(RESOLUTION_SCALE) \
  $(if $(filter engine info_storage,$(PROGRAM)),-DDOOM_GENERATED_INFO=1) \
  $(if $(filter renderer_tables,$(PROGRAM)),$(if $(filter 1,$(RENDERER_BF_SMOKE)),-DDOOM_RENDERER_BF_SMOKE=1))
 SCENE_DEFINES := $(if $(filter 1,$(START_MAP)),-DDOOM_START_MAP=1) $(if $(filter 1,$(START_DEMO)),-DDOOM_START_DEMO=1) $(if $(filter 1,$(LOW_DETAIL)),-DDOOM_LOW_DETAIL=1)
@@ -159,7 +184,7 @@ $(RCC) $(RASM) $(RLINK):
 # Complete the runtime's dependency check before the recursive link dependency
 # check. This avoids relinking on every run and catches a rebuilt runtime archive.
 runtime: $(RCC) $(RASM) $(RLINK)
-	+@bash tools/log-command.sh "$(BUILD)/logs/runtime.log" $(MAKE) -C "$(ROOT)/runtime" all BANK_SIZE=$(BANK_SIZE)
+	+@bash tools/log-command.sh "$(BUILD)/logs/runtime.log" $(MAKE) -C "$(ROOT)/runtime" all BANK_SIZE=$(BANK_SIZE) AUDIO=$(PCM_AUDIO)
 ripple: runtime
 	@test -n "$(SOURCES)" || { printf 'Unknown PROGRAM: %s\n' "$(PROGRAM)" >&2; exit 1; }
 	@case ' $(NATIVE_FIXTURES) ' in *' $(PROGRAM) '*) printf '%s is native-only; use TARGET=native\n' '$(PROGRAM)' >&2; exit 1;; esac
@@ -246,7 +271,7 @@ help:
 # RCC host code generation keeps each C translation unit separate through IR.
 # The clang "native" reference remains available for pixel comparisons.
 RNOUT := $(BUILD)/rcc-native/$(PROGRAM)
-RCC_NATIVE_SOURCES := $(sort $(NATIVE_SOURCES) src/compat_libc.c $(ROOT)/runtime/vm_devices.c $(ROOT)/runtime/ctype.c $(ROOT)/runtime/scanf.c src/native_devices.c)
+RCC_NATIVE_SOURCES := $(sort $(NATIVE_SOURCES) src/compat_libc.c $(ROOT)/runtime/vm_devices.c $(if $(filter 1,$(PCM_AUDIO)),$(ROOT)/runtime/vm_audio.c) $(if $(filter 1,$(MUSIC_AUDIO)),$(ROOT)/runtime/vm_music.c) $(ROOT)/runtime/ctype.c $(ROOT)/runtime/scanf.c src/native_devices.c)
 RCC_NATIVE_FLAGS := -Iinclude $(INCLUDES) -I$(ROOT)/runtime/include $(DEFINES) -DRCC_NATIVE=1 -DRIPPLE_MMIO_NO_INLINE=1 -DDOOM_ASSET_STRICT=$(if $(filter guest,$(ASSET_VALIDATION)),1,0)
 RCC_NATIVE_IR := $(foreach source,$(RCC_NATIVE_SOURCES),$(RNOUT)/$(call source_stem,$(source)).ir)
 .PHONY: rcc-native test-native

@@ -995,10 +995,25 @@ in [the optimization notes](../../rcc-backend/OPTIMIZATIONS.md).
 
 ## Remaining scope
 
-Doom savegames, demo recording, multiplayer, sound, persistent host
+Doom savegames, demo recording, multiplayer, persistent host
 configuration, PWADs and melt wipes are deferred. Longer sessions, additional
 maps and demo playback need broader validation beyond the bounded E1M1 replays.
 The Brainfuck host supports the device interface and multi-bank export. Its
 experimental launcher is separate from the regular build/test commands. A user
 has confirmed the first Doom title frame; full BF gameplay and an automated
 full-boot regression remain to be validated.
+
+### PCM sound effects and OPL3 music
+
+Normal Ripple and RCC native builds play Doom's sampled sound effects through
+the DEVICE_* PCM interface. Music is disabled by default because of its current
+performance cost. Speakers open only when audio starts; headless runs render
+without opening a sound device.
+
+Use `--audio off` to mute live playback, or capture a deterministic WAV with
+`ports/doom/run.sh --scene menu --headless --frame 8 --audio-wav build/menu.wav`.
+The Brainfuck build forces audio off at compile time: its image includes no PCM
+mixer, music module or audio helpers and performs no new sample loading,
+synthesis or submission work. `MUSIC_AUDIO=1` explicitly enables experimental
+host-side OPL3 music when building directly with make.
+See the [PCM contract and validation](../../docs/arch/audio.md).

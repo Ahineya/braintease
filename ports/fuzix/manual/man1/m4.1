@@ -1,0 +1,29 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH M4 1 "FUZIX" "Ripple"
+.SH NAME
+m4 \- expand text macros
+.SH SYNOPSIS
+.B m4 [file ...]
+.SH DESCRIPTION
+Read files or standard input and expand macros. The default quote characters
+are the backtick and apostrophe. Arguments are enclosed in parentheses;
+macro definitions substitute $1 through $9.
+.PP
+Builtins include define, undefine, ifdef, ifelse, changequote, dnl, include,
+sinclude, divert, undivert, divnum, dumpdef, errprint, eval, incr, decr,
+index, len, substr, translit and syscmd. This is the small MWC implementation;
+GNU options such as -D, -I and -P and GNU-specific builtins are not present.
+.PP
+Diversions 1 through 9 use unlinked temporary files. divert(0) returns to
+standard output, and undivert copies saved output without re-expanding it.
+A negative diversion discards output. Expansion/input nesting is bounded;
+allocation failures and incomplete calls or quotes report errors.
+.PP
+Eval uses signed 32-bit integer arithmetic. Its arithmetic operators include
++, -, *, /, %, exponentiation, comparisons, !, &, and |. Division by zero
+reports an error. This evaluator does not promise arbitrary precision.
+.SH EXAMPLES
+.nf
+define(`greet',`Hello, $1!')dnl
+greet(`Ripple')
+.fi

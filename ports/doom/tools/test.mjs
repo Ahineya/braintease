@@ -9,6 +9,7 @@ import { inspectAssets, selfTestAssets, checkAssetLog } from './assets-oracle.mj
 import { benchmark } from './benchmark.mjs';
 
 const EXPECTED = {
+  pcm_sound: 'PCM MIXER OK signed samples, guard trimming, rate conversion, panning, clipping, cache and malformed records\n',
   renderer_storage: 'RENDERER STORAGE OK grouped allocations, dirty zeroing, disjoint ranges, alignment and bank crossings\n',
   alloc_fast: 'ALLOC FAST OK zero sizes, overflow, reused cells, wide products and bank crossings\n',
   numeric: 'NUMERIC OK 6e970016 d440d0e1 1c93684a\n',

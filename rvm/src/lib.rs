@@ -18,3 +18,5 @@ pub mod input;
 pub mod input_events;
 pub mod network;
 pub mod runner;
+
+pub mod audio;

@@ -87,6 +87,12 @@ pub struct Cli {
     /// Logical ticks per second (Doom uses 35)
     #[arg(long, default_value_t = 35, value_parser = clap::value_parser!(u16).range(1..))]
     pub tick_hz: u16,
+    /// Speaker output: auto (paced live runs), or off (logical PCM still runs)
+    #[arg(long, value_enum, default_value_t=rvm::audio::AudioMode::Auto)]
+    pub audio: rvm::audio::AudioMode,
+    /// Capture rendered signed 16-bit PCM to a WAV file, including headless runs
+    #[arg(long, conflicts_with_all=["debug","tui"])]
+    pub audio_wav: Option<PathBuf>,
     /// JSON array of typed keyboard/pointer transitions scheduled by logical tick
     #[arg(long, conflicts_with_all = ["debug", "tui"])]
     pub input_script: Option<PathBuf>,

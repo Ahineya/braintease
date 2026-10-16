@@ -257,3 +257,5 @@ int system(const char *s) {
 int _time(__ktime_t *p, uint16_t clock) {
     return call(27, (long)p, clock, 0, 0);
 }
+
+int raise(int sig) { return kill(getpid(), sig); }

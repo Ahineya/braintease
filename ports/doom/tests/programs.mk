@@ -1,6 +1,6 @@
 # Small regressions compile the same engine sources as the complete port.
 NATIVE_FIXTURES := map_decode world_widths clock_widths
-FIXTURE_PROGRAMS := numeric libc wad_lookup wad_directory wad_read wad_read_small wad_read_perf asset_words graphics_cache demo_playback stat_storage info_storage projection_widths sky_widths event_widths texture_columns texture_metadata sprite_metadata sprite_metrics renderer_tables renderer_storage keyboard_controls config_bindings assets render_kernels raster_kernels sampled_raster memory_kernels alloc_fast $(NATIVE_FIXTURES)
+FIXTURE_PROGRAMS := pcm_sound numeric libc wad_lookup wad_directory wad_read wad_read_small wad_read_perf asset_words graphics_cache demo_playback stat_storage info_storage projection_widths sky_widths event_widths texture_columns texture_metadata sprite_metadata sprite_metrics renderer_tables renderer_storage keyboard_controls config_bindings assets render_kernels raster_kernels sampled_raster memory_kernels alloc_fast $(NATIVE_FIXTURES)
 
 SOURCES_numeric = tests/numeric.c engine/m_fixed.c engine/tables.c $(TABLE_SOURCES)
 SOURCES_libc := tests/compat_libc.c
@@ -46,3 +46,7 @@ GENERATE_renderer_tables = node tools/fixtures.mjs renderer_tables $(GENERATED)
 GENERATE_renderer_storage = node tools/renderer-storage-fixture.mjs $(GENERATED)
 GENERATE_keyboard_controls = node tools/fixtures.mjs keyboard_controls $(GENERATED)
 GENERATE_config_bindings = node tools/fixtures.mjs config_bindings $(GENERATED)
+
+SOURCES_pcm_sound := tests/pcm_sound.c
+
+$(BUILD)/ripple/pcm_sound/test_pcm_sound.asm $(BUILD)/native/pcm_sound/pcm_sound: src/pcm_sound.c

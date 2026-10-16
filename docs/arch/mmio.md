@@ -84,6 +84,12 @@ on focus loss. The [event and snapshot layouts](../../rvm/mmio.md#keyboard-and-p
 define flags, batching, overflow recovery and live/replay delivery. ABI version
 remains 1; there are no alternate input layouts.
 
+The [audio device](audio.md) adds PCM CONFIGURE/SUBMIT/STATE/CONTROL/RENDER
+commands at 0x0200–0x0204 and OPL3 music bank/score/control/state commands at
+0x0210–0x0213. Capabilities 0x0080 (PCM) and 0x0100 (music) are available in
+RVM and the RCC native runtime; RBF reports audio unsupported. No new MMIO
+addresses are used.
+
 These are host-device extensions; instruction encoding and CPU semantics are
 unchanged. The Rust VM, Brainfuck host adapter, and native runtime implement this
 device-command ABI. The Brainfuck CPU continues to execute guest instructions

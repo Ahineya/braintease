@@ -858,6 +858,14 @@ mod tests {
     }
 
     #[test]
+    fn storc_supports_large_guest_code_banks_and_retains_a_limit() {
+        let mut vm = VM::with_memory_size(64000, 256);
+        vm.guest_storc(139, 63999).unwrap();
+        assert!(vm.instructions.len() >= 140 * 64000);
+        assert!(vm.guest_storc(263, 0).is_err());
+    }
+
+    #[test]
     fn irq_registers_read_write_without_dispatch() {
         let mut vm = VM::with_memory_size(8, 256);
         vm.instructions = vec![halt(), nop(), nop(), nop(), nop(), nop(), nop(), nop()];

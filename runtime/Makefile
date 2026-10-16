@@ -14,7 +14,9 @@ SEGMENTED_STACK ?= 0
 STACK_FLAG = $(if $(filter 1,$(SEGMENTED_STACK)),--segmented-stack,)
 
 # Source files
-C_SOURCES = irq.c stack.c __char_patch.c putchar.c puts.c getchar.c mmio.c keyboard.c vm_devices.c vm_network.c $(wildcard net/*.c) rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
+AUDIO ?= 1
+AUDIO_STAMP := .audio-config
+C_SOURCES = irq.c stack.c __char_patch.c putchar.c puts.c getchar.c mmio.c keyboard.c vm_devices.c $(if $(filter 1,$(AUDIO)),vm_audio.c vm_music.c) vm_network.c $(wildcard net/*.c) rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
 ASM_SOURCES = crt0.asm
 
 # qfixed lives in src/ and is compiled via the qfixed.asm rule below
@@ -96,7 +98,10 @@ ros/crt0_sys.pobj: ros/crt0_sys.asm $(RASM) $(BANK_SIZE_STAMP)
 	@$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
 # Create runtime library archive (without crt0)
-$(RUNTIME_LIB): $(RUNTIME_OBJ_FILES) $(RLINK)
+$(AUDIO_STAMP): FORCE
+	@if test "$$(cat $@ 2>/dev/null)" != "$(AUDIO)"; then printf '%s\n' '$(AUDIO)' > $@; fi
+
+$(RUNTIME_LIB): $(RUNTIME_OBJ_FILES) $(RLINK) $(AUDIO_STAMP)
 	@echo "Creating runtime library archive..."
 	@$(RLINK) $(RUNTIME_OBJ_FILES) -f archive -o $(RUNTIME_LIB)
 
@@ -108,7 +113,7 @@ $(LIBROS): $(LIBROS_OBJ) $(RLINK)
 $(ASM_FILES) $(ROS_C_ASM) stack_segments.asm $(ALL_OBJ_FILES) $(ROS_ASM_OBJ) $(ROS_C_OBJ) $(RUNTIME_LIB) $(LIBROS): $(BUILD_RULES)
 
 clean:
-	rm -f stack_segments.asm $(ASM_FILES) $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm $(C_OBJ_FILES) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
+	rm -f stack_segments.asm $(ASM_FILES) vm_audio.asm vm_music.asm $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm $(C_OBJ_FILES) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP) $(AUDIO_STAMP)
 	@echo "Cleaned runtime directory"
 
 # Test target - build a test program with runtime

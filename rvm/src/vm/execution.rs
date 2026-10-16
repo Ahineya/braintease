@@ -468,7 +468,9 @@ impl VM {
     /// covers it. Harvard data stores do not come through here.
     pub(crate) fn guest_storc(&mut self, bank: u16, addr: u16) -> Result<(), String> {
         let idx = (bank as usize * self.bank_size as usize) + addr as usize;
-        const MAX_IMEM: usize = 64 * 65536;
+        // Large guest programs and process image slots can occupy more than
+        // 64 banks. Grow lazily, retaining a finite host allocation limit.
+        const MAX_IMEM: usize = 256 * 65536;
         if idx >= MAX_IMEM {
             return Err(format!(
                 "STORC: instruction address out of bounds: bank={bank}, addr={addr}, idx={idx}"

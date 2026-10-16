@@ -1,0 +1,321 @@
+--- a/awk.1
++++ b/awk.1
+@@ -632,0 +633,13 @@
++
++.SH RIPPLE NOTES
++This port uses binary64 software arithmetic and a C locale with an octet
++regular-expression alphabet. Input characters above 255 are rejected.
++Dynamic records/format buffers are limited to 16000 native characters;
++other storage is limited by the process heap. The default record allocation
++is 1024 characters and grows as required. Decimal floating output rounds
++the exact binary64 value, with precision fields up to 30.
++.PP
++Integer printf conversions use signed/unsigned 32-bit values. Multibyte
++locale conversion and hexadecimal floating output are not supplied. Files,
++redirections, command pipes, getline, system, arrays and functions run
++through the guest's own libc and kernel.
+--- a/awk.h
++++ b/awk.h
+@@ -28 +28,3 @@
+-#if __STDC_VERSION__ <= 199901L
++#undef assert
++#define assert(e) do { if (!(e)) FATAL("internal consistency check failed"); } while (0)
++#define FOPEN_MAX 16
+@@ -30,3 +31,0 @@
+-#else
+-#include <stdnoreturn.h>
+-#endif
+@@ -64 +63 @@
+-#define	RECSIZE	(8 * 1024)	/* sets limit on records, fields, etc., etc. */
++#define	RECSIZE	(1024)	/* sets limit on records, fields, etc., etc. */
+@@ -258,0 +258,6 @@
++
++/* Ripple: the regex engine has an octet alphabet; reject wider file cells. */
++int awk_getc(FILE *);
++int awk_octet(int);
++#undef getc
++#define getc(stream) awk_getc(stream)
+--- a/awkgram.y
++++ b/awkgram.y
+@@ -25,0 +26 @@
++extern void *ripple_absolute_pointer(void *);
+--- a/b.c
++++ b/b.c
+@@ -79 +79 @@
+-#define	NFA	128	/* cache this many dynamic fa's */
++#define	NFA	8	/* cache this many dynamic fa's */
+@@ -143 +143 @@
+-	overflo(__func__);
++	overflo("awk");
+@@ -147,0 +148,2 @@
++	const char *check;
++	for (check = s; *check; check++) awk_octet(*check);
+@@ -153 +155 @@
+-		resizesetvec(__func__);
++		resizesetvec("awk");
+@@ -201 +203 @@
+-		overflo(__func__);
++		overflo("awk");
+@@ -206,2 +208,2 @@
+-	f->posns[0] = intalloc(*(f->re[0].lfollow), __func__);
+-	f->posns[1] = intalloc(1, __func__);
++	f->posns[0] = intalloc(*(f->re[0].lfollow), "awk");
++	f->posns[1] = intalloc(1, "awk");
+@@ -227 +229 @@
+-	f->posns[2] = intalloc(k + 1,  __func__);
++	f->posns[2] = intalloc(k + 1,  "awk");
+@@ -423 +425 @@
+-			resizesetvec(__func__);
++			resizesetvec("awk");
+@@ -429 +431 @@
+-		p = intalloc(setcnt + 1, __func__);
++		p = intalloc(setcnt + 1, "awk");
+@@ -461 +463 @@
+-			resizesetvec(__func__);
++			resizesetvec("awk");
+@@ -549 +551 @@
+-		if ((ns = f->gototab[s][*p]) != 0)
++		if ((ns = f->gototab[s][awk_octet(*p)]) != 0)
+@@ -576 +578 @@
+-			if ((ns = f->gototab[s][*q]) != 0)
++			if ((ns = f->gototab[s][awk_octet(*q)]) != 0)
+@@ -621 +623 @@
+-			if ((ns = f->gototab[s][*q]) != 0)
++			if ((ns = f->gototab[s][awk_octet(*q)]) != 0)
+@@ -692 +694 @@
+-			if ((ns = pfa->gototab[s][c]) != 0)
++			if ((ns = pfa->gototab[s][awk_octet(c)]) != 0)
+@@ -881 +883 @@
+-int (xisblank)(int c)
++int xisblank(int c)
+@@ -1103 +1105 @@
+-					for (i = 1; i <= UCHAR_MAX; i++) {
++					for (i = 1; i <= 255; i++) {
+@@ -1248 +1250 @@
+-		resizesetvec(__func__);
++		resizesetvec("awk");
+@@ -1267 +1269 @@
+-						resizesetvec(__func__);
++						resizesetvec("awk");
+@@ -1306 +1308 @@
+-	p = intalloc(setcnt + 1, __func__);
++	p = intalloc(setcnt + 1, "awk");
+--- a/lex.c
++++ b/lex.c
+@@ -430 +430 @@
+-	  			sscanf(xbuf, "%x", (unsigned int *) &n);
++				n = (int)strtoul(xbuf, NULL, 16);
+@@ -586 +586 @@
+-	if (c == '\n')  
++	if (c == '\n')
+--- a/lib.c
++++ b/lib.c
+@@ -366 +366 @@
+-			char buf[MB_LEN_MAX + 1];
++			char buf[2];
+@@ -373 +373 @@
+-			n = mblen(r, MB_LEN_MAX);
++			n = 1;
+--- a/main.c
++++ b/main.c
+@@ -115,2 +115,2 @@
+-	setlocale(LC_CTYPE, "");
+-	setlocale(LC_NUMERIC, "C"); /* for parsing cmdline & prog */
++
++	 /* for parsing cmdline & prog */
+@@ -139 +139 @@
+-	srandom((unsigned long) srand_seed);
++	srand((unsigned long) srand_seed);
+@@ -215 +215 @@
+-	setlocale(LC_NUMERIC, ""); /* back to whatever it is locally */
++	 /* back to whatever it is locally */
+--- a/maketab.c
++++ b/maketab.c
+@@ -103 +103 @@
+-	{ CALL, "call", "call" },
++	{ CALL, "awk_call", "call" },
+--- a/proto.h
++++ b/proto.h
+@@ -138,6 +138,3 @@
+-extern	void	SYNTAX(const char *, ...)
+-    __attribute__((__format__(__printf__, 1, 2)));
+-extern	noreturn void	FATAL(const char *, ...)
+-    __attribute__((__format__(__printf__, 1, 2)));
+-extern	void	WARNING(const char *, ...)
+-    __attribute__((__format__(__printf__, 1, 2)));
++extern	void	SYNTAX(const char *, ...);
++extern	noreturn void	FATAL(const char *, ...);
++extern	void	WARNING(const char *, ...);
+@@ -153 +150 @@
+-extern	int	adjbuf(char **pb, int *sz, int min, int q, char **pbp, const char *what);
++extern	int	adjbuf(char **pb, int *sz, long min, int q, char **pbp, const char *what);
+@@ -157 +154 @@
+-extern	Cell	*call(Node **, int);
++extern	Cell	*awk_call(Node **, int);
+--- a/run.c
++++ b/run.c
+@@ -29,2 +29,2 @@
+-#include <wchar.h>
+-#include <wctype.h>
++
++
+@@ -102 +102 @@
+-int adjbuf(char **pbuf, int *psiz, int minlen, int quantum, char **pbptr,
++int adjbuf(char **pbuf, int *psiz, long minlen, int quantum, char **pbptr,
+@@ -113,0 +114 @@
++	if (minlen < 0 || minlen > 16000) FATAL("buffer exceeds 16000 characters");
+@@ -228 +229 @@
+-Cell *call(Node **a, int n)	/* function call.  very kludgy and fragile */
++Cell *awk_call(Node **a, int n)	/* function call.  very kludgy and fragile */
+@@ -516 +517 @@
+-	buf = makearraystring(a[1], __func__);
++	buf = makearraystring(a[1], "awk");
+@@ -549 +550 @@
+-		char *buf = makearraystring(a[1], __func__);
++		char *buf = makearraystring(a[1], "awk");
+@@ -571 +572 @@
+-	buf = makearraystring(a[0], __func__);
++	buf = makearraystring(a[0], "awk");
+@@ -817,0 +819,17 @@
++/* Validate field widths before native 16-bit conversions or allocation. */
++static int format_extent(const char *text)
++{
++    int extent = 0, value;
++    while (*text) {
++        if (!isdigit((unsigned char)*text)) { text++; continue; }
++        value = 0;
++        do {
++            if (value > 1600 || (value == 1600 && *text != '0'))
++                FATAL("format width/precision exceeds 16000 characters");
++            value = value * 10 + *text++ - '0';
++        } while (isdigit((unsigned char)*text));
++        if (value > extent) extent = value;
++    }
++    return extent;
++}
++
+@@ -832,10 +849,0 @@
+-	static bool first = true;
+-	static bool have_a_format = false;
+-
+-	if (first) {
+-		char xbuf[100];
+-
+-		snprintf(xbuf, sizeof(xbuf), "%a", 42.0);
+-		have_a_format = (strcmp(xbuf, "0x1.5p+5") == 0);
+-		first = false;
+-	}
+@@ -859 +867 @@
+-		fmtwd = atoi(s+1);
++		fmtwd = 0;
+@@ -881,0 +890,2 @@
++				if (!(getfval(x) >= -16000 && getfval(x) <= 16000))
++					FATAL("format width/precision exceeds 16000 characters");
+@@ -891,0 +902 @@
++		fmtwd = format_extent(fmt);
+@@ -897,4 +908 @@
+-			if (have_a_format)
+-				flag = *s;
+-			else
+-				flag = 'f';
++			FATAL("hexadecimal floating formatting is not supported");
+@@ -907 +915 @@
+-			*(t-1) = 'j';
++			*(t-1) = 'l';
+@@ -943,2 +951,2 @@
+-		case 'd':	snprintf(p, BUFSZ(p), fmt, (intmax_t) getfval(x)); break;
+-		case 'u':	snprintf(p, BUFSZ(p), fmt, (uintmax_t) getfval(x)); break;
++		case 'd':	snprintf(p, BUFSZ(p), fmt, (long) getfval(x)); break;
++		case 'u':	snprintf(p, BUFSZ(p), fmt, (unsigned long) getfval(x)); break;
+@@ -1521,72 +1528,0 @@
+-static char *nawk_convert(const char *s, int (*fun_c)(int),
+-    wint_t (*fun_wc)(wint_t))
+-{
+-	char *buf      = NULL;
+-	char *pbuf     = NULL;
+-	const char *ps = NULL;
+-	size_t n       = 0;
+-	wchar_t wc;
+-	size_t sz = MB_CUR_MAX;
+-
+-	if (sz == 1) {
+-		buf = tostring(s);
+-
+-		for (pbuf = buf; *pbuf; pbuf++)
+-			*pbuf = fun_c((uschar)*pbuf);
+-
+-		return buf;
+-	} else {
+-		/* upper/lower character may be shorter/longer */
+-		buf = tostringN(s, strlen(s) * sz + 1);
+-
+-		(void) mbtowc(NULL, NULL, 0);	/* reset internal state */
+-		/*
+-		 * Reset internal state here too.
+-		 * Assign result to avoid a compiler warning. (Casting to void
+-		 * doesn't work.)
+-		 * Increment said variable to avoid a different warning.
+-		 */
+-		int unused = wctomb(NULL, L'\0');
+-		unused++;
+-
+-		ps   = s;
+-		pbuf = buf;
+-		while (n = mbtowc(&wc, ps, sz),
+-		       n > 0 && n != (size_t)-1 && n != (size_t)-2)
+-		{
+-			ps += n;
+-
+-			n = wctomb(pbuf, fun_wc(wc));
+-			if (n == (size_t)-1)
+-				FATAL("illegal wide character %s", s);
+-
+-			pbuf += n;
+-		}
+-
+-		*pbuf = '\0';
+-
+-		if (n)
+-			FATAL("illegal byte sequence %s", s);
+-
+-		return buf;
+-	}
+-}
+-
+-#ifdef __DJGPP__
+-static wint_t towupper(wint_t wc)
+-{
+-	if (wc >= 0 && wc < 256)
+-		return toupper(wc & 0xFF);
+-
+-	return wc;
+-}
+-
+-static wint_t towlower(wint_t wc)
+-{
+-	if (wc >= 0 && wc < 256)
+-		return tolower(wc & 0xFF);
+-
+-	return wc;
+-}
+-#endif
+-
+@@ -1595,3 +1531,4 @@
+-	return nawk_convert(s, toupper, towupper);
+-}
+-
++    char *result = tostring(s), *p;
++    for (p = result; *p; p++) *p = toupper((unsigned char)*p);
++    return result;
++}
+@@ -1600 +1537,3 @@
+-	return nawk_convert(s, tolower, towlower);
++    char *result = tostring(s), *p;
++    for (p = result; *p; p++) *p = tolower((unsigned char)*p);
++    return result;
+@@ -1674 +1613 @@
+-		u = (Awkfloat) random() / (0x7fffffffL + 0x1UL);
++		u = (Awkfloat) rand() / (RAND_MAX + 1.0);
+@@ -1682 +1621 @@
+-		srandom((unsigned long) u);
++		srand((unsigned long) u);

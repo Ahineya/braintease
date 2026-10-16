@@ -39,8 +39,8 @@ LOADC/STORC, IRQs and the instruction timer enabled. `--rbf --run-only` reuses
 that export, and `--rbf --build-only` prepares it without starting the host.
 The JIT remains enabled by default on either host; use `--no-jit` to disable it.
 
-The BF tape reserves 80 data banks and 68 code banks for dynamically loaded
-executables, requiring about **266 MiB for the tape alone**. Brainfuck execution
+The BF tape reserves 80 data banks and 140 code banks for dynamically loaded
+executables, requiring about **547 MiB for the tape alone**. Brainfuck execution
 can be much slower than RVM, including BIOS disk loading. `--telemetry-lite`
 shows RBF progress. Interactive launches stream raw terminal bytes to the guest,
 including Ctrl-C, Tab and arrow keys; Ctrl-] stops the host and restores the
@@ -49,7 +49,7 @@ terminal. `--headless --input TEXT` runs without live terminal input. Use
 
 ## Unix userspace
 
-The image now includes **90 utility, scripting and game command names**, built from the pinned
+The image now includes **95 utility, scripting and game command names**, built from the pinned
 upstream sources and adapted where needed, plus the upstream V7 Bourne shell at `/bin/sh`.
 They are real executables using FUZIX system calls:
 
@@ -57,11 +57,12 @@ They are real executables using FUZIX system calls:
 | --- | --- |
 | Files and directories | `ls`, `cat`, `cp`, `mv`, `ln`, `rm`, `mkdir`, `rmdir`, `pwd`, `touch`, `chmod`, `chown`, `chgrp`, `mkfifo`, `mknod`, `basename`, `dirname`, `find`, `dd`, `tar`, `mktemp` |
 | Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp`, `diff`, `diffh`, `join`, `split`, `fmt`, `column`, `pr`, `col`, `tsort`, `cksum` |
+| Calculation and development | `expr`, `awk`, `make`, `m4`, `dc` |
 | Terminal and paging | `more`, `less`, `clear`, `stty`, `tty` |
 | Editing | `ed`, `vi` (Levee), `levee`, `vile` |
 | Processes and environment | `ps`, `kill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs`, `time`, `nice`, `nohup`, `groups`, `logname` |
 | Filesystem information | `df`, `du`, `sync` |
-| Manuals | `man` (43 installed manual pages) |
+| Manuals | `man` (48 installed manual pages) |
 | Fun and scripting | `cowsay`, `picol`, `tcl`, `tclsh`, `wump`, `hamurabi` |
 | Shell helpers | `test`, `true`, `false`, `seq`, `yes` |
 
@@ -127,7 +128,7 @@ The libc layer provides syscall wrappers, buffered file I/O, integer/string
 formatting, directories, environment lookup, UTC time conversion, and a reusable
 process-local `brk` allocator. Upstream portable string, option, sorting, regular
 expression, passwd/group, and mount-table routines are reused. It is not yet the
-complete upstream libc; floating formatted I/O,
+complete upstream libc; general floating formatted I/O outside AWK,
 networking, hardware-specific applications, compilers, and the rest of the
 application collection remain later porting work.
 
@@ -341,7 +342,7 @@ bank. Fork snapshots both banks into backing RAM; scheduling restores them at
 the same execution addresses, preserving pointers. Kernel continuations use a
 separate stack bank per process. Code images are reference-counted across fork
 and relocated into separate IMEM slots on exec. This currently supports eight
-process table entries, nine live code images, and up to four IMEM banks per
+process table entries, nine live code images, and up to twelve IMEM banks per
 userspace executable. Userspace allocation must use FUZIX brk/sbrk within its
 data bank; RCC's generic multi-bank runtime malloc is not a process allocator.
 
@@ -351,10 +352,10 @@ the scheduler; a software IRQ supplies the trap frame when restoring a preempted
 user continuation. No task sleeps with IRQ_BUSY held. Timer ticks are based on
 executed VM instructions (100,000 per tick), not a host wall-clock RTC.
 
-The launcher allocates 4,608,000 DMEM cells, enough for banks 0–71, rather than
+The launcher allocates 5,120,000 DMEM cells, enough for banks 0–79, rather than
 using RVM's very large general-purpose default. The port has no MMU or privilege
 isolation. Networking, the remaining upstream libc/application collection, swap,
-dynamic multi-bank user heaps, and RBF execution remain future work.
+and dynamic multi-bank user heaps remain future work.
 
 Caught signals use validated IMEM code pointers and a user-stack register frame.
 The kernel enters a userspace trampoline after a syscall or timer preemption;
@@ -532,7 +533,7 @@ root, and the Level 1 kernel supplies its primary group. The clock used by
 
 ## Manuals and classic games
 
-`man intro` provides a command overview. The image installs 43 plain manual
+`man intro` provides a command overview. The image installs 48 plain manual
 pages in `/usr/man`, including the Bourne shell, editors, Tcl, common text tools
 and the games. These combine retained upstream manuals with port-specific pages
 for changed behavior. Not every command has its own manual yet. Use, for example:
@@ -571,19 +572,65 @@ missing pages, include loops, oversized headers, live pager exit/Ctrl-C,
 actual game prompts/actions, invalid/large input, EOF, and terminal recovery
 in both RVM engines. They use isolated images and check filesystem consistency.
 
-## Next userspace batches
+## Text processing and development tools
 
-The next useful batch is remaining text tools such as `expr` and `awk`,
-development tools such as `make`, `m4` and `dc`, and broader manual coverage,
-followed by system administration tools. More game candidates in the archive
-include Sokoban, Star Trek and adventure interpreters. Larger applications, languages/build tools and
-networking depend on further libc, process-capacity and device work; the complete
-upstream archive is retained.
+The image includes MWC `expr`, `make` and `m4`, V7 `dc`, and **One True Awk
+20220122**. These run as guest executables, including their subprocesses and
+file I/O. Each has an installed manual page (`man awk`, for example).
+
+```sh
+expr 12 + 3 '*' 4
+awk -F: '{ total += $2 } END { print total }' records
+awk 'BEGIN { for (i=1; i<=5; i++) print i, sqrt(i) }'
+echo '12345678901234567890 2 * p' | dc
+m4 macros.m4
+make -n
+make TARGET=Ripple
+```
+
+AWK supports associative arrays, functions, regex matching/substitution,
+`getline`, redirected output, `system`, and command pipes. It uses binary64
+software arithmetic and a dedicated decimal formatter, including `%f`, `%e`
+and `%g` with precision up to 30. Integer formatting is 32-bit. The C locale
+and input/regex characters 0–255 are supported; Unicode and hexadecimal floating
+formatting are not supplied. Dynamic records and format buffers have a
+16,000-character ceiling, with the total process heap imposing an additional
+limit; a large record/program can exhaust that heap sooner.
+
+`make` is the historical MWC implementation: makefile/Makefile lookup, includes,
+macros, command-line assignments, timestamps, suffix rules, automatic variables
+and `-f`, `-r`, `-n`, `-q`, `-s`, `-i` are available. Its `$<` expands the
+prerequisite list. GNU make extensions such as `.PHONY`, pattern functions and
+parallel `-j` builds are not supplied. Default rules/macros live in `/usr/lib`.
+There is no guest C compiler yet, but make can run the existing shell tools.
+
+`m4` provides definitions, arguments, quoting, includes, conditionals, integer
+evaluation, diversions and shell commands. `dc` provides arbitrary-precision
+stack arithmetic, scale, bases, macros and arrays; `q` exits. `expr` provides
+checked 32-bit arithmetic and anchored basic regex matching/captures; quote
+operators so the shell passes them through. Ctrl-C interrupts these programs
+and returns to the shell.
+
+The batch expands each executable's code reservation to twelve IMEM banks;
+it retains the existing compiler ABI, data/stack banks and eight process slots.
+RVM's dynamic instruction-memory limit accommodates these larger guest images.
+Generated parsers are checked in; optional regeneration uses
+`python3 ports/fuzix/tools/generate_devtools.py` with Bison 2.3. Parser state
+is kept in memory and pointer tags normalized to work around an RCC sensitivity
+to local state across backward parser jumps. Builds need no parser generator
+or network access.
+
+`python3 ports/fuzix/tools/test_devtools.py` checks all five tools under JIT and
+interpreter execution, including calculations, regexes, arrays/functions,
+formatting, command pipes, files, dependency/include rules, errors, interrupts,
+reboot persistence and filesystem consistency. It uses isolated disks.
 
 ## Upstream and licensing
 
 The complete upstream source archive is in `vendor/`, pinned to the latest master
-revision fetched on 2026-10-16. A portable working subset is in `upstream/`. See [UPSTREAM.md](UPSTREAM.md) for provenance and
+revision fetched on 2026-10-16. A portable working subset is in `upstream/`.
+The separate pinned AWK archive and adapted sources are in `vendor/` and `awk/`;
+`awk.patch` records its source adaptations. See [UPSTREAM.md](UPSTREAM.md) for provenance and
 [upstream.patch](upstream.patch) for the core adaptations. Ripple platform
 sources, build tools, and bootstrap userspace live outside that snapshot's
 platform hierarchy so they can be reviewed together. Upstream sources retain their individual license notices, including GPL/LGPL

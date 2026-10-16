@@ -9,8 +9,9 @@ and limits are in the
 public function signatures or imply those functions exist.
 
 The original goal is complete: the guest resolves `syma-lang.org` using its own
-UDP/DNS implementation and pings the answer. The next goal is to build reusable
-libraries that can both consume and serve a small web page over guest TCP/IP.
+UDP/DNS implementation and pings the answer. The guest C HTTP client/server
+milestones are also complete. The next goal is typed RFL networking and
+pleasant, general-purpose async over that shared guest stack.
 
 ## Requirements shared by every milestone
 
@@ -260,14 +261,56 @@ and validate [static traits](../../rfl/traits.md) before relying on generic I/O
 abstractions. Concrete polling wrappers can be prototyped earlier; traits do
 not block the preceding C networking work.
 
-Explore polling operations and a bounded cooperative executor before adding
-`async`/`await`. The trait draft defers associated types and generic trait
-parameters. The recommended async preparation extends static traits with
-associated output types; generic trait parameters remain a useful independent
-extension when concrete library use cases require them. Specify projections,
-output constraints, suspended borrows, buffers, cancellation and cleanup before
-implementing async syntax. This is a documented goal, not a commitment to particular async
-syntax or an instruction to change the compiler during concurrent work.
+Static traits and associated types are implemented. The first polling library
+now supplies Future/Poll, bounded wakeup slots, timers and deterministic one/two
+root runners. General-purpose async is the goal: general places, resource
+ownership, automatic cleanup on every exit, task composition and suspended-borrow
+rules are required milestones before async syntax. The [RFL design](rfl.md)
+distinguishes implemented polling APIs from those language/runtime requirements.
+Generic trait parameters remain an independent extension driven by library needs.
+The production network reactor and typed RFL C-stack wrappers remain to be built.
+
+### Saved checkpoint — 16 October 2026
+
+**Work parked here at the user's request to switch tasks.** Resume from this
+checkpoint; the polling foundation is complete, general-purpose async is not.
+
+Implemented:
+
+- Static traits, Printable-based library printing, and associated output types.
+- [`std/task`](../../rfl/std/task.rfl): Context, bounded wakeup slots, coalescing,
+  generation checks, slot retirement and wrapping-clock timer registration.
+- [`std/future`](../../rfl/std/future.rfl): Future/Poll, checked callback futures,
+  immediate results, cooperative yielding, lazy timers and explicit cancellation.
+- [`std/executor`](../../rfl/std/executor.rfl): Reactor, block_on, optional turn
+  budgets and fair scheduling of two roots with different output types. Stop and
+  error paths retire wakeups and cancel unfinished work.
+- A function-value return-type inference fix, with a regression test: local and
+  captured callables and C function pointers supply numeric comparison context.
+
+Validation recorded at this checkpoint: **271 release tests passed**, using
+`cargo test --release -p rfl --tests --quiet -- --test-threads=4`.
+[`tests/futures.rs`](../../rfl/tests/futures.rs) adds eight tests: seven execution
+cases checked on both native and RVM, plus the inference regression.
+The [deterministic example](../../rfl/examples/futures.rfl) ran on both targets,
+printing `hello from a future`, `125`, and `2` on separate lines. Its timer uses a
+fake clock; this is not a real-time or live-network validation. No new explicit
+BF networking/futures run was required; routine RBF checks remain opt-in.
+
+Current limits: cancellation is guaranteed at the runner boundary, **not on
+arbitrary variable/scope destruction**. Callback-future copies alias one
+operation. There is no async/await syntax, compiler-owned async frame, general
+spawn/join-handle system, production clock/idle/network reactor or RFL socket
+wrapper. Existing C protocol tests do not prove those absent RFL layers.
+
+Resume with **general place borrowing and resource ownership**, then automatic
+deterministic cleanup across scope exit, replacement, return, `?`, loop exits,
+container destruction and parent cancellation. Settle resource copy/clone/move
+behavior before adding cleanup hooks. Follow with owned composition and task
+lifecycles, safe suspension rules/state-machine lowering, and network/library
+integration. Preserve the completed polling tests as acceptance cases; the
+[detailed design](rfl.md#required-path-to-pleasant-async) records the remaining
+semantics and validation targets.
 
 ## Separate and later work
 

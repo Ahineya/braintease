@@ -134,3 +134,18 @@ ripple_signal_entry:
     LI A1, 9
     CALL ripple_sigreturn
     HALT
+
+; Convert GP/SB-relative C pointer tags to concrete bank numbers. Parsers keep
+; pointers into local arrays and compare them after pointer arithmetic.
+ripple_absolute_pointer:
+    ADD RV0, A0, R0
+    ADD RV1, A1, R0
+    LI T0, -1
+    BNE RV1, T0, ripple_absolute_pointer_sb
+    ADD RV1, GP, R0
+ripple_absolute_pointer_sb:
+    LI T0, -2
+    BNE RV1, T0, ripple_absolute_pointer_done
+    ADD RV1, SB, R0
+ripple_absolute_pointer_done:
+    RET

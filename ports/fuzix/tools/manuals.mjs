@@ -18,7 +18,7 @@ export function manualFiles() {
     }
   };
   for (const directory of ['upstream/Applications/util', 'upstream/Applications/V7/cmd',
-                            'upstream/Applications/V7/games', 'manual'])
+                            'upstream/Applications/V7/games', 'awk', 'manual'])
     add(path.join(port, directory));
   return [...pages.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

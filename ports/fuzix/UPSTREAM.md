@@ -132,7 +132,7 @@ removes 320 files to exercise inode numbers beyond the old 255-inode boundary.
 The manuals/games batch imports util `man.c`, V7 `wump.c` and its manual,
 `games/hamurabi.c`, `Library/libs/rand.c`, and 26 command manual sources from
 util/V7. Port-specific pages in `manual/` override selected upstream pages;
-`tools/manuals.mjs` installs the combined 43-page set under `/usr/man`.
+`tools/manuals.mjs` installs the combined 48-page set under `/usr/man`.
 `man` retains Robert de Bath's GPL formatter with bounded paths, headers,
 indentation and line copies, read-error reporting, bounded `.so` redirects,
 nonmutating MANPATH/MANSECT search, and direct fork/exec pager management with
@@ -144,3 +144,56 @@ starvation is clamped and deducted, births follow the stated one-per-two rule
 with the 6000 population limit, rats consume their losses, and feeding/planting
 allocations reset each year. Its term is ten years. No compiler ABI changes
 or additional host dependencies are needed.
+
+The development-tools batch imports MWC `expr.y`, `make.c`/`make.h`, default
+`makeactions`/`makemacros`, `m4.c`, and V7 `dc.c`/`dc.1` from that same archive.
+Expr adds checked 32-bit arithmetic, bounded regex compilation and capture
+handling. Make adapts error reporting and include/parser ownership, fixes path
+lookup and dependency-cycle handling, and installs its default files under
+`/usr/lib`. M4 fixes diversion streams, temporary names, EOF/error handling,
+hash arithmetic and recursion bounds. DC retains its arbitrary-precision
+engine, with native-width pointer fixes, correct input-stack termination and
+Ctrl-C exit. Original source notices remain in place.
+
+## One True Awk
+
+- Project: [One True Awk](https://github.com/onetrueawk/awk)
+- Release: `20220122` (the pre-Unicode implementation)
+- Revision: `b9c01f51224fd302519e8a35bd06effc06f6d3d1`
+- Archive: `https://codeload.github.com/onetrueawk/awk/tar.gz/b9c01f51224fd302519e8a35bd06effc06f6d3d1`
+- Archive SHA-256: `8f6af020326b4c81c5ae7afa36ae99cf0ebbfdced3e4a4ead9b41fc1cca76a3d`
+- License: Lucent permissive notice, retained in `awk/LICENSE` and source headers.
+
+The complete unmodified archive is retained in `vendor/`. Selected root source,
+manual and license files live in `awk/`; `awk.patch` records adaptations to those
+originals, replayed with `git apply --unidiff-zero`. The generated
+`awkgram.tab.c`/`.h` and `proctab.c` are port build inputs rather than original
+archive files. `tools/generate_devtools.py` regenerates both expr/AWK parsers
+with Bison 2.3 and emits the AWK dispatch table without a host C compiler.
+`--check` checks the dispatch table alone. Ordinary builds use the checked-in
+files, requiring neither Bison nor network access.
+
+Both generated, non-reentrant parsers normalize RCC tagged pointers through
+`ripple_absolute_pointer` and keep dispatch state in memory. Their ordinary
+local-state loops were sensitive to register pressure across backward gotos
+with RCC; enabling parser tracing changed the failure. These port-local
+adaptations work with tracing disabled and preserve the compiler ABI.
+
+AWK adaptations remove GNU attributes and locale/wide-character dependencies,
+use a bounded octet regex alphabet over native C16 storage, validate input
+characters, bound buffers, reduce initial record/cache allocations, and retain
+32-bit integer printf values. Files, pipes and `system` use real guest
+processes. Port-local libc supplies `popen`/`pclose` and `raise`. AWK alone links
+binary64 software arithmetic, selected FUZIX math sources, decimal conversion
+and `ripple/float-format.inc`; ordinary utilities keep their smaller integer
+formatter. Math adaptations cover decimal constants, explicit 32-bit masks,
+C-locale number scanning, and 16-bit-safe exponent parsing. The decimal output
+formatter expands the exact binary rational, rounding to nearest with ties to
+even, with a precision cap of 30.
+
+The executable loader now reserves twelve code banks for each of nine live
+images and decodes aligned RXE instruction records from the cached disk block.
+The compiler ABI and data/stack bank limits are unchanged. RVM dynamically grows
+instruction memory up to 256 banks of 65,536 instructions; its bounds test
+covers the highest Ripple userspace reservation. RBF exports reserve 140 code
+banks and 80 data banks, requiring about 547 MiB for the tape alone.

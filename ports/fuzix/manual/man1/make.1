@@ -1,0 +1,31 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH MAKE 1 "FUZIX" "Ripple"
+.SH NAME
+make \- update targets from a Makefile
+.SH SYNOPSIS
+.B make [-deinpqrst] [-f file] [NAME=value] [target ...]
+.SH DESCRIPTION
+Read makefile or Makefile, follow dependencies, compare modification times
+and run recipes through /bin/sh. Recipe lines begin with a tab. Macros use
+$(NAME); command-line definitions take precedence. Environment definitions
+are available, with -e giving them precedence over file definitions.
+.PP
+Automatic macros include $@ (target), $? (newer prerequisites), $<
+(prerequisites) and $* (target prefix). Include files, suffix rules, double
+colon rules, .DEFAULT, .IGNORE and .SILENT are supported. This is historical
+MWC make, with its own syntax and limits; GNU pattern rules, functions,
+the .PHONY marker and parallel -j builds are not implemented.
+.PP
+-r skips default rules/macros; -f selects a file; -n prints recipes without
+running them; -s suppresses recipe echo; -i ignores recipe failures; -t
+touches targets; -q checks whether an update is needed. A recipe may start
+with @ to suppress echo or - to ignore errors. -p prints the parsed rules
+and macros; -d enables debugging.
+.PP
+Default rules and macros are in /usr/lib/makeactions and
+/usr/lib/makemacros. LIBPATH selects colon-separated library directories.
+SRCPATH supplies a source directory. The installed tools do not include
+a C compiler inside the guest; make can run any available commands.
+.SH STATUS
+Zero means success or up-to-date. One reports errors. With -q, two means
+an update is needed. Dependency cycles are reported as errors.

@@ -5,6 +5,8 @@
 #include <printf.h>
 /* One spare code slot lets exec replace an image with every task occupied. */
 #define CODE_SLOTS (PTABSIZE + 1)
+/* Keep the BF code reservation in ports/fuzix/Makefile in sync. */
+#define USER_CODE_BANKS 12
 static uint8_t code_refs[CODE_SLOTS];
 static uint32_t code_size[CODE_SLOTS];
 static int task_code[PTABSIZE];
@@ -23,8 +25,8 @@ int ripple_valid_code(unsigned long p) {
     unsigned base;
     if (slot < 0 || off >= BANK_CELLS)
         return 0;
-    base = 32 + slot * 4;
-    return bank >= base && bank < base + 4 &&
+    base = 32 + slot * USER_CODE_BANKS;
+    return bank >= base && bank < base + USER_CODE_BANKS &&
            (unsigned long)(bank - base) * BANK_CELLS + off < code_size[slot];
 }
 void ripple_code_free(ptptr p) {
@@ -69,7 +71,7 @@ arg_t _execve(void) {
     inoptr ino;
     struct s_argblk *abuf, *ebuf;
     uint32_t entry, nins, data, nr, pos, idx, i, expect;
-    unsigned slot, base, bank, addr, kind, cells[4];
+    unsigned slot, base, bank, addr, kind, chunk_off, cells[4];
     uint8_t **av, **ev;
     int argc;
     ino = n_open_argn();
@@ -93,7 +95,7 @@ arg_t _execve(void) {
     nins = longat(12);
     data = longat(16);
     nr = longat(20);
-    if (!nins || nins > 256000UL || entry >= nins || data > 60000UL ||
+    if (!nins || nins > (unsigned long)USER_CODE_BANKS * BANK_CELLS || entry >= nins || data > 60000UL ||
         nr > nins * 2) {
         udata.u_error = ENOEXEC;
         goto bad;
@@ -127,17 +129,28 @@ arg_t _execve(void) {
         tmpfree(ebuf);
         goto bad;
     }
-    base = 32 + slot * 4;
+    base = 32 + slot * USER_CODE_BANKS;
     /* Once STORC starts, read errors are fatal to this process. */
     stream_reset(ino);
     pos = 24;
     bank = base;
     addr = 0;
+    /* RXE1 instructions are eight octets and start at aligned offset 24.
+     * Decode directly from each cached filesystem block instead of making
+     * eight byte-reader calls per instruction in large images such as AWK. */
+    chunk_off = 24;
+    (void)byteat(pos);
     for (i = 0; i < nins; i++) {
-        cells[0] = byteat(pos);
-        cells[1] = wordat(pos + 2);
-        cells[2] = wordat(pos + 4);
-        cells[3] = wordat(pos + 6);
+        if (chunk_off == BLKSIZE) {
+            chunk_off = 0;
+            (void)byteat(pos);
+        }
+        if (chunk_off + 8 > stream_count) panic("short exec instruction read");
+        cells[0] = stream[chunk_off] & 255;
+        cells[1] = (stream[chunk_off + 2] & 255) | ((stream[chunk_off + 3] & 255) << 8);
+        cells[2] = (stream[chunk_off + 4] & 255) | ((stream[chunk_off + 5] & 255) << 8);
+        cells[3] = (stream[chunk_off + 6] & 255) | ((stream[chunk_off + 7] & 255) << 8);
+        chunk_off += 8;
         imem_store(bank, addr, cells);
         pos += 8;
         if (++addr == 64000) {

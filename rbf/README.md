@@ -591,3 +591,7 @@ BRK is a no-op in the non-debug BF host. These limitations do not change the
 Rust VM or its instruction set. Doom's first title frame has been confirmed by
 a user; full BF gameplay remains outside automated validation. Only the small
 fixtures above are part of validation here.
+
+PCM audio and OPL3 music are unsupported: capabilities 0x0080 and 0x0100 are
+absent and audio commands return status 7. BF Doom compiles out both audio
+modules and their runtime helpers entirely.

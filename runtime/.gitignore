@@ -36,3 +36,8 @@
 /stack_segments.asm
 /stack.asm
 /irq.asm
+
+/vm_audio.asm
+/.audio-config
+
+/vm_music.asm

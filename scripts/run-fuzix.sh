@@ -40,7 +40,7 @@ Normal launches check the disk and back up and repair recoverable shutdown
 metadata before updating. Structural damage stops the update. --disk skips
 updates unless --install-apps is supplied. Set FUZIX_BUILD for another build
 directory. Root disks use the Ripple C16 filesystem ABI.
-RBF uses the same disk and needs about 266 MiB for its BF tape alone. Booting
+RBF uses the same disk and needs about 547 MiB for its BF tape alone. Booting
 can take much longer; --telemetry-lite shows progress on RBF.
 HELP
 }

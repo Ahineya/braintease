@@ -1,3 +1,151 @@
+--- a/Applications/MWC/cmd/expr.y
++++ b/Applications/MWC/cmd/expr.y
+@@ -10,0 +11 @@
++extern void *ripple_absolute_pointer(void *);
+@@ -17,0 +19 @@
++#include <errno.h>
+@@ -27,0 +30 @@
++int yyparse(void);
+@@ -32,0 +36 @@
++long expr_number(char *text);
+@@ -44 +48 @@
+-void regerror(void);
++void expr_regerror(void);
+@@ -119 +123,3 @@
+-				$$ = ltoascii(-atol($2));
++				{ long value = expr_number($2);
++				  if (value == LONG_MIN) yyerror("integer overflow");
++				  $$ = ltoascii(-value); }
+@@ -170,0 +177,9 @@
++long expr_number(char *text)
++{
++    long value;
++    errno = 0;
++    value = strtol(text, NULL, 10);
++    if (errno) yyerror("integer overflow");
++    return value;
++}
++
+@@ -184,2 +199,2 @@
+-	v1 = atol(e1);
+-	v2 = atol(e2);
++	v1 = expr_number(e1);
++	v2 = expr_number(e2);
+@@ -187,0 +203 @@
++		if ((v2 > 0 && v1 > LONG_MAX - v2) || (v2 < 0 && v1 < LONG_MIN - v2)) yyerror("integer overflow");
+@@ -190,0 +207 @@
++		if ((v2 < 0 && v1 > LONG_MAX + v2) || (v2 > 0 && v1 < LONG_MIN + v2)) yyerror("integer overflow");
+@@ -193,0 +211 @@
++		if (v1 && v2 && ((v1 > 0 && v2 > 0 && v1 > LONG_MAX / v2) || (v1 > 0 && v2 < 0 && v2 < LONG_MIN / v1) || (v1 < 0 && v2 > 0 && v1 < LONG_MIN / v2) || (v1 < 0 && v2 < 0 && v1 < LONG_MAX / v2))) yyerror("integer overflow");
+@@ -196,0 +215 @@
++		if (v1 == LONG_MIN && v2 == -1) yyerror("integer overflow");
+@@ -203,0 +223 @@
++		if (v1 == LONG_MIN && v2 == -1) return ltoascii(0);
+@@ -222,2 +242,2 @@
+-		v1 = atol(e1);
+-		v2 = atol(e2);
++		v1 = expr_number(e1);
++		v2 = expr_number(e2);
+@@ -249 +269,4 @@
+-	codebuf = malloc(CODELEN);
++	cbsiz = CODELEN;
++	codebuf = malloc(cbsiz);
++	if (!codebuf) expr_regerror();
++	memset(brlist, 0, sizeof(brlist));
+@@ -255 +278 @@
+-	b = match(a, codebuf);
++	b = match(a, codebuf + (codebuf[0] == CSSOL));
+@@ -265,17 +288,16 @@
+-	if (b == NULL)
+-#if	1
+-		/* If \(\) used, string-valued return */
+-		return brcount == 0 ? "0" : "";
+-#else
+-		return "0";
+-#endif
+-	if (brcount == 0)
+-		return ltoascii((long)(b - a));
+-
+-	/* Remaining case is extraction of fields */
+-	for (a = e1, brp = brlist; (b = brp->b_bp) != NULL; ++brp)
+-		while (b < brp->b_ep)
+-			*a++ = *b++;
+-	*a = '\0';
+-	free (codebuf);
+-	return e1;
++    if (b == NULL) { free(codebuf); return brcount ? "" : "0"; }
++    if (!brcount) {
++        long matched = b - e1;
++        free(codebuf);
++        return ltoascii(matched);
++    }
++    if (!brlist[0].b_bp || !brlist[0].b_ep) { free(codebuf); return ""; }
++    {
++        size_t n = brlist[0].b_ep - brlist[0].b_bp;
++        char *text = malloc(n + 1);
++        if (!text) { output("expr: out of memory\n", 2); exit(3); }
++        memcpy(text, brlist[0].b_bp, n); text[n] = 0;
++        free(codebuf);
++        return text;
++    }
++
+@@ -303,0 +326 @@
++	unsigned long magnitude = n < 0 ? 0UL - (unsigned long)n : (unsigned long)n;
+@@ -311 +333,0 @@
+-		n = -n;
+@@ -314,3 +336,3 @@
+-		*bp++ = (n % 10) + '0';
+-		n /= 10;
+-	} while (n > 0);
++		*bp++ = (magnitude % 10) + '0';
++		magnitude /= 10;
++	} while (magnitude > 0);
+@@ -326 +348 @@
+- * Invoke regerror() on a regular expression syntax error.
++ * Invoke expr_regerror() on a regular expression syntax error.
+@@ -346 +368 @@
+-			regerror();
++			expr_regerror();
+@@ -385 +407 @@
+-					regerror();
++					expr_regerror();
+@@ -395 +417 @@
+-					regerror();
++					expr_regerror();
+@@ -402 +424 @@
+-					regerror();
++					expr_regerror();
+@@ -416 +438 @@
+-				regerror();
++				expr_regerror();
+@@ -422 +444 @@
+-				regerror();
++				expr_regerror();
+@@ -423,0 +446 @@
++				if (blevel >= BRSIZE - 1 || brcount >= BRSIZE - 1) expr_regerror();
+@@ -430 +453 @@
+-					regerror();
++					expr_regerror();
+@@ -437,0 +461 @@
++					if (c == '0' || c - '0' > brcount) expr_regerror();
+@@ -452,0 +477 @@
++	if (blevel) expr_regerror();
+@@ -482,0 +508 @@
++			if (!brlist[n].b_bp || !brlist[n].b_ep) expr_regerror();
+@@ -574,0 +601 @@
++	if (cbsiz > 16000) expr_regerror();
+@@ -577 +604 @@
+-		regerror();
++		expr_regerror();
+@@ -606,0 +634,2 @@
++		case '=':
++			return EQ;
+@@ -639 +668 @@
+- * The common code between yyerror() and regerror() (in regexp.c) is split
++ * The common code between yyerror() and expr_regerror() (in regexp.c) is split
+@@ -648 +677 @@
+-void regerror(void)
++void expr_regerror(void)
 --- a/Applications/MWC/cmd/find.y
 +++ b/Applications/MWC/cmd/find.y
 @@ -16,0 +17,2 @@
@@ -337,6 +485,187 @@
 +		unsigned long n_val;
 @@ -13,0 +14 @@
 +    int n_chars;
+--- a/Applications/MWC/cmd/m4.c
++++ b/Applications/MWC/cmd/m4.c
+@@ -7 +7 @@
+-#define	TMPFILE	"/tmp/m4%dxxxxxx"
++#define	TMPFILE	"/tmp/m4%dXXXXXX"
+@@ -23 +23 @@
+-	int s_hash;		/* raw hash value (sum of chars in body) */
++	unsigned s_hash;		/* raw hash value (sum of chars in body) */
+@@ -73,2 +73 @@
+-} outfile[10] = { {
+-NULL, stdout}};
++} outfile[10];
+@@ -115 +114 @@
+-FILE *offp = stdout;		/* current output file pointer */
++FILE *offp;		/* current output file pointer */
+@@ -117,0 +117 @@
++int process_depth, input_depth;
+@@ -139,2 +138,0 @@
+-		while (lstdchr != EOF && lstdchr != '\n')
+-			lstdchr = getchar();
+@@ -152,0 +151 @@
++	return NULL;
+@@ -204 +203 @@
+-	a->s_hash += c;
++	a->s_hash = (a->s_hash + (unsigned)c) % HASHSZ;
+@@ -209,0 +209 @@
++	if (++input_depth > 128) errorp(1, "input nesting exceeds 128");
+@@ -285,0 +286 @@
++	input_depth--;
+@@ -357,0 +359 @@
++ again:
+@@ -360 +362 @@
+-	if ((ftemp = fstkptr)->f_flag) {
++	if ((ftemp = fstkptr) != NULL && ftemp->f_flag) {
+@@ -375 +377 @@
+-		else if (c == '\n') {
++		else if (c == '\n' && fstkptr) {
+@@ -389,2 +391,4 @@
+-	if (c == '\0')
+-		return (popinp()? nxch() : c);
++	if (c == '\0') {
++		if (popinp()) goto again;
++		return c;
++	}
+@@ -395 +399 @@
+-	return (nxch());
++	goto again;
+@@ -418,0 +423 @@
++	if (++process_depth > 64) errorp(1, "macro nesting exceeds 64");
+@@ -434 +439 @@
+-			return (c);
++			{ process_depth--; return (c); }
+@@ -450,2 +455,2 @@
+-				istkptr->ifb.i_cbuf = c;
+-				if (c == '\n'
++				if (istkptr) istkptr->ifb.i_cbuf = c;
++				if (istkptr && c == '\n'
+@@ -483 +488 @@
+-	if (pct)
++	if (pct || qct)
+@@ -484,0 +490 @@
++	process_depth--;
+@@ -559 +565 @@
+-			outfile[ofnum].name = fn = alloc(15);
++			outfile[ofnum].name = fn = alloc(32);
+@@ -564 +570 @@
+-				fdopen(fd, "w")) == NULL)
++				fdopen(fd, "w+")) == NULL)
+@@ -565,0 +572 @@
++			unlink(fn);
+@@ -700,0 +708 @@
++			if (!val2) errorp(1, "eval: division by zero");
+@@ -703,0 +712 @@
++			if (!val2) errorp(1, "eval: division by zero");
+@@ -959,3 +968,2 @@
+-		fclose(fp);
+-		if ((fp = fopen(outfile[n].name, "r")) == NULL)
+-			errorp(1, "cannot open %s", outfile[n].name);
++		if (fflush(fp) || fseek(fp, 0, SEEK_SET))
++			errorp(1, "cannot rewind diversion");
+@@ -988,0 +997,2 @@
++	int failed = 0;
++	outfile[0].fp = offp = stdout;
+@@ -1018 +1028 @@
+-				errorp(0, "cannot open %s", *argv);
++				{ errorp(0, "cannot open %s", *argv); failed = 1; }
+@@ -1025,2 +1035,2 @@
+-	exit(0);
+-}
++	return failed || fflush(stdout) || ferror(stdout) ? 1 : 0;
++}
+--- a/Applications/MWC/cmd/make.c
++++ b/Applications/MWC/cmd/make.c
+@@ -80 +80,5 @@
+-	verrx(ERROR, s, args);
++	fputs("make: ", stderr);
++	vfprintf(stderr, s, args);
++	fputc('\n', stderr);
++	va_end(args);
++	exit(ERROR);
+@@ -101,0 +106 @@
++	return NULL;
+@@ -387,0 +393,3 @@
++	FILE *saved_fd = fd;
++	int saved_last = lastc, saved_line = lineno, saved_count = nbackup;
++	unsigned char saved_backup[NBACKUP];
+@@ -391,0 +400,2 @@
++	memcpy(saved_backup, backup, nbackup);
++	nbackup = 0;
+@@ -415 +425,3 @@
+-			fclose(fd);
++			if (fd != stdin) fclose(fd);
++			fd = saved_fd; lastc = saved_last; lineno = saved_line;
++			nbackup = saved_count; memcpy(backup, saved_backup, nbackup);
+@@ -503,0 +516 @@
++	pv = NULL;
+@@ -513 +526,12 @@
+-	cp = path(p, file, R_OK);
++	cp = NULL;
++	while (*p) {
++		char part[256];
++		const char *end = strchr(p, ':');
++		size_t len = end ? (size_t)(end - p) : strlen(p);
++		if (len && len < sizeof(part)) {
++			memcpy(part, p, len); part[len] = 0;
++			if ((cp = path(part, file, R_OK)) != NULL) break;
++		}
++		if (!end) break;
++		p = end + 1;
++	}
+@@ -521,19 +545,9 @@
+-	register char *vp, *cp;
+-	va_list ap;
+-	va_start(ap, file);
+-
+-	cp = NULL;
+-	for (vp = va_arg(ap, char *); vp != NULL;)
+-		if (access(vp, R_OK) >= 0) {
+-			cp = vp;
+-			break;
+-		}
+-	va_end(ap);
+-	if ( ! cp) {
+-		va_start(ap, file);
+-		for (vp = va_arg(ap, char *); vp != NULL; vp ++)
+-			if ((cp = path(srcpath, vp, R_OK)) != NULL)
+-				break;
+-		va_end(ap);
+-	}
+-	input(cp ? cp : file);
++    const char *candidate, *found = NULL;
++    va_list ap;
++    va_start(ap, file);
++    while ((candidate = va_arg(ap, char *)) != NULL) {
++        if (access(candidate, R_OK) == 0) { found = candidate; break; }
++        if (srcpath && *srcpath && (found = path(srcpath, candidate, R_OK)) != NULL) break;
++    }
++    va_end(ap);
++    input(found ? found : file);
+@@ -803,0 +818 @@
++	if (s->type==4) doerr("dependency cycle at %s", name);
+@@ -814 +829 @@
+-	s->type=T_DONE;
++	s->type=4;
+@@ -851,0 +867 @@
++	s->type=T_DONE;
+@@ -996 +1012 @@
+-		cmd = mark + 1;
++		cmd = mark ? mark + 1 : NULL;
+@@ -1189 +1205 @@
+-		inpath("makefile", "Makefile", NULL);
++		inpath("makefile", "makefile", "Makefile", (char *)NULL);
+--- a/Applications/MWC/cmd/make.h
++++ b/Applications/MWC/cmd/make.h
+@@ -17 +17,2 @@
+-#include <err.h>
++#include <utime.h>
++#include <sys/wait.h>
+@@ -19 +20 @@
+-#define MAKEPATH	"/opt/fcc/lib:/lib:/usr/lib"
++#define MAKEPATH	"/usr/lib"
 --- a/Applications/TCL/picol.c
 +++ b/Applications/TCL/picol.c
 @@ -30,0 +31,5 @@
@@ -852,6 +1181,39 @@
 +            if (cp > LINELN - 28) too_long();
 @@ -298,0 +307 @@
 +            if (cp >= LINELN - 20) too_long();
+--- a/Applications/V7/cmd/dc.c
++++ b/Applications/V7/cmd/dc.c
+@@ -1226,10 +1226,2 @@
+-
+-	signal(SIGINT, onintr);
+-	while (readptr != &readstk[0]) {
+-		if (*readptr != 0) {
+-			release(*readptr);
+-		}
+-		readptr--;
+-	}
+-	curfile = stdin;
+-	commnds();
++	(void)sig;
++	exit(130);
+@@ -1438 +1430 @@
+-	if (readptr != &readptr[0]) {
++	if (readptr != &readstk[0]) {
+@@ -1449,0 +1442 @@
++	return EOF;
+@@ -1903 +1896,2 @@
+-			execl("/bin/sh", "sh", "-c", line, 0);
++			char *args[] = {"sh", "-c", (char *)line, NULL};
++			execv("/bin/sh", args);
+@@ -2175 +2169 @@
+-					if (((int) p->beg & 01) != 0) {
++					if (((unsigned long) p->beg & 01) != 0) {
+@@ -2191 +2185 @@
+-							if (((int) q->
++							if (((unsigned long) q->
+@@ -2222 +2216 @@
+-	if ((int) p->beg & 01) {
++	if ((unsigned long) p->beg & 01) {
 --- a/Applications/V7/cmd/diff.c
 +++ b/Applications/V7/cmd/diff.c
 @@ -75,0 +76 @@
@@ -5809,6 +6171,22 @@
 @@ -125 +125 @@
 -	if (!valaddr_w(uaddr, 4, 4))
 +	if (!valaddr_w(uaddr, sizeof(uint32_t), sizeof(uint32_t)))
+--- a/Library/libs/exp.c
++++ b/Library/libs/exp.c
+@@ -99 +99 @@
+-			x = (double)(0x1p1023 * x);
++			x = (double)(8.98846567431158e+307 * x);
+@@ -104 +104 @@
+-			x = (double)(0x1p-1000 * 0x1p-1000);
++			x = (double)(9.332636185032189e-302 * 9.332636185032189e-302);
+@@ -125 +125 @@
+-		dummy = 0x1p1023 + x;	/* ensure we evaluate and maybe fault */
++		dummy = 8.98846567431158e+307 + x;	/* ensure we evaluate and maybe fault */
+--- a/Library/libs/floor.c
++++ b/Library/libs/floor.c
+@@ -71 +71 @@
+-					j = i1+(1<<(52-j0));
++					j = i1+(1UL<<(52-j0));
 --- a/Library/libs/qsort.c
 +++ b/Library/libs/qsort.c
 @@ -149 +149,2 @@
@@ -5818,6 +6196,182 @@
 @@ -151 +152 @@
 -   else if (size == 4)
 +   else if (size == sizeof(long))
+--- a/Library/libs/scalbn.c
++++ b/Library/libs/scalbn.c
+@@ -11 +11 @@
+-		x *= 0x1p1023;
++		x *= 8.98846567431158e+307;
+@@ -14 +14 @@
+-			x *= 0x1p1023;
++			x *= 8.98846567431158e+307;
+@@ -17 +17 @@
+-				x = (double)(x * 0x1p1023);
++				x = (double)(x * 8.98846567431158e+307);
+@@ -22 +22 @@
+-		x *= 0x1p-1022;
++		x *= 2.2250738585072014e-308;
+@@ -25 +25 @@
+-			x *= 0x1p-1022;
++			x *= 2.2250738585072014e-308;
+@@ -28 +28 @@
+-				x =(double)(x * 0x1p-1022);
++				x =(double)(x * 2.2250738585072014e-308);
+--- a/Library/libs/sqrt.c
++++ b/Library/libs/sqrt.c
+@@ -88 +88 @@
+-	int32_t sign = (int)0x80000000;
++	int32_t sign = (int32_t)0x80000000;
+--- a/Library/libs/strtod.c
++++ b/Library/libs/strtod.c
+@@ -109,79 +109,66 @@
+-double __strtod(const char *nptr, char **endptr, unsigned *err)
+-{
+-	double working;
+-	unsigned sign;
+-	signed exponent = 0;
+-	unsigned scale = 10.0;
+-
+-	/* An initial possibly empty sequence of white-space characters */
+-	while(isspace(*nptr))
+-		nptr++;
+-	/* An optional sign */
+-	nptr = get_sign(nptr, &sign);
+-
+-	/* One of:  NAN followed by an n-char-sequence */
+-	if (*nptr == 'N' || *nptr == 'n') {
+-		/* NaN check */
+-		if (strncasecmp(nptr, "NAN", 3) == 0) {
+-			working = 0.0/0.0;
+-			nptr += 3;
+-			while(isalnum(*nptr))
+-				nptr++;
+-			goto out;
+-		}
+-	}
+-	/* INF or INFINITY (again case independent) */
+-	if (*nptr == 'I' || *nptr == 'i') {
+-		/* INFinity check */
+-		if (strncasecmp(nptr, "INF", 3) == 0) {
+-			working = 1.0/0.0;
+-			nptr += 3;
+-			if (strncasecmp(nptr, "INITY", 5) == 0)
+-				nptr += 5;
+-			goto out;
+-		}
+-	}
+-	/* Now check for digits */
+-	if (!isdigit(*nptr)) {
+-		*err = 1;
+-		return 0.0;
+-	}
+-	/* TODO: do we also need to allow octal integer in this case ? */
+-	if (*nptr == '0' && (nptr[1] == 'x' || nptr[1] == 'X')) {
+-		nptr += 2;
+-		working = hexnumber(&nptr, err);
+-		if (*nptr == 'P' || *nptr == 'p') {
+-			nptr++;
+-			exponent = inumber(&nptr, err);
+-			scale = 2.0;
+-		} else
+-			*err = 1;
+-	} else {
+-		/* Standard form */
+-		working = number(&nptr);
+-		if (*nptr == '.') {
+-			nptr++;
+-			working += fraction(&nptr);
+-		}
+-		/* Now worry about exponents */
+-		if (*nptr == 'E' || *nptr == 'e') {
+-			nptr++;
+-			exponent = inumber(&nptr, err);
+-		}
+-	}
+-	if (sign)
+-		working = -working;
+-	/* Normalise it all. Once our base FP routines do exceptions
+-	   and overflows then all will work as expected on errors */
+-	while(exponent < 0) {
+-		working /= scale;
+-		exponent++;
+-	}
+-	while(exponent > 0) {
+-		working *= scale;
+-		exponent--;
+-	}
+-out:
+-	if (endptr)
+-		*endptr = (char *)nptr;
+-	return working;
++/* Ripple: C-locale decimal conversion, including .5 and exponents past 255.
++ * Retain 17 significant digits so long mantissas cannot overflow before scaling. */
++double __strtod(const char *text, char **endptr, unsigned *err)
++{
++    const char *p = text, *exponent_start;
++    double value = 0.0, factor;
++    int negative, digits = 0, kept = 0, adjust = 0, power = 0, exponent_negative;
++    unsigned magnitude;
++    while (isspace(*p)) p++;
++    negative = *p == '-';
++    if (*p == '+' || *p == '-') p++;
++    if (!strncasecmp(p, "inf", 3)) {
++        p += 3;
++        if (!strncasecmp(p, "inity", 5)) p += 5;
++        value = 1.0 / 0.0;
++        goto done;
++    }
++    if (!strncasecmp(p, "nan", 3)) { p += 3; value = 0.0 / 0.0; goto done; }
++    while (isdigit(*p)) {
++        digits++;
++        if (kept < 17) {
++            value = value * 10.0 + (*p - '0');
++            if (value != 0.0 || kept) kept++;
++        } else adjust++;
++        p++;
++    }
++    if (*p == '.') {
++        p++;
++        while (isdigit(*p)) {
++            digits++;
++            if (kept < 17) {
++                value = value * 10.0 + (*p - '0');
++                adjust--;
++                if (value != 0.0 || kept) kept++;
++            }
++            p++;
++        }
++    }
++    if (!digits) { if (endptr) *endptr = (char *)text; return 0.0; }
++    if (*p == 'e' || *p == 'E') {
++        exponent_start = p++;
++        exponent_negative = *p == '-';
++        if (*p == '+' || *p == '-') p++;
++        if (!isdigit(*p)) p = exponent_start;
++        else {
++            while (isdigit(*p)) {
++                if (power < 5000) power = power >= 500 ? 5000 : power * 10 + *p - '0';
++                if (power > 5000) power = 5000;
++                p++;
++            }
++            adjust += exponent_negative ? -power : power;
++        }
++    }
++    magnitude = adjust < 0 ? -adjust : adjust;
++    factor = 10.0;
++    if (value != 0.0) {
++        while (magnitude) {
++            if (magnitude & 1) value = adjust < 0 ? value / factor : value * factor;
++            magnitude >>= 1;
++            if (magnitude) factor *= factor;
++        }
++        if (!isfinite(value) || value == 0.0) *err = 1;
++    }
++done:
++    if (endptr) *endptr = (char *)p;
++    return negative ? -value : value;
+@@ -204 +191 @@
+-	unsigned err;
++	unsigned err = 0;
 --- a/Library/libs/sysconf.c
 +++ b/Library/libs/sysconf.c
 @@ -10,3 +10,3 @@

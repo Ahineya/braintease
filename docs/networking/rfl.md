@@ -1,195 +1,243 @@
-# High-level RFL networking: design direction
+# High-level RFL networking and general-purpose async
 
-**Status: planned exploration after the C HTTP client/server milestones.** No
-RFL networking module, future contract, executor or `async`/`await` syntax is
-introduced by this document. The [networking roadmap](roadmap.md) records the
-implementation order; the existing [traits proposal](../../rfl/traits.md) remains
-a language draft.
+**Status: polling foundation implemented; general-purpose async remains in progress.**
+Static traits and associated types are implemented. `std/task`, `std/future`, and
+`std/executor` provide a first executable polling layer. There is no async syntax,
+automatic cancellation on arbitrary scope exit, network reactor, or RFL socket
+wrapper yet. The C DHCP/DNS/TCP/HTTP milestones are already implemented; see the
+[networking roadmap](roadmap.md).
 
-The goal is pleasant RFL code for DNS, UDP, TCP and HTTP while reusing the guest
-C protocol stack in `libruntime.par`. Native, RVM and RBF should observe the same
-network behavior. Keep raw Ethernet on DEVICE_* and ordinary VM instructions;
-host sockets must not replace guest TCP/IP for the native target.
+**Saved checkpoint: 16 October 2026.** Work is parked at the user's request to
+switch tasks. See the [roadmap checkpoint](roadmap.md#saved-checkpoint--16-october-2026)
+for implemented files, recorded validation and the exact resume point. The next
+language milestone is general place borrowing and resource ownership followed
+by automatic deterministic cleanup.
 
-## Recommended order
+The destination is pleasant, general-purpose async RFL, including networking,
+timers and other event sources. Explicit cancellation is an implementation-stage
+API, not a requirement that applications manually clean up every abandoned await.
 
-| Step | Deliverable | Dependency |
-|------|-------------|------------|
-| Concrete bridge | Typed addresses, errors, context/connection ownership and explicit polling operations over the C library | Working C APIs and a reviewed RFL/C boundary |
-| Traits | Implement and validate the existing static trait system; use it for shared I/O interfaces | Generic checking, coherence, module resolution and ownership foundations |
-| Associated output types | Extend the language design so an awaitable can expose its result type through a trait | Working static traits; projection/constraint rules and diagnostics |
-| Polling I/O design | A consistent contract for pending work, partial reads/writes, EOF, deadlines and cancellation | Concrete operations; traits for generic stream consumers |
-| Cooperative executor | Bounded tasks, explicit network/timer progress and a defined wakeup policy | Polling and resource-lifetime contracts |
-| Async language support | State-machine lowering and an agreed awaitable result-type model | Executor plus suspension/cleanup semantics |
-| High-level API | RFL DNS/ping, HTTP client and hardcoded-HTML HTTP server examples | The preceding layers and the working C HTTP stack |
+## Implemented library contract
 
-The recommended public abstraction order is **static traits → associated output
-types → polling I/O → executor → async/await → high-level networking**. Concrete C bindings can be prototyped
-without waiting for traits, and the C networking milestones do not depend on
-this language work. Do not add async syntax merely to make the first wrapper
-call convenient.
+```rust
+export type Poll<T> = Pending | Ready(T);
+export trait Future {
+    type Output;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Output>;
+    fn cancel(&mut self);
+}
+```
 
-## Why traits first
+`Output` has no implicit Printable, error, or scalar bound. A future may return
+any supported owned value, commonly `Result<T, E>`. Operation failures belong in
+that output. Executor stop, clock errors and scheduling-budget exhaustion belong
+in `RunError`; they do not pretend to be the future's arbitrary output type.
 
-The draft uses static dispatch and monomorphization: trait methods become
-ordinary calls, with no required vtable, trait object or ISA change. This is a
-good fit for a small VM and the BF target. Generic I/O consumers could work
-with a TCP stream, memory buffer or deterministic test stream through common
-capabilities, rather than embedding TCP knowledge in every parser or formatter.
+Construction is lazy: irreversible work starts on first poll. A poll performs
+bounded work, never blocks, and returns Pending only after arranging a future
+wake (I/O, a deadline, or a cooperative self-wake). Spurious wakes and polls while
+pending are allowed. Ready delivers the result once. Polling a completed or
+cancelled operation is a protocol error. Custom implementations must enforce
+this contract. `poll_fn` supplies a checked callback wrapper that reports an
+explicit runtime error on repeated terminal polls. Specify `poll_fn<T>` explicitly
+when callback output inference needs a type; `ready(value)` infers from its input.
 
-Implement the trait registry, implementation validation, explicit generic
-bounds, module visibility, coherence and qualified method calls correctly.
-Generic method selection must preserve the meaning of declared bounds when
-specialized; it must not change because a concrete type has an inherent method
-with the same name. The first complete milestone is [Printable-based library printing](../rfl/traits-printing.md):
-replace compiler-selected print/println behavior with generic library functions,
-validate user-defined and nested printable types, and prove diagnostics and
-module resolution before networking relies on traits.
+Cancellation is synchronous, bounded and idempotent, including before the first
+poll. It must unregister operation-specific waits and release external state;
+it cannot retract already transmitted bytes. It takes no Context: future scope
+cleanup must not require a borrowed executor or a live mutable polling frame.
+The executor revokes task wakeups before invoking cancellation. Completed futures
+are not cancelled, and delivered outputs remain the caller's responsibility.
 
-The names `Read`, `Write` and `Flush` are useful design vocabulary, not committed
-standard-library declarations. Start with a small fixed I/O error/progress
-vocabulary and shared bounded helpers. Review code size and specialization
-cost, especially for BF, instead of assuming static dispatch makes every
-abstraction free.
+`ready(value)`, `yield_now()` and `sleep(milliseconds)` are supplied. Sleep starts
+its duration at first poll and rejects intervals above 2^31-1 milliseconds.
+CallbackFuture copies alias one operation's terminal state, rather than start
+independent operations. Ordinary captured values remain retained while callback
+owners remain alive, including after cancellation; external cleanup belongs in
+the explicit cancellation callback. This is a prototype representation, not
+compiler-generated async-frame storage or a user-defined destruction mechanism.
 
-## What the current trait draft does not settle
+## Wakeup and timer registry
 
-[The draft's exclusions](../../rfl/traits.md#18-explicitly-excluded-features)
-defer **associated types and generic trait parameters**, as well as trait
-objects, default methods and supertraits. A generic awaitable that can return
-arbitrary result types therefore needs an additional design decision. Do not
-present a trait with an associated `Output` type as already supported by v0.2.
+`task_set(capacity, now)` creates 1..1024 bounded slots. Allocation returns an
+initially runnable Waker or an explicit capacity error. Wakers carry a slot's
+shared dispatcher and generation; copies alias the same wake capability.
 
-The recommended extension is **associated types**: each future implementation
-chooses one output type, and generic consumers can name that output through the
-trait. Implement the draft's static trait foundation first, then specify type
-members, implementations, projections and any output-equality constraints the
-async API needs. Test these across generic code and modules, with missing or
-incompatible definitions reported at compile time. Syntax and constraints need
-an explicit amendment; they are not already part of draft 0.2.
+- Wake sets a ready bit. Multiple wakes coalesce.
+- The executor takes that bit before polling. A wake during poll therefore
+  survives for another turn; waking never recursively calls poll.
+- Retiring a slot clears readiness and timers. Old generations cannot wake,
+  retire or arm a reused slot. Exhausted generations retire permanently.
+- Each slot tracks its earliest requested deadline. Multiple registrations use
+  the earliest; extra timer wakes are permitted. Retiring the task removes its
+  timer, including on cancellation. Child operations sharing one task may cause
+  harmless spurious timer wakes after one child finishes.
+- Clock readings wrap at 32 bits. Consecutive readings must advance by at most
+  2^31-1 milliseconds. Backwards/ambiguous jumps are errors. All deadlines must
+  lie within the half-range comparison window.
 
-**Generic trait parameters** are useful for capabilities parameterized by an
-input type, such as conversion or request-handler interfaces. They deserve a
-separate extension, but async does not by itself require both parameters and
-associated types. Require a concrete library use case rather than making every
-trait feature a prerequisite for the first future. If introduced, implementation
-identity and overlap checks must include trait arguments, not just the trait
-name and receiver type.
+TaskSet copies share the registry. The implementation uses existing closures
+with shared scalar captures, one allocation group per slot. Wake does constant
+work; allocation, ticking and finding the next deadline scan the bounded slots.
+No reference to a movable RFL local is retained. No public trait objects, raw
+pointers, new instruction, interrupt or OS thread are needed. Representation and
+specialization costs must be measured before scaling the scheduler.
 
-A parameterized future trait is an alternative output model, not a second
-mandatory layer on top of associated output types. Prefer one clear contract
-initially. The fixed-result polling I/O prototype can still precede these
-extensions; general futures must not silently rely on absent language features.
-Generic associated types, dynamic trait objects and advanced lifetime bounds
-are not automatically included by adding ordinary associated types.
+Waker `take_ready` and `retire` are executor-level operations; futures normally
+use `wake`, `wake_at` and `is_live`. Low-level callers own the obligation to retire
+allocations. TaskSet has no automatic resource finalizer yet. Wakers retain
+slot state safely even if the TaskSet value is released; that alone does not
+implicitly retire the slot.
 
-Neither extension supplies suspended-borrow safety, stable task storage or
-cancellation cleanup. Those remain separate semantic requirements for async.
-The async proposal should make those guarantees explicit before syntax is
-implemented. This networking plan records the direction without rewriting
-`traits.md` or changing the compiler during concurrent work.
+## Executor and reactor
 
-Static traits also do not automatically provide storage for heterogeneous tasks.
-An executor needs an explicit representation, such as a bounded closed set of
-task variants or internal poll/cleanup handles with well-defined ownership.
-Document its dispatch and allocation costs; do not make public trait objects
-an accidental prerequisite of basic async networking.
+The executor schedules futures. A Reactor advances external work and supplies
+a wrapping monotonic millisecond clock:
 
-## Concrete bridge and ownership
+```rust
+export trait Reactor {
+    fn now(&self) -> u32;
+    fn turn(&mut self, wait: Option<u32>) -> bool;
+}
+```
 
-Wrap the existing C functions and handles behind RFL modules. Keep packet
-serialization, ARP, DHCP, TCP state and retransmission in the shared stack.
-Use RFL types for IPv4 addresses, endpoints, validated octet buffers, errors,
-connections and listeners. Managed RFL collections are not C ABI buffers;
-define their marshalling and ownership explicitly. One wire octet still maps
-to one compatibility cell, including for native code.
+Each executor turn checks its optional turn budget, calls the reactor, validates
+time, then polls runnable roots. Some(0) means do not sleep; Some(n) is an upper
+bound on idle waiting, not an instruction to ignore incoming events for n ms.
+None means no task timer is registered, not permission to stop servicing I/O or
+protocol maintenance. A reactor must still observe its own deadlines and stop
+requests. Returning false requests orderly cancellation.
 
-Separate a borrowed view of data valid during a poll/callback from an owned
-buffer that survives suspension. In particular, the current C UDP callback
-payload is valid only during that callback; an async operation cannot retain
-its pointer after returning. Decide where data is copied or owned, and how
-receive-buffer reuse interacts with a pending read.
+`block_on` drives one borrowed future to completion or reactor stop.
+`block_on_with_budget` additionally limits turns, including idle turns.
+`join_with_budget` schedules two roots with unrelated output types, alternating
+poll order. Each root runs at most once per turn; completed roots are retired
+immediately and are not polled again. A pending root cannot starve its peer or
+the reactor. Every normal error path retires all slots and cancels unfinished
+roots exactly once through the future contract. A zero budget cancels before
+polling. Fatal process faults are not exception unwinding.
 
-Keep C-facing calls synchronous at their ABI boundary. An RFL operation may
-remain pending between calls; that does not require keeping a C call frame
-suspended or crossing the C ABI with a trait/future object. Audit callback
-re-entry into RFL's existing driver before using it; polling through a private
-bridge is a simpler initial integration path.
+The supplied tests/examples use deterministic reactors. No production clock,
+network service, sleeping or event-aware wait is silently installed. A future
+that runs forever inside poll cannot be preempted by a turn budget.
+General heterogeneous spawn storage, join handles, nesting/re-entry policy and
+an event-aware runtime idle hook remain separate implementation work.
 
-Define who owns a context, UDP binding, TCP connection and listener, and when
-each is closed or cancelled. Do not assume ordinary struct destruction already
-provides user-defined resource cleanup. Review actual reference/place, borrow
-and cleanup support against the
-[implementation audit](../../rfl/IMPLEMENTATION.md#remaining-specification-gaps)
-when language work starts; the audit records gaps, not future guarantees.
+## Required path to pleasant async
 
-## Polling before syntax
+These are required milestones, not optional polish after syntax:
 
-A pending result means the operation needs further network progress, timer
-progress or capacity; it is neither EOF nor an error. Partial reads and writes
-are normal. A library must expose completion, pending, EOF, cancellation,
-timeout and failure distinctly, and document whether a write completion means
-buffer ownership transferred, bytes entered a transport buffer, or bytes were
-acknowledged by the peer. Avoid one ambiguous success result for all three.
+1. **General places and ownership.** Support borrowing fields, indexes and child
+   future state directly. Specify which resource/future values have identity,
+   which can be copied, and which require an explicit move or clone. Implicitly
+   copying an async state machine must not duplicate a socket operation, result
+   delivery or cleanup obligation. Existing ordinary value/COW semantics must
+   remain intact. The callback prototype's shared terminal flag is not a complete
+   language-level ownership model.
+2. **Automatic deterministic cleanup.** Introduce an owned-resource/future
+   cleanup mechanism with precisely specified copy/clone behavior. It must cover
+   scope exit, assignment/replacement, return, `?`, break/continue, container
+   destruction and cancelled parent frames. Release children and captured owners
+   exactly once, including never-polled futures and partial initialization.
+   A plain Drop method on freely copied structs would double-close resources;
+   settle ownership before adding such a hook. Cleanup is bounded and cannot
+   await; graceful async close is a separate explicit operation.
+3. **Composition and task ownership.** Add join/race/timeout with owned child
+   states, cleanup of losing branches, deterministic tie handling, and no
+   accidental copies of pending children. A bounded task registry owns each
+   spawned frame; handles carry generation-checked identity. Structured task
+   scopes cancel and reclaim children on exit. Detachment must be explicit.
+   Completed resource-valued outputs discarded by a race/error need normal
+   automatic resource cleanup too.
+4. **Async lowering.** Lower lazy async functions to owned state machines in
+   shared IR. Keep generated locals/children alive only for required states;
+   transfer results and emit state-specific cleanup on every exit. Reusing RFL's
+   resumable call frames is not by itself a lifetime or cancellation proof.
+   Initially reject borrows crossing suspension unless their ownership/stability
+   is proven; extend to safe borrowed operations deliberately. Diagnose these at
+   source locations instead of accepting unsafe hidden pointers.
+5. **Usable library integration.** Supply clock/idle/network reactors and typed
+   I/O, then DNS/TCP/HTTP applications. General formatting/writer traits, spawn
+   ergonomics, selection and async syntax must share the same progress and
+   cancellation semantics established by the polling tests.
 
-Define these contracts first for concrete operations and test streams. Then
-run multiple operations with a small cooperative executor that pumps the shared
-NIC and protocol timers. A pending network request must not block every task.
-The current mailbox provides frame polling, not a ready-made future wakeup API;
-design how queue changes, timer deadlines and available send space make tasks
-runnable. A bounded polling prototype is reasonable, but measure idle work and
-avoid an unbounded busy loop on BF.
+Associated equality constraints and generic trait parameters can follow concrete
+composition/I/O needs. Neither public dynamic dispatch nor a complete Rust-like
+trait/lifetime system is an implicit prerequisite for the first executor.
 
-A single-thread executor is enough for the first milestone. It needs no host
-thread per connection, OS scheduler, rOS daemon or new instruction. Preserve
-mailbox transaction serialization, fairness between ready tasks and explicit
-time semantics. Live tests must still respect real remote deadlines.
+## Network bridge and ownership
 
-## Async/await design questions
+Keep Ethernet on DEVICE_* and protocol state machines in the existing guest C
+stack in libruntime.par, including on native. Host sockets must not substitute
+for guest TCP/IP. One octet remains one compatibility cell.
 
-Treat async as resumable state machines lowered to ordinary shared IR. RFL
-already has resumable activation machinery, but that is not proof that escaping
-tasks, suspended borrows or cancellation are safe. Resolve at least:
+A network reactor owns stable C storage for contexts, DHCP, DNS, connections,
+listeners and TIME_WAIT records. RFL wrappers carry checked handles; no active
+C object may move with an RFL struct or COW buffer. An owned operation/stream
+handle must keep its registry owner alive, so cancellation remains valid after
+an executor stops. Reactor shutdown stops new work and cancels outstanding work;
+storage is freed only after dependent owners are released. A generation check
+alone is not permission to dereference a freed registry. C-facing calls are
+synchronous and must not keep a suspended C frame or recursively re-enter RFL polling.
+Callbacks record events for later task scheduling. UDP callback payloads must be
+copied before the callback returns.
 
-- Is an operation started when constructed, first polled or explicitly spawned?
-  What happens to an operation that is never awaited?
-- Which locals and owned values survive a suspension? How are reference counts,
-  resource owners and cleanup represented without duplicated destruction?
-- Can references or mutable borrows cross an await? How is concurrent mutation
-  prevented, and are suspended objects movable? Prefer a deliberately restricted
-  first version over an unimplemented lifetime promise.
-- How do cancellation, timeout, error propagation and early return release UDP
-  ports, TCP state and buffers exactly once? Define behavior during partial I/O
-  and normal close versus forced cancellation.
-- Who advances the NIC and timers, what wakes pending tasks, and how are task
-  count, memory, scheduling fairness and idle CPU work bounded?
-- Which awaitable/output contract is compatible with the chosen trait features,
-  and how does it compose across modules and generic functions?
+Drive net_dhcp_poll in place of net_poll for an active DHCP client, including
+while bound, then DNS/TCP/listener polling. Advance timers without traffic and
+use bounded packet work per turn. Reactor maintenance deadlines participate in
+idle decisions alongside task timers. Wakers do not create a NIC wake mechanism:
+begin with bounded periodic device checks, then measure an optional runtime wait
+hook without changing the ISA.
 
-Specify these in a dedicated language/runtime design before finalizing syntax.
-No particular `.await`, spawning, selection or error-propagation spelling in
-another language is adopted implicitly here. Blocking convenience entry points
-can drive the same polling engine for simple applications; async is not required
-to support the first RFL DNS or HTTP call.
+The first I/O futures own their buffers across pending polls. Later borrowed
+reads/writes require the suspension lifetime work above. Define results as:
 
-## Acceptance targets
+| Operation | Completion |
+|---|---|
+| Connect | Handshake succeeded, returning an owned stream |
+| Read | Owned data, explicit EOF, or error; pending is distinct |
+| Write | Possibly partial prefix copied into guest TCP TX storage |
+| Flush | Previously accepted prefix acknowledged by TCP, not necessarily processed by the remote application |
+| Shutdown | Accepted writes drained and local FIN sent; reading can remain available |
+| Close | Documented graceful completion/resource release, retaining TIME_WAIT protection |
 
-- Concrete RFL wrappers reproduce the guest DNS/ping demonstration and UDP
-  binary/empty payload behavior without a second protocol implementation.
-- Trait-based I/O consumers behave identically with a memory/test stream and a
-  TCP stream; missing bounds, overlapping implementations and ambiguous calls
-  produce useful compile-time errors.
-- Partial I/O, delayed readiness, peer EOF, queue pressure, timeouts, cancellation
-  and repeated resource reuse are tested before adding syntax sugar.
-- An executor can keep one request pending while another completes, advance
-  timers with no incoming packets, and reclaim cancelled task/connection state
-  with bounded memory and idle work.
-- RFL runs an HTTP client and serves the same hardcoded HTML page to a normal
-  host browser or `curl`, using the shared C TCP/IP stack.
-- Native and RVM results are recorded separately. BF compatibility is retained
-  with ordinary instructions and small explicit smoke tests where practical.
+Cancellation cannot roll back a partial write. Forced abort is distinct from
+graceful shutdown and TIME_WAIT retention. Stale handles and conflicting owners
+must fail explicitly rather than affect a reused connection slot. Configuration
+and link changes retain the C stack's existing invalidation behavior.
 
-This work follows the C stack milestones, with traits as preparatory language
-work. Runtime application arguments, TLS, broad concurrency and rOS integration
-remain separate decisions; none should turn the first RFL wrapper into an
-implicit rewrite of the compiler or protocol stack.
+A runnable deterministic example is [futures.rfl](../../rfl/examples/futures.rfl):
+
+```sh
+target/release/rfl run rfl/examples/futures.rfl --target native
+target/release/rfl run rfl/examples/futures.rfl
+```
+
+It completes an immediate String future alongside a 25 ms fake-clock timer,
+printing the result, clock reading and turn count. It performs no real sleeping
+or networking.
+
+## Validation and next acceptance targets
+
+At the saved checkpoint, the full RFL release suite passed **271 tests**.
+The eight new polling/inference tests include seven runtime cases exercised on
+native and RVM. The example above also ran on both targets with identical output.
+These are recorded results from the completed milestone, not a claim that async
+syntax, automatic scope cleanup or a production network reactor has been tested.
+
+`rfl/tests/futures.rs` tests the shipped modules on native and RVM, with fake
+clock/event sources. Include coalescing, wake-during-poll, stale/reused slots,
+capacity limits, lazy timers, clock wrap, pending work without repeated polling,
+reactor stop, cancellation, unrelated output types and alternating scheduling.
+
+Before general async, add ownership/cleanup regressions for all scope exits,
+never-polled/dropped futures, nested cancellation, discarded successful resource
+outputs, partial initialization and forbidden suspended borrows. Exercise two
+requests where one completes while the other waits, then cancel and reuse every
+resource. Test resource exhaustion and code size, not only successful output.
+
+The network acceptance target remains RFL DNS/ping, HTTP client and the same
+hardcoded-HTML server reached by an ordinary host browser, using guest TCP/IP.
+Record native and RVM separately. Keep BF compatibility; use small explicit BF
+checks where practical rather than requiring slow network runs each iteration.
+TLS, rOS scheduling and runtime argument delivery remain separate projects.

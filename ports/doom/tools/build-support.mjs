@@ -41,7 +41,10 @@ function sourceIdentity() {
 
 try {
   const [action, ...args] = process.argv.slice(2);
-  if (action === 'config-key') {
+  if (action === 'audio-output') {
+    const [source,destination]=args;
+    console.log(assertSeparateFile(destination,[source]));
+  } else if (action === 'config-key') {
     const [source, mode = 'cooked', bank = '64000', generated = '', assetValidation = 'preflight', resolutionScale = '1'] = args;
     checkMode(mode);
     checkValidation(assetValidation);
