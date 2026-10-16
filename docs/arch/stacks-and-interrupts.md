@@ -105,6 +105,9 @@ Returning with RET leaves BUSY set and does not restore the interrupted PC.
 | CSRR rd, csr | 0x23 | word1=destination register, word2=CSR number |
 | CSRW rs, csr | 0x24 | word1=source register, word2=CSR number |
 
+The optional [MMU](mmu.md) adds CSRs 12–28 and a saved privilege mode to this
+frame; IRQ entry switches to supervisor and IRET restores that mode.
+
 CSRR cannot target PC or PCB. Unknown CSRs, writes to read-only CSRs, trap-state
 writes outside a handler, and IRET outside a handler are execution errors.
 

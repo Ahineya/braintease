@@ -90,6 +90,11 @@ Cross-bank C calls save RAB in the prologue because a nested `CALL` overwrites R
   CPU control state is separate from the device mailbox. See
   [stacks-and-interrupts.md](stacks-and-interrupts.md).
 
+- **SYSCALL** (0x25) enters the supervisor trap vector from protected user mode.
+- **ENTERU R0, rb, ro** (0x26) enters protected user mode at rb:ro.
+  These require the optional [MMU](mmu.md). User programs cannot execute
+  privileged CPU operations such as HALT, IRET, CSRW or STORC.
+
 ## Virtual instructions (assembler)
 
 | Pseudo | Expansion |

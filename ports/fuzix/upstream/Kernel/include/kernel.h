@@ -62,13 +62,28 @@ From UZI by Doug Braun and UZI280 by Stefan Nitschke.
 #include "level2.h"
 #else
 
+#ifndef CONFIG_JOB_CONTROL
 #define jobcontrol_in(x,y)	0
 #define jobcontrol_out(x,y)	0
 #define jobcontrol_ioctl(x,y,z)	0
+#else
+struct tty;
+extern uint8_t jobcontrol_in(uint8_t, struct tty *);
+extern uint8_t jobcontrol_out(uint8_t, struct tty *);
+extern uint8_t jobcontrol_ioctl(uint8_t, struct tty *, uarg_t);
+extern int tcsetpgrp(struct tty *, char *);
+extern arg_t _setpgid(void), _setsid(void), _getsid(void);
+#endif
 
 #define limit_exceeded(x,y) (0)
+#ifdef CONFIG_JOB_CONTROL
+#define can_signal(p, sig) \
+    ((sig == SIGCONT && udata.u_ptab->p_session == (p)->p_session) || \
+     udata.u_ptab->p_uid == (p)->p_uid || super())
+#else
 #define can_signal(p, sig) \
 	(udata.u_ptab->p_uid == (p)->p_uid || super())
+#endif
 #define dump_core(sig)	sig
 #define in_group(x)	0
 #endif
@@ -198,16 +213,24 @@ typedef struct blkbuf {
 } blkbuf, *bufptr;
 
 #if defined(CONFIG_BLKBUF_HELPERS)
+#if defined(CONFIG_RIPPLE) && RIPPLE_BULK_IO
+#define blktok(kaddr,buf,off,len) \
+    ripple_buffer_copy((kaddr), (buf)->__bf_data + (off), (len))
+#define blkfromk(kaddr,buf,off,len) \
+    ripple_buffer_copy((buf)->__bf_data + (off), (kaddr), (len))
+#define blkzero(buf) ripple_buffer_zero((buf)->__bf_data)
+#else
 #define blktok(kaddr,buf,off,len) \
     memcpy((kaddr), (buf)->__bf_data + (off), (len))
 #define blkfromk(kaddr,buf, off,len) \
     memcpy((buf)->__bf_data + (off), (kaddr), (len))
+#define blkzero(buf)             memset(buf->__bf_data, 0, BLKSIZE)
+#endif
 #define blktou(uaddr,buf,off,len) \
     _uput((buf)->__bf_data + (off), (uaddr), (len))
 #define blkfromu(uaddr,buf,off,len) \
     _uget((uaddr),(buf)->__bf_data + (off), (len))
 #define blkptr(buf, off, len)	((void *)((buf)->__bf_data + (off)))
-#define blkzero(buf)		memset(buf->__bf_data, 0, BLKSIZE)
 #else
 extern void blktok(void *kaddr, struct blkbuf *buf, uint16_t off, uint16_t len);
 extern void blkfromk(void *kaddr, struct blkbuf *buf, uint16_t off, uint16_t len);
@@ -485,6 +508,7 @@ typedef struct p_tab {
 #define PFL_BATCH	4	/* Used full time quantum */
 #define PFL_GRAPHICS	8	/* Graphics hint flag for some platforms
                                    (platform owned) */
+#define PFL_EXECED 32
 #define PFL_SWAPIN	16	/* Swapped in but not yet run */
     uint8_t     p_tty;          /* Process' controlling tty minor # */
     uint16_t    p_pid;          /* Process ID */
@@ -517,7 +541,7 @@ typedef struct p_tab {
 #ifdef CONFIG_UDATA_TEXTTOP
     usize_t	p_texttop;	/* Copy of u_texttop */
 #endif
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
     uint16_t	p_session;
 #endif
 #ifdef CONFIG_PROFIL
@@ -655,7 +679,7 @@ typedef struct {
 /* waitpid options */
 #define WNOHANG		1
 #define WUNTRACED	2
-#define _WSTOPPED	0xFF
+#define _WSTOPPED	0x7F
 #define W_COREDUMP	0x80
 
 /* Open() parameters. */

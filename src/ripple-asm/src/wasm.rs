@@ -41,7 +41,7 @@ impl WasmAssembler {
 
     #[wasm_bindgen(js_name = "getAvailableMnemonics")]
     pub fn get_available_mnemonics(&self) -> Vec<String> {
-        use crate::types::{Opcode, Register};
+        use crate::types::Opcode;
         use crate::virtual_instructions::VirtualInstructionRegistry;
         
         let mut mnemonics = vec![];
@@ -86,18 +86,8 @@ impl WasmAssembler {
 
     #[wasm_bindgen(js_name = "assembleToMacro")]
     pub fn assemble_to_macro(&self, source: &str) -> Result<String, JsValue> {
-        match self.assembler.assemble(source) {
-            Ok(obj) => {
-                let formatter = MacroFormatter::new();
-                Ok(formatter.format_full_program(
-                    &obj.instructions,
-                    Some(&obj.data),
-                    None,
-                    None,
-                ))
-            }
-            Err(errors) => Err(JsValue::from_str(&errors.join("\n"))),
-        }
+        self.assembler.assemble_to_macro(source)
+            .map_err(|errors| JsValue::from_str(&errors.join("\n")))
     }
 }
 
@@ -198,11 +188,8 @@ impl WasmFormatter {
         let object_file: crate::ObjectFile = from_value(obj)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         
-        Ok(self.formatter.format_full_program(
-            &object_file.instructions,
-            Some(&object_file.data),
-            None,
-            None,
-        ))
+        let image = Linker::new(crate::DEFAULT_BANK_SIZE).link(vec![object_file])
+            .map_err(|errors| JsValue::from_str(&errors.join("\n")))?;
+        Ok(self.formatter.format_linked_program(&image))
     }
 }

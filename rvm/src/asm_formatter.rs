@@ -25,13 +25,16 @@ pub fn format_instruction_spans(
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ));
         }
+        Some(Opcode::Syscall) => {
+            spans.push(Span::styled("SYSCALL", opcode_style));
+        }
         Some(Opcode::Nop) => {
             spans.push(Span::styled("NOP", opcode_style));
         }
         Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or)
         | Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt)
         | Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod)
-        | Some(Opcode::Loadc) | Some(Opcode::Storc) => {
+        | Some(Opcode::Loadc) | Some(Opcode::Storc) | Some(Opcode::Enteru) => {
             // R-type: op rd, rs, rt
             spans.push(Span::styled(format!("{opcode_str:<6} "), opcode_style));
             spans.push(Span::styled(
@@ -223,7 +226,7 @@ pub fn get_instruction_style(instr: &Instr) -> Style {
             // Jump and branch instructions
             Style::default().fg(Color::Yellow)
         }
-        Some(Opcode::Load) | Some(Opcode::Store) | Some(Opcode::Loadc) | Some(Opcode::Storc) => {
+        Some(Opcode::Load) | Some(Opcode::Store) | Some(Opcode::Loadc) | Some(Opcode::Storc) | Some(Opcode::Enteru) => {
             // Memory operations
             Style::default().fg(Color::Blue)
         }

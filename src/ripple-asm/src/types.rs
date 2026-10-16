@@ -42,6 +42,8 @@ pub enum Opcode {
     Iret = 0x22,
     Csrr = 0x23,
     Csrw = 0x24,
+    Syscall = 0x25,
+    Enteru = 0x26,
     Nop = 0x42,
 }
 
@@ -86,6 +88,8 @@ impl Opcode {
             "IRET" => Some(Opcode::Iret),
             "CSRR" => Some(Opcode::Csrr),
             "CSRW" => Some(Opcode::Csrw),
+            "SYSCALL" => Some(Opcode::Syscall),
+            "ENTERU" => Some(Opcode::Enteru),
             _ => None,
         }
     }
@@ -129,6 +133,8 @@ impl Opcode {
             0x22 => Some(Opcode::Iret),
             0x23 => Some(Opcode::Csrr),
             0x24 => Some(Opcode::Csrw),
+            0x25 => Some(Opcode::Syscall),
+            0x26 => Some(Opcode::Enteru),
             0x42 => Some(Opcode::Nop),
             _ => None,
         }
@@ -174,6 +180,8 @@ impl Opcode {
             Opcode::Iret => "IRET",
             Opcode::Csrr => "CSRR",
             Opcode::Csrw => "CSRW",
+            Opcode::Syscall => "SYSCALL",
+            Opcode::Enteru => "ENTERU",
         }
     }
 
@@ -182,7 +190,7 @@ impl Opcode {
             "HALT", "NOP", "ADD", "SUB", "AND", "OR", "XOR", "SLL", "SRL", "SLT", "SLTU",
             "ADDI", "ANDI", "ORI", "XORI", "LI", "SLLI", "SRLI", "LOAD", "STORE",
             "JAL", "JALR", "BEQ", "BNE", "BLT", "BGE", "BRK", "MUL", "DIV", "MOD",
-            "MULI", "DIVI", "MODI", "LOADC", "STORC", "IRET", "CSRR", "CSRW"
+            "MULI", "DIVI", "MODI", "LOADC", "STORC", "IRET", "CSRR", "CSRW", "SYSCALL", "ENTERU"
         ]
     }
 
@@ -191,7 +199,7 @@ impl Opcode {
             Opcode::Halt | Opcode::Nop | Opcode::Add | Opcode::Sub | Opcode::And | Opcode::Or | 
             Opcode::Xor | Opcode::Sll | Opcode::Srl | Opcode::Slt | Opcode::Sltu | 
             Opcode::Jalr | Opcode::Brk | Opcode::Mul | Opcode::Div | Opcode::Mod |
-            Opcode::Loadc | Opcode::Storc | Opcode::Iret => InstructionFormat::R,
+            Opcode::Loadc | Opcode::Storc | Opcode::Iret | Opcode::Syscall | Opcode::Enteru => InstructionFormat::R,
             
             Opcode::Addi | Opcode::Andi | Opcode::Ori | Opcode::Xori | 
             Opcode::Slli | Opcode::Srli | Opcode::Load | Opcode::Store | 

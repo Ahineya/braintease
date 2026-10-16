@@ -1,0 +1,34 @@
+.TH SOKOBAN 6
+.SH NAME
+sokoban, sok - push boxes onto goals
+.SH SYNOPSIS
+sokoban [-l level] [level-file]
+.SH DESCRIPTION
+Move the player (@) and push every box ($) onto a goal (.). A box on a goal
+is shown as *, and a player standing on a goal as +. Boxes cannot be pulled.
+.PP
+The supplied collection contains 107 SokEvo puzzles by Lee J Haywood.
+His attribution and distribution terms are installed in /usr/lib/sok/README.
+.SH CONTROLS
+Arrow keys, hjkl or WASD move. U undoes up to 64 moves. R asks to restart the
+current puzzle. Q asks to quit. Ctrl-R redraws the screen. Ctrl-C quits and
+restores the terminal; Ctrl-D or input EOF also exits.
+.PP
+The terminal must have at least 32 columns and 18 rows. The game uses ANSI
+cursor controls and restores the main screen on exit.
+.SH PROGRESS
+Completing a default puzzle saves the next level in $HOME/.sokoban. Existing
+progress is loaded on the next launch. An explicit level or custom level file
+does not change saved progress. Use shutdown to persist the guest filesystem.
+.SH OPTIONS
+-l selects a level numbered from 1. --help displays usage.
+.SH FILE FORMAT
+Custom files use native C16 characters, not packed host octets. Each level
+record occupies 512 characters: 448 row-major map cells (14 by 32), player row,
+player column, boxes on goals, total boxes, then padding. Record zero is reserved
+for the collection title. Playable records are checked for bounds, tiles and
+matching box/goal counts. Out-of-map moves are rejected.
+.SH FILES
+/usr/lib/sok/sok.levels - supplied puzzles
+.PP
+$HOME/.sokoban - next default puzzle, stored as decimal text

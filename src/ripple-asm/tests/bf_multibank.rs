@@ -475,3 +475,20 @@ fn nested_calls_restore_nonzero_return_bank_before_returning_to_caller() {
         assert_eq!(plain.register(register), state.register(register));
     }
 }
+
+#[test]
+fn linked_bank_spanning_function_executes_on_plain_and_host_brainfuck_cpus() {
+    let object = RippleAssembler::new(AssemblerOptions {
+        bank_size: 37,
+        ..Default::default()
+    }).assemble(include_str!("fixtures/bank-spanning-function.asm")).unwrap();
+    let image = Linker::new(37).link(vec![object]).unwrap();
+    assert!(image.labels["L_far"].absolute_address / 4 >= 37);
+    for host in [false, true] {
+        let state = run(&image, host);
+        assert_eq!(state.output, b"Y");
+        assert_eq!(state.register(24), 8);
+        assert_eq!(state.register(3), 777);
+        assert_eq!(state.register(4), 888);
+    }
+}

@@ -13,61 +13,90 @@ pub(super) fn pointer(index: usize) -> u64 {
 }
 impl Runtime {
     pub(super) fn allocate(&mut self, count: u64) -> u64 {
-        let Ok(count) = usize::try_from(count) else {
-            return 0;
-        };
-        if count == 0 {
-            return 0;
-        }
-        // Some existing RFL null checks inspect the address cell. Keep
-        // allocation starts away from a bank's zero offset in this ABI.
-        let Some((free_start, start, available)) =
-            self.free.iter().find_map(|(&start, &available)| {
-                let skip = usize::from(start % BANK == 0);
-                (available >= count.saturating_add(skip)).then_some((
-                    start,
-                    start + skip,
-                    available - skip,
-                ))
-            })
-        else {
-            return 0;
-        };
-        self.free.remove(&free_start);
-        if available > count {
-            self.free.insert(start + count, available - count);
-        }
-        self.allocated.insert(start, count);
-        pointer(start)
+        allocate_from(&mut self.free, &mut self.allocated, count)
     }
     pub(super) fn release(&mut self, ptr: u64) {
-        if ptr == 0 {
-            return;
-        }
-        let mut start = linear(ptr);
-        let Some(mut size) = self.allocated.remove(&start) else {
-            fatal("invalid free or double free")
-        };
-        if let Some((&before, &length)) = self.free.range(..start).next_back() {
-            if before + length == start {
-                self.free.remove(&before);
-                start = before;
-                size += length;
-            }
-        }
-        if let Some((&after, &length)) = self.free.range(start..).next() {
-            if start + size == after {
-                self.free.remove(&after);
-                size += length;
-            }
-        }
-        self.free.insert(start, size);
+        release_from(&mut self.free, &mut self.allocated, ptr)
     }
+    pub(super) fn enable_process_memory(&mut self) {
+        let end = address_space::KERNEL_START;
+        if self
+            .allocated
+            .iter()
+            .any(|(&start, &size)| start + size > end)
+        {
+            fatal("private allocation overlaps native kernel arena");
+        }
+        self.free.retain(|start, size| {
+            if *start >= end {
+                false
+            } else {
+                *size = (*size).min(end - *start);
+                true
+            }
+        });
+        self.memory.enable_processes();
+    }
+}
+
+pub(super) fn allocate_from(
+    free: &mut BTreeMap<usize, usize>,
+    allocated: &mut BTreeMap<usize, usize>,
+    count: u64,
+) -> u64 {
+    let Ok(count) = usize::try_from(count) else {
+        return 0;
+    };
+    if count == 0 {
+        return 0;
+    }
+    // Some existing RFL null checks inspect the address cell. Keep
+    // allocation starts away from a bank's zero offset in this ABI.
+    let Some((free_start, start, available)) = free.iter().find_map(|(&start, &available)| {
+        let skip = usize::from(start % BANK == 0);
+        (available >= count.saturating_add(skip)).then_some((start, start + skip, available - skip))
+    }) else {
+        return 0;
+    };
+    free.remove(&free_start);
+    if available > count {
+        free.insert(start + count, available - count);
+    }
+    allocated.insert(start, count);
+    pointer(start)
+}
+
+pub(super) fn release_from(
+    free: &mut BTreeMap<usize, usize>,
+    allocated: &mut BTreeMap<usize, usize>,
+    ptr: u64,
+) {
+    if ptr == 0 {
+        return;
+    }
+    let mut start = linear(ptr);
+    let Some(mut size) = allocated.remove(&start) else {
+        fatal("invalid free or double free")
+    };
+    if let Some((&before, &length)) = free.range(..start).next_back() {
+        if before + length == start {
+            free.remove(&before);
+            start = before;
+            size += length;
+        }
+    }
+    if let Some((&after, &length)) = free.range(start..).next() {
+        if start + size == after {
+            free.remove(&after);
+            size += length;
+        }
+    }
+    free.insert(start, size);
 }
 
 // SAFETY CONTRACT for all generated-code entry points: ctx points to the one
 // exclusively borrowed live Runtime. Other operands are logical values, never
-// raw host addresses; every memory span is checked before accessing the Vec.
+// raw host addresses; every span is checked before accessing the address space.
 #[no_mangle]
 unsafe extern "C" fn rcc_native_load(ctx: *mut Runtime, ptr: u64, words: u64) -> u64 {
     let runtime = unsafe { &mut *ctx };

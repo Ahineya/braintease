@@ -100,6 +100,23 @@ impl<'a> Checker<'a> {
         })
     }
 
+    /// Inline arrays and owning slices use the ordinary value-read path.
+    /// Vectors already have lowering support for a referenced header.
+    pub(super) fn collection_value(&self, value: TExpr) -> TExpr {
+        let inner = self.referent(value.ty);
+        if value.ty.is_ref() && matches!(inner, Ty::Array { .. } | Ty::Slice(_) | Ty::String) {
+            TExpr {
+                ty: inner,
+                kind: TExprKind::Field {
+                    base: Box::new(value),
+                    offset: 0,
+                },
+            }
+        } else {
+            value
+        }
+    }
+
     pub(super) fn check_index(
         &mut self,
         span: usize,
@@ -108,6 +125,7 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
+        let base = self.collection_value(base);
         if let Ty::Ptr(_) = base.ty {
             return self.check_ptr_load(span, base, Some(index), expected);
         }
@@ -158,6 +176,7 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
+        let base = self.collection_value(base);
         if base.ty == Ty::String {
             let start = self.check_expr(start, Some(Ty::Usize))?;
             let end = self.check_expr(end, Some(Ty::Usize))?;
@@ -514,7 +533,7 @@ impl<'a> Checker<'a> {
         let mut cursor = recv;
         let binding = loop {
             match &cursor.kind {
-                TExprKind::Name(binding) => break *binding,
+                TExprKind::Name(binding, ..) => break *binding,
                 TExprKind::Field { base, offset: at } => {
                     offset += *at;
                     cursor = base;
@@ -544,7 +563,7 @@ impl<'a> Checker<'a> {
             };
             return Err(CompileError::at(self.source, span, message));
         }
-        if mutate && !root_ty.is_ref() {
+        if mutate {
             self.note_use(span, binding, true)?;
         }
         Ok((binding, offset))

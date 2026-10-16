@@ -142,7 +142,7 @@ impl<'a> Checker<'a> {
                 }
                 Ok(TExpr {
                     ty,
-                    kind: TExprKind::Name(id),
+                    kind: TExprKind::Name(id, span),
                 })
             }
             ExprKind::Borrow {
@@ -243,7 +243,9 @@ impl<'a> Checker<'a> {
             } => {
                 let mark = self.borrows.len();
                 let result = self.check_method(span, receiver, method, resolved, args, expected);
-                self.borrows.truncate(mark);
+                if !result.as_ref().is_ok_and(|value| value.ty.is_ref()) {
+                    self.borrows.truncate(mark);
+                }
                 if let Some((def, ty)) = self
                     .method_targets
                     .get(&(span, expr.span.end, method.clone()))

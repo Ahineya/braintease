@@ -9,10 +9,20 @@
 #define CONFIG_SMALL
 #define CONFIG_BANKS 1
 #define CONFIG_STACKSIZE 2048
+#if RIPPLE_MMU
+#define PTABSIZE 16
+#define UFTSIZE 16
+#define OFTSIZE 64
+#define ITABSIZE 64
+#define CONFIG_PLATFORM_BRK
+#else
 #define PTABSIZE 8
+#endif
 #define NBUFS 8
 #define NMOUNTS 2
-#define NUM_DEV_TTY 1
+#define CONFIG_JOB_CONTROL
+#define NUM_DEV_TTY 5
+#define RIPPLE_PTY_COUNT 4
 #define BOOT_TTY 512 + 1
 #define TTYDEV (BOOT_TTY)
 #define TICKSPERSEC 100
@@ -20,7 +30,11 @@
 #define BOOTDEVICENAMES "hd#"
 #define PROGBASE 0x00080000UL
 #define PROGLOAD 0x00080000UL
+#if RIPPLE_MMU
+#define PROGTOP (0x001f0000UL + 64000UL)
+#else
 #define PROGTOP (PROGBASE + 64000UL)
+#endif
 #define plt_copyright() ((void)0)
 /* C16 V2: 1,024 C characters / 2,048 physical octets per block. */
 #define BLKSIZE 1024

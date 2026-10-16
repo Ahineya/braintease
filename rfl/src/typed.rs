@@ -6,6 +6,7 @@ pub struct CollectionTypes {
     pub vectors: Vec<Ty>,
     pub slices: Vec<Ty>,
     pub arrays: Vec<Ty>,
+    pub owners: Vec<Ty>,
 }
 
 impl CollectionTypes {
@@ -153,7 +154,26 @@ pub enum TExprKind {
     /// IEEE bits. `f32` uses the low 32 bits.
     Float(u64),
     Bool(bool),
-    Name(u32),
+    Name(u32, usize),
+    Move {
+        binding: u32,
+        span: usize,
+    },
+    Owned {
+        value: Box<TExpr>,
+        cleanup: Box<TExpr>,
+    },
+    Drop(Box<TExpr>),
+    /// Transfer a consumed owner's payload, without invoking its cleanup hook.
+    IntoInner(Box<TExpr>),
+    EraseOwner(Box<TExpr>),
+    /// Unsafe, temporary view into live, initialized storage.
+    RawBorrow(Box<TExpr>),
+    /// Exchange initialized storage and a value; both old and new remain owned.
+    Replace {
+        place: Box<TExpr>,
+        value: Box<TExpr>,
+    },
     Unary {
         op: UnaryOp,
         expr: Box<TExpr>,
@@ -334,9 +354,12 @@ pub enum TExprKind {
         some_tag: u16,
         none_tag: u16,
     },
-    /// `&binding` or `&mut binding`. The value points at that local.
+    /// Address of a named place, without copying its projected values.
     Borrow {
+        span: usize,
         binding: u32,
+        mutable: bool,
+        projections: Vec<TPlaceStep>,
     },
     /// Load `stride` cells at `ptr`, plus `index` elements when present.
     Deref {
@@ -369,6 +392,20 @@ pub enum TExprKind {
         fail_tag: u16,
         payload: Ty,
         fail: Option<Ty>,
+    },
+}
+
+/// Projections are ordered from the root binding to the borrowed value.
+#[derive(Debug, Clone)]
+pub enum TPlaceStep {
+    Owned,
+    Field {
+        offset: i64,
+    },
+    Index {
+        index: Box<TExpr>,
+        container: Ty,
+        elem: Ty,
     },
 }
 

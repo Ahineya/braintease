@@ -17,8 +17,8 @@ impl InstructionEncoder {
         if matches!(opcode, Opcode::Csrr | Opcode::Csrw) && operands.len() != 2 {
             return Err(format!("{} requires 2 operands", opcode.to_str()));
         }
-        if opcode == Opcode::Iret && !operands.is_empty() {
-            return Err("IRET takes no operands".into());
+        if matches!(opcode, Opcode::Iret | Opcode::Syscall) && !operands.is_empty() {
+            return Err(format!("{} takes no operands", opcode.to_str()));
         }
         match opcode.format() {
             InstructionFormat::R => self.encode_r_format(opcode, operands),
@@ -33,7 +33,7 @@ impl InstructionEncoder {
         operands: &[String],
     ) -> Result<Instruction, String> {
         // HALT and NOP take no operands
-        if matches!(opcode, Opcode::Halt | Opcode::Nop | Opcode::Iret) && operands.is_empty() {
+        if matches!(opcode, Opcode::Halt | Opcode::Nop | Opcode::Iret | Opcode::Syscall) && operands.is_empty() {
             return Ok(Instruction::new(opcode, 0, 0, 0));
         }
 
@@ -51,6 +51,9 @@ impl InstructionEncoder {
         }
 
         let rd = self.parse_register(&operands[0])?;
+        if opcode == Opcode::Enteru && rd != 0 {
+            return Err("ENTERU first operand must be R0".into());
+        }
         let rs1 = self.parse_register(&operands[1])?;
         let rs2 = self.parse_register(&operands[2])?;
 
@@ -201,6 +204,16 @@ mod tests {
             assert!(encoder.encode(op, &["T0".into(), "1".into(), "2".into()]).is_err());
         }
         assert!(encoder.encode(Opcode::Iret, &["R0".into(), "R0".into(), "R0".into()]).is_err());
+    }
+
+    #[test]
+    fn protected_mode_instructions_encode_with_reserved_operands_checked() {
+        let encoder = InstructionEncoder::new(65535);
+        assert_eq!(encoder.encode(Opcode::Syscall,&[]).unwrap().opcode,0x25);
+        assert!(encoder.encode(Opcode::Syscall,&["R0".into()]).is_err());
+        let inst=encoder.encode(Opcode::Enteru,&["R0".into(),"T0".into(),"T1".into()]).unwrap();
+        assert_eq!((inst.opcode,inst.word1,inst.word2,inst.word3),(0x26,0,15,16));
+        assert!(encoder.encode(Opcode::Enteru,&["RA".into(),"T0".into(),"T1".into()]).is_err());
     }
 
     #[test]

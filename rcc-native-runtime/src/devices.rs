@@ -29,7 +29,7 @@ impl Runtime {
                 return value;
             }
         }
-        self.memory[index]
+        self.memory.read(index)
     }
     pub(super) fn write(&mut self, index: usize, value: u16) {
         if index < 32 {
@@ -63,7 +63,7 @@ impl Runtime {
                         self.enabled = true;
                     }
                     if value & 2 != 0 {
-                        self.memory[32..1032].fill(0);
+                        self.memory.fill(32..1032, 0);
                     }
                     self.request_display_if_enabled();
                 }
@@ -84,7 +84,7 @@ impl Runtime {
                     if self.devices.is_input_request(index, value) {
                         self.poll_device_input();
                     }
-                    if let Some(frame) = self.devices.write_register(
+                    if let Some(frame) = self.devices.write_register_with_memory(
                         index,
                         value,
                         &mut self.memory,
@@ -116,7 +116,7 @@ impl Runtime {
                             }
                         }
                         self.devices
-                            .complete_tick(&mut self.memory, BANK as u16, &[])
+                            .complete_tick_with_memory(&mut self.memory, BANK as u16, &[])
                             .unwrap_or_else(|e| fatal(&e));
                     }
                 }
@@ -127,7 +127,7 @@ impl Runtime {
         if self.mode == DISP_RGB565 && index < BANK && self.display.write_memory(index, value) {
             return;
         }
-        self.memory[index] = value;
+        self.memory.write(index, value);
     }
     fn poll_device_input(&mut self) {
         rvm::input::poll_display_input(&mut self.devices, &self.display);
@@ -164,10 +164,35 @@ mod tests {
     use super::*;
     use rvm::{devices::*, input_events::*};
     #[test]
+    fn device_dma_detaches_private_pages_but_writes_shared_kernel_memory() {
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        let desc = BANK + 40;
+        rt.memory
+            .write_from(desc, &[1, 12, 0x1234, 0, 4, 510, 1026, 0, 0, 0, 0, 0]);
+        let parent = rt.memory.clone();
+        rt.write(27, 1);
+        rt.write(28, 40);
+        rt.write(29, rvm::bulk::MEMORY_FILL);
+        assert_eq!(rt.devices.status(), STATUS_OK);
+        assert!(rt
+            .memory
+            .cells(4 * BANK + 510..4 * BANK + 1536)
+            .all(|v| v == 0x1234));
+        assert!(parent
+            .cells(4 * BANK + 510..4 * BANK + 1536)
+            .all(|v| v == 0));
+        rt.memory.write(desc + 4, 240);
+        rt.memory.write(desc + 5, 1);
+        rt.write(29, rvm::bulk::MEMORY_FILL);
+        assert_eq!(rt.devices.status(), STATUS_OK);
+        assert_eq!(parent.read(240 * BANK + 1), 0x1234);
+    }
+    #[test]
     fn native_input_batches_poll_live_keyboard_and_pointer_at_tick_zero() {
         let mut rt = Runtime::new();
         let desc = BANK + 10;
-        rt.memory[desc..desc + 10].copy_from_slice(&[1, 10, 2, 2, 0, 0, 0, 0, 0, 0]);
+        rt.memory.write_from(desc, &[1, 10, 2, 2, 0, 0, 0, 0, 0, 0]);
         rt.write(27, 1);
         rt.write(28, 10);
         {
@@ -178,19 +203,19 @@ mod tests {
         }
         rt.write(29, COMMAND_INPUT_READ);
         assert_eq!(rt.devices.status(), STATUS_OK);
-        assert_eq!(rt.memory[desc + 5], 2);
+        assert_eq!(rt.memory.read(desc + 5), 2);
         assert_eq!(
-            &rt.memory[2 * BANK..2 * BANK + 3],
+            rt.memory.cells(2 * BANK..2 * BANK + 3).collect::<Vec<_>>(),
             &[EVENT_KEY, FLAG_DOWN, 82]
         );
-        assert_eq!(rt.memory[2 * BANK + EVENT_CELLS], EVENT_MOTION);
-        assert_eq!(rt.memory[2 * BANK + EVENT_CELLS + 8], 123);
+        assert_eq!(rt.memory.read(2 * BANK + EVENT_CELLS), EVENT_MOTION);
+        assert_eq!(rt.memory.read(2 * BANK + EVENT_CELLS + 8), 123);
         assert_eq!(rt.devices.tick(), 0);
         rt.write(29, COMMAND_INPUT_READ);
-        assert_eq!(rt.memory[desc + 5], 0);
-        rt.memory[desc + 1] = STATE_CELLS as u16;
+        assert_eq!(rt.memory.read(desc + 5), 0);
+        rt.memory.write(desc + 1, STATE_CELLS as u16);
         rt.write(29, COMMAND_INPUT_STATE);
-        assert_ne!(rt.memory[desc + 12 + 82 / 16] & (1 << (82 % 16)), 0);
+        assert_ne!(rt.memory.read(desc + 12 + 82 / 16) & (1 << (82 % 16)), 0);
         for address in 10..=15 {
             rt.write(address, 65535);
             assert_eq!(rt.read(address), 0);

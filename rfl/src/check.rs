@@ -24,6 +24,7 @@ mod patterns;
 mod products;
 mod projections;
 mod register;
+mod resources;
 mod statements;
 mod traits;
 mod types;
@@ -212,6 +213,7 @@ fn analyze_inner(
         shared_spans: HashSet::new(),
         capture_error: None,
         vec_elems: Vec::new(),
+        owner_elems: Vec::new(),
         arrays: Vec::new(),
         slice_elems: Vec::new(),
         refs: Vec::new(),
@@ -330,9 +332,10 @@ fn analyze_inner(
             .map(|info| info.fields.iter().map(|(_, ty)| *ty).collect())
             .collect();
         let repr_c = checker.structs.iter().map(|info| info.repr_c).collect();
-        Ok(TModule {
+        let module = TModule {
             collections: CollectionTypes {
                 vectors: checker.vec_elems.clone(),
+                owners: checker.owner_elems.clone(),
                 slices: checker.slice_elems.clone(),
                 arrays: checker.arrays.iter().map(|a| a.elem).collect(),
             },
@@ -342,7 +345,9 @@ fn analyze_inner(
             repr_c,
             tuples: std::mem::take(&mut checker.tuples),
             externs: std::mem::take(&mut checker.externs),
-        })
+        };
+        crate::resources::check(source, &module)?;
+        Ok(module)
     })();
     checker.locate_prelude_uses(prelude_base);
     let info = ProgramInfo {
@@ -368,9 +373,21 @@ pub(crate) const BUILTIN_FUNCTIONS: &[(&str, &str)] = &[
     ("putc", "fn(integer | char) -> ()"),
     ("from_char", "fn(char) -> String"),
     ("from_byte", "fn(u8) -> String"),
+    ("owned", "fn<T>(T, fn(&mut T) -> unit) -> Owned<T>"),
+    ("move", "fn<T>(T) -> T"),
+    ("drop", "fn<T>(T) -> unit"),
 ];
 
 fn builtin_signature(name: &str) -> Option<&'static str> {
+    if name == "__erase_owned" {
+        return Some("fn(Owned<T>) -> ErasedOwner");
+    }
+    if name == "__borrow_raw" {
+        return Some("unsafe fn(*mut T) -> &mut T");
+    }
+    if name == "__replace_value" {
+        return Some("fn(&mut T, T) -> T");
+    }
     if name == "__write_value" {
         return Some("fn(scalar | String) -> ()");
     }
@@ -433,6 +450,7 @@ struct Checker<'a> {
     outer_bindings: Vec<Binding>,
     captures: Vec<crate::typed::Capture>,
     vec_elems: Vec<Ty>,
+    owner_elems: Vec<Ty>,
     arrays: Vec<ArrayInfo>,
     slice_elems: Vec<Ty>,
     refs: Vec<RefTy>,

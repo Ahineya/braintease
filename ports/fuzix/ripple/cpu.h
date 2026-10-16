@@ -38,4 +38,7 @@ extern void *memset(void *, int, size_t);
 extern int memcmp(const void *, const void *, size_t);
 extern size_t strlen(const char *);
 extern int strcmp(const char *, const char *);
+/* Cache-buffer operations cannot report a recoverable copy failure. */
+extern void *ripple_buffer_copy(void *, const void *, usize_t);
+extern void ripple_buffer_zero(void *);
 #endif

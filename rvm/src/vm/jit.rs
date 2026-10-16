@@ -98,7 +98,18 @@ struct Compiled {
     ranges: Vec<(usize, usize)>,
 }
 
+#[derive(Default)]
+struct AddressCode {
+    blocks: HashMap<usize, Compiled>,
+    hits: Vec<u16>,
+    covered: Vec<bool>,
+    table: Vec<usize>,
+    table_base: Box<usize>,
+}
+type CodeContext = (bool, bool, (u16, u16));
 pub(super) struct JitEngine {
+    context: CodeContext,
+    contexts: HashMap<CodeContext, AddressCode>,
     module: NativeModule,
     ids: HostIds,
     blocks: HashMap<usize, Compiled>,
@@ -118,6 +129,8 @@ impl JitEngine {
     fn new() -> Result<Self, String> {
         let (module, ids) = build_module()?;
         Ok(Self {
+            context: (false, false, (0, 0)),
+            contexts: HashMap::new(),
             module: NativeModule::new(module),
             ids,
             blocks: HashMap::new(),
@@ -129,6 +142,27 @@ impl JitEngine {
             table: Vec::new(),
             table_base: Box::new(0),
         })
+    }
+
+    fn select(&mut self, key: CodeContext) {
+        if self.context == key {
+            return;
+        }
+        let old = AddressCode {
+            blocks: std::mem::take(&mut self.blocks),
+            hits: std::mem::take(&mut self.hits),
+            covered: std::mem::take(&mut self.covered),
+            table: std::mem::take(&mut self.table),
+            table_base: std::mem::replace(&mut self.table_base, Box::new(0)),
+        };
+        self.contexts.insert(self.context, old);
+        let new = self.contexts.remove(&key).unwrap_or_default();
+        self.blocks = new.blocks;
+        self.hits = new.hits;
+        self.covered = new.covered;
+        self.table = new.table;
+        self.table_base = new.table_base;
+        self.context = key;
     }
 
     fn ensure_table(&mut self, len: usize) {
@@ -168,7 +202,7 @@ impl JitEngine {
         self.hits[index] >= HOT_THRESHOLD
     }
 
-    fn invalidate(&mut self, idx: usize) {
+    fn invalidate(&mut self, changed: std::ops::Range<usize>) {
         let doomed: Vec<usize> = self
             .blocks
             .iter()
@@ -176,7 +210,7 @@ impl JitEngine {
                 block
                     .ranges
                     .iter()
-                    .any(|(start, len)| idx >= *start && idx < start + len)
+                    .any(|(start, len)| changed.start < start + len && *start < changed.end)
             })
             .map(|(key, _)| *key)
             .collect();
@@ -212,6 +246,7 @@ impl JitEngine {
 
     fn rebuild(&mut self) -> Result<(), String> {
         let (module, ids) = build_module()?;
+        self.contexts.clear();
         self.blocks.clear();
         self.table.fill(0);
         self.covered.fill(false);
@@ -299,6 +334,7 @@ impl VM {
     pub(crate) fn jit_flush(&mut self) {
         self.jit_epoch = self.jit_epoch.wrapping_add(1);
         if let Some(engine) = self.jit.as_mut() {
+            engine.contexts.clear();
             engine.blocks.clear();
             engine.table.fill(0);
             engine.covered.fill(false);
@@ -308,9 +344,18 @@ impl VM {
     }
 
     pub(crate) fn jit_invalidate_index(&mut self, idx: usize) {
+        self.jit_invalidate_range(idx..idx + 1);
+    }
+
+    pub(crate) fn jit_invalidate_range(&mut self, range: std::ops::Range<usize>) {
+        if self.mmu.enabled {
+            self.jit_flush();
+            return;
+        }
         self.jit_epoch = self.jit_epoch.wrapping_add(1);
         if let Some(engine) = self.jit.as_mut() {
-            engine.invalidate(idx);
+            engine.contexts.clear();
+            engine.invalidate(range);
         }
     }
 
@@ -332,6 +377,7 @@ impl VM {
         let before = self.executed_instructions;
         self.jit_budget = budget;
         self.jit_fault = None;
+        self.mmu_pending = None;
         while self.jit_budget > 0 {
             if self.devices.has_pending_tick() || self.device_error.is_some() {
                 break;
@@ -345,16 +391,12 @@ impl VM {
             self.maybe_dispatch_irq();
             let pc = self.registers[Register::Pc as usize];
             let pcb = self.registers[Register::Pcb as usize];
-            let instr_idx = (pcb as usize * self.bank_size as usize) + pc as usize;
-            if instr_idx >= self.instructions.len() {
-                self.state = super::VMState::Error(format!(
-                    "PC out of bounds: bank={pcb}, offset={pc}, idx={instr_idx}, total_instructions={}",
-                    self.instructions.len()
-                ));
-                return Err(format!(
-                    "PC out of bounds: idx={instr_idx} >= len={}",
-                    self.instructions.len()
-                ));
+            let instr_idx = linear(self.bank_size, pc, pcb);
+            // Fetch faults belong to the reference trap path, including counting.
+            if self.get_current_instruction().is_none() {
+                self.execute_one::<true>()?;
+                self.jit_budget -= 1;
+                return Ok(self.executed_instructions - before);
             }
             let Some(code) = self.jit_block(instr_idx)? else {
                 // Cold paths stay on the reference interpreter. Count entries
@@ -363,12 +405,14 @@ impl VM {
                 for _ in 0..32.min(self.jit_budget) {
                     let inst = self.get_current_instruction();
                     let boundary = self.execute_one::<true>()?;
-                    let inst = inst.expect("successful instruction fetch");
                     self.jit_budget -= 1;
                     self.jit.as_mut().unwrap().stats.interpreted_instructions += 1;
                     if boundary {
                         return Ok(self.executed_instructions - before);
                     }
+                    let Some(inst) = inst else {
+                        break;
+                    };
                     if !is_plain(inst.opcode) || writes_pc(&inst) {
                         break;
                     }
@@ -382,6 +426,13 @@ impl VM {
                 self.executed_instructions - native_before;
             if let Some(engine) = self.jit.as_mut() {
                 engine.sweep()?;
+            }
+            if let Some(fault) = self.mmu_pending.take() {
+                self.jit_fault = None;
+                self.executed_instructions += 1;
+                self.jit_budget -= 1;
+                self.exception(fault, false)?;
+                break;
             }
             if let Some(error) = self.jit_fault.take() {
                 return Err(error);
@@ -411,41 +462,64 @@ impl VM {
         if self.bank_size == 0 {
             return Err("JIT: bank size is zero".into());
         }
-        if self.registers[Register::Pc as usize] < self.bank_size {
-            if let Some(code) = self.jit.as_ref().and_then(|engine| engine.get(index)) {
-                return Ok(Some(code));
-            }
-        }
         if self.jit.is_none() {
             self.jit = Some(JitEngine::new()?);
         }
-        if self.registers[Register::Pc as usize] >= self.bank_size
-            || self
-                .jit
-                .as_ref()
-                .unwrap()
-                .covered
-                .get(index)
-                .copied()
-                .unwrap_or(false)
-            || !self
-                .jit
-                .as_mut()
-                .unwrap()
-                .hot(index, self.instructions.len())
-        {
+        let key = (
+            self.mmu.enabled,
+            self.mmu.user,
+            if self.mmu.user {
+                self.mmu.code_root
+            } else {
+                (0, 0)
+            },
+        );
+        self.jit.as_mut().unwrap().select(key);
+        let code_len = if self.mmu.user {
+            self.mmu.code_limit(&self.memory, self.bank_size)
+        } else {
+            self.instructions.len()
+        };
+        if index >= code_len || self.registers[Register::Pc as usize] >= self.bank_size {
             return Ok(None);
         }
-        let region = build_region(
-            self.bank_size,
-            index,
-            &self.instructions,
-            &self.jit.as_ref().unwrap().covered,
-        )?;
-        self.jit
-            .as_mut()
-            .ok_or_else(|| "JIT engine missing".to_string())?
-            .compile(self.bank_size, index, &region, self.instructions.len())
+        if let Some(code) = self.jit.as_ref().and_then(|e| e.get(index)) {
+            return Ok(Some(code));
+        }
+        let engine = self.jit.as_mut().unwrap();
+        if engine.covered.get(index).copied().unwrap_or(false) || !engine.hot(index, code_len) {
+            return Ok(None);
+        }
+        let region = if !self.mmu.user {
+            build_region(self.bank_size, index, &self.instructions, &engine.covered)?
+        } else {
+            let size = self.bank_size;
+            let memory = &self.memory;
+            let code = &self.instructions;
+            let mmu = &mut self.mmu;
+            build_region_with(
+                size,
+                index,
+                code_len,
+                &mut |i| {
+                    let (pc, pcb) = locate(size, i);
+                    mmu.translate(
+                        memory,
+                        size,
+                        pcb,
+                        pc,
+                        crate::mmu::Access::Execute,
+                        code.len(),
+                    )
+                    .ok()
+                    .and_then(|p| code.get(p).copied())
+                    .unwrap_or(Instr::new(0xFF, 0xFF, 0, 0, 0))
+                },
+                &engine.covered,
+            )?
+        };
+        engine
+            .compile(self.bank_size, index, &region, code_len)
             .map(Some)
     }
 }

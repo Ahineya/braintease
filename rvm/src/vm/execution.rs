@@ -9,6 +9,30 @@ impl VM {
         self.registers[Register::R0 as usize] = 0;
 
         match instr.opcode {
+            0x25 => {
+                if !self.mmu.enabled || !self.mmu.user {
+                    return Err("SYSCALL requires MMU user mode".into());
+                }
+                self.exception(
+                    crate::mmu::Fault {
+                        cause: crate::mmu::CAUSE_SYSCALL,
+                        bank: 0,
+                        offset: 0,
+                    },
+                    true,
+                )?;
+            }
+            0x26 => {
+                if !self.mmu.enabled || instr.word1 != 0 || instr.word2 >= 32 || instr.word3 >= 32 {
+                    return Err("invalid ENTERU".into());
+                }
+                let bank = self.registers[instr.word2 as usize];
+                let offset = self.registers[instr.word3 as usize];
+                self.mmu.user = true;
+                self.registers[2] = bank;
+                self.registers[1] = offset;
+                self.skip_pc_increment = true;
+            }
             0x00 => {
                 // HALT (operands ignored)
                 self.state = VMState::Halted;
@@ -17,21 +41,27 @@ impl VM {
                 // NOP
             }
             0x22 => {
-                self.interrupt_return().map_err(|error| self.trap_error(error))?;
+                self.interrupt_return()
+                    .map_err(|error| self.trap_error(error))?;
             }
             0x23 => {
                 if instr.word1 >= 32 || matches!(instr.word1, 1 | 2) {
                     return Err(self.trap_error("invalid CSRR destination".into()));
                 }
-                let value = self.read_csr(instr.word2).map_err(|error| self.trap_error(error))?;
-                if instr.word1 != 0 { self.registers[instr.word1 as usize] = value; }
+                let value = self
+                    .read_csr(instr.word2)
+                    .map_err(|error| self.trap_error(error))?;
+                if instr.word1 != 0 {
+                    self.registers[instr.word1 as usize] = value;
+                }
             }
             0x24 => {
                 if instr.word1 >= 32 {
                     return Err(self.trap_error("invalid CSRW source".into()));
                 }
                 let value = self.registers[instr.word1 as usize];
-                self.write_csr(instr.word2, value).map_err(|error| self.trap_error(error))?;
+                self.write_csr(instr.word2, value)
+                    .map_err(|error| self.trap_error(error))?;
             }
 
             // ALU R-type operations
@@ -450,7 +480,7 @@ impl VM {
     }
 
     pub(crate) fn guest_loadc(&mut self, bank: u16, addr: u16) -> Result<(), String> {
-        let idx = (bank as usize * self.bank_size as usize) + addr as usize;
+        let idx = self.mmu_translate(bank, addr, crate::mmu::Access::CodeRead)?;
         if idx >= self.instructions.len() {
             return Err(format!(
                 "LOADC: instruction address out of bounds: bank={bank}, addr={addr}, idx={idx}"

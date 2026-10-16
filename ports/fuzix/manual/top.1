@@ -1,0 +1,35 @@
+.TH TOP 1
+.SH NAME
+top \- monitor processes, CPU time, and memory
+.SH SYNOPSIS
+.B top
+.RB [ \-b ]
+.RB [ \-n " count"]
+.RB [ \-d " seconds"]
+.SH DESCRIPTION
+Top displays protected kernel process snapshots. Interactive mode refreshes once
+per guest second; q, Ctrl-D, or Ctrl-C exits and restores the terminal. Ctrl-Z
+suspends top; fg resumes it. Batch mode prints snapshots without screen control.
+Nonterminal input or output defaults to one batch snapshot.
+.PP
+CPU% is the change in user plus kernel execution ticks divided by elapsed guest
+ticks. The first snapshot has no preceding sample and displays zero. Guest time
+advances with executed VM instructions, not host wall time.
+.PP
+MAP-K counts mapped data, heap and stack pages. PRIV-K counts pages referenced
+only by that process. SHRD-K counts its pages referenced by other processes too.
+MAP-K equals PRIV-K plus SHRD-K. Shared columns must not be added across rows;
+use free for unique physical page totals. Executable storage and reserved kernel
+RAM are outside these per-process counts. Values use physical KiB.
+.SH OPTIONS
+.TP
+.B \-b
+Print batch output.
+.TP
+.BI \-n " count"
+Exit after this many snapshots.
+.TP
+.BI \-d " seconds"
+Set the refresh interval (1 through 3276 guest seconds).
+.SH SEE ALSO
+ps(1), free(1), uptime(1), sh(1)

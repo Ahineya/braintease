@@ -57,6 +57,7 @@ impl Checker<'_> {
                 || module.adts.iter().any(|t| t.name == tr.name)
                 || module.structs.iter().any(|t| t.name == tr.name)
                 || Ty::parse_name(&tr.name).is_some()
+                || tr.name == "Owned"
             {
                 return Err(CompileError::at(
                     self.source,
@@ -157,7 +158,10 @@ impl Checker<'_> {
                 }
             } else if name.starts_with("$std$")
                 && (Ty::parse_name(outer).is_some()
-                    || matches!(outer.as_str(), "Vec" | "Slice" | "Option" | "Result"))
+                    || matches!(
+                        outer.as_str(),
+                        "Vec" | "Slice" | "Owned" | "Option" | "Result"
+                    ))
             {
                 return Err(CompileError::at(
                     self.source,

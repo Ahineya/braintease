@@ -34,6 +34,9 @@ pub(super) fn emit_record(
         if keeps(proc, ty) {
             retain_tree(builder, proc, frame, offset - ty.cells(), ty)?;
         }
+        if proc.resources.contains(ty) {
+            release_managed(builder, proc, frame, *field)?;
+        }
     }
     Ok(())
 }
@@ -94,6 +97,9 @@ pub(super) fn emit_field_store(
         if keeps(proc, ty) {
             retain_tree(builder, proc, frame, proc.slots[src].offset, ty)?;
         }
+        if proc.resources.contains(ty) {
+            release_managed(builder, proc, frame, src)?;
+        }
         return Ok(());
     }
     let at = proc.slots[dest].offset + offset;
@@ -106,6 +112,9 @@ pub(super) fn emit_field_store(
     }
     if keeps(proc, ty) {
         retain_tree(builder, proc, frame, at, ty)?;
+    }
+    if proc.resources.contains(ty) {
+        release_managed(builder, proc, frame, src)?;
     }
     Ok(())
 }
@@ -156,6 +165,11 @@ pub(super) fn emit_make(
             let value = load_cell(builder, frame, src + index, IrType::I16)?;
             store_object_cell(builder, &obj, offset, value)?;
             offset += 1;
+        }
+    }
+    for (slot, _) in fields {
+        if proc.resources.contains(proc.slots[*slot].ty) {
+            release_managed(builder, proc, frame, *slot)?;
         }
     }
     let addr = low16_of_ptr(builder, &obj)?;
@@ -215,6 +229,7 @@ pub(super) fn emit_try(
     fail_slot: Option<usize>,
     fail: Option<Ty>,
     release: bool,
+    cleanup: &[usize],
 ) -> Result<(), CompileError> {
     let tag = load_cell(builder, frame, proc.slots[src].offset, IrType::I16)?;
     let ok = builder.new_label();
@@ -244,6 +259,9 @@ pub(super) fn emit_try(
         )?;
     } else {
         store_immediate(builder, frame, result, proc, fail_tag)?;
+    }
+    for slot in cleanup {
+        release_managed(builder, proc, frame, *slot)?;
     }
     emit_return(builder, proc, frame, release)?;
     builder.create_block(ok).ir()?;

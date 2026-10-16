@@ -66,6 +66,9 @@ pub(super) fn emit_vec_lit(
             let value = load_cell(builder, frame, proc.slots[*slot].offset + cell, IrType::I16)?;
             store_object_cell(builder, &obj, at + cell, value)?;
         }
+        if proc.resources.contains(elem) {
+            release_managed(builder, proc, frame, *slot)?;
+        }
     }
     let header = gep(builder, frame, base)?;
     store_vec_ptr(builder, &header, &obj)
@@ -775,6 +778,9 @@ pub(super) fn store_object_cells(
             .build_pointer_offset(obj.clone(), Value::Temp(at), ptr_ty())
             .ir()?;
         builder.build_store(value, into, IrType::I16).ir()?;
+    }
+    if proc.resources.contains(proc.slots[src].ty) {
+        release_managed(builder, proc, frame, src)?;
     }
     Ok(())
 }

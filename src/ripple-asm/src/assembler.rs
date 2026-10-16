@@ -342,10 +342,17 @@ impl RippleAssembler {
                                     let current_inst = current_addr / 4;
                                     let target_inst = label.absolute_address / 4;
                                     let offset = (target_inst as i32) - (current_inst as i32);
-                                    modified_operands[i] = offset.to_string();
+                                    // Preserve the symbolic destination even when a
+                                    // provisional displacement fits. Bank placement
+                                    // and branch expansion happen only in rlink.
+                                    has_label_ref = true;
+                                    modified_operands[i] = if offset.unsigned_abs() <= self.options.max_immediate.min(u16::MAX as u32) {
+                                        offset.to_string()
+                                    } else { "0".into() };
                                 } else {
                                     // For absolute references, use the instruction index
                                     let inst_idx = label.absolute_address / 4;
+                                    if opcode == Opcode::Jal { has_label_ref = true; }
                                     if opcode == Opcode::Jal && inst_idx > self.options.max_immediate.min(u16::MAX as u32) {
                                         // A translation unit can contain several code banks.
                                         // Keep its wide local target symbolic until the linker
@@ -409,14 +416,13 @@ impl RippleAssembler {
                 || operand.starts_with("0b") || operand.starts_with("0B");
             
             if !is_register && !is_number {
-                // Local branches and small absolute targets were patched in
-                // second_pass. Wide JAL targets still need linker relocation.
+                // Control-flow destinations stay symbolic through placement.
                 // Local data labels must stay unresolved so the linker can add
                 // this object's data-section base after concatenation.
                 let is_local_label = state.labels.contains_key(operand);
                 let is_local_data = state.data_labels.contains_key(operand);
 
-                if !is_local_label || opcode == Opcode::Jal {
+                if !is_local_label || matches!(opcode, Opcode::Jal | Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge) {
                     let projection = operand.strip_prefix("%bank(").and_then(|s| s.strip_suffix(')'))
                         .map(|s| (s.to_string(), ReferenceType::CodeBank))
                         .or_else(|| operand.strip_prefix("%offset(").and_then(|s| s.strip_suffix(')'))
@@ -445,7 +451,20 @@ impl RippleAssembler {
 
     pub fn assemble_to_binary(&self, source: &str) -> Result<Vec<u8>, Vec<String>> {
         let obj = self.assemble(source)?;
-        if !obj.unresolved_references.is_empty() {
+        // Preserve direct binary assembly for local control flow whose original
+        // flat encoding fits. Wide targets and external/data references need
+        // the linker; do not silently emit their zero placeholders.
+        let needs_linker = obj.unresolved_references.iter().any(|(index, reference)| {
+            let Some(label) = obj.labels.get(&reference.label) else { return true; };
+            let target = label.absolute_address / 4;
+            match reference.ref_type.as_str() {
+                "branch" => target as usize / self.options.bank_size.max(1) as usize != *index / self.options.bank_size.max(1) as usize
+                    || (i64::from(target) - *index as i64).unsigned_abs() > u64::from(self.options.max_immediate.min(u16::MAX as u32)),
+                "absolute" => target >= u32::from(self.options.bank_size.max(1)) || target > self.options.max_immediate.min(u16::MAX as u32),
+                _ => true,
+            }
+        });
+        if needs_linker {
             return Err(vec!["binary assembly has unresolved references; assemble an object and link it with rlink".to_string()]);
         }
         
@@ -477,6 +496,12 @@ impl RippleAssembler {
         binary.extend_from_slice(&obj.data);
         
         Ok(binary)
+    }
+
+    /// Executable BF exports need the same final placement as VM images.
+    pub fn assemble_to_macro(&self, source: &str) -> Result<String, Vec<String>> {
+        let image = crate::Linker::new(self.options.bank_size).link(vec![self.assemble(source)?])?;
+        Ok(crate::MacroFormatter::new().format_linked_program(&image))
     }
 }
 

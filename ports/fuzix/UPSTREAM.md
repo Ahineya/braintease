@@ -81,9 +81,10 @@ packing, bounded file/terminal input, checked record I/O and replacement saves,
 terminal setup/restoration and window dimensions.
 The port uses a 30,000-character core, with one character reserved by the
 upstream read/insert algorithms. Unused platform backends remain unmodified.
-The process table has eight slots; the code loader reserves one extra image slot
-for replacement execs, and the launcher allocates all corresponding snapshot
-banks. The compiler ABI and per-process bank layout are unchanged.
+The legacy `MMU=0` process table has eight slots with RAM snapshots. The default
+RVM `MMU=1` profile has 16 slots, selected page maps, and COW user memory. Both
+reserve one extra code-image slot for replacement execs. The compiler ABI is
+unchanged; kernel and userspace must be built for the same MMU profile.
 
 `Applications/games/cowsay.c` is the Fedux C implementation by Federico Pomar
 and Federico Bond, with the existing FUZIX changes by Brett Gordon. The Ripple
@@ -126,13 +127,13 @@ explicit cluster size while preserving its rOS defaults. Old C16 V1 disks
 require a fresh image and are retained as backups by the launcher.
 Inode allocation/free checks also use the configured density. Exec argument
 buffers retain their earlier 256-character limit independently of larger disk
-blocks; this preserves the single-bank process layout. `libccheck` creates and
+blocks and the MMU profile's larger heap. `libccheck` creates and
 removes 320 files to exercise inode numbers beyond the old 255-inode boundary.
 
 The manuals/games batch imports util `man.c`, V7 `wump.c` and its manual,
 `games/hamurabi.c`, `Library/libs/rand.c`, and 26 command manual sources from
 util/V7. Port-specific pages in `manual/` override selected upstream pages;
-`tools/manuals.mjs` installs the combined 48-page set under `/usr/man`.
+`tools/manuals.mjs` installs the combined 52-page set under `/usr/man`.
 `man` retains Robert de Bath's GPL formatter with bounded paths, headers,
 indentation and line copies, read-error reporting, bounded `.so` redirects,
 nonmutating MANPATH/MANSECT search, and direct fork/exec pager management with
@@ -191,9 +192,81 @@ C-locale number scanning, and 16-bit-safe exponent parsing. The decimal output
 formatter expands the exact binary rational, rounding to nearest with ties to
 even, with a precision cap of 30.
 
-The executable loader now reserves twelve code banks for each of nine live
-images and decodes aligned RXE instruction records from the cached disk block.
-The compiler ABI and data/stack bank limits are unchanged. RVM dynamically grows
-instruction memory up to 256 banks of 65,536 instructions; its bounds test
+The executable loader reserves twelve code banks per live image: nine images
+in the legacy profile and seventeen in the default MMU profile. It decodes
+aligned RXE instruction records from the cached disk block. MMU userspace code
+starts at virtual bank zero; legacy code is relocated to its physical slot.
+The compiler ABI is unchanged. Static globals and the stack each retain a
+one-bank limit, while MMU user heaps can span sixteen data/heap banks. RVM
+dynamically grows instruction memory up to 256 banks of 65,536 instructions; its bounds test
 covers the highest Ripple userspace reservation. RBF exports reserve 140 code
 banks and 80 data banks, requiring about 547 MiB for the tape alone.
+
+Bulk-memory integration redirects the Ripple kernel's `blktok`, `blkfromk` and
+`blkzero` cache helpers through port-local buffer functions when `BULK_IO=1`.
+The ordinary helper macros remain for other platforms and `BULK_IO=0`.
+`ripple/usermem.c` supplies bounded RAM copy/fill helpers and the common bank-copy
+entry used for legacy fork/scheduling snapshots and kernel-stack cloning in both
+profiles; `lowlevel.asm` retains the original whole-bank fallback. MMU physical
+page initialization and COW copies also use these helpers. Copies preserve
+native 16-bit characters, and the mailbox is protected by saving/disabling/restoring
+IRQ enables around each submission. Physical buffers use bulk operations from
+256 cells upward. Translated user buffers use CPU accesses with mapped-page
+validation and COW resolution. Unsupported operations use scalar fallbacks;
+other host errors are propagated. The compiler/runtime's general memcpy and
+memset implementations are unchanged. Extended `forkcheck --stress` and
+`libccheck` cover fork isolation, high character bits, transfer boundaries,
+stack/heap file I/O, and zero fills.
+
+The protected profile's port-local `ripple/mmu.c` implements map selection,
+physical-page reference counts, COW faults, user-memory validation, and heap
+growth across banks. Its userspace entry uses SYSCALL and its kernel enters
+user mode with ENTERU. `ripple/libc/heap.c` supports allocations spanning banks
+without changing RCC's pointer representation or calling convention. `mmucheck`
+covers the larger heap, COW, ten live children, and privilege protection.
+
+
+The resources/games batch imports util `free.c`/`uptime.c`, library
+`clock_gettime.c`/`clock_getres.c`/`getloadavg.c`, and games `sok.c`, `sok.h`,
+`sokmap.c` and `ljh.sok` from the pinned archive. The clock helpers propagate
+syscall errors and load conversion uses wide arithmetic. The tools report
+native physical KiB, process capacity, sharing, monotonic guest uptime and
+load averages; no login-session count is fabricated. A read-only, versioned
+`RIPPLE_SYSINFO` ioctl on `/dev/proc` exposes counts without kernel pointers.
+
+Sokoban retains the upstream movement/undo algorithm, with fixes for boxes on
+goals, undo history/counting, bounds, level record sizes and seek arithmetic.
+Its Ripple terminal backend supplies ANSI drawing, arrows/hjkl/WASD, bounded
+escape reads, alternate-screen cleanup, Ctrl-C/EOF handling, and checked numeric
+arguments. Progress is decimal text in `$HOME/.sokoban`; explicit levels/custom
+collections do not change it. The checked host converter in `tools/sokoban.mjs`
+replaces the original host `sokmap` build and encodes native C16 records.
+The supplied 107 puzzles retain Lee J Haywood's designs, attribution and
+redistribution terms; those terms are installed alongside the levels.
+
+MMU robustness changes release complete heap pages on shrink, track new pages
+for failed-growth rollback, preserve ENOMEM on failed COW copy-out, and preflight
+exec's initial page requirements before replacing the old map. The protected
+profile allows 16 descriptors per process, 64 system-wide open files, and 64
+cached inodes so the larger process table can support simultaneous I/O. Fork
+flushes compiled code when replacing a child instruction map, preventing stale
+JIT code after process-slot reuse. Process memory is cleared from the table on
+exit. `mmucheck --stress` exercises page and process exhaustion, failed exec/copy-out, zeroed regrowth, isolation and repeated recovery.
+
+The terminal/job-control batch enables a focused CONFIG_JOB_CONTROL subset of
+level-2 facilities: sessions, process groups, foreground tty ownership and stop
+signals. Ripple's implementation in ripple/jobcontrol.c draws on the upstream
+level2.c and syscall_level2.c algorithms, with checked user pointers, stricter
+session/group changes and parent/exec ownership checks. The dormant upstream
+PTY block is not enabled; ripple/pty.c implements four checked BSD-style pairs.
+Kernel adaptations notify parents on stops, align wait status with libc, restart
+signal-set scans correctly after continuation, allow SIGKILL to wake stopped
+tasks, and retain surviving pipeline groups when a group leader exits.
+
+The Bourne shell integrates ripple/shell-jobs.c for jobs/fg/bg, group-aware waits,
+a fork/foreground handshake, terminal preservation and job cleanup. Levee gains
+raw Ctrl-Z handling, screen cleanup and redraw on continuation. Ripple ps/top
+use the address-free RIPPLE_PROCINFO ioctl instead of interpreting kernel
+pointers from the historical raw process table. The original upstream ps source
+is retained for provenance but is no longer the selected build source. Resource
+counts distinguish private and multiply referenced data/heap/stack pages.

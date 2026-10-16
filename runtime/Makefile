@@ -16,7 +16,7 @@ STACK_FLAG = $(if $(filter 1,$(SEGMENTED_STACK)),--segmented-stack,)
 # Source files
 AUDIO ?= 1
 AUDIO_STAMP := .audio-config
-C_SOURCES = irq.c stack.c __char_patch.c putchar.c puts.c getchar.c mmio.c keyboard.c vm_devices.c $(if $(filter 1,$(AUDIO)),vm_audio.c vm_music.c) vm_network.c $(wildcard net/*.c) rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
+C_SOURCES = irq.c stack.c __char_patch.c putchar.c puts.c getchar.c mmio.c keyboard.c vm_devices.c vm_bulk.c $(if $(filter 1,$(AUDIO)),vm_audio.c vm_music.c) vm_network.c $(wildcard net/*.c) rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
 ASM_SOURCES = crt0.asm
 
 # qfixed lives in src/ and is compiled via the qfixed.asm rule below

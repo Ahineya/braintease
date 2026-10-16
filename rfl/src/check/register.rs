@@ -8,6 +8,7 @@ impl<'a> Checker<'a> {
         for adt in &module.adts {
             if self.schemas.iter().any(|schema| schema.name == adt.name)
                 || self.struct_names.contains_key(&adt.name)
+                || adt.name == "Owned"
             {
                 return Err(CompileError::at(
                     self.source,

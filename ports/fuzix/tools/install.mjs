@@ -209,9 +209,26 @@ export function installRoot(input, files) {
     }
     if (f.device !== undefined) {
       if (old) {
-        if (w(old.base) !== (f.mode ?? 0o20666) ||
-            w(old.base + 12) !== f.device)
+        const mode = f.mode ?? 0o20666, device = w(old.base + 12);
+        if (w(old.base) !== mode ||
+            (device !== f.device && device !== f.migrateDeviceFrom))
           throw Error(`refusing to replace existing device path ${f.name}`);
+        if (device === f.device)
+          continue;
+        if (checked.issues.length)
+          throw Error('userspace upgrade requires a clean root; shut down or run fsck first');
+        let node = old;
+        // Migrate only the managed path, retaining any user-created aliases
+        // to the old device and preserving the node's other metadata.
+        if (w(old.base + 1) > 1) {
+          node = newNode(mode);
+          image.copy(image, node.base * 2, old.base * 2, (old.base + 32) * 2);
+          put(node.base + 1, 1);
+          put(old.base + 1, w(old.base + 1) - 1);
+          setEntry(parent, name, node.ino, entry.offset);
+        }
+        put(node.base + 12, f.device);
+        changed = true;
         continue;
       }
       const node = newNode(f.mode ?? 0o20666);

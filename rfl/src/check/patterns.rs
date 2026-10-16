@@ -156,7 +156,12 @@ impl<'a> Checker<'a> {
                     binding: original,
                     init: TExpr {
                         ty,
-                        kind: TExprKind::Borrow { binding: hidden },
+                        kind: TExprKind::Borrow {
+                            span: 0,
+                            binding: hidden,
+                            mutable: false,
+                            projections: vec![],
+                        },
                     },
                 });
             }

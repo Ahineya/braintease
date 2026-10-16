@@ -32,6 +32,9 @@ class LauncherTests(unittest.TestCase):
             self.assertIn(str(build / 'bios.bin'), command)
             self.assertIn('--guest-ctrl-c', command)
             self.assertEqual(command[command.index('--memory') + 1], '5120000')
+            (build / '.mmu').write_text('1\n')
+            protected, _ = launch.host_command(args, build / 'disk')
+            self.assertEqual(protected[protected.index('--memory') + 1], '16384000')
             args.backend = 'rbf'
             command, interactive = launch.host_command(args, build / 'disk')
             self.assertFalse(interactive)

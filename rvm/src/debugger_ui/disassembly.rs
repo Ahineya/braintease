@@ -183,6 +183,9 @@ impl TuiDebugger {
                     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 ));
             }
+            Some(Opcode::Syscall) => {
+                spans.push(Span::styled("SYSCALL", opcode_style));
+            }
             Some(Opcode::Iret) => {
                 spans.push(Span::styled("IRET", opcode_style));
             }
@@ -192,7 +195,7 @@ impl TuiDebugger {
             Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or)
             | Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt)
             | Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod)
-            | Some(Opcode::Loadc) | Some(Opcode::Storc) => {
+            | Some(Opcode::Loadc) | Some(Opcode::Storc) | Some(Opcode::Enteru) => {
                 // R-type: op rd, rs, rt
                 spans.push(Span::styled(format!("{opcode_str:<6} "), opcode_style));
                 spans.push(Span::styled(
@@ -377,10 +380,11 @@ impl TuiDebugger {
             Some(Opcode::Halt) => "HALT".to_string(),
             Some(Opcode::Nop) => "NOP".to_string(),
             Some(Opcode::Iret) => "IRET".to_string(),
+            Some(Opcode::Syscall) => "SYSCALL".to_string(),
             Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or)
             | Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt)
             | Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod)
-            | Some(Opcode::Loadc) | Some(Opcode::Storc) => {
+            | Some(Opcode::Loadc) | Some(Opcode::Storc) | Some(Opcode::Enteru) => {
                 let rd = Self::register_name(instr.word1 as u8);
                 let rs = Self::register_name(instr.word2 as u8);
                 let rt = Self::register_name(instr.word3 as u8);

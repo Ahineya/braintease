@@ -3,6 +3,9 @@ use bf_wasm::engine::Machine;
 use rvm::devices::GuestMemory;
 use serde::{Deserialize, Serialize};
 
+mod code;
+use code::{code_capacity, code_extent, code_growth, code_write};
+
 pub const LANES: usize = 8;
 pub const RAM_LANE: usize = 4;
 pub const ORIGIN: usize = 8;
@@ -158,6 +161,18 @@ impl GuestMemory for StridedMemory<'_> {
         assert!(index < self.cells);
         self.tape[ORIGIN + index * LANES + RAM_LANE] = value;
     }
+    fn code_capacity(&self, size: u16) -> usize {
+        code_capacity(size, self.tape.len(), |i| self.tape[i])
+    }
+    fn write_code(&mut self, size: u16, start: usize, code: &[[u16; 4]]) -> Result<(), u16> {
+        let cap = self.code_capacity(size);
+        let extent = code_extent(size, |i| self.tape[i]);
+        let grown = code_growth(size, cap, extent, start, code.len())?;
+        code_write(size, extent, grown, start, code, |address, value| {
+            self.tape[address] = value
+        });
+        Ok(())
+    }
 }
 
 /// Device access through the interpreter's logical cells. Individual reads do
@@ -188,6 +203,18 @@ impl GuestMemory for MachineMemory<'_> {
         assert!(index < self.cells);
         self.machine
             .write_cell(ORIGIN + index * LANES + RAM_LANE, value);
+    }
+    fn code_capacity(&self, size: u16) -> usize {
+        code_capacity(size, self.machine.tape_len(), |i| self.machine.read_cell(i))
+    }
+    fn write_code(&mut self, size: u16, start: usize, code: &[[u16; 4]]) -> Result<(), u16> {
+        let cap = self.code_capacity(size);
+        let extent = code_extent(size, |i| self.machine.read_cell(i));
+        let grown = code_growth(size, cap, extent, start, code.len())?;
+        code_write(size, extent, grown, start, code, |address, value| {
+            self.machine.write_cell(address, value)
+        });
+        Ok(())
     }
 }
 

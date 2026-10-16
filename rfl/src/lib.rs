@@ -14,6 +14,7 @@ mod modules;
 mod native;
 mod parser;
 mod rename;
+mod resources;
 mod run;
 mod ty;
 mod typed;

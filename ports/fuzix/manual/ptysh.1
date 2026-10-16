@@ -1,0 +1,26 @@
+.TH PTYSH 1
+.SH NAME
+ptysh \- run a command in a separate terminal session
+.SH SYNOPSIS
+.B ptysh
+.RI [ command " [argument ...]]"
+.SH DESCRIPTION
+Ptysh allocates an unused pseudo-terminal pair and starts a new session with
+its slave as the controlling terminal. The default command is sh. Input,
+output, terminal signals, line editing, editors and shell job control travel
+through the PTY. Exit the inner shell to return to the outer shell.
+.PP
+Four PTY pairs are available. Masters are /dev/ptyp0 through /dev/ptyp3;
+slaves are /dev/ttyp0 through /dev/ttyp3. Masters open exclusively, with mode
+0600 on installed device nodes. /dev/tty resolves to the caller's controlling
+terminal. Closing the master hangs up the slave's foreground process group;
+closing the last slave allows the master to drain output and then read EOF.
+.PP
+Ptysh requires an interactive outer terminal. It preserves terminal settings
+and restores them on exit. Nested ptysh sessions allocate different pairs.
+The fixed pool, process slots and per-process descriptors limit nesting.
+.PP
+This bridge uses nonblocking I/O and the existing terminal timeout mechanism.
+It is a minimal PTY host, not a terminal multiplexer or graphical terminal.
+.SH SEE ALSO
+sh(1), tty(1), stty(1), ps(1)

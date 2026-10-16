@@ -13,6 +13,63 @@ import {checkRoot} from './fsck.mjs';
 import {installRoot, growRoot} from './install.mjs';
 
 const seed = [ {name : '/init', data : Buffer.alloc((18 + CELLS + 2) * CELLS + 7, 0x61)} ];
+function nodeBase(image, name) {
+  const w = p => image.readUInt16LE(p * 2);
+  let base = inodeBase(1);
+  for (const part of name.split('/').filter(Boolean)) {
+    let found = 0;
+    for (let off = 0; off < w(base + 4); off += 32) {
+      const pos = w(base + 12 + Math.floor(off / CELLS)) * CELLS + off % CELLS;
+      let text = '';
+      for (let j = 1; j <= 30 && w(pos + j); j++)
+        text += String.fromCharCode(w(pos + j));
+      if (text === part) { found = w(pos); break; }
+    }
+    assert.ok(found, `missing fixture path ${name}`);
+    base = inodeBase(found);
+  }
+  return base;
+}
+
+test('managed tty migration preserves files, metadata and old device aliases', () => {
+  const device = {name: '/dev/tty', mode: 0o20666, device: 0x200,
+                  migrateDeviceFrom: 0x201, data: []};
+  const old = rootImage([
+    {name: '/dev/tty', mode: 0o20666, device: 0x201, data: []},
+    {name: '/dev/saved-console', link: '/dev/tty'},
+    {name: '/note', mode: 0o100640, data: Buffer.from('saved session')}
+  ], 8192, 128);
+  const base = nodeBase(old, '/dev/tty');
+  old.writeUInt16LE(42, (base + 2) * 2); // Preserve the existing owner.
+  const before = Buffer.from(old);
+  const migrated = installRoot(old, [device]);
+  const tty = nodeBase(migrated, '/dev/tty');
+  const saved = nodeBase(migrated, '/dev/saved-console');
+  assert.equal(migrated.readUInt16LE((tty + 12) * 2), 0x200);
+  assert.equal(migrated.readUInt16LE((tty + 2) * 2), 42);
+  assert.equal(migrated.readUInt16LE((tty + 1) * 2), 1);
+  assert.equal(saved, base);
+  assert.equal(migrated.readUInt16LE((saved + 12) * 2), 0x201);
+  assert.equal(migrated.readUInt16LE((saved + 1) * 2), 1);
+  const note = nodeBase(old, '/note');
+  assert.equal(nodeBase(migrated, '/note'), note);
+  assert.deepEqual(migrated.subarray(note * 2, (note + 32) * 2),
+                   old.subarray(note * 2, (note + 32) * 2));
+  assert.ok(migrated.includes(Buffer.from('saved session', 'utf16le')));
+  assert.deepEqual(checkRoot(migrated).issues, []);
+  assert.equal(installRoot(migrated, [device]), migrated);
+  assert.deepEqual(old, before);
+  assert.throws(() => installRoot(old, [{...device, migrateDeviceFrom: undefined}]),
+                /refusing to replace existing device/);
+  for (const [mode, number] of [[0o20666, 0x202], [0o60666, 0x201], [0o100666, 0]]) {
+    const other = rootImage([{name: '/dev/tty', mode, device: number, data: []}], 8192, 128);
+    assert.throws(() => installRoot(other, [device]), /refusing to replace existing device/);
+  }
+  const dirty = Buffer.from(old);
+  dirty.writeUInt16LE(1, (CELLS + 105) * 2);
+  assert.throws(() => installRoot(dirty, [device]), /requires a clean root/);
+});
+
 test('launcher recovers dirty metadata with a backup, preserves no-op identity, and refuses structural damage', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzix-launch-recovery-'));
   try {
@@ -24,6 +81,8 @@ test('launcher recovers dirty metadata with a backup, preserves no-op identity, 
     const original = fs.readFileSync(disk), root = fatFile(original, 'ROOTFS.IMG');
     const withNote = installRoot(root.data, [{name: '/note', mode: 0o100640,
                                             data: Buffer.from('saved session')}]);
+    // Reproduce a real pre-job-control disk, including an unclean shutdown.
+    withNote.writeUInt16LE(0x201, (nodeBase(withNote, '/dev/tty') + 12) * 2);
     withNote.writeUInt16LE(1, (CELLS + 105) * 2);
     const dirty = root.replace(withNote);
     fs.writeFileSync(disk, dirty);
@@ -37,6 +96,8 @@ test('launcher recovers dirty metadata with a backup, preserves no-op identity, 
     assert.deepEqual(fs.readFileSync(`${disk}.bak`), dirty);
     const good = fs.readFileSync(disk), cleanRoot = fatFile(good, 'ROOTFS.IMG').data;
     assert.deepEqual(checkRoot(cleanRoot).issues, []);
+    assert.equal(cleanRoot.readUInt16LE((nodeBase(cleanRoot, '/dev/tty') + 12) * 2), 0x200);
+    assert.equal(cleanRoot.readUInt16LE((nodeBase(cleanRoot, '/dev/tty1') + 12) * 2), 0x201);
     // User inodes, contents, and permissions survive the recovery and update.
     const note = Buffer.from('saved session', 'utf16le');
     assert.ok(cleanRoot.includes(note));

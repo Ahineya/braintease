@@ -1,0 +1,22 @@
+.TH FREE 1
+.SH NAME
+free - display physical memory and process capacity
+.SH SYNOPSIS
+free
+.SH DESCRIPTION
+Reports memory in KiB (1024 physical octets). Ripple C characters contain
+16 bits; one 512-cell MMU page occupies one KiB.
+.PP
+Mem includes the reserved kernel and platform area. User pool reports the
+physical memory available to processes. Shared pages count once in used
+memory, while process mappings count every reference to a shared page.
+The reserved area is unavailable to the user allocator; it is not a measurement
+of the kernel's live allocations. Swap is not implemented.
+.PP
+The process count includes this utility and unreaped zombies. The data/heap
+limit includes static program data; it is not an additional malloc allowance.
+The legacy profile reports fixed process reservations and has no COW sharing.
+.SH OPTIONS
+--help displays usage.
+.SH SEE ALSO
+ps(1), uptime(1)

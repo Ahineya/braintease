@@ -4,12 +4,16 @@ use std::path::{Path, PathBuf};
 struct Program(PathBuf);
 impl Program {
     fn new(source: &str) -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let directory =
-            std::env::temp_dir().join(format!("rfl-futures-{}-{stamp}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!(
+            "rfl-futures-{}-{stamp}-{sequence}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("main.rfl");
         std::fs::write(&path, source).unwrap();

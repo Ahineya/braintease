@@ -170,6 +170,7 @@ impl Checker<'_> {
             ));
         }
         let signature = self.projected_method_signature(name, method, ty)?;
+        self.note_reference_use(span, &recv, Some(wanted))?;
         let mut checked = vec![recv];
         for (arg, want) in args[1..].iter().zip(signature.params) {
             let got = self.check_expr(arg, Some(want))?;
@@ -180,6 +181,7 @@ impl Checker<'_> {
                     format!("expected {}, found {}", self.show(want), self.show(got.ty)),
                 ));
             }
+            self.note_reference_use(arg.span.start, &got, Some(want))?;
             checked.push(got);
         }
         let ret = signature.ret;

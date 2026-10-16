@@ -1,0 +1,54 @@
+import { Future, Poll, Pending, Ready, invalid_poll } from "std/future";
+import { Context } from "std/task";
+import { replace } from "std/mem";
+
+// Only the handle moves. The child is always polled in its Owned allocation.
+export type OwnedFuture<F:Future> = FutureRunning(Owned<F>) | FutureComplete | FutureCancelled;
+export fn own_future<F:Future>(future:F)->OwnedFuture<F> {
+    FutureRunning(owned(move(future),fn(future:&mut F)=>{future.cancel();}))
+}
+impl<F:Future> Future for OwnedFuture<F> {
+    type Output=F::Output;
+    fn poll(&mut self,cx:&mut Context)->Poll<F::Output> {
+        match replace(self,FutureCancelled) {
+            FutureRunning(child)=>{
+                let mut child=move(child);
+                let result={let future=child.borrow_mut();future.poll(cx)};
+                match move(result) {
+                    Pending=>{*self=FutureRunning(move(child));Pending},
+                    Ready(value)=>{
+                        *self=FutureComplete;
+                        // F finished: destroy its fields without calling F.cancel.
+                        drop(move(child).into_inner());
+                        Ready(move(value))
+                    }
+                }
+            },
+            FutureComplete=>{invalid_poll();Pending},
+            FutureCancelled=>{invalid_poll();Pending},
+        }
+    }
+    fn cancel(&mut self) {
+        match replace(self,FutureCancelled) {
+            FutureRunning(child)=>{drop(move(child));},
+            FutureComplete=>{*self=FutureComplete;},
+            FutureCancelled=>{},
+        }
+    }
+}
+
+// Unlike the callback prototype, this can hold move-only output values.
+export type ReadyValue<T> = ValueWaiting(T) | ValueTaken;
+export fn ready_owned<T>(value:T)->OwnedFuture<ReadyValue<T>> {
+    own_future(ValueWaiting(move(value)))
+}
+impl<T> Future for ReadyValue<T> {
+    type Output=T;
+    fn poll(&mut self,cx:&mut Context)->Poll<T> {
+        match replace(self,ValueTaken) {
+            ValueWaiting(value)=>Ready(move(value)),
+            ValueTaken=>{invalid_poll();Pending},
+        }
+    }
+    fn cancel(&mut self) {drop(replace(self,ValueTaken));}
+}

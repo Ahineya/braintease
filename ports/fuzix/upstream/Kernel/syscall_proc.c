@@ -667,7 +667,7 @@ setpgrp (void)                    Function 53
 
 arg_t _setpgrp(void)
 {
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 	/* For full session management it's a shade
 	   more complicated and we have the routine
 	   to do the full job */

@@ -14,11 +14,14 @@ pub(super) fn consumed_temporaries(proc: &Proc) -> HashSet<usize> {
     excluded.extend(proc.result_slot);
     for seg in &proc.segs {
         for insn in &seg.insns {
-            if let Insn::Borrow { slot, .. } = insn {
-                excluded.insert(*slot);
+            if let Insn::Borrow { place, .. } = insn {
+                excluded.insert(place.root);
             }
-            for slot in operands(insn) {
-                uses[slot] += 1;
+            // A cleanup is a lifetime boundary, not an additional value use.
+            if !matches!(insn, Insn::Drop { .. }) {
+                for slot in operands(insn) {
+                    uses[slot] += 1;
+                }
             }
         }
         match seg.term.as_ref().unwrap() {
@@ -46,6 +49,11 @@ pub(super) fn consumed_temporaries(proc: &Proc) -> HashSet<usize> {
 
 pub(super) fn operands(insn: &Insn) -> Vec<usize> {
     match insn {
+        Insn::Replace { place, value, .. } => vec![*place, *value],
+        Insn::IntoInner { src, .. } | Insn::EraseOwner { src, .. } => vec![*src],
+        Insn::Move { src, .. } => vec![*src],
+        Insn::Drop { slot } => vec![*slot],
+        Insn::Owned { value, cleanup, .. } => vec![*value, *cleanup],
         Insn::Copy { src, .. }
         | Insn::Neg { src, .. }
         | Insn::Not { src, .. }
@@ -89,7 +97,14 @@ pub(super) fn operands(insn: &Insn) -> Vec<usize> {
             v.extend(fail_slot);
             v
         }
-        Insn::Borrow { slot, .. } => vec![*slot],
+        Insn::Borrow { place, .. } => {
+            let mut slots = vec![place.root];
+            slots.extend(place.projections.iter().filter_map(|step| match step {
+                PlaceStep::Index { index, .. } => Some(*index),
+                _ => None,
+            }));
+            slots
+        }
         Insn::PtrLoad { ptr, index, .. } => {
             let mut v = vec![*ptr];
             v.extend(index);
@@ -118,6 +133,11 @@ pub(super) fn operands(insn: &Insn) -> Vec<usize> {
 /// Slots assigned by an instruction, including mutations and scratch results.
 pub(super) fn destinations(insn: &Insn) -> Vec<usize> {
     match insn {
+        Insn::Replace { dest, value, .. } => vec![*dest, *value],
+        Insn::IntoInner { dest, src } | Insn::EraseOwner { dest, src, .. } => vec![*dest, *src],
+        Insn::Move { dest, src } => vec![*dest, *src],
+        Insn::Drop { slot } => vec![*slot],
+        Insn::Owned { dest, .. } => vec![*dest],
         Insn::Const { slot, .. } | Insn::BoxNew { slot } => vec![*slot],
         Insn::Copy { dest, .. }
         | Insn::Bin { dest, .. }

@@ -79,6 +79,15 @@ pub(super) fn expand_impls(
                     format!("`Vec` already has `{}`", method.name),
                 ));
             }
+            if type_name == "Owned"
+                && matches!(method.name.as_str(), "borrow" | "borrow_mut" | "into_inner")
+            {
+                return Err(CompileError::at(
+                    source,
+                    method.name_span.start,
+                    format!("`Owned` already has `{}`", method.name),
+                ));
+            }
             let func = format!("{type_name}${}", method.name);
             let mut type_params = item.type_params.clone();
             type_params.extend(method.type_params.iter().cloned());

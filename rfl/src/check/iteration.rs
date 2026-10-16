@@ -59,11 +59,11 @@ impl<'a> Checker<'a> {
             kind: TExprKind::Index {
                 base: Box::new(TExpr {
                     ty: iter.ty,
-                    kind: TExprKind::Name(snap),
+                    kind: TExprKind::Name(snap, 0),
                 }),
                 index: Box::new(TExpr {
                     ty: Ty::Usize,
-                    kind: TExprKind::Name(index),
+                    kind: TExprKind::Name(index, 0),
                 }),
                 elem,
             },
@@ -92,7 +92,7 @@ impl<'a> Checker<'a> {
                     kind: TExprKind::Len {
                         vec: Box::new(TExpr {
                             ty: iter.ty,
-                            kind: TExprKind::Name(snap),
+                            kind: TExprKind::Name(snap, 0),
                         }),
                     },
                 }),
@@ -246,7 +246,7 @@ impl<'a> Checker<'a> {
             binding: cursor,
             value: TExpr {
                 ty: list_ty,
-                kind: TExprKind::Name(rest),
+                kind: TExprKind::Name(rest, 0),
             },
         }];
         stmts.extend(user.stmts);
@@ -258,7 +258,7 @@ impl<'a> Checker<'a> {
             kind: TExprKind::Match {
                 scrutinee: Box::new(TExpr {
                     ty: list_ty,
-                    kind: TExprKind::Name(cursor),
+                    kind: TExprKind::Name(cursor, 0),
                 }),
                 arms: vec![
                     TArm {

@@ -12,6 +12,7 @@ impl<'a> Checker<'a> {
                 || Ty::parse_name(&item.name).is_some()
                 || item.name == "Vec"
                 || item.name == "Slice"
+                || item.name == "Owned"
             {
                 return Err(CompileError::at(
                     self.source,
@@ -106,7 +107,11 @@ impl<'a> Checker<'a> {
             );
         }
         self.tuples = tuple_fields;
-        for elems in [&mut self.vec_elems, &mut self.slice_elems] {
+        for elems in [
+            &mut self.vec_elems,
+            &mut self.slice_elems,
+            &mut self.owner_elems,
+        ] {
             for elem in elems {
                 *elem = rewrite_layout(*elem, &widths, &tuple_w, &self.arrays);
             }
@@ -119,7 +124,42 @@ impl<'a> Checker<'a> {
         for (info, elem) in self.arrays.iter_mut().zip(elems) {
             info.elem = elem;
         }
+        self.finish_indirect_layouts(&widths, &tuple_w);
         self.check_repr(items)
+    }
+
+    /// Types interned while reading struct fields still contain preliminary
+    /// widths. Normalize every indirect table too, preserving its stable IDs.
+    /// Otherwise a callback signature or ADT payload can retain a zero-width
+    /// struct even though direct fields already have their final layout.
+    fn finish_indirect_layouts(&mut self, widths: &[u16], tuple_w: &[u16]) {
+        for info in self.refs.iter_mut().chain(&mut self.ptrs) {
+            info.inner = rewrite_layout(info.inner, widths, tuple_w, &self.arrays);
+        }
+        for sig in self.funcs.iter_mut().chain(&mut self.cfns) {
+            for param in &mut sig.params {
+                *param = rewrite_layout(*param, widths, tuple_w, &self.arrays);
+            }
+            sig.ret = rewrite_layout(sig.ret, widths, tuple_w, &self.arrays);
+        }
+        for adt in &mut self.adts {
+            for arg in &mut adt.args {
+                *arg = rewrite_layout(*arg, widths, tuple_w, &self.arrays);
+            }
+            for ctor in &mut adt.ctors {
+                for field in &mut ctor.fields {
+                    *field = rewrite_layout(*field, widths, tuple_w, &self.arrays);
+                }
+            }
+        }
+        // Monomorph keys must use the same normalized types as their values;
+        // reinterning after layout resolution must find the original ADT ID.
+        self.mono = self
+            .adts
+            .iter()
+            .enumerate()
+            .map(|(id, adt)| ((adt.schema, adt.args.clone()), id as u32))
+            .collect();
     }
 
     pub(super) fn check_repr(&self, items: &[crate::ast::StructItem]) -> Result<(), CompileError> {
@@ -461,7 +501,7 @@ impl<'a> Checker<'a> {
                 kind: TExprKind::Field {
                     base: Box::new(TExpr {
                         ty: root,
-                        kind: TExprKind::Name(id),
+                        kind: TExprKind::Name(id, 0),
                     }),
                     offset,
                 },

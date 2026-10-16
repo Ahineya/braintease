@@ -355,6 +355,10 @@ impl MacroFormatter {
             return Err("BF host entry point is outside the instruction image".into());
         }
         for instruction in &program.instructions {
+            if matches!(instruction.opcode, 0x25 | 0x26) ||
+                (matches!(instruction.opcode,0x23 | 0x24) && instruction.word2 >= 12) {
+                return Err("MMU instructions require RVM; build the Brainfuck profile with MMU=0".into());
+            }
             if !self.irq && matches!(instruction.opcode, 0x22..=0x24) {
                 return Err("BF IRQ instructions require --bf-irq (ENABLE_IRQ=1)".into());
             }

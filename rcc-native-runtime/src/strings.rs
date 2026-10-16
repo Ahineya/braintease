@@ -15,9 +15,9 @@ fn range(ptr: u64, count: u64) -> std::ops::Range<usize> {
 }
 fn length(rt: &Runtime, ptr: u64) -> usize {
     let at = linear(ptr);
-    rt.memory[at..]
-        .iter()
-        .position(|c| *c == 0)
+    rt.memory
+        .cells(at..CELLS)
+        .position(|c| c == 0)
         .unwrap_or_else(|| fatal("unterminated C string"))
 }
 macro_rules! string_service {
@@ -35,7 +35,7 @@ fn compare(rt: &Runtime, a: u64, b: u64, count: u64, strings: bool) -> u64 {
         if a >= CELLS || b >= CELLS {
             fatal("C comparison out of bounds");
         }
-        let (x, y) = (rt.memory[a], rt.memory[b]);
+        let (x, y) = (rt.memory.read(a), rt.memory.read(b));
         if x != y {
             return if x < y { u64::MAX } else { 1 };
         }
@@ -72,9 +72,9 @@ string_service!(rcc_native_ext_strncpy(rt, dest, src, count) {
     for at in to {
         if !ended {
             if from >= CELLS { fatal("strncpy source out of bounds"); }
-            ended = rt.memory[from] == 0;
+            ended = rt.memory.read(from) == 0;
         }
-        rt.memory[at] = if ended { 0 } else { rt.memory[from] };
+        rt.memory.write(at, if ended { 0 } else { rt.memory.read(from) });
         if !ended { from += 1; }
     }
     dest
@@ -90,18 +90,18 @@ string_service!(rcc_native_ext_strcat(rt, dest, src) {
 string_service!(rcc_native_ext_strchr(rt, src, value) {
     let at = linear(src);
     let n = length(rt, src);
-    rt.memory[at..=at + n].iter().position(|v| *v == value as u16)
+    rt.memory.cells(at..at + n + 1).position(|v| v == value as u16)
         .map(|i| pointer(at + i)).unwrap_or(0)
 });
 string_service!(rcc_native_ext_strrchr(rt, src, value) {
     let at = linear(src);
     let n = length(rt, src);
-    rt.memory[at..=at + n].iter().rposition(|v| *v == value as u16)
+    rt.memory.cells(at..at + n + 1).rposition(|v| v == value as u16)
         .map(|i| pointer(at + i)).unwrap_or(0)
 });
 string_service!(rcc_native_ext_memchr(rt, src, value, count) {
     let r = range(src, count);
     let start = r.start;
-    rt.memory[r].iter().position(|v| *v == value as u16)
+    rt.memory.cells(r).position(|v| v == value as u16)
         .map(|i| pointer(start + i)).unwrap_or(0)
 });

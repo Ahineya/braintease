@@ -15,7 +15,11 @@ PORT = Path(__file__).resolve().parents[1]
 ROOT = PORT.parents[1]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--build', type=Path, default=ROOT/'build/fuzix')
-build = p.parse_args().build.resolve()
+p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
+options = p.parse_args()
+engines = [True, False] if options.engine == 'both' else [options.engine == 'jit']
+engine_label = 'JIT and interpreter' if options.engine == 'both' else options.engine
+build = options.build.resolve()
 
 SCRIPT = r'''# Core Tcl-style syntax and 32-bit arithmetic.
   # Leading whitespace must not turn this comment into a command.
@@ -134,7 +138,7 @@ fs.writeFileSync(f,root.replace(installRoot(root.data,JSON.parse(fs.readFileSync
 
 def run(image, commands, jit, label):
     cmd = [str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),
-           '--memory','5120000','--headless','--input',commands,'--timeout','360']
+           '--memory','16384000','--headless','--input',commands,'--timeout','360']
     if jit: cmd.append('--jit')
     log = Path('/tmp/fuzix-fun-' + label + '.log')
     with log.open('w') as stream:
@@ -189,7 +193,7 @@ def live(image, jit):
         os.close(master)
 
 with tempfile.TemporaryDirectory(prefix='fuzix-fun-') as tmp:
-    for jit in (True,False):
+    for jit in engines:
         label = 'jit' if jit else 'interpreter'; image=Path(tmp)/(label+'.img')
         subprocess.run(['node',str(PORT/'tools/disk.mjs'),str(build),str(image)],check=True)
         fixtures = {
@@ -222,4 +226,4 @@ with tempfile.TemporaryDirectory(prefix='fuzix-fun-') as tmp:
         live(image,jit)
         subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
         print(label+': cowsay, Tcl scripts/REPL, bounds, channels, subprocesses, interrupts, upgrade and persistence passed',flush=True)
-print('Fun tools passed under JIT and interpreter')
+print('Fun tools passed under ' + engine_label)

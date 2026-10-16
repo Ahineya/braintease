@@ -1570,8 +1570,9 @@
 +        if (((uintptr_t)end) & 1)
 --- a/Applications/V7/cmd/sh/builtin.c
 +++ b/Applications/V7/cmd/sh/builtin.c
-@@ -7 +7,15 @@
+@@ -7 +7,16 @@
 -	return (0);
++    if (jobs_builtin(argn, cmd)) return 1;
 +	if (eq(cmd[0], "shutdown")) {
 +        uadmin(1, 0, NULL);
 +        error("shutdown failed");
@@ -1582,7 +1583,7 @@
 +        return 1;
 +    }
 +    if (eq(cmd[0], "help")) {
-+        prs("Shell: cd, set, export, read, eval, trap, wait, exit, shutdown.\n");
++        prs("Shell: cd, set, export, read, eval, trap, wait, jobs, fg, bg, exit, shutdown.\n");
 +        prs("Scripts: if/for/while/case, pipes, redirection, globbing, `commands`.\n");
 +        return 1;
 +    }
@@ -1618,9 +1619,16 @@
 +#define round(a,b)	(((uintptr_t)(a)+(b)-1)&~((uintptr_t)(b)-1))
 @@ -376,0 +377 @@
 +extern void reapchildren(void);
-@@ -402 +403 @@
+@@ -402 +403,8 @@
 -extern void execexp(char *s, UFD f);
 +extern void execexp(char *s, intptr_t f);
++
++extern int jobs_enabled(void), jobs_current(void), jobs_begin(TREPTR, int);
++extern void shell_terminal_accept(void);
++extern void jobs_await(int);
++extern void jobs_init(void), jobs_prompt(void), jobs_child(void), jobs_child_signals(void);
++extern void jobs_parent(int), jobs_wait(void), jobs_end(int), jobs_shutdown(void);
++extern int jobs_status(int, int), jobs_builtin(int, char **);
 --- a/Applications/V7/cmd/sh/error.c
 +++ b/Applications/V7/cmd/sh/error.c
 @@ -3 +2,0 @@
@@ -1639,7 +1647,9 @@
 +		int status = exitval;
 @@ -74,0 +80 @@
 +		exitval = status;
-@@ -78 +84,3 @@
+@@ -76,0 +83 @@
++	jobs_shutdown();
+@@ -78 +85,3 @@
 -	exit(exitval);
 +	if (getpid() == 1)
 +        uadmin(1, 0, NULL);
@@ -1675,22 +1685,27 @@
 +#ifdef BUILD_FSH
 +#include <readline/readline.h>
 +#endif
-@@ -32,0 +36,2 @@
+@@ -32,0 +36,5 @@
 +static struct termios terminal;
 +static int restore_terminal;
-@@ -35 +40 @@
++void shell_terminal_accept(void) {
++    if (restore_terminal) tcgetattr(input, &terminal);
++}
+@@ -35 +43 @@
 -static char history[1024];
 +static char history[4096];
-@@ -80,0 +86 @@
+@@ -80,0 +89 @@
 +	if (bias) return bias;
-@@ -206 +212,2 @@
+@@ -206 +215,3 @@
 -	if (setjmp(errshell) && prof) {
++	jobs_init();
 +	restore_terminal = (flags & prompt) && tcgetattr(input, &terminal) == 0;
 +    if (setjmp(errshell) && prof) {
-@@ -218,0 +226,4 @@
+@@ -218,0 +230,5 @@
++        jobs_prompt();
 +        if (restore_terminal)
 +            tcsetattr(input, TCSANOW, &terminal);
-+        if (getpid() == 1)
++        if (getpid() == 1 || jobs_enabled())
 +            reapchildren();
 --- a/Applications/V7/cmd/sh/mode.h
 +++ b/Applications/V7/cmd/sh/mode.h
@@ -1757,8 +1772,8 @@
 +void reapchildren(void)
 +{
 +    int pid, status;
-+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
-+        remember(pid, status);
++    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
++        if (!jobs_status(pid, status)) remember(pid, status);
 +}
 @@ -192,0 +228 @@
 +    memset(deadpid, 0, sizeof(deadpid));
@@ -1789,6 +1804,20 @@
 +		/* A foreground pipeline reports its final command's status,
 +		 * regardless of the order in which the children are reaped. */
 +		if (p == i || i <= 0)
+--- a/Applications/V7/cmd/sh/sh.1
++++ b/Applications/V7/cmd/sh/sh.1
+@@ -967,0 +968,11 @@
++.SH RIPPLE TERMINAL JOBS
++Interactive commands and pipelines use separate process groups.
++Ctrl-Z stops a foreground job; jobs lists jobs, fg resumes one with terminal
++ownership, and bg continues one in the background. Both resume commands accept
++an optional job number, such as fg %1. Background terminal reads stop with
++SIGTTIN; background writes stop when stty tostop is enabled. Fg restores a
++stopped program's terminal settings. The shell restores its own settings on
++stop or abnormal termination, while successful stty changes persist.
++.PP
++These builtins require an interactive controlling terminal. See jobs(1) for
++status and wait behavior, and ptysh(1) for independent terminal sessions.
 --- a/Applications/V7/cmd/sh/stak.c
 +++ b/Applications/V7/cmd/sh/stak.c
 @@ -4 +3,0 @@
@@ -1821,17 +1850,66 @@
 +++ b/Applications/V7/cmd/sh/xec.c
 @@ -4 +3,0 @@
 -#
-@@ -96 +95,2 @@
+@@ -35,0 +35,2 @@
++        int job_owner = 0, gate[2] = {-1, -1}, managed = 0;
++        char ready;
+@@ -96 +97,2 @@
 -						exitsh(a1 ? stoi(a1) : oldexit);
 +						exitval = a1 ? stoi(a1) : oldexit;
 +						done();
-@@ -176 +176 @@
+@@ -153 +155,6 @@
+-						flags |= forked;
++		                if (managed) {
++                    close(gate[1]); jobs_child();
++                    if (read(gate[0], &ready, 1) != 1) _exit(125);
++                    close(gate[0]);
++                }
++				flags |= forked;
+@@ -176 +183,2 @@
 -						await(-1);
-+						await(a1 ? stoi(a1) : -1);
-@@ -217 +217 @@
++						if (jobs_enabled()) jobs_await(a1 ? stoi(a1) : -1);
++                        else await(a1 ? stoi(a1) : -1);
+@@ -217 +225 @@
 -							execexp(a1, (UFD)&com[2]);	/* FIXME */
 +							execexp(a1, (intptr_t)&com[2]);	/* FIXME */
-@@ -439 +439 @@
+@@ -252,0 +261,3 @@
++            job_owner = jobs_begin(t, (treeflgs & FAMP) != 0);
++            managed = jobs_current();
++            if (managed && pipe(gate) < 0) error("cannot create job handshake");
+@@ -262,0 +274,4 @@
++            if (parent && managed) {
++                close(gate[0]); jobs_parent(parent);
++                write(gate[1], "x", 1); close(gate[1]);
++            }
+@@ -271,2 +286,3 @@
+-				if ((treeflgs & (FAMP | FPOU)) == 0)
+-					await(parent);
++                if ((treeflgs & (FAMP | FPOU)) == 0) {
++                    if (managed) jobs_wait(); else await(parent);
++                }
+@@ -274 +290 @@
+-					post(parent);
++                    { if (!managed) post(parent); }
+@@ -277,0 +294 @@
++                jobs_end(job_owner);
+@@ -280,0 +298,5 @@
++                if (managed) {
++                    close(gate[1]); jobs_child();
++                    if (read(gate[0], &ready, 1) != 1) _exit(125);
++                    close(gate[0]);
++                }
+@@ -290 +312,2 @@
+-				if (treeflgs & FINT) {
++                if (managed) jobs_child_signals();
++				if ((treeflgs & FINT) && !managed) {
+@@ -306 +329 @@
+-				if (treeflgs & FINT && ioset == 0)
++				if ((treeflgs & FINT) && !managed && ioset == 0)
+@@ -327,0 +351 @@
++            int pipeline_owner = jobs_begin(t, 0);
+@@ -332,0 +357 @@
++            jobs_end(pipeline_owner);
+@@ -439 +464 @@
 -void execexp(char *s, UFD f)
 +void execexp(char *s, intptr_t f)
 --- a/Applications/V7/cmd/split.c
@@ -2608,6 +2686,620 @@
 -}
 +  return 0;
 +}
+--- a/Applications/games/sok.c
++++ b/Applications/games/sok.c
+@@ -1,4 +1,3 @@
+-/*
+- *	A tiny Sokoban clone
+- */
+-
++/* SPDX-License-Identifier: GPL-2.0-only */
++/* Ripple adaptation of FUZIX's tiny Sokoban clone. Movement/undo are based on
++ * upstream sok.c; terminal, validation and progress I/O are adapted for C16. */
+@@ -5,0 +5 @@
++#include <stdio.h>
+@@ -13,0 +14 @@
++#include <sys/stat.h>
+@@ -15 +16 @@
+-#include <termcap.h>
++#include <errno.h>
+@@ -18,220 +19,79 @@
+-static struct winsize win;
+-static int conf_fd = -1;
+-static int level_fd;
+-
+-static struct level map;
+-static struct level base_map;
+-
+-static uint16_t level;
+-
+-#define MAX_UNDO	64
+-static uint8_t undolist[MAX_UNDO];
+-static uint8_t undop;
+-static uint16_t moves;
+-
+-static uint8_t left;
+-
+-#define BLOCK_MOVED	0x80
+-
+-#define MAP_WALL	'#'
+-#define MAP_FLOOR	' '
+-#define MAP_BLOCK	'$'
+-#define MAP_BLOCK_ON	'*'
+-#define MAP_TARGET	'.'
+-
+-/* HIJKL */
+-static int8_t delta[5][2] = { {0, -1}, {0, 0}, {1, 0}, {-1, 0}, {0, 1} };
+-
+-
+-static char *t_go;
+-static char *t_clreol;
+-static char *t_clreos;
+-
+-/* str is either a space buffer for clearing or the output queue for
+-   termios, but never both at once */
+-
+-#define MAXCOLS	132
+-
+-static char str[MAXCOLS];
+-static char *ptr;
+-
+-#ifdef __linux__
+-#include <stdio.h>
+-static char *_uitoa(int x)
+-{
+-	static char buf[10];
+-	sprintf(buf, "%d", x);
+-	return buf;
+-}
+-#endif
+-
+-static int outbuf(int c)
+-{
+-	*ptr++ = c;
+-	return c;
+-}
+-
+-static void tputs_buf(char *p, int n)
+-{
+-	ptr = str;
+-	tputs(p, n, outbuf);
+-	write(1, str, ptr - str);
+-}
+-
+-static void moveto(uint8_t y, uint8_t x)
+-{
+-	tputs_buf(tgoto(t_go, x, y), 1);
+-}
+-
+-static void draw(uint8_t y, uint8_t x, uint8_t c)
+-{
+-	moveto(2 + y, x + left);
+-	write(1, &c, 1);
+-}
+-
+-static void clrtoeol(void)
+-{
+-	if (*t_clreol)
+-		tputs_buf(t_clreol, 1);
+-	else {
+-		memset(str, ' ', win.ws_col);
+-		write(1, str, win.ws_col);
+-	}
+-}
+-
+-static void clear(void)
+-{
+-	if (*t_clreos) {
+-		moveto(0, 0);
+-		tputs_buf(t_clreos, win.ws_row);
+-	} else {
+-		int i = 0;
+-		while (i++ <= win.ws_row) {
+-			moveto(i, 0);
+-			clrtoeol();
+-		}
+-	}
+-}
+-
+-static struct termios tcsave, tcnew;
+-
+-void is_done(void)
+-{
+-	if (tcsetattr(0, TCSANOW, &tcsave))
+-		perror("tcsetattr:exit");
+-}
+-
+-void quit_game(int sig)
+-{
+-	is_done();
+-	_exit(1);
+-}
+-
+-
+-static int ival[3];
+-
+-static char *tnext(char *p)
+-{
+-	return p + strlen(p) + 1;
+-}
+-
+-static void tty_init(void)
+-{
+-	int fd[2];
+-	pid_t pid;
+-
+-	if (pipe(fd) < 0) {
+-		perror("pipe");
+-		exit(1);
+-	}
+-
+-	pid = fork();
+-	if (pid == -1) {
+-		perror("fork");
+-		exit(1);
+-	}
+-
+-	if (pid == 0) {
+-		close(fd[0]);
+-		dup2(fd[1], 1);
+-		execl("/usr/lib/tchelp", "tchelp", "li#co#cm$ce$cd$cl$",
+-		      NULL);
+-		_exit(1);
+-	}
+-	close(fd[1]);
+-
+-	if (read(fd[0], ival,sizeof(int)) != sizeof(int)) {
+-		perror("tcread");
+-		exit(1);
+-	}
+-	if (ival[0] == 0)
+-		exit(1);
+-
+-	if (read(fd[0], ival + 1 ,2 * sizeof(int)) != 2 * sizeof(int)) {
+-		perror("tcread");
+-		exit(1);
+-	}
+-	/* Don't need space for the two integer values reported */
+-	ival[0] -= 2 * sizeof(int);
+-	t_go = sbrk((ival[0] + 3) & ~3);
+-	if (t_go == (void *) -1) {
+-		perror("sbrk");
+-		exit(1);
+-	}
+-	if (read(fd[0], t_go, ival[0]) != ival[0]) {
+-		perror("tcread2");
+-		exit(1);
+-	}
+-	close(fd[0]);
+-	t_clreol = tnext(t_go);
+-	t_clreos = tnext(t_clreol);
+-	if (*t_clreos == 0)	/* No clr eos - try for clr/home */
+-		t_clreos++;	/* cl cap if present */
+-
+-	if (!*t_go) {
+-		write(2, "sok: insufficient terminal control.\n", 36);
+-		exit(1);
+-	}
+-
+-	if (tcgetattr(0, &tcsave) == 0) {
+-		atexit(is_done);
+-		memcpy(&tcnew, &tcsave, sizeof(struct termios));
+-		tcnew.c_cc[VMIN] = 1;
+-		tcnew.c_cc[VTIME] = 0;
+-		tcnew.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHOK);
+-		signal(SIGINT, quit_game);
+-		/* FIXME: handle stop/cont properly */
+-		signal(SIGTSTP, SIG_IGN);
+-		if (tcsetattr(0, TCSADRAIN, &tcnew))
+-			perror("tcsetattr");
+-	}
+-	if (ioctl(0, TIOCGWINSZ, &win)) {
+-		win.ws_col = 80;
+-		win.ws_row = 25;
+-	}
+-	if (win.ws_col > MAXCOLS)
+-		win.ws_col = MAXCOLS;
+-	left = (win.ws_col - MAP_W) / 2;
+-}
+-
+-static void drawplayer(void)
+-{
+-	if (map.map[map.py][map.px] == MAP_TARGET)
+-		draw(map.py, map.px, '+');
+-	else
+-		draw(map.py, map.px, '@');
+-}
+-
+-static void wipe_line(void)
+-{
+-	write(1, "                                ", 31);
+-}
+-
+-static uint8_t getkey(void)
+-{
+-	uint8_t c;
+-	if (read(0, &c, 1) < 1)
+-		exit(1);
+-	return toupper(c);
+-}
+-
++static struct level map, base_map;
++static unsigned level, level_count, moves, left;
++static int level_fd, tty_active;
++static struct termios tcsave;
++static char progress[160];
++#define MAX_UNDO 64
++#define BLOCK_MOVED 0x80
++#define MAP_WALL '#'
++#define MAP_FLOOR ' '
++#define MAP_BLOCK '$'
++#define MAP_BLOCK_ON '*'
++#define MAP_TARGET '.'
++static uint8_t undolist[MAX_UNDO], undop;
++static int8_t delta[5][2] = {{0,-1},{0,0},{1,0},{-1,0},{0,1}};
++
++static void moveto(unsigned y, unsigned x) { printf("\033[%u;%uH", y+1, x+1); }
++static void draw(unsigned y, unsigned x, unsigned c) {
++    moveto(2+y, x+left); putchar(c); fflush(stdout);
++}
++static void drawplayer(void) {
++    draw(map.py, map.px, map.map[map.py][map.px] == MAP_TARGET ? '+' : '@');
++}
++static void cleanup(void) {
++    if (tty_active) {
++        tcsetattr(0, TCSANOW, &tcsave);
++        fputs("\033[?25h\033[?1049l", stdout); fflush(stdout);
++        tty_active = 0;
++    }
++}
++static void interrupted(int sig) { cleanup(); _exit(128+sig); }
++static void tty_init(void) {
++    struct termios raw;
++    struct winsize win;
++    if (tcgetattr(0, &tcsave) == 0) {
++        raw = tcsave;
++        raw.c_lflag &= ~(ICANON|ECHO|ECHOE|ECHOK);
++        raw.c_cc[VMIN] = 0; raw.c_cc[VTIME] = 1;
++        if (tcsetattr(0, TCSANOW, &raw)) { perror("sokoban: terminal"); exit(1); }
++        tty_active = 1;
++        atexit(cleanup);
++        signal(SIGINT, interrupted); signal(SIGTERM, interrupted); signal(SIGHUP, interrupted);
++        signal(SIGTSTP, SIG_IGN);
++        fputs("\033[?1049h\033[?25l", stdout);
++    }
++    if (ioctl(0, TIOCGWINSZ, &win)) {win.ws_col=80;win.ws_row=24;}
++    if (!win.ws_col) win.ws_col=80;
++    if (!win.ws_row) win.ws_row=24;
++    if (win.ws_col < MAP_W || win.ws_row < MAP_H+4) {
++        fputs("sokoban: terminal must be at least 32 columns by 18 rows\n", stderr); exit(1);
++    }
++    left = (win.ws_col > 240 ? 240 : win.ws_col) / 2 - MAP_W / 2;
++}
++static int one_key(int optional) {
++    unsigned char c;
++    int n;
++    do {
++        n=read(0,&c,1);
++        if(!n && optional)return -1;
++    } while ((n<0 && errno==EINTR) || (!n && tty_active));
++    if (n<0) {perror("sokoban: input");exit(1);}
++    if (!n || c==4) exit(0);
++    if (c>127) return 0;
++    return c;
++}
++static unsigned getkey(void) {
++    int c=one_key(0);
++    if (c==27) {
++        c=one_key(1);
++        if (c=='[' || c=='O') {
++            c=one_key(1);
++            if (c=='A') return 'K'; if(c=='B') return 'J';
++            if(c=='C') return 'L'; if(c=='D') return 'H';
++        }
++        return 0;
++    }
++    c=toupper(c);
++    if(c=='W')return 'K'; if(c=='A')return 'H'; if(c=='S')return 'J'; if(c=='D')return 'L';
++    return c;
++}
+@@ -255,0 +116 @@
++	if (ny >= MAP_H || nx >= MAP_W) return;
+@@ -264 +125,3 @@
+-		uint8_t m = map.map[by][bx];
++		uint8_t m;
++		if (by >= MAP_H || bx >= MAP_W) return;
++		m = map.map[by][bx];
+@@ -275 +138 @@
+-		map.map[by][bx] = MAP_BLOCK;
++		map.map[by][bx] = fixup(base_map.map[by][bx]) == MAP_TARGET ? MAP_BLOCK_ON : MAP_BLOCK;
+@@ -316 +179 @@
+-		map.map[map.py][map.px] = MAP_BLOCK;
++		map.map[map.py][map.px] = fixup(base_map.map[map.py][map.px]) == MAP_TARGET ? MAP_BLOCK_ON : MAP_BLOCK;
+@@ -328,23 +191,5 @@
+-	move(reverse[dir] - 'H');
+-}
+-
+-static uint8_t notifier(const char *p)
+-{
+-	uint8_t c;
+-	moveto(0, 0);
+-	write(1, "Do you want to ", 15);
+-	write(1, p, strlen(p));
+-	write(1, " (Y/N)", 6);
+-	c = getkey();
+-	moveto(0, 0);
+-	wipe_line();
+-	return c == 'Y';
+-}
+-
+-static void redraw_all(void)
+-{
+-	uint8_t i;
+-	clear();
+-	for (i = 0; i < MAP_H; i++) {
+-		moveto(2 + i, left);
+-		write(1, map.map[i], MAP_W);
++	{
++		unsigned saved = undop;
++		move(reverse[dir] - 'H');
++		undop = saved;
++		if (moves >= 2) moves -= 2;
+@@ -352,128 +197,126 @@
+-	drawplayer();
+-}
+-
+-
+-static void start_level(void)
+-{
+-	moves = 0;
+-	undop = 0;
+-	memcpy(&map, &base_map.map, sizeof(map));
+-	redraw_all();
+-}
+-
+-static void key(void)
+-{
+-	uint8_t c;
+-	moveto(0,0);
+-	switch (c = getkey()) {
+-	case 'Q':
+-		if (notifier("quit"))
+-			exit(0);
+-		break;
+-	case 'R' & 31:
+-		redraw_all();
+-		break;
+-	case 'R':
+-		if (notifier("restart"))
+-			start_level();
+-		break;
+-	case 'U':
+-		undo();
+-		break;
+-	case 'H':
+-	case 'J':
+-	case 'K':
+-	case 'L':
+-		move(c - 'H');
+-		break;
+-	}
+-	/* TODO arrow key handling */
+-}
+-
+-static void play_level(void)
+-{
+-	start_level();
+-	while (map.done != map.blocks)
+-		key();
+-	moveto(0, 0);
+-	strcpy(str, "Level ");
+-	strcpy(str + 6, _uitoa(level));
+-	strcat(str + 6, " done in ");
+-	strcat(str + 6, _uitoa(moves));
+-	strcat(str + 6, " moves.");
+-	write(1, str, strlen(str));
+-	getkey();
+-}
+-
+-/*
+- *	There are various formats that mostly try and compress data
+- *	down, notably the rather tight scheme used by Pusher, and the
+- *	much more general approach used by XSB and the like. We naturally
+- *	do our own thing for now and expect a preprocessed fixed size level
+- *	on disk.
+- */
+-
+-static int load_level(uint16_t level)
+-{
+-	if (lseek(level_fd, level * MAP_SEEK, SEEK_SET) == -1 ||
+-	    read(level_fd, &base_map,
+-		 sizeof(struct level)) != sizeof(struct level))
+-		return 0;
+-	return 1;
+-}
+-
+-static void play_game(void)
+-{
+-	while (load_level(level)) {
+-		play_level();
+-		level++;
+-		/* Save the new level achieved */
+-		if (conf_fd != -1) {
+-			lseek(conf_fd, 0L, SEEK_SET);
+-			write(conf_fd, &level, 2);
+-		}
+-	}
+-}
+-
+-int main(int argc, char *argv[])
+-{
+-	uint16_t n;
+-	struct passwd *pw;
+-	const char *path = "/usr/lib/sok/sok.levels";
+-
+-	if (argc > 2 && strcmp(argv[1], "-l") == 0) {
+-		level = atoi(argv[2]);
+-		argc -= 2;
+-		argv += 2;
+-	}
+-	if (argc == 2)
+-		path = argv[1];
+-	if (argc > 2) {
+-		write(2, "sok [-l level] [path to levels].\n", 21);
+-		exit(1);
+-	}
+-	
+-	level_fd = open(path, O_RDONLY);
+-	if (level_fd == -1) {
+-		perror(path);
+-		exit(1);
+-	}
+-
+-	if (level == 0) {
+-		level = 1;
+-		pw = getpwuid(getuid());
+-		if (pw && chdir(pw->pw_dir) == 0) {
+-			conf_fd = open(".sokoban", O_RDWR | O_CREAT, 0600);
+-			if (conf_fd != -1) {
+-				if (read(conf_fd, &n, 2) == 2)
+-					level = n;
+-			}
+-		}
+-	}
+-	tty_init();
+-	/* Level '0' is actually not a level but a title screen */
+-	load_level(0);
+-	start_level();
+-	getkey();
+-	play_game();
+-}
++}
++
++
++static int notifier(const char *text) {
++    unsigned c;
++    moveto(0,0); printf("\033[K%s (y/n)",text); fflush(stdout);
++    do {c=getkey();} while(c!='Y' && c!='N' && c!='Q');
++    return c=='Y';
++}
++static void redraw_all(void) {
++    unsigned y;
++    fputs("\033[H\033[2J",stdout);
++    printf("Sokoban - level %u/%u - %u moves",level,level_count-1,moves);
++    for(y=0;y<MAP_H;y++) {
++        moveto(2+y,left); fwrite(map.map[y],1,MAP_W,stdout);
++    }
++    moveto(MAP_H+3,0);
++    fputs("Arrows/hjkl/WASD: move  u: undo  r: restart  q: quit",stdout);
++    drawplayer(); fflush(stdout);
++}
++static void start_level(void) {
++    moves=undop=0;
++    memcpy(&map,&base_map,sizeof(map));
++    redraw_all();
++}
++static void key(void) {
++    unsigned c=getkey();
++    if(c=='Q') {if(notifier("Quit?"))exit(0);}
++    else if(c=='R') {if(notifier("Restart level?"))start_level();}
++    else if(c==18) redraw_all();
++    else if(c=='U') undo();
++    else if(c=='H'||c=='J'||c=='K'||c=='L') move(c-'H');
++    moveto(0,0); printf("\033[KSokoban - level %u/%u - %u moves",level,level_count-1,moves); fflush(stdout);
++}
++static int load_level(unsigned n) {
++    unsigned done=0, y,x,boxes=0,goals=0,placed=0;
++    int count;
++    char *dest=(char *)&base_map;
++    if(n>=level_count)return 0;
++    if(lseek(level_fd,(unsigned long)n*MAP_SEEK,SEEK_SET)<0)goto bad;
++    while(done<sizeof(base_map)) {
++        count=read(level_fd,dest+done,sizeof(base_map)-done);
++        if(count<=0)goto bad;
++        done+=count;
++    }
++    if(base_map.py>=MAP_H||base_map.px>=MAP_W)goto bad;
++    if(!n)return 1;
++    for(y=0;y<MAP_H;y++)for(x=0;x<MAP_W;x++) {
++        unsigned c=base_map.map[y][x];
++        if(c!='#'&&c!=' '&&c!='$'&&c!='.'&&c!='*')goto bad;
++        if(c=='$'||c=='*')boxes++;
++        if(c=='.'||c=='*')goals++;
++        if(c=='*')placed++;
++    }
++    if(!boxes||boxes!=goals||boxes!=base_map.blocks||placed!=base_map.done)goto bad;
++    if(base_map.map[base_map.py][base_map.px]!=' '&&base_map.map[base_map.py][base_map.px]!='.')goto bad;
++    return 1;
++bad:
++    fprintf(stderr,"sokoban: invalid or unreadable level %u\n",n);exit(1);return 0;
++}
++static void save_progress(void) {
++    FILE *f;
++    if(!progress[0])return;
++    f=fopen(progress,"w");
++    if(!f){perror("sokoban: progress");return;}
++    if(fprintf(f,"%u\n",level)<0)fputs("sokoban: could not save progress\n",stderr);
++    if(fclose(f))perror("sokoban: progress");
++}
++static unsigned number(const char *s) {
++    char *end;
++    unsigned long n;
++    errno=0;n=strtoul(s,&end,10);
++    if(errno||!*s||*end||n<1||n>32767UL){fputs("sokoban: invalid level number\n",stderr);exit(1);}
++    return (unsigned)n;
++}
++int main(int argc,char **argv) {
++    const char *path="/usr/lib/sok/sok.levels", *home;
++    struct stat st;
++    struct passwd *pw;
++    int i=1,explicit_level=0;
++    FILE *f;
++    char line[32],*end;
++    unsigned long n;
++    if(argc==2&&!strcmp(argv[1],"--help")) {
++        puts("Usage: sokoban [-l level] [level-file]\nPush every $ onto a .; * marks a box on a goal.\nArrows/hjkl/WASD move; u undoes; r restarts; q quits.\nDefault progress is saved in ~/.sokoban.\nSokEvo puzzles by Lee J Haywood; see /usr/lib/sok/README.");return 0;
++    }
++    if(i<argc&&!strcmp(argv[i],"-l")) {
++        if(i+1>=argc){fputs("sokoban: -l requires a level\n",stderr);return 1;}
++        level=number(argv[i+1]);explicit_level=1;i+=2;
++    }
++    if(i<argc) {path=argv[i++];explicit_level=1;}
++    if(i!=argc || path[0]=='-') {fputs("Usage: sokoban [-l level] [level-file]\n",stderr);return 1;}
++    level_fd=open(path,O_RDONLY);
++    if(level_fd<0){perror(path);return 1;}
++    if(fstat(level_fd,&st)||st.st_size<2UL*MAP_SEEK||st.st_size%MAP_SEEK||st.st_size/MAP_SEEK>32768UL) {
++        fputs("sokoban: invalid level file\n",stderr);return 1;
++    }
++    level_count=st.st_size/MAP_SEEK;
++    if(!level)level=1;
++    if(!explicit_level) {
++        home=getenv("HOME");
++        if(!home || !*home){pw=getpwuid(getuid());home=pw?pw->pw_dir:"/";}
++        if(strlen(home)+10<sizeof(progress)) {
++            strcpy(progress,home);strcat(progress,"/.sokoban");
++            f=fopen(progress,"r");
++            if(f) {
++                if(fgets(line,sizeof(line),f)) {
++                    n=strtoul(line,&end,10);
++                    if(n>=1&&n<level_count&&(*end=='\n'||!*end))level=n;
++                }
++                fclose(f);
++            }
++        }
++    }
++    if(level>=level_count){fputs("sokoban: level out of range\n",stderr);return 1;}
++    load_level(level); /* Reject bad data before changing terminal settings. */
++    tty_init();
++    do {
++        start_level();
++        while(map.done!=map.blocks)key();
++        moveto(0,0);printf("\033[KLevel %u done in %u moves. Press a key.",level,moves);fflush(stdout);
++        ++level;save_progress();getkey();
++    } while(load_level(level));
++    puts("\nAll levels complete!");
++    close(level_fd);return 0;
++}
 --- a/Applications/levee/blockio.c
 +++ b/Applications/levee/blockio.c
 @@ -29,6 +29,12 @@
@@ -3140,28 +3832,45 @@
 +    if (popw(&undo,curp) && popw(&undo,&lump) && ((long)bufmax + lump < SIZE)) {
 --- a/Applications/levee/unixcall.c
 +++ b/Applications/levee/unixcall.c
-@@ -29,0 +30 @@
+@@ -29,0 +30,3 @@
 +#include <stdlib.h>
-@@ -43 +44 @@
++#include <signal.h>
++#include <errno.h>
+@@ -43 +46 @@
 -strput(char *s)
 +int strput(char *s)
-@@ -77 +78 @@
+@@ -63,0 +67,8 @@
++static void suspend_editor(int sig) {
++    fixcon();
++    /* signal() is one-shot: this second TSTP uses the default stop action. */
++    kill(getpid(), SIGTSTP);
++    signal(SIGTSTP, suspend_editor);
++    initcon();
++    redisplay(TRUE);
++}
+@@ -69,0 +81 @@
++        signal(SIGTSTP, suspend_editor);
+@@ -77 +89 @@
 -	new.c_iflag &= ~(IXOFF|IXANY|ICRNL|INLCR);
 +	new.c_iflag &= ~(IXON|IXOFF|IXANY|ICRNL|INLCR);
-@@ -79,0 +81,2 @@
+@@ -79,0 +92,2 @@
 +        new.c_cc[VMIN] = 1;
 +        new.c_cc[VTIME] = 0;
-@@ -80,0 +84 @@
+@@ -80,0 +95 @@
 +        strput("\033[?1049h\033[H");
-@@ -88,0 +93 @@
+@@ -88,0 +104 @@
 +         strput("\033[?1049l");
-@@ -98,2 +103,4 @@
+@@ -98,2 +114,8 @@
 -    read(0,&c,1);
 -    return c;
-+    if (read(0, &c, 1) != 1) {
-+        fixcon(); exit(1);
++    for (;;) {
++        if (read(0, &c, 1) != 1) {
++            if (errno == EINTR) continue;
++            fixcon(); exit(1);
++        }
++        if (c == 26) { raise(SIGTSTP); continue; }
++        return c < 128 ? c : 0;
 +    }
-+    return c < 128 ? c : 0;
 --- a/Applications/levee/wildargs.c
 +++ b/Applications/levee/wildargs.c
 @@ -31 +31 @@
@@ -3588,6 +4297,60 @@
 @@ -768 +769 @@
 -	return (len > 0 || ch != EOF) ? buf : 0;
 +	return (len > 0 || ch != EOF) ? buf : (char *)0;
+--- a/Applications/util/free.c
++++ b/Applications/util/free.c
+@@ -0,0 +1,2 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/* Ripple adaptation of the upstream free utility: physical KiB and COW usage. */
+@@ -1,0 +4,2 @@
++#include <string.h>
++#include <fcntl.h>
+@@ -4 +8 @@
+-#include <time.h>
++#include "resources.h"
+@@ -6 +10 @@
+-int main(int argc, char *argv[])
++int main(int argc, char **argv)
+@@ -8,11 +12,26 @@
+-	static struct {
+-		struct _uzisysinfoblk i;
+-		char buf[128];
+-	} uts;
+-	_uname(&uts.i, sizeof(uts));
+-	printf("         total         used         free\n");
+-	printf("Mem:     %5d        %5d        %5d\n",
+-		uts.i.memk, uts.i.usedk, uts.i.memk - uts.i.usedk);
+-	printf("Swap:    %5d        %5d        %5d\n",
+-		uts.i.swapk, uts.i.swapusedk, uts.i.swapk - uts.i.swapusedk);
+-	return 0;
++    struct ripple_sysinfo info;
++    unsigned long reserved;
++    int fd;
++    if (argc == 2 && !strcmp(argv[1], "--help")) {
++        puts("Usage: free\nDisplay physical memory, user pool, sharing, and process slots in KiB.");
++        return 0;
++    }
++    if (argc != 1) { fputs("Usage: free\n", stderr); return 1; }
++    fd = open("/dev/proc", O_RDONLY);
++    if (fd < 0) { perror("free: /dev/proc"); return 1; }
++    if (ioctl(fd, RIPPLE_SYSINFO, &info) || info.version != RIPPLE_SYSINFO_VERSION) {
++        perror("free: memory information"); close(fd); return 1;
++    }
++    close(fd);
++    reserved = info.ram_kib - info.pool_kib;
++    puts("                   total       used       free  (KiB)");
++    printf("Mem:          %10lu %10lu %10lu\n", info.ram_kib,
++           reserved + info.used_kib, info.pool_kib - info.used_kib);
++    printf("User pool:    %10lu %10lu %10lu\n", info.pool_kib,
++           info.used_kib, info.pool_kib - info.used_kib);
++    puts("Swap:                  0          0          0");
++    printf("Reserved: %lu KiB; shared: %lu KiB; process mappings: %lu KiB\n",
++           reserved, info.shared_kib, info.mapped_kib);
++    printf("Processes: %u/%u; data/heap limit: %lu cells; stack: %lu cells\n",
++           info.processes, info.slots, info.heap_cells, info.stack_cells);
++    return 0;
+@@ -20 +38,0 @@
+-
 --- a/Applications/util/head.c
 +++ b/Applications/util/head.c
 @@ -56 +56 @@
@@ -5825,6 +6588,105 @@
 +
 +    /* Ripple: reject missing operands before reading argv[1]. */
 +    if (argc < 2) { fputs("usage: touch file...\n",stderr); return 1; }
+--- a/Applications/util/uptime.c
++++ b/Applications/util/uptime.c
+@@ -0,0 +1,3 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/* Ripple adaptation of upstream uptime: monotonic guest time and process count.
++ * The port has no login accounting; do not invent a utmp user count. */
+@@ -2,0 +6 @@
++#include <string.h>
+@@ -3,0 +8 @@
++#include <fcntl.h>
+@@ -6 +11 @@
+-#include <utmp.h>
++#include "resources.h"
+@@ -8 +13 @@
+-static int count_users(void)
++static void printload(unsigned n)
+@@ -10,8 +15 @@
+-	int ct = 0;
+-	struct utmp *entry;
+-	setutent();
+-	while((entry = getutent()) != NULL)
+-		if (entry->ut_type == USER_PROCESS)
+-			ct++;
+-	endutent();
+-	return ct;
++    printf(" %u.%02u", n / 100, n % 100);
+@@ -20 +18 @@
+-static void printload(int i)
++int main(int argc, char **argv)
+@@ -22,2 +20,25 @@
+-	unsigned int n = i;
+-	printf(" %d.%02d", n/100, n%100);
++    struct timespec res;
++    struct ripple_sysinfo info;
++    unsigned loads[3];
++    unsigned long days, hours, mins;
++    int fd;
++    if (argc == 2 && !strcmp(argv[1], "--help")) {
++        puts("Usage: uptime\nDisplay guest uptime, process count, and load averages."); return 0;
++    }
++    if (argc != 1) { fputs("Usage: uptime\n", stderr); return 1; }
++    if (clock_gettime(CLOCK_MONOTONIC, &res)) { perror("uptime: clock"); return 1; }
++    fd = open("/dev/proc", O_RDONLY);
++    if (fd < 0) { perror("uptime: /dev/proc"); return 1; }
++    if (ioctl(fd, RIPPLE_SYSINFO, &info) || info.version != RIPPLE_SYSINFO_VERSION) {
++        perror("uptime: system information"); close(fd); return 1;
++    }
++    close(fd);
++    mins = res.tv_sec / 60; hours = mins / 60; days = hours / 24;
++    printf("up %lu day%s, %02lu:%02lu:%02lu, %u/%u processes",
++           days, days == 1 ? "" : "s", hours % 24, mins % 60,
++           res.tv_sec % 60, info.processes, info.slots);
++    if (getloadavg(loads, 3) == 3) {
++        printf(", load average:"); printload(loads[0]); printload(loads[1]); printload(loads[2]);
++    }
++    putchar('\n');
++    return 0;
+@@ -25,41 +45,0 @@
+-
+-int main(int argc, char *argv[])
+-{
+-	static struct timespec res;
+-	static unsigned int loadavg[3];
+-	time_t t;
+-	uint32_t days, hours, mins;
+-	struct tm *tm;
+-	int u;
+-
+-	/* Get the clocks we want */
+-	clock_gettime(CLOCK_MONOTONIC, &res);
+-        time(&t);
+-	tm = localtime(&t);
+-	printf(" %02d:%02d:%02d up ",
+-		tm->tm_hour, tm->tm_min, tm->tm_sec);
+-	mins = res.tv_sec / 60;
+-	hours = mins / 60;
+-	days = hours / 24;
+-
+-	mins %= 60;
+-	hours %= 24;
+-
+-	if (days == 1)
+-		printf("1 day, ");
+-	else if (days > 1)
+-		printf("%d days, ", (unsigned int)days);
+-	printf("%02d:%02d, ", (unsigned int)hours, (unsigned int)mins); 
+-
+-	u = count_users();
+-	printf("%d user%s", u, u != 1 ? "s" : "");
+-
+-	if (getloadavg(loadavg, 3) == 3) {
+-		printf(", load average:");
+-		printload(loadavg[0]);
+-		printload(loadavg[1]);
+-		printload(loadavg[2]);
+-	}
+-	printf("\n");
+-	return 0;
+-}
 --- a/Applications/util/vile.c
 +++ b/Applications/util/vile.c
 @@ -33,0 +34,3 @@
@@ -6077,15 +6939,66 @@
 @@ -668 +675 @@
 -    if(ino < 2 || ino >=(dev->s_isize-2)*8)
 +    if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
+--- a/Kernel/include/kdata.h
++++ b/Kernel/include/kdata.h
+@@ -88 +88 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 --- a/Kernel/include/kernel.h
 +++ b/Kernel/include/kernel.h
-@@ -320,0 +321,3 @@
+@@ -64,0 +65 @@
++#ifndef CONFIG_JOB_CONTROL
+@@ -67,0 +69,8 @@
++#else
++struct tty;
++extern uint8_t jobcontrol_in(uint8_t, struct tty *);
++extern uint8_t jobcontrol_out(uint8_t, struct tty *);
++extern uint8_t jobcontrol_ioctl(uint8_t, struct tty *, uarg_t);
++extern int tcsetpgrp(struct tty *, char *);
++extern arg_t _setpgid(void), _setsid(void), _getsid(void);
++#endif
+@@ -69,0 +79,5 @@
++#ifdef CONFIG_JOB_CONTROL
++#define can_signal(p, sig) \
++    ((sig == SIGCONT && udata.u_ptab->p_session == (p)->p_session) || \
++     udata.u_ptab->p_uid == (p)->p_uid || super())
++#else
+@@ -71,0 +86 @@
++#endif
+@@ -200,0 +216,7 @@
++#if defined(CONFIG_RIPPLE) && RIPPLE_BULK_IO
++#define blktok(kaddr,buf,off,len) \
++    ripple_buffer_copy((kaddr), (buf)->__bf_data + (off), (len))
++#define blkfromk(kaddr,buf,off,len) \
++    ripple_buffer_copy((buf)->__bf_data + (off), (kaddr), (len))
++#define blkzero(buf) ripple_buffer_zero((buf)->__bf_data)
++#else
+@@ -204,0 +227,2 @@
++#define blkzero(buf)             memset(buf->__bf_data, 0, BLKSIZE)
++#endif
+@@ -210 +233,0 @@
+-#define blkzero(buf)		memset(buf->__bf_data, 0, BLKSIZE)
+@@ -320,0 +344,3 @@
 +#ifdef CONFIG_RIPPLE
 +    uint16_t d_padding; /* DIR_LEN characters, 64 physical octets */
 +#endif
-@@ -562,0 +566,3 @@
+@@ -484,0 +511 @@
++#define PFL_EXECED 32
+@@ -517 +544 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+@@ -562,0 +590,3 @@
 +#ifdef CONFIG_RIPPLE
 +    unsigned long u_sigtramp; /* RXE user signal entry in separate IMEM */
++#endif
+@@ -652 +682 @@
+-#define _WSTOPPED	0xFF
++#define _WSTOPPED	0x7F
+--- a/Kernel/include/tty.h
++++ b/Kernel/include/tty.h
+@@ -220,0 +221,3 @@
++#ifdef CONFIG_JOB_CONTROL
++    uint16_t session;
 +#endif
 --- a/Kernel/inode.c
 +++ b/Kernel/inode.c
@@ -6102,9 +7015,40 @@
 +	}
 +#endif
 +}
+--- a/Kernel/kdata.c
++++ b/Kernel/kdata.c
+@@ -124,0 +125,3 @@
++#elif defined(CONFIG_JOB_CONTROL)
++    _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys,
++    _setpgid, _setsid, _getsid,
 --- a/Kernel/process.c
 +++ b/Kernel/process.c
-@@ -1014,0 +1015,7 @@
+@@ -326 +326 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+@@ -712,2 +712,6 @@
+-				udata.u_ptab->p_status = P_STOPPED;
+-				udata.u_ptab->p_event = j + (b << 4);
++                /* switchout has already uncharged a sleeping task. */
++                if (udata.u_ptab->p_status > P_READY) nready++;
++                udata.u_ptab->p_status = P_STOPPED;
++                udata.u_ptab->p_event = j + (b << 4);
++                ssig(udata.u_ptab->p_pptr, SIGCHLD);
++                wakeup(udata.u_ptab->p_pptr);
+@@ -778,0 +783,2 @@
++    /* A stop in the upper signal set may resume here after SIGCONT. */
++    sb = udata.u_ptab->p_sig;
+@@ -819 +825 @@
+-		if (sig == SIGCONT) {
++		if (sig == SIGCONT || sig == SIGKILL) {
+@@ -979,0 +986,4 @@
++#ifdef CONFIG_JOB_CONTROL
++                if (udata.u_ptab->p_session == udata.u_ptab->p_pid &&
++                    p->p_session == udata.u_ptab->p_session) {
++#else
+@@ -980,0 +991 @@
++#endif
+@@ -1014,0 +1026,7 @@
 +#ifdef CONFIG_RIPPLE
 +	/* A panic must never certify an inconsistent filesystem as clean. */
 +	{
@@ -6112,10 +7056,13 @@
 +		ripple_panic_stop();
 +	}
 +#else
-@@ -1015,0 +1023 @@
+@@ -1015,0 +1034 @@
 +#endif
 --- a/Kernel/start.c
 +++ b/Kernel/start.c
+@@ -119 +119 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 @@ -360 +360 @@
 -			"Copyright (c) 2014-2026 Alan Cox <alan@etchedpixels.co.uk>\nDevboot\n",
 +			"Copyright (c) 2014-2026 Alan Cox <alan@etchedpixels.co.uk>\n",
@@ -6157,6 +7104,118 @@
 +	if (func != SIG_DFL && func != SIG_IGN)
 +		udata.u_sigtramp = udata.u_argn2;
 +#endif
+@@ -652 +670 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+--- a/Kernel/tty.c
++++ b/Kernel/tty.c
+@@ -34,0 +35,15 @@
++/* Canonical input remains queued until a complete line (or EOF) exists. */
++static int input_ready(uint_fast8_t minor) {
++    struct s_queue *q = &ttyinq[minor];
++    struct tty *t = &ttydata[minor];
++    uint8_t *p = q->q_head;
++    unsigned n = q->q_count, c;
++    if (!(t->termios.c_lflag & ICANON)) return n != 0;
++    while (n--) {
++        c = *p++;
++        if (p == q->q_base + q->q_size) p = q->q_base;
++        if (c == '\n' || c == t->termios.c_cc[VEOF] ||
++            (t->termios.c_cc[VEOL] && c == t->termios.c_cc[VEOL])) return 1;
++    }
++    return 0;
++}
+@@ -47 +62 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+@@ -53 +68 @@
+-			if (remq(q, &c)) {
++			if ((udata.u_done || input_ready(minor) || (t->flag & TTYF_DEAD)) && remq(q, &c)) {
+@@ -97,0 +113 @@
++    if (udata.u_done) goto out;
+@@ -115 +131 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+@@ -172 +188 @@
+-	if (minor > NUM_DEV_TTY) {
++	if (!minor || minor > NUM_DEV_TTY) {
+@@ -235 +251,5 @@
+-	if (!(t->flag & TTYF_DEAD) && !udata.u_ptab->p_tty && !t->pgrp && !(flag & O_NOCTTY)) {
++	if (!(t->flag & TTYF_DEAD) && !udata.u_ptab->p_tty && !t->pgrp &&
++#ifdef CONFIG_JOB_CONTROL
++        udata.u_ptab->p_session == udata.u_ptab->p_pid &&
++#endif
++        !(flag & O_NOCTTY)) {
+@@ -238,0 +259,3 @@
++#ifdef CONFIG_JOB_CONTROL
++        t->session = udata.u_ptab->p_session;
++#endif
+@@ -254,0 +278,3 @@
++#ifdef CONFIG_JOB_CONTROL
++    t->session = 0;
++#endif
+@@ -264,4 +290,17 @@
+-        uint_fast8_t t = udata.u_ptab->p_tty;
+-        uint16_t *pgrp = &ttydata[t].pgrp;
+-        if (t && *pgrp == udata.u_ptab->p_pgrp && *pgrp == udata.u_ptab->p_pid)
+-                *pgrp = 0;
++#ifdef CONFIG_JOB_CONTROL
++    uint_fast8_t minor = udata.u_ptab->p_tty;
++    ptptr p;
++    if (!minor) return;
++    if (udata.u_ptab->p_session == udata.u_ptab->p_pid) {
++        tty_hangup(minor);
++        return;
++    }
++    for (p = ptab; p < ptab_end; p++)
++        if (p != udata.u_ptab && p->p_status && p->p_status != P_ZOMBIE &&
++            p->p_pgrp == ttydata[minor].pgrp) return;
++    if (ttydata[minor].pgrp == udata.u_ptab->p_pgrp) ttydata[minor].pgrp = 0;
++#else
++    uint_fast8_t minor = udata.u_ptab->p_tty;
++    if (minor && ttydata[minor].pgrp == udata.u_ptab->p_pgrp &&
++        ttydata[minor].pgrp == udata.u_ptab->p_pid) ttydata[minor].pgrp = 0;
++#endif
+@@ -283,0 +323,2 @@
++#endif
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+@@ -317 +358 @@
+-		return uput(&ttyinq[minor].q_count, data, 2);
++		return uput(&ttyinq[minor].q_count, data, sizeof(ttyinq[minor].q_count));
+@@ -341 +382 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+@@ -348,0 +390,2 @@
++#endif
++#ifdef CONFIG_LEVEL_2
+@@ -429,0 +473,3 @@
++        } else if (c && c == t->termios.c_cc[VSUSP]) {
++            wr = SIGTSTP;
++            goto sigout;
+@@ -470,0 +517,5 @@
++    /* Reserve the final slot for a line terminator. An overlong unfinished
++     * canonical line must not deadlock both sides of a PTY. */
++    if (canon && q->q_count >= q->q_size - 1 && !input_ready(minor) &&
++        c != '\n' && c != t->termios.c_cc[VEOF] &&
++        (!t->termios.c_cc[VEOL] || c != t->termios.c_cc[VEOL])) return 1;
+@@ -509,2 +560,6 @@
+-	if (ttydata[minor].termios.c_lflag & ECHO)
+-		tty_putc_wait(minor, c);
++    if (ttydata[minor].termios.c_lflag & ECHO) {
++#ifdef CONFIG_RIPPLE
++        if (minor > 1 && tty_writeready(minor) != TTY_READY_NOW) return;
++#endif
++        tty_putc_wait(minor, c);
++    }
+@@ -514,0 +570,8 @@
++#ifdef CONFIG_RIPPLE
++    if (minor > 1) {
++        if (tty_writeready(minor) == TTY_READY_NOW) tty_putc(minor, '\b');
++        if (tty_writeready(minor) == TTY_READY_NOW) tty_putc(minor, ' ');
++        if (tty_writeready(minor) == TTY_READY_NOW) tty_putc(minor, '\b');
++        return;
++    }
++#endif
 --- a/Kernel/usermem.c
 +++ b/Kernel/usermem.c
 @@ -62 +62 @@
@@ -6171,6 +7230,14 @@
 @@ -125 +125 @@
 -	if (!valaddr_w(uaddr, 4, 4))
 +	if (!valaddr_w(uaddr, sizeof(uint32_t), sizeof(uint32_t)))
+--- a/Library/libs/clock_gettime.c
++++ b/Library/libs/clock_gettime.c
+@@ -31 +31 @@
+-    _time(&tmp, 0);
++    if (_time(&tmp, 0) < 0) return -1;
+@@ -38 +38 @@
+-    _time(&tmp, 1);
++    if (_time(&tmp, 1) < 0) return -1;
 --- a/Library/libs/exp.c
 +++ b/Library/libs/exp.c
 @@ -99 +99 @@
@@ -6187,6 +7254,16 @@
 @@ -71 +71 @@
 -					j = i1+(1<<(52-j0));
 +					j = i1+(1UL<<(52-j0));
+--- a/Library/libs/getloadavg.c
++++ b/Library/libs/getloadavg.c
+@@ -8,0 +9,2 @@
++#include <errno.h>
++#include <syscalls.h>
+@@ -15,0 +18 @@
++	if (nelem < 0) { errno = EINVAL; return -1; }
+@@ -21 +24 @@
+-		loadavg[i] = (uts.loadavg[i] * 100) >> 8;
++		loadavg[i] = ((unsigned long)uts.loadavg[i] * 100UL) >> 8;
 --- a/Library/libs/qsort.c
 +++ b/Library/libs/qsort.c
 @@ -149 +149,2 @@

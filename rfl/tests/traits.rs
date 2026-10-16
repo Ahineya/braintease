@@ -489,10 +489,10 @@ fn static_trait_calls_run_on_the_brainfuck_cpu() {
 }
 
 #[test]
-fn automatic_shared_receivers_do_not_change_explicit_borrow_semantics() {
+fn automatic_and_explicit_field_borrows_protect_the_source() {
     reject(
         "struct Item{x:i16} fn main() { let mut p=Item{x:1}; let r=&p.x; p.x=2; println(*r); }",
-        "only a name",
+        "already borrowed",
     );
     reject(
         r#"

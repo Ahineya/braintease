@@ -35,3 +35,9 @@ export fn fill(dest: *mut u16, count: usize, value: u16) -> () {
         i = i + 1;
     }
 }
+
+// Transfer initialized storage without copying resources or dropping the old value.
+export fn replace<T>(place: &mut T, value: T) -> T {
+    __replace_value(place, move(value))
+}
+export fn take<T>(place: &mut Option<T>) -> Option<T> { replace(place, None) }

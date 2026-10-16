@@ -53,6 +53,31 @@ static void inode_check(void) {
     }
     check(rmdir(directory) == 0, "inode directory cleanup");
 }
+static void buffer_check(void) {
+    unsigned stack[2049], *heap = malloc(sizeof(stack));
+    unsigned i;
+    int fd;
+    check(heap != NULL, "bulk buffer allocation");
+    if (!heap) return;
+    fd = open("/libc-bulk-test", O_RDWR | O_CREAT | O_TRUNC, 0600);
+    check(fd >= 0, "bulk buffer file");
+    if (fd >= 0) {
+        for (i = 0; i < 2049; i++) heap[i] = i ^ 0xa55aU;
+        check(write(fd, heap, sizeof(stack)) == sizeof(stack), "GP buffer write");
+        check(lseek(fd, 0, SEEK_SET) == 0, "bulk buffer rewind");
+        check(read(fd, stack, sizeof(stack)) == sizeof(stack), "SB buffer read");
+        check(!memcmp(heap, stack, sizeof(stack)), "native words across filesystem blocks");
+        for (i = 0; i < 2049; i++) stack[i] = i ^ 0x5aa5U;
+        check(lseek(fd, 0, SEEK_SET) == 0, "bulk buffer rewrite seek");
+        check(write(fd, stack, sizeof(stack)) == sizeof(stack), "SB buffer write");
+        check(lseek(fd, 0, SEEK_SET) == 0, "bulk buffer reread seek");
+        check(read(fd, heap, sizeof(stack)) == sizeof(stack), "GP buffer read");
+        check(!memcmp(heap, stack, sizeof(stack)), "reverse native word transfer");
+        check(close(fd) == 0, "bulk buffer close");
+        check(unlink("/libc-bulk-test") == 0, "bulk buffer cleanup");
+    }
+    free(heap);
+}
 int main(void) {
     char b[80], small[4], *p, *q;
     FILE *f;
@@ -160,6 +185,7 @@ int main(void) {
         }
         free(p);
     }
+    buffer_check();
     inode_check();
     if (!failed)
         puts("libccheck passed");

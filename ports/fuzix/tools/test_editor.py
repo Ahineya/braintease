@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Edit real files through VILE's live terminal with both RVM engines."""
+"""Edit real files through VILE's live terminal with the selected RVM engine(s)."""
 import argparse
 import errno
 import os
@@ -14,7 +14,10 @@ PORT = Path(__file__).resolve().parents[1]
 ROOT = PORT.parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build', type=Path, default=ROOT / 'build/fuzix')
+parser.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 args = parser.parse_args()
+engines = [True, False] if args.engine == 'both' else [args.engine == 'jit']
+engine_label = 'JIT and interpreter' if args.engine == 'both' else args.engine
 build = args.build.resolve()
 
 
@@ -148,8 +151,8 @@ const updated = installRoot(root.data, [
 fs.writeFileSync(file, root.replace(updated));
 """
     subprocess.run(['node', '--input-type=module', '-e', fixtures, str(image)], cwd=ROOT, check=True)
-    exercise(image, True)
-    # Reopen saved files in the interpreter on the same persistent disk.
-    exercise(image, False)
+    exercise(image, engines[0])
+    # Reopen saved files on the same persistent disk.
+    exercise(image, engines[-1])
 
-print('VILE passed: live editing, save/reopen, backups, permissions, discard, named writes, raw-mode restoration, file limits; JIT and interpreter')
+print('VILE passed: live editing, save/reopen, backups, permissions, discard, named writes, raw-mode restoration, file limits; ' + engine_label)

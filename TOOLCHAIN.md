@@ -299,7 +299,7 @@ cat libruntime.par | jq '.objects[].name'
 
 3. **Headers**: include `stdio.h` / `mmio.h` / etc. from `runtime/include` rather than hand-declaring `putchar`.
 
-4. **Program size**: the linked image may occupy several IMEM banks. `rlink` places each function in one bank and NOP-pads to the next bank boundary when the remainder is too small. A **single function** larger than `--bank-size` instructions will not link. `rvm` loads multi-bank binaries; it does not reject images longer than one bank.
+4. **Program size**: both the linked image and a single function may occupy several IMEM banks. `rlink` keeps short local branches where possible and uses existing non-linking far jumps for crossings. Labels and relocations follow final placement; calls in spanning functions receive safe bank-boundary continuations. See [code-bank placement](docs/arch/code-banks.md). No extra compiler flag is needed.
 
 ## Troubleshooting
 

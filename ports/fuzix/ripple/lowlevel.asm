@@ -23,7 +23,7 @@ __hard_irqrestore:
     STORE A0, R0, T0
     RET
 ; copy an entire DMEM bank; fixed execution slots preserve embedded pointers.
-ripple_bank_copy:
+ripple_bank_copy_slow:
     LI T0, 0
     LI T2, 64000
 ripple_copy_loop:
@@ -250,7 +250,7 @@ ripple_enter_user:
     LOAD A3, GP, T0
     ADDI T0, T0, 1
     LOAD T1, GP, T0
-    LI SB, 9
+    LI SB, USER_SB
     LI SP, 1
     STORE T1, SB, SP
     ADDI SP, SP, 1
@@ -260,7 +260,11 @@ ripple_enter_user:
     LI T0, 22
     LI T1, 2
     STORE T1, R0, T0
+#if RIPPLE_MMU
+    ENTERU R0, T6, T7
+#else
     JALR R0, T6, T7
+#endif
 ; Hardware switches to the dedicated IRQ stack; IRET restores SP/SB/FP.
 ripple_irq:
     STORE R3, SB, SP
@@ -316,6 +320,10 @@ ripple_irq:
     STORE GP, SB, SP
     ADDI SP, SP, 1
     LI GP, 3
+#if RIPPLE_MMU
+    CSRR T0, 22
+    BNE T0, R0, ripple_exception_interrupt
+#endif
     LI T0, 26
     LOAD T1, R0, T0
     LI T0, 1
@@ -323,6 +331,7 @@ ripple_irq:
     ADD FP, SP, R0
     CALL ripple_tick
     BNE RV0, R0, ripple_preempt_interrupt
+ripple_irq_restore_registers:
     ADDI SP, SP, -1
     LOAD GP, SB, SP
     ADDI SP, SP, -1
@@ -376,6 +385,12 @@ ripple_irq:
     ADDI SP, SP, -1
     LOAD R3, SB, SP
     IRET
+#if RIPPLE_MMU
+ripple_exception_interrupt:
+    ADD FP, SP, R0
+    CALL ripple_fault
+    BEQ RV0, R0, ripple_irq_restore_registers
+#endif
 ripple_preempt_interrupt:
     CSRR T0, 0
     STORE T0, SB, SP
@@ -408,16 +423,36 @@ ripple_preempt_copy:
     CSRW T1, 7
     CSRW T3, 8
     CSRW T3, 9
+#if RIPPLE_MMU
+    CSRR T0, 22
+    BEQ T0, R0, ripple_choose_preempt
+    LI T0, %offset(ripple_trap_entry)
+    CSRW T0, 0
+    LI T0, %bank(ripple_trap_entry)
+    CSRW T0, 1
+    BEQ R0, R0, ripple_trampoline_selected
+ripple_choose_preempt:
+#endif
     LI T0, %offset(ripple_preempt_entry)
     CSRW T0, 0
     LI T0, %bank(ripple_preempt_entry)
     CSRW T0, 1
+#if RIPPLE_MMU
+ripple_trampoline_selected:
+    CSRW R0, 25
+#endif
     CSRW R0, 2
     LI T0, 23
     LI T1, 1
     STORE T1, R0, T0
     IRET
 ; CPU has completed IRET: IRQ_BUSY is clear before any scheduler can block.
+#if RIPPLE_MMU
+ripple_trap_entry:
+    LI X2, 0
+    CALL ripple_trap
+    HALT
+#endif
 ripple_preempt_entry:
     LI X2, 0
     CALL ripple_preempt
@@ -434,6 +469,10 @@ ripple_resume_wait:
     BEQ R0, R0, ripple_resume_wait
 ; A software IRQ provides a real CPU trap frame for restoring all registers.
 ripple_restore_interrupt:
+#if RIPPLE_MMU
+    LI T0, 1
+    CSRW T0, 25
+#endif
     LI T0, ripple_kernel_stack
     LOAD T1, GP, T0
     LI T0, 27
@@ -570,7 +609,7 @@ ripple_userptr:
 ripple_ptr_stack:
     LI T0, -2
     BNE A1, T0, ripple_ptr_zero
-    LI RV1, 9
+    LI RV1, USER_SB
     RET
 ripple_ptr_zero:
     BNE A0, R0, ripple_ptr_done
@@ -578,3 +617,44 @@ ripple_ptr_zero:
     LI RV1, -3
 ripple_ptr_done:
     RET
+
+#if RIPPLE_MMU
+; Every argument is a physical table bank. The layout lives in mmu.c.
+ripple_mmu_roots:
+    CSRW A0, 14
+    CSRW A0, 16
+    CSRW R0, 15
+    LI T0, 1536
+    CSRW T0, 17
+    LI T0, 8
+    CSRW T0, 18
+    LI T0, USER_SB
+    CSRW T0, 19
+    LI T0, %bank(ripple_irq)
+    CSRW T0, 20
+    LI T0, %offset(ripple_irq)
+    CSRW T0, 21
+    LI T0, 3
+    CSRW T0, 13
+    RET
+ripple_mmu_flush:
+    LI T0, 1
+    CSRW T0, 27
+    RET
+ripple_mmu_flush_code:
+    LI T0, 3
+    CSRW T0, 27
+    RET
+ripple_mmu_cause:
+    CSRR RV0, 22
+    RET
+ripple_mmu_fault_bank:
+    CSRR RV0, 23
+    RET
+ripple_mmu_fault_off:
+    CSRR RV0, 24
+    RET
+ripple_mmu_saved_mode:
+    CSRR RV0, 25
+    RET
+#endif

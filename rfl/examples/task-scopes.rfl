@@ -1,0 +1,42 @@
+// A bounded registry owns heterogeneous tasks. Join handles own typed results.
+// The fake clock keeps this example deterministic and immediate.
+import { task_scope } from "std/scope";
+import { TaskCancelled } from "std/scope_state";
+import { ready, sleep, poll_fn, Pending } from "std/future";
+import { ready_owned } from "std/future_owned";
+import { Context } from "std/task";
+import { Reactor, block_on_with_budget } from "std/executor";
+
+struct Clock { milliseconds:u32 }
+impl Reactor for Clock {
+    fn now(&self)->u32 {self.milliseconds}
+    fn turn(&mut self,wait:Option<u32>)->bool {
+        match wait {Some(n)=>{self.milliseconds+=n;},None=>{self.milliseconds+=1;}}
+        true
+    }
+}
+fn main()->i16 {
+    let mut clock=Clock{milliseconds:100};
+    let mut scope=match task_scope(3,clock.milliseconds) {Ok(s)=>move(s),Err(_)=>{return 1;}};
+    let mut greeting=match scope.spawn(ready("hello from a task")) {Ok(h)=>move(h),Err(_)=>{return 2;}};
+    let timer=match sleep(25) {Ok(t)=>t,Err(_)=>{return 3;}};
+    let mut timer=match scope.spawn(timer) {Ok(h)=>move(h),Err(_)=>{return 4;}};
+    let value=owned(42,fn(value:&mut i16)=>{println("result released");});
+    let mut value=match scope.spawn(ready_owned(move(value))) {Ok(h)=>move(h),Err(_)=>{return 5;}};
+    match scope.run_with_budget(&mut clock,4) {Ok(_)=>{},Err(_)=>{return 6;}}
+    drop(move(scope)); // Completed results remain owned by their join handles.
+    match block_on_with_budget(&mut greeting,&mut clock,1) {Ok(Ok(text))=>println(text),_=>{return 7;}}
+    match block_on_with_budget(&mut timer,&mut clock,1) {Ok(Ok(_))=>println(clock.milliseconds),_=>{return 8;}}
+    match block_on_with_budget(&mut value,&mut clock,1) {Ok(Ok(value))=>println(*value.borrow()),_=>{return 9;}}
+
+    let mut abandoned={
+        let mut scope=match task_scope(1,clock.milliseconds) {Ok(s)=>move(s),Err(_)=>{return 10;}};
+        let work=poll_fn<i16>(fn(cx:Context)=>Pending,fn()=>{println("unfinished task cancelled");});
+        match scope.spawn(work) {Ok(h)=>move(h),Err(_)=>{return 11;}}
+    };
+    match block_on_with_budget(&mut abandoned,&mut clock,1) {
+        Ok(Err(TaskCancelled))=>println("join observed scope closure"),
+        _=>{return 12;},
+    }
+    0
+}

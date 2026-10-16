@@ -29,7 +29,7 @@ fn drive<F:Future, R:Reactor>(future:&mut F, reactor:&mut R, limit:Option<u32>) 
         if (waker.take_ready()) {
             let mut cx=Context { waker:waker, now:now };
             match future.poll(&mut cx) {
-                Ready(value)=>{ waker.retire(); return Ok(value); },
+                Ready(value)=>{ waker.retire(); return Ok(move(value)); },
                 Pending=>{},
             }
         }
@@ -56,29 +56,35 @@ export fn join_with_budget<A:Future, B:Future, R:Reactor>(left:&mut A, right:&mu
         let now=reactor.now();
         if (!queue.tick(now)) { error=InvalidClock; break; }
         if (reverse) {
-            second=step(right, b, now, second);
-            first=step(left, a, now, first);
+            second=step(right, b, now, move(second));
+            first=step(left, a, now, move(first));
         } else {
-            first=step(left, a, now, first);
-            second=step(right, b, now, second);
+            first=step(left, a, now, move(first));
+            second=step(right, b, now, move(second));
         }
         reverse = !reverse;
-        match first {
-            Some(x)=>match second { Some(y)=>{ return Ok((x, y)); }, None=>{} },
-            None=>{},
+        let complete={ match &first { Some(_)=>match &second { Some(_)=>true, None=>false }, None=>false } };
+        if (complete) {
+            match move(first) {
+                Some(x)=>match move(second) { Some(y)=>{ return Ok((move(x), move(y))); }, None=>{} },
+                None=>{},
+            }
+            // The readiness check proves these branches unreachable. Keep the
+            // ownership state explicit even without path-sensitive refinement.
+            first=None; second=None;
         }
     }
     a.retire(); b.retire();
-    match first { None=>left.cancel(), Some(_)=>{} }
-    match second { None=>right.cancel(), Some(_)=>{} }
+    match &first { None=>left.cancel(), Some(_)=>{} }
+    match &second { None=>right.cancel(), Some(_)=>{} }
     Err(error)
 }
 fn step<F:Future>(future:&mut F, waker:Waker, now:u32, result:Option<F::Output>) -> Option<F::Output> {
-    match result { Some(value)=>{ return Some(value); }, None=>{} }
+    match move(result) { Some(value)=>{ return Some(move(value)); }, None=>{} }
     if (!waker.take_ready()) { return None; }
     let mut cx=Context { waker:waker, now:now };
     match future.poll(&mut cx) {
-        Ready(value)=>{ waker.retire(); Some(value) },
+        Ready(value)=>{ waker.retire(); Some(move(value)) },
         Pending=>None,
     }
 }

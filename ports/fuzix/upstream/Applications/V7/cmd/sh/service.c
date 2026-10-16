@@ -215,8 +215,8 @@ static int remembered(int pid, int *status)
 void reapchildren(void)
 {
     int pid, status;
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
-        remember(pid, status);
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
+        if (!jobs_status(pid, status)) remember(pid, status);
 }
 
 void postclr(void)

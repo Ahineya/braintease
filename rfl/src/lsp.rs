@@ -452,7 +452,20 @@ fn signature_parameters(label: &str) -> Vec<String> {
     let Some(inside) = label.strip_prefix("fn(") else {
         return Vec::new();
     };
-    let Some(close) = inside.find(')') else {
+    let mut depth = 0;
+    let close = inside.char_indices().find_map(|(at, ch)| match ch {
+        '(' => {
+            depth += 1;
+            None
+        }
+        ')' if depth == 0 => Some(at),
+        ')' => {
+            depth -= 1;
+            None
+        }
+        _ => None,
+    });
+    let Some(close) = close else {
         return Vec::new();
     };
     split_params(&inside[..close])
@@ -576,6 +589,8 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
                     | "unit"
                     | "Vec"
                     | "Slice"
+                    | "Owned"
+                    | "ErasedOwner"
                     | "Option"
                     | "Result"
                     | "c_int"
@@ -1041,5 +1056,25 @@ mod rename_tests {
             2
         );
         std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod resources {
+    use super::*;
+    #[test]
+    fn cleanup_signature_keeps_nested_callable_parameters() {
+        assert_eq!(
+            signature_parameters("fn(i16, fn(&mut i16) -> unit) -> Owned<i16>"),
+            vec!["i16", "fn(&mut i16) -> unit"]
+        );
+        let source = "fn use_owner(owner:Owned<i16>) {}";
+        let analysis = Analysis::open(None, source);
+        let tokens = lexer::tokenize(source).unwrap();
+        let owner = tokens
+            .iter()
+            .find(|t| matches!(&t.kind,TokenKind::Ident(n) if n=="Owned"))
+            .unwrap();
+        assert_eq!(token_kind(&analysis, owner), Some(2));
     }
 }

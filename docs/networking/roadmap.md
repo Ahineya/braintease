@@ -263,17 +263,23 @@ not block the preceding C networking work.
 
 Static traits and associated types are implemented. The first polling library
 now supplies Future/Poll, bounded wakeup slots, timers and deterministic one/two
-root runners. General-purpose async is the goal: general places, resource
-ownership, automatic cleanup on every exit, task composition and suspended-borrow
-rules are required milestones before async syntax. The [RFL design](rfl.md)
-distinguishes implemented polling APIs from those language/runtime requirements.
+root runners. Field/index borrowing now supports child futures in place.
+Explicit move-only `Owned<T>` resources now supply deterministic cleanup across
+normal exits, replacement and containers. Owned join/race/timeout composition
+is implemented with automatic cancellation and output cleanup.
+Bounded heterogeneous task scopes and typed joins are implemented too. Async
+still requires suspension rules and compiler state-machine lowering before syntax.
+The [RFL design](rfl.md) distinguishes implemented polling APIs from those language/runtime requirements.
 Generic trait parameters remain an independent extension driven by library needs.
 The production network reactor and typed RFL C-stack wrappers remain to be built.
 
 ### Saved checkpoint — 16 October 2026
 
-**Work parked here at the user's request to switch tasks.** Resume from this
-checkpoint; the polling foundation is complete, general-purpose async is not.
+**Original pause checkpoint; work resumed later on 16 October.** The polling
+foundation is complete. Field/index borrowing is now implemented; see the
+[current borrowing contract](rfl.md#borrowing-child-state-in-place). Resource
+ownership and automatic cleanup have since been implemented through explicit
+`Owned<T>` values; owned composition has since been implemented too.
 
 Implemented:
 
@@ -297,18 +303,62 @@ printing `hello from a future`, `125`, and `2` on separate lines. Its timer uses
 fake clock; this is not a real-time or live-network validation. No new explicit
 BF networking/futures run was required; routine RBF checks remain opt-in.
 
-Current limits: cancellation is guaranteed at the runner boundary, **not on
+Limits at the original polling checkpoint: cancellation was guaranteed at the
+runner boundary, **not on
 arbitrary variable/scope destruction**. Callback-future copies alias one
 operation. There is no async/await syntax, compiler-owned async frame, general
 spawn/join-handle system, production clock/idle/network reactor or RFL socket
 wrapper. Existing C protocol tests do not prove those absent RFL layers.
 
-Resume with **general place borrowing and resource ownership**, then automatic
-deterministic cleanup across scope exit, replacement, return, `?`, loop exits,
-container destruction and parent cancellation. Settle resource copy/clone/move
-behavior before adding cleanup hooks. Follow with owned composition and task
-lifecycles, safe suspension rules/state-machine lowering, and network/library
-integration. Preserve the completed polling tests as acceptance cases; the
+The resumed work supplies shared/mutable field and indexed-element borrows,
+COW-aware vector projections, parent/child polling and cancellation tests, and a
+[child-future example](../../rfl/examples/child-futures.rfl). Aliasing is checked
+conservatively over the whole root. The borrowing change alone did not add
+owned-resource semantics; the follow-up below does.
+The full release suite now passes **286 tests**, including 15 new borrowing/layout
+regressions; execution cases cover native and RVM. The child-future example also
+ran through both CLI targets. See [validation](rfl.md#validation-and-next-acceptance-targets).
+
+The next resource milestone implements move-only `Owned<T>`, explicit `move`,
+stable payload borrowing and synchronous cleanup across normal scope exit,
+replacement, return, `?`, loop exits, containers and partial construction.
+Resource-containing aggregates also require moves. A concrete
+[owned-future example](../../rfl/examples/owned-futures.rfl) demonstrates cleanup
+of never-polled and nested pending work; completed outputs transfer explicitly
+through the executor. The full release suite passes **303 tests**, including 15
+resource regressions and two editor checks; the example runs on native and RVM.
+Ordinary callback futures still retain prototype semantics;
+this is not async syntax or a general owned future adapter.
+
+The owned-composition milestone supplies `own_future`, `ready_owned`, and
+move-only join/race/timeout futures with distinct output types, deterministic
+ties and automatic cleanup of unfinished children/cached outputs. Child payloads
+remain in stable owner storage while polled; children share their parent waker.
+See the [contract and example](rfl.md#owned-future-composition).
+
+The full release suite passes **317 tests**, including 14 composition tests;
+execution cases cover native and RVM. The composed example also runs on both
+normal CLI targets. The existing small Brainfuck check now validates storage
+replacement and owner extraction as well as finalization.
+
+The task-lifecycle milestone supplies bounded heterogeneous `TaskScope`, typed
+move-only join handles, independent generational wake slots, cancellation
+requests on handle drop and synchronous cleanup on scope close/error. Completed
+outputs can outlive the scope; pending joins observe TaskCancelled. See the
+[task-scope contract](rfl.md#bounded-task-scopes-and-typed-joins) and
+[example](../../rfl/examples/task-scopes.rfl). There is no implicit detachment,
+background scheduler or async syntax.
+
+The full release suite passes **329 tests**, including 12 task-scope regressions;
+execution cases and the task-scope example pass on native and RVM. The bounded
+Brainfuck resource check also covers opaque owner finalization. Sharing generated
+cleanup reduces the example's main from 73,955 to 41,676 instructions. The
+per-function code-bank restriction has since been lifted in the shared
+assembler/linker. The [architecture contract](../arch/code-banks.md) records
+branch relaxation, relocation and the RVM/BF regression checks.
+
+Continue with **safe suspension rules and state-machine lowering**, then
+network/library integration. Preserve the completed polling tests as acceptance cases; the
 [detailed design](rfl.md#required-path-to-pleasant-async) records the remaining
 semantics and validation targets.
 

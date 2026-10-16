@@ -1,0 +1,171 @@
+import { Future, Poll, Pending, Ready, invalid_poll } from "std/future";
+import { OwnedFuture, own_future } from "std/future_owned";
+import { TaskSet, Waker, Context, TaskError, task_set } from "std/task";
+import { Reactor, RunError, ReactorStopped, TurnBudgetExceeded, InvalidClock } from "std/executor";
+import { JoinHandle, JoinState, HandleLive, Waiting, task_gate, result_gate, abort_state, finish_state, Finished, Aborted, Collected, JoinError, TaskCancelled, ENTER, LEAVE, COMPLETE, REQUEST_CANCEL, DESTROY, CANCEL_REQUESTED } from "std/scope_state";
+import { replace } from "std/mem";
+
+export type SpawnError = ScopeClosed | TaskLimit;
+export struct TaskEntry { storage:ErasedOwner, run:fn(Context)->bool, waker:Waker }
+export struct ScopeData { queue:TaskSet, entries:Vec<Option<TaskEntry>>, cursor:usize, closed:bool }
+export struct TaskScope { state:Owned<ScopeData> }
+
+export fn task_scope(capacity:usize,now:u32)->Result<TaskScope,TaskError> {
+    let queue=task_set(capacity,now)?;
+    let mut entries:Vec<Option<TaskEntry>> = [];
+    for (i in 0..capacity) {entries.push(None);}
+    Ok(TaskScope{state:owned(ScopeData{queue:queue,entries:move(entries),cursor:0,closed:false},close_data)})
+}
+fn close_data(data:&mut ScopeData) {
+    if (data.closed) {return;}
+    data.closed=true;
+    // Revoke every child wake before invoking any user cancellation callback.
+    for (i in 0..data.entries.len()) {
+        match &data.entries[i] {Some(entry)=>{entry.waker.retire();},None=>{}}
+    }
+    data.entries.clear();
+}
+fn reap(data:&mut ScopeData) {
+    // Dropping a parent can request cancellation of an earlier child slot.
+    // Reach a fixed point: every successful pass removes at least one entry.
+    let mut changed=true;
+    while (changed) {
+        changed=false;
+        for (i in 0..data.entries.len()) {
+            let dead={match &data.entries[i] {Some(entry)=>!entry.waker.is_live(),None=>false}};
+            if (dead) {drop(replace(&mut data.entries[i],None));changed=true;}
+        }
+    }
+}
+impl TaskScope {
+    export fn close(&mut self) {let data=self.state.borrow_mut();close_data(data);}
+    export fn spawn<F:Future>(&mut self,future:F)->Result<JoinHandle<F::Output>,SpawnError> {
+        let work=own_future(move(future));
+        let data=self.state.borrow_mut();
+        if (data.closed) {return Err(ScopeClosed);}
+        reap(data);
+        let waker=match data.queue.allocate() {Ok(w)=>w,Err(_)=>{return Err(TaskLimit);}};
+        let (entry,handle)=new_task(move(work),waker);
+        for (i in 0..data.entries.len()) {
+            let empty={match &data.entries[i] {None=>true,Some(_)=>false}};
+            if (empty) {data.entries[i]=Some(move(entry));return Ok(move(handle));}
+        }
+        // Allocation and registry capacity agree; preserve explicit failure if
+        // user code has directly tampered with the support representation.
+        Err(TaskLimit)
+    }
+    export fn active(&mut self)->usize {
+        let data=self.state.borrow_mut();active_data(data)
+    }
+    // One bounded turn; false means tasks still need service. Never sleeps
+    // beyond the reactor's hint and never treats a pending task as an error.
+    export fn turn<R:Reactor>(&mut self,reactor:&mut R)->Result<bool,RunError> {
+        let data=self.state.borrow_mut();turn_data(data,reactor)
+    }
+    export fn run<R:Reactor>(&mut self,reactor:&mut R)->Result<unit,RunError> {
+        let data=self.state.borrow_mut();
+        while (active_data(data)!=0) {turn_data(data,reactor)?;}
+        Ok({})
+    }
+    export fn run_with_budget<R:Reactor>(&mut self,reactor:&mut R,turns:u32)->Result<unit,RunError> {
+        let data=self.state.borrow_mut();
+        let mut used:u32=0;
+        while (active_data(data)!=0) {
+            if (used==turns) {close_data(data);return Err(TurnBudgetExceeded);}
+            used+=1;
+            turn_data(data,reactor)?;
+        }
+        Ok({})
+    }
+}
+fn active_data(data:&mut ScopeData)->usize {
+    reap(data);let mut count:usize=0;
+    for (i in 0..data.entries.len()) {match &data.entries[i] {Some(_)=>{count+=1;},None=>{}}}
+    count
+}
+fn turn_data<R:Reactor>(data:&mut ScopeData,reactor:&mut R)->Result<bool,RunError> {
+    if (active_data(data)==0) {return Ok(true);}
+    if (!reactor.turn(data.queue.wait_hint())) {close_data(data);return Err(ReactorStopped);}
+    let now=reactor.now();
+    if (!data.queue.tick(now)) {close_data(data);return Err(InvalidClock);}
+    let count=data.entries.len();let mut i=data.cursor;
+    for (visited in 0..count) {
+        match replace(&mut data.entries[i],None) {
+            Some(entry)=>{
+                let run=entry.run;
+                let done=if (entry.waker.take_ready()) {run(Context{waker:entry.waker,now:now})} else {false};
+                if (!done) {data.entries[i]=Some(move(entry));}
+            },
+            None=>{},
+        }
+        i+=1;if (i==count) {i=0;}
+    }
+    data.cursor+=1;if (data.cursor==count) {data.cursor=0;}
+    Ok(active_data(data)==0)
+}
+
+fn wake_joiner(wake:Option<Waker>) {match wake {Some(w)=>{w.wake();},None=>{}}}
+
+fn new_task<F:Future>(work:OwnedFuture<F>,waker:Waker)->(TaskEntry,JoinHandle<F::Output>) {
+    let gate=task_gate();let alive=result_gate();
+    let mut result=new_result<F::Output>(gate,alive,waker);
+    let result_pointer=unsafe {let state=result.borrow_mut();let p:*mut JoinState<F::Output> = &mut *state;p};
+    let mut storage=new_storage(move(work),result_pointer,gate,alive,waker);
+    let pointer=unsafe {let future=storage.borrow_mut();let p:*mut OwnedFuture<F> = &mut *future;p};
+    let run=task_dispatch(pointer,result_pointer,gate,alive,waker);
+    let poll=join_dispatch(result_pointer,alive);
+    let result=__erase_owned(move(result));
+    let entry=TaskEntry{storage:__erase_owned(move(storage)),run:run,waker:waker};
+    (move(entry),HandleLive(move(result),poll))
+}
+fn new_result<T>(gate:fn(u16)->bool,alive:fn(bool)->bool,waker:Waker)->Owned<JoinState<T>> {
+    let initial:JoinState<T> = Waiting(None);
+    owned(move(initial),fn(state:&mut JoinState<T>)=>{
+        alive(true);gate(REQUEST_CANCEL);waker.retire();
+    })
+}
+fn new_storage<F:Future>(work:OwnedFuture<F>,result_pointer:*mut JoinState<F::Output>,gate:fn(u16)->bool,alive:fn(bool)->bool,waker:Waker)->Owned<OwnedFuture<F>> {
+    owned(move(work),fn(future:&mut OwnedFuture<F>)=>{
+        let unfinished=gate(DESTROY);waker.retire();
+        if (unfinished) {future.cancel();}
+        if (alive(false)) {
+            let wake=unsafe {let state=__borrow_raw(result_pointer);abort_state(state)};
+            wake_joiner(wake);
+        }
+    })
+}
+// Raw views below are valid only after checking the separately retained gate.
+// Destruction closes that gate before releasing its typed payload allocation.
+fn task_dispatch<F:Future>(pointer:*mut OwnedFuture<F>,result_pointer:*mut JoinState<F::Output>,gate:fn(u16)->bool,alive:fn(bool)->bool,waker:Waker)->fn(Context)->bool {
+    fn(cx:Context)=>{
+        if (!gate(ENTER)) {return true;}
+        let mut cx=cx;
+        let polled=unsafe {let future=__borrow_raw(pointer);future.poll(&mut cx)};
+        if (gate(CANCEL_REQUESTED)) {gate(LEAVE);return true;}
+        match move(polled) {
+            Pending=>{gate(LEAVE);false},
+            Ready(value)=>{
+                gate(COMPLETE);waker.retire();
+                if (alive(false)) {
+                    let wake=unsafe {let state=__borrow_raw(result_pointer);finish_state(state,move(value))};
+                    wake_joiner(wake);
+                }
+                true
+            },
+        }
+    }
+}
+fn join_dispatch<T>(result_pointer:*mut JoinState<T>,alive:fn(bool)->bool)->fn(Context)->Poll<Result<T,JoinError>> {
+    fn(cx:Context)=>{
+        if (!alive(false)) {invalid_poll();return Pending;}
+        unsafe {
+            let state=__borrow_raw(result_pointer);
+            match replace(state,Collected) {
+                Waiting(_)=>{*state=Waiting(Some(cx.waker));Pending},
+                Finished(value)=>Ready(Ok(move(value))),
+                Aborted=>Ready(Err(TaskCancelled)),
+                Collected=>{invalid_poll();Pending},
+            }
+        }
+    }
+}

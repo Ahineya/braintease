@@ -49,6 +49,7 @@ impl<'a> Checker<'a> {
                 };
                 let init = self.check_expr(init, annotated)?;
                 let span = arm_span(pattern);
+                self.note_reference_use(span, &init, annotated)?;
                 if let Some(want) = annotated {
                     if init.ty != want {
                         return Err(CompileError::at(
@@ -169,7 +170,7 @@ impl<'a> Checker<'a> {
                     }
                     let ptr = TExpr {
                         ty,
-                        kind: TExprKind::Name(id),
+                        kind: TExprKind::Name(id, 0),
                     };
                     return Ok(TStmt::PtrStore {
                         ptr,
@@ -185,9 +186,7 @@ impl<'a> Checker<'a> {
                         "slices are read-only",
                     ));
                 }
-                if !ty.is_ref() {
-                    self.note_use(name_span.start, id, true)?;
-                }
+                self.note_use(name_span.start, id, true)?;
                 if !self.place_mutable(id, ty) {
                     let message = if ty.is_ref() {
                         format!("`{name}` needs a mutable reference")

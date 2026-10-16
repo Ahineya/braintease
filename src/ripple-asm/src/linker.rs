@@ -2,6 +2,7 @@ use crate::types::{Instruction, Label, ObjectFile, Opcode, Register, UnresolvedR
 use std::collections::HashMap;
 use std::path::Path;
 use std::fs;
+mod layout;
 
 pub struct Linker {
     bank_size: u16,
@@ -61,9 +62,6 @@ impl Linker {
         // Pack objects (or functions, if an object does not fit in one bank)
         // so instruction index = PCB * bank_size + PC. Pad unused bank tails
         // with NOP 0x42 (HALT is opcode 0x00).
-        let mut packed_instructions = Vec::new();
-        let mut file_maps: Vec<Vec<usize>> = object_files.iter()
-            .map(|obj| vec![0; obj.instructions.len()]).collect();
         let startup_layout = dispatcher_index.and_then(|index|
             self.startup_layout(&object_files, index, bank_size));
         let layout = match startup_layout {
@@ -83,22 +81,9 @@ impl Linker {
                 layout
             }
         };
-        for (file_idx, segment) in layout {
-            let obj = &object_files[file_idx];
-            let len = segment.end - segment.start;
-            if !packed_instructions.is_empty() {
-                let used = packed_instructions.len() % bank_size;
-                let remainder = if used == 0 { bank_size } else { bank_size - used };
-                if len > remainder {
-                    Self::pad_to_bank_end(&mut packed_instructions, bank_size);
-                }
-            }
-
-            for local_idx in segment.start..segment.end {
-                file_maps[file_idx][local_idx] = packed_instructions.len();
-                packed_instructions.push(obj.instructions[local_idx]);
-            }
-        }
+        if !errors.is_empty() { return Err(errors); }
+        let placement = layout::place(&object_files, &layout, bank_size)?;
+        let file_maps = &placement.maps;
 
         // Concatenate data independently of code banking
         let mut all_data = Vec::new();
@@ -160,7 +145,7 @@ impl Linker {
             return Err(errors);
         }
 
-        let mut resolved_instructions = packed_instructions;
+        let mut resolved_instructions = placement.instructions;
 
         for (file_idx, obj) in object_files.iter().enumerate() {
             for (local_idx, unresolved) in &obj.unresolved_references {
@@ -172,6 +157,14 @@ impl Linker {
                     continue;
                 }
                 let global_idx = file_maps[file_idx][*local_idx];
+
+                if unresolved.ref_type == "branch" && placement.far[file_idx][*local_idx] != 0 {
+                    let target = &global_labels[&unresolved.label];
+                    let jump = global_idx + usize::from(placement.far[file_idx][*local_idx] == 2);
+                    Self::encode_jal_target(&mut resolved_instructions[jump], target.absolute_address as usize / 4, bank_size);
+                    relocs.push(Reloc { kind: RelocKind::JalAbs, index: jump as u32 });
+                    continue;
+                }
 
                 if let Err(e) = self.resolve_reference(
                     &mut resolved_instructions[global_idx],
@@ -203,7 +196,7 @@ impl Linker {
                     continue;
                 }
                 let local_target = instruction.word3 as usize;
-                if local_target >= obj.instructions.len() {
+                if instruction.word2 != 0 || local_target >= obj.instructions.len() {
                     continue;
                 }
                 let new_target = file_maps[file_idx][local_target];
@@ -241,25 +234,14 @@ impl Linker {
     }
 
     /// Compiler block labels are `L_{func}_{id}`. Everything else is treated as
-    /// a function entry so a translation unit can be split without cutting a
-    /// function (and its BEQ/BNE offsets) across a bank.
+    /// a function entry. Prefer keeping ordinary functions in one bank; large
+    /// functions continue across banks with link-time branch relaxation.
     fn is_function_entry_label(name: &str) -> bool {
         !name.starts_with("L_") && !name.starts_with('.')
     }
 
     fn nop_pad_instruction() -> Instruction {
         Instruction::new(Opcode::Nop, 0, 0, 0)
-    }
-
-    fn pad_to_bank_end(instructions: &mut Vec<Instruction>, bank_size: usize) {
-        let used = instructions.len() % bank_size;
-        if used == 0 {
-            return;
-        }
-        let pad = bank_size - used;
-        for _ in 0..pad {
-            instructions.push(Self::nop_pad_instruction());
-        }
     }
 
     fn encode_jal_target(instruction: &mut Instruction, inst_idx: usize, bank_size: usize) {
@@ -388,9 +370,6 @@ impl Linker {
                 layout.extend(segments.into_iter().map(|segment| (file, segment)));
             } else if let Some(segments) = Self::movable_compiler_segments(obj) {
                 for segment in segments {
-                    if segment.end - segment.start > bank_size {
-                        return None; // ordinary packing reports the precise error
-                    }
                     if segment.name.as_ref().is_some_and(|n| n.starts_with("__rcc_init_")) {
                         initializers.push((file, segment));
                     } else {
@@ -432,10 +411,7 @@ impl Linker {
         starts.dedup_by_key(|(idx, _)| *idx);
 
         if starts.is_empty() {
-            return Err(format!(
-                "object is {} instructions, larger than bank size {}, and has no function labels to split on",
-                len, bank_size
-            ));
+            return Ok(vec![CodeSegment { start: 0, end: len, name: None }]);
         }
 
         if starts[0].0 != 0 {
@@ -447,13 +423,6 @@ impl Linker {
             let start = starts[i].0;
             let end = if i + 1 < starts.len() { starts[i + 1].0 } else { len };
             let name = starts[i].1.clone();
-            let seg_len = end - start;
-            if seg_len > bank_size {
-                return Err(format!(
-                    "function '{}' is {} instructions, larger than bank size {}",
-                    name, seg_len, bank_size
-                ));
-            }
             segments.push(CodeSegment { start, end, name: Some(name) });
         }
 
@@ -488,9 +457,17 @@ impl Linker {
                 let current_inst = current_idx as i32;
                 let target_inst = (target_label.absolute_address / 4) as i32;
                 let offset = target_inst - current_inst;
+
+                // Equal operands make BNE/BLT impossible; their target is still
+                // checked for existence, but no displacement will be used.
+                let never = instruction.word1 == instruction.word2
+                    && matches!(Opcode::from_u8(instruction.opcode), Some(Opcode::Bne | Opcode::Blt));
+                if !never && current_idx / self.bank_size.max(1) as usize != target_inst as usize / self.bank_size.max(1) as usize {
+                    return Err("cross-bank branch was not relaxed".into());
+                }
                 
                 // Update the immediate field (word3 for branches)
-                instruction.word3 = offset as u16;
+                instruction.word3 = if never { 0 } else { offset as u16 };
             }
             "absolute" => {
                 // JAL: word2 = code bank, word3 = in-bank instruction offset
@@ -1044,7 +1021,7 @@ func:
     }
 
     #[test]
-    fn test_function_larger_than_bank_fails() {
+    fn test_function_larger_than_bank_continues_in_the_next_bank() {
         let assembler = RippleAssembler::new(AssemblerOptions::default());
         let mut src = String::from("huge:\n");
         for _ in 0..10 {
@@ -1053,8 +1030,9 @@ func:
         let obj = assembler.assemble(&src).unwrap();
 
         let linker = Linker::new(8);
-        let err = linker.link(vec![obj]).unwrap_err();
-        assert!(err.iter().any(|e| e.contains("larger than bank size")));
+        let linked = linker.link(vec![obj]).unwrap();
+        assert_eq!(linked.instructions.len(), 10);
+        assert_eq!(linked.code_bank_count(), 2);
     }
 
     #[test]

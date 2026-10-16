@@ -1,0 +1,42 @@
+// A parent polls its child in place and forwards explicit cancellation.
+// See composed-futures.rfl for automatic cleanup through owned composition.
+import { Future, Poll, Pending, Ready, CallbackFuture, sleep } from "std/future";
+import { Context } from "std/task";
+import { Reactor, block_on_with_budget } from "std/executor";
+
+struct Greeting { timer: CallbackFuture<unit> }
+impl Future for Greeting {
+    type Output = String;
+    fn poll(&mut self, cx: &mut Context) -> Poll<String> {
+        match self.timer.poll(cx) {
+            Pending => Pending,
+            Ready(_) => Ready("hello from a child future"),
+        }
+    }
+    fn cancel(&mut self) { self.timer.cancel(); }
+}
+
+struct Clock { milliseconds: u32 }
+impl Reactor for Clock {
+    fn now(&self) -> u32 { self.milliseconds }
+    fn turn(&mut self, wait: Option<u32>) -> bool {
+        match wait {
+            Some(delay) => { self.milliseconds += delay; },
+            None => { self.milliseconds += 1; },
+        }
+        true
+    }
+}
+
+fn main() -> i16 {
+    let timer = match sleep(25) {
+        Ok(value) => value,
+        Err(_) => { println("invalid timer interval"); return 1; },
+    };
+    let mut greeting = Greeting { timer: timer };
+    let mut clock = Clock { milliseconds: 100 };
+    match block_on_with_budget(&mut greeting, &mut clock, 10) {
+        Ok(text) => { println(text); println(clock.milliseconds); 0 },
+        Err(_) => { println("executor stopped; unfinished work cancelled"); 1 },
+    }
+}

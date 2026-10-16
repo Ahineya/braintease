@@ -29,6 +29,10 @@ pub enum Ty {
     /// Index into the module's element-type table. The value is a heap pointer:
     /// address cell, bank cell. Null is the empty vector.
     Vec(u32),
+    /// Move-only owner of stable payload storage and a cleanup callback.
+    Owned(u32),
+    /// Move-only opaque owner; retains the original typed destruction glue.
+    ErasedOwner,
     /// Index into the checker's reference table. The value is a pointer to a
     /// local: address cell, bank cell. It cannot outlive that local.
     Ref(u32),
@@ -66,6 +70,7 @@ pub enum Ty {
 impl Ty {
     pub fn parse_name(name: &str) -> Option<Self> {
         Some(match name {
+            "ErasedOwner" => Self::ErasedOwner,
             "i8" => Self::I8,
             "u8" => Self::U8,
             "i16" => Self::I16,
@@ -125,7 +130,11 @@ impl Ty {
 
     /// The value owns a share of a refcounted heap object.
     pub fn is_managed(self) -> bool {
-        self.owns_buffer() || matches!(self, Self::Adt(_) | Self::Func(_) | Self::String)
+        self.owns_buffer()
+            || matches!(
+                self,
+                Self::Adt(_) | Self::Func(_) | Self::String | Self::Owned(_) | Self::ErasedOwner
+            )
     }
 
     pub fn is_signed(self) -> bool {
@@ -144,7 +153,13 @@ impl Ty {
             Self::Func(_) => 4,
             Self::I32 | Self::U32 | Self::Usize | Self::F32 => 2,
             Self::I64 | Self::U64 | Self::F64 => 4,
-            Self::Vec(_) | Self::Ref(_) | Self::Ptr(_) | Self::CFn(_) | Self::String => 2,
+            Self::Vec(_)
+            | Self::Owned(_)
+            | Self::ErasedOwner
+            | Self::Ref(_)
+            | Self::Ptr(_)
+            | Self::CFn(_)
+            | Self::String => 2,
             Self::Char => 2,
             // Address, bank, 32-bit start, 32-bit count.
             Self::Slice(_) => 6,
@@ -173,6 +188,8 @@ impl Ty {
             | Self::Adt(_)
             | Self::Func(_)
             | Self::Vec(_)
+            | Self::Owned(_)
+            | Self::ErasedOwner
             | Self::Ref(_)
             | Self::Ptr(_)
             | Self::CFn(_)
@@ -197,6 +214,8 @@ impl Ty {
             | Self::Adt(_)
             | Self::Func(_)
             | Self::Vec(_)
+            | Self::Owned(_)
+            | Self::ErasedOwner
             | Self::Ref(_)
             | Self::Ptr(_)
             | Self::CFn(_)
@@ -229,6 +248,8 @@ impl std::fmt::Display for Ty {
             Self::Adt(_) => "adt",
             Self::Func(_) => "fn",
             Self::Vec(_) => "vec",
+            Self::Owned(_) => "Owned",
+            Self::ErasedOwner => "ErasedOwner",
             Self::Ref(_) => "ref",
             Self::Array { .. } => "array",
             Self::Slice(_) => "slice",

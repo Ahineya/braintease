@@ -41,12 +41,8 @@ pub fn link(object_files: Vec<ObjectFile>) -> Result<LinkedProgram, Vec<String>>
     linker.link(object_files)
 }
 
-pub fn format_to_macro(obj: &ObjectFile) -> String {
+pub fn format_to_macro(obj: &ObjectFile) -> Result<String, Vec<String>> {
     let formatter = MacroFormatter::new();
-    formatter.format_full_program(
-        &obj.instructions,
-        Some(&obj.data),
-        None,
-        None,
-    )
+    let image = Linker::new(DEFAULT_BANK_SIZE).link(vec![obj.clone()])?;
+    Ok(formatter.format_linked_program(&image))
 }

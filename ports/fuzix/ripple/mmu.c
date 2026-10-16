@@ -1,0 +1,334 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Physical page tables and reference counts are outside the supervisor user
+ * window. No pointer into a task's memory is retained across a switch. */
+#include "platform.h"
+#include <kdata.h>
+#include <printf.h>
+#include <vm_bulk.h>
+extern long ripple_dispatch(struct ripple_request *);
+extern unsigned ripple_signal_frame(void);
+extern void ripple_resume_user(void);
+#define DROOT 0U
+#define DLEAF 512U
+#define IROOT 1536U
+#define ILEAF 2048U
+#define PAGES 3072U
+#define TABLE_CELLS (PAGES + 17U * 512U)
+#define RWU (MP_PRESENT | MP_READ | MP_WRITE | MP_USER)
+static unsigned cursor, used_pages;
+static unsigned task_pages[PTABSIZE];
+static unsigned ready[PTABSIZE];
+unsigned ripple_trap_action;
+static unsigned *table(unsigned task, unsigned off) {
+    return (unsigned *)(((unsigned long)(MMU_TABLE_BASE + task) << 16) | off);
+}
+static unsigned *refs(void) { return (unsigned *)((unsigned long)MMU_REF_BANK << 16); }
+static unsigned *pte(unsigned task, unsigned bank, unsigned off) {
+    unsigned index;
+    if (bank >= USER_GP && bank <= USER_HEAP_LAST) index = bank - USER_GP;
+    else if (bank == USER_SB) index = 16;
+    else return NULL;
+    return table(task, PAGES + index * 512U + (off / MMU_PAGE_CELLS) * 4U);
+}
+static unsigned pageid(unsigned *p) {
+    return (p[0] - MMU_POOL_BASE) * MMU_BANK_PAGES + p[1] / MMU_PAGE_CELLS;
+}
+static unsigned allocpage(void) {
+    unsigned tries, id;
+    for (tries = 0; tries < MMU_POOL_PAGES; tries++) {
+        id = cursor++;
+        if (cursor == MMU_POOL_PAGES) cursor = 0;
+        if (!refs()[id]) {
+            refs()[id] = 1;
+            ++used_pages;
+            return id;
+        }
+    }
+    return 65535U;
+}
+static void unref(unsigned id) {
+    if (id >= MMU_POOL_PAGES || !refs()[id]) panic("page reference");
+    if (--refs()[id] == 0) --used_pages;
+}
+usize_t ripple_mmu_used(void) { return used_pages; }
+void ripple_mmu_usage(unsigned long *shared, unsigned long *mapped) {
+    unsigned id, count;
+    *shared = *mapped = 0;
+    for (id = 0; id < MMU_POOL_PAGES; id++) {
+        count = refs()[id];
+        if (count > 1) ++*shared;
+        *mapped += count;
+    }
+}
+void ripple_mmu_task_usage(unsigned task, unsigned long *priv, unsigned long *shared) {
+    unsigned bank, off, *p;
+    *priv = *shared = 0;
+    if (!ready[task]) return;
+    for (bank = USER_GP; bank <= USER_SB; bank++) {
+        if (bank > USER_HEAP_LAST && bank != USER_SB) continue;
+        for (off = 0; off < BANK_CELLS; off += MMU_PAGE_CELLS) {
+            p = pte(task, bank, off);
+            if (p[2] & MP_PRESENT) {
+                if (refs()[pageid(p)] > 1) ++*shared;
+                else ++*priv;
+            }
+        }
+    }
+}
+static void setpage(unsigned *p, unsigned id) {
+    p[0] = MMU_POOL_BASE + id / MMU_BANK_PAGES;
+    p[1] = (id % MMU_BANK_PAGES) * MMU_PAGE_CELLS;
+    p[2] = RWU;
+    p[3] = 0;
+}
+static void *physical(unsigned id) {
+    return (void *)(((unsigned long)(MMU_POOL_BASE + id / MMU_BANK_PAGES) << 16) |
+                   ((id % MMU_BANK_PAGES) * MMU_PAGE_CELLS));
+}
+void ripple_mmu_init(void) {
+    memset(refs(), 0, MMU_POOL_PAGES);
+    memset(ready, 0, sizeof(ready));
+    cursor = used_pages = 0;
+    memset(task_pages,0,sizeof(task_pages));
+}
+void ripple_mmu_free(unsigned task) {
+    unsigned bank, off, *p;
+    if (!ready[task]) return;
+    for (bank = USER_GP; bank <= USER_SB; bank++) {
+        if (bank > USER_HEAP_LAST && bank != USER_SB) continue;
+        for (off = 0; off < BANK_CELLS; off += MMU_PAGE_CELLS) {
+            p = pte(task, bank, off);
+            if (p[2] & MP_PRESENT) unref(pageid(p));
+        }
+    }
+    ready[task] = 0;
+    task_pages[task] = 0;
+}
+int ripple_mmu_alloc(unsigned task) {
+    unsigned bank, *p;
+    memset(table(task, 0), 0, TABLE_CELLS);
+    table(task,DROOT)[0] = MMU_TABLE_BASE + task;
+    table(task,DROOT)[1] = DLEAF;
+    table(task,IROOT)[0] = MMU_TABLE_BASE + task;
+    table(task,IROOT)[1] = ILEAF;
+    for (bank = USER_GP; bank <= USER_SB; bank++) {
+        p = pte(task,bank,0);
+        if (!p) continue;
+        table(task,DLEAF + bank * 4U)[0] = MMU_TABLE_BASE + task;
+        table(task,DLEAF + bank * 4U)[1] = PAGES + (bank == USER_SB ? 16U : bank - USER_GP) * 512U;
+        table(task,DLEAF + bank * 4U)[2] = RWU | MP_PAGED;
+    }
+    ready[task] = 1;
+    task_pages[task] = 0;
+    return 0;
+}
+void ripple_mmu_select(unsigned task) { ripple_mmu_roots(MMU_TABLE_BASE + task); }
+static int newpage(unsigned task, unsigned bank, unsigned off) {
+    unsigned id, *p = pte(task,bank,off);
+    if (p[2] & MP_PRESENT) return 0;
+    id = allocpage();
+    if (id == 65535U) return -1;
+    if (ripple_zero(physical(id), MMU_PAGE_CELLS)) panic("page clear");
+    setpage(p,id);
+    ++task_pages[task];
+    return 0;
+}
+int ripple_mmu_exec(unsigned task) {
+    unsigned bank, off, *p;
+    unsigned available = MMU_POOL_PAGES - used_pages;
+    /* Exec may reclaim this task's private pages. Check before destroying its
+     * old map so ENOMEM leaves the existing executable usable. These helpers
+     * do not sleep, and kernel execution is not preemptively scheduled. */
+    if (ready[task]) {
+        for (bank = USER_GP; bank <= USER_SB; bank++) {
+            if (bank > USER_HEAP_LAST && bank != USER_SB) continue;
+            for (off = 0; off < BANK_CELLS; off += MMU_PAGE_CELLS) {
+                p = pte(task, bank, off);
+                if ((p[2] & MP_PRESENT) && refs()[pageid(p)] == 1) ++available;
+            }
+        }
+    }
+    if (available < 2U * MMU_BANK_PAGES) return -1;
+    ripple_mmu_free(task);
+    ripple_mmu_alloc(task);
+    for (off = 0; off < BANK_CELLS; off += MMU_PAGE_CELLS)
+        if (newpage(task,USER_GP,off) || newpage(task,USER_SB,off)) return -1;
+    ripple_mmu_select(task);
+    return 0;
+}
+void ripple_mmu_code(unsigned task, unsigned base, unsigned long count) {
+    unsigned bank;
+    for (bank = 0; bank < 12; bank++) {
+        unsigned *p = table(task, ILEAF + bank * 4U);
+        p[0] = base + bank;
+        p[1] = 0;
+        p[2] = (unsigned long)bank * BANK_CELLS < count ? MP_PRESENT|MP_READ|MP_EXEC|MP_USER : 0;
+    }
+    ripple_mmu_flush_code();
+}
+int ripple_mmu_fork(unsigned parent, unsigned child) {
+    unsigned bank, off, *src, *dst;
+    ripple_mmu_alloc(child);
+    memcpy(table(child,ILEAF),table(parent,ILEAF),1024);
+    for (bank = USER_GP; bank <= USER_SB; bank++) {
+        if (bank > USER_HEAP_LAST && bank != USER_SB) continue;
+        for (off=0; off<BANK_CELLS; off+=MMU_PAGE_CELLS) {
+            src=pte(parent,bank,off); dst=pte(child,bank,off);
+            if (!(src[2]&MP_PRESENT)) continue;
+            ++refs()[pageid(src)];
+            src[2]=(src[2]&~MP_WRITE)|MP_COW;
+            memcpy(dst,src,4);
+        }
+    }
+    task_pages[child] = task_pages[parent];
+    ptab[child].p_size = task_pages[child];
+    /* A reused child root may still have compiled code from its previous
+     * executable. Fork replaces its instruction map as well as data PTEs. */
+    ripple_mmu_flush_code();
+    return 0;
+}
+static int writable(unsigned *p) {
+    unsigned old, id;
+    if (p[2]&MP_WRITE) return 0;
+    if (!(p[2]&MP_COW)) return -1;
+    old=pageid(p);
+    if (refs()[old]>1) {
+        id=allocpage();
+        if (id==65535U) return -1;
+        if (ripple_copy(physical(id),physical(old),MMU_PAGE_CELLS)) panic("COW copy");
+        unref(old);
+        setpage(p,id);
+    } else p[2]=(p[2]|MP_WRITE)&~MP_COW;
+    ripple_mmu_flush();
+    return 0;
+}
+usize_t ripple_mmu_validate(unsigned long v, usize_t size, unsigned write) {
+    unsigned task = (unsigned)(udata.u_ptab - ptab), bank = v >> 16, off = (unsigned)v;
+    usize_t valid = 0;
+    unsigned n, *p;
+    while (size && off < BANK_CELLS && (p=pte(task,bank,off)) != NULL &&
+           (p[2]&(MP_PRESENT|MP_READ))==(MP_PRESENT|MP_READ) &&
+           (!write || (p[2]&(MP_WRITE|MP_COW)))) {
+        if (write && writable(p)) {udata.u_error=ENOMEM;break;}
+        n=MMU_PAGE_CELLS-off%MMU_PAGE_CELLS;
+        if (n>BANK_CELLS-off) n=BANK_CELLS-off;
+        if ((usize_t)n>size) n=(unsigned)size;
+        valid+=n; size-=n; off+=n;
+        if (off==BANK_CELLS) {off=0;bank++;}
+    }
+    return valid;
+}
+unsigned ripple_fault(void) {
+    unsigned cause=ripple_mmu_cause(), bank=ripple_mmu_fault_bank(), off=ripple_mmu_fault_off();
+    unsigned task=(unsigned)(udata.u_ptab-ptab), *p;
+    p=off<BANK_CELLS ? pte(task,bank,off) : NULL;
+    if (cause==3 && p && (p[2]&(MP_PRESENT|MP_COW))==(MP_PRESENT|MP_COW)) {
+        if (!writable(p)) return 0;
+        if (!ripple_mmu_saved_mode()) panic("unvalidated kernel COW write");
+        ripple_trap_action=2;
+        return 1;
+    }
+    if (!ripple_mmu_saved_mode()) panic("kernel MMU fault");
+    ripple_trap_action=cause==1 ? 1 : (cause==5 || cause==6 ? 3 : 2);
+    return 1;
+}
+void ripple_trap(void) {
+    unsigned *f=(unsigned *)((unsigned long)ripple_kernel_stack<<16);
+    unsigned long ptr=((unsigned long)f[6]<<16)|f[5];
+    long result;
+    if (ripple_trap_action!=1) {
+        udata.u_insys=1;
+        __hard_ei();
+        doexit(ripple_trap_action==3 ? SIGILL : SIGSEGV);
+    }
+    if (f[6]==65535U) ptr=((unsigned long)USER_GP<<16)|f[5];
+    if (f[6]==65534U) ptr=((unsigned long)USER_SB<<16)|f[5];
+    result=ripple_dispatch((struct ripple_request *)ptr);
+    /* fork/scheduling can resume this C frame on another kernel stack. */
+    f=(unsigned *)((unsigned long)ripple_kernel_stack<<16);
+    f[3]=(unsigned)result; f[4]=(unsigned)((unsigned long)result>>16);
+    ripple_signal_frame();
+    ripple_resume_user();
+    panic("MMU trap returned");
+}
+/* Packed pointers have a gap between canonical banks. brk/sbrk count cells,
+ * not those gaps. Static globals still occupy the first data bank. */
+static unsigned long dense(unsigned long p) {
+    return (p>>16)*BANK_CELLS+(unsigned)p;
+}
+arg_t brk_extend(uaddr_t ptr) {
+    unsigned bank=ptr>>16, off=(unsigned)ptr;
+    return bank<USER_GP || bank>USER_HEAP_LAST || off>=BANK_CELLS || ptr<udata.u_codebase ? ENOMEM : 0;
+}
+/* Record precisely the pages added by this growth attempt. Pre-existing
+ * mappings (including the unused part of exec's initial data bank) survive
+ * failure unchanged. One bit per heap page fits in 125 native cells. */
+#define HEAP_PAGES (16U * MMU_BANK_PAGES)
+static void rollback(unsigned task, unsigned *added) {
+    unsigned index, *p;
+    for (index = 0; index < HEAP_PAGES; index++) {
+        if (!(added[index / 16] & (1U << (index % 16)))) continue;
+        p = pte(task, USER_GP + index / MMU_BANK_PAGES,
+                (index % MMU_BANK_PAGES) * MMU_PAGE_CELLS);
+        unref(pageid(p)); p[2] = 0; --task_pages[task];
+    }
+    ripple_mmu_flush();
+    udata.u_ptab->p_size=task_pages[task];
+}
+arg_t _brk(void) {
+    unsigned long target=udata.u_argn, old=udata.u_break;
+    unsigned task=(unsigned)(udata.u_ptab-ptab), bank, off;
+    unsigned added[HEAP_PAGES / 16], index, *p;
+    unsigned long pos, end;
+    if ((udata.u_error=brk_extend(target))!=0) return -1;
+    if (target>old) {
+        memset(added, 0, sizeof(added));
+        pos=dense(old); end=dense(target);
+        while (pos<end) {
+            bank=(unsigned)(pos/BANK_CELLS); off=(unsigned)(pos%BANK_CELLS);
+            p = pte(task, bank, off);
+            if (!(p[2] & MP_PRESENT)) {
+                if (newpage(task,bank,off)) {
+                    rollback(task,added);
+                    udata.u_error=ENOMEM;return -1;
+                }
+                index = (bank - USER_GP) * MMU_BANK_PAGES + off / MMU_PAGE_CELLS;
+                added[index / 16] |= 1U << (index % 16);
+            }
+            pos+=MMU_PAGE_CELLS-off%MMU_PAGE_CELLS;
+        }
+        ripple_mmu_flush();
+        if (ripple_mmu_validate(old,end-dense(old),1)!=end-dense(old)) {
+            rollback(task,added);
+            return -1;
+        }
+        if (ripple_zero((void *)old,end-dense(old))) {
+            rollback(task,added);
+            return -1;
+        }
+    } else if (target < old) {
+        /* Keep the partial last page; release complete pages above the break.
+         * A later growth zeros the newly exposed tail even if it was shared. */
+        pos = (dense(target) + MMU_PAGE_CELLS - 1) / MMU_PAGE_CELLS * MMU_PAGE_CELLS;
+        end = dense(old);
+        while (pos < end) {
+            bank = (unsigned)(pos / BANK_CELLS); off = (unsigned)(pos % BANK_CELLS);
+            p = pte(task, bank, off);
+            if (p[2] & MP_PRESENT) { unref(pageid(p)); p[2] = 0; --task_pages[task]; }
+            pos += MMU_PAGE_CELLS;
+        }
+        ripple_mmu_flush();
+    }
+    udata.u_ptab->p_size=task_pages[task];
+    udata.u_break=target;
+    return 0;
+}
+arg_t _sbrk(void) {
+    unsigned long old=udata.u_break, linear=dense(old);
+    long change=udata.u_argn;
+    unsigned long next=linear+change;
+    if ((change>0 && next<linear)||(change<0 && next>linear)) {udata.u_error=ENOMEM;return -1;}
+    udata.u_argn=((next/BANK_CELLS)<<16)|(next%BANK_CELLS);
+    if (_brk()) return -1;
+    return (arg_t)old;
+}

@@ -1,0 +1,53 @@
+.TH PS 1
+.SH NAME
+ps \- report processes
+.SH SYNOPSIS
+.B ps
+.RB [ \-AeaNrlf ]
+.RB [ \-p " pid,..."]
+.RB [ \-u " uid,..."]
+.RB [ \-t " tty,..."]
+.SH DESCRIPTION
+Without selectors, ps shows processes with the caller's real user ID and
+controlling terminal. Each kernel record contains IDs, state, CPU counters,
+and mapped data/heap/stack page counts; kernel addresses are not exposed.
+.PP
+States: R running or runnable, S sleeping, D uninterruptible I/O, T stopped,
+F being forked, Z zombie. TIME is the process's own user plus kernel CPU time,
+not time accumulated by its children. TTY is the numeric controlling terminal:
+1 is the console; 2 through 5 are PTY slaves ttyp0 through ttyp3. Zero means none.
+.SH OPTIONS
+.TP
+.B \-A, \-e
+Select all processes.
+.TP
+.B \-a
+Select processes with a controlling terminal.
+.TP
+.B \-r
+Restrict selected processes to running/runnable states.
+.TP
+.B \-N
+Invert selection.
+.TP
+.BI \-p " pid,..."
+Select process IDs.
+.TP
+.BI \-u " uid,..."
+Select real user IDs or user names. -U is an alias.
+.TP
+.BI \-t " tty,..."
+Select numeric terminal minors, tty names, or device paths.
+.TP
+.B \-f
+Include UID, parent PID, process group and session ID.
+.TP
+.B \-l
+Also include private/shared KiB, scheduling priority, and nice value.
+.PP
+MAP-K equals PRIV-K plus SHRD-K. Shared pages appear in every referencing
+process; these values must not be summed as physical memory consumption.
+Code images and reserved kernel RAM are not included. Use free for unique
+physical totals and top for sampled CPU usage.
+.SH SEE ALSO
+free(1), top(1), uptime(1)

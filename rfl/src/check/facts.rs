@@ -64,6 +64,7 @@ impl<'a> Checker<'a> {
         }
         match ty {
             Ty::Adt(id) => self.adts[id as usize].name.clone(),
+            Ty::Owned(id) => format!("Owned<{}>", self.show(self.owner_elems[id as usize])),
             Ty::Vec(id) => format!("Vec<{}>", self.show(self.vec_elems[id as usize])),
             Ty::Slice(id) => format!("Slice<{}>", self.show(self.slice_elems[id as usize])),
             Ty::Array { id, len, .. } => {
@@ -124,6 +125,15 @@ impl<'a> Checker<'a> {
                 let ty = self.peek_place(base)?;
                 self.field_ty(ty, name)
             }
+            ExprKind::Index { base, .. } => {
+                let ty = self.peek_place(base)?;
+                self.element_of(self.referent(ty))
+            }
+            ExprKind::Deref(base) => match self.peek_place(base)? {
+                Ty::Ref(id) => Some(self.refs[id as usize].inner),
+                Ty::Ptr(id) => Some(self.ptrs[id as usize].inner),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -208,6 +218,10 @@ impl<'a> Checker<'a> {
             {
                 Some(Ty::String)
             }
+            ExprKind::Call { callee, args, .. } if callee == "move" => {
+                args.first().and_then(|e| self.peek(e))
+            }
+            ExprKind::Call { callee, .. } if callee == "owned" => None,
             ExprKind::Call { callee, .. } if is_builtin(callee) => Some(Ty::Unit),
             ExprKind::Call { callee, .. } => self.sigs.get(callee).and_then(|sig| sig.ret),
             ExprKind::Method {
@@ -226,6 +240,11 @@ impl<'a> Checker<'a> {
                     Some(Ty::Unit)
                 } else {
                     if let Some(ty) = self.peek(receiver) {
+                        if method == "into_inner" {
+                            if let Ty::Owned(id) = ty {
+                                return Some(self.owner_elems[id as usize]);
+                            }
+                        }
                         if let Some(key) = self.type_key(ty) {
                             if let Some(found) = self
                                 .methods

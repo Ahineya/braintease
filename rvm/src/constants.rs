@@ -134,3 +134,22 @@ pub const THEME_COLORS: [(u8, u8, u8); 16] = [
     (255, 119, 168), // 14: Pink
     (255, 204, 170), // 15: Peach
 ];
+
+// MMU ABI 1. Supervisor identity accesses can opt into a translated user window.
+pub const CSR_MMU_VERSION: u16 = 12;
+pub const CSR_MMU_CONTROL: u16 = 13;
+pub const CSR_DROOT_BANK: u16 = 14;
+pub const CSR_DROOT_OFF: u16 = 15;
+pub const CSR_IROOT_BANK: u16 = 16;
+pub const CSR_IROOT_OFF: u16 = 17;
+pub const CSR_WINDOW_LO: u16 = 18;
+pub const CSR_WINDOW_HI: u16 = 19;
+pub const CSR_TRAP_BANK: u16 = 20;
+pub const CSR_TRAP_OFF: u16 = 21;
+pub const CSR_TRAP_CAUSE: u16 = 22;
+pub const CSR_FAULT_BANK: u16 = 23;
+pub const CSR_FAULT_OFF: u16 = 24;
+pub const CSR_SAVED_MODE: u16 = 25;
+pub const CSR_MODE: u16 = 26;
+pub const CSR_MMU_FLUSH: u16 = 27;
+pub const CSR_MMU_FEATURES: u16 = 28;

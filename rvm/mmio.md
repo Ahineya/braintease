@@ -27,8 +27,8 @@ and [complete C example](#complete-c-example-using-the-helpers).
 | 10–15 | Reserved | R/W | Reads zero; writes ignored. Input uses DEVICE_* commands. |
 | 16      | `HDR_DISP_RESOLUTION` | R/W | Display resolution for RGB565 (hi8=width, lo8=height) |
 | 17      | `HDR_STORE_BLOCK`     | W   | Select current storage block (0-65535)                |
-| 18      | `HDR_STORE_ADDR`      | W   | Select byte address within block (0-65535)            |
-| 19      | `HDR_STORE_DATA`      | R/W | Data register: read/write byte at (block, addr)       |
+| 18      | `HDR_STORE_ADDR`      | W   | Select word address within block (0-32767)            |
+| 19      | `HDR_STORE_DATA`      | R/W | Data register: read/write 16-bit word at (block, addr)       |
 | 20      | `HDR_STORE_CTL`       | R/W | Storage control (busy/dirty/commit bits)              |
 | 21      | `HDR_IRQ_STATUS`      | R/W | Pending IRQ flags (write ORs into pending)            |
 | 22      | `HDR_IRQ_ENABLE`      | R/W | IRQ enable mask                                       |
@@ -104,24 +104,26 @@ Regular data memory starts at word 1032, after the VRAM region.
 
 **Storage Address (HDR_STORE_ADDR)**
 - Write-only register at address 18
-- Selects byte address within current block (0-65535)
+- Selects a 16-bit word address within the current 64-KiB block (0-32767)
 - Auto-increments after each HDR_STORE_DATA access
-- Wraps to 0 after reaching 65535
+- Addresses 32768-65535 read zero and ignore writes; the cursor wraps after 65535
+- Wrapping does not advance the selected block
 
 **Storage Data (HDR_STORE_DATA)**
 - Read/Write register at address 19
-- Read: Returns byte at (block, addr) in low 8 bits (high 8 bits are 0)
-- Write: Updates byte at (block, addr) using low 8 bits of value (high 8 bits ignored)
+- Read: Returns a 16-bit little-endian word at (block, word address)
+- Write: Updates both octets of that word with all 16 bits of the value
 - Auto-increments HDR_STORE_ADDR after each operation
 
 **Storage Control (HDR_STORE_CTL)**
 - Read/Write register at address 20
 - Control bits:
   - Bit 0 (BUSY): Read-only, 1 if VM is processing operation
-  - Bit 1 (DIRTY): Read/Write, 1 if current block has uncommitted writes
+  - Bit 1 (DIRTY): Read-only, 1 if current block has uncommitted writes
   - Bit 2 (COMMIT): Write-only, writing 1 commits current block
   - Bit 3 (COMMIT_ALL): Write-only, writing 1 commits all dirty blocks
-  - Bits 15-4: Reserved (read as 0)
+  - Bit 4 (ERROR): Sticky host I/O error; write one to clear
+  - Bits 15-5: Reserved (read as 0)
 
 ### Interrupt Controller
 
@@ -294,7 +296,7 @@ Assume bank 2, offsets 100–103 are available guest RAM. First write this recor
 |----------------|-------------------|---------|-----------------------------------------|
 | `(2, 100)` | 1 | descriptor version | 1 |
 | `(2, 101)` | 4 | descriptor length, including these first two cells | 4 |
-| `(2, 102)` | 0 | capability bits, output | 511 |
+| `(2, 102)` | 0 | capability bits, output | backend-dependent bitmask |
 | `(2, 103)` | 0 | key count, output | 256 |
 
 Then perform these bank-0 MMIO operations, in order:
@@ -309,7 +311,7 @@ read  address 30          # 0 means success
 The host obtains the descriptor address from registers 27/28, reads its header,
 validates the four-cell range, and writes results at `(2, 102)` and `(2, 103)`.
 Read those cells only after checking status. Test capability bits with a mask;
-future hosts may return additional bits rather than exactly 511.
+hosts may return additional bits; do not compare the whole value to a constant.
 
 Here is a complete Ripple C program doing the same operation with a stack array
 instead of a hard-coded address. `volatile` ensures the descriptor's memory
@@ -386,15 +388,17 @@ guest may then reuse the framebuffer; presentation has not advanced the clock.
 | 7 | unsupported device on this backend |
 | 8 | bounded queue would block |
 | 9 | invalid device state |
-| 10 | host audio capture I/O error |
+| 10 | host device I/O error |
 | 0x8000 | pending host tick grant |
 
-`CAPS` returns bits 0–8 set (511) in RVM and the RCC native runtime: extended
+`CAPS` includes bits 0–8 in RVM and the RCC native runtime: extended
 RGB565, logical clock, input events,
 held-key state, independent live-input polling (`VM_CAP_INPUT_POLL`, 0x0010),
 Ethernet networking (`VM_CAP_NETWORK`, 0x0020), pointer input (`VM_CAP_POINTER`,
 0x0040), PCM audio (`VM_CAP_PCM`, 0x0080), and OPL3 music (`VM_CAP_MUSIC`, 0x0100).
-RBF reports bits 0–6 (127) and leaves audio unsupported.
+RBF includes bits 0–6 and leaves audio unsupported. Additional capability bits
+report bulk RAM transfers (0x0400), attached storage (0x0200), and code uploads
+(0x0800); availability depends on the backend and CPU image.
 See [audio](../docs/arch/audio.md). Key count is 256. Ignore unknown capability
 bits and check status before consuming output fields.
 
@@ -403,6 +407,14 @@ Networking uses additional command IDs in this same mailbox: `NET_INFO` 0x0100
 See the [network wire formats and examples](../docs/mmio.networking.md#commands-and-wire-format).
 It needs no separate MMIO addresses. Packet transfers copy one eight-bit octet
 per guest cell and do not advance time, consume keyboard events or publish frames.
+
+#### Bulk storage and memory transfers
+
+Commands 0x0300–0x0303 provide bounded disk read/write, RAM copy/fill, and Harvard
+instruction uploads through this mailbox. See the [wire contract and C examples](../docs/arch/bulk-io.md).
+Disk offsets count octets; RAM lengths count cells; code lengths count instructions.
+Bulk and legacy storage share cached dirty data and durability barriers. No guest
+ISA instructions or MMIO addresses are added.
 
 #### Extended RGB565 presentation
 
@@ -723,7 +735,7 @@ snapshot cell 17; input registers 10–15 are reserved.
 
 ### Storage Operations
 ```asm
-; Write data to block 42, starting at byte 0
+; Write data to block 42, starting at word 0
 LI    A0, 42
 LI    T0, 0        ; Bank 0
 LI    T1, 17       ; HDR_STORE_BLOCK
@@ -733,7 +745,7 @@ LI    A0, 0
 LI    T1, 18       ; HDR_STORE_ADDR
 STORE A0, T0, T1
 
-; Write "Hello" (one byte at a time)
+; Write "Hello" (one character per 16-bit word)
 LI    A0, 'H'
 LI    T1, 19       ; HDR_STORE_DATA
 STORE A0, T0, T1   ; Auto-increments address
@@ -765,11 +777,11 @@ LI    T1, 18       ; HDR_STORE_ADDR
 STORE A0, T0, T1
 
 LI    T1, 19       ; HDR_STORE_DATA
-LOAD  A0, T0, T1   ; Read first byte ('H')
-LOAD  A1, T0, T1   ; Read second byte ('e') (auto-increment)
-LOAD  A2, T0, T1   ; Read third byte ('l') (auto-increment)
-LOAD  A3, T0, T1   ; Read fourth byte ('l') (auto-increment)
-LOAD  X0, T0, T1   ; Read fifth byte ('o') (auto-increment)
+LOAD  A0, T0, T1   ; Read first word ('H')
+LOAD  A1, T0, T1   ; Read second word ('e') (auto-increment)
+LOAD  A2, T0, T1   ; Read third word ('l') (auto-increment)
+LOAD  A3, T0, T1   ; Read fourth word ('l') (auto-increment)
+LOAD  X0, T0, T1   ; Read fifth word ('o') (auto-increment)
 ```
 
 ## C Runtime Integration

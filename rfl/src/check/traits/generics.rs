@@ -71,6 +71,7 @@ impl Checker<'_> {
         for name in declarations {
             self.check_declaration(&name)?;
         }
+        self.check_resource_declarations()?;
         self.typed.truncate(mark);
         self.generic_check = false;
         // Declaration-only instantiations must never suppress code generation.

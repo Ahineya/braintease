@@ -1,0 +1,117 @@
+import { Future, Poll, Pending, Ready, CallbackFuture, sleep, invalid_poll } from "std/future";
+import { OwnedFuture, own_future } from "std/future_owned";
+import { Context, TaskError } from "std/task";
+import { replace } from "std/mem";
+
+// Children share the parent's wake capability. Spurious child polls are allowed;
+// each pending child does bounded work at most once per parent poll.
+export type Join<A:Future,B:Future> =
+    JoinRunning(OwnedFuture<A>,OwnedFuture<B>,Option<A::Output>,Option<B::Output>,bool)
+    | JoinComplete | JoinCancelled;
+export fn join<A:Future,B:Future>(left:A,right:B)->Join<A,B> {
+    JoinRunning(own_future(move(left)),own_future(move(right)),None,None,false)
+}
+fn step<F:Future>(future:&mut OwnedFuture<F>,cx:&mut Context,result:Option<F::Output>)->Option<F::Output> {
+    let complete={match &result {Some(_)=>true,None=>false}};
+    if (complete) {return move(result);}
+    match future.poll(cx) {Ready(value)=>Some(move(value)),Pending=>None}
+}
+impl<A:Future,B:Future> Future for Join<A,B> {
+    type Output=(A::Output,B::Output);
+    fn poll(&mut self,cx:&mut Context)->Poll<(A::Output,B::Output)> {
+        match replace(self,JoinCancelled) {
+            JoinRunning(left,right,first,second,reverse)=>{
+                let mut left=move(left);let mut right=move(right);
+                let mut first=move(first);let mut second=move(second);
+                if (reverse) {
+                    second=step(&mut right,cx,move(second));
+                    first=step(&mut left,cx,move(first));
+                } else {
+                    first=step(&mut left,cx,move(first));
+                    second=step(&mut right,cx,move(second));
+                }
+                let complete={match &first {Some(_)=>match &second {Some(_)=>true,None=>false},None=>false}};
+                if (complete) {
+                    match move(first) {
+                        Some(a)=>match move(second) {
+                            Some(b)=>{*self=JoinComplete;return Ready((move(a),move(b)));},
+                            None=>{},
+                        },
+                        None=>{},
+                    }
+                    // Defensive terminal path: the readiness test proves both
+                    // payloads exist. Never continue with partially moved state.
+                    invalid_poll();return Pending;
+                };
+                *self=JoinRunning(move(left),move(right),move(first),move(second),!reverse);
+                Pending
+            },
+            JoinComplete=>{invalid_poll();Pending},
+            JoinCancelled=>{invalid_poll();Pending},
+        }
+    }
+    fn cancel(&mut self) {drop(replace(self,JoinCancelled));}
+}
+
+export type Either<A,B> = First(A) | Second(B);
+export type Race<A:Future,B:Future> = RaceRunning(OwnedFuture<A>,OwnedFuture<B>) | RaceComplete | RaceCancelled;
+// Left wins ties. If left is ready, right is cancelled without being polled.
+export fn race<A:Future,B:Future>(left:A,right:B)->Race<A,B> {
+    RaceRunning(own_future(move(left)),own_future(move(right)))
+}
+impl<A:Future,B:Future> Future for Race<A,B> {
+    type Output=Either<A::Output,B::Output>;
+    fn poll(&mut self,cx:&mut Context)->Poll<Either<A::Output,B::Output>> {
+        match replace(self,RaceCancelled) {
+            RaceRunning(left,right)=>{
+                let mut left=move(left);let mut right=move(right);
+                match left.poll(cx) {
+                    Ready(value)=>{*self=RaceComplete;return Ready(First(move(value)));},
+                    Pending=>{},
+                };
+                match right.poll(cx) {
+                    Ready(value)=>{*self=RaceComplete;return Ready(Second(move(value)));},
+                    Pending=>{},
+                };
+                *self=RaceRunning(move(left),move(right));
+                Pending
+            },
+            RaceComplete=>{invalid_poll();Pending},
+            RaceCancelled=>{invalid_poll();Pending},
+        }
+    }
+    fn cancel(&mut self) {drop(replace(self,RaceCancelled));}
+}
+
+export type TimeoutError = Elapsed;
+export type Timeout<F:Future> = TimeoutRunning(Race<F,CallbackFuture<unit>>) | TimeoutComplete | TimeoutCancelled;
+// Duration starts on first poll. Work wins when it and the timer are both ready.
+// Invalid durations still consume/cancel the supplied, never-polled work.
+export fn timeout<F:Future>(future:F,milliseconds:u32)->Result<Timeout<F>,TaskError> {
+    let work=own_future(move(future));
+    let timer=sleep(milliseconds)?;
+    Ok(TimeoutRunning(RaceRunning(move(work),own_future(timer))))
+}
+impl<F:Future> Future for Timeout<F> {
+    type Output=Result<F::Output,TimeoutError>;
+    fn poll(&mut self,cx:&mut Context)->Poll<Result<F::Output,TimeoutError>> {
+        match replace(self,TimeoutCancelled) {
+            TimeoutRunning(inner)=>{
+                let mut inner=move(inner);
+                match inner.poll(cx) {
+                    Pending=>{*self=TimeoutRunning(move(inner));Pending},
+                    Ready(result)=>{
+                        *self=TimeoutComplete;
+                        match move(result) {
+                            First(value)=>Ready(Ok(move(value))),
+                            Second(_)=>Ready(Err(Elapsed)),
+                        }
+                    }
+                }
+            },
+            TimeoutComplete=>{invalid_poll();Pending},
+            TimeoutCancelled=>{invalid_poll();Pending},
+        }
+    }
+    fn cancel(&mut self) {drop(replace(self,TimeoutCancelled));}
+}

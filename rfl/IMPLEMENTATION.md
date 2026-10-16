@@ -39,6 +39,14 @@ work. Measurements below are from 15 October 2026.
   maps type errors back from the combined module buffer to the original file.
 - **Runner artifacts:** each run removes its own temporary assembly, object, and
   binary files, including on errors.
+- **Child-state borrowing:** field/index paths now address original storage,
+  with bounds checks and managed COW detachment for vector ancestors. Referenced
+  arrays/slices work with indexed receivers too. Tests include parent futures,
+  scope/argument alias restrictions, C pointer coercions and cross-bank elements.
+- **Indirect layouts:** resolving forward struct layouts now updates callback
+  signatures, references/pointers, ADT payloads and monomorph keys as well as
+  direct fields. A stored `CallbackFuture` previously retained an unfinished
+  `Context` layout, producing `expected Context, found Context`.
 
 ## Compiler organization
 
@@ -454,7 +462,9 @@ managed payloads remain alive and are released through ordinary frame cleanup.
 Guards receive initialized references too. Safe `*reference` reads and mutable
 reference writes reuse the existing ownership-aware field operations. Shared
 receiver borrows of temporary values use frame-local snapshots. Explicit borrows
-still require names; field and index borrowing needs a common place representation.
+now support named field/index paths and root reference dereferences. Shared and
+mutable places lower to addresses; mutable vector ancestors detach with managed
+ownership preserved. See the [async borrowing contract](../docs/networking/rfl.md#borrowing-child-state-in-place).
 
 Calls lower to ordinary monomorphized functions, preserving the current frame
 ABI and all targets. There are no vtables, runtime trait tags, or new VM opcodes.
@@ -481,6 +491,161 @@ overlap unification, and C calls from traits on `#[repr(C)]` types. The complete
 release suite passes 221 tests, including 21 trait tests and a small compiled
 Brainfuck CPU execution test (16 October 2026).
 
+The subsequent child-state borrowing milestone passes **286 release tests**,
+including 15 new place/layout regressions. Execution checks cover native and RVM,
+managed COW, indexed references, borrowed method receivers, C pointer coercions,
+bank-crossing addresses, callback/ADT layouts and child future cancellation.
+`examples/child-futures.rfl` also runs through both normal CLI targets. This adds
+borrowing support. The subsequent resource milestone implements explicit
+`Owned<T>` values and automatic scope cleanup, described below.
+
+## Move-only resource foundation
+
+`Owned<T>` owns stable payload storage and a synchronous cleanup callback.
+`owned(value, cleanup)` constructs it; `move(local)` transfers ownership, and
+`.borrow()`/`.borrow_mut()` provide temporary access. Resource-containing structs,
+tuples, ADTs, vectors and fixed arrays are also move-only; ordinary values retain
+copy/COW behavior. A separate typed control-flow pass rejects implicit copies,
+use after move, conflicting borrows and unreinitialized loop transfers. It runs
+on explicit-owner generic declarations and on concrete specializations.
+
+Lexical cleanup instructions cover normal block exits, replacement, return,
+`?`, break/continue, partial construction and discarded/container-owned values.
+Calls transfer resource arguments into their callee; returns retain the result
+before releasing its old storage. Pattern snapshots release before arm bodies,
+with separate cleanup on failed patterns and arm exit. Cleanup callbacks use
+ordinary RFL resumable calls synchronously through one shared driver, including
+nested callbacks; no new
+ISA operation or host-only destructor is introduced.
+
+The implementation lives in `src/resources.rs`, `src/check/resources.rs` and
+`src/lower/resources.rs`, with lifetime boundaries in the existing lowerer.
+The [async contract](../docs/networking/rfl.md#move-only-resources-and-deterministic-cleanup)
+records destruction order and conservative restrictions. This does not implement
+`defer`, move-only closure captures or async syntax. The
+subsequent composition milestone below adds a general owned future adapter.
+Existing CallbackFuture copies continue to alias their checked prototype state. The executor now explicitly transfers resource-valued results
+and releases completed outputs when a join fails.
+
+`tests/resources.rs` exercises native/RVM execution, move/borrow/control-flow
+rejections, lexical and container cleanup, managed payloads, nested finalizer
+frames, partial initialization, generic declarations and future cancellation.
+A small compiled Brainfuck CPU test verifies finalization on that target too.
+See [examples/owned-futures.rfl](examples/owned-futures.rfl). The full release
+suite passes **303 tests** after this milestone, including 15 resource tests
+and two additional editor tests. The example also runs through both normal CLI
+targets with matching output.
+
+## Owned future composition
+
+`std/future_owned` implements move-only `OwnedFuture<F>` and `ready_owned(T)`.
+The adapter keeps each polled child in stable owner storage, cancels abandoned
+work once and releases a completed child without calling its cancel method.
+`std/combinators` supplies reusable join/race/timeout futures. Join alternates
+poll order and caches completed outputs; race is left-biased; timeout starts
+lazily and lets ready work win ties. All normal exits release losing/unfinished
+children and cached resource outputs. Children share the parent's waker, with
+spurious wakes permitted. See the [full contract](../docs/networking/rfl.md#owned-future-composition)
+and [composed example](examples/composed-futures.rfl).
+
+`std/mem::replace` uses a typed storage-transfer operation; `take` specializes
+it for Option. Lowering evaluates the mutable place before the value and uses
+scratch result storage to handle result/destination aliases. Ownership checking
+retains existing moved-value and loan restrictions. `Owned<T>::into_inner`
+consumes the owner, transfers its payload and disarms only its cleanup hook;
+normal nested payload/environment release still applies. A zero cleanup-frame
+size is the internal disarmed marker. Neither operation changes the ISA or ABI.
+Completion/signature help includes `into_inner`, and inherent declarations
+cannot override this builtin owner method.
+
+The full release suite passes **317 tests**, including 14 composition
+regressions: 13 native/RVM execution cases and one checking case with multiple
+ownership/borrow rejections. Coverage includes stable child addresses, cached
+and resource-valued outputs, nested parent wakes, timer ties/wrap, runner errors,
+terminal polls and repeated managed extraction. The existing small Brainfuck
+check now covers replacement/extraction/finalization. The composed example ran
+through both normal CLI targets with matching output.
+
+This implements composition as library state machines, without async syntax,
+spawned tasks, suspended borrows or a production clock/network reactor. A future
+adapter does not revoke aliases to an already copied CallbackFuture.
+
+## Task scopes and typed join handles
+
+`std/scope` implements a bounded heterogeneous registry owning stable task
+capsules. `TaskScope.spawn` returns a move-only `JoinHandle<F::Output>`;
+`std/scope_state` defines its Future implementation and Result/TaskCancelled
+contract. Each task has its own generational wake token. Scheduling rotates the
+starting slot, clears readiness before poll and reclaims completed frames.
+Result storage belongs to the handle, so successful outputs can outlive a scope.
+
+Scope close/drop and runner errors retire all tokens before cancelling and
+reclaiming remaining work. Handle drop releases cached output and requests
+cancellation; the scope reaps it before another poll or on the next spawn,
+active query or close. Reaping reaches a fixed point because cancelling a parent
+may cancel a child in an earlier slot. No implicit detach operation exists.
+A single-turn API supports application-driven spawning between turns; run and
+budgeted run use the existing Reactor contract. This does not add background
+progress, a production reactor, suspended references or async syntax.
+
+`ErasedOwner` is an opaque, move-only managed pointer. `__erase_owned` transfers
+an Owned allocation into a four-cell wrapper (refcount, concrete owner type ID,
+original address, original bank). Its generated destructor dispatches only among
+types actually erased in reachable code and invokes the original typed owner
+destructor. The original payload layout and cleanup ABI are unchanged. Unlike
+Owned, an erased owner exposes neither borrowed payload nor into_inner. This
+protects both task and result capsules from safe disarming of their lifetime
+gates. `__borrow_raw` requires unsafe, initialized/live correctly typed storage,
+and exclusive access; private library thunks use it only after checking a
+separately retained lifetime gate. Stale copied callbacks do not dereference
+freed storage. Reentrant use of a busy task fails explicitly.
+
+Task construction is split across small helpers after an initial monolithic
+spawn exceeded a 64,000-instruction code bank. Managed retains share one
+`rfl_retain` IR helper. Typed leaf releases and shared-box releases also use
+small helpers, including slot clearing and the original typed destruction
+semantics. This reduces early-return cleanup in callers. In the unchanged task-scope
+example, main falls from 73,955 to 41,676 assembly instructions, and total assembly
+falls from 1,650,206 to 1,033,940 instructions. The previous main exceeded a
+64,000-instruction bank. Null and reference-count overflow handling remain
+explicit. These helpers become ordinary guest code on Ripple and Brainfuck, and
+native code on the native target.
+The first scheduler representation still allocates capsules/control closures
+and scans bounded slots; it makes no allocation-free or throughput guarantee.
+A fixed-input comparison of unchanged `examples/bf.rfl` before and after sharing
+release helpers prints identical Hello World output. Executed guest instructions
+change from 3,221,449 to 3,221,643 (194 extra); assembly changes from 20,917 to
+20,961 instructions. This checks a small existing hot loop, not scheduler
+throughput. Compilation and execution wall times are not claimed as speedups.
+
+See the [contract](../docs/networking/rfl.md#bounded-task-scopes-and-typed-joins),
+[example](examples/task-scopes.rfl), and `tests/scopes.rs`. Tests cover typed and
+resource outputs, scope/handle destruction, waiter wakes, capacity and closed
+scopes, repeated slot reuse, stale copied callbacks, fairness, nested joins,
+timeouts, runner errors, ownership rejection and unsafe primitive checking.
+
+The full release suite passes **329 tests**, including 12 task-scope regressions.
+Execution cases and the complete task-scope example pass on native and RVM. The
+bounded Brainfuck resource test also verifies erased-owner finalization. This
+does not validate a full scheduler workload on RBF or a production network
+reactor. `cargo check -p rfl` passes too.
+
+### Lifting the per-function code-bank restriction
+
+Implemented in the shared assembler/linker for both RFL and C. The assembler
+preserves symbolic control-flow targets; `src/ripple-asm/src/linker/layout.rs`
+places functions across banks and iterates branch relaxation. Same-bank branches
+retain their short encoding, while crossings use existing non-linking JALs and
+conditional skips. Labels, code-pointer components and executable relocations
+follow final placement. Spanning-function calls avoid noncanonical boundary
+returns without changing the ISA or call ABI.
+
+The [architecture contract](../docs/arch/code-banks.md) records behavior,
+compatibility and regression coverage, including RVM interpreter/JIT and both BF
+CPUs. Code-size reduction remains useful independently; permitting large
+functions does not make duplicated cleanup cheap. Native functions have no
+Ripple placement requirement.
+
 ## Remaining specification gaps
 
 These are still unsupported; passing regression tests do not imply conformance.
@@ -488,7 +653,7 @@ These are still unsupported; passing regression tests do not imply conformance.
 | Requirement | Current behavior | Relevant implementation |
 |---|---|---|
 | `defer`, including cleanup on `?`, return, break, and continue | No defer AST or lowering | `src/ast.rs`, `src/parser.rs`, `src/lower/build.rs` |
-| General reference places | Explicit field/index borrowing still requires a common place representation; safe named dereferences are implemented | `src/check/borrows.rs`, `src/check/ffi.rs` |
+| General assignment places and lifetime analysis | Named field/index borrowing is implemented; assignment syntax still has narrower paths and loans conservatively protect the whole root | `src/check/borrows.rs`, `src/check/statements.rs`, `src/lower/places.rs` |
 | Constructors as callable values | `let cons = Cons` is rejected for a payload constructor | `src/check/constructors.rs`, `src/check/control.rs` |
 | Polymorphic immutable local callables | A local identity lambda used first on an integer cannot also be called on a boolean | `src/check/closures.rs`, `src/check/inference.rs` |
 | Full unsigned 64-bit literal range | `18446744073709551615` is rejected because integer tokens store signed `i64` | `src/lexer.rs`, `src/ast.rs` |
@@ -498,13 +663,16 @@ These are still unsupported; passing regression tests do not imply conformance.
 
 ## Follow-up order
 
-1. Introduce a common place representation for names, fields, indexes, and
-   dereferences, with explicit borrowing and write semantics.
+1. Extend the implemented borrowing places to generalized assignment paths and
+   more precise lifetime analysis. Explicit resource identity, moves and cleanup
+   are implemented; preserve ordinary value/COW behavior when extending them.
 2. Extend lifetime analysis beyond single-use temporaries and optimize checked
    collection accesses while preserving evaluation order and aliasing.
-3. Unify scope exits and cleanup before implementing `defer`.
-4. Design writer-oriented I/O and the Future/polling/executor contracts on top
-   of static traits and associated types before introducing async syntax.
+3. Extend the resource scope-exit machinery to the separately specified `defer`
+   feature.
+4. Build suspension rules and async state-machine lowering on the implemented
+   Future/polling/executor contracts before introducing async syntax. The
+   [async roadmap](../docs/networking/rfl.md) records the current checkpoint.
 5. Complete generic local-value inference, numeric literal representation, and
    large-value storage; add conformance cases alongside each extension.
 

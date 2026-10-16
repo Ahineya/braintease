@@ -310,13 +310,24 @@ impl VM {
                 if self.devices.is_input_request(addr, value) {
                     self.poll_device_input();
                 }
-                if let Some(frame) = self.devices.write_register(
+                let mut memory = super::devices::DeviceMemory {
+                    ram: &mut self.memory,
+                    code: &mut self.instructions,
+                    changed: None,
+                };
+                let frame = self.devices.write_register_with_storage(
                     addr,
                     value,
-                    &mut self.memory,
+                    &mut memory,
                     self.bank_size,
                     self.display_mode,
-                ) {
+                    self.storage.as_mut(),
+                );
+                let changed = memory.changed;
+                if let Some(range) = changed {
+                    self.jit_invalidate_range(range);
+                }
+                if let Some(frame) = frame {
                     let display = self
                         .rgb565_display
                         .get_or_insert_with(crate::display_rgb565::RGB565Display::new);

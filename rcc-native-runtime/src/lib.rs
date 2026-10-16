@@ -1,10 +1,12 @@
 //! Runtime services for native RCC/RFL objects. This owns memory and devices;
 //! it has no instruction decoder, VM registers or interpreter dispatch loop.
+mod address_space;
 mod devices;
 mod exports;
 mod files;
 mod host;
 mod memory;
+mod process;
 mod strings;
 pub use host::rcc_native_start;
 use rcc_ir::target::DataLayout;
@@ -16,11 +18,12 @@ const BANK: usize = DataLayout::RIPPLE16.bank_cells as usize;
 const CELLS: usize = BANK * 256;
 
 pub struct Runtime {
-    memory: Vec<u16>,
+    memory: address_space::Memory,
     stack: usize,
     free: BTreeMap<usize, usize>,
     allocated: BTreeMap<usize, usize>,
     functions: BTreeMap<u32, (usize, u32)>,
+    processes: process::Machine,
     output: Vec<u8>,
     devices: DeviceState,
     display: RGB565Display,
@@ -42,11 +45,12 @@ impl Runtime {
     fn new() -> Self {
         let heap = 5 * BANK + 1;
         Self {
-            memory: vec![0; CELLS],
+            memory: address_space::Memory::new(),
             stack: 2 * BANK + 1,
             free: BTreeMap::from([(heap, CELLS - heap)]),
             allocated: BTreeMap::new(),
             functions: BTreeMap::new(),
+            processes: process::Machine::default(),
             output: Vec::new(),
             devices: DeviceState::default(),
             display: RGB565Display::new(),

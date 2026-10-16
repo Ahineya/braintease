@@ -23,6 +23,9 @@ struct Offsets {
     epoch: i32,
     memory_base: i32,
     memory_len: i32,
+    window: i32,
+    window_lo: i32,
+    window_hi: i32,
 }
 
 fn offsets() -> Offsets {
@@ -34,6 +37,15 @@ fn offsets() -> Offsets {
         epoch: i32_offset(std::mem::offset_of!(VM, jit_epoch)),
         memory_base: i32_offset(std::mem::offset_of!(VM, jit_memory_base)),
         memory_len: i32_offset(std::mem::offset_of!(VM, jit_memory_len)),
+        window: i32_offset(
+            std::mem::offset_of!(VM, mmu) + std::mem::offset_of!(crate::mmu::Mmu, window),
+        ),
+        window_lo: i32_offset(
+            std::mem::offset_of!(VM, mmu) + std::mem::offset_of!(crate::mmu::Mmu, window_lo),
+        ),
+        window_hi: i32_offset(
+            std::mem::offset_of!(VM, mmu) + std::mem::offset_of!(crate::mmu::Mmu, window_hi),
+        ),
     }
 }
 
@@ -88,6 +100,8 @@ impl JitEngine {
             let var_executed = builder.declare_var(types::I64);
             let var_budget = builder.declare_var(types::I64);
             let mut cg = Cg {
+                protected: self.context.0,
+                user: self.context.1,
                 b: builder,
                 vm,
                 entry_depth: None,
@@ -127,6 +141,8 @@ impl JitEngine {
 }
 
 struct Cg<'a> {
+    protected: bool,
+    user: bool,
     b: FunctionBuilder<'a>,
     vm: Value,
     entry_depth: Option<Value>,
@@ -266,10 +282,16 @@ impl<'a> Cg<'a> {
         }
         let inst = &block.instrs[last];
         self.instruction_pc(block.index + last, inst);
+        if self.protected
+            && matches!(inst.opcode, 0x00 | 0x19 | 0x21 | 0x22..=0x26 | 0x27..=0x41 | 0x43..=0xFF)
+        {
+            self.finish(FALLBACK);
+            return Ok(());
+        }
         match inst.opcode {
             // These system operations use the reference handler, after all
             // preceding native register writes have been published.
-            0x22..=0x24 => {
+            0x22..=0x26 => {
                 self.finish(FALLBACK);
                 Ok(())
             }
@@ -303,7 +325,12 @@ impl<'a> Cg<'a> {
                 if inst.word1 == 0 || inst.word1 >= 32 {
                     self.take(dest, blocks)
                 } else {
-                    self.emit_native_call(inst, dest, blocks)
+                    if self.protected {
+                        self.finish(CONT);
+                        Ok(())
+                    } else {
+                        self.emit_native_call(inst, dest, blocks)
+                    }
                 }
             }
             0x12 => {

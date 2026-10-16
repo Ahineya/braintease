@@ -305,6 +305,15 @@ fn irq_is_rejected_at_export_unless_enabled() {
 }
 
 #[test]
+fn mmu_operations_are_rejected_instead_of_exporting_an_unprotected_cpu() {
+    for source in ["start:\nSYSCALL\nHALT\n", "start:\nENTERU R0, T0, T1\nHALT\n", "start:\nCSRW T0, 13\nHALT\n"] {
+        let image=assemble(source);
+        let error=MacroFormatter::new().with_irq(true).format_linked_program_host(&image,8).unwrap_err();
+        assert!(error.contains("MMU=0"),"{error}");
+    }
+}
+
+#[test]
 fn storc_self_modification_uses_snapshots_and_loadc_observes_written_words() {
     both("start:\nLI X0, 0\nLI X1, 4\nLI X2, 12\nLI X3, 65535\nSTORC R0, X0, X1\nLOADC R0, X0, X1\nHALT\n",false,|s| {
         assert_eq!((s.register(11),s.register(12),s.register(13),s.register(14)),(0,4,12,65535));
@@ -348,7 +357,6 @@ fn invalid_code_access_faults_before_touching_ram_or_registers() {
 fn csr_errors_are_explicit_and_do_not_corrupt_the_cpu() {
     for (op, error) in [
         ("IRET", 5),
-        ("CSRR T0, 12", 2),
         ("CSRW T0, 11", 2),
         ("CSRW T0, 0", 3),
         ("CSRW R0, 5", 4),
@@ -360,6 +368,12 @@ fn csr_errors_are_explicit_and_do_not_corrupt_the_cpu() {
             assert_eq!(field(&run(&im, host, true), 57), error, "{op}");
         }
     }
+    // CSR 12 is now MMU_VERSION. Host exports reject the unsupported CSR
+    // range (>=12) before execution; the plain CPU still checks unknown CSRs.
+    let im = assemble("start:\nCSRR T0, 31\nHALT\n");
+    assert_eq!(field(&run(&im, false, true), 57), 2);
+    assert!(MacroFormatter::new().with_irq(true)
+        .format_linked_program_host(&im, 8).unwrap_err().contains("MMU=0"));
 }
 #[test]
 fn interrupt_stack_and_editable_saved_continuation_restore_atomically() {

@@ -127,6 +127,7 @@ impl<'a> Checker<'a> {
                 }
                 typed
             };
+            self.note_reference_use(span, &arg, Some(ty))?;
             checked.push(arg);
         }
         if variadic {
@@ -194,6 +195,7 @@ impl<'a> Checker<'a> {
                     ),
                 ));
             }
+            self.note_reference_use(span, &typed, Some(*param))?;
             checked.push(typed);
         }
         if let Some(want) = expected {
@@ -214,7 +216,7 @@ impl<'a> Checker<'a> {
             kind: TExprKind::CApply {
                 callee: Box::new(TExpr {
                     ty,
-                    kind: TExprKind::Name(binding),
+                    kind: TExprKind::Name(binding, 0),
                 }),
                 args: checked,
             },
@@ -275,6 +277,7 @@ impl<'a> Checker<'a> {
                     ),
                 ));
             }
+            self.note_reference_use(span, &typed, Some(*param))?;
             checked.push(typed);
         }
         if let Some(want) = expected {
@@ -295,7 +298,7 @@ impl<'a> Checker<'a> {
             kind: TExprKind::Apply {
                 callee: Box::new(TExpr {
                     ty,
-                    kind: TExprKind::Name(binding),
+                    kind: TExprKind::Name(binding, 0),
                 }),
                 args: checked,
                 params: sig.params,
@@ -367,6 +370,8 @@ impl<'a> Checker<'a> {
                     self.infer_field(param_ty, typed.ty, &type_params, &mut solved, span)?;
                     self.loose_receiver = false;
                 }
+                let want = self.concrete_field(param_ty, &type_params, &solved)?;
+                self.note_reference_use(span, &typed, want)?;
                 checked.push(typed);
                 continue;
             }
@@ -379,10 +384,14 @@ impl<'a> Checker<'a> {
                         format!("expected {}, found {}", self.show(ty), self.show(typed.ty)),
                     ));
                 }
+                let want = self.concrete_field(param_ty, &type_params, &solved)?;
+                self.note_reference_use(span, &typed, want)?;
                 checked.push(typed);
             } else {
                 let typed = self.check_expr(arg, None)?;
                 self.infer_field(param_ty, typed.ty, &type_params, &mut solved, span)?;
+                let want = self.concrete_field(param_ty, &type_params, &solved)?;
+                self.note_reference_use(span, &typed, want)?;
                 checked.push(typed);
             }
         }

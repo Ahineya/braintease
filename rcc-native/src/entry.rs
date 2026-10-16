@@ -25,6 +25,11 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
         b.append_block_params_for_function_params(entry);
         b.switch_to_block(entry);
         let runtime = b.block_params(entry)[0];
+        if compiler.resumable {
+            let id = compiler.import("rcc_native_process_memory", 0)?;
+            let memory = compiler.object.declare_func_in_func(id, b.func);
+            b.ins().call(memory, &[runtime]);
+        }
         let store = compiler
             .object
             .declare_func_in_func(compiler.imports["rcc_native_store"], b.func);
@@ -91,10 +96,26 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
             let argv = b.ins().band_imm_u(packed, 0xffff_ffff);
             arguments.extend([argc, argv]);
         }
-        let main = compiler
-            .object
-            .declare_func_in_func(compiler.functions["main"], b.func);
-        let call = b.ins().call(main, &arguments);
+        let call = if compiler.resumable {
+            let id = compiler.import("rcc_native_process_start", 3)?;
+            let start = compiler.object.declare_func_in_func(id, b.func);
+            let token = b.ins().iconst(types::I64, compiler.codes["main"] as i64);
+            let zero = b.ins().iconst(types::I64, 0);
+            b.ins().call(
+                start,
+                &[
+                    runtime,
+                    token,
+                    arguments.get(1).copied().unwrap_or(zero),
+                    arguments.get(2).copied().unwrap_or(zero),
+                ],
+            )
+        } else {
+            let main = compiler
+                .object
+                .declare_func_in_func(compiler.functions["main"], b.func);
+            b.ins().call(main, &arguments)
+        };
         let result = b.inst_results(call)[0];
         b.ins().return_(&[result]);
         b.seal_all_blocks();

@@ -14,16 +14,20 @@ mod closures;
 mod constants;
 mod dispatch;
 mod emit;
+mod erasure;
 mod faults;
 mod ffi;
 mod frames;
 mod liveness;
+mod managed_runtime;
 mod memory;
 mod numeric;
 mod objects;
 mod optimize;
 mod ownership;
+mod places;
 mod print;
+mod resources;
 mod string_runtime;
 mod strings;
 mod temporaries;
@@ -37,15 +41,19 @@ use closures::*;
 use constants::*;
 use dispatch::*;
 use emit::*;
+use erasure::*;
 use faults::*;
 use ffi::*;
 use frames::*;
+use managed_runtime::*;
 use memory::*;
 use numeric::*;
 use objects::*;
 use optimize::*;
 use ownership::*;
+use places::*;
 use print::*;
+use resources::*;
 use string_runtime::*;
 use strings::*;
 use temporaries::*;
@@ -62,7 +70,7 @@ use std::sync::Arc;
 use crate::ast::{BinOp, UnaryOp};
 use crate::error::CompileError;
 use crate::ty::Ty;
-use crate::typed::{AdtDef, CtorDef, TBlock, TExpr, TExprKind, TFn, TModule, TStmt};
+use crate::typed::{AdtDef, CtorDef, TBlock, TExpr, TExprKind, TFn, TModule, TPlaceStep, TStmt};
 
 const RESUME: i64 = 0;
 const FUNC_ID: i64 = 1;
@@ -94,6 +102,7 @@ struct Proc {
     structs: Arc<Vec<Vec<Ty>>>,
     tuples: Arc<Vec<Vec<Ty>>>,
     collections: Arc<crate::typed::CollectionTypes>,
+    resources: Arc<crate::resources::ResourceTypes>,
     /// Emit a C function of this name that runs the frame function.
     c_export: bool,
 }
@@ -118,6 +127,33 @@ struct Seg {
 }
 
 enum Insn {
+    EraseOwner {
+        dest: usize,
+        src: usize,
+        owner: u32,
+    },
+    Replace {
+        dest: usize,
+        place: usize,
+        value: usize,
+    },
+    IntoInner {
+        dest: usize,
+        src: usize,
+    },
+    Move {
+        dest: usize,
+        src: usize,
+    },
+    Drop {
+        slot: usize,
+    },
+    Owned {
+        dest: usize,
+        value: usize,
+        cleanup: usize,
+        inner: Ty,
+    },
     Const {
         slot: usize,
         value: i64,
@@ -282,7 +318,8 @@ enum Insn {
     /// Address of a local slot. The destination holds that pointer.
     Borrow {
         dest: usize,
-        slot: usize,
+        place: Place,
+        mutable: bool,
     },
     /// `expr?`. Failure writes the function result and returns.
     Try {
@@ -294,6 +331,7 @@ enum Insn {
         payload: Ty,
         fail_slot: Option<usize>,
         fail: Option<Ty>,
+        cleanup: Vec<usize>,
     },
     /// Release `dest`, then put `src` there. `transfer` clears `src` without an extra retain.
     VecStore {
@@ -395,6 +433,25 @@ enum Insn {
     },
 }
 
+/// A frame root or an already computed address, followed by projections.
+struct Place {
+    root: usize,
+    indirect: bool,
+    projections: Vec<PlaceStep>,
+}
+
+enum PlaceStep {
+    Owned,
+    Field {
+        offset: i64,
+    },
+    Index {
+        index: usize,
+        container: Ty,
+        elem: Ty,
+    },
+}
+
 enum Term {
     Return,
     Jump(usize),
@@ -441,8 +498,6 @@ enum Term {
 struct Built {
     procs: Vec<Proc>,
     adts: Vec<AdtDef>,
-    structs: Arc<Vec<Vec<Ty>>>,
-    tuples: Arc<Vec<Vec<Ty>>>,
     collections: Arc<crate::typed::CollectionTypes>,
     /// Parallel to `structs`.
     repr_c: Vec<bool>,
@@ -465,6 +520,7 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     let structs = Arc::new(module.structs.clone());
     let tuples = Arc::new(module.tuples.clone());
     let collections = Arc::new(module.collections.clone());
+    let resources = Arc::new(crate::resources::ResourceTypes::new(module));
     let mut procs = module
         .functions
         .iter()
@@ -476,6 +532,7 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
                 structs.clone(),
                 tuples.clone(),
                 collections.clone(),
+                resources.clone(),
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -483,9 +540,9 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     for proc in &mut procs {
         fold_scalar_constants(proc);
     }
-    let mut need_alloc = false;
-    let mut need_fail = false;
-    let mut need_heap = false;
+    let mut need_alloc = !module.collections.owners.is_empty();
+    let mut need_fail = need_alloc;
+    let mut need_heap = need_alloc;
     let mut need_io = false;
     let mut need_print_num = false;
     let mut need_print_float = false;
@@ -598,6 +655,16 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
         }
         for seg in &proc.segs {
             for insn in &seg.insns {
+                if let Insn::Borrow { place, .. } = insn {
+                    if place
+                        .projections
+                        .iter()
+                        .any(|p| matches!(p, PlaceStep::Index { .. }))
+                    {
+                        need_fail = true;
+                        need_heap = true;
+                    }
+                }
                 match insn {
                     Insn::Print { ty, .. } => {
                         need_io = true;
@@ -622,8 +689,6 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     Ok(Built {
         procs,
         adts: module.adts.clone(),
-        structs,
-        tuples,
         collections,
         repr_c: module.repr_c.clone(),
         need_alloc,
@@ -754,8 +819,12 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
         module.add_function(builder.finish_function().unwrap());
     }
     emit_string_runtime(&mut builder, &mut module, built)?;
+    emit_retain_runtime(&mut builder, &mut module, built)?;
+    emit_managed_releases(&mut builder, &mut module, built)?;
     emit_frame_drops(&mut builder, &mut module, built)?;
     emit_arc(&mut builder, &mut module, built)?;
+    emit_owner_drops(&mut builder, &mut module, built)?;
+    emit_erased_drop(&mut builder, &mut module, built)?;
     Ok(module)
 }
 

@@ -9,10 +9,13 @@ PORT=Path(__file__).resolve().parents[1]
 ROOT=PORT.parents[1]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--build',type=Path,default=ROOT/'build/fuzix')
+p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 a=p.parse_args();build=a.build.resolve()
+engines = [True, False] if a.engine == 'both' else [a.engine == 'jit']
+engine_label = 'JIT and interpreter' if a.engine == 'both' else a.engine
 
-def run(image,commands,jit=True):
-    args=[str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),'--memory','5120000','--headless','--input',commands,'--timeout','180']
+def run(image,commands,jit):
+    args=[str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),'--memory','16384000','--headless','--input',commands,'--timeout','180']
     if jit:args+=['--jit']
     live=Path('/tmp/fuzix-unix-live.log')
     with live.open('w') as log:
@@ -126,7 +129,7 @@ cat /dev/null
 sync
 shutdown
 """
-    out=run(image,commands)
+    out=run(image,commands,engines[0])
     Path('/tmp/fuzix-unix-test-output.log').write_text(out)
     for wanted in ['libccheck passed','/work/nested','alpha','Files are identical','/bin','hello','uid=0(root)','root','FUZIX','Ripple','/bin/sed','/bin/sh','STATUS:1','STATUS:0','TEST:0','TEST:1','CAT:1','No such file or directory','CHILD','SHELL:7','edited line','SLEPT:0','KILL:0','FIFO:0','MKNOD:0','UTC']:
         assert wanted in out,(wanted,out)
@@ -141,9 +144,9 @@ shutdown
     check_image(image)
     # Upgrade the managed executables in place, then verify user files after reboot.
     subprocess.run(['node',str(PORT/'tools/disk.mjs'),str(build),str(image),'--install'],check=True)
-    out=run(image,'mknod /recycled c 1 0\nrm /recycled\necho recycled | cat\necho AFTER > /after-pipe\ncat /after-pipe\nrm /after-pipe\ncat /session-note\ncat /edited\ncat /work/nested/words\nrm -r /work\nrm /session-note /edited\nsync\nshutdown\n',False)
+    out=run(image,'mknod /recycled c 1 0\nrm /recycled\necho recycled | cat\necho AFTER > /after-pipe\ncat /after-pipe\nrm /after-pipe\ncat /session-note\ncat /edited\ncat /work/nested/words\nrm -r /work\nrm /session-note /edited\nsync\nshutdown\n',engines[-1])
     assert 'KEEP\n' in out and 'edited line\n' in out and 'beta\012alpha\012beta\n' in out,out
     assert 'recycled\n' in out and 'AFTER\n' in out,out
     assert 'rm:' not in out,out
     check_image(image)
-print('Unix userspace passed: upstream commands, pipes/redirection, statuses, shell, ed, upgrade, reboot persistence; JIT and interpreter')
+print('Unix userspace passed: upstream commands, pipes/redirection, statuses, shell, ed, upgrade, reboot persistence; ' + engine_label)

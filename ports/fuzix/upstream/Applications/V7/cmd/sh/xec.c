@@ -32,6 +32,8 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 	if ((t = argt) && execbrk == 0) {
 		register int treeflgs;
 		int oldexit, type;
+        int job_owner = 0, gate[2] = {-1, -1}, managed = 0;
+        char ready;
 		register char **com;
 
 		treeflgs = t->tretyp;
@@ -150,7 +152,12 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 							break;
 
 					case SYSLOGIN:
-						flags |= forked;
+		                if (managed) {
+                    close(gate[1]); jobs_child();
+                    if (read(gate[0], &ready, 1) != 1) _exit(125);
+                    close(gate[0]);
+                }
+				flags |= forked;
 						oldsigs();
 						execa((const char **)com);
 						done();
@@ -173,7 +180,8 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 						break;
 
 					case SYSWAIT:
-						await(a1 ? stoi(a1) : -1);
+						if (jobs_enabled()) jobs_await(a1 ? stoi(a1) : -1);
+                        else await(a1 ? stoi(a1) : -1);
 						break;
 
 					case SYSREAD:
@@ -250,6 +258,9 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 			}
 
 		case TFORK:
+            job_owner = jobs_begin(t, (treeflgs & FAMP) != 0);
+            managed = jobs_current();
+            if (managed && pipe(gate) < 0) error("cannot create job handshake");
 			if (execflg && (treeflgs & (FAMP | FPOU)) == 0)
 				parent = 0;
 			else {
@@ -260,6 +271,10 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 				}
 			}
 
+            if (parent && managed) {
+                close(gate[0]); jobs_parent(parent);
+                write(gate[1], "x", 1); close(gate[1]);
+            }
 			if (parent) {	/* This is the parent branch of fork;    */
 				/* it may or may not wait for the child. */
 				if (treeflgs & FPRS && flags & ttyflg) {
@@ -268,16 +283,23 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 				}
 				if (treeflgs & FPCL)
 					closepipe(pf1);
-				if ((treeflgs & (FAMP | FPOU)) == 0)
-					await(parent);
+                if ((treeflgs & (FAMP | FPOU)) == 0) {
+                    if (managed) jobs_wait(); else await(parent);
+                }
 				else if ((treeflgs & FAMP) == 0)
-					post(parent);
+                    { if (!managed) post(parent); }
 				else
 					assnum(&pcsadr, parent);
 
+                jobs_end(job_owner);
 				chktrap();
 				break;
 			} else {	/* this is the forked branch (child) of execute */
+                if (managed) {
+                    close(gate[1]); jobs_child();
+                    if (read(gate[0], &ready, 1) != 1) _exit(125);
+                    close(gate[0]);
+                }
 				flags |= forked;
 				iotemp = 0;
 				postclr();
@@ -287,7 +309,8 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 				/* Reset ramaining signals to parent */
 				/* except for those `lost' by trap   */
 				oldsigs();
-				if (treeflgs & FINT) {
+                if (managed) jobs_child_signals();
+				if ((treeflgs & FINT) && !managed) {
 					signal(INTR, SIG_IGN);
 					signal(QUIT, SIG_IGN);
 				}
@@ -303,7 +326,7 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 				}
 
 				/* default std input for & */
-				if (treeflgs & FINT && ioset == 0)
+				if ((treeflgs & FINT) && !managed && ioset == 0)
 					sh_rename(chkopen(devnull), 0);
 
 				/* io redirection */
@@ -325,11 +348,13 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 		case TFIL:
 		{
 			int pv[2];
+            int pipeline_owner = jobs_begin(t, 0);
 			chkpipe(pv);
 			if (execute(((LSTPTR) t)->lstlef, 0, pf1, pv) == 0)
 				execute(((LSTPTR) t)->lstrit, execflg, pv, pf2);
 			else
 				closepipe(pv);
+            jobs_end(pipeline_owner);
 			break;
                 }
 		case TLST:

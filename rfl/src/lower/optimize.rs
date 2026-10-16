@@ -61,7 +61,7 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
         .iter()
         .flat_map(|s| &s.insns)
         .filter_map(|i| match i {
-            Insn::Borrow { slot, .. } => Some(*slot),
+            Insn::Borrow { place, .. } => Some(place.root),
             _ => None,
         })
         .collect();

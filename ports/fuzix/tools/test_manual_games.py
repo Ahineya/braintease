@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PORT = ROOT / 'ports/fuzix'
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--build', type=Path, default=ROOT / 'build/fuzix')
-p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='both')
+p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 a = p.parse_args()
 build = a.build.resolve()
 
@@ -90,7 +90,7 @@ fs.writeFileSync(name,root.replace(installRoot(root.data,JSON.parse(fs.readFileS
 
 def batch(image, jit, label):
     command = [str(ROOT / 'target/release/rvm'), str(build / 'bios.bin'), '--disk', str(image),
-               '--memory', '5120000', '--headless', '--input', COMMANDS, '--timeout', '300']
+               '--memory', '16384000', '--headless', '--input', COMMANDS, '--timeout', '300']
     if jit:
         command.append('--jit')
     log = Path('/tmp/fuzix-manual-games-' + label + '.log')

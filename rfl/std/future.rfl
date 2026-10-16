@@ -22,7 +22,7 @@ impl<T> Future for CallbackFuture<T> {
     }
 }
 
-fn invalid_poll() {
+export fn invalid_poll() {
     write_text("error: future polled after completion or cancellation\n");
     rfl_halt();
 }
@@ -33,7 +33,7 @@ export fn poll_fn<T>(poll:fn(Context)->Poll<T>, cancel:fn()->unit) -> CallbackFu
         if (state != 0) { invalid_poll(); return Pending; }
         match poll(cx) {
             Pending => Pending,
-            Ready(value) => { state = 1; Ready(value) },
+            Ready(value) => { state = 1; Ready(move(value)) },
         }
     };
     let cleanup:fn()->unit = fn() => {

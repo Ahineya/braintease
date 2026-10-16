@@ -326,6 +326,8 @@ pub(super) fn arith_ty(ty: Ty) -> IrType {
         | Ty::Adt(_)
         | Ty::Func(_)
         | Ty::Vec(_)
+        | Ty::Owned(_)
+        | Ty::ErasedOwner
         | Ty::Ref(_)
         | Ty::Ptr(_)
         | Ty::CFn(_)
@@ -448,6 +450,8 @@ pub(super) fn ir_ty(ty: Ty) -> IrType {
         | Ty::Adt(_)
         | Ty::Func(_)
         | Ty::Vec(_)
+        | Ty::Owned(_)
+        | Ty::ErasedOwner
         | Ty::Ref(_)
         | Ty::Ptr(_)
         | Ty::CFn(_)
@@ -469,6 +473,8 @@ pub(super) fn width(ty: Ty) -> u32 {
         | Ty::Adt(_)
         | Ty::Func(_)
         | Ty::Vec(_)
+        | Ty::Owned(_)
+        | Ty::ErasedOwner
         | Ty::Ref(_)
         | Ty::Ptr(_)
         | Ty::CFn(_)
@@ -486,6 +492,8 @@ pub(super) fn cell_wise(ty: Ty) -> bool {
             | Ty::Adt(_)
             | Ty::Func(_)
             | Ty::Vec(_)
+            | Ty::Owned(_)
+            | Ty::ErasedOwner
             | Ty::Ref(_)
             | Ty::Ptr(_)
             | Ty::CFn(_)

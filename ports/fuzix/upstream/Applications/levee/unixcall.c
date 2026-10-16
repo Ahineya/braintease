@@ -28,6 +28,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <errno.h>
 
 int
 min(int a, int b)
@@ -62,12 +64,21 @@ char *basename(char *s)
 
 static int ioset = 0;
 static struct termios old;
+static void suspend_editor(int sig) {
+    fixcon();
+    /* signal() is one-shot: this second TSTP uses the default stop action. */
+    kill(getpid(), SIGTSTP);
+    signal(SIGTSTP, suspend_editor);
+    initcon();
+    redisplay(TRUE);
+}
 
 void initcon(void)
 {
     struct termios new;
 
     if (!ioset) {
+        signal(SIGTSTP, suspend_editor);
 	tcgetattr(0, &old);	/* preserve current terminal setup */
 
         erasechar = old.c_cc[VERASE];
@@ -100,8 +111,12 @@ int getKey(void)
 {
     unsigned char c;
 
-    if (read(0, &c, 1) != 1) {
-        fixcon(); exit(1);
+    for (;;) {
+        if (read(0, &c, 1) != 1) {
+            if (errno == EINTR) continue;
+            fixcon(); exit(1);
+        }
+        if (c == 26) { raise(SIGTSTP); continue; }
+        return c < 128 ? c : 0;
     }
-    return c < 128 ? c : 0;
 }

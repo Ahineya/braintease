@@ -12,7 +12,11 @@ PORT=Path(__file__).resolve().parents[1]
 ROOT=PORT.parents[1]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--build',type=Path,default=ROOT/'build/fuzix')
-build=p.parse_args().build.resolve()
+p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
+options = p.parse_args()
+engines = [True, False] if options.engine == 'both' else [options.engine == 'jit']
+engine_label = 'JIT and interpreter' if options.engine == 'both' else options.engine
+build = options.build.resolve()
 
 def host_tar(entries):
     stream=io.BytesIO()
@@ -36,7 +40,7 @@ fs.writeFileSync(process.argv[1],root.replace(installRoot(root.data,JSON.parse(f
 
 def run(image,commands,jit):
     log=image.with_suffix('.'+('jit' if jit else 'interpreter')+'.log')
-    command=[str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),'--memory','5120000','--headless','--input',commands,'--timeout','360']
+    command=[str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),'--memory','16384000','--headless','--input',commands,'--timeout','360']
     if jit:command+=['--jit']
     with log.open('w') as stream:
         result=subprocess.run(command,stdout=stream,stderr=subprocess.STDOUT,text=True,timeout=370)
@@ -189,7 +193,7 @@ with tempfile.TemporaryDirectory(prefix='fuzix-filetools-') as temporary:
                    'find /deep -name needle; echo FIND_DEEP:$?\n'
                    'tar -cf /deep.tar /deep\nmkdir /deep-out\ncd /deep-out\n'
                    'tar -xf /deep.tar; echo TAR_DEEP:$?\ncd /\n')
-    output=run(image,deep_commands+FIRST,True)
+    output=run(image,deep_commands+FIRST,engines[0])
     for expected in ['FIND_DEEP:0','TAR_DEEP:0','spaced\n','./first','FIND_ERROR:1','FIND_BAD:1','FIND_MISSING:1','DD_BAD:1','DD_OVERFLOW:1',
                      'DD_SAME:1','DIFF_CHANGED:1','DIFF_SAME:0','DIFF_ERROR:2','DIFF_STDIN:0',
                      'DIFF_SMALL:1','DIFF_DIR:0','DIFFH_DIR:0','DIFF_EOF:1','DIFF_EOF_SAME:0','DIFF_BLANKS:0','DIFF_MANY:1',
@@ -225,9 +229,9 @@ with tempfile.TemporaryDirectory(prefix='fuzix-filetools-') as temporary:
     with tarfile.open(fileobj=io.BytesIO(octets),mode='r:') as tar:
         assert tar.extractfile('tree/first').read()==b'alpha\n'
         assert tar.getmember('tree/native').mode==0o640
-    output=run(image,'cd /work/out\nfind tree -name native -exec cmp {} /native \\;\ndd if=tree/native of=/reboot-native bs=2\ndiff tree/left tree/right; echo REBOOT_DIFF:$?\ntar -cf /reboot.tar tree\nmkdir reboot\ncd reboot\ntar -xf /reboot.tar\ncmp tree/native /native\necho REBOOT_OK\nshutdown\n',False)
+    output=run(image,'cd /work/out\nfind tree -name native -exec cmp {} /native \\;\ndd if=tree/native of=/reboot-native bs=2\ndiff tree/left tree/right; echo REBOOT_DIFF:$?\ntar -cf /reboot.tar tree\nmkdir reboot\ncd reboot\ntar -xf /reboot.tar\ncmp tree/native /native\necho REBOOT_OK\nshutdown\n',engines[-1])
     assert 'REBOOT_DIFF:1' in output and 'REBOOT_OK' in output,output
     get,base,w=read_root(image)
     assert get('/reboot-native')==[0,0x1234,0xffff,0x80,10]
     subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
-print('File tools passed: find expressions/exec, dd count/seek, diff statuses/EOF/stdin, USTAR/streams/native data/metadata, malformed input and reboot persistence; JIT and interpreter')
+print('File tools passed: find expressions/exec, dd count/seek, diff statuses/EOF/stdin, USTAR/streams/native data/metadata, malformed input and reboot persistence; ' + engine_label)

@@ -401,3 +401,10 @@ extern int readc(void);
 /* xec.c */
 extern int execute(TREPTR argt, int execflg, int *pf1, int *pf2);
 extern void execexp(char *s, intptr_t f);
+
+extern int jobs_enabled(void), jobs_current(void), jobs_begin(TREPTR, int);
+extern void shell_terminal_accept(void);
+extern void jobs_await(int);
+extern void jobs_init(void), jobs_prompt(void), jobs_child(void), jobs_child_signals(void);
+extern void jobs_parent(int), jobs_wait(void), jobs_end(int), jobs_shutdown(void);
+extern int jobs_status(int, int), jobs_builtin(int, char **);

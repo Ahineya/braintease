@@ -158,6 +158,27 @@ pub(super) fn emit_insn(
     insn: &Insn,
 ) -> Result<(), CompileError> {
     match insn {
+        Insn::Replace { dest, place, value } => {
+            emit_replace(builder, proc, frame, *dest, *place, *value)
+        }
+        Insn::EraseOwner { dest, src, owner } => {
+            emit_erase_owner(builder, proc, frame, *dest, *src, *owner)
+        }
+        Insn::IntoInner { dest, src } => emit_into_inner(builder, proc, frame, *dest, *src),
+        Insn::Move { dest, src } => {
+            if dest == src {
+                return Ok(());
+            }
+            release_managed(builder, proc, frame, *dest)?;
+            transfer_slot(builder, proc, frame, *src, proc, frame, *dest)
+        }
+        Insn::Drop { slot } => release_managed(builder, proc, frame, *slot),
+        Insn::Owned {
+            dest,
+            value,
+            cleanup,
+            inner,
+        } => emit_owned(builder, proc, frame, *dest, *value, *cleanup, *inner),
         Insn::Const { slot, value } => {
             store_slot(builder, proc, frame, *slot, Value::Constant(*value))
         }
@@ -366,7 +387,11 @@ pub(super) fn emit_insn(
         } => emit_vec_get(
             builder, proc, frame, *vec, *index, *value, *dest, *elem, *some_tag, *none_tag,
         ),
-        Insn::Borrow { dest, slot } => emit_borrow(builder, proc, frame, *dest, *slot),
+        Insn::Borrow {
+            dest,
+            place,
+            mutable,
+        } => emit_borrow(builder, proc, frame, *dest, place, *mutable),
         Insn::PtrLoad {
             dest,
             ptr,
@@ -407,6 +432,7 @@ pub(super) fn emit_insn(
             payload,
             fail_slot,
             fail,
+            cleanup,
         } => emit_try(
             builder,
             proc,
@@ -420,6 +446,7 @@ pub(super) fn emit_insn(
             *fail_slot,
             *fail,
             built.need_alloc,
+            cleanup,
         ),
         Insn::Push {
             vec,
@@ -599,6 +626,8 @@ pub(super) fn call_helper(
         rcc_ir::float::build_from_helper(builder, name, args, ret)
     } else {
         builder.build_call(Value::Global(name.to_string()), args, ret)
-    }.ir()?.unwrap();
+    }
+    .ir()?
+    .unwrap();
     Ok(Value::Temp(temp))
 }

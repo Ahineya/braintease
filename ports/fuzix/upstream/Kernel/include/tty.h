@@ -218,6 +218,9 @@ struct tty {
 #define TTYF_DEAD	4
  /* FIXME add TTYF_SLEEPING 8 here so can generalize code */
     uint16_t pgrp;
+#ifdef CONFIG_JOB_CONTROL
+    uint16_t session;
+#endif
     struct termios termios;
     struct winsize winsize;	/* 8 byte so takes us up to 32 */
 };

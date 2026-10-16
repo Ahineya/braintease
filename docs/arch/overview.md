@@ -27,7 +27,7 @@ A **bank size** is the number of instructions (IMEM) or the address modulus the 
 - `rct` and `runtime/Makefile` default to **64000**.
 - `rcc` CLI default is 4096; `rasm`/`rlink` defaults differ — always pass the same `--bank-size` through the pipeline.
 - Instruction index: `idx = PCB * bank_size + PC`. When `PC` reaches `bank_size`, the VM wraps `PC` to 0 and increments `PCB`.
-- A program **may span multiple IMEM banks**. `rlink` packs objects (or individual functions, if an object is larger than one bank) so bank N starts at instruction index `N * bank_size`, NOP-padding unused tails. `rvm` loads the whole image; fetch is `PCB * bank_size + PC`. The remaining limit is that **one function** must still fit in a single bank (the linker errors if a function is larger than `--bank-size`).
+- Programs and individual functions **may span multiple IMEM banks**. `rlink` prefers keeping small functions within one bank and lets larger functions continue across banks. It relaxes cross-bank branches into existing far jumps and remaps code references after placement. See [code-banks.md](code-banks.md) for branch, call-boundary and relocation rules. `rvm` loads the whole image; fetch is `PCB * bank_size + PC`.
 
 Data banks used by the C runtime (see [memory.md](memory.md)):
 

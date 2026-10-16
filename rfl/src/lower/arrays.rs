@@ -85,6 +85,9 @@ pub(super) fn emit_array_lit(
             store_cell(builder, frame, at, value)?;
             at += 1;
         }
+        if proc.resources.contains(elem) {
+            release_managed(builder, proc, frame, *slot)?;
+        }
     }
     Ok(())
 }
@@ -161,6 +164,9 @@ pub(super) fn store_inline_elem(
             .build_pointer_offset(frame.clone(), off, ptr_ty())
             .ir()?;
         builder.build_store(word, ptr, IrType::I16).ir()?;
+    }
+    if proc.resources.contains(proc.slots[value].ty) {
+        release_managed(builder, proc, frame, value)?;
     }
     Ok(())
 }

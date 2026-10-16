@@ -1090,6 +1090,10 @@ fn builtin_methods(ty: &str) -> Vec<(String, String)> {
         add("pop", format!("fn() -> Option<{elem}>"));
         add("get", format!("fn(usize) -> Option<{elem}>"));
         add("clear", "fn() -> ()".to_string());
+    } else if ty.starts_with("Owned<") {
+        add("borrow", format!("fn() -> &{elem}"));
+        add("borrow_mut", format!("fn() -> &mut {elem}"));
+        add("into_inner", format!("fn() -> {elem}"));
     } else if ty == "String" {
         add("len", "fn() -> usize".to_string());
         add("is_empty", "fn() -> bool".to_string());
@@ -1106,6 +1110,7 @@ fn type_argument(ty: &str) -> String {
     if let Some(rest) = ty
         .strip_prefix("Vec<")
         .or_else(|| ty.strip_prefix("Slice<"))
+        .or_else(|| ty.strip_prefix("Owned<"))
     {
         if let Some(elem) = rest.strip_suffix('>') {
             return elem.to_string();
@@ -1291,7 +1296,7 @@ mod tests {
             let after = Analysis::open(Some(&path), &edited);
             assert!(after.diagnostics.is_empty(), "{:?}", after.diagnostics);
         }
-        let source = "fn main() { print(1); println(\"hi\"); putc('a'); let a = from_char('a'); let b = from_byte(65 as u8); }";
+        let source = "fn main() { print(1); println(\"hi\"); putc('a'); let a = from_char('a'); let b = from_byte(65 as u8); let owner=owned(1,fn(x:&mut i16)=>{}); let other=move(owner); drop(move(other)); }";
         let doc = Analysis::open(None, source);
         assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
         for (name, signature) in crate::check::BUILTIN_FUNCTIONS {
@@ -1299,6 +1304,9 @@ mod tests {
             let expected = match *name {
                 "print" => "fn(i16) -> unit",
                 "println" => "fn(String) -> unit",
+                "owned" => "fn(i16, fn(&mut i16) -> unit) -> Owned<i16>",
+                "move" => "fn(Owned<i16>) -> Owned<i16>",
+                "drop" => "fn(Owned<i16>) -> unit",
                 _ => signature,
             };
             assert_eq!(doc.signature(at).unwrap().0, expected);
@@ -1708,5 +1716,34 @@ mod tests {
             "definition should be the later function, at {}",
             def.start
         );
+    }
+}
+
+#[cfg(test)]
+mod resources {
+    use super::Analysis;
+    #[test]
+    fn owners_supply_checked_types_methods_and_move_errors() {
+        let source = "fn main() { let mut owner=owned(1,fn(x:&mut i16)=>{}); owner. }";
+        let doc = Analysis::open(None, source);
+        let items = doc.completions(source.find("owner.").unwrap() + 6);
+        for (method, signature) in [
+            ("borrow", "fn() -> &i16"),
+            ("borrow_mut", "fn() -> &mut i16"),
+            ("into_inner", "fn() -> i16"),
+        ] {
+            assert!(items
+                .iter()
+                .any(|i| i.label == method && i.detail == signature));
+        }
+        let source="fn main() { let owner=owned(1,fn(x:&mut i16)=>{}); let next=move(owner); owner.borrow(); }";
+        let doc = Analysis::open(None, source);
+        assert!(doc
+            .diagnostics
+            .iter()
+            .any(|e| e.detail.contains("moved value")));
+        let moved = source.find("move(owner)").unwrap() + 5;
+        let (_, span) = doc.definition(moved).unwrap();
+        assert_eq!(&source[span.start..span.end], "owner");
     }
 }

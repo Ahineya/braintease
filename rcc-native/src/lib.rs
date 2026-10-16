@@ -10,6 +10,8 @@ mod floating;
 mod globals;
 mod instruction;
 mod link;
+mod liveness;
+mod process;
 mod units;
 pub use units::link_modules;
 
@@ -29,6 +31,7 @@ struct Compiler {
     globals: BTreeMap<String, u64>,
     ir: Module,
     address_taken: BTreeSet<String>,
+    resumable: bool,
 }
 
 impl Compiler {
@@ -74,6 +77,11 @@ impl Compiler {
         Ok(id)
     }
     fn function_token(&mut self, name: &str) -> Result<u64, String> {
+        if self.resumable && self.ir.get_function(name).is_none_or(|f| f.is_external) {
+            return Err(format!(
+                "resumable native code cannot take the address of runtime binding {name}"
+            ));
+        }
         let arity = self
             .ir
             .get_function(name)
@@ -131,6 +139,19 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
     units::hoist_static_allocas(&mut ir);
     rcc_backend::optimize::optimize_module(&mut ir);
     units::retain_reachable(&mut ir);
+    let resumable = process::enabled(&ir);
+    if resumable {
+        if let Some(f) = ir
+            .functions
+            .iter()
+            .find(|f| !f.is_external && f.name.starts_with("rcc_process_"))
+        {
+            return Err(format!(
+                "{} is reserved for native process services",
+                f.name
+            ));
+        }
+    }
     let mut compiler = Compiler {
         object: ObjectModule::new(builder),
         functions: BTreeMap::new(),
@@ -139,6 +160,7 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
         globals: BTreeMap::new(),
         ir,
         address_taken: BTreeSet::new(),
+        resumable,
     };
     let mut offset = 1u64;
     for global in &compiler.ir.globals {
@@ -173,7 +195,11 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
                 } else {
                     Linkage::Export
                 },
-                &compiler.signature(function.parameters.len() + usize::from(function.is_vararg)),
+                &compiler.signature(if resumable && !function.is_external {
+                    0
+                } else {
+                    function.parameters.len() + usize::from(function.is_vararg)
+                }),
             )
             .map_err(|e| format!("native declaration {}: {e}", function.name))?;
         if compiler

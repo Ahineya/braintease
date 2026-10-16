@@ -71,7 +71,7 @@ impl<'a> Checker<'a> {
                     }
                     return Ok(());
                 }
-                if name == "Vec" || name == "Slice" {
+                if name == "Vec" || name == "Slice" || name == "Owned" {
                     if args.len() != 1 {
                         return Err(self.arity_error(span.start, name, 1, args.len()));
                     }
@@ -284,13 +284,15 @@ impl<'a> Checker<'a> {
                     }
                     return Ok(prim);
                 }
-                if name == "Vec" || name == "Slice" {
+                if name == "Vec" || name == "Slice" || name == "Owned" {
                     if args.len() != 1 {
                         return Err(self.arity_error(span.start, name, 1, args.len()));
                     }
                     let elem = self.apply(&args[0], subst)?;
                     self.require_vec_elem(span.start, elem)?;
-                    return Ok(if name == "Vec" {
+                    return Ok(if name == "Owned" {
+                        self.intern_owned(elem)
+                    } else if name == "Vec" {
                         self.intern_vec(elem)
                     } else {
                         self.intern_slice(elem)

@@ -424,15 +424,27 @@ pub(super) fn emit_call(
         Value::Constant(proc.slots[dest].offset),
     )?;
     for (arg, param) in args.iter().zip(&callee_proc.param_slots) {
-        copy_slot(
-            builder,
-            proc,
-            frame,
-            *arg,
-            callee_proc,
-            &callee_frame,
-            *param,
-        )?;
+        if proc.resources.contains(proc.slots[*arg].ty) {
+            transfer_slot(
+                builder,
+                proc,
+                frame,
+                *arg,
+                callee_proc,
+                &callee_frame,
+                *param,
+            )?;
+        } else {
+            copy_slot(
+                builder,
+                proc,
+                frame,
+                *arg,
+                callee_proc,
+                &callee_frame,
+                *param,
+            )?;
+        }
     }
     store_cell(builder, frame, RESUME, Value::Constant(next as i64))?;
     builder.build_return(Some(callee_frame)).ir()
@@ -476,6 +488,9 @@ pub(super) fn emit_apply(
     let mut offset = PAYLOAD + proc.slots[dest].ty.cells();
     for (arg, ty) in args.iter().zip(arg_tys) {
         copy_to_offset(builder, proc, frame, *arg, &callee_frame, offset)?;
+        if proc.resources.contains(*ty) {
+            release_managed(builder, proc, frame, *arg)?;
+        }
         offset += ty.cells();
     }
     let env_addr = load_cell(builder, frame, base + 2, IrType::I16)?;

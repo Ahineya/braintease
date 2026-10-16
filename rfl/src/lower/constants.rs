@@ -18,8 +18,8 @@ pub(super) fn fold_scalar_constants(proc: &mut Proc) {
             for slot in destinations(insn) {
                 writes[slot] += 1;
             }
-            if let Insn::Borrow { slot, .. } = insn {
-                writes[*slot] += 2;
+            if let Insn::Borrow { place, .. } = insn {
+                writes[place.root] += 2;
             }
         }
         if let Some(Term::Call { dest, .. } | Term::Apply { dest, .. }) = &seg.term {

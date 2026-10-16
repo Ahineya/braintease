@@ -35,6 +35,9 @@ char* tempfile;
 static void exfile(BOOL);
 static struct termios terminal;
 static int restore_terminal;
+void shell_terminal_accept(void) {
+    if (restore_terminal) tcgetattr(input, &terminal);
+}
 
 #ifdef BUILD_FSH
 static char history[4096];
@@ -209,6 +212,7 @@ static void exfile(BOOL prof)
 		flags &= ~prompt;
 	}
 
+	jobs_init();
 	restore_terminal = (flags & prompt) && tcgetattr(input, &terminal) == 0;
     if (setjmp(errshell) && prof) {
 		close(input);
@@ -223,9 +227,10 @@ static void exfile(BOOL prof)
 
 	/* command loop */
 	for (;;) {
+        jobs_prompt();
         if (restore_terminal)
             tcsetattr(input, TCSANOW, &terminal);
-        if (getpid() == 1)
+        if (getpid() == 1 || jobs_enabled())
             reapchildren();
 		tdystak(0);
 		stakchk();	/* may reduce sbrk */

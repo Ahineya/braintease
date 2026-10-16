@@ -147,7 +147,7 @@ impl<'a> Checker<'a> {
                     }
                     return Ok(solver.structure(id));
                 }
-                if name == "Vec" || name == "Slice" {
+                if name == "Vec" || name == "Slice" || name == "Owned" {
                     let concrete = self.apply(ty, &HashMap::new())?;
                     return Ok(solver.concrete(concrete));
                 }
@@ -522,9 +522,26 @@ impl<'a> Checker<'a> {
         scope: &mut Vec<HashMap<String, u32>>,
         ret: u32,
     ) -> Result<u32, CompileError> {
+        if callee == "owned" {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "add parameter types to a function that constructs an Owned resource",
+            ));
+        }
         let mut arg_vars = Vec::new();
         for arg in args {
             arg_vars.push(self.infer_expr(solver, arg, sigs, functions, scope, ret, None)?);
+        }
+        if callee == "move" {
+            if arg_vars.len() != 1 {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    "move() expects one argument",
+                ));
+            }
+            return Ok(arg_vars[0]);
         }
         if is_builtin(callee) {
             if let Some(arg) = arg_vars.first() {
@@ -884,6 +901,11 @@ impl<'a> Checker<'a> {
                     ret: Box::new(self.ty_to_parsed(sig.ret)),
                 }
             }
+            Ty::Owned(id) => ParsedTy::Named {
+                span,
+                name: "Owned".into(),
+                args: vec![self.ty_to_parsed(self.owner_elems[id as usize])],
+            },
             Ty::Vec(id) => ParsedTy::Named {
                 span,
                 name: "Vec".to_string(),

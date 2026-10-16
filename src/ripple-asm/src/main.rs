@@ -57,6 +57,9 @@ enum Commands {
         /// Output macro file (.bfm)
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Code/data bank size, matching assembly and linking
+        #[arg(short, long, default_value = "16")]
+        bank_size: u16,
     },
     
     /// Validate assembly file
@@ -150,6 +153,8 @@ fn get_instruction_description(opcode: Opcode) -> &'static str {
         Opcode::Iret => "Atomic interrupt return",
         Opcode::Csrr => "Read CPU control register",
         Opcode::Csrw => "Write CPU control register",
+        Opcode::Syscall => "Enter the supervisor syscall handler",
+        Opcode::Enteru => "Enter protected user mode at rs:rt",
     }
 }
 
@@ -170,7 +175,7 @@ fn get_instruction_category(opcode: Opcode) -> &'static str {
         Opcode::Jal | Opcode::Jalr | Opcode::Beq | Opcode::Bne | 
         Opcode::Blt | Opcode::Bge => "CONTROL FLOW",
         
-        Opcode::Halt | Opcode::Nop | Opcode::Brk | Opcode::Iret | Opcode::Csrr | Opcode::Csrw => "SPECIAL",
+        Opcode::Halt | Opcode::Nop | Opcode::Brk | Opcode::Iret | Opcode::Csrr | Opcode::Csrw | Opcode::Syscall | Opcode::Enteru => "SPECIAL",
     }
 }
 
@@ -343,13 +348,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         "macro" => {
-                            let formatter = MacroFormatter::new();
-                            let macro_output = formatter.format_full_program(
-                                &obj.instructions,
-                                Some(&obj.data),
-                                None,
-                                Some(&format!("Assembled from {}", input.display())),
-                            );
+                            let macro_output = assembler.assemble_to_macro(&source)
+                                .map_err(|errors| errors.join("\n"))?;
                             fs::write(&output_path, macro_output)?;
                             println!("✓ Formatted to macro file {}", output_path.display());
                         }
@@ -364,10 +364,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("  Labels: {}", obj.labels.len());
                     println!("  Data: {} bytes", obj.data.len());
                     if !obj.unresolved_references.is_empty() {
-                        println!("  ⚠ Unresolved references: {}", obj.unresolved_references.len());
-                        for (idx, unresolved) in &obj.unresolved_references {
-                            println!("    - Instruction {}: {}", idx, unresolved.label);
-                        }
+                        println!("  Link relocations: {}", obj.unresolved_references.len());
                     }
                 }
                 Err(errors) => {
@@ -380,17 +377,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         
-        Commands::Format { input, output } => {
+        Commands::Format { input, output, bank_size } => {
             let content = fs::read_to_string(&input)?;
             let obj: ripple_asm::ObjectFile = serde_json::from_str(&content)?;
             
             let formatter = MacroFormatter::new();
-            let macro_output = formatter.format_full_program(
-                &obj.instructions,
-                Some(&obj.data),
-                None,
-                Some(&format!("Formatted from {}", input.display())),
-            );
+            let image = ripple_asm::Linker::new(bank_size).link(vec![obj])
+                .map_err(|errors| errors.join("\n"))?;
+            let macro_output = formatter.format_linked_program(&image);
             
             let output_path = output.unwrap_or_else(|| {
                 let mut path = input.clone();
@@ -413,9 +407,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("  Labels: {}", obj.labels.len());
                     println!("  Data: {} bytes", obj.data.len());
                     
-                    if !obj.unresolved_references.is_empty() {
+                    let external: Vec<_> = obj.unresolved_references.values()
+                        .filter(|r| !obj.labels.contains_key(&r.label) && !obj.data_labels.contains_key(&r.label)).collect();
+                    if !external.is_empty() {
                         println!("  ⚠ Unresolved references:");
-                        for (_, unresolved) in &obj.unresolved_references {
+                        for unresolved in external {
                             println!("    - {}", unresolved.label);
                         }
                     }

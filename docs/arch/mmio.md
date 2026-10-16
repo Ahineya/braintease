@@ -101,6 +101,11 @@ advertised by capability 0x0020. It documents queues, one-octet-per-cell buffers
 the C helpers, host attachment and bidirectional ping tests. No additional MMIO
 addresses are used.
 
+The [bulk I/O contract](bulk-io.md) adds storage read/write and RAM/code copy/fill
+commands at 0x0300–0x0303. RVM and RBF can transfer attached-disk contents directly
+into guest RAM or instruction memory. Capabilities distinguish storage, RAM, and
+code support; transfers share the legacy disk cache and use the same mailbox.
+
 ## Interrupts
 
 IRQ ABI version 2 preserves RA/RAB and holds the interrupted PC/PCB and stack

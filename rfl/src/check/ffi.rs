@@ -363,13 +363,14 @@ impl<'a> Checker<'a> {
                 ));
             }
             let elem = info.inner;
-            let TExprKind::Name(binding) = ptr.kind else {
+            let TExprKind::Name(binding, ..) = ptr.kind else {
                 return Err(CompileError::at(
                     self.source,
                     span,
                     "a reference store needs a name",
                 ));
             };
+            self.note_use(span, binding, true)?;
             let value = self.check_expr(value, Some(elem))?;
             if value.ty != elem {
                 return Err(CompileError::at(

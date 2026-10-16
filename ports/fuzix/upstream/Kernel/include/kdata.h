@@ -85,7 +85,7 @@ struct runload {
 extern struct runload loadavg[];
 
 /* the system call dispatch table */
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 #define FUZIX_SYSCALL_COUNT 80
 #else
 #define FUZIX_SYSCALL_COUNT 68

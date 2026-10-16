@@ -82,10 +82,16 @@ if [[ "$run_only" == 0 ]]; then
     cargo build --quiet --release --manifest-path "$ROOT/src/ripple-asm/Cargo.toml" --bin rasm --bin rlink
     mkdir -p "$OUT"
     OUT="$(cd "$OUT" && pwd)"
-    make -C "$ROOT/ports/fuzix" "BUILD=$OUT" -j4 images >&2
+    mmu=1
+    if [[ "$target" == rbf ]]; then mmu=0; fi
+    make -C "$ROOT/ports/fuzix" "BUILD=$OUT" "MMU=$mmu" -j4 images >&2
     if [[ "$target" == rbf ]]; then
-        make -C "$ROOT/ports/fuzix" "BUILD=$OUT" -j4 bf >&2
+        make -C "$ROOT/ports/fuzix" "BUILD=$OUT" MMU=0 -j4 bf >&2
     fi
+fi
+if [[ "$target" == rbf && -f "$OUT/.mmu" && "$(cat "$OUT/.mmu")" != 0 ]]; then
+    echo 'error: current artifacts use the MMU; run without --run-only to build the Brainfuck profile' >&2
+    exit 1
 fi
 update=0
 if [[ -z "$disk" ]]; then

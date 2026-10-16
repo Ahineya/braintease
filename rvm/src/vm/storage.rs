@@ -404,6 +404,57 @@ impl Storage {
         Ok(())
     }
 
+    /// Positional octet transfers share the word-port cache and never move its
+    /// cursor. Preload every block before writes so an I/O failure cannot leave
+    /// a partially modified disk cache. EOF is zero padded, as on legacy ports.
+    pub fn read_bytes_at(&mut self, offset: u32, count: usize) -> io::Result<Vec<u8>> {
+        self.prepare_range(offset, count)?;
+        let mut bytes = Vec::with_capacity(count);
+        for index in u64::from(offset)..u64::from(offset) + count as u64 {
+            let block = &self.blocks[&((index / BLOCK_SIZE_BYTES as u64) as u16)];
+            let octet = index as usize % BLOCK_SIZE_BYTES;
+            bytes.push((block.data[octet / 2] >> ((octet % 2) * 8)) as u8);
+        }
+        Ok(bytes)
+    }
+
+    pub fn write_bytes_at(&mut self, offset: u32, bytes: &[u8]) -> io::Result<()> {
+        self.prepare_range(offset, bytes.len())?;
+        for (i, &value) in bytes.iter().enumerate() {
+            let index = u64::from(offset) + i as u64;
+            let block = self
+                .blocks
+                .get_mut(&((index / BLOCK_SIZE_BYTES as u64) as u16))
+                .unwrap();
+            let octet = index as usize % BLOCK_SIZE_BYTES;
+            let shift = (octet % 2) * 8;
+            block.data[octet / 2] =
+                (block.data[octet / 2] & !(255 << shift)) | (u16::from(value) << shift);
+            block.dirty = true;
+        }
+        Ok(())
+    }
+
+    fn prepare_range(&mut self, offset: u32, count: usize) -> io::Result<()> {
+        let end = u64::from(offset)
+            .checked_add(count as u64)
+            .filter(|&end| end <= (1u64 << 32))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "disk transfer exceeds 4 GiB")
+            })?;
+        if count == 0 {
+            return Ok(());
+        }
+        for id in u64::from(offset) / BLOCK_SIZE_BYTES as u64..=(end - 1) / BLOCK_SIZE_BYTES as u64
+        {
+            if let Err(error) = self.load_block(id as u16) {
+                self.io_error = true;
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     /// Get the control register value
     pub fn get_control(&self) -> u16 {
         let mut control = 0u16;
@@ -647,9 +698,59 @@ mod tests {
         assert_eq!(storage.get_control(), 2 | 16);
         storage.set_control_checked(16).unwrap();
         assert_eq!(storage.get_control(), 2);
-        storage.backing_file = Some(OpenOptions::new().read(true).write(true).open(&disk.0).unwrap());
+        storage.backing_file = Some(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&disk.0)
+                .unwrap(),
+        );
         storage.set_control_checked(8).unwrap();
         assert_eq!(storage.get_control(), 0);
         assert_eq!(&std::fs::read(&disk.0).unwrap()[..2], &[0x34, 0x12]);
+    }
+    #[test]
+    fn positional_transfers_preload_before_mutation_and_latch_io_errors() {
+        let disk = Disk::new(&[0x11, 0x22]);
+        let mut storage = Storage::with_path(disk.0.clone()).unwrap();
+        storage.write_word_checked(0xabcd).unwrap(); // Cache block zero.
+        storage.set_addr(17);
+        storage.backing_file = Some(OpenOptions::new().write(true).open(&disk.0).unwrap());
+        let before = storage.blocks[&0].data.clone();
+        assert!(storage.write_bytes_at(65535, &[1, 2]).is_err());
+        assert_eq!(storage.blocks[&0].data, before);
+        assert_eq!(storage.get_block(), 0);
+        assert_eq!(storage.get_addr(), 17);
+        assert_eq!(storage.get_control(), 2 | 16);
+        // A failed read must not expose even the successfully cached prefix.
+        let mut ram = vec![91; 256];
+        ram[40..52].copy_from_slice(&[1, 12, 65535, 0, 2, 0, 2, 0, 1, 0, 0, 0]);
+        let mut state = crate::devices::DeviceState::default();
+        state.write_register(
+            crate::devices::REGISTER_DESCRIPTOR_OFFSET,
+            40,
+            &mut ram,
+            64,
+            0,
+        );
+        let before = ram.clone();
+        state.write_register_with_storage(
+            crate::devices::REGISTER_COMMAND,
+            crate::bulk::STORAGE_READ,
+            &mut ram,
+            64,
+            0,
+            Some(&mut storage),
+        );
+        assert_eq!(state.status(), crate::devices::STATUS_IO);
+        assert_eq!(ram, before);
+        storage.backing_file = Some(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&disk.0)
+                .unwrap(),
+        );
+        storage.set_control_checked(16 | 8).unwrap();
     }
 }

@@ -83,11 +83,79 @@ impl FnBuild {
                 }
                 self.insn(Insn::StrFromByte { dest, src });
             }
-            TExprKind::Name(id) => {
+            TExprKind::Name(id, ..) => {
                 let src = self.binding_slot[*id as usize];
                 if src != dest {
                     self.insn(Insn::Copy { dest, src });
                 }
+            }
+            TExprKind::Move { binding, .. } => {
+                let src = self.binding_slot[*binding as usize];
+                self.insn(Insn::Move { dest, src });
+            }
+            TExprKind::Owned { value, cleanup } => {
+                let value_slot = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                let cleanup = self.emit_expr(cleanup);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::Owned {
+                    dest,
+                    value: value_slot,
+                    cleanup,
+                    inner: value.ty,
+                });
+            }
+            TExprKind::Replace { place, value } => {
+                let place = self.emit_expr(place);
+                if self.dead {
+                    return;
+                }
+                let value = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                // Keep the old storage distinct even when the enclosing
+                // assignment's destination aliases the replaced place.
+                let result = self.alloc(expr.ty);
+                self.insn(Insn::Replace {
+                    dest: result,
+                    place,
+                    value,
+                });
+                self.insn(Insn::Move { dest, src: result });
+            }
+            TExprKind::RawBorrow(value) => {
+                self.emit_expr_to(value, dest);
+            }
+            TExprKind::EraseOwner(value) => {
+                let src = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                let Ty::Owned(owner) = value.ty else {
+                    unreachable!()
+                };
+                self.insn(Insn::EraseOwner { dest, src, owner });
+            }
+            TExprKind::IntoInner(value) => {
+                let src = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                let result = self.alloc(expr.ty);
+                self.insn(Insn::IntoInner { dest: result, src });
+                self.insn(Insn::Move { dest, src: result });
+            }
+            TExprKind::Drop(value) => {
+                let slot = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                self.insn(Insn::Drop { slot });
             }
             TExprKind::Unary {
                 op: UnaryOp::Neg,
@@ -382,9 +450,62 @@ impl FnBuild {
                 }
                 self.insn(Insn::PtrNull { dest, ptr });
             }
-            TExprKind::Borrow { binding } => {
-                let slot = self.binding_slot[*binding as usize];
-                self.insn(Insn::Borrow { dest, slot });
+            TExprKind::Borrow {
+                binding,
+                mutable,
+                projections,
+                ..
+            } => {
+                let mut slot = self.binding_slot[*binding as usize];
+                let mut indirect = self.slots[slot].ty.is_ref();
+                let mut steps = Vec::new();
+                for step in projections {
+                    match step {
+                        TPlaceStep::Owned => steps.push(PlaceStep::Owned),
+                        TPlaceStep::Field { offset } => {
+                            steps.push(PlaceStep::Field { offset: *offset })
+                        }
+                        TPlaceStep::Index {
+                            index,
+                            container,
+                            elem,
+                        } => {
+                            let at = self.emit_expr(index);
+                            if self.dead {
+                                return;
+                            }
+                            steps.push(PlaceStep::Index {
+                                index: at,
+                                container: *container,
+                                elem: *elem,
+                            });
+                            // Check and detach this ancestor before evaluating
+                            // the next index. Intermediate addresses live in the
+                            // frame even when that index makes a function call.
+                            let next = self.alloc(expr.ty);
+                            self.insn(Insn::Borrow {
+                                dest: next,
+                                mutable: *mutable,
+                                place: Place {
+                                    root: slot,
+                                    indirect,
+                                    projections: std::mem::take(&mut steps),
+                                },
+                            });
+                            slot = next;
+                            indirect = true;
+                        }
+                    }
+                }
+                self.insn(Insn::Borrow {
+                    dest,
+                    mutable: *mutable,
+                    place: Place {
+                        root: slot,
+                        indirect,
+                        projections: steps,
+                    },
+                });
             }
             TExprKind::Try {
                 expr,
@@ -410,6 +531,7 @@ impl FnBuild {
                     payload: *payload,
                     fail_slot,
                     fail: *fail,
+                    cleanup: self.cleanup_slots(0),
                 });
             }
             TExprKind::Get {
@@ -639,7 +761,7 @@ impl FnBuild {
     /// the binding and consuming it. Other operands still take owning snapshots.
     fn read_collection(&mut self, expr: &TExpr, stable: bool) -> usize {
         if stable {
-            if let TExprKind::Name(id) = expr.kind {
+            if let TExprKind::Name(id, ..) = expr.kind {
                 return self.binding_slot[id as usize];
             }
         }
@@ -656,7 +778,7 @@ impl FnBuild {
 
 fn stable_index(expr: &TExpr) -> bool {
     match &expr.kind {
-        TExprKind::Int(_) | TExprKind::Name(_) => true,
+        TExprKind::Int(_) | TExprKind::Name(_, ..) => true,
         TExprKind::Unary { expr, .. } | TExprKind::Cast { expr, .. } => stable_index(expr),
         TExprKind::Binary { lhs, rhs, .. } => stable_index(lhs) && stable_index(rhs),
         _ => false,

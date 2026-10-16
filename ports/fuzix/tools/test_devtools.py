@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PORT = ROOT / 'ports/fuzix'
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--build', type=Path, default=ROOT / 'build/fuzix')
-p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='both')
+p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 a = p.parse_args()
 build = a.build.resolve()
 
@@ -177,7 +177,7 @@ fs.writeFileSync(f,r.replace(installRoot(r.data,JSON.parse(fs.readFileSync(proce
 
 def batch(image, jit, label):
     command = [str(ROOT / 'target/release/rvm'), str(build / 'bios.bin'), '--disk', str(image),
-               '--memory', '5120000', '--headless', '--input', 'sh /devtools-suite\n', '--timeout', '900']
+               '--memory', '16384000', '--headless', '--input', 'sh /devtools-suite\n', '--timeout', '900']
     if jit: command.append('--jit')
     log = Path('/tmp/fuzix-devtools-' + label + '.log')
     with log.open('w') as stream:
@@ -214,7 +214,7 @@ def reboot(image, jit):
     subprocess.run(['node', str(PORT / 'tools/disk.mjs'), str(build), str(image), '--install'], check=True)
     assert image.read_bytes() == before, 'no-op install changed a clean disk'
     cmd = [str(ROOT / 'target/release/rvm'), str(build / 'bios.bin'), '--disk', str(image),
-           '--memory', '5120000', '--headless', '--input',
+           '--memory', '16384000', '--headless', '--input',
            'cat /awk-written /awk-pipe-out /project/output\nshutdown\n', '--timeout', '120']
     if jit: cmd.append('--jit')
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=130)

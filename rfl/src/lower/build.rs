@@ -10,7 +10,9 @@ struct FnBuild {
     cur: usize,
     dead: bool,
     /// `(continue target, break target)` for each enclosing loop.
-    loops: Vec<(usize, usize)>,
+    loops: Vec<(usize, usize, usize)>,
+    scopes: Vec<Vec<usize>>,
+    resources: Arc<crate::resources::ResourceTypes>,
     result: Option<usize>,
     root: bool,
     /// The expression under construction is in tail position.
@@ -23,6 +25,7 @@ pub(super) fn build_fn(
     structs: Arc<Vec<Vec<Ty>>>,
     tuples: Arc<Vec<Vec<Ty>>>,
     collections: Arc<crate::typed::CollectionTypes>,
+    resources: Arc<crate::resources::ResourceTypes>,
 ) -> Result<Proc, CompileError> {
     let mut build = FnBuild {
         slots: Vec::new(),
@@ -32,6 +35,8 @@ pub(super) fn build_fn(
         cur: 0,
         dead: false,
         loops: Vec::new(),
+        scopes: Vec::new(),
+        resources: resources.clone(),
         result: None,
         root: func.name == "main" || func.c_export,
         tail_block: true,
@@ -76,7 +81,15 @@ pub(super) fn build_fn(
         env_offset += cells;
     }
     build.cur = build.fresh();
+    build.scopes.push(
+        func.params
+            .iter()
+            .map(|id| build.binding_slot[*id as usize])
+            .filter(|slot| resources.contains(build.slots[*slot].ty))
+            .collect(),
+    );
     build.emit_block(&func.body, result_slot);
+    build.cleanup_to(0);
     if !build.dead && build.segs[build.cur].term.is_none() {
         build.terminate(Term::Return);
     }
@@ -105,6 +118,7 @@ pub(super) fn build_fn(
         structs,
         tuples,
         collections,
+        resources,
         c_export: func.c_export,
     })
 }
@@ -118,7 +132,32 @@ impl FnBuild {
             ty,
             shared: false,
         });
-        self.slots.len() - 1
+        let slot = self.slots.len() - 1;
+        self.track_resource(slot);
+        slot
+    }
+
+    fn track_resource(&mut self, slot: usize) {
+        if self.resources.contains(self.slots[slot].ty) {
+            if let Some(scope) = self.scopes.last_mut() {
+                if !scope.contains(&slot) {
+                    scope.push(slot);
+                }
+            }
+        }
+    }
+
+    fn cleanup_slots(&self, depth: usize) -> Vec<usize> {
+        self.scopes[depth..]
+            .iter()
+            .rev()
+            .flat_map(|s| s.iter().rev().copied())
+            .collect()
+    }
+    fn cleanup_to(&mut self, depth: usize) {
+        for slot in self.cleanup_slots(depth) {
+            self.insn(Insn::Drop { slot });
+        }
     }
 
     fn alloc_shared(&mut self, ty: Ty) -> usize {
@@ -158,6 +197,8 @@ impl FnBuild {
 
     fn emit_block(&mut self, block: &TBlock, result: Option<usize>) {
         let tail_block = std::mem::replace(&mut self.tail_block, false);
+        let depth = self.scopes.len();
+        self.scopes.push(vec![]);
         for stmt in &block.stmts {
             if self.dead {
                 break;
@@ -175,6 +216,8 @@ impl FnBuild {
         }
         // A sibling branch inherits its own tail context, irrespective of
         // whether this branch returned or constructed a nested block.
+        self.cleanup_to(depth);
+        self.scopes.pop();
         self.tail_block = tail_block;
     }
 
@@ -186,14 +229,31 @@ impl FnBuild {
                     self.insn(Insn::BoxNew { slot: dest });
                 }
                 self.emit_expr_to(init, dest);
+                self.track_resource(dest);
             }
             TStmt::Destructure { pat, init } => {
-                let slot = self.emit_expr(init);
+                let slot = if let TExprKind::Name(id, 0) = init.kind {
+                    if self.resources.contains(init.ty) {
+                        let dest = self.alloc(init.ty);
+                        self.insn(Insn::Move {
+                            dest,
+                            src: self.binding_slot[id as usize],
+                        });
+                        dest
+                    } else {
+                        self.emit_expr(init)
+                    }
+                } else {
+                    self.emit_expr(init)
+                };
                 if self.dead {
                     return;
                 }
                 let fail = self.fresh();
                 self.bind_pat(pat, slot, fail);
+                if self.resources.contains(init.ty) {
+                    self.insn(Insn::Drop { slot });
+                }
                 let cont = self.cur;
                 self.cur = fail;
                 self.dead = false;
@@ -204,7 +264,7 @@ impl FnBuild {
             TStmt::Assign { binding, value } => {
                 let dest = self.binding_slot[*binding as usize];
                 if self.slots[dest].ty.owns_buffer() {
-                    let transfer = !matches!(value.kind, TExprKind::Name(_));
+                    let transfer = !matches!(value.kind, TExprKind::Name(_, ..));
                     let src = self.emit_expr(value);
                     if src != dest {
                         self.insn(Insn::VecStore {
@@ -293,7 +353,10 @@ impl FnBuild {
                 });
             }
             TStmt::Expr(expr) => {
-                self.emit_expr(expr);
+                let slot = self.emit_expr(expr);
+                if self.resources.contains(expr.ty) {
+                    self.insn(Insn::Drop { slot });
+                }
             }
             TStmt::Return(value) => {
                 let saved = self.tail_block;
@@ -311,6 +374,7 @@ impl FnBuild {
                 }
                 self.tail_block = saved;
                 if !self.dead {
+                    self.cleanup_to(0);
                     self.terminate(Term::Return);
                 }
             }
@@ -320,9 +384,10 @@ impl FnBuild {
     }
 
     fn jump_loop(&mut self, to_head: bool) {
-        let Some(&(head, after)) = self.loops.last() else {
+        let Some(&(head, after, depth)) = self.loops.last() else {
             return;
         };
+        self.cleanup_to(depth);
         self.terminate(Term::Jump(if to_head { head } else { after }));
     }
 
@@ -344,7 +409,7 @@ impl FnBuild {
             });
             self.dead = true;
         }
-        self.loops.push((head, after));
+        self.loops.push((head, after, self.scopes.len()));
         self.cur = body_seg;
         self.dead = false;
         self.emit_block(body, None);
@@ -402,7 +467,7 @@ impl FnBuild {
             then_seg: body_seg,
             else_seg: after,
         });
-        self.loops.push((step, after));
+        self.loops.push((step, after, self.scopes.len()));
         self.cur = body_seg;
         self.dead = false;
         if let Some(extract) = extract {
@@ -517,6 +582,8 @@ impl FnBuild {
         }
         let join = self.fresh();
         for arm in arms {
+            let depth = self.scopes.len();
+            self.scopes.push(vec![]);
             let fail = self.fresh();
             self.bind_pat(&arm.pat, slot, fail);
             if !self.dead {
@@ -535,13 +602,21 @@ impl FnBuild {
                 }
             }
             if !self.dead {
+                // Bindings now retain the selected fields. End the consuming
+                // snapshot before user code, so wildcard resources drop here.
+                if self.resources.contains(scrutinee.ty) {
+                    self.insn(Insn::Drop { slot });
+                }
                 self.emit_block(&arm.body, Some(dest));
             }
+            self.cleanup_to(depth);
             if !self.dead {
                 self.terminate(Term::Jump(join));
             }
             self.cur = fail;
             self.dead = false;
+            self.cleanup_to(depth);
+            self.scopes.pop();
         }
         self.terminate(Term::Fail);
         self.cur = join;
@@ -559,6 +634,7 @@ impl FnBuild {
                 if dest != slot {
                     self.insn(Insn::Copy { dest, src: slot });
                 }
+                self.track_resource(dest);
             }
             crate::typed::TPat::Ctor { tag, fields } => {
                 let ok = self.fresh();
@@ -584,6 +660,7 @@ impl FnBuild {
                                 offset,
                                 cells,
                             });
+                            self.track_resource(dest);
                         }
                         nested => {
                             let dest = self.alloc(field.ty);
@@ -594,6 +671,9 @@ impl FnBuild {
                                 cells,
                             });
                             self.bind_pat(nested, dest, fail);
+                            if self.resources.contains(field.ty) {
+                                self.insn(Insn::Drop { slot: dest });
+                            }
                             if self.dead {
                                 return;
                             }
@@ -624,6 +704,7 @@ impl FnBuild {
                                 src: slot,
                                 offset: field.offset,
                             });
+                            self.track_resource(dest);
                         }
                         nested => {
                             let dest = self.alloc(field.ty);
@@ -633,6 +714,9 @@ impl FnBuild {
                                 offset: field.offset,
                             });
                             self.bind_pat(nested, dest, fail);
+                            if self.resources.contains(field.ty) {
+                                self.insn(Insn::Drop { slot: dest });
+                            }
                             if self.dead {
                                 return;
                             }
@@ -644,7 +728,7 @@ impl FnBuild {
     }
 
     fn in_tail(&self, dest: usize, ty: Ty) -> bool {
-        if !self.tail_block || self.root {
+        if !self.tail_block || self.root || self.scopes.iter().any(|s| !s.is_empty()) {
             return false;
         }
         match self.result {

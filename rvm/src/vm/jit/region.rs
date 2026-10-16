@@ -43,7 +43,17 @@ pub(super) fn build_region(
     code: &[Instr],
     covered: &[bool],
 ) -> Result<Region, String> {
-    if entry >= code.len() {
+    build_region_with(bank, entry, code.len(), &mut |i| code[i], covered)
+}
+
+pub(super) fn build_region_with(
+    bank: u16,
+    entry: usize,
+    len: usize,
+    fetch: &mut impl FnMut(usize) -> Instr,
+    covered: &[bool],
+) -> Result<Region, String> {
+    if entry >= len {
         return Err(format!("JIT: region entry {entry} is outside code"));
     }
     // Follow branches and the instruction after a call. The callee is a
@@ -55,8 +65,8 @@ pub(super) fn build_region(
     while cursor < pending.len() {
         let index = pending[cursor];
         cursor += 1;
-        for succ in decode_at(code, bank, index, &HashSet::new(), covered).successors() {
-            if succ < code.len()
+        for succ in decode_at(fetch, len, bank, index, &HashSet::new(), covered).successors() {
+            if succ < len
                 && !covered.get(succ).copied().unwrap_or(false)
                 && leaders.len() < MAX_BLOCKS
                 && leaders.insert(succ)
@@ -69,7 +79,7 @@ pub(super) fn build_region(
     let mut order: Vec<usize> = leaders.iter().copied().collect();
     order.sort_unstable();
     for index in order {
-        let mut block = decode_at(code, bank, index, &leaders, covered);
+        let mut block = decode_at(fetch, len, bank, index, &leaders, covered);
         block.edge = block.edge.resolve(&leaders);
         blocks.push(block);
     }
@@ -118,7 +128,8 @@ impl Dest {
 }
 
 fn decode_at(
-    code: &[Instr],
+    fetch: &mut impl FnMut(usize) -> Instr,
+    len: usize,
     bank: u16,
     start: usize,
     stop: &HashSet<usize>,
@@ -128,7 +139,7 @@ fn decode_at(
     let mut index = start;
     let mut instrs = Vec::new();
     loop {
-        if index >= code.len() {
+        if index >= len {
             return GuestBlock {
                 index: start,
                 instrs,
@@ -149,9 +160,9 @@ fn decode_at(
                 edge: Edge::Next(Dest::Stay(index)),
             };
         }
-        let inst = code[index];
+        let inst = fetch(index);
         instrs.push(inst);
-        if let Some(edge) = control_edge(inst, bank, pc, pcb, code.len()) {
+        if let Some(edge) = control_edge(inst, bank, pc, pcb, len) {
             return GuestBlock {
                 index: start,
                 instrs,
@@ -168,7 +179,7 @@ fn decode_at(
         if instrs.len() >= MAX_BLOCK {
             let (next_pc, next_pcb) = step_pc(bank, pc, pcb);
             let next = linear(bank, next_pc, next_pcb);
-            let dest = if next < code.len() {
+            let dest = if next < len {
                 Dest::Stay(next)
             } else {
                 Dest::Leave

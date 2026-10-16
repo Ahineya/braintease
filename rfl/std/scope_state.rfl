@@ -1,0 +1,68 @@
+// Internal task storage. Typed state is accessed only while its lifetime gate is
+// live. Exported support functions are shared by scope and JoinHandle modules.
+import { Future, Poll, Pending, Ready, invalid_poll } from "std/future";
+import { Context, Waker } from "std/task";
+import { replace } from "std/mem";
+
+export type JoinError = TaskCancelled;
+export type JoinState<T> = Waiting(Option<Waker>) | Finished(T) | Aborted | Collected;
+export type JoinHandle<T> = HandleLive(ErasedOwner,fn(Context)->Poll<Result<T,JoinError>>) | HandleDone;
+
+export const ENTER:u16=0;
+export const LEAVE:u16=1;
+export const COMPLETE:u16=2;
+export const REQUEST_CANCEL:u16=3;
+export const DESTROY:u16=4;
+export const CANCEL_REQUESTED:u16=5;
+// A stale copied callback retains this gate, not a dereferenceable dangling view.
+export fn task_gate()->fn(u16)->bool {
+    let mut live=true;let mut busy=false;let mut requested=false;
+    fn(op:u16)=>{
+        if (op==REQUEST_CANCEL) {requested=true;return true;}
+        if (op==CANCEL_REQUESTED) {return requested;}
+        if (op==ENTER) {
+            if (!live || requested) {return false;}
+            if (busy) {invalid_poll();return false;}
+            busy=true;return true;
+        }
+        if (op==LEAVE) {busy=false;return true;}
+        if (op==COMPLETE) {busy=false;live=false;return true;}
+        if (op==DESTROY) {
+            if (busy) {invalid_poll();return false;}
+            let was=live;live=false;return was;
+        }
+        false
+    }
+}
+export fn result_gate()->fn(bool)->bool {
+    let mut live=true;
+    fn(close:bool)=>{if (close) {live=false;}live}
+}
+export fn abort_state<T>(state:&mut JoinState<T>)->Option<Waker> {
+    match replace(state,Aborted) {
+        Waiting(w)=>w,
+        other=>{*state=move(other);None},
+    }
+}
+export fn finish_state<T>(state:&mut JoinState<T>,value:T)->Option<Waker> {
+    match replace(state,Finished(move(value))) {
+        Waiting(w)=>w,
+        _=>{invalid_poll();None},
+    }
+}
+impl<T> Future for JoinHandle<T> {
+    type Output=Result<T,JoinError>;
+    fn poll(&mut self,cx:&mut Context)->Poll<Result<T,JoinError>> {
+        match replace(self,HandleDone) {
+            HandleLive(owner,poll)=>{
+                let owner=move(owner);
+                match poll(*cx) {
+                    Pending=>{*self=HandleLive(move(owner),poll);Pending},
+                    Ready(value)=>Ready(move(value)),
+                }
+            },
+            HandleDone=>{invalid_poll();Pending},
+        }
+    }
+    fn cancel(&mut self) {drop(replace(self,HandleDone));}
+}

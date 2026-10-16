@@ -173,6 +173,13 @@ the Clang/GCC reference for validation.
 
 ## Validation
 
+An opt-in cooperative process prototype is available through
+`<native_process.h>`. It saves live continuation values, uses copy-on-write
+private pages, and provides an explicit shared kernel arena. Programs without
+these service calls keep flat RAM and ordinary native calls. See
+[native processes](PROCESSES.md) for standalone examples, the API, limits and
+tests; these do not require the FUZIX port.
+
 Build the release runtime first, then:
 
 ```sh

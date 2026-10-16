@@ -11,6 +11,15 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         self.note_sig(builtin_signature(callee).unwrap().to_string());
+        if matches!(callee, "__erase_owned" | "__borrow_raw") {
+            return self.check_storage_builtin(span, callee, args, expected);
+        }
+        if callee == "__replace_value" {
+            return self.check_replace(span, args, expected);
+        }
+        if matches!(callee, "owned" | "move" | "drop") {
+            return self.check_resource_builtin(span, callee, args, expected);
+        }
         if callee == "from_char" || callee == "from_byte" {
             if args.len() != 1 {
                 return Err(CompileError::at(

@@ -359,12 +359,13 @@ impl BfDevices {
                 if self.devices.is_input_request(address, value) {
                     self.poll_device_input()?;
                 }
-                if let Some(frame) = self.devices.write_register_with_memory(
+                if let Some(frame) = self.devices.write_register_with_storage(
                     address,
                     value,
                     memory,
                     self.bank_size,
                     self.display_mode,
+                    self.storage.as_mut(),
                 ) {
                     self.display
                         .present(frame.width, frame.height, frame.pixels)?;

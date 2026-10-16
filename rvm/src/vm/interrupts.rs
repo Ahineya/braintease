@@ -11,6 +11,8 @@ pub(super) struct TrapFrame {
     pub sb: u16,
     pub sp: u16,
     pub fp: u16,
+    pub user: bool,
+    pub exception: bool,
 }
 
 #[cfg(test)]
@@ -177,6 +179,23 @@ impl VM {
     pub(super) fn read_csr(&self, csr: u16) -> Result<u16, String> {
         let frame = self.irq_frame;
         Ok(match csr {
+            CSR_MMU_VERSION => 1,
+            CSR_MMU_FEATURES => 3,
+            CSR_MMU_CONTROL => u16::from(self.mmu.enabled) | (u16::from(self.mmu.window) << 1),
+            CSR_DROOT_BANK => self.mmu.data_root.0,
+            CSR_DROOT_OFF => self.mmu.data_root.1,
+            CSR_IROOT_BANK => self.mmu.code_root.0,
+            CSR_IROOT_OFF => self.mmu.code_root.1,
+            CSR_WINDOW_LO => self.mmu.window_lo,
+            CSR_WINDOW_HI => self.mmu.window_hi,
+            CSR_TRAP_BANK => self.mmu.vector.0,
+            CSR_TRAP_OFF => self.mmu.vector.1,
+            CSR_TRAP_CAUSE => self.mmu.cause,
+            CSR_FAULT_BANK => self.mmu.address.0,
+            CSR_FAULT_OFF => self.mmu.address.1,
+            CSR_SAVED_MODE => u16::from(frame.is_some_and(|f| f.user)),
+            CSR_MODE => u16::from(self.mmu.user),
+            CSR_MMU_FLUSH => 0,
             CSR_EPC => frame.map_or(0, |f| f.pc),
             CSR_EPCB => frame.map_or(0, |f| f.pcb),
             CSR_SAVED_ENABLE => frame.map_or(0, |f| f.enable),
@@ -195,6 +214,49 @@ impl VM {
 
     pub(super) fn write_csr(&mut self, csr: u16, value: u16) -> Result<(), String> {
         match csr {
+            CSR_MMU_CONTROL => {
+                if value & !3 != 0 {
+                    return Err("invalid MMU control".into());
+                }
+                self.mmu.enabled = value & 1 != 0;
+                self.mmu.window = value & 2 != 0;
+                self.mmu.flush();
+            }
+            CSR_DROOT_BANK | CSR_DROOT_OFF | CSR_IROOT_BANK | CSR_IROOT_OFF | CSR_WINDOW_LO
+            | CSR_WINDOW_HI | CSR_TRAP_BANK | CSR_TRAP_OFF => {
+                match csr {
+                    CSR_DROOT_BANK => self.mmu.data_root.0 = value,
+                    CSR_DROOT_OFF => self.mmu.data_root.1 = value,
+                    CSR_IROOT_BANK => self.mmu.code_root.0 = value,
+                    CSR_IROOT_OFF => self.mmu.code_root.1 = value,
+                    CSR_WINDOW_LO => self.mmu.window_lo = value,
+                    CSR_WINDOW_HI => self.mmu.window_hi = value,
+                    CSR_TRAP_BANK => self.mmu.vector.0 = value,
+                    CSR_TRAP_OFF => self.mmu.vector.1 = value,
+                    _ => unreachable!(),
+                }
+                self.mmu.flush();
+            }
+            CSR_SAVED_MODE => {
+                if value > 1 || (value == 1 && !self.mmu.enabled) {
+                    return Err("invalid saved CPU mode".into());
+                }
+                self.irq_frame
+                    .as_mut()
+                    .ok_or("saved mode outside trap")?
+                    .user = value == 1;
+            }
+            CSR_MMU_FLUSH => {
+                if value & !3 != 0 {
+                    return Err("invalid MMU flush".into());
+                }
+                if value != 0 {
+                    self.mmu.flush();
+                }
+                if value & 2 != 0 {
+                    self.jit_flush();
+                }
+            }
             CSR_EPC | CSR_EPCB | CSR_SAVED_ENABLE | CSR_SAVED_SB | CSR_SAVED_SP | CSR_SAVED_FP => {
                 let frame = self
                     .irq_frame
@@ -253,8 +315,12 @@ impl VM {
     }
 
     pub(super) fn interrupt_return(&mut self) -> Result<(), String> {
-        let frame = self.irq_frame.take().ok_or("IRET outside an interrupt")?;
-        if !self.irq_acknowledged {
+        let frame = self.irq_frame.ok_or("IRET outside an interrupt")?;
+        if frame.user && !self.mmu.enabled {
+            return Err(self.trap_error("IRET to user mode requires the MMU".into()));
+        }
+        self.irq_frame = None;
+        if !frame.exception && !self.irq_acknowledged {
             self.irq_status |= 1 << (self.irq_cause - 1);
         }
         self.registers[Register::Pc as usize] = frame.pc;
@@ -263,6 +329,8 @@ impl VM {
         self.registers[Register::Sp as usize] = frame.sp;
         self.registers[Register::Fp as usize] = frame.fp;
         self.irq_enable = frame.enable;
+        self.mmu.user = frame.user;
+        self.mmu.cause = 0;
         self.irq_busy = 0;
         self.irq_cause = 0;
         self.irq_acknowledged = false;

@@ -6,6 +6,7 @@ mod instruction;
 mod interrupts;
 mod jit;
 mod mmio;
+mod protection;
 mod state;
 mod storage;
 mod terminal;
@@ -23,6 +24,8 @@ use std::collections::{HashMap, VecDeque};
 
 /// The Ripple Virtual Machine
 pub struct VM {
+    pub mmu: crate::mmu::Mmu,
+    mmu_pending: Option<crate::mmu::Fault>,
     pub devices: crate::devices::DeviceState,
     pub executed_instructions: u64,
     pub presented_frames: u64,
@@ -162,6 +165,8 @@ impl VM {
 
         VM {
             devices: crate::devices::DeviceState::default(),
+            mmu: crate::mmu::Mmu::default(),
+            mmu_pending: None,
             executed_instructions: 0,
             presented_frames: 0,
             device_error: None,
@@ -429,9 +434,12 @@ impl VM {
     /// The caller owns host polling and tick/capture/limit policies. A pending
     /// tick or device error leaves the VM untouched, as do HALT and breakpoints.
     pub fn run_batch(&mut self, budget: u64) -> Result<u64, String> {
-        if budget == 0 { return Ok(0); }
+        if budget == 0 {
+            return Ok(0);
+        }
         if matches!(self.state, VMState::Running)
-            && !self.devices.has_pending_tick() && self.device_error.is_none()
+            && !self.devices.has_pending_tick()
+            && self.device_error.is_none()
         {
             self.update_irq_timer();
         }
@@ -469,10 +477,21 @@ impl VM {
     // PC/PCB implementation. The reference specialization omits batch checks.
     #[inline]
     fn execute_one<const BATCH: bool>(&mut self) -> Result<bool, String> {
+        self.mmu_pending = None;
         // Calculate instruction address
         let pc = self.registers[Register::Pc as usize];
         let pcb = self.registers[Register::Pcb as usize];
-        let instr_idx = (pcb as usize * self.bank_size as usize) + pc as usize;
+        let instr_idx = match self.instruction_index() {
+            Ok(index) => index,
+            Err(error) => {
+                if let Some(fault) = self.mmu_pending.take() {
+                    self.exception(fault, false)?;
+                    self.executed_instructions += 1;
+                    return Ok(true);
+                }
+                return Err(error);
+            }
+        };
 
         if instr_idx >= self.instructions.len() {
             self.state = VMState::Error(format!(
@@ -496,7 +515,7 @@ impl VM {
         // Inspect STORE operands before execution/PC advancement: PC and PCB
         // themselves are legal source registers.
         let boundary = BATCH
-            && (matches!(instr.opcode, 0x00 | 0x19 | 0x22..=0x24)
+            && (matches!(instr.opcode, 0x00 | 0x19 | 0x22..=0x26)
                 || (instr.opcode == 0x12
                     && instr.word1 < 32
                     && instr.word2 < 32
@@ -512,7 +531,30 @@ impl VM {
         }
 
         // Execute instruction
-        self.execute_instruction(instr)?;
+        if self.mmu.user
+            && (matches!(instr.opcode, 0x00 | 0x19 | 0x21 | 0x22 | 0x24 | 0x26)
+                || (instr.opcode == 0x23
+                    && !matches!(instr.word2, CSR_MMU_VERSION | CSR_MMU_FEATURES | CSR_MODE)))
+        {
+            self.privilege_fault()?;
+            self.executed_instructions += 1;
+            return Ok(true);
+        }
+        if let Err(error) = self.execute_instruction(instr) {
+            let fault = self.mmu_pending.take().or_else(|| {
+                self.mmu.user.then_some(crate::mmu::Fault {
+                    cause: crate::mmu::CAUSE_ILLEGAL,
+                    bank: pcb,
+                    offset: pc,
+                })
+            });
+            if let Some(fault) = fault {
+                self.exception(fault, false)?;
+                self.executed_instructions += 1;
+                return Ok(true);
+            }
+            return Err(error);
+        }
         self.executed_instructions += 1;
 
         // Increment PC unless instruction set the skip flag
@@ -566,7 +608,11 @@ impl VM {
             sb: self.registers[Register::Sb as usize],
             sp: self.registers[Register::Sp as usize],
             fp: self.registers[Register::Fp as usize],
+            user: self.mmu.user,
+            exception: false,
         });
+        self.mmu.user = false;
+        self.mmu.cause = 0;
         self.sync_irq_memory();
 
         if self.irq_stack_top != 0 {
@@ -608,17 +654,21 @@ impl VM {
     pub fn get_current_instruction(&self) -> Option<Instr> {
         let pc = self.registers[Register::Pc as usize];
         let pcb = self.registers[Register::Pcb as usize];
-        let idx = (pcb as usize * self.bank_size as usize) + pc as usize;
-
-        if idx < self.instructions.len() {
-            Some(self.instructions[idx])
-        } else {
-            None
-        }
+        let idx = self.mmu.peek(
+            &self.memory,
+            self.bank_size,
+            pcb,
+            pc,
+            crate::mmu::Access::Execute,
+            self.instructions.len(),
+        )?;
+        self.instructions.get(idx).copied()
     }
 
     pub fn reset(&mut self) {
         self.devices.reset();
+        self.mmu = crate::mmu::Mmu::default();
+        self.mmu_pending = None;
         self.executed_instructions = 0;
         self.presented_frames = 0;
         self.device_error = None;

@@ -13,6 +13,11 @@ pub const MAGIC_WORD: usize = 80;
 pub const EXTENT_BANK_WORD: usize = 81;
 pub const EXTENT_OFF_WORD: usize = 82;
 pub const EXTENT_FULL_WORD: usize = 87;
+// Published by new CPUs for host bulk code uploads. Older images leave these
+// zero and continue to use STORC through the guest fallback.
+pub const CAPACITY_BANK_WORD: usize = 93;
+pub const CAPACITY_OFF_WORD: usize = 94;
+pub const CAPACITY_FULL_WORD: usize = 95;
 pub const MAGIC: u16 = 0xbfc2;
 const W1: usize = cell(58);
 const W2: usize = cell(59);
@@ -134,7 +139,12 @@ pub(super) fn capacity(instructions: usize, bank: u16, banks: Option<u16>) -> us
         .min(64 * 65536)
         .min(usize::from(bank) * 65536)
 }
-pub(super) fn definitions(bank: u16, banks: Option<u16>, instructions: usize, code_banks: u16) -> String {
+pub(super) fn definitions(
+    bank: u16,
+    banks: Option<u16>,
+    instructions: usize,
+    code_banks: u16,
+) -> String {
     let cap = capacity(instructions, bank, banks.or(Some(16)))
         .max(usize::from(code_banks) * usize::from(bank));
     let mut definitions = String::new();
@@ -153,6 +163,12 @@ pub(super) fn definitions(bank: u16, banks: Option<u16>, instructions: usize, co
     boot.set(
         cell(EXTENT_OFF_WORD),
         (instructions % usize::from(bank)) as u16,
+    );
+    boot.set(cell(CAPACITY_BANK_WORD), (cap / usize::from(bank)) as u16);
+    boot.set(cell(CAPACITY_OFF_WORD), (cap % usize::from(bank)) as u16);
+    boot.set(
+        cell(CAPACITY_FULL_WORD),
+        u16::from(cap / usize::from(bank) == 65536),
     );
     emit("cpu_boot", boot);
     let mut disabled = Bf::default();

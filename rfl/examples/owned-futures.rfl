@@ -1,0 +1,60 @@
+// Unique owners cancel abandoned work, including work never polled.
+import { Future, Poll, CallbackFuture, Pending, Ready, poll_fn } from "std/future";
+import { Context } from "std/task";
+import { Reactor, block_on_with_budget } from "std/executor";
+
+fn probe(ready: bool) -> Owned<CallbackFuture<i16>> {
+    let future = poll_fn<i16>(fn(cx: Context) => {
+        println("poll");
+        if (ready) { Ready(42) } else { Pending }
+    }, fn() => { println("cancel"); });
+    // poll_fn's terminal state makes cancel inert after completion or a prior
+    // cancellation. The owner also covers dropping a never-polled future.
+    owned(future, fn(future: &mut CallbackFuture<i16>) => { future.cancel(); })
+}
+
+struct Parent { child: Owned<CallbackFuture<i16>> }
+impl Future for Parent {
+    type Output = i16;
+    fn poll(&mut self, cx: &mut Context) -> Poll<i16> {
+        let child = self.child.borrow_mut();
+        child.poll(cx)
+    }
+    fn cancel(&mut self) {
+        let child = self.child.borrow_mut();
+        child.cancel();
+    }
+}
+
+struct Clock { ticks: u32 }
+impl Reactor for Clock {
+    fn now(&self) -> u32 { self.ticks }
+    fn turn(&mut self, wait: Option<u32>) -> bool {
+        self.ticks += 1;
+        true
+    }
+}
+
+fn main() -> i16 {
+    println("never-polled owner:");
+    { let never = probe(false); }
+
+    let mut clock = Clock { ticks: 0 };
+    println("pending parent:");
+    {
+        let child = probe(false);
+        let mut parent = owned(Parent { child: move(child) },
+            fn(parent: &mut Parent) => { parent.cancel(); });
+        block_on_with_budget(parent.borrow_mut(), &mut clock, 2);
+    }
+
+    println("ready owner:");
+    {
+        let mut done = probe(true);
+        match block_on_with_budget(done.borrow_mut(), &mut clock, 1) {
+            Ok(value) => { println(value); },
+            Err(_) => { return 1; },
+        }
+    }
+    0
+}

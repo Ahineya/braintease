@@ -137,10 +137,13 @@ pub(super) fn walk_expr(
         | ExprKind::CStr(_)
         | ExprKind::Char(_)
         | ExprKind::Name(_) => {}
-        ExprKind::Unary { expr, .. }
-        | ExprKind::Try(expr)
-        | ExprKind::Deref(expr)
-        | ExprKind::Borrow { expr, .. } => {
+        ExprKind::Unary { expr, .. } | ExprKind::Try(expr) | ExprKind::Deref(expr) => {
+            walk_expr(expr, scopes, depth, found);
+        }
+        ExprKind::Borrow { mutable, expr, .. } => {
+            if *mutable {
+                note_place_assign(expr, scopes, depth, found);
+            }
             walk_expr(expr, scopes, depth, found);
         }
         ExprKind::Binary { lhs, rhs, .. }
@@ -227,5 +230,20 @@ pub(super) fn walk_expr(
             walk_expr(start, scopes, depth, found);
             walk_expr(end, scopes, depth, found);
         }
+    }
+}
+
+fn note_place_assign(
+    expr: &Expr,
+    scopes: &[HashMap<String, (usize, bool, u32)>],
+    depth: u32,
+    found: &mut HashSet<usize>,
+) {
+    match &expr.kind {
+        ExprKind::Name(name) => note_assign(scopes, name, depth, found),
+        ExprKind::Field { base, .. } | ExprKind::Index { base, .. } => {
+            note_place_assign(base, scopes, depth, found)
+        }
+        _ => {}
     }
 }

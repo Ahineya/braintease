@@ -162,6 +162,7 @@ static void complete(int again) {
         complete_dir(dirname_buf, base, 0, dirs && !redir);
     } else if (wascommand) {
         for (i = 0; commands[i].sysnam; i++) candidate(commands[i].sysnam, base, 0);
+        candidate("jobs", base, 0); candidate("fg", base, 0); candidate("bg", base, 0);
         candidate("help", base, 0); candidate("sync", base, 0); candidate("shutdown", base, 0);
         path = pathnod.namval ? pathnod.namval : "/bin";
         do {

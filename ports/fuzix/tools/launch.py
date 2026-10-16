@@ -72,7 +72,9 @@ def host_command(args, image):
         if '--guest-ctrl-c' not in vm_args:
             vm_args = ['--guest-ctrl-c', *vm_args]
         if not any(v in ('--memory', '-m') or v.startswith('--memory=') for v in vm_args):
-            vm_args = ['--memory', '5120000', *vm_args]
+            profile = Path(args.build) / '.mmu'
+            protected = profile.exists() and profile.read_text().strip() == '1'
+            vm_args = ['--memory', '16384000' if protected else '5120000', *vm_args]
     else:
         program = 'bios.bf'
         # The export declares both RAM and code reservation. Do not impose RBF's

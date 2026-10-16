@@ -5,12 +5,14 @@ This folder is the **current** architectural specification for the Ripple VM, as
 | Document | Contents |
 |----------|----------|
 | [overview.md](overview.md) | 16-bit cells, banks, instruction vs data memory, toolchain |
+| [code-banks.md](code-banks.md) | Functions spanning code banks, branch relaxation and relocation |
 | [registers.md](registers.md) | 32-register file and symbolic names |
 | [isa.md](isa.md) | Encoding, opcodes, CALL/RET, HALT, LOAD/STORE pitfall |
 | [abi.md](abi.md) | C data model, calling convention, stack frames |
 | [memory.md](memory.md) | Bank map, fat pointers, GEP, heap |
 | [mmio.md](mmio.md) | MMIO header summary; full device spec in `rvm/mmio.md` |
 | [stacks-and-interrupts.md](stacks-and-interrupts.md) | Growing C stacks, CPU trap state, timer, IRET |
+| [mmu.md](mmu.md) | Optional translation, user mode, faults, page tables and COW |
 | [ros.md](ros.md) | rOS boot, SYS1/RXE1, banks, INT21, runtime split |
 
 Related (not duplicated here):

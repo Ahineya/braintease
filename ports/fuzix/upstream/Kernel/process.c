@@ -323,7 +323,7 @@ void makeproc(register ptptr p, register u_data *u)
 	p->p_sig[1].s_held = pp->p_sig[1].s_held;
 	p->p_tty = pp->p_tty;
 	p->p_uid = pp->p_uid;
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 	p->p_session = pp->p_session;
 #endif
 	/* Set default priority */
@@ -709,8 +709,12 @@ static uint_fast8_t chksigset(struct sigbits *sb, uint_fast8_t b)
 				/* Can we ever end up here not in READY/RUNNING ? */
 				/* Yes: we could be in P_SLEEP on a close race
 				   with do_psleep() */
-				udata.u_ptab->p_status = P_STOPPED;
-				udata.u_ptab->p_event = j + (b << 4);
+                /* switchout has already uncharged a sleeping task. */
+                if (udata.u_ptab->p_status > P_READY) nready++;
+                udata.u_ptab->p_status = P_STOPPED;
+                udata.u_ptab->p_event = j + (b << 4);
+                ssig(udata.u_ptab->p_pptr, SIGCHLD);
+                wakeup(udata.u_ptab->p_pptr);
 				sb->s_pending &= ~m;	// unset the bit
 				/* Defer if we are in interrupt state, we
 				   will pick up the reschedule instead */
@@ -776,6 +780,8 @@ uint_fast8_t chksigs(void)
 	   Cursig being set means we've already worked out what to do.
 	 */
 rescan:
+    /* A stop in the upper signal set may resume here after SIGCONT. */
+    sb = udata.u_ptab->p_sig;
 	if (udata.u_cursig || !(udata.u_ptab->p_flags & PFL_CHKSIG) || udata.u_ptab->p_status == P_STOPPED)
 		return udata.u_cursig;
 
@@ -816,7 +822,7 @@ void ssig(register ptptr proc, uint_fast8_t sig)
 	if (proc->p_status != P_EMPTY) {	/* Presumably was killed just now */
 		proc->p_flags |= PFL_CHKSIG;
                 /* SIGCONT has an unblockable effect */
-		if (sig == SIGCONT) {
+		if (sig == SIGCONT || sig == SIGKILL) {
 			/* You can never send yourself a SIGCONT when you are stopped */
 			if (proc->p_status == P_STOPPED) {
 			        proc->p_status = P_READY;
@@ -977,7 +983,12 @@ void doexit(uint16_t val)
 		}
 		/* Send SIGHUP to any pgrp members and remove
 		   them from our pgrp */
+#ifdef CONFIG_JOB_CONTROL
+                if (udata.u_ptab->p_session == udata.u_ptab->p_pid &&
+                    p->p_session == udata.u_ptab->p_session) {
+#else
                 if (p->p_pgrp == udata.u_ptab->p_pid) {
+#endif
 			p->p_pgrp = 0;
 			ssig(p, SIGHUP);
 			ssig(p, SIGCONT);

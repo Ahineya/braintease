@@ -97,6 +97,11 @@ int fstat(int fd, struct stat *s) {
 }
 int dup(int fd) { return call(17, fd, 0, 0, 0); }
 pid_t getpid(void) { return call(18, 0, 0, 0, 0); }
+pid_t getpgrp(void) { return call(61, 0, 0, 0, 0); }
+int setpgid(pid_t p, pid_t g) { return call(77, p, g, 0, 0); }
+pid_t setsid(void) { return call(78, 0, 0, 0, 0); }
+pid_t getsid(pid_t p) { return call(79, p, 0, 0, 0); }
+pid_t setpgrp(void) { return setsid(); }
 pid_t getppid(void) { return call(19, 0, 0, 0, 0); }
 uid_t getuid(void) { return call(20, 0, 0, 0, 0); }
 mode_t umask(mode_t m) { return call(21, m, 0, 0, 0); }
@@ -259,3 +264,13 @@ int _time(__ktime_t *p, uint16_t clock) {
 }
 
 int raise(int sig) { return kill(getpid(), sig); }
+
+int tcgetpgrp(int fd) {
+    unsigned group;
+    if (ioctl(fd, 12, &group) < 0) return -1;
+    return group;
+}
+int tcsetpgrp(int fd, int group) {
+    unsigned g = group;
+    return ioctl(fd, 13, &g);
+}

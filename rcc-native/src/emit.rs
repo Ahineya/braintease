@@ -6,7 +6,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use rcc_ir::ir::{Function, Instruction as I, IrType, Value};
 use rcc_ir::BankTag;
 
-type PhiAssignments = BTreeMap<u32, Vec<(u32, Vec<(Value, u32)>)>>;
+pub(super) type PhiAssignments = BTreeMap<u32, Vec<(u32, Vec<(Value, u32)>)>>;
 
 pub(super) struct Cg<'a, 'b> {
     pub b: FunctionBuilder<'a>,
@@ -14,12 +14,12 @@ pub(super) struct Cg<'a, 'b> {
     pub context: ClValue,
     pub vars: BTreeMap<u32, Variable>,
     pub types: BTreeMap<u32, IrType>,
-    blocks: BTreeMap<u32, Block>,
-    phis: PhiAssignments,
+    pub(super) blocks: BTreeMap<u32, Block>,
+    pub(super) phis: PhiAssignments,
     pub(super) frame: ClValue,
     pub(super) mark: ClValue,
     pub(super) allocas: BTreeMap<u32, u64>,
-    edges: Vec<(Block, u32, u32)>,
+    pub(super) edges: Vec<(Block, u32, u32)>,
     pub(super) va_input: Option<ClValue>,
     pub(super) var_area: u64,
 }
@@ -98,7 +98,7 @@ impl Cg<'_, '_> {
         self.edges.push((edge, from, to));
         Ok(edge)
     }
-    fn emit_edges(&mut self) -> Result<(), String> {
+    pub(super) fn emit_edges(&mut self) -> Result<(), String> {
         for (edge, from, to) in std::mem::take(&mut self.edges) {
             self.b.switch_to_block(edge);
             let phis = self.phis[&to].clone();
@@ -120,6 +120,9 @@ impl Cg<'_, '_> {
 }
 
 pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Result<(), String> {
+    if compiler.resumable {
+        return super::process::emit_function(compiler, function);
+    }
     let mut context = compiler.object.make_context();
     context.func.signature =
         compiler.signature(function.parameters.len() + usize::from(function.is_vararg));

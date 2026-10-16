@@ -12,12 +12,14 @@ impl<'a> Checker<'a> {
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
+        let receiver_mark = self.borrows.len();
         let recv = self.check_expr(receiver, None)?;
         if let Some(trait_name) = self
             .trait_dispatch
             .get(&(span, self.current_span.end, method.into()))
             .cloned()
         {
+            self.borrows.truncate(receiver_mark);
             return self.check_trait_method(
                 span,
                 &trait_name,
@@ -27,6 +29,22 @@ impl<'a> Checker<'a> {
                 args,
                 expected,
             );
+        }
+        if let Ty::Owned(id) = self.referent(recv.ty) {
+            if method == "into_inner" {
+                return self.check_into_inner(
+                    span,
+                    recv,
+                    args,
+                    self.owner_elems[id as usize],
+                    expected,
+                );
+            }
+            if matches!(method, "borrow" | "borrow_mut") {
+                self.borrows.truncate(receiver_mark);
+                return self
+                    .check_owner_borrow(span, receiver, recv.ty, id, method, args, expected);
+            }
         }
         if let Ty::Ptr(_) = recv.ty {
             return self.check_ptr_method(span, recv, method, args, expected);
@@ -55,21 +73,26 @@ impl<'a> Checker<'a> {
                 return self.check_vec_method(span, recv, method, args, elem, expected);
             }
         }
-        if let Ty::Slice(id) = recv.ty {
+        if let Ty::Slice(id) = place {
             let elem = self.slice_elems[id as usize];
             if matches!(method, "len" | "is_empty" | "get" | "to_vec") {
+                let recv = self.collection_value(recv);
                 return self.check_view_method(span, recv, method, args, elem, expected);
             }
             if matches!(method, "push" | "pop" | "clear") {
                 return Err(CompileError::at(self.source, span, "slices are read-only"));
             }
         }
-        if let Ty::Array { id, .. } = recv.ty {
+        if let Ty::Array { id, .. } = place {
             let elem = self.arrays[id as usize].elem;
             if matches!(method, "len" | "is_empty" | "get" | "to_vec") {
+                let recv = self.collection_value(recv);
                 return self.check_view_method(span, recv, method, args, elem, expected);
             }
         }
+        // User methods check their adapted receiver as the first argument.
+        // Discard the discovery pass's loans before that actual check.
+        self.borrows.truncate(receiver_mark);
         if let Some(key) = self.type_key(recv.ty) {
             if let Some(info) = self
                 .methods
@@ -232,6 +255,8 @@ impl<'a> Checker<'a> {
         Some(match ty {
             Ty::Adt(id) => self.schemas[self.adts[id as usize].schema].name.clone(),
             Ty::Vec(_) => "Vec".to_string(),
+            Ty::Owned(_) => "Owned".to_string(),
+            Ty::ErasedOwner => "ErasedOwner".to_string(),
             Ty::Slice(_) => "Slice".to_string(),
             Ty::I8 => "i8".to_string(),
             Ty::U8 => "u8".to_string(),

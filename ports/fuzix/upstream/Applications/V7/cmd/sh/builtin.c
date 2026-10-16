@@ -4,6 +4,7 @@
 
 int builtin(int argn, STRING *cmd)
 {
+    if (jobs_builtin(argn, cmd)) return 1;
 	if (eq(cmd[0], "shutdown")) {
         uadmin(1, 0, NULL);
         error("shutdown failed");
@@ -14,7 +15,7 @@ int builtin(int argn, STRING *cmd)
         return 1;
     }
     if (eq(cmd[0], "help")) {
-        prs("Shell: cd, set, export, read, eval, trap, wait, exit, shutdown.\n");
+        prs("Shell: cd, set, export, read, eval, trap, wait, jobs, fg, bg, exit, shutdown.\n");
         prs("Scripts: if/for/while/case, pipes, redirection, globbing, `commands`.\n");
         return 1;
     }

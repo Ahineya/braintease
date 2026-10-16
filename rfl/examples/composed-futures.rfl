@@ -1,0 +1,44 @@
+// Reusable owned futures; the deterministic clock makes this example immediate.
+import { Future, sleep } from "std/future";
+import { ready_owned } from "std/future_owned";
+import { join, race, timeout, First, Second, Elapsed } from "std/combinators";
+import { Reactor, block_on_with_budget } from "std/executor";
+
+struct Clock { milliseconds:u32 }
+impl Reactor for Clock {
+    fn now(&self)->u32 {self.milliseconds}
+    fn turn(&mut self, wait:Option<u32>)->bool {
+        match wait {
+            Some(delay)=>{self.milliseconds+=delay;},
+            None=>{self.milliseconds+=1;},
+        }
+        true
+    }
+}
+
+fn main()->i16 {
+    let mut clock=Clock{milliseconds:100};
+    let timer=match sleep(25) {Ok(t)=>t,Err(_)=>{return 1;}};
+    let mut greeting=join(ready_owned("hello from composed futures"),timer);
+    match block_on_with_budget(&mut greeting,&mut clock,4) {
+        Ok((text,_))=>println(text),
+        Err(_)=>{return 2;},
+    }
+    println(clock.milliseconds);
+
+    // A tie selects the first result, dropping the unpolled losing resource.
+    let loser=owned("loser",fn(text:&mut String)=>{println("loser released");});
+    let mut competition=race(ready_owned(42),ready_owned(move(loser)));
+    match block_on_with_budget(&mut competition,&mut clock,1) {
+        Ok(First(number))=>println(number),
+        _=>{return 3;},
+    }
+
+    let slow=match sleep(100) {Ok(t)=>t,Err(_)=>{return 4;}};
+    let mut bounded=match timeout(slow,5) {Ok(f)=>move(f),Err(_)=>{return 5;}};
+    match block_on_with_budget(&mut bounded,&mut clock,4) {
+        Ok(Err(Elapsed))=>println("timed out; pending work cancelled"),
+        _=>{return 6;},
+    }
+    0
+}

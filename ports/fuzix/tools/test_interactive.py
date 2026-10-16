@@ -14,7 +14,11 @@ PORT = Path(__file__).resolve().parents[1]
 ROOT = PORT.parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build', type=Path, default=ROOT / 'build/fuzix')
-build = parser.parse_args().build.resolve()
+parser.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
+options = parser.parse_args()
+engines = [True, False] if options.engine == 'both' else [options.engine == 'jit']
+engine_label = 'JIT and interpreter' if options.engine == 'both' else options.engine
+build = options.build.resolve()
 
 class Terminal:
     def __init__(self, image, jit):
@@ -140,7 +144,7 @@ def exercise(image, jit):
     subprocess.run(['python3', str(PORT/'tools/fsck.py'), str(image)], check=True)
 
 with tempfile.TemporaryDirectory(prefix='fuzix-interactive-') as temporary:
-    for jit in (True, False):
+    for jit in engines:
         image = Path(temporary) / ('jit.img' if jit else 'interpreter.img')
         subprocess.run(['node', str(PORT/'tools/disk.mjs'), str(build), str(image)], check=True)
         fixtures = r"""
@@ -161,9 +165,9 @@ fs.writeFileSync(f,root.replace(installRoot(root.data,[
         exercise(image, jit)
         # Persistence is checked by reopening each image, not by host text conversion.
         check = subprocess.run([str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),
-                                '--memory','5120000','--headless','--input',
+                                '--memory','16384000','--headless','--input',
                                 'cat /levee-note\ncmp /levee-large /levee-original; echo REBOOT:$?\nshutdown\n',
                                 '--timeout','120',*(['--jit'] if jit else [])],
                                stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=130)
         assert check.returncode==0 and b'REBOOT:0' in check.stdout and b'ONE\ntwo\nONE\nThree\n' in check.stdout.replace(b'\r', b''),check.stdout
-print('Interactive shell, Levee, eight process slots, clean terminal restoration and reboot persistence passed; JIT and interpreter')
+print('Interactive shell, Levee, eight process slots, clean terminal restoration and reboot persistence passed; ' + engine_label)

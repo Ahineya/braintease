@@ -965,6 +965,17 @@ In all cases SIGQUIT is ignored by the shell.
 The remaining flags and arguments are described under the
 .B set
 command.
+.SH RIPPLE TERMINAL JOBS
+Interactive commands and pipelines use separate process groups.
+Ctrl-Z stops a foreground job; jobs lists jobs, fg resumes one with terminal
+ownership, and bg continues one in the background. Both resume commands accept
+an optional job number, such as fg %1. Background terminal reads stop with
+SIGTTIN; background writes stop when stty tostop is enabled. Fg restores a
+stopped program's terminal settings. The shell restores its own settings on
+stop or abnormal termination, while successful stty changes persist.
+.PP
+These builtins require an interactive controlling terminal. See jobs(1) for
+status and wait behavior, and ptysh(1) for independent terminal sessions.
 .SH FILES
 .RB $HOME/ . \^profile
 .br

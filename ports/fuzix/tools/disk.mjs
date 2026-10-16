@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {fatFile} from './fat.mjs';
 import {installRoot, growRoot} from './install.mjs';
 import {manualFiles} from './manuals.mjs';
+import {sokobanFiles} from './sokoban.mjs';
 import {
   fat16Image,
   updateFat16Image
@@ -204,7 +205,7 @@ export function seedNames(build) {
 }
 export function buildDisk(build, filename, fresh = false, install = false) {
   const aliases = {vi: '/bin/levee', mv: '/bin/cp', ln: '/bin/cp',
-                   tcl: '/bin/picol', tclsh: '/bin/picol'};
+                   tcl: '/bin/picol', tclsh: '/bin/picol', sokoban: '/bin/sok'};
   // Switch aliases immediately after their target. This releases an older
   // shared executable before allocating the next large program during upgrades.
   const installedNames = seedNames(build), orderedNames = [];
@@ -231,7 +232,13 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          mode : 0o41777,
          data : Buffer.alloc(0)
        },
-       {name : '/dev/tty', mode : 0o20666, device : 0x201, data : Buffer.alloc(0)},
+       // Before job control, /dev/tty addressed the fixed console directly.
+       {name : '/dev/tty', mode : 0o20666, device : 0x200,
+        migrateDeviceFrom : 0x201, data : Buffer.alloc(0)},
+       ...Array.from({length: 4}, (_, i) => ([
+         {name: `/dev/ptyp${i}`, mode: 0o20600, device: 0x300 + i, data: Buffer.alloc(0)},
+         {name: `/dev/ttyp${i}`, mode: 0o20600, device: 0x202 + i, data: Buffer.alloc(0)}
+       ])).flat(),
        {name : '/dev/root', mode : 0o60600, device : 0, data : Buffer.alloc(0)},
        ...['null', 'zero', 'proc'].map((name, i) => ({
                                          name : `/dev/${name}`,
@@ -269,6 +276,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          name: `/usr/lib/${name}`, mode: 0o100644, preserve: true,
          data: fs.readFileSync(fileURLToPath(new URL(`../upstream/Applications/MWC/cmd/${name}`, import.meta.url)))
        })),
+       ...sokobanFiles(),
        ...manualFiles()];
   const kernel = {
     name : 'FUZIX.SYS',

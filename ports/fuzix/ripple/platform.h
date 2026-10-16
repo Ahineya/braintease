@@ -4,7 +4,7 @@
 #include <kernel.h>
 #define KERNEL_GP 3
 #define USER_GP 8
-#define USER_SB 9
+#include "mmu.h"
 #define BANK_CELLS 64000U
 struct ripple_context {
     unsigned sp, fp, sb, ra, rab, s0, s1, s2, s3;
@@ -23,6 +23,8 @@ extern void ripple_enter_user(void);
 extern void ripple_halt(void);
 extern void ripple_irq(void);
 extern void ripple_bank_copy(unsigned, unsigned);
+extern int ripple_copy(void *, const void *, usize_t);
+extern int ripple_zero(void *, usize_t);
 extern unsigned dmem_load(unsigned, unsigned);
 extern void dmem_store(unsigned, unsigned, unsigned);
 extern void imem_store(unsigned, unsigned, unsigned *);

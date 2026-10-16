@@ -80,6 +80,7 @@ void done(void)
 		exitval = status;
 		;
 	}
+	jobs_shutdown();
 	rmtemp(0);
 	if (getpid() == 1)
         uadmin(1, 0, NULL);

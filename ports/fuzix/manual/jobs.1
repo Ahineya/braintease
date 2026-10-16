@@ -1,0 +1,35 @@
+.TH JOBS 1
+.SH NAME
+jobs, fg, bg \- manage interactive shell jobs
+.SH SYNOPSIS
+.B jobs
+.br
+.B fg
+.RI [ %job ]
+.br
+.B bg
+.RI [ %job ]
+.SH DESCRIPTION
+These are builtins of the interactive Bourne shell. External commands,
+pipelines and background compound commands run in distinct process groups.
+Ctrl-C interrupts the foreground group. Ctrl-Z stops it and returns the
+terminal to the shell. Jobs lists tracked jobs and their process-group IDs.
+Fg hands the terminal back to a job and continues it; bg continues it while
+the shell retains the terminal. The default is the highest numbered active
+job. Select a job by the printed bracketed number, optionally prefixed by %.
+.PP
+A background job that reads its controlling terminal stops with SIGTTIN.
+Background writes are allowed unless stty tostop is enabled. Terminal-changing
+operations also honor foreground ownership. The shell ignores its own
+terminal stop signals and restores its terminal settings before each prompt.
+Fg restores the stopped job's terminal settings before resuming it.
+.PP
+Wait PID (or wait without arguments) can wait for background jobs without
+handing them the terminal. A pipeline reports its last command's status.
+The shell sends SIGHUP and SIGCONT to remaining jobs on exit.
+.PP
+Job control requires an interactive controlling terminal. Noninteractive
+scripts retain their historical process and wait behavior. Shell functions,
+modern substitution syntax, and the POSIX set -m interface are not provided.
+.SH SEE ALSO
+sh(1), kill(1), ps(1), ptysh(1)

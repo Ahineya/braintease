@@ -116,7 +116,7 @@ void complete_init(void)
 	udata.u_argn =  (arg_t)PROGLOAD + 256; /* "/init" */
 	udata.u_argn1 = (arg_t)PROGLOAD; /* Arguments */
 
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 	init_process->p_session = 1;
 #endif
 	init_process->p_pgrp = 1;

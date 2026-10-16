@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PORT = ROOT / 'ports/fuzix'
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--build', type=Path, default=ROOT / 'build/fuzix')
-p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='both')
+p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 a = p.parse_args()
 build = a.build.resolve()
 

@@ -98,7 +98,7 @@ impl<'a> Checker<'a> {
                     pat,
                     init: TExpr {
                         ty,
-                        kind: TExprKind::Name(hidden),
+                        kind: TExprKind::Name(hidden, 0),
                     },
                 });
             }
@@ -257,6 +257,7 @@ impl<'a> Checker<'a> {
                 text.push('$');
                 text
             }
+            Ty::Owned(id) => format!("Owned${}$", self.mangle_ty(self.owner_elems[id as usize])),
             Ty::Vec(id) => format!("Vec${}$", self.mangle_ty(self.vec_elems[id as usize])),
             Ty::Slice(id) => format!("Slice${}$", self.mangle_ty(self.slice_elems[id as usize])),
             Ty::Array { id, .. } => {

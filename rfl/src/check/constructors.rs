@@ -406,11 +406,20 @@ impl<'a> Checker<'a> {
                     }
                     return Ok(());
                 }
-                if name == "Vec" || name == "Slice" {
+                if name == "Vec" || name == "Slice" || name == "Owned" {
                     if args.len() != 1 {
                         return Err(self.arity_error(name_span.start, name, 1, args.len()));
                     }
-                    let elem = if name == "Vec" {
+                    let elem = if name == "Owned" {
+                        let Ty::Owned(id) = actual else {
+                            return Err(CompileError::at(
+                                self.source,
+                                span,
+                                format!("expected Owned, found {}", self.show(actual)),
+                            ));
+                        };
+                        self.owner_elems[id as usize]
+                    } else if name == "Vec" {
                         let Ty::Vec(id) = actual else {
                             return Err(CompileError::at(
                                 self.source,

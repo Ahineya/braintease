@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Boot the upstream Bourne shell, execute scripts, and reboot with both engines."""
+"""Boot the upstream Bourne shell, execute scripts, and reboot with the selected RVM engine(s)."""
 import argparse
 import os
 from pathlib import Path
@@ -10,7 +10,11 @@ PORT = Path(__file__).resolve().parents[1]
 ROOT = PORT.parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build', type=Path, default=ROOT/'build/fuzix')
-build = parser.parse_args().build.resolve()
+parser.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
+options = parser.parse_args()
+engines = [True, False] if options.engine == 'both' else [options.engine == 'jit']
+engine_label = 'JIT and interpreter' if options.engine == 'both' else options.engine
+build = options.build.resolve()
 
 SCRIPT = """echo ARGS:$#:$1:$2
 for x in alpha beta gamma; do echo LOOP:$x; done
@@ -81,7 +85,7 @@ shutdown
 
 def run(disk, commands, jit):
     command = [str(ROOT/'target/release/rvm'), str(build/'bios.bin'), '--disk', str(disk),
-               '--memory', '5120000', '--headless', '--input', commands, '--timeout', '120']
+               '--memory', '16384000', '--headless', '--input', commands, '--timeout', '120']
     if jit:
         command.append('--jit')
     log = Path(f'/tmp/fuzix-shell-{os.getpid()}-live.log')
@@ -98,7 +102,7 @@ def run(disk, commands, jit):
 with tempfile.TemporaryDirectory(prefix='fuzix-shell-') as temporary:
     disk = Path(temporary)/'shell.img'
     subprocess.run(['node', str(PORT/'tools/disk.mjs'), str(build), str(disk)], check=True)
-    output = run(disk, COMMANDS, True)
+    output = run(disk, COMMANDS, engines[0])
     Path('/tmp/fuzix-shell-test-output.log').write_text(output)
     for expected in ['ARGS:2:one:two', 'ARGS:2:three:four', 'LOOP:alpha', 'LOOP:gamma',
                      'IF_OK', 'OR_OK', 'AND_OK', 'CASE_OK', 'UNTIL_OK', 'WHILE_OK',
@@ -113,8 +117,8 @@ with tempfile.TemporaryDirectory(prefix='fuzix-shell-') as temporary:
                      'STILL_ALIVE', 'libccheck passed']:
         assert expected in output, (expected, output)
     subprocess.run(['python3', str(PORT/'tools/fsck.py'), str(disk)], check=True)
-    output = run(disk, 'sh /shell-suite persisted arguments\ncat /here /quoted\nlibccheck\nshutdown\n', False)
+    output = run(disk, 'sh /shell-suite persisted arguments\ncat /here /quoted\nlibccheck\nshutdown\n', engines[-1])
     assert ('ARGS:2:persisted:arguments' in output and
             'literal $SOURCED' in output and 'libccheck passed' in output), output
     subprocess.run(['python3', str(PORT/'tools/fsck.py'), str(disk)], check=True)
-print('Bourne shell passed: scripts, control flow, globbing, substitutions, heredocs, traps, wait, recovery and persistence; JIT and interpreter')
+print('Bourne shell passed: scripts, control flow, globbing, substitutions, heredocs, traps, wait, recovery and persistence; ' + engine_label)

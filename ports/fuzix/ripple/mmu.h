@@ -1,0 +1,46 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+#ifndef RIPPLE_FUZIX_MMU_H
+#define RIPPLE_FUZIX_MMU_H
+#ifndef RIPPLE_MMU
+#define RIPPLE_MMU 0
+#endif
+#if RIPPLE_MMU
+#define USER_SB 31
+#define USER_HEAP_LAST 23
+#define MMU_TABLE_BASE 64
+#define MMU_REF_BANK 80
+#define MMU_POOL_BASE 128
+#define MMU_RAM_BANKS 256
+#define MMU_PAGE_CELLS 512U
+#define MMU_BANK_PAGES 125U
+#define MMU_POOL_PAGES ((MMU_RAM_BANKS - MMU_POOL_BASE) * MMU_BANK_PAGES)
+#define MP_PRESENT 1U
+#define MP_READ 2U
+#define MP_WRITE 4U
+#define MP_EXEC 8U
+#define MP_USER 16U
+#define MP_PAGED 32U
+#define MP_COW 64U
+extern void ripple_mmu_init(void);
+extern usize_t ripple_mmu_used(void);
+extern void ripple_mmu_usage(unsigned long *, unsigned long *);
+extern void ripple_mmu_task_usage(unsigned, unsigned long *, unsigned long *);
+extern int ripple_mmu_alloc(unsigned);
+extern void ripple_mmu_select(unsigned);
+extern void ripple_mmu_free(unsigned);
+extern int ripple_mmu_fork(unsigned, unsigned);
+extern int ripple_mmu_exec(unsigned);
+extern void ripple_mmu_code(unsigned, unsigned, unsigned long);
+extern usize_t ripple_mmu_validate(unsigned long, usize_t, unsigned);
+extern void ripple_mmu_roots(unsigned);
+extern void ripple_mmu_flush(void);
+extern void ripple_mmu_flush_code(void);
+extern unsigned ripple_mmu_cause(void);
+extern unsigned ripple_mmu_fault_bank(void);
+extern unsigned ripple_mmu_fault_off(void);
+extern unsigned ripple_mmu_saved_mode(void);
+extern unsigned ripple_trap_action;
+#else
+#define USER_SB 9
+#endif
+#endif

@@ -17,27 +17,52 @@ uint8_t need_resched, plt_tick_present = 1;
 uaddr_t ramtop;
 static unsigned indexof(ptptr p) { return (unsigned)(p - ptab); }
 static void save_user(unsigned i) {
+#if RIPPLE_MMU
+    used(i);
+#else
     ripple_bank_copy(USER_GP, 64 + 2 * i);
     ripple_bank_copy(USER_SB, 65 + 2 * i);
+#endif
 }
 static void load_user(unsigned i) {
+#if RIPPLE_MMU
+    ripple_mmu_select(i);
+#else
     ripple_bank_copy(64 + 2 * i, USER_GP);
     ripple_bank_copy(65 + 2 * i, USER_SB);
+#endif
 }
 extern void ripple_code_init(void);
 void pagemap_init(void) {
     ripple_code_init();
+#if RIPPLE_MMU
+    ripple_mmu_init();
+    ramsize = MMU_RAM_BANKS * (unsigned long)BANK_CELLS / 512;
+    procmem = MMU_POOL_PAGES;
+#else
     ramsize = (64UL + 2 * PTABSIZE) * BANK_CELLS / 512;
     procmem = PTABSIZE * 250;
+#endif
 }
 void map_init(void) {}
 int pagemap_alloc(ptptr p) {
+#if RIPPLE_MMU
+    if (!udata.u_ptab) {
+        if (ripple_mmu_exec(indexof(p))) return ENOMEM;
+    } else ripple_mmu_alloc(indexof(p));
+#endif
     p->p_page = indexof(p) + 1;
     return 0;
 }
 extern void ripple_code_free(ptptr);
 extern void ripple_code_fork(ptptr);
-void pagemap_free(ptptr p) { ripple_code_free(p); }
+void pagemap_free(ptptr p) {
+    ripple_code_free(p);
+#if RIPPLE_MMU
+    ripple_mmu_free(indexof(p));
+#endif
+    p->p_size = 0;
+}
 int pagemap_prepare(struct exec *h) {
     used(h);
     return 0;
@@ -47,7 +72,13 @@ int pagemap_realloc(struct exec *h, usize_t m) {
     used(m);
     return 0;
 }
-usize_t pagemap_mem_used(void) { return nproc * 250UL; }
+usize_t pagemap_mem_used(void) {
+#if RIPPLE_MMU
+    return ripple_mmu_used();
+#else
+    return nproc * 250UL;
+#endif
+}
 void program_vectors(uint16_t *p) { used(p); }
 void set_cpu_type(void) {}
 void install_vdso(void) {}
@@ -78,7 +109,12 @@ int16_t dofork(ptptr p) {
     task_data[child] = udata;
     makeproc(p, &task_data[child]);
     ripple_code_fork(p);
+#if RIPPLE_MMU
+    ripple_mmu_free(child);
+    if (ripple_mmu_fork(parent,child)) panic("fork mappings");
+#else
     save_user(child);
+#endif
     contexts[child] = contexts[parent];
     contexts[child].sb = 32 + child;
     ripple_bank_copy(32 + parent, 32 + child);
@@ -133,6 +169,9 @@ unsigned ripple_signal_frame(void) {
     sp = f[31];
     if (f[30] != USER_SB || sp > BANK_CELLS - 64)
         doexit(SIGSEGV);
+#if RIPPLE_MMU
+    if (valaddr_w((void *)(((unsigned long)USER_SB<<16)|sp),32,32)!=32) doexit(SIGSEGV);
+#endif
     for (i = 0; i < 32; i++)
         dmem_store(USER_SB, sp + i, f[i + 1]);
     f[5] = sig;                       /* A0 */
@@ -167,7 +206,11 @@ static void signal_return(unsigned long ptr) {
 }
 long ripple_dispatch(struct ripple_request *user) {
     struct ripple_request req;
-    if (uget(user, &req, sizeof(req)))
+    if (uget(user, &req, sizeof(req))
+#if RIPPLE_MMU
+        || valaddr_w((void *)ripple_userptr(user),sizeof(req),sizeof(req))!=sizeof(req)
+#endif
+       )
         return -1;
     udata.u_insys = 1;
     __hard_ei();
@@ -193,7 +236,11 @@ unsigned ripple_tick(void) {
     irq_ack();
     /* Signals must also reach a user computation which makes no syscalls.
      * The normal trampoline leaves IRQ_BUSY with IRET before entering C. */
-    return !udata.u_insys &&
+    return
+#if RIPPLE_MMU
+           ripple_mmu_saved_mode() &&
+#endif
+           !udata.u_insys &&
            ((need_resched && nready > 1) ||
             (udata.u_ptab->p_flags & PFL_CHKSIG));
 }

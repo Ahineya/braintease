@@ -70,7 +70,7 @@ service!(rcc_native_ext_free(rt, ptr) { rt.release(ptr); 0 });
 service!(rcc_native_ext_calloc(rt, count, size) {
     let total = count.checked_mul(size).unwrap_or(0);
     let ptr = rt.allocate(total);
-    if ptr != 0 { rt.memory[span(ptr, total)].fill(0); }
+    if ptr != 0 { rt.memory.fill(span(ptr, total), 0); }
     ptr
 });
 service!(rcc_native_ext_realloc(rt, old, size) {
@@ -89,7 +89,7 @@ service!(rcc_native_ext_realloc(rt, old, size) {
 });
 service!(rcc_native_ext_memset(rt, dest, value, count) {
     let range = span(dest, count);
-    if range.start >= BANK { rt.memory[range].fill(value as u16); }
+    if range.start >= BANK { rt.memory.fill(range, value as u16); }
     else { for at in range { rt.write(at, value as u16); } }
     dest
 });

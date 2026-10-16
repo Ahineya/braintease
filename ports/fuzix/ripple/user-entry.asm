@@ -50,9 +50,13 @@ ripple_syscall:
     ADDI SP, SP, 1
     STORE RAB, SB, SP
     ADDI SP, SP, 1
+#if RIPPLE_MMU
+    SYSCALL
+#else
     LI T0, 1
     LI T1, 0
     JALR RA, T0, T1
+#endif
     ADDI SP, SP, -1
     LOAD RAB, SB, SP
     ADDI SP, SP, -1
@@ -131,7 +135,7 @@ ripple_signal_entry:
     JALR RA, A2, A1
     ADDI SP, SP, -1
     LOAD A0, SB, SP
-    LI A1, 9
+    LI A1, USER_SB
     CALL ripple_sigreturn
     HALT
 

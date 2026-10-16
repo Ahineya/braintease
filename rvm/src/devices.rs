@@ -19,8 +19,13 @@ pub const REGISTER_VERSION: usize = 31;
 pub const DISPLAY_MODE_EXTENDED: u16 = 4;
 /// INPUT_READ/INPUT_STATE collect live input without a clock grant.
 pub const CAP_INPUT_POLL: u16 = 0x0010;
-pub const CAPABILITIES: u16 =
-    15 | CAP_INPUT_POLL | crate::network::CAP_NETWORK | 0x0040 | crate::audio::CAP_PCM | crate::audio::CAP_MUSIC;
+pub const CAPABILITIES: u16 = 15
+    | crate::bulk::CAP_MEMORY
+    | CAP_INPUT_POLL
+    | crate::network::CAP_NETWORK
+    | 0x0040
+    | crate::audio::CAP_PCM
+    | crate::audio::CAP_MUSIC;
 pub const KEY_COUNT: usize = 256;
 pub const INPUT_QUEUE_CAPACITY: usize = 256;
 
@@ -266,6 +271,20 @@ pub trait GuestMemory {
     fn len(&self) -> usize;
     fn read(&self, index: usize) -> u16;
     fn write(&mut self, index: usize, value: u16);
+    /// Separate Harvard instruction space. Zero means this adapter cannot upload code.
+    fn code_capacity(&self, _bank_size: u16) -> usize {
+        0
+    }
+    /// The caller validates the complete range first. Implementations must grow
+    /// with NOPs like STORC and commit the entire upload or return an error.
+    fn write_code(
+        &mut self,
+        _bank_size: u16,
+        _start: usize,
+        _code: &[[u16; 4]],
+    ) -> Result<(), u16> {
+        Err(STATUS_UNSUPPORTED)
+    }
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -499,6 +518,19 @@ impl DeviceState {
         bank_size: u16,
         display_mode: u16,
     ) -> Option<PresentFrame> {
+        self.write_register_with_storage(address, value, memory, bank_size, display_mode, None)
+    }
+
+    /// Device context uses the same disk cache as the legacy storage ports.
+    pub fn write_register_with_storage<M: GuestMemory + ?Sized>(
+        &mut self,
+        address: usize,
+        value: u16,
+        memory: &mut M,
+        bank_size: u16,
+        display_mode: u16,
+        storage: Option<&mut crate::vm::Storage>,
+    ) -> Option<PresentFrame> {
         match address {
             REGISTER_DESCRIPTOR_BANK => self.descriptor.bank = value,
             REGISTER_DESCRIPTOR_OFFSET => self.descriptor.offset = value,
@@ -508,7 +540,7 @@ impl DeviceState {
                     return None;
                 }
                 self.command = value;
-                match self.execute_command(value, memory, bank_size, display_mode) {
+                match self.execute_command(value, memory, bank_size, display_mode, storage) {
                     Ok(frame) => return frame,
                     Err(status) => self.status = status,
                 }
@@ -546,6 +578,7 @@ impl DeviceState {
         memory: &mut M,
         bank_size: u16,
         display_mode: u16,
+        storage: Option<&mut crate::vm::Storage>,
     ) -> Result<Option<PresentFrame>, u16> {
         let length = match command {
             COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME => 8,
@@ -555,12 +588,18 @@ impl DeviceState {
             COMMAND_INPUT_STATE => STATE_CELLS,
             _ => crate::network::descriptor_length(command)
                 .or_else(|| crate::audio::descriptor_length(command))
+                .or_else(|| crate::bulk::descriptor_length(command))
                 .ok_or(STATUS_UNKNOWN_COMMAND)?,
         };
         if crate::audio::descriptor_length(command).is_some() && !self.audio.supported() {
             return Err(STATUS_UNSUPPORTED);
         }
         let range = Self::descriptor_range(self.descriptor, memory, bank_size, length)?;
+        if crate::bulk::descriptor_length(command).is_some() {
+            crate::bulk::execute(command, memory, range, bank_size, storage)?;
+            self.status = STATUS_OK;
+            return Ok(None);
+        }
         if crate::audio::descriptor_length(command).is_some() {
             self.audio.execute(command, memory, range, bank_size)?;
             self.status = STATUS_OK;
@@ -616,6 +655,7 @@ impl DeviceState {
                     } else {
                         0
                     };
+                descriptor[2] |= crate::bulk::capabilities(memory, bank_size, storage.is_some());
                 descriptor[3] = KEY_COUNT as u16;
             }
             COMMAND_NEXT_TICK => {

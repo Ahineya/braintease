@@ -138,6 +138,56 @@ pub(super) fn adjust_refcount(
     bank: Value,
     retain: bool,
 ) -> Result<(), CompileError> {
+    builder
+        .build_call(
+            Value::Global(
+                if retain {
+                    "rfl_retain"
+                } else {
+                    "rfl_release_box"
+                }
+                .into(),
+            ),
+            vec![addr, bank],
+            IrType::Void,
+        )
+        .ir()?;
+    Ok(())
+}
+
+pub(super) fn emit_retain_runtime(
+    builder: &mut IrBuilder,
+    module: &mut Module,
+    built: &Built,
+) -> Result<(), CompileError> {
+    if !built.need_heap {
+        return Ok(());
+    }
+    builder.create_function("rfl_retain".into(), IrType::Void);
+    builder.add_parameter(0, IrType::I16);
+    builder.add_parameter(1, IrType::I16);
+    let entry = builder.new_label();
+    builder.create_block(entry).ir()?;
+    adjust_refcount_body(builder, Value::Temp(0), Value::Temp(1), true)?;
+    builder.build_return(None).ir()?;
+    module.add_function(builder.finish_function().unwrap());
+    builder.create_function("rfl_release_box".into(), IrType::Void);
+    builder.add_parameter(0, IrType::I16);
+    builder.add_parameter(1, IrType::I16);
+    let entry = builder.new_label();
+    builder.create_block(entry).ir()?;
+    adjust_refcount_body(builder, Value::Temp(0), Value::Temp(1), false)?;
+    builder.build_return(None).ir()?;
+    module.add_function(builder.finish_function().unwrap());
+    Ok(())
+}
+
+fn adjust_refcount_body(
+    builder: &mut IrBuilder,
+    addr: Value,
+    bank: Value,
+    retain: bool,
+) -> Result<(), CompileError> {
     let skip = builder.new_label();
     let go = builder.new_label();
     let is_null = builder
@@ -240,7 +290,7 @@ pub(super) fn retain_words(
     ty: Ty,
 ) -> Result<(), CompileError> {
     let index = match ty {
-        Ty::Vec(_) | Ty::Slice(_) | Ty::String => 0,
+        Ty::Vec(_) | Ty::Slice(_) | Ty::String | Ty::Owned(_) | Ty::ErasedOwner => 0,
         Ty::Adt(_) => 1,
         Ty::Func(_) => 2,
         _ => return Ok(()),
@@ -300,9 +350,15 @@ pub(super) fn retain_managed_through(
         Ty::Tuple { id, .. } => {
             through_fields(builder, proc, slot, &proc.tuples[id as usize], true)
         }
-        Ty::Vec(_) | Ty::Slice(_) | Ty::String | Ty::Adt(_) | Ty::Func(_) => {
+        Ty::Vec(_)
+        | Ty::Slice(_)
+        | Ty::String
+        | Ty::Adt(_)
+        | Ty::Func(_)
+        | Ty::Owned(_)
+        | Ty::ErasedOwner => {
             let index = match ty {
-                Ty::Vec(_) | Ty::Slice(_) | Ty::String => 0,
+                Ty::Vec(_) | Ty::Slice(_) | Ty::String | Ty::Owned(_) | Ty::ErasedOwner => 0,
                 Ty::Adt(_) => 1,
                 _ => 2,
             };
@@ -353,7 +409,51 @@ pub(super) fn release_managed_through(
     slot: &Value,
     ty: Ty,
 ) -> Result<(), CompileError> {
+    if let Some(name) = release_helper_name(ty) {
+        builder
+            .build_call(Value::Global(name), vec![slot.clone()], IrType::Void)
+            .ir()?;
+        return Ok(());
+    }
+    release_managed_body(builder, proc, slot, ty)
+}
+
+pub(super) fn release_managed_body(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    slot: &Value,
+    ty: Ty,
+) -> Result<(), CompileError> {
     match ty {
+        Ty::Owned(_) | Ty::ErasedOwner => {
+            let addr = load_through(builder, slot, 0)?;
+            let bank = load_through(builder, slot, 1)?;
+            // Clear first: a synchronous finalizer may perform nested cleanup.
+            store_through(builder, slot, 0, Value::Constant(0))?;
+            store_through(builder, slot, 1, Value::Constant(0))?;
+            let skip = builder.new_label();
+            let go = builder.new_label();
+            let empty = builder
+                .build_binary(IrBinaryOp::Eq, addr.clone(), Value::Constant(0), IrType::I1)
+                .ir()?;
+            builder
+                .build_branch_cond(Value::Temp(empty), skip, go)
+                .ir()?;
+            builder.create_block(go).ir()?;
+            builder
+                .build_call(
+                    Value::Global(match ty {
+                        Ty::Owned(id) => format!("rfl_drop_owner_{id}"),
+                        _ => "rfl_drop_erased_owner".into(),
+                    }),
+                    vec![addr, bank],
+                    IrType::Void,
+                )
+                .ir()?;
+            builder.build_branch(skip).ir()?;
+            builder.create_block(skip).ir()?;
+            Ok(())
+        }
         Ty::Array { id, len, width } => {
             let elem = proc.collections.arrays[id as usize];
             if !keeps(proc, elem) {
@@ -591,54 +691,12 @@ pub(super) fn release_object_field(
     offset: i64,
     ty: Ty,
 ) -> Result<(), CompileError> {
-    match ty {
-        Ty::Array { id, len, width } => {
-            for i in 0..len {
-                release_object_field(
-                    builder,
-                    built,
-                    obj,
-                    offset + i64::from(i) * i64::from(width),
-                    built.collections.arrays[id as usize],
-                )?;
-            }
-            Ok(())
-        }
-        Ty::Struct { id, .. } | Ty::Tuple { id, .. } => {
-            let fields = match ty {
-                Ty::Struct { id, .. } => built.structs[id as usize].clone(),
-                _ => built.tuples[id as usize].clone(),
-            };
-            let mut at = offset;
-            for field in fields {
-                release_object_field(builder, built, obj, at, field)?;
-                at += field.cells();
-            }
-            Ok(())
-        }
-        Ty::Vec(_) | Ty::Slice(_) | Ty::String => {
-            let addr = load_cell(builder, obj, offset, IrType::I16)?;
-            let bank = load_cell(builder, obj, offset + 1, IrType::I16)?;
-            release_buffer(builder, &built.collections, addr, bank, ty)
-        }
-        Ty::Adt(id) => {
-            let tag = load_cell(builder, obj, offset, IrType::I16)?;
-            let addr = load_cell(builder, obj, offset + 1, IrType::I16)?;
-            let bank = load_cell(builder, obj, offset + 2, IrType::I16)?;
-            call_if_live(
-                builder,
-                &format!("rfl_drop_adt_{id}"),
-                vec![tag, addr, bank],
-            )
-        }
-        Ty::Func(_) => {
-            let id = load_cell(builder, obj, offset, IrType::I16)?;
-            let addr = load_cell(builder, obj, offset + 2, IrType::I16)?;
-            let bank = load_cell(builder, obj, offset + 3, IrType::I16)?;
-            call_if_live(builder, "rfl_drop_func", vec![id, addr, bank])
-        }
-        _ => Ok(()),
+    let proc = built.procs.first().expect("main exists");
+    if !keeps(proc, ty) {
+        return Ok(());
     }
+    let place = gep(builder, obj, offset)?;
+    release_managed_through(builder, proc, &place, ty)
 }
 
 pub(super) fn emit_drop_func(builder: &mut IrBuilder, built: &Built) -> Result<(), CompileError> {

@@ -478,28 +478,6 @@ pub(super) fn emit_box_new(
     store_cell(builder, frame, base + 1, bank)
 }
 
-pub(super) fn emit_borrow(
-    builder: &mut IrBuilder,
-    proc: &Proc,
-    frame: &Value,
-    dest: usize,
-    slot: usize,
-) -> Result<(), CompileError> {
-    let place = if proc.slots[slot].shared {
-        let obj = load_fat(builder, frame, proc.slots[slot].offset)?;
-        builder
-            .build_pointer_offset(obj, Value::Constant(1), ptr_ty())
-            .ir()?
-    } else {
-        gep(builder, frame, proc.slots[slot].offset)?
-    };
-    let addr = low16_of_ptr(builder, &place)?;
-    let bank = bank16_of_ptr(builder, &place)?;
-    let base = proc.slots[dest].offset;
-    store_cell(builder, frame, base, addr)?;
-    store_cell(builder, frame, base + 1, bank)
-}
-
 pub(super) fn ptr_ty() -> IrType {
     IrType::FatPtr(Box::new(IrType::I16))
 }

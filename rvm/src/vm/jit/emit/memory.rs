@@ -104,6 +104,16 @@ impl Cg<'_> {
         addr: Value,
         value: Option<Value>,
     ) -> Value {
+        if self.protected && self.user {
+            return if store {
+                self.call_i32(
+                    self.store,
+                    &[self.vm, bank, addr, value.expect("store value")],
+                )
+            } else {
+                self.call_i32(self.load, &[self.vm, bank, addr])
+            };
+        }
         let nonzero_bank = self.b.ins().icmp_imm_s(IntCC::NotEqual, bank, 0);
         let bank64 = self.b.ins().uextend(types::I64, bank);
         let addr64 = self.b.ins().uextend(types::I64, addr);
@@ -111,7 +121,27 @@ impl Cg<'_> {
         let index = self.b.ins().iadd(scaled, addr64);
         let length = self.memory_len.expect("memory prologue");
         let inside = self.b.ins().icmp(IntCC::UnsignedLessThan, index, length);
-        let direct = self.b.ins().band(nonzero_bank, inside);
+        let mut direct = self.b.ins().band(nonzero_bank, inside);
+        if self.protected {
+            let enabled = self
+                .b
+                .ins()
+                .load(types::I8, self.flags, self.vm, self.off.window);
+            let enabled = self.b.ins().icmp_imm_s(IntCC::NotEqual, enabled, 0);
+            let lo = self.load16(self.off.window_lo);
+            let hi = self.load16(self.off.window_hi);
+            let lo = self.zext(lo);
+            let hi = self.zext(hi);
+            let above = self
+                .b
+                .ins()
+                .icmp(IntCC::UnsignedGreaterThanOrEqual, bank, lo);
+            let below = self.b.ins().icmp(IntCC::UnsignedLessThanOrEqual, bank, hi);
+            let in_window = self.b.ins().band(above, below);
+            let mapped = self.b.ins().band(enabled, in_window);
+            let physical = self.b.ins().bnot(mapped);
+            direct = self.b.ins().band(direct, physical);
+        }
         let fast = self.b.create_block();
         let slow = self.b.create_block();
         let join = self.b.create_block();

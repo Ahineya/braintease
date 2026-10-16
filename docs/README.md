@@ -19,6 +19,7 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 
 | Document | Topic |
 |----------|-------|
+| [fuse-x/README.md](fuse-x/README.md) | Fuse-X native hosted FUZIX direction, desktop integration, storage, networking, and roadmap |
 | [rfl/traits-printing.md](rfl/traits-printing.md) | Planned first RFL traits milestone: Printable-based library print/println |
 | [networking/README.md](networking/README.md) | Guest Ethernet, DHCP, UDP/DNS, running examples, tests and TCP/HTTP roadmap |
 | [ir.md](ir.md) | Textual IR syntax, tutorials, and lowering rules |
