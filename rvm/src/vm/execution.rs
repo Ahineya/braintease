@@ -16,6 +16,23 @@ impl VM {
             0x42 => {
                 // NOP
             }
+            0x22 => {
+                self.interrupt_return().map_err(|error| self.trap_error(error))?;
+            }
+            0x23 => {
+                if instr.word1 >= 32 || matches!(instr.word1, 1 | 2) {
+                    return Err(self.trap_error("invalid CSRR destination".into()));
+                }
+                let value = self.read_csr(instr.word2).map_err(|error| self.trap_error(error))?;
+                if instr.word1 != 0 { self.registers[instr.word1 as usize] = value; }
+            }
+            0x24 => {
+                if instr.word1 >= 32 {
+                    return Err(self.trap_error("invalid CSRW source".into()));
+                }
+                let value = self.registers[instr.word1 as usize];
+                self.write_csr(instr.word2, value).map_err(|error| self.trap_error(error))?;
+            }
 
             // ALU R-type operations
             0x01 => {

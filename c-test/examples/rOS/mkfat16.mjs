@@ -53,7 +53,7 @@ export function fat16Image(files) {
   image[36] = 0x80;
   image[38] = 0x29;
   image.writeUInt32LE(0x12345678, 39);
-  image.write('RIPPLEROS  ', 43, 'ascii');
+  image.write('RIPPLEOS  ', 43, 'ascii');
   image.write('FAT16   ', 54, 'ascii');
   image.writeUInt16LE(0xaa55, 510);
 
@@ -82,8 +82,116 @@ export function fat16Image(files) {
   return image;
 }
 
+// Replace root files without reformatting: directories, unrelated chains,
+// metadata and unused sectors retain their original bytes. Work on a copy so
+// validation/allocation failures cannot partially modify the source image.
+export function updateFat16Image(source, files) {
+  const image = Buffer.from(source);
+  if (image.length < 512 || image.readUInt16LE(510) !== 0xaa55) {
+    throw new Error('Not a FAT16 disk image');
+  }
+  const bps = image.readUInt16LE(11);
+  const spc = image[13];
+  const reserved = image.readUInt16LE(14);
+  const fats = image[16];
+  const entries = image.readUInt16LE(17);
+  const sectors = image.readUInt16LE(19) || image.readUInt32LE(32);
+  const fatBytes = image.readUInt16LE(22) * bps;
+  const fatStart = reserved * bps;
+  const rootStart = fatStart + fats * fatBytes;
+  const rootEnd = rootStart + entries * 32;
+  const dataStart = rootStart + Math.ceil(entries * 32 / bps) * bps;
+  const clusterBytes = bps * spc;
+  const clusters = Math.floor((sectors * bps - dataStart) / clusterBytes);
+  const clusterLimit = Math.min(clusters + 2, 0xfff0);
+  if (![512, 1024, 2048, 4096].includes(bps) || !spc || (spc & (spc - 1))
+      || !reserved || !fats || !entries || !fatBytes || sectors * bps > image.length
+      || rootEnd > dataStart || dataStart > image.length || clusters < 4085
+      || clusters >= 65525 || (clusters + 2) * 2 > fatBytes) {
+    throw new Error('Unsupported or corrupt FAT16 layout');
+  }
+  const fat = image.subarray(fatStart, fatStart + fatBytes);
+  for (let index = 1; index < fats; ++index) {
+    if (!fat.equals(image.subarray(fatStart + index * fatBytes, fatStart + (index + 1) * fatBytes))) {
+      throw new Error('FAT copies disagree; refusing to update');
+    }
+  }
+  function fatSet(cluster, value) {
+    for (let index = 0; index < fats; ++index) {
+      image.writeUInt16LE(value, fatStart + index * fatBytes + cluster * 2);
+    }
+  }
+  const names = new Set();
+  const released = new Set();
+  const replacements = files.map(file => {
+    const name = canon83(file.name);
+    if (names.has(name)) throw new Error(`Duplicate replacement: ${file.name}`);
+    names.add(name);
+    let slot;
+    let freeSlot;
+    for (let entry = rootStart; entry < rootEnd; entry += 32) {
+      const first = image[entry];
+      if (first === 0 || first === 0xe5) freeSlot ??= entry;
+      if (first === 0) break;
+      if (first !== 0xe5 && image.subarray(entry, entry + 11).toString('ascii') === name) {
+        if (image[entry + 11] & 0x18) throw new Error(`Not a regular root file: ${file.name}`);
+        slot = entry;
+        break;
+      }
+    }
+    if (slot === undefined) {
+      if (freeSlot === undefined) throw new Error('FAT root directory is full');
+      slot = freeSlot;
+      const wasEnd = image[slot] === 0;
+      image.fill(0, slot, slot + 32);
+      if (wasEnd && slot + 32 < rootEnd) image[slot + 32] = 0;
+      image.write(name, slot, 'ascii');
+    } else {
+      let cluster = image.readUInt16LE(slot + 26);
+      let count = 0;
+      while (cluster && cluster < 0xfff8) {
+        if (cluster < 2 || cluster >= clusterLimit || released.has(cluster)) {
+          throw new Error(`Invalid or shared cluster chain: ${file.name}`);
+        }
+        released.add(cluster);
+        cluster = fat.readUInt16LE(cluster * 2);
+        ++count;
+        if (!cluster) throw new Error(`Broken cluster chain: ${file.name}`);
+      }
+      if (count * clusterBytes < image.readUInt32LE(slot + 28)) {
+        throw new Error(`Short cluster chain: ${file.name}`);
+      }
+    }
+    return { ...file, slot };
+  });
+  for (const cluster of released) fatSet(cluster, 0);
+  let candidate = 2;
+  for (const { data, slot } of replacements) {
+    let first = 0;
+    let previous = 0;
+    for (let offset = 0; offset < data.length; offset += clusterBytes) {
+      while (candidate < clusterLimit && fat.readUInt16LE(candidate * 2)) ++candidate;
+      if (candidate >= clusterLimit) throw new Error('Files exceed available FAT16 space');
+      const cluster = candidate++;
+      first ||= cluster;
+      if (previous) fatSet(previous, cluster);
+      fatSet(cluster, 0xffff);
+      const start = dataStart + (cluster - 2) * clusterBytes;
+      image.fill(0, start, start + clusterBytes);
+      image.set(data.subarray(offset, offset + clusterBytes), start);
+      previous = cluster;
+    }
+    image[slot + 11] |= 0x20;
+    image.writeUInt16LE(first, slot + 26);
+    image.writeUInt32LE(data.length, slot + 28);
+  }
+  return image;
+}
+
 function main(args) {
   let output;
+  let update = false;
+  let backup = false;
   const inputs = [];
   let positionalOnly = false;
   for (let i = 0; i < args.length; ++i) {
@@ -91,8 +199,12 @@ function main(args) {
     if (!positionalOnly && arg === '--') {
       positionalOnly = true;
     } else if (!positionalOnly && (arg === '-h' || arg === '--help')) {
-      console.log('Usage: node mkfat16.mjs -o IMAGE [src:DESTNAME | src ...]');
+      console.log('Usage: node mkfat16.mjs [--update [--backup]] -o IMAGE [src:DESTNAME | src ...]');
       return;
+    } else if (!positionalOnly && arg === '--update') {
+      update = true;
+    } else if (!positionalOnly && arg === '--backup') {
+      backup = true;
     } else if (!positionalOnly && (arg === '-o' || arg === '--output')) {
       if (++i >= args.length) throw new Error(`${arg} requires a filename`);
       output = args[i];
@@ -105,6 +217,7 @@ function main(args) {
     }
   }
   if (!output) throw new Error('An output image is required (-o IMAGE)');
+  if (backup && !update) throw new Error('--backup requires --update');
   const files = inputs.map(input => {
     const separator = input.indexOf(':');
     const source = separator < 0 ? input : input.slice(0, separator);
@@ -112,9 +225,41 @@ function main(args) {
     if (!fs.statSync(source).isFile()) throw new Error(`Not a file: ${source}`);
     return { name, data: fs.readFileSync(source) };
   });
-  const image = fat16Image(files);
+  const existing = update && fs.existsSync(output) ? fs.readFileSync(output) : undefined;
+  const image = existing ? updateFat16Image(existing, files) : fat16Image(files);
+  if (existing?.equals(image)) {
+    console.log(`unchanged ${output}`);
+    return;
+  }
   fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
-  fs.writeFileSync(output, image);
+  if (existing && backup) {
+    let suffix = 0;
+    let saved;
+    for (;;) {
+      saved = `${output}.bak${suffix ? `.${suffix}` : ''}`;
+      try {
+        fs.copyFileSync(output, saved, fs.constants.COPYFILE_EXCL);
+        break;
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        ++suffix;
+      }
+    }
+    console.log(`saved previous disk to ${saved}`);
+  }
+  const temporary = `${output}.tmp-${process.pid}`;
+  const descriptor = fs.openSync(temporary, 'wx', existing ? fs.statSync(output).mode : 0o666);
+  try {
+    try {
+      fs.writeFileSync(descriptor, image);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    fs.renameSync(temporary, output);
+  } finally {
+    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+  }
   console.log(`wrote ${output} files ${files.length}`);
 }
 

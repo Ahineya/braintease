@@ -63,6 +63,14 @@ ctx_ra:
     .space 1
 ctx_rab:
     .space 1
+ctx_s0:
+    .space 1
+ctx_s1:
+    .space 1
+ctx_s2:
+    .space 1
+ctx_s3:
+    .space 1
 ctx_rv:
     .space 1
 
@@ -83,6 +91,14 @@ ros_save_and_enter:
     STORE RA, T1, T0
     LI T0, ctx_rab
     STORE RAB, T1, T0
+    LI T0, ctx_s0
+    STORE S0, T1, T0
+    LI T0, ctx_s1
+    STORE S1, T1, T0
+    LI T0, ctx_s2
+    STORE S2, T1, T0
+    LI T0, ctx_s3
+    STORE S3, T1, T0
     ADD GP, A2, R0
     ADD SB, A3, R0
     LI SP, 1
@@ -102,9 +118,22 @@ ros_restore:
     LOAD RA, GP, T0
     LI T0, ctx_rab
     LOAD RAB, GP, T0
+    LI T0, ctx_s0
+    LOAD S0, GP, T0
+    LI T0, ctx_s1
+    LOAD S1, GP, T0
+    LI T0, ctx_s2
+    LOAD S2, GP, T0
+    LI T0, ctx_s3
+    LOAD S3, GP, T0
     LI T0, ctx_gp
     LOAD GP, GP, T0
-    JALR R0, RAB, RA
+    CSRW RA, 0       ; resume the saved shell continuation
+    CSRW RAB, 1
+    CSRW SB, 7
+    CSRW SP, 8
+    CSRW FP, 9
+    IRET
 
 ros_set_status:
     LI T0, 4

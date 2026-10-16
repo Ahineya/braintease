@@ -39,6 +39,9 @@ pub enum Opcode {
     Modi = 0x1F,
     Loadc = 0x20,
     Storc = 0x21,
+    Iret = 0x22,
+    Csrr = 0x23,
+    Csrw = 0x24,
     Nop = 0x42,
 }
 
@@ -80,6 +83,9 @@ impl Opcode {
             "MODI" => Some(Opcode::Modi),
             "LOADC" => Some(Opcode::Loadc),
             "STORC" => Some(Opcode::Storc),
+            "IRET" => Some(Opcode::Iret),
+            "CSRR" => Some(Opcode::Csrr),
+            "CSRW" => Some(Opcode::Csrw),
             _ => None,
         }
     }
@@ -120,6 +126,9 @@ impl Opcode {
             0x1F => Some(Opcode::Modi),
             0x20 => Some(Opcode::Loadc),
             0x21 => Some(Opcode::Storc),
+            0x22 => Some(Opcode::Iret),
+            0x23 => Some(Opcode::Csrr),
+            0x24 => Some(Opcode::Csrw),
             0x42 => Some(Opcode::Nop),
             _ => None,
         }
@@ -162,6 +171,9 @@ impl Opcode {
             Opcode::Modi => "MODI",
             Opcode::Loadc => "LOADC",
             Opcode::Storc => "STORC",
+            Opcode::Iret => "IRET",
+            Opcode::Csrr => "CSRR",
+            Opcode::Csrw => "CSRW",
         }
     }
 
@@ -170,7 +182,7 @@ impl Opcode {
             "HALT", "NOP", "ADD", "SUB", "AND", "OR", "XOR", "SLL", "SRL", "SLT", "SLTU",
             "ADDI", "ANDI", "ORI", "XORI", "LI", "SLLI", "SRLI", "LOAD", "STORE",
             "JAL", "JALR", "BEQ", "BNE", "BLT", "BGE", "BRK", "MUL", "DIV", "MOD",
-            "MULI", "DIVI", "MODI", "LOADC", "STORC"
+            "MULI", "DIVI", "MODI", "LOADC", "STORC", "IRET", "CSRR", "CSRW"
         ]
     }
 
@@ -179,14 +191,14 @@ impl Opcode {
             Opcode::Halt | Opcode::Nop | Opcode::Add | Opcode::Sub | Opcode::And | Opcode::Or | 
             Opcode::Xor | Opcode::Sll | Opcode::Srl | Opcode::Slt | Opcode::Sltu | 
             Opcode::Jalr | Opcode::Brk | Opcode::Mul | Opcode::Div | Opcode::Mod |
-            Opcode::Loadc | Opcode::Storc => InstructionFormat::R,
+            Opcode::Loadc | Opcode::Storc | Opcode::Iret => InstructionFormat::R,
             
             Opcode::Addi | Opcode::Andi | Opcode::Ori | Opcode::Xori | 
             Opcode::Slli | Opcode::Srli | Opcode::Load | Opcode::Store | 
             Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge | 
             Opcode::Jal | Opcode::Muli | Opcode::Divi | Opcode::Modi => InstructionFormat::I,
             
-            Opcode::Li => InstructionFormat::I1,
+            Opcode::Li | Opcode::Csrr | Opcode::Csrw => InstructionFormat::I1,
         }
     }
 }

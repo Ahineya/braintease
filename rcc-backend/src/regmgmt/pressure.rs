@@ -111,6 +111,8 @@ pub struct RegisterPressureManager {
     /// Linker-relocatable base of this TU's GP data (None if the TU has no globals).
     gp_base_label: Option<String>,
     memory_bank_size: u16,
+    segmented_stack: bool,
+    max_outgoing_stack_cells: u32,
 
     /// IR roots needed after the instruction currently being lowered. Older
     /// standalone lowering tests may omit this; whole functions always set it.
@@ -154,6 +156,8 @@ impl RegisterPressureManager {
             pinned_registers: std::collections::BTreeMap::new(),
             gp_base_label: None,
             memory_bank_size: 64000,
+            segmented_stack: false,
+            max_outgoing_stack_cells: 0,
             live_after: None,
             branch_spill_roots: None,
             prefer_caller_saved: false,
@@ -178,6 +182,15 @@ impl RegisterPressureManager {
     pub fn memory_bank_size(&self) -> u16 {
         self.memory_bank_size
     }
+
+    pub fn set_segmented_stack(&mut self, enabled: bool) { self.segmented_stack = enabled; }
+    pub fn segmented_stack(&self) -> bool { self.segmented_stack }
+
+    pub fn reserve_outgoing_stack_cells(&mut self, cells: u32) {
+        self.max_outgoing_stack_cells = self.max_outgoing_stack_cells.max(cells);
+    }
+
+    pub fn max_outgoing_stack_cells(&self) -> u32 { self.max_outgoing_stack_cells }
 
     /// Prevent `reg` from being reused as a spill victim until `unpin_register`.
     pub fn pin_register(&mut self, reg: Reg) {

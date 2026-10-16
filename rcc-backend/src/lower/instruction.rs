@@ -409,7 +409,7 @@ pub fn lower_instruction(
                 naming,
                 target,
                 call_args,
-                result_type.is_pointer(),
+                result_type.is_pointer() || matches!(result_type, IrType::Struct { .. } | IrType::Array { .. }),
                 result_type.is_wide() || result_type.is_f32(),
                 result_type.is_i64() || result_type.is_f64(),
                 result_name.clone(),

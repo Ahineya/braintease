@@ -3,6 +3,7 @@ mod display;
 mod execution;
 /// VM module - Virtual Machine implementation for the Ripple architecture
 mod instruction;
+mod interrupts;
 mod jit;
 mod mmio;
 mod state;
@@ -78,6 +79,7 @@ pub struct VM {
 
     // TTY input mode state
     tty_input_enabled: bool,
+    terminal_quit_requested: bool,
 
     // RNG state (simple LCG)
     rng_state: u32,
@@ -111,6 +113,12 @@ pub struct VM {
     irq_vector_bank: u16,
     irq_vector_off: u16,
     irq_cause: u16,
+    irq_frame: Option<interrupts::TrapFrame>,
+    irq_acknowledged: bool,
+    irq_stack_bank: u16,
+    irq_stack_top: u16,
+    irq_timer_period: u32,
+    irq_timer_deadline: Option<u64>,
 }
 
 impl VM {
@@ -177,6 +185,7 @@ impl VM {
             stdout_dirty: false,
             input_buffer: VecDeque::new(),
             tty_input_enabled: false,
+            terminal_quit_requested: false,
             rng_state: 0x12345678, // Fixed seed for reproducibility
             display_mode: DISP_OFF,
             display_enabled: false,
@@ -194,6 +203,12 @@ impl VM {
             irq_vector_bank: 0,
             irq_vector_off: 0,
             irq_cause: 0,
+            irq_frame: None,
+            irq_acknowledged: false,
+            irq_stack_bank: 0,
+            irq_stack_top: 0,
+            irq_timer_period: 0,
+            irq_timer_deadline: None,
         }
     }
 
@@ -411,6 +426,13 @@ impl VM {
     /// The caller owns host polling and tick/capture/limit policies. A pending
     /// tick or device error leaves the VM untouched, as do HALT and breakpoints.
     pub fn run_batch(&mut self, budget: u64) -> Result<u64, String> {
+        if budget == 0 { return Ok(0); }
+        if matches!(self.state, VMState::Running)
+            && !self.devices.has_pending_tick() && self.device_error.is_none()
+        {
+            self.update_irq_timer();
+        }
+        let budget = self.interrupt_budget(budget);
         if self.jit_enabled && !self.debug_mode && !self.verbose {
             return self.run_batch_jit(budget);
         }
@@ -471,7 +493,7 @@ impl VM {
         // Inspect STORE operands before execution/PC advancement: PC and PCB
         // themselves are legal source registers.
         let boundary = BATCH
-            && (matches!(instr.opcode, 0x00 | 0x19)
+            && (matches!(instr.opcode, 0x00 | 0x19 | 0x22..=0x24)
                 || (instr.opcode == 0x12
                     && instr.word1 < 32
                     && instr.word2 < 32
@@ -519,8 +541,9 @@ impl VM {
     }
 
     /// If a pending IRQ is enabled and none is in service, jump to the vector.
-    /// Saves PC/PCB into RA/RAB like JAL so the handler can RET.
+    /// Preserve call-return registers and keep dispatch inhibited until IRET.
     fn maybe_dispatch_irq(&mut self) {
+        self.update_irq_timer();
         if self.irq_busy != 0 {
             return;
         }
@@ -531,10 +554,23 @@ impl VM {
         let bit = ready.trailing_zeros() as u16;
         self.irq_busy = 1;
         self.irq_cause = bit + 1;
+        self.irq_status &= !(1 << bit);
+        self.irq_acknowledged = false;
+        self.irq_frame = Some(interrupts::TrapFrame {
+            pc: self.registers[Register::Pc as usize],
+            pcb: self.registers[Register::Pcb as usize],
+            enable: self.irq_enable,
+            sb: self.registers[Register::Sb as usize],
+            sp: self.registers[Register::Sp as usize],
+            fp: self.registers[Register::Fp as usize],
+        });
         self.sync_irq_memory();
 
-        self.registers[Register::Ra as usize] = self.registers[Register::Pc as usize];
-        self.registers[Register::Rab as usize] = self.registers[Register::Pcb as usize];
+        if self.irq_stack_top != 0 {
+            self.registers[Register::Sb as usize] = self.irq_stack_bank;
+            self.registers[Register::Sp as usize] = self.irq_stack_top;
+            self.registers[Register::Fp as usize] = self.irq_stack_top;
+        }
         self.registers[Register::Pcb as usize] = self.irq_vector_bank;
         self.registers[Register::Pc as usize] = self.irq_vector_off;
     }
@@ -597,6 +633,7 @@ impl VM {
         // Clear I/O buffers
         self.output_buffer.clear();
         self.input_buffer.clear();
+        self.terminal_quit_requested = false;
         self.output_ready = true;
         self.stdout_dirty = false;
 
@@ -629,6 +666,12 @@ impl VM {
         self.irq_vector_bank = 0;
         self.irq_vector_off = 0;
         self.irq_cause = 0;
+        self.irq_frame = None;
+        self.irq_acknowledged = false;
+        self.irq_stack_bank = 0;
+        self.irq_stack_top = 0;
+        self.irq_timer_period = 0;
+        self.irq_timer_deadline = None;
         self.jit_budget = 0;
         self.jit_depth = 0;
         self.jit_fault = None;
@@ -842,7 +885,7 @@ mod tests {
     }
 
     #[test]
-    fn irq_status_or_and_ack_clears_current_bit() {
+    fn irq_ack_keeps_dispatch_inhibited_until_iret() {
         let mut vm = VM::with_memory_size(8, 256);
         vm.instructions = vec![
             nop(),
@@ -865,7 +908,7 @@ mod tests {
         vm.step().unwrap();
         // Lowest enabled pending bit is 0 → cause 1, handler at 4 executed
         assert_eq!(vm.registers[Register::Pc as usize], 5);
-        assert_eq!(vm.registers[Register::Ra as usize], 0);
+        assert_eq!(vm.read_csr(CSR_EPC).unwrap(), 0);
         assert_eq!(vm.registers[Register::Rv0 as usize], 99);
         assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(1));
         assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(1));
@@ -874,10 +917,13 @@ mod tests {
         assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(1));
         assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(1));
 
-        vm.handle_mmio_write(HDR_IRQ_BUSY, 1); // ACK
+        vm.handle_mmio_write(HDR_IRQ_BUSY, 1); // ACK does not return from trap
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(1));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(1));
+        assert_eq!(vm.handle_mmio_read(HDR_IRQ_STATUS), Some(0x0004));
+        vm.interrupt_return().unwrap();
         assert_eq!(vm.handle_mmio_read(HDR_IRQ_BUSY), Some(0));
         assert_eq!(vm.handle_mmio_read(HDR_IRQ_CAUSE), Some(0));
-        assert_eq!(vm.handle_mmio_read(HDR_IRQ_STATUS), Some(0x0004)); // bit 2 still pending
     }
 
     #[test]

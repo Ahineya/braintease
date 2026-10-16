@@ -122,7 +122,7 @@ fn handle_return_instruction(
                 let temp_name = naming.temp_name(*t);
                 
                 // Check if returning a pointer (would need bank too)
-                if function.return_type.is_pointer() {
+                if function.return_type.is_pointer() || matches!(function.return_type, IrType::Struct { .. } | IrType::Array { .. }) {
                     // Get the bank register for this pointer first, before moving temp_name
                     let bank_info = mgr.get_pointer_bank(&temp_name)
                         .unwrap_or_else(|| {
@@ -541,7 +541,29 @@ pub fn lower_function_v2(
         }
     }
     super::loop_registers::promote(&mut builder_instructions, function, &alloca_offsets, local_slots, frame_top);
-    instructions.extend(crate::function::frame::finalize(builder_instructions, frame_top));
+    let finalized = crate::function::frame::finalize(builder_instructions, frame_top);
+    if mgr.segmented_stack() {
+        let outgoing = mgr.max_outgoing_stack_cells();
+        let needed = frame_top as u32 + 7 + outgoing;
+        let limit = u32::from(bank_size).checked_sub(10)
+            .ok_or("segmented stack bank is too small")?;
+        if needed + 1 > limit {
+            return Err(format!("function '{}' needs {needed} stack cells plus segment metadata, exceeding bank size {bank_size}", function.name));
+        }
+        let ready = naming.i32_label("stack_ready");
+        instructions.extend([
+            AsmInst::Comment("Check segmented stack before touching the frame".into()),
+            AsmInst::Li(Reg::Sc, (limit - needed) as i16),
+            AsmInst::Sltu(Reg::Sc, Reg::Sc, Reg::Sp),
+            AsmInst::Beq(Reg::Sc, Reg::R0, ready.clone()),
+            AsmInst::Move(Reg::T6, Reg::Ra),
+            AsmInst::Move(Reg::T7, Reg::Rab),
+            AsmInst::Li(Reg::X3, needed as i16),
+            AsmInst::Call("__rcc_stack_grow".into()),
+            AsmInst::Label(ready),
+        ]);
+    }
+    instructions.extend(finalized);
     Ok(instructions)
 }
 

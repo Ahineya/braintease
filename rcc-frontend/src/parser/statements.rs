@@ -302,8 +302,11 @@ impl Parser {
     pub fn parse_inline_asm_statement(&mut self) -> Result<StatementKind, CompilerError> {
         // Extended syntax: asm("code" : outputs : inputs : clobbers);
         // Basic syntax: asm("code");
-        
-        
+        // Inline assembly already has side effects in RCC IR. Accept the GNU
+        // explicit spelling without weakening its existing ordering contract.
+        if matches!(self.peek().map(|token| &token.token_type), Some(TokenType::Volatile)) {
+            self.advance();
+        }
         self.expect(TokenType::LeftParen, "inline assembly")?;
         
         // Parse assembly code string (with adjacent string concatenation)

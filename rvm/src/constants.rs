@@ -47,6 +47,21 @@ pub const HDR_IRQ_CAUSE: usize = 26; // R: 0=none, else 1 + bit index of in-serv
 
 // Software interrupt source (STATUS/ENABLE bit 0)
 pub const IRQ_SW: u16 = 1 << 0;
+pub const IRQ_TIMER: u16 = 1 << 1;
+
+// CPU control registers accessed with CSRR/CSRW. No device MMIO is displaced.
+pub const CSR_EPC: u16 = 0;
+pub const CSR_EPCB: u16 = 1;
+pub const CSR_SAVED_ENABLE: u16 = 2;
+pub const CSR_TIMER_LO: u16 = 3;
+pub const CSR_TIMER_HI: u16 = 4;
+pub const CSR_IRQ_SB: u16 = 5;
+pub const CSR_IRQ_SP: u16 = 6;
+pub const CSR_SAVED_SB: u16 = 7;
+pub const CSR_SAVED_SP: u16 = 8;
+pub const CSR_SAVED_FP: u16 = 9;
+pub const CSR_PENDING: u16 = 10;
+pub const CSR_IRQ_VERSION: u16 = 11;
 
 // Storage control bits
 pub const STORE_BUSY: u16 = 1 << 0; // bit0: VM is processing storage operation

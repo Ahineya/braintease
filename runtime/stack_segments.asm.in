@@ -1,0 +1,119 @@
+; Leaf stack transitions. @LIMIT@ is BANK_SIZE-10, filled by the runtime build.
+; X2 = incoming stack argument cells, X3 = complete frame/outgoing requirement.
+; T6/T7 hold the interrupted function-entry RA/RAB. A*, S*, FP, GP survive.
+__rcc_stack_grow:
+    LI SC, @LIMIT@
+    ADDI T0, SC, 5
+    LOAD T1, SB, T0
+    ADDI T0, T0, 1
+    LOAD T2, SB, T0
+    OR T0, T1, T2
+    BEQ T0, R0, __rcc_stack_exhausted
+    LOAD T3, T2, T1
+    BEQ T3, R0, __rcc_stack_exhausted
+    ; One fresh segment must fit incoming arguments and the entire callee.
+    ADD T0, X2, X3
+    SLTU T4, T0, X2
+    BNE T4, R0, __rcc_stack_exhausted
+    ADDI T0, T0, 1
+    BEQ T0, R0, __rcc_stack_exhausted
+    SLTU T4, SC, T0
+    BNE T4, R0, __rcc_stack_exhausted
+    ; Pop a bank from this stack's own free list.
+    LOAD T0, T3, SC
+    STORE T0, T2, T1
+    ADDI T0, T1, 1
+    LOAD T4, T2, T0
+    ADDI T4, T4, 1
+    STORE T4, T2, T0
+    ADDI T0, T1, 2
+    LOAD T5, T2, T0
+    SLTU T5, T5, T4
+    BEQ T5, R0, __rcc_stack_peak_done
+    STORE T4, T2, T0
+__rcc_stack_peak_done:
+    ADDI T0, SC, 1
+    STORE SB, T3, T0
+    ADDI T0, T0, 1
+    STORE SP, T3, T0
+    ADDI T0, T0, 1
+    STORE T6, T3, T0
+    ADDI T0, T0, 1
+    STORE T7, T3, T0
+    ; Copy the incoming argument area in its original order.
+    SUB T0, SP, X2
+    LI T4, 1
+__rcc_stack_copy_args:
+    BEQ X2, R0, __rcc_stack_args_done
+    LOAD T5, SB, T0
+    STORE T5, T3, T4
+    ADDI T0, T0, 1
+    ADDI T4, T4, 1
+    ADDI X2, X2, -1
+    BEQ R0, R0, __rcc_stack_copy_args
+__rcc_stack_args_done:
+    MOVE SB, T3
+    MOVE SP, T4
+    ; Resume the function prologue; its eventual RET goes through our trampoline.
+    MOVE T4, RA
+    MOVE T5, RAB
+    LI RA, %offset(__rcc_stack_return)
+    LI RAB, %bank(__rcc_stack_return)
+    JALR R0, T5, T4
+
+__rcc_stack_return:
+    ; Keep all result registers RV0/RV1/X0/X1 intact, including aggregate pointers.
+    LI SC, @LIMIT@
+    ADDI T0, SC, 5
+    LOAD T1, SB, T0
+    ADDI T0, T0, 1
+    LOAD T2, SB, T0
+    LOAD T0, T2, T1
+    STORE T0, SB, SC
+    STORE SB, T2, T1
+    ADDI T0, T1, 1
+    LOAD T3, T2, T0
+    ADDI T3, T3, -1
+    STORE T3, T2, T0
+    ADDI T0, SC, 1
+    LOAD T3, SB, T0
+    ADDI T0, T0, 1
+    LOAD T4, SB, T0
+    ADDI T0, T0, 1
+    LOAD RA, SB, T0
+    ADDI T0, T0, 1
+    LOAD RAB, SB, T0
+    MOVE SB, T3
+    MOVE SP, T4
+    RET
+
+__rcc_stack_bank:
+    MOVE RV0, SB
+    RET
+__rcc_stack_gp:
+    MOVE RV0, GP
+    RET
+__rcc_stack_read:
+    LOAD RV0, A0, A1
+    RET
+__rcc_stack_write:
+    STORE A2, A0, A1
+    RET
+
+__rcc_stack_exhausted:
+    LI T0, 83
+    STORE T0, R0, R0
+    LI T0, 84
+    STORE T0, R0, R0
+    LI T0, 65
+    STORE T0, R0, R0
+    LI T0, 67
+    STORE T0, R0, R0
+    LI T0, 75
+    STORE T0, R0, R0
+    LI T0, 33
+    STORE T0, R0, R0
+    LI T0, 10
+    STORE T0, R0, R0
+    LI RV0, 125
+    HALT

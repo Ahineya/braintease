@@ -3,7 +3,7 @@ use super::VM;
 use crate::constants::*;
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     style::ResetColor,
     terminal::{self, ClearType},
     ExecutableCommand,
@@ -17,54 +17,62 @@ impl VM {
         self.keyboard_state = KeyboardState::default();
     }
 
-    /// Poll keyboard events and update keyboard state (non-blocking)
-    pub(super) fn poll_keyboard(&mut self) {
-        // Only poll keyboard in TEXT40 mode with terminal raw mode
-        if self.display_mode != DISP_TEXT40 || !self.terminal_raw_mode {
-            return;
+    /// Poll independently of guest MMIO reads, so a busy or broken guest cannot
+    /// swallow Ctrl-C while raw mode disables the host terminal's SIGINT.
+    pub fn poll_host_terminal(&mut self) -> bool {
+        if self.host_input_enabled && !self.debug_mode && !self.verbose
+            && (self.tty_input_enabled || self.terminal_raw_mode)
+        {
+            self.poll_terminal_event();
         }
+        self.terminal_quit_requested
+    }
 
-        // Poll for a single keyboard event with zero timeout (non-blocking)
-        // Only process one event at a time to maintain state between reads
-        if event::poll(Duration::from_millis(0)).unwrap_or(false) {
-            if let Ok(Event::Key(key_event)) = event::read() {
-                // Clear all keys first, then set the current key
-                // This gives a "last key pressed" behavior
-                self.keyboard_state.up = false;
-                self.keyboard_state.down = false;
-                self.keyboard_state.left = false;
-                self.keyboard_state.right = false;
-                self.keyboard_state.z = false;
-                self.keyboard_state.x = false;
-                self.keyboard_state.last_read_counter = 0; // Reset counter on new input
-
-                // Set the current key as pressed
-                match key_event.code {
-                    KeyCode::Up => {
-                        self.keyboard_state.up = true;
-                    }
-                    KeyCode::Down => {
-                        self.keyboard_state.down = true;
-                    }
-                    KeyCode::Left => {
-                        self.keyboard_state.left = true;
-                    }
-                    KeyCode::Right => {
-                        self.keyboard_state.right = true;
-                    }
-                    KeyCode::Char('z') | KeyCode::Char('Z') => {
-                        self.keyboard_state.z = true;
-                    }
-                    KeyCode::Char('x') | KeyCode::Char('X') => {
-                        self.keyboard_state.x = true;
-                    }
-                    _ => {
-                        // For other keys, don't change state
-                    }
-                }
+    fn poll_terminal_event(&mut self) {
+        if event::poll(Duration::ZERO).unwrap_or(false) {
+            if let Ok(Event::Key(key)) = event::read() {
+                self.accept_terminal_key(key);
             }
         }
-        // If no event, keep the current state (don't clear)
+    }
+
+    fn accept_terminal_key(&mut self, key: KeyEvent) {
+        if key.kind == KeyEventKind::Release {
+            return;
+        }
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(key.code, KeyCode::Char('c' | 'C'))
+        {
+            self.terminal_quit_requested = true;
+            return;
+        }
+        if self.display_mode == DISP_TEXT40 {
+            self.keyboard_state = KeyboardState::default();
+            match key.code {
+                KeyCode::Up => self.keyboard_state.up = true,
+                KeyCode::Down => self.keyboard_state.down = true,
+                KeyCode::Left => self.keyboard_state.left = true,
+                KeyCode::Right => self.keyboard_state.right = true,
+                KeyCode::Char('z' | 'Z') => self.keyboard_state.z = true,
+                KeyCode::Char('x' | 'X') => self.keyboard_state.x = true,
+                _ => {}
+            }
+        } else {
+            match key.code {
+                KeyCode::Char(c) => self.input_buffer.push_back(c as u8),
+                KeyCode::Enter => self.input_buffer.push_back(b'\n'),
+                KeyCode::Backspace => self.input_buffer.push_back(8),
+                KeyCode::Tab => self.input_buffer.push_back(b'\t'),
+                KeyCode::Esc => self.input_buffer.push_back(27),
+                _ => {}
+            }
+        }
+    }
+
+    pub(super) fn poll_keyboard(&mut self) {
+        if self.display_mode == DISP_TEXT40 && self.terminal_raw_mode {
+            self.poll_terminal_event();
+        }
     }
 
     /// Enable TTY input mode (enable raw terminal mode for input capture)
@@ -86,44 +94,12 @@ impl VM {
         }
     }
 
-    /// Poll stdin for input (handles both terminal and piped input)
+    /// Piped input is supplied through --input; live terminal events also
+    /// service Ctrl-C through the same path as the runner's host polling.
     pub(super) fn poll_stdin(&mut self) {
-        // Terminal input - use crossterm events if raw mode is enabled
         if self.tty_input_enabled {
-            // Use crossterm to check for available input
-            if event::poll(Duration::from_millis(0)).unwrap_or(false) {
-                if let Ok(Event::Key(key_event)) = event::read() {
-                    // Convert key event to ASCII character
-                    match key_event.code {
-                        KeyCode::Char(c) => {
-                            // Push character to input buffer
-                            self.input_buffer.push_back(c as u8);
-                        }
-                        KeyCode::Enter => {
-                            // Push newline
-                            self.input_buffer.push_back(b'\n');
-                        }
-                        KeyCode::Backspace => {
-                            // Push backspace (ASCII 8)
-                            self.input_buffer.push_back(8);
-                        }
-                        KeyCode::Tab => {
-                            // Push tab
-                            self.input_buffer.push_back(b'\t');
-                        }
-                        KeyCode::Esc => {
-                            // Push escape (ASCII 27)
-                            self.input_buffer.push_back(27);
-                        }
-                        _ => {
-                            // Ignore other special keys for now
-                        }
-                    }
-                }
-            }
+            self.poll_terminal_event();
         }
-        // For piped input, we rely on pre-populated input buffer via --input flag
-        // Real-time piped input would require platform-specific non-blocking I/O
     }
 
     /// Enter TTY mode (for simple stdin/stdout with raw input)
@@ -205,4 +181,36 @@ pub fn install_terminal_cleanup_hook() {
         // Call the original panic hook
         original_hook(panic_info);
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn control_c_stops_the_host_without_becoming_guest_input() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        vm.host_input_enabled = false;
+        for mode in [DISP_TTY, DISP_TEXT40] {
+            vm.display_mode = mode;
+            vm.terminal_quit_requested = false;
+            vm.accept_terminal_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+            assert!(vm.poll_host_terminal());
+            assert!(vm.input_buffer.is_empty());
+        }
+        vm.reset();
+        assert!(!vm.poll_host_terminal());
+    }
+
+    #[test]
+    fn ordinary_terminal_input_and_text40_keys_still_reach_the_guest() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        vm.accept_terminal_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        vm.accept_terminal_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), b"c\n");
+        vm.display_mode = DISP_TEXT40;
+        vm.accept_terminal_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert!(vm.keyboard_state.up);
+        assert!(!vm.terminal_quit_requested);
+    }
 }

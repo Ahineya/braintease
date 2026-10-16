@@ -81,7 +81,7 @@ unchanged. The Rust VM, Brainfuck host adapter, and native runtime implement thi
 device-command ABI. The Brainfuck CPU continues to execute guest instructions
 in Brainfuck.
 
-The [networking contract](../mmio.networking.md) adds `NET_INFO` (0x0100),
+The [networking contract](../networking/device.md) adds `NET_INFO` (0x0100),
 `NET_TX` (0x0101), `NET_RX` (0x0102), and `NET_STATS` (0x0103) in the same mailbox,
 advertised by capability 0x0020. It documents queues, one-octet-per-cell buffers,
 the C helpers, host attachment and bidirectional ping tests. No additional MMIO
@@ -89,10 +89,11 @@ addresses are used.
 
 ## Interrupts
 
-Unpacked registers (no packed cause field). At the **start** of each instruction, if `BUSY==0` and `(STATUS & ENABLE)!=0`, the VM takes the **lowest set bit**, sets `BUSY`, sets `CAUSE = 1 + bit`, saves PC/PCB into RA/RAB (instruction not yet executed), and jumps to the vector. No nesting while busy. Software source: `IRQ_SW` (bit 0).
+IRQ ABI version 2 preserves RA/RAB and holds the interrupted PC/PCB and stack
+state in CPU control registers. ACK acknowledges the active event while BUSY
+continues to inhibit entry. IRET restores saved state and ends the handler
+atomically. Pending events raised during a handler are retained.
 
-ACK: write nonzero to `IRQ_BUSY` — clears busy, cause, and the STATUS bit for the in-service cause. Write 0 is ignored.
-
-Do not enable a bit that is already pending unless a handler is installed.
-
-Handler return: `RET` (uses RAB) or `JALR R0, RAB, RA`. ACK immediately before return so another pending IRQ cannot steal RA/RAB.
+CPU control registers, optional interrupt-stack switching, and the deterministic
+instruction timer are defined in [stacks-and-interrupts.md](stacks-and-interrupts.md).
+The device mailbox and all existing MMIO addresses are unchanged.

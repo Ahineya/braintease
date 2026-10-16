@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${ROS_BUILD:-$ROOT/build/ros}"
 build_only=0
 fresh=0
+update_disk=0
 disk=""
 args=()
 
@@ -26,9 +27,10 @@ try HELP, DIR, HELLO, or EXIT. No graphics window is needed.
 
 Other arguments are passed to rvm; target/release/rvm --help lists them.
 Cargo checks release tool freshness, then rebuilds the BIOS from source.
-On first launch it also builds IO.SYS, KERNEL.SYS, COMMAND.COM and HELLO.RXE
-and places them in build/ros/ros.img. Existing disks are kept across launches.
-Use --fresh to update the default disk's OS files (this resets that disk).
+Each launch rebuilds IO.SYS, KERNEL.SYS, COMMAND.COM and HELLO.RXE and updates
+them in build/ros/ros.img, preserving other files. Before changing an existing
+disk, it saves a backup alongside it (ros.img.bak, ros.img.bak.1, ...).
+Use --fresh to reformat the default disk and remove all existing files.
 Set ROS_BUILD to use a different build directory. Any image supplied with
 --disk is left intact by the build; the running guest can still write to it.
 EOF
@@ -68,8 +70,9 @@ cargo build --quiet --release --manifest-path "$ROOT/src/ripple-asm/Cargo.toml" 
 
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
-make_args=(-C "$ROOT/c-test/examples/rOS" -B "BUILD=$OUT" BANK_SIZE=64000)
+make_args=(-C "$ROOT/c-test/examples/rOS" -B "BUILD=$OUT" BANK_SIZE=64000 SEGMENTED_STACK=0)
 if [[ -z "$disk" ]]; then
+    update_disk=1
     disk="$OUT/ros.img"
     if [[ "$fresh" == 1 || ! -f "$disk" ]]; then
         if [[ -f "$disk" ]]; then
@@ -77,17 +80,22 @@ if [[ -z "$disk" ]]; then
         fi
         make_args+=(disk "DISK=$disk")
     else
-        make_args+=(bios)
-        printf 'Keeping existing rOS disk: %s (use --fresh to update/reset it)\n' "$disk" >&2
+        make_args+=(images)
+        printf 'Updating rOS files in existing disk: %s (other files are preserved)\n' "$disk" >&2
     fi
 else
     make_args+=(bios)
 fi
 
 # The rOS Makefile does not track compiler/header changes. Rebuild the selected
-# images explicitly; on-disk OS images are replaced only on creation/--fresh.
+# images explicitly, including the OS files installed in the default disk.
 printf 'Building rOS (64,000-cell banks)...\n' >&2
 make "${make_args[@]}" >&2
+if [[ "$fresh" == 0 && "$update_disk" == 1 ]]; then
+    node "$ROOT/c-test/examples/rOS/mkfat16.mjs" --update --backup -o "$disk" \
+        "$OUT/IO.SYS:IO.SYS" "$OUT/KERNEL.SYS:KERNEL.SYS" \
+        "$OUT/COMMAND.COM:COMMAND.COM" "$OUT/HELLO.RXE:HELLO.RXE" >&2
+fi
 if [[ "$build_only" == 1 ]]; then exit 0; fi
 
 printf 'Booting rOS; type HELP for commands or EXIT to stop.\n' >&2

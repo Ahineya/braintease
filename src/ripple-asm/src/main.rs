@@ -147,6 +147,9 @@ fn get_instruction_description(opcode: Opcode) -> &'static str {
         Opcode::Halt => "Stop execution",
         Opcode::Nop => "No operation",
         Opcode::Brk => "Break/Debug",
+        Opcode::Iret => "Atomic interrupt return",
+        Opcode::Csrr => "Read CPU control register",
+        Opcode::Csrw => "Write CPU control register",
     }
 }
 
@@ -167,7 +170,7 @@ fn get_instruction_category(opcode: Opcode) -> &'static str {
         Opcode::Jal | Opcode::Jalr | Opcode::Beq | Opcode::Bne | 
         Opcode::Blt | Opcode::Bge => "CONTROL FLOW",
         
-        Opcode::Halt | Opcode::Nop | Opcode::Brk => "SPECIAL",
+        Opcode::Halt | Opcode::Nop | Opcode::Brk | Opcode::Iret | Opcode::Csrr | Opcode::Csrw => "SPECIAL",
     }
 }
 

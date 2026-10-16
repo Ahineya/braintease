@@ -92,6 +92,7 @@ fn asm_of(module: &Module) -> Result<String, CompileError> {
             bank_size: 64000,
             use_v2: true,
             trace_spills: false,
+            segmented_stack: false,
         },
     )
     .map_err(CompileError::plain)?;

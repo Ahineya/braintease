@@ -227,14 +227,14 @@ fn run_with_execution(vm: &mut VM, options: &RunOptions, batched: bool) -> Resul
         closed: false,
         quit: false,
     };
-    let check_host = |vm: &VM| -> Result<bool, String> {
+    let check_host = |vm: &mut VM| -> Result<bool, String> {
         if options
             .timeout
             .is_some_and(|limit| started.elapsed() >= limit)
         {
             return Err("Wall-time limit exceeded".into());
         }
-        Ok(vm.window_closed())
+        Ok(vm.poll_host_terminal() || vm.window_closed())
     };
     loop {
         if let Some(error) = vm.device_error.as_ref() {

@@ -2078,6 +2078,8 @@ dependencies = [
  "rcc-ir",
  "rcc-native",
  "rcc-preprocessor",
+ "ripple-asm",
+ "rvm",
  "serde",
  "serde_json",
 ]

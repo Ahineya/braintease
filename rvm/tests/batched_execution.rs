@@ -181,7 +181,7 @@ fn irq_store_dispatch_and_acknowledgement_keep_instruction_boundaries() {
         code[2] = i(0, 0, 0, 0);
         code[66] = i(10, 9, 9, 1);
         code[67] = i(18, 7, 0, 10);
-        code[68] = i(20, 0, 4, 3);
+        code[68] = i(0x22, 0, 0, 0);
         let mut f = Fixture::new(64, code);
         f.vm.registers[7] = 1;
         f.vm.registers[8] = 21;

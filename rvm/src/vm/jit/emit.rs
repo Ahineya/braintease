@@ -267,6 +267,12 @@ impl<'a> Cg<'a> {
         let inst = &block.instrs[last];
         self.instruction_pc(block.index + last, inst);
         match inst.opcode {
+            // These system operations use the reference handler, after all
+            // preceding native register writes have been published.
+            0x22..=0x24 => {
+                self.finish(FALLBACK);
+                Ok(())
+            }
             0x15..=0x18 => {
                 let Edge::Branch { taken, fall } = block.edge else {
                     return Err("JIT: branch is missing its edges".into());

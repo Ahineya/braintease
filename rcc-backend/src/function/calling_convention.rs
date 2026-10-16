@@ -304,6 +304,11 @@ impl CallingConvention {
 
         debug!("Call args setup complete: {} in registers, {} words on stack, {} total instructions", 
                register_arg_slots.len(), stack_offset, insts.len());
+
+        if pressure_manager.segmented_stack() {
+            pressure_manager.reserve_outgoing_stack_cells(stack_offset as u32);
+            insts.push(AsmInst::Li(Reg::X2, stack_offset));
+        }
         
         insts
     }

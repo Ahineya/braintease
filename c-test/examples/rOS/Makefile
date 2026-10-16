@@ -58,7 +58,7 @@ CMD_RT_OBJS := \
 	$(RUNTIME)/stdlib.pobj \
 	$(RUNTIME)/softfloat.pobj
 
-.PHONY: all runtime bios io kernel command disk run \
+.PHONY: all runtime bios io kernel command images disk run \
 	test-bios test-io test-kernel test-disk-image hello clean
 .PRECIOUS: $(BUILD)/%.asm $(BUILD)/%.pobj
 
@@ -142,7 +142,9 @@ $(HELLO_RXE): runtime $(CRT0_ROS) $(LIBROS) $(BUILD)/hello.pobj
 	$(RLINK) $(CRT0_ROS) $(LIBROS) $(BUILD)/hello.pobj \
 		-f rxe --bank-size $(BANK_SIZE) -o $@
 
-disk: $(BIOS_BIN) $(IO_SYS) $(KERNEL_SYS) $(COMMAND_COM) $(HELLO_RXE)
+images: $(BIOS_BIN) $(IO_SYS) $(KERNEL_SYS) $(COMMAND_COM) $(HELLO_RXE)
+
+disk: images
 	$(NODE) $(SRC)/mkfat16.mjs -o $(DISK) \
 		$(IO_SYS):IO.SYS \
 		$(KERNEL_SYS):KERNEL.SYS \

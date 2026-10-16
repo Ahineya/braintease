@@ -422,13 +422,7 @@ impl VM {
             }
             HDR_IRQ_BUSY => {
                 if value != 0 && self.irq_busy != 0 {
-                    if self.irq_cause > 0 && self.irq_cause <= 16 {
-                        let bit = self.irq_cause - 1;
-                        self.irq_status &= !(1u16 << bit);
-                    }
-                    self.irq_busy = 0;
-                    self.irq_cause = 0;
-                    self.sync_irq_memory();
+                    self.irq_acknowledged = true;
                 }
                 true
             }

@@ -344,3 +344,11 @@ rlink file1.pobj file2.pobj -f archive -o mylib.par
 # Assemble-only helper (not the C compiler)
 rbt program.asm --run
 ```
+
+## Optional segmented C stacks
+
+Use `rcc compile --segmented-stack` (or `generate-asm --segmented-stack`) and build
+matching runtime objects with `make -C runtime SEGMENTED_STACK=1 BANK_SIZE=64000`.
+Initialize a per-stack pool with `<stack.h>` before deep calls. Fixed stacks remain
+the default for existing programs and low-level handlers. See
+[the stack and IRQ contract](docs/arch/stacks-and-interrupts.md) for setup and ABI rules.

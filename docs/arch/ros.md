@@ -6,13 +6,19 @@ Build and launch from the repository root:
 scripts/run-ros.sh
 ```
 
-This checks the release toolchain, builds the BIOS and, on first launch, the
-separate OS images and FAT16 disk in `build/ros`, then boots the Rust VM in the
+This checks the release toolchain and rebuilds the BIOS and separate OS images
+in `build/ros`, then boots the Rust VM in the
 terminal. At the `C:\>` prompt, try `HELP`, `DIR`, `HELLO`, and `EXIT`.
-The disk is preserved between launches. Use `--fresh` to rebuild the OS images
-and reset the default disk, erasing its existing files. `--disk PATH` boots an
+Each launch installs current `IO.SYS`, `KERNEL.SYS`, `COMMAND.COM` and `HELLO.RXE`
+into the default `ros.img`. Other files, directories and their metadata are
+preserved. Before changing an existing image, the launcher saves its previous
+contents to `ros.img.bak` (or `.bak.1`, `.bak.2`, etc.), then replaces the image
+atomically. An unchanged image does not create another backup. This also upgrades
+disks made before IRQ ABI v2; `--fresh` is not needed for an OS update.
+Use `--fresh` to reset the default disk, erasing its existing files. `--disk PATH` boots an
 existing rOS image without rebuilding that disk and cannot be combined with
 `--fresh`. `ROS_BUILD` selects another build directory.
+Ctrl+C stops the VM even when the guest is busy and does not read keyboard input.
 
 ```bash
 scripts/run-ros.sh --build-only
@@ -150,8 +156,11 @@ Hardware: `IRQ_SW` at header 21–26 ([mmio.md](mmio.md)).
 
 1. KERNEL at boot: `IRQ_VECTOR_*` = INT21 handler, `IRQ_ENABLE = IRQ_SW`.
 2. App (via `libros`): args in `A0`–`A3`. Save `RA`/`RAB` (the C return), then write `IRQ_SW` to `IRQ_STATUS`.
-3. The next instruction is interrupted; dispatch overwrites `RA`/`RAB` with that PC (the insn has not run). Handler runs on the **user stack** (v1).
-4. Result in `RV0`/`RV1`; ACK `IRQ_BUSY`; `RET` to the interrupted insn; wrapper restores the C return and `RET`s. Do not raise IRQ immediately before a `RET` — that `RET` would jump to itself.
+3. The next instruction is interrupted; CPU trap state saves the continuation and preserves `RA`/`RAB`. The current rOS handler uses the user stack.
+4. Result in `RV0`/`RV1`; ACK `IRQ_BUSY`; restore handler registers; `IRET` resumes the interrupted instruction. On application exit, the kernel sets saved PC/PCB/SB/SP/FP to the shell continuation before IRET.
+
+This requires IRQ ABI version 2. Rebuild the OS images on a new disk; old IRQ
+binaries use an incompatible return contract. See [stacks-and-interrupts.md](stacks-and-interrupts.md).
 
 `AH` in `A0`:
 

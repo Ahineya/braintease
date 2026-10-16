@@ -84,7 +84,7 @@ Fill A0–A3 in order. If the next argument does not fit in the remaining slots,
 | Result | Registers |
 |--------|-----------|
 | 16-bit scalar | RV0 |
-| Fat pointer | RV0 = address, RV1 = bank |
+| Fat pointer / aggregate-result address | RV0 = address, RV1 = concrete bank |
 | 32-bit (`long` / `float`) | RV0 = low, RV1 = high |
 | 64-bit (`long long` / `double`) | RV0, RV1, X0, X1 (low to high) |
 
@@ -92,7 +92,7 @@ Fill A0–A3 in order. If the next argument does not fit in the remaining slots,
 
 - **Caller-saved:** T0–T7, A0–A3, RV0–RV1 (and X* when used as wide scratch).
 - **Callee-saved:** S0–S3. The compiler currently **always** saves/restores all four in every function prologue/epilogue.
-- **RA / RAB:** clobbered by `CALL`/`JAL`/`JALR` and by IRQ dispatch. Callees save both.
+- **RA / RAB:** clobbered by `CALL`/`JAL`/`JALR` while IRQ entry preserves them. Callees save both.
 
 ## Stack
 
@@ -130,4 +130,16 @@ Epilogue restores S3…S0, then FP, RAB, RA, then `RET`.
 
 ## Interrupts vs the ABI
 
-IRQ dispatch writes RA/RAB like `JAL` but saves the **current** PC (the instruction has not executed yet). Handlers must `ACK` (`IRQ_BUSY` write nonzero) before returning, or keep ENABLE clear, so a still-pending IRQ cannot overwrite RA/RAB. Same-bank: `RET`. Cross-bank: `JALR R0, RAB, RA`. No nesting while `IRQ_BUSY` is set. Details: [mmio.md](mmio.md).
+IRQ ABI version 2 saves its continuation separately and preserves RA/RAB. Assembly
+handlers save all other live registers they modify, acknowledge the active event,
+and use IRET after restoring registers. ACK keeps dispatch inhibited until the
+atomic return. Optional interrupt-stack switching and editable return state are
+specified in [stacks-and-interrupts.md](stacks-and-interrupts.md).
+
+## Optional growing stacks
+
+`--segmented-stack` adds entry checks and bank transitions using a per-stack pool.
+Escaping stack pointers carry concrete banks, and aggregate returns carry both
+pointer words. Fixed stacks remain the default. See
+[stacks-and-interrupts.md](stacks-and-interrupts.md) for setup, assembly interop,
+bootstrap requirements, and migration.

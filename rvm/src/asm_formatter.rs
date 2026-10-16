@@ -69,7 +69,7 @@ pub fn format_instruction_spans(
                 Style::default().fg(Color::Rgb(255, 140, 0)),
             )); // Orange
         }
-        Some(Opcode::Li) => {
+        Some(Opcode::Li) | Some(Opcode::Csrr) | Some(Opcode::Csrw) => {
             // LI: li rd, imm
             spans.push(Span::styled(format!("{opcode_str:<6} "), opcode_style));
             spans.push(Span::styled(
@@ -189,6 +189,9 @@ pub fn format_instruction_spans(
                 format!("{offset}"),
                 Style::default().fg(Color::Rgb(255, 140, 0)),
             ));
+        }
+        Some(Opcode::Iret) => {
+            spans.push(Span::raw("IRET"));
         }
         Some(Opcode::Brk) => {
             // BRK

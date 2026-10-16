@@ -130,7 +130,7 @@ pub fn generate_function_call(
                 // read freed stack).
                 let src = Value::FatPtr(FatPointer {
                     addr: Box::new(Value::Temp(temp_id)),
-                    bank: BankTag::Stack,
+                    bank: BankTag::Mixed,
                 });
                 let dest = gen.builder.build_alloca(ir_return_type, None)
                     .map_err(|e| CodegenError::InternalError {

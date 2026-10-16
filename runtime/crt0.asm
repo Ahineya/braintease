@@ -20,6 +20,7 @@ _start:
     
     ; Call main function
     ; main() should be provided by the user program
+    LI X2, 0      ; no incoming stack arguments
     CALL main
     
     ; If main returns, halt the program

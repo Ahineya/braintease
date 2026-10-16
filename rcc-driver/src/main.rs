@@ -33,6 +33,7 @@ struct CompileConfig {
     bank_size: u16,
     /// Enable spill/reload tracing
     trace_spills: bool,
+    segmented_stack: bool,
     /// Skip preprocessing
     no_preprocess: bool,
     /// Include directories for preprocessor
@@ -90,6 +91,10 @@ enum Commands {
         /// Enable spill/reload tracing for debugging register allocation
         #[arg(long)]
         trace_spills: bool,
+
+        /// Use a configured pool of stack banks (requires matching runtime objects)
+        #[arg(long)]
+        segmented_stack: bool,
     },
     
     /// Compile C99 source file
@@ -128,6 +133,10 @@ enum Commands {
         /// Enable spill/reload tracing for debugging register allocation
         #[arg(long)]
         trace_spills: bool,
+
+        /// Use a configured pool of stack banks (requires matching runtime objects)
+        #[arg(long)]
+        segmented_stack: bool,
         
         /// Skip preprocessing (treat input as already preprocessed)
         #[arg(long)]
@@ -175,13 +184,13 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::GenerateAsm { input, output, bank_size, trace_spills } => {
-            if let Err(e) = generate_asm_command(&input, output.as_deref(), bank_size, trace_spills) {
+        Commands::GenerateAsm { input, output, bank_size, trace_spills, segmented_stack } => {
+            if let Err(e) = generate_asm_command(&input, output.as_deref(), bank_size, trace_spills, segmented_stack) {
                 eprintln!("Error generating assembly: {e}");
                 std::process::exit(1);
             }
         }
-        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, no_preprocess, include_dirs, defines, trace, target } => {
+        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, segmented_stack, no_preprocess, include_dirs, defines, trace, target } => {
             // Initialize logger based on debug level
             let log_level = match debug {
                 0 => "error",
@@ -206,6 +215,7 @@ fn main() {
                 ir_output_path: ir_output,
                 bank_size,
                 trace_spills,
+                segmented_stack,
                 no_preprocess,
                 include_dirs,
                 defines,
@@ -233,6 +243,7 @@ fn generate_asm_command(
     output_path: Option<&std::path::Path>,
     bank_size: u16,
     trace_spills: bool,
+    segmented_stack: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let text = fs::read_to_string(input_path)?;
     let module = rcc_ir::parse_module(&text)?;
@@ -243,7 +254,7 @@ fn generate_asm_command(
         path.set_extension("asm");
         path
     };
-    write_assembly(&module, &output, bank_size, trace_spills)
+    write_assembly(&module, &output, bank_size, trace_spills, segmented_stack)
 }
 
 fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -282,9 +293,10 @@ fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn 
         path
     };
     if config.target == rcc_ir::target::Target::Native {
+        if config.segmented_stack { return Err("--segmented-stack is a Ripple calling convention; native uses its own logical stack".into()); }
         if config.bank_size != 64000 { return Err("native v1 data ABI requires --bank-size 64000".into()); }
         rcc_native::compile_executable(module, &output).map_err(Into::into)
-    } else { write_assembly(module, &output, config.bank_size, config.trace_spills) }
+    } else { write_assembly(module, &output, config.bank_size, config.trace_spills, config.segmented_stack) }
 }
 
 fn write_assembly(
@@ -292,12 +304,14 @@ fn write_assembly(
     output: &std::path::Path,
     bank_size: u16,
     trace_spills: bool,
+    segmented_stack: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let has_main = module.functions.iter().any(|func| func.name == "main");
     let options = LoweringOptions {
         bank_size,
         use_v2: true,
         trace_spills,
+        segmented_stack,
     };
     match lower_module_to_assembly_with_options(module, options) {
         Ok(asm_instructions) => {

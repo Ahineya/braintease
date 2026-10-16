@@ -11,6 +11,10 @@ When a fat pointer is stored in memory, the bank word is either:
 - a **tag**: Global = −1, Stack = −2, NULL = −3 (`rcc-backend/src/regmgmt/bank.rs`), or
 - a non-negative **heap/dynamic bank number**.
 
+Segmented C code materializes the actual SB when stack pointers escape through
+calls or stores. Internal frame-relative values can still use the Stack tag.
+See [stack growth](stacks-and-interrupts.md).
+
 On load, negative tags become `GP` or `SB`; non-negative values are used as the bank register after `LI`.
 
 ## Provenance

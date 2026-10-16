@@ -45,8 +45,8 @@ pub fn lower_store(
 
             let bank_src: Option<(Reg, bool)> = mgr.get_pointer_bank(&name)
                 .map(|info| {
-                    // Preserve bank tags (-1 global, -2 stack). Runtime resolution
-                    // would turn a stack tag into SB, which is wrong to store.
+                    // Preserve v1 tags for fixed code; segmented code freezes SB
+                    // when a stack pointer escapes into memory.
                     // Dynamic banks are reloaded if the original register was spilled.
                     let context = naming.store_bank_check_context();
                     let (resolved_reg, check_insts) = get_bank_value_for_argument(
@@ -132,12 +132,13 @@ pub fn lower_store(
                     (r, true)
                 }
                 BankTag::Stack => {
-                    // Store the Stack bank tag value
-                    // When loaded back, this will be recognized as "use SB register"
+                    // A segmented stack pointer keeps its actual bank in memory;
+                    // fixed-stack code retains the original relative tag.
                     let name = naming.store_fatptr_bank();
                     let r = mgr.get_register(name);
                     insts.extend(mgr.take_instructions());
-                    insts.push(AsmInst::Li(r, BankTagValue::STACK));
+                    insts.push(if mgr.segmented_stack() { AsmInst::Move(r, Reg::Sb) }
+                        else { AsmInst::Li(r, BankTagValue::STACK) });
                     (r, true)
                 }
                 BankTag::Mixed => {

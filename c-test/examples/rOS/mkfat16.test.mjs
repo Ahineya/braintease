@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { fat16Image } from './mkfat16.mjs';
+import { fat16Image, updateFat16Image } from './mkfat16.mjs';
 
 test('BPB, both FAT copies, root entries and cluster chains preserve file data', () => {
   const files = [0, 1, 2048, 2049, 7777].map((length, index) => ({
@@ -23,7 +23,7 @@ test('BPB, both FAT copies, root entries and cluster chains preserve file data',
   assert.equal(image.readUInt16LE(22), 32);
   assert.equal(image.readUInt32LE(32), 20480);
   assert.equal(image.readUInt32LE(39), 0x12345678);
-  assert.equal(image.subarray(43, 54).toString(), 'RIPPLEROS  ');
+  assert.equal(image.subarray(43, 54).toString(), 'RIPPLEOS  ');
   assert.equal(image.subarray(54, 62).toString(), 'FAT16   ');
   assert.equal(image.readUInt16LE(510), 0xaa55);
 
@@ -96,6 +96,120 @@ test('CLI creates parent directories and accepts basename and explicit names', (
     const invalid = spawnSync(process.execPath, [command, '--output'], { encoding: 'utf8' });
     assert.notEqual(invalid.status, 0);
     assert.match(invalid.stderr, /requires a filename/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function rootFiles(image) {
+  const bps = image.readUInt16LE(11);
+  const bytes = bps * image[13];
+  const fatStart = image.readUInt16LE(14) * bps;
+  const rootStart = fatStart + image[16] * image.readUInt16LE(22) * bps;
+  const count = image.readUInt16LE(17);
+  const dataStart = rootStart + Math.ceil(count * 32 / bps) * bps;
+  const result = new Map();
+  for (let entry = rootStart; entry < rootStart + count * 32 && image[entry]; entry += 32) {
+    if (image[entry] === 0xe5) continue;
+    const name = image.subarray(entry, entry + 11).toString('ascii');
+    const chain = [];
+    const chunks = [];
+    for (let c = image.readUInt16LE(entry + 26); c && c < 0xfff8; c = image.readUInt16LE(fatStart + c * 2)) {
+      assert.ok(!chain.includes(c));
+      chain.push(c);
+      chunks.push(Buffer.from(image.subarray(dataStart + (c - 2) * bytes, dataStart + (c - 1) * bytes)));
+    }
+    result.set(name, {
+      entry, chain, chunks,
+      metadata: Buffer.from(image.subarray(entry, entry + 32)),
+      data: Buffer.concat(chunks).subarray(0, image.readUInt32LE(entry + 28)),
+    });
+  }
+  return result;
+}
+
+test('OS update preserves unrelated files, directories, metadata and allocated clusters', () => {
+  const before = fat16Image([
+    { name: 'IO.SYS', data: Buffer.alloc(5000, 1) },
+    { name: 'NOTES.TXT', data: Buffer.alloc(7000, 2) },
+    { name: 'KERNEL.SYS', data: Buffer.alloc(3000, 3) },
+    { name: 'MYDIR', data: Buffer.alloc(2048, 0) },
+  ]);
+  const entries = rootFiles(before);
+  before[entries.get('MYDIR      ').entry + 11] = 0x10;
+  before.writeUInt32LE(0x12345678, entries.get('NOTES   TXT').entry + 14);
+  const original = Buffer.from(before);
+  const io = Buffer.alloc(15000, 42);
+  const hello = Buffer.from('new app');
+  const after = updateFat16Image(before, [
+    { name: 'IO.SYS', data: io },
+    { name: 'KERNEL.SYS', data: Buffer.alloc(0) },
+    { name: 'HELLO.RXE', data: hello },
+  ]);
+  assert.deepEqual(before, original, 'the input must not be mutated');
+  const oldFiles = rootFiles(before);
+  const newFiles = rootFiles(after);
+  for (const name of ['NOTES   TXT', 'MYDIR      ']) {
+    assert.deepEqual(newFiles.get(name), oldFiles.get(name));
+  }
+  assert.deepEqual(newFiles.get('IO      SYS').data, io);
+  assert.equal(newFiles.get('KERNEL  SYS').chain.length, 0);
+  assert.deepEqual(newFiles.get('HELLO   RXE').data, hello);
+  const fatStart = before.readUInt16LE(14) * 512;
+  const fatBytes = before.readUInt16LE(22) * 512;
+  assert.deepEqual(after.subarray(fatStart, fatStart + fatBytes), after.subarray(fatStart + fatBytes, fatStart + 2 * fatBytes));
+  assert.deepEqual(updateFat16Image(after, [
+    { name: 'IO.SYS', data: io },
+    { name: 'KERNEL.SYS', data: Buffer.alloc(0) },
+    { name: 'HELLO.RXE', data: hello },
+  ]), after, 'repeating the same update must be stable');
+});
+
+test('invalid chains, inconsistent FATs, directories and full disks fail without mutation', () => {
+  const source = fat16Image([{ name: 'IO.SYS', data: Buffer.alloc(2048) }]);
+  const original = Buffer.from(source);
+  assert.throws(() => updateFat16Image(source, [{ name: 'IO.SYS', data: Buffer.alloc(10 * 1024 * 1024) }]), /space/);
+  assert.deepEqual(source, original);
+  const corrupt = Buffer.from(source);
+  for (const start of [512, 512 + 32 * 512]) corrupt.writeUInt16LE(2, start + 4);
+  assert.throws(() => updateFat16Image(corrupt, [{ name: 'IO.SYS', data: Buffer.alloc(1) }]), /chain/);
+  const disagree = Buffer.from(source);
+  disagree[512 + 4] = 0;
+  assert.throws(() => updateFat16Image(disagree, []), /copies disagree/);
+  const directory = Buffer.from(source);
+  directory[rootFiles(source).get('IO      SYS').entry + 11] = 0x10;
+  assert.throws(() => updateFat16Image(directory, [{ name: 'IO.SYS', data: Buffer.alloc(1) }]), /regular root file/);
+});
+
+test('CLI updates atomically with backups and skips unchanged disks', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ripple-fat16-update-'));
+  try {
+    const disk = path.join(directory, 'ros.img');
+    const code = path.join(directory, 'IO.SYS');
+    const initial = fat16Image([
+      { name: 'IO.SYS', data: Buffer.from('old') },
+      { name: 'USER.TXT', data: Buffer.from('keep me') },
+    ]);
+    fs.writeFileSync(disk, initial);
+    fs.writeFileSync(code, Buffer.from('new kernel code'));
+    const command = fileURLToPath(new URL('./mkfat16.mjs', import.meta.url));
+    const update = () => spawnSync(process.execPath, [command, '--update', '--backup', '-o', disk, code], { encoding: 'utf8' });
+    const first = update();
+    assert.equal(first.status, 0, first.stderr);
+    assert.deepEqual(fs.readFileSync(`${disk}.bak`), initial);
+    assert.equal(rootFiles(fs.readFileSync(disk)).get('USER    TXT').data.toString(), 'keep me');
+    const second = update();
+    assert.equal(second.status, 0, second.stderr);
+    assert.match(second.stdout, /unchanged/);
+    assert.ok(!fs.existsSync(`${disk}.bak.1`));
+    fs.writeFileSync(code, Buffer.alloc(10 * 1024 * 1024));
+    const beforeFailure = fs.readFileSync(disk);
+    assert.notEqual(update().status, 0);
+    assert.deepEqual(fs.readFileSync(disk), beforeFailure);
+    fs.writeFileSync(code, Buffer.from('another revision'));
+    assert.equal(update().status, 0);
+    assert.deepEqual(fs.readFileSync(`${disk}.bak.1`), beforeFailure);
+    assert.ok(!fs.readdirSync(directory).some(name => name.includes('.tmp-')));
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

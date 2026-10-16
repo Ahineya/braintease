@@ -10,9 +10,11 @@ BANK_SIZE ?= 64000  # Addressable 16-bit cells per bank
 MAX_IMMEDIATE = 65535
 RUNTIME_HEADERS = $(wildcard include/*.h) $(wildcard net/*.h)
 BANK_SIZE_STAMP = .bank-size
+SEGMENTED_STACK ?= 0
+STACK_FLAG = $(if $(filter 1,$(SEGMENTED_STACK)),--segmented-stack,)
 
 # Source files
-C_SOURCES = __char_patch.c putchar.c puts.c getchar.c mmio.c vm_devices.c vm_network.c $(wildcard net/*.c) rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
+C_SOURCES = irq.c stack.c __char_patch.c putchar.c puts.c getchar.c mmio.c vm_devices.c vm_network.c $(wildcard net/*.c) rand.c graphics.c string.c malloc.c printf.c ctype.c stdlib.c softfloat.c softmath.c scanf.c
 ASM_SOURCES = crt0.asm
 
 # qfixed lives in src/ and is compiled via the qfixed.asm rule below
@@ -20,8 +22,8 @@ ASM_FILES = $(C_SOURCES:.c=.asm) qfixed.asm
 C_OBJ_FILES = $(C_SOURCES:.c=.pobj) qfixed.pobj
 
 # Don't include crt0 in the runtime library - it should be linked separately
-RUNTIME_OBJ_FILES = $(C_OBJ_FILES)
-ALL_OBJ_FILES = $(C_OBJ_FILES) crt0.pobj
+RUNTIME_OBJ_FILES = $(C_OBJ_FILES) stack_segments.pobj
+ALL_OBJ_FILES = $(RUNTIME_OBJ_FILES) crt0.pobj
 RUNTIME_LIB = libruntime.par
 
 # rOS apps: INT21 putchar/getchar, no mmio. crt0_ros is linked separately.
@@ -35,11 +37,11 @@ LIBROS = libros.par
 # Default target
 all: $(RUNTIME_LIB) $(LIBROS) crt0.pobj $(ROS_ASM_OBJ)
 
-# Rewrite the stamp only when the configured bank size changes. Assembly and
-# object files embed this setting and must not be reused for another size.
+# Rebuild when bank size or stack calling convention changes. Objects from
+# different settings must not be mixed.
 $(BANK_SIZE_STAMP): FORCE
-	@if test "$$(cat $@ 2>/dev/null)" != "$(strip $(BANK_SIZE))"; then \
-		printf '%s\n' "$(strip $(BANK_SIZE))" > $@; \
+	@if test "$$(cat $@ 2>/dev/null)" != "$(strip $(BANK_SIZE)):$(SEGMENTED_STACK)"; then \
+		printf '%s\n' "$(strip $(BANK_SIZE)):$(SEGMENTED_STACK)" > $@; \
 	fi
 
 FORCE:
@@ -47,12 +49,26 @@ FORCE:
 # Compile C files to assembly
 %.asm: %.c $(RCC) $(RUNTIME_HEADERS) $(BANK_SIZE_STAMP)
 	@echo "Compiling $< to assembly..."
+	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE) $(STACK_FLAG)
+
+# Bootstrap pool management runs on the root stack and never grows itself.
+stack.asm: stack.c $(RCC) $(RUNTIME_HEADERS) $(BANK_SIZE_STAMP)
 	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
+
+# CPU control helpers are usable from fixed interrupt stacks.
+irq.asm: irq.c $(RCC) $(RUNTIME_HEADERS) $(BANK_SIZE_STAMP)
+	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
+
+stack_segments.asm: stack_segments.asm.in $(BANK_SIZE_STAMP)
+	sed "s/@LIMIT@/$$(( $(BANK_SIZE) - 10 ))/g" $< > $@
+
+stack_segments.pobj: stack_segments.asm $(RASM) $(BANK_SIZE_STAMP)
+	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)
 
 # Compile qfixed source
 qfixed.asm: src/qfixed.c $(RCC) $(RUNTIME_HEADERS) $(BANK_SIZE_STAMP)
 	@echo "Compiling qfixed.c to assembly..."
-	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
+	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE) $(STACK_FLAG)
 
 # Assemble C-generated assembly to object files
 $(C_OBJ_FILES): %.pobj: %.asm $(RASM) $(BANK_SIZE_STAMP)
@@ -88,7 +104,7 @@ $(LIBROS): $(LIBROS_OBJ) $(RLINK)
 
 # Clean generated files (but not hand-written .asm)
 clean:
-	rm -f $(ASM_FILES) $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm $(C_OBJ_FILES) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
+	rm -f stack_segments.asm $(ASM_FILES) $(ROS_C_ASM) memcpy.asm memset.asm test_main.asm $(C_OBJ_FILES) *.pobj *.par *.bf *.bfm ros/*.pobj $(BANK_SIZE_STAMP)
 	@echo "Cleaned runtime directory"
 
 # Test target - build a test program with runtime

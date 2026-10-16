@@ -324,6 +324,29 @@ fn native_irq_dispatch_and_code_module_reclamation_match() {
 }
 
 #[test]
+fn native_cpu_control_and_interrupt_returns_use_precise_reference_exits() {
+    // Each control operation is forced into a compiled region, including one
+    // that edits the saved continuation and an IRET after an acknowledgement.
+    let mut code = vec![i(0x42, 0, 0, 0); 32];
+    code[..12].copy_from_slice(&[
+        i(0x0e, 15, 25, 0), i(0x0e, 16, 20, 0), i(0x12, 16, 0, 15),
+        i(0x0e, 15, 22, 0), i(0x0e, 16, 1, 0), i(0x12, 16, 0, 15),
+        i(0x0e, 3, 1234, 0), i(0x0e, 4, 5678, 0),
+        i(0x0e, 15, 21, 0), i(0x12, 16, 0, 15),
+        i(0x0e, 5, 42, 0), i(0, 0, 0, 0),
+    ]);
+    code[20..26].copy_from_slice(&[
+        i(0x23, 17, crate::constants::CSR_EPC, 0),
+        i(0x24, 17, crate::constants::CSR_EPC, 0),
+        i(0x23, 18, crate::constants::CSR_IRQ_VERSION, 0),
+        i(0x0e, 15, 23, 0), i(0x12, 16, 0, 15), i(0x22, 0, 0, 0),
+    ]);
+    compare(64, code);
+    compare(64, vec![i(0x22, 0, 0, 0)]);
+    compare(64, vec![i(0x23, 15, 65535, 0)]);
+}
+
+#[test]
 fn an_out_of_bounds_call_preserves_the_interpreter_diagnostic() {
     // A high bank can produce a linear address above i32::MAX. It must reach
     // the ordinary PC diagnostic rather than fail during native translation.

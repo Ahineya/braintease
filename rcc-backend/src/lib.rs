@@ -17,13 +17,14 @@ pub use rcc_ir::ir::{
     IrBinaryOp, IrUnaryOp, GlobalVariable, Linkage, IrBuilder
 };
 pub use rcc_common::LabelId;
-use crate::lower::module::lower_module;
 
 /// Options for lowering
 pub struct LoweringOptions {
     pub bank_size: u16,
     pub use_v2: bool,
     pub trace_spills: bool,
+    /// Grow at function entry using the explicitly configured stack pool.
+    pub segmented_stack: bool,
 }
 
 impl Default for LoweringOptions {
@@ -32,6 +33,7 @@ impl Default for LoweringOptions {
             bank_size: 4096,
             use_v2: true,
             trace_spills: false,
+            segmented_stack: false,
         }
     }
 }
@@ -42,5 +44,5 @@ pub fn lower_module_to_assembly_with_options(
     options: LoweringOptions,
 ) -> Result<Vec<rcc_codegen::AsmInst>, String> {
     // Always use v2 backend now that v1 is removed
-    lower_module(module, options.bank_size, options.trace_spills)
+    crate::lower::module::lower_module_with_stack_mode(module, options.bank_size, options.trace_spills, options.segmented_stack)
 }

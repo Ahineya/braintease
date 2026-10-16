@@ -140,7 +140,7 @@ only that helper needs `sudo` authorization. Console programs that do not query
 the NIC never initialize networking. `RCC_NATIVE_NET=off` disables attachment,
 `shared` explicitly selects Internet sharing, and a socket path reuses an
 external Ethernet helper. `RIPPLE_NET` is a shared fallback setting. See the
-[networking contract and ping examples](../docs/mmio.networking.md).
+[networking contract and ping examples](../docs/networking/README.md).
 
 TEXT40 rendering, storage devices, and VM interrupts are not implemented in this
 milestone and report runtime errors when requested. TTY input is available via

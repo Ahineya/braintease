@@ -384,9 +384,9 @@ pub fn materialize_bank_to_register(
 
 /// Get bank value for passing as function argument
 /// 
-/// This function preserves bank tag values (-1 for Global, -2 for Stack)
-/// when preparing arguments for function calls. This is critical because
-/// the callee expects to receive tag values, not resolved register values.
+/// Fixed-stack calls retain v1 Global/Stack tags. Segmented calls materialize
+/// the current SB for an escaping stack pointer so a bank switch cannot rebind
+/// it to the callee. Dynamic pointer words already identify their original bank.
 /// 
 /// Returns (register_containing_bank_value, instructions_to_emit)
 pub fn get_bank_value_for_argument(
@@ -407,11 +407,13 @@ pub fn get_bank_value_for_argument(
             (r, insts)
         }
         BankInfo::Stack => {
-            // Pass the STACK tag value (-2), not SB register
+            // Escaping stack pointers must keep their original bank when a
+            // segmented callee changes SB. Fixed-stack objects retain v1 tags.
             let name = naming.temp_with_context(context, "stack_tag");
             let r = mgr.get_register(name);
             insts.extend(mgr.take_instructions());
-            insts.push(AsmInst::Li(r, BankTagValue::STACK));
+            insts.push(if mgr.segmented_stack() { AsmInst::Move(r, Reg::Sb) }
+                else { AsmInst::Li(r, BankTagValue::STACK) });
             (r, insts)
         }
         BankInfo::Heap(bank) => {

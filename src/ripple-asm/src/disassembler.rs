@@ -198,7 +198,7 @@ impl Disassembler {
 
     fn disassemble_r_format(&self, opcode: Opcode, inst: &Instruction) -> Result<String, String> {
         match opcode {
-            Opcode::Halt | Opcode::Nop | Opcode::Brk => {
+            Opcode::Halt | Opcode::Nop | Opcode::Brk | Opcode::Iret => {
                 Ok(opcode.to_str().to_string())
             }
             Opcode::Jalr => {

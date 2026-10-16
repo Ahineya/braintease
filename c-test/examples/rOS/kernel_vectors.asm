@@ -18,7 +18,7 @@ k_exit_vec:
     JAL R0, R0, k_exit
 
 ; Instruction 8 — IRQ vector. Keep this at K_SLOT_INT21.
-; IRQ already stored user resume in RA/RAB. Switch to KERNEL GP before C.
+; CPU trap state holds the user resume. Preserve C registers before dispatch.
 int21_handler:
     STORE RA, SB, SP
     ADDI SP, SP, 1
@@ -37,4 +37,4 @@ int21_handler:
     LOAD RAB, SB, SP
     ADDI SP, SP, -1
     LOAD RA, SB, SP
-    RET
+    IRET

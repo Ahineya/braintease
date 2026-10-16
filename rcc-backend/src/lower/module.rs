@@ -13,6 +13,10 @@ use super::function::lower_function_v2;
 
 /// Lower an entire module using the V2 backend
 pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Result<Vec<AsmInst>, String> {
+    lower_module_with_stack_mode(module, bank_size, trace_spills, false)
+}
+
+pub fn lower_module_with_stack_mode(module: &Module, bank_size: u16, trace_spills: bool, segmented_stack: bool) -> Result<Vec<AsmInst>, String> {
     if module.target != rcc_ir::target::Target::Ripple {
         return Err("native IR cannot be lowered to Ripple; recompile source for --target ripple".into());
     }
@@ -122,12 +126,14 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
         // The manager stores local_slots internally and lower_function_v2 will retrieve it
         let mut mgr = RegisterPressureManager::new(local_slots);
         mgr.set_trace_spills(trace_spills);
+        mgr.set_segmented_stack(segmented_stack);
         mgr.set_gp_base_label(global_manager.gp_base_label());
         let mut naming = new_function_naming();
         
         let function_asm = lower_function_v2(function, &mut mgr, &mut naming, &global_manager, bank_size)?;
         link_code.push(function.name.clone());
         let mut references = crate::optimize::function_symbols(function);
+        if segmented_stack { references.insert("__rcc_stack_grow".into()); }
         if crate::optimize::function_has_opaque_asm(function) {
             // Opaque assembly can use GP offsets or hidden function addresses.
             // Retain this translation unit's symbols when such a body is live.

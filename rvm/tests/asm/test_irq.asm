@@ -1,4 +1,4 @@
-; Software IRQ: raise bit 0, handler prints 'A', ACK, RET; main prints 'Y'
+; Software IRQ: raise bit 0, handler prints 'A', ACK, IRET; main prints 'Y'
 
 _start:
     LI R6, 25          ; IRQ_VECTOR_OFF
@@ -25,4 +25,4 @@ handler:
     LI R6, 23          ; IRQ_BUSY
     LI R7, 1
     STORE R7, R0, R6   ; ACK
-    RET
+    IRET

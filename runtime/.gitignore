@@ -31,3 +31,7 @@
 /libros.par
 # Guest protocol library assembly.
 /net/*.asm
+
+/stack_segments.asm
+/stack.asm
+/irq.asm

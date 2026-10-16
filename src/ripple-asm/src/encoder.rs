@@ -14,6 +14,12 @@ impl InstructionEncoder {
         opcode: Opcode,
         operands: &[String],
     ) -> Result<Instruction, String> {
+        if matches!(opcode, Opcode::Csrr | Opcode::Csrw) && operands.len() != 2 {
+            return Err(format!("{} requires 2 operands", opcode.to_str()));
+        }
+        if opcode == Opcode::Iret && !operands.is_empty() {
+            return Err("IRET takes no operands".into());
+        }
         match opcode.format() {
             InstructionFormat::R => self.encode_r_format(opcode, operands),
             InstructionFormat::I => self.encode_i_format(opcode, operands),
@@ -27,7 +33,7 @@ impl InstructionEncoder {
         operands: &[String],
     ) -> Result<Instruction, String> {
         // HALT and NOP take no operands
-        if (opcode == Opcode::Halt || opcode == Opcode::Nop) && operands.is_empty() {
+        if matches!(opcode, Opcode::Halt | Opcode::Nop | Opcode::Iret) && operands.is_empty() {
             return Ok(Instruction::new(opcode, 0, 0, 0));
         }
 
@@ -183,6 +189,19 @@ impl InstructionEncoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cpu_control_instructions_have_unambiguous_operand_counts() {
+        let encoder = InstructionEncoder::new(65535);
+        assert_eq!(encoder.encode(Opcode::Iret, &[]).unwrap().opcode, 0x22);
+        for op in [Opcode::Csrr, Opcode::Csrw] {
+            let instruction = encoder.encode(op, &["T0".into(), "11".into()]).unwrap();
+            assert_eq!(instruction.word1, Register::T0 as u16);
+            assert_eq!(instruction.word2, 11);
+            assert!(encoder.encode(op, &["T0".into(), "1".into(), "2".into()]).is_err());
+        }
+        assert!(encoder.encode(Opcode::Iret, &["R0".into(), "R0".into(), "R0".into()]).is_err());
+    }
 
     #[test]
     fn test_encode_add() {

@@ -271,7 +271,7 @@ The test suite includes:
 - `test_jumps` - CALL/RET (JAL/JALR)
 - `test_memory` - LOAD/STORE operations
 - `test_loadc_storc` - LOADC/STORC instruction-memory copies
-- `test_irq` - software IRQ dispatch, ACK, and RET
+- `test_irq` - software IRQ dispatch, ACK, and IRET
 
 ## Architecture
 
@@ -324,3 +324,7 @@ The VM loads binary programs in RLINK format:
 - Instructions (8 bytes each)
 - Data size (4 bytes, little-endian)
 - Data section (variable length)
+
+CPU IRQ ABI version 2, optional interrupt-stack switching, and the deterministic
+instruction timer are documented in [stacks-and-interrupts.md](../docs/arch/stacks-and-interrupts.md).
+Old IRQ binaries require rebuilding; the device mailbox and logical game clock are unchanged.

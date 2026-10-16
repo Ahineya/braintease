@@ -84,7 +84,11 @@ Cross-bank C calls save RAB in the prologue because a nested `CALL` overwrites R
 
 - **HALT**: opcode `0x00` (operands ignored).
 - **NOP**: opcode `0x42`.
-- **IRQ dispatch** is not an instruction. See [mmio.md](mmio.md).
+- **IRQ entry** preserves RA/RAB and saves a separate CPU continuation.
+- **IRET** (0x22) atomically returns from an interrupt; no operands.
+- **CSRR rd, csr** (0x23) and **CSRW rs, csr** (0x24) use I1 encoding.
+  CPU control state is separate from the device mailbox. See
+  [stacks-and-interrupts.md](stacks-and-interrupts.md).
 
 ## Virtual instructions (assembler)
 

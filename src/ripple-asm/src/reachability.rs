@@ -125,6 +125,7 @@ pub(crate) fn collect(objects: &mut [ObjectFile]) -> Result<(), Vec<String>> {
                 Some(
                     Opcode::Jalr
                         | Opcode::Halt
+                        | Opcode::Iret
                         | Opcode::Beq
                         | Opcode::Bne
                         | Opcode::Blt

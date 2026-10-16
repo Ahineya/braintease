@@ -130,56 +130,28 @@ Regular data memory starts at word 1032, after the VRAM region.
 
 ### Interrupt Controller
 
-Unpacked 16-bit registers (no bit-packing of cause into STATUS). Dispatch happens at the **start** of each instruction, before fetch: if `BUSY` is 0 and `(STATUS & ENABLE) != 0`, the VM takes the **lowest set bit**, sets `BUSY`, sets `CAUSE` to `1 + bit index` (bit 0 → cause 1), saves the current PC/PCB into RA/RAB (the interrupted instruction has not run yet), and jumps to `VECTOR_BANK`/`VECTOR_OFF`. IRQs do not nest while `BUSY` is set. There is no dedicated IRQ instruction.
+IRQ ABI **version 2** uses the same MMIO addresses 21–26, with a separate CPU
+continuation and atomic IRET. The lowest enabled pending source is taken before
+instruction execution. Entry preserves RA/RAB; BUSY inhibits nesting. The active
+source is removed from STATUS and reported through CAUSE (1 + bit index).
 
-Return with `RET` if the handler is in the same bank, or `JALR R0, RAB, RA` for a cross-bank handler. Acknowledge (`BUSY` write nonzero) as the last action before returning, or leave overlapping ENABLE bits clear: a still-pending enabled IRQ can otherwise fire before `RET` and overwrite RA/RAB.
+- STATUS reads pending events; writes OR new events into the pending mask.
+- ENABLE selects eligible sources.
+- BUSY reads in-service state. Writing nonzero acknowledges the active event;
+  it keeps BUSY set until IRET. Zero and acknowledgement outside a handler are ignored.
+- VECTOR_BANK/OFF select the handler.
+- CAUSE is read-only and remains latched until IRET.
 
-**IRQ Status (HDR_IRQ_STATUS)**
-- Read/Write register at address 21
-- Each bit is an interrupt source; bit 0 is the software IRQ (`IRQ_SW`)
-- Write ORs into the pending mask (bits cannot be cleared here)
-- Read returns the current pending mask
+Handlers preserve any general registers they modify, acknowledge, restore those
+registers, and execute IRET. The return atomically restores saved PC/PCB, enable
+mask, SB/SP/FP, and clears BUSY. An unacknowledged source is requeued. Events raised
+during the handler, including a repeated event of the active source, remain pending.
+RET is an ordinary C return and cannot substitute for IRET.
 
-**IRQ Enable (HDR_IRQ_ENABLE)**
-- Read/Write register at address 22
-- Bit mask of enabled sources; only `STATUS & ENABLE` can dispatch
-
-**IRQ Busy (HDR_IRQ_BUSY)**
-- Address 23
-- Read: 0 = idle, 1 = an IRQ is in service
-- Write nonzero: ACK — clear BUSY, clear CAUSE, and clear the STATUS bit for the in-service cause
-- Write 0 is ignored; ACK while not busy is ignored
-
-**IRQ Vector (HDR_IRQ_VECTOR_BANK / HDR_IRQ_VECTOR_OFF)**
-- Read/Write registers at addresses 24 and 25
-- Handler PCB and PC used on dispatch
-
-**IRQ Cause (HDR_IRQ_CAUSE)**
-- Read-only register at address 26
-- 0 = none in service; otherwise `1 + bit index` of the in-service IRQ
-- Writes are ignored
-
-**Software IRQ**
-```asm
-; Install a same-bank handler, enable bit 0, then raise it
-LI    T1, 25       ; HDR_IRQ_VECTOR_OFF
-LI    T2, handler
-STORE T2, R0, T1
-
-LI    T1, 22       ; HDR_IRQ_ENABLE
-LI    T2, 1        ; IRQ_SW
-STORE T2, R0, T1
-
-LI    T1, 21       ; HDR_IRQ_STATUS
-STORE T2, R0, T1   ; raise: next instruction is interrupted
-
-handler:
-    ; ... handle ...
-    LI    T1, 23   ; HDR_IRQ_BUSY
-    LI    T2, 1
-    STORE T2, R0, T1  ; ACK
-    RET
-```
+IRQ_SW is bit 0 and IRQ_TIMER is bit 1. CSRR/CSRW expose separate CPU return state,
+an optional interrupt stack, and an instruction-count timer. They do not displace
+the device mailbox at 27–31. The full contract, CSR numbers, C helpers, and binary
+migration requirements are in [stacks-and-interrupts.md](../docs/arch/stacks-and-interrupts.md).
 
 ### Keyboard Input (TEXT40 Mode Only)
 
@@ -830,7 +802,7 @@ IRQ helpers live in `runtime/include/mmio.h`. Do not enable a pending STATUS bit
 irq_set_vector(0, handler_pc);
 irq_set_enable(IRQ_SW);
 irq_raise(IRQ_SW);
-irq_ack();  // write 1 to MMIO_IRQ_BUSY
+irq_ack();  // in the handler: acknowledge; assembly restoration ends with IRET
 ```
 
 ## Design Rationale

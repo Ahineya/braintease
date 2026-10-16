@@ -183,6 +183,9 @@ impl TuiDebugger {
                     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 ));
             }
+            Some(Opcode::Iret) => {
+                spans.push(Span::styled("IRET", opcode_style));
+            }
             Some(Opcode::Nop) => {
                 spans.push(Span::styled("NOP", opcode_style));
             }
@@ -227,7 +230,7 @@ impl TuiDebugger {
                     Style::default().fg(Color::Rgb(255, 140, 0)),
                 )); // Orange
             }
-            Some(Opcode::Li) => {
+            Some(Opcode::Li) | Some(Opcode::Csrr) | Some(Opcode::Csrw) => {
                 // LI: li rd, imm
                 spans.push(Span::styled(format!("{opcode_str:<6} "), opcode_style));
                 spans.push(Span::styled(
@@ -373,6 +376,7 @@ impl TuiDebugger {
         match opcode {
             Some(Opcode::Halt) => "HALT".to_string(),
             Some(Opcode::Nop) => "NOP".to_string(),
+            Some(Opcode::Iret) => "IRET".to_string(),
             Some(Opcode::Add) | Some(Opcode::Sub) | Some(Opcode::And) | Some(Opcode::Or)
             | Some(Opcode::Xor) | Some(Opcode::Sll) | Some(Opcode::Srl) | Some(Opcode::Slt)
             | Some(Opcode::Sltu) | Some(Opcode::Mul) | Some(Opcode::Div) | Some(Opcode::Mod)
@@ -389,7 +393,7 @@ impl TuiDebugger {
                 let rs = Self::register_name(instr.word2 as u8);
                 format!("{:<6} {}, {}, 0x{:X}", opcode_str, rd, rs, instr.word3)
             }
-            Some(Opcode::Li) => {
+            Some(Opcode::Li) | Some(Opcode::Csrr) | Some(Opcode::Csrw) => {
                 let rd = Self::register_name(instr.word1 as u8);
                 format!("{:<6} {}, 0x{:X}", opcode_str, rd, instr.word2)
             }

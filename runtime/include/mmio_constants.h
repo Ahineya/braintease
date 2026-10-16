@@ -47,6 +47,7 @@
 
 // Software interrupt source (STATUS/ENABLE bit 0)
 #define IRQ_SW             (1 << 0)
+#define IRQ_TIMER          (1 << 1)
 
 // Storage control bits
 #define STORE_CTL_BUSY        (1 << 0)
