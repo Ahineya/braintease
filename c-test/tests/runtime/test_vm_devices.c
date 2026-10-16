@@ -14,6 +14,7 @@ int main(void) {
     VmClock after;
     VmClock again;
     VmInputEvent event;
+    VmInputBatch batch;
     VmInputState keys;
     unsigned short *pixels;
     unsigned short *cursor;
@@ -33,8 +34,8 @@ int main(void) {
     if (again.tick != after.tick || again.ms != after.ms) return fail(12);
 
     /* Run without input replay: the event queue and held bitmap start empty. */
-    if (vm_input_pop(&event) != VM_DEVICE_OK) return fail(13);
-    if (event.available || event.overflow) return fail(14);
+    if (vm_input_read(&event, 1, &batch) != VM_DEVICE_OK) return fail(13);
+    if (batch.count || batch.overflow) return fail(14);
     if (vm_input_state(&keys) != VM_DEVICE_OK) return fail(15);
     if (keys.overflow) return fail(16);
     for (i = 0; i < VM_KEY_STATE_WORDS; ++i) {

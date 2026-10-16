@@ -103,3 +103,44 @@ with RCC's existing C16 ABI and no GNU C additions. `picol`, `tcl`, and `tclsh`
 are hard links to one managed image. The original build/package files are
 retained for provenance. `/hello.tcl` is a port-local example seeded from
 `examples/hello.tcl`, preserving existing user edits on upgrades.
+
+The everyday/text batch imports util `less`, `mktemp`, `groups`, `logname`,
+`nohup`, `fmt`, `column`, `stty`, and V7 `clear`, `col`, `join`, `nice`, `pr`,
+`split`, `time`, `tsort`, `tty`. Existing util `more` and `cksum` are enabled.
+Adaptations cover raw pager input and cleanup, redirected and piped I/O,
+look-ahead index seeks, bounded screen/input sizes, native format widths,
+option parsing, temporary creation, complete records, I/O errors and exit
+statuses. Original notices remain in each imported source. The small `less`
+pager carries its upstream GPL3 notice. Portable `termcap`, `tgetent`,
+`ttyname`, `sysconf`, and `cfspeed` library sources are imported; terminal entry
+parsing is bounded, tty lookup uses the device number, and sysconf accounts
+for native 16-bit characters. Port-local libc adds `_uname` and `mkdtemp`.
+
+C16 V2 increases filesystem blocks from 256 to 1,024 native characters, while
+keeping the existing RCC ABI and RXE1 executable format. `blk512.c` uses
+`INO_PER_BLOCK` and the native number of indirect pointers rather than fixed
+8-bit-platform constants. The Ripple disk driver splits transfers at host
+storage-window and FAT-cluster boundaries. Image/check/install tools share a
+single V2 geometry definition, and the shared FAT image builder accepts an
+explicit cluster size while preserving its rOS defaults. Old C16 V1 disks
+require a fresh image and are retained as backups by the launcher.
+Inode allocation/free checks also use the configured density. Exec argument
+buffers retain their earlier 256-character limit independently of larger disk
+blocks; this preserves the single-bank process layout. `libccheck` creates and
+removes 320 files to exercise inode numbers beyond the old 255-inode boundary.
+
+The manuals/games batch imports util `man.c`, V7 `wump.c` and its manual,
+`games/hamurabi.c`, `Library/libs/rand.c`, and 26 command manual sources from
+util/V7. Port-specific pages in `manual/` override selected upstream pages;
+`tools/manuals.mjs` installs the combined 43-page set under `/usr/man`.
+`man` retains Robert de Bath's GPL formatter with bounded paths, headers,
+indentation and line copies, read-error reporting, bounded `.so` redirects,
+nonmutating MANPATH/MANSECT search, and direct fork/exec pager management with
+checked waits and clean pipe closure. Installed manuals are uncompressed.
+Wumpus checks EOF and numeric overflow, supports q, and returns to the shell.
+Hamurabi retains Brian L. Troutwine's MIT notice and Alan Cox's FUZIX adaptation;
+its resource counters are widened to 32 bits, numeric input/EOF/q are checked,
+starvation is clamped and deducted, births follow the stated one-per-two rule
+with the 6000 population limit, rats consume their losses, and feeding/planting
+allocations reset each year. Its term is ten years. No compiler ABI changes
+or additional host dependencies are needed.

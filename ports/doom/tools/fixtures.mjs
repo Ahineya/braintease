@@ -48,5 +48,11 @@ if (program === 'renderer_tables') {
   write('controls_defaults.inc', before(read('m_controls.c'), 'void M_BindBaseControls(void)'));
   const platform = fs.readFileSync(path.join(port, 'src/platform.c'), 'utf8');
   write('platform_keyboard.inc', before(from(platform, 'static unsigned char held['), ';')
-    + ';\n' + before(from(platform, 'static int doom_key('), 'void I_StartTic(void)'));
+    + ';\n' + before(from(platform, 'static int doom_key('), 'void I_StartTic(void)')
+    // Compile the actual device adapter on both targets, using the public C
+    // types without importing Ripple's libc headers into the host C oracle.
+    + fs.readFileSync(path.join(port, '../../runtime/include/vm_devices.h'), 'utf8')
+      .replace('#include <mmio_constants.h>', '')
+    + '\n#ifndef RCC_NATIVE\n#define RCC_NATIVE 1\n#endif\n'
+    + before(from(platform, 'void I_StartTic(void)'), 'void Doom_ConfigureCapture('));
 } else throw new Error('unknown extracted fixture: ' + program);

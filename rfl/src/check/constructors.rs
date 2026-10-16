@@ -207,6 +207,9 @@ impl<'a> Checker<'a> {
         span: usize,
     ) -> Result<(), CompileError> {
         match parsed {
+            // Projections are not injective: never infer T from T::Output.
+            // Once T is known, concrete_field and the final call check normalize it.
+            ParsedTy::Projection { .. } => Ok(()),
             ParsedTy::CFn { .. } => Err(CompileError::at(
                 self.source,
                 span,

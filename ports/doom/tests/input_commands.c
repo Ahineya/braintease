@@ -48,6 +48,36 @@ static int G_NextWeapon(int direction)
     return 0;
 }
 
+static VmInputEvent pending_input[24];
+static unsigned short pending_count, pending_position, input_overflow;
+static VmInputState recovery_state;
+
+unsigned short vm_input_read(VmInputEvent *events, unsigned short capacity, VmInputBatch *batch)
+{
+    unsigned short count = pending_count - pending_position;
+    if (count > capacity) count = capacity;
+    memcpy(events, pending_input + pending_position, (size_t)count * sizeof(*events));
+    pending_position += count;
+    batch->count = count;
+    batch->overflow = input_overflow;
+    return VM_DEVICE_OK;
+}
+unsigned short vm_input_state(VmInputState *state)
+{
+    *state = recovery_state;
+    input_overflow = 0;
+    return VM_DEVICE_OK;
+}
+int vm_key_is_down(const VmInputState *state, unsigned short usage)
+{
+    return (state->held[usage >> 4] & (1U << (usage & 15))) != 0;
+}
+void I_Error(char *error, ...)
+{
+    puts(error);
+    exit(1);
+}
+
 static void reset(void)
 {
     memset(gamekeydown, 0, sizeof(gamekeydown));
@@ -257,6 +287,65 @@ static void paired_physical_modifiers(void)
     expect_posts(4);
 }
 
+static void mouse_controls(void)
+{
+    reset();
+    Doom_PostMouse(1U, 10L, -3L);
+    expect("mouse fire, forward and turn", 3, 0, -80, BT_ATTACK);
+    Doom_PostMouse(0U, 0L, 0L);
+    expect("mouse release", 0, 0, 0, 0);
+    key(226,1);
+    Doom_PostMouse(0U, 5L, 0L);
+    expect("Alt mouse strafe", 0, 10, 0, 0);
+    key(226,0);
+    Doom_PostMouse(0U, 0L, 0L);
+    expect("mouse movement consumed", 0, 0, 0, 0);
+    Doom_PostMouse(0U, 999999L, -999999L);
+    if (queued_event.data2 != 1024 || queued_event.data3 != 1024) {
+        puts("INPUT FAIL mouse deltas not bounded"); exit(1);
+    }
+    Doom_PostMouse(0U, 0L, 0L);
+    expect("mouse recovery clears movement", 0, 0, 0, 0);
+    {
+        long dx = Doom_AddMouseDelta(0L, 7L);
+        dx = Doom_AddMouseDelta(dx, 5L);
+        /* A click between motions must not erase the tick's accumulated delta. */
+        Doom_PostMouse(1U, 0L, 0L);
+        Doom_PostMouse(1U, dx, 0L);
+        expect("mouse batch retains all movement and buttons", 0, 0, -96, BT_ATTACK);
+        if (Doom_AddMouseDelta(1020L, 2147483647L) != 1024L
+            || Doom_AddMouseDelta(-1020L, -2147483647L - 1L) != -1024L) {
+            puts("INPUT FAIL mouse accumulation overflow"); exit(1);
+        }
+    }
+}
+
+static void device_mouse_batches(void)
+{
+    unsigned short i;
+    reset();
+    memset(pending_input,0,sizeof(pending_input));
+    for (i=0;i<21;++i) {
+        pending_input[i].type = VM_INPUT_MOTION;
+        pending_input[i].flags = VM_INPUT_RELATIVE;
+        pending_input[i].dx = 1L;
+        pending_input[i].buttons = i < 10 ? 0 : 1;
+    }
+    pending_input[10].type = VM_INPUT_BUTTON;
+    pending_input[10].flags = VM_INPUT_DOWN;
+    pending_input[10].dx = 0L;
+    pending_count = 21;
+    pending_position = input_overflow = 0;
+    I_StartTic();
+    expect("mouse movement spans batches and a click", 0, 0, -160, BT_ATTACK);
+    /* Recovery replaces held controls and discards this tick's stale motion. */
+    memset(&recovery_state,0,sizeof(recovery_state));
+    pending_count = pending_position = 0;
+    input_overflow = 1;
+    I_StartTic();
+    expect("mouse overflow recovery releases buttons", 0, 0, 0, 0);
+}
+
 int main(void)
 {
     M_LoadDefaults();
@@ -265,10 +354,12 @@ int main(void)
     strafe_aliases();
     modifiers_and_turning();
     paired_physical_modifiers();
-    if (commands != 61) {
+    mouse_controls();
+    device_mouse_batches();
+    if (commands != 69) {
         printf("INPUT FAIL command count %d\n", commands);
         return 1;
     }
-    puts("INPUT OK: arrows/WASD, Control fire, Space use, Shift/Alt, aliases and releases");
+    puts("INPUT OK: arrows/WASD, Control fire, Space use, Shift/Alt, aliases, releases and mouse");
     return 0;
 }

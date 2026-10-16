@@ -5,6 +5,21 @@ use super::*;
 impl<'a> Checker<'a> {
     pub(super) fn validate_ty(&self, ty: &ParsedTy, params: &[String]) -> Result<(), CompileError> {
         match ty {
+            ParsedTy::Projection {
+                base, trait_name, ..
+            } => {
+                self.validate_ty(base, params)?;
+                if let Some((name, span)) = trait_name {
+                    if self.trait_name(name).is_none() {
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!("unknown trait `{name}`"),
+                        ));
+                    }
+                }
+                Ok(())
+            }
             ParsedTy::Func {
                 params: fn_params,
                 ret,
@@ -30,6 +45,12 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
             ParsedTy::Named { span, name, args } => {
+                if name == "Self" && self.assoc_self.is_some() {
+                    if !args.is_empty() {
+                        return Err(self.arity_error(span.start, name, 0, args.len()));
+                    }
+                    return Ok(());
+                }
                 if params.iter().any(|param| param == name) {
                     if !args.is_empty() {
                         return Err(CompileError::at(
@@ -154,6 +175,31 @@ impl<'a> Checker<'a> {
         subst: &HashMap<String, Ty>,
     ) -> Result<Ty, CompileError> {
         match ty {
+            ParsedTy::Projection {
+                span,
+                base,
+                trait_name,
+                name,
+                name_span,
+            } => {
+                let explicit = trait_name.as_ref().map(|(name, _)| name.as_str());
+                let context = if explicit.is_none()
+                    && matches!(base.as_ref(), ParsedTy::Named { name, args, .. } if name == "Self" && args.is_empty())
+                {
+                    self.assoc_self.as_ref().map(|(name, _)| name.clone())
+                } else {
+                    None
+                };
+                let base_ty = self.apply(base, subst)?;
+                self.apply_projection(
+                    *span,
+                    base_ty,
+                    explicit.or(context.as_deref()),
+                    name,
+                    *name_span,
+                    trait_name.as_ref().map(|(_, s)| *s),
+                )
+            }
             ParsedTy::Func { params, ret, .. } => {
                 let mut fn_params = Vec::new();
                 for param in params {
@@ -213,6 +259,11 @@ impl<'a> Checker<'a> {
                 self.intern_tuple(span.start, typed)
             }
             ParsedTy::Named { span, name, args } => {
+                if name == "Self" && args.is_empty() {
+                    if let Some((_, ty)) = &self.assoc_self {
+                        return Ok(*ty);
+                    }
+                }
                 if let Some(found) = subst.get(name).or_else(|| self.subst.get(name)) {
                     if !args.is_empty() {
                         return Err(CompileError::at(

@@ -1,0 +1,13 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH CKSUM 1 "FUZIX" "Ripple"
+.SH NAME
+cksum \- print a CRC and character count
+.SH SYNOPSIS
+.nf
+cksum [file ...]
+.fi
+.SH DESCRIPTION
+Print the standard CRC, character count and filename for each file, or
+read standard input when no file is named. Input characters must have
+values from 0 to 255. Files containing larger native characters are
+rejected, rather than silently discarding the high bits.

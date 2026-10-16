@@ -104,7 +104,7 @@ Brainfuck. Both accept the following flags:
 | `--asset-validation preflight\|guest` | Build-time checks or extra guest checks |
 | `--build-only`, `--jobs N` | Build without running; compilation parallelism |
 | `--headless`, `--output DIR` | No window; output directory |
-| `--input-script FILE` | Deterministic keyboard replay |
+| `--input-script FILE` | Deterministic keyboard/pointer replay |
 | `--clock paced\|unthrottled\|stepped` | Logical clock policy |
 | `--timeout SECONDS`, `--max-instructions N` | Execution limits; Rust launcher applies these only in headless mode |
 | `--help` | Launcher reference |
@@ -518,7 +518,7 @@ including full-width values, bank edges, pointer tags and the calling convention
 
 The normal launcher uses paced time for a window and unthrottled logical time
 for headless captures. `--clock stepped` accepts the VM's JSON control protocol
-on standard input. `--input-script FILE.json` supplies deterministic keyboard
+on standard input. `--input-script FILE.json` supplies deterministic keyboard/pointer
 events. See [the device guide](../../docs/doom-platform.md).
 Headless output includes a PNG, raw RGB565, build manifest and execution report
 under `build/run/`. Use `--output DIR`, `--frame N`, `--timeout SECONDS` and
@@ -912,8 +912,12 @@ fast as execution allows, or wait for automation to grant them. A slow backend
 therefore progresses through the same game ticks without having to catch up
 with an ever-growing wall-clock backlog.
 
-Input arrives as USB HID transitions and held-key state, translated into real
-Doom events. Doom renders its indexed-color image; the adapter converts through
+Input arrives as ordered typed events: USB HID keys, relative mouse movement,
+and mouse buttons, with a coherent state snapshot for overflow recovery. Doom
+requests cursor capture while focused; focus loss releases keys, buttons and
+capture, and refocusing restores the requested capture. Mouse X turns (or strafes
+with Alt), Y moves forward/back, and left/right/middle use Doom's control defaults.
+The adapter translates these into the engine's ordinary events. Doom renders its indexed-color image; the adapter converts through
 the current palette and presents RGB565 via `RGB565_EXT`. Capture sees the same
 completed frame as the display window. The Rust VM has no Doom-specific opcodes
 or execution shortcuts.
@@ -991,7 +995,7 @@ in [the optimization notes](../../rcc-backend/OPTIMIZATIONS.md).
 
 ## Remaining scope
 
-Doom savegames, demo recording, multiplayer, sound, mouse input, persistent host
+Doom savegames, demo recording, multiplayer, sound, persistent host
 configuration, PWADs and melt wipes are deferred. Longer sessions, additional
 maps and demo playback need broader validation beyond the bounded E1M1 replays.
 The Brainfuck host supports the device interface and multi-bank export. Its

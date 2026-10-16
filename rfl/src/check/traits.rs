@@ -3,6 +3,7 @@ use super::*;
 mod coherence;
 mod dispatch;
 mod generics;
+use super::projections::{contains_projection, depends_on_self, qualify_impl_type};
 use coherence::overlaps;
 
 #[derive(Clone)]
@@ -74,8 +75,17 @@ impl Checker<'_> {
                     variant: false,
                 });
             }
+            self.validate_associated_declarations(tr)?;
             let mut names = HashSet::new();
             for method in &tr.methods {
+                self.facts.push(BindingFact {
+                    name: method.name.clone(),
+                    def: method.name_span,
+                    ty: trait_method_signature(method),
+                    scope: method.name_span,
+                    visible_from: method.name_span.start,
+                    variant: false,
+                });
                 if !names.insert(&method.name) {
                     return Err(CompileError::at(
                         self.source,
@@ -89,7 +99,7 @@ impl Checker<'_> {
             let Some((name, span)) = &item.trait_name else {
                 continue;
             };
-            let Some(tr) = self.traits.iter().find(|t| t.name == *name) else {
+            let Some(tr) = self.traits.iter().find(|t| t.name == *name).cloned() else {
                 return Err(CompileError::at(
                     self.source,
                     span.start,
@@ -102,6 +112,14 @@ impl Checker<'_> {
                 def_file: None,
                 ty: format!("trait {}", label(name)),
             });
+            if contains_projection(&item.ty) {
+                return Err(CompileError::at(
+                    self.source,
+                    item.ty.span().start,
+                    "associated types are not allowed in impl type patterns",
+                ));
+            }
+            self.validate_associated_definitions(&tr, item)?;
             let ParsedTy::Named { name: outer, .. } = &item.ty else {
                 return Err(CompileError::at(
                     self.source,
@@ -189,6 +207,12 @@ impl Checker<'_> {
                         ),
                     ));
                 }
+                self.uses.push(NameUse {
+                    span: method.name_span,
+                    def: required.name_span,
+                    def_file: None,
+                    ty: trait_method_signature(required),
+                });
                 let func = format!("{name}${outer}$impl{index}${}", method.name);
                 let receiver = receiver_ty(&item.ty, method.receiver.unwrap(), method.name_span);
                 let mut params = vec![Param {
@@ -201,12 +225,20 @@ impl Checker<'_> {
                     },
                 }];
                 params.extend(method.params.clone());
+                for param in &mut params {
+                    if let Some(ty) = &mut param.ty {
+                        qualify_impl_type(ty, &item.ty, name);
+                    }
+                }
+                let mut ret = method.ret.clone().unwrap_or_else(unit);
+                qualify_impl_type(&mut ret, &item.ty, name);
+                self.impl_contexts.insert(func.clone(), name.clone());
                 module.functions.push(Function {
                     name: func.clone(),
                     name_span: method.name_span,
                     type_params: item.type_params.clone(),
                     params,
-                    ret: Some(method.ret.clone().unwrap_or_else(unit)),
+                    ret: Some(ret),
                     body: method.body.clone(),
                     c_export: false,
                     exported: false,
@@ -233,6 +265,22 @@ impl Checker<'_> {
     pub(super) fn register_trait_signatures(&mut self) -> Result<(), CompileError> {
         for tr in self.traits.clone() {
             for method in tr.methods {
+                for p in &method.params {
+                    if let Some(ty) = &p.ty {
+                        self.validate_ty(ty, &["Self".into()])?;
+                    }
+                }
+                if let Some(ty) = &method.ret {
+                    self.validate_ty(ty, &["Self".into()])?;
+                }
+                if method
+                    .params
+                    .iter()
+                    .any(|p| p.ty.as_ref().is_some_and(depends_on_self))
+                    || method.ret.as_ref().is_some_and(depends_on_self)
+                {
+                    continue;
+                }
                 let mut params = Vec::new();
                 for p in &method.params {
                     let ty = p.ty.as_ref().ok_or_else(|| {
@@ -256,6 +304,7 @@ impl Checker<'_> {
     }
 
     pub(super) fn validate_traits(&mut self) -> Result<(), CompileError> {
+        self.validate_associated_contracts()?;
         let schemas: Vec<_> = self.schemas.iter().map(|s| s.type_params.clone()).collect();
         for params in schemas {
             self.validate_bounds(&params)?;
@@ -278,11 +327,17 @@ impl Checker<'_> {
                 .find(|t| t.name == item.trait_name.as_ref().unwrap().0)
                 .unwrap()
                 .clone();
+            let self_ty = self.apply(&item.ty, &subst)?;
+            let saved_self = self.assoc_self.replace((tr.name.clone(), self_ty));
+            self.validate_associated_values(&tr, item, self_ty, &subst)?;
+            let mut contract_subst = HashMap::from([("Self".into(), self_ty)]);
+            // Associated definitions may depend on this impl's rigid parameters.
+            contract_subst.extend(subst.clone());
             for method in &item.items {
                 let required = tr.methods.iter().find(|m| m.name == method.name).unwrap();
                 for (have, want) in method.params.iter().zip(&required.params) {
                     let have = self.apply(have.ty.as_ref().unwrap(), &subst)?;
-                    let want = self.apply(want.ty.as_ref().unwrap(), &HashMap::new())?;
+                    let want = self.apply(want.ty.as_ref().unwrap(), &contract_subst)?;
                     if have != want {
                         return Err(CompileError::at(
                             self.source,
@@ -296,7 +351,7 @@ impl Checker<'_> {
                 }
                 let have = self.apply(&method.ret.clone().unwrap_or_else(unit), &subst)?;
                 let want =
-                    self.apply(&required.ret.clone().unwrap_or_else(unit), &HashMap::new())?;
+                    self.apply(&required.ret.clone().unwrap_or_else(unit), &contract_subst)?;
                 if have != want {
                     return Err(CompileError::at(
                         self.source,
@@ -308,6 +363,7 @@ impl Checker<'_> {
                     ));
                 }
             }
+            self.assoc_self = saved_self;
         }
         Ok(())
     }
@@ -333,6 +389,7 @@ fn unit() -> ParsedTy {
 
 fn collect_parameters(ty: &ParsedTy, names: &mut Vec<String>) {
     match ty {
+        ParsedTy::Projection { base, .. } => collect_parameters(base, names),
         ParsedTy::Named { name, args, .. } => {
             names.push(name.clone());
             for arg in args {

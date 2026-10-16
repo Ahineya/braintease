@@ -312,7 +312,9 @@ fn resumed_script_can_be_relative_to_saved_tick_and_disk_must_match() {
     bf.store(HDR_DISP_FLUSH, 1);
     bf.store(29, 3); // Tick 2, where the replacement replay should press UP.
     bf.store(HDR_TTY_OUT, 0); // Establish a zero destination, then transfer key state.
-    bf.at(8 + HDR_KEY_UP * 8 + 4);
+    bf.store(41, 28);
+    bf.store(29, 6);
+    bf.at(8 + (40 + 12 + 82 / 16) * 8 + 4);
     bf.text.push('?');
     let key = bf.pointer;
     bf.text.push_str("[-");
@@ -350,7 +352,7 @@ fn resumed_script_can_be_relative_to_saved_tick_and_disk_must_match() {
     ];
     let resumed = run(&source, &args);
     successful(&resumed);
-    assert_eq!(resumed.stdout, [0, 1]);
+    assert_eq!(resumed.stdout, [0, 4]);
     let absolute = run(&source, &args[..args.len() - 1]);
     assert!(!absolute.status.success());
     assert!(String::from_utf8_lossy(&absolute.stderr).contains("current tick"));

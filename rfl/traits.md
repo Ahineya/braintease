@@ -1,5 +1,5 @@
 # RFL — Traits
-**Language Specification · Draft 0.2**
+**Language Specification · Draft 0.3**
 
 **Status:** Implemented in `rfl` (16 October 2026); see [implementation notes](IMPLEMENTATION.md#static-traits-and-library-printing)
 **Compiler:** `rfl`  
@@ -8,7 +8,7 @@
 
 This specification extends RFL 0.1.
 
-It introduces static traits, trait implementations, generic trait bounds, and trait-based method resolution.
+It introduces static traits, trait implementations, generic trait bounds, associated types, and trait-based method resolution.
 
 It does **not** introduce dynamic dispatch, inheritance, trait objects, or runtime reflection.
 
@@ -18,7 +18,7 @@ It does **not** introduce dynamic dispatch, inheritance, trait objects, or runti
 
 RFL traits describe capabilities that types can implement.
 
-A trait declares a set of required methods.
+A trait declares required methods and may declare associated types.
 
 A type implements a trait by providing those methods.
 
@@ -49,7 +49,7 @@ trait Printable {
 }
 ```
 
-A trait declaration contains method signatures without implementations.
+A trait declaration contains method signatures without implementations and optional associated type declarations (section 23).
 
 Methods may accept ordinary parameters and return values.
 
@@ -1091,7 +1091,8 @@ However, neither is required by RFL 0.2.
 
 # 18. Explicitly excluded features
 
-The following are not supported in RFL 0.2:
+Associated types are supported by the 0.3 extension in section 23.
+The following remain unsupported:
 
 | Feature | Status |
 |---|---|
@@ -1100,7 +1101,6 @@ The following are not supported in RFL 0.2:
 | Virtual method tables | Not required |
 | Default trait methods | Deferred |
 | Trait inheritance / supertraits | Deferred |
-| Associated types | Deferred |
 | Generic trait parameters | Deferred |
 | Specialization | Excluded |
 | Negative implementations | Excluded |
@@ -1293,3 +1293,86 @@ All three compile into ordinary function calls.
 None requires runtime objects or virtual tables.
 
 The distinction is entirely about how functions are declared, discovered, and type-checked.
+
+# 23. Associated types (0.3)
+
+A trait can name types chosen by each implementation. They are part of the static
+contract and resolve to ordinary concrete types before lowering. They require no
+runtime tags, vtables, or ISA changes on Ripple, Brainfuck, or native targets.
+
+```rust
+trait Produce {
+    type Output: Printable;
+    fn produce(&self) -> Self::Output;
+}
+
+impl Produce for i16 {
+    type Output = String;
+    fn produce(&self) -> Self::Output { "hello" }
+}
+
+fn show<T: Produce>(value: T) -> T::Output {
+    let output = value.produce();
+    output.print();
+    output
+}
+```
+
+Every implementation must define every associated type exactly once. Extra names,
+duplicate definitions, missing definitions, incorrect method signatures, and
+unsatisfied associated bounds are errors, including in unused implementations.
+`type Output: A + B;` requires the selected type to implement both traits.
+Unbounded `type Output;` accepts any otherwise valid owned value type. Strings,
+collections, tuples, arrays, structs, ADTs, and function values retain their usual
+layout and ownership behavior. Associated types cannot contain escaping borrowed
+references; method parameters can still borrow an associated value.
+
+`Self` denotes the implementing type in trait signatures and implementation type
+annotations. `Self::Output` selects the current trait's member, even when another
+trait has a member with the same name. `Self` is reserved as a type name.
+
+Type positions support these projections:
+
+| Form | Meaning |
+|---|---|
+| `Self::Output` | Current trait's associated type |
+| `T::Output` | Associated type selected by the generic parameter's bounds |
+| `Concrete::Output` | Associated type from a visible applicable trait |
+| `<T as Produce>::Output` | Explicitly selected trait; also works with concrete types |
+| `T::Output::Item` | Nested projection, when `Output` has the required bound |
+
+Unqualified projections must identify exactly one applicable, lexically visible
+trait. Use the qualified form when multiple traits define the same member.
+Import aliases work for both the base type and trait. Existing coherence, orphan,
+and module visibility rules apply. Associated projections cannot appear in impl
+receiver patterns: those patterns must identify their generic arguments directly.
+
+Generic declarations are checked against their declared contracts. A
+`T::Output` is distinct from any concrete type until specialization; a particular
+implementation choosing `i16` does not let a generic body assume arithmetic on
+all outputs. Declared associated bounds permit their methods in generic code.
+Chained projections normalize recursively, with direct and indirect cycles
+rejected. Excessively deep resolution is also rejected with a cycle diagnostic.
+
+Projections do not infer their base type backwards. In a call taking both `T`
+and `T::Output`, the base is inferred from ordinary arguments or supplied explicit
+type arguments; the projected arguments must then match the normalized type.
+This preserves ordinary argument evaluation order and borrowing rules.
+
+The current extension excludes associated defaults, generic associated types,
+associated equality bounds (`T: Produce<Output = String>`), generic trait
+parameters, and supertraits. These require separate extensions; the compiler
+reports unsupported forms explicitly.
+
+The language server supports associated symbols, type highlighting, hover,
+definitions, and completion after `Self::`, a bounded `T::`, a concrete name, or
+`<T as Trait>::`. Ambiguous members are omitted. Associated member rename updates
+the contract, implementations, and resolved projections together. Nested projected
+receivers and erased generic impl arguments are handled conservatively by the
+rename index; unsupported resolution refuses the edit. Completion after a nested
+projection is not yet provided.
+
+See [examples/associated-types.rfl](examples/associated-types.rfl) for a manually
+polled future with a managed `String` output. This establishes the type contract
+needed for a future async design; it does not add async syntax, suspension, or an
+executor. Conformance cases live in `tests/associated_types.rs`.

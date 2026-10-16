@@ -272,6 +272,24 @@ pub(crate) fn check_root(
         })
         .collect();
     info.facts.extend(imported_values);
+    info.type_members = info
+        .type_members
+        .into_iter()
+        .flat_map(|member| {
+            if !member.concrete {
+                return vec![member];
+            }
+            maps[0]
+                .iter()
+                .filter(|(_, target)| **target == member.qualifier)
+                .map(|(alias, _)| {
+                    let mut member = member.clone();
+                    member.qualifier = alias.clone();
+                    member
+                })
+                .collect()
+        })
+        .collect();
     let chunks: Vec<(PathBuf, usize, usize)> = rfls
         .iter()
         .enumerate()
@@ -325,7 +343,12 @@ fn shift_info(
             .into_iter()
             .filter_map(|mut name| {
                 name.span = shift_span(name.span, base, len)?;
-                if let Some((path, def)) = locate(chunks, name.def) {
+                if let Some((path, def)) = name
+                    .def_file
+                    .is_none()
+                    .then(|| locate(chunks, name.def))
+                    .flatten()
+                {
                     if path != root_path {
                         name.def_file = Some(path);
                     }
@@ -340,6 +363,22 @@ fn shift_info(
             .filter_map(|mut expr| {
                 expr.span = shift_span(expr.span, base, len)?;
                 Some(expr)
+            })
+            .collect(),
+        type_members: info
+            .type_members
+            .into_iter()
+            .filter_map(|mut member| {
+                member.scope = shift_scope(member.scope, base, len)?;
+                Some(member)
+            })
+            .collect(),
+        trait_methods: info
+            .trait_methods
+            .into_iter()
+            .filter_map(|mut method| {
+                method.receiver = shift_span(method.receiver, base, len)?;
+                Some(method)
             })
             .collect(),
         methods: info.methods,
@@ -1266,7 +1305,11 @@ fn rewrite_uses(
         walk.expr(&mut item.init);
     }
     for tr in &mut ast.traits {
+        walk.bump(&mut tr.span);
         walk.bump(&mut tr.name_span);
+        for item in &mut tr.associated_types {
+            walk.associated_type(item);
+        }
         for method in &mut tr.methods {
             walk.function_like(
                 &mut method.name_span,
@@ -1297,6 +1340,9 @@ fn rewrite_uses(
             }
         }
         walk.ty(&mut item.ty);
+        for associated in &mut item.associated_types {
+            walk.associated_type(associated);
+        }
         for method in &mut item.items {
             walk.function_like(
                 &mut method.name_span,
@@ -1508,8 +1554,9 @@ impl Rewriter<'_> {
                 method,
                 resolved,
                 args,
-                ..
+                method_span,
             } => {
+                self.bump(method_span);
                 self.expr(receiver);
                 if self.fns.contains(method) && !self.hidden_value(method) {
                     self.rewrite_value(resolved);
@@ -1649,8 +1696,34 @@ impl Rewriter<'_> {
         }
     }
 
+    fn associated_type(&mut self, item: &mut AssociatedType) {
+        self.bump(&mut item.name_span);
+        for (name, span) in &mut item.bounds {
+            self.rewrite_type(name);
+            self.bump(span);
+        }
+        if let Some(value) = &mut item.value {
+            self.ty(value);
+        }
+    }
+
     fn ty(&mut self, ty: &mut ParsedTy) {
         match ty {
+            ParsedTy::Projection {
+                span,
+                base,
+                trait_name,
+                name_span,
+                ..
+            } => {
+                self.bump(span);
+                self.ty(base);
+                if let Some((name, span)) = trait_name {
+                    self.rewrite_type(name);
+                    self.bump(span);
+                }
+                self.bump(name_span);
+            }
             ParsedTy::Named { span, name, args } => {
                 self.bump(span);
                 self.rewrite_type(name);

@@ -107,6 +107,15 @@ impl<'a> Checker<'a> {
         subst: &HashMap<String, u32>,
     ) -> Result<u32, CompileError> {
         match ty {
+            ParsedTy::Projection { span, .. } => {
+                let mut concrete = HashMap::new();
+                for (name, var) in subst {
+                    let parsed = self.render_var(solver, *var, &HashMap::new()).map_err(|_| CompileError::at(self.source, span.start, "cannot infer an associated type before its base type; add parameter types"))?;
+                    concrete.insert(name.clone(), self.apply(&parsed, &HashMap::new())?);
+                }
+                let ty = self.apply(ty, &concrete)?;
+                Ok(solver.concrete(ty))
+            }
             ParsedTy::Named { span, name, args } => {
                 if let Some(var) = subst.get(name) {
                     if !args.is_empty() {

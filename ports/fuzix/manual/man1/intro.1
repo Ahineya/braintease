@@ -1,0 +1,28 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH INTRO 1 "FUZIX" "Ripple"
+.SH NAME
+intro \- commands available in FUZIX
+.SH SYNOPSIS
+.nf
+man intro
+.fi
+.SH DESCRIPTION
+Use man followed by a command name to read its manual, for example man sh,
+man cp, man less, man vi or man tcl. Games are in section 6: man wump and
+man hamurabi. Space advances the pager, Enter shows a line, and q returns
+to the shell. Ctrl-C interrupts the foreground program.
+.PP
+Use shutdown to save the filesystem and stop the machine. Files in your
+session persist across launches. Run ls /bin to list installed commands; help summarizes shell features.
+.PP
+Shell scripts, pipelines, redirection, loops and command substitution are
+available through sh. Editors are vi (Levee), vile and ed. With ed, use q
+to quit, or Q to discard changes.
+.PP
+Other useful commands include ls, cat, cp, mv, ln, rm, mkdir, rmdir, pwd,
+touch, chmod, chown, chgrp, mkfifo, mknod, basename, dirname, find, dd, tar,
+head, tail, wc, grep, fgrep, sed, sort, uniq, cut, tr, tee, comm, rev, expand,
+colrm, od, sum, cmp, diff, join, split, fmt, column, pr, col, tsort, cksum,
+more, less, clear, stty, tty, mktemp, ps, kill, sleep, env, printenv, id,
+whoami, uname, date, which, xargs, time, nice, nohup, groups, logname, df,
+du, sync, test, true, false, seq, yes, cowsay and tcl.

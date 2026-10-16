@@ -16,7 +16,7 @@ Bank 0, words **0–31** are the MMIO header. TEXT40 VRAM starts at word **32**.
 | 7 | DISP_STATUS | R | ready / flush_done |
 | 8 | DISP_CTL | R/W | enable / clear |
 | 9 | DISP_FLUSH | W | present frame |
-| 10–15 | KEY_* | R | TEXT40/RGB565 keys |
+| 10–15 | Reserved | R/W | reads zero; writes ignored |
 | 16 | DISP_RESOLUTION | R/W | RGB565 hi8=width lo8=height |
 | 17–20 | STORE_* | | block storage (16-bit word addressed) |
 | 21 | IRQ_STATUS | R/W | pending bits; **write ORs** |
@@ -49,7 +49,7 @@ See the [worked memory and C examples](../../rvm/mmio.md#worked-example-a-capabi
 and the [complete example using C helpers](../../rvm/mmio.md#complete-c-example-using-the-helpers).
 
 `runtime/include/vm_devices.h` provides framebuffer presentation, a logical
-simulation clock, keyboard events, and held-key state. The descriptor starts with
+simulation clock, ordered keyboard/pointer events, and input state. The descriptor starts with
 `[version, length]`, followed by command-specific 16-bit cells. Lengths, offsets,
 and framebuffer strides count **cells**, matching the compiler's 16-bit C byte.
 The descriptor may cross a bank boundary. Set its bank/offset, write the command,
@@ -62,8 +62,9 @@ it is complete before the next guest instruction. There is no polling loop.
 | CAPS | 2 | 4 | read capability bits and key count |
 | NEXT_TICK | 3 | 8 | request one simulation tick and read logical time |
 | GET_TIME | 4 | 8 | read logical time without advancing it |
-| INPUT_POP | 5 | 8 | pop one keyboard transition |
-| INPUT_STATE | 6 | 19 | read 256 held-key bits and clear sticky queue overflow |
+| INPUT_READ | 5 | 10 | drain up to 64 typed keyboard/pointer events |
+| INPUT_STATE | 6 | 28 | read keys, pointer, focus/capture and sequence; acknowledge overflow |
+| INPUT_CONFIGURE | 7 | 4 | request absolute or relative pointer mode |
 
 Mode 3 retains its bank-0 double-buffer layout, 8-bit dimensions, and flush
 register. Mode 4 accepts 16-bit width/height/stride and a banked framebuffer pointer
@@ -71,10 +72,17 @@ through `PRESENT`; it does not reserve pixel storage in bank 0. Presentation and
 time reads never advance the clock. See the [full wire contract](../../rvm/mmio.md#device-command-abi-version-1)
 and [Doom platform guide](../doom-platform.md).
 
-Hosts advertising `VM_CAP_INPUT_POLL` (0x0010) collect live keyboard input on
-`INPUT_POP` and `INPUT_STATE`, independently of clock grants. Live events carry
+Hosts advertising `VM_CAP_INPUT_POLL` (0x0010) collect live keyboard/pointer input on
+`INPUT_READ` and `INPUT_STATE`, independently of clock grants. Live events carry
 the current logical tick, including zero; scheduled replay and stepped-controller
 events remain tied to tick grants.
+
+The ordered stream includes keys, motion, buttons, wheel, enter/leave, focus and
+capture. Absolute positions count guest pixels; relative motion counts raw device
+units. Wheels use signed 16.16 lines. Relative capture is asynchronous and releases
+on focus loss. The [event and snapshot layouts](../../rvm/mmio.md#keyboard-and-pointer-events-and-state)
+define flags, batching, overflow recovery and live/replay delivery. ABI version
+remains 1; there are no alternate input layouts.
 
 These are host-device extensions; instruction encoding and CPU semantics are
 unchanged. The Rust VM, Brainfuck host adapter, and native runtime implement this

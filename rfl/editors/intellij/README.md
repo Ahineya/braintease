@@ -25,7 +25,7 @@ The default installation is `/Applications/IntelliJ IDEA.app`. Elsewhere, pass
 accepted. If the IDE has no compiler, set `JAVA_HOME` to a JDK 21 or later.
 
 In IDEA, open **Settings → Plugins → gear menu → Install Plugin from Disk** and
-select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.3.zip`. Restart
+select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.4.zip`. Restart
 if IDEA requests it, then open an `.rfl` file.
 
 To update an installed version, use the same **Install Plugin from Disk** action
@@ -82,8 +82,10 @@ libraries when used). Native compilation requires the host toolchain used by
 Use **Refactor → Rename** (usually **Shift+F6**) on an RFL declaration or use.
 IDEA uses the server's symbol ranges and workspace edits, with its normal rename
 dialog, preview and undo. Rename covers local variables, parameters, functions,
-constants, types, constructors, fields, methods and import aliases. Project
-exports update imports and uses in other `.rfl` files, including unopened files;
+constants, types, constructors, fields, methods, traits, associated types and import aliases. A trait
+method rename updates its contract, implementations and resolved calls together;
+other traits and inherent methods with the same spelling keep their identities.
+Project exports update imports and uses in other `.rfl` files, including unopened files;
 open files use their unsaved contents and document versions. Explicit import
 aliases keep their local spelling when the exported declaration is renamed.
 
@@ -96,7 +98,10 @@ syntax errors affecting the refactor and unresolved member receivers produce
 an error instead of partial edits. Workspace searches skip hidden directories,
 `target`, `build`, `node_modules` and `vendor`; files outside the workspace are
 treated as library imports unless open in the editor. File/module moves are not
-part of symbol rename. Rebuild the server when updating this plugin.
+part of symbol rename. The rename index deliberately refuses trait member edits
+when erased generic arguments or conditional impls prevent safe resolution;
+completion and navigation use the full compiler checker. Rebuild the server
+when updating this plugin.
 
 An empty **Settings → Languages & Frameworks → RFL → RFL executable** setting
 first tries `rfl` on IDEA's PATH (`rfl.exe` on Windows), then searches the project
@@ -121,8 +126,16 @@ restarts the server automatically.
 ## Features
 
 - Compiler diagnostics as you type, completion and hover documentation.
-- Builtin function completion (`print`, `println`, `putc`, `from_char`,
+- Prelude function completion (`print`, `println`, `putc`, `from_char`,
   `from_byte`) with signatures, available without imports.
+- Trait and bound highlighting, trait symbols, applicable trait method completion
+  after `.`, and qualified completion after `Trait::`, including imported aliases.
+  Hover, definition and parameter information work in generic bodies too.
+- Associated type symbols, projections, bounds, hover and navigation. Completion
+  covers `Self::`, bounded `T::`, concrete names and `<T as Trait>::`; projected
+  method results show their normalized types. Rename joins contract, definitions
+  and resolved projections. Nested projection completion is not yet provided;
+  rename refuses cases whose projected receiver cannot be safely resolved.
 - Go to definition, find usages and rename through the server.
 - Cmd-click an imported name or alias to open its declaration, or its quoted
   path to open the module file. Supports stdlib and relative imports. Builtin
@@ -147,8 +160,16 @@ If several modules export the name, IDEA offers a separate choice for each.
 Only exported standard-library names are suggested; project-local import discovery
 is not included.
 
-After a receiver such as `b.`, completion includes built-in/inherent methods and
-compatible exported stdlib extension functions. A string offers `replace`, `trim`,
+After a receiver such as `b.`, completion includes built-in/inherent methods,
+visible applicable trait methods and compatible exported stdlib extension functions.
+Trait candidates use the compiler's bound and impl checks, so `T: Read` offers
+`Read` methods while an unconstrained `T` does not. Ambiguous trait methods are
+omitted; inherent methods retain priority. `Printable.print` and the prelude
+`println` extension need no auto-import. Trait method calls navigate to the
+contract; implementation declarations also navigate to their contract signature.
+Qualified calls such as `Read::read(&value)` have completion and signature help.
+
+A string offers `replace`, `trim`,
 `contains`, `split`, and other matching functions from `std/string` even before
 they are imported. Selecting one adds its import or merges it into an existing
 import. Existing aliases are suggested under the alias with no duplicate import.
@@ -157,8 +178,9 @@ project free functions are not suggested. This uses the existing extension-call
 semantics and does not require traits or changes to the stdlib's declarations.
 
 These actions require the updated **RFL executable**. The existing plugin already
-displays LSP quick fixes, so a plugin reinstall is unnecessary. If you installed
-an older `rfl` on PATH, rebuild it with `cargo build --release -p rfl`, then update
+displays LSP quick fixes. Install plugin **0.2.4** for local `trait` keyword
+highlighting and correct rename token ranges; restart the language server after
+updating its executable. If you installed an older `rfl` on PATH, rebuild it with `cargo build --release -p rfl`, then update
 that PATH installation or point **Languages & Frameworks → RFL → RFL executable**
 at the new `target/release/rfl`. Restart the language server through its editor
 widget or **Tools → Restart RFL Language Server** after replacing the executable.
@@ -189,6 +211,11 @@ Gradle runs these through `checkRunConfigurations`. With `--test --server`, the
 build also exercises real checks, assembly/IR/native compilation, Ripple/native
 execution, JIT and compiler failure reporting, using a temporary source with
 spaces in its path. `--server` checks the actual RFL stdio server, including
-full-document edit synchronization and diagnostics recovery. All plugin sources,
+full-document edit synchronization and diagnostics recovery. Its separate trait
+protocol checks cover imported aliases, bounds, qualified calls, completion,
+contract navigation, parameter help, semantic tokens, versioned workspace rename
+and malformed impl diagnostics. Associated type protocol checks cover imported
+projections, partial-path completion, concrete signatures and workspace rename.
+All plugin sources,
 checks and plugin build output live in this directory. The existing compiler's
 run commands use and clean up their usual workspace `target/` scratch artifacts.

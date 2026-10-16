@@ -109,6 +109,7 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+        self.eval_consts(&module.consts)?;
         self.finish_structs(&module.structs)?;
         let plain: Vec<usize> = self
             .schemas

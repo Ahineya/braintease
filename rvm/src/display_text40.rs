@@ -96,7 +96,7 @@ impl Text40Snapshot {
 }
 
 /// A terminal has no portable key-up events. Keep the established TEXT40
-/// last-key pulse: at most ten legacy key-register reads per received event.
+/// last-key pulse: at most ten input observations per received event.
 #[derive(Default)]
 struct Text40Keys {
     key: Option<u16>,
@@ -117,12 +117,16 @@ impl Text40Keys {
         self.reads = 0;
     }
 
-    fn read(&mut self, key: u16) -> bool {
+    fn sample(&mut self) -> Option<u16> {
         self.reads = self.reads.saturating_add(1);
         if self.reads > 10 {
             self.key = None;
         }
-        self.key == Some(key)
+        self.key
+    }
+
+    fn read(&mut self, key: u16) -> bool {
+        self.sample() == Some(key)
     }
 }
 
@@ -186,7 +190,7 @@ impl Text40Display {
     }
 
     /// Reopen the host terminal after loading without resetting guest-visible
-    /// frame, queued input, or the remaining reads of a legacy key pulse.
+    /// frame, queued input, or the remaining observations of a key pulse.
     pub fn resume_interactive(&mut self) -> Result<(), String> {
         self.acquire_terminal()?;
         if self.active {
@@ -281,6 +285,12 @@ impl Text40Display {
     pub fn read_key(&mut self, key: u16) -> Result<bool, String> {
         self.poll_input()?;
         Ok(self.keys.read(key))
+    }
+
+    /// Sample the terminal pulse once for a complete DEVICE input snapshot.
+    pub fn key_state(&mut self) -> Result<Option<u16>, String> {
+        self.poll_input()?;
+        Ok(self.keys.sample())
     }
 
     /// Bounded, nonblocking polling also keeps Ctrl-C responsive between guest

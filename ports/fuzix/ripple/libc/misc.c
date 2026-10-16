@@ -212,15 +212,15 @@ int statvfs(const char *path, struct statvfs *v) {
     } k;
     if (_statfs(path, (uint8_t *)&k) < 0)
         return -1;
-    if (k.fs.s_mounted != 0x7252) {
+    if (k.fs.s_mounted != 0x7253) {
         errno = EINVAL;
         return -1;
     }
     v->f_bsize = v->f_frsize =
-        512; /* Physical octets, as expected by upstream df. */
+        2048; /* C16 V2 physical octets, as expected by upstream df. */
     v->f_blocks = k.fs.s_fsize - k.fs.s_isize;
     v->f_bfree = v->f_bavail = k.fs.s_tfree;
-    v->f_files = (k.fs.s_isize - 2) * 8;
+    v->f_files = (k.fs.s_isize - 2) * 32;
     v->f_ffree = v->f_favail = k.fs.s_tinode;
     v->f_fsid = 0;
     v->f_namemax = 30;
@@ -245,28 +245,35 @@ char *stpcpy(char *dest, const char *src) {
         dest++;
     return dest;
 }
-/* Atomic exclusive creation; the name is not an access-control boundary. */
-int mkstemp(char *pattern) {
+/* Atomic exclusive creation; generated names are not an access-control boundary. */
+static int temp_object(char *pattern, int directory) {
     static unsigned long serial;
-    size_t len = strlen(pattern);
-    unsigned attempt, i;
-    if (len < 6 || strcmp(pattern + len - 6, "XXXXXX")) {
+    size_t len = strlen(pattern), start = len;
+    unsigned attempt;
+    while (start && pattern[start - 1] == 'X') start--;
+    if (len - start < 6 || len >= 512) {
         errno = EINVAL;
         return -1;
     }
     for (attempt = 0; attempt < 256; attempt++) {
-        unsigned long n = ((unsigned long)getpid() * 257 + serial++) % 1000000UL;
-        int fd;
-        for (i = 0; i < 6; i++) {
-            pattern[len - 1 - i] = '0' + n % 10;
-            n /= 10;
+        unsigned long n = ((unsigned long)getpid() << 16) ^ serial++;
+        size_t i = len;
+        int result;
+        while (i > start) {
+            unsigned digit = n % 36;
+            pattern[--i] = digit < 10 ? '0' + digit : 'a' + digit - 10;
+            n /= 36;
         }
-        fd = open(pattern, O_RDWR | O_CREAT | O_EXCL, 0600);
-        if (fd >= 0 || errno != EEXIST)
-            return fd;
+        result = directory ? mkdir(pattern, 0700) :
+                 open(pattern, O_RDWR | O_CREAT | O_EXCL, 0600);
+        if (result >= 0 || errno != EEXIST) return result;
     }
     errno = EEXIST;
     return -1;
+}
+int mkstemp(char *pattern) { return temp_object(pattern, 0); }
+char *mkdtemp(char *pattern) {
+    return temp_object(pattern, 1) < 0 ? NULL : pattern;
 }
 const char *strsignal(int sig) {
     static const char *names[] = {

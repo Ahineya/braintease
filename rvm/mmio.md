@@ -24,12 +24,7 @@ and [complete C example](#complete-c-example-using-the-helpers).
 | 7       | `HDR_DISP_STATUS`     | R   | Display status (bit 0: ready, bit 1: flush done)      |
 | 8       | `HDR_DISP_CTL`        | R/W | Display control (bit 0: enable, bit 1: clear)         |
 | 9       | `HDR_DISP_FLUSH`      | W   | Trigger display flush (write non-zero)                |
-| 10      | `HDR_KEY_UP`          | R   | Arrow up key state (bit 0: 1=pressed, 0=released)     |
-| 11      | `HDR_KEY_DOWN`        | R   | Arrow down key state (bit 0: 1=pressed, 0=released)   |
-| 12      | `HDR_KEY_LEFT`        | R   | Arrow left key state (bit 0: 1=pressed, 0=released)   |
-| 13      | `HDR_KEY_RIGHT`       | R   | Arrow right key state (bit 0: 1=pressed, 0=released)  |
-| 14      | `HDR_KEY_Z`           | R   | Z key state (bit 0: 1=pressed, 0=released)            |
-| 15      | `HDR_KEY_X`           | R   | X key state (bit 0: 1=pressed, 0=released)            |
+| 10–15 | Reserved | R/W | Reads zero; writes ignored. Input uses DEVICE_* commands. |
 | 16      | `HDR_DISP_RESOLUTION` | R/W | Display resolution for RGB565 (hi8=width, lo8=height) |
 | 17      | `HDR_STORE_BLOCK`     | W   | Select current storage block (0-65535)                |
 | 18      | `HDR_STORE_ADDR`      | W   | Select byte address within block (0-65535)            |
@@ -153,23 +148,12 @@ an optional interrupt stack, and an instruction-count timer. They do not displac
 the device mailbox at 27–31. The full contract, CSR numbers, C helpers, and binary
 migration requirements are in [stacks-and-interrupts.md](../docs/arch/stacks-and-interrupts.md).
 
-### Keyboard Input (TEXT40 Mode Only)
+### Keyboard and pointer input
 
-**Overview**
-- Keyboard input flags are only active when display mode is set to TEXT40
-- Keys are polled when reading keyboard MMIO addresses
-- Flags indicate momentary key state (1=key event detected, 0=no event)
-- State is cleared before each poll, so keys must be held for continuous input
-
-**Arrow Keys (HDR_KEY_UP/DOWN/LEFT/RIGHT)**
-- Read-only registers at addresses 10-13
-- Bit 0 indicates key state
-- Used for navigation in games
-
-**Action Keys (HDR_KEY_Z/X)**
-- Read-only registers at addresses 14-15
-- Bit 0 indicates key state
-- Common game action buttons (e.g., jump, shoot)
+Input uses the DEVICE_* mailbox in every display mode. Registers 10–15 are
+reserved. The C directional helpers read DEVICE_INPUT_STATE using USB HID usages.
+TEXT40 terminal key presses become short pulses; windowed RGB565 input provides
+press/release, pointer motion, buttons, wheel, focus and capture events.
 
 ### Display System
 
@@ -298,8 +282,9 @@ Multiword integers use the low cell first.
 | CAPS | 2 | 4 | version, length, capability bits (out), key count (out) |
 | NEXT_TICK | 3 | 8 | version, length, tick low (out), tick high (out), milliseconds low (out), milliseconds high (out), Hz (out), reserved=0 |
 | GET_TIME | 4 | 8 | same as NEXT_TICK |
-| INPUT_POP | 5 | 8 | version, length, available (out), key (out), down (out), tick low (out), tick high (out), overflow (out) |
-| INPUT_STATE | 6 | 19 | version, length, overflow (out), 16 held-key bitmap cells (out) |
+| INPUT_READ | 5 | 10 | version, length, capacity, event buffer bank, offset, count (out), overflow (out), sequence low/high (out), reserved=0 |
+| INPUT_STATE | 6 | 28 | version, length, overflow, sequence low/high, requested pointer mode, buttons, flags, X low/high, Y low/high, 16 held-key bitmap cells (all after length are outputs) |
+| INPUT_CONFIGURE | 7 | 4 | version, length, pointer mode (0 absolute, 1 relative), reserved=0 |
 
 #### Worked example: a capabilities request in memory
 
@@ -309,7 +294,7 @@ Assume bank 2, offsets 100–103 are available guest RAM. First write this recor
 |----------------|-------------------|---------|-----------------------------------------|
 | `(2, 100)` | 1 | descriptor version | 1 |
 | `(2, 101)` | 4 | descriptor length, including these first two cells | 4 |
-| `(2, 102)` | 0 | capability bits, output | 63 |
+| `(2, 102)` | 0 | capability bits, output | 127 |
 | `(2, 103)` | 0 | key count, output | 256 |
 
 Then perform these bank-0 MMIO operations, in order:
@@ -324,7 +309,7 @@ read  address 30          # 0 means success
 The host obtains the descriptor address from registers 27/28, reads its header,
 validates the four-cell range, and writes results at `(2, 102)` and `(2, 103)`.
 Read those cells only after checking status. Test capability bits with a mask;
-future hosts may return additional bits rather than exactly 63.
+future hosts may return additional bits rather than exactly 127.
 
 Here is a complete Ripple C program doing the same operation with a stack array
 instead of a hard-coded address. `volatile` ensures the descriptor's memory
@@ -400,12 +385,11 @@ guest may then reuse the framebuffer; presentation has not advanced the clock.
 | 6 | input queue overflow during a tick grant |
 | 0x8000 | pending host tick grant |
 
-`CAPS` returns bits 0–5 set (63): extended RGB565, logical clock, input events,
+`CAPS` returns bits 0–6 set (127): extended RGB565, logical clock, input events,
 held-key state, independent live-input polling (`VM_CAP_INPUT_POLL`, 0x0010),
-and Ethernet networking (`VM_CAP_NETWORK`, 0x0020).
-Older ABI-1 hosts may lack bit 4 and collect live input only at tick grants.
-Older hosts may also lack networking. Key count is 256. Unknown future capability bits should be
-ignored. Error statuses must be checked before consuming output fields.
+Ethernet networking (`VM_CAP_NETWORK`, 0x0020), and pointer input (`VM_CAP_POINTER`,
+0x0040). Key count is 256. Ignore unknown capability bits and check status before
+consuming output fields.
 
 Networking uses additional command IDs in this same mailbox: `NET_INFO` 0x0100
 (18 cells), `NET_TX` 0x0101 (8), `NET_RX` 0x0102 (9), and `NET_STATS` 0x0103 (27).
@@ -443,40 +427,66 @@ CPU frequency throttling is a separate host setting and does not define the
 simulation clock. A Doom port should request ticks in its game loop and implement
 its time callback using `GET_TIME`; rendering must not become the clock source.
 
-#### Keyboard events and state
+#### Keyboard and pointer events and state
 
-Keys use USB HID keyboard usage IDs in the range 0–255, rather than host library
-key codes or ASCII. Common IDs are A–Z = 4–29, 1–9 = 30–38, 0 = 39, Enter = 40,
-Escape = 41, Space = 44, right/left/down/up = 79/80/81/82, and left/right
-Ctrl/Shift/Alt/GUI = 224–231. `runtime/include/vm_devices.h` defines named keys.
+`INPUT_READ` drains up to `capacity` ordered events (1–64). Its output buffer
+holds `capacity * 20` cells; buffers and descriptors may cross banks but must be
+valid guest RAM and must not overlap. Every range and descriptor field is checked
+before any event is consumed or output is written. A successful empty read has
+count zero. The output sequence is the current snapshot boundary, which can be
+newer than the final event in a partial batch. Sequence numbers wrap modulo 2^32.
 
-`INPUT_POP` returns one transition: `available=1`, key ID, `down=1` for press or
-0 for release, and the logical tick at which it was recorded. An empty queue
-returns `available=0`. Use `available` before reading the event's other fields.
+Each event occupies 20 cells; 32-bit fields use low/high cells in that order:
 
-With `VM_CAP_INPUT_POLL`, both input commands collect pending live keyboard
-transitions without advancing the clock or requiring `NEXT_TICK`. Live events
-carry the current logical tick when collected, including tick zero before the
-first grant; this is an observation timestamp, not a wall-clock timestamp.
-Clock reads, tick grants and presentations do not collect live window input.
-Scripted input and explicit stepped-controller events retain their scheduled
-tick-grant delivery, so polling cannot release future replay events.
+| Cells | Field |
+|-------|-------|
+| 0 | type: key=1, motion=2, button=3, wheel=4, enter/leave=5, focus=6, capture=7 |
+| 1 | flags: DOWN=1, RELATIVE=2, INSIDE=4, FOCUSED=8, CAPTURED=16 |
+| 2 | code: USB HID usage for keys, button ID for button transitions, otherwise zero |
+| 3 | held button bitmap after this event |
+| 4–5 | unsigned sequence |
+| 6–7 | low 32 bits of logical tick |
+| 8–9, 10–11 | signed X, Y position |
+| 12–13, 14–15 | signed movement delta X, Y (zero for other event types) |
+| 16–17, 18–19 | signed wheel X, Y in 16.16 lines (zero for other types) |
 
-Held keys persist until release; host auto-repeat must not create extra presses.
+Key IDs are USB HID usages 0–255: A–Z=4–29, Enter=40, Escape=41, Space=44,
+right/left/down/up=79/80/81/82, modifiers=224–231. Held keys persist until release;
+auto-repeat does not generate extra presses. Button IDs are left=0, right=1,
+middle=2, auxiliary=3–15; auxiliary numbering follows host conventions.
 
-`INPUT_STATE` returns a bitmap: key `k` is bit `(k & 15)` of cell `(k >> 4)`.
-Queue overflow is sticky and reported by both input commands. Reading state
-returns and clears the overflow flag, so a guest that missed transitions can
-resynchronize its held-key state. State is maintained even if events overflow.
-When that flag was set, `INPUT_STATE` also discards the remaining queued events
-because the returned bitmap supersedes them. With no overflow it leaves the
-event queue intact.
-The queue holds 256 transitions. A tick grant that overflows it reports status 6;
-automated runs also fail on observed overflow rather than silently accepting an
-incomplete replay.
+Absolute X/Y count framebuffer pixels from its top left (X right, Y down).
+They are signed and may lie outside the framebuffer in the window's letterbox
+or after leaving it. INSIDE means inside the host window, independently of those
+coordinates. Button events carry the click position and resulting button bitmap.
+Relative events have RELATIVE set: deltas count raw device units with the same
+axis directions, and their virtual X/Y accumulate with signed saturation. Wheel
+X is positive right and Y positive up. Pixel scrolling is normalized using 40
+logical window pixels per line, preserving fractional lines as signed 16.16.
 
-The six legacy key registers remain available to existing guests. Extended
-input supports Doom's additional controls without adding per-key MMIO addresses.
+`INPUT_CONFIGURE` requests absolute or relative mode. Relative mode asks a focused
+window to grab and hide the cursor (locked, or confined where locking is not
+supported). Capture is asynchronous: CAPTURE events and the CAPTURED snapshot
+flag report actual host acceptance, including failure to capture. Absolute mode
+releases it. Focus loss releases held keys, buttons and capture in order. Relative
+mode is requested again on refocus. Headless hosts do not claim live capture.
+
+With `VM_CAP_INPUT_POLL`, READ and STATE collect live events at the current logical
+tick, including zero, without advancing time or requiring a presentation. Replay
+and controller events are delivered at tick grants, never early by polling.
+Keyboard, button, motion, wheel, enter, focus and capture share one ordered queue.
+
+`INPUT_STATE` reports the current sequence boundary, requested pointer mode,
+button bitmap, flags, position, and all 256 keys. Key `k` is bit `(k & 15)` of
+cell `12 + (k >> 4)`. A normal snapshot leaves queued events intact. After queue
+overflow, the snapshot clears sticky overflow and discards stale queued events;
+replace application state with this authoritative snapshot. State continues to
+update while events are lost. Host overflow establishes a fresh snapshot boundary;
+sequence gaps do not measure the exact number of lost host transitions.
+
+The queue holds 256 events. READ reports overflow without clearing it. A tick
+grant that overflows reports status 6; automated runs fail on observed overflow.
+The ABI remains version 1; no alternate input layouts are supported.
 
 #### C interface and backend compatibility
 
@@ -485,7 +495,7 @@ on the stack, extract the compiler's packed bank/offset pointer representation,
 submit commands, check status, and copy successful outputs into typed structs.
 Use `vm_devices_version()` for discovery, `vm_devices_caps()` for capabilities,
 `vm_present_rgb565()` for output, `vm_next_tick()` / `vm_get_time()` for time,
-and `vm_input_pop()` / `vm_input_state()` for keyboard input.
+and `vm_input_read()` / `vm_input_state()` / `vm_input_configure()` for input.
 
 The instruction set is unchanged. The Rust VM, Brainfuck host and native
 runtime share this device protocol and live-input collection. The Brainfuck
@@ -511,6 +521,7 @@ int main(void) {
     VmDeviceCaps caps;
     VmClock clock;
     VmInputEvent event;
+    VmInputBatch batch;
     VmInputState keys;
     unsigned short needed = VM_CAP_RGB565_EXT | VM_CAP_CLOCK
         | VM_CAP_INPUT_EVENTS | VM_CAP_INPUT_STATE | VM_CAP_INPUT_POLL;
@@ -528,15 +539,17 @@ int main(void) {
     if (vm_input_state(&keys) != VM_DEVICE_OK) return 5;
     printf("up=%d\n", vm_key_is_down(&keys, VM_KEY_UP));
     for (;;) {
-        if (vm_input_pop(&event) != VM_DEVICE_OK) return 6;
-        if (event.overflow) {
+        if (vm_input_read(&event, 1, &batch) != VM_DEVICE_OK) return 6;
+        if (batch.overflow) {
             /* Recover the authoritative bitmap and discard stale events. */
             if (vm_input_state(&keys) != VM_DEVICE_OK) return 7;
             printf("resync up=%d\n", vm_key_is_down(&keys, VM_KEY_UP));
             break;
         }
-        if (!event.available) break;
-        printf("key=%u down=%u tick=%lu\n", event.key, event.down, event.tick);
+        if (!batch.count) break;
+        if (event.type == VM_INPUT_KEY)
+            printf("key=%u down=%u tick=%lu\n", event.code,
+                   event.flags & VM_INPUT_DOWN, event.tick);
     }
 
     if (vm_next_tick(&clock) != VM_DEVICE_OK) return 8;
@@ -557,7 +570,7 @@ after: tick=1 ms=28
 `GET_TIME` and input polling leave time unchanged. Only `NEXT_TICK` advances it;
 paced execution may wait, while unthrottled execution grants it immediately.
 Replay events scheduled for tick 1 become available after that grant, so call
-`vm_input_pop()` again afterwards to consume them. An ordinary `INPUT_STATE`
+`vm_input_read()` again afterwards to consume them. An ordinary `INPUT_STATE`
 snapshot leaves queued events intact; after overflow it clears stale events and
 the overflow flag. An application maintaining controls must replace its own
 held-key state from that recovery snapshot.
@@ -696,20 +709,10 @@ LI    T1, 4        ; HDR_RNG
 LOAD  A0, T0, T1   ; Random value in A0
 ```
 
-### Keyboard Input
-```asm
-; Check if up arrow is pressed
-LI    T0, 0        ; Bank 0
-LI    T1, 10       ; HDR_KEY_UP
-LOAD  T2, T0, T1
-ANDI  T2, T2, 1
-BEQ   T2, R0, not_pressed
+### Keyboard input
 
-; Handle up arrow press
-; ... game logic ...
-
-not_pressed:
-```
+Submit INPUT_STATE as described above. The up arrow (HID usage 82) is bit 2 of
+snapshot cell 17; input registers 10–15 are reserved.
 
 ### Storage Operations
 ```asm
@@ -827,12 +830,6 @@ pub const HDR_DISP_MODE: usize     = 6;
 pub const HDR_DISP_STATUS: usize   = 7;
 pub const HDR_DISP_CTL: usize      = 8;
 pub const HDR_DISP_FLUSH: usize    = 9;
-pub const HDR_KEY_UP: usize        = 10;
-pub const HDR_KEY_DOWN: usize      = 11;
-pub const HDR_KEY_LEFT: usize      = 12;
-pub const HDR_KEY_RIGHT: usize     = 13;
-pub const HDR_KEY_Z: usize         = 14;
-pub const HDR_KEY_X: usize         = 15;
 pub const HDR_DISP_RESOLUTION: usize = 16;
 pub const HDR_STORE_BLOCK: usize   = 17;
 pub const HDR_STORE_ADDR: usize    = 18;

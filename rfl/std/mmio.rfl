@@ -25,12 +25,7 @@ export const DISP_MODE: u16 = 6;
 export const DISP_STATUS: u16 = 7;
 export const DISP_CTL: u16 = 8;
 export const DISP_FLUSH: u16 = 9;
-export const KEY_UP: u16 = 10;
-export const KEY_DOWN: u16 = 11;
-export const KEY_LEFT: u16 = 12;
-export const KEY_RIGHT: u16 = 13;
-export const KEY_Z: u16 = 14;
-export const KEY_X: u16 = 15;
+// Registers 10..15 are reserved (read zero, writes ignored).
 export const DISP_RESOLUTION: u16 = 16;
 export const STORE_BLOCK: u16 = 17;
 export const STORE_ADDR: u16 = 18;
@@ -81,9 +76,11 @@ export const DEVICE_PRESENT: u16 = 1;
 export const DEVICE_CAPS: u16 = 2;
 export const DEVICE_NEXT_TICK: u16 = 3;
 export const DEVICE_GET_TIME: u16 = 4;
-export const DEVICE_INPUT_POP: u16 = 5;
+export const DEVICE_INPUT_READ: u16 = 5;
 export const DEVICE_INPUT_STATE: u16 = 6;
-// CAPS bit: live INPUT_POP/INPUT_STATE work independently of clock grants.
+export const DEVICE_INPUT_CONFIGURE: u16 = 7;
+export const CAP_POINTER: u16 = 64;
+// CAPS bit: live INPUT_READ/INPUT_STATE work independently of clock grants.
 export const CAP_INPUT_POLL: u16 = 16;
 export const CAP_NETWORK: u16 = 32;
 export const DEVICE_NET_INFO: u16 = 256;
@@ -180,7 +177,25 @@ export fn text40_char(x: u16, y: u16) -> u16 {
     if (x < TEXT40_COLS && y < TEXT40_ROWS) { read(text40_at(x, y)) & 255 } else { 0 }
 }
 
-export fn key_down(which: u16) -> bool { bit(read(which), 0) }
+// USB HID keyboard usages.
+export const KEY_UP: u16 = 82; // USB HID usage
+export const KEY_DOWN: u16 = 81; // USB HID usage
+export const KEY_LEFT: u16 = 80; // USB HID usage
+export const KEY_RIGHT: u16 = 79; // USB HID usage
+export const KEY_Z: u16 = 29; // USB HID usage
+export const KEY_X: u16 = 27; // USB HID usage
+
+// `which` is a USB HID usage. Ordinary snapshots preserve queued events.
+export fn key_down(which: u16) -> bool {
+    if (which >= 256) { return false; }
+    let mut state: [u16; 28] = [1, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    unsafe {
+        let p: *mut [u16; 28] = &mut state;
+        device_submit(DEVICE_INPUT_STATE, p.bank(), p.addr());
+    }
+    if (device_status() != 0) { return false; }
+    bit(state[12 + (which as usize) / 16], which % 16)
+}
 
 export fn rgb565_color(red: u16, green: u16, blue: u16) -> u16 {
     ((red >> 3) << 11) | ((green >> 2) << 5) | (blue >> 3)

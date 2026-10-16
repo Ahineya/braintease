@@ -10,6 +10,7 @@ mod control;
 mod coverage;
 mod declarations;
 mod display;
+mod editor;
 mod expressions;
 mod facts;
 mod ffi;
@@ -21,6 +22,7 @@ mod numeric;
 mod operators;
 mod patterns;
 mod products;
+mod projections;
 mod register;
 mod statements;
 mod traits;
@@ -29,6 +31,7 @@ mod types;
 use captures::*;
 use declarations::*;
 use display::*;
+pub(crate) use editor::trait_method_signature;
 use numeric::*;
 
 use std::collections::{HashMap, HashSet};
@@ -117,6 +120,26 @@ struct Suspended {
     loops: u32,
 }
 
+/// A method proven applicable to an expression, including generic bounds.
+#[derive(Clone)]
+pub struct MethodFact {
+    pub receiver: Span,
+    pub receiver_type: String,
+    pub trait_name: String,
+    pub name: String,
+    pub signature: String,
+}
+
+#[derive(Clone)]
+pub struct TypeMemberFact {
+    pub qualifier: String,
+    pub contract: String,
+    pub name: String,
+    pub detail: String,
+    pub scope: Span,
+    pub concrete: bool,
+}
+
 pub struct ProgramInfo {
     pub facts: Vec<BindingFact>,
     pub uses: Vec<NameUse>,
@@ -124,6 +147,8 @@ pub struct ProgramInfo {
     /// `(type name, method name)` for every inherent method that was checked.
     pub methods: Vec<(String, String)>,
     pub call_sigs: Vec<CallSig>,
+    pub trait_methods: Vec<MethodFact>,
+    pub type_members: Vec<TypeMemberFact>,
 }
 
 pub(crate) fn completion_function(func: &Function) -> Option<crate::completion::ExtensionFunction> {
@@ -146,11 +171,24 @@ pub(crate) fn completion_type_name(ty: &ParsedTy) -> String {
 }
 
 pub fn check(source: &str, module: &Module) -> Result<TModule, CompileError> {
-    analyze(source, module).1
+    analyze_inner(source, module, false).1
 }
 
 pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, CompileError>) {
+    analyze_inner(source, module, true)
+}
+
+fn analyze_inner(
+    source: &str,
+    module: &Module,
+    editor: bool,
+) -> (ProgramInfo, Result<TModule, CompileError>) {
     let mut checker = Checker {
+        editor,
+        type_members: Vec::new(),
+        trait_methods: Vec::new(),
+        method_cache: HashMap::new(),
+        method_targets: HashMap::new(),
         source,
         sigs: HashMap::new(),
         scopes: Vec::new(),
@@ -180,6 +218,10 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
         borrows: Vec::new(),
         methods: Vec::new(),
         traits: Vec::new(),
+        projection_types: HashMap::new(),
+        projection_stack: Vec::new(),
+        impl_contexts: HashMap::new(),
+        assoc_self: None,
         trait_sigs: HashMap::new(),
         trait_impls: Vec::new(),
         trait_scopes: module.trait_scopes.clone(),
@@ -207,6 +249,7 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
         call_sigs: Vec::new(),
         type_defs: HashMap::new(),
     };
+    let mut prelude_base = None;
     let result = (|| -> Result<TModule, CompileError> {
         let mut owned = module.clone();
         crate::modules::isolate_prelude_types(&mut owned);
@@ -236,6 +279,7 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
             owned.adts.insert(0, prelude_result());
         }
         if !owned.traits.iter().any(|t| t.name == "$std$Printable") {
+            prelude_base = Some(source.len() + 1);
             let mut prelude = crate::modules::printing_prelude(source.len() + 1)?;
             owned.traits.append(&mut prelude.traits);
             owned.impls.append(&mut prelude.impls);
@@ -243,9 +287,9 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
             checker.trait_scopes.append(&mut prelude.trait_scopes);
         }
         checker.prepare_traits(&mut owned)?;
+        checker.note_type_members(&owned);
         checker.methods = expand_impls(source, &mut owned)?;
         checker.ast_fns = owned.functions.clone();
-        checker.eval_consts(&owned.consts)?;
         checker.register(&mut owned)?;
         checker.register_trait_signatures()?;
         // Rigid generic types are a checking-only universe. They must not
@@ -258,6 +302,8 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
         checker.uses = declarations.uses;
         checker.expr_types = declarations.expr_types;
         checker.call_sigs = declarations.call_sigs;
+        checker.trait_methods = declarations.trait_methods;
+        checker.method_targets = declarations.method_targets;
         for item in &owned.consts {
             if checker.ctor_schema.contains_key(&item.name) {
                 return Err(CompileError::at(
@@ -298,7 +344,10 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
             externs: std::mem::take(&mut checker.externs),
         })
     })();
+    checker.locate_prelude_uses(prelude_base);
     let info = ProgramInfo {
+        type_members: std::mem::take(&mut checker.type_members),
+        trait_methods: std::mem::take(&mut checker.trait_methods),
         facts: std::mem::take(&mut checker.facts),
         uses: std::mem::take(&mut checker.uses),
         expr_types: std::mem::take(&mut checker.expr_types),
@@ -356,6 +405,12 @@ fn expr_returns(expr: &Expr) -> bool {
 
 #[derive(Clone)]
 struct Checker<'a> {
+    editor: bool,
+    type_members: Vec<TypeMemberFact>,
+    trait_methods: Vec<MethodFact>,
+    method_cache: HashMap<(Ty, usize), Vec<(String, String, String)>>,
+    /// Full source call and method name to the selected declaration.
+    method_targets: HashMap<(usize, usize, String), (Span, String)>,
     source: &'a str,
     sigs: HashMap<String, Sig>,
     scopes: Vec<HashMap<String, u32>>,
@@ -384,6 +439,10 @@ struct Checker<'a> {
     borrows: Vec<LiveBorrow>,
     methods: Vec<Inherent>,
     traits: Vec<Trait>,
+    projection_types: HashMap<(Ty, String, String), Ty>,
+    projection_stack: Vec<(Ty, String, String)>,
+    impl_contexts: HashMap<String, String>,
+    assoc_self: Option<(String, Ty)>,
     trait_sigs: HashMap<(String, String), FuncSig>,
     trait_impls: Vec<std::rc::Rc<traits::TraitImpl>>,
     trait_scopes: Vec<TraitScope>,
@@ -391,7 +450,7 @@ struct Checker<'a> {
     opaque: HashMap<Ty, (String, Vec<String>)>,
     subst: HashMap<String, Ty>,
     generic_check: bool,
-    trait_dispatch: HashMap<usize, String>,
+    trait_dispatch: HashMap<(usize, usize, String), String>,
     declarations_checked: HashSet<String>,
     declarations_active: HashSet<String>,
     /// The receiver argument of an inherent `&self` method accepts `&mut T`.
@@ -694,6 +753,7 @@ fn type_var_name(index: usize) -> String {
 
 fn escaped_ref(ty: &ParsedTy) -> bool {
     match ty {
+        ParsedTy::Projection { .. } => false,
         ParsedTy::Ref { .. } => true,
         ParsedTy::Ptr { inner, .. } => escaped_ref(inner),
         ParsedTy::Array { elem, .. } => escaped_ref(elem),
@@ -705,6 +765,7 @@ fn escaped_ref(ty: &ParsedTy) -> bool {
 
 fn mentions_unsolved(ty: &ParsedTy, params: &[String], solved: &[Option<Ty>]) -> bool {
     match ty {
+        ParsedTy::Projection { base, .. } => mentions_unsolved(base, params, solved),
         ParsedTy::Func {
             params: fn_params,
             ret,

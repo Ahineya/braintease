@@ -15,6 +15,7 @@ public final class EditorTest {
     public static void main(String[] args) throws Exception {
         lexer();
         rename();
+        traits();
         Path build = Path.of(args.length == 0 ? "build" : args[0]);
         Files.createDirectories(build);
         Path temporary = Files.createTempDirectory(build, "editor-test-");
@@ -70,6 +71,19 @@ public final class EditorTest {
         }
         for (int caret : new int[] {-1, text.length() + 1, 4, text.indexOf("fn"), text.indexOf("1;"), text.indexOf("\"frequency\"") + 3}) {
             require(RflLspCustomization.identifierRange(text, caret) == null, "comments, strings, keywords and numbers cannot rename");
+        }
+    }
+
+    private static void traits() {
+        String text = "trait Printable { fn print(&self); } impl<T: Printable + Debug> Printable for Vec<T> { fn print(&self) { Printable::print(self); } }";
+        require(tokens("trait").equals(List.of(RflTokens.KEYWORD)), "trait keyword");
+        require(tokens("Printable").equals(List.of(RflTokens.IDENTIFIER)), "user traits remain identifiers for semantic classification");
+        require(!tokens(text).contains(TokenType.BAD_CHARACTER), "traits, multiple bounds, impls and qualified calls tokenize");
+        require(RflLspCustomization.identifierRange(text, 1) == null, "trait keyword cannot rename");
+        for (String name : new String[] {"Printable", "print", "Debug"}) {
+            int start = text.indexOf(name);
+            var range = RflLspCustomization.identifierRange(text, start + 1);
+            require(range != null && range.getStartOffset() == start && range.getLength() == name.length(), "trait, method and bound rename range");
         }
     }
 

@@ -9,7 +9,7 @@ with small assembly and C fixtures.
 
 The CPU instruction set stays unchanged. Host-device ABI 1 uses MMIO addresses
 27–31 for banked descriptors. It supplies an RGB565 framebuffer, explicit
-simulation-tick grants, a read-only logical clock, keyboard transitions, and
+simulation-tick grants, a read-only logical clock, keyboard/pointer transitions, and
 held-key state. The wire contract is in [the MMIO reference](../rvm/mmio.md#device-command-abi-version-1);
 the C interface is [`vm_devices.h`](../runtime/include/vm_devices.h).
 
@@ -37,14 +37,15 @@ game loop, not in the clock callback: repeated time queries must remain harmless
 Keep simulation and presentation counts distinct, since a game can draw zero or
 multiple frames during a logical tick.
 
-Input events use USB HID keyboard usage IDs; translate them to Doom key codes in
-the adapter. Both press and release are delivered. If the queue overflows, read
-`vm_input_state()` and resynchronize controls from its 256-bit held-key snapshot.
-That recovery discards remaining stale events and clears the overflow flag;
-an ordinary state read leaves queued events untouched.
-The same input protocol supports a windowed host and deterministic replay.
+Doom reads typed input batches, translates USB HID press/release events to its
+key codes, and forwards relative mouse movement and left/right/middle buttons to
+the engine's mouse responder. It requests relative capture at graphics startup
+and releases it at shutdown. Focus loss synthesizes releases. On overflow it
+resynchronizes keys and mouse buttons from `vm_input_state()`; the snapshot
+discards stale events and clears overflow. Ordinary snapshots preserve events.
+The same ordered protocol supports live windows and deterministic replay.
 
-On hosts advertising `VM_CAP_INPUT_POLL`, `vm_input_pop()` and
+On hosts advertising `VM_CAP_INPUT_POLL`, `vm_input_read()` and
 `vm_input_state()` collect live input independently of clock grants. A program
 can process keyboard input before its first tick or while its simulation is
 paused. Live event timestamps record the current logical tick, which can be
@@ -60,14 +61,15 @@ stepped-controller input still become available at their specified grants.
 int run_game(unsigned short *pixels) {
     VmClock clock;
     VmInputEvent event;
+    VmInputBatch batch;
     if (vm_devices_version() != VM_DEVICE_ABI_VERSION) return 1;
     display_set_mode(DISP_MODE_RGB565_EXT);
     for (;;) {
         if (vm_next_tick(&clock) != VM_DEVICE_OK) return 1;
         for (;;) {
-            if (vm_input_pop(&event) != VM_DEVICE_OK) return 1;
-            if (!event.available) break;
-            /* Translate event.key and event.down into game input. */
+            if (vm_input_read(&event, 1, &batch) != VM_DEVICE_OK) return 1;
+            if (!batch.count) break;
+            /* Translate event.type, code, flags and movement into game input. */
         }
         /* Advance one simulation tick, then render pixels. */
         if (vm_present_rgb565(pixels, 320, 200, 320) != VM_DEVICE_OK) return 1;
@@ -223,3 +225,30 @@ host and multi-code-bank CPU now have their own small checks. A bounded
 first-level-frame run remains a separate, explicitly requested feasibility
 gate; passing small tests does not certify the full Doom workload. Playable BF
 speed is not an acceptance criterion.
+
+Pointer replay uses the same tick-ordered array as keyboard replay, for example:
+
+```json
+[
+  {"tick":1,"type":"focus","focused":true},
+  {"tick":1,"type":"relative","dx":12,"dy":-3},
+  {"tick":1,"type":"button","button":0,"down":true,"x":12,"y":-3},
+  {"tick":2,"type":"wheel","x":0,"y":65536},
+  {"tick":2,"type":"button","button":0,"down":false,"x":12,"y":-3}
+]
+```
+
+Types are `key` (numeric HID `key`, `down`), `motion` (`x`,`y`), `relative`
+(`dx`,`dy`), `button` (`button`,`down`,`x`,`y`), `wheel` (`x`,`y` in 16.16
+lines), `enter` (`inside`), `focus` (`focused`), and `capture` (`captured`).
+Keyboard shorthand with named `key` and no `type` remains supported. Stepped
+controllers accept `{"op":"input","event":{"type":"relative","dx":12,"dy":0}}`
+followed by a step command. Pending typed controller events and all input state
+are saved in BF checkpoints. These events describe replay state; headless replay
+does not attempt to grab a host cursor.
+
+Run `scripts/test-input-devices.sh` for a mixed keyboard/pointer C replay through
+the VM interpreter, VM JIT and native runtime. It checks signed coordinates,
+partial batches, sequence boundaries, wheel fractions, focus-loss releases,
+configuration and reserved registers. `scripts/test-bf-host.sh` exercises the same
+wire format through the actual Brainfuck CPU, including relative motion and wheel.

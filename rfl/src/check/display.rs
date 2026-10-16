@@ -2,54 +2,17 @@
 
 use super::*;
 
-pub(super) fn signature_accepts_receiver(signature: &str, receiver: &str) -> bool {
-    let Some(inside) = signature.strip_prefix("fn(") else {
-        return false;
-    };
-    let Some(close) = close_paren(inside) else {
-        return false;
-    };
-    let first = split_top(&inside[..close]).into_iter().next().unwrap_or("");
-    first == receiver || first == format!("&{receiver}") || first == format!("&mut {receiver}")
-}
-
-pub(super) fn close_paren(text: &str) -> Option<usize> {
-    let mut depth = 0i32;
-    for (index, ch) in text.char_indices() {
-        match ch {
-            '(' | '<' | '[' => depth += 1,
-            ')' if depth == 0 => return Some(index),
-            ')' | '>' | ']' => depth -= 1,
-            _ => {}
-        }
-    }
-    None
-}
-
-pub(super) fn split_top(text: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut depth = 0i32;
-    let mut start = 0usize;
-    for (index, ch) in text.char_indices() {
-        match ch {
-            '(' | '<' | '[' => depth += 1,
-            ')' | '>' | ']' => depth -= 1,
-            ',' if depth == 0 => {
-                parts.push(text[start..index].trim());
-                start = index + 1;
-            }
-            _ => {}
-        }
-    }
-    let tail = text[start..].trim();
-    if !tail.is_empty() {
-        parts.push(tail);
-    }
-    parts
-}
-
 pub(super) fn parsed_brief(ty: &ParsedTy) -> String {
     match ty {
+        ParsedTy::Projection {
+            base,
+            trait_name,
+            name,
+            ..
+        } => match trait_name {
+            Some((tr, _)) => format!("<{} as {tr}>::{name}", parsed_brief(base)),
+            None => format!("{}::{name}", parsed_brief(base)),
+        },
         ParsedTy::Named { name, args, .. } if args.is_empty() => name.clone(),
         ParsedTy::Named { name, args, .. } => {
             format!(

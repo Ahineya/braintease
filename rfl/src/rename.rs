@@ -8,6 +8,8 @@ use std::path::{Component, Path, PathBuf};
 use crate::ast::*;
 use crate::lexer::{self, Token, TokenKind};
 use crate::parser;
+mod associated;
+mod traits;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Key {
@@ -78,6 +80,11 @@ pub(crate) struct Workspace {
     fields: HashMap<(Ty, String), Binding>,
     methods: HashMap<(Ty, String), Vec<Binding>>,
     reachable: HashMap<PathBuf, HashSet<PathBuf>>,
+    traits: HashSet<Key>,
+    trait_methods: HashMap<(Key, String), Binding>,
+    associated_types: HashMap<(Key, String), Binding>,
+    trait_impls: Vec<traits::Implementation>,
+    bounds: HashMap<Key, Vec<Key>>,
     constructors: HashSet<Key>,
     occurrences: Vec<Occurrence>,
     uncertain: Vec<(PathBuf, Span)>,
@@ -173,6 +180,10 @@ impl Workspace {
     fn from_sources(sources: BTreeMap<PathBuf, String>) -> Self {
         let mut files = BTreeMap::new();
         let mut pending: Vec<_> = sources.into_iter().map(|(p, s)| (p, s, true)).collect();
+        let io = canonical(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std/io.rfl"));
+        if !pending.iter().any(|(path, _, _)| path == &io) {
+            pending.push((io.clone(), include_str!("../std/io.rfl").into(), false));
+        }
         while let Some((path, source, editable)) = pending.pop() {
             if files.contains_key(&path) {
                 continue;
@@ -221,6 +232,11 @@ impl Workspace {
             fields: HashMap::new(),
             methods: HashMap::new(),
             reachable: HashMap::new(),
+            traits: HashSet::new(),
+            trait_methods: HashMap::new(),
+            associated_types: HashMap::new(),
+            trait_impls: Vec::new(),
+            bounds: HashMap::new(),
             constructors: HashSet::new(),
             occurrences: Vec::new(),
             uncertain: Vec::new(),
@@ -312,7 +328,10 @@ impl Workspace {
             .collect();
         for (path, _) in &modules {
             let mut seen = HashSet::new();
-            let mut pending = vec![path.clone()];
+            let mut pending = vec![
+                path.clone(),
+                canonical(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std/io.rfl")),
+            ];
             while let Some(next) = pending.pop() {
                 if !seen.insert(next.clone()) {
                     continue;
@@ -373,6 +392,18 @@ impl Workspace {
                     true,
                     true,
                 );
+            }
+            for item in &ast.traits {
+                let key = self.global(
+                    path,
+                    &mut env,
+                    &item.name,
+                    item.name_span,
+                    item.exported,
+                    true,
+                    true,
+                );
+                self.traits.insert(key);
             }
             for item in &ast.adts {
                 let key = self.global(
@@ -478,8 +509,23 @@ impl Workspace {
                     }
                 }
             }
+            // Printable belongs to the implicit prelude unless a local or
+            // explicit imported trait shadows it. Its declarations stay read-only.
+            let io = canonical(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std/io.rfl"));
+            if let Some(binding) = self
+                .globals
+                .get(&io)
+                .and_then(|e| e.get("Printable"))
+                .cloned()
+            {
+                if !env.contains_key(&type_key("Printable")) {
+                    env.insert(type_key("Printable"), binding.clone());
+                    env.entry("Printable".into()).or_insert(binding);
+                }
+            }
             self.globals.insert(path.clone(), env);
         }
+        self.index_trait_methods(&modules);
         // Nominal type information sufficient for fields and inherent methods;
         // extension methods resolve through the same import/local bindings as calls.
         for (path, ast) in &modules {
@@ -523,6 +569,10 @@ impl Workspace {
                 }
             }
             for item in &ast.impls {
+                if item.trait_name.is_some() {
+                    self.index_trait_impl(path, item, &env);
+                    continue;
+                }
                 if let Some(ty) = type_of(&item.ty, &env) {
                     for method in &item.items {
                         let key = self.declare(path, &method.name, method.name_span, true);
@@ -602,11 +652,54 @@ impl Workspace {
                     }
                 }
             }
+            for item in &ast.traits {
+                let mut trait_env = env.clone();
+                let owner = Self::key(path, item.name_span);
+                trait_env.insert(
+                    type_key("Self"),
+                    Binding {
+                        key: owner.clone(),
+                        ty: Some(Ty::Named(owner)),
+                    },
+                );
+                for associated in &item.associated_types {
+                    for (name, span) in &associated.bounds {
+                        self.type_name(path, name, *span, &trait_env);
+                    }
+                }
+                for method in &item.methods {
+                    let mut local = trait_env.clone();
+                    self.params(path, &method.params, &mut local);
+                    if let Some(ty) = &method.ret {
+                        self.ty(path, ty, &local);
+                    }
+                }
+            }
             for item in &ast.impls {
+                if let Some((name, span)) = &item.trait_name {
+                    self.type_name(path, name, *span, &env);
+                }
                 let mut local = env.clone();
                 self.type_params(path, &item.type_params, &mut local);
                 self.ty(path, &item.ty, &local);
                 let receiver = type_of(&item.ty, &local);
+                local.insert(
+                    type_key("Self"),
+                    Binding {
+                        key: Self::key(path, item.ty.span()),
+                        ty: receiver.clone(),
+                    },
+                );
+                if let Some((name, _)) = &item.trait_name {
+                    if let Some(binding) = env.get(&type_key(name)) {
+                        local.insert("#SelfTrait".into(), binding.clone());
+                    }
+                }
+                for associated in &item.associated_types {
+                    if let Some(value) = &associated.value {
+                        self.ty(path, value, &local);
+                    }
+                }
                 for method in &item.items {
                     let mut local = local.clone();
                     // self is implicit and cannot be renamed.
@@ -656,12 +749,14 @@ impl Workspace {
     }
     fn type_name(&mut self, path: &Path, name: &str, span: Span, env: &Env) -> Option<Binding> {
         let binding = env.get(&type_key(name)).cloned();
-        self.occurrence(
-            path,
-            span,
-            binding.as_ref().map(|b| b.key.clone()),
-            Spelling::Name,
-        );
+        if name != "Self" {
+            self.occurrence(
+                path,
+                span,
+                binding.as_ref().map(|b| b.key.clone()),
+                Spelling::Name,
+            );
+        }
         binding
     }
     fn type_params(&mut self, path: &Path, params: &[TypeParam], env: &mut Env) {
@@ -674,6 +769,15 @@ impl Workspace {
                     ty: Some(Ty::Named(key.clone())),
                 },
             );
+            let mut bounds = Vec::new();
+            for (name, span) in &param.bounds {
+                if let Some(Ty::Named(bound)) =
+                    self.type_name(path, name, *span, env).and_then(|b| b.ty)
+                {
+                    bounds.push(bound);
+                }
+            }
+            self.bounds.insert(key.clone(), bounds);
             env.insert(
                 param.name.clone(),
                 Binding {
@@ -685,6 +789,27 @@ impl Workspace {
     }
     fn ty(&mut self, path: &Path, ty: &ParsedTy, env: &Env) {
         match ty {
+            ParsedTy::Projection {
+                base,
+                trait_name,
+                name,
+                name_span,
+                ..
+            } => {
+                self.ty(path, base, env);
+                if let Some((name, span)) = trait_name {
+                    self.type_name(path, name, *span, env);
+                }
+                let binding = self.projected_binding(
+                    path,
+                    base,
+                    trait_name.as_ref().map(|(name, _)| name.as_str()),
+                    name,
+                    *name_span,
+                    env,
+                );
+                self.occurrence(path, *name_span, binding.map(|b| b.key), Spelling::Name);
+            }
             ParsedTy::Named { span, name, args } => {
                 self.type_name(path, name, self.name_span(path, *span), env);
                 for arg in args {
@@ -880,15 +1005,6 @@ impl Workspace {
         );
         binding.and_then(|b| b.ty)
     }
-    fn method(&self, path: &Path, ty: Ty, name: &str) -> Option<Binding> {
-        let mut found = self
-            .methods
-            .get(&(ty, name.to_string()))?
-            .iter()
-            .filter(|b| self.reachable[path].contains(&b.key.path));
-        let first = found.next()?.clone();
-        found.next().is_none().then_some(first)
-    }
     fn expr(&mut self, path: &Path, expr: &Expr, env: &Env) -> Option<Ty> {
         match &expr.kind {
             ExprKind::Name(name) => self.named(path, name, expr.span, env).and_then(|b| b.ty),
@@ -936,8 +1052,7 @@ impl Workspace {
                 let binding = if intrinsic || uncertain {
                     None
                 } else {
-                    ty.and_then(|ty| self.method(path, ty, method))
-                        .or_else(|| env.get(method).cloned())
+                    ty.and_then(|ty| self.resolve_method(path, ty, method, *method_span, env, true))
                 };
                 self.occurrence(
                     path,
@@ -961,7 +1076,14 @@ impl Workspace {
                     .get(&type_key(ty_name))
                     .and_then(|b| b.ty.clone())
                     .unwrap_or_else(|| Ty::Builtin(ty_name.clone()));
-                let binding = self.method(path, ty, method);
+                let binding = self.resolve_method(
+                    path,
+                    ty,
+                    method,
+                    self.name_span(path, Span::new(span.end, expr.span.end)),
+                    env,
+                    false,
+                );
                 let method_span = self.name_span(path, Span::new(span.end, expr.span.end));
                 self.occurrence(
                     path,
@@ -1110,6 +1232,10 @@ impl Workspace {
                 matches!(expr.kind, ExprKind::Array(_)).then(|| Ty::Builtin("Vec".into()))
             }
             ExprKind::Str(_) => Some(Ty::Builtin("String".into())),
+            ExprKind::Int(_) => Some(Ty::Builtin("i16".into())),
+            ExprKind::Float(_) => Some(Ty::Builtin("f64".into())),
+            ExprKind::Bool(_) => Some(Ty::Builtin("bool".into())),
+            ExprKind::Char(_) => Some(Ty::Builtin("char".into())),
             _ => None,
         }
     }
@@ -1190,6 +1316,8 @@ impl Workspace {
             .fields
             .values()
             .chain(self.methods.values().flatten())
+            .chain(self.trait_methods.values())
+            .chain(self.associated_types.values())
             .any(|b| &b.key == key);
         for (path, file) in &self.files {
             if !file.editable || (!member && !self.exports.contains(key) && path != &key.path) {

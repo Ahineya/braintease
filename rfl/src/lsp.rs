@@ -264,6 +264,8 @@ fn completion(docs: &HashMap<String, Doc>, params: &Value) -> Value {
                 CompletionKind::Method => 2,
                 CompletionKind::Variable => 6,
                 CompletionKind::Type => 22,
+                    CompletionKind::Trait => 8,
+                    CompletionKind::AssociatedType => 25,
                 CompletionKind::Constant => 21,
                 CompletionKind::Field => 5,
                 CompletionKind::EnumMember => 20,
@@ -414,6 +416,8 @@ fn symbols(docs: &HashMap<String, Doc>, params: &Value) -> Value {
                     SymbolKind::Function => 12,
                     SymbolKind::Method => 6,
                     SymbolKind::Struct => 23,
+                    SymbolKind::Trait => 11,
+                    SymbolKind::AssociatedType => 26,
                     SymbolKind::Enum => 10,
                     SymbolKind::Const => 14,
                     SymbolKind::Field => 8,
@@ -537,6 +541,7 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
         | TokenKind::For
         | TokenKind::In
         | TokenKind::Type
+        | TokenKind::Trait
         | TokenKind::Impl
         | TokenKind::Const
         | TokenKind::Struct
@@ -553,7 +558,9 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
                 from_types
             } else if matches!(
                 name.as_str(),
-                "i8" | "u8"
+                "Self"
+                    | "i8"
+                    | "u8"
                     | "i16"
                     | "u16"
                     | "i32"

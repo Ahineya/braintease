@@ -7,6 +7,10 @@ enum Pattern {
 }
 fn pattern(ty: &ParsedTy, params: &[TypeParam], side: &str) -> Pattern {
     match ty {
+        // Projection-bearing impl patterns are rejected before coherence checking.
+        ParsedTy::Projection { span, .. } => {
+            Pattern::Var(format!("projection:{side}:{}", span.start))
+        }
         ParsedTy::Named { name, args, .. } => {
             if params.iter().any(|p| p.name == *name) {
                 return Pattern::Var(format!("{side}{name}"));

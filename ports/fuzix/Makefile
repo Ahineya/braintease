@@ -19,7 +19,7 @@ USERHEADERS := $(shell find ripple/include $(U)/include -name '*.h') $(RUNTIME_H
 LIBC_LOCAL := syscalls stdio format dirent misc heap
 LIBC_UPSTREAM := $(filter-out regerror malloc calloc realloc readline readline_fn,$(basename $(notdir $(wildcard upstream/Library/libs/*.c))))
 LIBC_OBJS := $(addprefix $(BUILD)/libc/,$(addsuffix .pobj,$(LIBC_LOCAL))) $(addprefix $(BUILD)/ulib/,$(addsuffix .pobj,$(LIBC_UPSTREAM)))
-APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol
+APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol more less mktemp groups logname nohup fmt column cksum stty join split tsort tty nice time clear pr col man wump hamurabi
 
 CORE := start devio filesys inode kdata process mm syscall_exec syscall_fs syscall_fs2 syscall_fs3 syscall_other syscall_proc timer tty blk512
 HEADERS := $(filter-out ripple/user.h,$(wildcard ripple/*.h)) $(wildcard $(K)/include/*.h) $(RUNTIME_HEADERS) $(ROS)/disk.h $(ROS)/fat16.h
@@ -109,7 +109,10 @@ test: images
 	python3 tools/test_interactive.py --build $(BUILD)
 	python3 tools/test_shell.py --build $(BUILD)
 	python3 tools/test_filetools.py --build $(BUILD)
+	python3 tools/test_texttools.py --build $(BUILD)
+	python3 tools/test_pagers.py --build $(BUILD)
 	python3 tools/test_fun.py --build $(BUILD)
+	python3 tools/test_manual_games.py --build $(BUILD)
 
 $(BUILD)/libc/%.asm: ripple/libc/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
@@ -130,7 +133,7 @@ userspace: $(addprefix $(BUILD)/,$(addsuffix .rxe,$(APPS)))
 $(BUILD)/apps/test.asm: upstream/Applications/MWC/cmd/test.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/apps/comm.asm $(BUILD)/apps/rev.asm: $(BUILD)/apps/%.asm: upstream/Applications/V7/cmd/%.c $(USERHEADERS) $(RCC) Makefile
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,comm rev join split tsort tty nice time clear pr col)): $(BUILD)/apps/%.asm: upstream/Applications/V7/cmd/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/mv.rxe $(BUILD)/ln.rxe: $(BUILD)/cp.rxe
@@ -179,8 +182,12 @@ $(BUILD)/sh/input.asm: ripple/shell-input.c $(wildcard $(SHELL_DIR)/*.h) $(USERH
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -I$(SHELL_DIR) -DBUILD_FSH >$@.log 2>&1 || { cat $@.log; exit 1; }
 
-$(BUILD)/apps/cowsay.asm: upstream/Applications/games/cowsay.c $(USERHEADERS) $(RCC) Makefile
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,cowsay hamurabi)): $(BUILD)/apps/%.asm: upstream/Applications/games/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/apps/wump.asm: upstream/Applications/V7/games/wump.c $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/apps/picol.asm: upstream/Applications/TCL/picol.c ripple/picol-extra.inc $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)

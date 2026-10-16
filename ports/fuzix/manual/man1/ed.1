@@ -1,0 +1,25 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH ED 1 "FUZIX" "Ripple"
+.SH NAME
+ed \- edit text by line
+.SH SYNOPSIS
+.nf
+ed [file]
+.fi
+.SH DESCRIPTION
+Ed accepts line-oriented editing commands. a appends text, i inserts text,
+and c replaces lines. End text entry with a line containing only a dot.
+p prints addressed lines; 1,$p prints the whole buffer. w writes the
+buffer, and w filename writes to a named file.
+.PP
+q quits when no unsaved changes remain. Q quits and discards changes.
+Ctrl-C interrupts the editor and returns to the shell.
+.SH EXAMPLES
+.nf
+ed note
+a
+hello Ripple
+.
+w
+q
+.fi

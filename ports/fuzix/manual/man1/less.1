@@ -1,0 +1,25 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH LESS 1 "FUZIX" "Ripple"
+.SH NAME
+less \- browse a file or piped input
+.SH SYNOPSIS
+.nf
+less [file]
+.fi
+.SH DESCRIPTION
+Browse a file, or standard input if no file is given. Space or f advances
+one screen; b goes back one screen; j and k move one line; d and u move
+half a screen; g returns to the start; Enter moves down one line; q quits.
+Ctrl-C interrupts and restores the terminal.
+.PP
+Piped input is spooled to an unlinked temporary file for backward movement.
+With redirected output, less copies the input unchanged. The line index
+is bounded by available memory, and older positions may be discarded.
+Search commands are not implemented in this small pager.
+.SH ENVIRONMENT
+LINES and COLUMNS override the terminal size. The fallback is 24 by 80.
+.SH EXAMPLES
+.nf
+less README
+seq 1 100 | less
+.fi

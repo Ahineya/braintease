@@ -1,0 +1,12 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH TTY 1 "FUZIX" "Ripple"
+.SH NAME
+tty \- print the current terminal name
+.SH SYNOPSIS
+.nf
+tty [-s]
+.fi
+.SH DESCRIPTION
+Print the terminal attached to standard input. -s suppresses output and
+reports only status. Exit status is zero for a terminal and nonzero for
+nonterminal input, such as a pipe.

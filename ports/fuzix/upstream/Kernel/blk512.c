@@ -16,10 +16,10 @@ blkno_t inode_blocks(inoptr i)
 /* Read an inode */
 uint_fast8_t breadi(uint16_t dev, uint16_t ino, void *ptr)
 {
-    struct blkbuf *buf = bread(dev, (ino >> 3) + 2, 0);
+    struct blkbuf *buf = bread(dev, (ino / INO_PER_BLOCK) + 2, 0);
     if (buf == NULL)
         return 1;
-    blktok(ptr, buf, sizeof(struct dinode) * (ino & 7), sizeof(struct dinode));
+    blktok(ptr, buf, sizeof(struct dinode) * (ino % INO_PER_BLOCK), sizeof(struct dinode));
     brelse(buf);
     return 0;
 }
@@ -27,10 +27,10 @@ uint_fast8_t breadi(uint16_t dev, uint16_t ino, void *ptr)
 /* Write an inode */
 uint_fast8_t bwritei(register inoptr ino)
 {
-    struct blkbuf *buf = bread(ino->c_dev, (ino->c_num >> 3) + 2, 0);
+    struct blkbuf *buf = bread(ino->c_dev, (ino->c_num / INO_PER_BLOCK) + 2, 0);
     if (buf == NULL)
         return 1;
-    blkfromk(&ino->c_node, buf, sizeof(struct dinode) * (ino->c_num & 0x07),
+    blkfromk(&ino->c_node, buf, sizeof(struct dinode) * (ino->c_num % INO_PER_BLOCK),
             sizeof(struct dinode));
     bfree(buf, 2);
     return 0;
@@ -78,6 +78,7 @@ static blkno_t bfetch(uint16_t dev, blkno_t blk, unsigned off, unsigned rwflg)
 blkno_t bmap(register inoptr ip, blkno_t bn, unsigned rwflg)
 {
     blkno_t blk;
+    const unsigned indirect = BLKSIZE / sizeof(blkno_t);
 
     if(getmode(ip) == MODE_R(F_BDEV))
         return(bn);
@@ -85,14 +86,14 @@ blkno_t bmap(register inoptr ip, blkno_t bn, unsigned rwflg)
     if (bn < 18)
         return ifetch(ip, bn, rwflg);
     bn -= 18;
-    if (bn & 0xFF00) {
+    if (bn >= indirect) {
         /* The single-indirect range precedes the double-indirect tree. */
-        bn -= 256;
+        bn -= indirect;
         blk = ifetch(ip, 19, rwflg);
         if (blk == NULLBLK)
             return blk;
-        blk = bfetch(ip->c_dev, blk, bn >> 8, rwflg);
-        bn &= 0xFF;
+        blk = bfetch(ip->c_dev, blk, bn / indirect, rwflg);
+        bn %= indirect;
     } else
         blk = ifetch(ip, 18, rwflg);
     if (blk == NULLBLK)

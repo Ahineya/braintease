@@ -1,0 +1,25 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH TCL 1 "FUZIX" "Ripple"
+.SH NAME
+tcl \- run the Picol Tcl subset
+.SH SYNOPSIS
+.nf
+tcl [-c script | file [arguments ...]]
+.fi
+.SH DESCRIPTION
+Run a script, evaluate -c text, or enter an interactive Tcl-style prompt.
+The command names picol, tcl and tclsh select the same interpreter.
+.PP
+Supported facilities include variables, procedures, lists, expr, if, while,
+for, foreach, catch, source, file channels and exec. This is a small Picol
+based subset, not the full Tcl language or package ecosystem.
+.PP
+open filename a appends to a text file. Read it later with cat filename.
+exec runs a command with literal arguments and captures its standard output.
+Ctrl-C interrupts and returns to the shell; exit leaves the interpreter.
+.SH EXAMPLES
+.nf
+tcl /hello.tcl Ripple
+cat /tcl-visits
+tcl -c 'puts [expr {6 * 7}]'
+.fi

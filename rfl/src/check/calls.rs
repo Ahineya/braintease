@@ -348,6 +348,7 @@ impl<'a> Checker<'a> {
                 self.infer_field(ret, want, &type_params, &mut solved, span)?;
             }
         }
+        self.infer_projection_arguments(&func, args, &type_params, &mut solved, span, loose_first)?;
         let mut checked = Vec::new();
         for (index, (arg, param)) in args.iter().zip(&func.params).enumerate() {
             let param_ty = param.ty.as_ref().unwrap();
@@ -396,6 +397,16 @@ impl<'a> Checker<'a> {
         self.check_bounds(&func.type_params, &concrete, span)?;
         let mangled = self.instantiate(callee, &concrete)?;
         let concrete_params = self.sigs[&mangled].params.clone();
+        for (index, (arg, want)) in checked.iter().zip(&concrete_params).enumerate() {
+            if arg.ty != *want && !(loose_first && index == 0 && self.ref_compatible(arg.ty, *want))
+            {
+                return Err(CompileError::at(
+                    self.source,
+                    args[index].span.start,
+                    format!("expected {}, found {}", self.show(*want), self.show(arg.ty)),
+                ));
+            }
+        }
         let ret = self.sigs[&mangled].ret.unwrap();
         self.noted_fn(&concrete_params, ret, skip_self);
         if let Some(want) = expected {

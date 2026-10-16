@@ -87,10 +87,10 @@ pub struct Cli {
     /// Logical ticks per second (Doom uses 35)
     #[arg(long, default_value_t = 35, value_parser = clap::value_parser!(u16).range(1..))]
     pub tick_hz: u16,
-    /// JSON array of key transitions scheduled by logical tick
+    /// JSON array of typed keyboard/pointer transitions scheduled by logical tick
     #[arg(long, conflicts_with_all = ["debug", "tui"])]
     pub input_script: Option<PathBuf>,
-    /// Read JSON-line step/key/quit commands from stdin; required for stepped clock
+    /// Read JSON-line step/key/input/quit commands from stdin; required for stepped clock
     #[arg(long, conflicts_with_all = ["debug", "tui", "input"])]
     pub control_stdin: bool,
 

@@ -24,15 +24,18 @@ function canon83(name) {
   return result;
 }
 
-export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SECS_PER_FAT} = {}) {
+export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SECS_PER_FAT,
+                                    sectorsPerCluster = SPC} = {}) {
   const rootSecs = Math.ceil(ROOT_ENT * 32 / BPS);
   const fatOffset = RESERVED * BPS;
   const rootOffset = (RESERVED + NUM_FATS * sectorsPerFat) * BPS;
   const dataOffset = rootOffset + rootSecs * BPS;
-  const clusterBytes = SPC * BPS;
+  const clusterBytes = sectorsPerCluster * BPS;
   const clusterCount = Math.floor((totalSectors * BPS - dataOffset) / clusterBytes);
   if (!Number.isInteger(totalSectors) || !Number.isInteger(sectorsPerFat)
       || totalSectors < 1 || totalSectors > 0xffffffff || sectorsPerFat < 1 || sectorsPerFat > 65535
+      || !Number.isInteger(sectorsPerCluster) || sectorsPerCluster < 1 || sectorsPerCluster > 128
+      || (sectorsPerCluster & (sectorsPerCluster - 1))
       || clusterCount < 4085 || clusterCount >= 0xffee
       || clusterCount + 2 > sectorsPerFat * BPS / 2) {
     throw new Error('Invalid FAT16 geometry');
@@ -45,7 +48,7 @@ export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SE
   image.set([0xeb, 0x3c, 0x90], 0);
   image.write('MSDOS5.0', 3, 'ascii');
   image.writeUInt16LE(BPS, 11);
-  image[13] = SPC;
+  image[13] = sectorsPerCluster;
   image.writeUInt16LE(RESERVED, 14);
   image[16] = NUM_FATS;
   image.writeUInt16LE(ROOT_ENT, 17);

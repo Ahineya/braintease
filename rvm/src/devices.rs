@@ -4,8 +4,9 @@
 //! mailbox registers are the only new MMIO addresses. `NEXT_TICK` suspends the
 //! guest at an instruction boundary until its runner grants exactly one tick.
 
+pub use crate::input_events::{InputEvent, InputState, InputTransition};
+use crate::input_events::{EVENT_CELLS, MAX_BATCH, STATE_CELLS};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
 use std::ops::Range;
 use std::path::Path;
 
@@ -16,9 +17,9 @@ pub const REGISTER_COMMAND: usize = 29;
 pub const REGISTER_STATUS: usize = 30;
 pub const REGISTER_VERSION: usize = 31;
 pub const DISPLAY_MODE_EXTENDED: u16 = 4;
-/// INPUT_POP/INPUT_STATE collect live input without a clock grant.
+/// INPUT_READ/INPUT_STATE collect live input without a clock grant.
 pub const CAP_INPUT_POLL: u16 = 0x0010;
-pub const CAPABILITIES: u16 = 15 | CAP_INPUT_POLL | crate::network::CAP_NETWORK;
+pub const CAPABILITIES: u16 = 15 | CAP_INPUT_POLL | crate::network::CAP_NETWORK | 0x0040;
 pub const KEY_COUNT: usize = 256;
 pub const INPUT_QUEUE_CAPACITY: usize = 256;
 
@@ -26,8 +27,9 @@ pub const COMMAND_PRESENT: u16 = 1;
 pub const COMMAND_CAPABILITIES: u16 = 2;
 pub const COMMAND_NEXT_TICK: u16 = 3;
 pub const COMMAND_GET_TIME: u16 = 4;
-pub const COMMAND_INPUT_POP: u16 = 5;
+pub const COMMAND_INPUT_READ: u16 = 5;
 pub const COMMAND_INPUT_STATE: u16 = 6;
+pub const COMMAND_INPUT_CONFIGURE: u16 = 7;
 
 pub const STATUS_OK: u16 = 0;
 pub const STATUS_UNKNOWN_COMMAND: u16 = 1;
@@ -45,12 +47,13 @@ pub struct KeyTransition {
     pub down: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct KeyEvent {
-    pub key: u16,
-    pub down: bool,
-    pub tick: u64,
+impl From<KeyTransition> for InputTransition {
+    fn from(key: KeyTransition) -> Self {
+        Self::Key {
+            key: key.key,
+            down: key.down,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,31 +65,16 @@ pub struct PresentFrame {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ScheduledKeyEvent {
+struct ScheduledInputEvent {
     tick: u64,
-    transition: KeyTransition,
+    transition: InputTransition,
 }
 
 /// An ordered replay. Same-tick transitions retain their file order.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InputScript {
-    events: Vec<ScheduledKeyEvent>,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum ScriptKey {
-    Name(String),
-    Number(u16),
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ScriptEvent {
-    tick: u64,
-    key: ScriptKey,
-    down: bool,
+    events: Vec<ScheduledInputEvent>,
 }
 
 impl InputScript {
@@ -102,34 +90,41 @@ impl InputScript {
     }
 
     pub fn from_json(json: &str) -> Result<Self, String> {
-        let entries: Vec<ScriptEvent> =
-            serde_json::from_str(json).map_err(|error| format!("invalid input script: {error}"))?;
+        let entries: Vec<serde_json::Value> =
+            serde_json::from_str(json).map_err(|e| format!("invalid input script: {e}"))?;
         let mut events = Vec::with_capacity(entries.len());
         let mut last_tick = 0;
-        for (index, entry) in entries.into_iter().enumerate() {
-            if entry.tick == 0 || entry.tick < last_tick {
+        for (index, mut entry) in entries.into_iter().enumerate() {
+            let object = entry
+                .as_object_mut()
+                .ok_or("input script event must be an object")?;
+            let tick = object
+                .remove("tick")
+                .and_then(|v| v.as_u64())
+                .ok_or("input script event needs a tick")?;
+            if tick == 0 || tick < last_tick {
                 return Err(format!(
                     "input script event {} must have a positive, nondecreasing tick",
                     index + 1
                 ));
             }
-            let key = match entry.key {
-                ScriptKey::Name(name) => key_code(&name).ok_or_else(|| {
-                    format!("unknown key {name:?} at input script event {}", index + 1)
-                })?,
-                ScriptKey::Number(number) if usize::from(number) < KEY_COUNT => number,
-                ScriptKey::Number(number) => {
-                    return Err(format!("key {number} is outside the 0..255 key range"));
+            if !object.contains_key("type") {
+                object.insert("type".into(), serde_json::json!("key"));
+            }
+            if let Some(value) = object.get_mut("key") {
+                if let Some(name) = value.as_str() {
+                    *value = serde_json::json!(
+                        key_code(name).ok_or_else(|| format!("unknown key {name:?}"))?
+                    );
                 }
-            };
-            last_tick = entry.tick;
-            events.push(ScheduledKeyEvent {
-                tick: entry.tick,
-                transition: KeyTransition {
-                    key,
-                    down: entry.down,
-                },
-            });
+            }
+            let transition: InputTransition = serde_json::from_value(entry)
+                .map_err(|e| format!("input script event {}: {e}", index + 1))?;
+            if !transition.valid() {
+                return Err("input script key/button out of range".into());
+            }
+            last_tick = tick;
+            events.push(ScheduledInputEvent { tick, transition });
         }
         Ok(Self { events })
     }
@@ -337,10 +332,7 @@ pub struct DeviceState {
     pending_tick: Option<DescriptorPointer>,
     tick_hz: u16,
     tick: u64,
-    held: [u16; KEY_COUNT / 16],
-    events: VecDeque<KeyEvent>,
-    input_overflow: bool,
-    overflow_seen: bool,
+    pub input: InputState,
     script: InputScript,
     script_position: usize,
 }
@@ -360,9 +352,8 @@ impl DeviceState {
     pub fn restore_checkpoint(snapshot: Self) -> Result<Self, String> {
         snapshot.network.validate_checkpoint()?;
         if snapshot.tick_hz == 0
-            || snapshot.events.len() > INPUT_QUEUE_CAPACITY
+            || !snapshot.input.validate(snapshot.tick)
             || snapshot.script_position > snapshot.script.events.len()
-            || snapshot.input_overflow && !snapshot.overflow_seen
             || !matches!(snapshot.status, 0..=6 | STATUS_PENDING)
             || snapshot.pending_tick.is_some() != (snapshot.status == STATUS_PENDING)
             || snapshot.pending_tick.is_some() && snapshot.command != COMMAND_NEXT_TICK
@@ -370,18 +361,8 @@ impl DeviceState {
             return Err("invalid device checkpoint state".into());
         }
         let mut previous = 0;
-        for event in &snapshot.events {
-            if usize::from(event.key) >= KEY_COUNT
-                || event.tick > snapshot.tick
-                || event.tick < previous
-            {
-                return Err("invalid device checkpoint input queue".into());
-            }
-            previous = event.tick;
-        }
-        previous = 0;
         for (index, event) in snapshot.script.events.iter().enumerate() {
-            if usize::from(event.transition.key) >= KEY_COUNT
+            if !event.transition.valid()
                 || event.tick == 0
                 || event.tick < previous
                 || (index < snapshot.script_position) != (event.tick <= snapshot.tick)
@@ -405,10 +386,7 @@ impl DeviceState {
             pending_tick: None,
             tick_hz,
             tick: 0,
-            held: [0; KEY_COUNT / 16],
-            events: VecDeque::new(),
-            input_overflow: false,
-            overflow_seen: false,
+            input: InputState::default(),
             script: InputScript::default(),
             script_position: 0,
         })
@@ -463,18 +441,18 @@ impl DeviceState {
         self.pending_tick.is_some()
     }
     pub fn input_overflowed(&self) -> bool {
-        self.input_overflow
+        self.input.overflow
     }
     pub fn overflow_seen(&self) -> bool {
-        self.overflow_seen
+        self.input.overflow_seen
     }
     pub fn held(&self, key: u16) -> bool {
-        usize::from(key) < KEY_COUNT && self.held[usize::from(key) / 16] & (1 << (key % 16)) != 0
+        self.input.held(key)
     }
 
     pub fn mark_input_overflow(&mut self) {
-        self.input_overflow = true;
-        self.overflow_seen = true;
+        self.input.overflow = true;
+        self.input.overflow_seen = true;
     }
 
     pub fn read_register(&self, address: usize) -> Option<u16> {
@@ -558,9 +536,11 @@ impl DeviceState {
         display_mode: u16,
     ) -> Result<Option<PresentFrame>, u16> {
         let length = match command {
-            COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME | COMMAND_INPUT_POP => 8,
+            COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME => 8,
+            COMMAND_INPUT_READ => 10,
+            COMMAND_INPUT_CONFIGURE => 4,
             COMMAND_CAPABILITIES => 4,
-            COMMAND_INPUT_STATE => 19,
+            COMMAND_INPUT_STATE => STATE_CELLS,
             _ => crate::network::descriptor_length(command).ok_or(STATUS_UNKNOWN_COMMAND)?,
         };
         let range = Self::descriptor_range(self.descriptor, memory, bank_size, length)?;
@@ -569,7 +549,7 @@ impl DeviceState {
             self.status = STATUS_OK;
             return Ok(None);
         }
-        let mut words = [0u16; 19];
+        let mut words = [0u16; STATE_CELLS];
         for (word, address) in words.iter_mut().zip(range.clone()) {
             *word = memory.read(address);
         }
@@ -617,26 +597,40 @@ impl DeviceState {
                 return Ok(None);
             }
             COMMAND_GET_TIME => self.write_time(descriptor),
-            COMMAND_INPUT_POP => {
-                descriptor[2..].fill(0);
-                if let Some(event) = self.events.pop_front() {
-                    descriptor[2] = 1;
-                    descriptor[3] = event.key;
-                    descriptor[4] = u16::from(event.down);
-                    descriptor[5] = event.tick as u16;
-                    descriptor[6] = (event.tick >> 16) as u16;
+            COMMAND_INPUT_READ => {
+                let capacity = usize::from(descriptor[2]);
+                if capacity == 0 || capacity > MAX_BATCH || descriptor[9] != 0 {
+                    return Err(STATUS_BAD_DESCRIPTOR);
                 }
-                descriptor[7] = u16::from(self.input_overflow);
+                let buffer = guest_range(
+                    memory.len(),
+                    bank_size,
+                    descriptor[3],
+                    descriptor[4],
+                    capacity * EVENT_CELLS,
+                )?;
+                if buffer.start < range.end && range.start < buffer.end {
+                    return Err(STATUS_BAD_DESCRIPTOR);
+                }
+                let count = capacity.min(self.input.events.len());
+                for i in 0..count {
+                    let event = self.input.events.pop_front().expect("count checked");
+                    for (j, cell) in event.cells().into_iter().enumerate() {
+                        memory.write(buffer.start + i * EVENT_CELLS + j, cell);
+                    }
+                }
+                descriptor[5] = count as u16;
+                descriptor[6] = u16::from(self.input.overflow);
+                descriptor[7] = self.input.sequence as u16;
+                descriptor[8] = (self.input.sequence >> 16) as u16;
             }
             COMMAND_INPUT_STATE => {
-                descriptor[2] = u16::from(self.input_overflow);
-                descriptor[3..].copy_from_slice(&self.held);
-                // A snapshot acknowledges lost transitions. Any older queued
-                // events must not overwrite the authoritative state just read.
-                if self.input_overflow {
-                    self.events.clear();
+                descriptor.copy_from_slice(&self.input.snapshot_cells());
+            }
+            COMMAND_INPUT_CONFIGURE => {
+                if descriptor[3] != 0 || !self.input.configure(descriptor[2]) {
+                    return Err(STATUS_BAD_DESCRIPTOR);
                 }
-                self.input_overflow = false;
             }
             _ => unreachable!("command was validated above"),
         }
@@ -660,7 +654,7 @@ impl DeviceState {
     /// Delivery neither advances time nor releases future replay events.
     pub fn accept_input(&mut self, events: impl IntoIterator<Item = KeyTransition>) {
         for event in events {
-            self.apply_transition(event);
+            self.input.apply(event.into(), self.tick);
         }
     }
 
@@ -668,43 +662,24 @@ impl DeviceState {
     pub fn is_input_request(&self, address: usize, value: u16) -> bool {
         address == REGISTER_COMMAND
             && !self.has_pending_tick()
-            && matches!(value, COMMAND_INPUT_POP | COMMAND_INPUT_STATE)
+            && matches!(value, COMMAND_INPUT_READ | COMMAND_INPUT_STATE)
     }
 
-    fn apply_transition(&mut self, transition: KeyTransition) {
-        if usize::from(transition.key) >= KEY_COUNT {
-            return;
-        }
-        if self.held(transition.key) == transition.down {
-            return;
-        }
-        let word = &mut self.held[usize::from(transition.key) / 16];
-        let mask = 1 << (transition.key % 16);
-        if transition.down {
-            *word |= mask;
-        } else {
-            *word &= !mask;
-        }
-        if self.events.len() == INPUT_QUEUE_CAPACITY {
-            self.mark_input_overflow();
-        } else {
-            self.events.push_back(KeyEvent {
-                key: transition.key,
-                down: transition.down,
-                tick: self.tick,
-            });
+    pub fn accept_events(&mut self, events: impl IntoIterator<Item = InputTransition>) {
+        for event in events {
+            self.input.apply(event, self.tick);
         }
     }
 
     /// Grant one pending tick, apply scripted/explicit tick-scheduled events,
     /// and atomically return the new clock value. Live window input is collected
-    /// independently by INPUT_POP/INPUT_STATE, never by advancing the clock.
+    /// independently by INPUT_READ/INPUT_STATE, never by advancing the clock.
     /// Calling without a pending command has no effect.
     pub fn complete_tick(
         &mut self,
         memory: &mut [u16],
         bank_size: u16,
-        tick_events: &[KeyTransition],
+        tick_events: &[InputTransition],
     ) -> Result<(), String> {
         self.complete_tick_with_memory(memory, bank_size, tick_events)
     }
@@ -713,7 +688,7 @@ impl DeviceState {
         &mut self,
         memory: &mut M,
         bank_size: u16,
-        tick_events: &[KeyTransition],
+        tick_events: &[InputTransition],
     ) -> Result<(), String> {
         let Some(pointer) = self.pending_tick.take() else {
             return Ok(());
@@ -732,15 +707,15 @@ impl DeviceState {
             }
             let transition = event.transition;
             self.script_position += 1;
-            self.apply_transition(transition);
+            self.input.apply(transition, self.tick);
         }
-        self.accept_input(tick_events.iter().copied());
+        self.accept_events(tick_events.iter().copied());
         let mut descriptor = [0u16; 8];
         self.write_time(&mut descriptor);
         for offset in 2..8 {
             memory.write(range.start + offset, descriptor[offset]);
         }
-        self.status = if self.input_overflow {
+        self.status = if self.input.overflow {
             STATUS_INPUT_OVERFLOW
         } else {
             STATUS_OK
@@ -752,6 +727,57 @@ impl DeviceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_bounds_overlap_and_capacity_fail_without_consuming_input() {
+        let mut state = DeviceState::new(35).unwrap();
+        let mut ram = vec![0u16; 256];
+        state.accept_events([
+            InputTransition::Motion {
+                x: -70000,
+                y: 80000,
+            },
+            InputTransition::Button {
+                button: 0,
+                down: true,
+                x: 1,
+                y: 2,
+            },
+        ]);
+        for (capacity, bank, offset, reserved, expected) in [
+            (0, 1, 0, 0, STATUS_BAD_DESCRIPTOR),
+            (65, 1, 0, 0, STATUS_BAD_DESCRIPTOR),
+            (1, 0, 31, 0, STATUS_BOUNDS),
+            (1, 3, 60, 0, STATUS_BOUNDS),
+            (1, 0, 40, 0, STATUS_BAD_DESCRIPTOR),
+            (1, 1, 0, 1, STATUS_BAD_DESCRIPTOR),
+        ] {
+            ram[40..50].copy_from_slice(&[1, 10, capacity, bank, offset, 99, 99, 99, 99, reserved]);
+            let before = ram.clone();
+            state.write_register(REGISTER_DESCRIPTOR_OFFSET, 40, &mut ram, 64, 4);
+            state.write_register(REGISTER_COMMAND, COMMAND_INPUT_READ, &mut ram, 64, 4);
+            assert_eq!(state.status(), expected);
+            assert_eq!(ram, before);
+            assert_eq!(state.input.events.len(), 2);
+        }
+        // Two complete records crossing a bank boundary; count and sequence are outputs.
+        ram[40..50].copy_from_slice(&[1, 10, 2, 1, 60, 0, 0, 0, 0, 0]);
+        state.write_register(REGISTER_COMMAND, COMMAND_INPUT_READ, &mut ram, 64, 4);
+        assert_eq!(state.status(), STATUS_OK);
+        assert_eq!(&ram[45..49], &[2, 0, 2, 0]);
+        assert_eq!(ram[124], 2);
+        assert_eq!(&ram[144..148], &[3, 1, 0, 1]);
+        assert!(state.input.events.is_empty());
+        ram[40..44].copy_from_slice(&[1, 4, 2, 0]);
+        state.write_register(REGISTER_COMMAND, COMMAND_INPUT_CONFIGURE, &mut ram, 64, 4);
+        assert_eq!(state.status(), STATUS_BAD_DESCRIPTOR);
+        assert_eq!(state.input.pointer_mode, 0);
+        ram[42] = 1;
+        state.write_register(REGISTER_COMMAND, COMMAND_INPUT_CONFIGURE, &mut ram, 64, 4);
+        assert_eq!(state.status(), STATUS_OK);
+        assert_eq!(state.input.pointer_mode, 1);
+        assert!(!state.input.captured);
+    }
 
     #[test]
     fn relative_scripts_preserve_order_and_reject_overflow() {
@@ -836,15 +862,18 @@ mod tests {
             (COMMAND_CAPABILITIES, 4),
             (COMMAND_NEXT_TICK, 8),
             (COMMAND_GET_TIME, 8),
-            (COMMAND_INPUT_POP, 8),
-            (COMMAND_INPUT_STATE, 19),
+            (COMMAND_INPUT_READ, 10),
+            (COMMAND_INPUT_STATE, STATE_CELLS as u16),
             (COMMAND_PRESENT, 8),
             (99, 8),
         ] {
             // The descriptor crosses bank 0->1; framebuffer crosses bank 1->2.
-            flat[63..82].fill(0);
+            flat[63..91].fill(0);
             flat[63] = ABI_VERSION;
             flat[64] = length;
+            if command == COMMAND_INPUT_READ {
+                flat[65..73].copy_from_slice(&[1, 2, 0, 0, 0, 0, 0, 0]);
+            }
             if command == COMMAND_PRESENT {
                 flat[65..71].copy_from_slice(&[3, 2, 5, 1, 62, 0]);
                 flat[126..134].copy_from_slice(&[1, 2, 3, 99, 99, 4, 5, 6]);
@@ -884,6 +913,9 @@ mod tests {
     ) -> Option<PresentFrame> {
         memory[40] = ABI_VERSION;
         memory[41] = length;
+        if command == COMMAND_INPUT_READ {
+            memory[42..50].copy_from_slice(&[1, 1, 32, 0, 0, 0, 0, 0]);
+        }
         device.write_register(
             REGISTER_DESCRIPTOR_OFFSET,
             40,
@@ -897,7 +929,13 @@ mod tests {
     fn tick(device: &mut DeviceState, memory: &mut [u16], events: &[KeyTransition]) {
         command(device, memory, COMMAND_NEXT_TICK, 8);
         assert_eq!(device.status(), STATUS_PENDING);
-        device.complete_tick(memory, 64, events).unwrap();
+        device
+            .complete_tick(
+                memory,
+                64,
+                &events.iter().copied().map(Into::into).collect::<Vec<_>>(),
+            )
+            .unwrap();
     }
 
     #[test]
@@ -1052,9 +1090,10 @@ mod tests {
         );
         assert_eq!(
             device
+                .input
                 .events
                 .iter()
-                .map(|event| (event.key, event.down, event.tick))
+                .map(|event| (event.code, event.flags & 1 != 0, event.tick))
                 .collect::<Vec<_>>(),
             [(40, true, 1), (40, false, 1), (82, true, 1)]
         );
@@ -1063,13 +1102,23 @@ mod tests {
         assert!(!device.held(4));
         tick(&mut device, &mut memory, &[]);
         assert!(device.held(4));
-        command(&mut device, &mut memory, COMMAND_INPUT_POP, 8);
-        assert_eq!(&memory[42..48], &[1, 40, 1, 1, 0, 0]);
+        command(&mut device, &mut memory, COMMAND_INPUT_READ, 10);
+        assert_eq!(
+            [
+                memory[45],
+                memory[98],
+                memory[97],
+                memory[102],
+                memory[103],
+                memory[46]
+            ],
+            [1, 40, 1, 1, 0, 0]
+        );
         device.reset();
         assert_eq!(device.tick(), 0);
-        assert!(device.events.is_empty());
+        assert!(device.input.events.is_empty());
         tick(&mut device, &mut memory, &[]);
-        assert_eq!(device.events.len(), 2);
+        assert_eq!(device.input.events.len(), 2);
     }
 
     #[test]
@@ -1084,17 +1133,22 @@ mod tests {
             down: false,
         });
         tick(&mut device, &mut memory, &events);
-        assert_eq!(device.events.len(), INPUT_QUEUE_CAPACITY);
+        assert_eq!(device.input.events.len(), INPUT_QUEUE_CAPACITY);
         assert_eq!(device.status(), STATUS_INPUT_OVERFLOW);
         assert!(device.input_overflowed());
         assert!(device.overflow_seen());
         assert!(!device.held(82));
-        command(&mut device, &mut memory, COMMAND_INPUT_STATE, 19);
+        command(
+            &mut device,
+            &mut memory,
+            COMMAND_INPUT_STATE,
+            STATE_CELLS as u16,
+        );
         assert_eq!(memory[42], 1);
-        assert_eq!(memory[43 + 82 / 16] & (1 << (82 % 16)), 0);
+        assert_eq!(memory[52 + 82 / 16] & (1 << (82 % 16)), 0);
         assert!(!device.input_overflowed());
         assert!(device.overflow_seen());
-        assert!(device.events.is_empty());
+        assert!(device.input.events.is_empty());
         assert_eq!(device.status(), STATUS_OK);
 
         tick(
@@ -1105,11 +1159,26 @@ mod tests {
                 down: true,
             }],
         );
-        command(&mut device, &mut memory, COMMAND_INPUT_STATE, 19);
+        command(
+            &mut device,
+            &mut memory,
+            COMMAND_INPUT_STATE,
+            STATE_CELLS as u16,
+        );
         assert_eq!(memory[42], 0);
-        assert_eq!(device.events.len(), 1);
-        command(&mut device, &mut memory, COMMAND_INPUT_POP, 8);
-        assert_eq!(&memory[42..48], &[1, 82, 1, 2, 0, 0]);
+        assert_eq!(device.input.events.len(), 1);
+        command(&mut device, &mut memory, COMMAND_INPUT_READ, 10);
+        assert_eq!(
+            [
+                memory[45],
+                memory[98],
+                memory[97],
+                memory[102],
+                memory[103],
+                memory[46]
+            ],
+            [1, 82, 1, 2, 0, 0]
+        );
     }
 
     #[test]

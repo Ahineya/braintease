@@ -228,6 +228,9 @@ int getgroups(int n, gid_t *p) { return call(74, n, (long)p, 0, 0); }
 int _statfs(const char *p, uint8_t *b) {
     return call(22, (long)p, (long)b, 0, 0);
 }
+int _uname(struct _uzisysinfoblk *p, int len) {
+    return call(54, (long)p, len, 0, 0);
+}
 int system(const char *s) {
     pid_t p;
     int status;

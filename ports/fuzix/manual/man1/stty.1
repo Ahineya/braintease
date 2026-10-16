@@ -1,0 +1,15 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH STTY 1 "FUZIX" "Ripple"
+.SH NAME
+stty \- inspect or change terminal settings
+.SH SYNOPSIS
+.nf
+stty [options]
+.fi
+.SH DESCRIPTION
+With no options, show terminal settings. -a displays all settings; -g
+prints the encoded form that can be supplied to restore them.
+.PP
+Common options include echo, -echo, icanon, -icanon, isig, -isig, raw and
+cooked. Only the flags supported by the console driver affect its behavior.
+An invalid option fails without applying a partial change.

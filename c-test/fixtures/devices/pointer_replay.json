@@ -1,0 +1,11 @@
+[
+  {"tick":1,"type":"focus","focused":true},
+  {"tick":1,"type":"enter","inside":true},
+  {"tick":1,"type":"key","key":26,"down":true},
+  {"tick":1,"type":"motion","x":-70000,"y":90000},
+  {"tick":1,"type":"button","button":0,"down":true,"x":123456,"y":-345678},
+  {"tick":1,"type":"relative","dx":-5,"dy":7},
+  {"tick":1,"type":"wheel","x":-32768,"y":98304},
+  {"tick":1,"type":"capture","captured":true},
+  {"tick":2,"type":"focus","focused":false}
+]

@@ -1,3 +1,4 @@
+use crate::input_events::{InputState, InputTransition, POINTER_RELATIVE};
 use pixels::{Pixels, SurfaceTexture};
 use serde::{Deserialize, Serialize};
 use std::sync::{
@@ -5,9 +6,12 @@ use std::sync::{
     Arc, Mutex,
 };
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
+use winit::event::{
+    DeviceEvent, ElementState, Event, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+};
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
 use winit::platform::run_return::EventLoopExtRunReturn;
+use winit::window::CursorGrabMode;
 use winit::window::WindowBuilder;
 
 /// Expand RGB565 channels by repeating their high bits, without rounding drift.
@@ -41,9 +45,7 @@ pub struct RGB565Checkpoint {
     front: Vec<u16>,
     back: Vec<u16>,
     sequence: u64,
-    pending_keys: Vec<(u16, bool)>,
-    held: Vec<bool>,
-    key_overflow: bool,
+    input: InputState,
     pub legacy_layout: bool,
     layout_revision: u64,
 }
@@ -57,17 +59,7 @@ pub struct RGB565State {
     pub back_buffer: Vec<u16>,
     pub sequence: u64,
     shutdown: Arc<AtomicBool>,
-    pub key_up: bool,
-    pub key_down: bool,
-    pub key_left: bool,
-    pub key_right: bool,
-    pub key_z: bool,
-    pub key_x: bool,
-    /// Stable USB HID keyboard usage IDs; OS auto-repeat is suppressed.
-    pub pending_keys: Vec<(u16, bool)>,
-    pub keys_held: [bool; 256],
-    /// The VM must resynchronize from keys_held if this is set.
-    pub key_overflow: bool,
+    pub input: InputState,
     legacy_layout: bool,
     // Initialization and mode changes can replace pixels without presenting a
     // frame, so sequence alone is not enough to invalidate the window cache.
@@ -90,15 +82,7 @@ impl RGB565State {
             back_buffer: Vec::new(),
             sequence: 0,
             shutdown: Arc::new(AtomicBool::new(false)),
-            key_up: false,
-            key_down: false,
-            key_left: false,
-            key_right: false,
-            key_z: false,
-            key_x: false,
-            pending_keys: Vec::new(),
-            keys_held: [false; 256],
-            key_overflow: false,
+            input: InputState::default(),
             legacy_layout: false,
             layout_revision: 0,
         }
@@ -145,30 +129,15 @@ impl RGB565State {
 
     /// Record a transition, preserving authoritative held state even on overflow.
     pub fn set_key(&mut self, key: u16, down: bool) {
-        let Some(held) = self.keys_held.get_mut(key as usize) else {
-            return;
-        };
-        if *held == down {
-            return;
-        }
-        *held = down;
-        self.key_up = self.keys_held[82];
-        self.key_down = self.keys_held[81];
-        self.key_left = self.keys_held[80];
-        self.key_right = self.keys_held[79];
-        self.key_z = self.keys_held[29];
-        self.key_x = self.keys_held[27];
-        if self.pending_keys.len() < 4096 && !self.key_overflow {
-            self.pending_keys.push((key, down));
-        } else {
-            self.key_overflow = true;
-        }
+        self.input.apply(InputTransition::Key { key, down }, 0);
     }
-
     pub fn release_keys(&mut self) {
         for key in 0..256 {
             self.set_key(key, false);
         }
+    }
+    pub fn input_event(&mut self, event: InputTransition) {
+        self.input.apply(event, 0);
     }
 
     pub fn request_shutdown(&self) {
@@ -261,9 +230,7 @@ impl RGB565Display {
             front: state.front_buffer.as_ref().clone(),
             back: state.back_buffer.clone(),
             sequence: state.sequence,
-            pending_keys: state.pending_keys.clone(),
-            held: state.keys_held.to_vec(),
-            key_overflow: state.key_overflow,
+            input: state.input.clone(),
             legacy_layout: state.legacy_layout,
             layout_revision: state.layout_revision,
         })
@@ -274,9 +241,7 @@ impl RGB565Display {
         bank_size: usize,
     ) -> Result<Self, String> {
         let pixels = usize::from(snapshot.width) * usize::from(snapshot.height);
-        if snapshot.held.len() != 256
-            || snapshot.pending_keys.len() > 4096
-            || snapshot.pending_keys.iter().any(|(key, _)| *key >= 256)
+        if !snapshot.input.validate(0)
             || snapshot.initialized && (pixels == 0 || snapshot.front.len() != pixels)
             || !snapshot.initialized
                 && (snapshot.width != 0
@@ -300,15 +265,7 @@ impl RGB565Display {
         state.front_buffer = Arc::new(snapshot.front);
         state.back_buffer = snapshot.back;
         state.sequence = snapshot.sequence;
-        state.pending_keys = snapshot.pending_keys;
-        state.keys_held.copy_from_slice(&snapshot.held);
-        state.key_up = state.keys_held[82];
-        state.key_down = state.keys_held[81];
-        state.key_left = state.keys_held[80];
-        state.key_right = state.keys_held[79];
-        state.key_z = state.keys_held[29];
-        state.key_x = state.keys_held[27];
-        state.key_overflow = snapshot.key_overflow;
+        state.input = snapshot.input;
         state.legacy_layout = snapshot.legacy_layout;
         state.layout_revision = snapshot.layout_revision;
         // A stopped host connection is not a stopped guest. The new window
@@ -591,6 +548,8 @@ pub fn run_rgb565_display(
     let mut dimensions = (256u32, 256u32);
     let mut rendered_version = None;
     let mut render_error = None;
+    let mut cursor_grabbed = false;
+    let mut relative_remainder = (0.0, 0.0);
 
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
@@ -606,16 +565,105 @@ pub fn run_rgb565_display(
                 ..
             } => {
                 let mut shared = state.lock().unwrap();
-                shared.release_keys();
+                shared.input_event(InputTransition::Focus { focused: false });
                 shared.request_shutdown();
                 *control_flow = ControlFlow::Exit;
             }
             Event::WindowEvent {
-                event: WindowEvent::Focused(false),
+                event: WindowEvent::Focused(focused),
                 ..
             } => {
-                state.lock().unwrap().release_keys();
+                state
+                    .lock()
+                    .unwrap()
+                    .input_event(InputTransition::Focus { focused });
             }
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved { position, .. },
+                ..
+            } => {
+                let (x, y) =
+                    match pixels.window_pos_to_pixel((position.x as f32, position.y as f32)) {
+                        Ok((x, y)) => (x as i32, y as i32),
+                        Err((x, y)) => (x as i32, y as i32),
+                    };
+                let mut shared = state.lock().unwrap();
+                if !shared.input.captured {
+                    shared.input_event(InputTransition::Motion { x, y });
+                }
+            }
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta },
+                ..
+            } => {
+                let mut shared = state.lock().unwrap();
+                if shared.input.captured {
+                    relative_remainder.0 += delta.0;
+                    relative_remainder.1 += delta.1;
+                    let (dx, dy) = (
+                        relative_remainder.0.trunc() as i32,
+                        relative_remainder.1.trunc() as i32,
+                    );
+                    relative_remainder.0 -= f64::from(dx);
+                    relative_remainder.1 -= f64::from(dy);
+                    shared.input_event(InputTransition::Relative { dx, dy });
+                }
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::MouseInput {
+                        state: pressed,
+                        button,
+                        ..
+                    },
+                ..
+            } => {
+                let button = match button {
+                    MouseButton::Left => 0,
+                    MouseButton::Right => 1,
+                    MouseButton::Middle => 2,
+                    MouseButton::Other(n) => extra_button(n),
+                };
+                let mut shared = state.lock().unwrap();
+                let (x, y) = (shared.input.x, shared.input.y);
+                shared.input_event(InputTransition::Button {
+                    button,
+                    down: pressed == ElementState::Pressed,
+                    x,
+                    y,
+                });
+            }
+            Event::WindowEvent {
+                event: WindowEvent::MouseWheel { delta, .. },
+                ..
+            } => {
+                // Pixel-scroll deltas use an explicit 40 logical window pixels per line.
+                let (x, y) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
+                    MouseScrollDelta::PixelDelta(p) => (
+                        p.x / window.scale_factor() / 40.0,
+                        p.y / window.scale_factor() / 40.0,
+                    ),
+                };
+                state.lock().unwrap().input_event(InputTransition::Wheel {
+                    x: (x * 65536.0).round() as i32,
+                    y: (y * 65536.0).round() as i32,
+                });
+            }
+            Event::WindowEvent {
+                event: WindowEvent::CursorEntered { .. },
+                ..
+            } => state
+                .lock()
+                .unwrap()
+                .input_event(InputTransition::Enter { inside: true }),
+            Event::WindowEvent {
+                event: WindowEvent::CursorLeft { .. },
+                ..
+            } => state
+                .lock()
+                .unwrap()
+                .input_event(InputTransition::Enter { inside: false }),
             Event::WindowEvent {
                 event: WindowEvent::KeyboardInput { input, .. },
                 ..
@@ -684,7 +732,26 @@ pub fn run_rgb565_display(
                     *control_flow = ControlFlow::Exit;
                 }
             }
-            Event::MainEventsCleared => window.request_redraw(),
+            Event::MainEventsCleared => {
+                let mut shared = state.lock().unwrap();
+                let want = shared.input.pointer_mode == POINTER_RELATIVE && shared.input.focused;
+                if want != cursor_grabbed {
+                    let captured = if want {
+                        window
+                            .set_cursor_grab(CursorGrabMode::Locked)
+                            .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined))
+                            .is_ok()
+                    } else {
+                        let _ = window.set_cursor_grab(CursorGrabMode::None);
+                        false
+                    };
+                    cursor_grabbed = captured;
+                    relative_remainder = (0.0, 0.0);
+                    window.set_cursor_visible(!captured);
+                    shared.input_event(InputTransition::Capture { captured });
+                }
+                window.request_redraw();
+            }
             _ => {}
         }
     });
@@ -735,7 +802,15 @@ mod tests {
         assert_eq!(restored.snapshot(), display.snapshot());
         assert_eq!(restored.read_memory(35), Some(0x1234));
         assert_eq!(
-            restored.get_state().lock().unwrap().pending_keys,
+            restored
+                .get_state()
+                .lock()
+                .unwrap()
+                .input
+                .events
+                .iter()
+                .map(|e| (e.code, e.flags & 1 != 0))
+                .collect::<Vec<_>>(),
             [(82, true)]
         );
         display.flush();
@@ -975,14 +1050,19 @@ mod tests {
         state.set_key(82, true);
         state.set_key(82, true);
         state.set_key(29, true);
-        assert!(state.key_up && state.key_z);
+        assert!(state.input.held(82) && state.input.held(29));
         state.release_keys();
         assert_eq!(
-            state.pending_keys,
+            state
+                .input
+                .events
+                .iter()
+                .map(|e| (e.code, e.flags & 1 != 0))
+                .collect::<Vec<_>>(),
             vec![(82, true), (29, true), (29, false), (82, false)]
         );
-        assert!(state.keys_held.iter().all(|held| !held));
-        assert!(!state.key_up && !state.key_z);
+        assert!(state.input.held.iter().all(|held| *held == 0));
+        assert!(!state.input.held(82) && !state.input.held(29));
         assert_eq!(key_usage(VirtualKeyCode::F12), Some(69));
         assert_eq!(key_usage(VirtualKeyCode::RControl), Some(228));
     }
@@ -993,8 +1073,37 @@ mod tests {
         for index in 0..4097 {
             state.set_key(4, index % 2 == 0);
         }
-        assert!(state.key_overflow);
-        assert_eq!(state.pending_keys.len(), 4096);
-        assert!(state.keys_held[4]);
+        assert!(state.input.overflow);
+        assert_eq!(
+            state
+                .input
+                .events
+                .iter()
+                .map(|e| (e.code, e.flags & 1 != 0))
+                .collect::<Vec<_>>()
+                .len(),
+            256
+        );
+        assert!(state.input.held(4));
+    }
+}
+
+// Winit preserves platform button numbers for auxiliary buttons.
+fn extra_button(n: u16) -> u16 {
+    #[cfg(target_os = "windows")]
+    {
+        n.saturating_add(2)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if n >= 275 {
+            n - 272
+        } else {
+            n
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        n
     }
 }

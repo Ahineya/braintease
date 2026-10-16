@@ -1,21 +1,28 @@
 #!/usr/bin/env node
-// Ripple FUZIX uses 256 16-bit C characters per physical 512-octet block.
+// Ripple FUZIX C16 V2 uses 2,048 physical octets per filesystem block.
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {fatFile} from './fat.mjs';
 import {installRoot, growRoot} from './install.mjs';
+import {manualFiles} from './manuals.mjs';
 import {
   fat16Image,
   updateFat16Image
 } from '../../../c-test/examples/rOS/mkfat16.mjs';
-const BLOCK = 512, CELLS = 256, MAGIC = 0x7252;
+import {BLOCK, CELLS, INODES_PER_BLOCK, MAGIC, SIGNATURE, inodeBase, DISK_GEOMETRY} from './layout.mjs';
 export function rootImage(files, blocks = 65535, inodeCount = 1024) {
-  if (inodeCount < 16 || inodeCount % 8 || inodeCount > 4096)
+  // The bootstrap builder fills its five fixed directories directly. Let the
+  // normal installer create deeper trees instead of flattening them into /bin.
+  const fixed = ['/', '/bin', '/dev', '/etc', '/tmp'];
+  const nested = files.filter(f => f.directory ? !fixed.includes(f.name) :
+                                    !fixed.slice(0, 4).includes(path.dirname(f.name)));
+  files = files.filter(f => !nested.includes(f));
+  if (inodeCount < 16 || inodeCount % INODES_PER_BLOCK || inodeCount > 4096)
     throw Error('invalid inode count');
-  if (blocks <= 2 + inodeCount / 8 || blocks > 65535)
+  if (blocks <= 2 + inodeCount / INODES_PER_BLOCK || blocks > 65535)
     throw Error('invalid root size');
-  const image = Buffer.alloc(blocks * BLOCK), isize = 2 + inodeCount / 8;
+  const image = Buffer.alloc(blocks * BLOCK), isize = 2 + inodeCount / INODES_PER_BLOCK;
   let nextBlock = isize, nextInode = 1;
   const nodes = [];
   const word = (cell, v) => image.writeUInt16LE(v & 65535, cell * 2);
@@ -32,7 +39,7 @@ export function rootImage(files, blocks = 65535, inodeCount = 1024) {
     const ino = nextInode++;
     if (ino >= inodeCount)
       throw Error('too many seed files');
-    const base = (2 + (ino >> 3)) * CELLS + (ino & 7) * 32;
+    const base = inodeBase(ino);
     word(base, mode);
     word(base + 1, links);
     wide(base + 4, data.length);
@@ -54,16 +61,16 @@ export function rootImage(files, blocks = 65535, inodeCount = 1024) {
     if (list.length > 18) {
       const b = alloc();
       word(base + 30, b);
-      for (let i = 18; i < Math.min(274, list.length); i++)
+      for (let i = 18; i < Math.min((18 + CELLS), list.length); i++)
         word(b * CELLS + i - 18, list[i]);
     }
-    if (list.length > 274) {
+    if (list.length > (18 + CELLS)) {
       const root = alloc();
       word(base + 31, root);
-      for (let i = 274; i < list.length; i += 256) {
+      for (let i = (18 + CELLS); i < list.length; i += CELLS) {
         const b = alloc();
-        word(root * CELLS + Math.floor((i - 274) / 256), b);
-        for (let j = i; j < Math.min(i + 256, list.length); j++)
+        word(root * CELLS + Math.floor((i - (18 + CELLS)) / CELLS), b);
+        for (let j = i; j < Math.min(i + CELLS, list.length); j++)
           word(b * CELLS + j - i, list[j]);
       }
     }
@@ -162,8 +169,8 @@ export function rootImage(files, blocks = 65535, inodeCount = 1024) {
   word(base + 110, unused);
   word(base + 111, 0);
   // Signature distinguishes this ABI from conventional eight-bit FUZIX images.
-  image.write('RIPPLE-FUZIX-C16-V1', 0, 'ascii');
-  return image;
+  image.write(SIGNATURE, 0, 'ascii');
+  return nested.length ? installRoot(image, nested) : image;
 }
 export function atomicWrite(filename, data) {
   fs.mkdirSync(path.dirname(filename), {recursive : true});
@@ -224,6 +231,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          mode : 0o41777,
          data : Buffer.alloc(0)
        },
+       {name : '/dev/tty', mode : 0o20666, device : 0x201, data : Buffer.alloc(0)},
        {name : '/dev/root', mode : 0o60600, device : 0, data : Buffer.alloc(0)},
        ...['null', 'zero', 'proc'].map((name, i) => ({
                                          name : `/dev/${name}`,
@@ -250,9 +258,14 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          data : Buffer.from('/dev/root / fuzix rw 0 0\n')
        },
        {
+         name: '/etc/termcap', mode: 0o100644, preserve: true,
+         data: Buffer.from('ansi|vt100|xterm|xterm-256color|ripple:co#80:li#24:cl=\\E[H\\E[2J:ho=\\E[H:cm=\\E[%i%d;%dH:me=\\E[0m:md=\\E[1m:us=\\E[4m:ue=\\E[0m:ce=\\E[K:up=\\E[A:bc=^H:\n')
+       },
+       {
          name: '/hello.tcl', mode: 0o100644, preserve: true,
          data: fs.readFileSync(fileURLToPath(new URL('../examples/hello.tcl', import.meta.url)))
-       }];
+       },
+       ...manualFiles()];
   const kernel = {
     name : 'FUZIX.SYS',
     data : fs.readFileSync(path.join(build, 'FUZIX.SYS'))
@@ -261,7 +274,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
   if (fs.existsSync(filename) && !fresh) {
     const old = fs.readFileSync(filename);
     const root = fatFile(old, 'ROOTFS.IMG').data;
-    if (root.toString('ascii', 0, 19) !== 'RIPPLE-FUZIX-C16-V1')
+    if (root.toString('ascii', 0, 19) !== SIGNATURE)
       throw Error(
           'existing disk has incompatible root ABI; use a different disk or --fresh');
     if (install) {
@@ -285,7 +298,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
                 'cannot expand a disk with additional outer FAT entries; use a new default image');
         }
         disk = fat16Image([ kernel, {name : 'ROOTFS.IMG', data : updated} ],
-                          {totalSectors : 131072, sectorsPerFat : 128});
+                          DISK_GEOMETRY);
       } else
         disk = updateFat16Image(fatFile(old, 'ROOTFS.IMG').replace(updated),
                                 [ kernel ]);
@@ -301,7 +314,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
     const files = seedFiles();
     disk =
         fat16Image([ kernel, {name : 'ROOTFS.IMG', data : rootImage(files)} ],
-                   {totalSectors : 131072, sectorsPerFat : 128});
+                   DISK_GEOMETRY);
     if (fs.existsSync(filename)) {
       let backup = `${filename}.bak`, i = 1;
       while (fs.existsSync(backup))

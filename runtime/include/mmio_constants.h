@@ -13,13 +13,7 @@
 #define MMIO_DISP_CTL      8
 #define MMIO_DISP_FLUSH    9
 
-// Keyboard input flags (bank 0, words 10..15)
-#define MMIO_KEY_UP        10
-#define MMIO_KEY_DOWN      11
-#define MMIO_KEY_LEFT      12
-#define MMIO_KEY_RIGHT     13
-#define MMIO_KEY_Z         14
-#define MMIO_KEY_X         15
+/* 10..15 reserved: read zero, writes ignored. Input uses DEVICE_*. */
 
 // Display resolution for RGB565 mode
 #define MMIO_DISP_RESOLUTION 16
@@ -55,9 +49,6 @@
 #define STORE_CTL_COMMIT      (1 << 2)
 #define STORE_CTL_COMMIT_ALL  (1 << 3)
 #define STORE_CTL_ERROR       (1 << 4) /* sticky I/O error; write one to clear */
-
-// Keyboard status bit
-#define KEY_PRESSED        (1 << 0)
 
 // Display modes
 #define DISP_MODE_OFF    0

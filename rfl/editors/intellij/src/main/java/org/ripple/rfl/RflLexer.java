@@ -11,7 +11,7 @@ import java.util.Set;
 public final class RflLexer extends LexerBase {
     private static final Set<String> KEYWORDS = Set.of(
         "fn", "let", "mut", "if", "else", "return", "as", "while", "break", "continue",
-        "match", "for", "in", "type", "impl", "const", "struct", "export", "import", "extern",
+        "match", "for", "in", "type", "trait", "impl", "const", "struct", "export", "import", "extern",
         "unsafe", "true", "false");
     private static final Set<String> TYPES = Set.of(
         "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64", "bool", "char",

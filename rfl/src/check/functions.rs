@@ -10,6 +10,13 @@ impl<'a> Checker<'a> {
         closure: bool,
         capture: bool,
     ) -> Result<(), CompileError> {
+        let saved_assoc_self = self.assoc_self.clone();
+        if !capture {
+            self.assoc_self = self
+                .impl_contexts
+                .get(&func.name)
+                .map(|tr| (tr.clone(), self.referent(self.sigs[name].params[0])));
+        }
         let saved = Suspended {
             scopes: std::mem::take(&mut self.scopes),
             bindings: std::mem::take(&mut self.bindings),
@@ -187,6 +194,7 @@ impl<'a> Checker<'a> {
         self.shared_spans = saved_shared;
         self.borrows = saved_borrows;
         self.loose_receiver = saved_loose;
+        self.assoc_self = saved_assoc_self;
         Ok(())
     }
 

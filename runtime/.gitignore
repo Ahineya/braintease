@@ -4,6 +4,7 @@
 /puts.asm
 /getchar.asm
 /mmio.asm
+/keyboard.asm
 /vm_devices.asm
 /vm_network.asm
 /rand.asm

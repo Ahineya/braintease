@@ -53,6 +53,34 @@ impl VM {
     /// leave window events untouched and use the scheduled replay/controller.
     pub(super) fn poll_device_input(&mut self) {
         if self.host_input_enabled {
+            if self.display_mode == crate::constants::DISP_TEXT40 {
+                self.poll_keyboard();
+                self.keyboard_state.last_read_counter += 1;
+                if self.keyboard_state.last_read_counter > 10 {
+                    self.clear_keyboard_state();
+                }
+                let k = self.keyboard_state;
+                self.devices.accept_input([
+                    KeyTransition {
+                        key: 82,
+                        down: k.up,
+                    },
+                    KeyTransition {
+                        key: 81,
+                        down: k.down,
+                    },
+                    KeyTransition {
+                        key: 80,
+                        down: k.left,
+                    },
+                    KeyTransition {
+                        key: 79,
+                        down: k.right,
+                    },
+                    KeyTransition { key: 29, down: k.z },
+                    KeyTransition { key: 27, down: k.x },
+                ]);
+            }
             if let Some(display) = &self.rgb565_display {
                 crate::input::poll_display_input(&mut self.devices, display);
             }
@@ -60,8 +88,12 @@ impl VM {
     }
 
     /// Grant a tick with explicit controller events; do not sample the window.
-    pub fn complete_tick(&mut self, events: Vec<KeyTransition>) -> Result<(), String> {
-        self.devices.complete_tick(&mut self.memory, self.bank_size, &events)
+    pub fn complete_tick(
+        &mut self,
+        events: Vec<crate::devices::InputTransition>,
+    ) -> Result<(), String> {
+        self.devices
+            .complete_tick(&mut self.memory, self.bank_size, &events)
     }
 
     pub fn window_closed(&self) -> bool {

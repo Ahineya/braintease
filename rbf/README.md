@@ -270,7 +270,7 @@ Logical time advances only when the guest requests NEXT_TICK. `--clock
 unthrottled` grants immediately, `paced` waits at most one tick interval, and
 `stepped --control-stdin` accepts the same ordered JSON commands as `rvm`.
 Slow BF execution never accumulates wall-clock catch-up ticks.
-`--input-script keys.json` replays key events at tick grants; see
+`--input-script keys.json` replays typed keyboard/pointer events at tick grants; see
 [the replay format](../docs/doom-platform.md#input-replay-and-stepping).
 
 ```sh
@@ -378,7 +378,7 @@ error does not overwrite a good checkpoint. Saving uses an atomic replacement
 and a checksum so a partial file cannot be mistaken for a valid save.
 
 The checkpoint includes the logical BF tape, pointer and execution position,
-BF/guest counters, clock and pending tick, RNG, keyboard queues and held keys,
+BF/guest counters, clock and pending tick, RNG, ordered input queues, keys, pointer/focus/capture state,
 script position, TTY queues, display buffers, and storage position/cache state.
 The sparse binary tape encoding avoids writing every zero cell. Native windows,
 terminal handles and external input connections are recreated. Accepted input

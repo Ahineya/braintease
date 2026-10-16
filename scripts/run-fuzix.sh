@@ -34,7 +34,8 @@ Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
 
 The first build imports no network dependencies beyond the normal Rust tools.
 Normal builds update the kernel and managed Unix executables on the default
-disk, preserving user files. Old roots gain space and inodes automatically.
+disk, preserving user files. Compatible roots gain space and inodes automatically.
+Older C16 V1 disks require --fresh for the larger C16 V2 block layout.
 Normal launches check the disk and back up and repair recoverable shutdown
 metadata before updating. Structural damage stops the update. --disk skips
 updates unless --install-apps is supplied. Set FUZIX_BUILD for another build

@@ -1,5 +1,5 @@
 {
   "expected": "Y\nY\n",
   "use_runtime": true,
-  "description": "Test keyboard MMIO addresses work correctly"
+  "description": "Test keyboard convenience helpers read DEVICE snapshots"
 }

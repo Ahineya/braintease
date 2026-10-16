@@ -614,7 +614,7 @@ tryagain:
         if(!(dev->s_tinode))
             goto corrupt;
         ino = dev->s_inode[--dev->s_ninode];
-        if(ino < 2 || ino >=(dev->s_isize-2)*8)
+        if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
             goto corrupt;
         --dev->s_tinode;
         return(ino);
@@ -672,7 +672,7 @@ void i_free(uint16_t devno, uint16_t ino)
     if(baddev(dev = getdev(devno)))
         return;
 
-    if(ino < 2 || ino >=(dev->s_isize-2)*8)
+    if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
         panic(PANIC_IFREE_BADI);
 
     ++dev->s_tinode;

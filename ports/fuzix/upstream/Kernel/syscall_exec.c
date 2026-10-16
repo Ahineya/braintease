@@ -10,7 +10,13 @@
 
 /* This is hardcoded as we use disk buffers as scratch for the arguments
    on most platforms */
+#ifdef CONFIG_RIPPLE
+/* Larger filesystem buffers must not expand argv into the single user bank.
+   Retain the port's existing argument limit independently of disk geometry. */
+#define ARGBUF_SIZE 256
+#else
 #define ARGBUF_SIZE	BLKSIZE
+#endif
 
 bool rargs(uint8_t **userspace_argv, struct s_argblk * argbuf)
 {

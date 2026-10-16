@@ -55,42 +55,73 @@ impl BfDevicesSnapshot {
 impl BfDevices {
     pub fn checkpoint(&mut self) -> Result<BfDevicesSnapshot, String> {
         Ok(BfDevicesSnapshot {
-            devices: self.devices.checkpoint(), display: self.display.checkpoint()?,
-            text_display: self.text_display.checkpoint(), presented_frames: self.presented_frames,
-            host_input_enabled: self.host_input_enabled, bank_size: self.bank_size,
-            rng_state: self.rng_state, display_mode: self.display_mode,
-            display_resolution: self.display_resolution, display_enabled: self.display_enabled,
-            input: self.input.clone(), output: self.output.clone(),
-            storage: self.storage.as_mut().map(Storage::checkpoint).transpose()
+            devices: self.devices.checkpoint(),
+            display: self.display.checkpoint()?,
+            text_display: self.text_display.checkpoint(),
+            presented_frames: self.presented_frames,
+            host_input_enabled: self.host_input_enabled,
+            bank_size: self.bank_size,
+            rng_state: self.rng_state,
+            display_mode: self.display_mode,
+            display_resolution: self.display_resolution,
+            display_enabled: self.display_enabled,
+            input: self.input.clone(),
+            output: self.output.clone(),
+            storage: self
+                .storage
+                .as_mut()
+                .map(Storage::checkpoint)
+                .transpose()
                 .map_err(|error| format!("Checkpoint storage: {error}"))?,
         })
     }
 
-    pub fn restore_checkpoint(snapshot: BfDevicesSnapshot, storage: Option<Storage>) -> Result<Self, String> {
-        if snapshot.bank_size < 32 || !matches!(snapshot.display_mode,
-            DISP_OFF | DISP_TTY | DISP_TEXT40 | DISP_RGB565 | DISP_RGB565_EXT)
+    pub fn restore_checkpoint(
+        snapshot: BfDevicesSnapshot,
+        storage: Option<Storage>,
+    ) -> Result<Self, String> {
+        if snapshot.bank_size < 32
+            || !matches!(
+                snapshot.display_mode,
+                DISP_OFF | DISP_TTY | DISP_TEXT40 | DISP_RGB565 | DISP_RGB565_EXT
+            )
             || snapshot.display.legacy_layout != (snapshot.display_mode == DISP_RGB565)
             || snapshot.display_mode == DISP_RGB565 && !snapshot.display.initialized
-            || !matches!(snapshot.display_mode, DISP_RGB565 | DISP_RGB565_EXT) && snapshot.display.initialized
+            || !matches!(snapshot.display_mode, DISP_RGB565 | DISP_RGB565_EXT)
+                && snapshot.display.initialized
         {
             return Err("invalid BF device checkpoint configuration".into());
         }
         let devices = DeviceState::restore_checkpoint(snapshot.devices)?;
-        let display = RGB565Display::restore_checkpoint(snapshot.display, usize::from(snapshot.bank_size))?;
+        let display =
+            RGB565Display::restore_checkpoint(snapshot.display, usize::from(snapshot.bank_size))?;
         let text_display = Text40Display::restore_checkpoint(snapshot.text_display)?;
         // Validate all other state before restoring dirty disk flags. A rejected
         // checkpoint must never cause a supplied disk to acquire pending writes.
         let storage = match (snapshot.storage, storage) {
             (None, None) => None,
-            (Some(saved), Some(storage)) => Some(storage.restore_checkpoint(saved)
-                .map_err(|error| format!("Restore storage: {error}"))?),
+            (Some(saved), Some(storage)) => Some(
+                storage
+                    .restore_checkpoint(saved)
+                    .map_err(|error| format!("Restore storage: {error}"))?,
+            ),
             _ => return Err("checkpoint disk presence differs from supplied disk".into()),
         };
-        Ok(Self { devices, display, text_display, storage,
-            presented_frames: snapshot.presented_frames, host_input_enabled: snapshot.host_input_enabled,
-            bank_size: snapshot.bank_size, rng_state: snapshot.rng_state,
-            display_mode: snapshot.display_mode, display_resolution: snapshot.display_resolution,
-            display_enabled: snapshot.display_enabled, input: snapshot.input, output: snapshot.output })
+        Ok(Self {
+            devices,
+            display,
+            text_display,
+            storage,
+            presented_frames: snapshot.presented_frames,
+            host_input_enabled: snapshot.host_input_enabled,
+            bank_size: snapshot.bank_size,
+            rng_state: snapshot.rng_state,
+            display_mode: snapshot.display_mode,
+            display_resolution: snapshot.display_resolution,
+            display_enabled: snapshot.display_enabled,
+            input: snapshot.input,
+            output: snapshot.output,
+        })
     }
 
     pub fn new(
@@ -217,22 +248,7 @@ impl BfDevices {
                     0
                 }
             }
-            HDR_KEY_UP..=HDR_KEY_X => {
-                let key = [82, 81, 80, 79, 29, 27][address - HDR_KEY_UP];
-                if self.display_mode == DISP_RGB565_EXT {
-                    self.poll_device_input();
-                }
-                let down = if self.display_mode == DISP_RGB565_EXT || !self.host_input_enabled {
-                    self.devices.held(key)
-                } else if self.display_mode == DISP_RGB565 {
-                    self.display.get_state().lock().unwrap().keys_held[usize::from(key)]
-                } else if self.display_mode == DISP_TEXT40 {
-                    self.text_display.read_key(key)?
-                } else {
-                    false
-                };
-                u16::from(down)
-            }
+            10..=15 => 0, // Reserved.
             HDR_DISP_RESOLUTION => self.display_resolution,
             HDR_STORE_DATA => {
                 if let Some(storage) = &mut self.storage {
@@ -336,7 +352,7 @@ impl BfDevices {
             HDR_IRQ_STATUS..=HDR_IRQ_CAUSE => {} // CPU microcode commits this store.
             27..=31 => {
                 if self.devices.is_input_request(address, value) {
-                    self.poll_device_input();
+                    self.poll_device_input()?;
                 }
                 if let Some(frame) = self.devices.write_register_with_memory(
                     address,
@@ -349,6 +365,7 @@ impl BfDevices {
                         .present(frame.width, frame.height, frame.pixels)?;
                     self.presented_frames += 1;
                 }
+                rvm::input::sync_display_input(&self.devices, &self.display);
             }
             // Read-only status, input and RNG registers ignore stores.
             _ => {}
@@ -380,10 +397,18 @@ impl BfDevices {
         Ok(())
     }
 
-    fn poll_device_input(&mut self) {
+    fn poll_device_input(&mut self) -> Result<(), String> {
         if self.host_input_enabled {
+            if self.display_mode == DISP_TEXT40 {
+                let held = self.text_display.key_state()?;
+                for key in [82, 81, 80, 79, 29, 27] {
+                    let down = held == Some(key);
+                    self.devices.accept_input([KeyTransition { key, down }]);
+                }
+            }
             rvm::input::poll_display_input(&mut self.devices, &self.display);
         }
+        Ok(())
     }
 
     /// Complete a requested tick with explicit controller events. Window input
@@ -391,9 +416,10 @@ impl BfDevices {
     pub fn complete_tick<M: GuestMemory + ?Sized>(
         &mut self,
         memory: &mut M,
-        events: Vec<KeyTransition>,
+        events: Vec<rvm::devices::InputTransition>,
     ) -> Result<(), String> {
-        self.devices.complete_tick_with_memory(memory, self.bank_size, &events)
+        self.devices
+            .complete_tick_with_memory(memory, self.bank_size, &events)
     }
 }
 
@@ -415,28 +441,55 @@ mod tests {
         store(&mut original, &mut memory, 34, 0xf800);
         store(&mut original, &mut memory, HDR_DISP_FLUSH, 1);
         store(&mut original, &mut memory, 35, 0x001f);
-        original.devices.set_script(InputScript::from_json(r#"[{"tick":1,"key":"A","down":true},{"tick":2,"key":"A","down":false}]"#).unwrap()).unwrap();
-        original.display.get_state().lock().unwrap().set_key(82, true);
+        original
+            .devices
+            .set_script(
+                InputScript::from_json(
+                    r#"[{"tick":1,"key":"A","down":true},{"tick":2,"key":"A","down":false}]"#,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        original
+            .display
+            .get_state()
+            .lock()
+            .unwrap()
+            .set_key(82, true);
         command(&mut original, &mut memory, COMMAND_NEXT_TICK, 8);
         let bytes = serde_json::to_vec(&original.checkpoint().unwrap()).unwrap();
-        let mut restored = BfDevices::restore_checkpoint(serde_json::from_slice(&bytes).unwrap(), None).unwrap();
+        let mut restored =
+            BfDevices::restore_checkpoint(serde_json::from_slice(&bytes).unwrap(), None).unwrap();
         let mut copy = memory.clone();
         assert_eq!(original.take_output(), restored.take_output());
-        for address in [HDR_TTY_IN_STATUS, HDR_TTY_IN_POP, HDR_TTY_IN_POP, HDR_TTY_IN_POP, HDR_TTY_IN_STATUS, HDR_RNG, HDR_RNG] {
-            assert_eq!(original.read_mmio(address, &mut memory).unwrap(), restored.read_mmio(address, &mut copy).unwrap());
+        for address in [
+            HDR_TTY_IN_STATUS,
+            HDR_TTY_IN_POP,
+            HDR_TTY_IN_POP,
+            HDR_TTY_IN_POP,
+            HDR_TTY_IN_STATUS,
+            HDR_RNG,
+            HDR_RNG,
+        ] {
+            assert_eq!(
+                original.read_mmio(address, &mut memory).unwrap(),
+                restored.read_mmio(address, &mut copy).unwrap()
+            );
         }
         original.complete_tick(&mut memory, vec![]).unwrap();
         restored.complete_tick(&mut copy, vec![]).unwrap();
         for (host, ram) in [(&mut original, &mut memory), (&mut restored, &mut copy)] {
             store(host, ram, HDR_DISP_FLUSH, 1);
-            command(host, ram, COMMAND_INPUT_POP, 8);
+            command(host, ram, COMMAND_INPUT_READ, 10);
             command(host, ram, COMMAND_NEXT_TICK, 8);
             host.complete_tick(ram, vec![]).unwrap();
         }
         assert_eq!(memory, copy);
         assert_eq!(original.display.snapshot(), restored.display.snapshot());
-        assert_eq!(serde_json::to_value(original.checkpoint().unwrap()).unwrap(),
-            serde_json::to_value(restored.checkpoint().unwrap()).unwrap());
+        assert_eq!(
+            serde_json::to_value(original.checkpoint().unwrap()).unwrap(),
+            serde_json::to_value(restored.checkpoint().unwrap()).unwrap()
+        );
     }
 
     fn host() -> BfDevices {
@@ -449,6 +502,9 @@ mod tests {
     fn command(host: &mut BfDevices, memory: &mut Vec<u16>, command: u16, length: u16) {
         memory[63] = ABI_VERSION;
         memory[64] = length;
+        if command == COMMAND_INPUT_READ {
+            memory[65..73].copy_from_slice(&[1, 2, 32, 0, 0, 0, 0, 0]);
+        }
         store(host, memory, REGISTER_DESCRIPTOR_OFFSET, 63);
         store(host, memory, REGISTER_COMMAND, command);
     }
@@ -515,9 +571,9 @@ mod tests {
         store(&mut host, &mut memory, 64 + 34, 0xbeef);
         assert_eq!(host.read_mmio(64 + 34, &mut memory).unwrap(), 0xbeef);
         host.display.get_state().lock().unwrap().set_key(82, true);
-        assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 1);
+        assert_eq!(host.read_mmio(10, &mut memory).unwrap(), 0);
         host.host_input_enabled = false;
-        assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 0);
+        assert_eq!(host.read_mmio(10, &mut memory).unwrap(), 0);
         store(&mut host, &mut memory, HDR_DISP_MODE, DISP_RGB565_EXT);
         assert!(host.display.snapshot().is_none());
         assert!(!host.window_closed());
@@ -552,9 +608,10 @@ mod tests {
         host.display.get_state().lock().unwrap().set_key(82, true);
         host.complete_tick(&mut memory, vec![]).unwrap();
         assert_eq!(host.devices.tick(), 0);
-        command(&mut host, &mut memory, COMMAND_INPUT_POP, 8);
-        assert_eq!(&memory[65..70], &[1, 82, 1, 0, 0]);
-        assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 1);
+        command(&mut host, &mut memory, COMMAND_INPUT_READ, 10);
+        assert_eq!(memory[68], 1);
+        assert_eq!(&memory[160..163], &[1, 1, 82]);
+        assert_eq!(host.read_mmio(10, &mut memory).unwrap(), 0);
         assert_eq!(host.devices.tick(), 0);
         assert!(!host.devices.held(40)); // Future replay remains unavailable.
         command(&mut host, &mut memory, COMMAND_NEXT_TICK, 8);
@@ -562,13 +619,18 @@ mod tests {
             host.read_mmio(REGISTER_STATUS, &mut memory).unwrap(),
             STATUS_PENDING
         );
-        host.complete_tick(&mut memory, vec![KeyTransition { key: 4, down: true }])
-            .unwrap();
+        host.complete_tick(
+            &mut memory,
+            vec![rvm::devices::InputTransition::Key { key: 4, down: true }],
+        )
+        .unwrap();
         assert_eq!(host.devices.tick(), 1);
-        assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 1);
+        assert_eq!(host.read_mmio(10, &mut memory).unwrap(), 0);
         for key in [40, 4] {
-            command(&mut host, &mut memory, COMMAND_INPUT_POP, 8);
-            assert_eq!(&memory[65..70], &[1, key, 1, 1, 0]);
+            command(&mut host, &mut memory, COMMAND_INPUT_READ, 10);
+            assert_eq!(memory[68], 1);
+            assert_eq!(&memory[160..163], &[1, 1, key]);
+            assert_eq!(memory[166], 1);
         }
         command(&mut host, &mut memory, COMMAND_GET_TIME, 8);
         assert_eq!(&memory[65..71], &[1, 0, 28, 0, 35, 0]);
@@ -585,7 +647,7 @@ mod tests {
             for index in 0..4097 {
                 state.set_key(4, index % 2 == 0);
             }
-            assert!(state.key_overflow);
+            assert!(state.input.overflow);
         }
         host.host_input_enabled = false;
         command(&mut host, &mut memory, COMMAND_NEXT_TICK, 8);
@@ -593,14 +655,14 @@ mod tests {
         assert!(!host.devices.held(4));
         assert!(!host.devices.overflow_seen());
         host.host_input_enabled = true;
-        command(&mut host, &mut memory, COMMAND_INPUT_STATE, 19);
+        command(&mut host, &mut memory, COMMAND_INPUT_STATE, 28);
         assert!(host.devices.held(4));
         assert!(host.devices.overflow_seen());
         assert_eq!(host.devices.tick(), 1);
         assert_eq!(host.devices.status(), STATUS_OK);
-        assert!(!host.display.get_state().lock().unwrap().key_overflow);
+        assert!(!host.display.get_state().lock().unwrap().input.overflow);
         assert_eq!(memory[65], 1);
-        assert_eq!(memory[66] & (1 << 4), 1 << 4);
+        assert_eq!(memory[75] & (1 << 4), 1 << 4);
         assert!(!host.devices.input_overflowed());
     }
 

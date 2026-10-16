@@ -1,9 +1,8 @@
 //! Device contract tests use the Rust VM exclusively, with private temporary disks.
 use rvm::constants::{
     DISP_OFF, DISP_RGB565, DISP_RGB565_EXT, HDR_DISP_FLUSH, HDR_DISP_MODE, HDR_DISP_RESOLUTION,
-    HDR_KEY_UP,
 };
-use rvm::devices::KeyTransition;
+use rvm::devices::InputTransition;
 use rvm::VM;
 use std::fs;
 use std::ops::{Deref, DerefMut};
@@ -214,7 +213,7 @@ fn tick_grants_deliver_controller_input_and_clock_reads_and_present_do_not_advan
     );
     assert_eq!(vm.command(3, &clock), 0x8000);
     assert_eq!(vm.devices.tick(), 0);
-    vm.complete_tick(vec![KeyTransition {
+    vm.complete_tick(vec![InputTransition::Key {
         key: 82,
         down: true,
     }])
@@ -222,7 +221,7 @@ fn tick_grants_deliver_controller_input_and_clock_reads_and_present_do_not_advan
     assert_eq!(vm.read_cell(0, 30).unwrap(), 0);
     assert_eq!(vm.devices.tick(), 1);
     assert_eq!(vm.devices.millis(), 28);
-    assert_eq!(vm.read_cell(0, HDR_KEY_UP as u16).unwrap(), 1);
+    assert_eq!(vm.read_cell(0, 10).unwrap(), 0);
     for _ in 0..20 {
         assert_eq!(vm.command(4, &clock), 0);
     }
@@ -252,22 +251,22 @@ fn live_keyboard_polling_works_before_any_tick_and_does_not_advance_replay() {
         .unwrap();
     let display = vm.rgb565_display.as_ref().unwrap().get_state();
     display.lock().unwrap().set_key(82, true);
-    let event = [1, 8, 0, 0, 0, 0, 0, 0];
+    let event = [1, 10, 1, 2, 0, 0, 0, 0, 0, 0];
     assert_eq!(vm.command(5, &event), 0);
     assert_eq!(
-        &vm.memory[DESCRIPTOR + 2..DESCRIPTOR + 8],
-        &[1, 82, 1, 0, 0, 0]
+        &vm.memory[2 * BANK_SIZE as usize..2 * BANK_SIZE as usize + 4],
+        &[1, 1, 82, 0]
     );
     assert_eq!(vm.devices.tick(), 0);
     assert!(!vm.devices.held(4));
     for _ in 0..3 {
         assert_eq!(vm.command(5, &event), 0);
-        assert_eq!(vm.memory[DESCRIPTOR + 2], 0);
+        assert_eq!(vm.memory[DESCRIPTOR + 5], 0);
     }
     display.lock().unwrap().set_key(82, false);
-    let mut state = [0; 19];
+    let mut state = [0; 28];
     state[0] = 1;
-    state[1] = 19;
+    state[1] = 28;
     assert_eq!(vm.command(6, &state), 0);
     assert!(!vm.devices.held(82));
     assert_eq!(vm.devices.tick(), 0);
@@ -275,14 +274,14 @@ fn live_keyboard_polling_works_before_any_tick_and_does_not_advance_replay() {
     rvm::devices::DeviceState::restore_checkpoint(vm.devices.checkpoint()).unwrap();
     assert_eq!(vm.command(5, &event), 0);
     assert_eq!(
-        &vm.memory[DESCRIPTOR + 2..DESCRIPTOR + 8],
-        &[1, 82, 0, 0, 0, 0]
+        &vm.memory[2 * BANK_SIZE as usize..2 * BANK_SIZE as usize + 4],
+        &[1, 0, 82, 0]
     );
-    assert_eq!(vm.command(3, &event), 0x8000);
+    assert_eq!(vm.command(3, &[1, 8, 0, 0, 0, 0, 0, 0]), 0x8000);
     vm.complete_tick(Vec::new()).unwrap();
     assert_eq!(vm.command(5, &event), 0);
     assert_eq!(
-        &vm.memory[DESCRIPTOR + 2..DESCRIPTOR + 8],
-        &[1, 4, 1, 1, 0, 0]
+        &vm.memory[2 * BANK_SIZE as usize..2 * BANK_SIZE as usize + 4],
+        &[1, 1, 4, 0]
     );
 }

@@ -45,7 +45,7 @@ def run(image,commands,jit):
                    if not line.startswith(('fuzix# ', '> ')))
     Path('/tmp/fuzix-filetools-output.log').write_text(text)
     assert result.returncode==0 and 'disk synced; power off.' in text,text
-    assert 'panic:' not in text and 'FAILED' not in text,text
+    assert 'panic:' not in text and 'FAILED' not in text and 'corrupt superblock' not in text,text
     return text
 
 # Read native cells from a clean filesystem, without mounting or modifying it.
@@ -58,17 +58,17 @@ process.stdout.write(fatFile(fs.readFileSync(process.argv[1]),'ROOTFS.IMG').data
     data=subprocess.check_output(['node','--input-type=module','-e',source,str(image)],cwd=ROOT)
     def w(p):return int.from_bytes(data[2*p:2*p+2],'little')
     def node(ino):
-        base=(2+(ino>>3))*256+(ino&7)*32
+        base=(2+(ino//32))*1024+(ino%32)*32
         return base,w(base+4)+65536*w(base+5)
     def cells(ino):
         base,size=node(ino)
         def block(n):
             if n<18:return w(base+12+n)
             n-=18
-            if n<256:return w(w(base+30)*256+n)
-            n-=256
-            return w(w(w(base+31)*256+n//256)*256+n%256)
-        return [w(block(i//256)*256+i%256) if block(i//256) else 0 for i in range(size)]
+            if n<1024:return w(w(base+30)*1024+n)
+            n-=1024
+            return w(w(w(base+31)*1024+n//1024)*1024+n%1024)
+        return [w(block(i//1024)*1024+i%1024) if block(i//1024) else 0 for i in range(size)]
     def lookup(path):
         ino=1
         for part in path.strip('/').split('/'):

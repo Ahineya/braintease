@@ -13,7 +13,11 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let recv = self.check_expr(receiver, None)?;
-        if let Some(trait_name) = self.trait_dispatch.get(&span).cloned() {
+        if let Some(trait_name) = self
+            .trait_dispatch
+            .get(&(span, self.current_span.end, method.into()))
+            .cloned()
+        {
             return self.check_trait_method(
                 span,
                 &trait_name,
@@ -93,14 +97,24 @@ impl<'a> Checker<'a> {
         }
         if let Some(trait_name) = candidates.first() {
             if self.generic_check && self.opaque.contains_key(&self.referent(recv.ty)) {
-                self.trait_dispatch.insert(span, trait_name.clone());
+                self.trait_dispatch.insert(
+                    (span, self.current_span.end, method.into()),
+                    trait_name.clone(),
+                );
             }
             return self
                 .check_trait_method(span, trait_name, receiver, recv.ty, method, args, expected);
         }
         let mut all = vec![receiver.clone()];
         all.extend(args.iter().cloned());
-        self.check_call(span, resolved, &[], &all, expected)
+        let result = self.check_call(span, resolved, &[], &all, expected);
+        if self.editor {
+            if let Some(target) = self.call_def(resolved) {
+                self.method_targets
+                    .insert((span, self.current_span.end, method.into()), target);
+            }
+        }
+        result
     }
 
     pub(super) fn check_inherent(
@@ -150,6 +164,7 @@ impl<'a> Checker<'a> {
         };
         self.loose_receiver = false;
         self.sig_skip_self = false;
+        self.note_inherent_target(span, &info.func, &info.method);
         result
     }
 
@@ -278,10 +293,12 @@ impl<'a> Checker<'a> {
                 format!("`{ty_name}` has no function `{method}`"),
             ));
         };
-        if self.fn_schemas.contains_key(&info.func) {
+        let result = if self.fn_schemas.contains_key(&info.func) {
             self.check_generic_call(span, &info.func, &[], args, expected)
         } else {
             self.check_call(span, &info.func, &[], args, expected)
-        }
+        };
+        self.note_inherent_target(span, &info.func, &info.method);
+        result
     }
 }

@@ -20,8 +20,30 @@
 #define VM_DEVICE_CAPS 2
 #define VM_DEVICE_NEXT_TICK 3
 #define VM_DEVICE_GET_TIME 4
-#define VM_DEVICE_INPUT_POP 5
+#define VM_DEVICE_INPUT_READ 5
 #define VM_DEVICE_INPUT_STATE 6
+#define VM_DEVICE_INPUT_CONFIGURE 7
+#define VM_INPUT_EVENT_CELLS 20
+#define VM_INPUT_BATCH_MAX 64
+#define VM_INPUT_KEY 1
+#define VM_INPUT_MOTION 2
+#define VM_INPUT_BUTTON 3
+#define VM_INPUT_WHEEL 4
+#define VM_INPUT_ENTER 5
+#define VM_INPUT_FOCUS 6
+#define VM_INPUT_CAPTURE 7
+#define VM_INPUT_DOWN 1
+#define VM_INPUT_RELATIVE 2
+#define VM_INPUT_INSIDE 4
+#define VM_INPUT_FOCUSED 8
+#define VM_INPUT_CAPTURED 16
+#define VM_POINTER_ABSOLUTE 0
+#define VM_POINTER_RELATIVE 1
+#define VM_BUTTON_LEFT 0
+#define VM_BUTTON_RIGHT 1
+#define VM_BUTTON_MIDDLE 2
+#define VM_BUTTON_AUX1 3
+#define VM_BUTTON_AUX2 4
 
 #define VM_CAP_RGB565_EXT 0x0001U
 #define VM_CAP_CLOCK 0x0002U
@@ -30,6 +52,7 @@
 /* Live input can be polled before/between ticks without advancing the clock. */
 #define VM_CAP_INPUT_POLL 0x0010U
 #define VM_CAP_NETWORK 0x0020U
+#define VM_CAP_POINTER 0x0040U
 #define VM_KEY_COUNT 256
 #define VM_KEY_STATE_WORDS 16
 
@@ -153,16 +176,22 @@ typedef struct VmClock {
     unsigned short hz;
 } VmClock;
 
+/* Wire-independent C objects. Absolute coordinates are signed guest pixels; relative deltas are raw
+ * device units (X right, Y down). Auxiliary button IDs are host-dependent. Wheels
+ * use signed 16.16 lines. Sequence numbers wrap modulo 2^32. */
 typedef struct VmInputEvent {
-    unsigned short available;
-    unsigned short key;
-    unsigned short down;
-    unsigned long tick;
-    unsigned short overflow;
+    unsigned short type, flags, code, buttons;
+    unsigned long sequence, tick;
+    long x, y, dx, dy, wheel_x, wheel_y;
 } VmInputEvent;
-
+typedef struct VmInputBatch {
+    unsigned short count, overflow;
+    unsigned long sequence;
+} VmInputBatch;
 typedef struct VmInputState {
-    unsigned short overflow;
+    unsigned short overflow, pointer_mode, buttons, flags;
+    unsigned long sequence;
+    long x, y;
     unsigned short held[VM_KEY_STATE_WORDS];
 } VmInputState;
 
@@ -179,15 +208,17 @@ unsigned short vm_present_rgb565(const unsigned short *pixels,
  * Neither presenting nor reading the clock advances a simulation tick. */
 unsigned short vm_next_tick(VmClock *clock);
 unsigned short vm_get_time(VmClock *clock);
-/* Input commands collect live keyboard transitions at the current logical tick
- * (which may be zero), independently of NEXT_TICK. Scheduled replay events
- * remain tied to tick grants. Check VM_CAP_INPUT_POLL on older ABI-1 hosts. */
-unsigned short vm_input_pop(VmInputEvent *event);
-
-/* Returns held keys and the sticky queue-overflow flag, then clears the flag.
- * After overflow, it also discards queued stale events: resynchronize from this
- * snapshot. Without overflow, the event queue is left intact. */
+/* Input commands collect live events independently of NEXT_TICK. Failed
+ * calls leave the output objects unchanged. Capacity must be 1..64. */
+unsigned short vm_input_read(VmInputEvent *events, unsigned short capacity,
+                             VmInputBatch *batch);
+/* A snapshot acknowledges overflow and discards stale queued events when the
+ * overflow flag was set; ordinary snapshots do not consume events. */
 unsigned short vm_input_state(VmInputState *state);
+/* Requests absolute/relative mode. Live capture is asynchronous: inspect
+ * VM_INPUT_CAPTURED or VM_INPUT_CAPTURE events to determine host acceptance. */
+unsigned short vm_input_configure(unsigned short mode);
+
 int vm_key_is_down(const VmInputState *state, unsigned short key);
 
 #endif

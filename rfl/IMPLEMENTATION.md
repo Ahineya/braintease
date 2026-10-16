@@ -427,7 +427,7 @@ entry is a separate optimization from the live-value publication implemented her
 
 ## Static traits and library printing
 
-The [traits 0.2 specification](traits.md) is implemented for static traits:
+The [traits specification](traits.md) is implemented for static traits:
 required method signatures, concrete and generic implementations, explicit
 `T: A + B` bounds, inferred call type arguments, qualified calls, module imports
 and aliases, lexical method visibility, coherence, and orphan checking. Inherent
@@ -458,8 +458,21 @@ still require names; field and index borrowing needs a common place representati
 
 Calls lower to ordinary monomorphized functions, preserving the current frame
 ABI and all targets. There are no vtables, runtime trait tags, or new VM opcodes.
-Associated types, generic trait parameters, generic trait methods, default
-methods, and dynamic dispatch remain outside this implementation.
+Generic trait parameters, generic trait methods, default methods, and dynamic
+dispatch remain outside this implementation. Associated types are implemented
+as the 0.3 extension in [traits.md](traits.md#23-associated-types-03): declarations,
+per-impl definitions, bounds, Self and qualified projections, nested projections,
+and declaration-time rigid checking. Concrete outputs normalize to existing types
+before lowering; no new runtime representation is needed. Resolution rejects
+cycles and ambiguity, and checks unused implementations. Equality constraints,
+associated defaults, and generic associated types remain deferred.
+
+Associated type tests include a manually polled future with String output,
+generic impls, nested managed values, wide struct layouts, module aliases,
+projection inference without changing borrow order, and invalid contracts.
+The language server supplies completion, navigation, normalized signatures and
+conservative workspace rename; the IntelliJ protocol checks exercise these over
+stdio. See `examples/associated-types.rfl`.
 
 Trait conformance and rejection cases live in `tests/traits.rs`, including the
 spec's acceptance program, declaration-time bounds versus inherent methods,
@@ -490,8 +503,8 @@ These are still unsupported; passing regression tests do not imply conformance.
 2. Extend lifetime analysis beyond single-use temporaries and optimize checked
    collection accesses while preserving evaluation order and aliasing.
 3. Unify scope exits and cleanup before implementing `defer`.
-4. Design associated types and writer-oriented I/O interfaces on top of static
-   traits before introducing async syntax.
+4. Design writer-oriented I/O and the Future/polling/executor contracts on top
+   of static traits and associated types before introducing async syntax.
 5. Complete generic local-value inference, numeric literal representation, and
    large-value storage; add conformance cases alongside each extension.
 

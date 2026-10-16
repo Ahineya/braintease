@@ -5,16 +5,17 @@ import {fileURLToPath} from 'node:url';
 
 import {atomicWrite} from './disk.mjs';
 import {fatFile} from './fat.mjs';
+import {BLOCK, CELLS, INODES_PER_BLOCK, MAGIC, SIGNATURE, inodeBase} from './layout.mjs';
 
 export function checkRoot(input, repair = false) {
   const image = Buffer.from(input), w = p => image.readUInt16LE(p * 2),
         put = (p, v) => image.writeUInt16LE(v & 65535, p * 2), wide = p => w(p) + w(p + 1) * 65536;
-  if (image.length < 1024 || image.toString('ascii', 0, 19) !== 'RIPPLE-FUZIX-C16-V1' ||
-      w(256) !== 0x7252)
-    throw Error('not a Ripple C16 FUZIX root');
-  const sb = 256, isize = w(sb + 1), blocks = w(sb + 2), inodes = (isize - 2) * 8, issues = [],
+  if (image.length < 2 * BLOCK || image.toString('ascii', 0, 19) !== SIGNATURE ||
+      w(CELLS) !== MAGIC)
+    throw Error('incompatible Ripple FUZIX root; recreate it with --fresh');
+  const sb = CELLS, isize = w(sb + 1), blocks = w(sb + 2), inodes = (isize - 2) * INODES_PER_BLOCK, issues = [],
         owners = new Map(), nodes = new Map(), refs = new Map();
-  if (isize < 3 || blocks <= isize || image.length !== blocks * 512)
+  if (isize < 3 || blocks <= isize || image.length !== blocks * BLOCK)
     throw Error('invalid root geometry');
   function claim(b, ino) {
     if (b < isize || b >= blocks) throw Error(`inode ${ino}: block outside data area`);
@@ -25,18 +26,18 @@ export function checkRoot(input, repair = false) {
   function indirect(b, level, start, map, ino) {
     if (!b) return;
     claim(b, ino);
-    for (let j = 0; j < 256; j++) {
-      const v = w(b * 256 + j);
+    for (let j = 0; j < CELLS; j++) {
+      const v = w(b * CELLS + j);
       if (!v) continue;
       if (level === 1) {
         claim(v, ino);
         map.set(start + j, v);
       } else
-        indirect(v, level - 1, start + j * 256, map, ino);
+        indirect(v, level - 1, start + j * CELLS, map, ino);
     }
   }
   for (let ino = 1; ino < inodes; ino++) {
-    const base = (2 + (ino >> 3)) * 256 + (ino & 7) * 32, mode = w(base), links = w(base + 1),
+    const base = inodeBase(ino), mode = w(base), links = w(base + 1),
           map = new Map(), size = wide(base + 4);
     if (!mode && !links) continue;
     const type = mode & 0xf000;
@@ -52,15 +53,15 @@ export function checkRoot(input, repair = false) {
         }
       }
       indirect(w(base + 30), 1, 18, map, ino);
-      indirect(w(base + 31), 2, 274, map, ino);
+      indirect(w(base + 31), 2, (18 + CELLS), map, ino);
     }
     nodes.set(ino, {ino, base, type, links, map, size});
   }
   const root = nodes.get(1);
   if (!root || root.type !== 0x4000) throw Error('root directory missing');
   function cell(node, pos) {
-    const b = node.map.get(Math.floor(pos / 256));
-    return b ? w(b * 256 + pos % 256) : 0;
+    const b = node.map.get(Math.floor(pos / CELLS));
+    return b ? w(b * CELLS + pos % CELLS) : 0;
   }
   const reachable = new Set(), parents = new Map([[1, 1]]), queue = [1];
   while (queue.length) {
@@ -69,7 +70,7 @@ export function checkRoot(input, repair = false) {
     reachable.add(ino);
     const node = nodes.get(ino);
     if (node.type !== 0x4000) continue;
-    if (node.size % 32 || node.size > blocks * 256) throw Error(`directory ${ino}: invalid size`);
+    if (node.size % 32 || node.size > blocks * CELLS) throw Error(`directory ${ino}: invalid size`);
     let dot = false, dotdot = false;
     for (let off = 0; off < node.size; off += 32) {
       const child = cell(node, off);
@@ -122,8 +123,8 @@ export function checkRoot(input, repair = false) {
         throw Error('invalid or duplicate free block');
       seen.add(b);
       if (!n) {
-        n = w(b * 256);
-        list = Array.from({length: 50}, (_, i) => w(b * 256 + 1 + i));
+        n = w(b * CELLS);
+        list = Array.from({length: 50}, (_, i) => w(b * CELLS + 1 + i));
       }
     }
     if (seen.size !== freeExpected.length || w(sb + 109) !== seen.size)
@@ -149,8 +150,8 @@ export function checkRoot(input, repair = false) {
     let free = [0];
     for (const b of [...freeExpected].reverse()) {
       if (free.length === 50) {
-        put(b * 256, 50);
-        free.forEach((v, i) => put(b * 256 + 1 + i, v));
+        put(b * CELLS, 50);
+        free.forEach((v, i) => put(b * CELLS + 1 + i, v));
         free = [];
       }
       free.push(b);

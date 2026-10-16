@@ -79,39 +79,56 @@ unsigned short vm_get_time(VmClock *clock) {
     return clock_command(VM_DEVICE_GET_TIME, clock);
 }
 
-unsigned short vm_input_pop(VmInputEvent *event) {
-    volatile unsigned short descriptor[8];
-    unsigned short status;
-    unsigned short i;
-    descriptor[0] = VM_DEVICE_ABI_VERSION;
-    descriptor[1] = 8;
-    for (i = 2; i < 8; ++i) descriptor[i] = 0;
-    status = submit(VM_DEVICE_INPUT_POP, descriptor);
-    if (status == VM_DEVICE_OK) {
-        event->available = descriptor[2];
-        event->key = descriptor[3];
-        event->down = descriptor[4];
-        event->tick = join_words(descriptor[5], descriptor[6]);
-        event->overflow = descriptor[7];
+static long signed_words(unsigned short lo, unsigned short hi) {
+    unsigned long value = join_words(lo, hi);
+    if (hi & 32768U) return -1L - (long)(0xffffffffUL - value);
+    return (long)value;
+}
+unsigned short vm_input_read(VmInputEvent *events, unsigned short capacity,
+                             VmInputBatch *batch) {
+    volatile unsigned short descriptor[10];
+    unsigned short words[VM_INPUT_BATCH_MAX * VM_INPUT_EVENT_CELLS];
+    unsigned long address = (unsigned long)words;
+    unsigned short status, i;
+    if (!capacity || capacity > VM_INPUT_BATCH_MAX) return VM_DEVICE_BAD_DESCRIPTOR;
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 10;
+    descriptor[2] = capacity; descriptor[3] = (unsigned short)(address >> 16);
+    descriptor[4] = (unsigned short)address;
+    for (i = 5; i < 10; ++i) descriptor[i] = 0;
+    status = submit(VM_DEVICE_INPUT_READ, descriptor);
+    if (status != VM_DEVICE_OK) return status;
+    batch->count = descriptor[5]; batch->overflow = descriptor[6];
+    batch->sequence = join_words(descriptor[7], descriptor[8]);
+    for (i = 0; i < batch->count; ++i) {
+        unsigned short *w = words + (unsigned long)i * VM_INPUT_EVENT_CELLS;
+        events[i].type = w[0]; events[i].flags = w[1];
+        events[i].code = w[2]; events[i].buttons = w[3];
+        events[i].sequence = join_words(w[4],w[5]); events[i].tick = join_words(w[6],w[7]);
+        events[i].x = signed_words(w[8],w[9]); events[i].y = signed_words(w[10],w[11]);
+        events[i].dx = signed_words(w[12],w[13]); events[i].dy = signed_words(w[14],w[15]);
+        events[i].wheel_x = signed_words(w[16],w[17]); events[i].wheel_y = signed_words(w[18],w[19]);
     }
     return status;
 }
-
 unsigned short vm_input_state(VmInputState *state) {
-    volatile unsigned short descriptor[19];
-    unsigned short status;
-    unsigned short i;
-    descriptor[0] = VM_DEVICE_ABI_VERSION;
-    descriptor[1] = 19;
-    for (i = 2; i < 19; ++i) descriptor[i] = 0;
+    volatile unsigned short descriptor[28];
+    unsigned short status, i;
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 28;
+    for (i = 2; i < 28; ++i) descriptor[i] = 0;
     status = submit(VM_DEVICE_INPUT_STATE, descriptor);
     if (status == VM_DEVICE_OK) {
-        state->overflow = descriptor[2];
-        for (i = 0; i < VM_KEY_STATE_WORDS; ++i) {
-            state->held[i] = descriptor[3 + i];
-        }
+        state->overflow = descriptor[2]; state->sequence = join_words(descriptor[3],descriptor[4]);
+        state->pointer_mode = descriptor[5]; state->buttons = descriptor[6]; state->flags = descriptor[7];
+        state->x = signed_words(descriptor[8],descriptor[9]); state->y = signed_words(descriptor[10],descriptor[11]);
+        for (i = 0; i < VM_KEY_STATE_WORDS; ++i) state->held[i] = descriptor[12 + i];
     }
     return status;
+}
+unsigned short vm_input_configure(unsigned short mode) {
+    volatile unsigned short descriptor[4];
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 4;
+    descriptor[2] = mode; descriptor[3] = 0;
+    return submit(VM_DEVICE_INPUT_CONFIGURE, descriptor);
 }
 
 int vm_key_is_down(const VmInputState *state, unsigned short key) {

@@ -206,10 +206,11 @@ fn main() {
         for name in builtins:
             item, = [item for item in responses[id] if item["label"] == name]
             assert item["kind"] == 3 and "additionalTextEdits" not in item, item
-    assert not builtins & {item["label"] for item in responses[17]}
+    assert not (builtins - {"print", "println"}) & {item["label"] for item in responses[17]}
     println = next(item for item in responses[29] if item["label"] == "println")
     assert println["textEdit"] == {"range": {"start": {"line": 0, "character": 12}, "end": {"line": 0, "character": 15}}, "newText": "println"}, println
-    assert responses[30]["signatures"][0]["label"] == println["detail"], responses[30]
+    assert println["detail"] == "fn<T: Printable>(T) -> ()", println
+    assert responses[30]["signatures"][0]["label"] == "fn(i16) -> unit", responses[30]
     print("LSP smoke passed: diagnostics and recovery while typing, scoped and builtin completion, navigation (including imports and paths), rename, symbols, hints, stdlib quick fixes, method completion with imports, and shutdown.")
 
 

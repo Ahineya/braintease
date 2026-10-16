@@ -102,138 +102,7 @@ impl VM {
                 Some(value)
             }
             HDR_DISP_FLUSH => Some(0), // Write-only, return 0
-            HDR_KEY_UP | HDR_KEY_DOWN | HDR_KEY_LEFT | HDR_KEY_RIGHT | HDR_KEY_Z | HDR_KEY_X => {
-                if self.display_mode == DISP_RGB565_EXT {
-                    self.poll_device_input();
-                }
-                let value = if self.display_mode == DISP_RGB565_EXT || !self.host_input_enabled {
-                    let key = match addr {
-                        HDR_KEY_UP => 82,
-                        HDR_KEY_DOWN => 81,
-                        HDR_KEY_LEFT => 80,
-                        HDR_KEY_RIGHT => 79,
-                        HDR_KEY_Z => 29,
-                        _ => 27,
-                    };
-                    u16::from(self.devices.held(key))
-                } else if self.display_mode == DISP_RGB565 {
-                    // For RGB565 mode, read keyboard state from the display window
-                    if let Some(ref display) = self.rgb565_display {
-                        let state = display.get_state();
-                        let s = state.lock().unwrap();
-                        match addr {
-                            HDR_KEY_UP => {
-                                if s.key_up {
-                                    1
-                                } else {
-                                    0
-                                }
-                            }
-                            HDR_KEY_DOWN => {
-                                if s.key_down {
-                                    1
-                                } else {
-                                    0
-                                }
-                            }
-                            HDR_KEY_LEFT => {
-                                if s.key_left {
-                                    1
-                                } else {
-                                    0
-                                }
-                            }
-                            HDR_KEY_RIGHT => {
-                                if s.key_right {
-                                    1
-                                } else {
-                                    0
-                                }
-                            }
-                            HDR_KEY_Z => {
-                                if s.key_z {
-                                    1
-                                } else {
-                                    0
-                                }
-                            }
-                            HDR_KEY_X => {
-                                if s.key_x {
-                                    1
-                                } else {
-                                    0
-                                }
-                            }
-                            _ => 0,
-                        }
-                    } else {
-                        0
-                    }
-                } else if self.display_mode == DISP_TEXT40 && self.terminal_raw_mode {
-                    // For TEXT40 mode, poll keyboard from terminal
-                    self.poll_keyboard();
-
-                    // Auto-clear keys after they've been read a few times
-                    // This prevents keys from getting "stuck" but allows for repeated reads
-                    self.keyboard_state.last_read_counter += 1;
-                    if self.keyboard_state.last_read_counter > 10 {
-                        // Clear the keyboard state after ~10 reads without new input
-                        self.keyboard_state = super::state::KeyboardState::default();
-                    }
-
-                    // Return the appropriate key state
-                    match addr {
-                        HDR_KEY_UP => {
-                            if self.keyboard_state.up {
-                                1
-                            } else {
-                                0
-                            }
-                        }
-                        HDR_KEY_DOWN => {
-                            if self.keyboard_state.down {
-                                1
-                            } else {
-                                0
-                            }
-                        }
-                        HDR_KEY_LEFT => {
-                            if self.keyboard_state.left {
-                                1
-                            } else {
-                                0
-                            }
-                        }
-                        HDR_KEY_RIGHT => {
-                            if self.keyboard_state.right {
-                                1
-                            } else {
-                                0
-                            }
-                        }
-                        HDR_KEY_Z => {
-                            if self.keyboard_state.z {
-                                1
-                            } else {
-                                0
-                            }
-                        }
-                        HDR_KEY_X => {
-                            if self.keyboard_state.x {
-                                1
-                            } else {
-                                0
-                            }
-                        }
-                        _ => 0,
-                    }
-                } else {
-                    0 // No keyboard input in other modes
-                };
-
-                self.memory[addr] = value;
-                Some(value)
-            }
+            10..=15 => Some(0),        // Reserved; input uses DEVICE_* events.
             HDR_DISP_RESOLUTION => {
                 self.memory[HDR_DISP_RESOLUTION] = self.display_resolution;
                 Some(self.display_resolution)
@@ -370,8 +239,8 @@ impl VM {
                 }
                 true
             }
-            HDR_KEY_UP | HDR_KEY_DOWN | HDR_KEY_LEFT | HDR_KEY_RIGHT | HDR_KEY_Z | HDR_KEY_X => {
-                true // Read-only keyboard flags, ignore writes
+            10..=15 => {
+                true // Reserved, ignore writes
             }
             HDR_DISP_RESOLUTION => {
                 // Set display resolution for RGB565 mode
@@ -455,6 +324,9 @@ impl VM {
                         Ok(()) => self.presented_frames += 1,
                         Err(error) => self.device_error = Some(error),
                     }
+                }
+                if let Some(display) = &self.rgb565_display {
+                    crate::input::sync_display_input(&self.devices, display);
                 }
                 true
             }

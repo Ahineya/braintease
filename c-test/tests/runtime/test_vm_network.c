@@ -10,6 +10,7 @@ int main(void) {
     VmNetReceive received;
     VmClock before, after;
     VmInputEvent event;
+    VmInputBatch batch;
     unsigned short outcome = 999;
     check(vm_devices_caps(&caps) == 0 && (caps.bits & VM_CAP_NETWORK));
     check(vm_net_info(0, &info) == 0 && !info.link && info.mtu == 1500 && info.max_frame == 1514);
@@ -20,7 +21,7 @@ int main(void) {
     outcome = 999; frame[2] = 256;
     check(vm_net_tx(0, frame, 17, &outcome) == VM_DEVICE_BAD_DESCRIPTOR && outcome == 999);
     check(vm_net_info(1, &info) == VM_DEVICE_BAD_DESCRIPTOR);
-    check(vm_input_pop(&event) == 0 && !event.available);
+    check(vm_input_read(&event, 1, &batch) == 0 && !batch.count);
     check(vm_get_time(&after) == 0 && after.tick == before.tick && after.ms == before.ms);
     check(vm_net_stats(0, &stats) == 0 && !stats.rx_received && !stats.tx_accepted && !stats.rx_queued && !stats.tx_queued);
     putchar('\n');

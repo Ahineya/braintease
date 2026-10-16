@@ -1,7 +1,10 @@
 //! Rigid declaration checking and recursive bound satisfaction.
 use super::*;
 impl Checker<'_> {
-    pub(super) fn validate_bounds(&mut self, params: &[TypeParam]) -> Result<(), CompileError> {
+    pub(in crate::check) fn validate_bounds(
+        &mut self,
+        params: &[TypeParam],
+    ) -> Result<(), CompileError> {
         for p in params {
             let mut seen = HashSet::new();
             for (name, span) in &p.bounds {
@@ -32,7 +35,7 @@ impl Checker<'_> {
         Ok(())
     }
 
-    pub(super) fn rigid(&mut self, param: &TypeParam) -> Result<Ty, CompileError> {
+    pub(in crate::check) fn rigid(&mut self, param: &TypeParam) -> Result<Ty, CompileError> {
         self.validate_bounds(std::slice::from_ref(param))?;
         let id = self.structs.len() as u32;
         let name = format!("$param${id}${}", param.name);

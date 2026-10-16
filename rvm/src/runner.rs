@@ -1,7 +1,7 @@
 //! Host policies around the unchanged guest instruction loop.
 use crate::{
     capture,
-    devices::{key_code, KeyTransition},
+    devices::{key_code, InputTransition},
     vm::{VMState, VM},
 };
 use clap::ValueEnum;
@@ -45,6 +45,7 @@ pub struct RunOptions {
 pub enum ControlCommand {
     Step { ticks: u64 },
     Key { key: String, down: bool },
+    Input { event: InputTransition },
     Quit,
 }
 
@@ -135,7 +136,7 @@ impl RunReport {
 #[derive(Default)]
 pub struct Controller {
     pub credits: u64,
-    pub events: Vec<KeyTransition>,
+    pub events: Vec<InputTransition>,
     pub closed: bool,
     pub quit: bool,
 }
@@ -166,7 +167,16 @@ impl Controller {
                             if self.events.len() >= 4096 {
                                 return Err("Controller input queue overflow".into());
                             }
-                            self.events.push(KeyTransition { key, down });
+                            self.events.push(InputTransition::Key { key, down });
+                        }
+                        ControlCommand::Input { event } => {
+                            if !event.valid() {
+                                return Err("Invalid input code".into());
+                            }
+                            if self.events.len() >= 4096 {
+                                return Err("Controller input queue overflow".into());
+                            }
+                            self.events.push(event);
                         }
                         ControlCommand::Quit => self.quit = true,
                     },

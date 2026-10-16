@@ -28,6 +28,31 @@ static void check(int ok, const char *s) {
         failed = 1;
     }
 }
+static void inode_check(void) {
+    char directory[40], path[64];
+    unsigned i, count = 0, highest = 0;
+    struct stat st;
+    sprintf(directory, "/tmp/inode-check-%u", (unsigned)getpid());
+    if (mkdir(directory, 0700) < 0) {
+        check(0, "inode test directory");
+        return;
+    }
+    for (i = 0; i < 320; i++) {
+        int fd;
+        sprintf(path, "%s/f%u", directory, i);
+        fd = open(path, O_RDWR | O_CREAT | O_EXCL, 0600);
+        if (fd < 0) break;
+        count++;
+        if (!fstat(fd, &st) && st.st_ino > highest) highest = st.st_ino;
+        close(fd);
+    }
+    check(count == 320 && highest > 255, "allocate beyond 255 inodes");
+    for (i = 0; i < count; i++) {
+        sprintf(path, "%s/f%u", directory, i);
+        check(unlink(path) == 0, "free high inode");
+    }
+    check(rmdir(directory) == 0, "inode directory cleanup");
+}
 int main(void) {
     char b[80], small[4], *p, *q;
     FILE *f;
@@ -135,6 +160,7 @@ int main(void) {
         }
         free(p);
     }
+    inode_check();
     if (!failed)
         puts("libccheck passed");
     return failed;

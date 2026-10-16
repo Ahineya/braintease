@@ -60,6 +60,11 @@ fn stepped_grant_latches_input_and_runs_until_next_boundary() {
         down: true,
     }))
     .unwrap();
+    tx.send(Ok(serde_json::from_str::<ControlCommand>(
+        r#"{"op":"input","event":{"type":"relative","dx":-5,"dy":7}}"#,
+    )
+    .unwrap()))
+        .unwrap();
     tx.send(Ok(ControlCommand::Step { ticks: 1 })).unwrap();
     let options = RunOptions {
         clock: ClockPolicy::Stepped,
@@ -69,6 +74,16 @@ fn stepped_grant_latches_input_and_runs_until_next_boundary() {
     assert_eq!(runner::run(&mut f.vm, &options).unwrap(), "halted");
     assert_eq!(f.vm.devices.tick(), 1);
     assert!(f.vm.devices.held(26));
+    assert_eq!((f.vm.devices.input.x, f.vm.devices.input.y), (-5, 7));
+    assert_eq!(
+        f.vm.devices
+            .input
+            .events
+            .iter()
+            .map(|e| e.kind)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
     assert_eq!(f.vm.executed_instructions, 1);
 }
 
@@ -213,12 +228,15 @@ fn piped_key_step_release_commands_preserve_hold_duration() {
     };
     assert_eq!(runner::run(&mut f.vm, &options).unwrap(), "tick_limit");
     // Inspect queued guest events without granting the pending fourth tick.
-    // A cloned device still has the pending request; use its complete_tick then POP.
+    // Complete the pending request, then read the typed event batch.
     f.vm.complete_tick(Vec::new()).unwrap();
+    f.vm.memory[100..110].copy_from_slice(&[1, 10, 2, 1, 0, 0, 0, 0, 0, 0]);
     f.vm.write_cell(0, 29, 5).unwrap();
-    assert_eq!(&f.vm.memory[102..108], &[1, 26, 1, 1, 0, 0]);
-    f.vm.write_cell(0, 29, 5).unwrap();
-    assert_eq!(&f.vm.memory[102..108], &[1, 26, 0, 3, 0, 0]);
+    assert_eq!(&f.vm.memory[105..109], &[2, 0, 2, 0]);
+    for (base, down, tick) in [(64000, 1, 1), (64020, 0, 3)] {
+        assert_eq!(&f.vm.memory[base..base + 3], &[1, down, 26]);
+        assert_eq!(f.vm.memory[base + 6], tick);
+    }
 }
 
 #[test]

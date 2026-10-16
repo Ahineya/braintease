@@ -22,15 +22,15 @@
 #define PROGLOAD 0x00080000UL
 #define PROGTOP (PROGBASE + 64000UL)
 #define plt_copyright() ((void)0)
-/* A disk block is 256 C characters / 512 physical octets. */
-#define BLKSIZE 256
-#define INO_PER_BLOCK 8
-#define BLKSHIFT 8
+/* C16 V2: 1,024 C characters / 2,048 physical octets per block. */
+#define BLKSIZE 1024
+#define INO_PER_BLOCK 32
+#define BLKSHIFT 10
 #define BLOCK(x) ((x) >> BLKSHIFT)
-#define BLKMASK 255
+#define BLKMASK 1023
 #define BLKOFF(x) ((uint16_t)(x) & BLKMASK)
 #define BLK_TO_OFFSET(x) ((uint32_t)(x) << BLKSHIFT)
-#define SMOUNTED 0x7252
+#define SMOUNTED 0x7253
 #define FILENAME_LEN 30
 #define DIR_LEN 32
 #endif

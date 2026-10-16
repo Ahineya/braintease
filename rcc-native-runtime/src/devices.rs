@@ -16,17 +16,7 @@ impl Runtime {
                 HDR_DISP_MODE => self.mode,
                 HDR_DISP_STATUS => 1 | if self.flushed { 2 } else { 0 },
                 HDR_DISP_CTL => u16::from(self.enabled),
-                HDR_KEY_UP..=HDR_KEY_X => {
-                    if self.mode == DISP_RGB565_EXT {
-                        self.poll_device_input();
-                    }
-                    let key = [82, 81, 80, 79, 29, 27][index - HDR_KEY_UP];
-                    if self.mode == DISP_RGB565 && self.host.visual() {
-                        u16::from(self.display.get_state().lock().unwrap().keys_held[key])
-                    } else {
-                        u16::from(self.devices.held(key as u16))
-                    }
-                }
+                10..=15 => 0, // Reserved.
                 HDR_DISP_RESOLUTION => self.resolution,
                 HDR_STORE_BLOCK..=HDR_STORE_CTL => fatal("native v1 storage device is unavailable"),
                 HDR_IRQ_STATUS..=HDR_IRQ_CAUSE => 0,
@@ -106,6 +96,7 @@ impl Runtime {
                             .unwrap_or_else(|e| fatal(&e));
                         self.capture();
                     }
+                    rvm::input::sync_display_input(&self.devices, &self.display);
                     if self.devices.has_pending_tick() {
                         if self.host.paced() {
                             let origin =
@@ -168,32 +159,38 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rvm::{devices::*, input_events::*};
     #[test]
-    fn native_input_commands_poll_window_without_a_tick_grant() {
+    fn native_input_batches_poll_live_keyboard_and_pointer_at_tick_zero() {
         let mut rt = Runtime::new();
         let desc = BANK + 10;
-        rt.memory[desc..desc + 8].copy_from_slice(&[1, 8, 0, 0, 0, 0, 0, 0]);
+        rt.memory[desc..desc + 10].copy_from_slice(&[1, 10, 2, 2, 0, 0, 0, 0, 0, 0]);
         rt.write(27, 1);
         rt.write(28, 10);
-        rt.display.get_state().lock().unwrap().set_key(82, true);
-        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
-        assert_eq!(&rt.memory[desc + 2..desc + 8], &[1, 82, 1, 0, 0, 0]);
+        {
+            let shared = rt.display.get_state();
+            let mut input = shared.lock().unwrap();
+            input.set_key(82, true);
+            input.input_event(InputTransition::Motion { x: 123, y: -5 });
+        }
+        rt.write(29, COMMAND_INPUT_READ);
+        assert_eq!(rt.devices.status(), STATUS_OK);
+        assert_eq!(rt.memory[desc + 5], 2);
+        assert_eq!(
+            &rt.memory[2 * BANK..2 * BANK + 3],
+            &[EVENT_KEY, FLAG_DOWN, 82]
+        );
+        assert_eq!(rt.memory[2 * BANK + EVENT_CELLS], EVENT_MOTION);
+        assert_eq!(rt.memory[2 * BANK + EVENT_CELLS + 8], 123);
         assert_eq!(rt.devices.tick(), 0);
-        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
-        assert_eq!(rt.memory[desc + 2], 0);
-        rt.display.get_state().lock().unwrap().set_key(82, false);
-        rt.memory[desc + 1] = 19;
-        rt.write(29, rvm::devices::COMMAND_INPUT_STATE);
-        assert_eq!(rt.memory[desc + 3 + 82 / 16] & (1 << (82 % 16)), 0);
-        assert_eq!(rt.devices.tick(), 0);
-        rt.memory[desc + 1] = 8;
-        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
-        assert_eq!(&rt.memory[desc + 2..desc + 8], &[1, 82, 0, 0, 0, 0]);
-        rt.display.get_state().lock().unwrap().set_key(4, true);
-        rt.write(29, rvm::devices::COMMAND_NEXT_TICK);
-        assert_eq!(rt.devices.tick(), 1);
-        assert!(!rt.devices.held(4)); // Clock grants do not collect live input.
-        rt.write(29, rvm::devices::COMMAND_INPUT_POP);
-        assert_eq!(&rt.memory[desc + 2..desc + 8], &[1, 4, 1, 1, 0, 0]);
+        rt.write(29, COMMAND_INPUT_READ);
+        assert_eq!(rt.memory[desc + 5], 0);
+        rt.memory[desc + 1] = STATE_CELLS as u16;
+        rt.write(29, COMMAND_INPUT_STATE);
+        assert_ne!(rt.memory[desc + 12 + 82 / 16] & (1 << (82 % 16)), 0);
+        for address in 10..=15 {
+            rt.write(address, 65535);
+            assert_eq!(rt.read(address), 0);
+        }
     }
 }

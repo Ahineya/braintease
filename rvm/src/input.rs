@@ -1,37 +1,60 @@
-//! Shared live keyboard collection for VM, BF and native hosts. Logical clock
-//! advancement and scheduled replay input are deliberately separate.
-use crate::{
-    devices::{DeviceState, KeyTransition},
-    display_rgb565::RGB565Display,
-};
+//! Shared live input collection. Polling never advances logical time.
+use crate::{devices::DeviceState, display_rgb565::RGB565Display, input_events::*};
+
+pub fn sync_display_input(devices: &DeviceState, display: &RGB565Display) {
+    display.get_state().lock().unwrap().input.pointer_mode = devices.input.pointer_mode;
+}
 
 pub fn poll_display_input(devices: &mut DeviceState, display: &RGB565Display) {
     let shared = display.get_state();
     let mut state = shared.lock().unwrap();
-    if state.key_overflow {
+    state.input.pointer_mode = devices.input.pointer_mode;
+    if state.input.overflow {
         devices.mark_input_overflow();
-        // Lost transitions cannot be replayed safely. The held bitmap remains
-        // authoritative; INPUT_STATE will acknowledge the overflow to the guest.
-        state.pending_keys.clear();
-        devices.accept_input(
-            state
-                .keys_held
-                .iter()
-                .copied()
-                .enumerate()
-                .map(|(key, down)| KeyTransition {
-                    key: key as u16,
-                    down,
-                }),
-        );
-        state.key_overflow = false;
+        // Establish a fresh snapshot boundary even when all host transitions
+        // could not be forwarded. Consumers must resynchronize after overflow.
+        devices.input.sequence = devices.input.sequence.wrapping_add(1);
+        devices.input.held = state.input.held;
+        devices.input.buttons = state.input.buttons;
+        devices.input.x = state.input.x;
+        devices.input.y = state.input.y;
+        devices.input.inside = state.input.inside;
+        devices.input.focused = state.input.focused;
+        devices.input.captured = state.input.captured;
+        state.input.events.clear();
+        state.input.overflow = false;
     } else {
-        devices.accept_input(
-            state
-                .pending_keys
-                .drain(..)
-                .map(|(key, down)| KeyTransition { key, down }),
-        );
+        let events = state.input.events.drain(..).filter_map(|e| match e.kind {
+            EVENT_KEY => Some(InputTransition::Key {
+                key: e.code,
+                down: e.flags & FLAG_DOWN != 0,
+            }),
+            EVENT_MOTION if e.flags & FLAG_RELATIVE != 0 => {
+                Some(InputTransition::Relative { dx: e.dx, dy: e.dy })
+            }
+            EVENT_MOTION => Some(InputTransition::Motion { x: e.x, y: e.y }),
+            EVENT_BUTTON => Some(InputTransition::Button {
+                button: e.code,
+                down: e.flags & FLAG_DOWN != 0,
+                x: e.x,
+                y: e.y,
+            }),
+            EVENT_WHEEL => Some(InputTransition::Wheel {
+                x: e.wheel_x,
+                y: e.wheel_y,
+            }),
+            EVENT_ENTER => Some(InputTransition::Enter {
+                inside: e.flags & FLAG_INSIDE != 0,
+            }),
+            EVENT_FOCUS => Some(InputTransition::Focus {
+                focused: e.flags & FLAG_FOCUSED != 0,
+            }),
+            EVENT_CAPTURE => Some(InputTransition::Capture {
+                captured: e.flags & FLAG_CAPTURED != 0,
+            }),
+            _ => None,
+        });
+        devices.accept_events(events);
     }
 }
 
@@ -39,61 +62,79 @@ pub fn poll_display_input(devices: &mut DeviceState, display: &RGB565Display) {
 mod tests {
     use super::*;
     #[test]
-    fn live_events_are_ordered_and_checkpointable_at_tick_zero() {
-        let mut devices = DeviceState::default();
+    fn live_mouse_and_keys_poll_at_tick_zero_and_preserve_checkpoint() {
         let display = RGB565Display::new();
+        let mut devices = DeviceState::new(35).unwrap();
+        devices.input.configure(POINTER_RELATIVE);
+        sync_display_input(&devices, &display);
         {
-            let shared = display.get_state();
-            let mut state = shared.lock().unwrap();
-            state.set_key(4, true);
-            state.set_key(4, false);
-            state.set_key(5, true);
+            let state = display.get_state();
+            let mut state = state.lock().unwrap();
+            assert_eq!(state.input.pointer_mode, POINTER_RELATIVE);
+            for event in [
+                InputTransition::Focus { focused: true },
+                InputTransition::Motion { x: 12, y: 34 },
+                InputTransition::Key { key: 4, down: true },
+                InputTransition::Button {
+                    button: 1,
+                    down: true,
+                    x: 12,
+                    y: 34,
+                },
+                InputTransition::Relative { dx: 5, dy: -6 },
+            ] {
+                state.input_event(event);
+            }
         }
         poll_display_input(&mut devices, &display);
         assert_eq!(devices.tick(), 0);
-        assert!(!devices.held(4));
-        assert!(devices.held(5));
-        let snapshot = serde_json::to_value(devices.checkpoint()).unwrap();
         assert_eq!(
-            snapshot["events"],
-            serde_json::json!([
-                {"key": 4, "down": true, "tick": 0},
-                {"key": 4, "down": false, "tick": 0},
-                {"key": 5, "down": true, "tick": 0}
-            ])
+            devices
+                .input
+                .events
+                .iter()
+                .map(|e| e.kind)
+                .collect::<Vec<_>>(),
+            [6, 2, 1, 3, 2]
         );
+        assert_eq!(
+            (devices.input.x, devices.input.y, devices.input.buttons),
+            (17, 28, 2)
+        );
+        assert!(devices.input.events.iter().all(|e| e.tick == 0));
         let restored = DeviceState::restore_checkpoint(devices.checkpoint()).unwrap();
-        assert_eq!(
-            serde_json::to_value(restored).unwrap(),
-            serde_json::to_value(devices.checkpoint()).unwrap()
-        );
-        // Polling again does not duplicate transitions.
-        let before = serde_json::to_value(devices.checkpoint()).unwrap();
+        assert_eq!(devices.input, restored.input);
         poll_display_input(&mut devices, &display);
-        assert_eq!(before, serde_json::to_value(devices.checkpoint()).unwrap());
-        let shared = display.get_state();
-        assert!(shared.lock().unwrap().pending_keys.is_empty());
+        assert_eq!(devices.input.events.len(), 5);
     }
     #[test]
-    fn host_queue_overflow_recovers_held_keys_without_advancing_time() {
-        let mut devices = DeviceState::default();
+    fn host_overflow_recovers_authoritative_pointer_and_keys() {
         let display = RGB565Display::new();
+        let mut devices = DeviceState::new(35).unwrap();
         {
             let shared = display.get_state();
             let mut state = shared.lock().unwrap();
-            for i in 0..4097 {
-                state.set_key(4, i % 2 == 0);
+            for n in 0..300 {
+                state.input_event(InputTransition::Motion { x: n, y: -n });
             }
-            state.set_key(5, true);
-            assert!(state.key_overflow);
+            state.set_key(82, true);
+            state.input_event(InputTransition::Button {
+                button: 0,
+                down: true,
+                x: -90000,
+                y: 80000,
+            });
         }
         poll_display_input(&mut devices, &display);
-        assert_eq!(devices.tick(), 0);
-        assert!(devices.held(4) && devices.held(5));
-        assert!(devices.input_overflowed());
-        let shared = display.get_state();
-        let state = shared.lock().unwrap();
-        assert!(!state.key_overflow && state.pending_keys.is_empty());
-        DeviceState::restore_checkpoint(devices.checkpoint()).unwrap();
+        assert!(devices.input.overflow && devices.held(82));
+        assert_eq!(
+            (devices.input.x, devices.input.y, devices.input.buttons),
+            (-90000, 80000, 1)
+        );
+        assert!(devices.input.events.is_empty());
+        assert_eq!(devices.input.snapshot_cells()[2], 1);
+        assert!(!devices.input.overflow);
+        poll_display_input(&mut devices, &display);
+        assert!(!devices.input.overflow);
     }
 }

@@ -1,0 +1,30 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH MAN 1 "FUZIX" "Ripple"
+.SH NAME
+man \- read command manuals
+.SH SYNOPSIS
+.nf
+man [-wqlv] [section] page
+.fi
+.SH DESCRIPTION
+Search /usr/man for a manual and format it with the built-in small man
+formatter. Interactive output goes through more; Space advances, Enter
+shows one line, and q quits. Redirected output is written directly.
+.PP
+-w prints the first matching pathname. -l reads a local file. -q suppresses
+unknown formatter-command messages; -v enables them. A section restricts
+the search, for example man 6 wump. Plain man and preformatted cat pages
+are supported; compressed files and full groff/mdoc formatting are not.
+.SH ENVIRONMENT
+MANPATH is a colon-separated list of manual trees. MANSECT controls section
+order; the default starts with 1, 6 and 8. PAGER selects the interactive
+pager, including shell arguments, for example PAGER='less'.
+.SH EXAMPLES
+.nf
+man intro
+man sh
+man 6 wump
+man -w cp
+man -l ./notes.1
+man cp | col -b > cp.txt
+.fi

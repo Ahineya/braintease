@@ -15,5 +15,6 @@ pub use vm::{Instr, VM};
 pub mod capture;
 pub mod devices;
 pub mod input;
+pub mod input_events;
 pub mod network;
 pub mod runner;

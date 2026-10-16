@@ -49,18 +49,20 @@ terminal. `--headless --input TEXT` runs without live terminal input. Use
 
 ## Unix userspace
 
-The image now includes **68 utility and scripting command names**, built from the pinned
+The image now includes **90 utility, scripting and game command names**, built from the pinned
 upstream sources and adapted where needed, plus the upstream V7 Bourne shell at `/bin/sh`.
 They are real executables using FUZIX system calls:
 
 | Purpose | Commands |
 | --- | --- |
-| Files and directories | `ls`, `cat`, `cp`, `mv`, `ln`, `rm`, `mkdir`, `rmdir`, `pwd`, `touch`, `chmod`, `chown`, `chgrp`, `mkfifo`, `mknod`, `basename`, `dirname`, `find`, `dd`, `tar` |
-| Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp`, `diff`, `diffh` |
+| Files and directories | `ls`, `cat`, `cp`, `mv`, `ln`, `rm`, `mkdir`, `rmdir`, `pwd`, `touch`, `chmod`, `chown`, `chgrp`, `mkfifo`, `mknod`, `basename`, `dirname`, `find`, `dd`, `tar`, `mktemp` |
+| Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp`, `diff`, `diffh`, `join`, `split`, `fmt`, `column`, `pr`, `col`, `tsort`, `cksum` |
+| Terminal and paging | `more`, `less`, `clear`, `stty`, `tty` |
 | Editing | `ed`, `vi` (Levee), `levee`, `vile` |
-| Processes and environment | `ps`, `kill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs` |
+| Processes and environment | `ps`, `kill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs`, `time`, `nice`, `nohup`, `groups`, `logname` |
 | Filesystem information | `df`, `du`, `sync` |
-| Fun and scripting | `cowsay`, `picol`, `tcl`, `tclsh` |
+| Manuals | `man` (43 installed manual pages) |
+| Fun and scripting | `cowsay`, `picol`, `tcl`, `tclsh`, `wump`, `hamurabi` |
 | Shell helpers | `test`, `true`, `false`, `seq`, `yes` |
 
 Try:
@@ -265,12 +267,18 @@ executables and the three Picol names likewise share their respective binaries. 
 image and its modification time untouched. An exclusive companion lock covers
 updates, VM execution, and offline checks.
 
-Old bootstrap roots are expanded automatically, including their inode tables;
+Smaller roots of the current filesystem version are expanded automatically, including their inode tables;
 early data blocks are relocated when necessary and the result is checked before
-writing. New/default upgraded disks are 64 MiB FAT16 images containing a
-65,535-block native root (just under 32 MiB) with at least 1,024 inodes. An old
+writing. New/default disks are 256 MiB FAT16 images containing a
+65,535-block native root (just under 128 MiB) with at least 1,024 inodes. An old
 disk with additional outer FAT entries is refused during expansion to avoid
-losing them. Inner guest files are preserved.
+losing them. Inner guest files are preserved within the current filesystem version.
+
+The larger C16 V2 blocks replace the earlier C16 V1 layout. V1 images need
+`scripts/run-fuzix.sh --fresh --build-only` to create a new disk; this saves the
+previous disk as a numbered backup. Existing V1 disks are rejected rather than
+silently converted. Executable RXE1 files and the C ABI are unchanged; no
+executable compression or packing is involved.
 
 `--disk IMAGE` boots an existing image without updating it. To install the new
 userspace on an explicit disk, with the VM stopped:
@@ -318,12 +326,12 @@ member access, physical line splicing, and releasing consumed call-argument
 registers before allocating return values. The linker now includes the full GP
 reservation in executable data sizes. No GNU C extensions were added.
 
-The disk format deliberately uses **256 C characters per block**, serialized
-as 512 physical little-endian octets. Inodes remain 32 cells / 64 octets;
+The disk format deliberately uses **1,024 C characters per block**, serialized
+as 2,048 physical little-endian octets. Inodes remain 32 cells / 64 octets;
 directory entries occupy 32 cells / 64 octets. The superblock uses the native
 Ripple structure layout. Files count C characters, and text is stored as 16-bit
 characters. RXE files contain one executable-format octet in each file character.
-A distinct superblock magic (`0x7252`) and `RIPPLE-FUZIX-C16-V1` signature prevent
+A distinct superblock magic (`0x7253`) and `RIPPLE-FUZIX-C16-V2` signature prevent
 confusion with conventional eight-bit FUZIX filesystems. Use the supplied image
 builder/checker rather than upstream host mkfs/fsck or ordinary FAT tools on the
 inner filesystem. The outer FAT16 filesystem uses its ordinary octet format.
@@ -459,10 +467,116 @@ mkdir restored; cd restored
 tar -xf /backup.tar
 ```
 
+## Pagers and everyday text tools
+
+`less filename` runs FUZIX's small pager. Space/`f` advances a page, `b` goes
+back, `d`/`u` moves half a page, `j`/Enter and `k` move one line, `g` returns
+to the first indexed line, and `q` quits. Ctrl-C exits and restores the terminal.
+The pager uses an alternate screen, handles final lines without a newline,
+and spools piped input into an unlinked temporary file for backward navigation.
+Its line index is bounded by the process heap; under memory pressure it drops
+older positions. Lines are read in chunks of at most 511 characters. Search
+commands are not implemented by this upstream pager.
+
+`more filename` streams pages; Space advances, Enter displays one more line,
+`n` moves to the next file, and `q` quits. Both pagers accept pipes and become
+plain copy streams when stdout is redirected. Dimensions come from the guest
+window, with valid `LINES`/`COLUMNS` overrides and an 80-column, 24-row fallback.
+`/etc/termcap` is seeded with ANSI terminal definitions and preserves user edits.
+`clear`, `tty` and `stty` use the guest terminal interfaces. `stty` rejects invalid
+options without applying a partially changed configuration; the kernel supports
+only the terminal flags implemented by its console driver.
+
+```sh
+seq 1 100 | less
+more README
+column -t -s: /etc/passwd
+fmt -w 60 README
+join names scores
+split -l 20 README part
+pr -t README
+stty -a
+time sh -c 'seq 1 100 | wc -l'
+nice -n 5 echo hello
+```
+
+`join` expects sorted inputs. It supports duplicate keys, unmatched records
+(`-a1`, `-a2`, `-a`), custom separators (`-t:`), field selection (`-1 N`, `-2 N`,
+`-j N`, `-j1 N`, `-j2 N`) and output fields (`-o 1.2 2.2`). Records are limited
+to 1,022 characters and 19 fields. Its second input must be seekable.
+`split` accepts `-l N` and historical `-N`, preserves unterminated final lines,
+checks output errors and prevents overwriting its own input. Suffixes run from
+`aa` through `zz` (676 files).
+
+`column` supports table mode (`-t`), separators (`-s`), row ordering (`-x`),
+widths up to 1,000 (`-c`), and table column limits (`-l`). Input records are at
+most 255 characters. `fmt` retains the upstream paragraph, centering and mail
+options, with numeric formatting limits of 4,096. `pr` retains historical
+pagination/column options; `-t` suppresses headers and final page padding.
+`col -b` removes overstrikes and `-x` expands tabs; its bounded line storage
+supports at most 780 columns/overstrike characters. `tsort` accepts tokens up
+to 50 characters, reports cycles and incomplete pairs, and returns a failure
+status for them.
+
+`cksum` computes the standard CRC for octet-valued files, matching host `cksum`
+on ASCII input. It rejects native characters above 255 rather than discarding
+their high bits. `mktemp` creates files atomically with mode 0600, or directories
+with mode 0700 using `-d`. It also supports `-p`, `-t`, `-q` and `-u`. Generated
+names use the whole trailing run of at least six `X` characters.
+
+`time`, `nice`, and `nohup` run separate programs and preserve useful exit
+statuses. `nohup` ignores SIGHUP and appends terminal output to `nohup.out`.
+`groups` and `logname` use the current FUZIX identity; the default session is
+root, and the Level 1 kernel supplies its primary group. The clock used by
+`time` follows the guest's instruction-driven timer.
+
+## Manuals and classic games
+
+`man intro` provides a command overview. The image installs 43 plain manual
+pages in `/usr/man`, including the Bourne shell, editors, Tcl, common text tools
+and the games. These combine retained upstream manuals with port-specific pages
+for changed behavior. Not every command has its own manual yet. Use, for example:
+
+```sh
+man sh
+man vi
+man tcl
+man less
+man 6 wump
+man hamurabi
+man -w cp
+man cp | col -b > cp-help
+```
+
+Interactive manuals use `more` (Space/Enter to advance, `q` to quit); set `PAGER`
+to choose another pager, such as `env PAGER=less man sh`. Redirected manuals are
+formatted directly. `-l` reads a local file, `-w` prints the first matching path,
+and `MANPATH`/`MANSECT` select the manual trees/section order. The small built-in
+formatter supports man macros and preformatted cat pages, with bounded paths,
+line/header storage and `.so` redirects. It does not support compressed manuals,
+full groff/mdoc, or source characters above 255.
+
+`wump` is the V7 **Hunt the Wumpus** cave game. Ask for instructions at startup,
+then move through connected rooms or shoot arrows while avoiding pits and bats.
+Enter `q` or press Ctrl-C to return to the shell.
+
+`hamurabi` is a **Sumerian city management game**: buy/sell land, allocate grain
+and plant crops for a ten-year term. Enter `q`, a negative number, or Ctrl-C to
+leave. Numeric input and EOF are checked. Resource accounting uses 32-bit
+values; yearly feeding/planting resets, starvation cannot wrap, and harvest
+losses are deducted. These are text games without saved-game support.
+
+The guest tests exercise manual search, formatting, aliases, custom paths,
+missing pages, include loops, oversized headers, live pager exit/Ctrl-C,
+actual game prompts/actions, invalid/large input, EOF, and terminal recovery
+in both RVM engines. They use isolated images and check filesystem consistency.
+
 ## Next userspace batches
 
-The next useful batch is the remaining text tools, including `awk`, followed by
-system administration tools. Larger applications, languages/build tools and
+The next useful batch is remaining text tools such as `expr` and `awk`,
+development tools such as `make`, `m4` and `dc`, and broader manual coverage,
+followed by system administration tools. More game candidates in the archive
+include Sokoban, Star Trek and adventure interpreters. Larger applications, languages/build tools and
 networking depend on further libc, process-capacity and device work; the complete
 upstream archive is retained.
 
@@ -490,3 +604,12 @@ The fun-tool suite checks cowsay wrapping, designs, stdin and input limits;
 Picol arithmetic, procedures, lists, channels, subprocesses, malformed input,
 large scripts and error statuses; interactive multiline input and Ctrl-C; and
 files across upgrades/reboots under both engines.
+
+The everyday-tool suite checks joins with duplicate keys, splitting, formatted
+tables, pagination, overstrikes, topological ordering, host-compatible checksums,
+temporary permissions, process exit statuses, and invalid inputs under both RVM
+engines. Live pager tests cover forward/backward navigation, pipes, Ctrl-C,
+unterminated lines and terminal restoration. Filesystem tests cover native
+16-bit contents, storage-window crossings, double-indirect sparse writes and
+truncation; `libccheck` also allocates and removes 320 files to exercise high
+inode numbers. The shared FAT builder retains its default rOS layout.

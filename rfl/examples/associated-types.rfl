@@ -1,0 +1,35 @@
+// A manually polled future. Associated types do not require async syntax.
+type Poll<T> = Pending | Ready(T);
+
+trait Future {
+    type Output: Printable;
+    fn poll(&mut self) -> Poll<Self::Output>;
+}
+
+struct Greeting { pending: bool }
+
+impl Future for Greeting {
+    type Output = String;
+
+    fn poll(&mut self) -> Poll<Self::Output> {
+        if (self.pending) {
+            self.pending = false;
+            Pending
+        } else {
+            Ready("hello from an associated type")
+        }
+    }
+}
+
+fn step<F: Future>(future: &mut F) -> Option<F::Output> {
+    match future.poll() {
+        Pending => None,
+        Ready(value) => Some(value),
+    }
+}
+
+fn main() {
+    let mut greeting = Greeting { pending: true };
+    println(step(&mut greeting));
+    println(step(&mut greeting));
+}

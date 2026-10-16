@@ -40,7 +40,7 @@ completion if necessary, and read status and outputs before another caller
 uses the mailbox. Separate descriptors may be allocated for each device, but
 the pointer and status registers are shared.
 
-For example, a guest may submit `NET_TX`, read its result, submit `INPUT_POP`,
+For example, a guest may submit `NET_TX`, read its result, submit `INPUT_READ`,
 read that result, and submit `PRESENT`. The accepted network frame remains in
 the host-owned TX queue while the guest uses the mailbox for other devices.
 Network commands return after queue/copy work; they do not hold the mailbox

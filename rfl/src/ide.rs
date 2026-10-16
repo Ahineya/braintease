@@ -1,6 +1,9 @@
 //! Queries for the language server. Positions are byte offsets into `source`.
 //! Scope and type information comes from the parser's spans and the checker.
 
+mod associated;
+mod traits;
+
 use std::path::{Path, PathBuf};
 
 use crate::ast::{Block, Expr, ExprKind, Function, Module, Stmt};
@@ -22,6 +25,8 @@ pub enum SymbolKind {
     Function,
     Method,
     Struct,
+    Trait,
+    AssociatedType,
     Enum,
     Const,
     Field,
@@ -82,6 +87,12 @@ impl Analysis {
             // Its missing name is already reported at the dot; the checker
             // cannot meaningfully diagnose a field called the empty string.
             diagnostics.retain(|error| !error.detail.ends_with(" has no field ``"));
+        }
+        if parse_errors
+            .iter()
+            .any(|error| error.detail == parser::EXPECTED_ASSOCIATED_TYPE_NAME)
+        {
+            diagnostics.retain(|error| !error.detail.contains("associated type ``"));
         }
         diagnostics.splice(0..0, parse_errors);
         Self {
@@ -159,11 +170,16 @@ impl Analysis {
                     span: name.span,
                 }),
         );
+        let mut seen = std::collections::HashSet::new();
+        locs.retain(|loc| seen.insert((loc.path.clone(), loc.span.start, loc.span.end)));
         locs
     }
 
     pub fn completions(&self, offset: usize) -> Vec<Completion> {
         let replace = ident_around(&self.source, offset);
+        if let Some(items) = self.trait_qualified_completions(replace) {
+            return items;
+        }
         if let Some(dot) = self.dot_before(offset) {
             return self.method_completions(dot, replace);
         }
@@ -178,7 +194,9 @@ impl Analysis {
                 CompletionKind::EnumMember
             } else if fact.ty.starts_with("fn(") {
                 CompletionKind::Function
-            } else if fact.ty.starts_with("type ") || fact.ty.starts_with("trait ") {
+            } else if fact.ty.starts_with("trait ") {
+                CompletionKind::Trait
+            } else if fact.ty.starts_with("type ") {
                 CompletionKind::Type
             } else if fact.ty.starts_with("const ") {
                 CompletionKind::Constant
@@ -221,7 +239,10 @@ impl Analysis {
             });
         }
         for symbol in &self.symbols {
-            if matches!(symbol.kind, SymbolKind::Field | SymbolKind::Method) {
+            if matches!(
+                symbol.kind,
+                SymbolKind::Field | SymbolKind::Method | SymbolKind::AssociatedType
+            ) {
                 continue;
             }
             if seen.contains(&symbol.name) {
@@ -233,10 +254,21 @@ impl Analysis {
                 kind: match symbol.kind {
                     SymbolKind::Function | SymbolKind::Method => CompletionKind::Function,
                     SymbolKind::Struct | SymbolKind::Enum => CompletionKind::Type,
+                    SymbolKind::Trait => CompletionKind::Trait,
+                    SymbolKind::AssociatedType => CompletionKind::AssociatedType,
                     SymbolKind::Const => CompletionKind::Constant,
                     SymbolKind::Field => CompletionKind::Field,
                 },
                 detail: symbol.detail.clone(),
+                replace,
+                import_edit: None,
+            });
+        }
+        if !seen.iter().any(|name| name == "Printable") {
+            items.push(Completion {
+                label: "Printable".into(),
+                kind: CompletionKind::Trait,
+                detail: "trait Printable".into(),
                 replace,
                 import_edit: None,
             });
@@ -292,6 +324,9 @@ impl Analysis {
 
     pub fn token_type(&self, span: crate::ast::Span) -> u32 {
         if let Some(fact) = self.facts().find(|fact| fact.def == span) {
+            if fact.ty.starts_with("trait ") || fact.ty.starts_with("type ") {
+                return 2;
+            }
             if fact.variant {
                 return 8;
             }
@@ -304,7 +339,13 @@ impl Analysis {
             return 4;
         }
         if self.symbols.iter().any(|symbol| {
-            matches!(symbol.kind, SymbolKind::Struct | SymbolKind::Enum) && symbol.span == span
+            matches!(
+                symbol.kind,
+                SymbolKind::Struct
+                    | SymbolKind::Enum
+                    | SymbolKind::Trait
+                    | SymbolKind::AssociatedType
+            ) && symbol.span == span
         }) {
             return 2;
         }
@@ -420,7 +461,11 @@ impl Analysis {
         };
         let mut items = Vec::new();
         let ty = expr.ty.clone();
-        for (name, detail) in builtin_methods(&ty) {
+        let referent = ty
+            .strip_prefix("&mut ")
+            .or_else(|| ty.strip_prefix('&'))
+            .unwrap_or(&ty);
+        for (name, detail) in builtin_methods(referent) {
             items.push(Completion {
                 label: name,
                 kind: CompletionKind::Method,
@@ -430,7 +475,7 @@ impl Analysis {
             });
         }
         for (type_name, method) in &info.methods {
-            if ty == *type_name || ty.starts_with(&format!("{type_name}<")) {
+            if referent == type_name || referent.starts_with(&format!("{type_name}<")) {
                 items.push(Completion {
                     label: method.clone(),
                     kind: CompletionKind::Method,
@@ -440,7 +485,41 @@ impl Analysis {
                 });
             }
         }
+        for method in info
+            .trait_methods
+            .iter()
+            .chain(&self.info.trait_methods)
+            .filter(|method| method.receiver == expr.span && method.receiver_type == expr.ty)
+        {
+            if !items.iter().any(|item| item.label == method.name) {
+                items.push(Completion {
+                    label: method.name.clone(),
+                    kind: CompletionKind::Method,
+                    detail: method.signature.clone(),
+                    replace,
+                    import_edit: None,
+                });
+            }
+        }
         for (module, function) in crate::modules::std_completion_functions() {
+            let prelude =
+                module == "std/io" && matches!(function.name.as_str(), "print" | "println");
+            // These free extensions take T by value, with the core Printable
+            // bound. A shared receiver method alone does not prove that bound.
+            if prelude
+                && (ty.starts_with('&')
+                    || !info
+                        .trait_methods
+                        .iter()
+                        .chain(&self.info.trait_methods)
+                        .any(|m| {
+                            m.receiver == expr.span
+                                && m.receiver_type == expr.ty
+                                && m.trait_name == "$std$Printable"
+                        }))
+            {
+                continue;
+            }
             let imported = self
                 .ast
                 .imports
@@ -474,7 +553,7 @@ impl Analysis {
                 continue;
             }
             if let Some(detail) = function.method_signature(&ty) {
-                let import_edit = if imported.is_some() {
+                let import_edit = if imported.is_some() || prelude {
                     None
                 } else {
                     crate::auto_import::completion_edit(
@@ -484,7 +563,7 @@ impl Analysis {
                         &function.name,
                     )
                 };
-                if imported.is_none() && import_edit.is_none() {
+                if imported.is_none() && !prelude && import_edit.is_none() {
                     continue;
                 }
                 let detail = if import_edit.is_some() {
@@ -567,7 +646,10 @@ impl Analysis {
     }
 
     fn uses(&self) -> impl Iterator<Item = &NameUse> {
-        self.info.uses.iter()
+        self.info
+            .uses
+            .iter()
+            .filter(|name| name.span.end <= self.source.len())
     }
 
     fn function_bodies(&self) -> Vec<&Block> {
@@ -760,6 +842,18 @@ fn call_in_expr(expr: &Expr, offset: usize) -> Option<CallAt> {
             Some(CallAt {
                 span: expr.span,
                 callee: *callee_span,
+                args: args.iter().map(|arg| arg.span).collect(),
+            })
+        }
+        ExprKind::Assoc { args, .. } => {
+            for arg in args {
+                if let Some(found) = call_in_expr(arg, offset) {
+                    return Some(found);
+                }
+            }
+            Some(CallAt {
+                span: expr.span,
+                callee: crate::ast::Span::new(expr.span.start, expr.span.start),
                 args: args.iter().map(|arg| arg.span).collect(),
             })
         }
@@ -1032,6 +1126,8 @@ pub enum CompletionKind {
     Method,
     Variable,
     Type,
+    Trait,
+    AssociatedType,
     Constant,
     Field,
     EnumMember,
@@ -1049,6 +1145,18 @@ fn symbols_of(module: &Module) -> Vec<Symbol> {
         push_function(&mut symbols, func, SymbolKind::Function);
     }
     for item in &module.impls {
+        for associated in &item.associated_types {
+            symbols.push(Symbol {
+                name: associated.name.clone(),
+                kind: SymbolKind::AssociatedType,
+                span: associated.name_span,
+                detail: associated
+                    .value
+                    .as_ref()
+                    .map(check::completion_type_name)
+                    .unwrap_or_default(),
+            });
+        }
         for method in &item.items {
             symbols.push(Symbol {
                 name: method.name.clone(),
@@ -1059,9 +1167,17 @@ fn symbols_of(module: &Module) -> Vec<Symbol> {
         }
     }
     for tr in &module.traits {
+        for associated in &tr.associated_types {
+            symbols.push(Symbol {
+                name: associated.name.clone(),
+                kind: SymbolKind::AssociatedType,
+                span: associated.name_span,
+                detail: format!("{}::{}", tr.name, associated.name),
+            });
+        }
         symbols.push(Symbol {
             name: tr.name.clone(),
-            kind: SymbolKind::Struct,
+            kind: SymbolKind::Trait,
             span: tr.name_span,
             detail: format!("trait {}", tr.name),
         });
@@ -1128,6 +1244,8 @@ fn empty_info() -> ProgramInfo {
         expr_types: Vec::new(),
         methods: Vec::new(),
         call_sigs: Vec::new(),
+        trait_methods: Vec::new(),
+        type_members: Vec::new(),
     }
 }
 

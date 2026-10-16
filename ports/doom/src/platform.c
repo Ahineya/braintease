@@ -31,7 +31,7 @@ float mouse_acceleration = 1.0f;
 int mouse_threshold = 10;
 int vanilla_keyboard_mapping = 1;
 int usegamma;
-int usemouse;
+int usemouse = 1;
 int screen_width = DOOM_OUTPUT_WIDTH, screen_height = DOOM_OUTPUT_HEIGHT, screen_bpp = 16;
 int fullscreen, aspect_ratio_correct, show_diskicon, diskicon_readbytes;
 char *video_driver = "ripple";
@@ -134,25 +134,71 @@ void Doom_PostKey(unsigned int usage, int down)
     D_ProcessEvents();
 }
 
+/* Saturate before addition so even an extreme replay delta cannot overflow. */
+long Doom_AddMouseDelta(long current, long delta)
+{
+    if (delta > 1024L - current) return 1024L;
+    if (delta < -1024L - current) return -1024L;
+    return current + delta;
+}
+
+/* Positive device Y is down; Doom uses positive Y for forward motion.
+ * Bound deltas before the engine's sensitivity/fixed-point arithmetic. */
+void Doom_PostMouse(unsigned int buttons, long dx, long dy)
+{
+    event_t event;
+    if (dx > 1024L) dx = 1024L;
+    if (dx < -1024L) dx = -1024L;
+    if (dy > 1024L) dy = 1024L;
+    if (dy < -1024L) dy = -1024L;
+    memset(&event, 0, sizeof(event));
+    event.type = ev_mouse;
+    event.data1 = buttons & 7U;
+    event.data2 = (int)dx;
+    event.data3 = -(int)dy;
+    D_PostEvent(&event);
+    D_ProcessEvents();
+}
+
 void I_StartTic(void)
 {
 #if defined(RIPPLE) || defined(RCC_NATIVE)
-    VmInputEvent event;
+    VmInputEvent events[16];
+    VmInputBatch batch;
     VmInputState state;
-    unsigned short status;
+    unsigned short status, n;
     unsigned int i;
+    static unsigned short mouse_buttons;
+    long mouse_dx = 0L, mouse_dy = 0L;
     for (;;) {
-        status = vm_input_pop(&event);
-        if (status != VM_DEVICE_OK && status != VM_DEVICE_INPUT_OVERFLOW)
-            I_Error("VM input failed");
-        if (status == VM_DEVICE_INPUT_OVERFLOW || event.overflow) {
+        status = vm_input_read(events, 16, &batch);
+        if (status != VM_DEVICE_OK) I_Error("VM input failed");
+        if (batch.overflow) {
             if (vm_input_state(&state) != VM_DEVICE_OK) I_Error("VM input state failed");
             for (i = 0; i < 256; ++i) Doom_PostKey(i, vm_key_is_down(&state, i));
+            mouse_buttons = state.buttons;
+            mouse_dx = mouse_dy = 0L;
+            Doom_PostMouse(mouse_buttons, 0L, 0L);
             break;
         }
-        if (!event.available) break;
-        Doom_PostKey(event.key, event.down);
+        for (n = 0; n < batch.count; ++n) {
+            VmInputEvent *event = &events[n];
+            if (event->type == VM_INPUT_KEY)
+                Doom_PostKey(event->code, (event->flags & VM_INPUT_DOWN) != 0);
+            else if (event->type == VM_INPUT_BUTTON) {
+                mouse_buttons = event->buttons;
+                Doom_PostMouse(mouse_buttons, 0L, 0L);
+            } else if (event->type == VM_INPUT_MOTION && (event->flags & VM_INPUT_RELATIVE)) {
+                mouse_buttons = event->buttons;
+                mouse_dx = Doom_AddMouseDelta(mouse_dx, event->dx);
+                mouse_dy = Doom_AddMouseDelta(mouse_dy, event->dy);
+            }
+        }
+        if (batch.count < 16) break;
     }
+    /* G_Responder replaces motion rather than accumulating it. Publish the
+     * combined tick after button events so clicks cannot erase movement. */
+    Doom_PostMouse(mouse_buttons, mouse_dx, mouse_dy);
 #else
     while (have_input && input_tick <= logical_tick) {
         Doom_PostKey(input_key, input_down);
@@ -201,6 +247,8 @@ void I_InitGraphics(void)
         I_Error("VM device ABI 1 with RGB565_EXT, clock and keyboard required");
     display_set_mode(DISP_MODE_RGB565_EXT);
     display_enable();
+    if (vm_input_configure(VM_POINTER_RELATIVE) != VM_DEVICE_OK)
+        I_Error("VM relative pointer configuration failed");
 #endif
     I_SetPalette(W_CacheLumpName("PLAYPAL", PU_CACHE));
 }
@@ -291,7 +339,11 @@ void I_FinishUpdate(void) { finish_update(0); }
 void Doom_RepeatFrame(void) { finish_update(1); }
 
 void I_ReadScreen(byte *dest) { memcpy(dest, I_VideoBuffer, (size_t)SCREENWIDTH * SCREENHEIGHT); }
-void I_ShutdownGraphics(void) {}
+void I_ShutdownGraphics(void) {
+#if defined(RIPPLE) || defined(RCC_NATIVE)
+    vm_input_configure(VM_POINTER_ABSOLUTE);
+#endif
+}
 void I_StartFrame(void) {}
 void I_UpdateNoBlit(void) {}
 void I_BeginRead(void) {}

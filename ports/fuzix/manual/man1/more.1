@@ -1,0 +1,21 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH MORE 1 "FUZIX" "Ripple"
+.SH NAME
+more \- display text a page at a time
+.SH SYNOPSIS
+.nf
+more [file ...]
+.fi
+.SH DESCRIPTION
+Display files, or standard input when no file is named. Space shows
+another page, Enter shows one more line, n selects the next file, and q
+quits. Ctrl-C interrupts and returns to the shell. Terminal settings are
+restored when the pager exits.
+.PP
+With redirected output, more copies the input unchanged. LINES and COLUMNS
+can override the terminal size.
+.SH EXAMPLES
+.nf
+more README
+seq 1 100 | more
+.fi

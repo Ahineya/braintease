@@ -16,6 +16,9 @@ impl<'a> Checker<'a> {
             span: expr.span,
             ty,
         });
+        if self.editor {
+            self.note_trait_completions(expr.span, typed.ty);
+        }
         self.current_span = saved;
         Ok(typed)
     }
@@ -53,33 +56,6 @@ impl<'a> Checker<'a> {
             shown.remove(0);
         }
         self.note_sig(format!("fn({}) -> {}", shown.join(", "), self.show(ret)));
-    }
-
-    pub(super) fn method_def(&self, method: &str, receiver: &Expr) -> Option<(Span, String)> {
-        let recv = self
-            .expr_types
-            .iter()
-            .rev()
-            .find(|expr| expr.span == receiver.span)?
-            .ty
-            .as_str();
-        let facts: Vec<&BindingFact> = self
-            .facts
-            .iter()
-            .filter(|fact| fact.name == method && fact.ty.starts_with("fn("))
-            .collect();
-        let matched = facts
-            .iter()
-            .copied()
-            .find(|fact| signature_accepts_receiver(&fact.ty, recv));
-        let fact = matched.or_else(|| {
-            if facts.len() == 1 {
-                Some(facts[0])
-            } else {
-                None
-            }
-        })?;
-        Some((fact.def, fact.ty.clone()))
     }
 
     pub(super) fn show(&self, ty: Ty) -> String {

@@ -101,6 +101,7 @@ pub struct Impl {
     pub type_params: Vec<TypeParam>,
     pub ty: ParsedTy,
     pub items: Vec<ImplItem>,
+    pub associated_types: Vec<AssociatedType>,
 }
 
 #[derive(Debug, Clone)]
@@ -172,6 +173,14 @@ pub struct Param {
 
 #[derive(Debug, Clone)]
 pub enum ParsedTy {
+    /// `T::Output` or `<T as Trait>::Output`; normalized before IR lowering.
+    Projection {
+        span: Span,
+        base: Box<ParsedTy>,
+        trait_name: Option<(String, Span)>,
+        name: String,
+        name_span: Span,
+    },
     Named {
         span: Span,
         name: String,
@@ -213,7 +222,8 @@ pub enum ParsedTy {
 impl ParsedTy {
     pub fn span(&self) -> Span {
         match self {
-            ParsedTy::Named { span, .. }
+            ParsedTy::Projection { span, .. }
+            | ParsedTy::Named { span, .. }
             | ParsedTy::Func { span, .. }
             | ParsedTy::Ref { span, .. }
             | ParsedTy::Ptr { span, .. }
@@ -546,10 +556,21 @@ impl BinOp {
 /// A statically dispatched interface. Signatures deliberately have no bodies.
 #[derive(Debug, Clone)]
 pub struct Trait {
+    pub span: Span,
     pub name: String,
     pub name_span: Span,
     pub exported: bool,
     pub methods: Vec<ImplItem>,
+    pub associated_types: Vec<AssociatedType>,
+}
+
+/// A required associated type in a trait, or its definition in an impl.
+#[derive(Debug, Clone)]
+pub struct AssociatedType {
+    pub name: String,
+    pub name_span: Span,
+    pub bounds: Vec<(String, Span)>,
+    pub value: Option<ParsedTy>,
 }
 
 #[derive(Debug, Clone)]

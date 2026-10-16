@@ -97,7 +97,7 @@ static void crc(int fd, char *name)
 {
   off_t f_size,length;
   unsigned long crc;
-  int nb;
+  int nb, j;
 
   if (fd < 0) {
 	perror(name);
@@ -116,7 +116,11 @@ static void crc(int fd, char *name)
 		return;
 	}
 	if (!nb) break;
-	f_size += nb;
+	for (j = 0; j < nb; j++) if (buffer[j] > 255) {
+          fputs("cksum: input contains non-octet native characters\n", stderr);
+          close(fd); error = 1; return;
+        }
+        f_size += nb;
 	crc = strncrc(buffer, nb, crc);
   }
   close(fd);

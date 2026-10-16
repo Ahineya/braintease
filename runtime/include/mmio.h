@@ -55,8 +55,8 @@ void text40_set_attr(int x, int y, unsigned char attr);
 unsigned char text40_get_char(int x, int y);
 unsigned char text40_get_attr(int x, int y);
 
-// Keyboard input functions (TEXT40 mode only)
-int key_pressed(unsigned short key_addr);
+// Keyboard state helpers backed by DEVICE_* input snapshots.
+int key_pressed(unsigned short key_usage);
 int key_up_pressed(void);
 int key_down_pressed(void);
 int key_left_pressed(void);

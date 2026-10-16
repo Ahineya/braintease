@@ -78,6 +78,18 @@ test('empty images and capacity boundaries remain valid', () => {
   assert.throws(() => fat16Image([{ name: 'caf\u00e9.bin', data: Buffer.alloc(0) }]), /ASCII/);
 });
 
+test('explicit larger clusters retain file data and reject invalid sizes', () => {
+  const data = Buffer.alloc(20001, 0xa7);
+  const image = fat16Image([{name: 'DATA.BIN', data}],
+      {totalSectors: 65536, sectorsPerFat: 32, sectorsPerCluster: 16});
+  assert.equal(image[13], 16);
+  assert.deepEqual(rootFiles(image).get('DATA    BIN').data, data);
+  assert.deepEqual(rootFiles(updateFat16Image(image, [{name: 'DATA.BIN', data: Buffer.from('changed')}]))
+      .get('DATA    BIN').data, Buffer.from('changed'));
+  for (const size of [0, 3, 256, 1.5])
+    assert.throws(() => fat16Image([], {sectorsPerCluster: size}), /geometry/);
+});
+
 test('CLI creates parent directories and accepts basename and explicit names', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ripple-fat16-'));
   try {

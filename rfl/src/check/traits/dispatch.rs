@@ -1,7 +1,7 @@
 //! Lexically visible trait candidates and ordinary direct-call lowering.
 use super::*;
 impl Checker<'_> {
-    fn impl_args(&self, item: &Impl, ty: Ty) -> Option<Vec<Ty>> {
+    pub(in crate::check) fn impl_args(&self, item: &Impl, ty: Ty) -> Option<Vec<Ty>> {
         let params: Vec<_> = item.type_params.iter().map(|p| p.name.clone()).collect();
         let mut solved = vec![None; params.len()];
         if self
@@ -13,7 +13,7 @@ impl Checker<'_> {
         solved.into_iter().collect()
     }
 
-    pub(super) fn satisfies(&self, name: &str, ty: Ty) -> Result<bool, CompileError> {
+    pub(in crate::check) fn satisfies(&self, name: &str, ty: Ty) -> Result<bool, CompileError> {
         self.satisfies_at(name, ty, &mut HashSet::new())
     }
 
@@ -169,7 +169,7 @@ impl Checker<'_> {
                 format!("{} does not implement `{name}`", self.show(ty)),
             ));
         }
-        let signature = self.trait_sigs[&(name.to_string(), method.to_string())].clone();
+        let signature = self.projected_method_signature(name, method, ty)?;
         let mut checked = vec![recv];
         for (arg, want) in args[1..].iter().zip(signature.params) {
             let got = self.check_expr(arg, Some(want))?;
@@ -216,6 +216,24 @@ impl Checker<'_> {
                 self.instantiate(func, &type_args)?
             }
         };
+        if self.editor {
+            self.method_targets.insert(
+                (span, self.current_span.end, method.into()),
+                (
+                    required.name_span,
+                    format!(
+                        "fn({}) -> {}",
+                        checked
+                            .iter()
+                            .skip(1)
+                            .map(|a| self.show(a.ty))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        self.show(ret)
+                    ),
+                ),
+            );
+        }
         Ok(TExpr {
             ty: ret,
             kind: TExprKind::Call {

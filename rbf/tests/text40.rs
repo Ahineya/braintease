@@ -131,12 +131,13 @@ fn deterministic_text_input_uses_scripted_tick_state() {
     memory[1100] = ABI_VERSION;
     memory[1101] = 8;
     store(&mut host, &mut memory, REGISTER_DESCRIPTOR_OFFSET, 1100);
-    assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), 0);
+    assert_eq!(host.read_mmio(10, &mut memory).unwrap(), 0);
     for expected in [1, 0] {
         store(&mut host, &mut memory, REGISTER_COMMAND, COMMAND_NEXT_TICK);
         host.complete_tick(&mut memory, vec![]).unwrap();
         for _ in 0..12 {
-            assert_eq!(host.read_mmio(HDR_KEY_UP, &mut memory).unwrap(), expected);
+            assert_eq!(host.read_mmio(10, &mut memory).unwrap(), 0);
+            assert_eq!(host.devices.held(82), expected != 0);
         }
     }
 }

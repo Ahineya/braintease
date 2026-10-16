@@ -9,7 +9,7 @@ use rbf::{
 };
 use rvm::{
     constants::*,
-    devices::{GuestMemory, COMMAND_INPUT_POP, REGISTER_COMMAND},
+    devices::{GuestMemory, COMMAND_INPUT_READ, REGISTER_COMMAND},
     runner::{ClockPolicy, ControlCommand},
 };
 use std::{
@@ -125,11 +125,19 @@ fn profiling_preserves_output_tape_and_limits() {
     program.store(HDR_TTY_OUT, 65);
     program.at(0);
     program.source.push_str("+[]");
-    let options = RunOptions { max_dispatches: Some(100), ..limits() };
+    let options = RunOptions {
+        max_dispatches: Some(100),
+        ..limits()
+    };
     let mut plain_output = Vec::new();
     let mut profiled_output = Vec::new();
     let plain_result = run(&mut plain, &program.source, &options, &mut plain_output);
-    let profiled_result = run(&mut profiled, &program.source, &options, &mut profiled_output);
+    let profiled_result = run(
+        &mut profiled,
+        &program.source,
+        &options,
+        &mut profiled_output,
+    );
     assert_eq!(plain_result, profiled_result);
     assert!(plain_result.unwrap_err().contains("dispatch limit"));
     assert_eq!(plain_output, b"A");
@@ -138,7 +146,10 @@ fn profiling_preserves_output_tape_and_limits() {
     assert_eq!(plain.machine.pointer(), profiled.machine.pointer());
     let report = profiled.profile.unwrap().report();
     assert_eq!(report.dispatches, 100);
-    assert!(report.operations.iter().any(|operation| operation.attempts > 0));
+    assert!(report
+        .operations
+        .iter()
+        .any(|operation| operation.attempts > 0));
 }
 
 #[test]
@@ -172,10 +183,17 @@ fn timeout_and_cancellation_work_before_cpu_initialization_or_hooks() {
 fn timeout_does_not_hide_a_failed_final_output_flush() {
     struct FailedFlush;
     impl Write for FailedFlush {
-        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> { Ok(bytes.len()) }
-        fn flush(&mut self) -> io::Result<()> { Err(io::Error::other("lost output")) }
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::other("lost output"))
+        }
     }
-    let options = RunOptions { timeout: Some(Duration::ZERO), ..limits() };
+    let options = RunOptions {
+        timeout: Some(Duration::ZERO),
+        ..limits()
+    };
     let error = run(&mut host(), "+[]", &options, &mut FailedFlush).unwrap_err();
     assert!(error.contains("Wall-time limit exceeded"));
     assert!(error.contains("Guest output: lost output"));
@@ -372,13 +390,22 @@ fn stepped_key_commands_apply_in_order_at_separate_tick_grants() {
     assert_eq!(host.devices.devices.tick(), 2);
     assert!(!host.devices.devices.held(4));
     let mut memory = StridedMemory::new(host.machine.tape_mut(), 256);
+    memory.write(64, 10);
+    for (i, w) in [1, 2, 32, 0, 0, 0, 0, 0].into_iter().enumerate() {
+        memory.write(65 + i, w);
+    }
     for (down, tick) in [(1, 1), (0, 2)] {
         host.devices
-            .write_mmio(REGISTER_COMMAND, COMMAND_INPUT_POP, &mut memory)
+            .write_mmio(REGISTER_COMMAND, COMMAND_INPUT_READ, &mut memory)
             .unwrap();
         assert_eq!(
-            (65..70).map(|i| memory.read(i)).collect::<Vec<_>>(),
-            [1, 4, down, tick, 0]
+            [
+                memory.read(68),
+                memory.read(162),
+                memory.read(161),
+                memory.read(166)
+            ],
+            [1, 4, down, tick]
         );
     }
 }

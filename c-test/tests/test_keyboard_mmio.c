@@ -1,13 +1,13 @@
-// Test keyboard MMIO functionality (non-interactive)
+// Test DEVICE keyboard convenience helpers (non-interactive)
 #include <stdio.h>
 #include <mmio.h>
 #include <mmio_constants.h>
 
 int main() {
-    // Test that we can read keyboard state addresses without crashing
+    // Test that we can read keyboard snapshot without crashing
     // In non-TEXT40 mode, these should all return 0
     
-    // Read all keyboard MMIO addresses
+    // Read all keyboard device state
     int up = key_up_pressed();
     int down = key_down_pressed();
     int left = key_left_pressed();

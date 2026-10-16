@@ -159,6 +159,7 @@ impl<'a> Checker<'a> {
                 let mark = self.borrows.len();
                 let result = self.check_assoc(span, ty_name, method, args, expected);
                 self.borrows.truncate(mark);
+                self.note_assoc_use(expr.span, ty_name, method);
                 result
             }
             ExprKind::Try(expr) => self.check_try(span, expr, expected),
@@ -221,20 +222,15 @@ impl<'a> Checker<'a> {
                 let mark = self.borrows.len();
                 let result = self.check_call(span, callee, type_args, args, expected)?;
                 self.borrows.truncate(mark);
-                let written = self.source.get(callee_span.start..callee_span.end);
-                let found = self
-                    .facts
-                    .iter()
-                    .rev()
-                    .find(|fact| self.source.get(fact.def.start..fact.def.end) == written)
-                    .map(|fact| (fact.def, fact.ty.clone()));
-                if let Some((def, ty)) = found {
-                    self.uses.push(NameUse {
-                        span: *callee_span,
-                        def,
-                        def_file: None,
-                        ty,
-                    });
+                if self.editor {
+                    if let Some((def, ty)) = self.call_def(callee) {
+                        self.uses.push(NameUse {
+                            span: *callee_span,
+                            def,
+                            def_file: None,
+                            ty,
+                        });
+                    }
                 }
                 Ok(result)
             }
@@ -248,7 +244,11 @@ impl<'a> Checker<'a> {
                 let mark = self.borrows.len();
                 let result = self.check_method(span, receiver, method, resolved, args, expected);
                 self.borrows.truncate(mark);
-                if let Some((def, ty)) = self.method_def(method, receiver) {
+                if let Some((def, ty)) = self
+                    .method_targets
+                    .get(&(span, expr.span.end, method.clone()))
+                    .cloned()
+                {
                     self.uses.push(NameUse {
                         span: *method_span,
                         def,

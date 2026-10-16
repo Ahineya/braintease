@@ -7,9 +7,10 @@ static unsigned short pixels[12];
 static int check_event(unsigned short key, unsigned short down,
                        unsigned long tick) {
     VmInputEvent event;
-    if (vm_input_pop(&event) != VM_DEVICE_OK) return 0;
-    return event.available && event.key == key && event.down == down &&
-           event.tick == tick && !event.overflow;
+    VmInputBatch batch;
+    if (vm_input_read(&event, 1, &batch) != VM_DEVICE_OK) return 0;
+    return batch.count && event.type == VM_INPUT_KEY && event.code == key && (event.flags & VM_INPUT_DOWN) == down &&
+           event.tick == tick && !batch.overflow;
 }
 
 static int fail(unsigned short code) {
@@ -20,6 +21,7 @@ static int fail(unsigned short code) {
 int main(void) {
     VmClock clock;
     VmInputEvent event;
+    VmInputBatch batch;
     VmInputState keys;
     unsigned short tick;
     unsigned short i;
@@ -36,7 +38,7 @@ int main(void) {
         } else {
             if (!check_event(VM_KEY_ENTER, 0, 3UL)) return fail(6);
         }
-        if (vm_input_pop(&event) != VM_DEVICE_OK || event.available) return fail(7);
+        if (vm_input_read(&event, 1, &batch) != VM_DEVICE_OK || batch.count) return fail(7);
         if (vm_input_state(&keys) != VM_DEVICE_OK || keys.overflow) return fail(8);
         if (vm_key_is_down(&keys, VM_KEY_W) != (tick == 1)) return fail(9);
         if (vm_key_is_down(&keys, VM_KEY_ENTER) != (tick == 2)) return fail(10);

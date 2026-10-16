@@ -1,0 +1,23 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH LEVEE 1 "FUZIX" "Ripple"
+.SH NAME
+levee \- edit text with vi commands
+.SH SYNOPSIS
+.nf
+vi [file]
+.fi
+.SH DESCRIPTION
+Levee is the default vi editor. Start in command mode: h, j, k, l move the
+cursor; i inserts text; Escape returns to command mode; x deletes a
+character; dd deletes a line; u undoes; / searches.
+.PP
+:w writes the buffer, :w filename sets a new filename, :q quits an unchanged
+buffer, :wq saves and quits, and :q! quits while discarding changes.
+Ctrl-C cancels raw input. The editor restores the terminal on exit.
+.PP
+The buffer holds at most 29999 native characters. Terminal dimensions are
+validated; this is a small vi implementation rather than full Vim.
+.SH EXAMPLES
+.nf
+vi notes
+.fi

@@ -1,8 +1,12 @@
+mod associated;
 mod cfg;
 
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::lexer::{Token, TokenKind};
+
+pub(crate) const EXPECTED_ASSOCIATED_TYPE_NAME: &str =
+    "expected an associated type name after '::'";
 
 pub(crate) const EXPECTED_MEMBER_NAME: &str = "expected a member name after '.'";
 
@@ -21,6 +25,7 @@ pub fn parse_for_target(
         tokens,
         index: 0,
         pending_gt: false,
+        pending_lt: false,
         tolerant: false,
         errors: Vec::new(),
     };
@@ -36,6 +41,7 @@ pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileErro
         tokens,
         index: 0,
         pending_gt: false,
+        pending_lt: false,
         tolerant: true,
         errors: Vec::new(),
     };
@@ -68,6 +74,8 @@ struct Parser<'a> {
     index: usize,
     /// One `>` left over from a `>>` that closed a generic argument.
     pending_gt: bool,
+    /// One `<` left from `<<` in a nested type argument.
+    pending_lt: bool,
     /// Keep going after a missing member name or semicolon. The compiler does not.
     tolerant: bool,
     errors: Vec<CompileError>,
@@ -442,14 +450,30 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_trait(&mut self, exported: bool) -> Result<Trait, CompileError> {
-        self.expect(&TokenKind::Trait, "trait")?;
+        let start = self.expect(&TokenKind::Trait, "trait")?.span;
         let (name, name_span) = self.expect_ident()?;
+        if name == "Self" {
+            return Err(CompileError::at(
+                self.source,
+                name_span.start,
+                "Self is reserved for the implementing type",
+            ));
+        }
         self.expect(
             &TokenKind::LBrace,
             "'{' (trait parameters are not supported)",
         )?;
         let mut methods = Vec::new();
+        let mut associated_types = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
+            let enabled = self.cfg_attributes()?;
+            if self.is(&TokenKind::Type) {
+                let item = self.parse_associated_type(true)?;
+                if enabled {
+                    associated_types.push(item);
+                }
+                continue;
+            }
             let method = self.parse_method(true)?;
             if method.receiver.is_none() {
                 return Err(CompileError::at(
@@ -465,14 +489,18 @@ impl<'a> Parser<'a> {
                     "generic trait methods are not supported",
                 ));
             }
-            methods.push(method);
+            if enabled {
+                methods.push(method);
+            }
         }
-        self.expect(&TokenKind::RBrace, "'}'")?;
+        let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
         Ok(Trait {
+            span: start.to(end),
             name,
             name_span,
             exported,
             methods,
+            associated_types,
         })
     }
 
@@ -501,21 +529,37 @@ impl<'a> Parser<'a> {
         };
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut items = Vec::new();
+        let mut associated_types = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
             let enabled = self.cfg_attributes()?;
             self.eat(&TokenKind::Export);
+            if self.is(&TokenKind::Type) {
+                if trait_name.is_none() {
+                    return Err(CompileError::at(
+                        self.source,
+                        self.current().span.start,
+                        "associated types require a trait impl",
+                    ));
+                }
+                let item = self.parse_associated_type(false)?;
+                if enabled {
+                    associated_types.push(item);
+                }
+                continue;
+            }
             let method = self.parse_method(false)?;
             if enabled {
                 items.push(method);
             }
         }
-        self.expect(&TokenKind::RBrace, "'}'")?;
+        let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
         Ok(Impl {
             trait_name,
-            span,
+            span: span.to(end),
             type_params,
             ty,
             items,
+            associated_types,
         })
     }
 
@@ -608,6 +652,13 @@ impl<'a> Parser<'a> {
     fn parse_adt(&mut self) -> Result<Adt, CompileError> {
         self.expect(&TokenKind::Type, "type")?;
         let (name, name_span) = self.expect_ident()?;
+        if name == "Self" {
+            return Err(CompileError::at(
+                self.source,
+                name_span.start,
+                "Self is reserved for the implementing type",
+            ));
+        }
         let params = self.parse_generic_params()?;
         self.expect(&TokenKind::Eq, "'='")?;
         self.eat(&TokenKind::Pipe);
@@ -630,16 +681,26 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_generic_params(&mut self) -> Result<Vec<TypeParam>, CompileError> {
-        if !self.eat(&TokenKind::Lt) {
+        if !self.eat_lt() {
             return Ok(Vec::new());
         }
         let mut params = Vec::new();
         loop {
             let (name, span) = self.expect_ident()?;
+            if name == "Self" {
+                return Err(CompileError::at(
+                    self.source,
+                    span.start,
+                    "Self is reserved for the implementing type",
+                ));
+            }
             let mut bounds = Vec::new();
             if self.eat(&TokenKind::Colon) {
                 loop {
                     bounds.push(self.expect_ident()?);
+                    if self.is(&TokenKind::Lt) {
+                        return Err(CompileError::at(self.source, self.current().span.start, "associated type equality constraints and generic trait bounds are not supported"));
+                    }
                     if !self.eat(&TokenKind::Plus) {
                         break;
                     }
@@ -662,15 +723,17 @@ impl<'a> Parser<'a> {
         callee: String,
         span: Span,
     ) -> Result<Option<Expr>, CompileError> {
-        if !self.is(&TokenKind::Lt) {
+        if !self.is(&TokenKind::Lt) && !self.is(&TokenKind::Shl) {
             return Ok(None);
         }
         let saved = self.index;
         let saved_gt = self.pending_gt;
-        self.bump();
-        if !self.is_ident() {
+        let saved_lt = self.pending_lt;
+        self.eat_lt();
+        if !self.starts_type() {
             self.index = saved;
             self.pending_gt = saved_gt;
+            self.pending_lt = saved_lt;
             return Ok(None);
         }
         let mut type_args = Vec::new();
@@ -680,13 +743,15 @@ impl<'a> Parser<'a> {
                 Err(_) => {
                     self.index = saved;
                     self.pending_gt = saved_gt;
+                    self.pending_lt = saved_lt;
                     return Ok(None);
                 }
             }
             if self.eat(&TokenKind::Comma) {
-                if !self.is_ident() {
+                if !self.starts_type() {
                     self.index = saved;
                     self.pending_gt = saved_gt;
+                    self.pending_lt = saved_lt;
                     return Ok(None);
                 }
                 continue;
@@ -696,6 +761,7 @@ impl<'a> Parser<'a> {
         if !self.eat_gt() || !self.is(&TokenKind::LParen) {
             self.index = saved;
             self.pending_gt = saved_gt;
+            self.pending_lt = saved_lt;
             return Ok(None);
         }
         self.bump();
@@ -763,6 +829,13 @@ impl<'a> Parser<'a> {
     fn parse_struct(&mut self) -> Result<StructItem, CompileError> {
         self.expect(&TokenKind::Struct, "struct")?;
         let (name, name_span) = self.expect_ident()?;
+        if name == "Self" {
+            return Err(CompileError::at(
+                self.source,
+                name_span.start,
+                "Self is reserved for the implementing type",
+            ));
+        }
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut fields = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
@@ -846,7 +919,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_type(&mut self) -> Result<ParsedTy, CompileError> {
+    fn parse_type_atom(&mut self) -> Result<ParsedTy, CompileError> {
         if self.is(&TokenKind::Extern) {
             return self.parse_c_fn_type();
         }
@@ -953,7 +1026,7 @@ impl<'a> Parser<'a> {
         }
         let (name, span) = self.expect_ident()?;
         let mut args = Vec::new();
-        if self.eat(&TokenKind::Lt) {
+        if self.eat_lt() {
             loop {
                 args.push(self.parse_type()?);
                 if self.eat(&TokenKind::Comma) {
@@ -2076,6 +2149,13 @@ impl<'a> Parser<'a> {
     }
 
     fn eat(&mut self, kind: &TokenKind) -> bool {
+        if self.pending_lt {
+            if *kind == TokenKind::Lt {
+                self.pending_lt = false;
+                return true;
+            }
+            return false;
+        }
         if self.pending_gt {
             if *kind == TokenKind::Gt {
                 self.pending_gt = false;
@@ -2092,6 +2172,9 @@ impl<'a> Parser<'a> {
     }
 
     fn is(&self, kind: &TokenKind) -> bool {
+        if self.pending_lt {
+            return *kind == TokenKind::Lt;
+        }
         if self.pending_gt {
             return *kind == TokenKind::Gt;
         }
@@ -2099,7 +2182,7 @@ impl<'a> Parser<'a> {
     }
 
     fn is_ident(&self) -> bool {
-        matches!(self.current().kind, TokenKind::Ident(_))
+        !self.pending_lt && !self.pending_gt && matches!(self.current().kind, TokenKind::Ident(_))
     }
 
     fn peek_assign(&self) -> bool {
@@ -2130,6 +2213,14 @@ impl<'a> Parser<'a> {
     }
 
     fn bump(&mut self) -> Token {
+        if self.pending_lt {
+            self.pending_lt = false;
+            let previous = self.prev_span();
+            return Token {
+                kind: TokenKind::Lt,
+                span: Span::new(previous.end - 1, previous.end),
+            };
+        }
         let token = self.current().clone();
         if self.index < self.tokens.len() {
             self.index += 1;

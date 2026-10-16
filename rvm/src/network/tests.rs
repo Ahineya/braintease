@@ -170,8 +170,10 @@ fn other_device_commands_and_background_failures_do_not_share_outputs_or_state()
         down: true,
     }]);
     ram[63..71].copy_from_slice(&[1, 8, 0, 0, 0, 0, 0, 0]);
-    device.write_register(REGISTER_COMMAND, COMMAND_INPUT_POP, &mut ram, 64, 0);
-    assert_eq!(&ram[65..71], &[1, 82, 1, 0, 0, 0]);
+    ram[63..73].copy_from_slice(&[1, 10, 1, 2, 0, 0, 0, 0, 0, 0]);
+    device.write_register(REGISTER_COMMAND, COMMAND_INPUT_READ, &mut ram, 64, 0);
+    assert_eq!(ram[68], 1);
+    assert_eq!(&ram[128..131], &[1, 1, 82]);
     let before = ram.clone();
     device.network.port().receive(vec![99; 14]);
     device.network.port().backend_failed();

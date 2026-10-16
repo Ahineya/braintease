@@ -6,7 +6,7 @@ use crate::{
     runner::Host,
 };
 use bf_wasm::engine::{Machine, Program};
-use rvm::{devices::KeyTransition, runner::Controller, vm::Storage};
+use rvm::{devices::InputTransition, runner::Controller, vm::Storage};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -37,7 +37,7 @@ struct State {
     layout: Layout,
     instructions: u64,
     controller_credits: u64,
-    controller_events: Vec<(u16, bool)>,
+    controller_events: Vec<InputTransition>,
     devices: BfDevicesSnapshot,
 }
 
@@ -90,12 +90,7 @@ impl Host {
                 layout: self.layout.clone(),
                 instructions: self.instructions,
                 controller_credits: self.controller.credits,
-                controller_events: self
-                    .controller
-                    .events
-                    .iter()
-                    .map(|e| (e.key, e.down))
-                    .collect(),
+                controller_events: self.controller.events.clone(),
                 devices: self.devices.checkpoint()?,
             };
             let metadata = serde_json::to_vec(&state).map_err(|e| e.to_string())?;
@@ -211,7 +206,7 @@ impl Host {
             }
             layout.validate(layout.tape_cells)?;
             if state.controller_events.len() > 4096
-                || state.controller_events.iter().any(|(key, _)| *key >= 256)
+                || state.controller_events.iter().any(|event| !event.valid())
             {
                 return Err("Invalid checkpoint controller input".into());
             }
@@ -233,11 +228,7 @@ impl Host {
                 profile: None,
                 controller: Controller {
                     credits: state.controller_credits,
-                    events: state
-                        .controller_events
-                        .into_iter()
-                        .map(|(key, down)| KeyTransition { key, down })
-                        .collect(),
+                    events: state.controller_events,
                     // Connections, cancellation and window closure are host lifecycle
                     // state. Reopening a saved session must not immediately stop it.
                     closed: false,
