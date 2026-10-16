@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Low-word masked arithmetic preserves wide inputs, carries, shifts, division and observable high words",
+  "expected": "YYYYYYYYYYY\n"
+}

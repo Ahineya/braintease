@@ -53,6 +53,7 @@ pub struct ImportItem {
     /// Name used in this file. Equal to `name` when there is no `as`.
     pub alias: String,
     pub span: Span,
+    pub alias_span: Span,
 }
 
 #[derive(Debug, Clone)]

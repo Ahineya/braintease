@@ -14,6 +14,14 @@
 #define NET_CONFIG_CHANGED 7
 #define NET_TIMEOUT 8
 #define NET_LINK_DOWN 9
+#define NET_EOF 10
+#define NET_RESET 11
+#define NET_CLOSED 12
+#define NET_BUSY 13
+#define NET_PATH_ERROR 14
+#define NET_CANCELLED 15
+#define NET_UNSUPPORTED 16
+#define NET_TCP_CONNECTIONS 4
 #define NET_FRAME_SIZE 1514
 #define NET_ARP_ENTRIES 4
 #define NET_UDP_PORTS 4
@@ -34,6 +42,8 @@ typedef struct NetConfig {
     unsigned short seed;
 } NetConfig;
 typedef struct NetContext NetContext;
+typedef struct NetTcp NetTcp;
+typedef struct NetTcpDriver NetTcpDriver;
 typedef struct NetError {
     unsigned char reporter[4], destination[4];
     unsigned short type, code, protocol, packet_id, mtu;
@@ -89,6 +99,10 @@ struct NetContext {
     NetSentPacket sent[NET_TX_HISTORY];
     NetError error;
     NetCounters counters;
+    NetTcp *tcp[NET_TCP_CONNECTIONS], *tcp_pending;
+    unsigned long tcp_reset_at;
+    unsigned short tcp_reset_sent;
+    const NetTcpDriver *tcp_driver;
 };
 
 /* Initializes the NIC and installs static configuration, announcing when up.

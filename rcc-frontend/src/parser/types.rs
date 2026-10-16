@@ -324,6 +324,11 @@ impl Parser {
                 }
 
                 let param_start = self.current_location();
+                // C99 permits register on a function parameter. It has no
+                // calling-convention effect, but precedes the type specifier.
+                if self.check(&TokenType::Register) {
+                    self.advance();
+                }
                 let param_type = self.parse_type_specifier()?;
                 self.skip_ignored_specifiers();
 

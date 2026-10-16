@@ -10,9 +10,8 @@ impl<'a> Checker<'a> {
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
+        self.note_sig(builtin_signature(callee).unwrap().to_string());
         if callee == "from_char" || callee == "from_byte" {
-            let arg_ty = if callee == "from_char" { "char" } else { "u8" };
-            self.note_sig(format!("fn({arg_ty}) -> String"));
             if args.len() != 1 {
                 return Err(CompileError::at(
                     self.source,
@@ -69,9 +68,7 @@ impl<'a> Checker<'a> {
             ));
         }
         let newline = callee == "println";
-        self.note_sig("fn(integer | bool | char | float | String) -> ()".to_string());
         if callee == "putc" {
-            self.note_sig("fn(integer | char) -> ()".to_string());
             let arg = self.check_expr(&args[0], None)?;
             if !arg.ty.is_int() && arg.ty != Ty::Char {
                 return Err(CompileError::at(

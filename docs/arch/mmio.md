@@ -18,7 +18,7 @@ Bank 0, words **0–31** are the MMIO header. TEXT40 VRAM starts at word **32**.
 | 9 | DISP_FLUSH | W | present frame |
 | 10–15 | KEY_* | R | TEXT40/RGB565 keys |
 | 16 | DISP_RESOLUTION | R/W | RGB565 hi8=width lo8=height |
-| 17–20 | STORE_* | | block storage (byte addressed) |
+| 17–20 | STORE_* | | block storage (16-bit word addressed) |
 | 21 | IRQ_STATUS | R/W | pending bits; **write ORs** |
 | 22 | IRQ_ENABLE | R/W | enable mask |
 | 23 | IRQ_BUSY | R/W | R: in-service; W nonzero = ACK |
@@ -97,3 +97,6 @@ atomically. Pending events raised during a handler are retained.
 CPU control registers, optional interrupt-stack switching, and the deterministic
 instruction timer are defined in [stacks-and-interrupts.md](stacks-and-interrupts.md).
 The device mailbox and all existing MMIO addresses are unchanged.
+
+Storage COMMIT/COMMIT_ALL are durable host-file barriers in RVM. STORE_CTL bit 4
+is a sticky host I/O error (write one to clear); see [storage semantics](../../rvm/mmio.md#durable-storage-commits-and-errors).

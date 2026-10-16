@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YY\n",
+  "description": "Numeric string escapes must remain single execution characters, without UTF-8 expansion"
+}

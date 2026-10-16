@@ -7,6 +7,7 @@ void net_arp_invalidate(NetContext *net, const unsigned char *address) {
             if (net->pending && (!address || (net->arp[i].used && net->arp[i].ready && !memcmp(net->tx, net->arp[i].mac, 6)) ||
                 (net_read16(net->tx + 12) == 0x0806 && !memcmp(net->tx + 38, address, 4)))) {
                 net->pending = 0; net_count(&net->counters.tx_discarded);
+                if (net->tcp_driver && net->tcp_pending) net->tcp_driver->dropped(net);
             }
             memset(&net->arp[i], 0, sizeof(net->arp[i]));
         }

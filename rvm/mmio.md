@@ -899,3 +899,16 @@ MMIO addresses. Possible future devices include:
 New commands must preserve existing descriptor versions and advertise their
 capabilities. A command's availability in the Rust VM does not imply support in
 the Brainfuck host adapter.
+
+### Durable storage commits and errors
+
+In RVM, `STORE_CTL` bit 2 (COMMIT) and bit 3 (COMMIT_ALL) wait for the
+backing file's `sync_all`/`fsync` before acknowledging dirty blocks. A failed
+write or durability barrier leaves the affected block dirty. Bit 4 is a sticky
+host I/O error flag; write one to bit 4 to acknowledge it (optionally with a
+retry command). Successful unrelated operations do not clear the error.
+COMMIT_ALL takes precedence if both commit command bits are written.
+
+This flushes the VM storage cache. Guest filesystem buffers still need a guest
+`sync` or clean shutdown. Neither operation makes a filesystem transaction
+atomic or guarantees a clean filesystem after interruption between writes.

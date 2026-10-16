@@ -244,11 +244,23 @@ pub fn analyze(source: &str, module: &Module) -> (ProgramInfo, Result<TModule, C
     (info, result)
 }
 
+/// Globally available compiler functions, shared with editor completion.
+pub(crate) const BUILTIN_FUNCTIONS: &[(&str, &str)] = &[
+    ("print", "fn(integer | bool | char | float | String) -> ()"),
+    ("println", "fn(integer | bool | char | float | String) -> ()"),
+    ("putc", "fn(integer | char) -> ()"),
+    ("from_char", "fn(char) -> String"),
+    ("from_byte", "fn(u8) -> String"),
+];
+
+fn builtin_signature(name: &str) -> Option<&'static str> {
+    BUILTIN_FUNCTIONS
+        .iter()
+        .find_map(|(builtin, signature)| (*builtin == name).then_some(*signature))
+}
+
 fn is_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "print" | "println" | "putc" | "from_char" | "from_byte"
-    )
+    builtin_signature(name).is_some()
 }
 
 fn always_returns(block: &Block) -> bool {

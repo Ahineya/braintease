@@ -256,7 +256,8 @@ impl ExpressionAnalyzer {
                 let struct_type = if *is_pointer {
                     // For arrow operator, dereference the pointer first
                     if let Some(obj_type) = &object.expr_type {
-                        if let Some(target) = obj_type.pointer_target() {
+                        let resolved = self.type_analyzer.borrow().resolve_type(obj_type);
+                        if let Some(target) = resolved.pointer_target() {
                             target.clone()
                         } else {
                             return Err(SemanticError::InvalidOperation {

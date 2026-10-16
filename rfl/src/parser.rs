@@ -277,12 +277,17 @@ impl<'a> Parser<'a> {
         if !self.is(&TokenKind::RBrace) {
             loop {
                 let (name, span) = self.expect_ident()?;
-                let alias = if self.eat(&TokenKind::As) {
-                    self.expect_ident()?.0
+                let (alias, alias_span) = if self.eat(&TokenKind::As) {
+                    self.expect_ident()?
                 } else {
-                    name.clone()
+                    (name.clone(), span)
                 };
-                names.push(ImportItem { name, alias, span });
+                names.push(ImportItem {
+                    name,
+                    alias,
+                    span,
+                    alias_span,
+                });
                 if self.eat(&TokenKind::Comma) {
                     if self.is(&TokenKind::RBrace) {
                         break;

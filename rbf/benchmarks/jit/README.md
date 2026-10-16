@@ -11,6 +11,7 @@ cells. No Doom build or run is involved.
 | `stack_calls` | C | Recursive calls, volatile local arrays and stack frames | 62096 | 14333 |
 | `wide_math` | C | Unsigned 32-bit shifts, XOR, addition and multiplication | 52319 | 2063 |
 | `sort` | C | Insertion sort, comparisons and overlapping array moves | 25056 | 28280 |
+| `masked_math` | C | TCP byte-pattern arithmetic with discarded upper words | 4368 | 1411 |
 
 Every program checks its result, prints exactly `Y` and returns zero on success;
 it prints `N` and returns one on failure. Sorting also checks ordering. Volatile
@@ -45,7 +46,7 @@ Each run has a 20-second execution limit plus an external process deadline,
 a one-million guest instruction ceiling and a 500-million BF-dispatch ceiling.
 Timeouts, nonzero exits and mismatches fail explicitly. `--case sort`,
 `--repetitions 1`, `--timeout 30`, `--inputs`, `--output`, `--rbf` and `--rvm`
-select cases, bounds and paths. `--build` always builds all five cases.
+select cases, bounds and paths. `--build` always builds all six cases.
 A private empty disk is passed to RVM; these fixtures do not access storage.
 
 To compare a saved older host with a candidate:
@@ -112,3 +113,41 @@ The profiles expose different remaining costs:
 
 The four-square comparison and exact input/pixel checks are documented in the
 [parent benchmark guide](../README.md#guarded-transfer-specialization-2026-10-15).
+
+
+## Masked arithmetic compiler result, 2026-10-16
+
+`masked_math.c` reproduces the TCP echo demo's `(offset * 37UL + 11UL) % 256UL`
+expression with volatile input and 32 checked iterations. The compiler used to
+compute the whole 32-bit product before discarding its high bits. The low-word
+mask pass instead computes single-use add/subtract/multiply/bitwise expressions
+in 16 bits and zero-extends the masked result to its original IR type. Shared
+wide users, division and right shifts retain their full-width operation.
+
+The before/after **compiler** comparison uses different generated BF images
+with the same BF host and source, 2048-cell banks and four RAM banks:
+
+| Counter | Before | After |
+| --- | ---: | ---: |
+| Executed guest instructions | 3098 | 1411 |
+| BF interpreter dispatches | 50,887,077 | 22,075,610 |
+| BF JIT dispatches | 50,887,158 | 22,075,656 |
+
+Three serial alternating repetitions matched each counter and printed `Y`.
+Dispatches fall by about 57%. Timing observations were roughly 0.63 → 0.27 s
+for the interpreter and 0.79 → 0.36 s for JIT, but other user work was active;
+use the instruction/dispatch counts as the firm evidence, not those timings as
+an isolated speed claim. This is a small arithmetic workload, not a measured
+speedup for the complete DHCP/TCP exchange.
+
+To build and check the current case with the normal bounded runner:
+
+```sh
+python3 rbf/benchmarks/jit/run.py --build
+python3 rbf/benchmarks/jit/run.py --case masked_math
+```
+
+The runner's `--baseline` option compares BF host binaries on one frozen image;
+it is not a compiler-before/after switch. The compiler comparison preserved
+separate before/after images and reports under ignored
+`build/network/tcp-analysis/bench/`.

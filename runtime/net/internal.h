@@ -2,6 +2,14 @@
 #define RIPPLE_NET_INTERNAL_H
 #include <net.h>
 #include <string.h>
+/* Optional protocol attachment: UDP/ICMP programs need not link TCP's state
+ * machine merely because IPv4 recognizes its protocol number. */
+struct NetTcpDriver {
+    int (*input)(NetContext *, unsigned short, unsigned short);
+    void (*transmitted)(NetContext *);
+    void (*dropped)(NetContext *);
+    void (*error)(NetContext *, const NetError *);
+};
 int net_config_valid(const NetConfig *config);
 void net_count(unsigned long *counter);
 void net_reset_paths(NetContext *net);
@@ -29,4 +37,10 @@ int net_arp_input(NetContext *net, unsigned short length);
 int net_ipv4_input(NetContext *net, unsigned short length);
 int net_icmp_input(NetContext *net, unsigned short header, unsigned short length);
 int net_udp_input(NetContext *net, unsigned short header, unsigned short length);
+unsigned short net_l4_checksum(const unsigned char *source, const unsigned char *destination,
+                              unsigned short protocol, const unsigned char *data, unsigned short length);
+int net_tcp_input(NetContext *net, unsigned short header, unsigned short length);
+void net_tcp_transmitted(NetContext *net);
+void net_tcp_pending_dropped(NetContext *net);
+void net_tcp_error(NetContext *net, const NetError *error);
 #endif

@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYYYYY\n",
+  "description": "Constant pointer offsets cross bank boundaries without changing their source pointer"
+}

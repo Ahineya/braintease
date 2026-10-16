@@ -54,6 +54,7 @@
 #define STORE_CTL_DIRTY       (1 << 1)
 #define STORE_CTL_COMMIT      (1 << 2)
 #define STORE_CTL_COMMIT_ALL  (1 << 3)
+#define STORE_CTL_ERROR       (1 << 4) /* sticky I/O error; write one to clear */
 
 // Keyboard status bit
 #define KEY_PRESSED        (1 << 0)

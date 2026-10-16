@@ -15,4 +15,6 @@ fn main() {
     let a = "something";
     let b = a.replace("some", "oth");
     println(b);
+
+    prin
 }

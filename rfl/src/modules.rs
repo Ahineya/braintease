@@ -146,6 +146,61 @@ pub(crate) fn check_root(
         );
         rename_defs(&mut unit.ast, &bindings[index]);
     }
+    // The checker sees the linked program, but editor queries must see only
+    // declarations available in the root module, using their imported aliases.
+    let mut imported_names = HashMap::<(usize, usize), Vec<String>>::new();
+    let mut imported_values = Vec::new();
+    for unit in rfls.iter().skip(1) {
+        let mut declaration = |name: &str, span: Span, ty: Option<String>| {
+            let mut aliases: Vec<_> = maps[0]
+                .iter()
+                .filter(|(_, target)| target.as_str() == name)
+                .map(|(alias, _)| alias.clone())
+                .collect();
+            aliases.sort();
+            for alias in &aliases {
+                if let Some(ty) = &ty {
+                    imported_values.push(crate::check::BindingFact {
+                        name: alias.clone(),
+                        def: span,
+                        ty: if ty.starts_with("type ") {
+                            format!("type {alias}")
+                        } else {
+                            ty.clone()
+                        },
+                        scope: Span::new(0, packed.len()),
+                        visible_from: 0,
+                        variant: false,
+                    });
+                }
+            }
+            if !aliases.is_empty() {
+                imported_names.insert((span.start, span.end), aliases);
+            }
+        };
+        for func in &unit.ast.functions {
+            declaration(&func.name, func.name_span, None);
+        }
+        for ext in &unit.ast.externs {
+            declaration(&ext.name, ext.name_span, None);
+        }
+        for adt in &unit.ast.adts {
+            declaration(&adt.name, adt.name_span, Some(format!("type {}", adt.name)));
+            for ctor in &adt.ctors {
+                declaration(&ctor.name, ctor.name_span, None);
+            }
+        }
+        for item in &unit.ast.structs {
+            declaration(&item.name, item.name_span, Some(format!("type {}", item.name)));
+        }
+        for item in &unit.ast.consts {
+            declaration(
+                &item.name,
+                item.name_span,
+                Some(format!("const {}", crate::check::completion_type_name(&item.ty))),
+            );
+        }
+    }
     let mut merged = Module {
         adts: Vec::new(),
         structs: Vec::new(),
@@ -168,7 +223,27 @@ pub(crate) fn check_root(
             merged.externs.push(ext);
         }
     }
-    let (info, result) = crate::check::analyze(&packed, &merged);
+    let (mut info, result) = crate::check::analyze(&packed, &merged);
+    info.facts = info
+        .facts
+        .into_iter()
+        .flat_map(|fact| {
+            if shift_span(fact.def, bases[0], lengths[0]).is_some() {
+                return vec![fact];
+            }
+            imported_names
+                .get(&(fact.def.start, fact.def.end))
+                .into_iter()
+                .flatten()
+                .map(|alias| {
+                    let mut imported = fact.clone();
+                    imported.name = alias.clone();
+                    imported
+                })
+                .collect()
+        })
+        .collect();
+    info.facts.extend(imported_values);
     let chunks: Vec<(PathBuf, usize, usize)> = rfls
         .iter()
         .enumerate()
@@ -1134,6 +1209,7 @@ fn rewrite_uses(
         walk.bump(&mut import.path_span);
         for name in &mut import.names {
             walk.bump(&mut name.span);
+            walk.bump(&mut name.alias_span);
         }
     }
 }
@@ -1203,6 +1279,7 @@ impl Rewriter<'_> {
     }
 
     fn block(&mut self, block: &mut Block) {
+        self.bump(&mut block.span);
         self.values.push(HashSet::new());
         for stmt in &mut block.stmts {
             self.stmt(stmt);
@@ -1216,8 +1293,13 @@ impl Rewriter<'_> {
     fn stmt(&mut self, stmt: &mut Stmt) {
         match stmt {
             Stmt::Let {
-                pattern, ty, init, ..
+                span,
+                pattern,
+                ty,
+                init,
+                ..
             } => {
+                self.bump(span);
                 if let Some(ty) = ty {
                     self.ty(ty);
                 }
@@ -1526,6 +1608,52 @@ fn std_module_name(spec: &str) -> Option<&str> {
         return None;
     }
     Some(rest)
+}
+
+/// Resolve import navigation without requiring the rest of the program to check.
+pub(crate) fn import_definition(
+    from: &Path,
+    spec: &str,
+    name: Option<&str>,
+) -> Option<(PathBuf, Span)> {
+    let from = std::fs::canonicalize(from).unwrap_or_else(|_| from.to_path_buf());
+    let path = std::fs::canonicalize(resolve_spec(&from, spec).ok()?).ok()?;
+    let Some(name) = name else {
+        return Some((path, Span::empty()));
+    };
+    // C declarations do not carry RFL spans; their imports still open the file.
+    if path.extension().is_some_and(|ext| ext == "c") {
+        return Some((path, Span::empty()));
+    }
+    let source = read_text(&path).ok()?;
+    let ast = parse_source(&source).ok()?;
+    let unit = RflUnit {
+        path: path.clone(),
+        source,
+        ast,
+        resolved: Vec::new(),
+    };
+    let bindings = own_bindings(&unit, 0, false, &mut HashSet::new()).ok()?;
+    if !bindings.get(name).is_some_and(|binding| binding.exported) {
+        return None;
+    }
+    let ast = &unit.ast;
+    let span = ast
+        .functions
+        .iter()
+        .map(|item| (&item.name, item.name_span))
+        .chain(ast.consts.iter().map(|item| (&item.name, item.name_span)))
+        .chain(ast.structs.iter().map(|item| (&item.name, item.name_span)))
+        .chain(ast.adts.iter().map(|item| (&item.name, item.name_span)))
+        .chain(
+            ast.adts
+                .iter()
+                .flat_map(|item| item.ctors.iter().map(|ctor| (&ctor.name, ctor.name_span))),
+        )
+        .find_map(|(found, span)| (found == name).then_some(span))
+        // Builtin exports such as std/option's Some have no source declaration.
+        .unwrap_or_else(Span::empty);
+    Some((path, span))
 }
 
 fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileError> {

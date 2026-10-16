@@ -655,7 +655,16 @@ fn uri_path(uri: &str) -> Option<PathBuf> {
 }
 
 fn path_uri(path: &std::path::Path) -> String {
-    format!("file://{}", path.display())
+    use std::fmt::Write as _;
+    let mut uri = String::from("file://");
+    for byte in path.to_string_lossy().bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b':' | b'-' | b'_' | b'.' | b'~') {
+            uri.push(byte as char);
+        } else {
+            write!(uri, "%{byte:02X}").unwrap();
+        }
+    }
+    uri
 }
 
 fn percent_decode(text: &str) -> String {

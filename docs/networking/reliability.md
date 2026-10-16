@@ -3,7 +3,7 @@
 The shared guest stack now handles neighbor expiration, bounded ARP retries,
 link transitions, queued-send cancellation and matched ICMP errors. These use
 ordinary guest C and the existing DEVICE_* NIC; no protocol work moves to the
-host. TCP remains the next milestone.
+host. The [TCP client](tcp.md) uses the same lifecycle and validated errors.
 
 ## Drive time and observe the link
 
@@ -118,7 +118,7 @@ correlation, not cryptographic authentication. A busy application may receive
 no notification for an older evicted packet and must still maintain deadlines.
 
 A matched error sets `NET_EVENT_ICMP_ERROR` and populates `network.error` with
-reporter, original destination/protocol/ID, type/code, UDP ports or echo
+reporter, original destination/protocol/ID, type/code, UDP/TCP ports or echo
 identifier/sequence, and the advertised next-hop MTU for type 3/code 4. To receive
 UDP-specific notifications, attach an optional handler to an existing binding:
 
@@ -135,8 +135,10 @@ int enable_errors(NetContext *net) {
 
 Do not recursively poll the context from callbacks. Passing a null handler
 disables it; unbinding removes it. Echo applications inspect the context event.
-Future TCP can consume the same validated quote information; TCP itself does
-not exist yet.
+TCP consumes the same validated quote information. Protocol/port-unreachable
+terminates a stream; fragmentation-needed and parameter problems report a path
+error. Network/host-unreachable and TTL errors remain soft diagnostics while
+retransmission and progress deadlines continue. See [TCP lifecycle](tcp.md#timers-windows-and-lifecycle).
 
 DNS installs its own handler. Type 3 finishes with `NET_DNS_UNREACHABLE`;
 types 11/12 use `NET_DNS_PATH_ERROR`. `NetDns.icmp_type`, `icmp_code` and `mtu`

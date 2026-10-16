@@ -2,7 +2,8 @@
 
 Agreed sequence: **DHCP → stack reliability → TCP → HTTP client → HTTP server
 → high-level RFL networking**.
-DHCP and stack reliability are implemented; the next milestone is TCP. Current behavior
+DHCP, stack reliability and the active-open TCP client are implemented. Next is
+the HTTP client; TCP listeners must follow before the HTTP server. Current behavior
 and limits are in the
 [overview](README.md) and [library guide](library.md). It does not define new
 public function signatures or imply those functions exist.
@@ -108,6 +109,16 @@ parts of this completed guest lifecycle milestone.
 
 **Outcome:** guest applications can connect to a host service and later accept
 connections using the same reusable TCP implementation.
+
+**Status: active-open client implemented and validated on native, RVM interpreter
+and RVM JIT.** See the [TCP guide](tcp.md) for ownership, timers and the exact
+supported subset, and [TCP tests](testing.md#tcp) for evidence. The guest
+exchanges 4,097 binary octets against both an independent packet peer and an
+ordinary host TCP socket. Four caller-owned connections fit a bounded table,
+each with 512-octet TX/RX buffers and one segment in flight. Passive listening
+and accept remain outstanding and are required before phase 5.
+
+The design and acceptance requirements for this phase are:
 
 Start with one active connection and fixed buffers against a controlled peer.
 Keep the state machine separate from packet serialization and application
@@ -247,8 +258,8 @@ planning shared VM/native argument delivery. The current DNS example still
 uses a build-time macro. These networking milestones must not block on a new
 argument ABI or concurrent compiler changes.
 
-Other later work includes DNS TCP fallback once TCP exists, EDNS/cache policy,
+Other later work includes integrating DNS TCP fallback, EDNS/cache policy,
 CNAME follow-up queries, Linux TAP, controlled-time replay files, broader TCP
-support, multiple connections, TLS/HTTPS, richer web serving, IPv6 and additional
+support and throughput, TLS/HTTPS, richer web serving, IPv6 and additional
 NICs. rOS driver locking, scheduling and daemons can be
 added when the OS has those foundations.

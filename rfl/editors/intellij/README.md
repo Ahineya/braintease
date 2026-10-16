@@ -102,7 +102,12 @@ restarts the server automatically.
 ## Features
 
 - Compiler diagnostics as you type, completion and hover documentation.
+- Builtin function completion (`print`, `println`, `putc`, `from_char`,
+  `from_byte`) with signatures, available without imports.
 - Go to definition, find usages and rename through the server.
+- Cmd-click an imported name or alias to open its declaration, or its quoted
+  path to open the module file. Supports stdlib and relative imports. Builtin
+  exports without a source declaration open their stdlib module.
 - Document symbols, parameter information, inlay hints and semantic highlighting.
 - Local syntax highlighting, comment/uncomment actions and paired brackets,
   including when the server is unavailable.

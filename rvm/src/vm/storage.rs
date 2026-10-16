@@ -34,6 +34,9 @@ pub struct Storage {
 
     /// Busy flag for operations
     busy: bool,
+
+    /// Sticky host I/O failure, acknowledged by STORE_CTL bit 4 (write one).
+    io_error: bool,
 }
 
 /// The disk is a separate checkpoint artifact. Dirty block flags are retained
@@ -47,6 +50,8 @@ pub struct StorageCheckpoint {
     image_sha256: String,
     cached_blocks: Vec<u16>,
     dirty_blocks: Vec<u16>,
+    #[serde(default)]
+    io_error: bool,
 }
 
 /// A single block of storage
@@ -170,6 +175,7 @@ impl Storage {
             image_sha256,
             cached_blocks,
             dirty_blocks,
+            io_error: self.io_error,
         })
     }
 
@@ -212,6 +218,7 @@ impl Storage {
         for id in snapshot.dirty_blocks {
             self.blocks.get_mut(&id).unwrap().dirty = true;
         }
+        self.io_error = snapshot.io_error;
         self.current_block = snapshot.current_block;
         self.current_addr = snapshot.current_addr;
         Ok(self)
@@ -258,6 +265,7 @@ impl Storage {
             backing_file: Some(backing_file),
             backing_path,
             busy: false,
+            io_error: false,
         })
     }
 
@@ -314,7 +322,9 @@ impl Storage {
                 let offset = block_num as u64 * BLOCK_SIZE_BYTES as u64;
                 file.seek(SeekFrom::Start(offset))?;
                 file.write_all(&block.to_bytes())?;
-                file.flush()?;
+                // A guest COMMIT is a durability barrier, not merely a write
+                // into the host's page cache. Retain dirty state on failure.
+                file.sync_all()?;
                 block.dirty = false;
             }
         }
@@ -345,6 +355,7 @@ impl Storage {
     /// Read a word at the current (block, addr)
     pub fn read_word(&mut self) -> u16 {
         self.read_word_checked().unwrap_or_else(|error| {
+            self.io_error = true;
             log::error!("Storage: read failed: {error}");
             0
         })
@@ -373,6 +384,7 @@ impl Storage {
     /// Write a word at the current (block, addr)
     pub fn write_word(&mut self, value: u16) {
         if let Err(error) = self.write_word_checked(value) {
+            self.io_error = true;
             log::error!("Storage: write failed: {error}");
         }
     }
@@ -408,6 +420,9 @@ impl Storage {
             }
         }
 
+        if self.io_error {
+            control |= 1 << 4;
+        }
         control
     }
 
@@ -419,22 +434,22 @@ impl Storage {
     }
 
     pub fn set_control_checked(&mut self, value: u16) -> io::Result<()> {
-        // Bit 2: COMMIT (current block)
-        if value & (1 << 2) != 0 {
-            self.busy = true;
-            let result = self.commit_block(self.current_block);
-            self.busy = false;
-            result?;
+        if value & (1 << 4) != 0 {
+            self.io_error = false;
         }
-
-        // Bit 3: COMMIT_ALL
-        if value & (1 << 3) != 0 {
-            self.busy = true;
-            let result = self.flush_checked();
-            self.busy = false;
-            result?;
+        self.busy = true;
+        let result = if value & (1 << 3) != 0 {
+            self.flush_checked()
+        } else if value & (1 << 2) != 0 {
+            self.commit_block(self.current_block)
+        } else {
+            Ok(())
+        };
+        self.busy = false;
+        if result.is_err() {
+            self.io_error = true;
         }
-        Ok(())
+        result
     }
 
     /// Commit all dirty blocks to disk
@@ -605,7 +620,7 @@ mod tests {
         storage.backing_file = Some(OpenOptions::new().read(true).open(&disk.0).unwrap());
         storage.write_word_checked(42).unwrap();
         assert!(storage.set_control_checked(4).is_err());
-        assert_eq!(storage.get_control(), 2); // Not busy; still dirty.
+        assert_eq!(storage.get_control(), 18); // Not busy; still dirty, error latched.
         assert!(storage.flush_checked().is_err());
         // Restore a writable handle so cleanup also checks successful retry.
         storage.backing_file = Some(
@@ -615,7 +630,26 @@ mod tests {
                 .open(&disk.0)
                 .unwrap(),
         );
-        storage.flush_checked().unwrap();
+        storage.set_control_checked(16 | 8).unwrap();
         assert_eq!(storage.get_control(), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_durability_barrier_keeps_dirty_data_and_latches_guest_error() {
+        let disk = Disk::new(&[]);
+        let mut storage = Storage::with_path(disk.0.clone()).unwrap();
+        storage.write_word_checked(0x1234).unwrap();
+        // /dev/null accepts writes and seeks, but cannot satisfy fsync. This
+        // distinguishes durable COMMIT from a successful host write alone.
+        storage.backing_file = Some(OpenOptions::new().write(true).open("/dev/null").unwrap());
+        assert!(storage.set_control_checked(8).is_err());
+        assert_eq!(storage.get_control(), 2 | 16);
+        storage.set_control_checked(16).unwrap();
+        assert_eq!(storage.get_control(), 2);
+        storage.backing_file = Some(OpenOptions::new().read(true).write(true).open(&disk.0).unwrap());
+        storage.set_control_checked(8).unwrap();
+        assert_eq!(storage.get_control(), 0);
+        assert_eq!(&std::fs::read(&disk.0).unwrap()[..2], &[0x34, 0x12]);
     }
 }

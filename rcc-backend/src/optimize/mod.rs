@@ -8,6 +8,7 @@ mod inline;
 mod locals;
 mod loops;
 mod narrow;
+mod low_bits;
 mod pointers;
 pub(crate) mod cfg;
 mod ssa;
@@ -16,6 +17,8 @@ mod reachability;
 mod redundancy;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod low_bits_tests;
 
 use rcc_common::TempId;
 use rcc_ir::ir::{Function, Instruction, Value};
@@ -44,6 +47,7 @@ pub fn optimize_function(function: &mut Function) {
     }
     locals::promote_single_store_locals(function);
     constants::simplify(function);
+    low_bits::narrow_masks(function);
     narrow::narrow_gep_indices(function);
     eliminate_dead_expressions(function);
     loops::hoist_invariants(function);

@@ -17,6 +17,7 @@ rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 | Page | Contents |
 |------|----------|
 | [Build and run](running.md) | Ping monitor, DNS/ping launcher, configuration, host backends and troubleshooting setup |
+| [TCP client](tcp.md) | Streams, retransmission, flow control, half-close and the automatic host echo demo |
 | [DHCP](dhcp.md) | Lease acquisition, renewal/rebinding, conflict detection, configuration changes and examples |
 | [Reliability and lifecycle](reliability.md) | Neighbor expiration/retry, link changes, pending sends and matched ICMP errors |
 | [Guest library](library.md) | Current C APIs, ownership, UDP callbacks, DNS, timeouts and linking |
@@ -30,11 +31,14 @@ rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 From the repository root, with the release toolchain built:
 
 ```sh
+scripts/run-net-tcp.sh
 scripts/run-net-dhcp.sh --monitor
 scripts/run-net-dhcp.sh rvm syma-lang.org --jit
 ```
 
-The monitor defaults to native execution with host-only Ethernet. The DNS/ping
+The TCP demo acquires a lease and exchanges 4,097 binary octets with a temporary
+ordinary host TCP echo service. The monitor defaults to native execution with
+host-only Ethernet. The DNS/ping
 launcher explicitly selects shared-mode vmnet/NAT. On macOS the runtime starts
 its embedded helper on the first NIC query; only the helper requires sudo.
 Capture is disabled in these automatic launchers. See [Build and run](running.md)
@@ -49,10 +53,11 @@ for prerequisites, native execution and selecting another guest IP.
 | Configuration / DHCP | Static `NetConfig` or guest DHCP acquisition, renewal, rebinding, expiry and ARP conflict detection | One lease per context; no saved-lease restore or DHCPRELEASE |
 | Ethernet/ARP | Four-entry expiring cache, bounded retry/backoff, MAC refresh and explicit invalidation | Fixed 60-second lifetime; no arbitrary unsolicited neighbor learning |
 | IPv4 | Local unicast and default-gateway routing, bounded parsing/checksums | No fragment reassembly; broadcast restricted to DHCP bootstrap |
-| ICMP | Echo and matched unreachable/time-exceeded/parameter errors; UDP callbacks and DNS diagnostics | Eight recent accepted packets, 30-second history; no path-MTU adaptation |
+| ICMP | Echo and matched unreachable/time-exceeded/parameter errors; UDP callbacks, DNS and TCP diagnostics | Eight recent accepted packets, 30-second history; no path-MTU adaptation |
 | UDP | Four bindings, callbacks, checksums, empty/binary payloads and backpressure | Payload limit 1472 octets; no reliability guarantee |
 | DNS | IPv4 A queries, compressed names, bounded in-answer CNAME chains, matching, retries and timeouts | Classic 512-octet UDP; no TCP fallback, EDNS, AAAA or cache |
-| TCP / HTTP | Planned | No current TCP, HTTP client or HTTP server library |
+| TCP | Active-open streams, MSS, bounded retransmission, flow control, half-close, reset and lifecycle cleanup | Four connections, 512-octet buffers, one segment in flight; no listener yet |
+| HTTP | Planned | No HTTP client or server library |
 
 The DNS demo's hostname is compiled into the guest with `DNS_NAME`; the
 launcher rebuilds it when a different name is supplied. The guest resolves
@@ -62,7 +67,7 @@ is [deferred](roadmap.md#separate-and-later-work).
 ## Architecture and constraints
 
 ```text
-application (DHCP/DNS/ping now; TCP/HTTP applications later)
+application (DHCP/DNS/ping/TCP now; HTTP applications later)
     ↕ guest protocol libraries in libruntime.par
     ↕ vm_network.h: NET_INFO / NET_TX / NET_RX / NET_STATS
     ↕ existing DEVICE_* mailbox, bank 0 cells 27–31
@@ -90,7 +95,8 @@ Keep these decisions when extending the stack:
   faster, but does not replace guest TCP/IP with host sockets.
 
 DHCP and the [stack reliability milestone](reliability.md) are implemented.
-The next agreed work is TCP, an HTTP client, a small HTTP server serving hardcoded HTML, and a
+The [active-open TCP client](tcp.md) is implemented too. Next are an HTTP client,
+TCP listeners and a small HTTP server serving hardcoded HTML, followed by a
 high-level RFL networking library. Traits are preparatory work for RFL I/O
 abstractions; async/await needs a separate design. These are planned milestones,
 not features available in the current library.

@@ -1,0 +1,159 @@
+--- a/Kernel/blk512.c
++++ b/Kernel/blk512.c
+@@ -1,7 +1,7 @@
+ #include "kernel.h"
+ #include "printf.h"
+ 
+-#if (BLKSIZE == 512)
++#if (BLKSIZE == 512) || defined(CONFIG_RIPPLE)
+ 
+ /*
+  *	File system routines for the usual 512 byte block size
+--- a/Kernel/devio.c
++++ b/Kernel/devio.c
+@@ -115,8 +115,8 @@
+ 		if (bdwrite(bp) != BLKSIZE) {
+ 			udata.u_error = EIO;
+ 			ret = -1;
+-		}
+-		bp->bf_dirty = false;
++		} else
++			bp->bf_dirty = false;
+ 	}
+ 	/* Time stamp the buffer on free up. It doesn't matter if we stamp it
+ 	   on read or free as while locked it can't go away. However if we
+@@ -179,11 +179,11 @@
+ 	block_s(bp);
+ 	if (bp->bf_dirty) {
+ 		res = bdwrite(bp);
+-		bp->bf_dirty = false;
++		if (res == BLKSIZE && d_flush(bp->bf_dev) == 0)
++			bp->bf_dirty = false;
++		else
++			udata.u_error = EIO;
+ 		bunlock_s(bp);
+-		d_flush(bp->bf_dev);
+-		if (res != BLKSIZE)
+-			udata.u_error = EIO;
+ 	} else
+ 		bunlock_s(bp);
+ }
+@@ -277,8 +277,10 @@
+ 
+ 	block(oldest);
+ 	if (oldest->bf_dirty) {
+-		if (bdwrite(oldest) != BLKSIZE)
++		if (bdwrite(oldest) != BLKSIZE) {
+ 			udata.u_error = EIO;
++			panic(PANIC_BDW); /* Never recycle a buffer after a failed write. */
++		}
+ 		oldest->bf_dirty = false;
+ 	}
+ 	return oldest;
+@@ -572,7 +574,7 @@
+ }
+ 
+ static unsigned decimal[] = {
+-#ifdef CONFIG_32BIT
++#if defined(CONFIG_32BIT) && !defined(CONFIG_RIPPLE)
+ 	1000000000,
+ 	100000000,
+ 	10000000,
+--- a/Kernel/include/kernel.h
++++ b/Kernel/include/kernel.h
+@@ -318,6 +318,9 @@
+ typedef struct direct {
+     uint16_t   d_ino;
+     uint8_t    d_name[FILENAME_LEN];
++#ifdef CONFIG_RIPPLE
++    uint16_t d_padding; /* DIR_LEN characters, 64 physical octets */
++#endif
+ } direct;
+ 
+ 
+--- a/Kernel/inode.c
++++ b/Kernel/inode.c
+@@ -397,4 +397,14 @@
+ 	sync_mounts();
+ 	/* WRS: also call d_flush(dev) here for each dirty dev ? */
+ 	bufsync();		/* Clear buffer pool */
+-}
++#ifdef CONFIG_RIPPLE
++	/* Immediate metadata writes may leave no dirty guest buffers. The VM
++	 * still has a write cache, so sync must always issue its barrier. */
++	{
++		unsigned i;
++		for (i = 0; i < NMOUNTS; ++i)
++			if (fs_tab[i].m_dev != NO_DEVICE && d_flush(fs_tab[i].m_dev))
++				udata.u_error = EIO;
++	}
++#endif
++}
+--- a/Kernel/usermem.c
++++ b/Kernel/usermem.c
+@@ -59,7 +59,7 @@
+ 
+ uint16_t ugetw(const void *user)
+ {
+-	if (!valaddr_r(user, 2, 2))
++	if (!valaddr_r(user, sizeof(uint16_t), sizeof(uint16_t)))
+ 		return -1;
+ #ifdef MISALIGNED
+ 	if (MISALIGNED(user, 2)) {
+@@ -87,7 +87,7 @@
+ 
+ int uputw(uint16_t value, void *user)
+ {
+-	if (!valaddr_w(user, 2, 2))
++	if (!valaddr_w(user, sizeof(uint16_t), sizeof(uint16_t)))
+ 		return -1;
+ #ifdef MISALIGNED
+ 	if (MISALIGNED(user, 2)) {
+@@ -109,7 +109,7 @@
+ 
+ uint32_t ugetl(void *uaddr)
+ {
+-	if (!valaddr_r(uaddr, 4, 4))
++	if (!valaddr_r(uaddr, sizeof(uint32_t), sizeof(uint32_t)))
+ 		return -1;
+ #ifdef MISALIGNED
+ 	if (MISALIGNED(uaddr, 4)) {
+@@ -122,7 +122,7 @@
+ 
+ int uputl(uint32_t val, void *uaddr)
+ {
+-	if (!valaddr_w(uaddr, 4, 4))
++	if (!valaddr_w(uaddr, sizeof(uint32_t), sizeof(uint32_t)))
+ 		return -1;
+ #ifdef MISALIGNED
+ 	if (MISALIGNED(uaddr, 4)) {
+--- a/Kernel/process.c
++++ b/Kernel/process.c
+@@ -1012,7 +1012,15 @@
+ {
+ 	kputs("\r\npanic: ");
+ 	kputs(deathcry);
++#ifdef CONFIG_RIPPLE
++	/* A panic must never certify an inconsistent filesystem as clean. */
++	{
++		extern void ripple_panic_stop(void);
++		ripple_panic_stop();
++	}
++#else
+ 	plt_monitor();
++#endif
+ 
+ 	for(;;);
+ }
+--- a/Kernel/filesys.c
++++ b/Kernel/filesys.c
+@@ -430,6 +430,9 @@
+     }
+ 
+     namecpy(curentry.d_name, newname, FILENAME_LEN);
++#ifdef CONFIG_RIPPLE
++    curentry.d_padding = 0;
++#endif
+ 
+     if (nindex)
+         curentry.d_ino = nindex->c_num;

@@ -14,6 +14,7 @@ static void notify(NetContext *net, const unsigned char *packet,
         net->error.identifier = net_read16(transport + 4); net->error.sequence = net_read16(transport + 6);
     }
     net->event = NET_EVENT_ICMP_ERROR; net_count(&net->counters.icmp_errors);
+    if (ip[9] == 6 && net->tcp_driver) net->tcp_driver->error(net, &net->error);
     if (ip[9] == 17) {
         for (i = 0; i < NET_UDP_PORTS; ++i) {
             if (net->ports[i].port == net->error.source_port && net->ports[i].error_handler) {

@@ -68,6 +68,7 @@ pub const STORE_BUSY: u16 = 1 << 0; // bit0: VM is processing storage operation
 pub const STORE_DIRTY: u16 = 1 << 1; // bit1: Current block has uncommitted writes
 pub const STORE_COMMIT: u16 = 1 << 2; // bit2: Trigger commit of current block
 pub const STORE_COMMIT_ALL: u16 = 1 << 3; // bit3: Trigger commit of all dirty blocks
+pub const STORE_ERROR: u16 = 1 << 4; // bit4: Sticky host I/O error; write one to clear
 
 // Words 27..31 are reserved for future use
 

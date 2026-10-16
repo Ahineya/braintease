@@ -1,0 +1,284 @@
+/*
+ *	For small machines it's cheaper to simply allocate banks in the size
+ *	needed for the largest swapout of the application as that'll be under
+ *	64K. For split I/D we can allocate pairs of swap banks.
+ *
+ *	It's possible to be a lot smarter about this and for 32bit systems
+ *	it becomes a necessity not to use this simple swap logic.
+ */
+
+#include <kernel.h>
+#include <kdata.h>
+#include <printf.h>
+
+#undef DEBUG
+
+#ifdef SWAPDEV
+
+
+uint16_t swappage;			/* Target page */
+
+/* Table of available maps */
+static uint8_t swapmap[MAX_SWAPS];
+static uint_fast8_t swapptr = 0;
+
+static char maxswap[] = PANIC_MAXSWAP;
+
+void swapmap_add(uint_fast8_t swap)
+{
+	if (swapptr == MAX_SWAPS)
+		panic(maxswap);
+	swapmap[swapptr++] = swap;
+	sysinfo.swapusedk -= SWAP_SIZE / 2;
+}
+
+int swapmap_alloc(void)
+{
+        if (swapptr) {
+		sysinfo.swapusedk += SWAP_SIZE / 2;
+                return swapmap[--swapptr];
+	}
+        else
+                return -1;
+}
+
+void swapmap_init(uint_fast8_t swap)
+{
+	if (swapptr == MAX_SWAPS)
+		panic(maxswap);
+	swapmap[swapptr++] = swap;
+	sysinfo.swapk += SWAP_SIZE / 2;
+}
+
+/* We can re-use udata.u_block and friends as we can never be swapped while
+   we are in the middle of an I/O (at least for now). If we rework the kernel
+   for sleepable I/O this will change */
+
+int swapread(uint16_t dev, blkno_t blkno, register usize_t nbytes,
+                    uaddr_t buf, uint16_t page)
+{
+	int res;
+
+	udata.u_dptr = swap_map(buf);
+	udata.u_block = blkno;
+	if (nbytes & BLKMASK)
+		panic("swprd");
+	udata.u_nblock = nbytes >> BLKSHIFT;
+	swappage = page;
+#ifdef DEBUG
+	kprintf("SR | L %p M %p Bytes %u Page %u Block %u\n",
+		buf, udata.u_dptr, nbytes, page, udata.u_block);
+#endif
+	res = ((*dev_tab[major(dev)].dev_read) (minor(dev), 2, 0));
+
+#if defined(CONFIG_TRIM) && !defined(CONFIG_SWAP_KEEP_IMAGE)
+	while (nbytes != 0)
+	{
+		d_ioctl(dev, HDIO_TRIM_KERNEL, (void*)&blkno);
+		blkno++;
+		nbytes -= 1<<BLKSHIFT;
+	}
+#endif
+
+	return res;
+}
+
+
+int swapwrite(uint16_t dev, blkno_t blkno, usize_t nbytes,
+		     uaddr_t buf, uint16_t page)
+{
+	/* FIXME: duplication here */
+	udata.u_dptr = swap_map(buf);
+	udata.u_block = blkno;
+	if (nbytes & BLKMASK)
+		panic("swpwr");
+	udata.u_nblock = nbytes >> BLKSHIFT;
+	swappage = page;
+#ifdef DEBUG
+	kprintf("SW | L %p M %p Bytes %u Page %u Block %u\n",
+		buf, udata.u_dptr, nbytes, page, udata.u_block);
+#endif
+	return ((*dev_tab[major(dev)].dev_write) (minor(dev), 2, 0));
+}
+
+
+/*
+ *	Swap out process. As we have them all the same size we ignore
+ *	p for now. For a single memory image system most of this can go!
+ */
+static ptptr swapvictim(ptptr p, int notself)
+{
+#ifdef CONFIG_MULTI
+	register ptptr c;
+	register ptptr r = NULL;
+	register ptptr f = NULL;
+	register uint16_t sc = 0;
+	uint16_t s;
+
+	extern ptptr getproc_nextp;	/* Eww.. */
+
+	c = getproc_nextp;
+
+	/* FIXME: with the punishment flag we ought to also consider that */
+	do {
+		if (c->p_page && c != udata.u_ptab) {	/* No point swapping someone in swap! */
+			/* We swapped it in but have not run it yet. Avoid thrashing */
+			if (!(c->p_flags & PFL_SWAPIN)) {
+				/* Find the last entry before us */
+				if (c->p_status == P_READY)
+					r = c;
+				if (c->p_status > P_READY
+				    && c->p_status <= P_FORKING) {
+					/* relative position in order of waits, bigger is longer, can wrap but
+					   shouldn't really matter to us much if it does */
+					s = (waitno - c->p_waitno);
+					if (s >= sc) {
+						sc = s;
+						f = c;
+					}
+				}
+			}
+		}
+		c++;
+		if (c == ptab_end)
+			c = ptab;
+	}
+	while (c != getproc_nextp);
+
+	/* Oldest waiter gets the boot */
+	if (f) {
+#ifdef DEBUG
+		kprintf("swapvictim %x (page %d, state %d)\n", f,
+			f->p_page, f->p_status);
+#endif
+		return f;
+	}
+	/* No waiters.. the scheduler cycles so we will be the last to run
+	   again, failing that the one before us that was ready */
+	if (notself == 0)
+		return udata.u_ptab;
+	return r;
+#else
+	if (notself)
+		panic(PANIC_NOTSELF);
+	return udata.u_ptab;
+#endif
+}
+
+ptptr swapneeded(ptptr p, int notself)
+{
+	ptptr n = swapvictim(p, notself);
+	if (n) {
+		inswap = 1;
+#ifdef CONFIG_PLATFORM_UDMA
+		plt_udma_sync(n);
+#endif
+		if (swapout(n))
+			n = NULL;
+		inswap = 0;
+	}
+	return n;
+}
+
+void swapper2(register ptptr p, uint16_t map)
+{
+#ifdef DEBUG
+	kprintf("Swapping in %p (page %d), udata.ptab %p\n", p, p->p_page,
+		udata.u_ptab);
+#endif
+	/* inswap = 1/0 around the swapin to sort preempt ? */
+	swapin(p, map);
+	swapmap_add(map);
+#ifdef DEBUG
+	kprintf("Swapped in %p (page %d), udata.ptab %p\n",
+		p, p->p_page, udata.u_ptab);
+#endif
+	udata.u_page = p->p_page;
+	udata.u_page2 = p->p_page2;
+	/* We booted it out onto disk, don't then not run it */
+	p->p_flags &= ~PFL_BATCH;
+}
+
+static void swapload(ptptr p)
+{
+	uint16_t map = p->p_page2;
+	pagemap_alloc(p);
+	swapper2(p, map);
+}
+
+#ifndef CONFIG_SWAPPER
+
+/*
+ *	Called from switchin when we discover that we want to run
+ *	a swapped process. We let pagemap_alloc cause any needed swap
+ *	out of idle processes.
+ */
+void swapper(register ptptr p)
+{
+	swapload(p);
+}
+
+#else
+
+/*
+ *	On smaller ports we do swapping in the context of the tasks. That
+ *	does get a bit exciting in some cases and isn't great for interrupt
+ *	response but it does save us a load of memory and special magic for
+ *	udata blocks in banked memory.
+ *
+ *	On bigger systems (eg 68K) there's a real advanage to having a
+ *	separate swapper task that does the swapping work for us.
+ */
+
+ptptr swapproc;
+static ptptr swapnext;
+
+/* We are always run as the next task if swapout is needed and we are never
+   paged out */
+void swaptask(void)
+{
+    irqflags_t irqf;
+    ptptr p;
+
+    swapproc = udata.u_ptab;
+    kprintf("Starting swap daemon.\n");
+    /* TODO: hook to discard the mm mappings we inherited of kernel init
+       page */
+
+    /* No signals except kill */
+    swapproc->p_sig[0].s_ignored = 0xFDFF;
+    swapproc->p_sig[1].s_ignored = 0xFFFF;
+
+    /* Dump our inherited mappings */
+    pagemap_free(swapproc);
+
+    while(1) {
+        irqf = di();
+        p = swapnext;
+        if (p == NULL) {
+            switchout();
+            /* Interrupts now enabled */
+            continue;
+        }
+        swapnext = NULL;
+        irqrestore(irqf);
+        /* Swap in the task we need. If needed it'll also swap out
+           a task to make room */
+        swapload(p);
+    }
+}
+
+/* On a system with a swap task this triggers an asynchronous swap in. When
+   we take this path the scheduler will schedule the swapper whenever
+   swapnext is true */
+void swapper(ptptr p)
+{
+	if (swapnext)
+		panic("2swap");
+	swapnext = p;
+	pwake(swapproc);
+}
+
+#endif
+
+#endif

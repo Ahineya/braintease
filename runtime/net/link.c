@@ -6,6 +6,7 @@ void net_count(unsigned long *counter) {
 void net_reset_paths(NetContext *net) {
     if (net->pending) net_count(&net->counters.tx_discarded);
     net->pending = 0; net->next_arp = 0; net->next_sent = 0;
+    if (net->tcp_driver && net->tcp_pending) net->tcp_driver->dropped(net);
     memset(net->arp, 0, sizeof(net->arp));
     memset(net->sent, 0, sizeof(net->sent));
     memset(&net->error, 0, sizeof(net->error));

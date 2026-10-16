@@ -17,10 +17,14 @@ unsigned short net_checksum(const unsigned char *p, unsigned short length) {
 }
 unsigned short net_udp_checksum(const unsigned char *source, const unsigned char *destination,
                                  const unsigned char *udp, unsigned short length) {
+    return net_l4_checksum(source, destination, 17, udp, length);
+}
+unsigned short net_l4_checksum(const unsigned char *source, const unsigned char *destination,
+                              unsigned short protocol, const unsigned char *data, unsigned short length) {
     unsigned char pseudo[12];
     memcpy(pseudo, source, 4); memcpy(pseudo + 4, destination, 4);
-    pseudo[8] = 0; pseudo[9] = 17; net_write16(pseudo + 10, length);
-    return 65535U - net_sum(net_sum(0, pseudo, 12), udp, length);
+    pseudo[8] = 0; pseudo[9] = protocol; net_write16(pseudo + 10, length);
+    return 65535U - net_sum(net_sum(0, pseudo, 12), data, length);
 }
 unsigned short net_random(NetContext *net) {
     net->random = net->random * 25173U + 13849U;
@@ -42,5 +46,6 @@ int net_transmit(NetContext *net, unsigned short length) {
     net->pending = 0;
     net_arp_sent(net);
     net_remember_packet(net, length);
+    if (net->tcp_driver && net->tcp_pending) net->tcp_driver->transmitted(net);
     return NET_OK;
 }

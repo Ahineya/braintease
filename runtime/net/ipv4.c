@@ -22,5 +22,6 @@ int net_ipv4_input(NetContext *net, unsigned short length) {
     }
     if (p[23] == 1) return net_icmp_input(net, header, total - header);
     if (p[23] == 17) return net_udp_input(net, header, total - header);
+    if (p[23] == 6 && net->tcp_driver) return net->tcp_driver->input(net, header, total - header);
     return NET_OK;
 }

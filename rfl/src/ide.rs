@@ -106,6 +106,20 @@ impl Analysis {
     }
 
     pub fn definition(&self, offset: usize) -> Option<(Option<PathBuf>, crate::ast::Span)> {
+        for import in &self.ast.imports {
+            let name = import
+                .names
+                .iter()
+                .find(|name| name.span.contains(offset) || name.alias_span.contains(offset));
+            if import.path_span.contains(offset) || name.is_some() {
+                let (path, span) = crate::modules::import_definition(
+                    self.path.as_deref()?,
+                    &import.path,
+                    name.map(|name| name.name.as_str()),
+                )?;
+                return Some((Some(path), span));
+            }
+        }
         if let Some(name) = self.uses().find(|name| name.span.contains(offset)) {
             let path = name.def_file.clone().or_else(|| self.path.clone());
             return Some((path, name.def));
@@ -161,6 +175,10 @@ impl Analysis {
                 CompletionKind::EnumMember
             } else if fact.ty.starts_with("fn(") {
                 CompletionKind::Function
+            } else if fact.ty.starts_with("type ") {
+                CompletionKind::Type
+            } else if fact.ty.starts_with("const ") {
+                CompletionKind::Constant
             } else {
                 CompletionKind::Variable
             };
@@ -176,6 +194,9 @@ impl Analysis {
             fact.scope.contains(offset)
                 && offset >= fact.visible_from
                 && (fact.ty.starts_with("fn(") || fact.variant)
+                && !self.ast.impls.iter().any(|item| {
+                    item.items.iter().any(|method| method.name_span == fact.def)
+                })
         }) {
             if seen.contains(&fact.name) {
                 continue;
@@ -195,6 +216,9 @@ impl Analysis {
             });
         }
         for symbol in &self.symbols {
+            if matches!(symbol.kind, SymbolKind::Field | SymbolKind::Method) {
+                continue;
+            }
             if seen.contains(&symbol.name) {
                 continue;
             }
@@ -208,6 +232,19 @@ impl Analysis {
                     SymbolKind::Field => CompletionKind::Field,
                 },
                 detail: symbol.detail.clone(),
+                replace,
+                import_edit: None,
+            });
+        }
+        for (name, signature) in check::BUILTIN_FUNCTIONS {
+            if seen.iter().any(|found| found == name) {
+                continue;
+            }
+            seen.push((*name).to_string());
+            items.push(Completion {
+                label: (*name).to_string(),
+                kind: CompletionKind::Function,
+                detail: (*signature).to_string(),
                 replace,
                 import_edit: None,
             });
@@ -1078,6 +1115,231 @@ fn empty_module() -> Module {
 #[cfg(test)]
 mod tests {
     use super::Analysis;
+
+    #[test]
+    fn builtins_complete_without_imports_and_use_the_checked_signatures() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/builtin-completion.rfl");
+        for imports in ["", "import { sin, PI } from \"std/math\";\n"] {
+            let source = format!("{imports}fn main() {{ pri(1); }}");
+            let at = source.find("pri(").unwrap() + 3;
+            let doc = Analysis::open(Some(&path), &source);
+            let items = doc.completions(at);
+            for (name, signature) in crate::check::BUILTIN_FUNCTIONS {
+                let matching: Vec<_> = items.iter().filter(|item| item.label == *name).collect();
+                assert_eq!(matching.len(), 1, "{name}");
+                let item = matching[0];
+                assert!(matches!(item.kind, super::CompletionKind::Function));
+                assert_eq!(&item.detail, signature);
+                assert!(item.import_edit.is_none());
+                assert_eq!(&source[item.replace.start..item.replace.end], "pri");
+            }
+            let item = items.iter().find(|item| item.label == "println").unwrap();
+            let mut edited = source.clone();
+            edited.replace_range(item.replace.start..item.replace.end, &item.label);
+            let after = Analysis::open(Some(&path), &edited);
+            assert!(after.diagnostics.is_empty(), "{:?}", after.diagnostics);
+        }
+        let source = "fn main() { print(1); println(\"hi\"); putc('a'); let a = from_char('a'); let b = from_byte(65 as u8); }";
+        let doc = Analysis::open(None, source);
+        assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
+        for (name, signature) in crate::check::BUILTIN_FUNCTIONS {
+            let at = source.find(&format!("{name}(")).unwrap() + name.len() + 1;
+            assert_eq!(doc.signature(at).unwrap().0, *signature);
+        }
+        let source = "fn main() { let text = \"hi\"; text. }";
+        let doc = Analysis::open(None, source);
+        let items = doc.completions(source.find("text.").unwrap() + 5);
+        for (name, _) in crate::check::BUILTIN_FUNCTIONS {
+            assert!(!items.iter().any(|item| item.label == *name), "{name}");
+        }
+    }
+
+    #[test]
+    fn imports_navigate_to_exported_declarations_and_module_files() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let path = root.join("examples/import-navigation.rfl");
+        // Unrelated broken imports and unfinished expressions must not prevent navigation.
+        let source = "import { missing } from \"./does-not-exist\";\nimport { sin as sine, PI as pi } from \"std/math.rfl\";\nimport { List as Items, Cons } from \"std/list\";\nimport { Some } from \"std/option\";\nimport { replace } from \"std/string\";\nfn main() { missing. }";
+        let doc = Analysis::open(Some(&path), source);
+        for (text, module, name) in [
+            ("sin as", "math", "sin"),
+            ("sine,", "math", "sin"),
+            ("PI as", "math", "PI"),
+            ("pi }", "math", "PI"),
+            ("List as", "list", "List"),
+            ("Items,", "list", "List"),
+            ("Cons }", "list", "Cons"),
+            ("replace }", "string", "replace"),
+        ] {
+            let (file, span) = doc.definition(source.find(text).unwrap() + 1).unwrap();
+            let file = file.unwrap();
+            assert_eq!(
+                file,
+                root.join(format!("std/{module}.rfl"))
+                    .canonicalize()
+                    .unwrap()
+            );
+            let target = std::fs::read_to_string(file).unwrap();
+            assert_eq!(&target[span.start..span.end], name);
+        }
+        for (text, module) in [
+            ("std/math.rfl", "math"),
+            ("std/list", "list"),
+            ("Some }", "option"),
+        ] {
+            let (file, span) = doc.definition(source.find(text).unwrap() + 1).unwrap();
+            assert_eq!(
+                file.unwrap(),
+                root.join(format!("std/{module}.rfl"))
+                    .canonicalize()
+                    .unwrap()
+            );
+            assert_eq!(span, crate::ast::Span::empty());
+        }
+        assert!(doc.definition(source.find("missing }").unwrap()).is_none());
+        let invalid = "import { not_exported } from \"std/math\";\nfn main() {}";
+        let doc = Analysis::open(Some(&path), invalid);
+        assert!(doc
+            .definition(invalid.find("not_exported").unwrap())
+            .is_none());
+        assert!(doc.definition(invalid.find("std/math").unwrap()).is_some());
+        assert!(doc.definition(invalid.find("from").unwrap()).is_none());
+    }
+
+    const EDITING_SOURCE: &str = "import { replace } from \"std/string\";\nimport { sin, PI } from \"std/math\";\nfn main() {\n let sample_rate: u32 = 44100;\n let frequency = 440.0;\n for (i in 0..sample_rate) {\n  let t = (i as f64) / (sample_rate as f64);\n  let sample = sin(2.0 * PI * frequency * t);\n  println(sample * 0.5 + 0.5);\n }\n let a = \"something\";\n let b = a.replace(\"some\", \"oth\");\n println(b);\n b.\n}\n";
+
+    #[test]
+    fn unfinished_member_reports_only_the_dot_and_keeps_imports() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/diagnostics-test.rfl");
+        let doc = Analysis::open(Some(&path), EDITING_SOURCE);
+        assert_eq!(doc.diagnostics.len(), 1, "{:?}", doc.diagnostics);
+        assert_eq!(
+            doc.diagnostics[0].detail,
+            crate::parser::EXPECTED_MEMBER_NAME
+        );
+        let dot = EDITING_SOURCE.rfind("b.").unwrap() + 1;
+        assert_eq!(doc.diagnostics[0].offset, Some(dot));
+        assert!(doc
+            .completions(dot + 1)
+            .iter()
+            .any(|item| item.label == "trim"));
+
+        let missing_import = EDITING_SOURCE.replace("sin, ", "");
+        let doc = Analysis::open(Some(&path), &missing_import);
+        assert!(
+            doc.diagnostics
+                .iter()
+                .any(|error| error.detail == "unknown function `sin`"),
+            "{:?}",
+            doc.diagnostics
+        );
+        assert!(doc
+            .diagnostics
+            .iter()
+            .any(|error| error.detail == crate::parser::EXPECTED_MEMBER_NAME));
+
+        let failed_import =
+            format!("import {{ missing }} from \"./does-not-exist\";\n{EDITING_SOURCE}");
+        let doc = Analysis::open(Some(&path), &failed_import);
+        assert_eq!(doc.diagnostics.len(), 2, "{:?}", doc.diagnostics);
+        assert!(
+            !doc.diagnostics
+                .iter()
+                .any(|error| error.detail.contains("unknown function")),
+            "{:?}",
+            doc.diagnostics
+        );
+    }
+
+    #[test]
+    fn ordinary_completion_shows_root_scope_and_imported_aliases_only() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/completion-test.rfl");
+        let source = EDITING_SOURCE.replace("b.\n", "freq\n");
+        let at = source.rfind("freq\n").unwrap() + 4;
+        let doc = Analysis::open(Some(&path), &source);
+        let items = doc.completions(at);
+        let labels: Vec<_> = items.iter().map(|item| item.label.as_str()).collect();
+        for name in [
+            "sin",
+            "replace",
+            "PI",
+            "main",
+            "a",
+            "b",
+            "sample_rate",
+            "frequency",
+        ] {
+            assert!(labels.contains(&name), "missing {name}: {labels:?}");
+        }
+        for name in [
+            "fract",
+            "from",
+            "region_eq",
+            "__rcc_f64_reduce_pi2",
+            "__rcc_f64_floor",
+            "i",
+            "t",
+            "sample",
+        ] {
+            assert!(!labels.contains(&name), "unexpected {name}: {labels:?}");
+        }
+        assert!(!labels.iter().any(|name| name.contains('$')), "{labels:?}");
+        let frequency = items.iter().find(|item| item.label == "frequency").unwrap();
+        assert_eq!(
+            &source[frequency.replace.start..frequency.replace.end],
+            "freq"
+        );
+        assert_eq!(frequency.detail, "f64");
+        assert!(
+            items
+                .iter()
+                .any(|item| item.label == "PI"
+                    && matches!(item.kind, super::CompletionKind::Constant))
+        );
+
+        let source = "import { sin as sine, PI as pi } from \"std/math\";\nimport { List as Items } from \"std/list\";\nfn main() { let value = sine(pi); value; }";
+        let at = source.rfind("value;").unwrap();
+        let doc = Analysis::open(Some(&path), source);
+        assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
+        let items = doc.completions(at);
+        let labels: Vec<_> = items.iter().map(|item| item.label.as_str()).collect();
+        for name in ["sine", "pi", "Items", "value", "main"] {
+            assert!(labels.contains(&name), "missing {name}: {labels:?}");
+        }
+        for name in ["sin", "PI", "List", "from"] {
+            assert!(!labels.contains(&name), "unexpected {name}: {labels:?}");
+        }
+        assert!(items
+            .iter()
+            .any(|item| item.label == "Items" && matches!(item.kind, super::CompletionKind::Type)));
+        // Linked source offsets must preserve local navigation as well as scope.
+        let (file, span) = doc.definition(at).unwrap();
+        assert_eq!(file.as_deref(), Some(path.as_path()));
+        assert_eq!(&source[span.start..span.end], "value");
+    }
+
+    #[test]
+    fn loop_completion_keeps_bindings_inside_the_body() {
+        for iter in ["0..3", "[1, 2, 3]"] {
+            let source =
+                format!("fn main() {{ for (item in {iter}) {{ println(item); }} println(0); }}");
+            let doc = Analysis::open(None, &source);
+            assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
+            let inside = source.find("println(item)").unwrap();
+            assert!(doc
+                .completions(inside)
+                .iter()
+                .any(|item| item.label == "item"));
+            let outside = source.find("println(0)").unwrap();
+            assert!(!doc
+                .completions(outside)
+                .iter()
+                .any(|item| item.label == "item"));
+        }
+    }
 
     #[test]
     fn imported_extensions_complete_after_inferred_string_and_partial_member() {

@@ -1,0 +1,103 @@
+#include "kernel.h"
+#include "printf.h"
+
+#if (BLKSIZE == 512) || defined(CONFIG_RIPPLE)
+
+/*
+ *	File system routines for the usual 512 byte block size
+ */
+
+/* Return the number of blocks an inode occupies assuming all blocks present */
+blkno_t inode_blocks(inoptr i)
+{
+    return (i->c_node.i_size + BLKMASK) >> BLKSHIFT;
+}
+
+/* Read an inode */
+uint_fast8_t breadi(uint16_t dev, uint16_t ino, void *ptr)
+{
+    struct blkbuf *buf = bread(dev, (ino >> 3) + 2, 0);
+    if (buf == NULL)
+        return 1;
+    blktok(ptr, buf, sizeof(struct dinode) * (ino & 7), sizeof(struct dinode));
+    brelse(buf);
+    return 0;
+}
+
+/* Write an inode */
+uint_fast8_t bwritei(register inoptr ino)
+{
+    struct blkbuf *buf = bread(ino->c_dev, (ino->c_num >> 3) + 2, 0);
+    if (buf == NULL)
+        return 1;
+    blkfromk(&ino->c_node, buf, sizeof(struct dinode) * (ino->c_num & 0x07),
+            sizeof(struct dinode));
+    bfree(buf, 2);
+    return 0;
+}
+
+static blkno_t ifetch(register inoptr ip, unsigned off, unsigned rwflg)
+{
+    register blkno_t *nb = ip->c_node.i_addr  + off;
+    if (*nb == 0) {
+        if (rwflg || (*nb = blk_alloc(ip->c_dev)) == 0)
+            return NULLBLK;
+        ip->c_flags |= CDIRTY;
+    }
+    return *nb;
+}
+
+static blkno_t bfetch(uint16_t dev, blkno_t blk, unsigned off, unsigned rwflg)
+{
+        register bufptr bp = bread(dev, blk, 0);
+        blkno_t nb;
+
+        if (bp == NULL) {
+            corrupt_fs(dev);
+            return NULLBLK;
+        }
+        off *= sizeof(blkno_t);
+
+        /* Add a sensible blk sized helper that's just
+        nb = blknum(bp, off); and to set likewise so in main memory
+           code is compact */
+        nb = *(blkno_t *)blkptr(bp, off, sizeof(blkno_t));
+        if (nb)
+            brelse(bp);
+        else {
+            if (rwflg || !(nb = blk_alloc(dev))) {
+                brelse(bp);
+                return NULLBLK;
+            }
+            blkfromk(&nb, bp, off, sizeof(blkno_t));
+            bawrite(bp);
+        }
+        return nb;
+}
+
+blkno_t bmap(register inoptr ip, blkno_t bn, unsigned rwflg)
+{
+    blkno_t blk;
+
+    if(getmode(ip) == MODE_R(F_BDEV))
+        return(bn);
+
+    if (bn < 18)
+        return ifetch(ip, bn, rwflg);
+    bn -= 18;
+    if (bn & 0xFF00) {
+        /* The single-indirect range precedes the double-indirect tree. */
+        bn -= 256;
+        blk = ifetch(ip, 19, rwflg);
+        if (blk == NULLBLK)
+            return blk;
+        blk = bfetch(ip->c_dev, blk, bn >> 8, rwflg);
+        bn &= 0xFF;
+    } else
+        blk = ifetch(ip, 18, rwflg);
+    if (blk == NULLBLK)
+        return blk;
+    return bfetch(ip->c_dev, blk, bn, rwflg);
+}
+
+#endif

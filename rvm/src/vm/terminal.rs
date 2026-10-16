@@ -59,6 +59,12 @@ impl VM {
             }
         } else {
             match key.code {
+                KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) && c.is_ascii() => {
+                    // Crossterm reports e.g. LF as Ctrl-J and EOF as Ctrl-D.
+                    // Preserve their control codes for guest terminal drivers.
+                    let byte = if c == '?' { 127 } else { c.to_ascii_uppercase() as u8 & 31 };
+                    self.input_buffer.push_back(byte);
+                }
                 KeyCode::Char(c) => self.input_buffer.push_back(c as u8),
                 KeyCode::Enter => self.input_buffer.push_back(b'\n'),
                 KeyCode::Backspace => self.input_buffer.push_back(8),
@@ -211,6 +217,16 @@ mod tests {
         vm.display_mode = DISP_TEXT40;
         vm.accept_terminal_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
         assert!(vm.keyboard_state.up);
+        assert!(!vm.terminal_quit_requested);
+    }
+
+    #[test]
+    fn tty_control_keys_keep_their_ascii_codes() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        for c in ['j', 'd', 'u', '?'] {
+            vm.accept_terminal_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL));
+        }
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), [10, 4, 21, 127]);
         assert!(!vm.terminal_quit_requested);
     }
 }

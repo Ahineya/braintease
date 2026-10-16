@@ -42,7 +42,7 @@ impl<'a> Checker<'a> {
         let snap = self.bind(format!("__snap{}", self.bindings.len()), iter.ty, false);
         let index = self.bind(format!("__idx{}", self.bindings.len()), Ty::Usize, true);
         self.scopes.push(HashMap::new());
-        let elem_pat = self.check_pat(pat, elem, false)?;
+        let elem_pat = self.check_for_pat(pat, elem, body.span)?;
         if !self.irrefutable_pat(&elem_pat, elem) {
             return Err(CompileError::at(
                 self.source,
@@ -148,7 +148,7 @@ impl<'a> Checker<'a> {
             ));
         }
         self.scopes.push(HashMap::new());
-        let bound = self.check_pat(pat, start.ty, false)?;
+        let bound = self.check_for_pat(pat, start.ty, body.span)?;
         let index = match bound {
             TPat::Bind(id) => id,
             TPat::Wild => self.bind(format!("__i{}", self.bindings.len()), start.ty, true),
@@ -229,7 +229,7 @@ impl<'a> Checker<'a> {
         let list_ty = iter.ty;
         let cursor = self.bind(format!("__cur{}", self.bindings.len()), list_ty, true);
         self.scopes.push(HashMap::new());
-        let elem_pat = self.check_pat(pat, elem, false)?;
+        let elem_pat = self.check_for_pat(pat, elem, body.span)?;
         if !self.irrefutable_pat(&elem_pat, elem) {
             return Err(CompileError::at(
                 self.source,
@@ -314,5 +314,12 @@ impl<'a> Checker<'a> {
                 }),
             })),
         })
+    }
+
+    fn check_for_pat(&mut self, pat: &Pat, ty: Ty, scope: Span) -> Result<TPat, CompileError> {
+        self.scope_spans.push(scope);
+        let result = self.check_pat(pat, ty, false);
+        self.scope_spans.pop();
+        result
     }
 }

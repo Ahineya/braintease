@@ -1,8 +1,8 @@
 # Guest networking library
 
-`<net.h>`, `<net_dns.h>` and `<net_dhcp.h>` are part of `runtime/libruntime.par`.
-They implement Ethernet, ARP, IPv4, ICMP echo, UDP, DHCP and a small DNS A
-resolver in guest C. The host moves raw Ethernet frames through [DEVICE_*](device.md); it never
+`<net.h>`, `<net_dns.h>`, `<net_dhcp.h>` and `<net_tcp.h>` are part of `runtime/libruntime.par`.
+They implement Ethernet, ARP, IPv4, ICMP echo, UDP, DHCP, a small DNS A
+resolver and active-open TCP streams in guest C. The host moves raw Ethernet frames through [DEVICE_*](device.md); it never
 resolves guest names or supplies guest TCP/IP. Each wire octet occupies one
 16-bit Ripple cell, including zero and 255.
 
@@ -187,7 +187,20 @@ record returns `NET_DNS_NO_ADDRESS` rather than starting another lookup. The
 configured recursive server normally supplies both. ARP uses a small expiring
 table with bounded retries and cooldown recovery. Configuration/link changes
 clear it; [the lifecycle guide](reliability.md) documents timers and counters.
-IPv4 reassembly, multicast and TCP are separate work.
+IPv4 reassembly, multicast and DNS-over-TCP fallback remain separate work.
+
+## TCP streams
+
+See the [TCP client guide](tcp.md) for the API, partial reads/writes, EOF,
+half-close, timeouts and connection ownership. Each caller-owned `NetTcp` has
+512-octet TX/RX buffers; a context can register four connections. Drive the
+network poll and then each active TCP connection. TCP does not receive NIC
+frames independently.
+
+`net_tcp_connect` enables TCP dispatch for its context. `net_tcp_enable` enables
+closed-port reset handling without opening a connection. Applications that use
+neither function do not link the TCP implementation: base IPv4, ARP and ICMP
+code call an optional internal driver rather than directly referencing TCP.
 
 ## Linking
 

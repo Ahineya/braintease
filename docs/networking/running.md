@@ -1,7 +1,7 @@
 # Build and run networking examples
 
 Run commands below from the repository root. This guide describes existing
-launchers; [TCP and HTTP](roadmap.md) remain future work.
+launchers; the [TCP client](tcp.md) is available and HTTP remains planned.
 
 ## Build prerequisites
 
@@ -17,6 +17,18 @@ cargo build --release --manifest-path src/ripple-asm/Cargo.toml --bin rasm --bin
 RBF additionally needs `target/release/rbf` and
 `src/bf-macro-expander/target/release/bfm`; those builds are only needed when
 explicitly selecting RBF. Networking needs neither Doom nor rOS to be built.
+
+## Try guest TCP
+
+```sh
+scripts/run-net-tcp.sh
+scripts/run-net-tcp.sh rvm --jit
+```
+
+This starts a temporary ordinary host echo service, acquires a guest DHCP lease
+and checks a 4,097-octet binary stream and orderly connection close. Host-only
+vmnet starts automatically with capture disabled. See the [TCP guide](tcp.md)
+for external peers, port selection, buffer ownership and supported limits.
 
 ## Acquire configuration through DHCP
 

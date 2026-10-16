@@ -14,7 +14,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[3]
 CASES = {"alu": ("asm", 512), **{name: ("c", 2048) for name in
-         ("gather", "stack_calls", "wide_math", "sort")}}
+         ("gather", "stack_calls", "wide_math", "sort", "masked_math")}}
 
 
 def sha(path):

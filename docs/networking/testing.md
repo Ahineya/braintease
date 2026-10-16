@@ -24,6 +24,7 @@ relevant matrix after compiler, runtime or protocol changes.
 | DHCP lease → acquired DNS server → VPS ping | JIT/live shared vmnet passed | Live shared vmnet passed | Not repeated for DHCP |
 | Host ping to DHCP lease and automatic helper cleanup | JIT/live passed | Live passed, executable copied outside repository | Not repeated for DHCP |
 | Independent UDP/DNS packet fixture | Interpreter and JIT passed | Passed | Opt-in; not part of routine DNS matrix |
+| TCP active-open, nine independent wire cases and ordinary host TCP echo | Interpreter/JIT passed | Passed | Live JIT DHCP/connection/traffic confirmed; full echo exceeded 600-second check |
 | Refactored persistent monitor and automatic helper cleanup | JIT/live host ping passed | Live host ping and executable outside repository passed | Not repeated for this refactor |
 
 The DNS milestone included malformed/mismatched replies, compression failures,
@@ -192,6 +193,94 @@ own raw NIC, and `NET_PRIVATE_RUNTIME=1` for private VM dependencies. These
 settings were used for the native/RVM protocol, DNS-name and offline-device
 regressions; ordinary `rct` registration remains available above.
 
+## TCP
+
+The four registered fake-NIC tests have 107 assertions in total:
+
+- `test_net_tcp`: handshake, partial writes/ACKs, sequence wrap, active close,
+  TIME_WAIT, reset, configuration/link loss and cancellation.
+- `test_net_tcp_receive`: ordered/overlapping/duplicate data, receive-window
+  clipping, ring reads, EOF/half-close, simultaneous close, malformed options,
+  closed-port reset limits and explicit urgent-data rejection.
+- `test_net_tcp_timers`: retransmission/backoff, RTT ambiguity, delayed local
+  acceptance, unsent-data ACK rejection, clock wrap, deadlines, zero windows,
+  pending-frame invalidation, connection capacity and slot reuse.
+- `test_net_tcp_errors`: matched hard/soft ICMP, MTU diagnostics and old-quote
+  isolation after tuple reuse.
+
+All 107 pass on native, RVM interpreter and RVM JIT. The normal unit builds use
+8192-cell banks; the capacity test owns five TCB objects and uses 16384.
+
+```sh
+./rct test_net_tcp test_net_tcp_receive test_net_tcp_errors --backend rvm --bank-size 8192 --timeout 30
+./rct test_net_tcp_timers --backend rvm --bank-size 16384 --timeout 30
+```
+
+For the independent Ethernet peer, build the static fixture variants. The
+forced initial sequence proves wraparound independently of the C tests:
+
+```sh
+NET_DEMO=tcp-echo NET_PRIVATE_RUNTIME=1 BANK_SIZE=8192 \
+  scripts/build-net-ping.sh rvm build/network/tcp/rvm -DTCP_INITIAL_SEQUENCE=0xfffffff0UL
+NET_DEMO=tcp-echo NET_PRIVATE_RUNTIME=1 \
+  scripts/build-net-ping.sh native build/network/tcp/native -DTCP_INITIAL_SEQUENCE=0xfffffff0UL
+scripts/test-net-tcp.py
+scripts/test-net-tcp.py --mode rvm --jit
+```
+
+All nine cases pass separately on native, RVM interpreter and JIT: success,
+loss, reorder, zero, partial-ack, malformed, reset, early and refused. Successful
+streams compare 4,097 binary octets exactly, exceeding every fixed TCP and demo
+buffer. The peer negotiates MSS 137, splits echoes into 113-octet pieces and
+wraps its own sequence too. Loss covers SYN, data, ACK, echo, peer FIN and the
+final ACK; zero-window probes and partial ACKs must preserve the byte stream.
+Malformed traffic includes incorrect tuples, offsets, options, checksums,
+fragments, ACKs and RSTs. Early EOF and reset must surface explicit failures.
+The peer never uses a host TCP socket or Internet connection.
+
+A separate test uses an **ordinary host kernel TCP socket**, guest DHCP and
+automatic host-only vmnet with capture disabled:
+
+```sh
+scripts/run-net-tcp.sh
+scripts/run-net-tcp.sh rvm --jit
+# Reuse those DHCP-enabled builds, including the interpreter:
+scripts/test-net-tcp-live.py
+scripts/test-net-tcp-live.py --mode rvm --jit
+```
+
+Native, RVM interpreter and JIT all passed the exact 4,097-octet exchange,
+peer EOF, guest half-close and helper cleanup. The temporary server binds only
+to the host vmnet address, not every host interface. Guest TCP constructs and
+processes every segment; the service only echoes application bytes. See the
+[TCP guide](tcp.md) for supported limits and the caller's ISN responsibility.
+
+The existing protocol/DNS/DHCP/lifecycle/device C regressions are repeated after
+the integration changes. An archive-linked TCP unit also validates extraction
+and function-pointer relocation. A 4096-bank monitor links successfully with
+all TCP objects omitted, and has the same binary size as the normal link that
+includes unused TCP objects. RBF remains excluded from the routine matrix.
+
+An explicit RBF live run is available with automatic host echo too:
+
+```sh
+scripts/run-net-tcp.sh rbf --jit
+```
+
+It builds the Brainfuck image and allows 1800 seconds by default
+(`--timeout SECONDS` overrides it).
+Guest stdout, host/telemetry stderr, fixture results and the RBF runtime report
+are separate files under `build/network/tcp-echo/rbf/`. Keeping telemetry
+separate prevents progress dots from corrupting success-marker checks.
+The default `test-net-tcp-live.py` modes remain native and RVM.
+
+The explicit RBF JIT check acquired a real lease, established its host TCP
+connection and continued exchanging pattern data, but did not finish the full
+4,097-octet exchange within the 600-second test bound. Helper cleanup passed
+on termination. This is partial interoperability evidence, not a full RBF echo
+pass; the launcher now allows 1800 seconds for an explicit run. The native/RVM
+full-stream results above remain separate.
+
 ## Live host and VPS tests
 
 On macOS, after building the monitor variants above:
@@ -238,6 +327,8 @@ Existing fixtures save logs and JSON results under:
 | DHCP packet tests | `build/network/dhcp/<mode>/` |
 | DHCP live monitor and helper cleanup | `build/network/dhcp-monitor/<mode>/` |
 | DHCP → DNS → ping launcher/build | `build/network/dhcp-ping/<mode>/` |
+| TCP C regressions / independent packet peer | `build/network/tcp/` |
+| TCP live host echo | `build/network/tcp-echo/<mode>/` |
 | Earlier IPv4-only VPS test | `build/network/vps/<mode>/` |
 
 The ICMP packet fixture also writes generated-test captures. This does not
