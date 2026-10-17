@@ -1,5 +1,5 @@
 {
   "use_runtime": true,
-  "description": "Added via command line",
-  "expected": "=== S3 ESSENTIALS ===\nT1: Struct\n34\nT2: StructPtr\n56\nT3: Nested\n1278\nT4: Cast\nAY\nT5: PtrCast\nY\nT6: NULL\nYY\nT7: PtrArith\n323\nT8: PtrCmp\nYYY\nT9: StructArr\n3456\nT10: AddrOf\n98\n=== END S3 ESSENTIALS ===\n"
+  "expected": "=== S3 ESSENTIALS ===\nT1: Struct\n34\nT2: StructPtr\n56\nT3: Nested\n1278\nT4: Cast\nAY\nT5: PtrCast\nY\nT6: NULL\nYY\nT7: PtrArith\n323\nT8: PtrCmp\nYYY\nT9: StructArr\n3456\nT10: AddrOf\n98\n=== END S3 ESSENTIALS ===\n",
+  "description": "Added via command line"
 }

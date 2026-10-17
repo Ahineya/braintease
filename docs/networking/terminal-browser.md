@@ -1,0 +1,311 @@
+# Terminal browser porting plan
+
+Assessment and implementation direction recorded on October 17, 2026. This is
+a plan, not a claim that a browser, curses integration or `select()` works yet.
+It covers both [FUZIX on RVM](../../ports/fuzix/README.md) and
+[native Fuse-X](../../fuse-x/README.md).
+
+## Goal and decision
+
+A terminal browser for small, traditional HTML sites is feasible. Start with
+plain HTTP, keyboard navigation and HTML forms. TLS is a separate milestone;
+it is not required to reach example.com or search Wiby over HTTP.
+
+Investigate a stripped Lynx port first, with an early local-HTML rendering and
+memory gate. This is a candidate choice, not evidence that Lynx already fits.
+Do not begin by changing RCC's C data model or importing a full desktop browser.
+Use the existing guest sockets and protocol stack on both execution targets.
+
+The initial useful browser should support:
+
+- Loading a URL, following relative and absolute links, back navigation and
+  scrolling through a document.
+- Text, headings, paragraphs, lists, preformatted text and useful table output.
+- Editing text fields, moving focus, selecting options and submitting GET
+  forms, including URL escaping and form encoding.
+- Interrupting a slow load while keeping keyboard input responsive.
+- Redirects, chunked responses, explicit page/cache limits and useful errors
+  for unsupported URLs or content.
+
+POST forms, cookies, uploads, compression and broader character-set support
+need explicit later acceptance criteria. Search on Wiby only needs a GET form.
+Start with ASCII display and a documented fallback for unsupported characters;
+keep HTTP octets and decoded display characters separate. Do not require CSS,
+JavaScript, images or a graphical display for this milestone.
+
+## HTTP targets and evidence
+
+Direct host-side HTTP requests during the assessment returned `200 OK` for:
+
+| URL | Observation |
+| --- | --- |
+| <http://example.com/> | Small HTML page; response used chunked transfer encoding |
+| <http://wiby.me/> | HTML search page served without a redirect to HTTPS |
+| <http://wiby.me/?q=retro> | Search results served over HTTP |
+| <http://wiby.me/surprise/> | HTML containing a meta-refresh to another site |
+| <http://www.retronetwork.net/text/> | HTTP site found in Wiby search results |
+| <http://toastytech.com/> | HTTP destination returned by Wiby's surprise page |
+
+These are observations from October 17, 2026, not availability guarantees or
+guest browser tests. The Wiby homepage uses `method="get"`, `action="/"` and
+an input named `q`. Its search needs ordinary HTML form handling. Following
+the surprise page automatically also needs meta-refresh support; an initial
+implementation may instead expose its destination as a selectable link.
+Individual search results can still require HTTPS or redirect there.
+
+The guest already has a downloader, for example:
+
+```sh
+htget http://example.com/ /example.html
+htget http://wiby.me/ /wiby.html
+```
+
+These commands save HTML; they do not render it or provide form input. The
+[port README](../../ports/fuzix/README.md#networking-and-remote-terminals)
+describes existing guest live-network validation and fixture tests. Do not
+confuse those results with the host checks above.
+
+## Existing foundations and gaps
+
+| Area | Foundation | Work needed for a browser |
+| --- | --- | --- |
+| Network | Guest IPv4, TCP, DNS, socket descriptors and nonblocking I/O | Descriptor readiness, browser-specific socket API audit and connection limits |
+| HTTP | Adapted FUZIX `htget` handles partial I/O, timeouts, chunking and redirects | Browser integration, forms, history and document/cache ownership |
+| Terminal | Termios, ANSI output, terminal dimensions, PTYs and job control | Screen library integration, key decoding, editing and resize behavior |
+| Memory | Bank-spanning heap; RVM MMU process data/heap window is up to 1,024,000 C cells | Measure renderer, tables, stack, cache and page limits |
+| Toolchain | Existing multi-file C applications run on RVM and native | Audit browser assumptions about integer widths, C bytes and library APIs |
+| TLS | Not implemented in this port | Independent library/ABI, entropy, certificate and validation work |
+
+The FUZIX `htget` implementation and the freestanding runtime HTTP helper are
+different layers. Their feature sets and buffering limits are not interchangeable.
+A ported browser should normally use POSIX-style guest sockets with its own
+HTTP implementation, rather than being forced through the RFL buffered HTTP API.
+See [htget.c](../../ports/fuzix/upstream/Applications/netd/htget.c),
+[runtime HTTP](http.md) and [RFL HTTP](rfl-library.md).
+
+The guest has bounded network pools. `NSOCKET` is eight, but that does not imply
+eight independent live TCP streams; the shared TCP pool has its own smaller
+limit, and Telnet sessions also consume resources. Begin with one page load
+at a time, no background downloads or prefetch, a small bounded history/cache,
+and prompt connection closure. A browser used through Telnet must leave room
+for its own terminal connection and DNS traffic.
+
+## C16 and memory decisions
+
+[RCC's limits](../../runtime/include/limits.h) define 16-bit `char` and `int`,
+32-bit `long`, and `CHAR_BIT == 16`. Native execution retains this compatibility
+ABI. Linking host ncurses or OpenSSL objects directly is not a compatible port;
+such facilities would need an explicit host adapter or a source port.
+
+Audit the browser and every selected dependency for:
+
+- Eight-bit byte assumptions in serialization, endian probes, pointer casts,
+  character classification and charset conversion. Preserve one wire octet per
+  C cell at the established socket boundary; serialize protocols explicitly.
+- Sixteen-bit arithmetic overflow in lengths, allocation products, offsets,
+  counters, bit masks and large literals. Use appropriate existing wide types
+  where needed rather than globally redefining `int`.
+- Large static language, entity and character tables. Application globals must
+  fit one 64,000-cell bank; RVM RXE initial data has a 60,000-cell limit.
+- Heap and stack use on representative documents. A network octet held in a
+  `char` array consumes two physical octets here, and auxiliary layout objects
+  add memory beyond the source document's size.
+- Configure probes that execute target binaries or equate C byte counts with
+  octet counts. Generate a reviewed target configuration with the host tools;
+  do not run an ordinary host configuration and assume its ABI answers apply.
+
+Use the [RVM memory description](../../ports/fuzix/README.md#protected-memory)
+and [native executable limits](../../fuse-x/EXECUTABLES.md) as the constraints.
+Measure globals and local document rendering before committing to an
+interactive port. Larger heaps do not remove the global-data-bank limit.
+
+## Browser candidates
+
+### Links 2.30
+
+Links has its own terminal engine, menus and editing widgets; a curses library
+is not a prerequisite for its text mode. Graphics and image dependencies can
+be omitted, as can SSL and optional compression/event libraries.
+
+However, the inspected 2.30 `configure.in` rejects `sizeof(unsigned) < 4` with
+an error requiring at least 32-bit integers. That probe itself assumes an
+ordinary byte model; bypassing it does not fix the code's arithmetic and layout
+assumptions. Its `select.c` also requires descriptor readiness. This makes
+current Links a substantial C16 port, not just a dependency/build adaptation.
+
+Keep it as a later candidate. If selected, reuse its existing widgets and audit
+integer widths explicitly rather than first building a separate widget toolkit.
+Sources: [official download and source archive](https://links.twibright.com/download.php),
+[features](https://links.twibright.com/features.php) and
+[user documentation](https://links.twibright.com/user_en.html).
+
+### Lynx
+
+Lynx requires a curses-compatible screen library and uses `select()` in its
+networking code. SSL and a number of other features are optional. Its existing
+HTML renderer and form handling would avoid writing those components anew.
+
+Use a stripped configuration for the feasibility build: omit TLS, optional
+compression, internationalized domain names, localization, directory editing,
+external protocol helpers and other nonessential features where supported.
+Measure static tables and rendering allocations. Do not infer compatibility
+from the absence of the particular Links configure rejection: Lynx's C16
+arithmetic, library requirements and runtime behavior remain unproven.
+Sources: [official installation requirements](https://lynx.invisible-island.net/current/INSTALLATION)
+and [2.9.2 source archive](https://invisible-island.net/archives/lynx/tarballs/lynx2.9.2.tar.gz).
+
+If the local-rendering/memory gate fails, compare a smaller existing browser
+before committing to a new HTML engine. A custom limited browser is a scope
+fallback, not the chosen implementation at this stage.
+
+## Terminal UI decision
+
+Start by adapting the curses implementation already present in the
+[pinned FUZIX archive](../../ports/fuzix/vendor/), under
+`fuzix/Library/libs/curses/`. Its headers are in
+[Library/include/curses.h](../../ports/fuzix/upstream/Library/include/curses.h),
+but the implementation is not included in the current library build. The
+build selects top-level `Library/libs/*.c`, not that nested source directory.
+
+An assessment-time compile-only probe extracted the archive to a temporary
+directory and compiled its 36 C sources with the ordinary RCC userspace
+include paths, `-DRIPPLE_MMU=1`, `-DNO_64BIT` and `--bank-size 64000`.
+Thirty-five compiled unchanged; `scan.c` failed on the unavailable `vsscanf`
+interface in that snapshot. Recheck headers and implementation together before
+fixing this; a declaration alone does not supply the function. This probe did
+not link a library or run a screen application on either target.
+
+The bundled implementation needs behavioral work:
+
+- `keypad()` is a stub; decode arrows, Home/End, Delete and escape sequences.
+- `nodelay()` sets a flag that `wgetch()` does not honor; integrate bounded
+  input waits with [the select contract](select.md).
+- `wgetstr()` has no buffer-length bound; provide bounded editing and do not
+  use unbounded input for URLs or form fields.
+- Define resize, redraw, terminal restore, suspend/resume and hangup behavior.
+- Audit character/attribute packing before adding Unicode; existing attributes
+  occupy upper bits of a screen cell.
+
+Curses supplies terminal primitives, not HTML forms. Browser code still owns
+focus order, text editing, checkboxes, select controls, textarea behavior and
+form encoding. Port the subset the candidate actually needs before considering
+a broader widget library. Existing shell editing and full-screen applications
+are useful behavior references, not proof that a reusable form toolkit exists.
+
+A terminal browser does not require changes to GX or Nano-X. It should work
+through a console, a Telnet PTY and RVM's `gterm`. Native graphical terminal
+availability is a separate [graphics milestone](../graphics/architecture.md).
+
+## HTTPS complexity and implementation choices
+
+HTTPS carries ordinary HTTP through TLS over TCP, usually on port 443. The
+existing guest TCP stack can transport it; replacing TCP is not a prerequisite.
+Running TLS inside the guest is a substantial port, considerably larger than
+the select integration. Treat it as a separate major milestone and establish
+the library's C16 feasibility before estimating a delivery schedule.
+
+| Approach | Estimated complexity | Boundary and tradeoff |
+| --- | --- | --- |
+| Host HTTP-to-HTTPS gateway | Low to moderate | Host fetches and verifies HTTPS; the guest-to-gateway connection remains plaintext. General browsing also needs URL, redirect and cookie handling. |
+| Host-provided TLS service | Moderate | A new explicit interface delegates TLS and certificate verification to the host. Avoids a C16 crypto port, but needs handle lifecycle, buffer conversion, readiness and failure semantics on each supported runtime. |
+| TLS library inside the guest | High | Retains guest-owned TLS over the existing guest sockets. Requires a library port, platform services, resource measurements and cryptographic/interoperability validation. |
+
+These are engineering assessments, not measured implementation times. A
+host-provided service is an architectural extension, not an existing API.
+Neither host option establishes that TLS executes inside the guest. A CONNECT
+tunnel only relays bytes and does not supply the missing TLS implementation.
+
+### Required work for guest TLS
+
+1. **C16 library adaptation.** Audit octet loads/stores, integer promotions,
+   shifts, overflow, endian conversions and serialization. This target has no
+   exact-width `uint8_t`; merely changing typedefs or passing the compiler does
+   not establish correct cryptography. Run known-answer tests for each enabled
+   primitive and review the adapted code's timing properties.
+2. **Secure randomness.** The existing
+   [socket code](../../ports/fuzix/ripple/sockets.c) explicitly describes the VM
+   RNG as non-cryptographic. Provide a defined entropy interface, preferably
+   backed by the host OS cryptographic random source on RVM and native. Define
+   failure behavior and seed the selected library's cryptographic generator;
+   clocks and deterministic VM seeds are not adequate substitutes.
+3. **Server authentication.** Supply trusted roots, certificate-chain and
+   hostname verification, validity-date checks and SNI for shared-IP sites.
+   Calendar time exists, but the port still needs usable time integration and
+   a policy for installing/updating the trust store. Store certificates as
+   files where practical instead of filling the global-data bank. Disabling
+   verification is not completion of the HTTPS milestone.
+4. **TLS-aware I/O.** Connect library send/receive callbacks to guest sockets.
+   Support partial transfers, handshake deadlines, cancellation, clean shutdown
+   and errors. A TLS read may require a network write; decrypted input can also
+   remain buffered after the socket stops reporting readability. Drive the
+   library's requested read/write states and buffered plaintext, not only the
+   socket's read set.
+5. **Resource and performance validation.** Measure record buffers, certificate
+   chains, handshake allocations, stack and static tables. A constrained
+   configuration appears plausible within the MMU heap, but that is not a
+   measured fit. Benchmark handshake arithmetic on RVM and native separately;
+   native execution retains C16 ABI constraints.
+
+Mbed TLS and wolfSSL are candidates for a source/configuration audit, not
+verified C16 ports or a final dependency decision. Evaluate a maintained
+configuration with TLS 1.2/1.3, the browser's required API and algorithms, its
+license, memory use and porting surface. Avoid implementing a new TLS protocol
+or cryptographic library for this browser.
+
+References: [Mbed TLS integration](https://mbed-tls.readthedocs.io/en/latest/kb/how-to/mbedtls-tutorial/),
+[entropy requirements](https://mbed-tls.readthedocs.io/en/latest/kb/how-to/add-entropy-sources-to-entropy-pool/),
+[wolfSSL porting guide](https://www.wolfssl.com/docs/porting-guide/) and
+[wolfSSL TLS 1.3 support](https://www.wolfssl.com/docs/tls13/).
+
+### First TLS milestone: HTTPS htget
+
+Prove the selected approach with an HTTPS-capable `htget` before integrating
+it into the browser. A blocking downloader can establish TLS without waiting
+for select to be finished; interactive browser integration needs responsive
+TLS-aware waiting and cancellation.
+
+The proposed acceptance sequence is:
+
+1. Pass enabled cryptographic primitive tests on the actual target, then
+   complete a handshake against a controlled local server.
+2. Download through one TLS connection with bounded memory, SNI, trusted-chain,
+   hostname and validity-date verification enabled.
+3. Reject an untrusted certificate, wrong hostname and expired certificate.
+   Exercise entropy-source failure, handshake timeout, connection truncation,
+   partial I/O and cleanup after repeated failures.
+4. Preserve `htget`'s existing destination-file protection on every TLS failure;
+   verify HTTP framing, redirects and a public HTTPS download in the guest.
+   Record peak memory and handshake time for RVM and native separately.
+5. Integrate the resulting TLS transport into the browser, including buffered
+   plaintext, bidirectional readiness and cancellation while loading a page.
+
+## Implementation order and acceptance gates
+
+1. **Local rendering and resource spike.** Build a minimal Lynx configuration
+   capable of dumping local HTML. Record necessary compiler/libc patches,
+   global-data size, stack use and peak heap on small and adversarial documents.
+   If it cannot fit, revisit the candidate before completing its UI port.
+2. **Reusable terminal/network prerequisites.** Implement the
+   [select contract and tests](select.md), integrate the required curses subset,
+   and audit socket calls, including asynchronous connection completion and
+   `getsockopt(SO_ERROR)` if the selected configuration uses them. These
+   foundations may progress alongside the rendering spike.
+3. **Offline interaction.** Navigate a local document, edit a bounded URL and
+   form fields, follow links and exercise suspend/resume, resize and exit.
+4. **Controlled HTTP.** Use an independent local HTTP/Ethernet fixture for
+   relative links, redirects, chunked bodies, partial reads/writes, GET encoding,
+   connection failures, slow responses, cancellation and memory limits.
+5. **Live HTTP.** Fetch example.com, search Wiby and follow an HTTP result in
+   the actual guest. Validate both console and Telnet operation, preserving
+   other sessions. Record RVM and native results separately.
+6. **Broader web support.** Define POST/cookie/compression and character-set
+   milestones; follow the [HTTPS plan](#https-complexity-and-implementation-choices)
+   for a separate TLS port, beginning with verified HTTPS downloads in `htget`.
+
+Report an HTTPS redirect as unsupported until TLS exists. A future optional
+HTTP-to-HTTPS gateway would terminate encryption outside the guest and must be
+documented as a different deployment mode. A CONNECT tunnel alone does not
+provide TLS to a browser that cannot perform the handshake.
+
+Completion means a responsive browser running in the guest, not only a host
+build, successful compilation, an HTML download or a standalone runtime test.

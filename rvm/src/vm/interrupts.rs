@@ -254,7 +254,7 @@ impl VM {
                     self.mmu.flush();
                 }
                 if value & 2 != 0 {
-                    self.jit_flush();
+                    self.jit_flush_mappings();
                 }
             }
             CSR_EPC | CSR_EPCB | CSR_SAVED_ENABLE | CSR_SAVED_SB | CSR_SAVED_SP | CSR_SAVED_FP => {

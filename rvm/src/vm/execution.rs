@@ -498,12 +498,10 @@ impl VM {
     /// covers it. Harvard data stores do not come through here.
     pub(crate) fn guest_storc(&mut self, bank: u16, addr: u16) -> Result<(), String> {
         let idx = (bank as usize * self.bank_size as usize) + addr as usize;
-        // Large guest programs and process image slots can occupy more than
-        // 64 banks. Grow lazily, retaining a finite host allocation limit.
-        const MAX_IMEM: usize = 256 * 65536;
-        if idx >= MAX_IMEM {
+        let capacity = self.code_memory_capacity();
+        if idx >= capacity {
             return Err(format!(
-                "STORC: instruction address out of bounds: bank={bank}, addr={addr}, idx={idx}"
+                "STORC: instruction address out of bounds: bank={bank}, addr={addr}, idx={idx}, code-memory limit={capacity}"
             ));
         }
         if idx >= self.instructions.len() {
@@ -516,7 +514,9 @@ impl VM {
             };
             let bs = self.bank_size.max(1) as usize;
             let bank_end = (bank as usize + 1).saturating_mul(bs);
-            let new_len = (idx + 1).max(bank_end).min(MAX_IMEM);
+            let new_len = (idx + 1).max(bank_end).min(capacity);
+            self.instructions.try_reserve(new_len - self.instructions.len())
+                .map_err(|_| "STORC: cannot allocate instruction memory")?;
             self.instructions.resize(new_len, nop);
         }
         let x0 = self.registers[Register::X0 as usize];

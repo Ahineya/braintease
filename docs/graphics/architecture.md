@@ -1,0 +1,190 @@
+# Graphics architecture
+
+## Ownership and boundaries
+
+FUZIX owns processes, PTYs, permissions and window ownership. A graphics service
+owns surfaces and presentation. The host backend supplies display/input and,
+for Fuse-X, native window lifecycle. A terminal owns a PTY master; its child
+session owns the slave and runs the shell or foreground command. A GUI library
+must not bypass terminal job control or use one global input stream for every
+window.
+
+```text
+sh / vi / top                  graphical applications
+     │ PTY stream                       │ drawing
+     ▼                                  ▼
+gterm: terminal model           Nano-X adapter (planned)
+     │ RGB565 upload/copy/fill/present   │
+     └────────────────┬─────────────────┘
+                GX window/surface/event interface
+                         │
+        ┌────────────────┴────────────────┐
+ RVM: kernel /dev/gfx              Fuse-X backend (planned)
+ physical scanout + DEVICE         native top-level windows
+ guest desktop later              one macOS app identity
+```
+
+Keep terminal parsing and painting independent of the window manager. Nano-X
+is a source of graphics algorithms and a small application API, rather than a
+requirement to put an entire virtual desktop inside every Mac window. There is
+no X11 protocol or X server in this first milestone.
+
+## GX version 1
+
+The common C header is [gx.h](../../ports/graphics/include/gx.h). This is a
+C16 **guest ABI**, not a host C structure layout or an octet network protocol.
+All dimensions, strides and buffer lengths count pixels/C cells as specified;
+one RGB565 pixel occupies one 16-bit cell. Pointers use the existing RCC ABI.
+A native backend must decode/validate guest data; it must not cast guest
+structures to host structs or retain translated pointers after an operation.
+
+| Operation | Contract |
+| --- | --- |
+| INFO | Version, formats, capability flags and maximum dimensions/window count |
+| CREATE | Checked dimensions/format, title metadata, opaque window and surface handles |
+| UPLOAD | Copy a caller-owned RGB565 rectangle synchronously, with a pixel stride |
+| FILL | Fill a surface rectangle with one RGB565 colour |
+| COPY | Copy a rectangle on the same surface with memmove overlap semantics |
+| PRESENT | Publish a completed surface snapshot; no retained userspace pointer |
+| EVENT | Nonblocking per-window event; type zero means no event |
+| STATE | Recover held keys, buttons, focus and pointer state after overflow |
+| WAIT | Ripple PTY-terminal extension: atomically wait for window input, PTY output/EOF or PTY write space |
+| DESTROY | Release the window and its surface |
+| TITLE | Reserved request; usable only when advertised by the backend |
+
+Handles are opaque and generation-checked. Applications must not assume the
+window and its surface always share a handle, even though this backend does so.
+Unknown/unsupported operations fail. Capability flags are the source of truth:
+the initial backend advertises RGB565, copy, fill and input, one window, and a
+640×480 maximum. It does not advertise multiple windows, resizing or title
+updates. CREATE accepts a title as metadata; the initial RVM window still uses
+its host title. A future backend should implement the same requests and add
+capabilities, rather than change application pointer or pixel conventions.
+
+Events carry the target window, sequence, type and typed payload. Keyboard codes
+are USB HID usages, pointer coordinates are content pixels, wheel values are
+signed 16.16 lines. Focus/capture flags describe actual state. Close is a request
+to the owner, not machine shutdown. Resize is reserved for a later capable
+backend. Overflow tells the client to recover state and discard assumptions
+about intermediate transitions. The current terminal clears held modifiers and
+repeat on loss of focus or overflow. Text composition/IME needs a future
+versioned event extension; HID translation alone is not a full text-input API.
+
+## Current RVM implementation
+
+`/dev/gfx` is a checked ioctl device, exclusive to the creating process. The
+process table slot **and** PID identify its owner. An inherited descriptor does
+not grant a forked child access to its parent's handles. Explicit DESTROY,
+owner exit and successful exec release the lease. Closing a transport descriptor
+alone does not destroy a window; this avoids an inherited child's close
+releasing the parent's window. Clients must use DESTROY or exit. Revisit this
+transport policy when introducing independent server/client connections.
+
+The framebuffer uses reserved physical banks 104–108 (320,000 cells), outside
+the COW user pool. A maximum frame needs 307,200 cells / 614,400 physical octets.
+Uploads validate the complete userspace rectangle first, then resolve readable
+MMU pages and DMA into physical scanout storage. This does not expose physical
+addresses to applications and never hands DMA a virtual userspace address.
+The syscall does not switch tasks while copying. Kernel code alone controls
+the shared DEVICE mailbox, with IRQ protection for each transaction.
+
+FILL and COPY use synchronous bulk memory commands. COPY chooses vertical row
+order and snapshots each row, preserving overlap in either direction. A scalar
+fallback preserves the contract if bulk commands are unavailable. PRESENT uses
+RGB565_EXT and publishes a host-owned immutable snapshot; the guest may reuse
+upload storage after the ioctl returns. There is no asynchronous fence or
+zero-copy promise. The existing host presenter still copies a complete frame;
+dirty rows reduce guest painting/upload work, not host publication cost.
+
+`gterm` compares dirty rows against a shadow of the painted cells. It uploads
+only changed character spans, fills runs of spaces, and moves the shadow along
+with COPY/FILL scrolling. Old and new cursor cells are damaged explicitly.
+`GX_WAIT` accepts the owner window handle, a PTY master descriptor, requested
+readiness bits and a timeout in deciseconds (zero polls). It returns ready bits
+and a host-monotonic millisecond sample for repeat deadlines. Input, slave output,
+slave close and input-queue consumption wake the wait; readiness testing and
+sleep registration are atomic under IRQ masking. An invalid/non-PTY descriptor
+fails, and signals interrupt the wait. The host clock advances timeout accounting;
+idle polls input and requests a one-millisecond host yield.
+The decisecond timeout is a fallback/deadline, not a mandatory input delay.
+Future local IPC and multiwindow waits can build on this bounded milestone.
+
+RVM opens a 640×480 framebuffer at 640×480 logical host points. Very small
+framebuffers retain integer enlargement to stay readable. GPU redraws occur on
+frame changes or host expose/resize requests, rather than continually rendering
+an unchanged terminal.
+
+The MMU loader resolves validated writable pages before DMA, including COW
+resolution, and uses physical page spans for exec data, user copies and clears.
+Fresh exec pages are already zeroed. No user virtual address is submitted as a
+physical device address. JIT regions retain physical instruction provenance:
+code writes invalidate overlapping regions in all roots; instruction-map flushes
+revalidate mapped regions and retain unaffected supervisor and user code. The
+virtual executable bound is cached until a mapping flush. User memory has a
+checked direct-mapped translation cache; native fast paths require matching
+page/epoch, permissions and both virtual and physical bounds. Misses and COW
+writes retain the reference fault path.
+
+The bounded terminal model and event/output batches
+prevent an unbounded escape sequence or output stream from consuming the
+kernel. Keyboard input is sent to the PTY, so signals and foreground groups
+continue to be handled by the tty driver. Child sessions receive an 80×30
+window size and TERM=ansi. Terminal close sends hangup/continue to the child's
+process group and bounds teardown before forced termination; it does not yet
+provide a save-work dialogue or a GUI detachment policy.
+
+RVM's optional guest-close policy hides a closed host window, posts a typed
+close event, and keeps the VM alive. A later display lease can reopen it.
+Close events survive input overflow/state recovery. Ordinary applications
+without that option retain the existing close-to-stop behavior. Platform UI acceptance testing includes opening, keyboard input and
+close/reopen; headless capture alone cannot prove native window behavior.
+Mac synthetic input can omit separate modifier transitions. The presenter uses
+modifier flags to supply a left-key alias when no physical side is known, and
+clears both sides on release. GTERM_TRACE_INPUT=1 logs GX events to the original
+console for diagnosis; normal sessions stay quiet.
+
+## Resource budget
+
+The protected profile expands capacities without increasing the existing
+32,768,000 physical-octet RAM reservation or the 16,000 KiB COW process pool.
+
+| Resource | Before | Protected graphics profile |
+| --- | ---: | ---: |
+| Process slots | 16 | 32 |
+| Descriptors per process | 16 | 32 |
+| System open-file objects | 64 | 128 |
+| Cached inodes | 64 | 128 |
+| PTY pairs | 4 | 8 |
+| User data/heap virtual banks | 16 | 16 |
+| Per-process user stack | 64,000 cells | 64,000 cells |
+| TCP connections | 4 | 4 |
+
+The close-on-exec mask grows to 32 bits where UFTSIZE exceeds 16. All descriptor
+mask shifts use wide arithmetic. Kernel stacks occupy banks 32–63; MMU tables
+64–95; reference counts 96; saved task data 97; scanout 104–108. User physical
+pages remain 128–255. Compile-time checks guard stack/table overlap and saved
+task-data size. Moving saved task data out of GP bank 3 leaves space for the
+larger process, inode, file and input tables. FUZIX/Ripple now supports only
+MMU builds on RVM; the former non-MMU/RBF configuration is retired.
+
+These are finite capacities, not a promise that 32 maximum-size programs fit.
+Executable allocation is still variable-size within the configured code pool.
+`free`, `ps` and `top` report the process pool and per-task mappings; reserved
+scanout belongs to kernel-reserved RAM and is not charged as user heap.
+
+## Fuse-X and Nano-X seam
+
+Fuse-X needs a window registry with owner, generation, dimensions, title,
+surface, event queue and host NSWindow reference. macOS owns decoration,
+placement, minimization and focus; FUZIX owns process and content lifetimes.
+One Dock identity, native Window menu and New Terminal remain host policy.
+No new MMIO pins are necessary for this guest API. The native hosted backend
+is a separate implementation of GX, not an emulation requirement for DMA.
+
+For Nano-X, classify root, top-level, child, popup and offscreen windows. A
+native top-level must become an independent GX window/surface; children retain
+clipping/coordinates inside that content. Preserve lifecycle, stacking, grabs,
+focus, close and resize semantics at that layer. The RVM backend can compose
+those surfaces into one guest desktop. A Nano-X PSD update callback alone
+receives framebuffer damage and lacks the lifecycle information needed here.
+Shared-window adaptation therefore belongs above that screen-driver callback.

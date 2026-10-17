@@ -1,0 +1,152 @@
+import {Network,NetError,BadArgument,NoMemory,DnsFailure,NetworkFailure} from "std/net";
+import {rfl_net_retain,rfl_net_release} from "./net/registry.c";
+import {rfl_http_begin,rfl_http_read,rfl_http_status,rfl_http_dns_status,rfl_http_drop} from "./net/client.c";
+import {rfl_http_listen,rfl_http_listener_epoch,rfl_http_unlisten,rfl_http_accept,rfl_http_request_text,rfl_http_reply_begin,rfl_http_reply_copy,rfl_http_reply_status,rfl_http_incoming_drop} from "./net/server.c";
+import {Future,sleep,yield_now} from "std/future";
+import {Result} from "std/result";
+
+export struct Request {host:String,path:String,port:u16,timeout_ms:u32,max_body:u32}
+export struct Response {status:u16,body:Vec<u8>}
+export struct HttpClient {network:Network,sequence:fn()->u32}
+export struct HttpServer {state:Owned<*mut u16>,epoch:u32}
+export struct IncomingRequest {method:String,path:String,host:String,session:Owned<*mut u16>}
+
+fn pointer(owner:&Owned<*mut u16>)->*mut u16 {let p=owner.borrow();*p}
+fn network_pointer(network:&Network)->*mut u16 {pointer(&network.state)}
+fn retain(handle:*mut u16)->Result<Owned<*mut u16>,NetError> {
+    let copy=rfl_net_retain(handle);
+    if (copy.is_null()) {return Err(NoMemory);}
+    Ok(owned(copy,fn(p:&mut *mut u16)=>{rfl_net_release(*p);}))
+}
+fn words()->Vec<u16> {
+    let mut buffer:Vec<u16> = [];
+    for (i in 0..256) {buffer.push(0);}
+    buffer
+}
+// Match RFL String's existing octet semantics. Balanced concatenation avoids
+// quadratic copying for large response bodies; no host character conversion.
+fn text_range(bytes:Vec<u8>,begin:usize,end:usize)->String {
+    if (end-begin>32) {
+        let middle=begin+(end-begin)/2;
+        return text_range(bytes,begin,middle)+text_range(bytes,middle,end);
+    }
+    let mut text="";
+    for (i in begin..end) {text=text+from_byte(bytes[i]);}
+    text
+}
+impl Request {
+    export fn get(host:String,path:String)->Request {Request{host:host,path:path,port:80,timeout_ms:30000,max_body:65536}}
+    export fn with_port(self,port:u16)->Request {let mut request=self;request.port=port;request}
+    export fn with_timeout(self,milliseconds:u32)->Request {let mut request=self;request.timeout_ms=milliseconds;request}
+    export fn with_limit(self,octets:u32)->Request {let mut request=self;request.max_body=octets;request}
+}
+impl Response {
+    export fn html(status:u16,text:String)->Response {
+        let mut body:Vec<u8> = [];
+        for (i in 0..text.len()) {body.push(text[i] as u8);}
+        Response{status:status,body:body}
+    }
+    export fn text(&self)->String {text_range(self.body,0,self.body.len())}
+    export fn is_success(&self)->bool {self.status>=200 && self.status<300}
+}
+// The seed is application supplied, as in the C stack. Sequence mixing here
+// and in the listener is deterministic, not a cryptographic entropy source.
+export fn http_client(network:&Network,sequence_seed:u32)->Result<HttpClient,NetError> {
+    let mut serial=sequence_seed;
+    let sequence:fn()->u32=fn()=>{serial+=2654435769;serial};
+    Ok(HttpClient{network:network.clone()?,sequence:sequence})
+}
+impl HttpClient {
+    export fn send(&self,request:Request)->Async<Result<Response,NetError>> {
+        send(self.network.clone(),request,self.sequence)
+    }
+}
+async fn send(network:Result<Network,NetError>,request:Request,sequence:fn()->u32)->Result<Response,NetError> {
+    let network=move(network)?;
+    if (request.host.len()==0 || request.host.len()>253 || request.path.len()==0 || request.path.len()>255 || request.max_body>1048576) {return Err(BadArgument);}
+    let mut host:Vec<u16> = []; let mut path:Vec<u16> = [];
+    for (i in 0..request.host.len()) {host.push(request.host[i] as u16);}
+    for (i in 0..request.path.len()) {path.push(request.path[i] as u16);}
+    let mut status:u16=0;
+    let initial_sequence=sequence();
+    let mut options:[u32;6]=[host.len() as u32,path.len() as u32,request.port as u32,
+        request.timeout_ms,request.max_body,initial_sequence];
+    let raw=unsafe {rfl_http_begin(network_pointer(&network),&mut host[0],&mut path[0],&mut options[0],&mut status)};
+    if (status!=0) {return Err(NetError::from_code(status));}
+    if (raw.is_null()) {return Err(NoMemory);}
+    let job=owned(raw,fn(p:&mut *mut u16)=>{rfl_http_drop(*p);});
+    drop(move(network));
+    let mut body:Vec<u8> = [];
+    let mut buffer=words();
+    while (true) {
+        let mut count:u16=0;
+        let status=unsafe {rfl_http_read(pointer(&job),&mut buffer[0],&mut count)};
+        for (i in 0..(count as usize)) {body.push(buffer[i] as u8);}
+        if (status==10) {return Ok(Response{status:rfl_http_status(pointer(&job)),body:body});}
+        if (status!=0 && status!=1) {
+            if (status==35) {return Err(DnsFailure(rfl_http_dns_status(pointer(&job))));}
+            return Err(NetError::from_code(status));
+        }
+        if (count!=0) {yield_now().await;} else {sleep(1).unwrap().await;}
+    }
+    Err(NetworkFailure(15))
+}
+
+export fn http_server(network:&Network,port:u16,sequence_seed:u32)->Result<HttpServer,NetError> {
+    let mut status:u16=0;
+    let raw=unsafe {rfl_http_listen(network_pointer(network),port,sequence_seed,&mut status)};
+    if (status!=0) {return Err(NetError::from_code(status));}
+    if (raw.is_null()) {return Err(NoMemory);}
+    let epoch=rfl_http_listener_epoch(raw);
+    Ok(HttpServer{state:owned(raw,fn(p:&mut *mut u16)=>{rfl_http_unlisten(*p);}),epoch:epoch})
+}
+impl HttpServer {
+    export fn accept(&self)->Async<Result<IncomingRequest,NetError>> {accept(retain(pointer(&self.state)),self.epoch)}
+}
+fn request_text(raw:*mut u16,field:u16)->String {
+    let mut buffer=words();
+    let count=unsafe {rfl_http_request_text(raw,field,&mut buffer[0])};
+    let mut bytes:Vec<u8> = [];
+    for (i in 0..(count as usize)) {bytes.push(buffer[i] as u8);}
+    text_range(bytes,0,bytes.len())
+}
+async fn accept(owner:Result<Owned<*mut u16>,NetError>,epoch:u32)->Result<IncomingRequest,NetError> {
+    let owner=move(owner)?;
+    while (true) {
+        let mut status:u16=0;
+        let raw=unsafe {rfl_http_accept(pointer(&owner),epoch,&mut status)};
+        if (status==0) {
+            let session=owned(raw,fn(p:&mut *mut u16)=>{rfl_http_incoming_drop(*p);});
+            return Ok(IncomingRequest{method:request_text(raw,0),path:request_text(raw,1),host:request_text(raw,2),session:move(session)});
+        }
+        if (status!=1) {return Err(NetError::from_code(status));}
+        sleep(1).unwrap().await;
+    }
+    Err(NetworkFailure(15))
+}
+impl IncomingRequest {
+    export fn respond(self,response:Response)->Async<Result<unit,NetError>> {respond(move(self),response)}
+}
+async fn respond(request:IncomingRequest,response:Response)->Result<unit,NetError> {
+    let raw=pointer(&request.session);
+    let status=rfl_http_reply_begin(raw,response.status,response.body.len() as u32);
+    if (status!=0) {return Err(NetError::from_code(status));}
+    let mut buffer=words();
+    let mut at:usize=0;
+    while (at<response.body.len()) {
+        let mut count=response.body.len()-at;
+        if (count>256) {count=256;}
+        for (i in 0..count) {buffer[i]=response.body[at+i] as u16;}
+        let status=unsafe {rfl_http_reply_copy(raw,&mut buffer[0],count as u16)};
+        if (status!=0) {return Err(NetError::from_code(status));}
+        at+=count;
+        yield_now().await;
+    }
+    while (true) {
+        let status=rfl_http_reply_status(raw);
+        if (status==0) {return Ok({});}
+        if (status!=1) {return Err(NetError::from_code(status));}
+        sleep(1).unwrap().await;
+    }
+    Err(NetworkFailure(15))
+}

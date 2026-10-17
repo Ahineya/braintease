@@ -7,8 +7,10 @@
 #include <vm_bulk.h>
 #include <printf.h>
 #include <tty.h>
+#include <timer.h>
 #include "resources.h"
 #include "pty.h"
+#include "graphics.h"
 static Fat16Fs outer;
 static Fat16DirEnt rootfile;
 static uint16_t clusters[16384];
@@ -30,7 +32,7 @@ int tty_carrier(uint_fast8_t m) {
     return m == 1 || ripple_pty_carrier(m);
 }
 void tty_sleeping(uint_fast8_t m) { used(m); }
-void tty_data_consumed(uint_fast8_t m) { used(m); }
+void tty_data_consumed(uint_fast8_t m) { if(m>1)ripple_gfx_wakeup(); }
 ttyready_t tty_writeready(uint_fast8_t m) {
     return m == 1 || ripple_pty_ready(m) ? TTY_READY_NOW : TTY_READY_LATER;
 }
@@ -231,6 +233,7 @@ static int system_ioctl(uint_fast8_t m, uarg_t req, char *p) {
             info.slot = slot; info.version = RIPPLE_PROCINFO_VERSION;
             info.cpu_hz = TICKSPERSEC;
             irq = di();
+            sync_clock();
             task = &ptab[slot];
             info.sample_ticks = ticks.full * (TICKSPERSEC / 10) + ticks_this_dsecond;
             if (task->p_status) {
@@ -241,11 +244,7 @@ static int system_ioctl(uint_fast8_t m, uarg_t req, char *p) {
                 info.nice = task->p_nice; info.start_ticks = task->p_time * (TICKSPERSEC / 10);
                 info.user_ticks = task->p_utime; info.system_ticks = task->p_stime;
                 memcpy(info.name, task->p_name, 8);
-#if RIPPLE_MMU
                 ripple_mmu_task_usage(slot, &info.private_kib, &info.shared_kib);
-#else
-                if (task->p_status != P_ZOMBIE) info.private_kib = 250;
-#endif
                 info.mapped_kib = info.private_kib + info.shared_kib;
             }
             irqrestore(irq);
@@ -258,6 +257,7 @@ static int system_ioctl(uint_fast8_t m, uarg_t req, char *p) {
             if (!valaddr_w((void *)p, sizeof(info), sizeof(info))) return -1;
             memset(&info, 0, sizeof(info));
             irq = di();
+            sync_clock();
             info.version = RIPPLE_SYSINFO_VERSION;
             info.ram_kib = ramsize;
             info.pool_kib = procmem;
@@ -269,14 +269,10 @@ static int system_ioctl(uint_fast8_t m, uarg_t req, char *p) {
             info.ticks_per_second = 10; /* ticks.full counts deciseconds. */
             for (i = 0; i < PTABSIZE; i++)
                 if (ptab[i].p_status != P_EMPTY) ++info.processes;
-#if RIPPLE_MMU
             info.flags = RIPPLE_SYSINFO_MMU;
             info.page_cells = MMU_PAGE_CELLS;
             info.heap_cells *= 16;
             ripple_mmu_usage(&info.shared_kib, &info.mapped_kib);
-#else
-            info.mapped_kib = info.used_kib;
-#endif
             irqrestore(irq);
             return uput(&info, p, sizeof(info));
         }
@@ -293,5 +289,6 @@ struct devsw dev_tab[] = {
     {root_open, no_close, root_read, root_write, root_ioctl},
     {system_open, no_close, system_read, system_write, system_ioctl},
     {ripple_slave_open, ripple_slave_close, tty_read, tty_write, tty_ioctl},
-    {ripple_pty_open, ripple_pty_close, ripple_pty_read, ripple_pty_write, ripple_pty_ioctl}};
-bool validdev(uint16_t d) { return major(d) < 4; }
+    {ripple_pty_open, ripple_pty_close, ripple_pty_read, ripple_pty_write, ripple_pty_ioctl},
+    {ripple_gfx_open, ripple_gfx_close, no_rdwr, no_rdwr, ripple_gfx_ioctl}};
+bool validdev(uint16_t d) { return major(d) < 5; }

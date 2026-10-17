@@ -20,6 +20,8 @@ pub enum TokenKind {
     /// A character literal. The value is a Unicode scalar.
     Char(u32),
     Fn,
+    Async,
+    Await,
     Let,
     Mut,
     If,
@@ -401,6 +403,8 @@ impl<'a> Lexer<'a> {
         let text = &self.source[start..self.index];
         match text {
             "fn" => TokenKind::Fn,
+            "async" => TokenKind::Async,
+            "await" => TokenKind::Await,
             "let" => TokenKind::Let,
             "mut" => TokenKind::Mut,
             "if" => TokenKind::If,

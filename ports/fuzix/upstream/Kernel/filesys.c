@@ -876,8 +876,8 @@ void uf_copy(uint_fast8_t oldd, uint_fast8_t newd)
     ++of_tab[udata.u_files[oldd]].o_refs;
     /* Copy the CLOEXEC mask acrosss so dup inherits it */
     /* doclose means the existing bit state is clear */
-    if (udata.u_cloexec & (1U << oldd))
-	    udata.u_cloexec |= 1U << newd;
+    if (udata.u_cloexec & (1UL << oldd))
+	    udata.u_cloexec |= 1UL << newd;
 }
 
 int uf_alloc_copy(uint_fast8_t oldd, uint_fast8_t base)
@@ -901,6 +901,15 @@ void i_deref(register inoptr ino)
 
     if(!ino->c_refs)
         panic(PANIC_INODE_FREED);
+
+#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
+    /* Ripple sockets use only the inode cache, without a disk allocation. */
+    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
+        if (!--ino->c_refs)
+            memset(ino, 0, sizeof(*ino));
+        return;
+    }
+#endif
 
     if (mode == MODE_R(F_PIPE))
         wakeup((uint8_t *)ino);
@@ -943,6 +952,13 @@ void wr_inode(register inoptr ino)
     blkno_t blkno;
 */
     magic(ino);
+
+#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
+    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
+        ino->c_flags &= ~CDIRTY;
+        return;
+    }
+#endif
 
     if (bwritei(ino))
         corrupt_fs(ino->c_dev);

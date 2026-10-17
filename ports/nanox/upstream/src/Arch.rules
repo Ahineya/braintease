@@ -1,0 +1,380 @@
+##############################################################################
+# Microwindows Architecture rules Makefile
+# Updated 2018 Greg Haerr
+# Copyright (c) 2000 Martin Jolicoeur, Greg Haerr
+# Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
+#
+# Architecture-specific rules
+#
+# Current Target Platforms (set with ARCH= in config)
+# LINUX-NATIVE
+# MACOSX
+# ANDROID
+# EMSCRIPTEN
+# FREEBSD
+#
+# Recently untested platforms follow (please let us know if changes required)
+# LINUX-LINARO (RPI cross compile)
+# LINUX-ARM
+# UCLINUX-ARM
+# LINUX-BLACKFIN
+# LINUX-MIPS
+# LINUX-SH
+# LINUX-AVR32 (BIGENDIAN=Y)
+# LINUX-POWERPC (BIGENDIAN=Y)
+# LINUX-SPARC (BIGENDIAN=Y)
+# SOLARIS (BIGENDIAN=Y)
+# RTEMS
+# ECOS
+# PSP (Sony PSP)
+# NDS (Nintendo DS)
+# TRIMEDIA
+# CYGWIN
+# DJGPP
+# MINGW
+# AJAGUAR (Atari Jaguar)
+
+##############################################################################
+# Default tools names (overriden in platform-specific section below)
+##############################################################################
+TOOLSPREFIX = $(NATIVETOOLSPREFIX)
+HOSTCC = gcc				# host compiler
+COMPILER = gcc				# cross compiler
+CXX_COMPILER = g++			# c++ compiler
+ARCHIVER = ar				# static library creator
+ARFLAGS = rs				# ar flags
+LINKER = ld					# linker
+CP = cp						# copy
+MV = mv						# move
+SHELL = /bin/sh
+LIBM = -lm
+LIBFLEX = -lfl
+NM = $(TOOLSPREFIX)nm		# following used for ECOS port only
+STRIP = $(TOOLSPREFIX)strip
+OBJCOPY = $(TOOLSPREFIX)objcopy
+
+##############################################################################
+# Default tools locations (overridden in config)
+##############################################################################
+NATIVETOOLSPREFIX        =
+ARMTOOLSPREFIX           = arm-linux-
+ANDROIDTOOLSPREFIX       = arm-linux-androideabi-
+RPITOOLSPREFIX           = arm-linux-gnueabihf-
+AVR32TOOLSPREFIX         = avr32-linux-
+MIPSTOOLSPREFIX          = mipsel-linux-
+POWERPCTOOLSPREFIX       = powerpc-linux-
+SHTOOLSPREFIX            = sh-linux-gnu
+BLACKFINTOOLSPREFIX      = bfin-uclinux-
+PSPTOOLSPREFIX           = psp-
+AJAGUARTOOLSPREFIX		 = m68k-elf-
+AQUILATOOLSPREFIX        = i686-aquila-
+COSMOTOOLSPREFIX         = x86_64-linux-musl-
+
+##############################################################################
+# Warning options
+##############################################################################
+WARNINGS += -Wunused-variable
+WARNINGS += -Wmissing-prototypes
+ifeq ($(DEBUG), Y)
+WARNINGS += -Wall
+WARNINGS += -Wpointer-arith
+WARNINGS += -Wbad-function-cast
+#WARNINGS += -Wstrict-prototypes				# win32 FARPROC can't be strict
+else
+WARNINGS += -Wno-pointer-to-int-cast			# win32 converts pointers to ints with menuID,ctrlID,atoms,rsrcs
+endif
+
+##############################################################################
+# Handle general architecture options
+##############################################################################
+ifeq ($(SHAREDLIBS), Y)
+CFLAGS += -fpic
+endif
+
+# Set special optimization flags with OPTIMIZE= in config when not =Y or =N
+ifeq ($(OPTIMIZE), Y)
+CFLAGS += -O3
+else
+ifneq ($(OPTIMIZE), N)
+CFLAGS += $(OPTIMIZE)
+endif
+endif
+
+ifeq ($(DEBUG), Y)
+CFLAGS += -g
+DEFINES += -DDEBUG=1
+#CFLAGS += -ggdb
+else
+#DEFINES += -DNDEBUG
+endif
+
+##############################################################################
+# Platform dependent compilers, tools & flags
+##############################################################################
+ifeq ($(ARCH), AJAGUAR)
+DEFINES += -DAJAGUAR=1
+TOOLSPREFIX = $(AJAGUARTOOLSPREFIX)
+endif
+
+ifeq ($(ARCH), LINUX-NATIVE)
+DEFINES += -DLINUX=1 -DUNIX=1
+endif
+
+ifeq ($(ARCH), LINUX-LINARO)
+TOOLSPREFIX = $(RPITOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DARCH_NEED_ALIGN32
+CFLAGS += -mstructure-size-boundary=8
+endif
+
+ifeq ($(ARCH), LINUX-ARM)
+TOOLSPREFIX = $(ARMTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DARCH_NEED_ALIGN32
+CFLAGS += -mstructure-size-boundary=8
+#CFLAGS += -s
+endif
+
+ifeq ($(ARCH), UCLINUX-ARM)
+TOOLSPREFIX = $(ARMTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DUCLINUX=1
+CFLAGS += -mstructure-size-boundary=8
+LDFLAGS += -elf2flt
+FLTFLAGS += -s 64000
+endif
+
+ifeq ($(ARCH), LINUX-MIPS)
+TOOLSPREFIX = $(MIPSTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DARCH_NEED_ALIGN32
+CFLAGS += -msoft-float
+#CFLAGS += -s
+endif
+
+ifeq ($(ARCH), LINUX-SH)
+TOOLSPREFIX =$(SHTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1
+CFLAGS += -m1 -m3
+endif
+
+ifeq ($(ARCH), LINUX-AVR32)
+TOOLSPREFIX = $(AVR32TOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1
+CFLAGS += -D_GNU_SOURCE
+#LDFLAGS += -static	# for static libs
+endif
+
+ifeq ($(ARCH), LINUX-POWERPC)
+TOOLSPREFIX = $(POWERPCTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -DLINUX_POWERPPC=1 -DMW_CPU_BIG_ENDIAN=1
+CFLAGS += -msoft-float
+#CFLAGS += -s
+endif
+
+ifeq ($(ARCH), LINUX-SPARC)
+DEFINES += -DLINUX=1 -DUNIX=1 -DLINUX_SPARC=1 -DMW_CPU_BIG_ENDIAN=1
+#LDFLAGS += -static	# for static libs
+endif
+
+ifeq ($(ARCH), SOLARIS)
+DEFINES += -DUNIX=1 -DMW_CPU_BIG_ENDIAN=1
+LDFLAGS += -lsocket -lnsl -lrt
+endif
+
+ifeq ($(ARCH), LINUX-BLACKFIN)
+TOOLSPREFIX = $(BLACKFINTOOLSPREFIX)
+DEFINES += -DLINUX=1 -DUNIX=1 -Dlinux=1 -DLINUX_BLACKFIN=1
+LDFLAGS += -Wl,-elf2flt
+endif
+
+ifeq ($(ARCH), MACOSX)
+COMPILER = clang
+DEFINES += -DUNIX=1 -DMACOSX=1
+LIBFLEX = -ll
+endif
+
+ifeq ($(ARCH), COSMO)
+TOOLSPREFIX = $(COSMOTOOLSPREFIX)
+INCLUDEDIRS += -I$(MW_DIR_SRC)/cosmo -I$(COSMOINCLUDE)
+DEFINES += -DUNIX=1
+CFLAGS = -static -nostdlib -nostdinc -fno-pie -no-pie -mno-red-zone -fno-omit-frame-pointer
+CFLAGS += -pg -mnop-mcount
+LDFLAGS = -g -Os -static -fno-pie -no-pie -mno-red-zone -nostdlib -nostdinc
+LDFLAGS += -fno-omit-frame-pointer -pg -mnop-mcount -Wl,--gc-sections -fuse-ld=bfd
+LDLIBS = -Wl,-T,$(COSMOAPE)/ape.lds $(COSMOCRT)/crt.o $(COSMOAPE)/ape.o
+LDLIBS += $(COSMOLIB)/cosmopolitan.a
+LIBM =
+endif
+
+ifeq ($(ARCH), RTEMS)
+COMPILER = $(RTEMS_CC)
+CXX_COMPILER = $(RTEMS_CC)
+INCLUDEDIRS += -I$(RTEMS_MAKEFILE_PATH)/lib/include
+DEFINES += -DUNIX=1 -DRTEMS=1 -DHAVE_MMAP=0 -DHAVE_SELECT=0
+CFLAGS += -O4 -fasm -g -B$(RTEMS_MAKEFILE_PATH)/lib/ -specs bsp_specs -qrtems
+# For RTEMS all variables are passed from Makefile.rtems after being
+# extracted from the BSP specific installation.
+ifneq ($(findstring rtems_init,$(LDFLAGS)),rtems_init)
+OS_OBJS = $(MW_DIR_OBJ)/FilesystemImage.o $(MW_DIR_OBJ)/rtems_init.o 
+LDFLAGS += $(OS_OBJS)
+endif
+endif
+
+ifeq ($(ARCH), ECOS)
+TOOLSPREFIX = $(ARMTOOLSPREFIX)
+ECOS_PREFIX = /work/iPAQ/ecos/install
+INCLUDEDIRS += -I$(ECOS_PREFIX)/include
+DEFINES += -D__ECOS=1 -DUNIX=1 -DHAVE_SIGNAL=0 -DHAVE_MMAP=0 -DHAVE_SELECT=0
+DEFINES += -DNX_PER_CLIENT_DATA=1
+CFLAGS += -mcpu=strongarm -Wall -ffunction-sections -fdata-sections -O2 -g
+LDFLAGS += -nostdlib
+LIBM =
+endif
+
+ifeq ($(ARCH), TRIMEDIA)
+COMPILER = cc
+CXX_COMPILER = CC
+TOOLSPREFIX = tm
+ARFLAGS = r
+DEFINES += -DTRIMEDIA=1 -DTCS2 -DOSAL -DLUD_USE_MEMSPACE
+DEFINES += -DHAVE_SIGNAL=0 -DMW_FEATURE_TIMERS=0
+INCLUDEDIRS += -I$(LUD_ROOT)/src/include -I$(LUD_ROOT)/src/modules/fb/include
+HOSTCFLAGS += -I$(LUD_ROOT)/src/include -I$(LUD_ROOT)/src/modules/fb/include
+CFLAGS += -O2 -el -target tm1 -host nohost -tmconfig=$(LUD_ROOT)/src/misc/tmconfig2.1 -B -Xdiag=1
+LDFLAGS += -O2 -el -target tm1 -host nohost -tmconfig=$(LUD_ROOT)/src/misc/tmconfig2.1 -B -Xdiag=1
+#LDFLAGS += -static	# for static libs
+LUD_ROOT = ../../../../../../..
+endif
+
+ifeq ($(ARCH), NDS)
+TOOLSPREFIX = arm-eabi-
+DEFINES += -DNDS=1 -DUNIX=0 -DHAVE_MMAP=0 -DNOMAIN
+INCLUDEDIRS += -I$(DEVKITPRO)/libnds/include -DARM9
+CFLAGS += -march=armv5te -mtune=arm946e-s -fomit-frame-pointer -ffast-math -mthumb-interwork
+#CFLAGS += -mthumb 
+CFLAGS += -O2 -s
+export PORTLIBS	:= $(DEVKITPRO)/portlibs/arm
+export PATH := $(DEVKITARM)/bin:$(PORTLIBS)/bin:$(PATH)
+SCREEN_HEIGHT=192
+SCREEN_WIDTH=256
+endif
+
+ifeq ($(ARCH), PSP)
+PSPSDK = $(shell psp-config --pspsdk-path)
+TOOLSPREFIX = $(PSPTOOLSPREFIX)
+DEFINES += -DPSP=1 -DHAVE_SIGNAL=0 -DHAVE_MMAP=0
+CFLAGS += -I$(PSPSDK)/include -G0 -O2 -DARCH_NEED_ALIGN32 -D_PSP_FW_VERSION=371
+#CFLAGS += -s
+LDFLAGS += -L$(PSPSDK)/lib
+PLIB := $(shell psp-config --pspsdk-path)/lib
+LDFLAGS += -lc -lpspdebug -lpspdisplay -lpspge -lpspctrl -lpspsdk
+LDFLAGS += -lpspnet -lpspnet_inet -lpspnet_apctl -lpspnet_resolver -lpsputility -lpspuser -lpspkernel -lpsplibc 
+endif
+
+ifeq ($(ARCH), CYGWIN)
+# __CYGWIN__ is automatically defined
+DEFINES += -DUNIX=1
+#LDFLAGS += -static	# for static libs
+endif
+
+ifeq ($(ARCH), MINGW)
+# __MINGW32__ is automatically defined
+DEFINES += -DUNIX=1
+endif
+
+ifeq ($(ARCH), DJGPP)
+SHELL = bash
+DEFINES += -DDOS_DJGPP=1 -D_NAIVE_DOS_REGS=1 -DMSDOS=1
+LDFLAGS += -lgrx20
+endif
+
+ifeq ($(ARCH), FREEBSD)
+COMPILER = clang
+CXX_COMPILER = clang++
+HOSTCC = clang
+# __FreeBSD__ is automatically defined
+DEFINES += -DUNIX=1
+INCLUDEDIRS += -I/usr/local/include
+LDFLAGS += -L/usr/local/lib
+HOSTCFLAGS += -I/usr/local/include
+HOSTLDFLAGS += -L/usr/local/lib
+# For forkpty in nxterm.
+NANOXCLIENTLIBS += -lutil
+endif
+
+ifeq ($(ARCH), ELKS)
+COMPILER = ia16-elf-gcc
+AS = ia16-elf-as
+ASFLAGS = -mtune=i8086 --32-segelf
+INCLUDEDIRS += -I/Users/greg/net/elks-gh/libc/include -I/Users/greg/net/elks-gh/elks/include
+DEFINES += -Iinclude -Ielksdrivers -I$(TOPDIR)/cross/lib/gcc/ia16-elf/6.3.0/include
+CFLAGS += -mcmodel=small -melks-libc -mtune=i8086 -Wall -Os
+CFLAGS += -mno-segment-relocation-stuff
+CFLAGS += -fno-inline -fno-builtin-printf -fno-builtin-fprintf
+DEFINES += -DELKS=1 -DUNIX=1 -DNANOWM=1 -DNDEBUG=1
+DEFINES += -DMWPIXEL_FORMAT=MWPF_PALETTE -DSCREEN_PIXTYPE=MWPF_PALETTE
+DEFINES += -Wno-unused-variable -Wno-unused-but-set-variable
+DEFINES += -Wno-missing-field-initializers
+endif
+
+ifeq ($(ARCH), ANDROID)
+TOOLSPREFIX = $(ANDROIDTOOLSPREFIX)
+# Add android ndk toolchain to path
+export PATH := $(ANDROID_NDK_HOME)/toolchains/$(ANDROID_TOOLCHAIN_NAME)/prebuilt/linux-x86_64/bin/:$(PATH)
+DEFINES += -DANDROID=1 -DLINUX=1 -DUNIX=1 -DHAVE_SELECT=0 -DARCH_NEED_ALIGN32
+CFLAGS += -mstructure-size-boundary=8
+CFLAGS += --sysroot=$(ANDROID_NDK_HOME)/platforms/$(ANDROID_PLATFORM_VER)/arch-$(ANDROID_ARCH)/
+CXXFLAGS += --sysroot=$(ANDROID_NDK_HOME)/platforms/$(ANDROID_PLATFORM_VER)/arch-$(ANDROID_ARCH)/
+LDFLAGS += --sysroot=$(ANDROID_NDK_HOME)/platforms/$(ANDROID_PLATFORM_VER)/arch-$(ANDROID_ARCH)/
+LDFLAGS += -L$(ANDROID_NDK_HOME)/sources/cxx-stl/llvm-libc++/libs/$(ANDROID_ARCH_VER)/
+LDFLAGS += -lallegro -llog -lc++
+endif
+
+ifeq ($(ARCH), AQUILA)
+TOOLSPREFIX = $(AQUILATOOLSPREFIX)
+CFLAGS += -DAQUILA -DUNIX -DUNIX98
+endif
+
+ifeq ($(SCREEN), SDL)
+ifneq ($(SDL2_INCLUDE),)
+CFLAGS += -I$(SDL2_INCLUDE) 
+endif
+ifneq ($(SDL2_LIB),)
+LDFLAGS += -L$(SDL2_LIB) 
+endif
+ifneq ($(SDL_ZOOM),)
+DEFINES += -DSDL_ZOOM=$(SDL_ZOOM)
+endif
+endif
+
+ifeq ($(SCREEN), ALLEGRO)
+# required for al_run_main in winmain.c/srvmain.c
+DEFINES += -DALLEGRO=1
+ifneq ($(ALLEGRO5_INCLUDE),)
+CFLAGS += -I$(ALLEGRO5_INCLUDE) 
+endif
+ifneq ($(ALLEGRO5_LIB),)
+LDFLAGS += -L$(ALLEGRO5_LIB) 
+endif
+ifneq ($(ALLEGRO_ZOOM),)
+DEFINES += -DALLEGRO_ZOOM=$(ALLEGRO_ZOOM)
+endif
+endif
+
+ifeq ($(ARCH), EMSCRIPTEN)
+COMPILER = emcc
+CXX_COMPILER = emcc
+ARCHIVER = emar
+LIBM =
+DEFINES += -DEMSCRIPTEN=1
+CFLAGS += -s USE_SDL=2 -s USE_ZLIB=1 -s USE_FREETYPE=1 -s USE_LIBPNG=1
+#LDFLAGS += -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1
+#LDFLAGS += -s WASM=0
+#LDFLAGS += -s TOTAL_MEMORY=67108864
+#LDFLAGS += -s ERROR_ON_UNDEFINED_SYMBOLS=0
+ifeq ($(VERBOSE), Y)
+CFLAGS += -v
+endif
+endif
+
+ifeq ($(WINEXTRA), Y)
+DEFINES += -DWINEXTRA=1
+INCLUDEDIRS += -I$(WINEXTRA_INCLUDE)
+endif

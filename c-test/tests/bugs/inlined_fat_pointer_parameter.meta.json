@@ -1,5 +1,5 @@
 {
+  "description": "Inlining preserves both words and bank provenance for pointer arguments and returns",
   "use_runtime": true,
-  "expected": "YYYY\n",
-  "description": "Inlining preserves both words and bank provenance for pointer arguments and returns"
+  "expected": "YYYY\n"
 }

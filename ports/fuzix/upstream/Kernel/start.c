@@ -1,4 +1,5 @@
 #include <kernel.h>
+#include <timer.h>
 #include <version.h>
 #include <kdata.h>
 #include <printf.h>
@@ -429,6 +430,9 @@ void fuzix_main(void)
            however means the date is often right and that time goes forward */
         tod.low = m->m_fs.s_time;
         tod.high = m->m_fs.s_timeh;
+#ifdef CONFIG_PLATFORM_CLOCK
+        plt_clock_init();
+#endif
 
 	root = i_open(root_dev, ROOTINODE);
 	if (!root)

@@ -1,0 +1,172 @@
+import {} from "./net/stack";
+import { rfl_net_create, rfl_net_retain, rfl_net_release, rfl_net_driver, rfl_net_driver_drop, rfl_net_service, rfl_net_stop, rfl_net_config, rfl_net_dhcp_begin, rfl_net_dhcp_status, rfl_net_dhcp_drop, rfl_net_now, rfl_net_pending_closes } from "./net/registry.c";
+import { rfl_dns_begin, rfl_dns_status, rfl_dns_drop } from "./net/dns.c";
+import { Reactor } from "std/executor";
+import { ClockedReactor, Service, ContinueAfter, StopReactor } from "std/reactor";
+import { host_reactor_with } from "std/host";
+import { Future, sleep } from "std/future";
+import { Result } from "std/result";
+
+export type NetError = BadArgument | NoMemory | NetworkFailure(u16) | DnsFailure(u16) | ReactorUnavailable;
+impl NetError {
+    export fn from_code(code:u16)->NetError {
+        if (code==2) {BadArgument} else if (code==64) {NoMemory} else {NetworkFailure(code)}
+    }
+    export fn message(&self)->String {
+        match self {
+            BadArgument=>"invalid networking argument",
+            NoMemory=>"network allocation failed",
+            DnsFailure(_)=>"guest DNS lookup failed",
+            ReactorUnavailable=>"network reactor unavailable",
+            NetworkFailure(code)=>match code {
+                3=>"network device error",4=>"network unreachable",5=>"no network port available",
+                7=>"network configuration changed",8=>"network operation timed out",9=>"network link down",
+                11=>"connection reset",12=>"connection closed",13=>"network capacity exhausted or operation busy",
+                14=>"network path error",15=>"network operation cancelled",16=>"unsupported network operation",
+                32=>"malformed HTTP response",33=>"HTTP size limit exceeded",34=>"truncated HTTP response",
+                35=>"guest DNS lookup failed",_=>"network operation failed",
+            },
+        }
+    }
+}
+
+export struct Ipv4 {a:u8,b:u8,c:u8,d:u8}
+export fn ipv4(a:u8,b:u8,c:u8,d:u8)->Ipv4 {Ipv4{a:a,b:b,c:c,d:d}}
+fn octet(n:u8)->String {
+    let value=n as u16;
+    let a=from_char((48+value/100) as char);
+    let b=from_char((48+value/10%10) as char);
+    let c=from_char((48+value%10) as char);
+    if (value>=100) {a+b+c} else if (value>=10) {b+c} else {c}
+}
+impl Ipv4 {
+    export fn text(&self)->String {octet(self.a)+"."+octet(self.b)+"."+octet(self.c)+"."+octet(self.d)}
+}
+export struct NetworkConfig {interface:u16,seed:u16,address:Ipv4,mask:Ipv4,gateway:Ipv4,dns:Ipv4}
+export struct Network {state:Owned<*mut u16>,interface:u16,seed:u16}
+export struct NetworkReactor {inner:ClockedReactor,guard:Owned<*mut u16>}
+
+// Stable C storage is owned through a lease. These helpers expose no C layout;
+// callers never retain a reference into a movable RFL value.
+fn pointer(owner:&Owned<*mut u16>)->*mut u16 {let view=owner.borrow();*view}
+fn lease(handle:*mut u16)->Result<Owned<*mut u16>,NetError> {
+    let copy=rfl_net_retain(handle);
+    if (copy.is_null()) {return Err(NoMemory);}
+    Ok(owned(copy,fn(p:&mut *mut u16)=>{rfl_net_release(*p);}))
+}
+fn create(config:NetworkConfig,dynamic:bool)->Result<Network,NetError> {
+    let mut words:[u16;18]=[config.interface,config.seed,
+        config.address.a as u16,config.address.b as u16,config.address.c as u16,config.address.d as u16,
+        config.mask.a as u16,config.mask.b as u16,config.mask.c as u16,config.mask.d as u16,
+        config.gateway.a as u16,config.gateway.b as u16,config.gateway.c as u16,config.gateway.d as u16,
+        config.dns.a as u16,config.dns.b as u16,config.dns.c as u16,config.dns.d as u16];
+    let mut status:u16=0;
+    let handle=unsafe {rfl_net_create(&mut words[0],if (dynamic) {1} else {0},&mut status)};
+    if (status!=0) {return Err(NetError::from_code(status));}
+    if (handle.is_null()) {return Err(NoMemory);}
+    Ok(Network{state:owned(handle,fn(p:&mut *mut u16)=>{rfl_net_release(*p);}),interface:config.interface,seed:config.seed})
+}
+export fn static_network(config:NetworkConfig)->Result<Network,NetError> {create(config,false)}
+export fn dhcp_network(interface:u16,seed:u16)->Result<Network,NetError> {
+    let zero=ipv4(0,0,0,0);
+    create(NetworkConfig{interface:interface,seed:seed,address:zero,mask:zero,gateway:zero,dns:zero},true)
+}
+fn configuration(handle:*mut u16,interface:u16,seed:u16)->Result<NetworkConfig,NetError> {
+    let mut data:[u16;16]=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    let status=unsafe {rfl_net_config(handle,&mut data[0])};
+    if (status!=0) {return Err(NetError::from_code(status));}
+    Ok(NetworkConfig{interface:interface,seed:seed,
+        address:ipv4(data[0] as u8,data[1] as u8,data[2] as u8,data[3] as u8),
+        mask:ipv4(data[4] as u8,data[5] as u8,data[6] as u8,data[7] as u8),
+        gateway:ipv4(data[8] as u8,data[9] as u8,data[10] as u8,data[11] as u8),
+        dns:ipv4(data[12] as u8,data[13] as u8,data[14] as u8,data[15] as u8)})
+}
+impl Network {
+    export fn clone(&self)->Result<Network,NetError> {
+        Ok(Network{state:lease(pointer(&self.state))?,interface:self.interface,seed:self.seed})
+    }
+    export fn configuration(&self)->Result<NetworkConfig,NetError> {configuration(pointer(&self.state),self.interface,self.seed)}
+    export fn reactor(&self)->Result<NetworkReactor,NetError> {
+        let handle=rfl_net_driver(pointer(&self.state));
+        if (handle.is_null()) {return Err(NetworkFailure(13));}
+        // ClockedReactor is copyable. A retained service callback must stop
+        // before touching C storage after the owning driver guard is gone.
+        let mut live=true;
+        let alive:fn()->bool=fn()=>live;
+        let retire:fn()->unit=fn()=>{live=false;};
+        let guard=owned(handle,fn(p:&mut *mut u16)=>{retire();rfl_net_driver_drop(*p);});
+        let service:fn(u32)->Service=fn(now:u32)=>{
+            if (!alive()) {return StopReactor;}
+            if (rfl_net_service(handle,now)==0) {ContinueAfter(Some(1))} else {StopReactor}
+        };
+        let inner=match host_reactor_with(service,1) {Ok(r)=>r,Err(_)=>{return Err(ReactorUnavailable);}};
+        Ok(NetworkReactor{inner:inner,guard:move(guard)})
+    }
+    export fn acquire(&self,timeout_ms:u32)->Async<Result<NetworkConfig,NetError>> {
+        acquire(lease(pointer(&self.state)),self.interface,self.seed,timeout_ms)
+    }
+    export fn resolve(&self,name:String,timeout_ms:u32)->Async<Result<Ipv4,NetError>> {
+        resolve(lease(pointer(&self.state)),name,timeout_ms)
+    }
+    export fn drain_closing(&self,timeout_ms:u32)->Async<Result<unit,NetError>> {
+        drain_closing(lease(pointer(&self.state)),timeout_ms)
+    }
+}
+async fn drain_closing(owner:Result<Owned<*mut u16>,NetError>,timeout:u32)->Result<unit,NetError> {
+    let owner=move(owner)?;
+    if (timeout>600000) {return Err(BadArgument);}
+    let raw=pointer(&owner);
+    let started=rfl_net_now(raw);
+    while (true) {
+        let count=rfl_net_pending_closes(raw);
+        if (count==65535) {return Err(NetworkFailure(15));}
+        if (count==0) {return Ok({});}
+        if (rfl_net_now(raw)-started>=timeout) {return Err(NetworkFailure(8));}
+        sleep(1).unwrap().await;
+    }
+    Err(NetworkFailure(15))
+}
+impl NetworkReactor {
+    export fn stop(&mut self) {rfl_net_stop(pointer(&self.guard));self.inner.stop();}
+}
+impl Reactor for NetworkReactor {
+    fn now(&self)->u32 {self.inner.now()}
+    fn turn(&mut self,wait:Option<u32>)->bool {
+        if (self.inner.turn(wait)) {true} else {rfl_net_stop(pointer(&self.guard));false}
+    }
+}
+async fn acquire(owner:Result<Owned<*mut u16>,NetError>,interface:u16,seed:u16,timeout:u32)->Result<NetworkConfig,NetError> {
+    let owner=move(owner)?;
+    let handle=pointer(&owner);
+    let mut status:u16=0;
+    let raw=unsafe {rfl_net_dhcp_begin(handle,timeout,&mut status)};
+    if (status!=0) {return Err(NetError::from_code(status));}
+    let job=owned(raw,fn(p:&mut *mut u16)=>{rfl_net_dhcp_drop(*p);});
+    while (true) {
+        let status=rfl_net_dhcp_status(pointer(&job));
+        if (status==0) {return configuration(handle,interface,seed);}
+        if (status!=1) {return Err(NetError::from_code(status));}
+        sleep(1).unwrap().await;
+    }
+    Err(NetworkFailure(15))
+}
+async fn resolve(owner:Result<Owned<*mut u16>,NetError>,name:String,timeout:u32)->Result<Ipv4,NetError> {
+    let owner=move(owner)?;
+    if (name.len()==0 || name.len()>253) {return Err(BadArgument);}
+    let mut words:Vec<u16> =[];
+    for (i in 0..name.len()) {words.push(name[i] as u16);}
+    let mut status:u16=0;
+    let raw=unsafe {rfl_dns_begin(pointer(&owner),&mut words[0],name.len() as u16,timeout,&mut status)};
+    if (status!=0) {return Err(NetError::from_code(status));}
+    let job=owned(raw,fn(p:&mut *mut u16)=>{rfl_dns_drop(*p);});
+    while (true) {
+        let status={let mut data:[u16;4]=[0,0,0,0];
+            let status=unsafe {rfl_dns_status(pointer(&job),&mut data[0])};
+            if (status==1) {return Ok(ipv4(data[0] as u8,data[1] as u8,data[2] as u8,data[3] as u8));}
+            status
+        };
+        if (status!=0) {return Err(DnsFailure(status));}
+        sleep(1).unwrap().await;
+    }
+    Err(NetworkFailure(15))
+}

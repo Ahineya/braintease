@@ -3,11 +3,19 @@
 use super::memory::{linear, pointer};
 use super::*;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+
+static STOPPING: AtomicBool = AtomicBool::new(false);
+extern "C" fn stop_session(_signal: libc::c_int) {
+    STOPPING.store(true, Ordering::Relaxed);
+}
 
 const DEFAULT_MAX_PROCESSES: usize = 256;
 
 #[derive(Clone)]
 struct Frame {
+    id: u64,
     token: u32,
     args: Vec<u64>,
     pc: u64,
@@ -19,6 +27,7 @@ struct Frame {
 impl Frame {
     fn new(token: u32, args: Vec<u64>, result: u64) -> Self {
         Self {
+            id: 0,
             token,
             args,
             pc: 0,
@@ -36,12 +45,22 @@ impl Frame {
 }
 
 #[derive(Clone)]
+struct Jump {
+    frame: Frame,
+    depth: usize,
+    stack: usize,
+    result: u64,
+    address: usize,
+}
+
+#[derive(Clone)]
 struct Image {
     memory: address_space::Memory,
     stack: usize,
     free: BTreeMap<usize, usize>,
     allocated: BTreeMap<usize, usize>,
     rng: u32,
+    errno: u64,
 }
 #[derive(Clone, Copy)]
 struct Wait {
@@ -55,6 +74,10 @@ struct Process {
     frames: Vec<Frame>,
     image: Option<Image>,
     wait: Option<Wait>,
+    module: Option<std::sync::Arc<images::Loaded>>,
+    staged: Option<(u32, std::sync::Arc<images::Loaded>)>,
+    jumps: BTreeMap<u64, Jump>,
+    loading: Option<(usize, Vec<u8>)>,
 }
 #[derive(Clone, Copy)]
 struct Request {
@@ -66,6 +89,11 @@ struct Request {
 
 #[derive(Default)]
 pub(super) struct Machine {
+    checkpoint: u32,
+    checkpoint_count: u16,
+    checkpoint_time: Option<Instant>,
+    pub(super) hosted: bool,
+    global_template: Vec<u16>,
     active: Option<Process>,
     runnable: VecDeque<Process>,
     waiting: Vec<Process>,
@@ -76,8 +104,58 @@ pub(super) struct Machine {
     arguments: Vec<u64>,
     root_status: Option<u64>,
     max_processes: usize,
+    next_frame: u64,
+    next_jump: u64,
 }
 impl Machine {
+    pub(super) fn diagnostic(&self) -> String {
+        self.active
+            .as_ref()
+            .map(|p| {
+                format!(
+                    "; continuations {:?}",
+                    p.frames
+                        .iter()
+                        .rev()
+                        .take(8)
+                        .map(|f| (format!("{:#x}", f.token), f.pc))
+                        .collect::<Vec<_>>()
+                )
+            })
+            .unwrap_or_default()
+    }
+    pub(super) fn loading(&mut self) -> &mut Option<(usize, Vec<u8>)> {
+        &mut self.active.as_mut().unwrap().loading
+    }
+    pub(super) fn owns_image(&self, image: &std::sync::Arc<images::Loaded>) -> bool {
+        self.active
+            .as_ref()
+            .and_then(|p| p.module.as_ref())
+            .is_some_and(|m| std::sync::Arc::ptr_eq(m, image))
+    }
+    pub(super) fn is_prelinked(&self) -> bool {
+        self.active.as_ref().is_some_and(|p| p.module.is_none())
+    }
+    pub(super) fn current_token(&self) -> u32 {
+        self.active
+            .as_ref()
+            .and_then(|p| p.frames.last())
+            .unwrap_or_else(|| fatal("no active image frame"))
+            .token
+    }
+    pub(super) fn stage_image(&mut self, entry: u32, image: std::sync::Arc<images::Loaded>) {
+        self.active.as_mut().unwrap().staged = Some((entry, image));
+    }
+    pub(super) fn discard_staged(&mut self, entry: u32) {
+        let process = self.active.as_mut().unwrap();
+        if process
+            .staged
+            .as_ref()
+            .is_some_and(|(token, _)| *token == entry)
+        {
+            process.staged = None;
+        }
+    }
     fn frame(&mut self) -> &mut Frame {
         self.active
             .as_mut()
@@ -105,6 +183,7 @@ impl Runtime {
             free: std::mem::take(&mut self.free),
             allocated: std::mem::take(&mut self.allocated),
             rng: self.rng,
+            errno: self.errno,
         }
     }
     fn clone_image(&self) -> Image {
@@ -114,6 +193,7 @@ impl Runtime {
             free: self.free.clone(),
             allocated: self.allocated.clone(),
             rng: self.rng,
+            errno: self.errno,
         }
     }
     fn restore_image(&mut self, image: Image) {
@@ -122,6 +202,7 @@ impl Runtime {
         self.free = image.free;
         self.allocated = image.allocated;
         self.rng = image.rng;
+        self.errno = image.errno;
     }
     fn rotate_process(&mut self) {
         if self.processes.runnable.is_empty() {
@@ -135,6 +216,9 @@ impl Runtime {
     fn select_process(&mut self) -> bool {
         if self.processes.active.is_some() {
             return true;
+        }
+        if self.processes.hosted {
+            return false;
         }
         let Some(mut process) = self.processes.runnable.pop_front() else {
             return false;
@@ -161,6 +245,10 @@ impl Runtime {
             frames: active.frames.clone(),
             image: Some(self.clone_image()),
             wait: None,
+            module: active.module.clone(),
+            staged: None,
+            jumps: active.jumps.clone(),
+            loading: None,
         };
         child.frames.last_mut().unwrap().result(result, 0);
         self.processes.frame().result(result, u64::from(pid));
@@ -234,7 +322,207 @@ impl Runtime {
         }
     }
     fn handle_request(&mut self, request: Request) {
+        // setjmp captures the caller's continuation, never a Rust/host stack.
+        // Memory is deliberately not rolled back: volatile locals and changes
+        // to globals/heap retain their values, just as for a machine setjmp.
+        if request.op == 13 {
+            let address = linear(request.a);
+            if address < BANK || address + 4 > address_space::KERNEL_START {
+                fatal("invalid native jump buffer");
+            }
+            self.processes.next_jump = self
+                .processes
+                .next_jump
+                .checked_add(1)
+                .unwrap_or_else(|| fatal("native jump token space exhausted"));
+            let cookie = self.processes.next_jump;
+            let process = self.processes.active.as_mut().unwrap();
+            let frame = process.frames.last_mut().unwrap();
+            frame.result(request.result, 0);
+            let jump = Jump {
+                frame: frame.clone(),
+                depth: process.frames.len(),
+                stack: self.stack,
+                result: request.result,
+                address,
+            };
+            process.jumps.retain(|_, j| j.address != address);
+            process.jumps.insert(cookie, jump);
+            for i in 0..4 {
+                self.memory.write(address + i, (cookie >> (16 * i)) as u16);
+            }
+            return;
+        }
+        if request.op == 14 {
+            let address = linear(request.a);
+            if address < BANK || address + 4 > address_space::KERNEL_START {
+                fatal("invalid native jump buffer");
+            }
+            let cookie = (0..4).fold(0u64, |n, i| {
+                n | (u64::from(self.memory.read(address + i)) << (16 * i))
+            });
+            let process = self.processes.active.as_mut().unwrap();
+            let jump = process
+                .jumps
+                .get(&cookie)
+                .cloned()
+                .unwrap_or_else(|| fatal("expired native jump buffer"));
+            if process
+                .frames
+                .get(jump.depth - 1)
+                .is_none_or(|f| f.id != jump.frame.id)
+            {
+                fatal("native longjmp target has returned");
+            }
+            process.frames.truncate(jump.depth - 1);
+            process.frames.push(jump.frame);
+            let value = request.b as u16;
+            process
+                .frames
+                .last_mut()
+                .unwrap()
+                .result(jump.result, u64::from(value.max(1)));
+            process.jumps.retain(|_, j| {
+                process
+                    .frames
+                    .get(j.depth - 1)
+                    .is_some_and(|f| f.id == j.frame.id)
+            });
+            self.stack = jump.stack;
+            return;
+        }
+        if self.processes.hosted {
+            match request.op {
+                15 => {
+                    let token = self.processes.checkpoint;
+                    if token != 0 {
+                        self.processes
+                            .active
+                            .as_mut()
+                            .unwrap()
+                            .frames
+                            .push(Frame::new(token, vec![], 0));
+                    }
+                }
+                6 => {
+                    let pointer = self.memory.kernel_allocate(request.a);
+                    self.processes.frame().result(request.result, pointer);
+                }
+                7 => {
+                    self.memory.kernel_release(request.a);
+                    self.processes.frame().result(request.result, 0);
+                }
+                4 => {
+                    self.processes.root_status = Some(request.a);
+                    self.processes.active = None;
+                    self.processes.runnable.clear();
+                }
+                8 => {
+                    let slot = request.a;
+                    if slot == 0
+                        || slot >= self.processes.max_processes as u64
+                        || self
+                            .processes
+                            .runnable
+                            .iter()
+                            .any(|p| u64::from(p.pid) == slot + 1)
+                        || u64::from(self.processes.active.as_ref().unwrap().pid) == slot + 1
+                    {
+                        self.processes
+                            .frame()
+                            .result(request.result, u64::from(u16::MAX));
+                    } else {
+                        let mut child = Process {
+                            pid: slot as u16 + 1,
+                            parent: 0,
+                            frames: self.processes.active.as_ref().unwrap().frames.clone(),
+                            image: Some(self.clone_image()),
+                            wait: None,
+                            module: self.processes.active.as_ref().unwrap().module.clone(),
+                            staged: None,
+                            jumps: self.processes.active.as_ref().unwrap().jumps.clone(),
+                            loading: None,
+                        };
+                        child.frames.last_mut().unwrap().result(request.result, 0);
+                        self.processes.frame().result(request.result, 1);
+                        self.processes.runnable.push_back(child);
+                    }
+                }
+                9 | 10 => {
+                    if u64::from(self.processes.active.as_ref().unwrap().pid) == request.a + 1 {
+                        if request.op == 10 {
+                            fatal("hosted context cannot drop itself and resume itself");
+                        }
+                        self.processes.frame().result(request.result, 0);
+                        return;
+                    }
+                    let index = self
+                        .processes
+                        .runnable
+                        .iter()
+                        .position(|p| u64::from(p.pid) == request.a + 1)
+                        .unwrap_or_else(|| fatal("hosted kernel selected an absent context"));
+                    let mut target = self.processes.runnable.remove(index).unwrap();
+                    self.processes.frame().result(request.result, 0);
+                    let image = self.park_image();
+                    let mut previous = self.processes.active.take().unwrap();
+                    if request.op == 9 {
+                        previous.image = Some(image);
+                        self.processes.runnable.push_back(previous);
+                    }
+                    self.restore_image(target.image.take().unwrap());
+                    self.processes.active = Some(target);
+                }
+                11 => {
+                    let arity = self
+                        .functions
+                        .get(&(request.a as u32))
+                        .unwrap_or_else(|| fatal("hosted exec entry is not registered"))
+                        .1;
+                    if arity != 1 {
+                        fatal("hosted exec entry must accept one argument");
+                    }
+                    let owner = self.images.owner(request.a as u32);
+                    self.processes.discard_staged(request.a as u32);
+                    let template = owner
+                        .as_ref()
+                        .map(|m| m.template.as_slice())
+                        .unwrap_or(&self.processes.global_template);
+                    self.memory.write_from(BANK, template);
+                    self.errno = owner.as_ref().map_or(0, |m| m.errno);
+                    self.processes.active.as_mut().unwrap().module = owner;
+                    self.memory.fill(2 * BANK..5 * BANK, 0);
+                    self.stack = 2 * BANK + 1;
+                    self.free = BTreeMap::from([(
+                        5 * BANK + 1,
+                        address_space::KERNEL_START - 5 * BANK - 1,
+                    )]);
+                    self.allocated.clear();
+                    self.processes.active.as_mut().unwrap().frames =
+                        vec![Frame::new(request.a as u32, vec![request.b], 0)];
+                    self.processes.active.as_mut().unwrap().jumps.clear();
+                    self.processes.active.as_mut().unwrap().loading = None;
+                }
+                12 => {
+                    let token = self.images.syscall;
+                    if token == 0 {
+                        fatal("hosted syscall bridge is not registered");
+                    }
+                    self.processes
+                        .active
+                        .as_mut()
+                        .unwrap()
+                        .frames
+                        .push(Frame::new(token, vec![request.a], request.result));
+                }
+                _ => fatal(
+                    "cooperative process services cannot be mixed with hosted kernel contexts",
+                ),
+            }
+            return;
+        }
         match request.op {
+            15 => self.rotate_process(),
             1 => self.fork_process(request.result),
             2 => {
                 self.processes.frame().result(request.result, 0);
@@ -265,6 +553,70 @@ impl Runtime {
     }
 }
 
+impl Runtime {
+    fn checkpoint_due(&mut self) -> u64 {
+        let machine = &mut self.processes;
+        if machine.hosted && machine.checkpoint == 0 {
+            return 0;
+        }
+        machine.checkpoint_count = machine.checkpoint_count.wrapping_add(1);
+        if machine.checkpoint_count < 256 {
+            return 0;
+        }
+        machine.checkpoint_count = 0;
+        if machine.hosted
+            && machine
+                .active
+                .as_ref()
+                .unwrap()
+                .frames
+                .iter()
+                .any(|f| f.token == machine.checkpoint || f.token == self.images.syscall)
+        {
+            return 0;
+        }
+        let now = Instant::now();
+        if machine
+            .checkpoint_time
+            .is_some_and(|last| now.duration_since(last) < Duration::from_millis(5))
+        {
+            return 0;
+        }
+        machine.checkpoint_time = Some(now);
+        1
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn rcc_native_process_checkpoint(ctx: *mut Runtime) -> u64 {
+    unsafe { &mut *ctx }.checkpoint_due()
+}
+
+#[no_mangle]
+unsafe extern "C" fn rcc_native_ext_rcc_hosted_bind_checkpoint(
+    ctx: *mut Runtime,
+    entry: u64,
+) -> u64 {
+    let rt = unsafe { &mut *ctx };
+    if !rt.processes.hosted
+        || rt
+            .functions
+            .get(&(entry as u32))
+            .is_none_or(|(_, arity)| *arity != 0)
+    {
+        fatal("invalid hosted checkpoint entry");
+    }
+    rt.processes.checkpoint = entry as u32;
+    rt.processes.checkpoint_time = Some(Instant::now());
+
+    0
+}
+
+#[no_mangle]
+unsafe extern "C" fn rcc_native_ext_rcc_hosted_stopping(_ctx: *mut Runtime) -> u64 {
+    u64::from(STOPPING.load(Ordering::Relaxed))
+}
+
 // Helpers borrow Runtime only for the duration of a synchronous generated call.
 // Scheduling happens after that call AND the enclosing native step return.
 macro_rules! helper {
@@ -277,6 +629,11 @@ macro_rules! helper {
     };
 }
 helper!(rcc_native_process_frame(rt, cells) {
+    if rt.processes.frame().id == 0 {
+        rt.processes.next_frame = rt.processes.next_frame.checked_add(1)
+            .unwrap_or_else(|| fatal("native frame identity space exhausted"));
+        rt.processes.frame().id = rt.processes.next_frame;
+    }
     if let Some(base) = rt.processes.frame().base { return pointer(base); }
     let mark = rt.stack;
     rt.stack = mark.checked_add(usize::try_from(cells).unwrap_or_else(|_| fatal("native frame size overflow")))
@@ -314,6 +671,7 @@ helper!(rcc_native_process_call(rt, token, count, result) {
 });
 helper!(rcc_native_process_return(rt, value) {
     let frame = rt.processes.active.as_mut().unwrap().frames.pop().unwrap();
+    rt.processes.active.as_mut().unwrap().jumps.retain(|_, j| j.frame.id != frame.id);
     rt.stack = frame.mark;
     if rt.processes.active.as_ref().unwrap().frames.is_empty() {
         rt.processes.request = Some(Request { op: 4, a: value, b: 0, result: 0 });
@@ -325,6 +683,12 @@ helper!(rcc_native_process_request(rt, op, a, b, result) {
 });
 helper!(rcc_native_process_bad_pc(_rt) { fatal("invalid native continuation program counter") });
 helper!(rcc_native_process_memory(rt) { rt.enable_process_memory(); 0 });
+helper!(rcc_native_kernel_globals(rt, cells) {
+    if rt.memory.kernel_allocate(cells) != pointer(address_space::KERNEL_START + 1) {
+        fatal("cannot reserve native shared kernel globals");
+    }
+    0
+});
 
 /// # Safety
 /// ctx is the live exclusively accessed runtime; its registered function tokens
@@ -335,10 +699,24 @@ unsafe extern "C" fn rcc_native_process_start(
     token: u64,
     argc: u64,
     argv: u64,
+    hosted: u64,
 ) -> u64 {
     {
         let rt = unsafe { &mut *ctx };
         rt.enable_process_memory();
+        if hosted != 0 {
+            STOPPING.store(false, Ordering::Relaxed);
+            // Signal handlers only set a flag. All guest work happens later, on its
+            // execution thread, at an idle boundary, syscall or compiled checkpoint.
+            unsafe {
+                let mut action: libc::sigaction = std::mem::zeroed();
+                action.sa_sigaction = stop_session as *const () as usize;
+                libc::sigemptyset(&mut action.sa_mask);
+                if libc::sigaction(libc::SIGTERM, &action, std::ptr::null_mut()) != 0 {
+                    fatal("cannot install hosted shutdown handler");
+                }
+            }
+        }
         let max_processes = std::env::var("RCC_NATIVE_MAX_PROCESSES")
             .ok()
             .map(|value| {
@@ -362,12 +740,22 @@ unsafe extern "C" fn rcc_native_process_start(
             _ => fatal("invalid native process main arity"),
         };
         rt.processes = Machine {
+            hosted: hosted != 0,
+            global_template: if hosted != 0 {
+                rt.memory.cells(BANK..2 * BANK).collect()
+            } else {
+                Vec::new()
+            },
             active: Some(Process {
                 pid: 1,
                 parent: 0,
                 frames: vec![Frame::new(token as u32, args, 0)],
                 image: None,
                 wait: None,
+                module: None,
+                staged: None,
+                jumps: BTreeMap::new(),
+                loading: None,
             }),
             next_pid: 2,
             max_processes,
@@ -395,5 +783,23 @@ unsafe extern "C" fn rcc_native_process_start(
         if let Some(request) = rt.processes.request.take() {
             rt.handle_request(request);
         }
+        // Calls already return to this driver with a saved continuation. Check
+        // their time slice here; only loops need extra compiler-generated code.
+        let user_step = rt.processes.active.as_ref().is_some_and(|p| {
+            !rt.processes.hosted
+                || p.frames
+                    .last()
+                    .is_some_and(|f| rt.images.owner(f.token).is_some())
+        });
+        if user_step && rt.checkpoint_due() != 0 {
+            // End the borrow before any future reentry into compiled code.
+            rt.handle_request(Request {
+                op: 15,
+                a: 0,
+                b: 0,
+                result: 0,
+            });
+        }
+        rt.images.collect(&mut rt.functions);
     }
 }

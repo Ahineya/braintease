@@ -1,5 +1,5 @@
 {
+  "expected": "YYYYYYYYYYYYYYY\n",
   "use_runtime": true,
-  "description": "Keep full signed32 and unsigned32/64 switch controls, including equal low halves",
-  "expected": "YYYYYYYYYYYYYYY\n"
+  "description": "Keep full signed32 and unsigned32/64 switch controls, including equal low halves"
 }

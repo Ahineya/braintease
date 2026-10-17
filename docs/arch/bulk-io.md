@@ -14,6 +14,7 @@ so a standalone Brainfuck interpreter needs equivalent device support.
 | STORAGE_WRITE | 0x0301 | RAM → attached disk cache |
 | MEMORY_COPY | 0x0302 | RAM → RAM or instruction memory |
 | MEMORY_FILL | 0x0303 | fill RAM cells |
+| MEMORY_INFO | 0x0304 | query addressable RAM and instruction capacity |
 
 `CAPS` advertises RAM transfers with bit `0x0400`, storage with `0x0200` when a
 disk backend is attached, and instruction uploads with `0x0800` when the CPU image
@@ -24,7 +25,7 @@ interrupts, or polling loops are required.
 
 ## Descriptor
 
-All four commands take twelve 16-bit cells. Inputs and the descriptor are
+The four transfer commands take twelve 16-bit cells. Inputs and the descriptor are
 snapshotted before mutation; the descriptor has no output fields.
 
 | Cell | Meaning |
@@ -36,6 +37,21 @@ snapshotted before mutation; the descriptor has no output fields.
 | 6–7 | element count, low/high |
 | 8 | representation, below |
 | 9–11 | reserved, must be zero |
+
+`MEMORY_INFO` instead takes eight cells: version 1, length 8, RAM capacity
+low/high, code capacity low/high, bank size, and reserved zero. Cells 2–7 are
+outputs. Capacities count RAM cells and instructions respectively, bounded by
+the architectural address space. The query allocates no memory and advances
+no clock. Native hosts report zero instruction capacity; RBF reports its
+exported reservation. RVM reports its configured instruction-storage ceiling.
+Older hosts return UNKNOWN_COMMAND; probe before relying on this extension.
+`vm_memory_info` in `<vm_bulk.h>` supplies the C wrapper.
+
+RVM defaults to 67,108,864 instructions (512 MiB of decoded code), allocated
+lazily. `--code-memory N` overrides the ceiling in instruction units. Initial
+binary loading, STORC and bulk uploads use the same ceiling; JIT tables and
+compiled host code consume additional memory. Allocation failures return
+errors. This ceiling does not reserve or limit data RAM.
 
 | Representation | Value | READ / WRITE | COPY |
 |---|---|---|---|
@@ -118,51 +134,45 @@ status = vm_bulk_copy((unsigned)(address >> 16), (unsigned)address,
 
 The BIOS loads each contiguous FAT-cluster span directly into kernel code or RAM,
 and clears the remaining data bank with FILL. The filesystem's block driver uses
-word transfers after mapping ROOTFS.IMG extents in the guest. In both profiles,
+word transfers after mapping ROOTFS.IMG extents in the guest.
 RXE execution uploads instruction batches from its physical filesystem stream
 buffer. The guest still checks executable headers and relocation records and
 manages processes.
 
-The default RVM `MMU=1` profile switches process maps instead of copying user
-banks. Fork shares code and COW data/stack pages; a write to a shared page copies
+FUZIX/Ripple requires RVM with MMU support. It switches process maps instead of
+copying user banks. Fork shares code and COW data/stack pages; a write to a shared page copies
 512 physical cells through the bulk RAM helper. Physical page initialization
 uses bulk FILL. Fork also clones the parent's physical kernel stack through the
 bank-copy helper.
 
-The legacy `MMU=0` profile snapshots/restores fixed user data/stack banks during
-fork and scheduling, and clones the parent's kernel stack. Each 64,000-cell bank
-uses two submissions (32,768 and 31,232 cells), preserving all 16 bits per cell.
-This profile also uses bulk operations to install/clear executable data and
-applies physical code-base relocations with LOADC/STORC. MMU-profile code uses
-virtual addresses starting at code bank zero and needs no physical-base edits.
+The loader maps executable code from virtual bank zero, without physical-base
+relocation. The old non-MMU/RBF FUZIX build and user-bank snapshots are retired.
 
 Physical kernel-buffer and filesystem cache-buffer copies/clears of at least
-256 cells use bulk operations. Small buffers retain direct copies. In the MMU
-profile, copies involving the supervisor's translated user window use CPU
-accesses, with user-memory validation and COW handling. This includes executable
-data installation and `/dev/zero` destinations. Virtual addresses are never
-submitted as physical device endpoints.
+256 cells use bulk operations. User-buffer helpers validate mapped spans and
+resolve COW, then submit translated physical endpoints to DMA. This includes
+executable data installation and `/dev/zero` destinations. Small transfers
+retain direct copies; virtual addresses are never physical device endpoints.
 
 These kernel operations disable interrupts across each mailbox submission and
 restore the previous interrupt mask. Assembly trap-frame moves and signal-frame
 validation retain their existing paths. Unsupported memory operations use the
 original loops; other errors become EIO for user-memory helpers or stop the
 kernel when a physical page, task stack, or cache-buffer transfer cannot be
-trusted. Toggling bulk I/O changes copy cost without changing either profile's
+trusted. Toggling bulk I/O changes copy cost without changing the MMU build's
 memory layout, the compiler ABI, or disk format.
 
 Build Fuzix with `BULK_IO=0` to force scalar transfers for comparison; the build
 records this setting and rebuilds affected objects. This flag does not disable
-the MMU or restore bank snapshots. Fast/fallback builds must use the same `MMU`
-setting and matching userspace. Unsupported bulk operations retain scalar
-fallbacks, but the MMU profile still requires an MMU-capable RVM. RBF uses `MMU=0`.
+the MMU. Fast/fallback builds must use matching MMU userspace. Unsupported bulk
+operations retain scalar fallbacks; both configurations require MMU-capable RVM.
 Doom has not been switched to these helpers in this change.
 
 ## Validation checkpoint (16 October 2026)
 
-The following results record the legacy `MMU=0` bulk-I/O integration before the
-MMU/COW profile was added. Instruction counts and timings are not benchmarks of
-the current default profile. Its additional protection/COW checks are described
+These historical results record the now-retired `MMU=0` bulk-I/O integration
+before the MMU/COW profile was added; this build is no longer an acceptance
+target. Instruction counts and timings are not benchmarks of the current profile. Its additional protection/COW checks are described
 in the [Fuzix validation guide](../../ports/fuzix/README.md#validation).
 
 - 212 RVM/RBF unit and integration tests, 71 assembler/CPU unit tests, and eight

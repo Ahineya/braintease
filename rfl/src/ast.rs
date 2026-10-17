@@ -140,6 +140,8 @@ pub struct TypeParam {
 
 #[derive(Debug, Clone)]
 pub struct Function {
+    /// The written result is wrapped in `Async<T>`; the body still returns T.
+    pub is_async: bool,
     pub name: String,
     pub name_span: Span,
     pub type_params: Vec<TypeParam>,
@@ -300,6 +302,7 @@ pub struct Expr {
 
 #[derive(Debug, Clone)]
 pub enum ExprKind {
+    Await(Box<Expr>),
     Int(i64),
     /// Decimal spelling. The checker chooses `f32` or `f64`.
     Float(String),

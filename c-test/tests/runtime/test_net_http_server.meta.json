@@ -1,5 +1,5 @@
 {
+  "description": "HTTP server partial writes, binary responses, deadlines including trickles, errors and pooled reuse",
   "expected": "YYYYYYYYYYYYYYYYYYYYYYY\n",
-  "use_runtime": true,
-  "description": "HTTP server partial writes, binary responses, deadlines including trickles, errors and pooled reuse"
+  "use_runtime": true
 }

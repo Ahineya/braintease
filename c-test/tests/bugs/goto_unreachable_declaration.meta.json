@@ -1,5 +1,5 @@
 {
+  "description": "Goto targets survive unreachable declarations and trailing instructions after a branch",
   "expected": "YY\n",
-  "use_runtime": true,
-  "description": "Goto targets survive unreachable declarations and trailing instructions after a branch"
+  "use_runtime": true
 }

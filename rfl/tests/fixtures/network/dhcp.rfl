@@ -1,0 +1,21 @@
+import {dhcp_network} from "std/net";
+import {Request,http_client} from "std/http";
+import {Reactor,block_on} from "std/executor";
+import {Result} from "std/result";
+fn main()->i16 {
+    let network=dhcp_network(0,7).expect("network");
+    let mut reactor=network.reactor().expect("reactor");
+    let mut lease=network.acquire(30000);
+    let config=block_on(&mut lease,&mut reactor).expect("DHCP executor").expect("DHCP");
+    println(config.address.text());println(config.dns.text());
+    let client=http_client(&network,4294967280).expect("client");
+    let mut request=client.send(Request::get("web.ripple.test","/").with_port(8080).with_limit(20000).with_timeout(30000));
+    let response=match block_on(&mut request,&mut reactor).expect("executor") {Ok(r)=>r,Err(e)=>{println(e.message());return 20;}};
+    println(response.status);
+    let mut checksum:u32=0;
+    for (i in 0..response.body.len()) {checksum+=response.body[i] as u32;}
+    println(response.body.len());println(checksum);
+    let mut closing=network.drain_closing(5000);
+    block_on(&mut closing,&mut reactor).expect("close executor").expect("close");
+    println("RFL HTTP OK");0
+}

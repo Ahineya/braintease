@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "A conditional between integer null and an object pointer has pointer type on return",
+  "expected": "Y\n"
+}

@@ -10,6 +10,7 @@ impl<'a> Checker<'a> {
     ) -> Result<TExpr, CompileError> {
         let span = expr.span.start;
         match &expr.kind {
+            ExprKind::Await(child) => self.check_await(span, child, expected),
             ExprKind::Int(value) => {
                 let ty = match expected {
                     Some(ty) if ty.is_int() => ty,

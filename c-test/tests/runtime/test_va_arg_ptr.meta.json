@@ -1,5 +1,5 @@
 {
+  "expected": "YYYYY\n",
   "use_runtime": true,
-  "description": "va_arg pointer store sizes",
-  "expected": "YYYYY\n"
+  "description": "va_arg pointer store sizes"
 }

@@ -127,27 +127,27 @@ extern uint32_t our_address;
 struct ifreq {
 	char ifr_name[IFNAMSIZ];
 	union {
-		struct ksockaddr ifr_addr;
-		struct ksockaddr ifr_dstaddr;
-		struct ksockaddr ifr_broadaddr;
-		struct ksockaddr ifr_netmask;
-		struct ksockaddr ifr_gwaddr;
-		struct ksockaddr ifr_hwaddr;
-		short ifr_flags;
-		int ifr_ifindex;
-		int ifr_mtu;
+		struct ksockaddr u_addr;
+		struct ksockaddr u_dstaddr;
+		struct ksockaddr u_broadaddr;
+		struct ksockaddr u_netmask;
+		struct ksockaddr u_gwaddr;
+		struct ksockaddr u_hwaddr;
+		short u_flags;
+		int u_ifindex;
+		int u_mtu;
 	} ifr_ifru;
 };
 
-#define ifr_addr	ifr_ifru.ifr_addr
-#define ifr_dstaddr	ifr_ifru.ifr_dstaddr
-#define ifr_broadaddr	ifr_ifru.ifr_broadaddr
-#define ifr_netmask	ifr_ifru.ifr_netmask
-#define ifr_hwaddr	ifr_ifru.ifr_hwaddr
-#define ifr_gwaddr	ifr_ifru.ifr_gwaddr
-#define ifr_flags	ifr_ifru.ifr_flags
-#define ifr_ifindex	ifr_ifru.ifr_ifindex
-#define ifr_mtu		ifr_ifru.ifr_mtu
+#define ifr_addr	ifr_ifru.u_addr
+#define ifr_dstaddr	ifr_ifru.u_dstaddr
+#define ifr_broadaddr	ifr_ifru.u_broadaddr
+#define ifr_netmask	ifr_ifru.u_netmask
+#define ifr_hwaddr	ifr_ifru.u_hwaddr
+#define ifr_gwaddr	ifr_ifru.u_gwaddr
+#define ifr_flags	ifr_ifru.u_flags
+#define ifr_ifindex	ifr_ifru.u_ifindex
+#define ifr_mtu		ifr_ifru.u_mtu
 
 #define IFF_UP		0x0001
 #define IFF_BROADCAST	0x0002

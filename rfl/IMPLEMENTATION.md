@@ -648,6 +648,12 @@ Ripple placement requirement.
 
 ## Remaining specification gaps
 
+Lazy async functions and postfix await are now implemented; see
+[the async contract](async.md). Their independent owned frames preserve locals,
+use existing Future/Context dispatch and cancel unfinished children on drop.
+Safe references cannot cross suspension. Async blocks, methods, borrowed async
+parameters and compact state layouts remain separate extensions.
+
 These are still unsupported; passing regression tests do not imply conformance.
 
 | Requirement | Current behavior | Relevant implementation |
@@ -670,8 +676,8 @@ These are still unsupported; passing regression tests do not imply conformance.
    collection accesses while preserving evaluation order and aliasing.
 3. Extend the resource scope-exit machinery to the separately specified `defer`
    feature.
-4. Build suspension rules and async state-machine lowering on the implemented
-   Future/polling/executor contracts before introducing async syntax. The
+4. Refine the implemented async state machines with tighter frame liveness and
+   layout, then add further async forms and proven borrowed operations. The
    [async roadmap](../docs/networking/rfl.md) records the current checkpoint.
 5. Complete generic local-value inference, numeric literal representation, and
    large-value storage; add conformance cases alongside each extension.

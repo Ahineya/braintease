@@ -1,4 +1,4 @@
 {
-  "expected": "Hi!\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "Hi!\n"
 }

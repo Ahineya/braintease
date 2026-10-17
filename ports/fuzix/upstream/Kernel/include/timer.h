@@ -13,7 +13,12 @@ typedef int16_t timecmp_t;
 timer_t set_timer_duration(uint16_t duration); /* good for up to 32K ticks */
 uint8_t timer_expired(timer_t timer_val);
 
-#ifndef CONFIG_NO_CLOCK
+#if defined(CONFIG_PLATFORM_CLOCK)
+extern void sync_clock(void);
+extern void plt_clock_init(void);
+extern void timer_advance(uint32_t deciseconds);
+extern void tod_advance(uint32_t deciseconds);
+#elif !defined(CONFIG_NO_CLOCK)
 #define sync_clock() 	do {} while(0)
 #define update_sync_clock() do {} while(0)
 #else

@@ -196,6 +196,11 @@ impl NetworkDevice {
         }
         Ok(())
     }
+    /// Attach before entering an interactive terminal, so helper authorization
+    /// cannot compete with the guest's input reader. Ordinary attachment is lazy.
+    pub fn prepare_host(&self) -> Result<(), String> {
+        self.host.ensure(self).map_err(str::to_owned)
+    }
     pub fn port(&self) -> NetworkPort {
         NetworkPort(Arc::clone(&self.state))
     }

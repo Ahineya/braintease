@@ -1,41 +1,80 @@
 # Fuse-X storage
 
 Fuse-X needs persistent system storage and a convenient way to exchange files
-with macOS. **A root disk image plus selected shared host folders is the current
-proposal**, rather than a settled filesystem implementation.
+with macOS. The implemented model is **a root disk image plus one read/write host folder**, mounted for the lifetime of the session.
 
 ## Root disk image
 
-Start by adapting the existing block-storage model to a host-backed image. This
+The hosted adapter uses the existing block-storage model with a host-backed image. This
 lets FUZIX retain its filesystem, system files, application installation, and
 guest device-file semantics. It also keeps a portable image usable with the
 Ripple port and existing image tooling, subject to executable-format differences.
 
+The hosted default uses 65,535 blocks, or 128 MiB minus 2 KiB of host storage,
+with 1,024 inodes. Normal application installation expands smaller clean roots
+to this geometry and keeps a backup. C16 V2 uses 16-bit block numbers, so larger
+single filesystems require a format change. Each ordinary file octet occupies
+one 16-bit cell on this image; host-folder files retain their normal octet layout.
+
 The hosted storage adapter must define block/octet conversion, error reporting,
 flush behavior, and orderly shutdown. Give a writable image one session owner;
-opening it from two independent kernels must not silently create competing
-filesystem caches.
+native kernels use an advisory host lock so two writable sessions cannot
+silently create competing filesystem caches. The launcher also rejects images
+already open by another process when host `lsof` is available. Offline image
+editors must still be used only while the kernel is stopped.
 
-Native storage MMIO is currently unavailable. Existing native C file streams
-are building blocks for host I/O, but do not implement the kernel's block-device
-interface or make a Mac directory into a guest mount.
+Native storage MMIO is currently unavailable. The hosted kernel instead uses
+native C streams for block I/O, with explicit C16/octet conversion. Folder mounts
+use a separate native filesystem service and do not masquerade as a block image.
 
 ## Shared Mac folders
 
-The proposed UI lets a person choose a Mac directory and expose it at a guest
-mount point, with read-only or read/write access. Example layout:
+The launcher creates the gitignored `fuse-x-shared/` folder at the repo root and
+mounts it read/write at `/mnt/host` by default. Use `--share HOST_DIRECTORY` to
+select another folder or `--no-share` to disable the mount. An explicit path can
+contain spaces and is resolved relative to the caller's working directory.
+Check modes leave the default folder unmounted. Example layout:
 
 | Guest path | Backing storage |
 | --- | --- |
 | `/` | FUZIX disk image |
-| `/mnt/host/projects` | An explicitly selected Mac projects directory |
+| `/mnt/host` | Repo-root `fuse-x-shared/`, or the directory selected with `--share` |
 
-This requires a filesystem bridge for open, read, write, seek, directory
-enumeration, metadata, creation, removal, and rename operations. Host references
-stay behind opaque handles; guest pointers and native host pointers have
-different representations.
+The bridge implements open/read/write/seek, directory enumeration, creation and
+removal, hard links, atomic rename, truncation, chmod and timestamps. Native
+Fuse-X packages can execute directly from the export. FUZIX retains path walking,
+mount traversal, the inode/open-file tables, shared offsets across dup/fork,
+close-on-exec and descriptor cleanup. Build-generated hooks adapt six canonical
+kernel units without editing `ports/fuzix/`; generation fails if a hook's source
+contract changes. Host references stay behind opaque handles.
 
-Specify the following before enabling general read/write mounts:
+Host file contents use one octet per guest cell, including binary data. Host-side
+file creation and replacement are visible on subsequent lookups. An open file
+retains its identity across rename/unlink, as on the host. Directory scans use
+snapshots; a fresh scan sees current entries. Empty-directory checks always use
+the current host directory. Closing writable handles and guest sync flush file
+data through host sync operations; this is not a claim of crash recovery.
+
+The initial contract is:
+
+- One export, at `/mnt/host`, configured only at launch. Its mountpoint is created
+  through normal FUZIX mkdir if absent. The mapping is not stored in the root image.
+- Regular files and directories only. Symlinks, FIFOs, sockets and devices are
+  not followed or exposed. Directory traversal uses opened directory handles
+  and refuses directory handles that have moved outside the selected export.
+- Filename components are at most 30 host octets. Longer names are omitted from
+  listings and direct access returns `ENAMETOOLONG`; they are never truncated to
+  another file's name. Host filename bytes and case behavior are preserved.
+- Host user permissions apply, and lookups currently require read permission.
+  Guest uid/gid are reported as zero. chmod maps ordinary permission bits;
+  setuid/setgid and host ownership changes are not provided.
+- Signed 32-bit file offsets apply; existing FUZIX syscall limits still apply
+  to truncation. Host identifiers map to bounded 16-bit guest inode numbers.
+- Cross-filesystem rename/link return `EXDEV`. Host filesystem capacity reporting
+  returns unsupported. Multiple exports, read-only policy selection and live
+  unmount controls are follow-up work.
+
+Further compatibility work includes:
 
 - Filename encoding, case sensitivity, and guest name/size limits.
 - Ownership, permissions, executable bits, and timestamps.
@@ -54,12 +93,19 @@ model is compatible with Apple's
 
 ## Implementation questions
 
-Choose the FUZIX filesystem integration point before committing to a bridge
-protocol. Begin with a narrow read-only directory/file subset if that makes the
-semantics easier to validate, then add writes with explicit metadata rules.
+The current integration dispatches host-backed inode and namespace operations
+through generated kernel hooks. Further work can broaden metadata compatibility,
+read-only export policies and mount configuration without changing file contents
+into a disk-image format.
 Whether host folders should eventually back more of the guest tree remains
-open; the first boot should not depend on solving that question.
+open; boot continues to use the root disk image.
 
 Keep the root image and shared-folder implementation independently testable.
 Image persistence should survive a restart; host-folder tests should verify
 that the same file is visible from both macOS and Fuse-X.
+
+`fuse-x/test_hostfs.py` uses a disposable export and root image to exercise
+read/write binary data, sparse/truncated files, fork/dup, rename/unlink of open
+files, directories, shared-folder exec, live host replacement, path boundaries
+and a later reboot without the export. Runtime unit checks also cover host
+replacement and moved-directory/symlink rejection.

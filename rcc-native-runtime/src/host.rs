@@ -71,6 +71,15 @@ pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
         .network
         .configure_host(network_setting.as_deref())
         .unwrap_or_else(|error| fatal(&error));
+    // Interactive launchers attach before the guest starts reading stdin, so
+    // vmnet's authorization prompt cannot race the console input worker.
+    if std::env::var("RCC_NATIVE_NET_EAGER").as_deref() == Ok("1") {
+        runtime
+            .devices
+            .network
+            .prepare_host()
+            .unwrap_or_else(|error| fatal(&error));
+    }
     if let Some(path) = std::env::var_os("RCC_NATIVE_INPUT_SCRIPT") {
         let script = rvm::devices::InputScript::from_path(path).unwrap_or_else(|e| fatal(&e));
         runtime

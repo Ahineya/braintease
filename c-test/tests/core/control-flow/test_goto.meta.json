@@ -1,5 +1,5 @@
 {
   "use_runtime": true,
-  "description": "goto forward, backward, and out of loop",
-  "expected": "YYYY\n"
+  "expected": "YYYY\n",
+  "description": "goto forward, backward, and out of loop"
 }

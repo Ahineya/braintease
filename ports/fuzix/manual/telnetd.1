@@ -1,0 +1,21 @@
+.TH TELNETD 1
+.SH NAME
+telnetd \- accept remote shells on pseudo-terminals
+.SH SYNOPSIS
+.B telnetd
+.RI [ -p " PORT]"
+.SH DESCRIPTION
+Listen on TCP port 23, or the specified port. Run telnetd & to retain the
+local shell. Each connection gets a new controlling PTY and /bin/sh session,
+with terminal echo, signals, window dimensions and shell job control.
+Exit the remote shell to disconnect; shutdown stops the whole guest.
+.PP
+This service grants an unauthenticated root shell. Traffic is plaintext.
+Use only on a trusted host-only network. It does not start automatically.
+.PP
+Four PTY pairs and four TCP connections are shared with other applications.
+Each connected shell also needs a bridge process, so the kernel process
+table can limit concurrent sessions. Disconnecting hangs up the remote
+terminal. Files use the ordinary persistent filesystem.
+.SH SEE ALSO
+telnet(1), ptysh(1), sh(1), stty(1)

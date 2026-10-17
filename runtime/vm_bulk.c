@@ -1,6 +1,25 @@
 #include <vm_bulk.h>
 #include <mmio.h>
 
+unsigned short vm_memory_info(unsigned long *ram_cells, unsigned long *code_instructions) {
+    volatile unsigned short descriptor[8];
+    unsigned long address = (unsigned long)descriptor;
+    unsigned short i, status;
+    if (mmio_read(MMIO_DEVICE_VERSION) != VM_DEVICE_ABI_VERSION)
+        return VM_DEVICE_UNSUPPORTED;
+    for (i = 0; i < 8; i++) descriptor[i] = 0;
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 8;
+    mmio_write(MMIO_DEVICE_DESC_BANK, (unsigned short)(address >> 16));
+    mmio_write(MMIO_DEVICE_DESC_OFF, (unsigned short)address);
+    mmio_write(MMIO_DEVICE_COMMAND, VM_DEVICE_MEMORY_INFO);
+    status = mmio_read(MMIO_DEVICE_STATUS);
+    if (status == VM_DEVICE_OK) {
+        *ram_cells = descriptor[2] | ((unsigned long)descriptor[3] << 16);
+        *code_instructions = descriptor[4] | ((unsigned long)descriptor[5] << 16);
+    }
+    return status;
+}
+
 static unsigned short transfer(unsigned short command, unsigned short source0,
     unsigned short source1, unsigned short bank, unsigned short offset,
     unsigned long count, unsigned short format) {

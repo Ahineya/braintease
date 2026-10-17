@@ -531,3 +531,46 @@ Repeat relevant existing ping, UDP and DNS regressions as layers are added.
 Record resource limits and test buffer exhaustion/reuse, partial progress,
 malformed input and deadlines. Do not accept a new protocol based solely on
 one happy-path request or on host-side substitution for guest code.
+
+
+## RFL library (17 October 2026)
+
+```sh
+python3 scripts/test-rfl-network.py
+python3 scripts/test-rfl-network.py --mode rvm --jit --skip-build
+MAKEFLAGS=-j4 ./rct test_rfl_net_ownership test_net_tcp_retire --backend rvm --timeout 90
+cargo test --release -p rfl --test c_libraries
+```
+
+The [RFL library guide](rfl-library.md) describes the API and remaining limits.
+The controlled packet tests passed separately on native, RVM interpreter and
+RVM JIT: guest DNS → HTTP with a 10,230-octet body/checksum, DHCP → acquired DNS
+→ HTTP, and six successive server connections with loss, reordering, zero
+windows and malformed input. Server metadata and response bytes are checked.
+These are RFL applications using guest protocols, not C-only coverage. Build
+and execution logs are in `build/network/rfl-http/<mode>/`. The normal DHCP
+examples additionally demonstrate automatic runtime NIC initialization; live
+RFL browser/curl interoperability is not claimed by these packet fixtures.
+
+The fake-NIC bridge regression passes 35 assertions on native and RVM; the new
+TCP retirement regression passes 15 on both. They cover leases surviving driver
+shutdown, capacity/reuse, DNS cleanup, refcount overflow, unfinished DHCP,
+stale listener generations, compact TIME_WAIT backpressure and duplicate FINs.
+The RFL import regression covers translation-unit static function/callback
+isolation and public global linkage. No routine RBF network run was added.
+
+Two compiler defects encountered while building the bridge have registered,
+correct-behavior RED regressions in `c-test/tests/bugs/`:
+`test_conditional_null_pointer_return` and `test_call_many_u32_arguments`.
+The first rejects a pointer/null conditional on return; the second exhausts
+pinned registers for a large non-inlined u32 call. The library uses an explicit
+branch and a compact options-array ABI respectively. Those tests remain open
+compiler work; the protocol/bridge passes do not claim they were fixed.
+
+
+The complete RFL release suite passed **359 tests, zero failures** with
+`CARGO_BUILD_JOBS=2 cargo test --release -p rfl --tests --quiet -- --test-threads=4`.
+The existing 193 C HTTP/listener assertions were also repeated successfully on
+native and RVM, for 243 networking assertions per target including the new
+bridge/retirement cases. The retained-reactor callback check passed on native,
+RVM and JIT after releasing its network and driver owners.

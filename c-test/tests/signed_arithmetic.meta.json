@@ -1,5 +1,5 @@
 {
-  "expected": "signed arithmetic ok\n",
   "use_runtime": true,
-  "description": "Signed word division, C remainder, arithmetic shifts, immediate operations and unsigned preservation"
+  "description": "Signed word division, C remainder, arithmetic shifts, immediate operations and unsigned preservation",
+  "expected": "signed arithmetic ok\n"
 }

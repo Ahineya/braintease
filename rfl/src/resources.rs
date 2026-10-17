@@ -293,6 +293,32 @@ impl Check<'_> {
     fn expr(&mut self, e: &TExpr, usage: Use, state: &mut State) -> Result<bool, CompileError> {
         use TExprKind::*;
         match &e.kind {
+            Expect { value, message, .. } => {
+                if !self.expr(value, Use::Value, state)? {
+                    return Ok(false);
+                }
+                return self.expr(message, Use::Value, state);
+            }
+            Await {
+                owner,
+                binding,
+                poll,
+            } => {
+                if !self.expr(owner, Use::Value, state)? {
+                    return Ok(false);
+                }
+                state.remove(binding);
+                self.known.insert(*binding);
+                return self.expr(poll, Use::Value, state);
+            }
+            AsyncNew { args, .. } => return self.values(args, state),
+            AsyncPoll { future, context } => {
+                if !self.expr(future, Use::Value, state)? {
+                    return Ok(false);
+                }
+                return self.expr(context, Use::Value, state);
+            }
+            AsyncCancel { future } => return self.expr(future, Use::Value, state),
             Name(id, span) => {
                 self.live(*id, *span, state)?;
                 if matches!(usage, Use::Value) && self.types.contains(e.ty) && *span != 0 {

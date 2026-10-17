@@ -24,3 +24,4 @@ pub mod audio;
 pub mod bulk;
 
 pub mod mmu;
+pub mod host_clock;

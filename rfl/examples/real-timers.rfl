@@ -1,0 +1,23 @@
+import { host_reactor } from "std/host";
+import { Reactor, block_on } from "std/executor";
+import { sleep, yield_now } from "std/future";
+import { task_scope } from "std/scope";
+import { Result } from "std/result";
+
+fn main()->i16 {
+    let mut reactor=host_reactor().expect("host reactor unavailable");
+    let mut scope=task_scope(3,reactor.now()).unwrap();
+    let slow=sleep(75).unwrap();
+    let fast=sleep(25).unwrap();
+    let mut a=scope.spawn(slow).unwrap();
+    let mut b=scope.spawn(fast).unwrap();
+    let mut c=scope.spawn(yield_now()).unwrap();
+    let start=reactor.now();
+    scope.run(&mut reactor).expect("reactor stopped");
+    block_on(&mut a,&mut reactor).unwrap().unwrap();
+    block_on(&mut b,&mut reactor).unwrap().unwrap();
+    block_on(&mut c,&mut reactor).unwrap().unwrap();
+    println("three tasks completed using host time");
+    println(reactor.now()-start);
+    0
+}

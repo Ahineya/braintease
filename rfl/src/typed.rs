@@ -62,6 +62,10 @@ pub struct CtorDef {
 
 #[derive(Debug, Clone)]
 pub struct TFn {
+    /// A fresh poll context is installed here on every poll, never retained.
+    pub async_context: Option<u32>,
+    /// The public future type for a lazy compiler-owned function.
+    pub async_result: Option<Ty>,
     pub name: String,
     /// Binding indexes of the parameters, in order.
     pub params: Vec<u32>,
@@ -150,6 +154,30 @@ pub struct TExpr {
 
 #[derive(Debug, Clone)]
 pub enum TExprKind {
+    /// Stdlib extraction: failure prints a message and terminates execution.
+    Expect {
+        value: Box<TExpr>,
+        message: Box<TExpr>,
+        ok_tag: u16,
+    },
+    Await {
+        owner: Box<TExpr>,
+        binding: u32,
+        poll: Box<TExpr>,
+    },
+    /// Construct a lazy future whose body is a separate resumable procedure.
+    AsyncNew {
+        body: String,
+        args: Vec<TExpr>,
+    },
+    /// Poll a compiler-owned future through a mutable reference.
+    AsyncPoll {
+        future: Box<TExpr>,
+        context: Box<TExpr>,
+    },
+    AsyncCancel {
+        future: Box<TExpr>,
+    },
     Int(i64),
     /// IEEE bits. `f32` uses the low 32 bits.
     Float(u64),

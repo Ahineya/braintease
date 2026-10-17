@@ -7,7 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "resources.h"
-#define REPORT_SLOTS 16
+#define REPORT_SLOTS 32
 static char process_state(unsigned state) {
     if (state == 1 || state == 2) return 'R';
     if (state == 3) return 'S';

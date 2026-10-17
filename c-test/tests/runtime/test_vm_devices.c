@@ -13,6 +13,7 @@ int main(void) {
     VmClock before;
     VmClock after;
     VmClock again;
+    VmHostTime host_before, host_after, calendar;
     VmInputEvent event;
     VmInputBatch batch;
     VmInputState keys;
@@ -32,6 +33,20 @@ int main(void) {
     if (after.ms != 1000UL / (unsigned long)after.hz) return fail(10);
     if (vm_get_time(&again) != VM_DEVICE_OK) return fail(11);
     if (again.tick != after.tick || again.ms != after.ms) return fail(12);
+    if (!(caps.bits & VM_CAP_HOST_CLOCK)) return fail(25);
+    if (vm_host_monotonic(&host_before) != VM_DEVICE_OK ||
+        vm_host_realtime(&calendar) != VM_DEVICE_OK ||
+        vm_host_monotonic(&host_after) != VM_DEVICE_OK) return fail(26);
+    if (host_after.seconds_high < host_before.seconds_high ||
+        (host_after.seconds_high == host_before.seconds_high &&
+         (host_after.seconds_low < host_before.seconds_low ||
+          (host_after.seconds_low == host_before.seconds_low &&
+           host_after.nanoseconds < host_before.nanoseconds)))) return fail(27);
+    if (calendar.nanoseconds >= 1000000000UL ||
+        calendar.resolution_ns != 1000000UL ||
+        host_after.resolution_ns != 1000000UL) return fail(28);
+    if (vm_get_time(&again) != VM_DEVICE_OK || again.tick != after.tick ||
+        again.ms != after.ms) return fail(29);
 
     /* Run without input replay: the event queue and held bitmap start empty. */
     if (vm_input_read(&event, 1, &batch) != VM_DEVICE_OK) return fail(13);

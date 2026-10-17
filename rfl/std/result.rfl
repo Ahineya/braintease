@@ -1,4 +1,13 @@
 impl<T, E> Result<T, E> {
+    // Error values need no formatting bound. Failure does not unwind cleanup.
+    export fn unwrap(self) -> T {
+        __expect_value(move(self), "called Result.unwrap() on Err")
+    }
+
+    export fn expect(self, message: String) -> T {
+        __expect_value(move(self), message)
+    }
+
     export fn is_ok(self) -> bool {
         match self {
             Ok(_) => true,

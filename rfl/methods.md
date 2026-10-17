@@ -1,6 +1,49 @@
 # RFL Specification: Methods and Extensions
 **Version 0.1 — Proposal**
 
+## Implemented stdlib extraction methods
+
+`Option<T>` and `Result<T, E>` provide `.unwrap()` and `.expect(message)`.
+Import the corresponding stdlib type to bring its inherent methods into scope:
+
+```rust
+import { Result } from "std/result";
+import { sleep } from "std/future";
+
+fn main() {
+    let slow = sleep(75).unwrap();
+    let fast = sleep(25).expect("could not create timer");
+}
+```
+
+Both return the contained `Some`/`Ok` value. For `None`/`Err`, `.unwrap()` prints
+`error: called Option.unwrap() on None` or
+`error: called Result.unwrap() on Err`; `.expect(message)` prints `error: `,
+the supplied String and a newline. Execution terminates with status 1, using
+the existing runtime fault path. This is immediate termination without resource
+unwinding, not a recoverable error. Use `?` inside a compatible Option/Result
+function, a match, or the existing fallback methods for recoverable failures.
+
+There are no `Printable` bounds, and Result does not print its error payload.
+An expect message is an ordinary, eagerly evaluated String argument, including
+on success. The default unwrap diagnostic does not allocate a String on success.
+
+Ordinary values retain their copy/COW semantics. When an Option or Result
+contains a move-only resource (in either Result variant), transfer a named
+receiver explicitly: `move(value).unwrap()`. A temporary such as
+`scope.spawn(work()).unwrap()` transfers directly. Extracted owned outputs remain
+valid after their wrapper is destroyed. These methods work on native and Ripple
+without a new ISA instruction. The historical proposal follows below.
+
+Six [extraction regressions](tests/extraction.rs) cover native/RVM execution,
+failure diagnostics, unit/managed/resource outputs, eager messages, async use,
+ownership/type rejection and the absence of diagnostic allocation in unwrap.
+An [editor check](src/ide/extraction.rs) covers completion, concrete signatures
+and navigation for both types. The real-timer, async-timer and composed-future
+examples run on both CLI targets using these methods.
+The complete RFL release suite passes **356 tests** with
+`cargo test --release -p rfl --tests --quiet -- --test-threads=4`.
+
 ## 1. Inherent methods
 
 Methods are declared in an `impl` block associated with a type.

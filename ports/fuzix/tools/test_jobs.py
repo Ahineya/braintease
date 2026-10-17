@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real-guest job control, process monitoring and PTY integration checks."""
 import argparse
+from launch import require_mmu
 import errno
 import fcntl
 import os
@@ -22,7 +23,7 @@ p.add_argument('--part', choices=('both', 'batch', 'live'), default='both')
 p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 a = p.parse_args()
 build = a.build.resolve()
-protected = (build / '.mmu').read_text().strip() == '1'
+require_mmu(build)
 
 
 def fsck(image):
@@ -35,11 +36,11 @@ def batch(image, jit):
                 'ps -p 1,; echo PS_TRAILING:$?\ntop -n 0; echo TOP_BAD:$?\nps -p xxx; echo PS_BAD:$?\n'
                 'sleep 1 &\nwait $!\necho WAIT:$?\nshutdown\n')
     args = [str(ROOT / 'target/release/rvm'), str(build / 'bios.bin'), '--disk', str(image),
-            '--memory', '16384000' if protected else '5120000', '--headless',
+            '--memory', '16384000', '--headless',
             '--input', commands, '--timeout', '240']
     if jit:
         args += ['--jit']
-    log = Path('/tmp/fuzix-jobs-' + ('mmu-' if protected else 'legacy-') + ('jit' if jit else 'interpreter') + '.log')
+    log = Path('/tmp/fuzix-jobs-mmu-' + ('jit' if jit else 'interpreter') + '.log')
     with log.open('w') as out:
         result = subprocess.run(args, stdout=out, stderr=subprocess.STDOUT, timeout=250)
     text = log.read_text().replace('\r', '')
@@ -63,7 +64,7 @@ def batch(image, jit):
 def live(image, jit):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
-    command = [str(ROOT / 'scripts/run-fuzix.sh'), '--run-only', '--disk', str(image), '--timeout', '300']
+    command = [str(ROOT / 'scripts/run-fuzix.sh'), '--run-only', '--disk', str(image), '--net', 'off', '--timeout', '300']
     if not jit:
         command.append('--no-jit')
     proc = subprocess.Popen(command, env=dict(os.environ, FUZIX_BUILD=str(build)),
@@ -173,7 +174,7 @@ def live(image, jit):
             proc.terminate()
             proc.wait(timeout=10)
         os.close(master)
-        Path('/tmp/fuzix-jobs-live-' + ('mmu-' if protected else 'legacy-') + ('jit' if jit else 'interpreter') + '.log').write_bytes(transcript)
+        Path('/tmp/fuzix-jobs-live-mmu-' + ('jit' if jit else 'interpreter') + '.log').write_bytes(transcript)
     fsck(image)
 
 

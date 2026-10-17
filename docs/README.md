@@ -19,12 +19,16 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 
 | Document | Topic |
 |----------|-------|
+| [graphics/README.md](graphics/README.md) | FUZIX graphics, GX contract, resource budget, Nano-X audit and desktop milestones |
 | [fuse-x/README.md](fuse-x/README.md) | Fuse-X native hosted FUZIX direction, desktop integration, storage, networking, and roadmap |
 | [rfl/traits-printing.md](rfl/traits-printing.md) | Planned first RFL traits milestone: Printable-based library print/println |
 | [networking/README.md](networking/README.md) | Guest Ethernet, DHCP, UDP/DNS, running examples, tests and TCP/HTTP roadmap |
+| [networking/terminal-browser.md](networking/terminal-browser.md) | Terminal browser feasibility, Lynx/Links porting decisions, curses and HTTP milestones |
+| [networking/select.md](networking/select.md) | Planned C16 select API, descriptor readiness, kernel wakeups and acceptance criteria |
 | [ir.md](ir.md) | Textual IR syntax, tutorials, and lowering rules |
 | [c-testsuite.md](c-testsuite.md) | Vendored c-testsuite vs Ripple data model |
 | [compiler-trace-formats.md](compiler-trace-formats.md) | `rcc --trace` JSON |
+| [compiler-performance.md](compiler-performance.md) | RCC profiling results, preprocessor prototype and parallel compilation plan |
 | [Brainfuck host](../rbf/README.md) | Native BF CPU host, devices, capture and bounded tests |
 
 ## Deprecated

@@ -29,6 +29,36 @@ instead of physical-octet constants. Utility changes add bounded recursive
 format widths. Original copyright and license notices remain with imported
 sources; newly rewritten adaptations are marked as such.
 
+The socket header includes `sys/types.h` through the include search path so
+Ripple's 32-bit size and syscall types apply even when sockets are included
+first. Its syscall carrier selects 32 bits for both Ripple memory profiles.
+The kernel and library interface headers rename private union members to
+avoid self-referential field macros in RCC; the public names and layout are
+unchanged. Socket syscalls and inode hooks are implemented in
+`ripple/sockets.c`, using the repository's guest Ethernet/IP/TCP runtime;
+upstream's network daemon and socket engine are not linked. Telnet tools
+and their bounded protocol codec are port-local sources, backed by the
+existing PTY driver and Bourne shell.
+Ripple sockets allocate cache-only inodes with `NO_DEVICE`; `filesys.c`
+skips disk writes and disk inode freeing for these entries, including sync
+and shutdown with a remote shell still connected.
+
+`Applications/netd/htget.c`, `dig.c`, `echoping.c`, `ntpdate.c` and `netdb.h`
+come from the same pinned archive. The clients retain their upstream command
+roles, with substantial C16 adaptations: DNS and NTP fields are explicit wire
+octets rather than native C structure overlays; HTTP is parsed incrementally,
+with partial I/O, chunked bodies, redirects and temporary-file replacement.
+Queries and downloads use monotonic deadlines rather than replacing process
+alarm handlers. NTP validates its peer and request timestamp before exposing
+an optional UTC guest-clock update. The original netdb license notice remains.
+`ripple/libc/resolver.c` implements shared hostname lookup over guest sockets,
+with local hosts/config files, bounded compressed-name/record parsing, CNAME
+following and TCP fallback. IPv4 hostent addresses use the packed in_addr ABI,
+so h_length is sizeof(struct in_addr), two C16 characters. `ripple/host.c`
+provides the small host/nslookup client. The libc also supplies stime/_stime
+wrappers for the existing kernel clock-setting syscall. Upstream's incomplete
+HTTP server and IRC client are not included in this batch.
+
 `Applications/util/vile.c` uses a direct ANSI terminal backend on Ripple, with
 validated dimensions, alternate-screen cleanup, and bounded storage compatible
 with its signed 16-bit movement offsets. Adaptations also bound file reads,
@@ -81,10 +111,13 @@ packing, bounded file/terminal input, checked record I/O and replacement saves,
 terminal setup/restoration and window dimensions.
 The port uses a 30,000-character core, with one character reserved by the
 upstream read/insert algorithms. Unused platform backends remain unmodified.
-The legacy `MMU=0` process table has eight slots with RAM snapshots. The default
-RVM `MMU=1` profile has 16 slots, selected page maps, and COW user memory. Both
-reserve one extra code-image slot for replacement execs. The compiler ABI is
-unchanged; kernel and userspace must be built for the same MMU profile.
+FUZIX/Ripple now requires the MMU on RVM, with 32 process slots, selected page
+maps, and COW user memory. One extra code-image record supports replacement
+execs. The compiler ABI is unchanged. The old non-MMU/RBF build, bank snapshots,
+one-bank allocator, and physical code-base relocations are retired; only the
+MMU build and its scalar/bulk I/O alternatives are maintained. Native Fuse-X
+shares common filesystem configuration and PTY code through a separate hosted
+platform configuration; it does not depend on the retired VM build.
 
 `Applications/games/cowsay.c` is the Fedux C implementation by Federico Pomar
 and Federico Bond, with the existing FUZIX changes by Brett Gordon. The Ripple
@@ -192,27 +225,31 @@ C-locale number scanning, and 16-bit-safe exponent parsing. The decimal output
 formatter expands the exact binary rational, rounding to nearest with ties to
 even, with a precision cap of 30.
 
-The executable loader reserves twelve code banks per live image: nine images
-in the legacy profile and seventeen in the default MMU profile. It decodes
+The executable loader tracks 33 live image records, allocating variable-size contiguous code
+regions instead of twelve-bank slots. Fork shares an image; exit releases its
+last reference. Failed exec frees the staged region and preserves the old image.
+The kernel decodes
 aligned RXE instruction records from the cached disk block. MMU userspace code
-starts at virtual bank zero; legacy code is relocated to its physical slot.
+starts at virtual bank zero through as many directory leaves as the configured
+pool needs.
 The compiler ABI is unchanged. Static globals and the stack each retain a
 one-bank limit, while MMU user heaps can span sixteen data/heap banks. RVM
-dynamically grows instruction memory up to 256 banks of 65,536 instructions; its bounds test
-covers the highest Ripple userspace reservation. RBF exports reserve 140 code
-banks and 80 data banks, requiring about 547 MiB for the tape alone.
+dynamically grows instruction memory up to a configurable ceiling, defaulting to
+67,108,864 instructions (512 MiB before JIT allocations). Binary loading, STORC
+and bulk uploads enforce the same ceiling. MEMORY_INFO reports actual host
+capacity, and the kernel clamps its pool accordingly. The default pool ceiling
+is 1024 banks; CODE_BANKS overrides it.
 
 Bulk-memory integration redirects the Ripple kernel's `blktok`, `blkfromk` and
 `blkzero` cache helpers through port-local buffer functions when `BULK_IO=1`.
 The ordinary helper macros remain for other platforms and `BULK_IO=0`.
 `ripple/usermem.c` supplies bounded RAM copy/fill helpers and the common bank-copy
-entry used for legacy fork/scheduling snapshots and kernel-stack cloning in both
-profiles; `lowlevel.asm` retains the original whole-bank fallback. MMU physical
+entry used for kernel-stack cloning; `lowlevel.asm` retains the original whole-bank fallback. MMU physical
 page initialization and COW copies also use these helpers. Copies preserve
 native 16-bit characters, and the mailbox is protected by saving/disabling/restoring
 IRQ enables around each submission. Physical buffers use bulk operations from
-256 cells upward. Translated user buffers use CPU accesses with mapped-page
-validation and COW resolution. Unsupported operations use scalar fallbacks;
+256 cells upward. User buffers use mapped-page validation and COW resolution, then physical DMA
+spans for large copies or CPU accesses for small transfers. Unsupported operations use scalar fallbacks;
 other host errors are propagated. The compiler/runtime's general memcpy and
 memset implementations are unchanged. Extended `forkcheck --stress` and
 `libccheck` cover fork isolation, high character bits, transfer boundaries,
@@ -263,6 +300,16 @@ Kernel adaptations notify parents on stops, align wait status with libc, restart
 signal-set scans correctly after continuation, allow SIGKILL to wake stopped
 tasks, and retain surviving pipeline groups when a group leader exits.
 
+`CONFIG_PLATFORM_CLOCK` separates instruction-based scheduling interrupts from
+host elapsed time. The portable timer code accepts batched decisecond advances,
+expires each queued deadline once, updates calendar time arithmetically, and
+bounds load-average catch-up after long host pauses. The Ripple platform reads
+the shared DEVICE host clocks with IRQ protection, samples running-task CPU time,
+and seeds the calendar after mounting root. Clock syscall/resource snapshots
+synchronize before returning data. Guest calendar changes leave monotonic time
+and alarm deadlines unchanged. `tools/test_timers.py` tests real durations,
+calendar isolation, cancellation, timestamps and recovery from a host SIGSTOP.
+
 The Bourne shell integrates ripple/shell-jobs.c for jobs/fg/bg, group-aware waits,
 a fork/foreground handshake, terminal preservation and job cleanup. Levee gains
 raw Ctrl-Z handling, screen cleanup and redraw on continuation. Ripple ps/top
@@ -270,3 +317,13 @@ use the address-free RIPPLE_PROCINFO ioctl instead of interpreting kernel
 pointers from the historical raw process table. The original upstream ps source
 is retained for provenance but is no longer the selected build source. Resource
 counts distinguish private and multiply referenced data/heap/stack pages.
+
+
+The graphics foundation raises the protected profile to 32 process slots,
+32 descriptors per process, 128 open-file objects/inodes and eight PTY pairs.
+Kernel close-on-exec masks are conditionally 32 bits and descriptor shifts use
+wide operands. Legacy profiles retain their smaller tables. Saved task data and
+MMU metadata are relocated to reserved banks; the process page pool is unchanged.
+The local GX device and graphical PTY terminal are new port code. Nano-X is an
+independent pinned import under `ports/nanox`, with a separate C16 adaptation
+audit; the Nano-X server is not linked into FUZIX.

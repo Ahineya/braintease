@@ -96,6 +96,7 @@ impl Drop for NativeModule {
 struct Compiled {
     /// Inclusive start and length of each basic block baked into this region.
     ranges: Vec<(usize, usize)>,
+    physical: Vec<(usize, usize)>,
 }
 
 #[derive(Default)]
@@ -105,6 +106,7 @@ struct AddressCode {
     covered: Vec<bool>,
     table: Vec<usize>,
     table_base: Box<usize>,
+    code_limit: Option<usize>,
 }
 type CodeContext = (bool, bool, (u16, u16));
 pub(super) struct JitEngine {
@@ -118,11 +120,65 @@ pub(super) struct JitEngine {
     hits: Vec<u16>,
     covered: Vec<bool>,
     stats: JitStats,
+    code_limit: Option<usize>,
     /// Native function per guest instruction. Zero means "not compiled".
     /// `table_base` is a stable cell holding the allocation's address, which
     /// compiled calls reload so a later growth of `table` stays visible.
     table: Vec<usize>,
     table_base: Box<usize>,
+}
+
+/// Remove all entry points of a region together, never freeing native code
+/// while a generated caller may still be unwinding through it.
+fn discard(
+    blocks: &mut HashMap<usize, Compiled>,
+    table: &mut [usize],
+    covered: &mut [bool],
+    stale: &impl Fn(&Compiled) -> bool,
+) -> bool {
+    let mut removed = false;
+    blocks.retain(|_, block| {
+        if !stale(block) {
+            return true;
+        }
+        removed = true;
+        for &(start, len) in &block.ranges {
+            table[start..start + len].fill(0);
+            covered[start..start + len].fill(false);
+        }
+        false
+    });
+    removed
+}
+fn resolve_ranges(
+    context: CodeContext,
+    size: u16,
+    memory: &[u16],
+    limit: usize,
+    ranges: &[(usize, usize)],
+) -> Option<Vec<(usize, usize)>> {
+    if !context.1 {
+        return Some(ranges.to_vec());
+    }
+    let mut mmu = crate::mmu::Mmu::default();
+    mmu.enabled = context.0;
+    mmu.user = true;
+    mmu.code_root = context.2;
+    let mut physical: Vec<(usize, usize)> = Vec::new();
+    for &(start, len) in ranges {
+        for index in start..start + len {
+            let (off, bank) = locate(size, index);
+            let at = mmu.peek(memory, size, bank, off, crate::mmu::Access::Execute, limit)?;
+            if let Some(last) = physical.last_mut() {
+                if last.0 + last.1 == at {
+                    last.1 += 1;
+                    continue;
+                }
+            }
+            physical.push((at, 1));
+        }
+    }
+    Some(physical)
 }
 
 impl JitEngine {
@@ -139,6 +195,7 @@ impl JitEngine {
             hits: Vec::new(),
             covered: Vec::new(),
             stats: JitStats::default(),
+            code_limit: None,
             table: Vec::new(),
             table_base: Box::new(0),
         })
@@ -149,6 +206,7 @@ impl JitEngine {
             return;
         }
         let old = AddressCode {
+            code_limit: self.code_limit.take(),
             blocks: std::mem::take(&mut self.blocks),
             hits: std::mem::take(&mut self.hits),
             covered: std::mem::take(&mut self.covered),
@@ -157,6 +215,7 @@ impl JitEngine {
         };
         self.contexts.insert(self.context, old);
         let new = self.contexts.remove(&key).unwrap_or_default();
+        self.code_limit = new.code_limit;
         self.blocks = new.blocks;
         self.hits = new.hits;
         self.covered = new.covered;
@@ -181,13 +240,6 @@ impl JitEngine {
         *self.table_base = self.table.as_ptr() as usize;
     }
 
-    fn clear_slot(&mut self, index: usize) {
-        if index < self.table.len() {
-            self.table[index] = 0;
-            self.covered[index] = false;
-        }
-    }
-
     fn get(&self, index: usize) -> Option<JitFn> {
         self.table
             .get(index)
@@ -203,38 +255,30 @@ impl JitEngine {
     }
 
     fn invalidate(&mut self, changed: std::ops::Range<usize>) {
-        let doomed: Vec<usize> = self
-            .blocks
-            .iter()
-            .filter(|(_, block)| {
-                block
-                    .ranges
-                    .iter()
-                    .any(|(start, len)| changed.start < start + len && *start < changed.end)
-            })
-            .map(|(key, _)| *key)
-            .collect();
-        if doomed.is_empty() {
-            return;
+        let overlaps = |block: &Compiled| {
+            block
+                .physical
+                .iter()
+                .any(|(start, len)| changed.start < start + len && *start < changed.end)
+        };
+        if discard(
+            &mut self.blocks,
+            &mut self.table,
+            &mut self.covered,
+            &overlaps,
+        ) {
+            self.dead += 1;
         }
-        let mut cover = Vec::new();
-        for key in &doomed {
-            if let Some(block) = self.blocks.get(key) {
-                for &(start, len) in &block.ranges {
-                    cover.extend(start..start + len);
-                }
+        for code in self.contexts.values_mut() {
+            if discard(
+                &mut code.blocks,
+                &mut code.table,
+                &mut code.covered,
+                &overlaps,
+            ) {
+                self.dead += 1;
             }
-            cover.push(*key);
         }
-        for key in doomed {
-            self.blocks.remove(&key);
-        }
-        for index in cover {
-            self.clear_slot(index);
-        }
-        // One edit invalidates the whole region. Rebuilding the module is the
-        // expensive path, and self-modifying stores are rare.
-        self.dead = self.dead.saturating_add(1);
     }
 
     fn sweep(&mut self) -> Result<(), String> {
@@ -263,6 +307,7 @@ impl JitEngine {
         start: usize,
         region: &Region,
         code_len: usize,
+        physical: Vec<(usize, usize)>,
     ) -> Result<JitFn, String> {
         let started = std::time::Instant::now();
         if bank_size == 0 {
@@ -316,6 +361,7 @@ impl JitEngine {
             start,
             Compiled {
                 ranges: region.ranges(),
+                physical,
             },
         );
         for block in &region.blocks {
@@ -335,6 +381,7 @@ impl VM {
         self.jit_epoch = self.jit_epoch.wrapping_add(1);
         if let Some(engine) = self.jit.as_mut() {
             engine.contexts.clear();
+            engine.code_limit = None;
             engine.blocks.clear();
             engine.table.fill(0);
             engine.covered.fill(false);
@@ -343,18 +390,50 @@ impl VM {
         }
     }
 
+    /// Mapping flushes need not discard physical supervisor code or unchanged
+    /// user mappings. Validate provenance for every decoded region, including
+    /// inactive roots; physical code writes are invalidated separately.
+    pub(crate) fn jit_flush_mappings(&mut self) {
+        self.jit_epoch = self.jit_epoch.wrapping_add(1);
+        let Some(engine) = self.jit.as_mut() else {
+            return;
+        };
+        let size = self.bank_size;
+        let memory = &self.memory;
+        let limit = self.instructions.len();
+        let context = engine.context;
+        let stale = |block: &Compiled| {
+            resolve_ranges(context, size, memory, limit, &block.ranges).as_ref()
+                != Some(&block.physical)
+        };
+        if discard(
+            &mut engine.blocks,
+            &mut engine.table,
+            &mut engine.covered,
+            &stale,
+        ) {
+            engine.dead += 1;
+        }
+        engine.code_limit = None;
+        for (context, code) in &mut engine.contexts {
+            let stale = |block: &Compiled| {
+                resolve_ranges(*context, size, memory, limit, &block.ranges).as_ref()
+                    != Some(&block.physical)
+            };
+            if discard(&mut code.blocks, &mut code.table, &mut code.covered, &stale) {
+                engine.dead += 1;
+            }
+            code.code_limit = None;
+        }
+    }
+
     pub(crate) fn jit_invalidate_index(&mut self, idx: usize) {
         self.jit_invalidate_range(idx..idx + 1);
     }
 
     pub(crate) fn jit_invalidate_range(&mut self, range: std::ops::Range<usize>) {
-        if self.mmu.enabled {
-            self.jit_flush();
-            return;
-        }
         self.jit_epoch = self.jit_epoch.wrapping_add(1);
         if let Some(engine) = self.jit.as_mut() {
-            engine.contexts.clear();
             engine.invalidate(range);
         }
     }
@@ -476,7 +555,15 @@ impl VM {
         );
         self.jit.as_mut().unwrap().select(key);
         let code_len = if self.mmu.user {
-            self.mmu.code_limit(&self.memory, self.bank_size)
+            if let Some(limit) = self.jit.as_ref().unwrap().code_limit {
+                limit
+            } else {
+                let limit =
+                    self.mmu
+                        .code_limit(&self.memory, self.bank_size, self.code_memory_capacity());
+                self.jit.as_mut().unwrap().code_limit = Some(limit);
+                limit
+            }
         } else {
             self.instructions.len()
         };
@@ -518,8 +605,16 @@ impl VM {
                 &engine.covered,
             )?
         };
+        let physical = resolve_ranges(
+            engine.context,
+            self.bank_size,
+            &self.memory,
+            self.instructions.len(),
+            &region.ranges(),
+        )
+        .ok_or("JIT: instruction mapping changed during compilation")?;
         engine
-            .compile(self.bank_size, index, &region, code_len)
+            .compile(self.bank_size, index, &region, code_len, physical)
             .map(Some)
     }
 }

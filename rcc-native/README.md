@@ -141,6 +141,9 @@ the NIC never initialize networking. `RCC_NATIVE_NET=off` disables attachment,
 `shared` explicitly selects Internet sharing, and a socket path reuses an
 external Ethernet helper. `RIPPLE_NET` is a shared fallback setting. See the
 [networking contract and ping examples](../docs/networking/README.md).
+Interactive launchers can set `RCC_NATIVE_NET_EAGER=1` to attach before guest
+execution, keeping helper authorization separate from console input handling.
+The Fuse-X console wrapper uses this mode.
 
 TEXT40 rendering, storage devices, and VM interrupts are not implemented in this
 milestone and report runtime errors when requested. TTY input is available via
@@ -179,6 +182,12 @@ private pages, and provides an explicit shared kernel arena. Programs without
 these service calls keep flat RAM and ordinary native calls. See
 [native processes](PROCESSES.md) for standalone examples, the API, limits and
 tests; these do not require the FUZIX port.
+
+Hosted kernels can instead select contexts explicitly through
+`<native_hosted.h>` and link shared kernel globals with repeatable `--kernel IR`
+arguments. [Fuse-X](../fuse-x/README.md) uses this mode to boot native FUZIX into
+a shell. FUZIX owns scheduling; `link-app` builds independently loadable native
+application packages. See [Fuse-X executables](../fuse-x/EXECUTABLES.md).
 
 Build the release runtime first, then:
 

@@ -1,5 +1,5 @@
 {
-  "description": "Global, parameter, block and for-loop bindings survive scalar/array shadowing; callback designators decay to void pointers",
   "use_runtime": true,
+  "description": "Global, parameter, block and for-loop bindings survive scalar/array shadowing; callback designators decay to void pointers",
   "expected": "YYYYYY\n"
 }

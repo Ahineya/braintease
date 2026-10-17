@@ -1,4 +1,4 @@
 {
-  "expected": "Pass: 1\nPass: 2\nPass: 3\nPass: 4\n0W\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "Pass: 1\nPass: 2\nPass: 3\nPass: 4\n0W\n"
 }

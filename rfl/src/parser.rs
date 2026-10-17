@@ -150,7 +150,7 @@ impl<'a> Parser<'a> {
                 }
             } else if self.is(&TokenKind::Extern) {
                 externs.extend(self.parse_extern_block()?);
-            } else if self.is(&TokenKind::Fn) {
+            } else if self.is(&TokenKind::Fn) || self.is(&TokenKind::Async) {
                 functions.push(self.parse_function()?);
             } else if self.is(&TokenKind::Import) {
                 imports.push(self.parse_import()?);
@@ -198,6 +198,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_function(&mut self) -> Result<Function, CompileError> {
+        let is_async = self.eat(&TokenKind::Async);
         self.expect(&TokenKind::Fn, "fn")?;
         let name_tok = self.expect_ident()?;
         let type_params = self.parse_generic_params()?;
@@ -218,8 +219,22 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        let ret = if is_async {
+            Some(ParsedTy::Named {
+                span: Span::empty(),
+                name: "Async".into(),
+                args: vec![ret.unwrap_or(ParsedTy::Named {
+                    span: name_tok.1,
+                    name: "unit".into(),
+                    args: Vec::new(),
+                })],
+            })
+        } else {
+            ret
+        };
         let body = self.parse_block()?;
         Ok(Function {
+            is_async,
             name: name_tok.0,
             name_span: name_tok.1,
             type_params,
@@ -274,7 +289,7 @@ impl<'a> Parser<'a> {
             consts.push(item);
             return Ok(());
         }
-        if self.is(&TokenKind::Fn) {
+        if self.is(&TokenKind::Fn) || self.is(&TokenKind::Async) {
             let mut func = self.parse_function()?;
             func.exported = true;
             functions.push(func);
@@ -341,13 +356,8 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect(&TokenKind::RBrace, "'}'")?;
-        if names.is_empty() {
-            return Err(CompileError::at(
-                self.source,
-                start.span.start,
-                "expected a name to import",
-            ));
-        }
+        // Empty imports link a dependency without exposing its declarations.
+        // In particular, C libraries can retain their opaque internal ABI.
         let (word, word_span) = self.expect_ident()?;
         if word != "from" {
             return Err(CompileError::at(
@@ -1649,6 +1659,13 @@ impl<'a> Parser<'a> {
                     }
                 }
             } else if self.eat(&TokenKind::Dot) {
+                if self.eat(&TokenKind::Await) {
+                    expr = Expr {
+                        span: expr.span.to(self.prev_span()),
+                        kind: ExprKind::Await(Box::new(expr)),
+                    };
+                    continue;
+                }
                 if !self.is_ident() {
                     let dot = self.prev_span();
                     if !self.tolerant {

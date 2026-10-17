@@ -1,5 +1,5 @@
 {
-  "description": "32-bit shifts preserve live high cells across internal branches and dirty spill storage",
   "expected": "long shifts ok\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "description": "32-bit shifts preserve live high cells across internal branches and dirty spill storage"
 }

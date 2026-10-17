@@ -238,6 +238,7 @@ impl Checker<'_> {
                 qualify_impl_type(&mut ret, &item.ty, name);
                 self.impl_contexts.insert(func.clone(), name.clone());
                 module.functions.push(Function {
+                    is_async: false,
                     name: func.clone(),
                     name_span: method.name_span,
                     type_params: item.type_params.clone(),

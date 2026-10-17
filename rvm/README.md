@@ -12,6 +12,15 @@ A reference implementation of the Ripple VM architecture that executes programs 
 - Debug mode for step-by-step execution
 - Binary program loader (RLINK format)
 
+## Instruction memory
+
+Instruction storage grows lazily, with a default ceiling of 67,108,864
+instructions (512 MiB of decoded instructions, plus JIT memory). Use
+`--code-memory N` to change this ceiling in instruction units. The same budget
+applies to binary loading, STORC and bulk uploads; it is independent of data
+RAM's `--memory` setting. The MEMORY_INFO device command reports the available
+capacity. Library users can call `VM::set_code_memory_limit` before loading.
+
 ## Building
 
 ```bash
@@ -333,3 +342,10 @@ The VM loads binary programs in RLINK format:
 CPU IRQ ABI version 2, optional interrupt-stack switching, and the deterministic
 instruction timer are documented in [stacks-and-interrupts.md](../docs/arch/stacks-and-interrupts.md).
 Old IRQ binaries require rebuilding; the device mailbox and logical game clock are unchanged.
+
+The same mailbox also provides `HOST_MONOTONIC` and `HOST_REALTIME` (capability
+0x1000), returning 64-bit seconds plus nanoseconds at 1 ms resolution. Operating
+systems can use elapsed host time for deadlines and Unix UTC time for their
+calendar without tying either to CPU speed. These reads do not advance the
+deterministic game clock or generate interrupts. See the
+[host-clock contract](mmio.md#host-clocks) for checkpoint and replay semantics.

@@ -1,5 +1,5 @@
 {
+  "description": "TCP retransmission, local backpressure, zero windows, deadlines, clock wrap and connection slot reuse",
   "use_runtime": true,
-  "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n",
-  "description": "TCP retransmission, local backpressure, zero windows, deadlines, clock wrap and connection slot reuse"
+  "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n"
 }

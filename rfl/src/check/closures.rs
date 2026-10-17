@@ -81,6 +81,7 @@ impl<'a> Checker<'a> {
             },
         };
         let func = Function {
+            is_async: false,
             name: name.clone(),
             name_span: crate::ast::Span::new(span, span),
             type_params: Vec::new(),

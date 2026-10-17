@@ -5,6 +5,7 @@ Build kernel/bios in a separate directory with BULK_IO=0, then pass it through
 --fallback-build. All disks are temporary; user disks are never opened.
 """
 import argparse
+from launch import require_mmu
 import json
 from pathlib import Path
 import shutil
@@ -19,9 +20,11 @@ p.add_argument('--build', type=Path, default=ROOT/'build/fuzix')
 p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 p.add_argument('--fallback-build', type=Path, required=True)
 a = p.parse_args()
+require_mmu(a.build)
+require_mmu(a.fallback_build)
 engines = [True, False] if a.engine == 'both' else [a.engine == 'jit']
 engine_label = 'JIT and interpreter' if a.engine == 'both' else a.engine
-commands = ('hello coffee\nhello\nforkcheck --stress\nforkcheck --stress\npreemptcheck\nlibccheck\n'
+commands = ('hello coffee\nhello\nforkcheck --stress\nforkcheck --stress\npreemptcheck\n'
             'echo durable > /bulk-note\nsync\ncat /bulk-note\nrm /bulk-note\nshutdown\n')
 with tempfile.TemporaryDirectory(prefix='fuzix-bulk-') as directory:
     temporary = Path(directory)
@@ -50,18 +53,30 @@ with tempfile.TemporaryDirectory(prefix='fuzix-bulk-') as directory:
         output = result.stdout + result.stderr
         assert result.returncode == 0, output
         assert 'argument: coffee' in output and output.count('Hello from a separate') == 2, output
-        assert output.count('forkcheck: bank snapshots and user zero passed') == 2, output
+        assert output.count('forkcheck: data/stack isolation and user zero passed') == 2, output
         assert output.count('parent value=7 child exit=23') == 2, output
         assert output.index('child ran while parent computed') < output.index('parent computation finished'), output
-        assert 'libccheck passed' in output, output
         assert 'durable\n' in output and 'Ripple: disk synced; power off.' in output, output
         assert 'panic:' not in output and 'FAILED' not in output, output
         data = json.loads(report.read_text())
         assert data['success'] and data['stop_reason'] == 'halted', data
         counts[name] = data['instructions']
+        # libccheck spins until alarm(1); its instruction count depends on host
+        # throughput, not transfer cost. Retain that coverage in a separate run.
+        signal_args = args.copy()
+        signal_args[signal_args.index('--input') + 1] = 'libccheck\nshutdown\n'
+        at = signal_args.index('--report')
+        del signal_args[at:at + 2]
+        signal_check = subprocess.run(signal_args, capture_output=True, text=True, timeout=250)
+        signal_output = signal_check.stdout + signal_check.stderr
+        assert signal_check.returncode == 0, signal_output
+        assert 'libccheck passed' in signal_output, signal_output
+        assert 'Ripple: disk synced; power off.' in signal_output, signal_output
+        assert 'panic:' not in signal_output and 'FAILED' not in signal_output, signal_output
         subprocess.run(['python3', str(PORT/'tools/fsck.py'), str(image)], check=True)
         print(f'{name}: {elapsed:.3f}s, {counts[name]:,} guest instructions', flush=True)
-    # Instruction-count reduction is stable; wall-clock ratios are informational.
+    # Compare fixed guest work, excluding the separate host-timed alarm spin.
+    # Wall-clock ratios remain informational.
     for jit in engines:
         label = 'jit' if jit else 'interp'
         assert counts[f'bulk-{label}'] < counts[f'fallback-{label}'] * 0.5, counts

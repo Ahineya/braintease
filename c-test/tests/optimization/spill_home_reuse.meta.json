@@ -1,5 +1,5 @@
 {
+  "expected": "YYYY\n",
   "use_runtime": true,
-  "description": "Scalar spill homes survive read-only asm inputs, loop branches and wide companions",
-  "expected": "YYYY\n"
+  "description": "Scalar spill homes survive read-only asm inputs, loop branches and wide companions"
 }

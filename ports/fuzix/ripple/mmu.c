@@ -12,8 +12,11 @@ extern void ripple_resume_user(void);
 #define DLEAF 512U
 #define IROOT 1536U
 #define ILEAF 2048U
-#define PAGES 3072U
+#define PAGES (ILEAF + RIPPLE_CODE_MAP_CELLS)
 #define TABLE_CELLS (PAGES + 17U * 512U)
+#if TABLE_CELLS > 64000UL
+#error Ripple MMU code and data tables exceed their reserved bank
+#endif
 #define RWU (MP_PRESENT | MP_READ | MP_WRITE | MP_USER)
 static unsigned cursor, used_pages;
 static unsigned task_pages[PTABSIZE];
@@ -85,6 +88,17 @@ static void *physical(unsigned id) {
     return (void *)(((unsigned long)(MMU_POOL_BASE + id / MMU_BANK_PAGES) << 16) |
                    ((id % MMU_BANK_PAGES) * MMU_PAGE_CELLS));
 }
+/* Resolve a validated read-only user span to one physical page for DMA. */
+int ripple_mmu_span(unsigned long ptr,unsigned write,unsigned *bank,unsigned *off,unsigned *run) {
+    unsigned *p=pte((unsigned)(udata.u_ptab-ptab),(unsigned)(ptr>>16),(unsigned)ptr);
+    if((unsigned)ptr>=BANK_CELLS||!p||(p[2]&(MP_PRESENT|MP_READ))!=(MP_PRESENT|MP_READ)||(write&&!(p[2]&MP_WRITE)))return -1;
+    *bank=p[0];*off=p[1]+(unsigned)ptr%MMU_PAGE_CELLS;
+    *run=MMU_PAGE_CELLS-(unsigned)ptr%MMU_PAGE_CELLS;
+    return 0;
+}
+int ripple_mmu_source(unsigned long ptr,unsigned *bank,unsigned *off,unsigned *run) {
+    return ripple_mmu_span(ptr,0,bank,off,run);
+}
 void ripple_mmu_init(void) {
     memset(refs(), 0, MMU_POOL_PAGES);
     memset(ready, 0, sizeof(ready));
@@ -106,11 +120,13 @@ void ripple_mmu_free(unsigned task) {
 }
 int ripple_mmu_alloc(unsigned task) {
     unsigned bank, *p;
-    memset(table(task, 0), 0, TABLE_CELLS);
+    if(ripple_zero(table(task,0),TABLE_CELLS))panic("MMU tables");
     table(task,DROOT)[0] = MMU_TABLE_BASE + task;
     table(task,DROOT)[1] = DLEAF;
-    table(task,IROOT)[0] = MMU_TABLE_BASE + task;
-    table(task,IROOT)[1] = ILEAF;
+    for (bank = 0; bank < RIPPLE_CODE_LEAVES; bank++) {
+        table(task,IROOT + bank * 2U)[0] = MMU_TABLE_BASE + task;
+        table(task,IROOT + bank * 2U)[1] = ILEAF + bank * 1024U;
+    }
     for (bank = USER_GP; bank <= USER_SB; bank++) {
         p = pte(task,bank,0);
         if (!p) continue;
@@ -158,7 +174,9 @@ int ripple_mmu_exec(unsigned task) {
 }
 void ripple_mmu_code(unsigned task, unsigned base, unsigned long count) {
     unsigned bank;
-    for (bank = 0; bank < 12; bank++) {
+    unsigned banks = (unsigned)((count + BANK_CELLS - 1UL) / BANK_CELLS);
+    if(ripple_zero(table(task,ILEAF),RIPPLE_CODE_MAP_CELLS))panic("MMU code map");
+    for (bank = 0; bank < banks; bank++) {
         unsigned *p = table(task, ILEAF + bank * 4U);
         p[0] = base + bank;
         p[1] = 0;
@@ -169,7 +187,7 @@ void ripple_mmu_code(unsigned task, unsigned base, unsigned long count) {
 int ripple_mmu_fork(unsigned parent, unsigned child) {
     unsigned bank, off, *src, *dst;
     ripple_mmu_alloc(child);
-    memcpy(table(child,ILEAF),table(parent,ILEAF),1024);
+    if(ripple_copy(table(child,ILEAF),table(parent,ILEAF),RIPPLE_CODE_MAP_CELLS))panic("fork code map");
     for (bank = USER_GP; bank <= USER_SB; bank++) {
         if (bank > USER_HEAP_LAST && bank != USER_SB) continue;
         for (off=0; off<BANK_CELLS; off+=MMU_PAGE_CELLS) {

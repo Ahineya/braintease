@@ -1,4 +1,4 @@
 {
-  "use_runtime": true,
-  "expected": "L0:A L1:B L2:C \n"
+  "expected": "L0:A L1:B L2:C \n",
+  "use_runtime": true
 }

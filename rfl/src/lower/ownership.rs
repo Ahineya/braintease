@@ -109,7 +109,12 @@ fn release_slots_body(
     proc: &Proc,
     frame: &Value,
 ) -> Result<(), CompileError> {
-    for index in 0..proc.slots.len() {
+    let indices: Vec<_> = if proc.async_result.is_some() {
+        (0..proc.slots.len()).rev().collect()
+    } else {
+        (0..proc.slots.len()).collect()
+    };
+    for index in indices {
         if proc.slots[index].shared {
             let addr = load_cell(builder, frame, proc.slots[index].offset, IrType::I16)?;
             let bank = load_cell(builder, frame, proc.slots[index].offset + 1, IrType::I16)?;

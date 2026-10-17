@@ -20,6 +20,7 @@ direction, proposals, and implemented foundations are distinguished below.
 | [Desktop integration](desktop.md) | Terminal and GUI windows, Dock navigation, menus, and session lifetime |
 | [Storage](storage.md) | Disk images, shared Mac folders, and filesystem integration questions |
 | [Networking](networking.md) | Headless access, host attachment, and network controls |
+| [Terminal browser](../networking/terminal-browser.md) | HTTP browser porting direction, curses prerequisites and shared select contract |
 | [Roadmap](roadmap.md) | Implementation stages, dependencies, acceptance criteria, and open decisions |
 
 ## Agreed direction
@@ -43,9 +44,11 @@ direction, proposals, and implemented foundations are distinguished below.
 
 ## Proposals to resolve
 
-The storage proposal is a FUZIX root disk image plus explicitly shared Mac
-folders. The exact filesystem bridge, metadata mapping, and mount behavior
-remain open. See [Storage](storage.md).
+Storage combines a FUZIX root disk image with the gitignored repo-root
+`fuse-x-shared/` folder mounted read/write at `/mnt/host` by default. Use `--share`
+to select another folder or `--no-share` to disable it. The first filesystem bridge preserves
+guest descriptors and supports native executables in the export. Additional
+mount policies and broader metadata compatibility remain open. See [Storage](storage.md).
 
 Window command formats, GUI launch behavior, close handling, terminal session
 policy, and the menu layout still need implementation decisions. Dock window
@@ -63,10 +66,21 @@ fork/yield/wait/exit, live-value preservation, copy-on-write private memory, and
 an explicit shared kernel arena. Standalone examples cover recursive calls,
 independent process memory, shared kernel state, and multiple live processes.
 
-These are runtime building blocks. They do not yet constitute a booted Fuse-X
-kernel, a native FUZIX executable loader, or the desktop described here. The
-current native display host manages one RGB565 window and treats its closure
-as shutdown; Fuse-X needs a different window/session lifecycle.
+The [hosted kernel](../../fuse-x/README.md) now boots native `/init` and the existing
+Bourne shell, with scripts, pipes, redirection, traps and terminal job control. FUZIX owns scheduling and process lifetime; native continuations
+provide fork, context switching and exec. Kernel globals are shared, while user
+memory uses copy-on-write pages. The native loader runs independently compiled
+application packages, alongside bootstrap programs selected through manifests.
+The integration has 16 process slots and compiler-assisted scheduling checkpoints
+in newly compiled applications. A persistent init supervisor reaps children and
+keeps the kernel alive across shell exits; the launcher supports console
+detach/reconnect and headless startup. Its
+[application inventory](../../fuse-x/APPLICATIONS.md) builds the 113 ported
+programs and aliases; memory budgets remain future work. File persistence and host timers work through real kernel
+syscalls. The hosted network adapter reuses the guest IPv4 stack and provides
+independent Telnet shells through FUZIX PTYs. Desktop integration remains a later stage. The current
+native display host manages one RGB565 window and treats closure as shutdown;
+Fuse-X needs a different window/session lifecycle.
 
 Use [native process documentation](../../rcc-native/PROCESSES.md) for current
 APIs, limits, examples, and validation. Use [networking documentation](../networking/README.md)

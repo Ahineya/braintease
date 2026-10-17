@@ -89,6 +89,27 @@ fn host_path(bytes: Vec<u8>) -> std::ffi::OsString {
         std::ffi::OsString::from(String::from_utf8_lossy(&bytes).into_owned())
     }
 }
+file_service!(rcc_native_ext_rcc_hosted_lock_image(rt, path, writable) {
+    use std::os::fd::AsRawFd;
+    let path = host_path(rt.c_string(path));
+    match OpenOptions::new().read(true).write(writable != 0).open(path) {
+        Ok(file) => {
+            let operation = if writable != 0 { libc::LOCK_EX } else { libc::LOCK_SH };
+            if unsafe { libc::flock(file.as_raw_fd(), operation | libc::LOCK_NB) } != 0 {
+                return u64::MAX;
+            }
+            rt.root_image_lock = Some(file);
+            0
+        }
+        Err(_) => u64::MAX,
+    }
+});
+file_service!(rcc_native_ext_rcc_hosted_sync_image(rt) {
+    match rt.root_image_lock.as_ref().map(std::fs::File::sync_all) {
+        Some(Ok(())) => 0,
+        _ => u64::MAX,
+    }
+});
 file_service!(rcc_native_ext_remove(rt, path) {
     let path = host_path(rt.c_string(path));
     let result = if std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_dir()) {
@@ -115,7 +136,8 @@ file_service!(rcc_native_ext_fopen(rt, path, mode) {
     }
     match options.open(host_path(path)) {
         Ok(file) => {
-            let ptr = rt.allocate(1);
+            // Hosted-kernel streams outlive guest exec and private heaps.
+            let ptr = if rt.processes.hosted { rt.memory.kernel_allocate(1) } else { rt.allocate(1) };
             if ptr == 0 { rt.file_error(12); return 0; }
             rt.memory.write(linear(ptr), 3);
             rt.files.insert(ptr, Stream { file: BufReader::new(file), eof: false, error: false });
@@ -126,7 +148,7 @@ file_service!(rcc_native_ext_fopen(rt, path, mode) {
 });
 file_service!(rcc_native_ext_fclose(rt, stream) {
     if rt.files.remove(&stream).is_none() { return rt.file_error(9); }
-    rt.release(stream);
+    if rt.processes.hosted { rt.memory.kernel_release(stream); } else { rt.release(stream); }
     0
 });
 file_service!(rcc_native_ext_fread(rt, buffer, size, count, stream) {

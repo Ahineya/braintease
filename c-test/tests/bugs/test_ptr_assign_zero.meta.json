@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
+  "description": "Assign integer 0 to a pointer (null pointer constant)",
   "expected": "Y\n",
-  "description": "Assign integer 0 to a pointer (null pointer constant)"
+  "use_runtime": true
 }

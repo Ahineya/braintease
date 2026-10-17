@@ -1,0 +1,16 @@
+.TH BF 1
+.SH NAME
+bf \- run a Brainfuck program
+.SH SYNOPSIS
+.B bf
+.I FILE
+.SH DESCRIPTION
+Execute the Brainfuck source in FILE. With no argument, print a short usage
+message. Non-command characters are ignored, and brackets are checked before
+execution. Programs may contain up to 30000 instructions.
+.PP
+The tape has 30000 initially zero cells. Cell values wrap from 255 to 0 and
+back; the tape pointer wraps at either end. The comma command reads standard
+input, storing zero at EOF. The dot command writes standard output.
+.SH EXAMPLE
+bf /hello.bf

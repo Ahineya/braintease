@@ -1,0 +1,5 @@
+{
+  "description": "Active-open TCP retirement preserves TIME_WAIT, supports capacity backpressure, late FIN ACKs and configuration invalidation",
+  "expected": "YYYYYYYYYYYYYYY\n",
+  "use_runtime": true
+}

@@ -281,6 +281,55 @@ mod tests {
         assert_eq!(a.executed_instructions, b.executed_instructions);
     }
     #[test]
+    fn hot_user_store_cannot_bypass_cow_after_a_tlb_flush() {
+        let make=|jit| {
+            let mut vm=machine(jit);
+            vm.registers[15]=6000;vm.registers[16]=8;vm.registers[17]=7;
+            vm.instructions[1024..1030].copy_from_slice(&[
+                i(0x11,5,16,17),i(0x0a,5,5,1),i(0x12,5,16,17),
+                i(0x0a,15,15,u16::MAX),i(0x16,15,0,(-4i16) as u16),i(0x25,0,0,0)]);
+            vm
+        };
+        let mut reference=make(false);let mut native=make(true);
+        for vm in [&mut reference,&mut native] {
+            while vm.mmu.user {vm.run_batch(511).unwrap();}
+            assert_eq!(vm.memory[6*1024+7],6000);
+            vm.memory[2048+8*4+2]=PRESENT|READ|USER|COW;
+            vm.write_csr(CSR_MMU_FLUSH,1).unwrap();
+            vm.write_csr(CSR_EPC,0).unwrap();vm.interrupt_return().unwrap();
+            vm.registers[15]=10;
+            while vm.mmu.user {vm.run_batch(511).unwrap();}
+            assert_eq!(vm.mmu.cause,CAUSE_WRITE);
+            assert_eq!(vm.read_csr(CSR_EPC).unwrap(),2);
+            assert_eq!(vm.memory[6*1024+7],6000);
+        }
+        assert_eq!(reference.registers,native.registers);
+        assert_eq!(reference.executed_instructions,native.executed_instructions);
+        assert!(native.jit_stats().unwrap().native_instructions>1000);
+    }
+    #[test]
+    fn jit_follows_code_mappings_above_the_first_instruction_leaf() {
+        let mut vm = machine(true);
+        vm.memory[3074..3076].copy_from_slice(&[7, 0]);
+        let entry = 7 * 1024 + 44 * 4; // Virtual bank 300 = directory 1, leaf 44.
+        vm.memory[entry..entry + 4].copy_from_slice(&[
+            1, 0, PRESENT | READ | EXECUTE | USER, 0,
+        ]);
+        vm.instructions[1024..1028].copy_from_slice(&[
+            i(0x0e, 5, 23, 0),
+            i(0x0a, 15, 15, u16::MAX),
+            i(0x16, 15, 0, u16::MAX),
+            i(0x25, 0, 0, 0),
+        ]);
+        vm.registers[Register::Pcb as usize] = 300;
+        vm.registers[15] = 6000;
+        while vm.mmu.user { vm.run_batch(511).unwrap(); }
+        assert_eq!(vm.registers[5], 23);
+        assert_eq!(vm.mmu.cause, CAUSE_SYSCALL);
+        assert!(vm.jit_stats().unwrap().native_instructions > 1000);
+    }
+
+    #[test]
     fn native_code_is_reused_only_for_the_matching_instruction_map() {
         let mut vm = machine(true);
         vm.memory[9 * 1024..9 * 1024 + 2].copy_from_slice(&[10, 0]);

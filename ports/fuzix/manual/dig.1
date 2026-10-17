@@ -1,0 +1,31 @@
+.TH DIG 1
+.SH NAME
+dig \- inspect DNS records
+.SH SYNOPSIS
+.B dig
+.RI [ @SERVER ] " [NAME [TYPE]] [+short]"
+.br
+.B dig
+.RI [ @SERVER ] " -x ADDRESS"
+.SH DESCRIPTION
+Query a numeric IPv4 DNS server, or the servers in /etc/resolv.conf.
+The default query is A; with no NAME it is the root NS set. Types include
+A, AAAA, MX, NS, CNAME, TXT, SOA, PTR, ANY and TYPE followed by a number.
+-t TYPE is another spelling. +short prints answer data only. -x constructs
+the IPv4 reverse-lookup name. The decoded result includes status, TTL and
+answer, authority and additional sections.
+.PP
+Replies are checked against the server, query ID and exact question, and
+compressed names and record lengths are bounded. Truncated UDP answers are
+retried over TCP, up to a 4096-octet reply. No EDNS, DNSSEC validation, search
+domains, iterative recursion or IPv6 transport is supplied. AAAA records
+can still be queried over IPv4 DNS. A valid NXDOMAIN response is displayed
+with a successful command status; failed queries exit nonzero.
+.SH EXAMPLES
+dig example.com MX
+.br
+dig @1.1.1.1 example.com A +short
+.br
+dig -x 192.168.64.1
+.SH SEE ALSO
+host(1), htget(1)

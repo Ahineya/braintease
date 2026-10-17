@@ -1,5 +1,5 @@
 {
   "description": "Pointer assignment to _Bool normalizes both non-null and null pointers",
-  "use_runtime": true,
-  "expected": "YY\n"
+  "expected": "YY\n",
+  "use_runtime": true
 }

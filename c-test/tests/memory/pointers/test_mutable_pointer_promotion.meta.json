@@ -1,5 +1,5 @@
 {
-  "description": "Mutable private fat-pointer loops preserve banks, crossing, null, exits, escapes and volatile storage",
   "use_runtime": true,
-  "expected": "YYYYYYYYY\n"
+  "expected": "YYYYYYYYY\n",
+  "description": "Mutable private fat-pointer loops preserve banks, crossing, null, exits, escapes and volatile storage"
 }

@@ -1,5 +1,5 @@
 {
-  "expected": "YYYYYYYYYYYY\n",
+  "description": "4-reg scalars plus stack out-pointers to locals",
   "use_runtime": true,
-  "description": "4-reg scalars plus stack out-pointers to locals"
+  "expected": "YYYYYYYYYYYY\n"
 }

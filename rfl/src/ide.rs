@@ -2,6 +2,8 @@
 //! Scope and type information comes from the parser's spans and the checker.
 
 mod associated;
+#[cfg(test)]
+mod extraction;
 mod traits;
 
 use std::path::{Path, PathBuf};
@@ -465,6 +467,30 @@ impl Analysis {
             .strip_prefix("&mut ")
             .or_else(|| ty.strip_prefix('&'))
             .unwrap_or(&ty);
+        if !ty.starts_with('&')
+            && self
+                .ast
+                .functions
+                .iter()
+                .any(|func| func.is_async && func.body.span.contains(dot))
+            && info
+                .trait_methods
+                .iter()
+                .chain(&self.info.trait_methods)
+                .any(|method| {
+                    method.receiver == expr.span
+                        && method.name == "poll"
+                        && method.trait_name.rsplit('$').next() == Some("Future")
+                })
+        {
+            items.push(Completion {
+                label: "await".into(),
+                kind: CompletionKind::Keyword,
+                detail: "Suspend until this future is ready".into(),
+                replace,
+                import_edit: None,
+            });
+        }
         for (name, detail) in builtin_methods(referent) {
             items.push(Completion {
                 label: name,
@@ -771,6 +797,7 @@ fn field_in_expr(
             field_in_expr(lhs, offset, types).or_else(|| field_in_expr(rhs, offset, types))
         }
         ExprKind::Unary { expr, .. }
+        | ExprKind::Await(expr)
         | ExprKind::Try(expr)
         | ExprKind::Deref(expr)
         | ExprKind::Borrow { expr, .. } => field_in_expr(expr, offset, types),
@@ -885,6 +912,7 @@ fn call_in_expr(expr: &Expr, offset: usize) -> Option<CallAt> {
             call_in_expr(lhs, offset).or_else(|| call_in_expr(rhs, offset))
         }
         ExprKind::Unary { expr, .. }
+        | ExprKind::Await(expr)
         | ExprKind::Try(expr)
         | ExprKind::Borrow { expr, .. }
         | ExprKind::Deref(expr) => call_in_expr(expr, offset),
@@ -1032,6 +1060,7 @@ fn hints_in_expr(expr: &Expr, facts: &[BindingFact], hints: &mut Vec<(usize, Str
             hints_in_expr(rhs, facts, hints);
         }
         ExprKind::Unary { expr, .. }
+        | ExprKind::Await(expr)
         | ExprKind::Try(expr)
         | ExprKind::Deref(expr)
         | ExprKind::Borrow { expr, .. }
@@ -1139,9 +1168,9 @@ pub enum CompletionKind {
 }
 
 const KEYWORDS: &[&str] = &[
-    "fn", "let", "mut", "if", "else", "return", "as", "while", "break", "continue", "match", "for",
-    "in", "type", "trait", "impl", "const", "struct", "export", "import", "extern", "unsafe",
-    "true", "false",
+    "async", "await", "fn", "let", "mut", "if", "else", "return", "as", "while", "break",
+    "continue", "match", "for", "in", "type", "trait", "impl", "const", "struct", "export",
+    "import", "extern", "unsafe", "true", "false",
 ];
 
 fn symbols_of(module: &Module) -> Vec<Symbol> {

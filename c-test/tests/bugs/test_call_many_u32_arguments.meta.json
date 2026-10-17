@@ -1,0 +1,5 @@
+{
+  "description": "Large calls stream u32 argument words without exhausting pinned registers",
+  "expected": "Y\n",
+  "use_runtime": true
+}

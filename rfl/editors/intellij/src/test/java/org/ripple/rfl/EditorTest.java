@@ -42,7 +42,7 @@ public final class EditorTest {
         require(tokens("/* unfinished").equals(List.of(RflTokens.BLOCK_COMMENT)), "unterminated comment extends to EOF");
         require(tokens("🙂").equals(List.of(TokenType.BAD_CHARACTER, TokenType.BAD_CHARACTER)), "invalid Unicode always advances");
         // Check every token boundary can be used to restart incremental highlighting.
-        String text = "/* two\nlines */ fn x() { c\"hi\"; '\\n'; 42 }";
+        String text = "/* two\nlines */ async fn x(f: Async<i16>) { c\"hi\"; '\\n'; f.await }";
         RflLexer full = new RflLexer();
         full.start(text);
         while (full.getTokenType() != null) {

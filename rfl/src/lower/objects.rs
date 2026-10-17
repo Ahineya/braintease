@@ -267,3 +267,51 @@ pub(super) fn emit_try(
     builder.create_block(ok).ir()?;
     emit_read(builder, proc, frame, dest, src, OBJ_FIELDS, payload.cells())
 }
+
+pub(super) fn emit_expect(
+    builder: &mut IrBuilder,
+    proc: &Proc,
+    frame: &Value,
+    dest: usize,
+    src: usize,
+    message: &ExpectMessage,
+    ok_tag: u16,
+) -> Result<(), CompileError> {
+    let tag = load_cell(builder, frame, proc.slots[src].offset, IrType::I16)?;
+    let ok = builder.new_label();
+    let bad = builder.new_label();
+    let same = builder
+        .build_binary(
+            IrBinaryOp::Eq,
+            tag,
+            Value::Constant(ok_tag as i64),
+            IrType::I1,
+        )
+        .ir()?;
+    builder.build_branch_cond(Value::Temp(same), ok, bad).ir()?;
+    builder.create_block(bad).ir()?;
+    emit_text(builder, "error: ")?;
+    match message {
+        ExpectMessage::Literal(bytes) => {
+            for byte in bytes {
+                putchar(builder, Value::Constant(i64::from(*byte)))?;
+            }
+            putchar(builder, Value::Constant(10))?;
+        }
+        ExpectMessage::Slot(slot) => emit_print(builder, proc, frame, *slot, Ty::String, true)?,
+    }
+    builder
+        .build_call(Value::Global("rfl_halt".into()), vec![], IrType::Void)
+        .ir()?;
+    builder.build_return(Some(null_ptr())).ir()?;
+    builder.create_block(ok).ir()?;
+    emit_read(
+        builder,
+        proc,
+        frame,
+        dest,
+        src,
+        OBJ_FIELDS,
+        proc.slots[dest].ty.cells(),
+    )
+}

@@ -1,0 +1,37 @@
+#!/bin/sh
+
+RULE=90
+WIDTH=79
+STEPS=38
+
+if test $# -gt 0; then RULE=$1; fi
+if test $# -gt 1; then WIDTH=$2; fi
+if test $# -gt 2; then STEPS=$3; fi
+
+BITS=`echo "$RULE 2 o p" | dc`
+
+echo "$BITS $WIDTH $STEPS" | awk '
+{
+    bits = "00000000" $1
+    w = $2
+    steps = $3
+
+    for (i = 0; i < 8; i++)
+        law[i] = substr(bits, length(bits) - i, 1) + 0
+
+    world[int(w / 2)] = 1
+
+    for (t = 0; t < steps; t++) {
+        for (x = 0; x < w; x++)
+            printf "%s", world[x] ? "#" : " "
+        printf "\n"
+
+        for (x = 0; x < w; x++) {
+            n = 4 * world[x-1] + 2 * world[x] + world[x+1]
+            next[x] = law[n]
+        }
+
+        for (x = 0; x < w; x++)
+            world[x] = next[x]
+    }
+}'

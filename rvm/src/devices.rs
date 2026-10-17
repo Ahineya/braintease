@@ -19,9 +19,13 @@ pub const REGISTER_VERSION: usize = 31;
 pub const DISPLAY_MODE_EXTENDED: u16 = 4;
 /// INPUT_READ/INPUT_STATE collect live input without a clock grant.
 pub const CAP_INPUT_POLL: u16 = 0x0010;
+pub const CAP_HOST_CLOCK: u16 = 0x1000;
+pub const CAP_HOST_IDLE: u16 = 0x2000;
 pub const CAPABILITIES: u16 = 15
     | crate::bulk::CAP_MEMORY
     | CAP_INPUT_POLL
+    | CAP_HOST_CLOCK
+    | CAP_HOST_IDLE
     | crate::network::CAP_NETWORK
     | 0x0040
     | crate::audio::CAP_PCM
@@ -36,6 +40,11 @@ pub const COMMAND_GET_TIME: u16 = 4;
 pub const COMMAND_INPUT_READ: u16 = 5;
 pub const COMMAND_INPUT_STATE: u16 = 6;
 pub const COMMAND_INPUT_CONFIGURE: u16 = 7;
+pub const COMMAND_HOST_MONOTONIC: u16 = 8;
+pub const COMMAND_HOST_REALTIME: u16 = 9;
+pub const COMMAND_HOST_IDLE: u16 = 10;
+/// Short, synchronous host waits keep cooperative reactors responsive.
+pub const HOST_IDLE_MAX_MS: u16 = 10;
 
 pub const STATUS_OK: u16 = 0;
 pub const STATUS_UNKNOWN_COMMAND: u16 = 1;
@@ -349,6 +358,8 @@ struct DescriptorPointer {
 #[serde(deny_unknown_fields)]
 pub struct DeviceState {
     #[serde(default)]
+    host_clock: crate::host_clock::HostClock,
+    #[serde(default)]
     pub network: crate::network::NetworkDevice,
     #[serde(default)]
     pub audio: crate::audio::AudioDevice,
@@ -370,12 +381,14 @@ impl Default for DeviceState {
 }
 
 impl DeviceState {
-    /// Persistent guest device state; no host handles or wall clocks are used.
+    /// Freeze elapsed host time. Restore resumes it, excluding checkpoint downtime.
     pub fn checkpoint(&self) -> Self {
-        self.clone()
+        let mut snapshot = self.clone();
+        snapshot.host_clock = self.host_clock.checkpoint();
+        snapshot
     }
 
-    pub fn restore_checkpoint(snapshot: Self) -> Result<Self, String> {
+    pub fn restore_checkpoint(mut snapshot: Self) -> Result<Self, String> {
         snapshot.network.validate_checkpoint()?;
         snapshot.audio.validate(snapshot.tick_hz)?;
         if snapshot.tick_hz == 0
@@ -398,6 +411,7 @@ impl DeviceState {
             }
             previous = event.tick;
         }
+        snapshot.host_clock.resume();
         Ok(snapshot)
     }
 
@@ -406,6 +420,7 @@ impl DeviceState {
             return Err("virtual tick rate must be greater than zero".to_string());
         }
         Ok(Self {
+            host_clock: crate::host_clock::HostClock::default(),
             network: crate::network::NetworkDevice::default(),
             audio: crate::audio::AudioDevice::default(),
             descriptor: DescriptorPointer { bank: 0, offset: 0 },
@@ -583,7 +598,9 @@ impl DeviceState {
         let length = match command {
             COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME => 8,
             COMMAND_INPUT_READ => 10,
+            COMMAND_HOST_MONOTONIC | COMMAND_HOST_REALTIME => 10,
             COMMAND_INPUT_CONFIGURE => 4,
+            COMMAND_HOST_IDLE => 4,
             COMMAND_CAPABILITIES => 4,
             COMMAND_INPUT_STATE => STATE_CELLS,
             _ => crate::network::descriptor_length(command)
@@ -664,6 +681,25 @@ impl DeviceState {
                 return Ok(None);
             }
             COMMAND_GET_TIME => self.write_time(descriptor),
+            COMMAND_HOST_MONOTONIC => {
+                crate::host_clock::write_time(descriptor, self.host_clock.monotonic());
+            }
+            COMMAND_HOST_REALTIME => {
+                crate::host_clock::write_time(descriptor, crate::host_clock::HostClock::realtime()?);
+            }
+            COMMAND_HOST_IDLE => {
+                if descriptor[2] > HOST_IDLE_MAX_MS || descriptor[3] != 0 {
+                    return Err(STATUS_BAD_DESCRIPTOR);
+                }
+                if descriptor[2] == 0 {
+                    std::thread::yield_now();
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(u64::from(descriptor[2])));
+                }
+                // There are no output cells. Avoid dirtying RAM/COW pages just
+                // to write the same descriptor back after every idle turn.
+                return Ok(None);
+            }
             COMMAND_INPUT_READ => {
                 let capacity = usize::from(descriptor[2]);
                 if capacity == 0 || capacity > MAX_BATCH || descriptor[9] != 0 {
@@ -801,6 +837,53 @@ impl DeviceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_clocks_validate_descriptors_and_do_not_advance_logical_time() {
+        use std::time::{Duration, SystemTime, UNIX_EPOCH};
+        let mut state = DeviceState::default();
+        let mut ram = vec![0u16; 256];
+        command(&mut state, &mut ram, COMMAND_CAPABILITIES, 4);
+        assert_ne!(ram[42] & CAP_HOST_CLOCK, 0);
+        for request in [COMMAND_HOST_MONOTONIC, COMMAND_HOST_REALTIME] {
+            for (version, length, expected) in [
+                (2, 10, STATUS_VERSION),
+                (1, 9, STATUS_BAD_DESCRIPTOR),
+            ] {
+                ram[40..50].copy_from_slice(&[version, length, 7, 7, 7, 7, 7, 7, 7, 7]);
+                let before = ram.clone();
+                state.write_register(REGISTER_COMMAND, request, &mut ram, 64, 4);
+                assert_eq!(state.status(), expected);
+                assert_eq!(ram, before);
+            }
+            let before = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+            command(&mut state, &mut ram, request, 10);
+            assert_eq!(state.status(), STATUS_OK);
+            let seconds = (0..4).fold(0u64, |n, i| n | u64::from(ram[42 + i]) << (i * 16));
+            let nanos = u32::from(ram[46]) | u32::from(ram[47]) << 16;
+            let resolution = u32::from(ram[48]) | u32::from(ram[49]) << 16;
+            assert!(nanos < 1_000_000_000);
+            assert_eq!(nanos % 1_000_000, 0);
+            assert_eq!(resolution, 1_000_000);
+            if request == COMMAND_HOST_REALTIME {
+                let after = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                let sampled = Duration::new(seconds, nanos);
+                assert!(sampled + Duration::from_millis(1) >= before);
+                assert!(sampled <= after);
+            }
+            assert_eq!(state.tick(), 0);
+            assert!(!state.has_pending_tick());
+        }
+        // Restore an old checkpoint which predates the host-clock extension.
+        let mut old = serde_json::to_value(DeviceState::default().checkpoint()).unwrap();
+        old.as_object_mut().unwrap().remove("host_clock");
+        let mut restored = DeviceState::restore_checkpoint(serde_json::from_value(old).unwrap()).unwrap();
+        command(&mut restored, &mut ram, COMMAND_HOST_MONOTONIC, 10);
+        assert_eq!(restored.status(), STATUS_OK);
+        restored.reset();
+        command(&mut restored, &mut ram, COMMAND_HOST_MONOTONIC, 10);
+        assert_eq!(&ram[42..46], &[0, 0, 0, 0]);
+    }
 
     #[test]
     fn batch_bounds_overlap_and_capacity_fail_without_consuming_input() {

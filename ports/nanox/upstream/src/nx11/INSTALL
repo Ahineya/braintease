@@ -1,0 +1,17 @@
+NXLIB build and installation instructions
+Version 0.48, now included in Microwindows source tree in microwindows/src/nxlib/.
+
+1. If X11 not installed on host, or nxlib target X11 different than cross-compiling host,
+	or use nxlib's X11 headers.
+	X11_INCLUDE=./X11-local
+
+2. Modify fontlist.c to set X11 PCF and Truetype font search directories
+	Modify FONT_DIR_LIST for search directory list.
+	If using memory font files (nxlib.h HAVE_STATICFONTS=1), then
+		add memory font names in fontlist.c also.
+
+3. Modify Makefile to set X11 rgb.txt file location
+	X11_RGBTXT=/usr/share/X11/rgb.txt
+
+4. Modify X11 application link lines to use '-lNX11 -lnano-X', and remove '-lXext'.
+	The shell script "replace-lX11.sh" is provided to do this for you.

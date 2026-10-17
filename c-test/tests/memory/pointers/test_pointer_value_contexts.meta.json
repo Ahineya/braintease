@@ -1,5 +1,5 @@
 {
-  "description": "Fat pointer loads through indexing, dereference and conditionals, plus contextual integer null-pointer conversion",
+  "expected": "YYYYYY\n",
   "use_runtime": true,
-  "expected": "YYYYYY\n"
+  "description": "Fat pointer loads through indexing, dereference and conditionals, plus contextual integer null-pointer conversion"
 }

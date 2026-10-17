@@ -1,0 +1,24 @@
+import {static_network,NetworkConfig,ipv4,NetError} from "std/net";
+import {HttpServer,Response,http_server} from "std/http";
+import {Future} from "std/future";
+import {Reactor,block_on} from "std/executor";
+import {Result} from "std/result";
+async fn serve(server:HttpServer)->Result<unit,NetError> {
+    for (i in 0..6) {
+        let request=server.accept().await?;
+        if (request.method!="GET" || request.path!="/" || request.host!="guest.test") {return Err(NetError::from_code(2));}
+        move(request).respond(Response::html(200,"<h1>Async RFL</h1>\n")).await?;
+        println("SERVED");
+    }
+    Ok({})
+}
+fn main()->i16 {
+    let network=static_network(NetworkConfig{interface:0,seed:7,address:ipv4(192,168,64,42),mask:ipv4(255,255,255,0),gateway:ipv4(192,168,64,1),dns:ipv4(1,1,1,1)}).expect("network");
+    let mut reactor=network.reactor().expect("reactor");
+    let server=http_server(&network,8080,305419896).expect("listen");
+    println("HTTP ready");
+    let mut service=serve(move(server));
+    match block_on(&mut service,&mut reactor).expect("executor") {
+        Ok(_)=>0,Err(e)=>{println(e.message());1},
+    }
+}

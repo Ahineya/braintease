@@ -1,5 +1,5 @@
 {
+  "description": "printf with real varargs",
   "expected": "hello 42\nok Z ff %\nabY\n",
-  "use_runtime": true,
-  "description": "printf with real varargs"
+  "use_runtime": true
 }

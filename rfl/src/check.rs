@@ -1,3 +1,4 @@
+mod async_functions;
 mod bindings;
 mod borrows;
 mod calls;
@@ -12,6 +13,7 @@ mod declarations;
 mod display;
 mod editor;
 mod expressions;
+mod extraction;
 mod facts;
 mod ffi;
 mod functions;
@@ -195,6 +197,7 @@ fn analyze_inner(
         scopes: Vec::new(),
         bindings: Vec::new(),
         fn_ret: Ty::Unit,
+        async_context: None,
         loops: 0,
         schemas: Vec::new(),
         ctor_schema: HashMap::new(),
@@ -254,6 +257,7 @@ fn analyze_inner(
     let mut prelude_base = None;
     let result = (|| -> Result<TModule, CompileError> {
         let mut owned = module.clone();
+        owned.adts.insert(0, prelude_async());
         crate::modules::isolate_prelude_types(&mut owned);
         if checker.trait_scopes.is_empty() {
             let mut visible: Vec<_> = owned.traits.iter().map(|t| t.name.clone()).collect();
@@ -379,6 +383,15 @@ pub(crate) const BUILTIN_FUNCTIONS: &[(&str, &str)] = &[
 ];
 
 fn builtin_signature(name: &str) -> Option<&'static str> {
+    if name == "__expect_value" {
+        return Some("fn(Option<T> | Result<T, E>, String) -> T");
+    }
+    if name == "__async_poll" {
+        return Some("fn(&mut Async<T>, &mut Context) -> Poll<T>");
+    }
+    if name == "__async_cancel" {
+        return Some("fn(&mut Async<T>) -> unit");
+    }
     if name == "__erase_owned" {
         return Some("fn(Owned<T>) -> ErasedOwner");
     }
@@ -422,6 +435,8 @@ fn expr_returns(expr: &Expr) -> bool {
 
 #[derive(Clone)]
 struct Checker<'a> {
+    /// None outside async bodies; Some(None) until the first await needs Context.
+    async_context: Option<Option<u32>>,
     editor: bool,
     type_members: Vec<TypeMemberFact>,
     trait_methods: Vec<MethodFact>,

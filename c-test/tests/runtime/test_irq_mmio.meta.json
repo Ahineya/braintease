@@ -1,5 +1,5 @@
 {
-  "description": "IRQ MMIO register R/W without dispatch",
+  "expected": "YYYYYYYY\n",
   "use_runtime": true,
-  "expected": "YYYYYYYY\n"
+  "description": "IRQ MMIO register R/W without dispatch"
 }

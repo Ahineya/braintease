@@ -1,8 +1,15 @@
 use crate::{Macro, Preprocessor};
 use anyhow::{anyhow, Result};
 use regex::Regex;
+use once_cell::sync::Lazy;
+use std::borrow::Cow;
 use std::fs;
 use std::path::{PathBuf};
+
+static FILE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b__FILE__\b").unwrap());
+static LINE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b__LINE__\b").unwrap());
+static DEFINED_PAREN: Lazy<Regex> = Lazy::new(|| Regex::new(r"defined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)").unwrap());
+static DEFINED_SPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r"defined\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap());
 
 impl Preprocessor {
     /// Handle include directive implementation
@@ -87,21 +94,18 @@ impl Preprocessor {
     
     /// Handle define directive implementation
     pub fn handle_define_impl(&mut self, name: String, params: Option<Vec<String>>, body: String, is_variadic: bool) -> Result<()> {
-        self.macros.insert(
-            name.clone(),
-            Macro {
-                name,
-                params,
-                body,
-                is_variadic,
-            },
-        );
+        self.insert_macro(Macro {
+            name,
+            params,
+            body,
+            is_variadic,
+        });
         Ok(())
     }
     
     /// Handle undef directive implementation
     pub fn handle_undef_impl(&mut self, name: String) -> Result<()> {
-        self.macros.remove(&name);
+        self.undefine(&name);
         Ok(())
     }
     
@@ -127,20 +131,33 @@ impl Preprocessor {
             depth += 1;
             
             for (name, macro_def) in &self.macros {
+                // Necessary condition only: the existing regex/literal rules
+                // still decide whether this is an invocation. Inspect the
+                // current result, including names introduced earlier this pass.
+                if !result.contains(name.as_str()) {
+                    continue;
+                }
+                let re = self.macro_patterns[name].get_or_try_init(|| {
+                    let name = regex::escape(name);
+                    Regex::new(&if macro_def.params.is_none() {
+                        format!(r"\b{name}\b")
+                    } else {
+                        format!(r"\b{name}\s*\(")
+                    })
+                })?;
                 if macro_def.params.is_none() {
                     // Object-like macro
-                    let pattern = format!(r"\b{}\b", regex::escape(name));
-                    let re = Regex::new(&pattern)?;
-                    
                     let body = apply_object_like_body(&macro_def.body);
-                    let next = replace_unquoted(&result, &re, |_| body.clone());
-                    expanded |= next != result;
-                    result = next;
+                    if let Cow::Owned(next) = replace_unquoted(&result, re, |_| body.clone()) {
+                        expanded |= next != result;
+                        result = next;
+                    }
                 } else {
                     // Function-like macro
-                    let next = self.expand_function_macro(&result, name, macro_def)?;
-                    expanded |= next != result;
-                    result = next;
+                    if let Cow::Owned(next) = self.expand_function_macro(&result, name, macro_def, re)? {
+                        expanded |= next != result;
+                        result = next;
+                    }
                 }
             }
         }
@@ -155,33 +172,37 @@ impl Preprocessor {
     }
 
     fn expand_predefined(&self, text: &str) -> Result<String> {
-        let file = match &self.current_file {
-            Some(path) => {
-                let s = path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"");
-                format!("\"{s}\"")
-            }
-            None => "\"\"".to_string(),
+        if !text.contains("__FILE__") && !text.contains("__LINE__") {
+            return Ok(text.to_string());
+        }
+        let with_file = if text.contains("__FILE__") {
+            let file = match &self.current_file {
+                Some(path) => {
+                    let s = path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"");
+                    format!("\"{s}\"")
+                }
+                None => "\"\"".to_string(),
+            };
+            replace_unquoted(text, &FILE_PATTERN, |_| file.clone())
+        } else {
+            Cow::Borrowed(text)
         };
-        let re_file = Regex::new(r"\b__FILE__\b")?;
-        let with_file = replace_unquoted(text, &re_file, |_| file.clone());
 
-        let re_line = Regex::new(r"\b__LINE__\b")?;
-        if !re_line.is_match(&with_file) {
-            return Ok(with_file);
+        if !with_file.contains("__LINE__") {
+            return Ok(with_file.into_owned());
         }
 
-        Ok(replace_unquoted(&with_file, &re_line, |offset| {
+        Ok(replace_unquoted(&with_file, &LINE_PATTERN, |offset| {
             (self.current_line + with_file[..offset].bytes().filter(|&b| b == b'\n').count()).to_string()
-        }))
+        }).into_owned())
     }
     
     /// Expand function-like macro
-    fn expand_function_macro(&self, text: &str, name: &str, macro_def: &Macro) -> Result<String> {
+    fn expand_function_macro<'a>(&self, text: &'a str, name: &str, macro_def: &Macro, re: &Regex) -> Result<Cow<'a, str>> {
         let params = macro_def.params.as_ref().unwrap();
-        
-        // Create regex pattern for function-like macro invocation
-        let pattern = format!(r"\b{}\s*\(", regex::escape(name));
-        let re = Regex::new(&pattern)?;
+        if !re.is_match(text) {
+            return Ok(Cow::Borrowed(text));
+        }
         
         let mut result = String::new();
         let mut last_end = 0;
@@ -212,8 +233,11 @@ impl Preprocessor {
             last_end = args_start + args_end + 1; // +1 for closing paren
         }
         
+        if last_end == 0 {
+            return Ok(Cow::Borrowed(text));
+        }
         result.push_str(&text[last_end..]);
-        Ok(result)
+        Ok(Cow::Owned(result))
     }
     
     /// Parse macro arguments from text
@@ -377,7 +401,10 @@ impl Preprocessor {
 // Keep byte positions stable while hiding string/character literals from macro
 // matching. Replacements always use the original slices, preserving escapes,
 // UTF-8, and literal '$' characters in replacement bodies.
-fn mask_literals(text: &str) -> String {
+fn mask_literals(text: &str) -> Cow<'_, str> {
+    if !text.contains(['"', '\'']) {
+        return Cow::Borrowed(text);
+    }
     let mut bytes = text.as_bytes().to_vec();
     let mut i = 0;
     while i < bytes.len() {
@@ -396,10 +423,13 @@ fn mask_literals(text: &str) -> String {
             }
         } else { i += 1; }
     }
-    String::from_utf8(bytes).expect("masking whole literals preserves UTF-8")
+    Cow::Owned(String::from_utf8(bytes).expect("masking whole literals preserves UTF-8"))
 }
 
-fn replace_unquoted(text: &str, pattern: &Regex, replacement: impl Fn(usize) -> String) -> String {
+fn replace_unquoted<'a>(text: &'a str, pattern: &Regex, replacement: impl Fn(usize) -> String) -> Cow<'a, str> {
+    if !pattern.is_match(text) {
+        return Cow::Borrowed(text);
+    }
     let searchable = mask_literals(text);
     let mut out = String::new();
     let mut end = 0;
@@ -408,17 +438,18 @@ fn replace_unquoted(text: &str, pattern: &Regex, replacement: impl Fn(usize) -> 
         out.push_str(&replacement(found.start()));
         end = found.end();
     }
+    if end == 0 {
+        return Cow::Borrowed(text);
+    }
     out.push_str(&text[end..]);
-    out
+    Cow::Owned(out)
 }
 
 fn replace_defined(condition: &str, is_defined: impl Fn(&str) -> bool) -> String {
-    let re_paren = Regex::new(r"defined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)").unwrap();
-    let re_space = Regex::new(r"defined\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
-    let step = re_paren.replace_all(condition, |caps: &regex::Captures| {
+    let step = DEFINED_PAREN.replace_all(condition, |caps: &regex::Captures| {
         if is_defined(&caps[1]) { "1" } else { "0" }
     });
-    re_space.replace_all(&step, |caps: &regex::Captures| {
+    DEFINED_SPACE.replace_all(&step, |caps: &regex::Captures| {
         if is_defined(&caps[1]) { "1" } else { "0" }
     }).into_owned()
 }

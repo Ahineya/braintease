@@ -65,6 +65,29 @@ it is complete before the next guest instruction. There is no polling loop.
 | INPUT_READ | 5 | 10 | drain up to 64 typed keyboard/pointer events |
 | INPUT_STATE | 6 | 28 | read keys, pointer, focus/capture and sequence; acknowledge overflow |
 | INPUT_CONFIGURE | 7 | 4 | request absolute or relative pointer mode |
+| HOST_MONOTONIC | 8 | 10 | read host elapsed time independently of simulation ticks |
+| HOST_REALTIME | 9 | 10 | read host Unix UTC calendar time |
+| HOST_IDLE | 10 | 4 | yield or request a bounded host wait of at most 10 ms |
+
+Capability `VM_CAP_HOST_CLOCK` (0x1000) advertises both host clocks in RVM,
+RBF and native C. Both return `[1, 10, seconds (four cells), nanoseconds
+(two cells), resolution_ns (two cells)]`, least-significant cell first.
+Resolution is 1 ms; nanoseconds are in 0..999,999,999. These synchronous reads
+do not grant simulation ticks or generate IRQs. `HOST_MONOTONIC` starts at its
+first read after reset, includes time while the VM is paused, and cannot move
+backward with calendar changes. Checkpoint restore resumes saved elapsed time,
+excluding time spent saved. `HOST_REALTIME` reads the host calendar on every
+request and may jump. `VmHostTime` represents seconds as two 32-bit C fields.
+Host clocks are deliberately nondeterministic; deterministic games/replays
+should keep using `GET_TIME`/`NEXT_TICK`.
+
+`VM_CAP_HOST_IDLE` (0x2000) advertises `HOST_IDLE`. Submit `[1, 4, ms, 0]`,
+where `ms` is 0..10: zero yields, positive values request a host sleep. The
+descriptor stays unchanged. Larger durations or nonzero reserved cells fail
+before waiting. It grants no simulation tick, generates no IRQ, consumes no
+input and starts no network. A host scheduler can oversleep; callers must
+reread monotonic time. This is a bounded polling fallback, not an event
+subscription. See the [idle contract and reactor example](host-idle.md).
 
 Mode 3 retains its bank-0 double-buffer layout, 8-bit dimensions, and flush
 register. Mode 4 accepts 16-bit width/height/stride and a banked framebuffer pointer
@@ -78,7 +101,7 @@ the current logical tick, including zero; scheduled replay and stepped-controlle
 events remain tied to tick grants.
 
 The ordered stream includes keys, motion, buttons, wheel, enter/leave, focus and
-capture. Absolute positions count guest pixels; relative motion counts raw device
+capture, plus opt-in guest window-close requests. Absolute positions count guest pixels; relative motion counts raw device
 units. Wheels use signed 16.16 lines. Relative capture is asynchronous and releases
 on focus loss. The [event and snapshot layouts](../../rvm/mmio.md#keyboard-and-pointer-events-and-state)
 define flags, batching, overflow recovery and live/replay delivery. ABI version
@@ -105,6 +128,8 @@ The [bulk I/O contract](bulk-io.md) adds storage read/write and RAM/code copy/fi
 commands at 0x0300–0x0303. RVM and RBF can transfer attached-disk contents directly
 into guest RAM or instruction memory. Capabilities distinguish storage, RAM, and
 code support; transfers share the legacy disk cache and use the same mailbox.
+`MEMORY_INFO` (0x0304) reports RAM and code capacities without allocating memory.
+It lets an OS size its code pool to the host's configured or exported capacity.
 
 ## Interrupts
 

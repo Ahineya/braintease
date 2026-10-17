@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     for (n = 0; n < sys.slots; n++) {
         info.slot = n; require(!ioctl(fd, RIPPLE_PROCINFO, &info), "fork memory report");
         if (info.pid == p) require(info.mapped_kib == info.private_kib + info.shared_kib &&
-            (!(sys.flags & RIPPLE_SYSINFO_MMU) || info.shared_kib > 0), "shared fork pages");
+            ((sys.flags & RIPPLE_SYSINFO_MMU) && info.shared_kib > 0), "shared fork pages");
     }
     close(fd);
     require(!kill(p, SIGCONT), "continue");

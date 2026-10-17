@@ -1,5 +1,5 @@
 {
-  "expected": "Y\nY\n",
   "use_runtime": true,
-  "description": "calloc zeros allocated memory"
+  "description": "calloc zeros allocated memory",
+  "expected": "Y\nY\n"
 }

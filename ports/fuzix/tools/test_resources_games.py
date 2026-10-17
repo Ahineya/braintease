@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise MMU pressure, resource accounting and Sokoban in real guests."""
 import argparse
+from launch import require_mmu
 import errno
 import fcntl
 import os
@@ -21,7 +22,7 @@ p.add_argument('--build', type=Path, default=ROOT / 'build/fuzix')
 p.add_argument('--engine', choices=('both', 'jit', 'interpreter'), default='jit', help='RVM engine coverage (default: jit)')
 a = p.parse_args()
 build = a.build.resolve()
-protected = (build / '.mmu').read_text().strip() == '1'
+require_mmu(build)
 
 
 def check_disk(image):
@@ -34,15 +35,14 @@ def run(image, jit):
                 'sokoban -l -1; echo SOK_NUMBER:$?\nsokoban -l; echo SOK_ARG:$?\n'
                 'sokoban /bad-levels; echo SOK_BAD:$?\n'
                 'man -w free\nman -w uptime\nman -w 6 sokoban\n')
-    if protected:
-        commands += 'mmucheck --stress\necho MMU_STRESS:$?\n'
+    commands += 'mmucheck --stress\necho MMU_STRESS:$?\n'
     commands += 'free\nuptime\necho RESOURCE_RECOVERY_OK\nshutdown\n'
     args = [str(ROOT / 'target/release/rvm'), str(build / 'bios.bin'), '--disk', str(image),
-            '--memory', '16384000' if protected else '5120000', '--headless',
+            '--memory', '16384000', '--headless',
             '--input', commands, '--timeout', '600']
     if jit:
         args.append('--jit')
-    log = Path('/tmp/fuzix-resources-' + ('mmu-' if protected else 'legacy-') + ('jit' if jit else 'interpreter') + '.log')
+    log = Path('/tmp/fuzix-resources-mmu-' + ('jit' if jit else 'interpreter') + '.log')
     with log.open('w') as out:
         result = subprocess.run(args, stdout=out, stderr=subprocess.STDOUT, timeout=610)
     text = log.read_text().replace('\r', '')
@@ -54,16 +54,15 @@ def run(image, jit):
     rows = re.findall(r'User pool:\s+(\d+)\s+(\d+)\s+(\d+)', text)
     assert len(rows) == 2, text[-8000:]
     for total, used, free in rows:
-        assert int(total) == (16000 if protected else 2000)
+        assert int(total) == 16000
         assert int(used) + int(free) == int(total)
     # The shell may release its own partial arena page between commands.
     assert int(rows[1][1]) <= int(rows[0][1]) + 1, rows
     assert len(re.findall(r'up \d+ days?, \d+:\d+:\d+, \d+/\d+ processes, load average:', text)) == 2
-    if protected:
-        for expected in ['MMU_STRESS:0', 'process exhaustion (14 children) and slot recovery passed',
-                         'physical exhaustion, failed exec, and page recovery passed',
-                         'shrink/regrow, ENOMEM rollback, and repeated cleanup passed']:
-            assert expected in text, (expected, text[-8000:])
+    for expected in ['MMU_STRESS:0', 'process exhaustion (30 children) and slot recovery passed',
+                     'physical exhaustion, failed exec, and page recovery passed',
+                     'shrink/regrow, ENOMEM rollback, and repeated cleanup passed']:
+        assert expected in text, (expected, text[-8000:])
     assert 'panic:' not in text and 'FAILED' not in text, text[-8000:]
     check_disk(image)
 
@@ -71,7 +70,7 @@ def run(image, jit):
 def live(image, jit, resume=False):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
-    command = [str(ROOT / 'scripts/run-fuzix.sh'), '--run-only', '--disk', str(image), '--timeout', '240']
+    command = [str(ROOT / 'scripts/run-fuzix.sh'), '--run-only', '--disk', str(image), '--net', 'off', '--timeout', '240']
     if not jit:
         command.append('--no-jit')
     proc = subprocess.Popen(command, env=dict(os.environ, FUZIX_BUILD=str(build)),
@@ -138,7 +137,7 @@ def live(image, jit, resume=False):
             proc.terminate()
             proc.wait(timeout=10)
         os.close(master)
-        Path('/tmp/fuzix-sokoban-' + ('mmu-' if protected else 'legacy-') + ('jit' if jit else 'interpreter') + ('-resume' if resume else '') + '.log').write_bytes(transcript)
+        Path('/tmp/fuzix-sokoban-mmu-' + ('jit' if jit else 'interpreter') + ('-resume' if resume else '') + '.log').write_bytes(transcript)
     check_disk(image)
 
 
@@ -162,5 +161,5 @@ fs.writeFileSync(name,root.replace(installRoot(root.data,files)));
         run(image, jit)
         live(image, jit)
         live(image, jit, resume=True)
-        coverage = 'resources, ' + ('MMU recovery, ' if protected else '') + 'Sokoban controls/progress/terminal passed'
+        coverage = 'resources, MMU recovery, Sokoban controls/progress/terminal passed'
         print(('JIT' if jit else 'Interpreter') + ': ' + coverage, flush=True)

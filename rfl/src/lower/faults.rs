@@ -11,6 +11,7 @@ pub(super) const FAIL_CHAR: i64 = 6;
 pub(super) const FAIL_MATCH: i64 = 7;
 pub(super) const FAIL_UNREACHABLE: i64 = 8;
 pub(super) const FAIL_NULL: i64 = 9;
+pub(super) const FAIL_ASYNC_POLL: i64 = 10;
 
 pub(super) fn fail(builder: &mut IrBuilder, code: i64) -> Result<(), CompileError> {
     builder
@@ -45,6 +46,10 @@ pub(super) fn emit_rfl_fail(builder: &mut IrBuilder) -> Result<(), CompileError>
         (FAIL_MATCH, "error: non-exhaustive match\n"),
         (FAIL_UNREACHABLE, "error: unreachable state\n"),
         (FAIL_NULL, "error: null pointer\n"),
+        (
+            FAIL_ASYNC_POLL,
+            "error: future polled after completion or cancellation\n",
+        ),
     ];
     for (id, text) in messages {
         let print = builder.new_label();

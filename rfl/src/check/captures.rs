@@ -137,7 +137,10 @@ pub(super) fn walk_expr(
         | ExprKind::CStr(_)
         | ExprKind::Char(_)
         | ExprKind::Name(_) => {}
-        ExprKind::Unary { expr, .. } | ExprKind::Try(expr) | ExprKind::Deref(expr) => {
+        ExprKind::Unary { expr, .. }
+        | ExprKind::Try(expr)
+        | ExprKind::Deref(expr)
+        | ExprKind::Await(expr) => {
             walk_expr(expr, scopes, depth, found);
         }
         ExprKind::Borrow { mutable, expr, .. } => {

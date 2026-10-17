@@ -1,43 +1,81 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* RXE1 loader for Ripple's separate instruction and data memories. */
 #include "platform.h"
+#include "graphics.h"
 #include <kdata.h>
 #include <printf.h>
 #include <vm_bulk.h>
 /* One spare code slot lets exec replace an image with every task occupied. */
 #define CODE_SLOTS (PTABSIZE + 1)
-/* Keep the BF code reservation in ports/fuzix/Makefile in sync. */
-#define USER_CODE_BANKS 12
 static uint8_t code_refs[CODE_SLOTS];
 static uint32_t code_size[CODE_SLOTS];
+static unsigned code_base[CODE_SLOTS], code_banks[CODE_SLOTS];
+static unsigned code_limit;
 static int task_code[PTABSIZE];
 void ripple_code_init(void) {
-    unsigned i;
+    unsigned i, status;
+    unsigned long ram, capacity;
+    irqflags_t flags;
+    code_limit = RIPPLE_CODE_BANKS;
+    flags = di();
+    status = vm_memory_info(&ram, &capacity);
+    irqrestore(flags);
+    if (status == VM_DEVICE_OK) {
+        capacity /= BANK_CELLS;
+        if (capacity < code_limit) code_limit = (unsigned)capacity;
+    } else if (code_limit > 256U) {
+        /* Older hosts cannot report their cap. Retain a conservative pool. */
+        code_limit = 256U;
+    }
+    if (code_limit < RIPPLE_CODE_FIRST) code_limit = RIPPLE_CODE_FIRST;
     for (i = 0; i < PTABSIZE; i++) task_code[i] = -1;
+}
+/* First-fit contiguous extents allocate physical instruction storage.
+ * Metadata slots track images, not fixed-size regions. Reserve before loading
+ * so a sleeping exec cannot have its destination claimed by another task. */
+static int code_reserve(uint32_t count) {
+    unsigned slot, i, base = RIPPLE_CODE_FIRST;
+    unsigned banks = (unsigned)((count + BANK_CELLS - 1UL) / BANK_CELLS);
+    for (slot = 0; slot < CODE_SLOTS && code_refs[slot]; slot++);
+    if (slot == CODE_SLOTS) return -1;
+    while (base <= code_limit && banks <= code_limit - base) {
+        for (i = 0; i < CODE_SLOTS; i++) {
+            if (code_refs[i] && base < code_base[i] + code_banks[i] &&
+                code_base[i] < base + banks) break;
+        }
+        if (i == CODE_SLOTS) {
+            code_refs[slot] = 1;
+            code_base[slot] = base;
+            code_banks[slot] = banks;
+            code_size[slot] = count;
+            return slot;
+        }
+        base = code_base[i] + code_banks[i];
+    }
+    return -1;
+}
+static void code_drop(unsigned slot) {
+    if (!--code_refs[slot]) {
+        code_size[slot] = 0;
+        code_base[slot] = code_banks[slot] = 0;
+    }
 }
 static uint8_t stream[BLKSIZE];
 static uint32_t stream_base;
 static uint16_t stream_count;
 static inoptr stream_inode;
-extern void imem_add_word2(unsigned, unsigned, unsigned);
 int ripple_valid_code(unsigned long p) {
     int slot = task_code[(unsigned)(udata.u_ptab - ptab)];
     unsigned bank = p >> 16, off = (unsigned)p;
-    unsigned base;
     if (slot < 0 || off >= BANK_CELLS)
         return 0;
-#if RIPPLE_MMU
-    base = 0;
-#else
-    base = 32 + slot * USER_CODE_BANKS;
-#endif
-    return bank >= base && bank < base + USER_CODE_BANKS &&
-           (unsigned long)(bank - base) * BANK_CELLS + off < code_size[slot];
+    return bank < code_banks[slot] &&
+           (unsigned long)bank * BANK_CELLS + off < code_size[slot];
 }
 void ripple_code_free(ptptr p) {
     unsigned i = (unsigned)(p - ptab);
     if (task_code[i] >= 0) {
-        --code_refs[task_code[i]];
+        code_drop(task_code[i]);
         task_code[i] = -1;
     }
 }
@@ -76,7 +114,8 @@ arg_t _execve(void) {
     inoptr ino;
     struct s_argblk *abuf, *ebuf;
     uint32_t entry, nins, data, nr, pos, idx, i, expect;
-    unsigned slot, base, bank, addr, kind, chunk_off, cells[4];
+    unsigned base, bank, addr, kind, chunk_off, cells[4];
+    int slot = -1;
     unsigned fast_code = RIPPLE_BULK_IO, fast_data = RIPPLE_BULK_IO;
     uint8_t **av, **ev;
     int argc;
@@ -101,13 +140,19 @@ arg_t _execve(void) {
     nins = longat(12);
     data = longat(16);
     nr = longat(20);
-    if (!nins || nins > (unsigned long)USER_CODE_BANKS * BANK_CELLS || entry >= nins || data > 60000UL ||
-        nr > nins * 2) {
+    if (!nins || nins > (unsigned long)(RIPPLE_CODE_BANKS - RIPPLE_CODE_FIRST) * BANK_CELLS ||
+        entry >= nins || data > 60000UL) {
         udata.u_error = ENOEXEC;
         goto bad;
     }
-    expect = 24 + nins * 8 + data + nr * 8;
-    if (expect != ino->c_node.i_size) {
+    /* Subtract validated sections rather than overflowing RXE length sums. */
+    expect = ino->c_node.i_size - 24;
+    if (nins > expect / 8) {
+        udata.u_error = ENOEXEC;
+        goto bad;
+    }
+    expect -= nins * 8;
+    if (data > expect || (expect - data) % 8 || nr != (expect - data) / 8) {
         udata.u_error = ENOEXEC;
         goto bad;
     }
@@ -121,9 +166,8 @@ arg_t _execve(void) {
             goto bad;
         }
     }
-    for (slot = 0; slot < CODE_SLOTS && code_refs[slot]; slot++)
-        ;
-    if (slot == CODE_SLOTS) {
+    slot = code_reserve(nins);
+    if (slot < 0) {
         udata.u_error = ENOMEM;
         goto bad;
     }
@@ -135,7 +179,7 @@ arg_t _execve(void) {
         tmpfree(ebuf);
         goto bad;
     }
-    base = 32 + slot * USER_CODE_BANKS;
+    base = code_base[slot];
     /* Once STORC starts, read errors are fatal to this process. */
     stream_reset(ino);
     pos = 24;
@@ -187,43 +231,20 @@ arg_t _execve(void) {
             bank++;
         }
     }
-    for (i = 0; i < nr; i++) {
-        pos = 24 + nins * 8 + data + i * 8;
-        kind = wordat(pos);
-        idx = longat(pos + 4);
-        if (kind == 0 && !RIPPLE_MMU)
-            imem_add_word2(base + (unsigned)(idx / 64000UL),
-                           (unsigned)(idx % 64000UL), base);
-    }
-#if RIPPLE_MMU
     if (ripple_mmu_exec((unsigned)(udata.u_ptab-ptab))) {
         tmpfree(abuf);
         tmpfree(ebuf);
         udata.u_error = ENOMEM;
         goto bad;
     }
-    fast_data = 0; /* Device descriptors contain physical addresses. */
-#endif
-    /* Clear and populate data in block-sized transfers as well. */
-    i = 0;
-    while (fast_data && i < 64000UL) {
-        unsigned n = (unsigned)(64000UL - i), status;
-        irqflags_t flags;
-        if (n > VM_BULK_MAX_CELLS) n = VM_BULK_MAX_CELLS;
-        flags = di();
-        status = vm_bulk_fill(USER_GP, (unsigned)i, n, 0);
-        irqrestore(flags);
-        if (status == VM_DEVICE_OK) { i += n; continue; }
-        if (status != VM_DEVICE_UNKNOWN_COMMAND && status != VM_DEVICE_UNSUPPORTED)
-            panic("exec data clear");
-        fast_data = 0;
-    }
-    if (!fast_data) uzero((void *)PROGBASE, 64000);
+    /* The new map consists of zeroed private pages. Data uploads below resolve
+     * each virtual destination to a validated physical DMA span. */
     i = 0;
     while (i < data) {
         pos = 24 + nins * 8 + i;
         if (fast_data) {
-            unsigned n, status;
+            unsigned n, status, dest_bank=USER_GP, dest_off=(unsigned)i;
+            unsigned run;
             unsigned long ptr;
             irqflags_t flags;
             (void)byteat(pos);
@@ -231,10 +252,12 @@ arg_t _execve(void) {
             n = stream_count - chunk_off;
             if ((unsigned long)n > data - i) n = (unsigned)(data - i);
             if (!n) panic("short exec data read");
+            if(ripple_mmu_span(PROGBASE+i,1,&dest_bank,&dest_off,&run))panic("exec destination");
+            if(n>run)n=run;
             ptr = (unsigned long)(stream + chunk_off);
             flags = di();
             status = vm_bulk_copy((unsigned)(ptr >> 16), (unsigned)ptr,
-                USER_GP, (unsigned)i, n, VM_BULK_OCTETS);
+                dest_bank, dest_off, n, VM_BULK_OCTETS);
             irqrestore(flags);
             if (status == VM_DEVICE_OK) { i += n; continue; }
             if (status != VM_DEVICE_UNKNOWN_COMMAND && status != VM_DEVICE_UNSUPPORTED)
@@ -253,8 +276,9 @@ arg_t _execve(void) {
     ripple_argc = argc;
     ripple_argv = (unsigned long)av;
     ripple_envp = (unsigned long)ev;
+    ripple_gfx_exit(udata.u_ptab);
     for (i = 0; i < UFTSIZE; i++)
-        if (udata.u_cloexec & (1U << i))
+        if (udata.u_cloexec & (1UL << i))
             doclose(i);
     udata.u_cloexec = 0;
     memset(udata.u_sigvec, 0, sizeof(udata.u_sigvec));
@@ -281,15 +305,9 @@ arg_t _execve(void) {
     tmpfree(ebuf);
     i_deref(ino);
     ripple_code_free(udata.u_ptab);
-    code_refs[slot] = 1;
-    code_size[slot] = nins;
     task_code[(unsigned)(udata.u_ptab - ptab)] = slot;
-#if RIPPLE_MMU
     ripple_mmu_code((unsigned)(udata.u_ptab-ptab),base,nins);
     ripple_exec_bank = (unsigned)(entry / 64000UL);
-#else
-    ripple_exec_bank = base + (unsigned)(entry / 64000UL);
-#endif
     ripple_exec_pc = (unsigned)(entry % 64000UL);
     __hard_di();
     udata.u_insys = 0;
@@ -297,6 +315,7 @@ arg_t _execve(void) {
     ripple_enter_user();
     panic("exec returned");
 bad:
+    if (slot >= 0) code_drop((unsigned)slot);
     i_deref(ino);
     return -1;
 }

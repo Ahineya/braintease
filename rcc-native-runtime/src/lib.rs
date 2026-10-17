@@ -1,10 +1,14 @@
 //! Runtime services for native RCC/RFL objects. This owns memory and devices;
 //! it has no instruction decoder, VM registers or interpreter dispatch loop.
 mod address_space;
+mod console;
 mod devices;
 mod exports;
 mod files;
 mod host;
+mod hostfs;
+mod image_bindings;
+mod images;
 mod memory;
 mod process;
 mod strings;
@@ -24,6 +28,8 @@ pub struct Runtime {
     allocated: BTreeMap<usize, usize>,
     functions: BTreeMap<u32, (usize, u32)>,
     processes: process::Machine,
+    console: console::Console,
+    images: images::Images,
     output: Vec<u8>,
     devices: DeviceState,
     display: RGB565Display,
@@ -34,6 +40,8 @@ pub struct Runtime {
     rng: u32,
     host: host::Host,
     files: BTreeMap<u64, files::Stream>,
+    root_image_lock: Option<std::fs::File>,
+    hostfs: hostfs::HostFs,
     errno: u64,
     clock_start: Option<std::time::Instant>,
     presentations: u64,
@@ -51,6 +59,8 @@ impl Runtime {
             allocated: BTreeMap::new(),
             functions: BTreeMap::new(),
             processes: process::Machine::default(),
+            console: console::Console::default(),
+            images: images::Images::default(),
             output: Vec::new(),
             devices: DeviceState::default(),
             display: RGB565Display::new(),
@@ -61,6 +71,8 @@ impl Runtime {
             rng: 1,
             host: host::Host::from_env(),
             files: BTreeMap::new(),
+            root_image_lock: None,
+            hostfs: hostfs::HostFs::default(),
             errno: 0,
             clock_start: None,
             presentations: 0,

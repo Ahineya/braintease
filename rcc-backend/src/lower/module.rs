@@ -10,6 +10,7 @@ use crate::globals::GlobalManager;
 use crate::naming::new_function_naming;
 use crate::regmgmt::RegisterPressureManager;
 use super::function::lower_function_v2;
+use std::collections::HashMap;
 
 /// Lower an entire module using the V2 backend
 pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Result<Vec<AsmInst>, String> {
@@ -147,6 +148,7 @@ pub fn lower_module_with_stack_mode(module: &Module, bank_size: u16, trace_spill
     // Internal C linkage is object-local even when different files use the same names.
     let mut internal = module.internal_functions.clone();
     internal.extend(module.globals.iter().filter(|g| matches!(g.linkage, Linkage::Internal | Linkage::Private)).map(|g| g.name.clone()));
+    let renamer = InternalSymbolRenamer::new(&internal, global_manager.unit_tag());
     for inst in &mut all_instructions {
         let label = match inst {
             AsmInst::Label(s) | AsmInst::Call(s) | AsmInst::LiLabel(_, s)
@@ -154,21 +156,10 @@ pub fn lower_module_with_stack_mode(module: &Module, bank_size: u16, trace_spill
             | AsmInst::Blt(_, _, s) | AsmInst::Bge(_, _, s) => s,
             _ => continue,
         };
-        for name in &internal {
-            let unique = format!("__rcc_local_{}_{}", global_manager.unit_tag(), name);
-            if *label == *name { *label = unique; break; }
-            if *label == format!("%offset({name})") { *label = format!("%offset({unique})"); break; }
-            if *label == format!("%bank({name})") { *label = format!("%bank({unique})"); break; }
-            let block_prefix = format!("L_{name}_");
-            if let Some(tail) = label.strip_prefix(&block_prefix) {
-                *label = format!("L_{unique}_{tail}"); break;
-            }
-        }
+        if let Some(unique) = renamer.assembly_label(label) { *label = unique; }
     }
     let rename = |name: &str| {
-        if internal.iter().any(|n| n == name) {
-            format!("__rcc_local_{}_{}", global_manager.unit_tag(), name)
-        } else { name.to_string() }
+        renamer.symbols.get(name).cloned().unwrap_or_else(|| name.to_string())
     };
     let symbols: std::collections::BTreeMap<_, _> = link_symbols.into_iter()
         .map(|(name, refs)| (rename(&name), refs.iter().map(|n| rename(n)).collect::<Vec<_>>())).collect();
@@ -183,4 +174,80 @@ pub fn lower_module_with_stack_mode(module: &Module, bank_size: u16, trace_spill
     all_instructions.insert(0, AsmInst::Comment(format!("rcc-link-v1 {metadata}")));
     info!("V2: Module lowering complete, generated {} instructions", all_instructions.len());
     Ok(all_instructions)
+}
+
+/// Build replacements once per translation unit. Block labels can contain
+/// underscores in the function name, so checking only the first '_' is wrong.
+struct InternalSymbolRenamer {
+    symbols: HashMap<String, String>,
+    exact: HashMap<String, (usize, String)>,
+    blocks: HashMap<String, (usize, String)>,
+}
+
+impl InternalSymbolRenamer {
+    fn new(names: &[String], unit: &str) -> Self {
+        let mut this = Self { symbols: HashMap::new(), exact: HashMap::new(), blocks: HashMap::new() };
+        for (index, name) in names.iter().enumerate() {
+            let unique = format!("__rcc_local_{unit}_{name}");
+            this.symbols.insert(name.clone(), unique.clone());
+            for (from, to) in [
+                (name.clone(), unique.clone()),
+                (format!("%offset({name})"), format!("%offset({unique})")),
+                (format!("%bank({name})"), format!("%bank({unique})")),
+            ] {
+                this.exact.entry(from).or_insert((index, to));
+            }
+            this.blocks.entry(name.clone()).or_insert((index, format!("L_{unique}_")));
+        }
+        this
+    }
+
+    fn assembly_label(&self, label: &str) -> Option<String> {
+        let mut best = self.exact.get(label).map(|(index, value)| (*index, value.clone()));
+        if let Some(block) = label.strip_prefix("L_") {
+            for (offset, _) in block.match_indices('_') {
+                if let Some((index, prefix)) = self.blocks.get(&block[..offset]) {
+                    // Preserve the old first-match order for ambiguous names
+                    // such as foo and foo_bar, including exact-label matches.
+                    if best.as_ref().is_none_or(|(previous, _)| index < previous) {
+                        best = Some((*index, format!("{prefix}{}", &block[offset + 1..])));
+                    }
+                }
+            }
+        }
+        best.map(|(_, value)| value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InternalSymbolRenamer;
+
+    #[test]
+    fn internal_symbol_lookup_preserves_expressions_and_prefix_precedence() {
+        // Compare against the original ordered implementation, including
+        // overlapping function names and a C symbol resembling a block label.
+        for names in [
+            vec!["foo", "foo_bar", "L_foo_entry", "_hidden"],
+            vec!["L_foo_entry", "foo_bar", "foo", "_hidden"],
+        ] {
+            let names: Vec<String> = names.into_iter().map(str::to_string).collect();
+            let renamer = InternalSymbolRenamer::new(&names, "unit");
+            for label in ["foo", "foo_bar", "%offset(foo)", "%bank(foo_bar)",
+                "L_foo_entry", "L_foo_bar_loop_2", "L__hidden_done", "external",
+                "%offset(external)", "foo_suffix", "L_foobar_entry"] {
+                let mut expected = None;
+                for name in &names {
+                    let unique = format!("__rcc_local_unit_{name}");
+                    if label == name { expected = Some(unique); break; }
+                    if label == format!("%offset({name})") { expected = Some(format!("%offset({unique})")); break; }
+                    if label == format!("%bank({name})") { expected = Some(format!("%bank({unique})")); break; }
+                    if let Some(tail) = label.strip_prefix(&format!("L_{name}_")) {
+                        expected = Some(format!("L_{unique}_{tail}")); break;
+                    }
+                }
+                assert_eq!(renamer.assembly_label(label), expected, "{label}, {names:?}");
+            }
+        }
+    }
 }

@@ -35,7 +35,7 @@ pub(super) fn retain_reachable(procs: &mut Vec<Proc>) {
                 }
             }
             for insn in &seg.insns {
-                if let Insn::Closure { func, .. } = insn {
+                if let Insn::Closure { func, .. } | Insn::AsyncNew { body: func, .. } = insn {
                     if let Some(index) = indices.get(func) {
                         work.push(*index);
                     }
@@ -297,9 +297,11 @@ pub(super) fn segment_order(proc: &Proc) -> Vec<usize> {
         }
         work.push((index, true));
         match proc.segs[index].term.as_ref().unwrap() {
-            Term::Jump(next) | Term::Call { next, .. } | Term::Apply { next, .. } => {
-                work.push((*next, false))
-            }
+            Term::Jump(next)
+            | Term::Suspend { next, .. }
+            | Term::AsyncPoll { next, .. }
+            | Term::Call { next, .. }
+            | Term::Apply { next, .. } => work.push((*next, false)),
             Term::If {
                 then_seg, else_seg, ..
             }

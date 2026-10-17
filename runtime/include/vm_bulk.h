@@ -9,6 +9,7 @@
 #define VM_DEVICE_STORAGE_WRITE 0x0301U
 #define VM_DEVICE_MEMORY_COPY 0x0302U
 #define VM_DEVICE_MEMORY_FILL 0x0303U
+#define VM_DEVICE_MEMORY_INFO 0x0304U
 #define VM_BULK_WORDS 0
 #define VM_BULK_OCTETS 1
 #define VM_BULK_CODE_WORDS 2
@@ -33,4 +34,6 @@ unsigned short vm_bulk_copy(unsigned short source_bank, unsigned short source_of
     unsigned short bank, unsigned short offset, unsigned long count, unsigned short format);
 unsigned short vm_bulk_fill(unsigned short bank, unsigned short offset,
     unsigned long count, unsigned short value);
+/* Current host capacities; no allocation or clock advancement. */
+unsigned short vm_memory_info(unsigned long *ram_cells, unsigned long *code_instructions);
 #endif

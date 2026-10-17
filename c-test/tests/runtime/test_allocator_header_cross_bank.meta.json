@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "expected": "Y\n",
+  "use_runtime": true,
   "description": "Allocation headers with multiword size and pointer fields straddling a bank boundary"
 }

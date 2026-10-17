@@ -2,6 +2,15 @@ use super::*;
 use rcc_ir::ir::{IrType, Value};
 
 pub(super) fn initializers(compiler: &Compiler) -> Result<Vec<(u64, u64, u64)>, String> {
+    Ok(image_initializers(compiler)?
+        .into_iter()
+        .map(|(p, v, n, _)| (p, v, n))
+        .collect())
+}
+
+pub(super) fn image_initializers(
+    compiler: &Compiler,
+) -> Result<Vec<(u64, u64, u64, bool)>, String> {
     let mut output = Vec::new();
     for global in &compiler.ir.globals {
         if let Some(value) = &global.initializer {
@@ -73,7 +82,7 @@ fn flatten(
     pointer: u64,
     ty: &IrType,
     value: &Value,
-    out: &mut Vec<(u64, u64, u64)>,
+    out: &mut Vec<(u64, u64, u64, bool)>,
 ) -> Result<(), String> {
     match (ty, value) {
         (IrType::Array { size, element_type }, Value::ConstantArray(values)) => {
@@ -121,7 +130,19 @@ fn flatten(
             if words > 4 {
                 return Err(format!("unsupported native initializer {value:?} for {ty}"));
             }
-            out.push((pointer, constant(compiler, value)?, words));
+            fn token(compiler: &Compiler, value: &Value) -> bool {
+                match value {
+                    Value::Global(n) | Value::Function(n) => compiler.codes.contains_key(n),
+                    Value::FatPtr(p) => token(compiler, &p.addr),
+                    _ => false,
+                }
+            }
+            out.push((
+                pointer,
+                constant(compiler, value)?,
+                words,
+                token(compiler, value),
+            ));
         }
     }
     Ok(())

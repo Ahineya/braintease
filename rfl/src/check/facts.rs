@@ -178,6 +178,7 @@ impl<'a> Checker<'a> {
                 })
                 .or_else(|| self.consts.get(name).map(|(ty, _)| *ty)),
             ExprKind::Borrow { .. }
+            | ExprKind::Await(_)
             | ExprKind::Try(_)
             | ExprKind::Slice { .. }
             | ExprKind::Deref(_) => None,

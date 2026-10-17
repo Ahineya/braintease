@@ -42,7 +42,12 @@ impl Cg<'_, '_> {
                     self.k(n as i64)
                 } else {
                     let code = self.compiler.function_token(name)?;
-                    self.k(code as i64)
+                    let value = self.k(code as i64);
+                    if self.compiler.application {
+                        self.runtime("rcc_native_image_token", &[value])?
+                    } else {
+                        value
+                    }
                 }
             }
             Value::FatPtr(pointer) => {
@@ -287,11 +292,6 @@ pub(super) fn result_type(inst: &I) -> Option<(u32, IrType)> {
             result_type,
             ..
         }
-        | I::GetElementPtr {
-            result,
-            result_type,
-            ..
-        }
         | I::Alloca {
             result,
             result_type,
@@ -307,6 +307,19 @@ pub(super) fn result_type(inst: &I) -> Option<(u32, IrType)> {
             result_type,
             ..
         } => Some((*result, result_type.clone())),
+        I::GetElementPtr {
+            result,
+            result_type,
+            ..
+        } => {
+            // Field GEPs may carry the element type, but the SSA value is always
+            // an address. Continuation spills must preserve its bank bits.
+            let ty = match result_type {
+                IrType::FatPtr(_) => result_type.clone(),
+                _ => IrType::FatPtr(Box::new(result_type.clone())),
+            };
+            Some((*result, ty))
+        }
         I::Call {
             result: Some(result),
             result_type,

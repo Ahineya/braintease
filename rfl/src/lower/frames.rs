@@ -243,6 +243,9 @@ pub(super) fn emit_return(
         builder.build_return(Some(null_ptr())).ir()?;
         builder.create_block(caller).ir()?;
     }
+    if proc.async_result.is_some() {
+        return emit_async_ready(builder, proc, frame);
+    }
     let caller_ptr = load_fat(builder, frame, CALLER)?;
     if let Some(result) = proc.result_slot {
         let dest = load_cell(builder, frame, DEST, IrType::I16)?;

@@ -1,6 +1,6 @@
 {
-  "expected": "Y\n",
-  "description": "Q16.16 physics loop from the advanced test",
   "use_runtime": true,
-  "timeout_secs": 15
+  "expected": "Y\n",
+  "timeout_secs": 15,
+  "description": "Q16.16 physics loop from the advanced test"
 }

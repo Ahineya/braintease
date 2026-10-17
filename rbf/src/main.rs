@@ -43,6 +43,9 @@ struct Cli {
     /// NIC policy: auto (default), host, shared, off, or an external helper socket
     #[arg(long, conflicts_with_all = ["load_state", "save_state"])]
     net: Option<PathBuf>,
+    /// Attach networking before guest execution or interactive terminal input
+    #[arg(long, requires = "net")]
+    net_eager: bool,
     #[arg(long, default_value_t = 0x12345678)]
     seed: u32,
     #[arg(long, default_value_t = 35, value_parser = clap::value_parser!(u16).range(1..))]
@@ -283,6 +286,9 @@ fn execute(cli: Cli) -> Result<i32, String> {
         .devices
         .network
         .configure_host(network_setting.as_deref())?;
+    if cli.net_eager {
+        host.devices.devices.network.prepare_host()?;
+    }
     if let Some(text) = &cli.input {
         host.devices.push_input(text.as_bytes());
     }

@@ -1,4 +1,13 @@
 impl<T> Option<T> {
+    // Failure terminates execution; it does not unwind resource cleanup.
+    export fn unwrap(self) -> T {
+        __expect_value(move(self), "called Option.unwrap() on None")
+    }
+
+    export fn expect(self, message: String) -> T {
+        __expect_value(move(self), message)
+    }
+
     export fn is_some(self) -> bool {
         match self {
             Some(_) => true,

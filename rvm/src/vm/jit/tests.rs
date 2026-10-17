@@ -197,7 +197,7 @@ fn reload_clears_native_call_targets_from_the_previous_image() {
     vm.instructions = vec![i(0x15, 0, 0, 1), i(0, 0, 0, 0)];
     vm.jit = Some(JitEngine::new().unwrap());
     let region = build_region(64, 0, &vm.instructions, &[]).unwrap();
-    vm.jit.as_mut().unwrap().compile(64, 0, &region, 2).unwrap();
+    vm.jit.as_mut().unwrap().compile(64, 0, &region, 2, region.ranges()).unwrap();
     assert!(vm.jit.as_ref().unwrap().get(1).is_some());
     vm.jit_flush();
     assert!(vm.jit.as_ref().unwrap().get(0).is_none());
@@ -351,4 +351,39 @@ fn an_out_of_bounds_call_preserves_the_interpreter_diagnostic() {
     // A high bank can produce a linear address above i32::MAX. It must reach
     // the ordinary PC diagnostic rather than fail during native translation.
     compare(64000, vec![i(0x13, 3, 65535, 1), i(0, 0, 0, 0)]);
+}
+
+#[test]
+fn mapping_flush_and_code_writes_preserve_unaffected_native_regions() {
+    use crate::mmu::{PRESENT,READ,EXECUTE,USER};
+    let mut fixture=Fixture::new(1024);
+    let vm=&mut fixture.vm;
+    vm.memory.resize(16*1024,0);
+    vm.instructions=vec![i(0x42,0,0,0);4*1024];
+    let flags=PRESENT|READ|EXECUTE|USER;
+    for (root,leaf,physical) in [(3,4,1),(9,10,2)] {
+        vm.memory[root*1024..root*1024+2].copy_from_slice(&[leaf as u16,0]);
+        vm.memory[leaf*1024..leaf*1024+4].copy_from_slice(&[physical as u16,0,flags,0]);
+    }
+    let mut engine=JitEngine::new().unwrap();
+    for (context,physical) in [((true,false,(0,0)),0),((true,true,(3,0)),1024),((true,true,(9,0)),2048)] {
+        let code=[i(0x0e,5,11,0),i(0,0,0,0)];
+        vm.instructions[physical..physical+2].copy_from_slice(&code);
+        let region=build_region(1024,0,&code,&[]).unwrap();
+        engine.select(context);
+        engine.compile(1024,0,&region,2,vec![(physical,2)]).unwrap();
+    }
+    vm.jit=Some(engine);vm.mmu.enabled=true;
+    // Reusing one task's root for another executable must evict that mapping,
+    // retaining both the kernel and a different process's compiled image.
+    vm.memory[4096]=3;
+    vm.write_csr(crate::constants::CSR_MMU_FLUSH,3).unwrap();
+    let engine=vm.jit.as_ref().unwrap();
+    assert!(engine.contexts[&(true,true,(3,0))].blocks.is_empty());
+    assert!(!engine.contexts[&(true,false,(0,0))].blocks.is_empty());
+    assert!(!engine.blocks.is_empty());
+    vm.jit_invalidate_range(2048..2049);
+    let engine=vm.jit.as_ref().unwrap();
+    assert!(engine.blocks.is_empty());
+    assert!(!engine.contexts[&(true,false,(0,0))].blocks.is_empty());
 }

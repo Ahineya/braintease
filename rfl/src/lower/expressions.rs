@@ -8,6 +8,115 @@ impl FnBuild {
             return;
         }
         match &expr.kind {
+            TExprKind::Expect {
+                value,
+                message,
+                ok_tag,
+            } => {
+                let src = self.emit_expr(value);
+                if self.dead {
+                    return;
+                }
+                // The default unwrap diagnostic is static. Do not allocate a
+                // String for a message that is only used on the failure path.
+                let message = match &message.kind {
+                    TExprKind::Str(bytes) => ExpectMessage::Literal(bytes.clone()),
+                    _ => ExpectMessage::Slot(self.emit_expr(message)),
+                };
+                if !self.dead {
+                    self.insn(Insn::Expect {
+                        dest,
+                        src,
+                        message,
+                        ok_tag: *ok_tag,
+                    });
+                }
+            }
+            TExprKind::Await {
+                owner,
+                binding,
+                poll,
+            } => {
+                let slot = self.binding_slot[*binding as usize];
+                self.emit_expr_to(owner, slot);
+                if self.dead {
+                    return;
+                }
+                self.track_resource(slot);
+                let poll_start = self.fresh();
+                self.terminate(Term::Jump(poll_start));
+                self.cur = poll_start;
+                self.dead = false;
+                let result = self.emit_expr(poll);
+                if self.dead {
+                    return;
+                }
+                let pending = self.fresh();
+                let ready = self.fresh();
+                self.terminate(Term::Tag {
+                    slot: result,
+                    tag: 0,
+                    then_seg: pending,
+                    else_seg: ready,
+                });
+                self.cur = pending;
+                self.dead = false;
+                self.insn(Insn::Drop { slot: result });
+                self.terminate(Term::Suspend {
+                    next: poll_start,
+                    cleanup: self.cleanup_slots(0),
+                });
+                self.cur = ready;
+                self.dead = false;
+                self.insn(Insn::Read {
+                    dest,
+                    src: result,
+                    offset: OBJ_FIELDS,
+                    cells: expr.ty.cells(),
+                });
+                self.insn(Insn::Drop { slot: result });
+                let TExprKind::Owned { value, .. } = &owner.kind else {
+                    unreachable!()
+                };
+                let finished = self.alloc(value.ty);
+                self.insn(Insn::IntoInner {
+                    dest: finished,
+                    src: slot,
+                });
+                self.insn(Insn::Drop { slot: finished });
+            }
+            TExprKind::AsyncNew { body, args } => {
+                let args = args.iter().map(|arg| self.emit_expr(arg)).collect();
+                if !self.dead {
+                    self.insn(Insn::AsyncNew {
+                        dest,
+                        body: body.clone(),
+                        args,
+                    });
+                }
+            }
+            TExprKind::AsyncPoll { future, context } => {
+                let future = self.emit_expr(future);
+                let context = self.emit_expr(context);
+                if self.dead {
+                    return;
+                }
+                let next = self.fresh();
+                self.terminate(Term::AsyncPoll {
+                    dest,
+                    future,
+                    context,
+                    next,
+                });
+                self.cur = next;
+                self.dead = false;
+            }
+            TExprKind::AsyncCancel { future } => {
+                let future = self.emit_expr(future);
+                if !self.dead {
+                    self.insn(Insn::AsyncCancel { future });
+                }
+            }
             TExprKind::Int(value) => self.insn(Insn::Const {
                 slot: dest,
                 value: expr.ty.bits(*value),

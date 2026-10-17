@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
+  "description": "Full-cell string characters, unsigned comparisons, 32-bit lengths, exact memory-copy bounds and overlapping moves",
   "expected": "YYYYYYYYYYY\n",
-  "description": "Full-cell string characters, unsigned comparisons, 32-bit lengths, exact memory-copy bounds and overlapping moves"
+  "use_runtime": true
 }

@@ -1,0 +1,25 @@
+// Full-width host samples. Monotonic time is independent of simulation ticks;
+// realtime is calendar time and must never drive async deadlines.
+#[repr(C)]
+export struct HostTime { seconds_low:u32, seconds_high:u32, nanoseconds:u32, resolution_ns:u32 }
+export type TimeError = ClockDeviceError(u16) | InvalidHostTime;
+import { rfl_host_clock_read } from "./host_support.c";
+fn read_time(calendar:bool)->Result<HostTime,TimeError> {
+    let mut words:[u32;4]=[0,0,0,0];
+    let status=unsafe {rfl_host_clock_read(if (calendar) {1} else {0},&mut words[0])};
+    if (status != 0) {return Err(ClockDeviceError(status));}
+    let sample=HostTime{seconds_low:words[0],seconds_high:words[1],nanoseconds:words[2],resolution_ns:words[3]};
+    if (sample.nanoseconds >= 1000000000 || sample.resolution_ns == 0 || sample.resolution_ns > 1000000000) {
+        return Err(InvalidHostTime);
+    }
+    Ok(sample)
+}
+export fn monotonic()->Result<HostTime,TimeError> {read_time(false)}
+export fn realtime()->Result<HostTime,TimeError> {read_time(true)}
+impl HostTime {
+    // Intentionally modulo 2^32; high seconds contribute a multiple of 2^32.
+    export fn wrapping_millis(&self)->u32 {self.seconds_low*1000+self.nanoseconds/1000000}
+}
+export fn monotonic_millis()->Result<u32,TimeError> {
+    let sample=monotonic()?;Ok(sample.wrapping_millis())
+}

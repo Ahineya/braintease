@@ -1,5 +1,5 @@
 {
-  "description": "Bank-tag branches preserve other live pointer spills while scanning global, stack and heap pointer arrays under register pressure",
+  "expected": "YYYY\n",
   "use_runtime": true,
-  "expected": "YYYY\n"
+  "description": "Bank-tag branches preserve other live pointer spills while scanning global, stack and heap pointer arrays under register pressure"
 }

@@ -1,5 +1,5 @@
 {
   "expected": "YYYYYYYYYYY\n",
-  "use_runtime": true,
-  "description": "abs, labs, and llabs"
+  "description": "abs, labs, and llabs",
+  "use_runtime": true
 }

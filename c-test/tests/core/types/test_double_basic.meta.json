@@ -1,6 +1,6 @@
 {
-  "use_runtime": true,
   "expected": "YYYYYYYYY\n",
-  "description": "IEEE double arith, ABI, casts",
-  "timeout_secs": 15
+  "use_runtime": true,
+  "timeout_secs": 15,
+  "description": "IEEE double arith, ABI, casts"
 }

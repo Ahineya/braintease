@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "description": "IEEE float sizeof, arith, compare, ABI, casts",
-  "expected": "YYYYYYYYYYYYYYYYY\n"
+  "expected": "YYYYYYYYYYYYYYYYY\n",
+  "use_runtime": true
 }

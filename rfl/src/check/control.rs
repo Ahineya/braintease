@@ -11,6 +11,12 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         self.note_sig(builtin_signature(callee).unwrap().to_string());
+        if callee == "__expect_value" {
+            return self.check_expect_value(span, args, expected);
+        }
+        if matches!(callee, "__async_poll" | "__async_cancel") {
+            return self.check_async_builtin(span, callee, args, expected);
+        }
         if matches!(callee, "__erase_owned" | "__borrow_raw") {
             return self.check_storage_builtin(span, callee, args, expected);
         }

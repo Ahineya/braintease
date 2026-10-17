@@ -88,6 +88,15 @@ fn uses(instruction: &I) -> Set {
 }
 
 impl Liveness {
+    pub fn before(&self, block: usize, position: usize, instruction: &I) -> Set {
+        let mut live = self.after[block][position].clone();
+        if let Some((id, _)) = super::emit::result_type(instruction) {
+            live.remove(&id);
+        }
+        live.extend(uses(instruction));
+        live
+    }
+
     pub fn analyze(function: &Function) -> Result<Self, String> {
         let mut input = BTreeMap::<u32, Set>::new();
         let mut output = input.clone();

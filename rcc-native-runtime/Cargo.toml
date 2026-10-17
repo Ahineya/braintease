@@ -7,5 +7,9 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 rcc-ir.workspace = true
 rvm = { path = "../rvm" }
+serde_json.workspace = true
+libloading = "0.8.8"
+libc = "0.2"
+
 [lints]
 workspace = true

@@ -73,6 +73,28 @@ char *strerror(int e) {
         return "Directory not empty";
     case ENOEXEC:
         return "Exec format error";
+    case EFBIG: return "File too large";
+    case ENAMETOOLONG: return "File name too long";
+    case EAFNOSUPPORT: return "Address family not supported";
+    case EALREADY: return "Operation already in progress";
+    case EADDRINUSE: return "Address already in use";
+    case EADDRNOTAVAIL: return "Address not available";
+    case EOPNOTSUPP: return "Operation not supported";
+    case ECONNRESET: return "Connection reset by peer";
+    case ENETDOWN: return "Network is down";
+    case EMSGSIZE: return "Message too long";
+    case ETIMEDOUT: return "Connection timed out";
+    case ECONNREFUSED: return "Connection refused";
+    case EHOSTUNREACH: return "No route to host";
+    case EHOSTDOWN: return "Host is down";
+    case ENETUNREACH: return "Network is unreachable";
+    case ENOTCONN: return "Socket is not connected";
+    case EINPROGRESS: return "Operation now in progress";
+    case ESHUTDOWN: return "Socket is shut down";
+    case EISCONN: return "Socket is already connected";
+    case EDESTADDRREQ: return "Destination address required";
+    case ENOBUFS: return "No buffer space available";
+    case EPROTONOSUPPORT: return "Protocol not supported";
     default:
         return "System error";
     }

@@ -1,0 +1,16 @@
+.TH PING 1
+.SH NAME
+ping \- send IPv4 ICMP echo requests
+.SH SYNOPSIS
+.B ping
+.RI [ -c " COUNT] ADDRESS"
+.SH DESCRIPTION
+Send echo requests to an IPv4 address or hostname and report replies, TTL and
+round-trip time. Four requests are sent by default. Count must be positive.
+Root access is required to open the raw ICMP socket. Ctrl-C stops the command.
+.PP
+Timing is based on the guest host-clock timer, with 100 ms display resolution.
+The Ethernet interface must have an attached peer and a suitable address,
+mask and gateway. For the default host-only link try ping -c 3 192.168.64.1.
+.SH SEE ALSO
+ifconfig(1)

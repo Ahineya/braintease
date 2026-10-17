@@ -1,5 +1,5 @@
 {
-  "expected": "YYYYY\n",
+  "use_runtime": true,
   "description": "Relocated global initializer cursor reuse across arrays, wide values, and function/data pointers",
-  "use_runtime": true
+  "expected": "YYYYY\n"
 }

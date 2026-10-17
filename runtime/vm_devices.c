@@ -79,6 +79,38 @@ unsigned short vm_get_time(VmClock *clock) {
     return clock_command(VM_DEVICE_GET_TIME, clock);
 }
 
+static unsigned short host_clock_command(unsigned short command, VmHostTime *time) {
+    volatile unsigned short descriptor[10];
+    unsigned short i, status;
+    if (vm_devices_version() != VM_DEVICE_ABI_VERSION) return VM_DEVICE_UNSUPPORTED;
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 10;
+    for (i = 2; i < 10; ++i) descriptor[i] = 0;
+    status = submit(command, descriptor);
+    if (status == VM_DEVICE_OK) {
+        time->seconds_low = join_words(descriptor[2], descriptor[3]);
+        time->seconds_high = join_words(descriptor[4], descriptor[5]);
+        time->nanoseconds = join_words(descriptor[6], descriptor[7]);
+        time->resolution_ns = join_words(descriptor[8], descriptor[9]);
+    }
+    return status;
+}
+
+unsigned short vm_host_monotonic(VmHostTime *time) {
+    return host_clock_command(VM_DEVICE_HOST_MONOTONIC, time);
+}
+unsigned short vm_host_realtime(VmHostTime *time) {
+    return host_clock_command(VM_DEVICE_HOST_REALTIME, time);
+}
+
+unsigned short vm_host_idle(unsigned short milliseconds) {
+    volatile unsigned short descriptor[4];
+    if (milliseconds > VM_HOST_IDLE_MAX_MS) return VM_DEVICE_BAD_DESCRIPTOR;
+    if (vm_devices_version() != VM_DEVICE_ABI_VERSION) return VM_DEVICE_UNSUPPORTED;
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 4;
+    descriptor[2] = milliseconds; descriptor[3] = 0;
+    return submit(VM_DEVICE_HOST_IDLE, descriptor);
+}
+
 static long signed_words(unsigned short lo, unsigned short hi) {
     unsigned long value = join_words(lo, hi);
     if (hi & 32768U) return -1L - (long)(0xffffffffUL - value);

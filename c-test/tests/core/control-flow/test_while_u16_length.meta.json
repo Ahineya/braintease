@@ -1,5 +1,5 @@
 {
-  "description": "while (i < length) over unsigned short post length",
+  "expected": "YY\n",
   "use_runtime": true,
-  "expected": "YY\n"
+  "description": "while (i < length) over unsigned short post length"
 }

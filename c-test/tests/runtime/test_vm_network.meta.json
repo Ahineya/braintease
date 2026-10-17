@@ -1,5 +1,5 @@
 {
-  "description": "Mailbox Ethernet discovery, octet validation and isolation without a live backend",
+  "use_runtime": true,
   "expected": "YYYYYYYYYYY\n",
-  "use_runtime": true
+  "description": "Mailbox Ethernet discovery, octet validation and isolation without a live backend"
 }

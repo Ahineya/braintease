@@ -2,6 +2,30 @@
 
 use super::*;
 
+/// The only constructor is compiler-private. A future owns erased frame storage.
+pub(super) fn prelude_async() -> Adt {
+    let span = Span::empty();
+    Adt {
+        name: "Async".into(),
+        name_span: span,
+        exported: false,
+        params: vec![TypeParam {
+            name: "T".into(),
+            span,
+            bounds: vec![],
+        }],
+        ctors: vec![Ctor {
+            name: "$compiler$async".into(),
+            name_span: span,
+            fields: vec![ParsedTy::Named {
+                span,
+                name: "ErasedOwner".into(),
+                args: vec![],
+            }],
+        }],
+    }
+}
+
 pub(super) fn prelude_result() -> Adt {
     let span = Span::empty();
     let value = ParsedTy::Named {
@@ -129,6 +153,7 @@ pub(super) fn expand_impls(
                 }
             });
             module.functions.push(Function {
+                is_async: false,
                 name: func.clone(),
                 name_span: method.name_span,
                 type_params,

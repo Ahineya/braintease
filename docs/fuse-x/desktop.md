@@ -102,3 +102,12 @@ native mode keeps macOS window chrome. A standalone RVM desktop may add its own
 chrome, compositor, and dock-like launcher behind the same surface interface.
 Native widgets, clipboard integration, high-DPI behavior, and drawing
 acceleration remain separate design tasks.
+
+## Shared graphics contract
+
+The [GX architecture](../graphics/architecture.md) defines the C16 guest-facing
+window/surface/event boundary and the first RVM terminal. Fuse-X should implement
+that contract with native top-level windows and capability discovery. Its native
+GX backend remains planned; importing Nano-X does not supply that backend. See
+the [milestones](../graphics/roadmap.md) for local IPC, multiple windows and
+Nano-X lifecycle adaptation.

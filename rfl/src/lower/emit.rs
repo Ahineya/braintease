@@ -35,7 +35,13 @@ fn emit_switch(
 ) -> Result<(), CompileError> {
     let mut resumes = std::collections::BTreeSet::from([0]);
     for index in segment_order(proc) {
-        if let Some(Term::Call { next, .. } | Term::Apply { next, .. }) = proc.segs[index].term {
+        if let Some(
+            Term::Call { next, .. }
+            | Term::Apply { next, .. }
+            | Term::Suspend { next, .. }
+            | Term::AsyncPoll { next, .. },
+        ) = proc.segs[index].term
+        {
             resumes.insert(next);
         }
     }
@@ -78,6 +84,29 @@ pub(super) fn emit_seg(
         }
     }
     match proc.segs[index].term.as_ref().unwrap() {
+        Term::Suspend { next, .. } => {
+            // Safe borrows end before await. These views (including temporary
+            // poll-context copies) must not retain addresses into a prior poll.
+            for slot in &proc.slots {
+                if slot.ty.is_ref() {
+                    for i in 0..2 {
+                        store_cell(builder, frame, slot.offset + i, Value::Constant(0))?;
+                    }
+                }
+            }
+            store_cell(builder, frame, RESUME, Value::Constant(*next as i64))?;
+            emit_async_pending(builder, frame)
+        }
+        Term::AsyncPoll {
+            dest,
+            future,
+            context,
+            next,
+        } => {
+            let child = emit_async_enter(builder, proc, frame, *dest, *future, *context)?;
+            store_cell(builder, frame, RESUME, Value::Constant(*next as i64))?;
+            builder.build_return(Some(child)).ir()
+        }
         Term::Return => emit_return(builder, proc, frame, built.need_alloc),
         Term::Jump(target) => builder.build_branch(labels[*target]).ir(),
         Term::Tag {
@@ -158,6 +187,14 @@ pub(super) fn emit_insn(
     insn: &Insn,
 ) -> Result<(), CompileError> {
     match insn {
+        Insn::Expect {
+            dest,
+            src,
+            message,
+            ok_tag,
+        } => emit_expect(builder, proc, frame, *dest, *src, message, *ok_tag),
+        Insn::AsyncNew { .. } => emit_async_new(builder, proc, built, frame, insn),
+        Insn::AsyncCancel { future } => emit_async_cancel(builder, proc, frame, *future),
         Insn::Replace { dest, place, value } => {
             emit_replace(builder, proc, frame, *dest, *place, *value)
         }

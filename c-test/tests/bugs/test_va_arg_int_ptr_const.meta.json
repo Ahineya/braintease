@@ -1,5 +1,5 @@
 {
-  "expected": "Y\n",
+  "description": "va_arg(int*) store of constant 42 with sibling pointer branches",
   "use_runtime": true,
-  "description": "va_arg(int*) store of constant 42 with sibling pointer branches"
+  "expected": "Y\n"
 }

@@ -1,5 +1,5 @@
 {
-  "use_runtime": false,
   "expected": "Y\n",
-  "description": "Small 16-bit C-byte smoke program suitable for the unchanged Brainfuck VM"
+  "description": "Small 16-bit C-byte smoke program suitable for the unchanged Brainfuck VM",
+  "use_runtime": false
 }

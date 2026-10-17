@@ -118,6 +118,7 @@ pub(super) struct DeviceMemory<'a> {
     pub ram: &'a mut Vec<u16>,
     pub code: &'a mut Vec<super::Instr>,
     pub changed: Option<std::ops::Range<usize>>,
+    pub code_limit: usize,
 }
 impl crate::devices::GuestMemory for DeviceMemory<'_> {
     fn len(&self) -> usize {
@@ -130,7 +131,7 @@ impl crate::devices::GuestMemory for DeviceMemory<'_> {
         self.ram[i] = v;
     }
     fn code_capacity(&self, size: u16) -> usize {
-        (256 * 65536).min(usize::from(size) * 65536)
+        self.code_limit.min(usize::from(size) * 65536)
     }
     fn write_code(&mut self, size: u16, start: usize, code: &[[u16; 4]]) -> Result<(), u16> {
         use crate::devices::STATUS_BOUNDS;

@@ -1,5 +1,5 @@
 {
-  "expected": "YYYYYYYYYYYYYYYYYY\n",
   "use_runtime": true,
-  "description": "Guest UDP stack: bindings, checksums, odd and empty payloads, backpressure and malformed lengths"
+  "description": "Guest UDP stack: bindings, checksums, odd and empty payloads, backpressure and malformed lengths",
+  "expected": "YYYYYYYYYYYYYYYYYY\n"
 }

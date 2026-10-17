@@ -1,5 +1,5 @@
 {
-  "expected": "YYYYYYYYYYYY\n",
   "description": "32-bit long signed/unsigned div, rem, and shifts",
+  "expected": "YYYYYYYYYYYY\n",
   "use_runtime": true
 }

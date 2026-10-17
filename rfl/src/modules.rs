@@ -684,6 +684,10 @@ fn load_c(path: &Path, cmods: &mut Vec<CMod>) -> Result<usize, CompileError> {
     }
     let source = read_text(&canon)?;
     let mut preprocessor = rcc_preprocessor::Preprocessor::new();
+    // Imported C uses the same compatibility ABI and guest runtime headers as
+    // rcc. In particular, stdlib device bridges must not use host SDK headers.
+    preprocessor
+        .add_include_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../runtime/include"));
     let processed = preprocessor
         .process(&source, canon.clone())
         .map_err(|err| CompileError::plain(err.to_string()))?;
@@ -1529,7 +1533,7 @@ impl Rewriter<'_> {
             | ExprKind::CStr(_)
             | ExprKind::Char(_) => {}
             ExprKind::Name(name) => self.rewrite_value(name),
-            ExprKind::Unary { expr, .. } => self.expr(expr),
+            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) => self.expr(expr),
             ExprKind::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);
@@ -1935,11 +1939,25 @@ fn parse_source_for_target(
 fn prefix_globals(module: &mut IrModule, prefix: &str) {
     let mut names = HashMap::new();
     for global in &mut module.globals {
+        if !matches!(
+            global.linkage,
+            rcc_ir::ir::Linkage::Internal | rcc_ir::ir::Linkage::Private
+        ) {
+            continue;
+        }
         let next = format!("{prefix}{}", global.name);
         names.insert(global.name.clone(), next.clone());
         global.name = next;
     }
+    for name in &mut module.internal_functions {
+        let next = format!("{prefix}{name}");
+        names.insert(name.clone(), next.clone());
+        *name = next;
+    }
     for func in &mut module.functions {
+        if let Some(next) = names.get(&func.name) {
+            func.name = next.clone();
+        }
         rewrite_function(func, &names);
     }
     for global in &mut module.globals {
@@ -1950,6 +1968,7 @@ fn prefix_globals(module: &mut IrModule, prefix: &str) {
 }
 
 fn merge_ir(dst: &mut IrModule, src: &mut IrModule) -> Result<(), CompileError> {
+    dst.internal_functions.append(&mut src.internal_functions);
     let offset = max_label(dst).saturating_add(1);
     for mut func in src.functions.drain(..) {
         shift_function(&mut func, offset);
@@ -1972,7 +1991,21 @@ fn merge_ir(dst: &mut IrModule, src: &mut IrModule) -> Result<(), CompileError> 
         }
     }
     for global in src.globals.drain(..) {
-        if dst.get_global(&global.name).is_some() {
+        if let Some(existing) = dst.globals.iter_mut().find(|g| g.name == global.name) {
+            use rcc_ir::ir::Linkage;
+            if existing.linkage == Linkage::Declaration {
+                *existing = global;
+                continue;
+            }
+            if global.linkage == Linkage::Declaration {
+                continue;
+            }
+            if existing.var_type == global.var_type
+                && existing.initializer.is_none()
+                && global.initializer.is_none()
+            {
+                continue;
+            }
             return Err(CompileError::plain(format!(
                 "duplicate global `{}`",
                 global.name
@@ -2132,7 +2165,7 @@ fn rewrite_insn(insn: &mut Instruction, names: &HashMap<String, String>) {
 
 fn rewrite_value(value: &mut Value, names: &HashMap<String, String>) {
     match value {
-        Value::Global(name) => {
+        Value::Global(name) | Value::Function(name) => {
             if let Some(next) = names.get(name) {
                 *name = next.clone();
             }
@@ -2144,11 +2177,7 @@ fn rewrite_value(value: &mut Value, names: &HashMap<String, String>) {
                 rewrite_value(value, names);
             }
         }
-        Value::Temp(_)
-        | Value::Constant(_)
-        | Value::Function(_)
-        | Value::ConstantArray(_)
-        | Value::Undef => {}
+        Value::Temp(_) | Value::Constant(_) | Value::ConstantArray(_) | Value::Undef => {}
     }
 }
 

@@ -8,6 +8,7 @@ pub const STORAGE_READ: u16 = 0x0300;
 pub const STORAGE_WRITE: u16 = 0x0301;
 pub const MEMORY_COPY: u16 = 0x0302;
 pub const MEMORY_FILL: u16 = 0x0303;
+pub const MEMORY_INFO: u16 = 0x0304;
 pub const CAP_STORAGE: u16 = 0x0200;
 pub const CAP_MEMORY: u16 = 0x0400;
 pub const CAP_CODE: u16 = 0x0800;
@@ -20,6 +21,7 @@ pub const MAX_INSTRUCTIONS: usize = 8192;
 pub const DESCRIPTOR_CELLS: usize = 12;
 
 pub fn descriptor_length(command: u16) -> Option<usize> {
+    if command == MEMORY_INFO { return Some(8); }
     matches!(
         command,
         STORAGE_READ | STORAGE_WRITE | MEMORY_COPY | MEMORY_FILL
@@ -77,6 +79,15 @@ pub fn execute<M: GuestMemory + ?Sized>(
     bank_size: u16,
     storage: Option<&mut Storage>,
 ) -> Result<(), u16> {
+    if command == MEMORY_INFO {
+        let architectural = usize::from(bank_size) * 65536;
+        let ram = memory.len().min(architectural) as u32;
+        let code = memory.code_capacity(bank_size).min(architectural) as u32;
+        let output = [1, 8, ram as u16, (ram >> 16) as u16,
+                      code as u16, (code >> 16) as u16, bank_size, 0];
+        for (index, word) in descriptor.zip(output) { memory.write(index, word); }
+        return Ok(());
+    }
     // Snapshot before any mutation. Reject RAM destination aliases with the
     // descriptor rather than having command submission overwrite its own ABI.
     let mut d = [0u16; DESCRIPTOR_CELLS];

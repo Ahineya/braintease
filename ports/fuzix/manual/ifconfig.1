@@ -1,0 +1,18 @@
+.TH IFCONFIG 1
+.SH NAME
+ifconfig \- inspect or configure the Ethernet interface
+.SH SYNOPSIS
+.B ifconfig
+.RI [ eth0 " [ADDRESS] [netmask MASK] [gateway ADDRESS] [up|down]]"
+.SH DESCRIPTION
+Without configuration operands, print the address, mask, gateway and link
+state of eth0. Addresses use numeric dotted-decimal IPv4. Configuration
+requires root and lasts until reboot. Changing configuration invalidates
+existing connections. Down disables protocol traffic; up enables it again.
+.PP
+The default is 192.168.64.250/24 with gateway 192.168.64.1. The macOS launcher
+defaults to shared/NAT internet access. Use --net host for a host-only link,
+or --net off to boot offline. DNS servers are in /etc/resolv.conf and local
+aliases in /etc/hosts. DHCP is not implemented by this port.
+.SH SEE ALSO
+ping(1), telnet(1), telnetd(1)

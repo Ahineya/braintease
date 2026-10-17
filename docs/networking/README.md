@@ -19,13 +19,16 @@ rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 | [Build and run](running.md) | Ping monitor, DNS/ping launcher, configuration, host backends and troubleshooting setup |
 | [HTTP server](http-server.md) | Guest TCP listen/accept, hardcoded HTML, browser/curl and bounded request handling |
 | [HTTP client](http.md) | Streaming GET, bounded response parsing, guest DNS and the automatic host HTTP demo |
+| [Terminal browser plan](terminal-browser.md) | FUZIX/Fuse-X browser feasibility, HTTP targets, Lynx/Links decisions, curses and porting gates |
+| [select contract](select.md) | Planned descriptor readiness API, C16 ABI, scheduler/device integration and required tests |
 | [TCP client](tcp.md) | Streams, retransmission, flow control, half-close and the automatic host echo demo |
 | [DHCP](dhcp.md) | Lease acquisition, renewal/rebinding, conflict detection, configuration changes and examples |
 | [Reliability and lifecycle](reliability.md) | Neighbor expiration/retry, link changes, pending sends and matched ICMP errors |
 | [Guest library](library.md) | Current C APIs, ownership, UDP callbacks, DNS, timeouts and linking |
 | [Device contract](device.md) | DEVICE_* sharing, descriptor layouts, frame queues, transport and checkpoints |
 | [Testing](testing.md) | Reproducible commands, existing coverage, recorded validation and evidence requirements |
-| [RFL design direction](rfl.md) | Typed wrappers, traits, polling I/O and async/await questions; planned only |
+| [RFL library](rfl-library.md) | Owned DHCP/DNS, network reactor, async HTTP requests/responses and HTML serving |
+| [RFL async design](rfl.md) | Implemented traits, polling, ownership, composition, task scopes and async/await |
 | [Roadmap](roadmap.md) | DHCP → stack reliability → TCP → HTTP client/server → RFL, with acceptance criteria |
 
 ## Try it
@@ -64,6 +67,7 @@ for prerequisites, native execution and selecting another guest IP.
 | DNS | IPv4 A queries, compressed names, bounded in-answer CNAME chains, matching, retries and timeouts | Classic 512-octet UDP; no TCP fallback, EDNS, AAAA or cache |
 | TCP | Active/passive opens, bounded pools, retransmission, flow control, half-close and compact TIME_WAIT | Four live connections, two listeners, 512-octet buffers, one segment in flight |
 | HTTP | Streaming GET client and bounded single-request server, incremental parsing and exact response lengths | Plain HTTP; no request bodies, chunking, TLS, persistent connections or redirect following |
+| RFL | Owned network reactor, DHCP/DNS futures, buffered Request/Response and async HTML serving | No direct RFL UDP/TCP streams or streaming HTTP bodies yet |
 
 The DNS demo's hostname is compiled into the guest with `DNS_NAME`; the
 launcher rebuilds it when a different name is supplied. The guest resolves
@@ -103,7 +107,7 @@ Keep these decisions when extending the stack:
 DHCP and the [stack reliability milestone](reliability.md) are implemented.
 The [active-open TCP client](tcp.md) and [streaming HTTP client](http.md) are
 implemented too, together with passive TCP listeners and the
-[HTTP server serving hardcoded HTML](http-server.md). Next is a high-level RFL
-networking library. Traits are preparatory work for RFL I/O
-abstractions; async/await needs a separate design. These are planned milestones,
-not features available in the current library.
+[HTTP server serving hardcoded HTML](http-server.md). The first high-level
+[RFL library](rfl-library.md) now supplies owned DHCP/DNS and async HTTP
+client/server wrappers over that stack. Direct RFL UDP/TCP, streaming bodies
+and richer HTTP remain follow-ups.

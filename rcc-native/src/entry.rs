@@ -2,7 +2,7 @@
 use super::*;
 use cranelift_codegen::ir::InstBuilder;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
+pub(super) fn emit_entry(compiler: &mut Compiler, kernel_cells: u64) -> Result<(), String> {
     let main = compiler
         .ir
         .get_function("main")
@@ -29,6 +29,12 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
             let id = compiler.import("rcc_native_process_memory", 0)?;
             let memory = compiler.object.declare_func_in_func(id, b.func);
             b.ins().call(memory, &[runtime]);
+        }
+        if kernel_cells != 0 {
+            let id = compiler.import("rcc_native_kernel_globals", 1)?;
+            let reserve = compiler.object.declare_func_in_func(id, b.func);
+            let cells = b.ins().iconst(types::I64, kernel_cells as i64);
+            b.ins().call(reserve, &[runtime, cells]);
         }
         let store = compiler
             .object
@@ -97,10 +103,13 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
             arguments.extend([argc, argv]);
         }
         let call = if compiler.resumable {
-            let id = compiler.import("rcc_native_process_start", 3)?;
+            let id = compiler.import("rcc_native_process_start", 4)?;
             let start = compiler.object.declare_func_in_func(id, b.func);
             let token = b.ins().iconst(types::I64, compiler.codes["main"] as i64);
             let zero = b.ins().iconst(types::I64, 0);
+            let hosted = b
+                .ins()
+                .iconst(types::I64, i64::from(super::process::hosted(&compiler.ir)));
             b.ins().call(
                 start,
                 &[
@@ -108,6 +117,7 @@ pub(super) fn emit_entry(compiler: &mut Compiler) -> Result<(), String> {
                     token,
                     arguments.get(1).copied().unwrap_or(zero),
                     arguments.get(2).copied().unwrap_or(zero),
+                    hosted,
                 ],
             )
         } else {

@@ -106,6 +106,64 @@ pub(super) fn emit_erased_drop(
         builder.build_branch(free).ir()?;
         builder.create_block(no).ir()?;
     }
+    for proc in built.procs.iter().filter(|p| p.async_result.is_some()) {
+        let yes = builder.new_label();
+        let no = builder.new_label();
+        let eq = builder
+            .build_binary(
+                IrBinaryOp::Eq,
+                tag.clone(),
+                Value::Constant((built.collections.owners.len() + proc.func_id) as i64),
+                IrType::I1,
+            )
+            .ir()?;
+        builder.build_branch_cond(Value::Temp(eq), yes, no).ir()?;
+        builder.create_block(yes).ir()?;
+        let frame = fat_from_parts(builder, addr.clone(), bank.clone())?;
+        let state = load_cell(builder, &frame, RESUME, IrType::I16)?;
+        let complete = builder
+            .build_binary(
+                IrBinaryOp::Eq,
+                state.clone(),
+                Value::Constant(u16::MAX as i64),
+                IrType::I1,
+            )
+            .ir()?;
+        let cleanup = builder.new_label();
+        builder
+            .build_branch_cond(Value::Temp(complete), free, cleanup)
+            .ir()?;
+        builder.create_block(cleanup).ir()?;
+        // Only the active lexical scopes run user cleanup, in their recorded
+        // reverse initialization order. Cleared slots make the final sweep safe.
+        let sweep = builder.new_label();
+        for seg in &proc.segs {
+            if let Some(Term::Suspend { next, cleanup }) = &seg.term {
+                let yes = builder.new_label();
+                let no = builder.new_label();
+                let eq = builder
+                    .build_binary(
+                        IrBinaryOp::Eq,
+                        state.clone(),
+                        Value::Constant(*next as i64),
+                        IrType::I1,
+                    )
+                    .ir()?;
+                builder.build_branch_cond(Value::Temp(eq), yes, no).ir()?;
+                builder.create_block(yes).ir()?;
+                for slot in cleanup {
+                    release_managed(builder, proc, &frame, *slot)?;
+                }
+                builder.build_branch(sweep).ir()?;
+                builder.create_block(no).ir()?;
+            }
+        }
+        builder.build_branch(sweep).ir()?;
+        builder.create_block(sweep).ir()?;
+        release_managed_slots(builder, proc, &frame)?;
+        builder.build_branch(free).ir()?;
+        builder.create_block(no).ir()?;
+    }
     // Tags are compiler-written. Fail explicitly if storage was corrupted.
     fail(builder, FAIL_UNREACHABLE)?;
     builder.build_return(None).ir()?;

@@ -183,6 +183,19 @@ sharing implicitly. The guest still configures its own IPv4 address, through DHC
 static configuration. The static demo uses `192.168.64.250/24` with host/gateway
 `192.168.64.1`.
 
+RVM and RBF also accept `--net POLICY --net-eager` to prepare the link before
+guest execution or terminal input starts. This keeps sudo authorization from
+competing with an interactive guest's keyboard reader. Native programs expose
+the same early attachment through `RCC_NATIVE_NET_EAGER=1`.
+The [Fuse-X launcher](../../fuse-x/README.md#networking-and-remote-shells) uses
+early attachment for interactive consoles and defaults to shared/NAT internet access
+on macOS (offline elsewhere).
+The FUZIX launcher uses
+this for host/shared policies, and defaults to shared/NAT with internet access. Use
+`--net off` for an offline FUZIX launch. See
+[FUZIX networking and remote terminals](../../ports/fuzix/README.md#networking-and-remote-terminals)
+for guest `ping`, `ifconfig`, `telnet` and `telnetd` setup.
+
 Orderly exit detaches and stops the owned helper. If a guest process dies without
 running destructors, the managed helper stops after its five-second heartbeat
 timeout, removes its interface/socket and cleans its private files after dropping

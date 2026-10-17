@@ -15,6 +15,9 @@ pub use parser::Directive;
 pub struct Preprocessor {
     /// Defined macros
     macros: HashMap<String, Macro>,
+    /// Compile patterns only for macros encountered in text. Redefinition
+    /// replaces the cell, so object/function changes cannot reuse a stale pattern.
+    macro_patterns: HashMap<String, once_cell::sync::OnceCell<regex::Regex>>,
     /// Include search paths
     include_dirs: Vec<PathBuf>,
     /// Stack of conditional compilation states
@@ -69,6 +72,7 @@ impl Preprocessor {
     pub fn new() -> Self {
         let mut pp = Self {
             macros: HashMap::new(),
+            macro_patterns: HashMap::new(),
             include_dirs: vec![],
             conditional_stack: vec![],
             current_file: None,
@@ -94,20 +98,23 @@ impl Preprocessor {
     /// Define a macro
     pub fn define(&mut self, name: String, value: Option<String>) {
         let body = value.unwrap_or_else(|| "1".to_string());
-        self.macros.insert(
-            name.clone(),
-            Macro {
-                name,
-                params: None,
-                body,
-                is_variadic: false,
-            },
-        );
+        self.insert_macro(Macro {
+            name,
+            params: None,
+            body,
+            is_variadic: false,
+        });
+    }
+
+    fn insert_macro(&mut self, definition: Macro) {
+        self.macro_patterns.insert(definition.name.clone(), Default::default());
+        self.macros.insert(definition.name.clone(), definition);
     }
 
     /// Undefine a macro
     pub fn undefine(&mut self, name: &str) {
         self.macros.remove(name);
+        self.macro_patterns.remove(name);
     }
 
     /// Set whether to keep comments

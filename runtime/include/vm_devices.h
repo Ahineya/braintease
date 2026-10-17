@@ -27,6 +27,10 @@
 #define VM_DEVICE_INPUT_READ 5
 #define VM_DEVICE_INPUT_STATE 6
 #define VM_DEVICE_INPUT_CONFIGURE 7
+#define VM_DEVICE_HOST_MONOTONIC 8
+#define VM_DEVICE_HOST_REALTIME 9
+#define VM_DEVICE_HOST_IDLE 10
+#define VM_HOST_IDLE_MAX_MS 10U
 #define VM_INPUT_EVENT_CELLS 20
 #define VM_INPUT_BATCH_MAX 64
 #define VM_INPUT_KEY 1
@@ -36,6 +40,7 @@
 #define VM_INPUT_ENTER 5
 #define VM_INPUT_FOCUS 6
 #define VM_INPUT_CAPTURE 7
+#define VM_INPUT_CLOSE 8
 #define VM_INPUT_DOWN 1
 #define VM_INPUT_RELATIVE 2
 #define VM_INPUT_INSIDE 4
@@ -59,6 +64,8 @@
 #define VM_CAP_POINTER 0x0040U
 #define VM_CAP_PCM 0x0080U
 #define VM_CAP_MUSIC 0x0100U
+#define VM_CAP_HOST_CLOCK 0x1000U
+#define VM_CAP_HOST_IDLE 0x2000U
 #define VM_KEY_COUNT 256
 #define VM_KEY_STATE_WORDS 16
 
@@ -182,6 +189,11 @@ typedef struct VmClock {
     unsigned short hz;
 } VmClock;
 
+typedef struct VmHostTime {
+    unsigned long seconds_low, seconds_high;
+    unsigned long nanoseconds, resolution_ns;
+} VmHostTime;
+
 /* Wire-independent C objects. Absolute coordinates are signed guest pixels; relative deltas are raw
  * device units (X right, Y down). Auxiliary button IDs are host-dependent. Wheels
  * use signed 16.16 lines. Sequence numbers wrap modulo 2^32. */
@@ -214,6 +226,17 @@ unsigned short vm_present_rgb565(const unsigned short *pixels,
  * Neither presenting nor reading the clock advances a simulation tick. */
 unsigned short vm_next_tick(VmClock *clock);
 unsigned short vm_get_time(VmClock *clock);
+/* Independent host clocks at 1ms resolution. Monotonic starts at the first
+ * host-clock read after reset; checkpoints exclude time spent saved. Realtime
+ * is Unix UTC time and may jump. Calls never advance logical simulation ticks.
+ * Callers must serialize the mailbox, including against interrupt handlers. */
+unsigned short vm_host_monotonic(VmHostTime *time);
+unsigned short vm_host_realtime(VmHostTime *time);
+/* Cooperatively yield (0) or idle the host for 1..10ms. No logical tick, IRQ,
+ * input consumption or NIC attachment. The host scheduler may oversleep;
+ * always reread monotonic time afterwards. Invalid requests never sleep.
+ * This is a bounded polling fallback, not an event subscription. */
+unsigned short vm_host_idle(unsigned short milliseconds);
 /* Input commands collect live events independently of NEXT_TICK. Failed
  * calls leave the output objects unchanged. Capacity must be 1..64. */
 unsigned short vm_input_read(VmInputEvent *events, unsigned short capacity,

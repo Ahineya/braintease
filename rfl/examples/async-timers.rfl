@@ -1,0 +1,27 @@
+import { Future, sleep, yield_now } from "std/future";
+import { TaskError } from "std/task";
+import { Reactor, block_on_with_budget } from "std/executor";
+import { host_reactor } from "std/host";
+import { task_scope } from "std/scope";
+import { Result } from "std/result";
+
+async fn answer() -> Result<i16, TaskError> {
+    sleep(25)?.await;
+    Ok(42)
+}
+
+async fn greeting() -> String {
+    yield_now().await;
+    "hello from async RFL"
+}
+
+fn main() -> i16 {
+    let mut reactor = host_reactor().expect("host reactor unavailable");
+    let mut scope = task_scope(2, reactor.now()).unwrap();
+    let mut message = scope.spawn(greeting()).unwrap();
+    let mut result = scope.spawn(answer()).unwrap();
+    scope.run_with_budget(&mut reactor, 100).expect("tasks did not finish");
+    println(block_on_with_budget(&mut message, &mut reactor, 1).unwrap().unwrap());
+    println(block_on_with_budget(&mut result, &mut reactor, 1).unwrap().unwrap().unwrap());
+    0
+}

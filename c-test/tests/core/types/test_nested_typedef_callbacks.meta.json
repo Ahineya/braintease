@@ -1,5 +1,5 @@
 {
-  "description": "Recursive structs containing typedef fields and callback unions, callback arrays, and scoped anonymous enumerators",
   "use_runtime": true,
+  "description": "Recursive structs containing typedef fields and callback unions, callback arrays, and scoped anonymous enumerators",
   "expected": "YYYYYY\n"
 }

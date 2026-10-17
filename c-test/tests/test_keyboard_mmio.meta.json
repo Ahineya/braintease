@@ -1,5 +1,5 @@
 {
+  "description": "Test keyboard convenience helpers read DEVICE snapshots",
   "expected": "Y\nY\n",
-  "use_runtime": true,
-  "description": "Test keyboard convenience helpers read DEVICE snapshots"
+  "use_runtime": true
 }

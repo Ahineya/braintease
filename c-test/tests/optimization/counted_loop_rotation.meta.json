@@ -1,5 +1,5 @@
 {
   "expected": "YYYYYYYYYY\n",
-  "use_runtime": true,
-  "description": "Counted loop rotation preserves signedness, dynamic zero trips, endpoint values, volatile bounds and early exits"
+  "description": "Counted loop rotation preserves signedness, dynamic zero trips, endpoint values, volatile bounds and early exits",
+  "use_runtime": true
 }

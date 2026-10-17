@@ -31,5 +31,7 @@ extern void imem_store(unsigned, unsigned, unsigned *);
 extern void *ripple_userptr(const void *);
 extern void ripple_disk_init(void);
 extern void ripple_poll(void);
+extern void ripple_network_init(void);
+extern void ripple_network_poll(void);
 extern void ripple_shutdown(void);
 #endif

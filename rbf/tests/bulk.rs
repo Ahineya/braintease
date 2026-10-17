@@ -78,6 +78,7 @@ fn transfers_and_loaded_code_work_in_both_bf_engines() {
                 454,
             );
         }
+        command(&mut source, MEMORY_INFO, [1, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 449);
         source.push_str("LI T0, 67\nLI T1, 512\nJALR R0, T0, T1\n");
         let object = RippleAssembler::new(AssemblerOptions {
             bank_size: 513,
@@ -125,6 +126,8 @@ fn transfers_and_loaded_code_work_in_both_bf_engines() {
                 "halted"
             );
             let ram = |i: usize| host.machine.read_cell(ORIGIN + 8 * i + 4);
+            assert_eq!(ram(449), 0);
+            assert_eq!((65..71).map(ram).collect::<Vec<_>>(), [4104, 0, 69 * 513, 0, 513, 0]);
             for i in 450..455 {
                 assert_eq!(
                     ram(i),

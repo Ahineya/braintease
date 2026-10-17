@@ -1,4 +1,5 @@
 #ifndef _NET_IF_H
+#define _NET_IF_H
 
 #include <sys/ioctl.h>
 
@@ -15,27 +16,27 @@ struct sockaddr_hw {
 struct ifreq {
 	char ifr_name[IFNAMSIZ];
 	union {
-		struct sockaddr ifr_addr;
-		struct sockaddr ifr_dstaddr;
-		struct sockaddr ifr_broadaddr;
-		struct sockaddr ifr_netmask;
-		struct sockaddr ifr_gwaddr;
-		struct sockaddr ifr_hwaddr;
-		short ifr_flags;
-		int ifr_ifindex;
-		int ifr_mtu;
+		struct sockaddr u_addr;
+		struct sockaddr u_dstaddr;
+		struct sockaddr u_broadaddr;
+		struct sockaddr u_netmask;
+		struct sockaddr u_gwaddr;
+		struct sockaddr u_hwaddr;
+		short u_flags;
+		int u_ifindex;
+		int u_mtu;
 	} ifr_ifru;
 };
 
-#define ifr_addr	ifr_ifru.ifr_addr
-#define ifr_dstaddr	ifr_ifru.ifr_dstaddr
-#define ifr_broadaddr	ifr_ifru.ifr_broadaddr
-#define ifr_netmask	ifr_ifru.ifr_netmask
-#define ifr_hwaddr	ifr_ifru.ifr_hwaddr
-#define ifr_gwaddr	ifr_ifru.ifr_gwaddr
-#define ifr_flags	ifr_ifru.ifr_flags
-#define ifr_ifindex	ifr_ifru.ifr_ifindex
-#define ifr_mtu		ifr_ifru.ifr_mtu
+#define ifr_addr	ifr_ifru.u_addr
+#define ifr_dstaddr	ifr_ifru.u_dstaddr
+#define ifr_broadaddr	ifr_ifru.u_broadaddr
+#define ifr_netmask	ifr_ifru.u_netmask
+#define ifr_hwaddr	ifr_ifru.u_hwaddr
+#define ifr_gwaddr	ifr_ifru.u_gwaddr
+#define ifr_flags	ifr_ifru.u_flags
+#define ifr_ifindex	ifr_ifru.u_ifindex
+#define ifr_mtu		ifr_ifru.u_mtu
 
 #define IFF_UP		0x0001
 #define IFF_BROADCAST	0x0002

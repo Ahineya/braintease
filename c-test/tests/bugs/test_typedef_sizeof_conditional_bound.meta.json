@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
+  "expected": "YYYY\n",
   "description": "sizeof and offsetof conditional expressions in typedef array bounds",
-  "expected": "YYYY\n"
+  "use_runtime": true
 }

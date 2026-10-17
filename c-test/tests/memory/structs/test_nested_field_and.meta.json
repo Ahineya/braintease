@@ -1,6 +1,6 @@
 {
-  "description": "Logical AND of two nested struct field comparisons",
   "use_runtime": true,
-  "expected": "Y\n",
-  "timeout_secs": 10
+  "description": "Logical AND of two nested struct field comparisons",
+  "timeout_secs": 10,
+  "expected": "Y\n"
 }

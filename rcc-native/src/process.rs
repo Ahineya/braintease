@@ -1,4 +1,4 @@
-//! Opt-in stackless native continuations. Only calls split a function; ordinary
+//! Opt-in stackless native continuations. Calls and loop checkpoints split functions; ordinary
 //! arithmetic and CFGs still compile to host instructions. Only live SSA values
 //! cross a suspension; immutable parameters are recovered from frame arguments.
 use super::emit::{argument_words, result_type, width, Cg};
@@ -16,6 +16,13 @@ fn operation(name: &str) -> Option<(u64, usize)> {
         "rcc_process_getpid" => (5, 0),
         "rcc_process_kernel_alloc" => (6, 1),
         "rcc_process_kernel_free" => (7, 1),
+        "rcc_hosted_clone" => (8, 1),
+        "rcc_hosted_switch" => (9, 1),
+        "rcc_hosted_drop_switch" => (10, 1),
+        "rcc_hosted_exec" => (11, 2),
+        "rcc_hosted_syscall" => (12, 1),
+        "setjmp" => (13, 1),
+        "longjmp" => (14, 2),
         _ => return None,
     })
 }
@@ -29,11 +36,73 @@ pub(super) fn enabled(module: &Module) -> bool {
         .any(|i| {
             matches!(i, I::Call {
             function: Value::Global(n) | Value::Function(n), ..
-        } if n.starts_with("rcc_process_") && operation(n).is_some())
+        } if (n.starts_with("rcc_process_") || n.starts_with("rcc_hosted_")) && operation(n).is_some())
+        })
+}
+
+pub(super) fn hosted(module: &Module) -> bool {
+    module
+        .functions
+        .iter()
+        .flat_map(|f| &f.blocks)
+        .flat_map(|b| &b.instructions)
+        .any(|i| {
+            matches!(i, I::Call {function: Value::Global(n) | Value::Function(n), ..}
+            if n.starts_with("rcc_hosted_") && operation(n).is_some())
         })
 }
 
 impl Cg<'_, '_> {
+    fn reload_continuation(
+        &mut self,
+        live: &BTreeSet<u32>,
+        parameters: &BTreeMap<u32, usize>,
+    ) -> Result<(), String> {
+        for id in live {
+            let value = if let Some(index) = parameters.get(id) {
+                let index = self.k(*index as i64);
+                self.runtime("rcc_native_process_arg", &[index])?
+            } else {
+                let slot = self.k(i64::from(*id));
+                self.runtime("rcc_native_process_slot", &[slot])?
+            };
+            let bits = width(
+                self.types
+                    .get(id)
+                    .ok_or_else(|| format!("undefined continuation temporary %{id}"))?,
+            );
+            let value = self.mask(value, bits);
+            self.define(*id, value)?;
+        }
+        Ok(())
+    }
+
+    fn checkpoint(
+        &mut self,
+        pc: u64,
+        live: &BTreeSet<u32>,
+        parameters: &BTreeMap<u32, usize>,
+    ) -> Result<(cranelift_codegen::ir::Block, cranelift_codegen::ir::Block), String> {
+        let due = self.runtime("rcc_native_process_checkpoint", &[])?;
+        let suspend = self.b.create_block();
+        let resume = self.b.create_block();
+        let proceed = self.b.create_block();
+        self.b.ins().brif(due, suspend, &[], proceed, &[]);
+        self.b.switch_to_block(suspend);
+        let mut spills = live.clone();
+        spills.retain(|id| !parameters.contains_key(id));
+        self.save_continuation(pc, &spills)?;
+        let op = self.k(15);
+        let zero = self.k(0);
+        self.runtime("rcc_native_process_request", &[op, zero, zero, zero])?;
+        self.b.ins().return_(&[zero]);
+        self.b.switch_to_block(resume);
+        self.reload_continuation(live, parameters)?;
+        self.b.ins().jump(proceed, &[]);
+        self.b.switch_to_block(proceed);
+        Ok((resume, proceed))
+    }
+
     fn save_continuation(&mut self, pc: u64, live: &BTreeSet<u32>) -> Result<(), String> {
         let pc = self.k(pc as i64);
         // Clear slots from the previous suspension before storing this one.
@@ -151,6 +220,9 @@ fn suspends(compiler: &Compiler, instruction: &I) -> bool {
 }
 
 pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Result<(), String> {
+    // Hosted kernel units remain uninterrupted. Independently loaded user code
+    // and standalone process programs provide bounded scheduling opportunities.
+    let checkpoints = compiler.application || !hosted(&compiler.ir);
     let liveness = super::liveness::Liveness::analyze(function)?;
     let parameters: BTreeMap<_, _> = function
         .parameters
@@ -295,6 +367,26 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
         for (block_index, block) in function.blocks.iter().enumerate() {
             cg.b.switch_to_block(cg.blocks[&block.id]);
             for (position, instruction) in block.instructions.iter().enumerate() {
+                let backward = |target: &u32| {
+                    function.blocks[..=block_index]
+                        .iter()
+                        .any(|b| b.id == *target)
+                };
+                let loop_edge = match instruction {
+                    I::Branch(to) => backward(to),
+                    I::BranchCond {
+                        true_label,
+                        false_label,
+                        ..
+                    } => backward(true_label) || backward(false_label),
+                    _ => false,
+                };
+                if checkpoints && loop_edge {
+                    pc += 1;
+                    let live = liveness.before(block_index, position, instruction);
+                    let (resume, _) = cg.checkpoint(pc, &live, &parameters)?;
+                    switch.set_entry(u128::from(pc), resume);
+                }
                 if suspends(cg.compiler, instruction) {
                     pc += 1;
                     let live = &liveness.after[block_index][position];
@@ -302,21 +394,7 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
                     let resume = cg.b.create_block();
                     switch.set_entry(u128::from(pc), resume);
                     cg.b.switch_to_block(resume);
-                    for id in live {
-                        let value = if let Some(index) = parameters.get(id) {
-                            let index = cg.k(*index as i64);
-                            cg.runtime("rcc_native_process_arg", &[index])?
-                        } else {
-                            let slot = cg.k(i64::from(*id));
-                            cg.runtime("rcc_native_process_slot", &[slot])?
-                        };
-                        let bits =
-                            width(cg.types.get(id).ok_or_else(|| {
-                                format!("undefined continuation temporary %{id}")
-                            })?);
-                        let value = cg.mask(value, bits);
-                        cg.define(*id, value)?;
-                    }
+                    cg.reload_continuation(live, &parameters)?;
                 } else if let I::Return(value) = instruction {
                     let value = match value {
                         Some(v) => cg.value(v)?,

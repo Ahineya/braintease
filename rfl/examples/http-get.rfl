@@ -1,0 +1,22 @@
+import {dhcp_network,NetError} from "std/net";
+import {Request,http_client} from "std/http";
+import {Reactor,block_on} from "std/executor";
+import {Result} from "std/result";
+
+fn main()->i16 {
+    let network=dhcp_network(0,12345).unwrap();
+    let mut reactor=network.reactor().unwrap();
+    let mut lease=network.acquire(30000);
+    let config=block_on(&mut lease,&mut reactor).unwrap().unwrap();
+    println(config.address.text());
+    let client=http_client(&network,305419896).unwrap();
+    let request=Request::get("192.168.64.1","/").with_port(8080);
+    let mut fetch=client.send(request);
+    match block_on(&mut fetch,&mut reactor).unwrap() {
+        Ok(response)=>{println(response.status);println(response.text());},
+        Err(error)=>{println(error.message());return 1;},
+    }
+    let mut closing=network.drain_closing(3000);
+    block_on(&mut closing,&mut reactor).unwrap().unwrap();
+    0
+}

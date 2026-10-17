@@ -1,5 +1,5 @@
 {
   "use_runtime": true,
-  "expected": "YYYY\n",
-  "description": "Unreachable external global storage must not exhaust GP memory; retained pointers, one-past pointers and callbacks relocate correctly"
+  "description": "Unreachable external global storage must not exhaust GP memory; retained pointers, one-past pointers and callbacks relocate correctly",
+  "expected": "YYYY\n"
 }

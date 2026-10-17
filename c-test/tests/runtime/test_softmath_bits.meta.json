@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "description": "Integer floor, correctly rounded sqrt and large-angle range reduction",
-  "expected": "YYYYYYYYYYYYYY\n"
+  "expected": "YYYYYYYYYYYYYY\n",
+  "use_runtime": true
 }

@@ -2420,14 +2420,18 @@ dependencies = [
  "cranelift-object",
  "rcc-backend",
  "rcc-ir",
+ "serde_json",
 ]
 
 [[package]]
 name = "rcc-native-runtime"
 version = "0.1.0"
 dependencies = [
+ "libc",
+ "libloading 0.8.8",
  "rcc-ir",
  "rvm",
+ "serde_json",
 ]
 
 [[package]]

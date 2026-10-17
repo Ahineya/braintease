@@ -1,5 +1,5 @@
 {
+  "use_runtime": true,
   "expected": "Y\n",
-  "description": "q_cos(0) should be near 1",
-  "use_runtime": true
+  "description": "q_cos(0) should be near 1"
 }

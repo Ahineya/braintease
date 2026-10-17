@@ -1,0 +1,30 @@
+import {dhcp_network,NetError} from "std/net";
+import {HttpServer,Response,http_server} from "std/http";
+import {Future} from "std/future";
+import {Reactor,block_on} from "std/executor";
+import {Result} from "std/result";
+
+async fn serve(server:HttpServer)->Result<unit,NetError> {
+    while (true) {
+        let request=server.accept().await?;
+        println(request.method+" "+request.path);
+        let response=if (request.method!="GET") {Response::html(405,"<h1>GET required</h1>")}
+            else if (request.path=="/") {Response::html(200,"<!doctype html><html><body><h1>Hello from async RFL!</h1></body></html>\n")}
+            else {Response::html(404,"<h1>Not found</h1>")};
+        move(request).respond(response).await?;
+    }
+    Ok({})
+}
+fn main()->i16 {
+    let network=dhcp_network(0,12345).unwrap();
+    let mut reactor=network.reactor().unwrap();
+    let mut lease=network.acquire(30000);
+    let config=block_on(&mut lease,&mut reactor).unwrap().unwrap();
+    let server=http_server(&network,8080,305419896).unwrap();
+    println("HTTP ready http://"+config.address.text()+":8080/");
+    let mut service=serve(move(server));
+    match block_on(&mut service,&mut reactor).unwrap() {
+        Ok(_)=>0,
+        Err(error)=>{println(error.message());1},
+    }
+}

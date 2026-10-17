@@ -357,7 +357,7 @@ impl MacroFormatter {
         for instruction in &program.instructions {
             if matches!(instruction.opcode, 0x25 | 0x26) ||
                 (matches!(instruction.opcode,0x23 | 0x24) && instruction.word2 >= 12) {
-                return Err("MMU instructions require RVM; build the Brainfuck profile with MMU=0".into());
+                return Err("MMU instructions require RVM; the Brainfuck backend does not support the MMU".into());
             }
             if !self.irq && matches!(instruction.opcode, 0x22..=0x24) {
                 return Err("BF IRQ instructions require --bf-irq (ENABLE_IRQ=1)".into());

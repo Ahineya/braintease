@@ -1,5 +1,5 @@
 {
   "expected": "YY\n",
-  "use_runtime": true,
-  "description": "while(1) until 0xFF Doom patch column terminator"
+  "description": "while(1) until 0xFF Doom patch column terminator",
+  "use_runtime": true
 }

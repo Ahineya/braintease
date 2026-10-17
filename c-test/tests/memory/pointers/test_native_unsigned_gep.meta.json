@@ -1,5 +1,5 @@
 {
-  "description": "Native unsigned indices preserve bank carries, noncanonical pointers, live operands, and signed or wider displacement semantics",
+  "expected": "YYYYYY\n",
   "use_runtime": true,
-  "expected": "YYYYYY\n"
+  "description": "Native unsigned indices preserve bank carries, noncanonical pointers, live operands, and signed or wider displacement semantics"
 }

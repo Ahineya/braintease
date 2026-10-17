@@ -1,0 +1,23 @@
+import {static_network,NetworkConfig,NetworkReactor,ipv4} from "std/net";
+import {Request,http_client} from "std/http";
+import {Reactor,block_on} from "std/executor";
+import {Result} from "std/result";
+fn main()->i16 {
+    let network=static_network(NetworkConfig{interface:0,seed:7,address:ipv4(192,168,64,42),mask:ipv4(255,255,255,0),gateway:ipv4(192,168,64,1),dns:ipv4(1,1,1,1)}).expect("network");
+    let mut reactor=network.reactor().expect("reactor");
+    let client=http_client(&network,4294967280).expect("client");
+    let mut request=client.send(Request::get("web.ripple.test","/").with_port(8080).with_limit(20000).with_timeout(30000));
+    let response=match block_on(&mut request,&mut reactor).expect("executor") {Ok(r)=>r,Err(e)=>{println(e.message());return 20;}};
+    println(response.status);
+    let mut checksum:u32=0;
+    for (i in 0..response.body.len()) {checksum+=response.body[i] as u32;}
+    println(response.body.len());println(checksum);
+    let mut closing=network.drain_closing(5000);
+    block_on(&mut closing,&mut reactor).expect("close executor").expect("close");
+    drop(move(closing));drop(move(request));drop(move(client));drop(move(network));
+    let NetworkReactor{inner,guard}=move(reactor);
+    let mut stale=inner;
+    drop(move(guard));
+    if (stale.turn(None)) {return 21;}
+    println("RFL HTTP OK");0
+}

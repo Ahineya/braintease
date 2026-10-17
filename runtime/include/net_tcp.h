@@ -58,6 +58,11 @@ struct NetTcpWaitTable {
 };
 /* NULL detaches only an empty/expired table. Never evicts a live tuple. */
 int net_tcp_wait_attach(NetContext *net, NetTcpWaitTable *table);
+/* Relinquish a finished active-open TCB without losing TIME_WAIT protection.
+ * OK means inactive/storage may be freed. BUSY keeps the TCB live and must be
+ * retried after polling (including when the compact wait table is full).
+ * Accepted objects still require net_tcp_release to return their pool slot. */
+int net_tcp_retire(NetTcp *tcp);
 
 /* Called synchronously for each new passive open. Supply fresh, unpredictable
  * ISNs for untrusted networks. Do not recursively poll or mutate the context. */

@@ -42,6 +42,91 @@ mod tests {
     }
 
     #[test]
+    fn absent_macro_filter_preserves_identifier_and_literal_boundaries() {
+        let source = concat!(
+            "#define VALUE 7\n#define CALL(x) x + VALUE\n",
+            "VALUE_suffix prefix_VALUE CALL_suffix(3)\n",
+            "\"VALUE CALL( __FILE__ __LINE__ café\" 'VALUE'\n",
+            "CALL (VALUE)\n");
+        let output = preprocess(source).unwrap();
+        assert_eq!(output.trim(), concat!(
+            "VALUE_suffix prefix_VALUE CALL_suffix(3)\n",
+            "\"VALUE CALL( __FILE__ __LINE__ café\" 'VALUE'\n",
+            "7 + 7"));
+    }
+
+    #[test]
+    fn introduced_names_are_rescanned_through_pasting_and_nested_arguments() {
+        let source = concat!(
+            "#define FIRST SECOND\n#define SECOND 9\n",
+            "#define JOIN(a,b) a##b\n#define STR(x) #x\n",
+            "#define WRAP(x) x\n",
+            "FIRST JOIN(SEC,OND) WRAP(WRAP(FIRST)) STR(unexpanded)\n");
+        assert_eq!(preprocess(source).unwrap().trim(), "9 9 9 \"unexpanded\"");
+    }
+
+    #[test]
+    fn cached_patterns_follow_directive_redefinition_and_undef() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<Preprocessor>();
+        let source = concat!(
+            "#define ITEM 3\nITEM\n",
+            "#define ITEM(x) ((x)+1)\nITEM(4) ITEM\n",
+            "#undef ITEM\nITEM(5)\n",
+            "#define ITEM 8\nITEM\n");
+        assert_eq!(preprocess(source).unwrap().trim(), "3\n\n((4)+1) ITEM\nITEM(5)\n\n8");
+        let mut pp = Preprocessor::new();
+        pp.define("ITEM".into(), Some("1".into()));
+        assert_eq!(pp.expand_macros_impl("ITEM").unwrap(), "1");
+        pp.define("ITEM".into(), Some("2".into()));
+        assert_eq!(pp.expand_macros_impl("ITEM").unwrap(), "2");
+        pp.undefine("ITEM");
+        assert_eq!(pp.expand_macros_impl("ITEM").unwrap(), "ITEM");
+    }
+
+    #[test]
+    fn builtins_keep_current_file_line_and_literal_context_across_chunks() {
+        let source = "__FILE__ __LINE__\n#define VALUE 2\nVALUE __LINE__\n\"__FILE__ __LINE__\"\n";
+        let mut pp = Preprocessor::new();
+        assert_eq!(pp.process(source, PathBuf::from("first.c")).unwrap().trim(),
+            "\"first.c\" 1\n\n2 4\n\"__FILE__ __LINE__\"");
+        assert_eq!(pp.process("__FILE__ __LINE__\n", PathBuf::from("second.c")).unwrap().trim(),
+            "\"second.c\" 1");
+    }
+
+    #[test]
+    fn unused_and_quoted_macros_do_not_hide_invocation_diagnostics() {
+        for (source, expected) in [
+            ("#define PAIR(a,b) a+b\nPAIR(1)\n", "expects 2 arguments, got 1"),
+            ("#define PAIR(a,b) a+b\nPAIR(1,2\n", "Unterminated macro arguments"),
+            ("#define GROW GROW + 1\nGROW\n", "Maximum macro expansion depth exceeded"),
+        ] {
+            assert!(preprocess(source).unwrap_err().to_string().contains(expected));
+        }
+        assert_eq!(preprocess("#define PAIR(a,b) a+b\n\"PAIR(\"\n").unwrap().trim(), "\"PAIR(\"");
+    }
+
+    #[test]
+    fn cached_patterns_and_defined_follow_conditional_includes() {
+        let path = std::env::temp_dir().join(format!("rcc-pp-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("choice.h"), concat!(
+            "#if defined(MODE) && MODE == 1\n#define CHOICE(x) x\n",
+            "#else\n#undef CHOICE\n#define CHOICE 12\n#endif\n")).unwrap();
+        let mut pp = Preprocessor::new();
+        pp.add_include_dir(path.clone());
+        let output = pp.process(concat!(
+            "#define MODE 1\n#include <choice.h>\nCHOICE(5)\n",
+            "#undef MODE\n#define MODE 2\n#include <choice.h>\nCHOICE\n",
+            "#if defined CHOICE && !defined(MISSING)\n__LINE__\n#endif\n"),
+            path.join("main.c")).unwrap();
+        std::fs::remove_dir_all(path).unwrap();
+        // Retain the preprocessor's existing approximate directive-line
+        // accounting as well as its replacement output.
+        assert_eq!(output.trim(), "5\n\n\n12\n\n12");
+    }
+
+    #[test]
     fn test_directive_comments_are_whitespace() {
         let source = "#define VALUE 1/**/+2\n#if 0 // UNUSED\nwrong\n#elif VALUE == 3 /* accepted */\nright\n#endif\n";
         assert_eq!(preprocess(source).unwrap().trim(), "right");

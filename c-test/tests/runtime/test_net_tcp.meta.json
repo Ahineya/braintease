@@ -1,5 +1,5 @@
 {
-  "description": "TCP active handshake, partial ACKs, sequence wrap, close, reset and lifecycle",
+  "use_runtime": true,
   "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n",
-  "use_runtime": true
+  "description": "TCP active handshake, partial ACKs, sequence wrap, close, reset and lifecycle"
 }

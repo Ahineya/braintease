@@ -124,6 +124,7 @@ pub struct VM {
     irq_stack_top: u16,
     irq_timer_period: u32,
     irq_timer_deadline: Option<u64>,
+    code_memory_limit: usize,
 }
 
 impl VM {
@@ -217,6 +218,7 @@ impl VM {
             irq_stack_top: 0,
             irq_timer_period: 0,
             irq_timer_deadline: None,
+            code_memory_limit: crate::constants::DEFAULT_CODE_MEMORY,
         }
     }
 
@@ -227,6 +229,19 @@ impl VM {
 
     pub fn set_rng_seed(&mut self, seed: u32) {
         self.rng_state = seed;
+    }
+
+    /// Set the lazy instruction-storage budget; existing code must still fit.
+    pub fn set_code_memory_limit(&mut self, instructions: usize) -> Result<(), String> {
+        if instructions == 0 || instructions < self.instructions.len() {
+            return Err("code-memory limit must be nonzero and fit the loaded code".into());
+        }
+        self.code_memory_limit = instructions;
+        Ok(())
+    }
+
+    pub fn code_memory_capacity(&self) -> usize {
+        self.code_memory_limit.min(usize::from(self.bank_size) * 65536)
     }
 
     pub fn load_binary(&mut self, binary: &[u8]) -> Result<(), String> {
@@ -243,10 +258,7 @@ impl VM {
             return Err("Invalid binary: missing bank size".to_string());
         }
         let binary_bank_size = u16::from_le_bytes([binary[pos], binary[pos + 1]]);
-        if binary_bank_size != 0 {
-            // 0 means not specified, use default
-            self.bank_size = binary_bank_size;
-        }
+        let image_bank_size = if binary_bank_size == 0 { self.bank_size } else { binary_bank_size };
         pos += 2;
 
         // Read entry point
@@ -276,6 +288,17 @@ impl VM {
         // Code may span multiple banks. Fetch is PCB * bank_size + PC.
         // rlink NOP-pads so bank N starts at index N * bank_size.
 
+        let capacity = self.code_memory_limit.min(usize::from(image_bank_size) * 65536);
+        if instruction_count > capacity {
+            return Err(format!("binary needs {instruction_count} instructions; code-memory limit is {capacity}"));
+        }
+        instruction_count.checked_mul(INSTRUCTION_SIZE)
+            .and_then(|bytes| pos.checked_add(bytes))
+            .filter(|&end| end <= binary.len())
+            .ok_or("Invalid binary: truncated instruction section")?;
+        self.instructions.try_reserve(instruction_count.saturating_sub(self.instructions.len()))
+            .map_err(|_| "cannot allocate instruction memory for binary")?;
+        self.bank_size = image_bank_size;
         // Read instructions. Drop translated blocks from any previous image.
         self.instructions.clear();
         self.jit_flush();
@@ -910,9 +933,11 @@ mod tests {
     #[test]
     fn storc_supports_large_guest_code_banks_and_retains_a_limit() {
         let mut vm = VM::with_memory_size(64000, 256);
-        vm.guest_storc(139, 63999).unwrap();
-        assert!(vm.instructions.len() >= 140 * 64000);
-        assert!(vm.guest_storc(263, 0).is_err());
+        vm.guest_storc(300, 63999).unwrap();
+        assert_eq!(vm.instructions.len(), 301 * 64000);
+        vm.set_code_memory_limit(301 * 64000).unwrap();
+        assert!(vm.guest_storc(301, 0).is_err());
+        assert_eq!(vm.instructions.len(), 301 * 64000);
     }
 
     #[test]

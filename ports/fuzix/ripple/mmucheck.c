@@ -10,7 +10,6 @@
 #include "resources.h"
 static int value=7;
 
-#if RIPPLE_MMU
 static int infofd;
 static struct ripple_sysinfo info(void) {
     struct ripple_sysinfo r;
@@ -68,11 +67,11 @@ static void heap_edges(void) {
     _exit(0);
 }
 static void capacity(void) {
-    int gate[2], children[16], count=0, pid, status, i;
+    int gate[2], children[32], count=0, pid, status, i;
     char c;
     struct ripple_sysinfo before=info(), after;
     if(pipe(gate))exit(43);
-    while(count<16) {
+    while(count<32) {
         pid=fork();
         if(pid<0)break;
         if(!pid) {
@@ -215,10 +214,8 @@ static void stress(void) {
     close(infofd);
     puts("mmucheck: shrink/regrow, ENOMEM rollback, and repeated cleanup passed");
 }
-#endif
 
 int main(int argc, char **argv) {
-#if RIPPLE_MMU
     unsigned long n=200000UL, i;
     unsigned char *heap=malloc(n), byte;
     int pid, status, fds[2], children[10], count;
@@ -265,8 +262,5 @@ int main(int argc, char **argv) {
     free(heap);
     puts("mmucheck: kernel and MMIO protection passed");
     if(argc==2 && !strcmp(argv[1],"--stress"))stress();
-#else
-    puts("mmucheck: MMU disabled in this build");
-#endif
     return 0;
 }

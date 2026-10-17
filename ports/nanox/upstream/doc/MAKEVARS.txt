@@ -1,0 +1,84 @@
+Microwindows Makefile System Overview
+-------------------------------------
+
+src/Makefile
+	MW_DIR_SRC := $(CURDIR)
+	MW_DIR_RELATIVE := 
+	includes Path.rules
+	includes config
+	sets dirs=
+	all: default
+	make -C rtems
+	make -C ecos
+	make -C demos
+	make -C TinyWidgets
+	includes Makefile.rules
+
+
+src/config
+	SCREEN					screen driver (X11, FB, FBE, SDL, etc)
+	SCREEN_HEIGHT			new, size of screen on non-dynamic framebuffer systems and FBE
+	SCREEN_WIDTH			new
+	SCREEN_DEPTH			new, palette bits per pixel for MWPF_PALETTE mode only
+	MOUSE=					new, mouse driver
+	KEYBOARD=				new, keyboard driver
+	X11LIBLOCATION=			new config option, location of X11 libraries
+	X11HDRLOCATION=			new config option, location of X11 headers
+
+src/Makefile.rules
+	CFLAGS=					platform-specific flags, optimization and debug options
+	CXXFLAGS=				c++ flags
+	OPTFLAGS=				removed
+	CPPFLAGS=				removed
+
+	DEFINES=				should only set -D defines for config-specified options
+	INCLUDEDIRS=			should only set -I include directories
+	EXTRAFLAGS=				new config option to add -W warnings and -s linker strip options to compiler
+
+	LDFLAGS=				-L and link flags only (prepend link line)
+	LDLIBS=					new, -llibs only       (append link line) [NOT YET IMPLEMENTED, appending LDFLAGS now]
+
+	HOSTCFLAGS=				change, only used for -I X11 includes & SCREEN H/W for fbe.c build
+	HOSTLDFLAGS=			new
+
+	EXTENGINELIBS=			external libs required to link engine into an app
+	MWINLIBS=				files required for linking mwin API apps (libmwin.a)
+	NANOXCLIENTLIBS=		files required for linking nanox API aps (libnano-X.a)
+
+	include Arch.rules
+
+# new compile and link uses more make vars
+	COMPILEARGS = $(CFLAGS) $(WARNINGS) $(INCLUDEDIRS) $(DEFINES) $(EXTRAFLAGS)
+	CXXCOMPILEARGS = $(CXXFLAGS) $(INCLUDEDIRS)
+.c.o:
+	$(CC) -c $(COMPILEARGS) -o $@ $<
+.cpp.o:
+	$(CXX) -c $(CXXCOMPILEARGS) -o $@ $<
+
+	LIBS = $(NANOXFILES) $(NANOXSERVERLIBS)		# static nanox
+	LIBS = $(NANOXFILES) $(CCNANOXSERVERLIBS)	# shared nanox
+	LIBS = $(CCMWINLIBS)						# mwin
+	LINKARGS = $(CFLAGS) $(LDFLAGS) $(OBJS) $(LIBS) $(LDFLAGS)		[final LDFLAGS will be replaced with LDLIB soon]
+.o.exe:			# new expanded link rule vs old
+	$(CC) $(LINKARGS) -o $@
+
+
+src/Arch.rules
+	WARNINGS=				change, only add to CFLAGS, not CXXFLAGS
+	TOOLSPREFIX=
+	DEFINES +=
+	CFLAGS +=
+	LDFLAGS +=
+
+	HOSTCC=
+	COMPILER=
+	CXX_COMPILER=
+
+
+library/Objects.rules
+
+
+library/Makefile
+	LIBNAME=
+	LIBNAMESO=
+	OBJS=

@@ -1,0 +1,14 @@
+.TH ECHOPING 1
+.SH NAME
+echoping \- test a UDP echo service
+.SH SYNOPSIS
+.B echoping
+.RI HOST " [PORT [MESSAGE]]"
+.SH DESCRIPTION
+Resolve HOST, send MESSAGE to its UDP echo service and compare the reply.
+The default port is 7 and the default message is This is a test!.
+Messages are limited to 1023 characters. A missing response times out after
+five seconds. A failed lookup, timeout or differing reply returns nonzero.
+The socket accepts replies only from the selected address and port.
+.SH SEE ALSO
+ping(1), host(1)

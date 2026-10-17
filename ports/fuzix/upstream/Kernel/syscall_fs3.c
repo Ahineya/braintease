@@ -140,7 +140,7 @@ arg_t _open(void)
 	/* O_CLOEXEC updates the mask of file handles to close on execve()
 	   so that you can handle this atomically */
 	if (flag & O_CLOEXEC)
-		udata.u_cloexec |= (1 << uindex);
+		udata.u_cloexec |= (1UL << uindex);
 
 	/* Update the number of readers and writers as we need this for
 	   pipe behaviour */
@@ -288,12 +288,12 @@ arg_t _fcntl(void)
 	case F_GETFL:
 		return *acc;
 	case F_GETFD:
-		return udata.u_cloexec & (1U << fd) ? O_CLOEXEC : 0;
+		return udata.u_cloexec & (1UL << fd) ? O_CLOEXEC : 0;
 	case F_SETFD:
 		if (data & O_CLOEXEC)
-			udata.u_cloexec |= (1U << fd);
+			udata.u_cloexec |= (1UL << fd);
 		else
-			udata.u_cloexec &= ~(1U << fd);
+			udata.u_cloexec &= ~(1UL << fd);
 		return 0;
 	case F_DUPFD:
 		return uf_alloc_copy(fd, data);

@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "description": "Repeated arithmetic across short-circuit bounds, nested rectangle checks, wrapping coordinates and volatile/division barriers",
-  "expected": "YYYYYYYYYY\n"
+  "expected": "YYYYYYYYYY\n",
+  "use_runtime": true
 }

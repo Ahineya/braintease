@@ -1,5 +1,5 @@
 {
   "expected": "Y\n",
-  "use_runtime": true,
-  "description": "Nested calls that return structs by value"
+  "description": "Nested calls that return structs by value",
+  "use_runtime": true
 }

@@ -8,6 +8,7 @@
 //! stack only holds the driver and the function that is running right now.
 
 mod arrays;
+mod async_functions;
 mod buffer_ownership;
 mod build;
 mod closures;
@@ -35,6 +36,7 @@ mod vector_fill;
 mod vectors;
 
 use arrays::*;
+use async_functions::*;
 use buffer_ownership::*;
 use build::*;
 use closures::*;
@@ -86,6 +88,8 @@ struct Slot {
 }
 
 struct Proc {
+    async_context: Option<usize>,
+    async_result: Option<Ty>,
     name: String,
     ret: Ty,
     func_id: usize,
@@ -127,6 +131,20 @@ struct Seg {
 }
 
 enum Insn {
+    Expect {
+        dest: usize,
+        src: usize,
+        message: ExpectMessage,
+        ok_tag: u16,
+    },
+    AsyncNew {
+        dest: usize,
+        body: String,
+        args: Vec<usize>,
+    },
+    AsyncCancel {
+        future: usize,
+    },
     EraseOwner {
         dest: usize,
         src: usize,
@@ -433,6 +451,11 @@ enum Insn {
     },
 }
 
+enum ExpectMessage {
+    Literal(Vec<u8>),
+    Slot(usize),
+}
+
 /// A frame root or an already computed address, followed by projections.
 struct Place {
     root: usize,
@@ -453,6 +476,19 @@ enum PlaceStep {
 }
 
 enum Term {
+    /// Poll an owned child through the same frame-to-frame driver as a call.
+    AsyncPoll {
+        dest: usize,
+        future: usize,
+        context: usize,
+        next: usize,
+    },
+    /// Return Pending without unwinding the owned frame. Ordinary calls have
+    /// already returned before reaching this boundary.
+    Suspend {
+        next: usize,
+        cleanup: Vec<usize>,
+    },
     Return,
     Jump(usize),
     If {
@@ -521,8 +557,8 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     let tuples = Arc::new(module.tuples.clone());
     let collections = Arc::new(module.collections.clone());
     let resources = Arc::new(crate::resources::ResourceTypes::new(module));
-    let mut procs = module
-        .functions
+    let functions = expand_async_functions(&module.functions, &resources);
+    let mut procs = functions
         .iter()
         .enumerate()
         .map(|(id, func)| {
@@ -540,7 +576,8 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     for proc in &mut procs {
         fold_scalar_constants(proc);
     }
-    let mut need_alloc = !module.collections.owners.is_empty();
+    let mut need_alloc =
+        !module.collections.owners.is_empty() || procs.iter().any(|p| p.async_result.is_some());
     let mut need_fail = need_alloc;
     let mut need_heap = need_alloc;
     let mut need_io = false;
@@ -666,6 +703,10 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
                     }
                 }
                 match insn {
+                    Insn::Expect { .. } => {
+                        need_io = true;
+                        need_fail = true;
+                    }
                     Insn::Print { ty, .. } => {
                         need_io = true;
                         if ty.is_int() {
@@ -825,6 +866,7 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     emit_arc(&mut builder, &mut module, built)?;
     emit_owner_drops(&mut builder, &mut module, built)?;
     emit_erased_drop(&mut builder, &mut module, built)?;
+    emit_async_runtime(&mut builder, &mut module, built)?;
     Ok(module)
 }
 

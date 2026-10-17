@@ -1,5 +1,5 @@
 {
+  "description": "Small standalone signed arithmetic parity check for the Brainfuck VM",
   "expected": "Y\n",
-  "use_runtime": false,
-  "description": "Small standalone signed arithmetic parity check for the Brainfuck VM"
+  "use_runtime": false
 }

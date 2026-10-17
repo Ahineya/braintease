@@ -23,6 +23,10 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub memory: Option<usize>,
 
+    /// Maximum instruction-memory size in instructions (allocated lazily)
+    #[arg(long, default_value_t = rvm::constants::DEFAULT_CODE_MEMORY)]
+    pub code_memory: usize,
+
     /// Set virtual CPU frequency (e.g., 1MHz, 500KHz, 2.5GHz)
     #[arg(short = 'f', long)]
     pub frequency: Option<String>,
@@ -57,6 +61,10 @@ pub struct Cli {
     /// Send Ctrl-C to the guest TTY; Ctrl-] remains an emergency host stop.
     #[arg(long)]
     pub guest_ctrl_c: bool,
+
+    /// Deliver window close requests to the guest instead of stopping the VM
+    #[arg(long, requires = "visual")]
+    pub guest_window_close: bool,
     /// Save a native-resolution PNG and stop at the requested presentation
     #[arg(long, conflicts_with_all = ["debug", "tui"])]
     pub screenshot: Option<PathBuf>,
@@ -107,6 +115,9 @@ pub struct Cli {
     /// NIC policy: auto (default), host, shared, off, or an external helper socket
     #[arg(long)]
     pub net: Option<PathBuf>,
+    /// Attach networking before guest execution or interactive terminal input
+    #[arg(long, requires = "net")]
+    pub net_eager: bool,
 
     /// After HALT, exit with main()'s return value in RV0 (low 8 bits).
     /// Used by the c-testsuite runner so `return 1` fails the test.

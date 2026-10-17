@@ -19,6 +19,7 @@ struct Key {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Ty {
+    Async(Box<Ty>),
     Named(Key),
     Builtin(String),
 }
@@ -1190,6 +1191,10 @@ impl Workspace {
             ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } => {
                 self.expr(path, expr, env)
             }
+            ExprKind::Await(expr) => match self.expr(path, expr, env) {
+                Some(Ty::Async(output)) => Some(*output),
+                _ => None,
+            },
             ExprKind::Deref(expr) | ExprKind::Try(expr) => {
                 self.expr(path, expr, env);
                 None
@@ -1449,6 +1454,9 @@ fn mapped(edits: &[Edit], path: &Path, offset: usize, target: bool) -> usize {
 }
 fn type_of(ty: &ParsedTy, env: &Env) -> Option<Ty> {
     match ty {
+        ParsedTy::Named { name, args, .. } if name == "Async" && args.len() == 1 => {
+            type_of(&args[0], env).map(|ty| Ty::Async(Box::new(ty)))
+        }
         ParsedTy::Named { name, .. } => env
             .get(&type_key(name))
             .and_then(|b| b.ty.clone())
@@ -1502,6 +1510,7 @@ fn valid_name(name: &str) -> Result<(), String> {
             | "Vec"
             | "Option"
             | "Result"
+            | "Async"
             | "Some"
             | "None"
             | "Ok"
@@ -1827,5 +1836,25 @@ mod additional_tests {
             )
         );
         assert!(crate::check_source(&result).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod async_tests {
+    use super::tests::single;
+    #[test]
+    fn awaited_calls_arguments_and_result_fields_keep_their_bindings() {
+        let source="struct Point { value:i16 } async fn make(n:i16)->Point {Point{value:n}} async fn work()->i16 {let n=42;let p=make(n).await;p.value} fn main(){}";
+        let renamed = single(source, source.find("make(n:").unwrap(), "construct");
+        assert_eq!(renamed, source.replace("make", "construct"));
+        let renamed = single(source, source.find("let n=").unwrap() + 4, "answer");
+        assert_eq!(
+            renamed,
+            source
+                .replace("let n=", "let answer=")
+                .replace("make(n).", "make(answer).")
+        );
+        let renamed = single(source, source.find("value:").unwrap(), "number");
+        assert_eq!(renamed, source.replace("value", "number"));
     }
 }

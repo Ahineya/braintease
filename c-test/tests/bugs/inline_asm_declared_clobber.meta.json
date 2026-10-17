@@ -1,5 +1,5 @@
 {
+  "description": "Declared assembly register clobber preserves a live parameter",
   "expected": "Y\n",
-  "use_runtime": true,
-  "description": "Declared assembly register clobber preserves a live parameter"
+  "use_runtime": true
 }

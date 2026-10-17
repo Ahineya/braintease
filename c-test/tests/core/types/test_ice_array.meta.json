@@ -1,5 +1,5 @@
 {
-  "expected": "YYY\n",
+  "description": "Integer constant expressions for array sizes and designators",
   "use_runtime": true,
-  "description": "Integer constant expressions for array sizes and designators"
+  "expected": "YYY\n"
 }

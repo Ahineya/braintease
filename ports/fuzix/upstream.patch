@@ -3888,6 +3888,1110 @@
 +int PROC
 @@ -96,0 +100 @@
 +    return 0;
+--- a/Applications/netd/dig.c
++++ b/Applications/netd/dig.c
+@@ -1,5 +1,4 @@
+-/*
+-  A Cheesey Dig Client
+-
+-*/
+-
++/* A Cheesey Dig Client, from FUZIX Applications/netd.
++ * Ripple adaptation: bounded octet parsing, configurable types and TCP fallback.
++ * The original struct overlays assumed an 8-bit C byte. */
++#include <stdio.h>
+@@ -7 +5,0 @@
+-#include <stdio.h>
+@@ -9,4 +7 @@
+-#include <unistd.h>
+-#include <fcntl.h>
+-#include <sys/socket.h>
+-#include <netinet/in.h>
++#include <resolv.h>
+@@ -14,30 +9,7 @@
+-#include <signal.h>
+-#include "netdb.h"
+-
+-struct header{
+-    uint16_t id;
+-    uint8_t  cntl;
+-    uint8_t  ret;
+-    uint16_t qdcount;
+-    uint16_t ancount;
+-    uint16_t nscount;
+-    uint16_t arcount;
+-};
+-
+-/* This needs to be packed if your compiler adds padding */
+-struct RRtail{
+-    uint16_t type;
+-    uint16_t rdlen;
+-};
+-
+-#define RRTAIL_LEN 10
+-#define DNS_TYPE_A     1
+-#define DNS_CLASS_IN   1
+-
+-int fd;
+-char buf[1024];
+-char server[17] = "192.168.1.1";
+-char name[256] = ".";
+-
+-void alarm_handler( int signum ){
+-    return;
++static unsigned char packet[RIPPLE_DNS_PACKET];
++static const char *types[]={"A","NS","CNAME","SOA","PTR","MX","TXT","AAAA","ANY"};
++static unsigned codes[]={1,2,5,6,12,15,16,28,255};
++static const char *typename(unsigned n) {
++    unsigned i;static char b[20];
++    for(i=0;i<9;i++)if(codes[i]==n)return types[i];
++    sprintf(b,"TYPE%u",n);return b;
+@@ -45,37 +17,4 @@
+-
+-
+-int send_question( char *name ){
+-    struct header *p=( struct header *)buf;
+-    
+-    char *i = name;
+-    char *o = buf + sizeof(struct header);
+-    char *l = o++;
+-
+-    memset( p, 0, sizeof(buf) );
+-    p->id = htons(42);     /* "random" query ID */
+-    p->cntl = 0x1;  /* request a recursive query */
+-    p->qdcount = htons(1); /* one question */
+-    /* fill out name string */
+-    
+-    while(1){
+-	if( ! *i )
+-	    break;
+-	if( *i == '.' ){
+-	    *l = o - l - 1 ;
+-	    i++;
+-	    l = o++;
+-	}
+-	else
+-	    *o++ = *i++;
+-    }
+-    *l = o - l - 1;
+-    *o++ = 0;
+-    /* Avoid unaligned accesses when the encoded DNS name is not word aligned. */
+-    /* type: A record */
+-    *o++ = DNS_TYPE_A >> 8;
+-    *o++ = DNS_TYPE_A & 0xFF;
+-    /* class: inet */
+-    *o++ = DNS_CLASS_IN >> 8;
+-    *o++ = DNS_CLASS_IN & 0xFF;
+-    
+-    write( fd, buf, (int)(o - buf) );
++static unsigned typecode(const char *s) {
++    unsigned i;char *end;unsigned long n;
++    for(i=0;i<9;i++)if(!strcasecmp(s,types[i]))return codes[i];
++    if(!strncmp(s,"TYPE",4)){n=strtoul(s+4,&end,10);if(*s&&!*end&&n&&n<=65535UL)return n;}
+@@ -84,14 +23,30 @@
+-
+-void print_name( char *ptr ){
+-    while(1){
+-	if( *ptr == 0 ){
+-	    break;
+-	}
+-	if( (*ptr & 0xc0) == 0xc0 ){
+-	    ptr = buf + *(ptr + 1);
+-	    continue;
+-	}
+-	fwrite( ptr + 1, *ptr, 1, stdout );
+-	//	write(1, ptr + 1, *ptr );
+-	printf(".");
+-	ptr += *ptr + 1;
++static void dotname(const char *s){printf("%s%s",s,!strcmp(s,".")?"":".");}
++static int record(unsigned length,unsigned *offset,int brief) {
++    struct ripple_dns_rr rr;unsigned p,end,i,c;char name[254],ip[16];uint32_t v;
++    if(ripple_dns_rr(packet,length,offset,&rr))return -1;
++    p=rr.data;end=p+rr.size;
++    if(!brief){dotname(rr.name);printf("\t%lu\t%s\t%s\t",rr.ttl,rr.klass==1?"IN":"OTHER",typename(rr.type));}
++    if(rr.klass==1&&rr.type==1) {
++        v=(uint32_t)packet[p]|((uint32_t)packet[p+1]<<8)|((uint32_t)packet[p+2]<<16)|((uint32_t)packet[p+3]<<24);
++        inet_ntop(AF_INET,&v,ip,sizeof(ip));fputs(ip,stdout);
++    } else if(rr.klass==1&&rr.type==28) {
++        for(i=0;i<8;i++)printf(i?":%x":"%x",ripple_dns_u16(packet+p+i*2));
++    } else if(rr.klass==1&&(rr.type==2||rr.type==5||rr.type==12||rr.type==15||rr.type==6)) {
++        if(rr.type==15){printf("%u ",ripple_dns_u16(packet+p));p+=2;}
++        if(ripple_dns_name(packet,length,&p,name))return -1;dotname(name);
++        if(rr.type==6) {
++            putchar(' ');if(ripple_dns_name(packet,length,&p,name))return -1;dotname(name);
++            for(i=0;i<5;i++)printf(" %lu",ripple_dns_u32(packet+p+i*4));
++        }
++    } else if(rr.klass==1&&rr.type==16) {
++        while(p<end) {
++            c=packet[p++];putchar('"');
++            for(i=0;i<c;i++) {
++                unsigned ch=packet[p++];
++                if(ch=='"'||ch=='\\')putchar('\\');
++                if(ch>=32&&ch<127)putchar(ch);else printf("\\%03u",ch);
++            }
++            putchar('"');if(p<end)putchar(' ');
++        }
++    } else {
++        printf("\\# %u ",rr.size);while(p<end)printf("%02x",packet[p++]);
+@@ -99,2 +54 @@
+-    printf("\t\t");
+-    return;
++    putchar('\n');return 0;
+@@ -102,53 +56,15 @@
+-
+-
+-void print_entry( char **pptr, int no ){
+-    uint16_t type;
+-    uint16_t rdlen;
+-/* Compiler warning, removed unused variable 'j'*/
+-    int i;
+-    char *ptr = *pptr;
+-    struct in_addr addr;
+-    for( i = 0; i < no; i++ ){
+-	print_name( ptr );
+-	while(1){
+-	    if( *ptr == 0 ){
+-		ptr++;
+-		break;
+-	    }
+-	    if( (*ptr & 0xc0) == 0xc0 ){
+-		ptr += 2;
+-		break;
+-	    }
+-	    ptr += *ptr + 1;
+-	}
+-	
+-         /*
+-         * Do not cast packet data to RRtail.
+-         *  DNS resource records are not guaranteed to be naturally aligned.
+-         */
+-        type  = (ptr[0] << 8) | ptr[1];
+-        rdlen = (ptr[8] << 8) | ptr[9];
+-        ptr += RRTAIL_LEN;
+-
+-	/* cname */
+-	if( type == 6 ){
+-	    printf( "SOA   ");
+-	    print_name( ptr );
+-            ptr += rdlen;
+-	}
+-	else if( type == 5 ){
+-	    printf( "CNAME ");
+-	    print_name( ptr );
+-	    ptr += rdlen;
+-	}
+-	else if( type == 1 ){
+-	    printf( "A     ");
+-            memcpy(&addr, ptr, sizeof(struct in_addr));
+-            printf("%s", inet_ntoa(addr));
+-	    ptr += rdlen;
+-	}
+-	else{
+-	    printf( "???   ");
+-            ptr += rdlen;
+-	}
+-	printf("\n");
++int main(int argc,char **argv) {
++    const char *server=0,*name=0;unsigned type=1,i,at,count,section;int brief=0,n;
++    char reversed[80],actual[16],question[254];uint32_t ip;
++    for(i=1;i<(unsigned)argc;i++) {
++        if(!strcmp(argv[i],"--help"))goto usage;
++        if(argv[i][0]=='@'){server=argv[i]+1;continue;}
++        if(!strcmp(argv[i],"+short")){brief=1;continue;}
++        if(!strcmp(argv[i],"-x")) {
++            if(++i>=(unsigned)argc||inet_pton(AF_INET,argv[i],&ip)!=1)goto usage;
++            sprintf(reversed,"%u.%u.%u.%u.in-addr.arpa",(unsigned)(ip>>24),(unsigned)((ip>>16)&255),(unsigned)((ip>>8)&255),(unsigned)(ip&255));
++            name=reversed;type=12;continue;
++        }
++        if(!strcmp(argv[i],"-t")){if(++i>=(unsigned)argc||!(type=typecode(argv[i])))goto usage;continue;}
++        if(argv[i][0]=='-')goto usage;
++        if(!name)name=argv[i];else if(!(type=typecode(argv[i])))goto usage;
+@@ -156 +72,21 @@
+-    *pptr = ptr;
++    if(!name){name=".";type=2;}
++    n=ripple_dns_query(server,name,type,packet,sizeof(packet));
++    if(n<0){herror("dig");return 1;}
++    if(!brief) {
++        if(server)strncpy(actual,server,15);else ripple_dns_server(actual);actual[15]=0;
++        i=packet[3]&15;
++        printf(";; SERVER: %s#53\n;; status: %s, id: %u\n",actual,i==0?"NOERROR":i==3?"NXDOMAIN":i==2?"SERVFAIL":i==5?"REFUSED":"ERROR",ripple_dns_u16(packet));
++        printf(";; QUERY: %u, ANSWER: %u, AUTHORITY: %u, ADDITIONAL: %u\n",ripple_dns_u16(packet+4),ripple_dns_u16(packet+6),ripple_dns_u16(packet+8),ripple_dns_u16(packet+10));
++    }
++    at=12;if(ripple_dns_name(packet,n,&at,question))goto malformed;at+=4;
++    for(section=0;section<3;section++) {
++        count=ripple_dns_u16(packet+6+section*2);
++        if(count&&!brief)printf("\n;; %s SECTION:\n",section==0?"ANSWER":section==1?"AUTHORITY":"ADDITIONAL");
++        for(i=0;i<count;i++) {
++            if(brief&&section){struct ripple_dns_rr rr;if(ripple_dns_rr(packet,n,&at,&rr))goto malformed;}
++            else if(record(n,&at,brief))goto malformed;
++        }
++    }
++    return 0;
++malformed:fputs("dig: malformed DNS response\n",stderr);return 1;
++usage:fputs("usage: dig [@SERVER] [NAME [A|AAAA|MX|NS|CNAME|TXT|SOA|PTR|ANY]] [+short]\n       dig [@SERVER] -x ADDRESS\n",stderr);return argc==2&&!strcmp(argv[1],"--help")?0:1;
+@@ -158,136 +93,0 @@
+-
+-/* open up /etc/resolv.conf and read in
+-   fixme: handles only small config files < 512 bytes */
+-int readrc( void ){
+-    char *ws = " \f\n\r\t\v";
+-    char *ptr;
+-    int x;
+-
+-    fd = open( "/etc/resolv.conf", O_RDONLY );
+-    if ( fd < 0 ){
+-	return -1;
+-    }
+-    x = read( fd, buf, 511 );
+-    if( x < 1 )
+-	goto reterr;
+-    buf[x] = 0;
+-    ptr = strtok( buf, ws );
+-    while ( ptr ){
+-	if ( ! strcmp( ptr, "nameserver" ) ){
+-	    ptr = strtok( NULL, ws );
+-	    if( ptr == NULL )
+-		goto reterr;
+-	    strcpy( server, ptr );
+-	    goto retok;
+-	}
+-	ptr = strtok( NULL, ws );
+-    }
+- reterr:
+-    close(fd);
+-    return -1;
+- retok:
+-    close(fd);
+-    return 0;
+-}
+-
+-int main( int argc, char *argv[] ){
+-
+-    struct sockaddr_in addr;
+-    int x;
+-    int tries = 5;
+-
+-    readrc();
+-
+-    for( x = 1; x < argc; x++ ){
+-	if( argv[x][0] == '@' )
+-	    strncpy( server, &(argv[x][1]), 16);
+-	else
+-	    strncpy( name, argv[x], 256 );
+-    }
+-
+-    fd = socket( AF_INET, SOCK_DGRAM, 0);
+-    if( fd < 0 ){
+-	perror("socket");
+-	exit(1);
+-    }
+-
+-    addr.sin_family = AF_INET;
+-    addr.sin_port = htons( 53 );
+-    inet_pton( AF_INET, server, &addr.sin_addr.s_addr );
+-
+-    if( connect( fd, (struct sockaddr *)&addr, sizeof(addr) ) < 0 ){
+-	perror("connect");
+-	exit(1);
+-    }
+-
+-    for( ; tries ; tries-- ){
+-	send_question( name );
+-	signal( SIGALRM, alarm_handler );
+-	alarm(2);
+-	x = read( fd, buf, 1024 );
+-	if( x <= 0 )
+-	    continue;
+-	goto process;
+-    }
+-    perror("timeout");
+-    exit(1);
+-
+- process:
+-    /* process packet */
+-    {
+-	struct header *h = (struct header *)buf;
+-
+-	char *ptr;
+-	int i;
+-	
+-	if( ntohs(h->id) != 42 ){
+-	    fprintf( stderr, "bad ID\n");
+-	    exit(1);
+-	}
+-
+-	if(!(h->cntl & 0x80)){
+-	    fprintf( stderr, "not an answer\n");
+-	    exit(1);
+-	}
+-
+-	if(!(h->ret & 0x80)) {
+-	    fprintf( stderr, "server doesn't do recursion\n");
+-	}
+-	/* skip over our question(s) */
+-	printf("qust: %d, ans: %d, ns: %d, add: %d\n",
+-	       ntohs(h->qdcount), ntohs(h->ancount), ntohs(h->nscount), ntohs(h->arcount) );
+-	ptr = buf + sizeof( struct header );
+-	printf("questions:\n");
+-	/* move ptr past questions */
+-	for( i = 0; i < ntohs(h->qdcount); i++ ){
+-	    print_name( ptr );
+-	    printf("\n");
+-	    while(1){
+-		if( *ptr == 0 ){
+-		    ptr++;
+-		    break;
+-		}
+-		if( (*ptr & 0xc0) == 0xc0 ){
+-		    ptr += 2;
+-		    break;
+-		}
+-		ptr += *ptr + 1;
+-	    }
+-	    ptr +=4;
+-	}   
+-	/* print out answers */
+-	if( ntohs(h->ancount) ){
+-	    printf("answers:\n");
+-	    print_entry( &ptr, ntohs(h->ancount) );
+-	}
+-	if( ntohs(h->nscount) ){
+-	    printf("authority:\n");
+-	    print_entry( &ptr, ntohs(h->nscount) );
+-	}
+-	if( ntohs(h->arcount) ){
+-	    printf("additional:\n");
+-	    print_entry( &ptr, ntohs(h->arcount) );
+-	}
+-    }
+-    exit(0);
+-}
+--- a/Applications/netd/echoping.c
++++ b/Applications/netd/echoping.c
+@@ -1,5 +1,4 @@
+-/*
+-   Echoping - A UDP test client
+-   Sends some text to a UDP echo server, waits for reply, prints it.
+-*/
+-#include <stdio.h>
++/* FUZIX Echoping - UDP test client. Ripple: hostname lookup, bounded input,
++ * connected-peer filtering, monotonic timeout and meaningful exit status. */
++#include <netutil.h>
++#include <netdb.h>
+@@ -8,3 +6,0 @@
+-#include <unistd.h>
+-#include <sys/socket.h>
+-#include <netinet/in.h>
+@@ -12,15 +8,16 @@
+-
+-int main(int argc, char *argv[])
+-{
+-    struct sockaddr_in addr;
+-    int fd;
+-    char buf[1024];
+-    int x;
+-    int port = 7;
+-    const char *message = "This is a test!";
+-    socklen_t addr_len = sizeof(addr);
+-
+-    if (argc < 2 || argc > 4)
+-    {
+-        fprintf(stderr, "Usage: %s <ip address> [port] [message]\n", argv[0]);
+-        exit(1);
++int main(int argc,char **argv) {
++    struct sockaddr_in peer;struct hostent *h;char reply[1024],*end;
++    const char *message="This is a test!";unsigned long port=7,start;int fd,n,status=1;
++    if(argc<2||argc>4||!strcmp(argv[1],"--help"))goto usage;
++    if(argc>2){port=strtoul(argv[2],&end,10);if(!*argv[2]||*end||!port||port>65535UL)goto usage;}
++    if(argc>3)message=argv[3];if(strlen(message)>1023){fputs("echoping: message too long\n",stderr);return 1;}
++    h=gethostbyname(argv[1]);if(!h){herror(argv[1]);return 1;}
++    memset(&peer,0,sizeof(peer));peer.sin_family=AF_INET;peer.sin_port=htons(port);
++    memcpy(&peer.sin_addr,h->h_addr_list[0],sizeof(peer.sin_addr));
++    fd=socket(AF_INET,SOCK_DGRAM,0);if(fd<0){perror("echoping");return 1;}
++    if(connect(fd,(void *)&peer,sizeof(peer))||fcntl(fd,F_SETFL,O_NONBLOCK)<0||nu_write(fd,message,strlen(message),5000UL))goto done;
++    if(!*message) {
++        start=nu_now();
++        /* A zero-length write is a generic filesystem no-op; send must
++         * reach the socket layer to transmit an empty UDP datagram. */
++        do {n=send(fd,message,0,0);if(n>=0)break;if(errno!=EAGAIN||nu_expired(start,5000UL)||nu_wait())goto done;}while(1);
+@@ -28,53 +25,6 @@
+-
+-    if (argc >= 3)
+-    {
+-        port = atoi(argv[2]);
+-    }
+-
+-    if (argc == 4)
+-    {
+-        message = argv[3];
+-    }
+-
+-    fd = socket(AF_INET, SOCK_DGRAM, 0);
+-    if (fd < 0)
+-    {
+-        perror("socket()");
+-        exit(1);
+-    }
+-
+-    addr.sin_family = AF_INET;
+-    addr.sin_port = htons(port);
+-
+-    if (inet_pton(AF_INET, argv[1], &addr.sin_addr) <= 0)
+-    {
+-        perror("inet_pton");
+-        exit(1);
+-    }
+-
+-    printf("Sending to %s:%d\n", argv[1], port);
+-    x = sendto(fd, message, strlen(message), 0, (struct sockaddr *)&addr, sizeof(addr));
+-    if (x < 0)
+-    {
+-        perror("sendto");
+-        close(fd);
+-        exit(1);
+-    }
+-
+-    printf("Sent message: %s\n", message);
+-
+-    /* Need a timeout here */
+-    x = recvfrom(fd, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&addr, &addr_len);
+-    if (x >= 0)
+-    {
+-        buf[x] = '\0';
+-        printf("Received %d bytes: >%s<\n", x, buf);
+-    }
+-    else
+-    {
+-        perror("recvfrom");
+-        printf("No response received.\n");
+-    }
+-
+-    close(fd);
+-    return 0;
++    n=nu_read(fd,reply,sizeof(reply)-1,5000UL);if(n<0)goto done;
++    reply[n]=0;
++    if((unsigned)n!=strlen(message)||memcmp(reply,message,n)){fputs("echoping: reply differs from message\n",stderr);close(fd);return 1;}
++    printf("Received %d octets from %s: %s\n",n,argv[1],reply);status=0;
++ done:if(status)perror("echoping");close(fd);return status;
++ usage:fputs("usage: echoping HOST [PORT [MESSAGE]]\n",stderr);return argc==2&&!strcmp(argv[1],"--help")?0:1;
+--- a/Applications/netd/htget.c
++++ b/Applications/netd/htget.c
+@@ -1 +1,5 @@
+-#include <stdio.h>
++/* FUZIX Applications/netd/htget.c.
++ * Ripple adaptation: incremental framing, partial I/O, timeouts, redirects,
++ * chunk decoding and temporary-file replacement. No wire struct overlays. */
++#include <netutil.h>
++#include <netdb.h>
+@@ -3 +6,0 @@
+-#include <stdint.h>
+@@ -5,5 +8,2 @@
+-#include <unistd.h>
+-#include <fcntl.h>
+-#include <errno.h>
+-#include <sys/socket.h>
+-#include <netinet/in.h>
++#include <signal.h>
++#include <ctype.h>
+@@ -11,12 +11,18 @@
+-#include "netdb.h"
+-
+-
+-static int sock;
+-static char buf[512];
+-static char *bufend = buf;
+-static char *readp = buf;
+-static int buflen = 0;
+-
+-void writes(int fd, const char *p)
+-{
+-    write(fd, p, strlen(p));
++#define LINE 1024
++static int sock=-1,out=-1;
++static volatile int interrupted;
++static char temporary[512];
++static unsigned char input[512],output[512];
++static unsigned head,used,buffered;
++static unsigned long saved;
++static void caught(int sig){interrupted=sig;signal(sig,caught);}
++static void cleanup(void){if(out>=0)close(out);if(sock>=0)close(sock);if(*temporary)unlink(temporary);}
++static int byte(void) {
++    ssize_t n;
++    if(interrupted){errno=EINTR;return -1;}
++    if(head==used) {
++        n=nu_read(sock,input,sizeof(input),30000UL);
++        if(n<=0)return n<0?-1:-2;
++        head=0;used=n;
++    }
++    return input[head++];
+@@ -24,6 +30,8 @@
+-
+-void xflush(void)
+-{
+-    if (write(sock, buf, buflen) != buflen) {
+-        perror("write");
+-        exit(1);
++static int line(char *s,unsigned long *budget) {
++    unsigned n=0;int c;
++    for(;;) {
++        c=byte();if(c<0)return -1;
++        if(!*budget){errno=EMSGSIZE;return -1;}--*budget;
++        if(c=='\r') {if(byte()!='\n'){errno=EINVAL;return -1;}s[n]=0;return 0;}
++        if(c=='\n'||(c<32&&c!='\t')||c>126||n==LINE){errno=EINVAL;return -1;}
++        s[n++]=c;
+@@ -31 +38,0 @@
+-    buflen = 0;
+@@ -33,21 +40,5 @@
+-
+-void xwrites(const char *p)
+-{
+-    int l = strlen(p);
+-    if (l + buflen > 512)
+-        xflush();
+-    memcpy(buf + buflen, p, l);
+-    buflen += l;
+-}
+-
+-int xread(void)
+-{
+-    int len;
+-
+-    /* The first call we return the stray bytes from the line parser */
+-    if (bufend != buf && bufend > readp) {
+-        len = bufend - readp;
+-        memcpy(buf, readp, bufend - readp);
+-        bufend = buf;
+-        readp = buf;
+-        return len;
++static int decimal(const char *s,unsigned long *v) {
++    unsigned c;*v=0;if(!*s)return -1;
++    while((c=*s++)!=0) {
++        if(c<'0'||c>'9'||*v>(2147483647UL-(c-'0'))/10)return -1;
++        *v=*v*10+c-'0';
+@@ -55,163 +45,0 @@
+-    len = read(sock, buf, 512);
+-    if (len < 0) {
+-        perror("read");
+-        exit(1);
+-    }
+-    return len;
+-}
+-
+-int xreadline(void)
+-{
+-    int len;
+-
+-    if (readp != buf && bufend > readp) {
+-        memcpy(buf, readp, bufend - readp);
+-        bufend -= (readp - buf);
+-    }
+-    readp = buf;
+-
+-    len = read(sock, buf + buflen, 512 - buflen);
+-    if (len < 0) {
+-        perror("read");
+-        exit(1);
+-    }
+-    buflen += len;
+-    bufend += len;
+-
+-    while(readp < bufend) {
+-        if (*readp == '\r' && readp[1] == '\n') {
+-            *readp++ = '\n';
+-            *readp++ = 0;
+-            len = readp - buf;
+-            buflen -= len;
+-            return len;
+-        }
+-        readp++;
+-    }
+-    writes(2,"htget: overlong/misformatted header\n");
+-    exit(1);
+-}
+-    
+-
+-int main(int argc, char *argv[])
+-{
+-    struct sockaddr_in sin;
+-    struct hostent *h;
+-    uint16_t port = 80;
+-    char *pp;
+-    char *fp;
+-    int of;
+-    int code;
+-    int len;
+-    uint8_t looped = 0;
+-
+-    if (argc != 3) {
+-        writes(2, "htget url file\n");
+-        exit(1);
+-    }
+-    if (strncmp(argv[1], "http://", 7)) {
+-        writes(2, "htget: only http:// is supported.\n");
+-        exit(2);
+-    }
+-    argv[1] += 7;
+-
+-    fp = strchr(argv[1], '/');
+-    if (fp)
+-        *fp++ = 0;
+-
+-    pp = strrchr(argv[1], ':');
+-    if (pp) {
+-        *pp++ = 0;
+-        port = atoi(pp);
+-        if (port == 0) {
+-            writes(2, "htget: invalid port\n");
+-            exit(1);
+-        }
+-    }
+-
+-
+-    sin.sin_family = AF_INET;
+-    sin.sin_port = htons(port);
+-    
+-    h = gethostbyname(argv[1]);
+-    if (h == NULL) {
+-        writes(2, "htget: unknown host \"");
+-        writes(2, argv[1]);
+-        writes(2, "\"\n");
+-        exit(1);
+-    }
+-    memcpy( &sin.sin_addr.s_addr, h->h_addr_list[0], 4 );
+-
+-    sock = socket(AF_INET, SOCK_STREAM, 0);
+-    if (sock == -1) {
+-        perror("socket");
+-        exit(1);
+-    }
+-    if (connect(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+-        perror("connect");
+-        exit(1);
+-    }
+-
+-    xwrites("GET /");
+-    if (fp)
+-        xwrites(fp);
+-    xwrites(" HTTP/1.1\r\n");
+-    xwrites("Host: ");
+-    xwrites(argv[1]);
+-    if (pp) {
+-        xwrites(":");
+-        xwrites(pp);
+-    }
+-    xwrites("\r\nUser-Agent: Fuzix-htget/0.1\r\nConnection: close\r\n\r\n");
+-    xflush();
+-
+-    do {
+-        xreadline();
+-        errno = 0;
+-        pp = strchr(buf, ' ');
+-        if (pp == NULL) {
+-            writes(2, "htget: invalid reply\n");
+-            writes(2, buf);
+-            exit(1);
+-        }
+-        pp++;
+-        code = strtoul(pp, &pp, 10);
+-        if (code < 100 || *pp++ != ' ') {
+-            writes(2, "htget: invalid reply\n");
+-            writes(2, buf);
+-            exit(1);
+-        }
+-
+-        if (code  != 200)
+-            writes(2, buf);
+-        do {
+-            xreadline();
+-            if (code != 200)
+-                writes(2, buf);
+-        } while(*buf != '\n');
+-
+-        /* A 100 code means "I'm thinking please wait then a header cycle then
+-           a real header and has a blank line following */
+-        if (code == 100)
+-            xreadline();
+-    } while (code == 100 && !looped++);
+-
+-    of = open(argv[2], O_WRONLY|O_CREAT, 0666);
+-    if (of == -1) {
+-        perror(argv[2]);
+-        exit(1);
+-    }
+-    /* FIXME: if we saw a Transfer-Encoding: chunked" we need to do this
+-       bit differently */
+-    if (code == 200) {
+-        while((len = xread()) > 0) {
+-            if (write(of, buf, len) != len) {
+-                perror("write");
+-                exit(1);
+-            }
+-            write(1,".",1);
+-        }
+-    }
+-    write(1,"\n",1);
+-    close(of);
+-    close(sock);
+@@ -219,0 +48,144 @@
++static int parse_url(const char *url,char *host,char *path,unsigned *port) {
++    const char *p,*start;unsigned n=0;char number[8];unsigned long v;
++    if(strncmp(url,"http://",7))return -1;
++    p=url+7;start=p;*port=80;
++    while(*p&&*p!='/'&&*p!='?'&&*p!='#'&&*p!=':') {
++        if(n==253||*p<=32||*p>126||*p=='@'||*p=='['||*p==']')return -1;
++        host[n++]=*p++;
++    }
++    if(p==start)return -1;host[n]=0;
++    if(*p==':') {
++        ++p;n=0;while(*p&&*p!='/'&&*p!='?'&&*p!='#'){if(n==7)return -1;number[n++]=*p++;}
++        number[n]=0;if(decimal(number,&v)||!v||v>65535UL)return -1;*port=v;
++    }
++    n=0;if(*p!='/')path[n++]='/';
++    while(*p&&*p!='#'){if(n==LINE||*p<=32||*p>126)return -1;path[n++]=*p++;}
++    path[n]=0;return 0;
++}
++static int redirected(const char *url,const char *location,char *next) {
++    const char *p,*last;unsigned n;
++    if(!strncmp(location,"http://",7)) {if(strlen(location)>1279)return -1;strcpy(next,location);return 0;}
++    if(strstr(location,"://"))return -1;
++    if(location[0]=='/'&&location[1]=='/') {
++        if(strlen(location)>1274)return -1;strcpy(next,"http:");strcat(next,location);return 0;
++    }
++    p=url+7;while(*p&&*p!='/'&&*p!='?'&&*p!='#')++p;
++    if(*location=='/')n=p-url;
++    else if(*location=='?') {p=url;while(*p&&*p!='?'&&*p!='#')++p;n=p-url;}
++    else {
++        last=p;while(*p&&*p!='?'&&*p!='#'){if(*p=='/')last=p;++p;}
++        n=last-url+(*last=='/'?1:0);
++    }
++    if(n+strlen(location)+2>1280)return -1;
++    memcpy(next,url,n);next[n]=0;
++    if(*location!='/'&&*location!='?'&&next[n-1]!='/')strcat(next,"/");
++    strcat(next,location);return 0;
++}
++static int flush_body(void) {
++    if(buffered&&nu_write(out,output,buffered,30000UL))return -1;
++    saved+=buffered;buffered=0;return 0;
++}
++static int body_byte(int c) {
++    if(c==-1)return -1;
++    if(c==-2){errno=EIO;return -1;}
++    if(saved+buffered>=2147483647UL){errno=EFBIG;return -1;}
++    output[buffered++]=c;return buffered==sizeof(output)?flush_body():0;
++}
++static int body(unsigned chunked,unsigned has_length,unsigned long length) {
++    char text[LINE+1],*p;unsigned long n,budget=16384;unsigned digit;int c;
++    if(chunked)for(;;) {
++        if(line(text,&budget))return -1;
++        n=0;p=text;if(!isxdigit(*p)){errno=EINVAL;return -1;}
++        while(isxdigit(*p)) {
++            digit=isdigit(*p)?*p-'0':tolower(*p)-'a'+10;
++            if(n>(2147483647UL-digit)/16){errno=EFBIG;return -1;}n=n*16+digit;++p;
++        }
++        if(*p&&*p!=';'){errno=EINVAL;return -1;}
++        if(!n) {
++            do {if(line(text,&budget))return -1;if(*text&&!strchr(text,':')){errno=EINVAL;return -1;}}while(*text);
++            break;
++        }
++        while(n--){if(body_byte(byte()))return -1;}
++        if(byte()!='\r'||byte()!='\n'){errno=EINVAL;return -1;}
++        /* Bound each chunk-size/trailer block, without limiting total body. */
++        budget=16384;
++    } else if(has_length) {
++        while(length--){if(body_byte(byte()))return -1;}
++    } else {
++        while((c=byte())!=-2){if(c<0||body_byte(c))return -1;}
++    }
++    return flush_body();
++}
++static int output_file(const char *name) {
++    const char *slash;unsigned n;
++    if(!strcmp(name,"-")){out=1;return 0;}
++    slash=strrchr(name,'/');n=slash?(unsigned)(slash-name+1):0;
++    if(n+14>=sizeof(temporary)){errno=ENAMETOOLONG;return -1;}
++    memcpy(temporary,name,n);strcpy(temporary+n,".htgetXXXXXX");
++    out=mkstemp(temporary);return out<0?-1:0;
++}
++int main(int argc,char **argv) {
++    char url[1280],next[1280],host[254],path[LINE+1],text[LINE+1],location[LINE+1],*value,*end;
++    unsigned port,redirects=0,status,info,has_length,chunked,fields;
++    unsigned long length,budget;struct hostent *h;struct sockaddr_in peer;
++    if(argc!=3||!strcmp(argv[1],"--help")) {
++        fputs("usage: htget http://HOST[:PORT]/PATH FILE|-\n",stderr);
++        return argc==2&&!strcmp(argv[1],"--help")?0:1;
++    }
++    if(strlen(argv[1])>=sizeof(url))goto invalid;
++    strcpy(url,argv[1]);atexit(cleanup);signal(SIGINT,caught);signal(SIGTERM,caught);signal(SIGPIPE,SIG_IGN);
++    for(;;) {
++        if(parse_url(url,host,path,&port))goto invalid;
++        h=gethostbyname(host);if(!h){herror(host);return interrupted?128+interrupted:1;}
++        memset(&peer,0,sizeof(peer));peer.sin_family=AF_INET;peer.sin_port=htons(port);
++        memcpy(&peer.sin_addr,h->h_addr_list[0],sizeof(peer.sin_addr));
++        sock=socket(AF_INET,SOCK_STREAM,0);if(sock<0||nu_connect(sock,(void *)&peer,sizeof(peer),30000UL))goto failed;
++        if(nu_write(sock,"GET ",4,30000UL)||nu_write(sock,path,strlen(path),30000UL)||
++           nu_write(sock," HTTP/1.1\r\nHost: ",17,30000UL)||nu_write(sock,host,strlen(host),30000UL))goto failed;
++        if(port!=80){sprintf(text,":%u",port);if(nu_write(sock,text,strlen(text),30000UL))goto failed;}
++        strcpy(text,"\r\nUser-Agent: Fuzix-htget/0.2\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n");
++        if(nu_write(sock,text,strlen(text),30000UL))goto failed;
++        head=used=0;budget=16384;info=0;
++        do {
++            if(line(text,&budget))goto failed;
++            if((strncmp(text,"HTTP/1.0 ",9)&&strncmp(text,"HTTP/1.1 ",9))||strlen(text)<12||
++               !isdigit(text[9])||!isdigit(text[10])||!isdigit(text[11])||(text[12]&&text[12]!=' '))goto malformed;
++            status=(text[9]-'0')*100+(text[10]-'0')*10+text[11]-'0';
++            if(status<100||status>599||status==101)goto malformed;
++            has_length=chunked=fields=0;length=0;location[0]=0;
++            for(;;) {
++                if(line(text,&budget))goto failed;
++                if(!*text)break;if(++fields>128)goto malformed;
++                value=strchr(text,':');if(!value||value==text)goto malformed;*value++=0;
++                for(end=text;*end;end++)if(!isalnum(*end)&&!strchr("!#$%&'*+-.^_`|~",*end))goto malformed;
++                while(*value==' '||*value=='\t')++value;
++                end=value+strlen(value);while(end>value&&(end[-1]==' '||end[-1]=='\t'))*--end=0;
++                if(!strcasecmp(text,"Content-Length")){if(has_length||decimal(value,&length))goto malformed;has_length=1;}
++                else if(!strcasecmp(text,"Transfer-Encoding")){if(chunked||strcasecmp(value,"chunked"))goto malformed;chunked=1;}
++                else if(!strcasecmp(text,"Content-Encoding")&&strcasecmp(value,"identity"))goto malformed;
++                else if(!strcasecmp(text,"Location")){if(*location)goto malformed;strcpy(location,value);}
++            }
++            if((has_length&&chunked)||(status==204&&(has_length||chunked)))goto malformed;
++            if(status<200&&++info>4)goto malformed;
++        }while(status<200);
++        if(status==301||status==302||status==303||status==307||status==308) {
++            if(!*location||redirects++==5||redirected(url,location,next)) {
++                fputs("htget: invalid, unsupported or excessive redirect\n",stderr);return 1;
++            }
++            close(sock);sock=-1;strcpy(url,next);continue;
++        }
++        if(status<200||status>=300){fprintf(stderr,"htget: HTTP status %u\n",status);return 1;}
++        if(output_file(argv[2]))goto failed;
++        if(status!=204&&body(chunked,has_length,length))goto failed;
++        if(interrupted){errno=EINTR;goto failed;}
++        if(out!=1) {
++            if(close(out)<0){out=-1;goto failed;}out=-1;
++            if(rename(temporary,argv[2]))goto failed;temporary[0]=0;
++        }
++        if(strcmp(argv[2],"-"))fprintf(stderr,"htget: %lu octets saved to %s\n",saved,argv[2]);
++        out=-1;return 0;
++    }
++invalid:fputs("htget: expected a valid http:// URL (HTTPS is not supported)\n",stderr);return 1;
++malformed:fputs("htget: invalid or unsupported HTTP response\n",stderr);return 1;
++failed:perror("htget");return interrupted?128+interrupted:1;
++}
+--- a/Applications/netd/netdb.h
++++ b/Applications/netd/netdb.h
+@@ -27,0 +28,2 @@
++#include <sys/types.h>
++#include <netinet/in.h>
+@@ -51 +53,7 @@
+-extern struct hostent *gethostbyname (char *name);
++/* Addresses use struct in_addr's packed 32-bit representation, including on
++   C16 Ripple. h_length is sizeof(struct in_addr), not four C characters. */
++extern struct hostent *gethostbyname (const char *name);
++extern struct hostent *gethostbyaddr (const void *, socklen_t, int);
++extern const char *hstrerror(int);
++extern void herror(const char *);
++#define h_addr h_addr_list[0]
+--- a/Applications/netd/ntpdate.c
++++ b/Applications/netd/ntpdate.c
+@@ -1,8 +1,7 @@
+-/*
+-  A Cheesey NTP client to set system time
+-
+-  (C) 2017, Brett M. Gordon, GPL2 under Fuzix
+-
+-*/
+-
+-#include <stdio.h>
++/* A Cheesey NTP client to set system time.
++ * (C) 2017 Brett M. Gordon, GPL2 under Fuzix.
++ * Ripple adaptation: explicit octets, reply correlation, monotonic timeouts,
++ * UTC clock updates and checked options. */
++#include <netutil.h>
++#include <netdb.h>
++#include <resolv.h>
+@@ -11,5 +9,0 @@
+-#include <unistd.h>
+-#include <sys/socket.h>
+-#include <netinet/in.h>
+-#include <arpa/inet.h>
+-#include <signal.h>
+@@ -18,58 +12,10 @@
+-#include "netdb.h"
+-
+-#define AF_INET     1
+-#define SOCK_DGRAM  2
+-
+-typedef struct {
+-    uint32_t sec;
+-    uint32_t frac;
+-} ntime;
+-
+-struct ntp_t {
+-    uint8_t lvm;
+-    uint8_t statum;
+-    uint8_t poll;
+-    uint8_t prec;
+-    uint32_t delay;
+-    uint32_t disp;
+-    uint32_t refid;
+-    ntime ref;
+-    ntime org;
+-    ntime rec;
+-    ntime xmit;
+-};
+-
+-
+-#define MAXBUF 256
+-#define NTP_UNIX_EPOCH_OFFSET 2208988800UL  /*NTP Time  1900-01-01 to Unix Time 1970-01-01 */
+-int fd;
+-char buf[MAXBUF];
+-struct sockaddr_in addr;
+-int setflg = 0;
+-int disflg = 0;
+-int port = 123;  /* default port no */
+-
+-void alarm_handler( int signum ){
+-    return;
+-}
+-
+-void pusage( void ){
+-    fprintf(stderr, "ntpdate -sd [-o tz] server\n");
+-    exit(1);
+-}
+-
+-/* sends query to remote */
+-void sendq( void ){
+-    struct ntp_t *i = (struct ntp_t *)buf;
+-    memset( buf, 0, MAXBUF );
+-    i->lvm = 0xe3;
+-    write(fd, buf, 48);
+-}
+-
+-void my_open( int argc, char *argv[]){
+-    struct hostent *h;
+-
+-    h=gethostbyname( argv[optind] );
+-    if (!h){
+-	fprintf( stderr, "cannot resolve hostname\n" );
+-	exit(1);
++#include <arpa/inet.h>
++static void put32(unsigned char *p,unsigned long v){p[0]=v>>24;p[1]=(v>>16)&255;p[2]=(v>>8)&255;p[3]=v&255;}
++int main(int argc,char **argv) {
++    struct sockaddr_in peer;struct hostent *h;unsigned char query[48],reply[512];
++    unsigned long port=123,start,stamp;long hours;time_t utc,display;int option,set=0,offset=0,fd,n,attempt;char *end;
++    if(argc==2&&!strcmp(argv[1],"--help"))goto usage;
++    while((option=getopt(argc,argv,"p:o:ds"))!=-1) {
++        if(option=='p'){port=strtoul(optarg,&end,10);if(!*optarg||*end||!port||port>65535UL)goto usage;}
++        else if(option=='o'){hours=strtol(optarg,&end,10);if(!*optarg||*end||hours<-12||hours>14)goto usage;offset=hours;}
++        else if(option=='s')set=1;else if(option!='d')goto usage;
+@@ -77,79 +23,23 @@
+-    memcpy( &addr.sin_addr.s_addr, h->h_addr_list[0], 4 );
+-
+-    fd = socket(AF_INET, SOCK_DGRAM, 0);
+-    if (fd < 0) {
+-	perror("af_inet sock_dgram 0");
+-	exit(1);
+-    }
+-
+-    addr.sin_port = htons(port);
+-    addr.sin_family = AF_INET;
+-    if (connect(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+-	perror("connect");
+-	exit(1);
+-    }
+-}
+-
+-
+-int main( int argc, char *argv[] ){
+-    int retries;
+-    int rv;
+-    uint32_t ntpsec;
+-    time_t uv;
+-    int tz = 0;
+-    struct ntp_t *ptr = (struct ntp_t *)buf;
+-
+-    while ((rv = getopt( argc, argv, "p:o:ds" )) > 0 ){
+-	switch (rv){
+-	case 'p':
+-	    port = atoi( optarg );
+-	    break;
+-	case 'o':
+-	    tz = atoi( optarg );
+-	    if (tz < -12 || tz > 12){
+-		fprintf(stderr, "bad timezone\n");
+-		exit(1);
+-	    }
+-	    break;
+-	case 's':
+-	    setflg = 1;
+-	    break;
+-	case 'd':
+-	    disflg = 1;
+-	    break;
+-	case '?':
+-	    pusage();
+-	}
+-    }
+-    if( ! argv[optind] )
+-	pusage();
+-
+-    my_open( argc, argv );
+-
+-    retries = 3;
+-    while (retries--){
+-	sendq();
+-	signal( SIGALRM, alarm_handler );
+-	alarm(2);
+-	rv = read( fd, buf, MAXBUF);
+-	if (rv < 0 )
+-	    continue;
+-	if (rv >= sizeof( struct ntp_t ))
+-	    goto process;
+-
+-    }
+-    fprintf(stderr, "timeout\n");
+-    exit(1);
+-
+- process:
+-    ntpsec = ntohl(ptr->xmit.sec);
+-    uv = (time_t)(ntpsec - NTP_UNIX_EPOCH_OFFSET);
+-    uv += tz * 60 * 60;
+-
+-    if (disflg || !setflg)
+-        printf(ctime(&uv));
+-    if (setflg){
+-        rv = stime(&uv);
+-        if (rv){
+-            perror("stime");
+-            exit(1);
++    if(argc-optind!=1)goto usage;
++    h=gethostbyname(argv[optind]);if(!h){herror(argv[optind]);return 1;}
++    memset(&peer,0,sizeof(peer));peer.sin_family=AF_INET;peer.sin_port=htons(port);
++    memcpy(&peer.sin_addr,h->h_addr_list[0],sizeof(peer.sin_addr));
++    fd=socket(AF_INET,SOCK_DGRAM,0);if(fd<0){perror("ntpdate");return 1;}
++    if(connect(fd,(void *)&peer,sizeof(peer))||fcntl(fd,F_SETFL,O_NONBLOCK)<0)goto failed;
++    for(attempt=0;attempt<3;attempt++) {
++        memset(query,0,sizeof(query));query[0]=0x23;
++        put32(query+40,time(0)+2208988800UL);
++        put32(query+44,nu_now()^((unsigned long)getpid()<<16)^attempt);
++        start=nu_now();
++        if(nu_write(fd,query,sizeof(query),2000UL)) {if(errno==EINTR)goto failed;continue;}
++        while(!nu_expired(start,2000UL)) {
++            n=read(fd,reply,sizeof(reply));
++            if(n<0){if(errno!=EAGAIN||nu_wait())goto failed;continue;}
++            if(n<48||(reply[0]&7)!=4||((reply[0]>>3)&7)<3||((reply[0]>>3)&7)>4||
++               (reply[0]>>6)==3||!reply[1]||reply[1]>15||memcmp(reply+24,query+40,8))continue;
++            stamp=ripple_dns_u32(reply+40);if(!stamp)continue;
++            utc=stamp-2208988800UL;
++            close(fd);
++            if(set&&stime(&utc)<0){perror("ntpdate: stime");return 1;}
++            display=utc+(long)offset*3600L;
++            printf("%s",ctime(&display));return 0;
+@@ -158 +48,3 @@
+-    exit(0);
++    errno=ETIMEDOUT;
++ failed:perror("ntpdate");close(fd);return 1;
++ usage:fputs("usage: ntpdate [-d] [-s] [-p PORT] [-o DISPLAY_HOURS] SERVER\n",stderr);return argc==2&&!strcmp(argv[1],"--help")?0:1;
 --- a/Applications/util/basename.c
 +++ b/Applications/util/basename.c
 @@ -30 +30,2 @@
@@ -6939,6 +8043,29 @@
 @@ -668 +675 @@
 -    if(ino < 2 || ino >=(dev->s_isize-2)*8)
 +    if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
+@@ -872,2 +879,2 @@
+-    if (udata.u_cloexec & (1U << oldd))
+-	    udata.u_cloexec |= 1U << newd;
++    if (udata.u_cloexec & (1UL << oldd))
++	    udata.u_cloexec |= 1UL << newd;
+@@ -896,0 +904,9 @@
++
++#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
++    /* Ripple sockets use only the inode cache, without a disk allocation. */
++    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
++        if (!--ino->c_refs)
++            memset(ino, 0, sizeof(*ino));
++        return;
++    }
++#endif
+@@ -938,0 +955,7 @@
++
++#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
++    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
++        ino->c_flags &= ~CDIRTY;
++        return;
++    }
++#endif
 --- a/Kernel/include/kdata.h
 +++ b/Kernel/include/kdata.h
 @@ -88 +88 @@
@@ -6991,9 +8118,65 @@
 +#ifdef CONFIG_RIPPLE
 +    unsigned long u_sigtramp; /* RXE user signal entry in separate IMEM */
 +#endif
-@@ -652 +682 @@
+@@ -582,0 +613,3 @@
++#if UFTSIZE > 16
++    uint32_t    u_cloexec;       /* Close on exec flags, including high FDs. */
++#else
+@@ -583,0 +617 @@
++#endif
+@@ -652 +686 @@
 -#define _WSTOPPED	0xFF
 +#define _WSTOPPED	0x7F
+--- a/Kernel/include/netdev.h
++++ b/Kernel/include/netdev.h
+@@ -130,9 +130,9 @@
+-		struct ksockaddr ifr_addr;
+-		struct ksockaddr ifr_dstaddr;
+-		struct ksockaddr ifr_broadaddr;
+-		struct ksockaddr ifr_netmask;
+-		struct ksockaddr ifr_gwaddr;
+-		struct ksockaddr ifr_hwaddr;
+-		short ifr_flags;
+-		int ifr_ifindex;
+-		int ifr_mtu;
++		struct ksockaddr u_addr;
++		struct ksockaddr u_dstaddr;
++		struct ksockaddr u_broadaddr;
++		struct ksockaddr u_netmask;
++		struct ksockaddr u_gwaddr;
++		struct ksockaddr u_hwaddr;
++		short u_flags;
++		int u_ifindex;
++		int u_mtu;
+@@ -142,9 +142,9 @@
+-#define ifr_addr	ifr_ifru.ifr_addr
+-#define ifr_dstaddr	ifr_ifru.ifr_dstaddr
+-#define ifr_broadaddr	ifr_ifru.ifr_broadaddr
+-#define ifr_netmask	ifr_ifru.ifr_netmask
+-#define ifr_hwaddr	ifr_ifru.ifr_hwaddr
+-#define ifr_gwaddr	ifr_ifru.ifr_gwaddr
+-#define ifr_flags	ifr_ifru.ifr_flags
+-#define ifr_ifindex	ifr_ifru.ifr_ifindex
+-#define ifr_mtu		ifr_ifru.ifr_mtu
++#define ifr_addr	ifr_ifru.u_addr
++#define ifr_dstaddr	ifr_ifru.u_dstaddr
++#define ifr_broadaddr	ifr_ifru.u_broadaddr
++#define ifr_netmask	ifr_ifru.u_netmask
++#define ifr_hwaddr	ifr_ifru.u_hwaddr
++#define ifr_gwaddr	ifr_ifru.u_gwaddr
++#define ifr_flags	ifr_ifru.u_flags
++#define ifr_ifindex	ifr_ifru.u_ifindex
++#define ifr_mtu		ifr_ifru.u_mtu
+--- a/Kernel/include/timer.h
++++ b/Kernel/include/timer.h
+@@ -16 +16,6 @@
+-#ifndef CONFIG_NO_CLOCK
++#if defined(CONFIG_PLATFORM_CLOCK)
++extern void sync_clock(void);
++extern void plt_clock_init(void);
++extern void timer_advance(uint32_t deciseconds);
++extern void tod_advance(uint32_t deciseconds);
++#elif !defined(CONFIG_NO_CLOCK)
 --- a/Kernel/include/tty.h
 +++ b/Kernel/include/tty.h
 @@ -220,0 +221,3 @@
@@ -7002,6 +8185,9 @@
 +#endif
 --- a/Kernel/inode.c
 +++ b/Kernel/inode.c
+@@ -289 +289 @@
+-	udata.u_cloexec &= ~(1 << uindex);
++	udata.u_cloexec &= ~(1UL << uindex);
 @@ -400 +400,11 @@
 -}
 +#ifdef CONFIG_RIPPLE
@@ -7026,7 +8212,66 @@
 @@ -326 +326 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -712,2 +712,6 @@
+@@ -420 +420 @@
+-static void load_average(void)
++static void load_average(uint32_t elapsed)
+@@ -427,5 +427,8 @@
+-	utick++;
+-	if (utick < 50)
+-		return;
+-
+-	utick = 0;
++        uint32_t samples = elapsed / 50;
++        unsigned remainder = utick + elapsed % 50;
++        samples += remainder / 50;
++        utick = remainder % 50;
++        /* We cannot reconstruct historical runnable counts after a host pause.
++           Bound catch-up work; 100 minutes already converges all averages. */
++        if (samples > 1200) samples = 1200;
++        while (samples--) {
+@@ -442,0 +446 @@
++        }
+@@ -467,0 +472,32 @@
++#ifdef CONFIG_PLATFORM_CLOCK
++/* Called under di by the platform clock. Expire each queued timer once even
++   after a long pause, without manufacturing CPU interrupts or CPU time. */
++void timer_advance(uint32_t elapsed)
++{
++    ptptr p, *q = &alarms;
++    ticks.full += elapsed;
++    while (*q) {
++        p = *q;
++        if (p->p_status == P_EMPTY) panic("dead timer");
++        if (p->p_alarm) {
++            if (elapsed >= p->p_alarm) {
++                p->p_alarm = 0;
++                ssig(p, SIGALRM);
++            } else p->p_alarm -= elapsed;
++        }
++        if (p->p_timeout > 1) {
++            if (elapsed >= (uint32_t)p->p_timeout - 1) {
++                p->p_timeout = 1;
++                pwake(p);
++            } else p->p_timeout -= elapsed;
++        }
++        if (p->p_timeout < 2 && !p->p_alarm) {
++            p->p_flags &= ~PFL_ALARM;
++            *q = p->p_timerq;
++        } else q = &p->p_timerq;
++    }
++    tod_advance(elapsed);
++    load_average(elapsed);
++}
++#endif
++
+@@ -469,0 +506 @@
++#ifndef CONFIG_PLATFORM_CLOCK
+@@ -508 +545 @@
+-                load_average();
++                load_average(1);
+@@ -512,0 +550 @@
++#endif
+@@ -712,2 +750,6 @@
 -				udata.u_ptab->p_status = P_STOPPED;
 -				udata.u_ptab->p_event = j + (b << 4);
 +                /* switchout has already uncharged a sleeping task. */
@@ -7035,20 +8280,20 @@
 +                udata.u_ptab->p_event = j + (b << 4);
 +                ssig(udata.u_ptab->p_pptr, SIGCHLD);
 +                wakeup(udata.u_ptab->p_pptr);
-@@ -778,0 +783,2 @@
+@@ -778,0 +821,2 @@
 +    /* A stop in the upper signal set may resume here after SIGCONT. */
 +    sb = udata.u_ptab->p_sig;
-@@ -819 +825 @@
+@@ -819 +863 @@
 -		if (sig == SIGCONT) {
 +		if (sig == SIGCONT || sig == SIGKILL) {
-@@ -979,0 +986,4 @@
+@@ -979,0 +1024,4 @@
 +#ifdef CONFIG_JOB_CONTROL
 +                if (udata.u_ptab->p_session == udata.u_ptab->p_pid &&
 +                    p->p_session == udata.u_ptab->p_session) {
 +#else
-@@ -980,0 +991 @@
+@@ -980,0 +1029 @@
 +#endif
-@@ -1014,0 +1026,7 @@
+@@ -1014,0 +1064,7 @@
 +#ifdef CONFIG_RIPPLE
 +	/* A panic must never certify an inconsistent filesystem as clean. */
 +	{
@@ -7056,16 +8301,22 @@
 +		ripple_panic_stop();
 +	}
 +#else
-@@ -1015,0 +1034 @@
+@@ -1015,0 +1072 @@
 +#endif
 --- a/Kernel/start.c
 +++ b/Kernel/start.c
-@@ -119 +119 @@
+@@ -1,0 +2 @@
++#include <timer.h>
+@@ -119 +120 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -360 +360 @@
+@@ -360 +361 @@
 -			"Copyright (c) 2014-2026 Alan Cox <alan@etchedpixels.co.uk>\nDevboot\n",
 +			"Copyright (c) 2014-2026 Alan Cox <alan@etchedpixels.co.uk>\n",
+@@ -431,0 +433,3 @@
++#ifdef CONFIG_PLATFORM_CLOCK
++        plt_clock_init();
++#endif
 --- a/Kernel/syscall_exec.c
 +++ b/Kernel/syscall_exec.c
 @@ -12,0 +13,5 @@
@@ -7076,20 +8327,46 @@
 +#else
 @@ -13,0 +19 @@
 +#endif
+--- a/Kernel/syscall_fs3.c
++++ b/Kernel/syscall_fs3.c
+@@ -143 +143 @@
+-		udata.u_cloexec |= (1 << uindex);
++		udata.u_cloexec |= (1UL << uindex);
+@@ -291 +291 @@
+-		return udata.u_cloexec & (1U << fd) ? O_CLOEXEC : 0;
++		return udata.u_cloexec & (1UL << fd) ? O_CLOEXEC : 0;
+@@ -294 +294 @@
+-			udata.u_cloexec |= (1U << fd);
++			udata.u_cloexec |= (1UL << fd);
+@@ -296 +296 @@
+-			udata.u_cloexec &= ~(1U << fd);
++			udata.u_cloexec &= ~(1UL << fd);
 --- a/Kernel/syscall_proc.c
 +++ b/Kernel/syscall_proc.c
-@@ -297,0 +298,4 @@
+@@ -1,0 +2 @@
++#include <timer.h>
+@@ -156,0 +158,3 @@
++		{
++                        irqflags_t irq = di();
++                        sync_clock();
+@@ -158,0 +163 @@
++                        irqrestore(irq);
+@@ -159,0 +165 @@
++		}
+@@ -211,0 +218 @@
++	sync_clock();
+@@ -297,0 +305,4 @@
 +	/* Ripple syscall values carry the complete banked pointer. */
 +#ifdef CONFIG_RIPPLE
 +	return (arg_t)oldbrk;
 +#else
-@@ -298,0 +303 @@
+@@ -298,0 +310 @@
 +#endif
-@@ -334 +339,2 @@
+@@ -334 +346,2 @@
 -			if (p->p_status && p->p_pptr == udata.u_ptab) {
 +			/* PID 1's bootstrap parent is itself, not a waitable child. */
 +			if (p != udata.u_ptab && p->p_status && p->p_pptr == udata.u_ptab) {
-@@ -529,0 +536,7 @@
+@@ -529,0 +543,7 @@
 +#ifdef CONFIG_RIPPLE
 +		extern int ripple_valid_code(unsigned long);
 +		if (func != SIG_DFL &&
@@ -7097,16 +8374,32 @@
 +		     !ripple_valid_code((unsigned long)udata.u_argn2))) {
 +			udata.u_error = EFAULT;
 +#else
-@@ -530,0 +544 @@
+@@ -530,0 +551 @@
 +#endif
-@@ -536,0 +551,4 @@
+@@ -536,0 +558,4 @@
 +#ifdef CONFIG_RIPPLE
 +	if (func != SIG_DFL && func != SIG_IGN)
 +		udata.u_sigtramp = udata.u_argn2;
 +#endif
-@@ -652 +670 @@
+@@ -652 +677 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+--- a/Kernel/timer.c
++++ b/Kernel/timer.c
+@@ -61,0 +62,13 @@
++#ifdef CONFIG_PLATFORM_CLOCK
++/* Large elapsed intervals must not require one interrupt per missed tick. */
++void tod_advance(uint32_t elapsed)
++{
++    uint32_t seconds = elapsed / 10;
++    unsigned remainder = tod_deci + elapsed % 10;
++    uint32_t previous = tod.low;
++    seconds += remainder / 10;
++    tod_deci = remainder % 10;
++    tod.low += seconds;
++    if (tod.low < previous) ++tod.high;
++}
++#endif
 --- a/Kernel/tty.c
 +++ b/Kernel/tty.c
 @@ -34,0 +35,15 @@
@@ -7230,6 +8523,60 @@
 @@ -125 +125 @@
 -	if (!valaddr_w(uaddr, 4, 4))
 +	if (!valaddr_w(uaddr, sizeof(uint32_t), sizeof(uint32_t)))
+--- a/Library/include/net/if.h
++++ b/Library/include/net/if.h
+@@ -1,0 +2 @@
++#define _NET_IF_H
+@@ -18,9 +19,9 @@
+-		struct sockaddr ifr_addr;
+-		struct sockaddr ifr_dstaddr;
+-		struct sockaddr ifr_broadaddr;
+-		struct sockaddr ifr_netmask;
+-		struct sockaddr ifr_gwaddr;
+-		struct sockaddr ifr_hwaddr;
+-		short ifr_flags;
+-		int ifr_ifindex;
+-		int ifr_mtu;
++		struct sockaddr u_addr;
++		struct sockaddr u_dstaddr;
++		struct sockaddr u_broadaddr;
++		struct sockaddr u_netmask;
++		struct sockaddr u_gwaddr;
++		struct sockaddr u_hwaddr;
++		short u_flags;
++		int u_ifindex;
++		int u_mtu;
+@@ -30,9 +31,9 @@
+-#define ifr_addr	ifr_ifru.ifr_addr
+-#define ifr_dstaddr	ifr_ifru.ifr_dstaddr
+-#define ifr_broadaddr	ifr_ifru.ifr_broadaddr
+-#define ifr_netmask	ifr_ifru.ifr_netmask
+-#define ifr_hwaddr	ifr_ifru.ifr_hwaddr
+-#define ifr_gwaddr	ifr_ifru.ifr_gwaddr
+-#define ifr_flags	ifr_ifru.ifr_flags
+-#define ifr_ifindex	ifr_ifru.ifr_ifindex
+-#define ifr_mtu		ifr_ifru.ifr_mtu
++#define ifr_addr	ifr_ifru.u_addr
++#define ifr_dstaddr	ifr_ifru.u_dstaddr
++#define ifr_broadaddr	ifr_ifru.u_broadaddr
++#define ifr_netmask	ifr_ifru.u_netmask
++#define ifr_hwaddr	ifr_ifru.u_hwaddr
++#define ifr_gwaddr	ifr_ifru.u_gwaddr
++#define ifr_flags	ifr_ifru.u_flags
++#define ifr_ifindex	ifr_ifru.u_ifindex
++#define ifr_mtu		ifr_ifru.u_mtu
+--- a/Library/include/sys/socket.h
++++ b/Library/include/sys/socket.h
+@@ -4 +4 @@
+-#include "types.h"
++#include <sys/types.h>
+@@ -10,0 +11,3 @@
++#define SHUT_RD 0
++#define SHUT_WR 1
++#define SHUT_RDWR 2
+@@ -37 +40 @@
+-#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__)
++#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__) || defined(RIPPLE_MMU)
 --- a/Library/libs/clock_gettime.c
 +++ b/Library/libs/clock_gettime.c
 @@ -31 +31 @@

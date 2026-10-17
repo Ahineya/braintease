@@ -1,0 +1,208 @@
+Microwindows Configuration Documentation
+May 21, 2019 g haerr <greg@censoft.com>
+Feb 13, 2025 Updated for ELKS and bin/nxstart.
+
+To build Microwindows for desktop demonstration:
+
+1. cd microwindows/src
+
+2. The default configuration is for MAC OSX using SDL2 (Configs/config.macosx).
+   For Linux X11 type "cp Configs/config.linux-X11 config".
+   For Linux hardware framebuffer type "cp Configs/config.linux-fb config".
+   For Linux framebuffer emulation on X11 type "cp Configs/config.linux-fbe config".
+   For SDL on OSX type "cp Configs/config.sdl config".
+
+   Edit the default configuration file "config" for library support desired.
+
+   There are (outdated) pre-built configuration files for a variety
+   of target systems, see Configs/README.
+   See microwindows/doc/CONTENTS.txt and microwindows/src/Configs/README for more information.
+
+3. Type "make" (or "make -f Makefile.elks" for ELKS).
+
+4.  Run the demonstration program using "bin/nxstart". this will allow you to
+    select other demos from Nano-X itself. For looking at more complex
+    demo configurations, see the demo.sh shell script, or run "./demo.sh".
+
+5.  Older instructions for running Win32 demos or individual Nano-X applications:
+    Run individual demonstration programs using "./runapp <appname>".
+
+	Any application in microwindows/src/bin/ can be run using the application launch
+	script, runapp, which automatically starts the nano-X server if required.
+	Some examples:
+
+	./runapp demo-aafont
+	./runapp demo-nuklear-overview
+	./runapp demo-composite
+	./runapp mwdvetest
+	./runapp mwmine
+
+	./runapp can be used to set the Nano-X portrait modes using -L, -R, -D, -A
+	(left, right, upside down, auto-mouseedge) when running Nano-X apps, e.g.:
+
+	./runapp -A demo-ttfont		(move mouse to edges of screen to demonstragte flip orientation)
+
+	The runapp shell script sets up and exports LD_LIBRARY_PATH so that the
+	required shared libraries are loaded from microwindows/src/lib/ when
+	configured with SHAREDLINK=Y. To link the demo programs
+	with Microwindows static libraries, set SHAREDLINK=N.
+
+	Microwindows by default builds both .a and shared libraries.
+	To not generate any shared libraries, set SHAREDLIBS=N.
+
+	For the EMSCRIPTEN port, check that the EMSDK is in ~/emsdk/, then compilation
+	is done after copying Configs/config.emscripten to src/config and running
+	./make-emscripten.  Applications are run as above but using ./emrun:
+
+	./emrun demo-aafont
+	./emrun mwdemo2
+	./emrun mwmine
+	./emrun mwapp		(multiple win32 apps simultaneously)
+
+	If MICROWINMULTIAPP=Y is set in config, win32 apps will be compiled as shared
+	libraries and be loadable dynamically, now supporting multiple simultaneous
+	application execution. These bin/mw*.so apps are loaded using the mwapp loader:
+
+	bin/mwapp					(demo win32 apps simultaneously)
+	bin/mwapp mwdemo2			(to run a single app)
+	bin/mwapp mwdemo mwterm		(to run just specified apps)
+
+6. Documentation is available in the microwindows/doc directory.
+	Complete browser accessible API documentation is at doc/nano-X/index.html
+	Win32 API documentation is in doc/html/Win32API.html
+	NXLIB API documentation is in doc/html/NXlib programming and reference manual.html
+	PDF documentation is in doc/pdf
+
+7. More information below.
+
+Microwindows compiles and runs on Linux, MACOSX, UNIX, X11, EMSCRIPTEN, Android, PSP,
+RTEMS, MinGW and bare hardware.  There is support for the MIPS,
+ARM, and x86 cpu's using the cross compiler toolchains specified in config.
+
+Use "make -f Makefile.elks" to compile for ELKS.
+
+Use "make -f Makefile_nr ARCH=XXX" to compile for MinGW or DOS-DJGPP.
+
+Microwindows can be compiled to use different screen, 
+mouse and keyboard drivers for a given operating system environment.
+Most options are set using configuration file (microwindows/src/config) options.
+These options are manually editted.
+Other fine-tuning options are set in the graphics drawing engine's header
+file microwindows/src/include/device.h.
+
+After changing any options in microwindows/src/config, Microwindows
+is built by typing "make".
+
+Microwindows' header files can be written to /usr/lib/microwin,
+and libraries to /usr/lib by typing "sudo make install".  This
+is not required unless using Microwindows to build outside
+applications, however.  All demos build and run using the headers
+and libraries built in the source tree.
+
+Config options are detailed in the config file itself and
+following each operating environment below.  Setting the line
+	MICROWIN=Y
+will build Microwindows libraries.  The line
+	NANOX=Y
+will build Nano-X libraries.  Both are built by default.
+	NX11=Y will build the libNX11 X11-compatibility library used with libnano-X.
+
+Setting OPTIMIZE=Y will run the compiler's -O3 switch.
+Setting DEBUG=Y will add -g.  Setting VERBOSE=Y will display
+the full compiler command line when making.  When cross-compiling
+for different platforms, the various XXXTOOLSPREFIX values
+must be set accordingly.
+
+The Nano-X server can be built as a compiled-in application,
+or use UNIX sockets to allow separately compiled applications
+to connect to the server.  Setting the line
+	LINK_APP_INTO_SERVER=Y
+will create libnanoX and all demos with the server files necessary to create
+a standalone nano-X application, which is useful for debugging,
+or for not having to run a separate client/server connection
+to the nano-X server. The downside is that multiple applications
+cannot be run simultaneously.
+
+Scaled, rotated, and antialiased fonts (truetype and adobe type 1)
+are supported using Freetype 2. Set
+	HAVE_FREETYPE_2_SUPPORT=Y
+in the config file. For Adobe Type 1 font support, download
+t1lib-1.0.tar.gz from microwindows.org or 
+ftp://ftp.neuroinformatik.ruhr-uni-bochum.de/pub/software/t1lib/
+and set:
+	HAVE_T1LIB_SUPPORT=Y
+in the config file.  The demo-ttfont, demo-aafont and demop-font  programs demonstrate
+use of both truetype and type 1 fonts.
+
+If compiling for use with multi-threaded applications, setting
+	THREADSAFE=Y (default)
+enables a global mutex around all GrXXX() functions.
+This is necessary when using Nano-X with the SDL library and SMPEG.
+
+All the demos are built in the microwindows/src/bin directory. 
+
+A set of demonstration scripts running multiple applications are available in
+microwindows/src/demoscripts/*.sh.
+
+Linux/UNIX
+==========
+Linux users set the line below in the config file.
+	ARCH=LINUX-NATIVE
+
+UNIX/Linux users have the choice of running framebuffer screen drivers, X11 or SDL.
+The framebuffer driver runs on 1, 2, 4, 8, 16 and 32bpp systems.
+To choose between them, set one of the following lines in the config file:
+	SCREEN=FB		(for 1, 2, 4, 8, 16 or 32 bpp linear fb access)
+	SCREEN=X11
+	SCREEN=SDL		(for SDL version 2)
+	SCREEN=FBE		(for framebuffer emulator bin/fbe, set FBEMULATOR=Y also)
+
+When building the X11 version, the SCREEN_PIXTYPE can be used
+to emulate a different hardware framebuffer configuration.
+See the config file SCREEN_PIXTYPE= for more details, the default
+is 32 bit color in ARGB format.
+
+Linux framebuffer users can use either the /dev/input/mice driver,
+the GPM mouse driver, or a "bare" serial mouse driver that decodes
+the mouse directly from the serial port.  Set one of the following in config:
+	MOUSE=DEVMICEMOUSE
+	MOUSE=GPMMOUSE
+	MOUSE=SERMOUSE
+	MOUSE=NOMOUSE		(for no mouse)
+
+Note that to use the GPM driver, you must start GPM with
+the -R option, and usually specify the mouse type with -t.
+See mouse.sh for an example.  If using the direct serial
+mouse driver, the serial port may have to be specified in
+microwindows/src/drivers/mou_ser.c, as it defaults to /dev/psaux,
+and expects a ps2-compatible mouse (changeable in mou_ser.c
+or through environment variables MOUSE_TYPE={ms,pc,logi,ps2},
+and MOUSE_PORT=/dev/ttyS1).
+
+There is a utility that converts MS fonts, for exact
+MS-Windows look and feel.  You must own a MS license in order
+to use an MS font.  To use the MS fonts, compile microwindows/src/fonts/tools/convfnt.c
+on a Windows system, and it will create the win*.c font tables.
+These fonts can then be linked in by modifying the drivers/genfont.c file.
+
+DJGPP and others
+================
+There are contributed DJGPP and MINGW32 ports.
+Instructions are in microwindows/src/Makefile_nr.
+
+Framebuffer notes:
+If you haven't used any of the Linux 2.2 or 2.4 framebuffer drivers before,
+it can be a little daunting at first. Alex Buell has written a
+Framebuffer HOWTO, which is available at
+http://en.tldp.org/HOWTO/Framebuffer-HOWTO.html which goes into detail about the
+various drivers, command line options, and the fbset utility.
+For any frame buffer other than the Vesa framebuffer
+(which can only change modes at bootup because it needs to
+execute the code in the video card's ROM in real mode),
+you can change bits per pixel with the command 'fbset -depth {8|16|24|32}'.
+Another very useful framebuffer site is http://www.linux-fbdev.org
+
+Have fun!
+
+Greg Haerr
+<greg@censoft.com>

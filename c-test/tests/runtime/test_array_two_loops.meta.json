@@ -1,4 +1,4 @@
 {
-  "expected": "12345\n12345\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "12345\n12345\n"
 }

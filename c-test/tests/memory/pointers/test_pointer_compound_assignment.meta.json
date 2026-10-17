@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "expected": "pointer compound assignment ok\n",
+  "use_runtime": true,
   "description": "Pointer +=/-= preserve banks across signed, unsigned, wide offsets and evaluate lvalues once"
 }

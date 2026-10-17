@@ -1,0 +1,32 @@
+import { monotonic_millis, ClockDeviceError, InvalidHostTime } from "std/time";
+import { ClockedReactor, ReactorError, ClockError, IdleError, InvalidClockSample, Service, ContinueAfter, clocked_reactor } from "std/reactor";
+import { rfl_host_idle } from "./host_support.c";
+
+fn read_clock()->Result<u32,ReactorError> {
+    match monotonic_millis() {
+        Ok(now)=>Ok(now),
+        Err(ClockDeviceError(status))=>Err(ClockError(status)),
+        Err(InvalidHostTime)=>Err(InvalidClockSample),
+    }
+}
+fn idle(milliseconds:u32)->Result<unit,ReactorError> {
+    if (milliseconds > 10) {return Err(IdleError(3));}
+    let status=rfl_host_idle(milliseconds as u16);
+    if (status == 0) {Ok({})} else {Err(IdleError(status))}
+}
+fn no_service(now:u32)->Service {ContinueAfter(None)}
+
+// Timer-only reactor. No network is initialized and no logical tick is granted.
+export fn host_reactor()->Result<ClockedReactor,ReactorError> {
+    host_reactor_with(no_service,10)
+}
+// Service is called before and after each bounded idle. It may register wakes,
+// supply an earlier maintenance deadline, or stop orderly. Protocol work must
+// be bounded; this hook does not install a networking stack by itself.
+// Return ContinueAfter(Some(0)) when service has just made a task runnable.
+export fn host_reactor_with(service:fn(u32)->Service,quantum:u32)->Result<ClockedReactor,ReactorError> {
+    let reactor=clocked_reactor(read_clock,idle,service,quantum)?;
+    // Detect an older host lacking idle support before accepting any work.
+    idle(0)?;
+    Ok(reactor)
+}

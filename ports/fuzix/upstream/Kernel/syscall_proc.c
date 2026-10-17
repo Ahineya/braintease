@@ -1,4 +1,5 @@
 #include <kernel.h>
+#include <timer.h>
 #include <kdata.h>
 #include <printf.h>
 
@@ -154,9 +155,14 @@ arg_t _time(void)
 			rdtime(&t);
 			break;
 		case 1:
+		{
+                        irqflags_t irq = di();
+                        sync_clock();
 			t.low = ticks.full;
 			t.high = 0;
+                        irqrestore(irq);
 			break;
+		}
 		default:
 			udata.u_error = EINVAL;
 			return -1;
@@ -209,6 +215,7 @@ arg_t _times(void)
 
 	irq = di();
 
+	sync_clock();
 	r = uput(&udata.u_ptab->p_utime, buf, 4 * sizeof(clock_t)) |
 		uput(&ticks, buf + 4 * sizeof(clock_t), sizeof(clock_t));
 

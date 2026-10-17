@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "description": "malloc of a near-bank-sized block",
-  "expected": "Y\nY\n"
+  "expected": "Y\nY\n",
+  "use_runtime": true
 }

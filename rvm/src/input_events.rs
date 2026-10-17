@@ -20,6 +20,7 @@ pub const EVENT_WHEEL: u16 = 4;
 pub const EVENT_ENTER: u16 = 5;
 pub const EVENT_FOCUS: u16 = 6;
 pub const EVENT_CAPTURE: u16 = 7;
+pub const EVENT_CLOSE: u16 = 8;
 
 /// Absolute coordinates count guest framebuffer pixels; relative deltas count raw
 /// device units (positive X right, positive Y down). Wheel values are signed 16.16 lines:
@@ -59,6 +60,8 @@ pub enum InputTransition {
     Capture {
         captured: bool,
     },
+    /// Close the guest window, leaving the machine running.
+    Close,
 }
 impl InputTransition {
     pub fn valid(self) -> bool {
@@ -109,7 +112,7 @@ impl InputEvent {
         words
     }
     pub fn valid(&self) -> bool {
-        matches!(self.kind, EVENT_KEY..=EVENT_CAPTURE)
+        matches!(self.kind, EVENT_KEY..=EVENT_CLOSE)
             && self.flags & !31 == 0
             && (self.kind != EVENT_KEY || self.code < 256)
             && (self.kind != EVENT_BUTTON || self.code < 16)
@@ -174,6 +177,9 @@ impl InputState {
     pub fn apply(&mut self, transition: InputTransition, tick: u64) {
         if !transition.valid() {
             return;
+        }
+        if matches!(transition, InputTransition::Close) {
+            self.apply(InputTransition::Focus { focused: false }, tick);
         }
         let mut event = InputEvent {
             kind: 0,
@@ -269,6 +275,9 @@ impl InputState {
                 self.focused = focused;
                 event.kind = EVENT_FOCUS;
             }
+            InputTransition::Close => {
+                event.kind = EVENT_CLOSE;
+            }
             InputTransition::Capture { captured } => {
                 if self.captured == captured {
                     return;
@@ -285,6 +294,10 @@ impl InputState {
         event.flags |= self.flags();
         if self.events.len() == QUEUE_CAPACITY {
             self.mark_overflow();
+            if event.kind == EVENT_CLOSE {
+                self.events.pop_front();
+                self.events.push_back(event);
+            }
         } else {
             self.events.push_back(event);
         }
@@ -330,7 +343,9 @@ impl InputState {
         cells[11] = (self.y as u32 >> 16) as u16;
         cells[12..].copy_from_slice(&self.held);
         if self.overflow {
-            self.events.clear();
+            // A state snapshot recovers held inputs, but cannot recover a close
+            // request. Retain it until the guest consumes it.
+            self.events.retain(|e| e.kind == EVENT_CLOSE);
         }
         self.overflow = false;
         cells
@@ -366,6 +381,23 @@ impl InputState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn close_survives_overflow_and_state_recovery() {
+        let mut s = InputState::default();
+        s.apply(InputTransition::Key { key: 4, down: true }, 0);
+        for x in 1..300 {
+            s.apply(InputTransition::Motion { x, y: 0 }, 0);
+        }
+        s.apply(InputTransition::Close, 0);
+        assert!(!s.held(4));
+        assert!(!s.focused);
+        assert!(s.overflow);
+        s.snapshot_cells();
+        assert_eq!(s.events.len(), 1);
+        assert_eq!(s.events[0].kind, EVENT_CLOSE);
+        assert!(s.validate(0));
+    }
+
     #[test]
     fn mixed_events_preserve_order_signed_values_and_click_coordinates() {
         let mut s = InputState::default();
@@ -407,11 +439,12 @@ mod tests {
             (signed(8), signed(10), signed(16), signed(18)),
             (123454, -345675, -32768, 98304)
         );
-        assert!(s
-            .events
-            .iter()
-            .enumerate()
-            .all(|(i, e)| e.tick == 7 && e.sequence == i as u32 + 1));
+        assert!(
+            s.events
+                .iter()
+                .enumerate()
+                .all(|(i, e)| e.tick == 7 && e.sequence == i as u32 + 1)
+        );
         assert!(s.validate(7));
         assert!(!s.validate(6));
     }

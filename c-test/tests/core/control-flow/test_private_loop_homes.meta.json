@@ -1,5 +1,5 @@
 {
-  "description": "Private loop homes preserve zero-trip, nested and early-exit values, escaped memory, and reused equality predicates",
   "expected": "YYYYYY\n",
+  "description": "Private loop homes preserve zero-trip, nested and early-exit values, escaped memory, and reused equality predicates",
   "use_runtime": true
 }

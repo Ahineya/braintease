@@ -286,7 +286,7 @@ int16_t doclose(uint_fast8_t uindex)
 			ino->c_readers--;
 	}
 	udata.u_files[uindex] = NO_FILE;
-	udata.u_cloexec &= ~(1 << uindex);
+	udata.u_cloexec &= ~(1UL << uindex);
 	oft_deref(oftindex);
 
 	/* if we closed a file in write mode, flush the device's cache after inode has been deferenced */

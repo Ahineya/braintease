@@ -1,5 +1,5 @@
 {
+  "use_runtime": true,
   "expected": "Y\n",
-  "description": "Forward struct tag then complete definition",
-  "use_runtime": true
+  "description": "Forward struct tag then complete definition"
 }

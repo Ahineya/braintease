@@ -41,3 +41,5 @@ c-test/vendor/result.txt
 /gitlog.txt
 # Runtime build configuration stamp
 /runtime/.bank-size
+# Default Fuse-X shared Mac folder
+/fuse-x-shared/

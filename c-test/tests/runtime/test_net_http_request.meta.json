@@ -1,5 +1,5 @@
 {
   "use_runtime": true,
-  "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n",
-  "description": "HTTP request framing, all splits, Host/length/version validation, syntax, limits and EOF"
+  "description": "HTTP request framing, all splits, Host/length/version validation, syntax, limits and EOF",
+  "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n"
 }

@@ -1,5 +1,5 @@
 {
-  "description": "Bounded incremental HTTP GET response framing, split boundaries and malformed input",
   "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n",
+  "description": "Bounded incremental HTTP GET response framing, split boundaries and malformed input",
   "use_runtime": true
 }

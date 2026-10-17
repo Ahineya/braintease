@@ -8,8 +8,9 @@ Displays elapsed guest time, occupied and total process slots, and the kernel's
 one, five and fifteen minute load averages. Process slots include this utility
 and unreaped zombies. There is no login-session accounting.
 .PP
-Time advances with the instruction-driven guest timer, not host wall time.
-Pausing the VM pauses guest time. The underlying 32-bit decisecond counter
+Time follows the host monotonic clock. Host pauses count toward uptime;
+checkpoint downtime does not. Calendar corrections cannot change uptime.
+The underlying 32-bit decisecond counter
 wraps after approximately 13.6 years of guest uptime.
 .SH OPTIONS
 --help displays usage.

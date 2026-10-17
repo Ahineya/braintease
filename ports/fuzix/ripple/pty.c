@@ -3,11 +3,19 @@
 #include <kdata.h>
 #include <tty.h>
 #include "pty.h"
+#include "graphics.h"
+#include <gx.h>
 #define QS 512
 static uint8_t input[RIPPLE_PTY_COUNT][QS], output[RIPPLE_PTY_COUNT][QS];
 static struct s_queue outq[RIPPLE_PTY_COUNT];
 static uint8_t masters[RIPPLE_PTY_COUNT], opened[RIPPLE_PTY_COUNT];
 static struct termios defaults;
+unsigned ripple_pty_status(unsigned m) {
+    unsigned status=0;
+    if(outq[m].q_count || (opened[m]&&!ttydata[m+2].users))status|=GX_READY_READ;
+    if(ttyinq[m+2].q_count<ttyinq[m+2].q_size || (opened[m]&&!ttydata[m+2].users))status|=GX_READY_WRITE;
+    return status;
+}
 static void queue_init(struct s_queue *q, uint8_t *buf) {
     q->q_base = q->q_head = q->q_tail = buf;
     q->q_size = QS; q->q_count = 0; q->q_wakeup = QS / 2;
@@ -29,6 +37,7 @@ void ripple_pty_putc(unsigned m, unsigned c) {
     if (masters[m - 2]) {
         insq(&outq[m - 2], c & 255);
         wakeup(&outq[m - 2]);
+        ripple_gfx_wakeup();
     }
 }
 int ripple_slave_open(uint_fast8_t m, uint16_t f) {
@@ -45,6 +54,7 @@ int ripple_slave_close(uint_fast8_t m) {
     if (m > 1) {
         wakeup(&outq[m - 2]);
         wakeup(&ttyinq[m].q_count);
+        ripple_gfx_wakeup();
     }
     return r;
 }

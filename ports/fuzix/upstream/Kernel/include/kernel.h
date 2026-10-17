@@ -610,7 +610,11 @@ typedef struct u_data {
 
     /* This section is not written out except as padding */
     uint8_t     u_files[UFTSIZE];       /* Process file table: indices into open file table, or NO_FILE. */
+#if UFTSIZE > 16
+    uint32_t    u_cloexec;       /* Close on exec flags, including high FDs. */
+#else
     uint16_t	u_cloexec;	/* Close on exec flags */
+#endif
     inoptr      u_cwd;          /* Index into inode table of cwd. */
     inoptr	u_root;		/* Index into inode table of / */
     inoptr	u_rename;	/* Used in n_open for rename() checking */

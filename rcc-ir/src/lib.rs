@@ -4,6 +4,7 @@
 //! `BankTag` lives here because fat pointers carry it through both sides.
 
 pub mod ir;
+pub mod native_image;
 pub mod target;
 pub mod float;
 mod bank;

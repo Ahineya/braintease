@@ -1,7 +1,6 @@
 //! Optional CPU address translation. Tables are physical RAM, never MMIO.
 //! Supervisor accesses are physical except for an explicitly selected user
 //! window. User accesses always translate and can never target physical bank 0.
-use std::collections::HashMap;
 pub const PAGE_CELLS: usize = 512;
 pub const PRESENT: u16 = 1;
 pub const READ: u16 = 2;
@@ -55,6 +54,25 @@ struct Translation {
     physical: usize,
     flags: u16,
 }
+pub(crate) const TLB_SIZE: usize = 128;
+/// Stable layout shared with generated checked user-memory accesses. A miss
+/// goes through translate(), which validates PTEs and fills one cache entry.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct TlbEntry {
+    pub tag: u32,
+    pub generation: u32,
+    pub physical: usize,
+    pub flags: u32,
+    pub span: u32,
+}
+#[derive(Debug)]
+pub(crate) struct Tlb(pub [TlbEntry; TLB_SIZE]);
+impl Default for Tlb {
+    fn default() -> Self {
+        Self([TlbEntry::default(); TLB_SIZE])
+    }
+}
 #[derive(Debug, Default)]
 pub struct Mmu {
     pub enabled: bool,
@@ -67,11 +85,15 @@ pub struct Mmu {
     pub vector: (u16, u16),
     pub cause: u16,
     pub address: (u16, u16),
-    cache: HashMap<(bool, u16, u16), Translation>,
+    pub(crate) tlb: Tlb,
+    pub(crate) tlb_generation: u32,
 }
 impl Mmu {
     pub fn flush(&mut self) {
-        self.cache.clear();
+        self.tlb_generation = self.tlb_generation.wrapping_add(1);
+        if self.tlb_generation == 0 {
+            self.tlb.0.fill(TlbEntry::default());
+        }
     }
     pub fn mapped(&self, bank: u16, access: Access) -> bool {
         self.enabled
@@ -150,6 +172,18 @@ impl Mmu {
             flags,
         })
     }
+    fn cache_key(bank: u16, offset: u16, code: bool) -> (usize, u32) {
+        let page = usize::from(offset) / PAGE_CELLS;
+        (
+            (usize::from(bank) ^ page ^ if code { 64 } else { 0 }) & (TLB_SIZE - 1),
+            ((u32::from(bank) << 8) | ((page as u32) << 1) | u32::from(code)) + 1,
+        )
+    }
+    fn cached(&self, bank: u16, offset: u16, code: bool) -> Option<TlbEntry> {
+        let (index, tag) = Self::cache_key(bank, offset, code);
+        let entry = self.tlb.0[index];
+        (entry.tag == tag && entry.generation == self.tlb_generation).then_some(entry)
+    }
     pub fn peek(
         &self,
         memory: &[u16],
@@ -167,15 +201,12 @@ impl Mmu {
         if size == 0 || offset >= size {
             return None;
         }
-        let key = (
-            access.code(),
-            bank,
-            (usize::from(offset) / PAGE_CELLS) as u16,
-        );
         let t = self
-            .cache
-            .get(&key)
-            .copied()
+            .cached(bank, offset, access.code())
+            .map(|e| Translation {
+                physical: e.physical,
+                flags: e.flags as u16,
+            })
             .or_else(|| self.walk(memory, size, bank, offset, access.code()))?;
         if t.flags & access.flag() == 0 || (self.user && t.flags & USER == 0) {
             return None;
@@ -205,45 +236,55 @@ impl Mmu {
         if size == 0 || offset >= size {
             return Err(fail);
         }
-        let key = (
-            access.code(),
-            bank,
-            (usize::from(offset) / PAGE_CELLS) as u16,
-        );
-        let translation = if let Some(t) = self.cache.get(&key) {
-            *t
+        let t = if let Some(e) = self.cached(bank, offset, access.code()) {
+            Translation {
+                physical: e.physical,
+                flags: e.flags as u16,
+            }
         } else {
             let t = self
                 .walk(memory, size, bank, offset, access.code())
                 .ok_or(fail)?;
-            self.cache.insert(key, t);
+            let (index, tag) = Self::cache_key(bank, offset, access.code());
+            self.tlb.0[index] = TlbEntry {
+                tag,
+                generation: self.tlb_generation,
+                physical: t.physical,
+                flags: u32::from(t.flags),
+                span: PAGE_CELLS.min(usize::from(size) - t.physical % usize::from(size)) as u32,
+            };
             t
         };
-        if translation.flags & access.flag() == 0 || (self.user && translation.flags & USER == 0) {
+        if t.flags & access.flag() == 0 || (self.user && t.flags & USER == 0) {
             return Err(fail);
         }
-        let address = translation.physical + usize::from(offset) % PAGE_CELLS;
-        if address >= limit
-            || translation.physical % usize::from(size) + usize::from(offset) % PAGE_CELLS
-                >= usize::from(size)
-        {
+        let within = usize::from(offset) % PAGE_CELLS;
+        let address = t.physical + within;
+        if address >= limit || t.physical % usize::from(size) + within >= usize::from(size) {
             return Err(fail);
         }
         Ok(address)
     }
-    /// Upper virtual bound for bounded JIT tables. No untrusted dense allocation:
-    /// regions above this implementation's 256 virtual code banks interpret.
-    pub fn code_limit(&self, memory: &[u16], size: u16) -> usize {
-        let mut banks = 0;
-        if let Some(dir) = Self::table(memory, size, self.code_root, 0, 2) {
-            for b in 0..256 {
-                if let Some(p) = Self::table(memory, size, (dir[0], dir[1]), b * 4, 4) {
-                    if p[2] & (PRESENT | EXECUTE | USER) == PRESENT | EXECUTE | USER {
-                        banks = b + 1;
-                    }
+    /// Upper virtual bound for JIT tables, bounded by the configured code budget.
+    /// Sparse mappings above that bound continue through reference execution.
+    pub fn code_limit(&self, memory: &[u16], size: u16, capacity: usize) -> usize {
+        if size == 0 {
+            return 0;
+        }
+        let banks = capacity.div_ceil(usize::from(size)).min(65536);
+        for high in (0..banks.div_ceil(256)).rev() {
+            let Some(dir) = Self::table(memory, size, self.code_root, high * 2, 2) else {
+                continue;
+            };
+            let Some(leaf) = Self::table(memory, size, (dir[0], dir[1]), 0, 1024) else {
+                continue;
+            };
+            for low in (0..256.min(banks - high * 256)).rev() {
+                if leaf[low * 4 + 2] & (PRESENT | EXECUTE | USER) == PRESENT | EXECUTE | USER {
+                    return ((high * 256 + low + 1) * usize::from(size)).min(capacity);
                 }
             }
         }
-        banks * usize::from(size)
+        0
     }
 }

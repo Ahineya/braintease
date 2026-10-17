@@ -33,6 +33,11 @@ pub(super) fn consumed_temporaries(proc: &Proc) -> HashSet<usize> {
             Term::If { cond, .. } => {
                 excluded.insert(*cond);
             }
+            Term::AsyncPoll {
+                future, context, ..
+            } => {
+                excluded.extend([*future, *context]);
+            }
             Term::Tag { slot, .. } | Term::Lit { slot, .. } => {
                 excluded.insert(*slot);
             }
@@ -49,6 +54,15 @@ pub(super) fn consumed_temporaries(proc: &Proc) -> HashSet<usize> {
 
 pub(super) fn operands(insn: &Insn) -> Vec<usize> {
     match insn {
+        Insn::Expect { src, message, .. } => {
+            let mut result = vec![*src];
+            if let ExpectMessage::Slot(slot) = message {
+                result.push(*slot);
+            }
+            result
+        }
+        Insn::AsyncNew { args, .. } => args.clone(),
+        Insn::AsyncCancel { future } => vec![*future],
         Insn::Replace { place, value, .. } => vec![*place, *value],
         Insn::IntoInner { src, .. } | Insn::EraseOwner { src, .. } => vec![*src],
         Insn::Move { src, .. } => vec![*src],
@@ -133,6 +147,9 @@ pub(super) fn operands(insn: &Insn) -> Vec<usize> {
 /// Slots assigned by an instruction, including mutations and scratch results.
 pub(super) fn destinations(insn: &Insn) -> Vec<usize> {
     match insn {
+        Insn::Expect { dest, .. } => vec![*dest],
+        Insn::AsyncNew { dest, .. } => vec![*dest],
+        Insn::AsyncCancel { .. } => vec![],
         Insn::Replace { dest, value, .. } => vec![*dest, *value],
         Insn::IntoInner { dest, src } | Insn::EraseOwner { dest, src, .. } => vec![*dest, *src],
         Insn::Move { dest, src } => vec![*dest, *src],

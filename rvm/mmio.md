@@ -287,6 +287,8 @@ Multiword integers use the low cell first.
 | INPUT_READ | 5 | 10 | version, length, capacity, event buffer bank, offset, count (out), overflow (out), sequence low/high (out), reserved=0 |
 | INPUT_STATE | 6 | 28 | version, length, overflow, sequence low/high, requested pointer mode, buttons, flags, X low/high, Y low/high, 16 held-key bitmap cells (all after length are outputs) |
 | INPUT_CONFIGURE | 7 | 4 | version, length, pointer mode (0 absolute, 1 relative), reserved=0 |
+| HOST_MONOTONIC | 8 | 10 | version, length, seconds (four output cells), nanoseconds (two output cells), resolution_ns (two output cells) |
+| HOST_REALTIME | 9 | 10 | same layout as HOST_MONOTONIC |
 
 #### Worked example: a capabilities request in memory
 
@@ -398,7 +400,8 @@ Ethernet networking (`VM_CAP_NETWORK`, 0x0020), pointer input (`VM_CAP_POINTER`,
 0x0040), PCM audio (`VM_CAP_PCM`, 0x0080), and OPL3 music (`VM_CAP_MUSIC`, 0x0100).
 RBF includes bits 0–6 and leaves audio unsupported. Additional capability bits
 report bulk RAM transfers (0x0400), attached storage (0x0200), and code uploads
-(0x0800); availability depends on the backend and CPU image.
+(0x0800); availability depends on the backend and CPU image. Host monotonic and
+calendar clocks use `VM_CAP_HOST_CLOCK` (0x1000) on RVM, RBF and native C.
 See [audio](../docs/arch/audio.md). Key count is 256. Ignore unknown capability
 bits and check status before consuming output fields.
 
@@ -412,6 +415,10 @@ per guest cell and do not advance time, consume keyboard events or publish frame
 
 Commands 0x0300–0x0303 provide bounded disk read/write, RAM copy/fill, and Harvard
 instruction uploads through this mailbox. See the [wire contract and C examples](../docs/arch/bulk-io.md).
+Command 0x0304 (`MEMORY_INFO`) uses an eight-cell descriptor to report RAM-cell
+and instruction capacities, bank size, and reserved zero. Its capacities reflect
+RVM's configurable `--code-memory` budget or RBF's exported code reservation;
+the query allocates nothing and does not advance time.
 Disk offsets count octets; RAM lengths count cells; code lengths count instructions.
 Bulk and legacy storage share cached dirty data and durability barriers. No guest
 ISA instructions or MMIO addresses are added.
@@ -446,6 +453,30 @@ CPU frequency throttling is a separate host setting and does not define the
 simulation clock. A Doom port should request ticks in its game loop and implement
 its time callback using `GET_TIME`; rendering must not become the clock source.
 
+#### Host clocks
+
+`HOST_MONOTONIC` reads elapsed host time from the first monotonic read after
+device reset. It includes host pauses and is independent of CPU instruction
+counts, runner pacing and the logical game clock. `HOST_REALTIME` reads Unix
+UTC time from the host calendar; calendar corrections may move it backward.
+The latter reports I/O error if the host date precedes the Unix epoch.
+
+Both commands are synchronous and return unsigned 64-bit whole seconds,
+unsigned 32-bit nanoseconds, and unsigned 32-bit resolution in nanoseconds.
+Values are quantized to 1 ms and resolution is 1,000,000 ns. All eight cells
+after the header are outputs. Invalid headers or bounds leave RAM unchanged.
+`vm_host_monotonic()` and `vm_host_realtime()` return `VmHostTime`, whose
+`seconds_low`/`seconds_high` fields avoid requiring a 64-bit RCC integer type.
+As with other mailbox operations, callers must serialize submissions against
+interrupt handlers. No simulation tick, input event or IRQ is generated.
+
+Device checkpoints save elapsed monotonic milliseconds without serializing a
+host `Instant`. Restore anchors the saved value to the new host instant, so
+time spent saved is excluded. Old checkpoints without clock state start at
+zero. Realtime always uses the current host calendar after restore. Host-clock
+reads are not deterministic replay inputs: guests requiring deterministic
+execution should continue to use `GET_TIME` and `NEXT_TICK` exclusively.
+
 #### Keyboard and pointer events and state
 
 `INPUT_READ` drains up to `capacity` ordered events (1–64). Its output buffer
@@ -459,7 +490,7 @@ Each event occupies 20 cells; 32-bit fields use low/high cells in that order:
 
 | Cells | Field |
 |-------|-------|
-| 0 | type: key=1, motion=2, button=3, wheel=4, enter/leave=5, focus=6, capture=7 |
+| 0 | type: key=1, motion=2, button=3, wheel=4, enter/leave=5, focus=6, capture=7, window close request=8 |
 | 1 | flags: DOWN=1, RELATIVE=2, INSIDE=4, FOCUSED=8, CAPTURED=16 |
 | 2 | code: USB HID usage for keys, button ID for button transitions, otherwise zero |
 | 3 | held button bitmap after this event |
@@ -493,13 +524,17 @@ mode is requested again on refocus. Headless hosts do not claim live capture.
 With `VM_CAP_INPUT_POLL`, READ and STATE collect live events at the current logical
 tick, including zero, without advancing time or requiring a presentation. Replay
 and controller events are delivered at tick grants, never early by polling.
-Keyboard, button, motion, wheel, enter, focus and capture share one ordered queue.
+Keyboard, button, motion, wheel, enter, focus, capture and close share one ordered queue.
+With RVM `--visual --guest-window-close`, a host close hides the window and
+sends a close request without stopping the VM. Focus/input releases precede it;
+a new display lease may reopen the window. This policy is opt-in.
 
 `INPUT_STATE` reports the current sequence boundary, requested pointer mode,
 button bitmap, flags, position, and all 256 keys. Key `k` is bit `(k & 15)` of
 cell `12 + (k >> 4)`. A normal snapshot leaves queued events intact. After queue
 overflow, the snapshot clears sticky overflow and discards stale queued events;
-replace application state with this authoritative snapshot. State continues to
+close requests are retained because a held-state snapshot cannot recover them.
+Replace application state with this authoritative snapshot. State continues to
 update while events are lost. Host overflow establishes a fresh snapshot boundary;
 sequence gaps do not measure the exact number of lost host transitions.
 

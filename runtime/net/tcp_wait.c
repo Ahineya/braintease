@@ -34,6 +34,14 @@ int tcp_wait_save(NetTcp *tcp) {
     }
     return NET_BUSY;
 }
+int net_tcp_retire(NetTcp *tcp) {
+    int status;
+    if (!tcp || !tcp->net) return NET_BAD_ARGUMENT;
+    if (!tcp->active) return NET_OK;
+    if (tcp->state != NET_TCP_TIME_WAIT) return NET_BUSY;
+    status = tcp_wait_save(tcp);
+    return tcp->active ? status : NET_OK;
+}
 int tcp_wait_input(NetContext *net, const TcpSegment *s) {
     unsigned short i;
     unsigned char *p;

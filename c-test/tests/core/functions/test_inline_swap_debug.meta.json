@@ -1,4 +1,4 @@
 {
-  "expected": "12 21\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "12 21\n"
 }

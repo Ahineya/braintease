@@ -39,11 +39,11 @@
     },
     "keyword": {
       "name": "keyword.control.rfl",
-      "match": "\\b(?:fn|let|mut|if|else|return|as|while|break|continue|match|for|in|type|impl|const|struct|export|import|extern|unsafe|true|false)\\b"
+      "match": "\\b(?:fn|async|await|let|mut|if|else|return|as|while|break|continue|match|for|in|type|trait|impl|const|struct|export|import|extern|unsafe|true|false)\\b"
     },
     "type": {
       "name": "entity.name.type.rfl",
-      "match": "\\b(?:i8|u8|i16|u16|i32|u32|i64|u64|f32|f64|bool|char|String|usize|unit|Vec|Slice|Option|Result|c_int|c_char|c_short|c_uint|c_long|c_size_t)\\b"
+      "match": "\\b(?:i8|u8|i16|u16|i32|u32|i64|u64|f32|f64|bool|char|String|usize|unit|Vec|Slice|Owned|Async|Option|Result|c_int|c_char|c_short|c_uint|c_long|c_size_t)\\b"
     },
     "operator": {
       "name": "keyword.operator.rfl",

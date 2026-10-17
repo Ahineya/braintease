@@ -309,7 +309,7 @@ fn mmu_operations_are_rejected_instead_of_exporting_an_unprotected_cpu() {
     for source in ["start:\nSYSCALL\nHALT\n", "start:\nENTERU R0, T0, T1\nHALT\n", "start:\nCSRW T0, 13\nHALT\n"] {
         let image=assemble(source);
         let error=MacroFormatter::new().with_irq(true).format_linked_program_host(&image,8).unwrap_err();
-        assert!(error.contains("MMU=0"),"{error}");
+        assert!(error.contains("does not support the MMU"),"{error}");
     }
 }
 
@@ -373,7 +373,7 @@ fn csr_errors_are_explicit_and_do_not_corrupt_the_cpu() {
     let im = assemble("start:\nCSRR T0, 31\nHALT\n");
     assert_eq!(field(&run(&im, false, true), 57), 2);
     assert!(MacroFormatter::new().with_irq(true)
-        .format_linked_program_host(&im, 8).unwrap_err().contains("MMU=0"));
+        .format_linked_program_host(&im, 8).unwrap_err().contains("does not support the MMU"));
 }
 #[test]
 fn interrupt_stack_and_editable_saved_continuation_restore_atomically() {

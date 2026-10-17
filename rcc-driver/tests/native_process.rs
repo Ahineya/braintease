@@ -6,6 +6,95 @@ use std::{
 
 struct Fixture(PathBuf);
 static NEXT_FIXTURE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[test]
+fn hosted_kernel_selects_contexts_and_exec_resets_only_private_globals() {
+    let fixture = Fixture::new();
+    let sources = [
+        (
+            "kernel",
+            r#"
+            #include <native_hosted.h>
+            struct State { int padding; int counter; };
+            struct State states[2];
+            int shared;
+            extern int guest(void);
+            void pause_kernel(void) { rcc_hosted_idle(0); }
+            int main(void) {
+                for (int i = 0; i < 3; i++) {
+                    states[1].counter = i;
+                    pause_kernel();
+                    if (states[1].counter != i) return 94;
+                }
+                return guest();
+            }
+        "#,
+        ),
+        (
+            "application",
+            r#"
+        #include <native_hosted.h>
+        #include <stdlib.h>
+        extern int shared;
+        static int global = 7;
+        void replacement(unsigned long argument) {
+            if (argument != 23 || global != 7 || shared != 2) exit(90);
+            rcc_hosted_drop_switch(0);
+            exit(91);
+        }
+        int guest(void) {
+            int local = 11;
+            int child = rcc_hosted_clone(1);
+            if (child == 0) {
+                global = 99; local = 22; shared = 1;
+                rcc_hosted_switch(0);
+                if (global != 99 || local != 22 || shared != 2) exit(92);
+                rcc_hosted_exec(replacement, 23);
+                return 93;
+            }
+            if (child != 1) return 1;
+            shared = 10;
+            rcc_hosted_switch(1);
+            if (global != 7 || local != 11 || shared != 1) return 2;
+            shared = 2;
+            rcc_hosted_switch(1);
+            if (global != 7 || shared != 2) return 3;
+            return 42;
+        }
+        "#,
+        ),
+    ];
+    for (name, source) in sources {
+        let input = fixture.0.join(format!("{name}.c"));
+        std::fs::write(&input, source).unwrap();
+        let result = Command::new(env!("CARGO_BIN_EXE_rcc"))
+            .args(["compile", "--target", "native", "--emit-ir", "-I"])
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../runtime/include"))
+            .arg(&input)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        std::fs::write(fixture.0.join(format!("{name}.ir")), result.stdout).unwrap();
+    }
+    let linked = Command::new(env!("CARGO_BIN_EXE_rcc"))
+        .args(["link-native", "--kernel"])
+        .arg(fixture.0.join("kernel.ir"))
+        .arg(fixture.0.join("application.ir"))
+        .arg("-o")
+        .arg(fixture.0.join("process"))
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    fixture.execute(&[], 42);
+}
 impl Fixture {
     fn new() -> Self {
         let serial = std::time::SystemTime::now()
@@ -407,5 +496,91 @@ fn runtime_function_pointers_are_rejected_in_resumable_programs() {
             .contains("cannot take the address of runtime binding puts"),
         "{}",
         String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn nonlocal_jumps_restore_native_continuations_across_fork() {
+    Fixture::new().run(
+        r#"
+        #include <native_process.h>
+        typedef unsigned jmp_buf[10];
+        extern int setjmp(jmp_buf);
+        extern void longjmp(jmp_buf, int);
+        jmp_buf target;
+        volatile int changed;
+        void descend(int n) { if (n) descend(n-1); longjmp(target, -9); }
+        int main(void) {
+            int value = setjmp(target);
+            if (!value) { changed=23; descend(8); }
+            if (value!=-9 || changed!=23) return 1;
+            value = setjmp(target);
+            if (!value) longjmp(target, 0);
+            if (value!=1) return 2;
+            value = setjmp(target);
+            if (value) return value==17 ? 17 : 3;
+            int pid=rcc_process_fork();
+            if (!pid) longjmp(target,17);
+            int status;
+            if(rcc_process_wait(pid,&status)!=pid || status!=17) return 4;
+            return 42;
+        }
+    "#,
+        42,
+    );
+}
+
+#[test]
+fn nonlocal_jump_to_returned_activation_is_rejected() {
+    let fixture = Fixture::new();
+    let compiled = fixture.compile(
+        r#"
+        #include <native_process.h>
+        typedef unsigned jmp_buf[10];
+        extern int setjmp(jmp_buf);
+        extern void longjmp(jmp_buf, int);
+        jmp_buf target;
+        void expired(void) { setjmp(target); }
+        int main(void) {
+            rcc_process_getpid();
+            expired();
+            longjmp(target, 3);
+            return 42;
+        }
+    "#,
+    );
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let result = fixture.execute(&[], 1);
+    assert!(String::from_utf8_lossy(&result.stderr).contains("expired native jump buffer"));
+}
+
+#[test]
+fn computation_loops_schedule_children_without_explicit_yields() {
+    Fixture::new().run(
+        r#"
+        #include <native_process.h>
+        int main(void) {
+            volatile unsigned *flag=rcc_process_kernel_alloc(1);
+            if(!flag)return 1;
+            *flag=0;
+            int child=rcc_process_fork();
+            if(child<0)return 2;
+            if(!child) { *flag=1; rcc_process_exit(17); }
+            unsigned long a=11,b=7;
+            while(!*flag) {
+                a=a*1664525UL+1013904223UL;
+                b=b*1664525UL+1013904223UL;
+            }
+            int status;
+            if(rcc_process_wait(child,&status)!=child || status!=17)return 3;
+            rcc_process_kernel_free((void *)flag);
+            return a==b ? 4 : 42;
+        }
+        "#,
+        42,
     );
 }

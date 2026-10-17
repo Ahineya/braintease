@@ -1,10 +1,12 @@
 # High-level RFL networking and general-purpose async
 
-**Status: polling, child-state borrowing, resource ownership, owned composition and task scopes implemented;
+**Status: polling, child-state borrowing, resource ownership, owned composition, task scopes, real-time reactors and async functions implemented;
 general-purpose async remains in progress.**
 Static traits and associated types are implemented. `std/task`, `std/future`, and
-`std/executor` provide a first executable polling layer. There is no async syntax,
-network reactor or RFL socket wrapper yet. Explicit `Owned<T>` resources now
+`std/executor` provide the polling layer used by lazy `async fn` functions and
+postfix `.await`. The first `std/net` reactor and `std/http` client/server wrappers are implemented;
+see the [RFL library guide](rfl-library.md) for the shipped API and limits. Direct
+RFL UDP/TCP streams remain work. Explicit `Owned<T>` resources now
 run synchronous cleanup at scope exit; `own_future`, `ready_owned`, `join`,
 `race` and `timeout` adopt that ownership mechanism. The C DHCP/DNS/TCP/HTTP milestones are already implemented; see the
 [networking roadmap](roadmap.md).
@@ -13,8 +15,9 @@ run synchronous cleanup at scope exit; `own_future`, `ready_owned`, `join`,
 futures poll child state in place. See the [roadmap checkpoint](roadmap.md#saved-checkpoint--16-october-2026)
 for the original polling milestone. Move-only `Owned<T>` resources and deterministic scope cleanup now provide the
 next foundation. Owned composition and bounded task lifecycles are implemented.
-Async syntax remains deferred until suspension and cancellation semantics are
-implemented.
+Compiler-owned frames now preserve state across await and cancel unfinished
+children on abandonment. Safe references cannot cross suspension. See the
+[language contract and runnable example](../../rfl/async.md).
 
 The destination is pleasant, general-purpose async RFL, including networking,
 timers and other event sources. Explicit cancellation is an implementation-stage
@@ -120,13 +123,97 @@ the reactor. Every normal error path retires all slots and cancels unfinished
 roots exactly once through the future contract. A zero budget cancels before
 polling. Fatal process faults are not exception unwinding.
 
-The supplied tests/examples use deterministic reactors. No production clock,
-network service, sleeping or event-aware wait is silently installed. A future
+The original tests/examples use deterministic reactors. The explicit host
+reactor below adds real clocks and bounded idle waiting; no network service or
+event subscription is silently installed. A future
 that runs forever inside poll cannot be preempted by a turn budget.
 The owned task scopes below add heterogeneous spawn storage and typed join
 handles. An event-aware runtime idle hook remains separate implementation work.
 
+## Real-time reactors
+
+`std/time` exposes `monotonic()`, `realtime()` and `monotonic_millis()` as
+fallible operations. `HostTime` keeps all 64 seconds bits in `seconds_low` and
+`seconds_high`, plus `nanoseconds` and `resolution_ns`. Its `wrapping_millis()`
+intentionally converts modulo 2^32 for the existing timer registry. Realtime
+may jump and is never used to schedule futures. Device errors and malformed
+samples are explicit `TimeError` values. No read advances simulation time.
+
+`std/host::host_reactor()` constructs a timer reactor using the shared guest
+DEVICE_* helpers on both native and Ripple. It checks host idle support before
+accepting work. An older host produces a construction error; no silent busy-loop
+fallback or logical-tick substitution is installed.
+
+```rust
+import { host_reactor } from "std/host";
+import { block_on } from "std/executor";
+import { sleep } from "std/future";
+
+fn main()->i16 {
+    let mut reactor=match host_reactor() {Ok(r)=>r,Err(_)=>{return 1;}};
+    let mut timer=match sleep(25) {Ok(f)=>f,Err(_)=>{return 2;}};
+    match block_on(&mut timer,&mut reactor) {Ok(_)=>0,Err(_)=>1}
+}
+```
+
+`host_reactor_with(service, quantum)` accepts a `fn(u32)->Service` callback and
+an idle quantum of 1..10 milliseconds. `Service` is exported by `std/reactor`:
+
+- `ContinueAfter(Some(n))` requests service again within n milliseconds of the
+  timestamp supplied to this callback. Zero prevents idle waiting. Durations
+  above 2^31-1 are errors.
+- `ContinueAfter(None)` supplies no maintenance deadline; the bounded quantum
+  still applies, including when there is no task timer.
+- `StopReactor` requests orderly cancellation through the existing executor.
+
+Service runs before and after each idle opportunity, including runnable turns.
+It may perform bounded protocol work and wake tasks. It must not block or retain
+borrowed context. Return ContinueAfter(Some(0)) after making a task runnable so
+the reactor does not idle on a hint computed before that wake. This is an integration boundary, not an installed C network
+registry, socket API or public spawn capability.
+
+The reactor takes the minimum of task deadlines, maintenance deadlines and its
+idle quantum. Hints refer to the executor's previous clock sample: time spent
+running guest instructions and service callbacks counts towards those deadlines.
+Runnable/expired work never requests a positive idle. After waiting and servicing
+events, the reactor rereads actual monotonic time instead of adding the requested
+duration. Consecutive readings obey the registry's half-range/wrap rules.
+
+`std/reactor::clocked_reactor(read_clock, idle, service, quantum)` exposes the
+same policy with injectable fallible callbacks. It returns `ClockedReactor`,
+which implements Reactor, provides idempotent `stop()` and retains an optional
+`ReactorError` through `error()`. Clock/idle errors, backwards or ambiguous time,
+and invalid maintenance delays stop further callbacks and make `turn` return
+false. Runners report ReactorStopped and cancel unfinished work; inspect the
+reactor's error for the detailed cause. `now()` returns the last validated
+sample. Copies copy the reactor state; callback captures keep their ordinary
+RFL sharing semantics.
+
+The [host idle command](../arch/host-idle.md) requests at most 10 ms of host sleep
+per turn. This is bounded periodic polling, not an event-aware sleep or a hard
+host scheduling latency guarantee. It consumes no input, initializes no NIC,
+grants no logical tick and generates no IRQ. The explicit `std/net` reactor now adds
+network service and operation wakes; see the [library guide](rfl-library.md).
+Compiler-generated suspension
+is now implemented as described below.
+
+The [real-timers example](../../rfl/examples/real-timers.rfl) runs two real timers
+and a yielding task in one task scope:
+
+```sh
+target/release/rfl run rfl/examples/real-timers.rfl
+target/release/rfl run rfl/examples/real-timers.rfl --target native
+```
+
 ## Borrowing child state in place
+
+For source-level async functions, see [async functions](../../rfl/async.md).
+They compose with the same Future, Reactor and TaskScope contracts. Await
+captures its child once, forwards a fresh Context on each poll and resumes
+without repeating earlier statements. Independent frames can retire out of
+order; suspended calls never retain a synchronous arena bookmark. Cancellation
+uses active-scope cleanup and releases partial expressions safely. The initial
+layout reserves all slots rather than packing mutually exclusive states.
 
 Explicit borrows now accept named paths such as `&parent.child`,
 `&mut parent.child`, `&mut children[index]`, and nested combinations. Inherent
@@ -424,7 +511,8 @@ These are required milestones, not optional polish after syntax:
    normal scope exits, replacement, early returns, `?`, loop exits and containers,
    including partial initialization. The concrete future example proves
    cancellation of never-polled and nested pending work. Compiler-generated
-   async frames and move-only captures remain work; a freely copied struct does
+   async frames now provide state-specific cancellation too. Move-only closure
+   captures remain work; a freely copied struct does
    not gain an implicit Drop hook.
 3. **Composition and task ownership.** Owned join/race/timeout now provide child
    states, cleanup of losing branches, deterministic ties and cached resource
@@ -434,16 +522,16 @@ These are required milestones, not optional polish after syntax:
    boundary. Detachment remains unsupported rather than implicit.
    Preserve the implemented automatic cleanup of resource-valued outputs
    discarded by a race or error.
-4. **Async lowering.** Lower lazy async functions to owned state machines in
-   shared IR. Keep generated locals/children alive only for required states;
-   transfer results and emit state-specific cleanup on every exit. Reusing RFL's
-   resumable call frames is not by itself a lifetime or cancellation proof.
-   Initially reject borrows crossing suspension unless their ownership/stability
-   is proven; extend to safe borrowed operations deliberately. Diagnose these at
-   source locations instead of accepting unsafe hidden pointers.
-5. **Usable library integration.** Supply clock/idle/network reactors and typed
-   I/O, then DNS/TCP/HTTP applications. General formatting/writer traits, spawn
-   ergonomics, selection and async syntax must share the same progress and
+4. **Async lowering.** Lazy async functions, generic associated outputs and
+   await are implemented in shared IR with independent owned frames and
+   state-specific cleanup. Safe borrows crossing suspension are rejected at
+   source locations. Extend frame liveness/layout, async blocks/methods and
+   eventually proven borrowed operations without weakening those guarantees.
+5. **Usable library integration.** Clock and bounded idle reactors are now
+   implemented independently of compiler suspension. The first network reactor,
+   DNS futures and buffered HTTP client/server now wrap the C stack. Extend direct
+   typed UDP/TCP and streaming I/O. General formatting/writer traits, spawn
+   ergonomics, selection and further async forms must share the same progress and
    cancellation semantics established by the polling tests.
 
 Associated equality constraints and generic trait parameters can follow concrete
@@ -566,7 +654,8 @@ callbacks, runner errors and ownership/unsafe rejection. Execution cases run on
 native and RVM. The task-scope example ran on both normal CLI targets with matching
 output. The bounded Brainfuck resource smoke check additionally verifies opaque
 owner finalization; this does not claim a full task-scope or network run on RBF.
-`cargo check -p rfl` also passes. The examples still use deterministic clocks.
+`cargo check -p rfl` also passes. Those examples use deterministic clocks;
+the subsequent real-time reactor example uses host time.
 
 Before general async, extend these ownership/cleanup regressions for
 never-polled/dropped futures, nested cancellation, discarded successful resource
@@ -574,8 +663,61 @@ outputs, partial initialization and forbidden suspended borrows. Exercise two
 requests where one completes while the other waits, then cancel and reuse every
 resource. Test resource exhaustion and code size, not only successful output.
 
+The real-time reactor milestone adds seven native/RVM parity tests in
+[`tests/reactor.rs`](../../rfl/tests/reactor.rs). Injected clocks prove elapsed
+guest/service work is deducted from waits, runnable work never sleeps,
+maintenance deadlines shorten waits, clock wrap is accepted, errors/stop cancel
+unfinished work, and an external service wakes a pending root after its peer
+has completed. A real host case checks the clock/idle C bridge without granting
+simulation ticks. Both normal CLI targets run `real-timers.rfl`; editor protocol
+checks confirm clean diagnostics, constructor hover and stdlib navigation.
+The device's four Rust regressions cover flat/strided memory, malformed requests,
+pending ticks, input preservation and actual interpreter/JIT execution. The C
+device and archived-host-idle regressions also pass. RFL C imports now search
+the guest runtime headers; the bridge selects portable MMIO entry points on
+both targets instead of emitting Ripple-only inline assembly into native IR.
+The complete release suite passes **336 tests**, with no failures, using the
+full-suite command recorded above.
+
+The async-function milestone passes **349 release tests** with the same command.
+[`tests/async_functions.rs`](../../rfl/tests/async_functions.rs) adds eleven
+regressions covering lazy construction, generic/managed/resource outputs,
+loops and expression snapshots across suspension, fresh poll contexts,
+independent frames, partial initialization, cancellation and terminal-poll
+errors. Execution cases run on native and RVM. Recursive awaits exercise 6,000
+levels on native and 512 on RVM without recursively entering a polling driver;
+the current guest allocator's block-list scans remain a performance follow-up.
+Two editor tests cover await output types, signatures, completion, navigation
+and field renaming through awaited results. The IntelliJ lexer/run checks and
+LSP smoke, trait and associated-type protocol checks pass. The
+[real-clock async example](../../rfl/examples/async-timers.rfl) runs through both
+CLI targets, printing `hello from async RFL` and `42`. The bounded BF resource
+check remains in the suite; no full async or network run on RBF is claimed.
+
 The network acceptance target remains RFL DNS/ping, HTTP client and the same
 hardcoded-HTML server reached by an ordinary host browser, using guest TCP/IP.
 Record native and RVM separately. Keep BF compatibility; use small explicit BF
 checks where practical rather than requiring slow network runs each iteration.
 TLS, rOS scheduling and runtime argument delivery remain separate projects.
+
+
+## First shipped networking layer — 17 October 2026
+
+`std/net` now supplies owned shared contexts, static/DHCP configuration, one
+network reactor, DNS futures and graceful-close draining. `std/http` supplies
+Request/Response, a buffered GET client and an owned accept/respond HTML server.
+Both targets use the same C protocol implementation. The
+[RFL library guide](rfl-library.md) contains the current API, examples, ownership
+rules and limits; direct UDP/TCP streams and streaming HTTP remain follow-ups.
+
+The complete release suite passes **359 tests**, using
+`CARGO_BUILD_JOBS=2 cargo test --release -p rfl --tests --quiet -- --test-threads=4`.
+Three C-import regressions cover private helpers/function pointers, shared public
+globals/tentative definitions and duplicate definition errors. Independent RFL
+packet applications pass on native, RVM interpreter and JIT: guest DNS → HTTP,
+DHCP → leased DNS → HTTP, and six server connections with loss, reordering and
+zero windows. A retained reactor callback stops after its driver is destroyed.
+The 35 bridge and 15 retirement assertions pass on native/RVM, as do the existing
+193 C HTTP/listener assertions. Two separate pre-existing C compiler defects
+remain registered RED; see [the evidence](testing.md#rfl-library-17-october-2026).
+No live RFL browser test or new RBF networking run is claimed.

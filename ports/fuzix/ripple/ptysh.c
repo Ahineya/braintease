@@ -9,6 +9,7 @@
 #include <termios.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include "pty-limits.h"
 static struct termios saved;
 static int changed, master = -1, child;
 static volatile int interrupted;
@@ -29,7 +30,7 @@ int main(int argc, char **argv) {
         puts("usage: ptysh [COMMAND [ARG...]]\nRun a command (default sh) in a separate terminal session."); return 0;
     }
     if (!isatty(0) || tcgetattr(0, &saved) < 0) { fputs("ptysh: interactive terminal required\n", stderr); return 1; }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < RIPPLE_PTY_COUNT; i++) {
         path[9] = slave[9] = '0' + i;
         master = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK);
         if (master >= 0) break;

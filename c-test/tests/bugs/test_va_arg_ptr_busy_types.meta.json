@@ -1,5 +1,5 @@
 {
   "description": "busy_fmt: char* long* int* va_arg stores",
-  "use_runtime": true,
-  "expected": "YYYY\n"
+  "expected": "YYYY\n",
+  "use_runtime": true
 }

@@ -1,0 +1,24 @@
+GTERM(1)
+
+NAME
+    gterm - graphical PTY terminal
+
+SYNOPSIS
+    gterm [COMMAND [ARG...]]
+
+DESCRIPTION
+    Open an 80 by 30 terminal in a 640 by 480 RGB565 window. With no
+    command, run sh. Requires the RVM MMU profile and launcher --visual.
+    One graphics window is available in this milestone.
+
+    The terminal supports ANSI cursor movement, colours, scrolling,
+    editing and alternate screen. Ctrl-C and Ctrl-Z go to the foreground
+    PTY job. Use jobs, bg and fg in sh. Exit the shell to close its terminal.
+
+    Closing the host window hangs up the child session; FUZIX keeps
+    running. Start gterm again from the original console. Use shutdown
+    to save the disk and stop the operating system.
+
+LIMITS
+    Fixed size, bitmap font, basic US keyboard. No Unicode, clipboard,
+    scrollback, mouse reporting or dynamic resize yet.

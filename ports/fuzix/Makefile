@@ -11,24 +11,38 @@ ROS := $(ROOT)/c-test/examples/rOS
 RCC := $(ROOT)/target/release/rcc
 RASM := $(ROOT)/src/ripple-asm/target/release/rasm
 RLINK := $(ROOT)/src/ripple-asm/target/release/rlink
+# Retained only to diagnose older build commands; there is one supported profile.
 MMU ?= 1
+ifneq ($(MMU),1)
+$(error Non-MMU FUZIX/Ripple is retired; remove MMU=$(MMU) and rebuild for RVM)
+endif
 BULK_IO ?= 1
+CODE_BANKS ?= 1024
 TEST_ENGINE ?= jit
-FLAGS := -DRIPPLE_MMU=$(MMU) -DRIPPLE_BULK_IO=$(BULK_IO) --bank-size 64000 -I$(PORT)/ripple -I$(K)/include -I$(K)/dev -I$(R)/include -DBANK_SIZE=64000
+FLAGS := -DRIPPLE_MMU=1 -DRIPPLE_BULK_IO=$(BULK_IO) -DRIPPLE_CODE_BANKS=$(CODE_BANKS) --bank-size 64000 -I$(PORT)/ripple -I$(K)/include -I$(K)/dev -I$(R)/include -I$(ROOT)/ports/graphics/include -DBANK_SIZE=64000
 RUNTIME_HEADERS := $(addprefix $(R)/include/,$(addsuffix .h,stdint stddef stdarg string ctype stdlib mmio mmio_constants vm_devices vm_bulk irq stdio limits stdbool))
+RUNTIME_HEADERS += $(addprefix $(R)/include/,$(addsuffix .h,net net_tcp vm_network))
 U := $(PORT)/upstream/Library
-USERFLAGS := -DRIPPLE_MMU=$(MMU) --bank-size 64000 -I$(PORT)/ripple/include -I$(U)/include -I$(R)/include -I$(PORT)/ripple -DNO_64BIT
+USERFLAGS := -DRIPPLE_MMU=1 --bank-size 64000 -I$(PORT)/ripple/include -I$(U)/include -I$(R)/include -I$(PORT)/ripple -I$(ROOT)/ports/graphics/include -DNO_64BIT
 USERHEADERS := $(BUILD)/.mmu $(shell find ripple/include $(U)/include -name '*.h') $(RUNTIME_HEADERS) $(K)/include/userstructs.h
-LIBC_LOCAL := syscalls stdio format dirent misc heap pipe
+LIBC_LOCAL := syscalls stdio format dirent misc heap pipe sockets resolver
 AWK_MATH_SRC := __sin __cos __rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow sin cos atan atan2 strtod ecvt fmod frexp ldexp modf
 LIBC_UPSTREAM := $(filter-out regerror malloc calloc realloc readline readline_fn $(AWK_MATH_SRC),$(basename $(notdir $(wildcard upstream/Library/libs/*.c))))
 LIBC_OBJS := $(addprefix $(BUILD)/libc/,$(addsuffix .pobj,$(LIBC_LOCAL))) $(addprefix $(BUILD)/ulib/,$(addsuffix .pobj,$(LIBC_UPSTREAM)))
 APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol more less mktemp groups logname nohup fmt column cksum stty join split tsort tty nice time clear pr col man wump hamurabi expr awk make m4 dc
 APPS += free uptime sok top ptysh
+APPS += ifconfig ping telnet telnetd
+APPS += htget dig echoping ntpdate host
+APPS += bf
+APPS += gterm
 
 CORE := start devio filesys inode kdata process mm syscall_exec syscall_fs syscall_fs2 syscall_fs3 syscall_other syscall_proc timer tty blk512
 BULK_CONFIG := $(BUILD)/.bulk-io
 MMU_CONFIG := $(BUILD)/.mmu
+CODE_CONFIG := $(BUILD)/.code-banks
+$(CODE_CONFIG): FORCE
+	@mkdir -p $(@D)
+	@if test "$$(cat $@ 2>/dev/null)" != "$(CODE_BANKS)"; then printf '%s\n' '$(CODE_BANKS)' > $@; fi
 $(MMU_CONFIG): FORCE
 	@mkdir -p $(@D)
 	@if test "$$(cat $@ 2>/dev/null)" != "$(MMU)"; then printf '%s\n' '$(MMU)' > $@; fi
@@ -37,8 +51,8 @@ FORCE:
 $(BULK_CONFIG): FORCE
 	@mkdir -p $(@D)
 	@if test "$$(cat $@ 2>/dev/null)" != "$(BULK_IO)"; then printf '%s\n' '$(BULK_IO)' > $@; fi
-HEADERS := $(MMU_CONFIG) $(BULK_CONFIG) $(filter-out ripple/user.h,$(wildcard ripple/*.h)) $(wildcard $(K)/include/*.h) $(RUNTIME_HEADERS) $(ROS)/disk.h $(ROS)/fat16.h
-USERHEADERS += ripple/resources.h
+HEADERS := $(ROOT)/ports/graphics/include/gx.h $(MMU_CONFIG) $(BULK_CONFIG) $(CODE_CONFIG) $(filter-out ripple/user.h,$(wildcard ripple/*.h)) $(wildcard $(K)/include/*.h) $(RUNTIME_HEADERS) $(ROS)/disk.h $(ROS)/fat16.h
+USERHEADERS += ripple/mmu-profile.h ripple/resources.h ripple/pty-limits.h $(ROOT)/ports/graphics/include/gx.h
 OBJS := $(addprefix $(BUILD)/kernel/,$(addsuffix .pobj,$(CORE)))
 .PHONY: all kernel-objects clean
 .PRECIOUS: $(BUILD)/kernel/%.asm
@@ -49,18 +63,26 @@ kernel-objects: $(OBJS)
 $(BUILD)/kernel/%.asm: $(K)/%.c $(HEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
-	@$(RCC) compile $< -o $@ $(FLAGS) $(if $(and $(filter 1,$(MMU)),$(filter syscall_proc,$*)),-D_brk=ripple_legacy_brk -D_sbrk=ripple_legacy_sbrk) >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RCC) compile $< -o $@ $(FLAGS) $(if $(filter syscall_proc,$*),-D_brk=ripple_legacy_brk -D_sbrk=ripple_legacy_sbrk) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/kernel/%.pobj: $(BUILD)/kernel/%.asm $(RASM)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
 # Persistent disks and backups deliberately survive clean.
 clean:
-	rm -rf "$(BUILD)/kernel" "$(BUILD)/port" "$(BUILD)/rt" "$(BUILD)/ros" "$(BUILD)/user" "$(BUILD)/apps" "$(BUILD)/libc" "$(BUILD)/ulib" "$(BUILD)/sh" "$(BUILD)/levee" "$(BUILD)/awk" "$(BUILD)/math"
+	rm -rf "$(BUILD)/kernel" "$(BUILD)/port" "$(BUILD)/rt" "$(BUILD)/ros" "$(BUILD)/user" "$(BUILD)/apps" "$(BUILD)/libc" "$(BUILD)/ulib" "$(BUILD)/sh" "$(BUILD)/levee" "$(BUILD)/awk" "$(BUILD)/math" "$(BUILD)/net"
 	rm -f "$(BUILD)/FUZIX.SYS" "$(BUILD)/bios.bin" "$(BUILD)/bios.bf" "$(BUILD)"/*.rxe "$(BUILD)/apps.json"
 
-PORT_CORE := platform devices jobcontrol pty usermem exec version $(if $(filter 1,$(MMU)),mmu)
+PORT_CORE := platform devices jobcontrol pty usermem exec version sockets graphics mmu
 PORT_OBJS := $(addprefix $(BUILD)/port/,$(addsuffix .pobj,$(PORT_CORE)))
-SHARED := string ctype stdlib mmio irq putchar puts vm_devices vm_bulk
+SHARED := string ctype stdlib mmio irq putchar puts vm_devices vm_bulk vm_network
 RT_OBJS := $(addprefix $(BUILD)/rt/,$(addsuffix .pobj,$(SHARED)))
+NET_SRC := core config wire ipv4 link arp history icmp icmp_error udp tcp tcp_wire tcp_ack tcp_payload tcp_stream tcp_poll tcp_receive tcp_decode tcp_error tcp_listen tcp_passive tcp_wait
+NET_OBJS := $(addprefix $(BUILD)/net/,$(addsuffix .pobj,$(NET_SRC)))
+$(BUILD)/net/%.asm: $(R)/net/%.c $(wildcard $(R)/net/*.h) $(RUNTIME_HEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ --bank-size 64000 -I$(R)/include -DBANK_SIZE=64000 >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/net/%.pobj: $(BUILD)/net/%.asm $(RASM)
+	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
+.PRECIOUS: $(BUILD)/net/%.asm
 $(BUILD)/port/%.asm: ripple/%.c $(HEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
@@ -75,14 +97,14 @@ $(BUILD)/ros/%.asm: $(ROS)/%.c $(RCC) Makefile $(HEADERS)
 	@$(RCC) compile $< -o $@ --bank-size 64000 -I$(R)/include -I$(ROS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/%.pobj: $(BUILD)/%.asm $(RASM)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/port/lowlevel.pobj: $(BUILD)/port/lowlevel-profile.asm $(RASM)
+$(BUILD)/port/lowlevel.pobj: ripple/lowlevel.asm $(RASM) $(MMU_CONFIG) Makefile
 	@mkdir -p $(@D)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/kernel/memalloc_none.asm: $(K)/mm/memalloc_none.c $(HEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(FLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/FUZIX.SYS: $(BUILD)/port/lowlevel.pobj $(OBJS) $(PORT_OBJS) $(RT_OBJS) $(BUILD)/kernel/usermem.pobj $(BUILD)/kernel/memalloc_none.pobj $(BUILD)/ros/disk.pobj $(BUILD)/ros/fat16.pobj $(RLINK)
+$(BUILD)/FUZIX.SYS: $(BUILD)/port/lowlevel.pobj $(OBJS) $(PORT_OBJS) $(RT_OBJS) $(NET_OBJS) $(BUILD)/kernel/usermem.pobj $(BUILD)/kernel/memalloc_none.pobj $(BUILD)/ros/disk.pobj $(BUILD)/ros/fat16.pobj $(RLINK)
 	@$(RLINK) $(filter %.pobj,$^) -f sys --code-bank-base 1 --gp-bank 3 --sb-bank 32 --bank-size 64000 -o $@ >$(BUILD)/kernel-link.log 2>&1 || { cat $(BUILD)/kernel-link.log; exit 1; }
 .PHONY: kernel
 kernel: $(BUILD)/FUZIX.SYS
@@ -92,14 +114,11 @@ $(BUILD)/port/boot-entry.pobj: ripple/boot-entry.asm $(RASM)
 $(BUILD)/bios.bin: $(BUILD)/port/boot-entry.pobj $(BUILD)/port/boot.pobj $(RT_OBJS) $(BUILD)/ros/disk.pobj $(BUILD)/ros/fat16.pobj $(RLINK)
 	@$(RLINK) $(filter %.pobj,$^) -f binary --bank-size 64000 -o $@ >$(BUILD)/bios-link.log 2>&1 || { cat $(BUILD)/bios-link.log; exit 1; }
 
-# Dynamic kernel/user code is loaded from the same disk as the native VM.
-# Eight process slots plus one spare exec slot reserve twelve banks each, occupying code banks 32..139.
-$(BUILD)/bios.bf: $(BUILD)/port/boot-entry.pobj $(BUILD)/port/boot.pobj $(RT_OBJS) $(BUILD)/ros/disk.pobj $(BUILD)/ros/fat16.pobj $(RLINK)
-	@test "$(MMU)" = 0 || { echo "Brainfuck requires MMU=0; rebuild images and bf with that profile" >&2; exit 1; }
-	@$(RLINK) $(filter %.pobj,$^) -f bf --standalone --bf-host --bf-irq --bank-size 64000 --memory-banks 80 --code-banks 140 -o $@ >$(BUILD)/bios-bf-link.log 2>&1 || { cat $(BUILD)/bios-bf-link.log; exit 1; }
-.PHONY: bf
-bf: $(BUILD)/bios.bf
-	@test "$(MMU)" = 0 || { echo "Brainfuck requires MMU=0" >&2; exit 1; }
+# Preserve an explicit failure for old commands, even if a stale export exists.
+.PHONY: bf $(BUILD)/bios.bf
+bf $(BUILD)/bios.bf:
+	@echo "error: non-MMU FUZIX/RBF is retired; use images and run-fuzix.sh on RVM" >&2
+	@exit 1
 
 .PHONY: bios
 bios: $(BUILD)/bios.bin
@@ -108,7 +127,7 @@ $(BUILD)/user/%.asm: ripple/%.c ripple/user.h $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/user/entry.pobj: $(BUILD)/user/entry-profile.asm $(RASM)
+$(BUILD)/user/entry.pobj: ripple/user-entry.asm $(RASM) $(MMU_CONFIG) Makefile
 	@mkdir -p $(@D)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
@@ -118,10 +137,18 @@ userspace: $(BUILD)/init.rxe $(BUILD)/hello.rxe $(BUILD)/forkcheck.rxe $(BUILD)/
 images: kernel bios userspace
 .PRECIOUS: $(BUILD)/user/%.asm $(BUILD)/user/%.pobj
 
+.PHONY: test-graphics
+test-graphics: images $(BUILD)/gfxcheck.rxe
+	python3 $(ROOT)/ports/graphics/tests/run.py
+	python3 tools/test_graphics.py --build $(BUILD)
+
 .PHONY: test
 test: images
 	python3 tools/test_launch.py
 	python3 tools/test.py --build $(BUILD) --engine $(TEST_ENGINE)
+	python3 tools/test_timers.py --build $(BUILD) --engine $(TEST_ENGINE)
+	python3 tools/test_network.py --build $(BUILD) --engine $(TEST_ENGINE)
+	python3 tools/test_nettools.py --build $(BUILD)
 	node --test tools/disk.test.mjs tools/sokoban.test.mjs
 	python3 tools/test_terminal.py --build $(BUILD) --engine $(TEST_ENGINE)
 	python3 tools/test_unix.py --build $(BUILD) --engine $(TEST_ENGINE)
@@ -164,9 +191,12 @@ $(BUILD)/mv.rxe $(BUILD)/ln.rxe: $(BUILD)/cp.rxe
 	@cp $< $@
 $(BUILD)/apps.json: Makefile
 	@mkdir -p $(@D)
-	@python3 -c 'import json; print(json.dumps("init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck $(APPS) mv ln sh vi tcl tclsh sokoban".split()))' >$@
+	@python3 -c 'import json; print(json.dumps("init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck $(APPS) mv ln sh vi tcl tclsh sokoban nslookup".split()))' >$@
 userspace: $(BUILD)/mv.rxe $(BUILD)/ln.rxe $(BUILD)/sh.rxe $(BUILD)/vi.rxe $(BUILD)/tcl.rxe $(BUILD)/tclsh.rxe $(BUILD)/apps.json
 userspace: $(BUILD)/sokoban.rxe
+userspace: $(BUILD)/nslookup.rxe
+$(BUILD)/nslookup.rxe: $(BUILD)/host.rxe
+	@cp $< $@
 $(BUILD)/sokoban.rxe: $(BUILD)/sok.rxe
 	@cp $< $@
 
@@ -256,15 +286,6 @@ $(BUILD)/awk.rxe: $(BUILD)/user/entry.pobj $(AWK_OBJS) $(BUILD)/user/userlib.pob
 	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/awk/%.asm $(BUILD)/math/%.asm
 
-# Only these two hand-written files need profile selection; generated compiler
-# assembly is already selected by the ordinary C preprocessor.
-$(BUILD)/port/lowlevel-profile.asm: ripple/lowlevel.asm tools/asm_profile.py $(MMU_CONFIG)
-	@mkdir -p $(@D)
-	@python3 tools/asm_profile.py $< $@ $(MMU)
-$(BUILD)/user/entry-profile.asm: ripple/user-entry.asm tools/asm_profile.py $(MMU_CONFIG)
-	@mkdir -p $(@D)
-	@python3 tools/asm_profile.py $< $@ $(MMU)
-
 $(BUILD)/sh/jobs.asm: ripple/shell-jobs.c $(wildcard $(SHELL_DIR)/*.h) $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -I$(SHELL_DIR) -DBUILD_FSH >$@.log 2>&1 || { cat $@.log; exit 1; }
@@ -272,3 +293,18 @@ $(BUILD)/sh/jobs.asm: ripple/shell-jobs.c $(wildcard $(SHELL_DIR)/*.h) $(USERHEA
 $(addprefix $(BUILD)/apps/,$(addsuffix .asm,ps top ptysh)): $(BUILD)/apps/%.asm: ripple/%.c ripple/process-report.h $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,ifconfig ping telnet telnetd)): $(BUILD)/apps/%.asm: ripple/%.c ripple/telnet-protocol.h $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,htget dig echoping ntpdate)): $(BUILD)/apps/%.asm: upstream/Applications/netd/%.c $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,host bf gterm)): $(BUILD)/apps/%.asm: ripple/%.c $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/apps/gterm.asm: $(ROOT)/ports/graphics/terminal.c $(ROOT)/ports/graphics/terminal.h $(ROOT)/ports/graphics/fonts/rom8x16.inc
+
+# Opt-in integration probe; not installed on normal disks.
+$(BUILD)/gfxcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/gfxcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)

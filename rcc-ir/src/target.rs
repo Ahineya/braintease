@@ -86,6 +86,21 @@ impl DataLayout {
 /// Keeping their arities explicit prevents accidentally calling host libc with
 /// logical pointers or silently choosing a signature from an untyped callsite.
 pub const NATIVE_SERVICES: &[(&str, usize)] = &[
+    ("rcc_hosted_image_begin", 1),
+    ("rcc_hosted_image_append", 2),
+    ("rcc_hosted_image_finish", 0),
+    ("rcc_hosted_image_cancel", 0),
+    ("rcc_hosted_valid_function", 2),
+    ("rcc_hosted_image_load", 2),
+    ("rcc_hosted_image_discard", 1),
+    ("rcc_hosted_bind_syscall", 1),
+    ("rcc_hosted_bind_checkpoint", 1),
+    ("rcc_hosted_stopping", 0),
+    ("rcc_hosted_lock_image", 2),
+    ("rcc_hosted_sync_image", 0),
+    ("rcc_hosted_input", 0),
+    ("rcc_hosted_idle", 1),
+    ("rcc_hosted_fs", 2),
     ("abs", 1),
     ("labs", 1),
     ("llabs", 1),

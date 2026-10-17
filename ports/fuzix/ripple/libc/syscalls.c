@@ -262,6 +262,15 @@ int system(const char *s) {
 int _time(__ktime_t *p, uint16_t clock) {
     return call(27, (long)p, clock, 0, 0);
 }
+int _stime(const __ktime_t *p, uint16_t clock) {
+    return call(28, (long)p, clock, 0, 0);
+}
+int stime(const time_t *p) {
+    __ktime_t t;
+    if(!p){errno=EFAULT;return -1;}
+    t.low=*p;t.high=0;
+    return _stime(&t,0);
+}
 
 int raise(int sig) { return kill(getpid(), sig); }
 

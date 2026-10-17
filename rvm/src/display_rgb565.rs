@@ -2,12 +2,13 @@ use crate::input_events::{InputState, InputTransition, POINTER_RELATIVE};
 use pixels::{Pixels, SurfaceTexture};
 use serde::{Deserialize, Serialize};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use winit::dpi::LogicalSize;
 use winit::event::{
-    DeviceEvent, ElementState, Event, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+    DeviceEvent, ElementState, Event, ModifiersState, MouseButton, MouseScrollDelta,
+    VirtualKeyCode, WindowEvent,
 };
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
 use winit::platform::run_return::EventLoopExtRunReturn;
@@ -97,7 +98,8 @@ impl RGB565State {
         if bank_size < 32 || pixels_needed > available_space {
             return Err(format!(
                 "Display resolution {width}x{height} requires {} cells, but only {} available in bank",
-                pixels_needed * 2, available_space * 2
+                pixels_needed * 2,
+                available_space * 2
             ));
         }
         self.width = width as u16;
@@ -130,6 +132,23 @@ impl RGB565State {
     /// Record a transition, preserving authoritative held state even on overflow.
     pub fn set_key(&mut self, key: u16, down: bool) {
         self.input.apply(InputTransition::Key { key, down }, 0);
+    }
+    /// Synthetic host events can carry modifier flags without physical modifier
+    /// key transitions. Recover an aggregate left-key alias in that case.
+    fn sync_modifiers(&mut self, modifiers: ModifiersState) {
+        for (left, right, pressed) in [
+            (224, 228, modifiers.ctrl()),
+            (225, 229, modifiers.shift()),
+            (226, 230, modifiers.alt()),
+            (227, 231, modifiers.logo()),
+        ] {
+            if !pressed {
+                self.set_key(left, false);
+                self.set_key(right, false);
+            } else if !self.input.held(left) && !self.input.held(right) {
+                self.set_key(left, true);
+            }
+        }
     }
     pub fn release_keys(&mut self) {
         for key in 0..256 {
@@ -514,9 +533,39 @@ pub fn key_usage(key: VirtualKeyCode) -> Option<u16> {
     })
 }
 
+/// A close suppresses the current lease, while an idle display merely waits
+/// for its first frame. These must remain distinct when the host hides a window.
+struct WindowVisibility {
+    shown: bool,
+    closed_layout: Option<u64>,
+}
+impl WindowVisibility {
+    fn close(&mut self, revision: u64) {
+        self.shown = false;
+        self.closed_layout = Some(revision);
+    }
+    fn update(&mut self, initialized: bool, revision: u64) -> Option<bool> {
+        if !initialized {
+            self.closed_layout = None;
+        }
+        let show = initialized && self.closed_layout != Some(revision);
+        let changed = self.shown != show;
+        self.shown = show;
+        changed.then_some(show)
+    }
+}
+
 /// Run on the main thread, returning when the guest finishes or the window closes.
 pub fn run_rgb565_display(
     state: Arc<Mutex<RGB565State>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_rgb565_display_with_close_policy(state, false)
+}
+
+/// In guest-close mode, hide a closed window and wait for a new display lease.
+pub fn run_rgb565_display_with_close_policy(
+    state: Arc<Mutex<RGB565State>>,
+    guest_window_close: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Also stop the guest when window/GPU initialization returns an error.
     // Keep this guard outside the event-loop closure so unwinding releases it.
@@ -531,6 +580,7 @@ pub fn run_rgb565_display(
     let mut event_loop = EventLoopBuilder::new().build();
     let window = WindowBuilder::new()
         .with_title("Ripple VM - RGB565 Display")
+        .with_visible(!guest_window_close)
         .with_inner_size(LogicalSize::new(512u32, 512u32))
         .with_resizable(true)
         .build(&event_loop)?;
@@ -550,6 +600,10 @@ pub fn run_rgb565_display(
     let mut render_error = None;
     let mut cursor_grabbed = false;
     let mut relative_remainder = (0.0, 0.0);
+    let mut visibility_state = WindowVisibility {
+        shown: !guest_window_close,
+        closed_layout: None,
+    };
 
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
@@ -565,9 +619,16 @@ pub fn run_rgb565_display(
                 ..
             } => {
                 let mut shared = state.lock().unwrap();
-                shared.input_event(InputTransition::Focus { focused: false });
-                shared.request_shutdown();
-                *control_flow = ControlFlow::Exit;
+                if guest_window_close {
+                    visibility_state.close(shared.layout_revision);
+                    shared.input_event(InputTransition::Close);
+                    drop(shared);
+                    window.set_visible(false);
+                } else {
+                    shared.input_event(InputTransition::Focus { focused: false });
+                    shared.request_shutdown();
+                    *control_flow = ControlFlow::Exit;
+                }
             }
             Event::WindowEvent {
                 event: WindowEvent::Focused(focused),
@@ -665,14 +726,20 @@ pub fn run_rgb565_display(
                 .unwrap()
                 .input_event(InputTransition::Enter { inside: false }),
             Event::WindowEvent {
+                event: WindowEvent::ModifiersChanged(modifiers),
+                ..
+            } => {
+                state.lock().unwrap().sync_modifiers(modifiers);
+            }
+            Event::WindowEvent {
                 event: WindowEvent::KeyboardInput { input, .. },
                 ..
             } => {
                 if let Some(key) = input.virtual_keycode.and_then(key_usage) {
-                    state
-                        .lock()
-                        .unwrap()
-                        .set_key(key, input.state == ElementState::Pressed);
+                    let mut shared = state.lock().unwrap();
+                    #[allow(deprecated)]
+                    shared.sync_modifiers(input.modifiers);
+                    shared.set_key(key, input.state == ElementState::Pressed);
                 }
             }
             Event::WindowEvent {
@@ -685,6 +752,7 @@ pub fn run_rgb565_display(
                         render_error = Some(error.to_string());
                         *control_flow = ControlFlow::Exit;
                     }
+                    window.request_redraw();
                 }
             }
             Event::WindowEvent {
@@ -699,6 +767,7 @@ pub fn run_rgb565_display(
                         render_error = Some(error.to_string());
                         *control_flow = ControlFlow::Exit;
                     }
+                    window.request_redraw();
                 }
             }
             Event::RedrawRequested(_) => {
@@ -725,6 +794,9 @@ pub fn run_rgb565_display(
                     update.write_rgba(pixels.frame_mut(), dimensions.0);
                     rendered_version = Some(update.version);
                 }
+                if !visibility_state.shown {
+                    return;
+                }
                 // Expose and surface-resize events still redraw the cached RGBA
                 // image even when the guest has not presented another frame.
                 if let Err(error) = pixels.render() {
@@ -734,6 +806,14 @@ pub fn run_rgb565_display(
             }
             Event::MainEventsCleared => {
                 let mut shared = state.lock().unwrap();
+                let frame_changed = shared.frame_update(rendered_version).is_some();
+                // Hidden macOS windows may receive no redraw events. Reopening
+                // must also be driven from the event loop's polling boundary.
+                let visibility = if guest_window_close {
+                    visibility_state.update(shared.initialized, shared.layout_revision)
+                } else {
+                    None
+                };
                 let want = shared.input.pointer_mode == POINTER_RELATIVE && shared.input.focused;
                 if want != cursor_grabbed {
                     let captured = if want {
@@ -750,7 +830,13 @@ pub fn run_rgb565_display(
                     window.set_cursor_visible(!captured);
                     shared.input_event(InputTransition::Capture { captured });
                 }
-                window.request_redraw();
+                drop(shared);
+                if let Some(visible) = visibility {
+                    window.set_visible(visible);
+                }
+                if frame_changed || visibility == Some(true) {
+                    window.request_redraw();
+                }
             }
             _ => {}
         }
@@ -767,12 +853,13 @@ fn backing_surface_size(width: u32, height: u32) -> (u32, u32) {
 }
 
 /// Keep tiny framebuffers readable while retaining an integer pixel scale.
-/// Ordinary-sized frames keep the existing two-times default window size.
+/// Larger framebuffers use one logical point per guest pixel. In particular,
+/// 640x480 must fit a laptop desktop; Retina backing pixels are host-managed.
 fn initial_window_size(width: u16, height: u16) -> (u32, u32) {
     let width = u32::from(width);
     let height = u32::from(height);
     let short_edge = width.min(height).max(1);
-    let scale = 2.max(240u32.div_ceil(short_edge));
+    let scale = 240u32.div_ceil(short_edge).max(1);
     (width * scale, height * scale)
 }
 
@@ -785,6 +872,50 @@ impl Drop for RGB565Display {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn modifier_flags_supply_missing_transitions_and_release_families() {
+        let display = RGB565Display::new();
+        let shared = display.get_state();
+        let mut host = shared.lock().unwrap();
+        host.sync_modifiers(ModifiersState::CTRL | ModifiersState::SHIFT);
+        assert!(host.input.held(224) && host.input.held(225));
+        host.set_key(29, true);
+        assert!(
+            host.input
+                .events
+                .iter()
+                .position(|e| e.code == 224)
+                .unwrap()
+                < host.input.events.iter().position(|e| e.code == 29).unwrap()
+        );
+        host.sync_modifiers(ModifiersState::empty());
+        assert!(!host.input.held(224) && !host.input.held(225));
+        host.set_key(230, true);
+        host.sync_modifiers(ModifiersState::ALT);
+        assert!(host.input.held(230) && !host.input.held(226));
+    }
+
+    #[test]
+    fn guest_window_visibility_tracks_first_frame_close_and_new_lease() {
+        let mut s = WindowVisibility {
+            shown: false,
+            closed_layout: None,
+        };
+        assert_eq!(s.update(false, 0), None);
+        assert_eq!(s.update(false, 0), None);
+        assert_eq!(s.update(true, 0), Some(true));
+        assert_eq!(s.update(true, 0), None);
+        s.close(0);
+        assert_eq!(s.update(true, 0), None);
+        assert_eq!(s.update(false, 1), None);
+        assert_eq!(s.update(true, 1), Some(true));
+        s.close(1);
+        // The guest can replace its lease between two host event-loop turns.
+        assert_eq!(s.update(true, 2), Some(true));
+        assert_eq!(s.update(false, 3), Some(false));
+        assert_eq!(s.update(false, 3), None);
+    }
 
     #[test]
     fn checkpoint_preserves_both_legacy_buffers_and_pending_keyboard_input() {
@@ -850,7 +981,8 @@ mod tests {
         assert_eq!(initial_window_size(1, 1), (240, 240));
         assert_eq!(initial_window_size(160, 100), (480, 300));
         assert_eq!(initial_window_size(320, 200), (640, 400));
-        assert_eq!(initial_window_size(256, 256), (512, 512));
+        assert_eq!(initial_window_size(256, 256), (256, 256));
+        assert_eq!(initial_window_size(640, 480), (640, 480));
     }
 
     #[test]
@@ -913,13 +1045,17 @@ mod tests {
         update.write_rgba(&mut rgba, 2);
         assert_eq!(
             rgba,
-            [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255]
+            [
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255
+            ]
         );
-        assert!(state
-            .lock()
-            .unwrap()
-            .frame_update(Some(update.version))
-            .is_none());
+        assert!(
+            state
+                .lock()
+                .unwrap()
+                .frame_update(Some(update.version))
+                .is_none()
+        );
 
         display.present(1, 1, vec![0]).unwrap();
         let next = state
@@ -941,11 +1077,13 @@ mod tests {
         let state = display.get_state();
         let disabled = state.lock().unwrap().frame_update(None).unwrap();
         assert!(disabled.frame.is_none());
-        assert!(state
-            .lock()
-            .unwrap()
-            .frame_update(Some(disabled.version))
-            .is_none());
+        assert!(
+            state
+                .lock()
+                .unwrap()
+                .frame_update(Some(disabled.version))
+                .is_none()
+        );
 
         display.init(1, 1, 34).unwrap();
         let initialized = state
@@ -990,11 +1128,13 @@ mod tests {
         let previous = state.lock().unwrap().frame_update(None).unwrap();
         display.write_memory(34, 0x001f);
         // Back-buffer writes do not make a new frame visible.
-        assert!(state
-            .lock()
-            .unwrap()
-            .frame_update(Some(previous.version))
-            .is_none());
+        assert!(
+            state
+                .lock()
+                .unwrap()
+                .frame_update(Some(previous.version))
+                .is_none()
+        );
         display.flush();
         let next = state
             .lock()
@@ -1096,11 +1236,7 @@ fn extra_button(n: u16) -> u16 {
     }
     #[cfg(target_os = "linux")]
     {
-        if n >= 275 {
-            n - 272
-        } else {
-            n
-        }
+        if n >= 275 { n - 272 } else { n }
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {

@@ -1,0 +1,87 @@
+import { Reactor } from "std/executor";
+
+// Callbacks supply bounded external work. Service delays are relative to the
+// supplied `now`, not to the end of that callback. None still permits idle turns.
+export type Service = ContinueAfter(Option<u32>) | StopReactor;
+export type ReactorError = ClockError(u16) | IdleError(u16) | InvalidClockSample | InvalidIdleQuantum | InvalidServiceDelay;
+export struct ClockedReactor {
+    read_clock: fn()->Result<u32,ReactorError>,
+    idle: fn(u32)->Result<unit,ReactorError>,
+    service: fn(u32)->Service,
+    time:u32,
+    quantum:u32,
+    stopped:bool,
+    failure:Option<ReactorError>,
+}
+
+// The injectable boundary is also useful for deterministic clocks and tests.
+// A quantum is never zero and never exceeds the host idle command's 10ms cap.
+export fn clocked_reactor(read_clock:fn()->Result<u32,ReactorError>,idle:fn(u32)->Result<unit,ReactorError>,service:fn(u32)->Service,quantum:u32)->Result<ClockedReactor,ReactorError> {
+    if (quantum == 0 || quantum > 10) {return Err(InvalidIdleQuantum);}
+    let now=read_clock()?;
+    Ok(ClockedReactor{read_clock:read_clock,idle:idle,service:service,time:now,quantum:quantum,stopped:false,failure:None})
+}
+
+fn remaining(now:u32,deadline:u32)->u32 {
+    if (((now-deadline) as i32) >= 0) {0} else {deadline-now}
+}
+impl ClockedReactor {
+    export fn stop(&mut self) {self.stopped=true;}
+    export fn error(&self)->Option<ReactorError> {self.failure}
+    fn fail(&mut self,error:ReactorError)->bool {
+        self.failure=Some(error);self.stopped=true;false
+    }
+    fn refresh(&mut self)->bool {
+        let read=self.read_clock;
+        match read() {
+            Ok(now)=>{
+                if (now-self.time > 2147483647) {return self.fail(InvalidClockSample);}
+                self.time=now;true
+            },
+            Err(error)=>self.fail(error),
+        }
+    }
+    fn service_once(&mut self)->Option<u32> {
+        let service=self.service;
+        match service(self.time) {
+            StopReactor=>{self.stopped=true;None},
+            ContinueAfter(delay)=>match delay {
+                Some(ms)=>{
+                    if (ms > 2147483647) {self.fail(InvalidServiceDelay);None}
+                    else {Some(self.time+ms)}
+                },
+                None=>None,
+            },
+        }
+    }
+}
+impl Reactor for ClockedReactor {
+    fn now(&self)->u32 {self.time}
+    fn turn(&mut self,wait:Option<u32>)->bool {
+        if (self.stopped) {return false;}
+        // Executor hints refer to the last clock sample. Guest work since that
+        // sample counts towards the deadline, including on a slow VM/BF CPU.
+        let task_deadline=match wait {
+            Some(ms)=>{
+                if (ms > 2147483647) {return self.fail(InvalidClockSample);}
+                Some(self.time+ms)
+            },
+            None=>None,
+        };
+        if (!self.refresh()) {return false;}
+        let maintenance=self.service_once();
+        if (self.stopped || !self.refresh()) {return false;}
+        let mut delay=self.quantum;
+        match task_deadline {Some(end)=>{let n=remaining(self.time,end);if (n<delay) {delay=n;}},None=>{}}
+        match maintenance {Some(end)=>{let n=remaining(self.time,end);if (n<delay) {delay=n;}},None=>{}}
+        if (delay != 0) {
+            let idle=self.idle;
+            match idle(delay) {Ok(_)=>{},Err(error)=>{return self.fail(error);}}
+        }
+        if (!self.refresh()) {return false;}
+        // Events arriving during the bounded idle are serviced before polling.
+        self.service_once();
+        if (self.stopped) {return false;}
+        self.refresh()
+    }
+}

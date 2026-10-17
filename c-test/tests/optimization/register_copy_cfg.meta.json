@@ -1,5 +1,5 @@
 {
-  "description": "Register copies across loop branches, unequal joins, early exits and calls",
+  "expected": "YYYYYYYYY\n",
   "use_runtime": true,
-  "expected": "YYYYYYYYY\n"
+  "description": "Register copies across loop branches, unequal joins, early exits and calls"
 }

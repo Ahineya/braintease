@@ -19,25 +19,62 @@ limitations live in [native processes](../../rcc-native/PROCESSES.md).
 
 ## Hosted kernel and storage
 
-Create the hosted platform adapters alongside the existing Ripple target. Resolve
-context switching, syscall entry, shared kernel globals, user-memory access,
-process ownership, and the first native application-loading strategy. Wire the
-disk-image adapter and a nonblocking console.
+The first integrated [hosted kernel](../../fuse-x/README.md) boots native
+`/init`, starts the existing Bourne shell and runs independently compiled native applications.
+FUZIX owns process scheduling and lifetime; hosted runtime calls clone, select,
+discard and replace saved native continuations. Kernel globals use the shared
+arena and private application memory uses copy-on-write pages.
 
-Acceptance: boot the hosted kernel into a headless guest shell, run a guest
-program, exercise fork/wait/exit through the integrated kernel, and verify file
-persistence after orderly shutdown and restart. Native IR generation for some
-kernel files alone does not satisfy this stage.
+The console polls host input without blocking guest execution. A raw C16 image
+provides persistent storage. Native executable packages load after kernel path and permission checks;
+bootstrap manifests also select registered functions. The first independently
+compiled utilities are cat, ls and cp. See [native executables](../../fuse-x/EXECUTABLES.md)
+for the ABI and loader. Ripple RXE files require recompilation for this target.
+
+Acceptance checks cover shell commands, arguments, fork/wait/exit, private memory,
+shared file offsets, concurrent children, timers, failed exec rollback, successful
+exec, process-slot reuse, input backpressure, EOF and persistence after restart.
+`make -C fuse-x test` runs the bootstrap and integrated session checks.
+
+The application inventory builds 113 programs and aliases. Native nonlocal
+jumps, custom signal handlers, standard devices and PTYs support the real
+shell. Application behavior checks distinguish compilation from runtime
+coverage. Follow-up work remains for further application validation, complete
+libc, instruction-level preemption and enforced memory budgets. Current bank-window
+validation and RAM accounting are provisional; the Ripple port's variable
+executable allocation is not yet implemented in the hosted platform.
 
 ## Headless network terminal
 
-Connect a network terminal to the guest console/session machinery once the
-required networking is ready. This stage can precede graphics and should not
-block graphics work if networking takes longer.
+The hosted integration reuses the Ripple port's IPv4/TCP/UDP stack, resolver
+tools and Telnet server. Protocol state uses hosted shared kernel allocation;
+polling runs at idle and syscall boundaries. Remote connections use the existing
+FUZIX PTYs and independently loaded Bourne shells. The launcher exposes host-only,
+shared NAT, offline and external Ethernet attachment. Graphics work can proceed
+independently without changes to `ports/fuzix/` from this integration.
 
 Acceptance: connect, use the shell, disconnect without stopping the kernel,
 and reconnect. Unrelated sessions continue to run. See
 [Networking](networking.md).
+
+## Session lifecycle and scheduling fairness
+
+The init supervisor keeps the kernel alive independently of its console shell,
+reaps adopted children and starts a new console shell after exit. The launcher
+supports console detach/reconnect, background startup, headless startup and an
+explicit Telnet service. Native SIGTERM and `--stop` request orderly process
+termination and storage flush. A one-shot mode retains finite console/EOF runs.
+
+New application packages include loop-edge scheduling checkpoints, while calls
+reuse existing continuation boundaries. A roughly 5 ms slice enters a kernel
+callback for timers, input, networking, signal delivery and ready-task selection.
+Kernel callbacks and their signal handlers remain nonpreemptible. Existing
+packages need recompilation for loop checkpoints; memory budgets and per-process
+fault containment remain open.
+
+Acceptance checks cover console replay/reconnection and terminal restoration,
+shell respawn, orphan reaping, busy-loop Ctrl-C and stop/continue/termination,
+signal-handler longjmp, headless Telnet, image locking and clean shutdown.
 
 ## First graphics window
 
@@ -72,8 +109,11 @@ dependency or a later requirement for window switching.
 
 ## Shared folders and later graphics
 
-Implement the selected host-filesystem bridge with explicit metadata and mount
-rules. Acceptance includes reading files from both systems, agreed write and
+The first host-filesystem bridge exposes the gitignored repo-root
+`fuse-x-shared/` folder read/write at `/mnt/host` by default; `--share` overrides
+it and `--no-share` disables it. It preserves the root disk and guest
+descriptor ownership, and supports independently compiled executables in the
+export. Acceptance includes reading files from both systems, agreed write and
 rename behavior, bounded export paths, and correct handling of host-side edits
 or a removed mount. See [Storage](storage.md).
 
@@ -85,10 +125,9 @@ surface interface across host and standalone presentation.
 
 | Question | Needed before |
 | --- | --- |
-| How FUZIX scheduling uses the native continuation engine | Integrated process execution |
-| Shared kernel globals and kernel/user execution boundaries | Hosted kernel integration |
-| Native executable format, linking, and loading | Running independently built native guest applications |
-| Terminal hangup, GUI launch/detachment, and initial shell policy | Multiple independent sessions |
+| Enforced user/kernel memory boundaries and process budgets | Untrusted applications |
+| Further libc and application-specific compatibility | Remaining application modes and options |
+| Graphical terminal hangup and GUI launch/detachment policy | Multiple independent windows |
 | Window command/event formats and buffer ownership | First graphics window |
 | Reopen behavior and final menu/shortcut layout | Desktop lifecycle completion |
 | Image format compatibility and host filesystem bridge semantics | Persistent storage and shared-folder mounts |

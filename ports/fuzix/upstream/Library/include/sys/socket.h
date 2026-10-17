@@ -1,13 +1,16 @@
 #ifndef _SYS_SOCKET_H
 #define _SYS_SOCKET_H
 
-#include "types.h"
+#include <sys/types.h>
 
 #define AF_INET		1
 
 #define SOCK_RAW	1
 #define SOCK_DGRAM	2
 #define SOCK_STREAM	3
+#define SHUT_RD 0
+#define SHUT_WR 1
+#define SHUT_RDWR 2
 
 
 typedef int socklen_t;
@@ -34,7 +37,7 @@ int shutdown(int __fd, int __how);
 int socket(int __domain, int __type, int __protocol);
 
 /* LP32 */
-#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__)
+#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__) || defined(RIPPLE_MMU)
 typedef uint32_t	__uarg_t;
 #else
 /* LP16 */

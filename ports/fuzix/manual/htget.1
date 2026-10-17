@@ -1,0 +1,25 @@
+.TH HTGET 1
+.SH NAME
+htget \- download an HTTP file
+.SH SYNOPSIS
+.B htget
+.RI http://HOST[:PORT]/PATH " FILE|-"
+.SH DESCRIPTION
+Resolve HOST and retrieve an HTTP body. Use - as FILE to write to stdout.
+Content-length, connection-close and chunked framing are supported, with
+informational responses and up to five HTTP redirects. Partial socket reads
+and writes are handled. An idle read or write times out after 30 seconds.
+.PP
+For a named file, a temporary file is created in the destination directory.
+Only a successful response and complete transfer replace the destination.
+HTTP errors, malformed or truncated bodies and interruption preserve an
+existing file. Ctrl-C removes the temporary file and returns to the shell.
+.PP
+Only cleartext http:// is supported. HTTPS/TLS, authentication, cookies and
+compressed-content decoding are not implemented. Header lines are limited to
+1024 characters and header blocks to 16 KiB. DNS uses /etc/hosts and
+/etc/resolv.conf. Saved file lengths count guest C characters, one per octet.
+.SH EXAMPLE
+htget http://example.com/ /example.html
+.SH SEE ALSO
+dig(1), host(1), ifconfig(1)

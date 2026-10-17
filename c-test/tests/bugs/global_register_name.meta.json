@@ -1,5 +1,5 @@
 {
   "description": "C globals whose names match assembly registers remain valid linker symbols",
-  "expected": "Y\n",
-  "use_runtime": true
+  "use_runtime": true,
+  "expected": "Y\n"
 }

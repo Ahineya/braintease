@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
   "expected": "YYY\n",
-  "description": "Link collection retains callback and global initializer dependencies, discards unreachable undefined calls"
+  "description": "Link collection retains callback and global initializer dependencies, discards unreachable undefined calls",
+  "use_runtime": true
 }

@@ -1,0 +1,19 @@
+.TH TELNET 1
+.SH NAME
+telnet \- open an interactive remote terminal
+.SH SYNOPSIS
+.B telnet
+.RI ADDRESS " [PORT]"
+.SH DESCRIPTION
+Connect to an IPv4 address or hostname, using port 23 by default. Input and output
+use a Telnet NVT stream. The client negotiates echo, suppress-go-ahead,
+initial window dimensions and an ANSI terminal type. An interactive terminal
+is required; terminal settings are restored when the client exits.
+.PP
+Press Ctrl-^ to close the connection. On many keyboards this is
+Ctrl-Shift-6. Ctrl-] is reserved for the VM host emergency exit.
+.PP
+Telnet traffic is plaintext. Use trusted peers and networks.
+Subsequent window resize notifications are not implemented.
+.SH SEE ALSO
+telnetd(1), ifconfig(1)

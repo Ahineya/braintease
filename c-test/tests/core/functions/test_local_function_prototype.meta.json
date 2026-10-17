@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
+  "description": "Block-scope function declaration must call the existing function (c-testsuite 00078)",
   "expected": "YY\n",
-  "description": "Block-scope function declaration must call the existing function (c-testsuite 00078)"
+  "use_runtime": true
 }

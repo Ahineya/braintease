@@ -1,0 +1,23 @@
+.TH HOST 1
+.SH NAME
+host, nslookup \- resolve an IPv4 hostname or reverse address
+.SH SYNOPSIS
+.B host
+.RI NAME|ADDRESS
+.br
+.B nslookup
+.RI NAME|ADDRESS
+.SH DESCRIPTION
+Print IPv4 addresses for NAME, or look up the PTR name of ADDRESS.
+Nslookup is an alias for this small, noninteractive host tool.
+Local aliases in /etc/hosts are checked before DNS. Nameservers come from
+/etc/resolv.conf, with up to three numeric IPv4 nameserver entries.
+The installed defaults are 1.1.1.1 and 8.8.8.8; configuration survives upgrades.
+.PP
+DNS follows bounded CNAME chains and retries truncated UDP replies over TCP.
+Up to four IPv4 addresses are returned. Queries use monotonic timeouts and
+do not replace the caller's alarm or signal handlers. Unknown names and
+missing address records return a nonzero status. Search domains, IPv6 host
+results and a DNS cache are not supplied. Use dig for other record types.
+.SH SEE ALSO
+dig(1), ping(1), telnet(1)

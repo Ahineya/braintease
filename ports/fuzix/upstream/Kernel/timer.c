@@ -59,6 +59,19 @@ void wrtime(time_t *tloc)
 
 static uint8_t tod_deci;	/* 10ths of a second count */
 static uint8_t rtcsec;		/* Second number we expect from the RTC */
+#ifdef CONFIG_PLATFORM_CLOCK
+/* Large elapsed intervals must not require one interrupt per missed tick. */
+void tod_advance(uint32_t elapsed)
+{
+    uint32_t seconds = elapsed / 10;
+    unsigned remainder = tod_deci + elapsed % 10;
+    uint32_t previous = tod.low;
+    seconds += remainder / 10;
+    tod_deci = remainder % 10;
+    tod.low += seconds;
+    if (tod.low < previous) ++tod.high;
+}
+#endif
 #ifdef CONFIG_RTC
 static uint8_t rtcsync;		/* Counter in 1/10ths until we sync with the RTC */
 #endif

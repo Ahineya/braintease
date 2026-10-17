@@ -1,0 +1,20 @@
+.TH NTPDATE 1
+.SH NAME
+ntpdate \- query network time or set the guest clock
+.SH SYNOPSIS
+.B ntpdate
+.RI [ -d ] " [-s] [-p PORT] [-o HOURS] SERVER"
+.SH DESCRIPTION
+Resolve SERVER and send an NTP client request, using UDP port 123 by default.
+Display the returned calendar time. -s also sets the guest's UTC calendar
+and requires root. -d is accepted for the display mode. -o shifts only the
+display by the requested whole hours, from -12 through 14; clock updates
+always use UTC. The host's clock is never modified.
+.PP
+Replies must match the request timestamp and peer, use NTP version 3 or 4
+server mode, and report a synchronized stratum from 1 through 15. Queries
+are bounded to three attempts with two-second monotonic timeouts. Clock
+updates do not alter networking deadlines or uptime. NTP authentication,
+clock discipline and subsecond correction are not supplied.
+.SH SEE ALSO
+date(1), uptime(1), host(1)

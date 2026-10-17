@@ -16,7 +16,7 @@ No new IR opcode and no new machine instruction are required. RFL functions are 
 
 The hardware stack is bank 2. The backend gives every live call a frame there: saved registers, a spill area, and any `alloca`. One frame is small. A recursive RFL call chain is not, and the backend does not grow that bank or perform tail calls.
 
-**RFL-to-RFL calls do not nest on the hardware stack.**
+**Ordinary RFL-to-RFL calls do not nest on the hardware stack.**
 
 Each monomorphized RFL function is one IR function with the C calling convention:
 
@@ -54,6 +54,29 @@ The hardware stack, at an RFL yield point, holds startup, the driver, and nothin
 
 `extern "C"` calls are direct IR calls. They happen while the active RFL function is on the hardware stack and do not yield. An exported C function may build a frame and enter the driver. If C calls back into RFL during an `extern "C"` call, that entry nests another driver on the hardware stack, once per crossing. Deep recursion inside C still uses bank 2. Pure RFL recursion does not.
 
+### Compiler-owned async frames
+
+[`async fn` and `.await`](async.md) use this same frame-to-frame driver.
+A function has a lazy ordinary constructor returning `Async<T>` and an owned
+resumable body returning T. The body's allocation is independent of the LIFO
+arena; its locals and children can survive Pending and its handle can move or
+retire out of allocation order.
+
+Polling sets a fresh Context and caller/result continuation, then returns the
+body frame to the existing driver. Pending writes a Poll value into that caller
+and resumes the caller, unwinding ordinary poll-call frames before the parent's
+own suspension. Ready builds its payload directly in the heap, transfers the
+result, cleans the body and resumes its caller. No nested polling driver or
+source-sized stack result buffer is needed, including for recursive awaits.
+Suspension clears borrowed context/views and the synchronous caller link.
+
+An erased owner header retains typed destruction metadata. Cancellation selects
+the suspended state's active cleanup order, cancels unfinished awaited children
+and releases initialized managed slots. Completed frames never cancel delivered
+work. Cleanup callbacks retain their existing synchronous destruction protocol.
+Safe references cannot cross await; later borrowed operations need an explicit
+lifetime proof. The full ownership and current layout limits are in [async.md](async.md).
+
 ---
 
 ## 2. Where data lives
@@ -64,6 +87,7 @@ The hardware stack, at an RFL yield point, holds startup, the driver, and nothin
 | Global bank, bank 1 | C globals a linked C object actually defines. RFL does not put payloads here |
 | Managed heap, banks 5–255 | ADT nodes, strings, closure environments, arrays, and other escaped values |
 | Frame arena, chunks from that heap | Activation records |
+| Independent owned heap allocations | Suspended async bodies and their initialized state |
 | Code banks | Function bodies, and the immediates that rebuild static payloads at startup |
 
 The global bank is one bank, and the linker rejects overflow. RFL static payloads are created on the managed heap when the program starts. The startup code stores them from immediate operands in the code image, which already spans code banks. Nullary constructors such as `Nil` and `None` are immediate scalars, not heap objects and not global-bank objects. A constructor with fields is a managed heap object.

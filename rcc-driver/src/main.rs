@@ -42,6 +42,7 @@ struct CompileConfig {
     defines: Vec<String>,
     /// Enable tracing of all compilation stages to JSON files
     trace: bool,
+    timings: bool,
     target: rcc_ir::target::Target,
 }
 
@@ -57,9 +58,19 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Link native-targeted IR translation units into a host executable
+    /// Link application IR and guest libc into an independent Fuse-X executable
+    LinkApp {
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        #[arg(short, long)]
+        output: PathBuf,
+    },
     LinkNative {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
+        /// Kernel IR units whose globals are shared between hosted contexts
+        #[arg(long = "kernel", value_name = "IR")]
+        kernel: Vec<PathBuf>,
         #[arg(short, long)]
         output: PathBuf,
     },
@@ -153,6 +164,9 @@ enum Commands {
         /// Enable tracing of all compilation stages to JSON files
         #[arg(long)]
         trace: bool,
+        /// Report compilation stage wall times to stderr
+        #[arg(long)]
+        timings: bool,
         /// Native v1 uses host machine code with the shared Ripple data ABI
         #[arg(long, default_value="ripple", value_parser=rcc_ir::target::Target::parse)]
         target: rcc_ir::target::Target,
@@ -163,14 +177,30 @@ fn main() {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::LinkNative { inputs, output } => {
+        Commands::LinkApp { inputs, output } => {
+            let result = (|| -> Result<(),Box<dyn std::error::Error>> {
+                let modules=inputs.iter().map(|p| rcc_ir::parse_module(&fs::read_to_string(p)?).map_err(Into::into)).collect::<Result<Vec<_>,Box<dyn std::error::Error>>>()?;
+                rcc_native::compile_application(&modules,&output)?;
+                Ok(())
+            })();
+            if let Err(error)=result {eprintln!("Application link failed: {error}");std::process::exit(1);}
+        },
+        Commands::LinkNative { inputs, kernel, output } => {
             let result = (|| -> Result<(), Box<dyn std::error::Error>> {
                 let modules = inputs.iter().map(|path| {
                     let text = fs::read_to_string(path)?;
                     rcc_ir::parse_module(&text).map_err(Into::into)
                 }).collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
-                let module = rcc_native::link_modules(&modules)?;
-                rcc_native::compile_executable(&module, &output)?;
+                if kernel.is_empty() {
+                    let module = rcc_native::link_modules(&modules)?;
+                    rcc_native::compile_executable(&module, &output)?;
+                } else {
+                    let kernel = kernel.iter().map(|path| {
+                        let text = fs::read_to_string(path)?;
+                        rcc_ir::parse_module(&text).map_err(Into::into)
+                    }).collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+                    rcc_native::compile_hosted_executable(&kernel, &modules, &output)?;
+                }
                 Ok(())
             })();
             if let Err(error) = result {
@@ -190,7 +220,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, segmented_stack, no_preprocess, include_dirs, defines, trace, target } => {
+        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, segmented_stack, no_preprocess, include_dirs, defines, trace, timings, target } => {
             // Initialize logger based on debug level
             let log_level = match debug {
                 0 => "error",
@@ -220,6 +250,7 @@ fn main() {
                 include_dirs,
                 defines,
                 trace,
+                timings,
                 target,
             };
             
@@ -261,29 +292,35 @@ fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn 
     if module.target == rcc_ir::target::Target::Native && config.target != module.target {
         return Err("native IR cannot be retargeted to Ripple; recompile the source".into());
     }
-    let mut selected = module.clone();
-    selected.target = config.target;
-    let module = &selected;
-    let ir_output = rcc_ir::emit_module(module);
-    if config.emit_ir {
-        print!("{ir_output}");
-        return Ok(());
-    }
-    if config.print_ir {
-        println!("\n=== IR Output ===");
-        print!("{ir_output}");
-        println!("=== End IR ===\n");
-    }
-    if config.save_ir {
-        let ir_path = if let Some(path) = &config.ir_output_path {
-            path.clone()
-        } else {
-            let mut path = config.input_path.clone();
-            path.set_extension("ir");
-            path
-        };
-        fs::write(&ir_path, &ir_output)?;
-        println!("IR saved to: {}", ir_path.display());
+    let selected = (module.target != config.target).then(|| {
+        let mut selected = module.clone();
+        selected.target = config.target;
+        selected
+    });
+    let module = selected.as_ref().unwrap_or(module);
+    if config.emit_ir || config.print_ir || config.save_ir {
+        let _timer = StageTimer::new(config.timings, "ir_output");
+        let ir_output = rcc_ir::emit_module(module);
+        if config.emit_ir {
+            print!("{ir_output}");
+            return Ok(());
+        }
+        if config.print_ir {
+            println!("\n=== IR Output ===");
+            print!("{ir_output}");
+            println!("=== End IR ===\n");
+        }
+        if config.save_ir {
+            let ir_path = if let Some(path) = &config.ir_output_path {
+                path.clone()
+            } else {
+                let mut path = config.input_path.clone();
+                path.set_extension("ir");
+                path
+            };
+            fs::write(&ir_path, &ir_output)?;
+            println!("IR saved to: {}", ir_path.display());
+        }
     }
     let output = if let Some(path) = &config.output_path {
         path.clone()
@@ -295,8 +332,30 @@ fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn 
     if config.target == rcc_ir::target::Target::Native {
         if config.segmented_stack { return Err("--segmented-stack is a Ripple calling convention; native uses its own logical stack".into()); }
         if config.bank_size != 64000 { return Err("native v1 data ABI requires --bank-size 64000".into()); }
+        let _timer = StageTimer::new(config.timings, "native_codegen_link");
         rcc_native::compile_executable(module, &output).map_err(Into::into)
-    } else { write_assembly(module, &output, config.bank_size, config.trace_spills, config.segmented_stack) }
+    } else {
+        let _timer = StageTimer::new(config.timings, "ripple_lower_emit");
+        write_assembly(module, &output, config.bank_size, config.trace_spills, config.segmented_stack)
+    }
+}
+
+/// Opt-in diagnostics stay off stdout so --emit-ir remains machine-readable.
+struct StageTimer {
+    stage: &'static str,
+    start: Option<std::time::Instant>,
+}
+impl StageTimer {
+    fn new(enabled: bool, stage: &'static str) -> Self {
+        Self { stage, start: enabled.then(std::time::Instant::now) }
+    }
+}
+impl Drop for StageTimer {
+    fn drop(&mut self) {
+        if let Some(start) = self.start {
+            eprintln!("rcc-timing {} {:.6}", self.stage, start.elapsed().as_secs_f64());
+        }
+    }
 }
 
 fn write_assembly(
@@ -374,9 +433,12 @@ fn save_trace_file<T: Serialize>(
 }
 
 fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let _total = StageTimer::new(config.timings, "total");
     if config.input_path.extension().and_then(|ext| ext.to_str()) == Some("ir") {
+        let timer = StageTimer::new(config.timings, "read_parse_ir");
         let text = fs::read_to_string(&config.input_path)?;
         let module = rcc_ir::parse_module(&text)?;
+        drop(timer);
         if module.target != config.target {
             return Err(format!("IR target is {}; use --target {} or recompile the source", module.target.name(), module.target.name()).into());
         }
@@ -397,10 +459,14 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
     }
     
     // Read source file
-    let mut source = fs::read_to_string(&config.input_path)?;
+    let mut source = {
+        let _timer = StageTimer::new(config.timings, "read_source");
+        fs::read_to_string(&config.input_path)?
+    };
     
     // Preprocess unless explicitly disabled
     if !config.no_preprocess {
+        let _timer = StageTimer::new(config.timings, "preprocess");
         let mut preprocessor = Preprocessor::new();
         
         // Add include directories
@@ -435,6 +501,7 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
     }
     
     // Parse the source
+    let parse_timer = StageTimer::new(config.timings, "parse");
     let mut ast = match Frontend::parse_source(&source) {
         Ok(ast) => {
             if !config.emit_ir {
@@ -468,6 +535,7 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
             return Err(e.into());
         }
     };
+    drop(parse_timer);
     
     // Save AST if tracing is enabled
     if config.trace {
@@ -478,9 +546,12 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
     }
     
     // Perform semantic analysis
-    let mut analyzer = SemanticAnalyzer::new();
-    analyzer.analyze(&mut ast)?;
-    let type_analyzer = analyzer.into_type_info();
+    let type_analyzer = {
+        let _timer = StageTimer::new(config.timings, "semantic");
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&mut ast)?;
+        analyzer.into_type_info()
+    };
     
     // Save semantic analysis output if tracing is enabled
     if config.trace {
@@ -524,8 +595,11 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
     }
     
     // Convert to typed AST
-    let typed_ast = rcc_frontend::type_translation_unit(&ast, type_analyzer)
-        .map_err(|e| CompilerError::internal_error(format!("Type error: {}", e)))?;
+    let typed_ast = {
+        let _timer = StageTimer::new(config.timings, "type");
+        rcc_frontend::type_translation_unit(&ast, type_analyzer)
+            .map_err(|e| CompilerError::internal_error(format!("Type error: {}", e)))?
+    };
     
     // Save typed AST if tracing is enabled
     if config.trace {
@@ -540,7 +614,10 @@ fn compile_c99_file(config: CompileConfig) -> Result<(), Box<dyn std::error::Err
         println!("\n💀 Attempting full compilation pipeline");
     }
     let codegen = rcc_frontend::TypedCodeGenerator::new(config.input_path.file_stem().unwrap().to_str().unwrap().to_string());
-    match codegen.generate(&typed_ast) {
+    let ir_timer = StageTimer::new(config.timings, "ir_generate");
+    let generated = codegen.generate(&typed_ast);
+    drop(ir_timer);
+    match generated {
         Ok(ir_module) => {
             if !config.emit_ir {
                 println!("💫 Successfully generated IR");

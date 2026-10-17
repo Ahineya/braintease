@@ -1,19 +1,24 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #ifndef RIPPLE_FUZIX_MMU_H
 #define RIPPLE_FUZIX_MMU_H
-#ifndef RIPPLE_MMU
-#define RIPPLE_MMU 0
-#endif
-#if RIPPLE_MMU
+#include "mmu-profile.h"
+#include "code.h"
 #define USER_SB 31
 #define USER_HEAP_LAST 23
 #define MMU_TABLE_BASE 64
-#define MMU_REF_BANK 80
+#define MMU_REF_BANK 96
+#define MMU_TASK_DATA_BANK 97
+/* Physical scanout storage, separate from the COW process pool. */
+#define MMU_GRAPHICS_BANK 104
+#define MMU_GRAPHICS_CELLS (5UL * 64000UL)
 #define MMU_POOL_BASE 128
 #define MMU_RAM_BANKS 256
 #define MMU_PAGE_CELLS 512U
 #define MMU_BANK_PAGES 125U
 #define MMU_POOL_PAGES ((MMU_RAM_BANKS - MMU_POOL_BASE) * MMU_BANK_PAGES)
+#if 32 + PTABSIZE > MMU_TABLE_BASE || MMU_TABLE_BASE + PTABSIZE > MMU_REF_BANK
+#error Overlapping Ripple process stacks or MMU metadata
+#endif
 #define MP_PRESENT 1U
 #define MP_READ 2U
 #define MP_WRITE 4U
@@ -40,7 +45,6 @@ extern unsigned ripple_mmu_fault_bank(void);
 extern unsigned ripple_mmu_fault_off(void);
 extern unsigned ripple_mmu_saved_mode(void);
 extern unsigned ripple_trap_action;
-#else
-#define USER_SB 9
-#endif
+extern int ripple_mmu_span(unsigned long, unsigned, unsigned *, unsigned *, unsigned *);
+extern int ripple_mmu_source(unsigned long, unsigned *, unsigned *, unsigned *);
 #endif

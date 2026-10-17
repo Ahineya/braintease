@@ -49,13 +49,27 @@ impl<'a> Checker<'a> {
         for index in &pending {
             let func = functions[*index].clone();
             let (params, ret) = sigs[&func.name].clone();
+            let body_ret = if func.is_async {
+                match solver.info[solver.find(ret) as usize].as_ref() {
+                    Some(IInfo::Adt { args, .. }) => args[0],
+                    _ => unreachable!("async result is wrapped by the parser"),
+                }
+            } else {
+                ret
+            };
             let mut scope = vec![HashMap::new()];
             for (param, var) in func.params.iter().zip(&params) {
                 self.infer_pat(&mut solver, &param.pat, *var, &mut scope)?;
             }
-            let body =
-                self.infer_block(&mut solver, &func.body, &sigs, functions, &mut scope, ret)?;
-            solver.unify(body, ret).map_err(|_| {
+            let body = self.infer_block(
+                &mut solver,
+                &func.body,
+                &sigs,
+                functions,
+                &mut scope,
+                body_ret,
+            )?;
+            solver.unify(body, body_ret).map_err(|_| {
                 CompileError::at(
                     self.source,
                     func.name_span.start,

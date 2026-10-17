@@ -10,6 +10,13 @@ export trait Future {
     fn cancel(&mut self);
 }
 
+// Compiler-owned frames are lazy and move-only, including their parameters.
+impl<T> Future for Async<T> {
+    type Output = T;
+    fn poll(&mut self, cx:&mut Context) -> Poll<T> { __async_poll(self, cx) }
+    fn cancel(&mut self) { __async_cancel(self); }
+}
+
 // Copies alias one operation: wrapper state prevents duplicate completion.
 export type CallbackFuture<T> = CallbackFuture(fn(Context)->Poll<T>, fn()->unit);
 impl<T> Future for CallbackFuture<T> {

@@ -1,5 +1,5 @@
 {
   "use_runtime": true,
-  "description": "Test MMIO layout; the Rust VM emits CRLF after TEXT40 enables raw terminal mode",
-  "expected": "TTY:OK\nRNG:OK\nDISP:OK\r\nMMIO:OK\r\n"
+  "expected": "TTY:OK\nRNG:OK\nDISP:OK\r\nMMIO:OK\r\n",
+  "description": "Test MMIO layout; the Rust VM emits CRLF after TEXT40 enables raw terminal mode"
 }

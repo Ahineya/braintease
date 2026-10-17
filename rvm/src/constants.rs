@@ -7,6 +7,8 @@ pub const DEFAULT_BANK_SIZE: u16 = 65535;
 pub const OP_HALT: u8 = 0x00;
 pub const OP_NOP: u8 = 0x42;
 pub const DEFAULT_MEMORY_SIZE: usize = 65536 * 65536; // 64K words in 64K banks
+/// Instruction storage ceiling, allocated lazily (512 MiB of decoded code).
+pub const DEFAULT_CODE_MEMORY: usize = 1024 * 65536;
 
 // Memory-mapped I/O header addresses (bank 0, words 0..31)
 pub const HDR_TTY_OUT: usize = 0; // Write: low8 → stdout

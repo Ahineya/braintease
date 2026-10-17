@@ -21,7 +21,7 @@ static int intact(unsigned *stack, unsigned *outer, unsigned salt) {
     return 1;
 }
 static int fail(void) {
-    out("forkcheck FAILED bank snapshot\n");
+    out("forkcheck FAILED memory isolation\n");
     return 1;
 }
 static int exercise(unsigned *outer) {
@@ -87,7 +87,7 @@ static int exercise(unsigned *outer) {
         close(fd);
         for (i = 0; i < 36000U; i++) if (data[i]) return fail();
     }
-    out("forkcheck: bank snapshots and user zero passed\n");
+    out("forkcheck: data/stack isolation and user zero passed\n");
     return value == 7 && ((unsigned)status >> 8) == 23 ? 0 : 1;
 }
 

@@ -1,5 +1,5 @@
 {
-  "use_runtime": true,
+  "expected": "YYYYYYYYYYYYYYYY\n",
   "description": "Test EVERYTHING that can go wrong with pointers. And it does.",
-  "expected": "YYYYYYYYYYYYYYYY\n"
+  "use_runtime": true
 }

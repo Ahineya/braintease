@@ -1,5 +1,5 @@
 {
+  "description": "A function can span code banks and branch past 65535 instructions",
   "expected": "YY\n",
-  "use_runtime": false,
-  "description": "A function can span code banks and branch past 65535 instructions"
+  "use_runtime": false
 }

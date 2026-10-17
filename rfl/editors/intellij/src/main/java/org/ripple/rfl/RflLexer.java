@@ -10,12 +10,12 @@ import java.util.Set;
 /** Tolerant editor lexer. Parsing and semantic analysis remain in rfl lsp. */
 public final class RflLexer extends LexerBase {
     private static final Set<String> KEYWORDS = Set.of(
-        "fn", "let", "mut", "if", "else", "return", "as", "while", "break", "continue",
+        "fn", "async", "await", "let", "mut", "if", "else", "return", "as", "while", "break", "continue",
         "match", "for", "in", "type", "trait", "impl", "const", "struct", "export", "import", "extern",
         "unsafe", "true", "false");
     private static final Set<String> TYPES = Set.of(
         "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64", "bool", "char",
-        "String", "usize", "unit", "Vec", "Slice", "Owned", "Option", "Result", "c_int", "c_char",
+        "String", "usize", "unit", "Vec", "Slice", "Owned", "Async", "Option", "Result", "c_int", "c_char",
         "c_short", "c_uint", "c_long", "c_size_t");
     private CharSequence buffer = "";
     private int start, end, limit;

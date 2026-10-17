@@ -541,6 +541,8 @@ fn semantic_tokens(docs: &HashMap<String, Doc>, params: &Value) -> Value {
 fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
     Some(match &token.kind {
         TokenKind::Fn
+        | TokenKind::Async
+        | TokenKind::Await
         | TokenKind::Let
         | TokenKind::Mut
         | TokenKind::If
@@ -590,6 +592,7 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
                     | "Vec"
                     | "Slice"
                     | "Owned"
+                    | "Async"
                     | "ErasedOwner"
                     | "Option"
                     | "Result"
@@ -1076,5 +1079,53 @@ mod resources {
             .find(|t| matches!(&t.kind,TokenKind::Ident(n) if n=="Owned"))
             .unwrap();
         assert_eq!(token_kind(&analysis, owner), Some(2));
+    }
+}
+
+#[cfg(test)]
+mod async_tests {
+    use super::*;
+    #[test]
+    fn async_hover_signatures_tokens_and_completion_hide_generated_helpers() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/async-editor.rfl");
+        let source = r#"
+            import { Future, yield_now } from "std/future";
+            async fn make(n:i16)->i16 {yield_now().await;n+2}
+            async fn work()->i16 {let value=make(40).await;value}
+            fn main() {}
+        "#;
+        let analysis = Analysis::open(Some(&path), source);
+        assert!(
+            analysis.diagnostics.is_empty(),
+            "{:?}",
+            analysis.diagnostics
+        );
+        let call = source.find("make(40)").unwrap();
+        assert_eq!(
+            analysis.signature(call + 6).unwrap().0,
+            "fn(i16) -> Async<i16>"
+        );
+        let await_at = source.find("make(40).await").unwrap() + 9;
+        assert_eq!(analysis.hover(await_at).unwrap(), "i16");
+        let (_, span) = analysis.definition(call).unwrap();
+        assert_eq!(&source[span.start..span.end], "make");
+        assert!(!analysis
+            .completions(source.rfind("value}").unwrap())
+            .iter()
+            .any(|item| item.label.contains('$')));
+        for token in lexer::tokenize(source)
+            .unwrap()
+            .iter()
+            .filter(|token| matches!(token.kind, TokenKind::Async | TokenKind::Await))
+        {
+            assert_eq!(token_kind(&analysis, token), Some(0));
+        }
+        let incomplete = source.replace("make(40).await", "make(40).aw");
+        let analysis = Analysis::open(Some(&path), &incomplete);
+        let at = incomplete.find("make(40).aw").unwrap() + 11;
+        assert!(analysis
+            .completions(at)
+            .iter()
+            .any(|item| item.label == "await"));
     }
 }

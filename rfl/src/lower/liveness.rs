@@ -26,7 +26,18 @@ pub(super) fn live_at_resume(proc: &Proc) -> Vec<HashSet<usize>> {
             }
         }
         match seg.term.as_ref().unwrap() {
-            Term::Jump(next) => successors[index].push(*next),
+            Term::Jump(next) | Term::Suspend { next, .. } => successors[index].push(*next),
+            Term::AsyncPoll {
+                future,
+                context,
+                dest,
+                next,
+            } => {
+                read(*future, &defs[index], &mut uses[index]);
+                read(*context, &defs[index], &mut uses[index]);
+                defs[index].insert(*dest);
+                successors[index].push(*next);
+            }
             Term::Call {
                 args, dest, next, ..
             }
@@ -94,7 +105,15 @@ pub(super) fn live_at_resume(proc: &Proc) -> Vec<HashSet<usize>> {
     // point without relying on IR labels or on the order blocks were emitted.
     let mut at_resume = vec![HashSet::new(); proc.segs.len()];
     for seg in &proc.segs {
-        if let Some(Term::Call { dest, next, .. } | Term::Apply { dest, next, .. }) = &seg.term {
+        if let Some(Term::Suspend { next, .. }) = &seg.term {
+            at_resume[*next].extend(live[*next].iter().copied());
+        }
+        if let Some(
+            Term::Call { dest, next, .. }
+            | Term::Apply { dest, next, .. }
+            | Term::AsyncPoll { dest, next, .. },
+        ) = &seg.term
+        {
             // The callee writes its result directly into the heap frame.
             at_resume[*next].extend(live[*next].iter().filter(|slot| *slot != dest).copied());
         }

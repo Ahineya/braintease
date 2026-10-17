@@ -10,6 +10,8 @@ impl<'a> Checker<'a> {
         closure: bool,
         capture: bool,
     ) -> Result<(), CompileError> {
+        let saved_async_context =
+            std::mem::replace(&mut self.async_context, func.is_async.then_some(None));
         let saved_assoc_self = self.assoc_self.clone();
         if !capture {
             self.assoc_self = self
@@ -38,12 +40,33 @@ impl<'a> Checker<'a> {
         self.scopes = vec![HashMap::new()];
         self.loops = 0;
         let declared = self.sigs[name].ret;
+        let async_result = func.is_async.then_some(declared.unwrap_or(Ty::Unit));
+        let declared = if func.is_async {
+            let id = match declared {
+                Some(Ty::Adt(id))
+                    if self.schemas[self.adts[id as usize].schema].name == "Async" =>
+                {
+                    id
+                }
+                _ => return Err(CompileError::at(
+                    self.source,
+                    func.name_span.start,
+                    "Async is reserved for compiler-owned futures in an async function signature",
+                )),
+            };
+            Some(self.adts[id as usize].args[0])
+        } else {
+            declared
+        };
         self.fn_ret = declared.unwrap_or(Ty::Unit);
         let mut params = Vec::new();
         let mut seen = HashMap::new();
         let mut prefix = Vec::new();
         for (index, param) in func.params.iter().enumerate() {
             let ty = self.sigs[name].params[index];
+            if func.is_async {
+                self.require_vec_elem(param.name_span.start, ty)?;
+            }
             let simple = matches!(&param.pat, Pat::Name { name, .. } if name != "_");
             if simple {
                 if seen.contains_key(&param.name) {
@@ -104,6 +127,13 @@ impl<'a> Checker<'a> {
             }
         }
         let ret = declared.unwrap_or_else(|| self.peek_block(&func.body).unwrap_or(Ty::I16));
+        if func.is_async && (func.name == "main" || func.c_export) {
+            return Err(CompileError::at(
+                self.source,
+                func.name_span.start,
+                "async functions cannot be main or exported through the C ABI",
+            ));
+        }
         if func.name == "main" && !matches!(ret, Ty::Unit | Ty::I16) {
             return Err(CompileError::at(
                 self.source,
@@ -119,7 +149,7 @@ impl<'a> Checker<'a> {
                 "a function cannot return a reference",
             ));
         }
-        self.sigs.get_mut(name).unwrap().ret = Some(ret);
+        self.sigs.get_mut(name).unwrap().ret = Some(async_result.unwrap_or(ret));
         if func.type_params.is_empty() && func.name_span.end > func.name_span.start {
             let params = self.sigs[name]
                 .params
@@ -127,7 +157,7 @@ impl<'a> Checker<'a> {
                 .map(|ty| self.show(*ty))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let signature = format!("fn({params}) -> {}", self.show(ret));
+            let signature = format!("fn({params}) -> {}", self.show(async_result.unwrap_or(ret)));
             if let Some(fact) = self
                 .facts
                 .iter_mut()
@@ -174,6 +204,8 @@ impl<'a> Checker<'a> {
         }
         let captures = std::mem::take(&mut self.captures);
         self.typed.push(TFn {
+            async_context: self.async_context.flatten(),
+            async_result,
             name: name.to_string(),
             params,
             ret,
@@ -195,6 +227,7 @@ impl<'a> Checker<'a> {
         self.borrows = saved_borrows;
         self.loose_receiver = saved_loose;
         self.assoc_self = saved_assoc_self;
+        self.async_context = saved_async_context;
         Ok(())
     }
 

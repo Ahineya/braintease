@@ -32,32 +32,113 @@ Start it again and `cat note`. Use **shutdown** to save and stop normally.
 `sync` commits filesystem changes without stopping. `exit` shuts down PID 1;
 inside a child `sh`, it returns to its caller.
 
-Select the Brainfuck CPU with `scripts/run-fuzix.sh --rbf` (or positional `rbf`).
-`--rvm` selects the default native VM. Both use the same persistent disk. The launcher rebuilds and installs the
-appropriate kernel/userspace profile when switching hosts. RVM defaults to the
-MMU profile; RBF selects `MMU=0` and additionally exports `bios.bf` with
-LOADC/STORC, IRQs and the instruction timer enabled. `--rbf --run-only` reuses
-that export, and `--rbf --build-only` prepares it without starting the host.
-The JIT remains enabled by default on either host; use `--no-jit` to disable it.
+FUZIX/Ripple is **MMU-only on RVM**. The old `MMU=0` bank-snapshot build and
+FUZIX/RBF export are retired. `make MMU=0`, `make bf`, and launcher `--rbf`
+fail immediately; stale non-MMU or unmarked artifacts are rejected before disk
+updates. Rebuild with the ordinary launcher to migrate an old build directory;
+managed executables are updated while saved files are preserved. `MMU=1` and
+`--rvm` remain accepted for existing scripts. The JIT is enabled by default;
+`--no-jit` selects RVM's interpreter. General RBF support elsewhere in the
+repository and the separate native Fuse-X platform are unaffected.
 
-The BF tape reserves 80 data banks and 140 code banks for dynamically loaded
-executables, requiring about **547 MiB for the tape alone**. Brainfuck execution
-can be much slower than RVM, including BIOS disk loading. `--telemetry-lite`
-shows RBF progress. Interactive launches stream raw terminal bytes to the guest,
-including Ctrl-C, Tab and arrow keys; Ctrl-] stops the host and restores the
-terminal. `--headless --input TEXT` runs without live terminal input. Use
-`shutdown` to save cleanly before switching hosts.
+## Networking and remote terminals
+
+On macOS, ordinary launches attach shared/NAT Ethernet with internet access:
+
+```sh
+scripts/run-fuzix.sh
+```
+
+The host asks for administrator access to start its vmnet helper before the
+guest starts accepting keyboard input. `--net host` selects a host-only link,
+`--net off` boots offline, and `--net /path/to/socket` attaches an external
+Ethernet peer. `RIPPLE_NET` overrides the default policy when no flag is given.
+
+Inside FUZIX:
+
+```text
+ifconfig
+ping -c 3 192.168.64.1
+host example.com
+dig example.com MX
+htget http://example.com/ /example.html
+telnetd &
+```
+
+The initial static address is **192.168.64.250/24**, with gateway
+**192.168.64.1**. From another host terminal, connect with
+`telnet 192.168.64.250`. Each connection gets a separate PTY and Bourne shell;
+Ctrl-C, Ctrl-Z, `jobs`, `fg`, terminal dimensions and Levee work through that
+terminal. Files share the normal persistent root. Use `exit` to close a remote
+shell, and `shutdown` to save and stop the whole guest.
+
+**Telnetd grants an unauthenticated root shell, and Telnet traffic is plaintext.**
+Use it on the trusted host-only link. It starts only when requested.
+Eight PTYs and four TCP connections are available,
+shared with local PTY sessions and outgoing connections; process slots can become the limiting resource first.
+
+The guest also has `telnet HOST [PORT]`. Press **Ctrl-^** (Ctrl-Shift-6 on
+many keyboards) to leave that client. Ctrl-] remains the VM's emergency exit.
+`ping`, `telnet` and the new network utilities resolve IPv4 hostnames in the
+guest. `/etc/hosts` supplies local aliases; `/etc/resolv.conf` supplies up to
+three numeric IPv4 nameservers. New disks use 1.1.1.1 and 8.8.8.8. These files
+survive rebuilds and upgrades. Queries validate the source, identifier,
+question, compression pointers and record bounds, follow up to eight CNAME
+lookups and retry over TCP when a UDP reply is truncated. No host resolver or
+socket proxy is used. DHCP, IPv6 transport and routed packet forwarding are
+not supplied by this port. `ifconfig eth0 ADDRESS netmask MASK gateway ADDRESS`
+changes the live configuration, which resets at the next boot.
+
+The network command pack includes upstream FUZIX `htget`, `dig`, `echoping`
+and `ntpdate`, adapted for Ripple's C16 ABI, plus `host` and its `nslookup`
+alias. `dig` supports A, AAAA, MX, NS, CNAME, TXT, SOA, PTR, ANY, `@SERVER`,
+`+short` and `-x ADDRESS`. AAAA records can be inspected over IPv4 DNS even
+though the transport stack is IPv4-only.
+
+`htget http://HOST[:PORT]/PATH FILE` downloads a body; `FILE` may be `-` for
+stdout. It handles content length, close-delimited and chunked bodies,
+informational replies and up to five HTTP redirects. It requests uncompressed
+content and uses a temporary file in the destination directory, replacing the
+destination only after a successful transfer. Failed or interrupted downloads
+preserve the original file. HTTP is cleartext; HTTPS/TLS, authentication,
+cookies and compressed-content decoding are not supplied. I/O has a 30-second
+idle timeout. `echoping HOST [PORT [MESSAGE]]` tests a UDP echo service, with
+a five-second timeout. `ntpdate SERVER` displays network time; `-s` updates
+only the guest's UTC calendar. `-o HOURS` adjusts display, not the clock update.
+
+IPv4, ARP, ICMP echo, UDP and TCP run in the guest using the shared
+`runtime/net` implementation. The host transports Ethernet frames. The FUZIX
+socket layer supports stream/datagram reads and writes, bind/listen/accept,
+nonblocking I/O, half-close, descriptor sharing across fork, and bounded queues.
+Protocol state occupies reserved physical bank 5. Polling uses the host-clock
+timer at 10 ms resolution, and all protocol/device operations hold the kernel
+interrupt lock. Packet queues and stream buffers are deliberately small; this
+is a single-interface stack intended for interactive use and small transfers.
+
+`python3 ports/fuzix/tools/test_network.py` uses an independent local Ethernet
+peer and a private disk. It checks socket ABI/errors, binary UDP/TCP, fork/dup,
+half-close, ping in both directions, Telnet negotiation, concurrent terminals,
+Ctrl-C, Levee stop/continue/save, client mode, reconnects and reboot persistence.
+`python3 ports/fuzix/tools/test_network_host.py` is an opt-in macOS check against
+the actual host TCP/IP stack and vmnet helper; authorize sudo first and stop
+other guests using the same static address. Both default to JIT execution.
+`python3 ports/fuzix/tools/test_nettools.py` checks DNS correlation, aliases,
+record decoding, TCP fallback, binary/chunked HTTP, redirects, interrupted and
+failed downloads, NTP and persisted files against independent packet fixtures.
+`test_nettools_live.py` is the opt-in macOS check for the default shared link:
+it performs public DNS queries and downloads example.com's HTTP page into a
+private image. Both use JIT and preserve the normal guest disk.
 
 ## Protected memory
 
 The default RVM build uses [MMU ABI 1](../../docs/arch/mmu.md), 256 physical RAM
-banks (32,000 KiB), and 16 process slots. It allows 16 descriptors per process,
-64 system-wide open files, and 64 cached inodes. A 16,000 KiB physical page pool
+banks (32,000 KiB), and 32 process slots. It allows 32 descriptors per process,
+128 system-wide open files, and 128 cached inodes. A 16,000 KiB physical page pool
 backs user memory. Each process has up to 16 data/heap banks (1,024,000 C characters,
 roughly 2 MiB of physical memory) and a separate 64,000-cell stack. Static
 program globals still occupy one bank and RXE images retain their existing
 60,000-character initial-data limit. Actual allocations share the physical pool;
-16 processes cannot each consume their entire virtual capacity simultaneously.
+32 processes cannot each consume their entire virtual capacity simultaneously.
 
 Process switches select maps instead of copying data and stack banks. `fork`
 shares read-only code and COW data/stack pages; writes copy 512-cell pages as
@@ -67,8 +148,9 @@ live at the top of the stack bank, leaving the heap region available for growth.
 Invalid user accesses terminate the process with SIGSEGV. MMU/user privilege
 violations cannot write kernel tables or issue device commands.
 
-The physical layout is kernel GP 3, IRQ stack 4, process kernel stacks 32–47,
-tables 64–79, page reference counts 80, and user physical pages 128–255. User
+The physical layout is kernel GP 3, IRQ stack 4, network state 5, process kernel stacks 32–63,
+tables 64–95, page reference counts 96, saved task data 97, graphics scanout
+104–108, and user physical pages 128–255. User
 virtual code starts at bank 0, data/heap occupies 8–23, and stack uses 31.
 Supervisor data accesses in virtual banks 8–31 use the active process map;
 other kernel accesses and all device descriptors are physical. User-copy helpers
@@ -79,14 +161,13 @@ paging from disk.
 
 Run `mmucheck` to exercise a large heap, COW, ten concurrent children and memory
 protection. The normal `forkcheck` and `preemptcheck` exercises also apply.
-For the old copy-based model, build with `make MMU=0`; the launcher chooses this
-automatically for Brainfuck. That profile retains eight process slots, GP 8,
-stack 9 and the one-bank allocator. The MMU requires a rebuilt RVM and rebuilt
-userspace; existing disks keep user files while managed executables are updated.
+The MMU requires an updated RVM and matching rebuilt userspace; existing disks
+keep user files while managed executables are updated. The non-MMU build is no
+longer supported.
 
 ## Unix userspace
 
-The image now includes **101 utility, scripting and game command names**, built from the pinned
+The image now includes **113 utility, scripting, graphics and game command names**, built from the pinned
 upstream sources and adapted where needed, plus the upstream V7 Bourne shell at `/bin/sh`.
 They are real executables using FUZIX system calls:
 
@@ -96,11 +177,12 @@ They are real executables using FUZIX system calls:
 | Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp`, `diff`, `diffh`, `join`, `split`, `fmt`, `column`, `pr`, `col`, `tsort`, `cksum` |
 | Calculation and development | `expr`, `awk`, `make`, `m4`, `dc` |
 | Terminal and paging | `more`, `less`, `clear`, `stty`, `tty` |
+| Networking | `ifconfig`, `ping`, `telnet`, `telnetd`, `htget`, `dig`, `host`, `nslookup`, `echoping`, `ntpdate` |
 | Editing | `ed`, `vi` (Levee), `levee`, `vile` |
 | Processes and environment | `ps`, `kill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs`, `time`, `nice`, `nohup`, `groups`, `logname`, `free`, `uptime` |
 | Filesystem information | `df`, `du`, `sync` |
 | Manuals | `man` (57 installed manual pages) |
-| Fun and scripting | `cowsay`, `picol`, `tcl`, `tclsh`, `wump`, `hamurabi`, `sokoban`, `sok` |
+| Fun and scripting | `bf`, `cowsay`, `picol`, `tcl`, `tclsh`, `wump`, `hamurabi`, `sokoban`, `sok` |
 | Shell helpers | `test`, `true`, `false`, `seq`, `yes` |
 
 Try:
@@ -137,7 +219,7 @@ echo "Today: `date`"
 
 `help`, `sync`, and `shutdown` remain small Ripple additions. PID 1 bootstraps
 straight into the shell, so it consumes one process slot. The kernel currently
-has 16 slots in the MMU profile and eight in the legacy profile; pipelines,
+has 32 slots; pipelines,
 subshells, command substitutions and background tasks
 share that limit. Interactive prompts now provide Tab completion for shell builtins, executable
 commands in `PATH`, and filenames/directories. Tab extends a common prefix;
@@ -167,7 +249,7 @@ formatting, directories, environment lookup, UTC time conversion, and a reusable
 process-local `brk` allocator. Upstream portable string, option, sorting, regular
 expression, passwd/group, and mount-table routines are reused. It is not yet the
 complete upstream libc; general floating formatted I/O outside AWK,
-networking, hardware-specific applications, compilers, and the rest of the
+additional networking APIs, hardware-specific applications, compilers, and the rest of the
 application collection remain later porting work.
 
 ## Jobs, monitoring and terminal sessions
@@ -193,24 +275,27 @@ Escape, type `:wq`, and press Enter to save and quit. `:q!` quits without saving
 Use `fg %1` to select job 1 when several jobs exist. Editors need the terminal,
 so resume them with `fg`; `bg` is for work that can continue in the background.
 
-`ps -ef` reports parent, group and session IDs, process states and actual CPU
+`ps -ef` reports parent, group and session IDs, process states and sampled CPU
 time. `ps -el` adds private/shared memory counts. `top` refreshes CPU usage and
 memory interactively (`q` quits); `top -b -n 2` prints two batch snapshots.
-CPU percentages use elapsed instruction-driven guest time. Per-process MAP-K
+CPU percentages use elapsed host monotonic time. CPU counters sample the
+selected running task in centiseconds, excluding idle; a gap credits at most
+100 ms to avoid billing a long host/debugger pause to one task. These are guest
+execution estimates, not host-process CPU measurements. Per-process MAP-K
 is PRIV-K plus SHRD-K, in physical KiB, covering data/heap/stack pages. Shared
 pages appear in each referencing process, so these columns cannot be summed
 to obtain physical usage; `free` reports unique pool totals instead. Executable
 images and reserved kernel RAM are outside the per-process page counts.
 
 `ptysh` opens a new terminal session running the shell. Exit it to return to
-the outer shell; nesting uses distinct pairs. Four pairs are exposed as
-`/dev/ptyp0`–`/dev/ptyp3` (exclusive masters) and
-`/dev/ttyp0`–`/dev/ttyp3` (slaves, tty minors 2–5). Device nodes default to
+the outer shell; nesting uses distinct pairs. FUZIX/Ripple exposes eight pairs:
+`/dev/ptyp0`–`/dev/ptyp7` (exclusive masters) and
+`/dev/ttyp0`–`/dev/ttyp7` (slaves, tty minors 2–9). Device nodes default to
 0600. `/dev/tty` follows the caller's controlling terminal. PTYs support
 canonical/raw input, echo, nonblocking backpressure, window-size ioctls,
 foreground signals, EOF and master-close hangup. They provide the kernel
 foundation for multiplexers and graphical terminals; `ptysh` itself is a
-single-session bridge. These facilities work in both MMU and legacy profiles.
+single-session bridge.
 
 The read-only `/dev/proc` ioctl `RIPPLE_PROCINFO` provides versioned records
 without kernel pointers, alongside `RIPPLE_SYSINFO`. Process groups and
@@ -249,11 +334,8 @@ not add arrow-key bindings to the upstream editors. In `ed`, enter `q` to quit
 (confirm with `y` if prompted), or `Q` to discard changes and quit immediately.
 Ctrl-C terminates `ed` and returns to the shell.
 
-The legacy `MMU=0` profile reserves 80 data banks (10,000 KiB), funding eight
-process slots with private data/stack snapshots. Its one-bank heap remains
-limited to 64,000 characters. The default MMU profile supports larger heaps and
-more processes as described above; each profile retains one spare executable
-slot so `exec` can replace an image when every process slot is occupied.
+The MMU supports larger heaps and more processes as described above. One spare
+executable record lets `exec` replace an image when every process slot is occupied.
 
 ## Memory reporting and Sokoban
 
@@ -265,9 +347,9 @@ process maps. The reserved area is not a count of live kernel allocations.
 summed to estimate physical usage. `free` also shows occupied/total process slots
 and the data/heap and stack capacities in native cells. Slots include zombies.
 
-`uptime` reports elapsed guest time, process slots and kernel load averages.
-The timer is instruction-driven, so these are guest seconds, not elapsed host
-wall time. The port has no login accounting or swap.
+`uptime` reports elapsed host monotonic time, process slots and kernel load
+averages. Sleep, alarms, terminal timeouts and monitor refresh intervals use
+the same elapsed clock. The port has no login accounting or swap.
 
 ```sh
 free
@@ -287,6 +369,12 @@ see `man sokoban` for their checked format. Credits and distribution terms are
 installed in `/usr/lib/sok/README`.
 
 ## Cows and small Tcl scripts
+
+`bf FILE` runs a Brainfuck source file, ignoring non-command characters. With
+no argument, it prints a short usage message. It uses 30,000 wrapping 8-bit
+cells and accepts up to 30,000 instructions, with brackets checked before
+execution. `,` reads standard input (EOF writes zero), and `.` writes standard
+output. The tape pointer wraps at either end. See `man bf`.
 
 `cowsay` is the bundled Fedux/FUZIX C version. It accepts a message or standard
 input, wraps at 40 columns by default, and supports its eight cow designs:
@@ -408,22 +496,17 @@ artifacts while retaining disks and backups.
 
 ## Bulk loading
 
-Current RVM and RBF hosts accelerate BIOS kernel loading, filesystem block I/O,
-executable code uploads, and physical RAM copies/clears through the existing
-DEVICE_* mailbox. In the default MMU profile, this includes COW page copies,
-page initialization, and cloning the parent's kernel stack during fork. Process
-switches select maps without copying user banks. The legacy profile also uses
-bulk transfers for executable data installation, fork bank snapshots, and
-scheduling bank save/restore. Large physical kernel-buffer and filesystem
-cache-buffer copies/clears use them in both profiles. Translated user buffers,
-including executable data and `/dev/zero` destinations in the MMU profile, use
-checked CPU accesses so virtual addresses are never submitted as physical device
-addresses. The guest still parses FAT/RXE files and validates relocation records;
-the legacy profile also applies physical code-base relocations. Code uploads
-preserve Harvard memory semantics and JIT invalidation; disk transfers share the
-legacy storage cache and commit barriers. Unsupported bulk operations fall back
-to the original loops; the MMU profile still requires an MMU-capable RVM.
-Rebuild `bios.bf` to enable bulk code uploads in RBF.
+RVM accelerates BIOS kernel loading, filesystem block I/O, executable code/data
+uploads, COW page copies, page initialization, and kernel-stack cloning during
+fork through the existing DEVICE_* mailbox. Process switches select maps without
+copying user banks. Large kernel-buffer and cache-buffer copies/clears use DMA.
+User-buffer helpers validate each mapped span, resolve COW before writing, and
+translate virtual addresses to physical DMA endpoints; small transfers retain
+CPU accesses. The guest still parses FAT/RXE files and validates relocation
+records. Code starts at virtual bank zero and needs no physical-base relocation.
+Code uploads preserve Harvard memory semantics and JIT invalidation; disk
+transfers share the storage cache and commit barriers. Unsupported bulk
+operations fall back to scalar loops. An MMU-capable RVM is always required.
 
 The [bulk I/O ABI](../../docs/arch/bulk-io.md) documents formats, limits and C helpers.
 `BULK_IO=0` forces scalar transfers without changing the MMU profile. For a
@@ -435,19 +518,15 @@ python3 ports/fuzix/tools/test_bulk.py --fallback-build /tmp/fuzix-slow
 python3 scripts/test-bulk-io.py
 ```
 
-Use `MMU=0` for both builds when comparing the legacy profile. The C helper test
-exercises RVM and RBF, with and without their JITs, using private temporary
-disks. The Fuzix comparison uses identical userspace with fast
-and fallback kernels of the same MMU profile under JIT by default; add
-`--engine both` for interpreter coverage too. It checks
-execution counts, repeated nested forks, native-word data/stack isolation, large
-zero reads, preemption, signals, file-buffer copies and clean shutdown. In the
-legacy profile, full-bank copies cross the 32,768-cell submission boundary;
-the MMU profile copies shared user pages in 512-cell units. `forkcheck --stress`
-runs the extended fork/isolation test directly; plain `forkcheck` retains its
-quick parent/child check. Transfers of fewer than
-256 cells use direct loops, and small trap/signal frames retain their assembly
-paths. Toggling bulk I/O preserves each profile's memory layout and disk format.
+The generic C helper test exercises RVM and RBF, with and without their JITs,
+using private temporary disks. The FUZIX comparison uses identical userspace
+with MMU fast and scalar kernels under JIT by default; add `--engine both` for
+interpreter coverage. It checks execution counts, repeated nested forks,
+native-word data/stack isolation, large zero reads, preemption, signals,
+file-buffer copies and clean shutdown. User COW copies use 512-cell pages;
+kernel-stack copies span whole banks. `forkcheck --stress` runs the extended
+isolation test directly. Small trap/signal frames retain their assembly paths.
+Toggling bulk I/O preserves memory layout and disk format.
 
 ## Storage durability and recovery
 
@@ -494,28 +573,37 @@ confusion with conventional eight-bit FUZIX filesystems. Use the supplied image
 builder/checker rather than upstream host mkfs/fsck or ordinary FAT tools on the
 inner filesystem. The outer FAT16 filesystem uses its ordinary octet format.
 
-In the legacy `MMU=0` profile, each process has a 64,000-cell global/data bank
-and a separate 64,000-cell stack bank. Fork snapshots both banks into backing
-RAM; scheduling restores them at the same execution addresses, preserving
-pointers. Kernel continuations use a separate stack bank per process. Code
-images are reference-counted across fork
-and relocated into separate IMEM slots on exec. This profile supports eight
-process table entries, nine live code images, and up to twelve IMEM banks per
-userspace executable. Userspace allocation must use FUZIX brk/sbrk within its
-data bank; RCC's generic multi-bank runtime malloc is not a process allocator.
+Each process uses its own virtual data/heap and stack mappings. Fork shares
+COW pages and reference-counted code images; scheduling selects maps. Kernel
+continuations retain a separate physical stack bank per process. Userspace
+allocation uses the kernel's bank-aware `brk`/`sbrk`; RCC's generic runtime
+allocator is not a process allocator.
 
 The timer uses IRQ ABI v2 and a dedicated interrupt stack. All ordinary registers
 and CPU return state are preserved. A timer return completes IRET before entering
 the scheduler; a software IRQ supplies the trap frame when restoring a preempted
-user continuation. No task sleeps with IRQ_BUSY held. Timer ticks are based on
-executed VM instructions (100,000 per tick), not a host wall-clock RTC.
+user continuation. No task sleeps with IRQ_BUSY held. Scheduling opportunities
+remain instruction-driven (100,000 instructions per IRQ). Each handler reads
+`HOST_MONOTONIC` through the DEVICE mailbox; syscall boundaries and idle polls
+also synchronize it. Elapsed deadlines and uptime use host time, independently
+of instruction throughput. Alarm/timeout catch-up is bounded by the timer queue,
+even after a long pause. Load averages use the current runnable count to estimate
+missed samples, with bounded catch-up work.
 
-The launcher allocates 16,384,000 DMEM cells (banks 0–255) for the default
-MMU profile, which provides privilege isolation and bank-spanning user heaps
-as described in [Protected memory](#protected-memory). The legacy profile uses
-5,120,000 cells (banks 0–79) and has no privilege isolation. Networking, the
-remaining upstream libc/application collection, swap, and disk-backed demand
-paging remain future work.
+The host clocks require an updated RVM; the kernel stops with an explicit
+message if monotonic time is unavailable. No new MMIO addresses or wall-time IRQ
+source are needed.
+Calendar time is seeded from `HOST_REALTIME` after mounting root (falling back
+to the superblock date if unavailable), then advances monotonically. Guest date
+changes do not affect uptime or deadlines; host calendar changes after boot are
+not automatically imported. The kernel retains 100 ms deadline/uptime granularity
+and whole-second calendar timestamps, despite the host device's 1 ms resolution.
+VM host pauses count toward uptime; saved-checkpoint downtime is excluded.
+
+The launcher allocates 16,384,000 DMEM cells (banks 0–255), providing privilege
+isolation and bank-spanning user heaps as described in
+[Protected memory](#protected-memory). The remaining upstream application
+collection, swap, and disk-backed demand paging remain future work.
 
 Caught signals use validated IMEM code pointers and a user-stack register frame.
 The kernel enters a userspace trampoline after a syscall or timer preemption;
@@ -706,7 +794,7 @@ names use the whole trailing run of at least six `X` characters.
 statuses. `nohup` ignores SIGHUP and appends terminal output to `nohup.out`.
 `groups` and `logname` use the current FUZIX identity; the default session is
 root, and the Level 1 kernel supplies its primary group. The clock used by
-`time` follows the guest's instruction-driven timer.
+`time` uses host elapsed time and sampled guest CPU counters.
 
 ## Manuals and classic games
 
@@ -788,13 +876,19 @@ checked 32-bit arithmetic and anchored basic regex matching/captures; quote
 operators so the shell passes them through. Ctrl-C interrupts these programs
 and returns to the shell.
 
-Each executable has a twelve-bank IMEM reservation. The legacy profile has
-eight process slots and the MMU profile has 16; both retain the RCC calling ABI.
+Executable code uses first-fit contiguous bank regions sized to each linked
+image, shared across fork and freed with the last reference. There are 32 process
+slots, retaining the RCC calling ABI.
+One spare image record allows staged exec without overwriting the running
+image. A failed allocation returns ENOMEM and preserves that image; exec needs
+enough contiguous free banks for the replacement while the old image is live.
+The default physical pool is banks 32–1023. `CODE_BANKS=N` selects another
+exclusive pool ceiling at build time; the kernel also clamps it to the capacity
+reported by MEMORY_INFO.
 Individual functions can span code banks through the shared linker's
 [branch relaxation](../../docs/arch/code-banks.md). The RXE loader handles the
-generated far-jump relocations in the legacy profile and virtual code mappings
-in the MMU profile; the twelve-bank limit applies to the entire linked image,
-including padding and expanded branches. Rebuilding `rlink` automatically
+virtual code mappings for bank-spanning functions. There is no separate twelve-bank executable limit; allocation
+includes padding and expanded branches. Rebuilding `rlink` automatically
 relinks the BIOS, kernel and userspace images.
 RVM's dynamic instruction-memory limit accommodates these larger guest images.
 Generated parsers are checked in; optional regeneration uses
@@ -811,9 +905,11 @@ reboot persistence and filesystem consistency. It uses isolated disks.
 `python3 ports/fuzix/tools/test_code_banks.py --build build/fuzix` compiles a
 function containing 65,536 NOPs and loads it into a private guest disk. It checks
 forward/backward branches, sequential bank crossings, function pointers, signal
-handlers, nonlocal jumps, fork and repeated exec. It defaults to JIT and accepts
-the same `--engine` choices as the other guest suites; use an `MMU=0` build to
-exercise physical code-base relocation too.
+handlers, nonlocal jumps, fork and repeated exec, including an image whose entry
+point is above virtual bank 12. With a small advertised host budget it checks
+code-pool exhaustion, failed-exec rollback, fork sharing and extent reuse.
+It defaults to JIT and accepts
+the same `--engine` choices as the other guest suites.
 
 ## Upstream and licensing
 
@@ -850,3 +946,22 @@ unterminated lines and terminal restoration. Filesystem tests cover native
 16-bit contents, storage-window crossings, double-indirect sparse writes and
 truncation; `libccheck` also allocates and removes 320 files to exercise high
 inode numbers. The shared FAT builder retains its default rOS layout.
+
+
+## First graphics terminal
+
+Run `scripts/run-fuzix.sh --visual`, then `gterm` at the console. This starts
+an 80×30 PTY shell in an RGB565 window; `gterm COMMAND ARG...` runs a command.
+The protected profile has 32 process slots, 32 descriptors per process,
+128 system open-file/inode slots and eight PTYs. Closing the graphics window
+hangs up that terminal session while FUZIX remains available on the console.
+`exit` returns to the console; `shutdown` saves the disk and stops the kernel.
+
+The first backend has one fixed 640×480 window. Nano-X is pinned for subsequent
+adaptation; its server/apps are not installed yet. The shared GX interface is
+designed for RVM presentation and future Fuse-X native macOS windows. See the
+[graphics architecture and milestones](../../docs/graphics/README.md).
+
+`make -C ports/fuzix BUILD=/absolute/build/path test-graphics` builds the opt-in
+graphics probe and runs JIT tests on private disks, including exact pixel
+comparison, MMU uploads, owner lifetime, high descriptors and PTY capacity.

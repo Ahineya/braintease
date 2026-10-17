@@ -235,10 +235,11 @@ export function buildDisk(build, filename, fresh = false, install = false) {
        // Before job control, /dev/tty addressed the fixed console directly.
        {name : '/dev/tty', mode : 0o20666, device : 0x200,
         migrateDeviceFrom : 0x201, data : Buffer.alloc(0)},
-       ...Array.from({length: 4}, (_, i) => ([
+       ...Array.from({length: 8}, (_, i) => ([
          {name: `/dev/ptyp${i}`, mode: 0o20600, device: 0x300 + i, data: Buffer.alloc(0)},
          {name: `/dev/ttyp${i}`, mode: 0o20600, device: 0x202 + i, data: Buffer.alloc(0)}
        ])).flat(),
+       {name : '/dev/gfx', mode : 0o20600, device : 0x400, data : Buffer.alloc(0)},
        {name : '/dev/root', mode : 0o60600, device : 0, data : Buffer.alloc(0)},
        ...['null', 'zero', 'proc'].map((name, i) => ({
                                          name : `/dev/${name}`,
@@ -264,6 +265,10 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          preserve : true,
          data : Buffer.from('/dev/root / fuzix rw 0 0\n')
        },
+       {name: '/etc/resolv.conf', mode: 0o100644, preserve: true,
+        data: Buffer.from('nameserver 1.1.1.1\nnameserver 8.8.8.8\n')},
+       {name: '/etc/hosts', mode: 0o100644, preserve: true,
+        data: Buffer.from('192.168.64.250 ripple fuzix\n')},
        {
          name: '/etc/termcap', mode: 0o100644, preserve: true,
          data: Buffer.from('ansi|vt100|xterm|xterm-256color|ripple:co#80:li#24:cl=\\E[H\\E[2J:ho=\\E[H:cm=\\E[%i%d;%dH:me=\\E[0m:md=\\E[1m:us=\\E[4m:ue=\\E[0m:ce=\\E[K:up=\\E[A:bc=^H:\n')

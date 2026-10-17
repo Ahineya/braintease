@@ -38,7 +38,7 @@ pub(super) fn build_fn(
         scopes: Vec::new(),
         resources: resources.clone(),
         result: None,
-        root: func.name == "main" || func.c_export,
+        root: func.name == "main" || func.c_export || func.async_result.is_some(),
         tail_block: true,
     };
     let result_slot = if func.ret == Ty::Unit {
@@ -99,7 +99,14 @@ pub(super) fn build_fn(
             func.name
         )));
     }
+    if func.async_result.is_some() && build.segs.len() > u16::MAX as usize {
+        return Err(CompileError::plain(
+            "async function has too many resume states",
+        ));
+    }
     Ok(Proc {
+        async_context: func.async_context.map(|id| build.binding_slot[id as usize]),
+        async_result: func.async_result,
         name: func.name.clone(),
         ret: func.ret,
         func_id,

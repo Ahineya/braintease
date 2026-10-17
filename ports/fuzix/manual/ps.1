@@ -15,7 +15,8 @@ and mapped data/heap/stack page counts; kernel addresses are not exposed.
 States: R running or runnable, S sleeping, D uninterruptible I/O, T stopped,
 F being forked, Z zombie. TIME is the process's own user plus kernel CPU time,
 not time accumulated by its children. TTY is the numeric controlling terminal:
-1 is the console; 2 through 5 are PTY slaves ttyp0 through ttyp3. Zero means none.
+1 is the console; 2 through 9 are PTY slaves ttyp0 through ttyp7.
+Zero means none.
 .SH OPTIONS
 .TP
 .B \-A, \-e

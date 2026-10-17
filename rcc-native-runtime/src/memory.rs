@@ -4,7 +4,9 @@ pub(super) fn linear(pointer: u64) -> usize {
     let bank = pointer >> 16;
     let offset = pointer & 65535;
     if bank >= 256 || offset >= BANK as u64 {
-        fatal("pointer outside native compatibility memory");
+        fatal(&format!(
+            "pointer outside native compatibility memory: 0x{pointer:x}"
+        ));
     }
     bank as usize * BANK + offset as usize
 }
@@ -137,10 +139,15 @@ unsafe extern "C" fn rcc_native_store(ctx: *mut Runtime, ptr: u64, value: u64, w
     0
 }
 #[no_mangle]
-unsafe extern "C" fn rcc_native_gep(_ctx: *mut Runtime, ptr: u64, offset: u64) -> u64 {
+unsafe extern "C" fn rcc_native_gep(ctx: *mut Runtime, ptr: u64, offset: u64) -> u64 {
     let start = linear(ptr);
     let result = (start as i128) + (offset as i64 as i128);
     if !(0..CELLS as i128).contains(&result) {
+        eprintln!(
+            "native pointer: base={ptr:#x}, offset={}{}",
+            offset as i64,
+            unsafe { &*ctx }.processes.diagnostic()
+        );
         fatal("native pointer arithmetic out of bounds");
     }
     pointer(result as usize)

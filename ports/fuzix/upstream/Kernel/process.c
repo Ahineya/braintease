@@ -417,18 +417,21 @@ ptptr ptab_alloc(void)
    is pre-Unix from Tenex). We don't report P_IOWAIT the same way as Unix
    does ... need to keep track of two nready values to do that */
 
-static void load_average(void)
+static void load_average(uint32_t elapsed)
 {
 	register struct runload *r;
 	static uint_fast8_t utick;
 	uint_fast8_t i;
 	uint16_t nr;
 
-	utick++;
-	if (utick < 50)
-		return;
-
-	utick = 0;
+        uint32_t samples = elapsed / 50;
+        unsigned remainder = utick + elapsed % 50;
+        samples += remainder / 50;
+        utick = remainder % 50;
+        /* We cannot reconstruct historical runnable counts after a host pause.
+           Bound catch-up work; 100 minutes already converges all averages. */
+        if (samples > 1200) samples = 1200;
+        while (samples--) {
 
 	/* Every 5 seconds */
 	i = 0;
@@ -440,6 +443,7 @@ static void load_average(void)
 				(((uint32_t)nr) << 16)) >> 8);
 		r++;
 	}
+        }
 }
 
 /*
@@ -465,8 +469,41 @@ void ptimer_insert(void)
  * We are running off the interrupt stack.
  */
 
+#ifdef CONFIG_PLATFORM_CLOCK
+/* Called under di by the platform clock. Expire each queued timer once even
+   after a long pause, without manufacturing CPU interrupts or CPU time. */
+void timer_advance(uint32_t elapsed)
+{
+    ptptr p, *q = &alarms;
+    ticks.full += elapsed;
+    while (*q) {
+        p = *q;
+        if (p->p_status == P_EMPTY) panic("dead timer");
+        if (p->p_alarm) {
+            if (elapsed >= p->p_alarm) {
+                p->p_alarm = 0;
+                ssig(p, SIGALRM);
+            } else p->p_alarm -= elapsed;
+        }
+        if (p->p_timeout > 1) {
+            if (elapsed >= (uint32_t)p->p_timeout - 1) {
+                p->p_timeout = 1;
+                pwake(p);
+            } else p->p_timeout -= elapsed;
+        }
+        if (p->p_timeout < 2 && !p->p_alarm) {
+            p->p_flags &= ~PFL_ALARM;
+            *q = p->p_timerq;
+        } else q = &p->p_timerq;
+    }
+    tod_advance(elapsed);
+    load_average(elapsed);
+}
+#endif
+
 void timer_interrupt(void)
 {
+#ifndef CONFIG_PLATFORM_CLOCK
 	/* Increment processes and global tick counters. We can't do this
 	   mid swap because we might have half of the bits for one process
 	   and half of another.. */
@@ -505,11 +542,12 @@ void timer_interrupt(void)
 				q = &(p->p_timerq);
 		}
 		updatetod();
-                load_average();
+                load_average(1);
 #ifdef CONFIG_AUDIO
 		audio_tick();
 #endif
 	}
+#endif
 #ifndef CONFIG_SINGLETASK
 	sync_clock();
 	/* Check run time of current process. We don't charge time while

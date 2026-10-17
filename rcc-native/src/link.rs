@@ -26,8 +26,40 @@ pub fn runtime_library() -> Result<PathBuf, String> {
 }
 
 pub fn compile_executable(module: &Module, output: &Path) -> Result<(), String> {
-    let runtime = runtime_library()?;
     let bytes = super::compile_object(module)?;
+    link_object(bytes, output)
+}
+
+/// Link kernel units with shared globals and ordinary private application units.
+/// Native continuations provide context mechanics; the kernel owns scheduling.
+pub fn compile_hosted_executable(
+    kernel: &[Module],
+    applications: &[Module],
+    output: &Path,
+) -> Result<(), String> {
+    use rcc_ir::ir::Linkage;
+    let mut shared = std::collections::BTreeSet::new();
+    for (index, module) in kernel.iter().enumerate() {
+        for global in &module.globals {
+            if global.linkage != Linkage::Declaration {
+                shared.insert(
+                    if matches!(global.linkage, Linkage::Internal | Linkage::Private) {
+                        format!("__unit{index}_{}", global.name)
+                    } else {
+                        global.name.clone()
+                    },
+                );
+            }
+        }
+    }
+    let modules: Vec<_> = kernel.iter().chain(applications).cloned().collect();
+    let module = super::link_modules(&modules)?;
+    let bytes = super::compile_object_with_kernel(&module, &shared)?;
+    link_object(bytes, output)
+}
+
+fn link_object(bytes: Vec<u8>, output: &Path) -> Result<(), String> {
+    let runtime = runtime_library()?;
     let parent = output
         .parent()
         .filter(|p| !p.as_os_str().is_empty())

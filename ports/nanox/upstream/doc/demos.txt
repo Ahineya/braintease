@@ -1,0 +1,262 @@
+-----------------------------------------------------
+This is an overview of the demo programs provided. 
+These can be found in the microwindows/src/bin directory
+after executing "make" from microwindows/src.
+
+All the demonstration programs can be run using "./runapp <appname>".
+
+Any application can be run using the application launch
+script, runapp, which automatically starts the nano-X server if required.
+Some examples:
+
+	./runapp demo-aafont
+	./runapp demo-composite
+	./runapp mwdvetest
+	./runapp mwmine
+
+Following is a list of the demo programs with short
+descriptions.
+------------------------------------------------------
+
+- demo-arc - 
+Shows arcs and circles.
+
+- demo-blit - 
+Shows blitting using dice images.
+demo-blit.sh will call this demo
+together with nxmag.
+
+- demo-convimage -
+Demo that shows the canny edge dector applied
+to the dragon.bmp image.
+
+- demo-composite -
+Compositioning demo.
+demo-composite.sh will call this
+program together with nxmag.
+
+- convbmp -
+Windows BMP to Microwindows image converter.
+Converts bmp file into a Nano-X format bitmap
+that can be included in a header file.
+
+- demo-dash -
+Draw shapes with dashed lines.
+
+- show_ppm -
+Displays ppm images. Enter ppm image name
+on command line.
+
+- fbe -
+No demo, emulate framebuffer with X11 for
+developing framebuffer programs using X11
+environment.
+
+- demo-ttfont -
+Shows "quick brown fox" text in increasing sizes.
+You can specify different fonts on the command line.
+demo-ttfont.sh will call this program.
+
+- demo-aafont -
+Allows to rotate text or select other font
+attributes. Some will work only if text is 
+not rotated.
+demo-aafont.sh will call this program.
+Will run from src directory only.
+
+- getselection -
+Reads text from the clipboard. Mark any
+text and enter Ctrl-C to add to the
+clipboard before. Or use the setselection program.
+
+- demo-grabkey -
+Displays keys entered. Can be used for testing
+keyboard drivers.
+demo-grabkey.sh will call this program.
+
+- landmine -
+A landmine game.
+
+- launcher -
+Start with ./bin/launcher bin/launcher.cnf
+Desktop that allows to select several applications.
+Implements a screensaver that quickly starts to
+display screensavers with changing graphics.
+launcher.sh will start this program.
+
+- makebmp -
+Framebuffer data to .bmp file converter.
+
+- mwmine -
+Minesweeper game using the MWin API.
+
+- demo-monobitmap -
+Displays 1bpp mono bitmap.
+demo-monobitmap.sh will call this program together with nxmag.
+
+- mwdemoalpha -
+Alpha blending using the MWin API.
+
+- mwbrush -
+Create 4 rectangles filled with 4 different colours
+using the MWin API.
+
+- mwcontrols -
+Shows several controls of the MWin API.
+
+- mwdemo -
+Graphics display implemented with the MWin API.
+
+- mwdemo2 -
+Several controls implemented with the MWin API.
+
+- mwdialog -
+Displays a window and a button using the MWin API with a resource file.
+
+- mwdraw -
+Simple graphics using the MWin API.
+
+- mwdvetest -
+Mwin API demo using dialogs and a resource file
+implemented by dveprojects.com in Italy.
+
+- mwhello -
+Shows a static text in a window and
+displays a message box using the MWin API.
+
+- mwlistcombo -
+Displays a listbox and a combobox using
+the MWin API.
+
+- mwmenu -
+Shows how to implement a menu system using 
+buttons for the horizontal menu bar and lists
+for the drop-down submenus.
+
+- mwmsgbox -
+A messagebox using the MWin API.
+
+- mwprogbar -
+A progress bar using the MWin API.
+
+- mwsimple -
+Shows an empty window using the MWin API.
+
+- mwstatictext -
+Displays a static text box. Text changes if click the
+mouse in the window or press a key. Implemented with
+the MWin API.
+
+- mwstretch -
+Shows an image and the same image with an increased size 
+using "StretchBlt". Implemented with the MWin API.
+
+- mwterm -
+Terminal application using the mwin API.
+
+- mwtest -
+Very basic window using the mwin API.
+
+- npanel -
+Select applications from a list window
+and run them in child windows.
+
+- nsaver -
+A collection of screen savers for Nano-X.
+
+- ntetris -
+Tetris game.
+
+- demo-agg -
+Uses the libagg library with Nano-X. If you
+run this with demo-agg.sh script in the demoscripts/
+directory, the nxmag program will be run in parallel.
+This allows to analyse the rendered image in detail.
+
+- nxcal -
+Standard screen calibrator for Nano-X.
+
+- nxclock -
+Shows a round clock.
+
+- nxev -
+Outputs nano-X events in the console window.
+
+- nxeyes -
+Nano-X version of the Xeyes application.
+
+- nxkbd -
+Software popup keyboard.
+
+- nxlsclients -
+Displays a list of client windows and their 
+properties in the console window.
+
+- nxmag -
+A real time magnifier program that magnifies the area 
+around the mouse in a separate window.
+Enter "nxmag -h" to list the command line parameters.
+
+- nxroach -
+A port of Xroach to Nano-X.
+The roaches scamper around until they  find a  window  to  hide
+under. Try to find the roaches under your windows.
+
+- nxscribble -
+Will try to read the letters you scribble with the cursor.
+
+- nxterm -
+Terminal application including ANSI emulation.
+nxterm.sh will call this program.
+
+- nxview -
+Displays image specified including the path on the command line.
+nxview.sh will call this program. Pass image on command line or
+uncomment lines in the script.
+
+- show_font -
+Display any font. Needs path to font file on the command line.
+The show_font.sh calls this demo with four or three different fonts.
+
+- polydemo -
+Shows polygons.
+
+- rgndemo -
+Shows several different types of regions.
+
+- nxsetportrait -
+A utility to set the portrait mode of the display.
+
+- setselection -
+Reads the specified file into the clipboard.
+
+- slider -
+A slider game.
+
+- snap_ppm -
+A screenshot program saving in ppm format images.
+
+- demo-font -
+Draws fonts at an angle.
+demo-font.sh will call this program.
+
+- demo-tilestipple -
+Tile/stipple demo program.
+
+- tux -
+Displays the tux penguin to demonstrate shaped window frames.
+
+- tuxchess -
+Linux chess program.
+chess.sh will call this program.
+
+- world -
+Shows a map of the world. Select areas to zoom.
+
+------------------------------------------------------
+further scripts:
+
+nxterm.sh will open nxterm, nxeyes and tux.
+demo-graphics.sh will open rgndemo, dashdemo, tsdemo arcdemo, polydemo, tux and nxmag
+start-vnc.sh will run the vnc demo if this is enabled in the configure file.
+------------------------------------------------------

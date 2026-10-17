@@ -3,7 +3,8 @@
 Agreed sequence: **DHCP → stack reliability → TCP → HTTP client → HTTP server
 → high-level RFL networking**.
 DHCP, stack reliability, TCP active/passive opens and HTTP client/server are
-implemented. High-level RFL networking is the next milestone. Current behavior
+implemented. The first owned RFL DHCP/DNS/HTTP layer is implemented; direct
+RFL UDP/TCP and streaming remain follow-ups. Current behavior
 and limits are in the
 [overview](README.md) and [library guide](library.md). It does not define new
 public function signatures or imply those functions exist.
@@ -267,11 +268,18 @@ root runners. Field/index borrowing now supports child futures in place.
 Explicit move-only `Owned<T>` resources now supply deterministic cleanup across
 normal exits, replacement and containers. Owned join/race/timeout composition
 is implemented with automatic cancellation and output cleanup.
-Bounded heterogeneous task scopes and typed joins are implemented too. Async
-still requires suspension rules and compiler state-machine lowering before syntax.
+Bounded heterogeneous task scopes and typed joins are implemented too. Lazy
+`async fn` functions and `.await` now use compiler-owned state machines, with
+safe suspension restrictions and automatic cancellation.
 The [RFL design](rfl.md) distinguishes implemented polling APIs from those language/runtime requirements.
 Generic trait parameters remain an independent extension driven by library needs.
-The production network reactor and typed RFL C-stack wrappers remain to be built.
+The first owned network reactor, DHCP/DNS futures and buffered HTTP client/server
+wrappers are implemented. See the [shipped RFL API](rfl-library.md); direct UDP/TCP
+and streaming bodies remain work.
+Explicit real-time reactors now supply host monotonic time, bounded idle waiting
+and a bounded service/maintenance callback. They use DEVICE_* on native and
+Ripple and do not install networking or advance simulation ticks. See the
+[reactor contract and runnable example](rfl.md#real-time-reactors).
 
 ### Saved checkpoint — 16 October 2026
 
@@ -357,10 +365,47 @@ per-function code-bank restriction has since been lifted in the shared
 assembler/linker. The [architecture contract](../arch/code-banks.md) records
 branch relaxation, relocation and the RVM/BF regression checks.
 
-Continue with **safe suspension rules and state-machine lowering**, then
-network/library integration. Preserve the completed polling tests as acceptance cases; the
+Continue with **network/library integration** and refinements to async frame
+liveness/layout. Preserve the completed polling tests as acceptance cases; the
 [detailed design](rfl.md#required-path-to-pleasant-async) records the remaining
 semantics and validation targets.
+
+On 17 October, host monotonic/realtime clock support made it possible to add
+`std/time`, `std/reactor` and `std/host`. The shared HOST_IDLE command gives the
+reactor a bounded non-spinning fallback. Timer waits account for elapsed guest
+and callback work, and service hooks can wake independent roots or stop orderly.
+This runtime milestone does not implement async/await syntax, suspended borrows
+or generated async frames; those remain the next compiler work.
+The complete RFL release suite passes **336 tests**; the seven new reactor
+regressions run on native and RVM. Device coverage includes interpreter/JIT
+execution and a strided BF memory adapter. The real-timer example and its editor
+diagnostics/navigation checks also pass.
+
+The subsequent compiler milestone implements lazy `async fn` and `.await` on
+native and Ripple, including loops/branches, generic associated outputs,
+resource-valued results and cancellation of pending children. Frames own their
+storage independently of the ordinary call arena. Safe loans cannot cross an
+await; async parameters/outputs cannot retain safe references. Async blocks,
+methods, borrowed async operations and more compact frame layouts remain work.
+See the [language contract](../../rfl/async.md) and
+[real-clock task-scope example](../../rfl/examples/async-timers.rfl).
+
+The full release suite passes **349 tests**, including eleven async regressions
+and two new editor checks. The example runs through both native and RVM CLI
+targets; IntelliJ and LSP protocol checks pass too. Polling uses the existing
+flat frame driver, including recursive awaits. Guest heap block-list scans add
+quadratic work for many simultaneously live frames; allocator indexing or frame
+pools are a separate performance follow-up alongside tighter frame layouts.
+
+The first library milestone now ships `std/net` and `std/http`: owned network
+contexts/reactors, DHCP, DNS, buffered GET Request/Response and accept/respond
+HTML serving over the shared C stack. The [usage guide](rfl-library.md) records
+limits and runnable examples. Native/RVM/JIT packet applications pass, including
+DHCP → DNS → HTTP and server loss/backpressure/reuse. The complete RFL release
+suite passes **359 tests**; 243 shared C networking assertions pass per native/RVM
+target. Direct RFL UDP/TCP streams, streaming bodies, event-aware waits and
+richer HTTP remain the next library work. Generated code size and allocation
+cost still need focused compiler/runtime optimization.
 
 ## Separate and later work
 

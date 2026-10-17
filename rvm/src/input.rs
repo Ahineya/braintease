@@ -21,10 +21,15 @@ pub fn poll_display_input(devices: &mut DeviceState, display: &RGB565Display) {
         devices.input.inside = state.input.inside;
         devices.input.focused = state.input.focused;
         devices.input.captured = state.input.captured;
+        let closed = state.input.events.iter().any(|e| e.kind == EVENT_CLOSE);
         state.input.events.clear();
+        if closed {
+            devices.accept_events([InputTransition::Close]);
+        }
         state.input.overflow = false;
     } else {
         let events = state.input.events.drain(..).filter_map(|e| match e.kind {
+            EVENT_CLOSE => Some(InputTransition::Close),
             EVENT_KEY => Some(InputTransition::Key {
                 key: e.code,
                 down: e.flags & FLAG_DOWN != 0,
@@ -61,6 +66,35 @@ pub fn poll_display_input(devices: &mut DeviceState, display: &RGB565Display) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn close_reaches_guest_with_and_without_host_overflow() {
+        for overflow in [false, true] {
+            let display = RGB565Display::new();
+            let mut devices = DeviceState::new(35).unwrap();
+            let shared = display.get_state();
+            let mut host = shared.lock().unwrap();
+            host.input_event(InputTransition::Close);
+            if overflow {
+                host.input.mark_overflow();
+            }
+            drop(host);
+            poll_display_input(&mut devices, &display);
+            assert!(devices.input.events.iter().any(|e| e.kind == EVENT_CLOSE));
+            devices.input.snapshot_cells();
+            assert!(devices.input.events.iter().any(|e| e.kind == EVENT_CLOSE));
+            poll_display_input(&mut devices, &display);
+            assert_eq!(
+                devices
+                    .input
+                    .events
+                    .iter()
+                    .filter(|e| e.kind == EVENT_CLOSE)
+                    .count(),
+                1
+            );
+        }
+    }
+
     #[test]
     fn live_mouse_and_keys_poll_at_tick_zero_and_preserve_checkpoint() {
         let display = RGB565Display::new();

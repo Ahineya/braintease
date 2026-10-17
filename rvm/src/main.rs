@@ -93,6 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         VM::with_options(bank_size, DEFAULT_MEMORY_SIZE, disk_path)
     };
 
+    vm.set_code_memory_limit(cli.code_memory)?;
+
     // Set RNG seed if specified
     if let Some(seed) = rng_seed {
         vm.set_rng_seed(seed);
@@ -173,6 +175,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     vm.devices
         .network
         .configure_host(network_setting.as_deref())?;
+    if cli.net_eager {
+        vm.devices.network.prepare_host()?;
+    }
 
     if verbose {
         println!("Loading binary from {}...", file_path.display());
@@ -207,13 +212,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         bank_size: vm.bank_size,
         memory_cells: vm.memory.len(),
         seed: rng_seed.unwrap_or(0x12345678),
-        binary_sha256: runner::sha256_file(&file_path)?,
-        disk_sha256: cli.disk.as_deref().map(runner::sha256_file).transpose()?,
-        input_script_sha256: cli
+        binary_sha256: if cli.report.is_some() { runner::sha256_file(&file_path)? } else { String::new() },
+        disk_sha256: if cli.report.is_some() { cli.disk.as_deref().map(runner::sha256_file).transpose()? } else { None },
+        input_script_sha256: if cli.report.is_some() { cli
             .input_script
             .as_deref()
             .map(runner::sha256_file)
-            .transpose()?,
+            .transpose()? } else { None },
         input_overflow: false,
         jit: None,
     };
@@ -225,10 +230,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let worker_state = display_state.clone();
         let report_path = cli.report.clone();
         let capture_requested = options.screenshot.is_some() || options.raw_frame.is_some();
+        let guest_window_close = cli.guest_window_close;
         let vm_thread = thread::spawn(move || {
             let result = runner::run(&mut vm, &options);
             report.finish(&vm, &result);
-            if capture_requested || result.is_err() {
+            if capture_requested || guest_window_close || result.is_err() {
                 worker_state.lock().unwrap().request_shutdown();
             }
             if let Some(path) = report_path {
@@ -241,7 +247,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 0
             })
         });
-        let window_result = display_rgb565::run_rgb565_display(display_state.clone());
+        let window_result = display_rgb565::run_rgb565_display_with_close_policy(display_state.clone(), guest_window_close);
         display_state.lock().unwrap().request_shutdown();
         let status = vm_thread.join().map_err(|_| "VM worker panicked")??;
         window_result?;

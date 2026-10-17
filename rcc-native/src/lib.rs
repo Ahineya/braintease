@@ -3,6 +3,7 @@
 //! V1 executes host machine code with a shared RCC/RFL compatibility ABI:
 //! a hidden runtime context and one u64 carrier per scalar. Carriers preserve
 //! the declared integer width or IEEE bits; they are not host C declarations.
+mod application;
 mod arithmetic;
 mod emit;
 mod entry;
@@ -13,13 +14,14 @@ mod link;
 mod liveness;
 mod process;
 mod units;
+pub use application::compile_application;
 pub use units::link_modules;
 
 use cranelift_codegen::ir::{types, AbiParam, Signature};
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_module::{FuncId, Linkage, Module as ClModule};
 use cranelift_object::{ObjectBuilder, ObjectModule};
-pub use link::{compile_executable, runtime_library};
+pub use link::{compile_executable, compile_hosted_executable, runtime_library};
 use rcc_ir::{ir::Module, target::Target};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -32,6 +34,7 @@ struct Compiler {
     ir: Module,
     address_taken: BTreeSet<String>,
     resumable: bool,
+    application: bool,
 }
 
 impl Compiler {
@@ -51,6 +54,11 @@ impl Compiler {
             if !function.is_external {
                 return Ok(self.functions[name]);
             }
+        }
+        if self.application && !rcc_ir::native_image::application_service(name) {
+            return Err(format!(
+                "application external {name} requires a guest libc definition"
+            ));
         }
         let arity = rcc_ir::target::NATIVE_SERVICES
             .iter()
@@ -115,6 +123,21 @@ impl Compiler {
 }
 
 pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
+    compile_object_inner(module, &BTreeSet::new(), false).map(|(object, _)| object)
+}
+
+fn compile_object_with_kernel(
+    module: &Module,
+    kernel: &BTreeSet<String>,
+) -> Result<Vec<u8>, String> {
+    compile_object_inner(module, kernel, false).map(|(object, _)| object)
+}
+
+fn compile_object_inner(
+    module: &Module,
+    kernel: &BTreeSet<String>,
+    application: bool,
+) -> Result<(Vec<u8>, Option<rcc_ir::native_image::Manifest>), String> {
     if module.target != Target::Native {
         return Err("native backend requires IR compiled for --target native".into());
     }
@@ -139,7 +162,23 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
     units::hoist_static_allocas(&mut ir);
     rcc_backend::optimize::optimize_module(&mut ir);
     units::retain_reachable(&mut ir);
-    let resumable = process::enabled(&ir);
+    let resumable = application || process::enabled(&ir);
+    if application {
+        for f in ir.functions.iter().filter(|f| f.is_external) {
+            if f.name == "exit"
+                || ((f.name.starts_with("rcc_process_") || f.name.starts_with("rcc_hosted_"))
+                    && f.name != "rcc_hosted_syscall")
+            {
+                return Err(format!(
+                    "application external {} must enter the kernel through guest libc",
+                    f.name
+                ));
+            }
+        }
+    }
+    if !kernel.is_empty() && !process::hosted(&ir) {
+        return Err("shared kernel modules require the hosted continuation API".into());
+    }
     if resumable {
         if let Some(f) = ir
             .functions
@@ -161,8 +200,10 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
         ir,
         address_taken: BTreeSet::new(),
         resumable,
+        application,
     };
     let mut offset = 1u64;
+    let mut kernel_offset = 1u64;
     for global in &compiler.ir.globals {
         if matches!(global.linkage, rcc_ir::ir::Linkage::Declaration) {
             return Err(format!(
@@ -170,14 +211,21 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
                 global.name
             ));
         }
+        let (bank, cursor) = if kernel.contains(&global.name) {
+            (240u64, &mut kernel_offset)
+        } else {
+            (1u64, &mut offset)
+        };
         compiler
             .globals
-            .insert(global.name.clone(), (1 << 16) | offset);
-        offset = offset
+            .insert(global.name.clone(), (bank << 16) | *cursor);
+        *cursor = cursor
             .checked_add(Target::Native.layout().size_in_cells(&global.var_type)?)
             .ok_or("native globals size overflow")?;
     }
-    if offset >= u64::from(Target::Native.layout().bank_cells) {
+    if offset >= u64::from(Target::Native.layout().bank_cells)
+        || kernel_offset >= u64::from(Target::Native.layout().bank_cells)
+    {
         return Err("native v1 global bank capacity exceeded".into());
     }
     for function in &compiler.ir.functions {
@@ -237,10 +285,16 @@ pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
             globals::register_functions(&mut compiler, value)?;
         }
     }
-    entry::emit_entry(&mut compiler)?;
-    compiler
+    let manifest = if application {
+        Some(application::manifest(&compiler, offset as u32)?)
+    } else {
+        entry::emit_entry(&mut compiler, kernel_offset - 1)?;
+        None
+    };
+    let object = compiler
         .object
         .finish()
         .emit()
-        .map_err(|e| format!("native object emission: {e}"))
+        .map_err(|e| format!("native object emission: {e}"))?;
+    Ok((object, manifest))
 }
