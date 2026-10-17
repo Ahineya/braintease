@@ -1,0 +1,5 @@
+{
+  "description": "Large direct/indirect variadic calls stage scalar, wide and pointer stack arguments",
+  "expected": "YYY\n",
+  "use_runtime": true
+}

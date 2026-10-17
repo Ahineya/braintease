@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run cowsay and the Picol Tcl subset in RVM, including live input and persistence."""
 import argparse
+import hashlib
 import errno
 import json
 import os
@@ -130,9 +131,11 @@ def seed(image, files):
     manifest = image.with_suffix('.json'); manifest.write_text(json.dumps(files))
     source = r'''
 import fs from 'node:fs';import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const f=process.argv[1],d=fs.readFileSync(f),root=fatFile(d,'ROOTFS.IMG');
-fs.writeFileSync(f,root.replace(installRoot(root.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
+const f=process.argv[1],d=openImage(f),root=fatFile(d,'ROOTFS.IMG');
+atomicWrite(f,root.replace(installRoot(root.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
 '''
     subprocess.run(['node','--input-type=module','-e',source,str(image),str(manifest)],cwd=ROOT,check=True)
 
@@ -218,9 +221,9 @@ with tempfile.TemporaryDirectory(prefix='fuzix-fun-') as tmp:
                          'Hello, coffee! Tcl is alive.','square(5) = 25']:
             assert expected in output,(expected,output)
         subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
-        before=image.read_bytes()
+        before=hashlib.file_digest(image.open('rb'), 'sha256').digest()
         subprocess.run(['node',str(PORT/'tools/disk.mjs'),str(build),str(image),'--install'],check=True)
-        assert image.read_bytes()==before,'a clean no-op upgrade changed the disk'
+        assert hashlib.file_digest(image.open('rb'), 'sha256').digest()==before,'a clean no-op upgrade changed the disk'
         output=run(image,'cat /tcl-state /tcl-visits\ntcl /hello.tcl again\nshutdown\n',jit,label+'-reboot')
         assert 'one\ntwo lines\nthree' in output and 'Hello, coffee!' in output and 'Hello, again!' in output,output
         live(image,jit)

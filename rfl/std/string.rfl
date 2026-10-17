@@ -1,13 +1,16 @@
 import { List } from "std/list";
 
+/// Returns the indexed string length (`text.len()`); does not count Unicode graphemes.
 export fn byte_len(text: String) -> usize {
     text.len()
 }
 
+/// Returns whether the string has no indexed elements.
 export fn is_empty(text: String) -> bool {
     text.is_empty()
 }
 
+/// Returns whether every indexed character is below 128.
 export fn is_ascii(text: String) -> bool {
     let mut i: usize = 0;
     while (i < text.len()) {
@@ -26,14 +29,17 @@ fn region_eq(text: String, start: usize, needle: String) -> bool {
     true
 }
 
+/// Returns whether `text` begins with `prefix`. An empty prefix matches.
 export fn starts_with(text: String, prefix: String) -> bool {
     if (prefix.len() > text.len()) { false } else { region_eq(text, 0, prefix) }
 }
 
+/// Returns whether `text` ends with `suffix`. An empty suffix matches.
 export fn ends_with(text: String, suffix: String) -> bool {
     if (suffix.len() > text.len()) { false } else { region_eq(text, text.len() - suffix.len(), suffix) }
 }
 
+/// Returns whether `needle` occurs in `text`. An empty needle matches.
 export fn contains(text: String, needle: String) -> bool {
     match index_of(text, needle) {
         Some(_) => true,
@@ -41,6 +47,7 @@ export fn contains(text: String, needle: String) -> bool {
     }
 }
 
+/// Returns the first index of `needle`, or `None`. An empty needle returns `Some(0)`.
 export fn index_of(text: String, needle: String) -> Option<usize> {
     let nlen = needle.len();
     let tlen = text.len();
@@ -53,8 +60,10 @@ export fn index_of(text: String, needle: String) -> Option<usize> {
     None
 }
 
+/// Concatenates `left` and `right` into a string.
 export fn concat(left: String, right: String) -> String { left + right }
 
+/// Concatenates `count` copies of `text`; zero copies produce an empty string.
 export fn repeat(text: String, count: usize) -> String {
     let mut out = "";
     let mut i: usize = 0;
@@ -69,6 +78,7 @@ fn is_space(ch: char) -> bool {
     ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
 }
 
+/// Removes leading and trailing ASCII spaces, tabs, carriage returns and newlines.
 export fn trim(text: String) -> String {
     let mut start: usize = 0;
     while (start < text.len() && is_space(text[start])) { start = start + 1; }
@@ -77,6 +87,7 @@ export fn trim(text: String) -> String {
     text[start..end]
 }
 
+/// Splits on a literal separator, preserving empty pieces. An empty separator splits into individual indexed elements.
 export fn split(text: String, sep: String) -> List<String> {
     let mut out: List<String> = Nil;
     if (sep.len() == 0) {
@@ -104,6 +115,7 @@ export fn split(text: String, sep: String) -> List<String> {
     out.reverse()
 }
 
+/// Replaces non-overlapping occurrences of `from` with `to`. An empty `from` leaves the string unchanged.
 export fn replace(text: String, from: String, to: String) -> String {
     if (from.len() == 0) { return text; }
     let mut out = "";

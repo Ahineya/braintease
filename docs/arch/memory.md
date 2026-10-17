@@ -23,7 +23,7 @@ The compiler tracks a bank tag on every pointer-valued temporary (`BankTag` in `
 
 | Tag | Meaning | Bank register |
 |-----|---------|----------------|
-| Global | `.data` / `.rodata` / string | `GP` (crt0: 1) |
+| Global | `.data` / `.rodata` / string | `GP` for legacy objects; tracked actual bank for banked globals |
 | Stack | alloca / frame | `SB` (crt0: 2) |
 | Heap(n) | `malloc` result | immediate bank `n` |
 | Unknown | parameter or loaded pointer | runtime tag / second word |
@@ -41,10 +41,31 @@ Set in `runtime/crt0.asm` and `runtime/malloc.c`:
 | Bank | Use |
 |------|-----|
 | 0 | MMIO + TEXT40 VRAM (see [mmio.md](mmio.md)). Not used as the C global bank. |
-| 1 | Globals (`GP`) |
-| 2 | Stack (`SB`), grows up from address 1 |
-| 3–4 | Unused |
-| 5–255 | Heap arena with first-fit allocation, splitting and coalescing. Allocations may span banks. |
+| 1 | First global bank (`GP`) |
+| 2 | Stack (`SB`) for small programs, grows up from address 1 |
+| 3–4 | Normally unused |
+| 5–255 | Heap arena for small programs; allocations may span banks |
+
+Bank-aware global addressing is the default for source and IR compilation,
+including multi-file applications and kernels. `--banked-globals` remains accepted;
+`--banked-globals=false` opts into compact legacy references for small units
+(large units still select bank-aware addressing automatically). Globals may
+span up to sixteen banks. The linker places legacy data
+first, normalizes symbol offsets/bank deltas, and rejects legacy references that
+would wrap. Global provenance alone never proves that a pointer is in the first
+GP bank: field access, calls, stores and returns preserve its tracked bank.
+
+For standalone programs, the linker supplies `__rcc_layout_stack_bank` and
+`__rcc_layout_heap_bank`: the stack follows all globals, and the heap starts in
+the next bank, with bank 5 as its minimum. Small programs retain the table above.
+Explicit segmented-stack pools must avoid globals; `rcc_stack_reserve` obtains
+its pool through this allocator. Protected FUZIX RXE loading instead uses its
+[own virtual layout](../../ports/fuzix/README.md#protected-memory). SYS1 boot
+images still require single-bank globals.
+
+The [native target](../../rcc-native/README.md) retains the pointer representation,
+using bank 1 for small globals and banks 32–47 for large globals, excluded from
+allocation and preserved privately across fork/exec.
 
 `BANK_SIZE` (words) is injected when compiling the runtime (`-D BANK_SIZE=…`) and must match `rcc` / `rasm` / `rlink` / `rvm`.
 
@@ -57,8 +78,8 @@ checks multiplication overflow before allocating and clearing memory.
 
 Allocation sizes, `sizeof`, and `memcpy`/`memset` lengths are all C bytes (one cell),
 not file-format octets. They use 32-bit `size_t`, so one allocation can span banks.
-The fixed heap range remains banks 5–255; no VM instruction or bank layout changes
-are required.
+The heap ends at bank 255; its lower bound follows the linked global/stack
+layout. No new VM instructions are required.
 
 ## Instruction memory
 

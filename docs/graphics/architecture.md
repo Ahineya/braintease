@@ -13,7 +13,7 @@ window.
 sh / vi / top                  graphical applications
      │ PTY stream                       │ drawing
      ▼                                  ▼
-gterm: terminal model           Nano-X adapter (planned)
+gterm: terminal model           Nano-X engine (server planned)
      │ RGB565 upload/copy/fill/present   │
      └────────────────┬─────────────────┘
                 GX window/surface/event interface
@@ -99,15 +99,19 @@ dirty rows reduce guest painting/upload work, not host publication cost.
 `gterm` compares dirty rows against a shadow of the painted cells. It uploads
 only changed character spans, fills runs of spaces, and moves the shadow along
 with COPY/FILL scrolling. Old and new cursor cells are damaged explicitly.
-`GX_WAIT` accepts the owner window handle, a PTY master descriptor, requested
-readiness bits and a timeout in deciseconds (zero polls). It returns ready bits
-and a host-monotonic millisecond sample for repeat deadlines. Input, slave output,
-slave close and input-queue consumption wake the wait; readiness testing and
-sleep registration are atomic under IRQ masking. An invalid/non-PTY descriptor
-fails, and signals interrupt the wait. The host clock advances timeout accounting;
-idle polls input and requests a one-millisecond host yield.
-The decisecond timeout is a fallback/deadline, not a mandatory input delay.
-Future local IPC and multiwindow waits can build on this bounded milestone.
+`gterm` uses the standard guest `select()` interface to wait on its graphics
+descriptor and PTY master. Graphics read readiness means a queued event,
+overflow notice or close request; `GX_EVENT` retrieves it without changing the
+wait API. PTY writes are watched only while keyboard replies are pending.
+Finite waits drive repeat/child checks using monotonic time. Queue transitions
+wake the process immediately; timeout duration is not an input delay.
+See [descriptor readiness](../networking/select.md) for the C16 ABI, native
+coverage, timer resolution and lifetime rules.
+
+`GX_WAIT` remains as a compatibility ioctl combining one window and one PTY.
+It is no longer gterm's wait mechanism. Unix-domain local IPC descriptors can join
+the same select loop; multiple windows still need explicit event ownership and
+subscription semantics.
 
 RVM opens a 640×480 framebuffer at 640×480 logical host points. Very small
 framebuffers retain integer enlargement to stay readable. GPU redraws occur on
@@ -128,8 +132,9 @@ writes retain the reference fault path.
 The bounded terminal model and event/output batches
 prevent an unbounded escape sequence or output stream from consuming the
 kernel. Keyboard input is sent to the PTY, so signals and foreground groups
-continue to be handled by the tty driver. Child sessions receive an 80×30
-window size and TERM=ansi. Terminal close sends hangup/continue to the child's
+continue to be handled by the tty driver. Child sessions receive the selected
+terminal geometry (80×30 by default, with matching pixel dimensions) and
+TERM=ansi. Terminal close sends hangup/continue to the child's
 process group and bounds teardown before forced termination; it does not yet
 provide a save-work dialogue or a GUI detachment policy.
 
@@ -157,11 +162,11 @@ The protected profile expands capacities without increasing the existing
 | PTY pairs | 4 | 8 |
 | User data/heap virtual banks | 16 | 16 |
 | Per-process user stack | 64,000 cells | 64,000 cells |
-| TCP connections | 4 | 4 |
+| TCP connections | 4 | 16 |
 
 The close-on-exec mask grows to 32 bits where UFTSIZE exceeds 16. All descriptor
 mask shifts use wide arithmetic. Kernel stacks occupy banks 32–63; MMU tables
-64–95; reference counts 96; saved task data 97; scanout 104–108. User physical
+64–95; reference counts 96; saved task data 97; FAT chain 98–99; scanout 104–108. User physical
 pages remain 128–255. Compile-time checks guard stack/table overlap and saved
 task-data size. Moving saved task data out of GP bank 3 leaves space for the
 larger process, inode, file and input tables. FUZIX/Ripple now supports only
@@ -188,3 +193,19 @@ focus, close and resize semantics at that layer. The RVM backend can compose
 those surfaces into one guest desktop. A Nano-X PSD update callback alone
 receives framebuffer damage and lacks the lifecycle information needed here.
 Shared-window adaptation therefore belongs above that screen-driver callback.
+
+`nxeyes` also uses a nonrectangular top-level bounding region. The future native
+adapter must carry that mask into native window/input handling, or explicitly
+offer a rectangular fallback. RGB565 pixels alone cannot describe transparent
+corners or input passing through them; the current GX v1 header has no surface
+alpha or window-shape operation.
+
+The initial Nano-X engine is exercised by `nxdraw`, which owns the existing
+single RVM GX lease. Its C16 screen driver rasterizes into a 640×480 userspace
+RGB565 buffer and uploads the bounding dirty rectangle at presentation. GX
+resolves the MMU mapping and uses DMA for the upload. Mono bitmap strides count
+16-bit cells; surface sizes use 32-bit cell counts. Same-surface blits currently
+snapshot the source in userspace for correct clipping and overlap across region
+bands. A later optimization can replace this copy with bounded scratch spans
+or validated GX bulk operations. The separate Nano-X server and event/window
+adapters remain the next milestone; the engine demo installs no window manager.

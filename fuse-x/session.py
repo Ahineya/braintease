@@ -10,6 +10,7 @@ import pty
 import select
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import termios
@@ -67,6 +68,7 @@ def serve(state, command):
         environment = dict(os.environ, RCC_NATIVE_NET_EAGER='1')
         child = None
         clients = {}
+        requests = {}
         attached = None
         outgoing = bytearray()
         incoming = bytearray()
@@ -131,9 +133,18 @@ def serve(state, command):
                             connection.close()
                         else:
                             clients[connection] = time.monotonic()
+                            requests[connection] = bytearray()
                     elif descriptor in clients:
                         try:
-                            request = descriptor.recv(1)
+                            buffer = requests[descriptor]
+                            chunk = descriptor.recv(1 if not buffer else 5 - len(buffer))
+                            if not chunk:
+                                descriptor.close(); del clients[descriptor]; del requests[descriptor]
+                                continue
+                            buffer.extend(chunk)
+                            request = bytes(buffer[:1])
+                            if request == b'W' and len(buffer) < 5:
+                                continue
                             if request == b'A':
                                 if attached is not None:
                                     descriptor.send(b'ERROR console already attached\n')
@@ -141,6 +152,15 @@ def serve(state, command):
                                 else:
                                     attached = descriptor
                                     outgoing.extend(b'OK\n' + replay)
+                            elif request == b'W':
+                                rows, columns = struct.unpack('!HH', buffer[1:5])
+                                if rows and columns:
+                                    fcntl.ioctl(master, termios.TIOCSWINSZ,
+                                                struct.pack('HHHH', rows, columns, 0, 0))
+                                    descriptor.send(b'OK\n')
+                                else:
+                                    descriptor.send(b'ERROR invalid terminal size\n')
+                                descriptor.close()
                             else:
                                 if request == b'S':
                                     stop(None, None)
@@ -149,6 +169,7 @@ def serve(state, command):
                         except OSError:
                             descriptor.close()
                         del clients[descriptor]
+                        del requests[descriptor]
                     elif descriptor is attached:
                         try:
                             data = attached.recv(4096)
@@ -195,6 +216,7 @@ def serve(state, command):
                     if time.monotonic() - started > 2:
                         connection.close()
                         del clients[connection]
+                        del requests[connection]
             result = child.wait()
             (state / 'exit.json').write_text(json.dumps({'status': result}) + '\n')
             # Flush the last shutdown message before closing the client stream.
@@ -229,6 +251,7 @@ def attach(state, *, boot_only=False):
     descriptor = sys.stdin.fileno()
     interactive = os.isatty(descriptor)
     boot_output = bytearray()
+    last_size = None
     def interrupted(number, _frame):
         raise SystemExit(128 + number)
     signal.signal(signal.SIGTERM, interrupted)
@@ -249,7 +272,18 @@ def attach(state, *, boot_only=False):
             tty.setraw(descriptor)
         inputs = [connection, descriptor]
         while True:
-            ready, _, _ = select.select(inputs, [], [])
+            if interactive:
+                try:
+                    columns, rows = os.get_terminal_size(descriptor)
+                    if rows and columns and (rows, columns) != last_size:
+                        with connect(state, b'W' + struct.pack('!HH', rows, columns)) as control:
+                            control.recv(256)
+                        last_size = rows, columns
+                except OSError:
+                    # Drain the attached stream even if the kernel just exited,
+                    # or an older broker cannot accept a size update.
+                    pass
+            ready, _, _ = select.select(inputs, [], [], .1 if interactive else None)
             if connection in ready:
                 data = connection.recv(8192)
                 if not data:

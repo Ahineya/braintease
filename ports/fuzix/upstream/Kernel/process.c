@@ -958,6 +958,10 @@ static int signal_parent(ptptr c)
 
 void doexit(uint16_t val)
 {
+#ifdef CONFIG_SELECT
+    ripple_select_exit(udata.u_ptab);
+#endif
+
 	register ptptr p;
 	register uint_fast8_t j;
 	irqflags_t irq;

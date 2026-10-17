@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Predefined file and line macros are defined for ifdef/ifndef, including Lynx assertion guards",
+  "expected": "YY\n"
+}

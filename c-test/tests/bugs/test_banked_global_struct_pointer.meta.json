@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Global struct fields retain their actual bank through pointer loads and returns",
+  "expected": "Y\n"
+}

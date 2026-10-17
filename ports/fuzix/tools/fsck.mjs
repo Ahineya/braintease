@@ -5,17 +5,18 @@ import {fileURLToPath} from 'node:url';
 
 import {atomicWrite} from './disk.mjs';
 import {fatFile} from './fat.mjs';
-import {BLOCK, CELLS, INODES_PER_BLOCK, MAGIC, SIGNATURE, inodeBase} from './layout.mjs';
+import {BLOCK, CELLS, layout, baseFor} from './layout.mjs';
+import {Image, openImage} from './image.mjs';
 
 export function checkRoot(input, repair = false) {
-  const image = Buffer.from(input), w = p => image.readUInt16LE(p * 2),
-        put = (p, v) => image.writeUInt16LE(v & 65535, p * 2), wide = p => w(p) + w(p + 1) * 65536;
-  if (image.length < 2 * BLOCK || image.toString('ascii', 0, 19) !== SIGNATURE ||
-      w(CELLS) !== MAGIC)
-    throw Error('incompatible Ripple FUZIX root; recreate it with --fresh');
-  const sb = CELLS, isize = w(sb + 1), blocks = w(sb + 2), inodes = (isize - 2) * INODES_PER_BLOCK, issues = [],
+  const image = Image.from(input).fork(), w = p => image.readUInt16LE(p * 2),
+        put = (p, v) => image.writeUInt16LE(v, p * 2), wide = p => image.readUInt32LE(p * 2);
+  const format = layout(image), {sb: offsets, ptr, step, direct, indirect: entries} = format;
+  const setptr = (p, v) => format.version === 3 ? image.writeUInt32LE(v, p * 2) : put(p, v);
+  const sb = CELLS, isize = w(sb + offsets.isize), blocks = ptr(sb + offsets.blocks),
+        inodes = (isize - 2) * format.inodes, issues = [],
         owners = new Map(), nodes = new Map(), refs = new Map();
-  if (isize < 3 || blocks <= isize || image.length !== blocks * BLOCK)
+  if (isize < 3 || blocks <= isize || image.length !== blocks * BLOCK || inodes > 65535)
     throw Error('invalid root geometry');
   function claim(b, ino) {
     if (b < isize || b >= blocks) throw Error(`inode ${ino}: block outside data area`);
@@ -26,35 +27,43 @@ export function checkRoot(input, repair = false) {
   function indirect(b, level, start, map, ino) {
     if (!b) return;
     claim(b, ino);
-    for (let j = 0; j < CELLS; j++) {
-      const v = w(b * CELLS + j);
+    for (let j = 0; j < entries; j++) {
+      const v = ptr(b * CELLS + j * step);
       if (!v) continue;
       if (level === 1) {
         claim(v, ino);
         map.set(start + j, v);
       } else
-        indirect(v, level - 1, start + j * CELLS, map, ino);
+        indirect(v, level - 1, start + j * entries ** (level - 1), map, ino);
     }
   }
   for (let ino = 1; ino < inodes; ino++) {
-    const base = inodeBase(ino), mode = w(base), links = w(base + 1),
+    const base = baseFor(ino, format), mode = w(base), links = w(base + 1),
           map = new Map(), size = wide(base + 4);
     if (!mode && !links) continue;
     const type = mode & 0xf000;
-    if (![0x8000, 0x4000, 0x2000, 0x6000, 0x1000].includes(type))
+    if (![0x8000, 0x4000, 0x2000, 0x6000, 0x1000, 0xc000].includes(type))
       throw Error(`inode ${ino}: invalid type`);
+    // Pathname sockets have no stored stream state or filesystem data blocks.
+    if (type === 0xc000 && (size || Array.from({length: 20}, (_, j) =>
+        ptr(base + 12 + j * step)).some(Boolean)))
+      throw Error(`inode ${ino}: invalid socket metadata`);
     // FUZIX stores named-pipe buffers in ordinary filesystem blocks too.
     if (type === 0x8000 || type === 0x4000 || type === 0x1000) {
-      for (let j = 0; j < 18; j++) {
-        const b = w(base + 12 + j);
+      for (let j = 0; j < direct; j++) {
+        const b = ptr(base + 12 + j * step);
         if (b) {
           claim(b, ino);
           map.set(j, b);
         }
       }
-      indirect(w(base + 30), 1, 18, map, ino);
-      indirect(w(base + 31), 2, (18 + CELLS), map, ino);
+      let start = direct;
+      for (let level = 1; level <= (format.version === 3 ? 3 : 2); level++) {
+        indirect(ptr(base + 12 + (direct + level - 1) * step), level, start, map, ino);
+        start += entries ** level;
+      }
     }
+    if (size > 0x7fffffff) throw Error(`inode ${ino}: invalid file size`);
     nodes.set(ino, {ino, base, type, links, map, size});
   }
   const root = nodes.get(1);
@@ -111,7 +120,7 @@ export function checkRoot(input, repair = false) {
     if (!nodes.has(i)) unused.push(i);
   try {
     const seen = new Set();
-    let n = w(sb + 3), list = Array.from({length: 50}, (_, i) => w(sb + 4 + i));
+    let n = w(sb + offsets.nfree), list = Array.from({length: 50}, (_, i) => ptr(sb + offsets.free + i * step));
     for (;;) {
       if (n < 1 || n > 50) throw Error('invalid free block count');
       const b = list[--n];
@@ -124,56 +133,56 @@ export function checkRoot(input, repair = false) {
       seen.add(b);
       if (!n) {
         n = w(b * CELLS);
-        list = Array.from({length: 50}, (_, i) => w(b * CELLS + 1 + i));
+        list = Array.from({length: 50}, (_, i) => ptr(b * CELLS + 1 + i * step));
       }
     }
-    if (seen.size !== freeExpected.length || w(sb + 109) !== seen.size)
+    if (seen.size !== freeExpected.length || ptr(sb + offsets.tfree) !== seen.size)
       throw Error('free block totals mismatch');
   } catch (e) {
     issues.push(e.message);
   }
-  if (w(sb + 110) !== unused.length) issues.push('free inode total mismatch');
-  const ni = w(sb + 54), cached = new Set();
+  if (w(sb + offsets.tinode) !== unused.length) issues.push('free inode total mismatch');
+  const ni = w(sb + offsets.ninode), cached = new Set();
   if (ni > 50)
     issues.push('invalid inode cache size');
   else
     for (let i = 0; i < ni; i++) {
-      const ino = w(sb + 55 + i);
+      const ino = w(sb + offsets.inode + i);
       if (!unused.includes(ino) || cached.has(ino)) {
         issues.push('invalid free inode cache');
         break;
       }
       cached.add(ino);
     }
-  if (w(sb + 105) !== 2) issues.push('filesystem was not shut down cleanly');
+  if (w(sb + offsets.clean) !== 2) issues.push('filesystem was not shut down cleanly');
   if (repair && issues.length) {
     let free = [0];
     for (const b of [...freeExpected].reverse()) {
       if (free.length === 50) {
         put(b * CELLS, 50);
-        free.forEach((v, i) => put(b * CELLS + 1 + i, v));
+        free.forEach((v, i) => setptr(b * CELLS + 1 + i * step, v));
         free = [];
       }
       free.push(b);
     }
-    put(sb + 3, free.length);
-    for (let i = 0; i < 50; i++) put(sb + 4 + i, free[i] || 0);
-    put(sb + 109, freeExpected.length);
-    put(sb + 54, Math.min(50, unused.length));
-    for (let i = 0; i < 50; i++) put(sb + 55 + i, unused[i] || 0);
-    put(sb + 110, unused.length);
-    put(sb + 105, 2);
+    put(sb + offsets.nfree, free.length);
+    for (let i = 0; i < 50; i++) setptr(sb + offsets.free + i * step, free[i] || 0);
+    setptr(sb + offsets.tfree, freeExpected.length);
+    put(sb + offsets.ninode, Math.min(50, unused.length));
+    for (let i = 0; i < 50; i++) put(sb + offsets.inode + i, unused[i] || 0);
+    put(sb + offsets.tinode, unused.length);
+    put(sb + offsets.clean, 2);
   }
-  return {image, issues, files: nodes.size, freeBlocks: freeExpected.length};
+  return {owners, image, issues, files: nodes.size, freeBlocks: freeExpected.length, nodes, format, isize, blocks};
 }
 export function checkDisk(filename, repair = false) {
-  const original = fs.readFileSync(filename), root = fatFile(original, 'ROOTFS.IMG'),
+  const original = openImage(filename), root = fatFile(original, 'ROOTFS.IMG'),
         result = checkRoot(root.data, repair);
   for (const message of result.issues) console.error(message);
   if (repair && result.issues.length) {
     let backup = `${filename}.bak`, n = 1;
     while (fs.existsSync(backup)) backup = `${filename}.bak.${n++}`;
-    fs.copyFileSync(filename, backup, fs.constants.COPYFILE_EXCL);
+    fs.copyFileSync(filename, backup, fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE);
     atomicWrite(filename, root.replace(result.image));
   }
   console.log(`${result.files} inodes; ${result.freeBlocks} free blocks; ${

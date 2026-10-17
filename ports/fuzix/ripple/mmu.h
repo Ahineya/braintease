@@ -8,6 +8,8 @@
 #define MMU_TABLE_BASE 64
 #define MMU_REF_BANK 96
 #define MMU_TASK_DATA_BANK 97
+/* Two supervisor banks hold the outer FAT chain, outside kernel GP. */
+#define MMU_DISK_MAP_BANK 98
 /* Physical scanout storage, separate from the COW process pool. */
 #define MMU_GRAPHICS_BANK 104
 #define MMU_GRAPHICS_CELLS (5UL * 64000UL)
@@ -35,6 +37,7 @@ extern void ripple_mmu_select(unsigned);
 extern void ripple_mmu_free(unsigned);
 extern int ripple_mmu_fork(unsigned, unsigned);
 extern int ripple_mmu_exec(unsigned);
+extern int ripple_mmu_exec_data(unsigned, unsigned long);
 extern void ripple_mmu_code(unsigned, unsigned, unsigned long);
 extern usize_t ripple_mmu_validate(unsigned long, usize_t, unsigned);
 extern void ripple_mmu_roots(unsigned);

@@ -365,11 +365,17 @@ impl<'a> TypedExpressionGenerator<'a> {
                 // This is done by creating a temporary variable to hold the result
                 
                 // Allocate space for the result value
-                let result_ptr = self.builder.build_alloca(ir_type.clone(), None)
-                    .map_err(|e| CodegenError::InternalError {
-                        message: format!("Failed to allocate temporary for ternary: {e}"),
-                        location: rcc_common::SourceLocation::new_simple(0, 0),
-                    })?;
+                // A void conditional carries only control flow and side effects.
+                // It must never create storage, a load or a store of type void.
+                let result_ptr = if matches!(value_type, Type::Void) {
+                    None
+                } else {
+                    Some(self.builder.build_alloca(ir_type.clone(), None)
+                        .map_err(|e| CodegenError::InternalError {
+                            message: format!("Failed to allocate temporary for ternary: {e}"),
+                            location: rcc_common::SourceLocation::new_simple(0, 0),
+                        })?)
+                };
                 
                 // Create labels for control flow
                 let then_label = self.builder.new_label();
@@ -390,19 +396,21 @@ impl<'a> TypedExpressionGenerator<'a> {
                         location: rcc_common::SourceLocation::new_simple(0, 0),
                     })?;
                 let then_value = self.generate(then_expr)?;
-                if is_aggregate {
-                    assignments::copy_struct_access(self, then_value, result_ptr.clone(), then_expr.get_declared_type(), &value_type)?;
-                } else {
-                    let then_value = if then_expr.get_type() != &value_type {
-                        conversions::convert_value(self, then_value, then_expr.get_type(), &value_type)?
+                if let Some(result_ptr) = &result_ptr {
+                    if is_aggregate {
+                        assignments::copy_struct_access(self, then_value, result_ptr.clone(), then_expr.get_declared_type(), &value_type)?;
                     } else {
-                        then_value
-                    };
-                    self.builder.build_store(then_value, result_ptr.clone(), ir_type.clone())
-                        .map_err(|e| CodegenError::InternalError {
-                            message: format!("Failed to store then value: {e}"),
-                            location: rcc_common::SourceLocation::new_simple(0, 0),
-                        })?;
+                        let then_value = if then_expr.get_type() != &value_type {
+                            conversions::convert_value(self, then_value, then_expr.get_type(), &value_type)?
+                        } else {
+                            then_value
+                        };
+                        self.builder.build_store(then_value, result_ptr.clone(), ir_type.clone())
+                            .map_err(|e| CodegenError::InternalError {
+                                message: format!("Failed to store then value: {e}"),
+                                location: rcc_common::SourceLocation::new_simple(0, 0),
+                            })?;
+                    }
                 }
                 // Only create branch if block doesn't already have a terminator
                 if !self.builder.current_block_has_terminator() {
@@ -420,19 +428,21 @@ impl<'a> TypedExpressionGenerator<'a> {
                         location: rcc_common::SourceLocation::new_simple(0, 0),
                     })?;
                 let else_value = self.generate(else_expr)?;
-                if is_aggregate {
-                    assignments::copy_struct_access(self, else_value, result_ptr.clone(), else_expr.get_declared_type(), &value_type)?;
-                } else {
-                    let else_value = if else_expr.get_type() != &value_type {
-                        conversions::convert_value(self, else_value, else_expr.get_type(), &value_type)?
+                if let Some(result_ptr) = &result_ptr {
+                    if is_aggregate {
+                        assignments::copy_struct_access(self, else_value, result_ptr.clone(), else_expr.get_declared_type(), &value_type)?;
                     } else {
-                        else_value
-                    };
-                    self.builder.build_store(else_value, result_ptr.clone(), ir_type.clone())
-                        .map_err(|e| CodegenError::InternalError {
-                            message: format!("Failed to store else value: {e}"),
-                            location: rcc_common::SourceLocation::new_simple(0, 0),
-                        })?;
+                        let else_value = if else_expr.get_type() != &value_type {
+                            conversions::convert_value(self, else_value, else_expr.get_type(), &value_type)?
+                        } else {
+                            else_value
+                        };
+                        self.builder.build_store(else_value, result_ptr.clone(), ir_type.clone())
+                            .map_err(|e| CodegenError::InternalError {
+                                message: format!("Failed to store else value: {e}"),
+                                location: rcc_common::SourceLocation::new_simple(0, 0),
+                            })?;
+                    }
                 }
                 // Only create branch if block doesn't already have a terminator
                 if !self.builder.current_block_has_terminator() {
@@ -450,6 +460,9 @@ impl<'a> TypedExpressionGenerator<'a> {
                         location: rcc_common::SourceLocation::new_simple(0, 0),
                     })?;
                 
+                let Some(result_ptr) = result_ptr else {
+                    return Ok(Value::Constant(0));
+                };
                 if is_aggregate {
                     // Aggregates are used as pointers (assignment, member access, byval args)
                     Ok(result_ptr)

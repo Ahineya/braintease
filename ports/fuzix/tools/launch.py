@@ -84,6 +84,10 @@ def main():
         updated = subprocess.run(cmd)
         if updated.returncode:
             sys.exit(updated.returncode)
+    if not args.update:
+        checked = subprocess.run(['node', str(Path(__file__).with_name('check-abi.mjs')), str(image)])
+        if checked.returncode:
+            sys.exit(checked.returncode)
     if args.build_only:
         return
     command = host_command(args, image)

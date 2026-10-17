@@ -30,4 +30,7 @@ int rcc_hosted_valid_function(unsigned long token, unsigned arity);
 /* Console polling returns an octet, -1 for no data, or -2 for EOF. */
 int rcc_hosted_input(void);
 void rcc_hosted_idle(unsigned milliseconds);
+/* Synchronous hosted GX adapter. request contains twelve 32-bit cells pairs;
+ * the adapter copies buffers and never retains guest pointers. Kernel only. */
+long rcc_hosted_gx(unsigned operation, unsigned long *request);
 #endif

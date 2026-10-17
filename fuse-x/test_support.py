@@ -9,7 +9,8 @@ def check_root(path):
     checker = Path(__file__).resolve().parents[1] / 'ports/fuzix/tools/fsck.mjs'
     subprocess.run(['node', '--input-type=module', '-e',
                     "import fs from 'node:fs'; const {checkRoot}=await import(process.argv[1]);"
-                    "const result=checkRoot(fs.readFileSync(process.argv[2]));"
+                    "const {openImage}=await import(new URL('image.mjs',process.argv[1]));"
+                    "const result=checkRoot(openImage(process.argv[2]));"
                     "if(result.issues.length) throw Error(result.issues.join('\\n'));",
                     checker.as_uri(), str(path.resolve())], check=True)
 

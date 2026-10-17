@@ -111,6 +111,19 @@ unsigned short vm_host_idle(unsigned short milliseconds) {
     return submit(VM_DEVICE_HOST_IDLE, descriptor);
 }
 
+unsigned short vm_host_terminal_size(VmTerminalSize *size) {
+    volatile unsigned short descriptor[4];
+    unsigned short status;
+    if (vm_devices_version() != VM_DEVICE_ABI_VERSION) return VM_DEVICE_UNSUPPORTED;
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 4;
+    descriptor[2] = descriptor[3] = 0;
+    status = submit(VM_DEVICE_HOST_TERMINAL, descriptor);
+    if (status == VM_DEVICE_OK) {
+        size->rows = descriptor[2]; size->columns = descriptor[3];
+    }
+    return status;
+}
+
 static long signed_words(unsigned short lo, unsigned short hi) {
     unsigned long value = join_words(lo, hi);
     if (hi & 32768U) return -1L - (long)(0xffffffffUL - value);

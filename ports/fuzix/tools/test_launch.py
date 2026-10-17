@@ -131,7 +131,15 @@ class LauncherTests(unittest.TestCase):
 
     def test_disk_lock_survives_exec_and_releases_on_exit(self):
         disk = self.build / 'disk'
-        disk.touch()
+        root = LAUNCH.parents[3]
+        subprocess.run(['node', '--input-type=module', '-e', """
+import {rootImage, atomicWrite} from './ports/fuzix/tools/disk.mjs';
+import {fat16Image} from './c-test/examples/rOS/mkfat16.mjs';
+import {Image} from './ports/fuzix/tools/image.mjs';
+const image=fat16Image([{name:'ROOTFS.IMG',data:rootImage([],256)}],{imageFactory:n=>new Image(n)});
+atomicWrite(process.argv[1],image);
+""", str(disk)], cwd=root, check=True)
+
         fake = self.build / 'host'
         fake.write_text('#!' + sys.executable + '\n' + """
 import signal, sys

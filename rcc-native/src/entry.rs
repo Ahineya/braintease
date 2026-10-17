@@ -36,6 +36,13 @@ pub(super) fn emit_entry(compiler: &mut Compiler, kernel_cells: u64) -> Result<(
             let cells = b.ins().iconst(types::I64, kernel_cells as i64);
             b.ins().call(reserve, &[runtime, cells]);
         }
+        if compiler.global_bank != 1 {
+            let id = compiler.import("rcc_native_global_memory", 2)?;
+            let reserve = compiler.object.declare_func_in_func(id, b.func);
+            let bank = b.ins().iconst(types::I64, compiler.global_bank as i64);
+            let cells = b.ins().iconst(types::I64, compiler.global_cells as i64);
+            b.ins().call(reserve, &[runtime, bank, cells]);
+        }
         let store = compiler
             .object
             .declare_func_in_func(compiler.imports["rcc_native_store"], b.func);

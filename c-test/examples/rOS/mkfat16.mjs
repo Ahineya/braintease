@@ -25,7 +25,7 @@ function canon83(name) {
 }
 
 export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SECS_PER_FAT,
-                                    sectorsPerCluster = SPC} = {}) {
+                                    sectorsPerCluster = SPC, imageFactory = size => Buffer.alloc(size)} = {}) {
   const rootSecs = Math.ceil(ROOT_ENT * 32 / BPS);
   const fatOffset = RESERVED * BPS;
   const rootOffset = (RESERVED + NUM_FATS * sectorsPerFat) * BPS;
@@ -44,23 +44,23 @@ export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SE
   const requiredClusters = files.reduce((total, file) => total + Math.ceil(file.data.length / clusterBytes), 0);
   if (requiredClusters > clusterCount) throw new Error('Files exceed FAT16 image capacity');
 
-  const image = Buffer.alloc(totalSectors * BPS);
+  const image = imageFactory(totalSectors * BPS);
   image.set([0xeb, 0x3c, 0x90], 0);
   image.write('MSDOS5.0', 3, 'ascii');
   image.writeUInt16LE(BPS, 11);
-  image[13] = sectorsPerCluster;
+  image.writeUInt8(sectorsPerCluster, 13);
   image.writeUInt16LE(RESERVED, 14);
-  image[16] = NUM_FATS;
+  image.writeUInt8(NUM_FATS, 16);
   image.writeUInt16LE(ROOT_ENT, 17);
   image.writeUInt16LE(totalSectors <= 65535 ? totalSectors : 0, 19);
-  image[21] = MEDIA;
+  image.writeUInt8(MEDIA, 21);
   image.writeUInt16LE(sectorsPerFat, 22);
   image.writeUInt16LE(32, 24);
   image.writeUInt16LE(2, 26);
   // Preserve the existing image layout, including its total-sector mirror.
   image.writeUInt32LE(totalSectors, 32);
-  image[36] = 0x80;
-  image[38] = 0x29;
+  image.writeUInt8(0x80, 36);
+  image.writeUInt8(0x29, 38);
   image.writeUInt32LE(0x12345678, 39);
   image.write('RIPPLEOS  ', 43, 'ascii');
   image.write('FAT16   ', 54, 'ascii');
@@ -84,7 +84,7 @@ export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SE
     }
     const entry = rootOffset + index * 32;
     image.write(canon83(name), entry, 'ascii');
-    image[entry + 11] = 0x20;
+    image.writeUInt8(0x20, entry + 11);
     image.writeUInt16LE(first, entry + 26);
     image.writeUInt32LE(data.length, entry + 28);
   }
@@ -95,14 +95,14 @@ export function fat16Image(files, {totalSectors = TOTAL_SECS, sectorsPerFat = SE
 // metadata and unused sectors retain their original bytes. Work on a copy so
 // validation/allocation failures cannot partially modify the source image.
 export function updateFat16Image(source, files) {
-  const image = Buffer.from(source);
+  const image = Buffer.isBuffer(source) ? Buffer.from(source) : source.fork();
   if (image.length < 512 || image.readUInt16LE(510) !== 0xaa55) {
     throw new Error('Not a FAT16 disk image');
   }
   const bps = image.readUInt16LE(11);
-  const spc = image[13];
+  const spc = image.readUInt8(13);
   const reserved = image.readUInt16LE(14);
-  const fats = image[16];
+  const fats = image.readUInt8(16);
   const entries = image.readUInt16LE(17);
   const sectors = image.readUInt16LE(19) || image.readUInt32LE(32);
   const fatBytes = image.readUInt16LE(22) * bps;
@@ -126,6 +126,7 @@ export function updateFat16Image(source, files) {
     }
   }
   function fatSet(cluster, value) {
+    fat.writeUInt16LE(value, cluster * 2);
     for (let index = 0; index < fats; ++index) {
       image.writeUInt16LE(value, fatStart + index * fatBytes + cluster * 2);
     }
@@ -139,11 +140,11 @@ export function updateFat16Image(source, files) {
     let slot;
     let freeSlot;
     for (let entry = rootStart; entry < rootEnd; entry += 32) {
-      const first = image[entry];
+      const first = image.readUInt8(entry);
       if (first === 0 || first === 0xe5) freeSlot ??= entry;
       if (first === 0) break;
       if (first !== 0xe5 && image.subarray(entry, entry + 11).toString('ascii') === name) {
-        if (image[entry + 11] & 0x18) throw new Error(`Not a regular root file: ${file.name}`);
+        if (image.readUInt8(entry + 11) & 0x18) throw new Error(`Not a regular root file: ${file.name}`);
         slot = entry;
         break;
       }
@@ -151,9 +152,9 @@ export function updateFat16Image(source, files) {
     if (slot === undefined) {
       if (freeSlot === undefined) throw new Error('FAT root directory is full');
       slot = freeSlot;
-      const wasEnd = image[slot] === 0;
+      const wasEnd = image.readUInt8(slot) === 0;
       image.fill(0, slot, slot + 32);
-      if (wasEnd && slot + 32 < rootEnd) image[slot + 32] = 0;
+      if (wasEnd && slot + 32 < rootEnd) image.writeUInt8(0, slot + 32);
       image.write(name, slot, 'ascii');
     } else {
       let cluster = image.readUInt16LE(slot + 26);
@@ -190,7 +191,7 @@ export function updateFat16Image(source, files) {
       image.set(data.subarray(offset, offset + clusterBytes), start);
       previous = cluster;
     }
-    image[slot + 11] |= 0x20;
+    image.writeUInt8(image.readUInt8(slot + 11) | 0x20, slot + 11);
     image.writeUInt16LE(first, slot + 26);
     image.writeUInt32LE(data.length, slot + 28);
   }

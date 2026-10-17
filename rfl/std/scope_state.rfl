@@ -4,17 +4,27 @@ import { Future, Poll, Pending, Ready, invalid_poll } from "std/future";
 import { Context, Waker } from "std/task";
 import { replace } from "std/mem";
 
+/// A join failure indicating that the child task was cancelled.
 export type JoinError = TaskCancelled;
+/// Internal single-consumer result storage for waiting, finished, aborted or collected scoped tasks.
 export type JoinState<T> = Waiting(Option<Waker>) | Finished(T) | Aborted | Collected;
+/// A move-only future for a scoped child's result. Dropping a live handle requests cancellation of the child.
 export type JoinHandle<T> = HandleLive(ErasedOwner,fn(Context)->Poll<Result<T,JoinError>>) | HandleDone;
 
+/// Internal task-gate command: begin a non-reentrant poll if the task is live.
 export const ENTER:u16=0;
+/// Internal task-gate command: finish a pending poll.
 export const LEAVE:u16=1;
+/// Internal task-gate command: finish and retire the task.
 export const COMPLETE:u16=2;
+/// Internal task-gate command: request child cancellation.
 export const REQUEST_CANCEL:u16=3;
+/// Internal task-gate command: close the lifetime gate before releasing storage.
 export const DESTROY:u16=4;
+/// Internal task-gate query: report whether cancellation was requested.
 export const CANCEL_REQUESTED:u16=5;
 // A stale copied callback retains this gate, not a dereferenceable dangling view.
+/// Creates a shared lifetime/reentrancy gate for a scoped child; stale callbacks retain this gate rather than a dangling storage view.
 export fn task_gate()->fn(u16)->bool {
     let mut live=true;let mut busy=false;let mut requested=false;
     fn(op:u16)=>{
@@ -34,16 +44,19 @@ export fn task_gate()->fn(u16)->bool {
         false
     }
 }
+/// Creates a shared result-lifetime gate; passing true closes it permanently.
 export fn result_gate()->fn(bool)->bool {
     let mut live=true;
     fn(close:bool)=>{if (close) {live=false;}live}
 }
+/// Marks a waiting result aborted and returns its registered joiner waker; preserves an already settled result.
 export fn abort_state<T>(state:&mut JoinState<T>)->Option<Waker> {
     match replace(state,Aborted) {
         Waiting(w)=>w,
         other=>{*state=move(other);None},
     }
 }
+/// Stores a completed child result and returns its waiting joiner's waker. Settling a non-waiting result terminates execution.
 export fn finish_state<T>(state:&mut JoinState<T>,value:T)->Option<Waker> {
     match replace(state,Finished(move(value))) {
         Waiting(w)=>w,

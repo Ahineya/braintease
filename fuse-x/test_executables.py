@@ -31,13 +31,19 @@ def main():
                         '--bootstrap-shell', '--apps', str(executable.parent / 'apps')], check=True)
 
         def install(name, path):
-            subprocess.run(['node', str(here / 'image.mjs'), 'put', str(image),
-                            '/bin/' + name, str(path)], check=True, capture_output=True)
+            result = subprocess.run(['node', str(here / 'image.mjs'), 'put', str(image),
+                                     '/bin/' + name, str(path)], capture_output=True, text=True)
+            # This image is disposable. Retaining a full 1 GiB backup for every
+            # malformed-package fixture can exhaust the host's temporary disk.
+            for backup in directory.glob('root.img.bak*'):
+                backup.unlink()
+            assert result.returncode == 0, result.stdout + result.stderr
 
         def compile_app(source, output):
-            subprocess.run(['python3', str(here / 'cc.py'), str(source), '-o', str(output),
+            result = subprocess.run(['python3', str(here / 'cc.py'), str(source), '-o', str(output),
                             '--compiler', str(compiler), '--build', str(executable.parent)],
-                           check=True, capture_output=True)
+                           capture_output=True, text=True)
+            assert result.returncode == 0, result.stdout + result.stderr
 
         def run(commands):
             result = subprocess.run([str(executable), '--run', str(image)], input=commands,
@@ -57,6 +63,9 @@ def main():
         check = directory / 'image-check.fxe'
         compile_app(here / 'examples/processes.c', check)
         install('image-check', check)
+        global_check = directory / 'global-banks.fxe'
+        compile_app(here / 'examples/global-banks.c', global_check)
+        install('global-banks', global_check)
         large = directory / 'large-data'
         large.write_bytes(bytes(i % 251 for i in range(70000)))
         install('large-source', large)
@@ -79,6 +88,12 @@ def main():
         bad('bad-cpu', lambda m: m.update(arch='wrong-cpu'))
         bad('bad-entry', lambda m: m.update(entry=0))
         bad('bad-data', lambda m: m.update(initializers=[[0xf00001, 1, 1, False]]))
+        bad('bad-global-bank', lambda m: m.update(global_bank=2))
+        bad('bad-global-size', lambda m: m.update(global_cells=1024001))
+        def legacy(m):
+            m['abi'] = 1
+            m.pop('global_bank')
+        bad('legacy', legacy)
         bad('bad-helper', lambda m: m['helpers'].append({'symbol': 'rcc_native_ext_fopen', 'arity': 2}))
         truncated = directory / 'truncated.fxe'
         truncated.write_bytes(package[:-32])
@@ -87,12 +102,15 @@ def main():
                      'cp /tmp/source /tmp/copied\ncat /tmp/copied\nls -l /tmp\n'
                      'cp /bin/large-source /tmp/large-copy\n'
                      'cp /bin/outside /tmp/copied-app\n/tmp/copied-app\n'
-                     'image-check\n' + ''.join(name + '\n' for name in
-                     ['bad-cpu', 'bad-entry', 'bad-data', 'bad-helper', 'truncated']) + 'shutdown\n')
+                     'image-check\n/bin/global-banks\nlegacy\n' + ''.join(name + '\n' for name in
+                     ['bad-cpu', 'bad-entry', 'bad-data', 'bad-global-bank', 'bad-global-size',
+                      'bad-helper', 'truncated']) + 'shutdown\n')
         assert 'Built outside the kernel\n' in output, output
         assert 'persistent native copy\n' in output and 'copied\n' in output, output
         assert 'independent image checks passed' in output, output
-        assert output.count('executable rejected:') == 6, output
+        assert 'GLOBAL_BANKS_OK ' in output and 'GLOBAL_BANKS_EXEC_OK' in output, output
+        assert 'GLOBAL_CHECK_FAILED' not in output, output
+        assert output.count('executable rejected:') == 8, output
         output = run('cat /tmp/copied\nshutdown\n')
         assert 'persistent native copy\n' in output, output
 

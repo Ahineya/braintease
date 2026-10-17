@@ -252,6 +252,26 @@ pub(crate) fn check_root(
         }
     }
     let (mut info, result) = crate::check::analyze(&packed, &merged);
+    // Retain unambiguous internal identities in all facts. Only presentation
+    // translates them, preferring names/aliases visible from this root file.
+    for table in &bindings {
+        for (name, binding) in table {
+            info.display_names
+                .insert(binding.mangled.clone(), name.clone());
+        }
+    }
+    let mut aliases: Vec<_> = maps[0].iter().collect();
+    aliases.sort_by(|(a, _), (b, _)| a.cmp(b));
+    let mut displayed = HashSet::new();
+    for (alias, target) in aliases {
+        let original_is_visible = info
+            .display_names
+            .get(target)
+            .is_some_and(|original| maps[0].get(original) == Some(target));
+        if !original_is_visible && displayed.insert(target) {
+            info.display_names.insert(target.clone(), alias.clone());
+        }
+    }
     info.facts = info
         .facts
         .into_iter()
@@ -322,6 +342,7 @@ fn shift_info(
     let base = *base;
     let len = *len;
     crate::check::ProgramInfo {
+        display_names: info.display_names,
         facts: info
             .facts
             .into_iter()
@@ -1615,7 +1636,12 @@ impl Rewriter<'_> {
                     self.expr(field);
                 }
             }
-            ExprKind::Field { base, .. } => self.expr(base),
+            ExprKind::Field {
+                base, name_span, ..
+            } => {
+                self.bump(name_span);
+                self.expr(base);
+            }
             ExprKind::Range { start, end, .. } => {
                 self.expr(start);
                 self.expr(end);
@@ -1893,6 +1919,31 @@ pub(crate) fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileEr
         if !path.exists() {
             return Err(CompileError::plain(format!(
                 "the standard library module `{name}` is not implemented yet"
+            )));
+        }
+        return Ok(path);
+    }
+    if let Some(name) = spec.strip_prefix("lib/") {
+        let name = name.strip_suffix(".rfl").unwrap_or(name);
+        if name.is_empty()
+            || name.split('/').any(|part| {
+                part.is_empty()
+                    || part == "."
+                    || part == ".."
+                    || part.contains('.')
+                    || part.contains('\\')
+            })
+        {
+            return Err(CompileError::plain(
+                "expected a companion library module such as `lib/ini`",
+            ));
+        }
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("lib")
+            .join(format!("{name}.rfl"));
+        if !path.is_file() {
+            return Err(CompileError::plain(format!(
+                "the companion library module `{name}` is not implemented yet"
             )));
         }
         return Ok(path);

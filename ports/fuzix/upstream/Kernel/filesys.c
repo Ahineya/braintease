@@ -330,7 +330,7 @@ found:
         if(!(nindex->c_node.i_nlink && nindex->c_node.i_mode & F_MASK))
             goto badino;
     }
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
     if (!nindex->c_refs)
         memset(nindex->c_select, 0, sizeof(nindex->c_select));
 #endif
@@ -774,7 +774,7 @@ void blk_free(uint16_t devno, blkno_t blk)
         if (buf) {
             /* nfree must directly preceed the blocks and without padding. That's
                the assumption UZI always had */
-            blkfromk(&dev->s_nfree, buf, 0, sizeof(int) + 50 * sizeof(blkno_t));
+            blkfromk(&dev->s_nfree, buf, 0, sizeof(dev->s_nfree) + FILESYS_TABSIZE * sizeof(blkno_t));
             bawrite(buf);
             dev->s_nfree = 0;
         } else
@@ -987,44 +987,29 @@ uint16_t devnum(inoptr ino)
  *	very important so that they end up on the freelist in the
  *	order we want to allocate them.
  */
-int f_trunc_blocks(register inoptr ino, uint16_t nblock)
+int f_trunc_blocks(register inoptr ino, blkno_t nblock)
 {
-    register uint16_t dev;
-    register int_fast8_t j;
-    uint16_t indirect = BLKSIZE / sizeof(blkno_t);
-    uint16_t map1 = 0, map2 = 0;
-
-    if (ino->c_flags & CRDONLY) {
-        udata.u_error = EROFS;
-        return -1;
+    unsigned level, j;
+    uint32_t indirect = BLKSIZE / sizeof(blkno_t), span = 1;
+    uint32_t start = FS_DIRECT, keep;
+    uint16_t dev = ino->c_dev;
+    if (ino->c_flags & CRDONLY) { udata.u_error = EROFS; return -1; }
+    for (level = 1; level <= FS_LEVELS; level++) {
+        span *= indirect;
+        start += span;
     }
-
-    /* nblock counts retained data blocks: 18 direct, one indirect
-       block, then the double-indirect tree. */
-    if (nblock > 18)
-        map1 = min(nblock - 18, indirect);
-    if (nblock > 18 + indirect)
-        map2 = nblock - 18 - indirect;
-    dev = ino->c_dev;
-
-    freeblk(dev, ino->c_node.i_addr[19], 2, map2);
-    if (!map2)
-        ino->c_node.i_addr[19] = 0;
-
-    /* A retained double-indirect block implies the whole single
-       indirect range is still live. */
-    if (map1 < indirect)
-        freeblk(dev, ino->c_node.i_addr[18], 1, map1);
-    if (!map1)
-        ino->c_node.i_addr[18] = 0;
-
-    /* Avoid narrowing a large retained count to signed int. */
-    if (nblock < 18) {
-        /* TODO: use a pointer here */
-        for (j = 17; j >= (int)nblock; --j) {
-            freeblk(dev, ino->c_node.i_addr[j], 0, 0);
-            ino->c_node.i_addr[j] = 0;
-        }
+    for (level = FS_LEVELS; level; level--) {
+        start -= span;
+        keep = nblock > start ? min(nblock - start, span) : 0;
+        j = FS_DIRECT + level - 1;
+        freeblk(dev, ino->c_node.i_addr[j], level, keep);
+        if (!keep) ino->c_node.i_addr[j] = 0;
+        span /= indirect;
+    }
+    for (j = FS_DIRECT; j > nblock; ) {
+        --j;
+        freeblk(dev, ino->c_node.i_addr[j], 0, 0);
+        ino->c_node.i_addr[j] = 0;
     }
     ino->c_flags |= CDIRTY;
     return 0;
@@ -1057,11 +1042,12 @@ int f_trunc(register inoptr ino)
     - possibly split 400 and 512 sized block cases so we can get divisions
       out of the path here and down to shift and mask
  */
-void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock)
+void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock)
 {
     struct blkbuf *buf;
     blkno_t child;
-    uint16_t span, first, keep;
+    uint32_t span = 1, first, keep;
+    unsigned depth;
     register int16_t j;
 #ifndef CONFIG_BLKBUF_EXTERNAL
     register blkno_t *entries;
@@ -1075,7 +1061,7 @@ void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock)
             corrupt_fs(dev);
             return;
         }
-        span = level == 1 ? 1 : BLKSIZE / sizeof(blkno_t);
+        for (depth = 1; depth < level; depth++) span *= BLKSIZE / sizeof(blkno_t);
         first = nblock / span;
 #ifndef CONFIG_BLKBUF_EXTERNAL
         entries = blkptr(buf, 0, BLKSIZE);
@@ -1276,8 +1262,13 @@ struct mount *fmount(uint16_t dev, register inoptr ino, uint16_t flags)
     brelse(buf);
 
 #ifdef DEBUG
+#ifdef CONFIG_RIPPLE
+    kprintf("fp->s_mounted=0x%x, fp->s_isize=0x%x, fp->s_fsize=0x%lx\n",
+    fp->s_mounted, fp->s_isize, (unsigned long)fp->s_fsize);
+#else
     kprintf("fp->s_mounted=0x%x, fp->s_isize=0x%x, fp->s_fsize=0x%x\n",
     fp->s_mounted, fp->s_isize, fp->s_fsize);
+#endif
 #endif
 
     /* See if there really is a filesystem on the device */

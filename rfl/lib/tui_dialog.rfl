@@ -1,0 +1,277 @@
+import { Screen, Window, TerminalError, InvalidWindow, BOLD, REVERSE, NO_KEY, CLOSED, RESIZE, UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, BACKSPACE } from "std/curses";
+/// Styles for independent reusable dialogs, without application-specific roles.
+export struct Palette {
+    /// Dialog body and border.
+    body: u32,
+    /// Title and shortcut hints.
+    title: u32,
+    /// Text input field.
+    input: u32,
+    /// Current list item.
+    selected: u32,
+    /// Shadow layer.
+    shadow: u32
+}
+
+struct Popup {
+    front: Window,
+    shadow: Window
+}
+
+fn popup(screen: &Screen, colors: Palette, title: String, rows: i16) -> Result<Popup, TerminalError> {
+    if (screen.rows() < 8 || screen.columns() < 24) {
+        return Err(InvalidWindow);
+    }
+    let width = if (screen.columns() > 80) {
+        76
+    } else {
+        screen.columns() - 4
+    };
+    let height = if (rows > screen.rows() - 2) {
+        screen.rows() - 2
+    } else if (rows < 6) {
+        6
+    } else {
+        rows
+    };
+    let y = (screen.rows() - height) / 2;
+    let x = (screen.columns() - width) / 2;
+    let shadow = screen.window(height, width, y + 1, x + 2)?;
+    let front = screen.window(height, width, y, x)?;
+    shadow.background(colors.shadow);
+    front.background(colors.body);
+    front.border(colors.body);
+    front.text(0, 2, fitted(" " + title + " ", width - 4), colors.title | BOLD);
+    Ok(Popup { front: move(front), shadow: move(shadow) })
+}
+
+/// Clips a string to a nonnegative cell width. Printable ASCII dialogs use one byte per cell.
+export fn fitted(text: String, width: i16) -> String {
+    if (width <= 0) {
+        ""
+    } else if (text.len() > width as usize) {
+        text[0..width as usize]
+    } else {
+        text
+    }
+}
+
+fn present(screen: &Screen, popup: &Popup) {
+    screen.stage();
+    popup.shadow.stage();
+    popup.front.stage();
+    screen.present();
+}
+
+/// Editable single-line input with arrows, Home/End, Backspace/Delete, Ctrl-U,
+/// Enter and Esc. Resizing preserves the text and cursor; limit is 255 ASCII bytes.
+export fn prompt(screen: &Screen, colors: Palette, title: String, initial: String) -> Option<String> {
+    let mut value = initial;
+    let mut cursor: usize = value.len();
+    while (true) {
+        let panel = match popup(screen, colors, title, 7) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return None;
+            }
+        };
+        let width = (panel.front.columns() - 4) as usize;
+        while (true) {
+            let left = if (cursor >= width) {
+                cursor - width + 1
+            } else {
+                0 as usize
+            };
+            panel.front.fill(2, 2, width as i16, ' ', colors.input);
+            panel.front.text(2, 2, fitted(value[left..value.len()], width as i16), colors.input);
+            panel.front.text(4, 2, fitted("Enter accept  Esc cancel  Ctrl-U clear", width as i16), colors.body);
+            panel.front.cursor(2, 2 + (cursor - left) as i16, true);
+            present(screen, &panel);
+            let key = panel.front.key();
+            if (key == NO_KEY) {
+                continue;
+            }
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == 27 || key == 3 || key == CLOSED) {
+                panel.front.cursor(0, 0, false);
+                return None;
+            }
+            if (key == 10 || key == 13) {
+                panel.front.cursor(0, 0, false);
+                return Some(value);
+            }
+            if (key == LEFT && cursor > 0) {
+                cursor -= 1;
+            } else if (key == RIGHT && cursor < value.len()) {
+                cursor += 1;
+            } else if (key == HOME || key == 1) {
+                cursor = 0;
+            } else if (key == END || key == 5) {
+                cursor = value.len();
+            } else if (key == 21) {
+                value = "";
+                cursor = 0;
+            } else if (key == BACKSPACE && cursor > 0) {
+                value = value[0..(cursor - 1)] + value[cursor..value.len()];
+                cursor -= 1;
+            } else if (key == 330 && cursor < value.len()) {
+                value = value[0..cursor] + value[(cursor + 1)..value.len()];
+            } else if (key >= 32 && key < 127 && value.len() < 255) {
+                value = value[0..cursor] + from_char(key as char) + value[cursor..value.len()];
+                cursor += 1;
+            }
+        }
+    }
+    None
+}
+
+/// A scrollable choice menu with arrows, Page Up/Down, Home/End and first-letter
+/// jumps. Returns the selected index, or None on cancellation/terminal loss.
+export fn choose(screen: &Screen, colors: Palette, title: String, choices: Vec<String>, initial: usize) -> Option<usize> {
+    if (choices.is_empty()) {
+        return None;
+    }
+    let mut selected = if (initial < choices.len()) {
+        initial
+    } else {
+        0 as usize
+    };
+    let mut top: usize = 0;
+    while (true) {
+        let panel = match popup(screen, colors, title, if (choices.len() > 14) {
+            19
+        } else {
+            choices.len() as i16 + 5
+        }) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return None;
+            }
+        };
+        let rows = (panel.front.rows() - 4) as usize;
+        while (true) {
+            if (selected < top) {
+                top = selected;
+            } else if (selected >= top + rows) {
+                top = selected - rows + 1;
+            }
+            for (row in 0..rows) {
+                let style = if (top + row == selected) {
+                    colors.selected
+                } else {
+                    colors.body
+                };
+                panel.front.fill(row as i16 + 2, 2, panel.front.columns() - 4, ' ', style);
+                if (top + row < choices.len()) {
+                    panel.front.text(row as i16 + 2, 2, fitted(choices[top + row], panel.front.columns() - 4), style);
+                }
+            }
+            panel.front.text(panel.front.rows() - 2, 2, fitted("Enter select  Esc cancel", panel.front.columns() - 4), colors.title);
+            panel.front.cursor(0, 0, false);
+            present(screen, &panel);
+            let key = panel.front.key();
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == CLOSED || key == 27 || key == 3) {
+                return None;
+            }
+            if (key == 10 || key == 13) {
+                return Some(selected);
+            }
+            if (key == UP && selected > 0) {
+                selected -= 1;
+            } else if (key == DOWN && selected + 1 < choices.len()) {
+                selected += 1;
+            } else if (key == HOME) {
+                selected = 0;
+            } else if (key == END) {
+                selected = choices.len() - 1;
+            } else if (key == PAGE_UP) {
+                selected = if (selected > rows) {
+                    selected - rows
+                } else {
+                    0 as usize
+                };
+            } else if (key == PAGE_DOWN) {
+                selected = if (selected + rows < choices.len()) {
+                    selected + rows
+                } else {
+                    choices.len() - 1
+                };
+            } else if (key >= 32 && key < 127) {
+                for (step in 1..choices.len() + 1) {
+                    let i = (selected + step) % choices.len();
+                    if (choices[i].is_empty()) {
+                        continue;
+                    }
+                    let c = choices[i][0] as i16;
+                    if (c == key || c + 32 == key || c == key + 32) {
+                        selected = i;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Scrollable text modal, with Esc/Enter/q to close and resize recovery.
+export fn message(screen: &Screen, colors: Palette, title: String, lines: Vec<String>) {
+    let mut top: usize = 0;
+    while (true) {
+        let panel = match popup(screen, colors, title, screen.rows() - 4) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return;
+            }
+        };
+        let rows = (panel.front.rows() - 4) as usize;
+        while (true) {
+            for (row in 0..rows) {
+                panel.front.fill(row as i16 + 2, 2, panel.front.columns() - 4, ' ', colors.body);
+                if (top + row < lines.len()) {
+                    panel.front.text(row as i16 + 2, 2, fitted(lines[top + row], panel.front.columns() - 4), colors.body);
+                }
+            }
+            panel.front.text(panel.front.rows() - 2, 2, fitted("Arrows/PgUp/PgDn scroll  Enter/Esc close", panel.front.columns() - 4), colors.title);
+            panel.front.cursor(0, 0, false);
+            present(screen, &panel);
+            let key = panel.front.key();
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == CLOSED || key == 27 || key == 3 || key == 10 || key == 13 || key == 113) {
+                return;
+            }
+            if (key == UP && top > 0) {
+                top -= 1;
+            }
+            if (key == DOWN && top + rows < lines.len()) {
+                top += 1;
+            }
+            if (key == PAGE_UP) {
+                top = if (top > rows) {
+                    top - rows
+                } else {
+                    0 as usize
+                };
+            }
+            if (key == PAGE_DOWN) {
+                let last = if (lines.len() > rows) {
+                    lines.len() - rows
+                } else {
+                    0 as usize
+                };
+                top = if (top + rows < last) {
+                    top + rows
+                } else {
+                    last
+                };
+            }
+        }
+    }
+}

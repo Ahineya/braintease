@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise find/dd/diff/tar on disk, across reboot, and against host USTAR."""
 import argparse
+from root_reader import RootReader
 import io
 import json
 from pathlib import Path
@@ -31,9 +32,11 @@ def seed(image,files):
     source="""
 import fs from 'node:fs';
 import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const image=fs.readFileSync(process.argv[1]),root=fatFile(image,'ROOTFS.IMG');
-fs.writeFileSync(process.argv[1],root.replace(installRoot(root.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
+const image=openImage(process.argv[1]),root=fatFile(image,'ROOTFS.IMG');
+atomicWrite(process.argv[1],root.replace(installRoot(root.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
 """
     manifest=image.with_suffix('.json');manifest.write_text(json.dumps(files))
     subprocess.run(['node','--input-type=module','-e',source,str(image),str(manifest)],cwd=ROOT,check=True)
@@ -54,36 +57,8 @@ def run(image,commands,jit):
 
 # Read native cells from a clean filesystem, without mounting or modifying it.
 def read_root(image):
-    source="""
-import fs from 'node:fs';
-import {fatFile} from './ports/fuzix/tools/fat.mjs';
-process.stdout.write(fatFile(fs.readFileSync(process.argv[1]),'ROOTFS.IMG').data);
-"""
-    data=subprocess.check_output(['node','--input-type=module','-e',source,str(image)],cwd=ROOT)
-    def w(p):return int.from_bytes(data[2*p:2*p+2],'little')
-    def node(ino):
-        base=(2+(ino//32))*1024+(ino%32)*32
-        return base,w(base+4)+65536*w(base+5)
-    def cells(ino):
-        base,size=node(ino)
-        def block(n):
-            if n<18:return w(base+12+n)
-            n-=18
-            if n<1024:return w(w(base+30)*1024+n)
-            n-=1024
-            return w(w(w(base+31)*1024+n//1024)*1024+n%1024)
-        return [w(block(i//1024)*1024+i%1024) if block(i//1024) else 0 for i in range(size)]
-    def lookup(path):
-        ino=1
-        for part in path.strip('/').split('/'):
-            directory=cells(ino)
-            for i in range(0,len(directory),32):
-                name=''.join(chr(c) for c in directory[i+1:i+31]).split('\0',1)[0]
-                if directory[i] and name==part:
-                    ino=directory[i];break
-            else:raise AssertionError('missing '+path)
-        return ino
-    return lambda path:cells(lookup(path)),lambda path:node(lookup(path))[0],w
+    reader = RootReader(image)
+    return reader.read, lambda path: reader.base(reader.lookup(path)), reader.word
 
 FIRST=r"""mkdir -p /work/tree/nested /work/out
 cd /work/tree

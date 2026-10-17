@@ -50,6 +50,23 @@ work. Measurements below are from 15 October 2026.
 
 ## Compiler organization
 
+The [shared formatter](formatting.md) supplies `rfl fmt`, whole-document and
+selection LSP formatting, and IDEA's native Reformat Code integration. It keeps
+token spellings intact, uses four spaces and imposes no line-width limit.
+
+Editor type labels translate linked identities such as `m1$Network` back to
+source names, preferring aliases visible in the current file. Inlay hints,
+hover, signature help and completion details share this presentation layer;
+the compiler and member resolution retain their distinct internal identities.
+
+Outer `///` comments document declarations and are rendered as Markdown below
+the checked type/signature in LSP hover. `ide/documentation.rs` indexes local
+declarations from the current buffer and follows definition locations to read
+imported documentation, preserving aliases and method/field ownership rather
+than matching names. Public standard-library APIs, struct fields and trait
+contracts have documentation; coverage checks both Ripple and native cfgs.
+See [IDEA documentation](editors/intellij/README.md#documentation-on-hover).
+
 The former 8,844-line checker and 8,804-line lowerer are split by responsibility.
 The entry files coordinate compilation and hold shared state; implementation is
 in private child modules.
@@ -665,7 +682,7 @@ These are still unsupported; passing regression tests do not imply conformance.
 | Full unsigned 64-bit literal range | `18446744073709551615` is rejected because integer tokens store signed `i64` | `src/lexer.rs`, `src/ast.rs` |
 | Machine limits hidden from source values | Fixed-array lengths, frame metadata, reference counts, and root-frame storage still have machine-width or stack constraints | `src/ty.rs`, `src/lower/{frames,ownership}.rs` |
 | Source locations on runtime faults | Fault reasons are printed, but faults do not carry the original expression location | `src/typed.rs`, `src/lower/faults.rs` |
-| Complete build/link CLI | Only `check`, `compile`, `run`, and `lsp` exist; documented `build --link` is absent | `src/main.rs`, `src/run.rs` |
+| General standalone build/link CLI | `build --os fuzix\|fuse-x` links guest applications; the separately specified standalone `build --link` remains absent | `src/main.rs`, `src/run.rs`, `tools/build_os.py` |
 
 ## Follow-up order
 
@@ -688,6 +705,32 @@ fails on existing argument-count lints and IDE/LSP style issues; those lints wer
 not suppressed. Module loading for IDE analysis and compilation also still has
 duplicated graph preparation, and checking C imports still constructs C IR.
 
+## OS applications and RFL Commander
+
+`rfl build INPUT --os fuzix|fuse-x` compiles an application on the host and
+links it against the selected guest's libc. Its output is a normal RXE or FXE
+executable, with guest arguments, environment, pipes, files and process exit.
+It uses the Ripple or native backend internally; `compile --target native`
+alone still produces a standalone program rather than a Fuse-X application.
+
+The documented RFL libraries `std/posix` and `std/curses` provide owned files,
+binary I/O, directory metadata, process services, terminal drawing and decoded
+input. Small C adapters isolate libc layouts and macro-only APIs. All Commander
+application logic, models, widgets, rendering and file operations live in
+[`apps/commander`](apps/commander/), split across RFL modules. Theme roles and
+panel layout state are separate from file operations. Commander has color
+themes with INI inheritance/user overrides, visible active/inactive selection,
+scroll indicators and floating prompts, confirmations, viewer and theme menu.
+The shared curses API includes color pairs, DEC line drawing, owned windows,
+composition and scrolling. Single-panel mode and a guest command prompt with
+both panels hidden are also available.
+
+See [OS builds, library contracts and Commander controls](os/README.md) for
+commands, architecture, limits and integration tests. The build rejects the
+standalone MMIO/host services: OS applications must use guest services rather
+than access devices directly. Networking wrappers, recursive operations
+and an editor remain follow-up work.
+
 ## Validation
 
 ```sh
@@ -708,3 +751,22 @@ Reference counts also fail explicitly at their 16-bit limit instead of wrapping
 and freeing live collection elements. That collection follow-up covered 140 passing
 tests (3 library, 105 original compile tests, 24 regressions, and 8 managed-collection
 tests).
+
+### Bundled companion libraries
+
+Optional application policies/formats use the `lib/` import namespace, rooted at
+`rfl/lib` with the same resolver in compilation and LSP navigation/hover. Relative
+imports remain application-private; this does not add a package manager.
+`lib/ini` embeds the shared portable C INI reader and works standalone or in an
+OS process. `lib/tui_theme` wraps the shared C theme loader (arbitrary role schema,
+transactional configuration layers, named inheritance), and `lib/tui_curses`
+installs its styles with caller-supplied monochrome fallbacks. The latter two
+use the guest OS build path. See [`lib/README.md`](lib/README.md) and
+[`../libraries/README.md`](../libraries/README.md). `std/ini` is a compatibility
+adapter, rather than a second parser.
+
+Commander now offers Ctrl-A/F1 About, F4/e Edit (`VISUAL`, `EDITOR`, then `vi`),
+r Rename, and Enter to run executable files. Curses suspends to the normal
+screen for commands/editors and restores the pre-application screen on exit.
+Regular-file EXDEV moves use complete-copy then unlink, preserving ordinary
+permission bits; a failed unlink reports that the source was retained.

@@ -68,6 +68,7 @@ it is complete before the next guest instruction. There is no polling loop.
 | HOST_MONOTONIC | 8 | 10 | read host elapsed time independently of simulation ticks |
 | HOST_REALTIME | 9 | 10 | read host Unix UTC calendar time |
 | HOST_IDLE | 10 | 4 | yield or request a bounded host wait of at most 10 ms |
+| HOST_TERMINAL | 11 | 4 | read live host terminal rows and columns |
 
 Capability `VM_CAP_HOST_CLOCK` (0x1000) advertises both host clocks in RVM,
 RBF and native C. Both return `[1, 10, seconds (four cells), nanoseconds
@@ -88,6 +89,20 @@ before waiting. It grants no simulation tick, generates no IRQ, consumes no
 input and starts no network. A host scheduler can oversleep; callers must
 reread monotonic time. This is a bounded polling fallback, not an event
 subscription. See the [idle contract and reactor example](host-idle.md).
+
+`VM_CAP_HOST_TERMINAL` (0x4000) advertises the terminal-size query on RVM and
+native hosts. Submit `[1, 4, 0, 0]`; success returns `[1, 4, rows, columns]`.
+Both dimensions must be nonzero. Nonzero input payload cells are invalid;
+without an available host terminal, the command returns `UNSUPPORTED` and
+leaves the descriptor unchanged. It consumes no input, advances no simulation
+tick and raises no device IRQ. Like the host clock, it samples live external
+state rather than deterministic replay state. Existing hosts can report an
+unknown command; clients retain a default or cached size.
+
+FUZIX and Fuse-X use this query for physical-console `TIOCGWINSZ`. A detected
+change updates the console and sends guest `SIGWINCH`; PTYs keep client-set
+dimensions. Fuse-X's attached console client forwards initial and changed
+dimensions to the broker's kernel PTY through a separate control connection.
 
 Mode 3 retains its bank-0 double-buffer layout, 8-bit dimensions, and flush
 register. Mode 4 accepts 16-bit width/height/stride and a banked framebuffer pointer

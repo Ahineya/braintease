@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YY\n",
+  "description": "C99 date and time builtins supply string literals for Lynx build information"
+}

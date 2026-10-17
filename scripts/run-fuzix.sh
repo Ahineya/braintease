@@ -15,7 +15,8 @@ usage() {
 Usage: scripts/run-fuzix.sh [options] [host options...]
 
 Boot FUZIX/Ripple. Try help, ls, cat README, echo hello > note, hello,
-forkcheck, preemptcheck, and shutdown. Use shutdown before closing the VM.
+forkcheck, preemptcheck, lynx http://wiby.me/, and shutdown.
+Use shutdown before closing the VM.
 Files persist across launches and kernel rebuilds.
 Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
 
@@ -27,7 +28,7 @@ Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
   --fresh          Reformat the default disk (saves the old disk as a backup)
   --disk IMAGE     Use an existing image without updating its contents
   --install-apps   Also update an explicit --disk image, preserving saved files
-  --visual         Enable the graphics window; run gterm at the guest console
+  --visual         Enable graphics; run startx for the Nano-X desktop
   --headless       Disable interactive terminal input
   --input TEXT     Preload commands, e.g. --input $'ls\nshutdown\n'
   --timeout N      Stop after N host seconds (not a clean guest shutdown)
@@ -35,7 +36,7 @@ Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
 The first build imports no network dependencies beyond the normal Rust tools.
 Normal builds update the kernel and managed Unix executables on the default
 disk, preserving user files. Compatible roots gain space and inodes automatically.
-Older C16 V1 disks require --fresh for the larger C16 V2 block layout.
+C16 V2 roots upgrade to V3 (1 GiB) with a backup. V1 disks require --fresh.
 Normal launches check the disk and back up and repair recoverable shutdown
 metadata before updating. Structural damage stops the update. --disk skips
 updates unless --install-apps is supplied. Set FUZIX_BUILD for another build
@@ -81,7 +82,7 @@ if [[ "$run_only" == 0 ]]; then
         export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
     fi
     printf 'Checking compiler, assembler and VM...\n' >&2
-    cargo build --quiet --release --manifest-path "$ROOT/Cargo.toml" -p rcc-driver -p rvm
+    cargo build --quiet --release --manifest-path "$ROOT/Cargo.toml" -p rcc-driver -p rvm -p rfl
     cargo build --quiet --release --manifest-path "$ROOT/src/ripple-asm/Cargo.toml" --bin rasm --bin rlink
     mkdir -p "$OUT"
     OUT="$(cd "$OUT" && pwd)"

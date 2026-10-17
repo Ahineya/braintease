@@ -71,6 +71,8 @@ impl RippleAssembler {
             .into_iter()
             .map(|(idx, pending)| {
                 let ref_type = match pending.ref_type {
+                    ReferenceType::DataBank => "data_bank",
+                    ReferenceType::DataOffset => "data_offset",
                     ReferenceType::CodeBank => "code_bank",
                     ReferenceType::CodeOffset => "code_offset",
                     ReferenceType::Branch => "branch",
@@ -242,7 +244,12 @@ impl RippleAssembler {
             "space" => {
                 // .space N reserves N bytes of zero-initialized memory
                 if let Some(arg) = line.directive_args.first() {
-                    if let Ok(count) = self.encoder.parse_immediate(arg) {
+                    let count = if let Some(hex) = arg.strip_prefix("0x").or_else(|| arg.strip_prefix("0X")) {
+                        u32::from_str_radix(hex, 16)
+                    } else if let Some(binary) = arg.strip_prefix("0b").or_else(|| arg.strip_prefix("0B")) {
+                        u32::from_str_radix(binary, 2)
+                    } else { arg.parse::<u32>() };
+                    if let Some(count) = count.ok().filter(|n| *n <= 16 * u32::from(u16::MAX)) {
                         if count > 0 {
                             for _ in 0..count {
                                 state.memory_data.push(0);
@@ -423,10 +430,14 @@ impl RippleAssembler {
                 let is_local_data = state.data_labels.contains_key(operand);
 
                 if !is_local_label || matches!(opcode, Opcode::Jal | Opcode::Beq | Opcode::Bne | Opcode::Blt | Opcode::Bge) {
-                    let projection = operand.strip_prefix("%bank(").and_then(|s| s.strip_suffix(')'))
+                    let projection = operand.strip_prefix("%data_bank(").and_then(|s| s.strip_suffix(')'))
+                        .map(|s| (s.to_string(), ReferenceType::DataBank))
+                        .or_else(|| operand.strip_prefix("%data_offset(").and_then(|s| s.strip_suffix(')'))
+                            .map(|s| (s.to_string(), ReferenceType::DataOffset)))
+                        .or_else(|| operand.strip_prefix("%bank(").and_then(|s| s.strip_suffix(')'))
                         .map(|s| (s.to_string(), ReferenceType::CodeBank))
                         .or_else(|| operand.strip_prefix("%offset(").and_then(|s| s.strip_suffix(')'))
-                            .map(|s| (s.to_string(), ReferenceType::CodeOffset)));
+                            .map(|s| (s.to_string(), ReferenceType::CodeOffset))));
                     let ref_type = if let Some((_, kind)) = &projection {
                         *kind
                     } else if is_local_data {

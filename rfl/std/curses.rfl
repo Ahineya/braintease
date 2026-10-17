@@ -1,0 +1,357 @@
+// The terminal adapter is selected automatically by `rfl build --os ...`.
+extern "C" {
+    fn rfl_curses_cells(window: *mut u16, row: i16, column: i16, cells: *const u32, count: i16) -> i16;
+    fn rfl_curses_shape(shape: i16) -> i16;
+    fn rfl_curses_screen() -> *mut u16;
+    fn rfl_curses_begin() -> i16;
+    fn rfl_curses_end();
+    fn rfl_curses_rows() -> i16;
+    fn rfl_curses_columns() -> i16;
+    fn rfl_curses_clear();
+    fn rfl_curses_move(row: i16, column: i16) -> i16;
+    fn rfl_curses_style(style: u32);
+    fn rfl_curses_character(ch: i16);
+    fn rfl_curses_refresh();
+    fn rfl_curses_key() -> i16;
+    fn rfl_curses_timeout(milliseconds: i16);
+    fn rfl_curses_cursor(visible: i16);
+    fn rfl_curses_suspend();
+    fn rfl_curses_resume() -> i16;
+    fn rfl_curses_colors() -> i16;
+    fn rfl_curses_pair(pair: i16, foreground: i16, background: i16) -> i16;
+    fn rfl_curses_lines(enabled: i16);
+    fn rfl_curses_window(rows: i16, columns: i16, row: i16, column: i16) -> *mut u16;
+    fn rfl_curses_delete(window: *mut u16);
+    fn rfl_curses_reposition(window: *mut u16, row: i16, column: i16) -> i16;
+    fn rfl_curses_height(window: *mut u16) -> i16;
+    fn rfl_curses_width(window: *mut u16) -> i16;
+    fn rfl_curses_background(window: *mut u16, style: u32);
+    fn rfl_curses_text(window: *mut u16, row: i16, column: i16, bytes: *const u8, count: i16, style: u32);
+    fn rfl_curses_fill(window: *mut u16, row: i16, column: i16, width: i16, ch: u16, style: u32);
+    fn rfl_curses_border(window: *mut u16, row: i16, column: i16, rows: i16, columns: i16, style: u32);
+    fn rfl_curses_stage(window: *mut u16);
+    fn rfl_curses_present();
+    fn rfl_curses_window_key(window: *mut u16) -> i16;
+    fn rfl_curses_window_cursor(window: *mut u16, row: i16, column: i16, visible: i16);
+    fn rfl_curses_scroll(window: *mut u16, lines: i16) -> i16;
+    fn rfl_curses_region(window: *mut u16, top: i16, bottom: i16) -> i16;
+}
+
+/// Terminal initialization or resume failed.
+export type TerminalError = TerminalUnavailable | InvalidWindow;
+/// No key arrived before the input timeout.
+export const NO_KEY: i16 = -1;
+/// The input terminal closed or became invalid.
+export const CLOSED: i16 = -2;
+/// Down-arrow key.
+export const DOWN: i16 = 258;
+/// Up-arrow key.
+export const UP: i16 = 259;
+/// Left-arrow key.
+export const LEFT: i16 = 260;
+/// Right-arrow key.
+export const RIGHT: i16 = 261;
+/// Home key.
+export const HOME: i16 = 262;
+/// Backspace key, normalized from ASCII backspace or delete.
+export const BACKSPACE: i16 = 263;
+/// Page Down key.
+export const PAGE_DOWN: i16 = 338;
+/// Page Up key.
+export const PAGE_UP: i16 = 339;
+/// End key.
+export const END: i16 = 360;
+/// Terminal size changed; subsequent dimension queries use the new size.
+export const RESIZE: i16 = 410;
+/// Plain monochrome text.
+export const NORMAL: u32 = 0;
+/// Bold text attribute.
+export const BOLD: u32 = 512;
+/// Reverse-video text attribute.
+export const REVERSE: u32 = 1024;
+/// Standout text attribute.
+export const STANDOUT: u32 = 2048;
+/// Underlined text attribute.
+export const UNDERLINE: u32 = 4096;
+/// Returns the key code for function key 1 through 12.
+export fn function_key(number: i16) -> i16 {
+    264 + number
+}
+
+/// An owned terminal session. Drop restores terminal modes and cursor visibility.
+export struct Screen {
+    /// Lifetime guard; use `start` to acquire a session.
+    guard: Owned<u16>
+}
+
+/// Starts one raw, no-echo terminal session with keypad decoding and a 100 ms input timeout.
+/// Only one session can be active; the existing curses atexit hook also restores on language failure.
+export fn start() -> Result<Screen, TerminalError> {
+    if (rfl_curses_begin() < 0) {
+        return Err(TerminalUnavailable);
+    }
+    Ok(Screen { guard: owned(0 as u16, fn(value: &mut u16) => {
+        rfl_curses_end();
+    }) })
+}
+
+/// An independent floating window. Drop releases its cells; redraw lower layers after closing it.
+/// Each window retains the terminal session until the last screen/window owner is dropped.
+/// Stage windows from back to front, then call `Screen.present` for one composed update.
+export struct Window {
+    /// Owned opaque guest window; use `Screen.window` to construct it.
+    state: Owned<*mut u16>
+}
+
+/// ANSI black palette index.
+export const BLACK: i16 = 0;
+/// ANSI red palette index.
+export const RED: i16 = 1;
+/// ANSI green palette index.
+export const GREEN: i16 = 2;
+/// ANSI yellow palette index.
+export const YELLOW: i16 = 3;
+/// ANSI blue palette index (ordinary, not bright blue).
+export const BLUE: i16 = 4;
+/// ANSI magenta palette index.
+export const MAGENTA: i16 = 5;
+/// ANSI cyan palette index.
+export const CYAN: i16 = 6;
+/// ANSI white palette index.
+export const WHITE: i16 = 7;
+/// Use the terminal's default foreground or background.
+export const DEFAULT_COLOR: i16 = -1;
+/// Alternate-character-set horizontal line, suitable for `glyph`.
+export const HLINE: u16 = 8305;
+/// Alternate-character-set vertical line, suitable for `glyph`.
+export const VLINE: u16 = 8312;
+
+/// Encodes color pair 1–63 for combination with `BOLD`, `REVERSE` and other attributes.
+/// Pair zero uses terminal defaults. Initialize pairs with `Screen.define_pair`.
+export fn color_pair(number: u16) -> u32 {
+    ((number as u32) & 63) << 16
+}
+
+fn draw(window: *mut u16, row: i16, column: i16, text: String, style: u32) {
+    if (row < 0 || row >= rfl_curses_height(window) || column < 0 || column >= rfl_curses_width(window)) {
+        return;
+    }
+    let width = (rfl_curses_width(window) - column) as usize;
+    let count = if (text.len() < width) {
+        text.len()
+    } else {
+        width
+    };
+    if (count == 0) {
+        return;
+    }
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..count) {
+        let ch = text[i] as u32;
+        bytes.push(if (ch >= 32 && ch <= 126) {
+            ch as u8
+        } else {
+            63 as u8
+        });
+    }
+    unsafe {
+        rfl_curses_text(window, row, column, &bytes[0], count as i16, style);
+    }
+}
+
+fn fill(window: *mut u16, row: i16, column: i16, width: i16, ch: char, style: u32) {
+    let code = ch as u32;
+    rfl_curses_fill(window, row, column, width, if (code >= 32 && code <= 126) {
+        code as u16
+    } else {
+        63 as u16
+    }, style);
+}
+
+impl Screen {
+    /// Returns the current number of terminal rows.
+    export fn rows(&self) -> i16 {
+        rfl_curses_rows()
+    }
+    /// Returns the current number of terminal columns.
+    export fn columns(&self) -> i16 {
+        rfl_curses_columns()
+    }
+    /// Clears the default virtual screen using its current attribute.
+    export fn clear(&self) {
+        rfl_curses_clear();
+    }
+    /// Fills the complete default screen with spaces using `style`.
+    export fn background(&self, style: u32) {
+        rfl_curses_background(rfl_curses_screen(), style);
+    }
+    /// Draws clipped printable ASCII text. Other characters display as `?`.
+    export fn text(&self, row: i16, column: i16, text: String, style: u32) {
+        draw(rfl_curses_screen(), row, column, text, style);
+    }
+    /// Writes packed character/style cells as one clipped, nonwrapping row batch.
+    /// Character occupies bits 0..7; attributes and color_pair occupy higher bits.
+    /// Control/non-ASCII characters become ?, except alternate-set glyphs.
+    export fn cells(&self, row: i16, column: i16, cells: Vec<u32>) -> bool {
+        if (cells.len() > 512) {
+            return false;
+        }
+        if (cells.is_empty()) {
+            return true;
+        }
+        unsafe {
+            rfl_curses_cells(rfl_curses_screen(), row, column, &cells[0], cells.len() as i16) == 0
+        }
+    }
+    /// Sets cursor shape: 0 terminal default, 1 block, 2 underline, 3 bar.
+    /// Unsupported terminals may retain their normal cursor. Exit restores default.
+    export fn cursor_shape(&self, shape: i16) -> bool {
+        rfl_curses_shape(shape) == 0
+    }
+    /// Draws repeated printable ASCII characters, clipped to the screen.
+    export fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32) {
+        fill(rfl_curses_screen(), row, column, width, ch, style);
+    }
+    /// Draws one curses glyph, including `HLINE`/`VLINE`, with independent attributes.
+    export fn glyph(&self, row: i16, column: i16, glyph: u16, style: u32) {
+        rfl_curses_fill(rfl_curses_screen(), row, column, 1, glyph, style);
+    }
+    /// Draws a framed rectangle using the selected line-drawing mode; invalid rectangles are ignored.
+    export fn border(&self, row: i16, column: i16, rows: i16, columns: i16, style: u32) {
+        rfl_curses_border(rfl_curses_screen(), row, column, rows, columns, style);
+    }
+    /// Selects DEC line glyphs or portable ASCII borders, independent of color support.
+    export fn line_drawing(&self, enabled: bool) {
+        rfl_curses_lines(if (enabled) {
+            1
+        } else {
+            0
+        });
+    }
+    /// Starts ANSI color support, returning false for `TERM=dumb` or `NO_COLOR`.
+    export fn colors(&self) -> bool {
+        rfl_curses_colors() != 0
+    }
+    /// Defines pair 1–63 with palette indices 0–255, or -1 for terminal defaults.
+    /// Indices 0–15 use ordinary/bright ANSI sequences; higher indices need a 256-color terminal.
+    export fn define_pair(&self, pair: u16, foreground: i16, background: i16) -> bool {
+        rfl_curses_pair(pair as i16, foreground, background) == 0
+    }
+    /// Allocates an owned independent window inside the current screen bounds.
+    /// Windows retain their own dimensions after a screen resize; staging clips them safely.
+    export fn window(&self, rows: i16, columns: i16, row: i16, column: i16) -> Result<Window, TerminalError> {
+        if (rows < 1 || columns < 1) {
+            return Err(InvalidWindow);
+        }
+        let raw = rfl_curses_window(rows, columns, row, column);
+        if (raw.is_null()) {
+            return Err(InvalidWindow);
+        }
+        Ok(Window { state: owned(raw, fn(p: &mut *mut u16) => {
+            rfl_curses_delete(*p);
+        }) })
+    }
+    /// Stages the complete default screen as the bottom composition layer.
+    export fn stage(&self) {
+        rfl_curses_stage(rfl_curses_screen());
+    }
+    /// Presents all staged windows in one screen update.
+    export fn present(&self) {
+        rfl_curses_present();
+    }
+    /// Stages and presents the default screen. Use `stage`/`present` for overlapping windows.
+    export fn refresh(&self) {
+        rfl_curses_refresh();
+    }
+    /// Reads a decoded key, timeout `NO_KEY`, resize `RESIZE`, or terminal loss `CLOSED`.
+    export fn key(&self) -> i16 {
+        rfl_curses_key()
+    }
+    /// Sets input timeout: negative blocks, zero polls, positive values are milliseconds.
+    export fn timeout(&self, milliseconds: i16) {
+        rfl_curses_timeout(milliseconds);
+    }
+    /// Positions the default-screen cursor and sets its visibility.
+    export fn cursor(&self, row: i16, column: i16, visible: bool) {
+        rfl_curses_window_cursor(rfl_curses_screen(), row, column, if (visible) {
+            1
+        } else {
+            0
+        });
+    }
+    /// Restores shell terminal modes temporarily while retaining screen ownership.
+    export fn suspend(&self) {
+        rfl_curses_suspend();
+    }
+    /// Reenters program modes after suspension and updates terminal dimensions.
+    export fn resume(&self) -> Result<unit, TerminalError> {
+        if (rfl_curses_resume() < 0) {
+            Err(TerminalUnavailable)
+        } else {
+            Ok({})
+        }
+    }
+}
+
+impl Window {
+    fn raw(&self) -> *mut u16 {
+        let p = self.state.borrow();
+        *p
+    }
+    /// Returns this window's height in cells.
+    export fn rows(&self) -> i16 {
+        rfl_curses_height(self.raw())
+    }
+    /// Returns this window's width in cells.
+    export fn columns(&self) -> i16 {
+        rfl_curses_width(self.raw())
+    }
+    /// Fills the entire window with spaces in `style`.
+    export fn background(&self, style: u32) {
+        rfl_curses_background(self.raw(), style);
+    }
+    /// Draws clipped printable ASCII text using coordinates relative to the window.
+    export fn text(&self, row: i16, column: i16, text: String, style: u32) {
+        draw(self.raw(), row, column, text, style);
+    }
+    /// Fills part of a row with printable ASCII characters.
+    export fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32) {
+        fill(self.raw(), row, column, width, ch, style);
+    }
+    /// Draws one alternate-set or ASCII curses glyph.
+    export fn glyph(&self, row: i16, column: i16, glyph: u16, style: u32) {
+        rfl_curses_fill(self.raw(), row, column, 1, glyph, style);
+    }
+    /// Frames this window using DEC line glyphs or the selected ASCII fallback.
+    export fn border(&self, style: u32) {
+        rfl_curses_border(self.raw(), 0, 0, self.rows(), self.columns(), style);
+    }
+    /// Moves this window while preserving its content; redraw lower layers to erase its old position.
+    export fn move_to(&self, row: i16, column: i16) -> bool {
+        rfl_curses_reposition(self.raw(), row, column) == 0
+    }
+    /// Scrolls the current scrolling region up for positive distances, down for negative distances.
+    export fn scroll(&self, lines: i16) -> bool {
+        rfl_curses_scroll(self.raw(), lines) == 0
+    }
+    /// Sets an inclusive scrolling region, keeping border/title rows outside it when desired.
+    export fn scroll_region(&self, top: i16, bottom: i16) -> bool {
+        rfl_curses_region(self.raw(), top, bottom) == 0
+    }
+    /// Stages this complete layer above earlier staged windows.
+    export fn stage(&self) {
+        rfl_curses_stage(self.raw());
+    }
+    /// Reads keys while refreshing this window rather than overwriting it with the default screen.
+    export fn key(&self) -> i16 {
+        rfl_curses_window_key(self.raw())
+    }
+    /// Positions the cursor relative to this window and sets its visibility.
+    export fn cursor(&self, row: i16, column: i16, visible: bool) {
+        rfl_curses_window_cursor(self.raw(), row, column, if (visible) {
+            1
+        } else {
+            0
+        });
+    }
+}

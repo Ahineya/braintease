@@ -353,8 +353,11 @@ char **scan(int argn)
 
 	while (argp) {
 		*--comargn = argp->argval;
-		if ( (argp = argp->argnxt) )
-			trim(*comargn);
+		argp = argp->argnxt;
+		/* Expansion is complete for every argument, including argv[0].
+		 * Leaving quote bits on the command hides '/' from getpath(),
+		 * corrupts argv[0], and prevents quoted builtin recognition. */
+		trim(*comargn);
 		if (argp == 0 || ((intptr_t)(argp)) & ARGMK) {
 			gsort(comargn, comargm);
 			comargm = comargn;

@@ -2,6 +2,7 @@
 """Exercise an actual native kernel against disposable C16 root images."""
 import argparse
 import hashlib
+import shutil
 import os
 from pathlib import Path
 import subprocess
@@ -31,15 +32,15 @@ def main():
     with tempfile.TemporaryDirectory(prefix="fuse-x-boot-") as temporary:
         root = Path(temporary) / "ROOTFS.IMG"
         subprocess.run(["node", str(here / "image.mjs"), "create", str(root)], check=True)
-        original = hashlib.sha256(root.read_bytes()).digest()
+        original = hashlib.file_digest(root.open('rb'), 'sha256').digest()
         output = run("--boot-check", root, contains="bootstrap check passed")
         assert "FUZIX version" in output and "PID 1" in output, output
-        assert hashlib.sha256(root.read_bytes()).digest() == original, "read-only boot changed image"
+        assert hashlib.file_digest(root.open('rb'), 'sha256').digest() == original, "read-only boot changed image"
         run("--write-check", root, "hello from the hosted kernel", contains="file contents verified")
-        assert hashlib.sha256(root.read_bytes()).digest() != original, "write check did not persist"
-        persisted = hashlib.sha256(root.read_bytes()).digest()
+        assert hashlib.file_digest(root.open('rb'), 'sha256').digest() != original, "write check did not persist"
+        persisted = hashlib.file_digest(root.open('rb'), 'sha256').digest()
         run("--read-check", root, "hello from the hosted kernel", contains="file contents verified")
-        assert hashlib.sha256(root.read_bytes()).digest() == persisted, "read check changed image"
+        assert hashlib.file_digest(root.open('rb'), 'sha256').digest() == persisted, "read check changed image"
         run("--read-check", root, "incorrect contents", success=False, contains="persistent file contents")
         run("--boot-check", Path(temporary) / "missing.img", success=False, contains="cannot open root image")
         invalid = Path(temporary) / "invalid.img"
@@ -48,15 +49,15 @@ def main():
         run(success=False, contains="usage:")
         # The launcher must preserve arguments and caller-relative image paths.
         spaced = Path(temporary) / "root with spaces.img"
-        spaced.write_bytes(root.read_bytes())
+        shutil.copyfile(root,spaced)
         run("--run-only", "--boot-check", "--disk", spaced.name, launcher=True, cwd=temporary,
             contains="bootstrap check passed")
         run("--run-only", "--disk", spaced, "--write-check", "launcher value with spaces",
             launcher=True, contains="file contents verified")
-        written = spaced.read_bytes()
+        written = hashlib.file_digest(spaced.open('rb'),'sha256').digest()
         run("--run-only", "--disk", spaced, "--read-check", "launcher value with spaces",
             launcher=True, contains="file contents verified")
-        assert spaced.read_bytes() == written, "launcher read changed image"
+        assert hashlib.file_digest(spaced.open('rb'),'sha256').digest() == written, "launcher read changed image"
         run("--run-only", "--fresh", launcher=True, success=False, contains="cannot be combined")
         run("--timeout", "invalid", launcher=True, success=False, contains="positive whole number")
         run("--disk", launcher=True, success=False, contains="requires a value")

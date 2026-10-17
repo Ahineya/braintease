@@ -17,10 +17,10 @@ import time
 
 HERE = Path(__file__).resolve().parent
 PORT = HERE.parent / 'ports/fuzix'
-NETWORK = set('ifconfig ping telnet telnetd htget dig echoping ntpdate host nslookup'.split())
+NETWORK = set('ifconfig ping telnet telnetd htget dig echoping ntpdate host nslookup lynx'.split())
 ALIASES = dict(mv='cp', ln='cp', vi='levee', tcl='picol', tclsh='picol', sokoban='sok', nslookup='host')
 # The first GX device is MMU/RVM-only; native window service is a later milestone.
-RVM_ONLY = {'gterm'}
+RVM_ONLY = {'gterm', 'nxdraw', 'nano-X', 'nanowm', 'nxlaunch', 'nxterm', 'startx', 'nxeyes', 'nxclock', 'nxroach'}
 
 
 def names():
@@ -36,11 +36,19 @@ def recipe(name):
     name = ALIASES.get(name, name)
     base = PORT / 'upstream/Applications'
     flags = ['-DUIDGID=0']
+    if name == 'lynx':
+        directory = PORT.parent / 'lynx'
+        sources = [p for pattern in ('*.py', '*.c', 'config/*', 'vendor/*')
+                   for p in directory.glob(pattern) if p.is_file()]
+        for directory in (PORT / 'ripple/curses', PORT / 'upstream/Library/libs/curses'):
+            sources += list(directory.glob('*.c')) + list(directory.glob('*.h'))
+        return sources, []
     if name == 'sh':
         directory = base / 'V7/cmd/sh'
         sources = [directory / (s + '.c') for s in
                    'args blok builtin cmd ctype error expand fault glob io macro main msg name print service setbrk stak string word xec'.split()]
-        sources += [PORT / 'ripple/shell-input.c', PORT / 'ripple/shell-jobs.c']
+        sources += [PORT / 'ripple/shell-input.c', PORT / 'ripple/shell-jobs.c',
+                    PORT / 'ripple/shell-prompt.c']
         return sources, ['-DBUILD_FSH', '-I' + str(directory)]
     if name == 'levee':
         directory = base / 'levee'
@@ -138,6 +146,12 @@ def main():
         log = build / 'application-logs' / (name + '.log')
         stamp = build / 'application-logs' / (name + '.json')
         digest = hashlib.sha256(sdk_fingerprint + str(flags).encode())
+        if name == 'lynx':
+            # The browser also uses the preprocessor and native runtime at link
+            # time. Keep them in its normal application cache invalidation.
+            for tool in (args.compiler.resolve().with_name('rcpp'),
+                         HERE.parent / 'target/release/librcc_native_runtime.a'):
+                digest.update(str((tool, tool.stat().st_mtime_ns, tool.stat().st_size)).encode())
         for path in sorted(set(compile_sources + [h for s in sources for h in s.parent.glob('*.h')])):
             digest.update(str(path).encode()); digest.update(path.read_bytes())
         key = digest.hexdigest()
@@ -161,6 +175,10 @@ def main():
         start = time.monotonic()
         command = [sys.executable, str(HERE / 'cc.py'), *map(str, compile_sources), *flags,
                    '--compiler', str(args.compiler.resolve()), '--build', str(build), '-o', str(output)]
+        if name == 'lynx':
+            command = [sys.executable, str(PORT.parent / 'lynx/build.py'), '--target', 'native',
+                       '--compiler', str(args.compiler.resolve()), '--build-dir', str(build),
+                       '-j', str(max(1, args.jobs)), '-o', str(output)]
         with log.open('w') as stream:
             result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
         # Keep stale successes out of the install set after a failed rebuild.
@@ -170,7 +188,7 @@ def main():
         print(f'{name}: {status}', flush=True)
         record = dict(name=name, status=status, runtime='not tested', fingerprint=key,
                     requirements=['hosted networking'] if name in NETWORK else [],
-                    sources=[str(s.relative_to(PORT)) for s in sources],
+                    sources=[str(s.relative_to(PORT.parent)) if name == 'lynx' else str(s.relative_to(PORT)) for s in sources],
                     log=str(log), seconds=round(time.monotonic() - start, 2),
                     bytes=output.stat().st_size if output.exists() else None,
                     reason=log.read_text()[-3000:] if result.returncode else None)

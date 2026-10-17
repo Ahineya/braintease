@@ -21,11 +21,13 @@ pub const DISPLAY_MODE_EXTENDED: u16 = 4;
 pub const CAP_INPUT_POLL: u16 = 0x0010;
 pub const CAP_HOST_CLOCK: u16 = 0x1000;
 pub const CAP_HOST_IDLE: u16 = 0x2000;
+pub const CAP_HOST_TERMINAL: u16 = 0x4000;
 pub const CAPABILITIES: u16 = 15
     | crate::bulk::CAP_MEMORY
     | CAP_INPUT_POLL
     | CAP_HOST_CLOCK
     | CAP_HOST_IDLE
+    | CAP_HOST_TERMINAL
     | crate::network::CAP_NETWORK
     | 0x0040
     | crate::audio::CAP_PCM
@@ -43,6 +45,7 @@ pub const COMMAND_INPUT_CONFIGURE: u16 = 7;
 pub const COMMAND_HOST_MONOTONIC: u16 = 8;
 pub const COMMAND_HOST_REALTIME: u16 = 9;
 pub const COMMAND_HOST_IDLE: u16 = 10;
+pub const COMMAND_HOST_TERMINAL: u16 = 11;
 /// Short, synchronous host waits keep cooperative reactors responsive.
 pub const HOST_IDLE_MAX_MS: u16 = 10;
 
@@ -601,6 +604,7 @@ impl DeviceState {
             COMMAND_HOST_MONOTONIC | COMMAND_HOST_REALTIME => 10,
             COMMAND_INPUT_CONFIGURE => 4,
             COMMAND_HOST_IDLE => 4,
+            COMMAND_HOST_TERMINAL => 4,
             COMMAND_CAPABILITIES => 4,
             COMMAND_INPUT_STATE => STATE_CELLS,
             _ => crate::network::descriptor_length(command)
@@ -699,6 +703,18 @@ impl DeviceState {
                 // There are no output cells. Avoid dirtying RAM/COW pages just
                 // to write the same descriptor back after every idle turn.
                 return Ok(None);
+            }
+            COMMAND_HOST_TERMINAL => {
+                if descriptor[2] != 0 || descriptor[3] != 0 {
+                    return Err(STATUS_BAD_DESCRIPTOR);
+                }
+                let (columns, rows) = crossterm::terminal::size()
+                    .map_err(|_| STATUS_UNSUPPORTED)?;
+                if rows == 0 || columns == 0 {
+                    return Err(STATUS_UNSUPPORTED);
+                }
+                descriptor[2] = rows;
+                descriptor[3] = columns;
             }
             COMMAND_INPUT_READ => {
                 let capacity = usize::from(descriptor[2]);
@@ -837,6 +853,36 @@ impl DeviceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_terminal_size_validates_without_advancing_guest_time() {
+        let mut state = DeviceState::default();
+        let mut ram = vec![0u16; 256];
+        command(&mut state, &mut ram, COMMAND_CAPABILITIES, 4);
+        assert_ne!(ram[42] & CAP_HOST_TERMINAL, 0);
+        for (version, length, payload, expected) in [
+            (2, 4, 0, STATUS_VERSION),
+            (1, 3, 0, STATUS_BAD_DESCRIPTOR),
+            (1, 4, 1, STATUS_BAD_DESCRIPTOR),
+        ] {
+            ram[40..44].copy_from_slice(&[version, length, payload, 0]);
+            let before = ram.clone();
+            state.write_register(REGISTER_COMMAND, COMMAND_HOST_TERMINAL, &mut ram, 64, 4);
+            assert_eq!(state.status(), expected);
+            assert_eq!(ram, before);
+        }
+        ram[40..44].copy_from_slice(&[1, 4, 0, 0]);
+        let before = ram.clone();
+        state.write_register(REGISTER_COMMAND, COMMAND_HOST_TERMINAL, &mut ram, 64, 4);
+        if state.status() == STATUS_OK {
+            assert!(ram[42] > 0 && ram[43] > 0);
+        } else {
+            assert_eq!(state.status(), STATUS_UNSUPPORTED);
+            assert_eq!(ram, before);
+        }
+        assert_eq!(state.tick(), 0);
+        assert!(!state.has_pending_tick());
+    }
 
     #[test]
     fn host_clocks_validate_descriptors_and_do_not_advance_logical_time() {

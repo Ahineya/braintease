@@ -40,18 +40,19 @@ struct _uzisysinfoblk {
 struct _uzifilesys {
     int16_t s_mounted;
     uint16_t s_isize;
-    uint16_t s_fsize;
+    uint32_t s_fsize;
     uint16_t s_nfree;
-    uint16_t s_free[__FILESYS_TABSIZE];
+    uint32_t s_free[__FILESYS_TABSIZE];
     int16_t s_ninode;
     uint16_t s_inode[__FILESYS_TABSIZE];
     uint8_t s_fmod;
     uint8_t s_timeh;
     uint32_t s_time;
-    uint16_t s_tfree;
+    uint32_t s_tfree;
     uint16_t s_tinode;
     uint8_t s_shift;
 };
+
 
 struct _sockio {
     uint16_t sio_flags;

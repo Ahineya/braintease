@@ -1,6 +1,7 @@
 pub mod lexer;
 pub mod parser;
 pub mod directives;
+mod expansion;
 pub mod cond_eval;
 pub mod tests;
 
@@ -15,9 +16,8 @@ pub use parser::Directive;
 pub struct Preprocessor {
     /// Defined macros
     macros: HashMap<String, Macro>,
-    /// Compile patterns only for macros encountered in text. Redefinition
-    /// replaces the cell, so object/function changes cannot reuse a stale pattern.
-    macro_patterns: HashMap<String, once_cell::sync::OnceCell<regex::Regex>>,
+    /// Lex replacement lists once; redefinition invalidates the cached tokens.
+    macro_tokens: HashMap<String, once_cell::sync::OnceCell<Vec<expansion::PpToken>>>,
     /// Include search paths
     include_dirs: Vec<PathBuf>,
     /// Stack of conditional compilation states
@@ -72,7 +72,7 @@ impl Preprocessor {
     pub fn new() -> Self {
         let mut pp = Self {
             macros: HashMap::new(),
-            macro_patterns: HashMap::new(),
+            macro_tokens: HashMap::new(),
             include_dirs: vec![],
             conditional_stack: vec![],
             current_file: None,
@@ -107,14 +107,18 @@ impl Preprocessor {
     }
 
     fn insert_macro(&mut self, definition: Macro) {
-        self.macro_patterns.insert(definition.name.clone(), Default::default());
+        self.macro_tokens.insert(definition.name.clone(), Default::default());
         self.macros.insert(definition.name.clone(), definition);
+    }
+
+    fn macro_is_defined(&self, name: &str) -> bool {
+        matches!(name, "__FILE__" | "__LINE__") || self.macros.contains_key(name)
     }
 
     /// Undefine a macro
     pub fn undefine(&mut self, name: &str) {
         self.macros.remove(name);
-        self.macro_patterns.remove(name);
+        self.macro_tokens.remove(name);
     }
 
     /// Set whether to keep comments
@@ -324,7 +328,27 @@ impl Preprocessor {
 
     /// Handle include directive
     fn handle_include(&mut self, directive: Directive) -> Result<String> {
-        if let Directive::Include { path, is_system } = directive {
+        if let Directive::Include { operand } = directive {
+            // C99 6.10.2: literal header names are not expanded. Other forms
+            // undergo macro replacement and must then form one header name.
+            let expanded;
+            let name = if operand.starts_with('"') || operand.starts_with('<') {
+                operand.as_str()
+            } else {
+                expanded = self.expand_macros(&operand)?;
+                expanded.trim()
+            };
+            let (rest, closing, is_system) = match name.chars().next() {
+                Some('"') => (&name[1..], '"', false),
+                Some('<') => (&name[1..], '>', true),
+                _ => return Err(anyhow::anyhow!("Invalid include directive: {operand}")),
+            };
+            let (path, trailing) = rest.split_once(closing)
+                .ok_or_else(|| anyhow::anyhow!("Unterminated include directive: {operand}"))?;
+            if path.is_empty() || !trailing.trim().is_empty() {
+                return Err(anyhow::anyhow!("Invalid include directive: {operand}"));
+            }
+            let path = path.to_string();
             self.handle_include_impl(path, is_system)
         } else {
             Ok(String::new())
@@ -359,12 +383,12 @@ impl Preprocessor {
             }
             Directive::Ifdef { name } => {
                 let parent_active = self.should_output();
-                let active = parent_active && self.macros.contains_key(&name);
+                let active = parent_active && self.macro_is_defined(&name);
                 (active, parent_active)
             }
             Directive::Ifndef { name } => {
                 let parent_active = self.should_output();
-                let active = parent_active && !self.macros.contains_key(&name);
+                let active = parent_active && !self.macro_is_defined(&name);
                 (active, parent_active)
             }
             _ => return Ok(()),

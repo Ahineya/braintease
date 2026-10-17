@@ -35,6 +35,8 @@ struct Compiler {
     address_taken: BTreeSet<String>,
     resumable: bool,
     application: bool,
+    global_bank: u64,
+    global_cells: u64,
 }
 
 impl Compiler {
@@ -201,7 +203,23 @@ fn compile_object_inner(
         address_taken: BTreeSet::new(),
         resumable,
         application,
+        global_bank: 1,
+        global_cells: 1,
     };
+    let global_cells = compiler
+        .ir
+        .globals
+        .iter()
+        .filter(|g| !kernel.contains(&g.name))
+        .try_fold(1u64, |size, g| {
+            size.checked_add(Target::Native.layout().size_in_cells(&g.var_type)?)
+                .ok_or_else(|| "native globals size overflow".to_string())
+        })?;
+    let bank_cells = u64::from(Target::Native.layout().bank_cells);
+    if global_cells > bank_cells {
+        compiler.global_bank = u64::from(rcc_ir::native_image::GLOBAL_BANK);
+    }
+    compiler.global_cells = global_cells;
     let mut offset = 1u64;
     let mut kernel_offset = 1u64;
     for global in &compiler.ir.globals {
@@ -214,19 +232,20 @@ fn compile_object_inner(
         let (bank, cursor) = if kernel.contains(&global.name) {
             (240u64, &mut kernel_offset)
         } else {
-            (1u64, &mut offset)
+            (compiler.global_bank, &mut offset)
         };
-        compiler
-            .globals
-            .insert(global.name.clone(), (bank << 16) | *cursor);
+        compiler.globals.insert(
+            global.name.clone(),
+            ((bank + *cursor / bank_cells) << 16) | (*cursor % bank_cells),
+        );
         *cursor = cursor
             .checked_add(Target::Native.layout().size_in_cells(&global.var_type)?)
             .ok_or("native globals size overflow")?;
     }
-    if offset >= u64::from(Target::Native.layout().bank_cells)
+    if offset > bank_cells * u64::from(rcc_ir::native_image::GLOBAL_BANKS)
         || kernel_offset >= u64::from(Target::Native.layout().bank_cells)
     {
-        return Err("native v1 global bank capacity exceeded".into());
+        return Err(format!("native global capacity exceeded: {offset} application cells, {kernel_offset} kernel cells"));
     }
     for function in &compiler.ir.functions {
         let name = if function.is_external {

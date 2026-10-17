@@ -13,6 +13,7 @@ pub(super) fn emit_string_runtime(
         "rfl_string_slice",
         "rfl_string_char",
         "rfl_string_equal",
+        "rfl_string_literal",
     ] {
         let needed = built.procs.iter().any(|proc| {
             proc.segs.iter().any(|seg| {
@@ -20,6 +21,7 @@ pub(super) fn emit_string_runtime(
                     ("rfl_string_concat", Insn::StrConcat { .. })
                     | ("rfl_string_slice", Insn::StrSlice { .. })
                     | ("rfl_string_char", Insn::StrFromChar { .. }) => true,
+                    ("rfl_string_literal", Insn::Str { bytes, .. }) => bytes.len() >= 8,
                     ("rfl_string_equal", Insn::Bin { lhs, .. }) => {
                         proc.slots[*lhs].ty == Ty::String
                     }
@@ -41,11 +43,63 @@ pub(super) fn emit_string_runtime(
                 let obj = build_char_string(builder, Value::Temp(0))?;
                 builder.build_return(Some(obj)).ir()?;
             }
+            "rfl_string_literal" => literal(builder)?,
             _ => equal(builder)?,
         }
         module.add_function(builder.finish_function().unwrap());
     }
     Ok(())
+}
+
+// Emit this shared copy in IR rather than calling libc memcpy: standalone and
+// guest libc have different size_t ABIs. The RFL count is always 32 bits.
+fn literal(builder: &mut IrBuilder) -> Result<(), CompileError> {
+    start(builder, "rfl_string_literal", ptr_ty(), &[ptr_ty(), COUNT])?;
+    let source = fat_temp(0, BankTag::Mixed);
+    let count = Value::Temp(1);
+    let obj = alloc_string(builder, count.clone())?;
+    let index_slot = builder.build_alloca(COUNT, None).ir()?;
+    builder
+        .build_store(Value::Constant(0), index_slot.clone(), COUNT)
+        .ir()?;
+    let head = builder.new_label();
+    let body = builder.new_label();
+    let done = builder.new_label();
+    builder.build_branch(head).ir()?;
+    builder.create_block(head).ir()?;
+    let index = Value::Temp(builder.build_load(index_slot.clone(), COUNT).ir()?);
+    let more = builder
+        .build_binary(IrBinaryOp::Ult, index.clone(), count, IrType::I1)
+        .ir()?;
+    builder
+        .build_branch_cond(Value::Temp(more), body, done)
+        .ir()?;
+    builder.create_block(body).ir()?;
+    let from = builder
+        .build_pointer_offset(source, index.clone(), ptr_ty())
+        .ir()?;
+    let byte = Value::Temp(builder.build_load(from, IrType::I16).ir()?);
+    let offset = builder
+        .build_binary(
+            IrBinaryOp::Add,
+            index.clone(),
+            Value::Constant(STR_DATA),
+            COUNT,
+        )
+        .ir()?;
+    let to = builder
+        .build_pointer_offset(obj.clone(), Value::Temp(offset), ptr_ty())
+        .ir()?;
+    builder.build_store(byte, to, IrType::I16).ir()?;
+    let next = builder
+        .build_binary(IrBinaryOp::Add, index, Value::Constant(1), COUNT)
+        .ir()?;
+    builder
+        .build_store(Value::Temp(next), index_slot, COUNT)
+        .ir()?;
+    builder.build_branch(head).ir()?;
+    builder.create_block(done).ir()?;
+    builder.build_return(Some(obj)).ir()
 }
 
 fn start(

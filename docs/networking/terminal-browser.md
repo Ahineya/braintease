@@ -1,9 +1,59 @@
 # Terminal browser porting plan
 
 Assessment and implementation direction recorded on October 17, 2026. This is
-a plan, not a claim that a browser, curses integration or `select()` works yet.
+a browser plan with initial implementation work. The shared
+[`select()` prerequisite](select.md) and [C16 curses](../../ports/fuzix/CURSES.md)
+now pass guest tests on both targets. The [Lynx port](../../ports/lynx/README.md)
+compiles all 82 configured source units with RCC's own preprocessor. Both
+native Fuse-X and RVM/FUZIX link and run Lynx, passing version and two local HTML
+dump tests. Its roughly 231,000 static cells use four banks on either target;
+the packages are about 27 MiB. Guest HTTP, forms and console/Telnet navigation
+now have an independent Ethernet acceptance harness. The port adds complete
+request writes, a 64 KiB response limit and small-cache defaults. Browser heap
+arena measurements are opt-in; stack peak and a broader hostile-HTML audit remain
+open.
 It covers both [FUZIX on RVM](../../ports/fuzix/README.md) and
 [native Fuse-X](../../fuse-x/README.md).
+
+## Current HTTP implementation
+
+The [port README](../../ports/lynx/README.md) gives build, install and test commands.
+Both normal launchers include Lynx in their app build and image-update paths,
+including its configuration, help and license. Existing configuration is
+preserved. `install.py` remains available for standalone packages and stopped
+disks. Normal guest disks are not changed by acceptance tests.
+
+The guest owns HTTP parsing, HTML rendering, DNS and TCP. The local Ethernet
+fixture covers split headers/chunks, redirects, complete long requests, link
+following/back, GET text/select encoding, scrolling, actual resize dimensions,
+slow-load cancellation, transfer overflow, errors and recovery. A browser on one
+Telnet PTY must leave a second remote shell usable. Missing terminal capabilities
+produce a browser error instead of a NULL-screen access. Native raw-input queue
+backpressure has its own slow-reader paste regression. Lynx restores terminal
+state before suspension and repaints after `fg`, using its own signal handler
+over the shared curses primitives.
+
+Defaults are two cached documents, a 2,048-character URL bound and 15-second
+connect/read waits. The hard transfer cap is 65,536 wire octets **per HTTP
+response**, including headers and chunk framing; it also applies without a
+Content-Length. This does not bound every possible HTML layout allocation.
+`LYNX_RESOURCE_REPORT=1` reports the guest heap arena's high-water reservation;
+`build/runtime-*.json` retains acceptance measurements. Stack peak is not yet
+instrumented. Tests are focused acceptance coverage, not a complete C16 or
+hostile-input audit of upstream Lynx.
+
+The October 17 interactive fixture reserved 226,976 heap cells on native and
+226,971 on RVM (about 443 KiB each), in addition to 231,149 and 231,107 static
+cells respectively. This covers forms, long requests, scrolling, oversize
+rejection and error recovery; it is not a worst-case renderer bound.
+
+Live guest tests have rendered example.com, Wiby's home page and its `retro`
+search results on both targets. Some current HTTP search results instead return
+a JavaScript verification page. That is a fetched HTTP response, not successful
+verification or a claim that the destination's content is usable. TLS,
+JavaScript and anti-bot compatibility remain separate work. Live smoke tests use
+private guest addresses and disks; repeated fresh guests can encounter stale
+shared-vmnet NAT state when reusing an address.
 
 ## Goal and decision
 
@@ -11,8 +61,10 @@ A terminal browser for small, traditional HTML sites is feasible. Start with
 plain HTTP, keyboard navigation and HTML forms. TLS is a separate milestone;
 it is not required to reach example.com or search Wiby over HTTP.
 
-Investigate a stripped Lynx port first, with an early local-HTML rendering and
-memory gate. This is a candidate choice, not evidence that Lynx already fits.
+Keep the stripped Lynx port as the chosen browser. Its static tables exceeded
+one bank, so application globals now extend across banks. Local rendering and
+interactive HTTP run on both targets. Continue resource and malformed-document
+coverage alongside browser integration.
 Do not begin by changing RCC's C data model or importing a full desktop browser.
 Use the existing guest sockets and protocol stack on both execution targets.
 
@@ -69,7 +121,7 @@ confuse those results with the host checks above.
 
 | Area | Foundation | Work needed for a browser |
 | --- | --- | --- |
-| Network | Guest IPv4, TCP, DNS, socket descriptors and nonblocking I/O | Descriptor readiness, browser-specific socket API audit and connection limits |
+| Network | Guest IPv4, TCP, DNS, socket descriptors and nonblocking I/O | Browser-specific socket API audit and connection limits; shared select readiness now exists |
 | HTTP | Adapted FUZIX `htget` handles partial I/O, timeouts, chunking and redirects | Browser integration, forms, history and document/cache ownership |
 | Terminal | Termios, ANSI output, terminal dimensions, PTYs and job control | Screen library integration, key decoding, editing and resize behavior |
 | Memory | Bank-spanning heap; RVM MMU process data/heap window is up to 1,024,000 C cells | Measure renderer, tables, stack, cache and page limits |
@@ -83,9 +135,9 @@ HTTP implementation, rather than being forced through the RFL buffered HTTP API.
 See [htget.c](../../ports/fuzix/upstream/Applications/netd/htget.c),
 [runtime HTTP](http.md) and [RFL HTTP](rfl-library.md).
 
-The guest has bounded network pools. `NSOCKET` is eight, but that does not imply
-eight independent live TCP streams; the shared TCP pool has its own smaller
-limit, and Telnet sessions also consume resources. Begin with one page load
+The guest has bounded network pools: the OS profile has 16 Internet socket
+slots, 16 TCP connections and four listeners. These are shared by applications;
+Telnet sessions and DNS also consume resources. Begin with one page load
 at a time, no background downloads or prefetch, a small bounded history/cache,
 and prompt connection closure. A browser used through Telnet must leave room
 for its own terminal connection and DNS traffic.
@@ -105,8 +157,9 @@ Audit the browser and every selected dependency for:
 - Sixteen-bit arithmetic overflow in lengths, allocation products, offsets,
   counters, bit masks and large literals. Use appropriate existing wide types
   where needed rather than globally redefining `int`.
-- Large static language, entity and character tables. Application globals must
-  fit one 64,000-cell bank; RVM RXE initial data has a 60,000-cell limit.
+- Large static language, entity and character tables. Globals can now span up
+  to sixteen 64,000-cell banks. RVM globals share its data/heap window, leaving
+  less heap for documents; native packages reserve a separate global region.
 - Heap and stack use on representative documents. A network octet held in a
   `char` array consumes two physical octets here, and auxiliary layout objects
   add memory beyond the source document's size.
@@ -116,8 +169,13 @@ Audit the browser and every selected dependency for:
 
 Use the [RVM memory description](../../ports/fuzix/README.md#protected-memory)
 and [native executable limits](../../fuse-x/EXECUTABLES.md) as the constraints.
-Measure globals and local document rendering before committing to an
-interactive port. Larger heaps do not remove the global-data-bank limit.
+The initial global-data and local-rendering gates are complete. Measure
+representative and adversarial interactive loads as the port expands. The former single-bank global limit has been lifted without
+changing C16 pointer representation or the VM instruction set. Bank-boundary
+initializers, wide values, heap separation, syscall spans and fork/exec pass
+actual native and RVM guest tests. RCC enables bank-aware global references by default, including multi-file RVM
+applications. `--banked-globals=false` retains compact legacy references for
+small translation units.
 
 ## Browser candidates
 
@@ -154,18 +212,28 @@ arithmetic, library requirements and runtime behavior remain unproven.
 Sources: [official installation requirements](https://lynx.invisible-island.net/current/INSTALLATION)
 and [2.9.2 source archive](https://invisible-island.net/archives/lynx/tarballs/lynx2.9.2.tar.gz).
 
-If the local-rendering/memory gate fails, compare a smaller existing browser
-before committing to a new HTML engine. A custom limited browser is a scope
-fallback, not the chosen implementation at this stage.
+The chosen approach is to retain Lynx and fix the compiler/runtime limits it
+exposes. The local renderer is the first acceptance step; a custom HTML engine
+is outside this plan.
 
 ## Terminal UI decision
+
+The initial shared library is implemented; see
+[the curses contract and tests](../../ports/fuzix/CURSES.md). Its expanded guest
+probe covers input deadlines, keys, bounded editing, ownership, colors, composed
+windows, resize, suspend/resume and restoration on native Fuse-X and RVM JIT.
+[RFL Commander](../../rfl/apps/commander/) demonstrates themes and layered UI.
+These are useful for later browser presentation work; Lynx currently uses its
+existing interface. Browser-specific console and Telnet tests live in
+`ports/lynx/test_browser.py`.
+
 
 Start by adapting the curses implementation already present in the
 [pinned FUZIX archive](../../ports/fuzix/vendor/), under
 `fuzix/Library/libs/curses/`. Its headers are in
 [Library/include/curses.h](../../ports/fuzix/upstream/Library/include/curses.h),
-but the implementation is not included in the current library build. The
-build selects top-level `Library/libs/*.c`, not that nested source directory.
+and the implementation is now linked explicitly by curses consumers. Ordinary
+utilities still select top-level `Library/libs/*.c` without curses.
 
 An assessment-time compile-only probe extracted the archive to a temporary
 directory and compiled its 36 C sources with the ordinary RCC userspace
@@ -175,7 +243,7 @@ interface in that snapshot. Recheck headers and implementation together before
 fixing this; a declaration alone does not supply the function. This probe did
 not link a library or run a screen application on either target.
 
-The bundled implementation needs behavioral work:
+The following bundled implementation defects motivated the now-tested adaptations:
 
 - `keypad()` is a stub; decode arrows, Home/End, Delete and escape sequences.
 - `nodelay()` sets a flag that `wgetch()` does not honor; integrate bounded
@@ -285,8 +353,8 @@ The proposed acceptance sequence is:
    capable of dumping local HTML. Record necessary compiler/libc patches,
    global-data size, stack use and peak heap on small and adversarial documents.
    If it cannot fit, revisit the candidate before completing its UI port.
-2. **Reusable terminal/network prerequisites.** Implement the
-   [select contract and tests](select.md), integrate the required curses subset,
+2. **Reusable terminal/network prerequisites.** Use the implemented
+   [select interface and tests](select.md), integrate the required curses subset,
    and audit socket calls, including asynchronous connection completion and
    `getsockopt(SO_ERROR)` if the selected configuration uses them. These
    foundations may progress alongside the rendering spike.

@@ -101,6 +101,7 @@ pub const NATIVE_SERVICES: &[(&str, usize)] = &[
     ("rcc_hosted_input", 0),
     ("rcc_hosted_idle", 1),
     ("rcc_hosted_fs", 2),
+    ("rcc_hosted_gx", 2),
     ("abs", 1),
     ("labs", 1),
     ("llabs", 1),

@@ -8,6 +8,8 @@
 #include <mmio.h>
 #include <native_hosted.h>
 #include <string.h>
+#include "selectwait.h"
+#include "graphics.h"
 
 struct u_data udata;
 uint8_t sys_cpu = 0x52, sys_cpu_feat, sys_stubs[1];
@@ -19,6 +21,7 @@ static unsigned clock_ready;
 unsigned fuse_write_check;
 unsigned fuse_running;
 unsigned fuse_headless, fuse_telnet, fuse_one_shot, fuse_stopping, fuse_console_closed;
+unsigned fuse_gui;
 const char *fuse_value;
 static char saved_value[1024];
 char *fuse_boot_parameters = "ro";
@@ -41,7 +44,7 @@ int pagemap_alloc(ptptr p) {
     p->p_size = 750; /* Provisional charge; resident-memory budgets are not integrated. */
     return 0;
 }
-void pagemap_free(ptptr p) { p->p_page = 0; p->p_size = 0; }
+void pagemap_free(ptptr p) { ripple_gfx_exit(p); p->p_page = 0; p->p_size = 0; }
 int pagemap_prepare(struct exec *h) { used(h); return 0; }
 int pagemap_realloc(struct exec *h, usize_t size) { used(h); used(size); return ENOSYS; }
 usize_t pagemap_mem_used(void) { return nproc * 750UL; }
@@ -99,7 +102,13 @@ void sync_clock(void) {
     unsigned long sample, elapsed, deciseconds;
     unsigned remainder;
     irqflags_t flags = di();
-    if (clock_ready && vm_host_monotonic(&now) == VM_DEVICE_OK) {
+    if (clock_ready) {
+        if (vm_host_monotonic(&now) != VM_DEVICE_OK) {
+            ripple_select_clock(NULL);
+            irqrestore(flags);
+            return;
+        }
+        ripple_select_clock(&now);
         sample = now.seconds_low * 100UL + now.nanoseconds / 10000000UL;
         elapsed = sample - host_last;
         host_last = sample;
@@ -121,8 +130,10 @@ void plt_clock_init(void) {
 uint_fast8_t plt_rtc_secs(void) { return 255; }
 uint_fast8_t plt_param(char *p) { used(p); return 0; }
 void plt_idle(void) {
+    ripple_gfx_poll();
     if (fuse_running && rcc_hosted_stopping()) fuse_request_shutdown();
-    fuse_poll_input(); sync_clock(); ripple_network_poll(); rcc_hosted_idle(1);
+    fuse_poll_input(); sync_clock(); ripple_network_poll();
+    if(!nready) rcc_hosted_idle(1);
 }
 /* Ignored/default SIGCONT may wake a timed sleeper without interrupting it.
  * Keep its existing deadline instead of treating every wake as EINTR. */
@@ -186,6 +197,7 @@ static void fuse_checkpoint(void) {
     arg_t result=udata.u_retval;
     udata.u_insys=1;
     sync_clock();
+    ripple_gfx_poll();
     fuse_poll_input();
     ripple_network_poll();
     if(rcc_hosted_stopping()) fuse_request_shutdown();
@@ -201,6 +213,7 @@ static void fuse_checkpoint(void) {
 static arg_t syscall_impl(unsigned number, unsigned long a, unsigned long b, unsigned long c, unsigned long d, int *error) {
     arg_t result;
     sync_clock();
+    ripple_gfx_poll();
     ripple_network_poll();
     if(fuse_running && rcc_hosted_stopping()) fuse_request_shutdown();
     udata.u_insys = 1;
@@ -234,7 +247,7 @@ int main(int argc, char **argv) {
     if (argc < 3 ||
         (strcmp(argv[1], "--run") && strcmp(argv[1], "--boot-check") && strcmp(argv[1], "--write-check") &&
          strcmp(argv[1], "--read-check"))) {
-        kputs("usage: fuse-x --run ROOTFS.IMG [--share HOST_DIRECTORY] [--headless] [--telnet] [--one-shot]\n"
+        kputs("usage: fuse-x --run ROOTFS.IMG [--share HOST_DIRECTORY] [--headless] [--gui] [--telnet] [--one-shot]\n"
               "       fuse-x --boot-check ROOTFS.IMG\n"
               "       fuse-x --write-check ROOTFS.IMG VALUE\n"
               "       fuse-x --read-check ROOTFS.IMG VALUE\n");
@@ -245,6 +258,7 @@ int main(int argc, char **argv) {
     if(fuse_running) {
         for(i=3;i<argc;i++) {
             if(!strcmp(argv[i],"--headless")) fuse_headless=1;
+            else if(!strcmp(argv[i],"--gui")) fuse_gui=1;
             else if(!strcmp(argv[i],"--telnet")) fuse_telnet=1;
             else if(!strcmp(argv[i],"--one-shot")) fuse_one_shot=1;
             else if(!strcmp(argv[i],"--share") && i+1<argc && !*fuse_host_directory) {
@@ -254,6 +268,7 @@ int main(int argc, char **argv) {
             } else return 2;
         }
         if(fuse_headless && fuse_one_shot)return 2;
+        if(fuse_headless && fuse_gui)return 2;
     } else if (argc == 4) {
         if (strlen(argv[3]) > 1023) return 2;
         strcpy(saved_value, argv[3]);

@@ -3,6 +3,7 @@
 #define RIPPLE_PTY_H
 void ripple_pty_init(void);
 unsigned ripple_pty_status(unsigned);
+unsigned ripple_pty_select(unsigned);
 int ripple_slave_open(uint_fast8_t, uint16_t);
 int ripple_slave_close(uint_fast8_t);
 void ripple_pty_putc(unsigned, unsigned);

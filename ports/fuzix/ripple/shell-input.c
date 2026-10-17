@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* Interactive input for the V7 shell. No malloc: sh owns its brk arena. */
 #include "defs.h"
+#include "shell-prompt.h"
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -20,6 +21,8 @@ static char *buf;
 static unsigned end, cursor, capacity, columns, screenrow;
 static int out;
 static const char *ps;
+static const char *prompt_tail;
+static unsigned prompt_columns;
 static DIR directory;
 static char decoded[LINE], dirname_buf[LINE], pathname[LINE];
 
@@ -50,16 +53,16 @@ static void text(const char *s, unsigned n) {
         } else write(out, s + i, 1);
     }
 }
-static unsigned position(unsigned n) { return width(ps, strlen(ps)) + width(buf, n); }
+static unsigned position(unsigned n) { return prompt_columns + width(buf, n); }
 static void redraw(void) {
     unsigned full, pos, row;
     put("\r");
     if (screenrow) number(screenrow, 'A');
-    if (width(ps, strlen(ps)) < columns) {
-        unsigned prefix = width(ps, strlen(ps));
+    if (prompt_columns < columns) {
+        unsigned prefix = prompt_columns;
         if (prefix) number(prefix, 'C');
         put("\033[J");
-    } else { put("\033[J"); put(ps); }
+    } else { put("\033[J"); put(prompt_tail); }
     text(buf, end);
     full = position(end); pos = position(cursor);
     /* Resolve the terminal's pending wrap at an exact right margin. */
@@ -234,6 +237,8 @@ int rl_edit(int fd, int ofd, const char *promptstr, char *inputbuf, size_t lengt
     if (tcsetattr(fd, TCSANOW, &raw)) return -1;
     buf = inputbuf; end = cursor = 0; capacity = length - 1; buf[0] = 0;
     ps = promptstr; out = ofd; columns = 80;
+    prompt_columns = shell_prompt_columns(ps);
+    prompt_tail = shell_prompt_tail(ps);
     if (!ioctl(fd, TIOCGWINSZ, &ws) && ws.ws_col >= 20 && ws.ws_col <= 240) columns = ws.ws_col;
     put(ps); screenrow = position(0) / columns;
     while (1) {

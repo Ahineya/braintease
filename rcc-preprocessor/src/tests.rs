@@ -66,7 +66,7 @@ mod tests {
     }
 
     #[test]
-    fn cached_patterns_follow_directive_redefinition_and_undef() {
+    fn cached_tokens_follow_directive_redefinition_and_undef() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<Preprocessor>();
         let source = concat!(
@@ -99,7 +99,6 @@ mod tests {
         for (source, expected) in [
             ("#define PAIR(a,b) a+b\nPAIR(1)\n", "expects 2 arguments, got 1"),
             ("#define PAIR(a,b) a+b\nPAIR(1,2\n", "Unterminated macro arguments"),
-            ("#define GROW GROW + 1\nGROW\n", "Maximum macro expansion depth exceeded"),
         ] {
             assert!(preprocess(source).unwrap_err().to_string().contains(expected));
         }
@@ -107,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn cached_patterns_and_defined_follow_conditional_includes() {
+    fn cached_tokens_and_defined_follow_conditional_includes() {
         let path = std::env::temp_dir().join(format!("rcc-pp-cache-{}", std::process::id()));
         std::fs::create_dir_all(&path).unwrap();
         std::fs::write(path.join("choice.h"), concat!(
@@ -495,13 +494,8 @@ mod tests {
             #define X X
             int x = X;
         "};
-        // Current implementation will hit max recursion depth
-        // This is expected behavior - it prevents infinite loops
-        let result = preprocess(input);
-        // The result might be an error due to max expansion depth
-        // This is fine - we just want to make sure it doesn't panic
-        // or cause a stack overflow
-        let _ = result; // Don't check if it's ok or err, just that it completes
+        assert_eq!(preprocess(input).unwrap().trim(), "int x = X;");
+        assert_eq!(preprocess("#define GROW GROW + 1\nGROW\n").unwrap().trim(), "GROW + 1");
     }
 
     #[test]

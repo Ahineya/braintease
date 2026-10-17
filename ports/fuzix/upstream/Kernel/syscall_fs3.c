@@ -455,7 +455,9 @@ arg_t _ftruncate(void)
 
 	o = &of_tab[udata.u_files[file]];
 	if (n < 0 || (HIBYTE32(n) & BLKOVERSIZE32) ||
-	    (uint32_t)n > 65536UL * BLKSIZE ||
+#ifndef CONFIG_RIPPLE
+            (uint32_t)n > 65536UL * BLKSIZE ||
+#endif
 	    O_ACCMODE(o->o_access) == O_RDONLY ||
 	    getmode(ino) != MODE_R(F_REG)) {
 		udata.u_error = EINVAL;
@@ -471,9 +473,23 @@ arg_t _ftruncate(void)
 	if (n < ino->c_node.i_size) {
 		keep = ((uint32_t)n + BLKSIZE - 1) / BLKSIZE;
 		/* 65536 retained blocks must not wrap to zero. */
-		if (keep <= UINT16_MAX && f_trunc_blocks(ino, keep))
+		if (
+#ifndef CONFIG_RIPPLE
+                    keep <= UINT16_MAX &&
+#endif
+                    f_trunc_blocks(ino, keep))
 			return -1;
 	}
+    /* Shrinking within a retained block must not expose old bytes on regrowth. */
+    if (n < ino->c_node.i_size && BLKOFF(n)) {
+        blkno_t b = bmap(ino, BLOCK((uint32_t)n), 1);
+        if (b != NULLBLK) {
+            bufptr bp = bread(ino->c_dev, b, 0);
+            if (!bp) return -1;
+            memset(blkptr(bp, BLKOFF(n), BLKSIZE - BLKOFF(n)), 0, BLKSIZE - BLKOFF(n));
+            bawrite(bp);
+        }
+    }
 	ino->c_node.i_size = n;
 	setftime(ino, M_TIME | C_TIME);
 	wr_inode(ino);

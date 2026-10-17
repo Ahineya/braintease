@@ -16,6 +16,12 @@ unsigned ripple_pty_status(unsigned m) {
     if(ttyinq[m+2].q_count<ttyinq[m+2].q_size || (opened[m]&&!ttydata[m+2].users))status|=GX_READY_WRITE;
     return status;
 }
+unsigned ripple_pty_select(unsigned m) {
+    unsigned s;
+    if(m>=RIPPLE_PTY_COUNT)return SELECT_IN|SELECT_OUT;
+    s=ripple_pty_status(m);
+    return (s&GX_READY_READ?SELECT_IN:0)|(s&GX_READY_WRITE?SELECT_OUT:0);
+}
 static void queue_init(struct s_queue *q, uint8_t *buf) {
     q->q_base = q->q_head = q->q_tail = buf;
     q->q_size = QS; q->q_count = 0; q->q_wakeup = QS / 2;
@@ -38,6 +44,7 @@ void ripple_pty_putc(unsigned m, unsigned c) {
         insq(&outq[m - 2], c & 255);
         wakeup(&outq[m - 2]);
         ripple_gfx_wakeup();
+        if(outq[m-2].q_count==1)selwake_dev(3,m-2,SELECT_IN);
     }
 }
 int ripple_slave_open(uint_fast8_t m, uint16_t f) {
@@ -46,7 +53,7 @@ int ripple_slave_open(uint_fast8_t m, uint16_t f) {
         udata.u_error = ENXIO; return -1;
     }
     r = tty_open(m, f);
-    if (!r && m > 1) { opened[m - 2] = 1; wakeup(&outq[m - 2]); }
+    if (!r && m > 1) { opened[m - 2] = 1; wakeup(&outq[m - 2]); selwake_dev(3,m-2,SELECT_IN|SELECT_OUT); }
     return r;
 }
 int ripple_slave_close(uint_fast8_t m) {
@@ -55,6 +62,7 @@ int ripple_slave_close(uint_fast8_t m) {
         wakeup(&outq[m - 2]);
         wakeup(&ttyinq[m].q_count);
         ripple_gfx_wakeup();
+        selwake_dev(3,m-2,SELECT_IN|SELECT_OUT);
     }
     return r;
 }
@@ -91,6 +99,7 @@ int ripple_pty_read(uint_fast8_t m, uint_fast8_t raw, uint_fast8_t f) {
             else if (uputc(c, udata.u_base + n)) break;
             ++n;
             wakeup(&ttydata[m + 2]);
+            if(q->q_count==QS-1)selwake_dev(2,m+2,SELECT_OUT);
         } else {
             if (n || (opened[m] && !ttydata[m + 2].users)) break;
             if (psleep_flags(q, f)) break;

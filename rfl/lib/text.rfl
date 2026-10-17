@@ -1,0 +1,346 @@
+// The portable engine is shared with C; no OS or curses dependency.
+import {} from "../../libraries/text/text.c";
+extern "C" {
+    fn text_new() -> *mut u16;
+    fn text_free(buffer: *mut u16);
+    fn text_error(buffer: *mut u16) -> *const u8;
+    fn text_length(buffer: *mut u16) -> u32;
+    fn text_byte(buffer: *mut u16, at: u32) -> i16;
+    fn text_copy(buffer: *mut u16, at: u32, n: u32, out: *mut u8) -> i16;
+    fn text_append(buffer: *mut u16, bytes: *const u8, n: u32) -> i16;
+    fn text_replace(buffer: *mut u16, at: u32, remove: u32, bytes: *const u8, n: u32) -> i16;
+    fn text_begin(buffer: *mut u16, cursor: u32);
+    fn text_end(buffer: *mut u16, cursor: u32);
+    fn text_saved(buffer: *mut u16);
+    fn text_revision(buffer: *mut u16) -> u32;
+    fn text_generation(buffer: *mut u16) -> u32;
+    fn text_modified(buffer: *mut u16) -> i16;
+    fn text_undo(buffer: *mut u16) -> i32;
+    fn text_redo(buffer: *mut u16) -> i32;
+    fn text_lines(buffer: *mut u16) -> u32;
+    fn text_row(buffer: *mut u16, at: u32) -> u32;
+    fn text_start(buffer: *mut u16, row: u32) -> u32;
+    fn text_endline(buffer: *mut u16, row: u32) -> u32;
+    fn text_visual(buffer: *mut u16, at: u32, tabstop: u16) -> u32;
+    fn text_column(buffer: *mut u16, row: u32, column: u32, tabstop: u16) -> u32;
+    fn text_word(buffer: *mut u16, at: u32, motion: i16, count: u16) -> u32;
+    fn text_find(buffer: *mut u16, at: u32, bytes: *const u8, n: u32, backward: i16) -> i32;
+    fn text_find_char(buffer: *mut u16, at: u32, ch: i16, backward: i16, till: i16, count: u16) -> i32;
+    fn text_newline(buffer: *mut u16, at: u32, indent: i16) -> i32;
+    fn text_open_line(buffer: *mut u16, at: u32, above: i16, indent: i16) -> i32;
+    fn text_indent(buffer: *mut u16, first: u32, last: u32, width: u16, remove: i16, tabs: i16) -> i16;
+    fn text_object(buffer: *mut u16, at: u32, object: i16, around: i16, bounds: *mut u32) -> i16;
+    fn text_match(buffer: *mut u16, at: u32) -> i32;
+    fn text_language(buffer: *mut u16, language: u16);
+    fn text_render(buffer: *mut u16, row: u32, left: u32, width: u16, tabstop: u16, styles: *const u32, selected: u32, from: u32, to: u32, cells: *mut u32) -> i16;
+    fn text_hash(bytes: *const u8, n: u32, seed: u32) -> u32;
+}
+
+/// Half-open octet bounds returned by a text object.
+export struct Bounds {
+    /// First included octet.
+    start: usize,
+    /// First excluded octet.
+    end: usize
+}
+
+/// A bounded, mutable gap buffer with indexed lines and grouped undo/redo.
+/// Offsets count octets. Supports 512 KiB/file, 65536 lines, and a shared
+/// 2 MiB gap-capacity budget. Rejects binary NUL; preserves CRLF bytes.
+export struct Buffer {
+    /// Owned opaque C engine. Use methods instead of modifying this field.
+    state: Owned<*mut u16>
+}
+
+fn c_text(p: *const u8) -> String {
+    let mut result = "";
+    let mut i: usize = 0;
+    while (true) {
+        let c = unsafe {
+            p[i]
+        };
+        if (c == 0) {
+            return result;
+        }
+        result = result + from_byte(c);
+        i += 1;
+    }
+    result
+}
+
+/// Validates an octet string and copies it to a byte vector, without a terminator.
+export fn octets(value: String) -> Result<Vec<u8>, String> {
+    let mut out: Vec<u8> = [];
+    for (i in 0..value.len()) {
+        if (value[i] == '\0' || value[i] as u32 > 255) {
+            return Err("Text must contain non-NUL octets");
+        }
+        out.push(value[i] as u8);
+    }
+    Ok(out)
+}
+
+/// Creates an empty owned text buffer. Allocation failure returns an error.
+export fn buffer() -> Result<Buffer, String> {
+    let p = text_new();
+    if (p.is_null()) {
+        return Err("Cannot allocate text buffer");
+    }
+    Ok(Buffer { state: owned(p, fn(value: &mut *mut u16) => {
+        text_free(*value);
+    }) })
+}
+
+/// Updates a portable FNV-1a fingerprint; use seed 2166136261 for the first chunk.
+export fn hash(bytes: Vec<u8>, seed: u32) -> u32 {
+    if (bytes.is_empty()) {
+        seed
+    } else {
+        unsafe {
+            text_hash(&bytes[0], bytes.len() as u32, seed)
+        }
+    }
+}
+
+impl Buffer {
+    fn raw(&self) -> *mut u16 {
+        let p = self.state.borrow();
+        *p
+    }
+    fn checked(&self, status: i16) -> Result<unit, String> {
+        if (status < 0) {
+            Err(c_text(text_error(self.raw())))
+        } else {
+            Ok({})
+        }
+    }
+    fn offset(&self, value: i32) -> Result<usize, String> {
+        if (value < 0) {
+            Err(c_text(text_error(self.raw())))
+        } else {
+            Ok(value as usize)
+        }
+    }
+    /// Length in octets, including line endings.
+    export fn len(&self) -> usize {
+        text_length(self.raw()) as usize
+    }
+    /// Returns an octet, or -1 outside the file.
+    export fn byte(&self, at: usize) -> i16 {
+        text_byte(self.raw(), at as u32)
+    }
+    /// Copies a range. A zero length returns an empty vector.
+    export fn bytes(&self, at: usize, count: usize) -> Result<Vec<u8>, String> {
+        if (at > self.len() || count > self.len() - at) {
+            return Err("Invalid text range");
+        }
+        let mut out: Vec<u8> = [];
+        for (i in 0..count) {
+            out.push(0);
+        }
+        if (count > 0) {
+            self.checked(unsafe {
+                text_copy(self.raw(), at as u32, count as u32, &mut out[0])
+            })?;
+        }
+        Ok(out)
+    }
+    /// Appends initial file data without recording undo. Call saved() after loading.
+    export fn append(&self, bytes: Vec<u8>) -> Result<unit, String> {
+        if (bytes.is_empty()) {
+            return Ok({});
+        }
+        self.checked(unsafe {
+            text_append(self.raw(), &bytes[0], bytes.len() as u32)
+        })
+    }
+    /// Replaces a half-open range as one undoable edit. Failure leaves text intact.
+    export fn replace(&self, at: usize, count: usize, bytes: Vec<u8>) -> Result<unit, String> {
+        let mut source = bytes;
+        let length = source.len();
+        source.push(0);
+        self.checked(unsafe {
+            text_replace(self.raw(), at as u32, count as u32, &source[0], length as u32)
+        })
+    }
+    /// Starts a new undo group, recording its original cursor.
+    export fn begin(&self, cursor: usize) {
+        text_begin(self.raw(), cursor as u32);
+    }
+    /// Closes the current group and records its final cursor.
+    export fn end(&self, cursor: usize) {
+        text_end(self.raw(), cursor as u32);
+    }
+    /// Marks the current revision as saved and closes the undo group.
+    export fn saved(&self) {
+        text_saved(self.raw());
+    }
+    /// Returns the current history revision identifier.
+    export fn revision(&self) -> u32 {
+        text_revision(self.raw())
+    }
+    /// Display invalidation token. Unlike revision(), changes within one undo
+    /// group also change this token. Compare for equality, not ordering.
+    export fn generation(&self) -> u32 {
+        text_generation(self.raw())
+    }
+    /// True when the current revision differs from the saved revision.
+    export fn modified(&self) -> bool {
+        text_modified(self.raw()) != 0
+    }
+    /// Undoes a complete group and returns its original cursor, or None.
+    export fn undo(&self) -> Option<usize> {
+        let at = text_undo(self.raw());
+        if (at < 0) {
+            None
+        } else {
+            Some(at as usize)
+        }
+    }
+    /// Redoes a complete group and returns its final cursor, or None.
+    export fn redo(&self) -> Option<usize> {
+        let at = text_redo(self.raw());
+        if (at < 0) {
+            None
+        } else {
+            Some(at as usize)
+        }
+    }
+    /// Number of logical lines, at least one. A final newline creates an empty line.
+    export fn lines(&self) -> usize {
+        text_lines(self.raw()) as usize
+    }
+    /// Zero-based line containing an offset.
+    export fn row(&self, at: usize) -> usize {
+        text_row(self.raw(), at as u32) as usize
+    }
+    /// First offset on a line; out-of-range lines map to EOF.
+    export fn start(&self, row: usize) -> usize {
+        text_start(self.raw(), row as u32) as usize
+    }
+    /// End offset before LF/CRLF, or EOF on the last line.
+    export fn endline(&self, row: usize) -> usize {
+        text_endline(self.raw(), row as u32) as usize
+    }
+    /// Visual column after expanding tabs.
+    export fn visual(&self, at: usize, tabstop: u16) -> usize {
+        text_visual(self.raw(), at as u32, tabstop) as usize
+    }
+    /// Offset at or before a visual column on the requested line.
+    export fn column(&self, row: usize, column: usize, tabstop: u16) -> usize {
+        text_column(self.raw(), row as u32, column as u32, tabstop) as usize
+    }
+    /// Vi word motion w/b/e or W/B/E, repeated count times.
+    export fn word(&self, at: usize, motion: i16, count: u16) -> usize {
+        text_word(self.raw(), at as u32, motion, count) as usize
+    }
+    /// Wrapped literal search, starting after/before the cursor.
+    export fn find(&self, at: usize, query: String, backward: bool) -> Result<Option<usize>, String> {
+        let mut bytes = octets(query)?;
+        let n = bytes.len();
+        bytes.push(0);
+        let result = unsafe {
+            text_find(self.raw(), at as u32, &bytes[0], n as u32, if (backward) {
+                1
+            } else {
+                0
+            })
+        };
+        Ok(if (result < 0) {
+            None
+        } else {
+            Some(result as usize)
+        })
+    }
+    /// Vi f/F/t/T search within one line.
+    export fn find_char(&self, at: usize, ch: i16, backward: bool, till: bool, count: u16) -> Option<usize> {
+        let result = text_find_char(self.raw(), at as u32, ch, if (backward) {
+            1
+        } else {
+            0
+        }, if (till) {
+            1
+        } else {
+            0
+        }, count);
+        if (result < 0) {
+            None
+        } else {
+            Some(result as usize)
+        }
+    }
+    /// Inserts a line break with the file's initial LF/CRLF convention and optional indentation.
+    export fn newline(&self, at: usize, indent: bool) -> Result<usize, String> {
+        self.offset(text_newline(self.raw(), at as u32, if (indent) {
+            1
+        } else {
+            0
+        }))
+    }
+    /// Opens an indented line above or below the cursor, returning the insertion offset.
+    export fn open_line(&self, at: usize, above: bool, indent: bool) -> Result<usize, String> {
+        self.offset(text_open_line(self.raw(), at as u32, if (above) {
+            1
+        } else {
+            0
+        }, if (indent) {
+            1
+        } else {
+            0
+        }))
+    }
+    /// Indents/unindents an inclusive line range as one edit.
+    export fn indent(&self, first: usize, last: usize, width: u16, remove: bool, tabs: bool) -> Result<unit, String> {
+        self.checked(text_indent(self.raw(), first as u32, last as u32, width, if (remove) {
+            1
+        } else {
+            0
+        }, if (tabs) {
+            1
+        } else {
+            0
+        }))
+    }
+    /// Half-open bounds for a word, nested bracket or same-line quote object.
+    export fn object(&self, at: usize, object: i16, around: bool) -> Result<Bounds, String> {
+        let mut bounds: Vec<u32> = [0, 0];
+        self.checked(unsafe {
+            text_object(self.raw(), at as u32, object, if (around) {
+                1
+            } else {
+                0
+            }, &mut bounds[0])
+        })?;
+        Ok(Bounds { start: bounds[0] as usize, end: bounds[1] as usize })
+    }
+    /// Finds a matching bracket at the cursor, or None.
+    export fn matching(&self, at: usize) -> Option<usize> {
+        let p = text_match(self.raw(), at as u32);
+        if (p < 0) {
+            None
+        } else {
+            Some(p as usize)
+        }
+    }
+    /// Selects the incremental lexical highlighter; zero means plain text.
+    export fn language(&self, language: u16) {
+        text_language(self.raw(), language);
+    }
+    /// Renders up to 512 cells with tab expansion, clipping and selection. styles
+    /// contains seven curses styles: plain/comment/keyword/string/number/operator/type.
+    export fn cells(&self, row: usize, left: usize, width: u16, tabstop: u16, styles: Vec<u32>, selected: u32, from: usize, to: usize) -> Result<Vec<u32>, String> {
+        if (width > 512 || styles.len() != 7) {
+            return Err("Invalid text render width or palette");
+        }
+        let mut out: Vec<u32> = [];
+        for (i in 0..width as usize) {
+            out.push(0);
+        }
+        if (width > 0) {
+            self.checked(unsafe {
+                text_render(self.raw(), row as u32, left as u32, width, tabstop, &styles[0], selected, from as u32, to as u32, &mut out[0])
+            })?;
+        }
+        Ok(out)
+    }
+}

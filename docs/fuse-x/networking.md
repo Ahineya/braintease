@@ -14,10 +14,9 @@ and commands.
 
 The hosted kernel now enables the existing FUZIX socket/inode bridge and
 guest ARP/IPv4/ICMP/UDP/TCP stack. A generated build adaptation replaces the
-bridge's reserved physical bank with shared hosted kernel allocation. Kernel
+bridge's reserved physical banks with shared hosted kernel allocation. Kernel
 polling runs during idle and syscall boundaries; FUZIX still owns descriptors,
-blocking waits, terminal endpoints and process lifetime. Port sources stay
-unchanged. The existing socket and resolver libc supports the ten network tools.
+blocking waits, terminal endpoints and process lifetime. The same transport sources serve both platforms. The existing socket and resolver libc supports the ten network tools.
 
 ## Headless terminal milestone
 
@@ -72,3 +71,13 @@ Guest configuration is `192.168.64.250/24`, gateway/resolver `192.168.64.1`.
 Network menu controls, configuration persistence and live attachment changes
 remain open. The local Ethernet fixture test does not require vmnet privileges
 and does not establish that an arbitrary host's vmnet setup works.
+
+## Capacity and guest-local services
+
+Both kernels now provide sixteen internet endpoints, sixteen active TCP
+connections and four TCP listeners. A separate pool of thirty-two Unix-domain
+stream endpoints supports pathname services and `socketpair()` even offline.
+These are guest endpoints governed by FUZIX descriptors and filesystem
+permissions; they do not bridge to Mac Unix sockets. They participate in the
+same `select()` loop as PTYs and internet sockets. See [local IPC and
+capacity](../networking/local-ipc.md) for buffer, backlog and lifetime rules.

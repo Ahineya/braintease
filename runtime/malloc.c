@@ -22,6 +22,7 @@ struct heap_block {
 };
 
 static struct heap_block *heap_head;
+extern void *__rcc_heap_start(void);
 
 /* The pointer ABI is two cells: address, bank. */
 union heap_fat_ptr {
@@ -29,17 +30,12 @@ union heap_fat_ptr {
     unsigned int w[2];
 };
 
-static void *make_fat_ptr(unsigned int addr, unsigned int bank) {
-    union heap_fat_ptr fp;
-    fp.w[0] = addr;
-    fp.w[1] = bank;
-    return fp.p;
-}
-
 static void init_heap(void) {
     if (heap_head == NULL) {
-        heap_head = (struct heap_block *)make_fat_ptr(0, HEAP_START_BANK);
-        heap_head->size = HEAP_CAPACITY - sizeof(struct heap_block);
+        union heap_fat_ptr start;
+        start.p = __rcc_heap_start();
+        heap_head = start.p;
+        heap_head->size = (size_t)(HEAP_END_BANK - start.w[1] + 1) * BANK_SIZE - sizeof(struct heap_block);
         heap_head->next = NULL;
         heap_head->available = 1;
     }

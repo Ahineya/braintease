@@ -71,7 +71,8 @@
 #define EDESTADDRREQ    57              /* No destination address specified */
 #define ENOBUFS		58		/* No buffer space available */
 #define EPROTONOSUPPORT	59		/* Protocol not supported */
-#define __ERRORS	56
+#define EOVERFLOW       60              /* Result does not fit caller ABI */
+#define __ERRORS	61
 
 extern int sys_nerr;
 extern char *sys_errlist[];

@@ -1,67 +1,27 @@
 // Install managed userspace files into a clean C16 root, preserving other
 // inodes.
 import {checkRoot} from './fsck.mjs';
-import {BLOCK, CELLS, INODES_PER_BLOCK, inodeBase} from './layout.mjs';
+import {BLOCK, CELLS, INODES_PER_BLOCK, INODE_CELLS, ROOT_BLOCKS, MAGIC, SIGNATURE, SB, inodeBase, blockPath} from './layout.mjs';
+import {Image} from './image.mjs';
 
 export function installRoot(input, files) {
-  const image = Buffer.from(input), w = p => image.readUInt16LE(p * 2),
-        put = (p, v) => image.writeUInt16LE(v & 65535, p * 2),
-        wide = p => w(p) + w(p + 1) * 65536, putWide = (p, v) => {
-          put(p, v);
-          put(p + 1, v >>> 16);
-        };
-  // Structural errors always abort before any output can be written.
-  const checked = checkRoot(input), isize = w((CELLS + 1)), blocks = w((CELLS + 2)),
-        limit = (isize - 2) * INODES_PER_BLOCK;
-  const nodes = new Map(), used = new Set();
-  function readNode(ino) {
-    const base = inodeBase(ino), map = [], owned = [];
-    function indirect(b, level) {
-      if (!b)
-        return;
-      used.add(b);
-      owned.push(b);
-      for (let j = 0; j < CELLS; j++) {
-        const v = w(b * CELLS + j);
-        if (level === 1) {
-          map.push(v);
-          if (v) {
-            used.add(v);
-            owned.push(v);
-          }
-        } else if (v)
-          indirect(v, level - 1);
-        else
-          for (let k = 0; k < CELLS; k++)
-            map.push(0);
-      }
-    }
-    if ([0x8000, 0x4000, 0x1000].includes(w(base) & 0xf000)) {
-      for (let j = 0; j < 18; j++) {
-        const b = w(base + 12 + j);
-        map.push(b);
-        if (b) {
-          used.add(b);
-          owned.push(b);
-        }
-      }
-      indirect(w(base + 30), 1);
-      // Preserve the logical gap when no single-indirect tree exists.
-      while (map.length < (18 + CELLS))
-        map.push(0);
-      indirect(w(base + 31), 2);
-    }
-    return {ino, base, map, owned, size : wide(base + 4)};
-  }
-  for (let ino = 1; ino < limit; ino++) {
-    const base = inodeBase(ino);
-    if (w(base) || w(base + 1))
-      nodes.set(ino, readNode(ino));
-  }
+  const checked = checkRoot(input);
+  if (checked.format.version !== 3) throw Error('upgrade C16 V2 with growRoot before installing');
+  const image = checked.image, w = p => image.readUInt16LE(p * 2),
+        put = (p, v) => image.writeUInt16LE(v, p * 2),
+        wide = p => image.readUInt32LE(p * 2), putWide = (p, v) => image.writeUInt32LE(v, p * 2);
+  const isize = checked.isize, blocks = checked.blocks, limit = (isize - 2) * INODES_PER_BLOCK;
+  const nodes = checked.nodes, used = new Set(checked.owners.keys());
+  for (const node of nodes.values()) node.owned = [];
+  for (const [block, ino] of checked.owners) nodes.get(ino).owned.push(block);
   function cells(node) {
-    return Array.from(
-        {length : node.size},
-        (_, i) => node.map[Math.floor(i / CELLS)] ? w(node.map[Math.floor(i / CELLS)] * CELLS + (i % CELLS)) : 0);
+    const result = new Uint16Array(node.size);
+    for (const [index, block] of node.map) {
+      const chunk = image.subarray(block * BLOCK, (block + 1) * BLOCK);
+      for (let i = 0; i < CELLS && index * CELLS + i < node.size; i++)
+        result[index * CELLS + i] = chunk.readUInt16LE(i * 2);
+    }
+    return result;
   }
   function lookup(dir, name) {
     const data = cells(dir);
@@ -89,48 +49,18 @@ export function installRoot(input, files) {
     return b;
   }
   function writeNode(node, data) {
-    for (const b of node.owned) {
-      used.delete(b);
-      if (b < cursor)
-        cursor = b;
+    for (const b of node.owned) { used.delete(b); if (b < cursor) cursor = b; }
+    node.owned = []; node.map = new Map();
+    image.fill(0, (node.base + 12) * 2, (node.base + INODE_CELLS) * 2);
+    const block = () => { const b = alloc(); node.owned.push(b); return b; };
+    for (let i = 0; i < Math.ceil(data.length / CELLS); i++) {
+      const b = block(); node.map.set(i, b);
+      installBlock(image, node.base, i, b, block);
+      const chunk = Buffer.alloc(BLOCK);
+      for (let j = 0; j < Math.min(CELLS, data.length - i * CELLS); j++) chunk.writeUInt16LE(data[i * CELLS + j], j * 2);
+      image.set(chunk, b * BLOCK);
     }
-    node.owned = [];
-    node.map = [];
-    image.fill(0, (node.base + 12) * 2, (node.base + 32) * 2);
-    function block() {
-      const b = alloc();
-      node.owned.push(b);
-      return b;
-    }
-    const count = Math.ceil(data.length / CELLS);
-    let single = 0, double = 0, branch = 0;
-    for (let i = 0; i < count; i++) {
-      const b = block();
-      node.map.push(b);
-      if (i < 18)
-        put(node.base + 12 + i, b);
-      else if (i < (18 + CELLS)) {
-        if (!single) {
-          single = block();
-          put(node.base + 30, single);
-        }
-        put(single * CELLS + i - 18, b);
-      } else {
-        if (!double) {
-          double = block();
-          put(node.base + 31, double);
-        }
-        if ((i - (18 + CELLS)) % CELLS === 0) {
-          branch = block();
-          put(double * CELLS + Math.floor((i - (18 + CELLS)) / CELLS), branch);
-        }
-        put(branch * CELLS + (i - (18 + CELLS)) % CELLS, b);
-      }
-      for (let j = 0; j < Math.min(CELLS, data.length - i * CELLS); j++)
-        put(b * CELLS + j, data[i * CELLS + j]);
-    }
-    node.size = data.length;
-    putWide(node.base + 4, data.length);
+    node.size = data.length; putWide(node.base + 4, data.length);
   }
   let changed = false;
   function newNode(mode, links = 1) {
@@ -143,8 +73,8 @@ export function installRoot(input, files) {
     if (ino === limit)
       throw Error('not enough free inodes to install userspace');
     const base = inodeBase(ino);
-    image.fill(0, base * 2, (base + 32) * 2);
-    const node = {ino, base, map : [], owned : [], size : 0};
+    image.fill(0, base * 2, (base + INODE_CELLS) * 2);
+    const node = {ino, base, map : new Map(), owned : [], size : 0};
     nodes.set(ino, node);
     put(base, mode);
     put(base + 1, links);
@@ -152,7 +82,7 @@ export function installRoot(input, files) {
     return node;
   }
   function setEntry(parent, name, ino, offset = -1) {
-    const directory = cells(parent);
+    const directory = Array.from(cells(parent));
     if (offset < 0)
       offset = directory.findIndex((v, i) => i % 32 === 0 && !v);
     if (offset < 0) {
@@ -222,7 +152,7 @@ export function installRoot(input, files) {
         // to the old device and preserving the node's other metadata.
         if (w(old.base + 1) > 1) {
           node = newNode(mode);
-          image.copy(image, node.base * 2, old.base * 2, (old.base + 32) * 2);
+          image.copy(image, node.base * 2, old.base * 2, (old.base + INODE_CELLS) * 2);
           put(node.base + 1, 1);
           put(old.base + 1, w(old.base + 1) - 1);
           setEntry(parent, name, node.ino, entry.offset);
@@ -262,7 +192,7 @@ export function installRoot(input, files) {
         put(old.base + 1, links);
         if (!links) {
           writeNode(old, []);
-          image.fill(0, old.base * 2, (old.base + 32) * 2);
+          image.fill(0, old.base * 2, (old.base + INODE_CELLS) * 2);
           nodes.delete(old.ino);
         }
       }
@@ -271,7 +201,7 @@ export function installRoot(input, files) {
       changed = true;
       continue;
     }
-    const data = Array.from(f.data), mode = f.mode ?? 0o100755;
+    const data = f.data, mode = f.mode ?? 0o100755;
     if (old && w(old.base) === mode && old.size === data.length &&
         cells(old).every((c, i) => c === data[i]))
       continue;
@@ -294,61 +224,55 @@ export function installRoot(input, files) {
     return input;
   // Rebuild free lists from the new ownership graph, then check the result
   // again.
-  put((CELLS + 105), 1);
+  put((CELLS + SB.clean), 1);
   const result = checkRoot(image, true).image;
   if (checkRoot(result).issues.length)
     throw Error('installed root failed validation');
   return result;
 }
 
-export function growRoot(input, blocks = 65535) {
-  const oldBlocks = input.length / BLOCK, oldIsize = input.readUInt16LE((CELLS + 1) * 2),
-        newIsize = Math.max(oldIsize, 2 + 1024 / INODES_PER_BLOCK);
-  if (oldBlocks >= blocks && oldIsize === newIsize)
-    return input;
-  if (checkRoot(input).issues.length)
-    throw Error('root expansion requires a clean filesystem');
-  const image = Buffer.alloc(Math.max(oldBlocks, blocks) * BLOCK);
-  input.copy(image);
-  const w = p => image.readUInt16LE(p * 2),
-        put = (p, v) => image.writeUInt16LE(v, p * 2), moved = new Map();
-  // Make room for 1,024 inodes on old bootstrap roots. Move early data blocks
-  // above the old filesystem end, preserving every existing inode number.
-  if (oldBlocks + newIsize - oldIsize > image.length / BLOCK)
-    throw Error('insufficient room to expand inode table');
-  for (let b = oldIsize; b < newIsize; b++) {
-    const target = oldBlocks + b - oldIsize;
-    image.copy(image, target * BLOCK, b * BLOCK, (b + 1) * BLOCK);
-    moved.set(b, target);
-    image.fill(0, b * BLOCK, (b + 1) * BLOCK);
+// Install one logical data block, allocating only the necessary pointer path.
+export function installBlock(image, base, index, block, allocate) {
+  const path = blockPath(index);
+  let at = base + 12 + path[0] * 2;
+  for (const slot of path.slice(1)) {
+    let pointer = image.readUInt32LE(at * 2);
+    if (!pointer) { pointer = allocate(); image.writeUInt32LE(pointer, at * 2); }
+    at = pointer * CELLS + slot * 2;
   }
-  function pointer(at, level) {
-    let b = w(at);
-    if (!b)
-      return;
-    if (moved.has(b)) {
-      b = moved.get(b);
-      put(at, b);
+  image.writeUInt32LE(block, at * 2);
+}
+
+export function growRoot(input, blocks = ROOT_BLOCKS) {
+  const old = checkRoot(input), count = Math.max(1024, (old.isize - 2) * old.format.inodes);
+  if (!Number.isInteger(blocks) || blocks < 1 || blocks * BLOCK > 0xffffffff) throw Error('invalid root size');
+  if (old.format.version === 3 && old.blocks >= blocks && old.format.inodes * (old.isize - 2) >= count) return input;
+  if (old.issues.length) throw Error('root expansion requires a clean filesystem');
+  // Repack blocks, never inode numbers. This preserves hard links, ownership,
+  // timestamps, native characters and holes, including across V2/V3 tree shapes.
+  const image = new Image(Math.max(old.blocks, blocks) * BLOCK), isize = 2 + count / INODES_PER_BLOCK;
+  image.write(SIGNATURE, 0, 'ascii'); image.writeUInt16LE(MAGIC, CELLS * 2);
+  image.writeUInt16LE(isize, (CELLS + SB.isize) * 2);
+  image.writeUInt32LE(image.length / BLOCK, (CELLS + SB.blocks) * 2);
+  image.writeUInt32LE(old.image.readUInt32LE((CELLS + old.format.sb.time) * 2), (CELLS + SB.time) * 2);
+  image.writeUInt16LE(0o100000, inodeBase(0) * 2); image.writeUInt16LE(1, (inodeBase(0) + 1) * 2);
+  let cursor = isize;
+  function allocate() {
+    if (cursor >= image.length / BLOCK) throw Error('not enough space to upgrade root');
+    return cursor++;
+  }
+  for (const node of old.nodes.values()) {
+    const base = inodeBase(node.ino);
+    old.image.copy(image, base * 2, node.base * 2, (node.base + 12) * 2);
+    if (node.type === 0x2000 || node.type === 0x6000)
+      image.writeUInt32LE(old.format.ptr(node.base + 12), (base + 12) * 2);
+    for (const [index, source] of [...node.map].sort((a, b) => a[0] - b[0])) {
+      const block = allocate();
+      installBlock(image, base, index, block, allocate);
+      old.image.copy(image, block * BLOCK, source * BLOCK, (source + 1) * BLOCK);
     }
-    if (level)
-      for (let i = 0; i < CELLS; i++)
-        pointer(b * CELLS + i, level - 1);
   }
-  for (let ino = 1; ino < (oldIsize - 2) * INODES_PER_BLOCK; ino++) {
-    const base = inodeBase(ino),
-          type = w(base) & 0xf000;
-    if (type !== 0x8000 && type !== 0x4000 && type !== 0x1000)
-      continue;
-    for (let j = 0; j < 18; j++)
-      pointer(base + 12 + j, 0);
-    pointer(base + 30, 1);
-    pointer(base + 31, 2);
-  }
-  put((CELLS + 1), newIsize);
-  put((CELLS + 2), image.length / BLOCK);
-  put((CELLS + 105), 1);
   const result = checkRoot(image, true).image;
-  if (checkRoot(result).issues.length)
-    throw Error('expanded root failed verification');
+  if (checkRoot(result).issues.length) throw Error('upgraded root failed verification');
   return result;
 }

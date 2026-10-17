@@ -25,16 +25,27 @@ including a running editor or foreground program. Closing the host terminal
 also detaches. Host terminal settings are restored when the client exits.
 The original small shell remains available as `/bin/fxsh` for debugging.
 
+The Bourne shell supports colored and dynamic `PS1`/`PS2` prompts, for example:
+
+```sh
+PS1='\[\e[32m\]\u@\h:\w\[\e[0m\]\$ '
+```
+
+See the [shared shell's prompt escape table](../ports/fuzix/README.md) for the
+supported escapes. Directory and clock values refresh at each prompt; line
+editing accounts for colors, nonprinting sequences and multiline prompts.
+
 The [launcher](../scripts/run-fuse-x.sh) builds the compiler, runtime and kernel,
 creates `fuse-x/build/ROOTFS.IMG` if missing, and starts the console shell.
 Networking defaults to shared Ethernet with NAT internet access on macOS and off elsewhere.
 Files persist across rebuilds and launches. Normal builds inventory the ported applications and install successful local
 executables, preserving other files and saving a `.bak` (or `.bak.N`) before
-changing an existing image. Smaller roots expand to 65,535 blocks (128 MiB minus
-2 KiB) and at least 1,024 inodes with their contents preserved. Fresh roots use
-that size too. This is the current C16 V2 filesystem's block-count limit;
-ordinary file octets occupy 16-bit cells on this disk. `--build-only` prepares
-everything without running. `--fresh` backs up and replaces the default image.
+changing an existing image. Smaller roots and C16 V2 images upgrade to a sparse 1 GiB C16 V3 root
+with at least 1,024 inodes, preserving file contents, metadata and hard links.
+V3 uses 32-bit block references; ordinary file octets still occupy 16-bit cells.
+See the [format and migration guide](../docs/arch/c16-filesystem.md).
+`--build-only` prepares everything without running. `--fresh` backs up and
+replaces the default image.
 `FUSE_X_BUILD` changes the build directory; build output goes to `build.log` there.
 Interactive sessions have no default timeout; `--timeout N` sets one in seconds.
 
@@ -50,6 +61,27 @@ syscalls and host clocks, then stops at the `/init` loading boundary. The write
 check replaces `/tmp/fuse-x-check` through kernel syscalls, syncs and exits; the
 read check verifies it in a separate read-only launch. Checks default to a
 ten-second timeout. These test persistence after orderly exits, not crash recovery.
+
+## RFL applications
+
+Normal builds also install `rfl-demo` and `rfl-fm`, the modular RFL Commander,
+with `mc` as its short alias. Try `mc / /tmp` for two panels, file
+viewing/copy/move/mkdir/delete, Ctrl-P for one panel, and Ctrl-O for a guest
+command prompt. Ctrl-A/F1 opens About, F4 edits with VISUAL/EDITOR (default vi),
+`r` renames, and Enter runs executable files. F10 restores the shell screen.
+Regular files move between `/mnt/host` and guest storage by copy-then-remove.
+F9 selects a color theme; Classic Blue is the subdued default. Example themes
+live in `/usr/share/mc/themes`, defaults in `/etc/mc.ini`, and user overrides in
+`$HOME/.config/mc/config.ini`. Prompts and the viewer use floating windows;
+long listings show scroll indicators and visible selection in both panels.
+The application is written in RFL using `std/posix` and `std/curses`; small C
+adapters connect those libraries to guest libc. Reusable INI/theme companions
+are available to C and RFL applications; see [application libraries](../libraries/README.md).
+
+Build another guest application on the host with
+`target/release/rfl build app.rfl --os fuse-x -o app.fxe`.
+See [RFL OS builds and Commander](../rfl/os/README.md) for installation,
+controls, module boundaries, current limits and `make -C fuse-x test-rfl`.
 
 ## Persistent and headless sessions
 
@@ -84,6 +116,10 @@ not orderly shutdown. The broker's `console.log` records guest output while no
 client is attached; it rotates at 8 MiB and retains one previous log.
 Attachments replay at most the latest 64 KiB. A client that stops reading is
 disconnected once its output backlog reaches 1 MiB, leaving the kernel running.
+Attached clients also forward terminal dimensions on connection and resize;
+the kernel exposes the current physical-console size through `TIOCGWINSZ`.
+Commander rebuilds/repositions its layout and dialogs when dimensions change.
+Remote PTYs retain the sizes negotiated by their own clients.
 
 For finite piped scripts or the old shell-exit behavior, use `--one-shot`.
 It runs the console directly, without a persistent broker. The native executable
@@ -93,7 +129,7 @@ sessions continuing; the launcher keeps its console input open across detach.
 
 ## Existing images
 
-The executable needs a raw C16 V2 `ROOTFS.IMG`, rather than the outer Ripple FAT
+The executable needs a raw C16 V3 `ROOTFS.IMG`, rather than the outer Ripple FAT
 disk. The signature and physical image size are checked before boot.
 
 ```sh
@@ -223,8 +259,9 @@ code. Disk layout remains compatible with the Ripple C16 filesystem.
 
 The hosted configuration has 16 FUZIX process slots, including init, the shell
 and unreaped children. Private RAM uses 1 KiB copy-on-write pages. Banks 1–4
-hold globals and continuation stacks, 8–23 provide a bounded user heap window,
-and 31 holds arguments. Shared kernel globals and allocations use banks 240–255.
+hold small globals and continuation stacks, 8–23 provide a bounded user heap
+window, and 31 holds arguments. Larger applications reserve banks 32–47 for
+globals. Shared kernel globals and allocations use banks 240–255.
 Current RAM figures are provisional accounting, not enforced physical budgets;
 the Ripple port's variable executable allocation is not yet integrated here.
 
@@ -241,10 +278,96 @@ kernel timers at these checkpoints and platform services. Interrupt masking reco
 logical state on the single guest execution thread. Console input is collected
 by a host worker and polled without blocking that thread. Four guest PTY pairs
 provide independent terminal sessions. Custom handlers run on completed syscall
-returns; privilege isolation and GUI windows remain future work.
+returns; privilege isolation remains future work.
 User-copy validation checks allowed regions, but trusted compiled code can still
 address kernel memory directly.
 
 See the [architecture](../docs/fuse-x/architecture.md),
 [roadmap](../docs/fuse-x/roadmap.md), and
 [native continuation APIs](../rcc-native/PROCESSES.md).
+
+### Descriptor readiness
+
+The shared guest `select()` interface supports regular files, pipes, terminals,
+PTYs and internet/local guest sockets. Unix-domain stream sockets and
+`socketpair()` work without Ethernet. Both targets have sixteen internet socket
+endpoints, sixteen active TCP connections, four TCP listeners and a separate
+pool of thirty-two local endpoints. See [local IPC](../docs/networking/local-ipc.md).
+The native process limit remains 16 descriptors; sets
+have the same two-word C16 layout as RVM. Waiting suspends the native
+continuation while other sessions and host idle processing proceed. TCP
+asynchronous connect exposes `getsockopt(SOL_SOCKET, SO_ERROR)`. Both graphics
+backends expose per-owner input readiness through `select()`.
+See [the readiness contract](../docs/networking/select.md).
+
+Run `python3 ports/fuzix/tools/test_select.py --native` from the repository root
+after building Fuse-X and its applications. It uses a disposable root and a
+local Ethernet fixture, with no internet dependency.
+
+### Persistent shell settings
+
+Interactive Bourne shells load `$HOME/.shrc` once before the first prompt,
+including console and Telnet sessions. Root currently has `HOME=/`, so edit
+`/.shrc`. Scripts and ordinary `sh -c` do not source it. Put prompt assignments
+there, followed by a separate `export PS1` command, and use `. "$HOME/.shrc"`
+to apply changes in the current shell. See the
+[shared shell instructions](../ports/fuzix/README.md) for a colored example.
+The file survives session restarts and application upgrades.
+
+## Native graphics
+
+`scripts/run-fuse-x.sh --gui` starts a persistent Nano-X service and opens a
+native graphical terminal as well as the reconnectable console. Normal interactive sessions also allow a window to open
+on demand: run `gterm`, `nxdraw`, or `startx` from the guest shell. `--headless`
+keeps presentation disabled. Rebuild/install the applications before using
+`--run-only` with an older image.
+
+All native windows belong to `Fuse-X.app`, with one Dock icon. **Command-N** or
+**File → New Terminal** starts another guest shell on its own PTY. The **Window**
+menu and Dock menu list current windows and restore minimized windows. Closing
+the last window keeps the kernel running; New Terminal works afterwards.
+**Quit Fuse-X** / Command-Q requests the same orderly guest shutdown and disk
+flush as `shutdown`. The bundle is launched by the script with the selected disk
+and host-folder options; standalone Finder launch is not configured yet.
+
+The hosted `/dev/gfx` implements GX RGB565 creation, upload, fill, overlapping
+copy, presentation, titles, input/state, Unix readiness and destruction. Up to
+16 surfaces have independent input queues and opaque, non-reused handles.
+FUZIX checks process ownership; inherited descriptors cannot destroy a parent's
+windows. Successful exec and process exit release owned windows. Four PTYs
+currently limit the total of native terminals, Nano-X terminals and Telnet
+shells. Standalone GX programs scale their fixed framebuffer on host resize;
+Nano-X windows resize their guest canvases and notify clients (up to 1024×768,
+subject to guest memory). Fixed-size clients retain that restriction.
+
+Run `nxclock &`, `nxeyes &` or `nxterm &` in GUI mode: each Nano-X top-level
+opens its own Mac window with native chrome. Child widgets stay in their
+parent's private canvas; overlapping virtual coordinates do not overlap pixels
+across native windows. macOS owns top-level placement and window management.
+`startx` ensures the service exists, opens Applications and Terminal, and returns
+to the shell. It reuses a running service and does not start NanoWM. Closing
+client windows leaves the service and kernel running. Native GUI clients release
+inherited terminal stdio and survive launching-terminal closure; redirected
+files/pipes and explicit process termination still work. The RVM desktop and
+shared application sources remain unchanged. See the
+[desktop design](../docs/fuse-x/desktop.md) for lifecycle details and limits.
+
+The adapter copies guest buffers synchronously and publishes immutable frames.
+The Mac main thread owns windows/GPU/menus; the guest worker owns the kernel.
+No UI callback retains a guest pointer or directly forks a guest process. New
+Terminal requests are bounded and consumed by PID 1. Shared graphics sources
+are adapted in the build directory, leaving the VM desktop sources unchanged.
+
+Run the integrated checks on a disposable disk:
+
+```sh
+make -C fuse-x test-graphics
+cargo test -p rcc-native-runtime --lib
+```
+
+The checks cover C16 layouts, ownership across fork, stale handles, title
+updates, overlapping copies, exit/exec cleanup, Nano-X drawing, a PTY shell,
+client timers/malformed requests/resource limits, private top-level/child
+rendering, resize/reparent/map/title/close, persistent service startup and GUI
+survival across terminal hangup with PTY reuse. Native window/menu interactions also require a graphical Mac
+session; the restricted command runner cannot register an AppKit application.

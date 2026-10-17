@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "use_runtime": true,
+  "description": "Lynx-style bitfields preserve adjacent flags, truncate unsigned stores and sign-extend signed fields"
+}

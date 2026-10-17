@@ -103,8 +103,8 @@ def main():
         # must create it through ordinary guest mkdir, without image import.
         old = directory / 'old-root.img'
         builder = (HERE.parent / 'ports/fuzix/tools/disk.mjs').as_uri()
-        source = ('import fs from "node:fs";import {rootImage} from ' + repr(builder) + ';'
-                  'fs.writeFileSync(process.argv[1],rootImage([...["init","sh"].map(id=>'
+        source = ('import fs from "node:fs";import {rootImage,atomicWrite} from ' + repr(builder) + ';'
+                  'atomicWrite(process.argv[1],rootImage([...["init","sh"].map(id=>'
                   '({name:id==="init"?"/init":"/bin/sh",mode:0o100755,'
                   'data:Buffer.from("FXN1:"+id+":1\\n")})),{name:"/bin/cat",mode:0o100755,'
                   'data:fs.readFileSync(process.argv[2])}],2048,128));')

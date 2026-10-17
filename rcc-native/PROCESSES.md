@@ -52,7 +52,9 @@ Process-enabled programs divide compatibility memory into:
 | Banks 0–239 | Private process RAM; MMIO remains a shared host service |
 | Banks 240–255 | Explicit shared kernel arena |
 
-The existing private global bank, stack region and heap start remain unchanged.
+Small programs retain global bank 1. Larger programs use banks 32–47 for
+private globals, reserved from allocation. The stack region and heap start
+remain unchanged.
 Private `malloc` is bounded below bank 240. Ordinary native programs continue
 to use all 256 banks for their existing layout.
 
@@ -161,7 +163,8 @@ rcc link-native --kernel kernel.ir application.ir -o hosted
 ```
 
 Only definitions in kernel units become shared globals (bank 240 onwards).
-Application units retain private globals in bank 1. The linker reserves the
+Application units retain private globals in bank 1, or banks 32–47 for larger
+images. The linker reserves the
 shared global region before allocating other kernel objects. Either process API
 opts the linked program into resumable code generation.
 

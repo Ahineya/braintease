@@ -14,6 +14,33 @@ pub(super) fn pointer(index: usize) -> u64 {
     (((index / BANK) as u64) << 16) | (index % BANK) as u64
 }
 impl Runtime {
+    pub(super) fn exclude_globals(&mut self, range: std::ops::Range<usize>) {
+        if self
+            .allocated
+            .iter()
+            .any(|(&start, &size)| start < range.end && range.start < start + size)
+        {
+            fatal("native globals overlap an existing allocation");
+        }
+        self.free = self
+            .free
+            .iter()
+            .flat_map(|(&start, &size)| {
+                let end = start + size;
+                if start >= range.end || end <= range.start {
+                    return vec![(start, size)];
+                }
+                let mut pieces = Vec::new();
+                if start < range.start {
+                    pieces.push((start, range.start - start));
+                }
+                if end > range.end {
+                    pieces.push((range.end, end - range.end));
+                }
+                pieces
+            })
+            .collect();
+    }
     pub(super) fn allocate(&mut self, count: u64) -> u64 {
         allocate_from(&mut self.free, &mut self.allocated, count)
     }
@@ -39,6 +66,20 @@ impl Runtime {
         });
         self.memory.enable_processes();
     }
+}
+
+#[no_mangle]
+unsafe extern "C" fn rcc_native_global_memory(ctx: *mut Runtime, bank: u64, cells: u64) -> u64 {
+    use rcc_ir::native_image::{GLOBAL_BANK, GLOBAL_BANKS};
+    if bank != u64::from(GLOBAL_BANK) || cells == 0 || cells > u64::from(GLOBAL_BANKS) * BANK as u64
+    {
+        fatal("invalid native global reservation");
+    }
+    let rt = unsafe { &mut *ctx };
+    let range = bank as usize * BANK..bank as usize * BANK + cells as usize;
+    rt.exclude_globals(range.clone());
+    rt.extended_globals = Some(range);
+    0
 }
 
 pub(super) fn allocate_from(
@@ -94,6 +135,29 @@ pub(super) fn release_from(
         }
     }
     free.insert(start, size);
+}
+
+#[cfg(test)]
+mod global_tests {
+    use super::*;
+    #[test]
+    fn extended_globals_are_excluded_from_allocations_and_fork_privately() {
+        let mut rt = Runtime::new();
+        let cells = 140003;
+        unsafe { rcc_native_global_memory(&mut rt, 32, cells) };
+        let start = 32 * BANK;
+        rt.memory.write(start + 64000, 0xbeef);
+        let before = (32 - 5) * BANK - 1;
+        assert_eq!(rt.allocate(before as u64), pointer(5 * BANK + 1));
+        let after = rt.allocate(100);
+        assert_eq!(after, pointer(start + cells as usize));
+        rt.enable_process_memory();
+        let mut child = rt.memory.clone();
+        child.write(start + 64000, 0x1234);
+        assert_eq!(rt.memory.read(start + 64000), 0xbeef);
+        rt.release(after);
+        assert_eq!(rt.allocate(200), after);
+    }
 }
 
 // SAFETY CONTRACT for all generated-code entry points: ctx points to the one

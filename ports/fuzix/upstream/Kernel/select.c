@@ -3,12 +3,15 @@
 #include <kdata.h>
 #include <printf.h>
 
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
 
 /* Select maps live in the in-core inode. The on-disk address array is
  * also used for pipe data and is too small for larger process tables. */
 
 uint16_t pipesel = 0;
+#ifdef CONFIG_SELECT
+extern unsigned ripple_select_active;
+#endif
 
 void seladdwait(struct selmap *s)
 {
@@ -71,6 +74,9 @@ void selwake_inode(inoptr i, uint16_t mask)
 
 void selwake_dev(uint_fast8_t major, uint_fast8_t minor, uint16_t mask)
 {
+#ifdef CONFIG_SELECT
+    if(!ripple_select_active)return;
+#endif
 	irqflags_t irq = di();
 	uint16_t v = (major << 8) | minor;
 	inoptr i = i_tab;
@@ -115,6 +121,7 @@ void selwake_pipe(inoptr i, uint16_t mask)
 }
 
 
+#ifndef CONFIG_RIPPLE
 /*******************************************
   _select (nfd, base)            Function 72
   int nfd;
@@ -246,5 +253,6 @@ done:
 
 #undef nfd
 #undef base
+#endif /* !CONFIG_RIPPLE: see ripple/selectwait.c */
 
 #endif

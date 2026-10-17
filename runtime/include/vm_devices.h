@@ -30,6 +30,7 @@
 #define VM_DEVICE_HOST_MONOTONIC 8
 #define VM_DEVICE_HOST_REALTIME 9
 #define VM_DEVICE_HOST_IDLE 10
+#define VM_DEVICE_HOST_TERMINAL 11
 #define VM_HOST_IDLE_MAX_MS 10U
 #define VM_INPUT_EVENT_CELLS 20
 #define VM_INPUT_BATCH_MAX 64
@@ -66,6 +67,7 @@
 #define VM_CAP_MUSIC 0x0100U
 #define VM_CAP_HOST_CLOCK 0x1000U
 #define VM_CAP_HOST_IDLE 0x2000U
+#define VM_CAP_HOST_TERMINAL 0x4000U
 #define VM_KEY_COUNT 256
 #define VM_KEY_STATE_WORDS 16
 
@@ -194,6 +196,10 @@ typedef struct VmHostTime {
     unsigned long nanoseconds, resolution_ns;
 } VmHostTime;
 
+typedef struct VmTerminalSize {
+    unsigned short rows, columns;
+} VmTerminalSize;
+
 /* Wire-independent C objects. Absolute coordinates are signed guest pixels; relative deltas are raw
  * device units (X right, Y down). Auxiliary button IDs are host-dependent. Wheels
  * use signed 16.16 lines. Sequence numbers wrap modulo 2^32. */
@@ -237,6 +243,9 @@ unsigned short vm_host_realtime(VmHostTime *time);
  * always reread monotonic time afterwards. Invalid requests never sleep.
  * This is a bounded polling fallback, not an event subscription. */
 unsigned short vm_host_idle(unsigned short milliseconds);
+/* Live host console dimensions; unsupported without an attached terminal.
+ * Failure leaves the output object unchanged. Does not advance guest time. */
+unsigned short vm_host_terminal_size(VmTerminalSize *size);
 /* Input commands collect live events independently of NEXT_TICK. Failed
  * calls leave the output objects unchanged. Capacity must be 1..64. */
 unsigned short vm_input_read(VmInputEvent *events, unsigned short capacity,

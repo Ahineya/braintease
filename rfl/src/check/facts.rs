@@ -180,8 +180,13 @@ impl<'a> Checker<'a> {
             ExprKind::Borrow { .. }
             | ExprKind::Await(_)
             | ExprKind::Try(_)
-            | ExprKind::Slice { .. }
             | ExprKind::Deref(_) => None,
+            // A string slice remains a String. Preserve this hint for overloaded
+            // addition and comparison even when neither operand is a literal.
+            ExprKind::Slice { base, .. } => self
+                .peek(base)
+                .filter(|ty| self.referent(*ty) == Ty::String)
+                .map(|_| Ty::String),
             ExprKind::Assoc {
                 ty_name, method, ..
             } => {

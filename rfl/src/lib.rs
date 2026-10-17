@@ -6,6 +6,7 @@ mod auto_import;
 mod check;
 mod completion;
 mod error;
+mod format;
 mod ide;
 mod lexer;
 mod lower;
@@ -20,6 +21,7 @@ mod ty;
 mod typed;
 
 pub use error::CompileError;
+pub use format::{format_edits, format_source, FormatEdit};
 pub use native::{compile_file_to_native, run_native_file, run_native_program};
 pub use rcc_ir::target::Target;
 pub use lsp::serve as serve_lsp;
@@ -97,6 +99,7 @@ fn asm_of(module: &Module) -> Result<String, CompileError> {
             use_v2: true,
             trace_spills: false,
             segmented_stack: false,
+            banked_globals: false,
         },
     )
     .map_err(CompileError::plain)?;

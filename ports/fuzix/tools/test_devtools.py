@@ -169,9 +169,11 @@ def seed(image):
     manifest = image.with_suffix('.json'); manifest.write_text(json.dumps(files))
     subprocess.run(['node', '--input-type=module', '-e', '''
 import fs from 'node:fs';import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const f=process.argv[1],d=fs.readFileSync(f),r=fatFile(d,'ROOTFS.IMG');
-fs.writeFileSync(f,r.replace(installRoot(r.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
+const f=process.argv[1],d=openImage(f),r=fatFile(d,'ROOTFS.IMG');
+atomicWrite(f,r.replace(installRoot(r.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
 ''', str(image), str(manifest)], cwd=ROOT, check=True)
 
 

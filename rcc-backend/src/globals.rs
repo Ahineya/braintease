@@ -11,10 +11,10 @@ use log::debug;
 /// Information about a global variable's allocation
 #[derive(Debug, Clone)]
 pub struct GlobalInfo {
-    /// Address in global memory (bank 0)
-    pub address: u16,
+    /// Linear cell offset in this translation unit, before link-time placement.
+    pub address: u32,
     /// Size in 16-bit words
-    pub size: u16,
+    pub size: u32,
 }
 
 /// Global variable manager for tracking and lowering globals
@@ -22,11 +22,12 @@ pub struct GlobalManager {
     /// Map from global name to allocation info
     allocations: HashMap<String, GlobalInfo>,
     /// Next available global address
-    next_address: u16,
+    next_address: u32,
     /// Sanitized module name used to uniquify the GP base label
     module_name: String,
-    definitions: Vec<(String, u16)>,
+    definitions: Vec<(String, u32)>,
     bank_size: u16,
+    banked_globals: bool,
 }
 
 fn sanitize_module_name(name: &str) -> String {
@@ -59,10 +60,18 @@ impl GlobalManager {
             module_name: format!("{}_{}", sanitize_module_name(module_name), uuid::Uuid::new_v4().simple()),
             definitions: Vec::new(),
             bank_size,
+            banked_globals: false,
         }
     }
 
     /// Linker-relocatable label for word 0 of this TU's GP data, if any globals exist
+    pub fn with_banked_globals(mut self, enabled: bool) -> Self {
+        self.banked_globals = enabled;
+        self
+    }
+
+    pub fn banked_globals(&self) -> bool { self.banked_globals }
+
     pub fn gp_base_label(&self) -> Option<String> {
         if self.next_address == 0 {
             None
@@ -72,7 +81,7 @@ impl GlobalManager {
     }
 
     /// Total GP words allocated in this translation unit
-    pub fn total_words(&self) -> u16 {
+    pub fn total_words(&self) -> u32 {
         self.next_address
     }
 
@@ -92,25 +101,39 @@ impl GlobalManager {
 
     pub fn unit_tag(&self) -> &str { &self.module_name }
 
-    fn emit_gp_addr(&self, dest: Reg, address: u16) -> Vec<AsmInst> {
+    fn emit_gp_addr(&self, dest: Reg, address: u32) -> Vec<AsmInst> {
         let label = self.gp_base_label();
         emit_addr_constant(dest, address as i16, true, label.as_deref())
     }
     
     /// Initializer destinations retain their owning symbol so the linker may
     /// compact other globals without changing offsets within this object.
-    fn emit_initializer_addr(&self, dest: Reg, global: &GlobalVariable, address: u16) -> Vec<AsmInst> {
+    fn emit_initializer_addr(&self, dest: Reg, global: &GlobalVariable, address: u32) -> Vec<AsmInst> {
         if let Some(info) = self.get_global_info(&global.name) {
+            if self.banked_globals {
+                return self.emit_banked_address(dest, Reg::T6, &global.name, i64::from(address) - i64::from(info.address));
+            }
             emit_addr_constant(dest, address.wrapping_sub(info.address) as i16, true, Some(&global.name))
         } else {
             self.emit_gp_addr(dest, address)
         }
     }
 
+    fn initializer_bank(&self) -> Reg { if self.banked_globals { Reg::T6 } else { Reg::Gp } }
+
+    fn emit_banked_address(&self, addr: Reg, bank: Reg, symbol: &str, cells: i64) -> Vec<AsmInst> {
+        let expression = format!("{symbol}+{cells}");
+        vec![AsmInst::LiLabel(addr, format!("%data_offset({expression})")),
+             AsmInst::LiLabel(bank, format!("%data_bank({expression})")),
+             AsmInst::Add(bank, bank, Reg::Gp)]
+    }
+
     /// Allocate space for a global variable
     pub fn allocate_global(&mut self, global: &GlobalVariable) -> GlobalInfo {
         // Calculate size in words (16-bit)
-        let size = global.var_type.size_in_words().unwrap_or(1) as u16;
+        let size = if global.linkage == Linkage::Declaration { 0 } else {
+            u32::try_from(global.var_type.size_in_words().unwrap_or(1)).expect("validated global size")
+        };
         
         let info = GlobalInfo {
             address: self.next_address,
@@ -119,7 +142,7 @@ impl GlobalManager {
         
         if global.linkage != Linkage::Declaration {
             self.next_address = self.next_address.checked_add(size)
-                .expect("global storage exceeds the 16-bit data address space");
+                .expect("global storage exceeds the 32-bit data address space");
             self.definitions.push((global.name.clone(), size));
         }
         self.allocations.insert(global.name.clone(), info.clone());
@@ -171,6 +194,7 @@ impl GlobalManager {
     /// Control flow and unknown instructions discard the proof; this does not
     /// move or remove any memory writes (including volatile initialization).
     fn reuse_initializer_cursor(&self, insts: Vec<AsmInst>) -> Vec<AsmInst> {
+        if self.banked_globals { return insts; }
         let Some(base) = self.gp_base_label() else { return insts; };
         let mut result = Vec::with_capacity(insts.len());
         let mut cursor: Option<(String, u16)> = None;
@@ -214,7 +238,7 @@ impl GlobalManager {
     }
 
     /// Lower array initialization
-    fn lower_array_init(&self, global: &GlobalVariable, values: &[i64], address: u16) -> Vec<AsmInst> {
+    fn lower_array_init(&self, global: &GlobalVariable, values: &[i64], address: u32) -> Vec<AsmInst> {
         let mut insts = Vec::new();
         
         // Add comment - if it looks like string data, format it nicely
@@ -242,9 +266,10 @@ impl GlobalManager {
         // Store each value
         let mut addr = address;
         for &value in values {
+            if self.banked_globals && value == 0 { addr += 1; continue; }
             insts.push(AsmInst::Li(Reg::T0, value as i16));
             insts.extend(self.emit_initializer_addr(Reg::T1, global, addr));
-            insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1)); // Store to global memory (bank GP)
+            insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1)); // Store to global memory (bank GP)
             addr += 1;
         }
         
@@ -252,7 +277,7 @@ impl GlobalManager {
     }
     
     /// Lower single value initialization
-    fn lower_single_value_init(&self, global: &GlobalVariable, init_value: &Value, address: u16) -> Vec<AsmInst> {
+    fn lower_single_value_init(&self, global: &GlobalVariable, init_value: &Value, address: u32) -> Vec<AsmInst> {
         let mut insts = Vec::new();
         
         insts.push(AsmInst::Comment(format!("Global variable: {} at address {}", 
@@ -260,14 +285,15 @@ impl GlobalManager {
         
         match init_value {
             Value::Constant(val) => {
+                if self.banked_globals && *val == 0 { return insts; }
                 // Handle different sizes
                 match &global.var_type {
                     IrType::I64 | IrType::F64 => {
                         let parts = crate::instr::i64::split_const64(*val);
                         for i in 0..4 {
                             insts.push(AsmInst::Li(Reg::T0, parts[i]));
-                            insts.extend(self.emit_initializer_addr(Reg::T1, global, address + i as u16));
-                            insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                            insts.extend(self.emit_initializer_addr(Reg::T1, global, address + i as u32));
+                            insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                         }
                     }
                     IrType::I32 | IrType::F32 => {
@@ -278,18 +304,18 @@ impl GlobalManager {
                         // Store low word
                         insts.push(AsmInst::Li(Reg::T0, low));
                         insts.extend(self.emit_initializer_addr(Reg::T1, global, address));
-                        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                         
                         // Store high word
                         insts.push(AsmInst::Li(Reg::T0, high));
                         insts.extend(self.emit_initializer_addr(Reg::T1, global, address + 1));
-                        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                     }
                     _ => {
                         // Default: single word store
                         insts.push(AsmInst::Li(Reg::T0, *val as i16));
                         insts.extend(self.emit_initializer_addr(Reg::T1, global, address));
-                        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                     }
                 }
             }
@@ -304,6 +330,9 @@ impl GlobalManager {
                         insts.extend(self.lower_function_pointer_init(global, name, address));
                     }
                     Value::Global(name) => {
+                        if self.banked_globals {
+                            return self.lower_address_pointer_init(global, &Value::Global(name.clone()), rcc_ir::BankTag::Global, 0, address);
+                        }
                         // Need to get the address of the referenced global
                         insts.push(AsmInst::Comment(format!("Pointer to global '{}'", name)));
                         
@@ -315,12 +344,12 @@ impl GlobalManager {
                             let _ = target_info;
                             insts.push(AsmInst::LiLabel(Reg::T0, name.clone()));
                             insts.extend(self.emit_initializer_addr(Reg::T1, global, address));
-                            insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                            insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                             
                             // Store the bank (GP register value for global)
                             insts.push(AsmInst::Add(Reg::T0, Reg::Gp, Reg::R0)); // Copy GP register value
                             insts.extend(self.emit_initializer_addr(Reg::T1, global, address + 1));
-                            insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                            insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                         } else {
                             // Global not found - this is a compiler error
                             panic!("COMPILER ERROR: Global pointer '{}' references undefined global '{}'", 
@@ -328,14 +357,17 @@ impl GlobalManager {
                         }
                     }
                     Value::Constant(val) => {
+                        if self.banked_globals && fp.bank == rcc_ir::BankTag::Global {
+                            return self.lower_address_pointer_init(global, fp.addr.as_ref(), fp.bank, 0, address);
+                        }
                         // Direct constant pointer value
                         if matches!(fp.bank, rcc_ir::BankTag::Global) {
-                            insts.extend(self.emit_gp_addr(Reg::T0, *val as u16));
+                            insts.extend(self.emit_gp_addr(Reg::T0, *val as u32));
                         } else {
                             insts.push(AsmInst::Li(Reg::T0, *val as i16));
                         }
                         insts.extend(self.emit_initializer_addr(Reg::T1, global, address));
-                        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                         
                         // Store the bank component
                         match fp.bank {
@@ -352,7 +384,7 @@ impl GlobalManager {
                             _ => panic!("unsupported constant global pointer bank"),
                         }
                         insts.extend(self.emit_initializer_addr(Reg::T1, global, address + 1));
-                        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+                        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
                     }
                     _ => {
                         panic!("COMPILER ERROR: Global pointer '{}' has unsupported address type: {:?}", 
@@ -375,14 +407,14 @@ impl GlobalManager {
         
         insts
     }
-    fn lower_aggregate_init(&self, global: &GlobalVariable, ty: &IrType, values: &[Value], address: u16) -> Vec<AsmInst> {
+    fn lower_aggregate_init(&self, global: &GlobalVariable, ty: &IrType, values: &[Value], address: u32) -> Vec<AsmInst> {
         let mut values = values.iter().peekable();
         let insts = self.lower_aggregate_elements(global, ty, &mut values, address);
         assert!(values.next().is_none(), "too many global aggregate initializers");
         insts
     }
 
-    fn lower_aggregate_elements<'a>(&self, global: &GlobalVariable, ty: &IrType, values: &mut std::iter::Peekable<std::slice::Iter<'a, Value>>, address: u16) -> Vec<AsmInst> {
+    fn lower_aggregate_elements<'a>(&self, global: &GlobalVariable, ty: &IrType, values: &mut std::iter::Peekable<std::slice::Iter<'a, Value>>, address: u32) -> Vec<AsmInst> {
         let element_types: Vec<&IrType> = match ty {
             IrType::Array { size, element_type } => (0..*size).map(|_| element_type.as_ref()).collect(),
             IrType::Struct { fields, .. } => fields.iter().collect(),
@@ -412,28 +444,41 @@ impl GlobalManager {
                     insts.extend(self.lower_single_value_init(&element, value, offset));
                 }
             }
-            offset += element_type.size_in_words().expect("sized global initializer") as u16;
+            offset += element_type.size_in_words().expect("sized global initializer") as u32;
         }
         insts
     }
 
-    fn lower_function_pointer_init(&self, global: &GlobalVariable, name: &str, address: u16) -> Vec<AsmInst> {
+    fn lower_function_pointer_init(&self, global: &GlobalVariable, name: &str, address: u32) -> Vec<AsmInst> {
         let mut insts = vec![AsmInst::LiLabel(Reg::T0, format!("%offset({name})"))];
         insts.extend(self.emit_initializer_addr(Reg::T1, global, address));
-        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
         insts.push(AsmInst::LiLabel(Reg::T0, format!("%bank({name})")));
         insts.extend(self.emit_initializer_addr(Reg::T1, global, address + 1));
-        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
         insts
     }
 
     /// Relocate the base first, then add the displacement to the complete fat
     /// pointer. A 16-bit addition alone loses both bank-size and CPU-word carry.
-    fn lower_address_pointer_init(&self, global: &GlobalVariable, base: &Value, bank: rcc_ir::BankTag, cells: i64, address: u16) -> Vec<AsmInst> {
+    fn lower_address_pointer_init(&self, global: &GlobalVariable, base: &Value, bank: rcc_ir::BankTag, cells: i64, address: u32) -> Vec<AsmInst> {
         use rcc_ir::BankTag;
+        if self.banked_globals && bank == BankTag::Global {
+            let (symbol, displacement) = match base {
+                Value::Global(name) => (name.clone(), cells),
+                Value::Constant(n) => (self.gp_base_label().expect("allocated globals"), n.checked_add(cells).expect("global address displacement overflow")),
+                _ => panic!("invalid static address base: {base:?}"),
+            };
+            let mut insts = self.emit_banked_address(Reg::T0, Reg::T2, &symbol, displacement);
+            insts.extend(self.emit_initializer_addr(Reg::T1, global, address));
+            insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
+            insts.extend(self.emit_initializer_addr(Reg::T1, global, address + 1));
+            insts.push(AsmInst::Store(Reg::T2, self.initializer_bank(), Reg::T1));
+            return insts;
+        }
         let mut insts = match base {
             Value::Global(name) => vec![AsmInst::LiLabel(Reg::T0, name.clone())],
-            Value::Constant(offset) if bank == BankTag::Global => self.emit_gp_addr(Reg::T0, *offset as u16),
+            Value::Constant(offset) if bank == BankTag::Global => self.emit_gp_addr(Reg::T0, *offset as u32),
             Value::Constant(offset) => vec![AsmInst::Li(Reg::T0, *offset as i16)],
             _ => panic!("invalid static address base: {base:?}"),
         };
@@ -465,9 +510,9 @@ impl GlobalManager {
             insts.push(AsmInst::Add(Reg::T0, Reg::T3, Reg::R0));
         }
         insts.extend(self.emit_initializer_addr(Reg::T1, global, address));
-        insts.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
+        insts.push(AsmInst::Store(Reg::T0, self.initializer_bank(), Reg::T1));
         insts.extend(self.emit_initializer_addr(Reg::T1, global, address + 1));
-        insts.push(AsmInst::Store(Reg::T2, Reg::Gp, Reg::T1));
+        insts.push(AsmInst::Store(Reg::T2, self.initializer_bank(), Reg::T1));
         insts
     }
 
@@ -501,7 +546,7 @@ mod tests {
         let mut original = Vec::new();
         for offset in offsets {
             original.push(AsmInst::Li(Reg::T0, offset as i16));
-            original.extend(manager.emit_gp_addr(Reg::T1, offset));
+            original.extend(manager.emit_gp_addr(Reg::T1, u32::from(offset)));
             original.push(AsmInst::Store(Reg::T0, Reg::Gp, Reg::T1));
         }
         let optimized = manager.reuse_initializer_cursor(original.clone());

@@ -1,0 +1,51 @@
+import { UP, DOWN, LEFT, RIGHT, HOME, END, BACKSPACE, PAGE_UP, PAGE_DOWN, CLOSED, function_key } from "std/curses";
+export type Action = Navigate(i16) | First | Last | Enter | Parent | Switch | Reload | Copy | Move | Mkdir | Delete | View | Quit | Console | SinglePanel | ThemeMenu | About | Edit | Rename | NoAction;
+export fn action(key: i16, page: i16) -> Action {
+    if (key == CLOSED || key == 3 || key == 113 || key == function_key(10)) {
+        Quit
+    } else if (key == UP || key == 107) {
+        Navigate(-1)
+    } else if (key == DOWN || key == 106) {
+        Navigate(1)
+    } else if (key == PAGE_UP) {
+        Navigate(-page)
+    } else if (key == PAGE_DOWN) {
+        Navigate(page)
+    } else if (key == HOME) {
+        First
+    } else if (key == END) {
+        Last
+    } else if (key == 13 || key == 10 || key == RIGHT || key == 108) {
+        Enter
+    } else if (key == BACKSPACE || key == LEFT || key == 104) {
+        Parent
+    } else if (key == 9 || key == 353) {
+        Switch
+    } else if (key == 18 || key == function_key(2)) {
+        Reload
+    } else if (key == 1 || key == function_key(1)) {
+        About
+    } else if (key == 101 || key == function_key(4)) {
+        Edit
+    } else if (key == 114) {
+        Rename
+    } else if (key == 99 || key == function_key(5)) {
+        Copy
+    } else if (key == 109 || key == function_key(6)) {
+        Move
+    } else if (key == 110 || key == function_key(7)) {
+        Mkdir
+    } else if (key == 100 || key == function_key(8)) {
+        Delete
+    } else if (key == 118 || key == function_key(3)) {
+        View
+    } else if (key == function_key(9)) {
+        ThemeMenu
+    } else if (key == 15) {
+        Console
+    } else if (key == 16) {
+        SinglePanel
+    } else {
+        NoAction
+    }
+}

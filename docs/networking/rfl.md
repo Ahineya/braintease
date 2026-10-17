@@ -718,6 +718,7 @@ packet applications pass on native, RVM interpreter and JIT: guest DNS → HTTP,
 DHCP → leased DNS → HTTP, and six server connections with loss, reordering and
 zero windows. A retained reactor callback stops after its driver is destroyed.
 The 35 bridge and 15 retirement assertions pass on native/RVM, as do the existing
-193 C HTTP/listener assertions. Two separate pre-existing C compiler defects
-remain registered RED; see [the evidence](testing.md#rfl-library-17-october-2026).
+193 C HTTP/listener assertions. The C pointer/null conditional defect is now
+fixed and its bridge workaround removed. The separate wide-argument call
+regression remains RED; see [the evidence](testing.md#rfl-library-17-october-2026).
 No live RFL browser test or new RBF networking run is claimed.

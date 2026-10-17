@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 PORT = Path(__file__).resolve().parents[1]
@@ -122,3 +123,6 @@ with tempfile.TemporaryDirectory(prefix='fuzix-shell-') as temporary:
             'literal $SOURCED' in output and 'libccheck passed' in output), output
     subprocess.run(['python3', str(PORT/'tools/fsck.py'), str(disk)], check=True)
 print('Bourne shell passed: scripts, control flow, globbing, substitutions, heredocs, traps, wait, recovery and persistence; ' + engine_label)
+
+subprocess.run([sys.executable,str(PORT/'tools/test_shrc.py'),'--build',str(build),
+                '--engine','jit' if engines[0] else 'interpreter'],check=True)

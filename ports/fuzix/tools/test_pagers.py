@@ -134,9 +134,11 @@ with tempfile.TemporaryDirectory(prefix='fuzix-pagers-') as temporary:
     subprocess.run(['node', '--input-type=module', '-e', """
 import fs from 'node:fs';
 import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const disk = fs.readFileSync(process.argv[1]), root = fatFile(disk, 'ROOTFS.IMG');
-fs.writeFileSync(process.argv[1], root.replace(installRoot(root.data, JSON.parse(fs.readFileSync(process.argv[2])))));
+const disk = openImage(process.argv[1]), root = fatFile(disk, 'ROOTFS.IMG');
+atomicWrite(process.argv[1], root.replace(installRoot(root.data, JSON.parse(fs.readFileSync(process.argv[2])))));
 """, str(image), str(seed)], cwd=ROOT, check=True)
     for jit in ((True, False) if a.engine == 'both' else (a.engine == 'jit',)):
         exercise(image, jit)

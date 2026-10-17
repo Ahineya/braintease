@@ -27,6 +27,9 @@ with tempfile.TemporaryDirectory(prefix='fuzix-gfx-') as temp:
     out=run(image,"gfxcheck\necho GX_STATUS:$?\ngterm sh -c 'echo Terminal_alive; echo graphical_pty > /gfx-note'\necho GTERM_STATUS:$?\ncat /gfx-note\nshutdown\n")
     for expected in ['GX_STATUS:0','GTERM_STATUS:0','graphical_pty','disk synced; power off.']:
         assert expected in out,(expected,out)
+    out=run(image,"gterm --geometry 64x20 -- sh -c 'stty -a > /gterm-size'\necho SMALL_STATUS:$?\ncat /gterm-size\ngterm -g 0x20 true\necho ZERO_STATUS:$?\ngterm -g 999999999999x20 true\necho HUGE_STATUS:$?\ngterm -g 64x31 true\necho TALL_STATUS:$?\ngterm -g 40x12 false\necho CHILD_STATUS:$?\nshutdown\n")
+    for expected in ['SMALL_STATUS:0','20 rows 64 columns','320 ypixels 512 xpixels','ZERO_STATUS:2','HUGE_STATUS:2','TALL_STATUS:2','CHILD_STATUS:1','disk synced; power off.']:
+        assert expected in out,(expected,out)
     subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
     out=run(image,'cat /gfx-note\nshutdown\n');assert 'graphical_pty' in out,out
     subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
@@ -41,4 +44,4 @@ with tempfile.TemporaryDirectory(prefix='fuzix-gfx-') as temp:
     expected=struct.pack('<'+'H'*len(pixels),*pixels)
     actual=raw.read_bytes()
     assert actual==expected,('RGB565 mismatch',next((i//2 for i,(x,y) in enumerate(zip(actual,expected)) if x!=y),None),len(actual))
-print('Graphics JIT passed: cross-bank/page and stack uploads, exact RGB565 overlap/fill, ownership/cleanup, FD31 CLOEXEC, eight PTYs, graphical PTY exec and persistent restart')
+print('Graphics JIT passed: uploads/overlap/fill, ownership/cleanup, FD31 CLOEXEC, eight PTYs, configurable terminal/PTY geometry, invalid-size rejection, child status and persistent restart')

@@ -5,6 +5,7 @@ use std::sync::mpsc::{self, Sender};
 
 enum Event {
     DisplayRequested,
+    HostedDisplayRequested,
     Finished,
 }
 
@@ -13,6 +14,7 @@ pub(super) struct Host {
     pacing: Option<bool>,
     events: Option<Sender<Event>>,
     window_requested: bool,
+    hosted_window_requested: bool,
 }
 impl Host {
     fn new(headless: bool, pacing: Option<bool>) -> Self {
@@ -21,6 +23,7 @@ impl Host {
             pacing,
             events: None,
             window_requested: false,
+            hosted_window_requested: false,
         }
     }
     pub(super) fn from_env() -> Self {
@@ -54,6 +57,15 @@ impl Host {
             .send(Event::DisplayRequested)
             .unwrap_or_else(|_| fatal("native display host disconnected"));
         self.window_requested = true;
+    }
+    pub(super) fn request_hosted_window(&mut self) {
+        if !self.headless && !self.hosted_window_requested {
+            if let Some(events) = &self.events {
+                if events.send(Event::HostedDisplayRequested).is_ok() {
+                    self.hosted_window_requested = true;
+                }
+            }
+        }
     }
 }
 
@@ -100,6 +112,8 @@ pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
         )
         .unwrap_or_else(|e| fatal(&e));
     let state = runtime.display.get_state();
+    let graphics = runtime.graphics.shared.clone();
+    let finished_graphics = graphics.clone();
     let (events, receiver) = mpsc::channel();
     runtime.host.events = Some(events);
     let worker = std::thread::spawn(move || {
@@ -110,18 +124,27 @@ pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
             fatal("requested native frame was never presented");
         }
         runtime.display.shutdown();
+        finished_graphics.lock().unwrap().finished = true;
         // A finished program wakes the main thread without creating an event
         // loop. On panic, dropping the runtime disconnects the same channel.
         let _ = runtime.host.events.as_ref().unwrap().send(Event::Finished);
         status
     });
-    if let Ok(Event::DisplayRequested) = receiver.recv() {
-        // A short-lived program may already have finished after requesting UI.
-        if !state.lock().unwrap().should_quit() {
-            if let Err(error) = rvm::display_rgb565::run_rgb565_display(state) {
-                fatal(&format!("native display: {error}"));
+    match receiver.recv() {
+        Ok(Event::HostedDisplayRequested) => {
+            if let Err(error) = hosted_graphics::run(graphics) {
+                fatal(&format!("hosted display: {error}"));
             }
         }
+        Ok(Event::DisplayRequested) => {
+            // A short-lived program may already have finished after requesting UI.
+            if !state.lock().unwrap().should_quit() {
+                if let Err(error) = rvm::display_rgb565::run_rgb565_display(state) {
+                    fatal(&format!("native display: {error}"));
+                }
+            }
+        }
+        _ => {}
     }
     worker
         .join()

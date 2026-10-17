@@ -5,11 +5,35 @@ import { Reactor, RunError, ReactorStopped, TurnBudgetExceeded, InvalidClock } f
 import { JoinHandle, JoinState, HandleLive, Waiting, task_gate, result_gate, abort_state, finish_state, Finished, Aborted, Collected, JoinError, TaskCancelled, ENTER, LEAVE, COMPLETE, REQUEST_CANCEL, DESTROY, CANCEL_REQUESTED } from "std/scope_state";
 import { replace } from "std/mem";
 
+/// A spawn failure because the scope is closed or has reached its task limit.
 export type SpawnError = ScopeClosed | TaskLimit;
-export struct TaskEntry { storage:ErasedOwner, run:fn(Context)->bool, waker:Waker }
-export struct ScopeData { queue:TaskSet, entries:Vec<Option<TaskEntry>>, cursor:usize, closed:bool }
-export struct TaskScope { state:Owned<ScopeData> }
+/// Internal scoped-task storage: erased ownership, a poll callback and a generation-checked wake token.
+export struct TaskEntry {
+    /// Owned erased child-future storage.
+    storage:ErasedOwner,
+    /// Bounded poll callback returning whether the child is finished.
+    run:fn(Context)->bool,
+    /// Wake slot allocated for this child.
+    waker:Waker
+}
+/// Shared scope implementation state. Prefer the `TaskScope` methods over modifying this representation.
+export struct ScopeData {
+    /// Shared wake registry for the scope.
+    queue:TaskSet,
+    /// Fixed-capacity task entries; empty slots contain `None`.
+    entries:Vec<Option<TaskEntry>>,
+    /// Rotating first slot for fair scheduling.
+    cursor:usize,
+    /// Whether further spawns are forbidden.
+    closed:bool
+}
+/// An owned group of independently scheduled child futures. Closing or dropping the scope cancels unfinished children.
+export struct TaskScope {
+    /// Owned shared scope state; use the scope methods to manage children.
+    state:Owned<ScopeData>
+}
 
+/// Creates a task scope with fixed capacity and initial wrapping millisecond time; accepts 1–1024 task slots.
 export fn task_scope(capacity:usize,now:u32)->Result<TaskScope,TaskError> {
     let queue=task_set(capacity,now)?;
     let mut entries:Vec<Option<TaskEntry>> = [];
@@ -38,7 +62,9 @@ fn reap(data:&mut ScopeData) {
     }
 }
 impl TaskScope {
+    /// Closes the scope and releases its child task entries, cancelling unfinished children. Further spawns fail.
     export fn close(&mut self) {let data=self.state.borrow_mut();close_data(data);}
+    /// Moves a future into the scope and returns its join handle. Returns `ScopeClosed` or `TaskLimit` if it cannot be scheduled.
     export fn spawn<F:Future>(&mut self,future:F)->Result<JoinHandle<F::Output>,SpawnError> {
         let work=own_future(move(future));
         let data=self.state.borrow_mut();
@@ -54,19 +80,23 @@ impl TaskScope {
         // user code has directly tampered with the support representation.
         Err(TaskLimit)
     }
+    /// Reaps retired tasks and counts the remaining active child entries.
     export fn active(&mut self)->usize {
         let data=self.state.borrow_mut();active_data(data)
     }
     // One bounded turn; false means tasks still need service. Never sleeps
     // beyond the reactor's hint and never treats a pending task as an error.
+    /// Performs one bounded scheduling turn. Returns true when no children remain, false when work is pending, or a reactor/clock error.
     export fn turn<R:Reactor>(&mut self,reactor:&mut R)->Result<bool,RunError> {
         let data=self.state.borrow_mut();turn_data(data,reactor)
     }
+    /// Services scoped tasks until all complete. Reactor or clock failure closes the scope and cancels unfinished children.
     export fn run<R:Reactor>(&mut self,reactor:&mut R)->Result<unit,RunError> {
         let data=self.state.borrow_mut();
         while (active_data(data)!=0) {turn_data(data,reactor)?;}
         Ok({})
     }
+    /// Runs the scope for at most `turns` reactor turns. Exhaustion closes it, cancels unfinished work and returns `TurnBudgetExceeded`.
     export fn run_with_budget<R:Reactor>(&mut self,reactor:&mut R,turns:u32)->Result<unit,RunError> {
         let data=self.state.borrow_mut();
         let mut used:u32=0;

@@ -748,10 +748,17 @@ fn c_strings(procs: &[Proc]) -> Vec<Vec<u16>> {
     for proc in procs {
         for seg in &proc.segs {
             for insn in &seg.insns {
-                if let Insn::CStr { bytes, .. } = insn {
-                    if !cstrs.iter().any(|found: &Vec<u16>| found == bytes) {
-                        cstrs.push(bytes.clone());
+                let bytes = match insn {
+                    Insn::CStr { bytes, .. } => bytes.clone(),
+                    // Keep short literals inline; long literals belong in data,
+                    // not one instruction sequence per character at every use.
+                    Insn::Str { bytes, .. } if bytes.len() >= 8 => {
+                        bytes.iter().map(|byte| u16::from(*byte)).collect()
                     }
+                    _ => continue,
+                };
+                if !cstrs.contains(&bytes) {
+                    cstrs.push(bytes);
                 }
             }
         }
@@ -765,7 +772,7 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     if built.need_alloc || built.need_fail || built.need_heap {
         module.add_function(extern_fn("rfl_halt", IrType::Void, Vec::new()));
         if !built.need_io {
-            module.add_function(extern_fn("putchar", IrType::Void, vec![IrType::I16]));
+            module.add_function(extern_fn("putchar", IrType::I16, vec![IrType::I16]));
         }
     }
     if built.need_alloc || built.need_heap {
@@ -786,7 +793,7 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
         ));
     }
     if built.need_io {
-        module.add_function(extern_fn("putchar", IrType::Void, vec![IrType::I16]));
+        module.add_function(extern_fn("putchar", IrType::I16, vec![IrType::I16]));
     }
     for ext in &built.externs {
         if module.get_function(&ext.name).is_some() {

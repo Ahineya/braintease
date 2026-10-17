@@ -12,6 +12,7 @@ static int netcall(long op, long a, long b, long c, long d, long e, long f) {
     return call(66, (long)args, 0, 0, 0);
 }
 int socket(int domain,int type,int protocol) { return netcall(0,domain,type,protocol,0,0,0); }
+int socketpair(int domain,int type,int protocol,int fds[2]) { return netcall(11,domain,type,protocol,(long)fds,0,0); }
 int listen(int fd,int backlog) { return netcall(1,fd,backlog,0,0,0,0); }
 int bind(int fd,const struct sockaddr *a,socklen_t n) { return netcall(2,fd,(long)a,n,0,0,0); }
 int connect(int fd,const struct sockaddr *a,socklen_t n) { return netcall(3,fd,(long)a,n,0,0,0); }
@@ -29,6 +30,9 @@ ssize_t send(int fd,const void *b,size_t n,int flags) { return sendto(fd,b,n,fla
 ssize_t recv(int fd,void *b,size_t n,int flags) { return recvfrom(fd,b,n,flags,0,0); }
 int shutdown(int fd,int how) { return netcall(8,fd,how,0,0,0,0); }
 int getpeername(int fd,struct sockaddr *a,socklen_t *n) { return netcall(9,fd,(long)a,(long)n,0,0,0); }
+int getsockopt(int fd,int level,int option,void *value,socklen_t *length) {
+    return netcall(10,fd,level,option,(long)value,(long)length,0);
+}
 uint16_t htons(uint16_t n) { return (n>>8)|(n<<8); }
 uint32_t htonl(uint32_t n) {
     return ((n&255UL)<<24)|((n&65280UL)<<8)|((n>>8)&65280UL)|(n>>24);

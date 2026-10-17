@@ -7,11 +7,14 @@ import { host_reactor_with } from "std/host";
 import { Future, sleep } from "std/future";
 import { Result } from "std/result";
 
+/// Networking failure, including invalid arguments, allocation, guest stack/DNS status, or an unavailable reactor.
 export type NetError = BadArgument | NoMemory | NetworkFailure(u16) | DnsFailure(u16) | ReactorUnavailable;
 impl NetError {
+    /// Maps a guest networking status to `BadArgument`, `NoMemory` or `NetworkFailure(code)`.
     export fn from_code(code:u16)->NetError {
         if (code==2) {BadArgument} else if (code==64) {NoMemory} else {NetworkFailure(code)}
     }
+    /// Returns a human-readable description of the networking error.
     export fn message(&self)->String {
         match self {
             BadArgument=>"invalid networking argument",
@@ -30,7 +33,18 @@ impl NetError {
     }
 }
 
-export struct Ipv4 {a:u8,b:u8,c:u8,d:u8}
+/// An IPv4 address stored as four octets in network display order.
+export struct Ipv4 {
+    /// First address octet.
+    a:u8,
+    /// Second address octet.
+    b:u8,
+    /// Third address octet.
+    c:u8,
+    /// Fourth address octet.
+    d:u8
+}
+/// Constructs an IPv4 address from four octets.
 export fn ipv4(a:u8,b:u8,c:u8,d:u8)->Ipv4 {Ipv4{a:a,b:b,c:c,d:d}}
 fn octet(n:u8)->String {
     let value=n as u16;
@@ -40,11 +54,40 @@ fn octet(n:u8)->String {
     if (value>=100) {a+b+c} else if (value>=10) {b+c} else {c}
 }
 impl Ipv4 {
+    /// Formats the address in dotted-decimal notation, without leading zeroes.
     export fn text(&self)->String {octet(self.a)+"."+octet(self.b)+"."+octet(self.c)+"."+octet(self.d)}
 }
-export struct NetworkConfig {interface:u16,seed:u16,address:Ipv4,mask:Ipv4,gateway:Ipv4,dns:Ipv4}
-export struct Network {state:Owned<*mut u16>,interface:u16,seed:u16}
-export struct NetworkReactor {inner:ClockedReactor,guard:Owned<*mut u16>}
+/// Interface identity, random seed, IPv4 address, subnet mask, gateway and DNS server for a guest network.
+export struct NetworkConfig {
+    /// Guest network interface index.
+    interface:u16,
+    /// Initialization seed supplied to the guest stack.
+    seed:u16,
+    /// Local IPv4 address.
+    address:Ipv4,
+    /// IPv4 subnet mask.
+    mask:Ipv4,
+    /// Default IPv4 gateway.
+    gateway:Ipv4,
+    /// IPv4 address of the DNS server.
+    dns:Ipv4
+}
+/// A retained guest network handle. Drive its reactor while polling DHCP, DNS and HTTP futures.
+export struct Network {
+    /// Owned retained guest network handle; use the network methods to manage it.
+    state:Owned<*mut u16>,
+    /// Guest network interface index.
+    interface:u16,
+    /// Initialization seed retained for configuration snapshots.
+    seed:u16
+}
+/// A guarded host reactor that services the guest network stack. Only one network driver may be active for a network.
+export struct NetworkReactor {
+    /// Host clock, idle and service reactor.
+    inner:ClockedReactor,
+    /// Owned guard retaining the active guest network driver.
+    guard:Owned<*mut u16>
+}
 
 // Stable C storage is owned through a lease. These helpers expose no C layout;
 // callers never retain a reference into a movable RFL value.
@@ -66,7 +109,9 @@ fn create(config:NetworkConfig,dynamic:bool)->Result<Network,NetError> {
     if (handle.is_null()) {return Err(NoMemory);}
     Ok(Network{state:owned(handle,fn(p:&mut *mut u16)=>{rfl_net_release(*p);}),interface:config.interface,seed:config.seed})
 }
+/// Creates a guest network with an explicit static IPv4 configuration.
 export fn static_network(config:NetworkConfig)->Result<Network,NetError> {create(config,false)}
+/// Creates an unconfigured guest network on `interface`, using `seed` for initialization. Poll `acquire` with its reactor to obtain a DHCP lease.
 export fn dhcp_network(interface:u16,seed:u16)->Result<Network,NetError> {
     let zero=ipv4(0,0,0,0);
     create(NetworkConfig{interface:interface,seed:seed,address:zero,mask:zero,gateway:zero,dns:zero},true)
@@ -82,10 +127,13 @@ fn configuration(handle:*mut u16,interface:u16,seed:u16)->Result<NetworkConfig,N
         dns:ipv4(data[12] as u8,data[13] as u8,data[14] as u8,data[15] as u8)})
 }
 impl Network {
+    /// Retains the same guest network state in a new owned handle; can fail if the handle cannot be retained.
     export fn clone(&self)->Result<Network,NetError> {
         Ok(Network{state:lease(pointer(&self.state))?,interface:self.interface,seed:self.seed})
     }
+    /// Reads the network's current IPv4 configuration.
     export fn configuration(&self)->Result<NetworkConfig,NetError> {configuration(pointer(&self.state),self.interface,self.seed)}
+    /// Creates the guarded reactor that pumps this network's protocol work. Fails if a driver is already active or host reactor support is unavailable.
     export fn reactor(&self)->Result<NetworkReactor,NetError> {
         let handle=rfl_net_driver(pointer(&self.state));
         if (handle.is_null()) {return Err(NetworkFailure(13));}
@@ -102,12 +150,15 @@ impl Network {
         let inner=match host_reactor_with(service,1) {Ok(r)=>r,Err(_)=>{return Err(ReactorUnavailable);}};
         Ok(NetworkReactor{inner:inner,guard:move(guard)})
     }
+    /// Builds a lazy DHCP acquisition future with a millisecond timeout. Drive the network reactor until it completes.
     export fn acquire(&self,timeout_ms:u32)->Async<Result<NetworkConfig,NetError>> {
         acquire(lease(pointer(&self.state)),self.interface,self.seed,timeout_ms)
     }
+    /// Builds a lazy guest DNS lookup future with a millisecond timeout. Accepts names of 1–253 indexed bytes and requires the network reactor to be driven.
     export fn resolve(&self,name:String,timeout_ms:u32)->Async<Result<Ipv4,NetError>> {
         resolve(lease(pointer(&self.state)),name,timeout_ms)
     }
+    /// Waits for pending TCP closes while the reactor runs. Timeouts above 600000 ms are invalid; expiry returns a network timeout error.
     export fn drain_closing(&self,timeout_ms:u32)->Async<Result<unit,NetError>> {
         drain_closing(lease(pointer(&self.state)),timeout_ms)
     }
@@ -127,6 +178,7 @@ async fn drain_closing(owner:Result<Owned<*mut u16>,NetError>,timeout:u32)->Resu
     Err(NetworkFailure(15))
 }
 impl NetworkReactor {
+    /// Stops the network driver and requests orderly shutdown of the inner host reactor.
     export fn stop(&mut self) {rfl_net_stop(pointer(&self.guard));self.inner.stop();}
 }
 impl Reactor for NetworkReactor {

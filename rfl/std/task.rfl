@@ -1,15 +1,28 @@
 // Single-thread wake registry. Each slot owns a closure with shared scalar state.
 // Copies share that state; no pointer into a movable RFL value is retained.
+/// Wake-registry failure: invalid capacity or duration, or no available task slot.
 export type TaskError = InvalidCapacity | NoTaskSlot | InvalidDuration;
+/// A generation-checked wake token. Copies share a slot; stale tokens cannot wake a reused slot.
 export struct Waker {
+    /// Shared wake-slot command callback. Prefer the waker methods.
     dispatch: fn(u16, u32, u32) -> u32,
+    /// Generation identifying this allocation of the wake slot.
     generation: u32,
 }
+/// A single-thread wake registry with fixed capacity, a wrapping clock and per-slot timers.
 export struct TaskSet {
+    /// Shared slot callbacks for the fixed-capacity wake registry.
     slots: Vec<fn(u16, u32, u32) -> u32>,
+    /// Shared accessor for the registry clock sample.
     clock: fn(Option<u32>) -> u32,
 }
-export struct Context { waker: Waker, now: u32 }
+/// The current poll's wake token and wrapping monotonic millisecond sample.
+export struct Context {
+    /// Wake token to register when another poll will be needed.
+    waker: Waker,
+    /// Wrapping monotonic milliseconds sampled for this poll.
+    now: u32
+}
 
 // Private command tags keep wake tokens independent of public trait objects.
 const ALLOCATE:u16 = 1;
@@ -61,6 +74,7 @@ fn make_slot(now:u32) -> fn(u16, u32, u32) -> u32 {
     }
 }
 
+/// Creates a wake registry with 1–1024 slots and the initial wrapping clock sample `now`.
 export fn task_set(capacity:usize, now:u32) -> Result<TaskSet, TaskError> {
     if (capacity == 0 || capacity > 1024) { return Err(InvalidCapacity); }
     let mut slots:Vec<fn(u16, u32, u32)->u32> = [];
@@ -75,6 +89,7 @@ export fn task_set(capacity:usize, now:u32) -> Result<TaskSet, TaskError> {
 }
 
 impl TaskSet {
+    /// Allocates a live, initially runnable wake slot; returns `NoTaskSlot` if the registry is full.
     export fn allocate(&self) -> Result<Waker, TaskError> {
         let mut slot:usize = 0;
         while (slot < self.slots.len()) {
@@ -85,6 +100,7 @@ impl TaskSet {
         }
         Err(NoTaskSlot)
     }
+    /// Advances the registry clock and makes expired timers runnable. Returns false if the forward delta exceeds `2^31 - 1`.
     export fn tick(&self, now:u32) -> bool {
         let access = self.clock;
         if (now - access(None) > 2147483647) { return false; }
@@ -94,6 +110,7 @@ impl TaskSet {
         true
     }
     // Some(0) means runnable work; None means no registered timer or wakeup.
+    /// Returns `Some(0)` for runnable work, the shortest timer delay otherwise, or `None` if no timer or wake is registered.
     export fn wait_hint(&self) -> Option<u32> {
         let mut delay:u32 = 4294967295;
         let mut slot:usize = 0;
@@ -108,24 +125,29 @@ impl TaskSet {
 }
 
 impl Waker {
+    /// Marks a live slot runnable; returns false for a stale or retired token.
     export fn wake(&self) -> bool {
         let call = self.dispatch;
         call(WAKE, self.generation, 0) != 0
     }
     // Executor use: clear BEFORE polling, preserving wakes during that poll.
+    /// Takes and clears the runnable flag before polling, preserving wakeups registered during that poll.
     export fn take_ready(&self) -> bool {
         let call = self.dispatch;
         call(TAKE, self.generation, 0) != 0
     }
+    /// Retires this generation's slot, invalidating its copied tokens; returns whether it was live.
     export fn retire(&self) -> bool {
         let call = self.dispatch;
         call(RETIRE, self.generation, 0) != 0
     }
+    /// Returns whether this generation still owns a live wake slot.
     export fn is_live(&self) -> bool {
         let call = self.dispatch;
         call(LIVE, self.generation, 0) != 0
     }
     // Deadline must be within the wrapping clock's half-range window.
+    /// Registers a wrapping millisecond deadline for a live slot. The deadline must lie within the clock's half-range window.
     export fn wake_at(&self, deadline:u32) -> bool {
         let call = self.dispatch;
         call(ARM, self.generation, deadline) != 0

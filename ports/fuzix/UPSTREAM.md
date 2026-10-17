@@ -31,14 +31,16 @@ sources; newly rewritten adaptations are marked as such.
 
 The socket header includes `sys/types.h` through the include search path so
 Ripple's 32-bit size and syscall types apply even when sockets are included
-first. Its syscall carrier selects 32 bits for both Ripple memory profiles.
+first. Its syscall carrier selects 32 bits for the Ripple ABI.
 The kernel and library interface headers rename private union members to
 avoid self-referential field macros in RCC; the public names and layout are
 unchanged. Socket syscalls and inode hooks are implemented in
 `ripple/sockets.c`, using the repository's guest Ethernet/IP/TCP runtime;
 upstream's network daemon and socket engine are not linked. Telnet tools
 and their bounded protocol codec are port-local sources, backed by the
-existing PTY driver and Bourne shell.
+existing PTY driver and Bourne shell. The public socket header also declares
+`socketpair`; `ripple/localsockets.c` and the port-local `sys/un.h` provide
+pathname Unix stream sockets with filesystem permissions and select readiness.
 Ripple sockets allocate cache-only inodes with `NO_DEVICE`; `filesys.c`
 skips disk writes and disk inode freeing for these entries, including sync
 and shutdown with a remote shell still connected.
@@ -100,6 +102,11 @@ bounded session history, ANSI cursor editing and completion from the live shell
 `PATH`/builtin table and filesystem, without mixing libc malloc with the V7
 shell's private brk arena. Buffered interactive reads return immediately after
 consuming a completed line. RVM forwards ANSI navigation keys in text mode.
+`ripple/shell-prompt.c` expands PS1/PS2 backslash escapes in fixed buffers,
+including identity, directory, clock, ANSI color and multiline prompts. Main's
+prompt hook formats once before editing or fallback output; the editor measures
+the final logical prompt line and honors nonprinting spans without sending
+marker bytes to the terminal. The same module is built for Fuse-X.
 
 `Applications/levee/` is imported from the same pinned archive. Levee was
 developed by David L Parsons; its redistribution notice remains in each source
@@ -150,12 +157,24 @@ pager carries its upstream GPL3 notice. Portable `termcap`, `tgetent`,
 parsing is bounded, tty lookup uses the device number, and sysconf accounts
 for native 16-bit characters. Port-local libc adds `_uname` and `mkdtemp`.
 
-C16 V2 increases filesystem blocks from 256 to 1,024 native characters, while
+C16 V3 now retains 1,024-character blocks while widening disk block references
+and volume/free-space counts to 32 bits. Inodes grow to 64 cells with 17 direct
+and single/double/triple indirect roots. File mapping and truncation retain wide
+counts; writes reject signed-offset overflow, and truncated partial tails are
+cleared. Internal statfs records require a V3 tag to protect older callers from
+an oversized record copy; statvfs counters are wide. See the
+[V3 specification](../../docs/arch/c16-filesystem.md). V2 roots are converted by
+the host tools with backups, retaining inode identities and Unix metadata.
+The Ripple FAT chain moves from kernel GP to supervisor banks 98–99. Sparse
+host tools avoid whole-image copies. The default root is 1 GiB on both Ripple
+and native Fuse-X; no compiler calling convention or VM device changes are needed.
+
+The earlier C16 V2 increased filesystem blocks from 256 to 1,024 native characters, while
 keeping the existing RCC ABI and RXE1 executable format. `blk512.c` uses
 `INO_PER_BLOCK` and the native number of indirect pointers rather than fixed
 8-bit-platform constants. The Ripple disk driver splits transfers at host
 storage-window and FAT-cluster boundaries. Image/check/install tools share a
-single V2 geometry definition, and the shared FAT image builder accepts an
+single geometry definition, and the shared FAT image builder accepts an
 explicit cluster size while preserving its rOS defaults. Old C16 V1 disks
 require a fresh image and are retained as backups by the launcher.
 Inode allocation/free checks also use the configured density. Exec argument
@@ -327,3 +346,54 @@ MMU metadata are relocated to reserved banks; the process page pool is unchanged
 The local GX device and graphical PTY terminal are new port code. Nano-X is an
 independent pinned import under `ports/nanox`, with a separate C16 adaptation
 audit; the Nano-X server is not linked into FUZIX.
+
+`CONFIG_SELECT` enables inode waiter maps/helpers without the unrelated level-2
+facilities. Ripple's syscall 72 uses the shared versioned C16 request and wide
+fd sets in `ripple/selectwait.c`; the old upstream syscall is retained only for
+other platforms. Pipe reads/writes and last-close notify selectors; writes
+preserve nonblocking flags and enforce queue capacity. TTY readiness honors
+canonical lines, EOF and noncanonical thresholds, and queue flush/erase notify
+writers. Canonical EOF no longer emits a spurious bell. Process exit removes
+select registrations before slot reuse. The socket header exposes the port's
+SO_ERROR subset; its implementation remains in the existing guest socket bridge.
+
+The Bourne shell's `main.c` loads `$HOME/.shrc` through the existing dot-command
+parser after interactive setup and before the first prompt. A once-only guard
+survives syntax-error recovery; missing files, empty/unset HOME and nonregular
+files are skipped. Script/command-mode shells do not load it unless explicitly
+interactive. The existing login `.profile` path remains separate and precedes
+interactive `.shrc` loading. `tools/test_shrc.py` checks native and JIT guest
+startup, prompt persistence, HOME resolution, script isolation and recovery;
+it is included in the shell and native prompt regression suites.
+
+The shared curses sources under `Library/libs/curses/` are imported from this
+same archive. Their adaptations are recorded separately in `curses.patch`
+(relative to `upstream/`, replay with `git apply --unidiff-zero`); local input,
+window allocation and screen lifetime replacements live in `ripple/curses/`.
+The superseded upstream routines remain available for provenance but are not
+linked. See [CURSES.md](CURSES.md) for the API subset and native/RVM tests.
+
+The color/window extension widens imported cell pointers and cell temporaries
+to `chtype`, preserving legacy attribute bits while adding color-pair bits.
+Those mechanical edits are in `curses.patch`. `ripple/curses/color.c` and
+`render.c` replace termcap-dependent attribute output and the old refresh path
+with ANSI color/DEC line output and clipped, complete-layer composition. The
+old `doupdt`, `refresh` and `winscrol` units remain as provenance and are excluded
+from both userspace builds. Local scrolling copies cells so derived windows
+retain aliases; color-pair changes and terminal restoration invalidate output.
+
+The fine-deadline work adds port-local `ripple/deadline.c` and `ripple/clock.c`
+on both targets. The original `_time` in `syscall_proc.c` is compiled as
+`ripple_legacy_time`, preserving its existing selectors. The port adds a fine
+monotonic sample selector without changing the old timer/accounting units.
+`ripple/libc/clock.c` replaces the selected upstream clock_gettime/getres units;
+the original imported sources remain unchanged for provenance and other ports.
+See [TIMERS.md](TIMERS.md) for the clock ABI and actual guest validation.
+
+The Bourne shell's `scan()` dequotes every expanded word, including argv[0].
+Upstream skipped that final chain entry, leaving quote marker bits in the command
+name: `getpath()` then missed quoted slashes, searched PATH for absolute paths,
+and passed a marked argv[0] to scripts. Dequoting after expansion preserves
+literal glob characters while fixing quoted builtin names and executable paths.
+`tools/test_shell_paths.py` covers both kernels, including single/double quotes,
+variables, spaces, punctuation, relative commands, script $0 and exit status.

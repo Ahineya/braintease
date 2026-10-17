@@ -69,6 +69,7 @@ impl CallingConvention {
                 CallArg::Scalar(_) => 1,
                 CallArg::FatPointer { .. } => 2,
                 CallArg::I64 { .. } => 4,
+                CallArg::StackSlots(ref slots) => slots.len(),
             });
         if let Some(from) = stack_args_from {
             register_items.retain(|(i, _)| *i < from);
@@ -195,6 +196,7 @@ impl CallingConvention {
                         trace!("  Arg {} (i64) goes in A0-A3", idx);
                         reg_args.push((idx, arg_regs[*reg_slot], arg));
                     }
+                    CallArg::StackSlots(_) => unreachable!("staged argument assigned to registers"),
                 }
             } else {
                 // This arg goes on stack
@@ -202,6 +204,7 @@ impl CallingConvention {
                     CallArg::Scalar(_) => trace!("  Arg {idx} (scalar) goes on stack"),
                     CallArg::FatPointer { .. } => trace!("  Arg {idx} (fat ptr) goes on stack"),
                     CallArg::I64 { .. } => trace!("  Arg {idx} (i64) goes on stack"),
+                    CallArg::StackSlots(_) => trace!("  Arg {idx} (staged) goes on stack"),
                 }
                 stack_args.push((idx, arg));
             }
@@ -240,6 +243,15 @@ impl CallingConvention {
                         }
                         stack_offset += 4;
                         stack_src_regs.extend(words);
+                    }
+                    CallArg::StackSlots(slots) => {
+                        for slot in slots.iter().rev() {
+                            insts.push(AsmInst::AddI(Reg::Sc, Reg::Fp, *slot));
+                            insts.push(AsmInst::Load(Reg::Sc, Reg::Sb, Reg::Sc));
+                            insts.push(AsmInst::Store(Reg::Sc, Reg::Sb, Reg::Sp));
+                            insts.push(AsmInst::AddI(Reg::Sp, Reg::Sp, 1));
+                        }
+                        stack_offset += slots.len() as i16;
                     }
                 }
             }
@@ -283,6 +295,7 @@ impl CallingConvention {
                             }
                         }
                     }
+                    CallArg::StackSlots(_) => unreachable!("staged argument assigned to registers"),
                 }
             }
         }
@@ -457,6 +470,7 @@ impl CallingConvention {
                 CallArg::Scalar(_) => 1,
                 CallArg::FatPointer { .. } => 2,
                 CallArg::I64 { .. } => 4,
+                CallArg::StackSlots(slots) => slots.len() as i16,
             };
         }
         debug!("  Call will use {stack_words} stack words");
@@ -472,6 +486,7 @@ impl CallingConvention {
                 CallArg::Scalar(r) => consumed.push(*r),
                 CallArg::FatPointer { addr, bank } => consumed.extend([*addr, *bank]),
                 CallArg::I64 { words } => consumed.extend(*words),
+                CallArg::StackSlots(_) => {},
             }
         }
         if let CallTarget::Registers { addr, bank } = &target {
@@ -710,6 +725,9 @@ pub enum CallArg {  // This needs to stay pub for the re-export
     Scalar(Reg),
     FatPointer { addr: Reg, bank: Reg },
     I64 { words: [Reg; 4] },
+    /// Low word first, each at a private FP-relative home. Used only for stack
+    /// arguments so arbitrarily long lists do not exhaust pinned registers.
+    StackSlots(Vec<i16>),
 }
 
 // Tests moved to tests/calling_convention_tests.rs

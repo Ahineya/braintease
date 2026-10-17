@@ -15,6 +15,10 @@ struct Cli {
     /// Output file
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Write JSON symbol locations (code instruction indices and dense data cells)
+    #[arg(long)]
+    map: Option<PathBuf>,
     
     /// Output format (binary, text, macro, bf, archive, sys, rxe)
     #[arg(short, long, default_value = "binary")]
@@ -137,6 +141,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let linker = Linker::new(cli.bank_size);
     match linker.link_archives(object_files, archives) {
         Ok(mut program) => {
+            if let Some(path) = &cli.map {
+                let code: std::collections::BTreeMap<_, _> = program.labels.iter()
+                    .map(|(name, label)| (name, label.absolute_address / 4)).collect();
+                let data: std::collections::BTreeMap<_, _> = program.data_labels.iter().collect();
+                fs::write(path, serde_json::to_vec_pretty(&serde_json::json!({
+                    "bank_size": program.bank_size, "code": code, "data": data,
+                }))?)?;
+            }
             if cli.format == "sys" {
                 program.apply_code_bank_base(cli.code_bank_base);
             }
@@ -158,6 +170,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("✓ Linked to binary {}", output_path.display());
                 }
                 "sys" => {
+                    if program.data.len() > usize::from(program.bank_size) {
+                        return Err("SYS1 boot loader supports one global data bank; use RXE1 for banked applications".into());
+                    }
                     let binary = program.to_sys(cli.code_bank_base, cli.gp_bank, cli.sb_bank);
                     fs::write(&output_path, binary)?;
                     println!("✓ Linked to SYS1 {}", output_path.display());

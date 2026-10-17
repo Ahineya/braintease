@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/select.h>
 #include <gx.h>
 #include "pty-limits.h"
 extern long call(unsigned,long,long,long,long);
@@ -31,6 +32,12 @@ int main(int argc,char **argv) {
     extra=open(path,O_RDWR|O_NOCTTY);C(extra<0&&errno==EBUSY);
     for(i=0;i<RIPPLE_PTY_COUNT;i++)close(ptys[i]);
     create();h.version=GX_VERSION;h.handle=w.window;
+    {
+        fd_set reads,writes;struct timeval timeout={0,0};
+        FD_ZERO(&reads);FD_ZERO(&writes);FD_SET(fd,&reads);FD_SET(fd,&writes);
+        C(select(fd+1,&reads,&writes,NULL,&timeout)==1);
+        C(!FD_ISSET(fd,&reads)&&FD_ISSET(fd,&writes));
+    }
     {
         struct gx_wait wait;int master,slave,pid;char byte;
         master=open("/dev/ptyp0",O_RDWR|O_NONBLOCK|O_NOCTTY);C(master>=0);

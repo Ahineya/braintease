@@ -2,15 +2,30 @@ package org.ripple.rfl;
 
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.platform.lsp.api.customization.LspCustomization;
+import com.intellij.platform.lsp.api.customization.LspFormattingCustomizer;
+import com.intellij.platform.lsp.api.customization.LspFormattingSupport;
 import com.intellij.platform.lsp.api.customization.LspRenameCustomizer;
 import com.intellij.platform.lsp.api.customization.LspRenameSupport;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/** Use IDEA's native Refactor > Rename flow, including preview and undo. */
+/** Route native editor actions to the compiler's shared language services. */
 final class RflLspCustomization extends LspCustomization {
+    private final LspFormattingSupport formatting = new LspFormattingSupport() {
+        @Override public boolean shouldFormatThisFileExclusivelyByServer(
+                @NotNull VirtualFile file, boolean ideCanFormatThisFileItself,
+                boolean serverExplicitlyWantsToFormatThisFile) {
+            // These flags describe IDE formatting and explicit server selection,
+            // not document/range capabilities. Both can be false for our PSI.
+            return "rfl".equals(file.getExtension());
+        }
+    };
+
+    @Override public @NotNull LspFormattingCustomizer getFormattingCustomizer() { return formatting; }
+
     private final LspRenameSupport rename = new LspRenameSupport() {
         // The default only handles TEXT/TextMate files; RFL has its own PSI.
         @Override public boolean shouldRunRename(@NotNull PsiFile file) {

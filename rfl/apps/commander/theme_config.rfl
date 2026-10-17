@@ -1,0 +1,53 @@
+import { Entry, parse } from "lib/ini";
+import { Config, Role, loader, valid_name as library_valid_name } from "lib/tui_theme";
+import { environment } from "std/posix";
+
+export fn role_names() -> Vec<String> {
+    ["text", "frame", "title", "selected", "inactive", "status", "error", "directory", "dialog", "input", "accent", "muted", "shadow"]
+}
+
+fn role(foreground: i16, background: i16, bold: bool) -> Role {
+    Role { foreground: foreground, background: background, bold: bold, reverse: false, underline: false }
+}
+
+export fn classic() -> Config {
+    Config { name: "Classic Blue", roles: [role(7, 4, false), role(6, 4, false), role(7, 4, true), role(0, 6, false), role(7, 0, false), role(7, 0, false), role(7, 1, false), role(6, 4, true), role(0, 7, false), role(7, 4, false), role(3, 0, false), role(6, 4, false), role(0, 0, false)], lines: true }
+}
+
+export fn valid_name(name: String) -> bool {
+    library_valid_name(name)
+}
+
+export fn entries(text: String) -> Result<Vec<Entry>, String> {
+    match parse(text) {
+        Ok(values) => Ok(values),
+        Err(_) => Err("Invalid INI syntax or input limit")
+    }
+}
+
+export fn apply(config: Config, values: Vec<Entry>) -> Result<Config, String> {
+    let theme = loader(config, role_names())?;
+    for (i in 0..values.len()) {
+        theme.assignment(values[i])?;
+    }
+    Ok(theme.config())
+}
+
+export fn named(name: String) -> Result<Config, String> {
+    let theme = loader(classic(), role_names())?;
+    theme.named("/usr/share/mc/themes", name)?;
+    Ok(theme.config())
+}
+
+export fn configured() -> Result<Config, String> {
+    let theme = loader(classic(), role_names())?;
+    theme.file("/usr/share/mc/themes", "/etc/mc.ini", true)?;
+    let home = match environment("HOME") {
+        Ok(Some(home)) => home,
+        _ => ""
+    };
+    if (!home.is_empty()) {
+        theme.file("/usr/share/mc/themes", home + "/.config/mc/config.ini", true)?;
+    }
+    Ok(theme.config())
+}

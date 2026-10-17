@@ -69,6 +69,21 @@ class Terminal:
 def exercise(image, jit):
     t = Terminal(image, jit)
     try:
+        color = b'\x1b[32mP>\x1b[0m '
+        t.send(b"PS1='\\[\\e[32m\\]P>\\[\\e[0m\\] '\r")
+        t.until(color)
+        t.send(b'echo ac\x1b[Db\x1b[F\r')
+        output = t.until(color)
+        assert b'\nabc\n' in output and b'\x1b[3C\x1b[J' in output, output
+        t.send(b"PS1='HEADER\\n\\[\\e[32m\\]P>\\[\\e[0m\\] '\r")
+        t.until(color)
+        t.send(b'echo ac\x1b[Db\x1b[F')
+        output = t.until(b'\r\x1b[11C')
+        assert b'HEADER' not in output, output
+        t.send(b'\r')
+        assert b'\nabc\n' in t.until(color)
+        t.send(b"PS1='fuzix# '\r")
+        t.until(b'\r\nfuzix# ')
         assert b'argument: completion' in t.shell(b'hell\tcompletion\r')
         t.shell("echo FILE > /completion-note")
         assert b'\nFILE\n' in t.shell(b'cat /comple\t\r')
@@ -150,10 +165,12 @@ with tempfile.TemporaryDirectory(prefix='fuzix-interactive-') as temporary:
         fixtures = r"""
 import fs from 'node:fs';
 import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const f=process.argv[1], disk=fs.readFileSync(f), root=fatFile(disk,'ROOTFS.IMG');
+const f=process.argv[1], disk=openImage(f), root=fatFile(disk,'ROOTFS.IMG');
 const text=Array.from('line\n'.repeat(600),c=>c.charCodeAt(0));
-fs.writeFileSync(f,root.replace(installRoot(root.data,[
+atomicWrite(f,root.replace(installRoot(root.data,[
  {name:'/levee-large',mode:0o100644,data:text},
  {name:'/levee-original',mode:0o100644,data:text},
  {name:'/levee-native',mode:0o100644,data:[0x1234,0xffff,10,65,10]},

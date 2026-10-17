@@ -2,6 +2,8 @@
 //! Scope and type information comes from the parser's spans and the checker.
 
 mod associated;
+mod display;
+mod documentation;
 #[cfg(test)]
 mod extraction;
 mod traits;
@@ -41,6 +43,7 @@ pub struct Analysis {
     pub info: ProgramInfo,
     pub symbols: Vec<Symbol>,
     ast: Module,
+    documentation: std::collections::HashMap<usize, documentation::DocComment>,
 }
 
 impl Analysis {
@@ -63,10 +66,12 @@ impl Analysis {
                     info: empty_info(),
                     symbols: Vec::new(),
                     ast: empty_module(),
+                    documentation: std::collections::HashMap::new(),
                 };
             }
         };
         let symbols = symbols_of(&parsed);
+        let documentation = documentation::collect(source, &parsed);
         let (info, mut diagnostics) = if !parsed.imports.is_empty() && path.is_some() {
             match crate::modules::check_root(path.unwrap(), source, parsed.clone()) {
                 Ok(checked) => checked,
@@ -104,10 +109,15 @@ impl Analysis {
             info,
             symbols,
             ast: parsed,
+            documentation,
         }
     }
 
     pub fn hover(&self, offset: usize) -> Option<String> {
+        self.hover_type(offset).map(|text| self.display_type(&text))
+    }
+
+    fn hover_type(&self, offset: usize) -> Option<String> {
         if let Some(name) = self.uses().find(|name| name.span.contains(offset)) {
             return Some(name.ty.clone());
         }
@@ -178,6 +188,16 @@ impl Analysis {
     }
 
     pub fn completions(&self, offset: usize) -> Vec<Completion> {
+        self.completion_items(offset)
+            .into_iter()
+            .map(|mut item| {
+                item.detail = self.display_type(&item.detail);
+                item
+            })
+            .collect()
+    }
+
+    fn completion_items(&self, offset: usize) -> Vec<Completion> {
         let replace = ident_around(&self.source, offset);
         if let Some(items) = self.trait_qualified_completions(replace) {
             return items;
@@ -321,7 +341,7 @@ impl Analysis {
             .iter()
             .position(|span| offset < span.end)
             .unwrap_or(call.args.len()) as u32;
-        Some((label, active))
+        Some((self.display_type(&label), active))
     }
 
     pub fn token_type(&self, span: crate::ast::Span) -> u32 {
@@ -381,6 +401,9 @@ impl Analysis {
             hints_in_block(&func.body, &self.info.facts, &mut hints);
         }
         hints
+            .into_iter()
+            .map(|(offset, label)| (offset, self.display_type(&label)))
+            .collect()
     }
 
     fn method_completions(&self, dot: usize, replace: crate::ast::Span) -> Vec<Completion> {
@@ -1273,6 +1296,7 @@ fn push_function(symbols: &mut Vec<Symbol>, func: &Function, kind: SymbolKind) {
 
 fn empty_info() -> ProgramInfo {
     ProgramInfo {
+        display_names: std::collections::HashMap::new(),
         facts: Vec::new(),
         uses: Vec::new(),
         expr_types: Vec::new(),
@@ -1401,6 +1425,24 @@ mod tests {
             .is_none());
         assert!(doc.definition(invalid.find("std/math").unwrap()).is_some());
         assert!(doc.definition(invalid.find("from").unwrap()).is_none());
+    }
+
+    #[test]
+    fn companion_library_imports_navigate_and_hover() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let path = root.join("examples/companion-navigation.rfl");
+        let source = "import { parse } from \"lib/ini\"; fn main() { parse(\"x=y\"); }";
+        let doc = Analysis::open(Some(&path), source);
+        assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
+        let (file, span) = doc.definition(source.find("parse }").unwrap()).unwrap();
+        let file = file.unwrap();
+        assert_eq!(file, root.join("lib/ini.rfl").canonicalize().unwrap());
+        assert_eq!(
+            &std::fs::read_to_string(file).unwrap()[span.start..span.end],
+            "parse"
+        );
+        let hover = doc.hover_markdown(source.rfind("parse(").unwrap()).unwrap();
+        assert!(hover.contains("shared C reader"), "{hover}");
     }
 
     const EDITING_SOURCE: &str = "import { replace } from \"std/string\";\nimport { sin, PI } from \"std/math\";\nfn main() {\n let sample_rate: u32 = 44100;\n let frequency = 440.0;\n for (i in 0..sample_rate) {\n  let t = (i as f64) / (sample_rate as f64);\n  let sample = sin(2.0 * PI * frequency * t);\n  println(sample * 0.5 + 0.5);\n }\n let a = \"something\";\n let b = a.replace(\"some\", \"oth\");\n println(b);\n b.\n}\n";

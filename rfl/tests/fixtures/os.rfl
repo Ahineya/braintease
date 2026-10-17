@@ -1,0 +1,205 @@
+import { IoError, Errno, InvalidLength, InvalidPath, SameFile, UnsupportedFileType, create, open_read, open_append, read_bytes as read, write_all, arguments, environment, process_id, exit, metadata, read_dir, create_dir, remove_file, DIRECTORY, REGULAR, MAX_READ, SEEK_SET, set_permissions, executable, run_program } from "std/posix";
+import { copy_file, move_path, Moved, CopiedSourceRetained, shell_quote } from "../../apps/commander/actions";
+import {} from "std/option";
+import {} from "std/result";
+import { normalize, load_panel } from "../../apps/commander/model";
+import { theme_checks } from "./themes";
+import { number } from "../../apps/commander/format";
+
+fn ensure(condition: bool, code: i16) {
+    if (!condition) {
+        println("RFL_OS_FAILED");
+        println(code);
+        exit(code);
+    }
+}
+
+fn probe() -> Result<unit, IoError> {
+    theme_checks()?;
+    create_dir("/launch")?;
+    copy_file("/bin/rfl-probe", "/launch/runner")?;
+    let runner = metadata("/launch/runner")?;
+    let program = metadata("/bin/rfl-probe")?;
+    ensure(executable("/launch/runner")? && runner.mode == program.mode, 40);
+    create_dir("/edit")?;
+    let args_status = run_program("/bin/rfl-probe", ["literal-args", "a'b $xx.txt", "", "two words"])?;
+    ensure(args_status == 0, 52);
+    let quoted = create("/edit/a'b $xx.txt")?;
+    quoted.write_text("before edit\n")?;
+    move(quoted).close()?;
+    let editor = create("/tmp/test-editor")?;
+    editor.write_text("echo EDITOR_ARG:\"$1\"\necho EDITED >> \"$1\"\nexit 7\n")?;
+    move(editor).close()?;
+    ensure(shell_quote("a'b") == "'a'\"'\"'b'", 41);
+    create_dir("/scroll")?;
+    for (i in 0..40) {
+        let file = create("/scroll/item-" + number(i as u32))?;
+    }
+    ensure(process_id() > 1, 10);
+    let args = arguments();
+    ensure(args.len() >= 1, 11);
+    match environment("PATH")? {
+        Some(_) => {},
+        None => ensure(false, 12)
+    }
+    ensure(read(-1, 0)?.is_empty(), 13);
+    match read(-1, 1) {
+        Err(Errno(_)) => {},
+        _ => ensure(false, 14)
+    }
+    match read(0, MAX_READ + 1) {
+        Err(InvalidLength) => {},
+        _ => ensure(false, 15)
+    }
+    match create("/tmp/no\0file") {
+        Err(InvalidPath) => {},
+        _ => ensure(false, 16)
+    }
+    create_dir("/left")?;
+    create_dir("/right")?;
+    create_dir("/left/adir")?;
+    for (i in 0..48) {
+        let file = create("/tmp/rfl-owned")?;
+        file.write_text("closed on drop\n")?;
+    }
+    let file = create("/left/alpha.txt")?;
+    file.write_text("RFL file manager fixture\nsecond line\n")?;
+    move(file).close()?;
+    let file = create("/left/zz.txt")?;
+    file.write_text("last file\n")?;
+    move(file).close()?;
+    let file = open_append("/left/zz.txt")?;
+    file.write_text("appended\n")?;
+    move(file).close()?;
+    let file = create("/tmp/rfl-large")?;
+    let mut bytes: Vec<u8> = [];
+    let length: usize = 70000;
+    for (i in 0..length) {
+        bytes.push((i % 251) as u8);
+    }
+    file.write_all(bytes)?;
+    move(file).close()?;
+    let file = open_read("/tmp/rfl-large")?;
+    file.seek(65530, SEEK_SET)?;
+    let alias = file.try_clone()?;
+    let data = alias.read(20)?;
+    let boundary: usize = 65530;
+    ensure(data.len() == 20, 20);
+    for (i in 0..20 as usize) {
+        ensure(data[i] == ((boundary + i) % 251) as u8, 21);
+    }
+    let position = file.seek(0, 1)?;
+    ensure(position == 65550, 22);
+    let info = metadata("/tmp/rfl-large")?;
+    ensure(info.size == 70000, 23);
+    let info = metadata("/left")?;
+    ensure(info.kind == DIRECTORY, 24);
+    let panel = load_panel("/left")?;
+    ensure(panel.entries.len() == 4 && panel.entries[0].name == ".." && panel.entries[1].name == "adir" && panel.entries[2].name == "alpha.txt", 25);
+    ensure(normalize("/left/adir/.././alpha.txt") == "/left/alpha.txt", 26);
+    let count = copy_file("/tmp/rfl-large", "/right/large")?;
+    ensure(count == 70000, 27);
+    let copy = open_read("/right/large")?;
+    copy.seek(65530, SEEK_SET)?;
+    let data = copy.read(20)?;
+    for (i in 0..20 as usize) {
+        ensure(data[i] == ((boundary + i) % 251) as u8, 28);
+    }
+    move(copy).close()?;
+    remove_file("/right/large")?;
+    match copy_file("/left/alpha.txt", "/left/alpha.txt") {
+        Err(SameFile) => {},
+        _ => ensure(false, 29)
+    }
+    match copy_file("/left/alpha.txt", "/left/adir") {
+        Err(UnsupportedFileType) => {},
+        _ => ensure(false, 30)
+    }
+    ensure(read_dir("/right")?.is_empty(), 31);
+    let commander = metadata("/bin/rfl-fm")?;
+    let alias = metadata("/bin/mc")?;
+    ensure(commander.device == alias.device && commander.inode == alias.inode, 32);
+    println("RFL_OS_OK");
+    Ok({})
+}
+
+fn host_moves() -> Result<unit, IoError> {
+    match move_path("/mnt/host/input.bin", "/tmp/from-host")? {
+        Moved => {},
+        _ => ensure(false, 42)
+    }
+    let info = metadata("/tmp/from-host")?;
+    ensure(info.size == 70000, 43);
+    ensure(info.mode == 448 as u16, 44);
+    match metadata("/mnt/host/input.bin") {
+        Err(Errno(2)) => {},
+        _ => ensure(false, 45)
+    }
+    match move_path("/tmp/from-host", "/mnt/host/returned.bin")? {
+        Moved => {},
+        _ => ensure(false, 46)
+    }
+    match metadata("/tmp/from-host") {
+        Err(Errno(2)) => {},
+        _ => ensure(false, 47)
+    }
+    match move_path("/mnt/host/keep.bin", "/left/adir") {
+        Err(_) => {},
+        _ => ensure(false, 48)
+    }
+    let kept = metadata("/mnt/host/keep.bin")?;
+    ensure(kept.size == 4, 49);
+    match move_path("/mnt/host/locked/file", "/tmp/kept-copy")? {
+        CopiedSourceRetained(_) => {},
+        _ => ensure(false, 50)
+    }
+    let copy = metadata("/tmp/kept-copy")?;
+    let kept = metadata("/mnt/host/locked/file")?;
+    ensure(copy.size == 4 && kept.size == 4, 51);
+    println("RFL_HOST_MOVES_OK");
+    Ok({})
+}
+
+fn main() -> i16 {
+    let args = arguments();
+    if (args.len() > 0 && args[0] == "/launch/runner") {
+        println("RFL_EXEC_OK");
+        return 0;
+    }
+    if (args.len() > 1 && args[1] == "literal-args") {
+        ensure(args.len() == 5 && args[2] == "a'b $xx.txt" && args[3] == "" && args[4] == "two words", 53);
+        return 0;
+    }
+    if (args.len() > 1 && args[1] == "host-moves") {
+        return match host_moves() {
+            Ok(_) => 0,
+            Err(_) => {
+                println("RFL_HOST_MOVES_FAILED");
+                1
+            }
+        };
+    }
+    if (args.len() > 1 && args[1] == "status") {
+        return 23;
+    }
+    if (args.len() > 1 && args[1] == "panic") {
+        let missing: Option<i16> = None;
+        return missing.unwrap();
+    }
+    if (args.len() > 1 && args[1] == "copy") {
+        while (true) {
+            let bytes = read(0, 1024).unwrap();
+            if (bytes.is_empty()) {
+                return 0;
+            }
+            write_all(1, bytes).unwrap();
+        }
+    }
+    match probe() {
+        Ok(_) => 0,
+        Err(_) => {
+            println("RFL_OS_FAILED");
+            1
+        }
+    }
+}

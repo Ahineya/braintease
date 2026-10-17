@@ -2,11 +2,16 @@ import { Context, TaskError, InvalidDuration } from "std/task";
 import { write_text } from "std/io";
 extern "C" { fn rfl_halt(); }
 
+/// The result of polling a future: `Pending` requests another wake, and `Ready(value)` completes it.
 export type Poll<T> = Pending | Ready(T);
+/// A cooperatively polled asynchronous operation with an associated `Output` type and synchronous cancellation.
 export trait Future {
+    /// Value produced when this future completes.
     type Output;
+    /// Attempts bounded progress. Return `Ready` once on completion; before returning `Pending`, arrange a wake through `cx.waker`. Do not poll after completion or cancellation.
     fn poll(&mut self, cx:&mut Context) -> Poll<Self::Output>;
     // Idempotent and synchronous. Never needs a borrowed executor context.
+    /// Synchronously cancels unfinished work and releases its resources. Must be idempotent and must not retain an executor context.
     fn cancel(&mut self);
 }
 
@@ -18,6 +23,7 @@ impl<T> Future for Async<T> {
 }
 
 // Copies alias one operation: wrapper state prevents duplicate completion.
+/// A callback-backed future. Copies share an operation and its completion/cancellation guard.
 export type CallbackFuture<T> = CallbackFuture(fn(Context)->Poll<T>, fn()->unit);
 impl<T> Future for CallbackFuture<T> {
     type Output = T;
@@ -29,11 +35,13 @@ impl<T> Future for CallbackFuture<T> {
     }
 }
 
+/// Reports an invalid poll after completion or cancellation and terminates execution.
 export fn invalid_poll() {
     write_text("error: future polled after completion or cancellation\n");
     rfl_halt();
 }
 
+/// Builds a future from poll and cleanup callbacks. Completion is delivered once; cancellation invokes cleanup at most once.
 export fn poll_fn<T>(poll:fn(Context)->Poll<T>, cancel:fn()->unit) -> CallbackFuture<T> {
     let mut state:u16 = 0;
     let checked:fn(Context)->Poll<T> = fn(cx:Context) => {
@@ -50,11 +58,13 @@ export fn poll_fn<T>(poll:fn(Context)->Poll<T>, cancel:fn()->unit) -> CallbackFu
 }
 
 // No Printable bound. The captured value lives until the last wrapper is released.
+/// Builds a callback future that immediately returns `value`. The captured value lives until the last wrapper is released.
 export fn ready<T>(value:T) -> CallbackFuture<T> {
     let poll:fn(Context)->Poll<T> = fn(cx:Context) => Ready(value);
     poll_fn(poll, fn()=>{})
 }
 
+/// Builds a future that wakes itself and returns `Pending` once, then completes with unit.
 export fn yield_now() -> CallbackFuture<unit> {
     let mut yielded = false;
     let poll:fn(Context)->Poll<unit> = fn(cx:Context) => {
@@ -66,6 +76,7 @@ export fn yield_now() -> CallbackFuture<unit> {
 
 // The wrapping millisecond clock requires all intervals to be < 2^31.
 // Starts on FIRST POLL, not construction. The executor owns timer registration.
+/// Builds a timer future that starts on its first poll. Intervals above `2^31 - 1` milliseconds return `InvalidDuration`.
 export fn sleep(milliseconds:u32) -> Result<CallbackFuture<unit>, TaskError> {
     if (milliseconds > 2147483647) { return Err(InvalidDuration); }
     let mut started = false;

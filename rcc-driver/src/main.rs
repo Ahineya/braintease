@@ -34,6 +34,7 @@ struct CompileConfig {
     /// Enable spill/reload tracing
     trace_spills: bool,
     segmented_stack: bool,
+    banked_globals: bool,
     /// Skip preprocessing
     no_preprocess: bool,
     /// Include directories for preprocessor
@@ -106,6 +107,11 @@ enum Commands {
         /// Use a configured pool of stack banks (requires matching runtime objects)
         #[arg(long)]
         segmented_stack: bool,
+
+        /// Bank-aware global addresses (default; =false selects compact legacy references)
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set,
+              num_args = 0..=1, require_equals = true, default_missing_value = "true")]
+        banked_globals: bool,
     },
     
     /// Compile C99 source file
@@ -148,6 +154,11 @@ enum Commands {
         /// Use a configured pool of stack banks (requires matching runtime objects)
         #[arg(long)]
         segmented_stack: bool,
+
+        /// Bank-aware global addresses (default; =false selects compact legacy references)
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set,
+              num_args = 0..=1, require_equals = true, default_missing_value = "true")]
+        banked_globals: bool,
         
         /// Skip preprocessing (treat input as already preprocessed)
         #[arg(long)]
@@ -214,13 +225,13 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::GenerateAsm { input, output, bank_size, trace_spills, segmented_stack } => {
-            if let Err(e) = generate_asm_command(&input, output.as_deref(), bank_size, trace_spills, segmented_stack) {
+        Commands::GenerateAsm { input, output, bank_size, trace_spills, segmented_stack, banked_globals } => {
+            if let Err(e) = generate_asm_command(&input, output.as_deref(), bank_size, trace_spills, segmented_stack, banked_globals) {
                 eprintln!("Error generating assembly: {e}");
                 std::process::exit(1);
             }
         }
-        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, segmented_stack, no_preprocess, include_dirs, defines, trace, timings, target } => {
+        Commands::Compile { input, output, emit_ir, print_ir, save_ir, ir_output, debug, bank_size, trace_spills, segmented_stack, banked_globals, no_preprocess, include_dirs, defines, trace, timings, target } => {
             // Initialize logger based on debug level
             let log_level = match debug {
                 0 => "error",
@@ -246,6 +257,7 @@ fn main() {
                 bank_size,
                 trace_spills,
                 segmented_stack,
+                banked_globals,
                 no_preprocess,
                 include_dirs,
                 defines,
@@ -275,6 +287,7 @@ fn generate_asm_command(
     bank_size: u16,
     trace_spills: bool,
     segmented_stack: bool,
+    banked_globals: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let text = fs::read_to_string(input_path)?;
     let module = rcc_ir::parse_module(&text)?;
@@ -285,7 +298,7 @@ fn generate_asm_command(
         path.set_extension("asm");
         path
     };
-    write_assembly(&module, &output, bank_size, trace_spills, segmented_stack)
+    write_assembly(&module, &output, bank_size, trace_spills, segmented_stack, banked_globals)
 }
 
 fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -336,7 +349,7 @@ fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn 
         rcc_native::compile_executable(module, &output).map_err(Into::into)
     } else {
         let _timer = StageTimer::new(config.timings, "ripple_lower_emit");
-        write_assembly(module, &output, config.bank_size, config.trace_spills, config.segmented_stack)
+        write_assembly(module, &output, config.bank_size, config.trace_spills, config.segmented_stack, config.banked_globals)
     }
 }
 
@@ -364,6 +377,7 @@ fn write_assembly(
     bank_size: u16,
     trace_spills: bool,
     segmented_stack: bool,
+    banked_globals: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let has_main = module.functions.iter().any(|func| func.name == "main");
     let options = LoweringOptions {
@@ -371,6 +385,7 @@ fn write_assembly(
         use_v2: true,
         trace_spills,
         segmented_stack,
+        banked_globals,
     };
     match lower_module_to_assembly_with_options(module, options) {
         Ok(asm_instructions) => {

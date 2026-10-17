@@ -1,0 +1,19 @@
+import { Buffer } from "lib/text";
+import { Screen } from "std/curses";
+extern "C" {
+    fn rfl_text_paint(buffer: *mut u16, y: i16, x: i16, row: u32, left: u32, width: u16, tabstop: u16, styles: *const u32, selected: u32, from: u32, to: u32) -> i16;
+}
+
+/// Renders a highlighted text row directly into the default screen, without
+/// allocating a temporary cell vector. The first seven palette entries match
+/// Buffer.cells; additional application theme roles are ignored.
+/// Returns false for invalid dimensions/palette or a failed render.
+export fn paint(screen: &Screen, buffer: &Buffer, y: i16, x: i16, row: usize, left: usize, width: u16, tabstop: u16, styles: Vec<u32>, selected: u32, from: usize, to: usize) -> bool {
+    if (width > 512 || styles.len() < 7 || y < 0 || y >= screen.rows() || x < 0 || x >= screen.columns()) {
+        return false;
+    }
+    let raw = buffer.state.borrow();
+    unsafe {
+        rfl_text_paint(*raw, y, x, row as u32, left as u32, width, tabstop, &styles[0], selected, from as u32, to as u32) == 0
+    }
+}

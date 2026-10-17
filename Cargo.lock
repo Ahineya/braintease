@@ -2429,9 +2429,12 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "libloading 0.8.8",
+ "objc",
+ "pixels",
  "rcc-ir",
  "rvm",
  "serde_json",
+ "winit",
 ]
 
 [[package]]

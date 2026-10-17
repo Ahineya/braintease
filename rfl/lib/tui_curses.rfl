@@ -1,0 +1,40 @@
+import { Screen, BOLD, REVERSE, UNDERLINE, color_pair } from "std/curses";
+import { Config } from "lib/tui_theme";
+
+/// Installs a theme into curses pairs first..first+roles.len()-1. Application
+/// fallback attributes make semantic roles readable on monochrome terminals.
+/// Pair range and role lengths are validated before changing the screen.
+export fn install(screen: &Screen, config: Config, first: u16, fallback: Vec<u32>) -> Result<Vec<u32>, String> {
+    if (first < 1 || first > 63 || config.roles.len() >(64 - first) as usize || fallback.len() != config.roles.len()) {
+        return Err("Invalid theme pair range or fallback schema");
+    }
+    for (i in 0..config.roles.len()) {
+        let role = config.roles[i];
+        if (role.foreground < -1 || role.foreground > 255 || role.background < -1 || role.background > 255) {
+            return Err("Invalid palette index");
+        }
+    }
+    let colored = screen.colors();
+    screen.line_drawing(config.lines);
+    let mut styles: Vec<u32> = [];
+    for (i in 0..config.roles.len()) {
+        let role = config.roles[i];
+        let mut style: u32 = 0;
+        if (role.bold) {
+            style = style | BOLD;
+        }
+        if (role.reverse) {
+            style = style | REVERSE;
+        }
+        if (role.underline) {
+            style = style | UNDERLINE;
+        }
+        if (colored && screen.define_pair(first + i as u16, role.foreground, role.background)) {
+            style = style | color_pair(first + i as u16);
+        } else {
+            style = style | fallback[i];
+        }
+        styles.push(style);
+    }
+    Ok(styles)
+}

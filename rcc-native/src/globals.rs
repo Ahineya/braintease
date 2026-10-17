@@ -49,7 +49,7 @@ fn constant(compiler: &Compiler, value: &Value) -> Result<u64, String> {
             let value = constant(compiler, &ptr.addr)?;
             if matches!(ptr.addr.as_ref(), Value::Constant(_)) {
                 let bank = match ptr.bank {
-                    rcc_ir::BankTag::Global => 1,
+                    rcc_ir::BankTag::Global => compiler.global_bank,
                     rcc_ir::BankTag::Stack => 2,
                     rcc_ir::BankTag::Heap(b) => u64::from(b),
                     rcc_ir::BankTag::Null => 0,
@@ -137,12 +137,12 @@ fn flatten(
                     _ => false,
                 }
             }
-            out.push((
-                pointer,
-                constant(compiler, value)?,
-                words,
-                token(compiler, value),
-            ));
+            let constant = constant(compiler, value)?;
+            // Both a fresh runtime and an executable template start zeroed.
+            // Large sparse arrays must not emit one call/JSON tuple per zero.
+            if constant != 0 {
+                out.push((pointer, constant, words, token(compiler, value)));
+            }
         }
     }
     Ok(())

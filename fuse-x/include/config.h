@@ -3,6 +3,7 @@
 #define FUSE_X_CONFIG_H
 /* Keep the on-disk C16 layout shared with the Ripple port. Platform services
  * below are hosted implementations; no Ripple machine code is linked. */
+#define CONFIG_FUSE_X
 #define RIPPLE_PTY_COUNT 4
 #include "../../ports/fuzix/ripple/config-common.h"
 #define PTABSIZE 16

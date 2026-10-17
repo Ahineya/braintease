@@ -1,0 +1,5 @@
+{
+  "description": "C99 raw/expanded macro arguments, lazy prescan, nested calls, variadics, placemarkers, and self-reference suppression",
+  "use_runtime": true,
+  "expected": "YYYYYYYY\n"
+}

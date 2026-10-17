@@ -161,6 +161,8 @@ fn request(
         "textDocument/inlayHint" => inlays(docs, params),
         "textDocument/semanticTokens/full" => semantic_tokens(docs, params),
         "textDocument/codeAction" => code_actions(docs, params, versioned_edits),
+        "textDocument/formatting" => formatting(docs, params, false),
+        "textDocument/rangeFormatting" => formatting(docs, params, true),
         _ => Value::Null,
     }
 }
@@ -176,6 +178,8 @@ fn initialize() -> Value {
             "renameProvider": { "prepareProvider": true },
             "codeActionProvider": { "codeActionKinds": ["quickfix"], "resolveProvider": false },
             "documentSymbolProvider": true,
+            "documentFormattingProvider": true,
+            "documentRangeFormattingProvider": true,
             "signatureHelpProvider": { "triggerCharacters": ["(", ","] },
             "inlayHintProvider": true,
             "semanticTokensProvider": {
@@ -188,6 +192,37 @@ fn initialize() -> Value {
         },
         "serverInfo": { "name": "rfl", "version": "0.1.0" }
     })
+}
+
+fn formatting(docs: &HashMap<String, Doc>, params: &Value, selection: bool) -> Value {
+    let Some(doc) = document(docs, params) else {
+        return json!([]);
+    };
+    let bounds = if selection {
+        let Some(start) = offset_of(doc, &params["range"]["start"]) else {
+            return json!([]);
+        };
+        let Some(end) = offset_of(doc, &params["range"]["end"]) else {
+            return json!([]);
+        };
+        if start > end {
+            return json!([]);
+        }
+        start..end
+    } else {
+        0..doc.source.len()
+    };
+    let Ok(edits) = crate::format::format_edits(&doc.source) else {
+        // Incomplete syntax is common while editing. Never rewrite a damaged file.
+        return json!([]);
+    };
+    json!(edits
+        .into_iter()
+        .filter(|edit| edit.start >= bounds.start
+            && edit.end <= bounds.end
+            && (!selection || edit.start < bounds.end))
+        .map(|edit| json!({ "range": range(doc, edit.start, edit.end), "newText": edit.new_text }))
+        .collect::<Vec<_>>())
 }
 
 fn code_actions(docs: &HashMap<String, Doc>, params: &Value, versioned_edits: bool) -> Value {
@@ -242,10 +277,10 @@ fn hover(docs: &HashMap<String, Doc>, params: &Value) -> Value {
     let Some(offset) = offset_of(doc, &params["position"]) else {
         return Value::Null;
     };
-    let Some(text) = doc.analysis.hover(offset) else {
+    let Some(text) = doc.analysis.hover_markdown(offset) else {
         return Value::Null;
     };
-    json!({ "contents": { "kind": "markdown", "value": format!("```rfl\n{text}\n```") } })
+    json!({ "contents": { "kind": "markdown", "value": text } })
 }
 
 fn completion(docs: &HashMap<String, Doc>, params: &Value) -> Value {
@@ -834,6 +869,90 @@ fn send(stdout: &mut impl Write, message: &Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn format_doc(source: &str) -> Doc {
+        Doc {
+            source: source.to_string(),
+            version: Some(1),
+            path: None,
+            lines: line_starts(source),
+            analysis: Analysis::open(None, source),
+        }
+    }
+
+    fn apply_formatting(doc: &Doc, edits: &Value) -> String {
+        let mut text = doc.source.clone();
+        for edit in edits.as_array().unwrap().iter().rev() {
+            let start = offset_of(doc, &edit["range"]["start"]).unwrap();
+            let end = offset_of(doc, &edit["range"]["end"]).unwrap();
+            text.replace_range(start..end, edit["newText"].as_str().unwrap());
+        }
+        text
+    }
+
+    #[test]
+    fn formatting_uses_unsaved_text_and_utf16_ranges() {
+        assert_eq!(
+            initialize()["capabilities"]["documentFormattingProvider"],
+            true
+        );
+        assert_eq!(
+            initialize()["capabilities"]["documentRangeFormattingProvider"],
+            true
+        );
+        let uri = "file:///format.rfl";
+        let source = "fn main(){/* 🙂 */let x=1;println(x);}";
+        let docs = HashMap::from([(uri.to_string(), format_doc(source))]);
+        let params =
+            json!({"textDocument":{"uri":uri},"options":{"tabSize":8,"insertSpaces":false}});
+        let edits = formatting(&docs, &params, false);
+        assert_eq!(
+            apply_formatting(&docs[uri], &edits),
+            crate::format_source(source).unwrap()
+        );
+        assert!(!edits.as_array().unwrap().is_empty());
+        // No server-side mutation: the client owns application of TextEdits.
+        assert_eq!(docs[uri].source, source);
+    }
+
+    #[test]
+    fn selection_formatting_never_changes_outside_the_selection() {
+        let uri = "file:///selection.rfl";
+        let source = "fn main(){let x=1;let y=2;}";
+        let doc = format_doc(source);
+        let start = source.find("let y").unwrap();
+        let end = source.find("2;").unwrap() + 2;
+        let params = json!({"textDocument":{"uri":uri},"range":range(&doc,start,end)});
+        let docs = HashMap::from([(uri.to_string(), doc)]);
+        let edits = formatting(&docs, &params, true);
+        assert_eq!(
+            apply_formatting(&docs[uri], &edits),
+            "fn main(){let x=1;\n    let y = 2;}"
+        );
+        assert_eq!(
+            formatting(
+                &docs,
+                &json!({"textDocument":{"uri":"file:///missing.rfl"}}),
+                false
+            ),
+            json!([])
+        );
+    }
+
+    #[test]
+    fn formatting_noops_for_invalid_and_already_formatted_buffers() {
+        let uri = "file:///format.rfl";
+        for source in [
+            "fn main() {\n    println(1);\n}\n",
+            "fn main() { let x = ; }",
+        ] {
+            let docs = HashMap::from([(uri.to_string(), format_doc(source))]);
+            assert_eq!(
+                formatting(&docs, &json!({"textDocument":{"uri":uri}}), false),
+                json!([])
+            );
+        }
+    }
 
     fn doc(source: &str) -> Doc {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/auto-import-lsp.rfl");

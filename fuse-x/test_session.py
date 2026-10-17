@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Exercise native applications through the real FUZIX process/syscall paths."""
 import argparse
+import hashlib
+import mmap
 import os
 from pathlib import Path
 import pty
@@ -48,35 +50,35 @@ def main():
         for name,blocks,inodes in [('small',2048,128),('medium',32768,1024)]:
             small = Path(temporary) / (name+'.img')
             marker=name+'-root-kept'
-            source = ('import fs from "node:fs"; import {rootImage} from ' + repr(builder) + ';'
-                      'fs.writeFileSync(process.argv[1],rootImage([{name:"/tmp/kept",'
+            source = ('import fs from "node:fs"; import {rootImage,atomicWrite} from ' + repr(builder) + ';'
+                      'atomicWrite(process.argv[1],rootImage([{name:"/tmp/kept",'
                       'mode:0o100644,data:Buffer.from(process.argv[2])}],'
                       +str(blocks)+','+str(inodes)+'));')
             subprocess.run(['node', '--input-type=module', '-e', source, str(small), marker], check=True)
             previous = small.read_bytes()
             subprocess.run(['node', str(here / 'image.mjs'), 'install', str(small),
                             '--bootstrap-shell', '--apps', str(executable.parent / 'apps')], check=True)
-            assert small.stat().st_size == 65535 * 2048
+            assert small.stat().st_size == 524288 * 2048
             assert Path(str(small) + '.bak').read_bytes() == previous
             if name=='medium':
                 # Place this preserved file at the final valid block to exercise
                 # native I/O above the former 64 MiB image boundary.
                 checker=(here.parent/'ports/fuzix/tools/fsck.mjs').as_uri()
                 layout=(here.parent/'ports/fuzix/tools/layout.mjs').as_uri()
-                relocate=('import fs from "node:fs"; import {checkRoot} from '+repr(checker)+';'
-                          'import {inodeBase} from '+repr(layout)+';'
-                          'let image=fs.readFileSync(process.argv[1]);'
-                          'const at=image.indexOf(Buffer.from(process.argv[2],"utf16le"));'
-                          'if(at<0 || at%2048)throw Error("missing preserved-file block");'
-                          'const old=at/2048,high=65534;let moved=0;'
-                          'for(let ino=1;ino<1024;ino++){const p=(inodeBase(ino)+12)*2;'
-                          'if(image.readUInt16LE(p)===old){'
-                          'image.copy(image,high*2048,at,at+2048);'
-                          'image.writeUInt16LE(high,p);moved++;}}'
-                          'if(moved!==1)throw Error("unexpected block ownership");'
+                images=(here.parent/'ports/fuzix/tools/image.mjs').as_uri()
+                reader=(here.parent/'ports/fuzix/tools/read-root.mjs').as_uri()
+                relocate=('import {checkRoot} from '+repr(checker)+';'
+                          'import {atomicWrite} from '+repr(builder)+';'
+                          'import {openImage} from '+repr(images)+';'
+                          'import {rootReader} from '+repr(reader)+';'
+                          'let image=openImage(process.argv[1]).fork();'
+                          'const node=rootReader(image).lookup("/tmp/kept");'
+                          'const old=node.map.get(0),high=524287;'
+                          'image.copy(image,high*2048,old*2048,(old+1)*2048);'
+                          'image.writeUInt32LE(high,(node.base+12)*2);'
                           'image=checkRoot(image,true).image;'
                           'if(checkRoot(image).issues.length)throw Error("bad relocated root");'
-                          'fs.writeFileSync(process.argv[1],image);')
+                          'atomicWrite(process.argv[1],image);')
                 subprocess.run(['node','--input-type=module','-e',relocate,str(small),marker],check=True)
             output = run(small, 'cat /tmp/kept\nwrite /tmp/expanded capacity-ok\n'
                                'cat /tmp/expanded\nshutdown\n')
@@ -91,16 +93,19 @@ def main():
         output = run(image, 'hello\n' * 20 + 'shutdown\n', limit='2')
         assert output.count('fork: errno') == 20, output
         # Installing current manifests is idempotent and preserves user files.
-        original = image.read_bytes()
+        original = hashlib.file_digest(image.open('rb'),'sha256').digest()
         subprocess.run(['node', str(here / 'image.mjs'), 'install', str(image)], check=True)
-        assert image.read_bytes() == original, 'unchanged manifests rewrote image'
+        assert hashlib.file_digest(image.open('rb'),'sha256').digest() == original, 'unchanged manifests rewrote image'
         # Upgrade an older manifest without losing files, keeping its exact backup.
-        outdated = original.replace('FXN1:hello:1'.encode('utf-16-le'),
-                                    'FXN1:hello:0'.encode('utf-16-le'))
-        assert outdated != original, 'manifest fixture was not found'
-        image.write_bytes(outdated)
+        with image.open('r+b') as file, mmap.mmap(file.fileno(),0) as data:
+            at=data.find('FXN1:hello:1'.encode('utf-16-le'))
+            assert at>=0,'manifest fixture was not found'
+            replacement='FXN1:hello:0'.encode('utf-16-le')
+            data[at:at+len(replacement)]=replacement
+            data.flush()
+        outdated=hashlib.file_digest(image.open('rb'),'sha256').digest()
         subprocess.run(['node', str(here / 'image.mjs'), 'install', str(image)], check=True)
-        assert image.with_suffix('.img.bak').read_bytes() == outdated
+        assert hashlib.file_digest(image.with_suffix('.img.bak').open('rb'),'sha256').digest() == outdated
         output = run(image, 'cat /tmp/note\nshutdown\n')
         assert 'persistent value\n' in output, output
         master, slave = pty.openpty()

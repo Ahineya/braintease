@@ -1,0 +1,35 @@
+// Compatibility API. New applications should import the companion `lib/ini`.
+import { parse as library_parse, InvalidSyntax as LibrarySyntax, InputTooLarge as LibraryLimit } from "lib/ini";
+
+/// Invalid syntax at a one-based line, or a bounded-input/allocation failure.
+export type IniError = InvalidSyntax(u32) | InputTooLarge;
+/// One ordered INI assignment; later entries may override earlier ones.
+export struct Entry {
+    /// Section name, or empty before the first section.
+    section: String,
+    /// Trimmed key name.
+    key: String,
+    /// Trimmed value, optionally enclosed in matching quotes.
+    value: String
+}
+
+/// Compatibility wrapper over the shared `lib/ini` reader. New code should use
+/// `lib/ini`. Supports sections, key=value, whole-line #/; comments and quotes;
+/// limits input to 64 KiB, lines to 1024 bytes and assignments to 256.
+export fn parse(text: String) -> Result<Vec<Entry>, IniError> {
+    let values = match library_parse(text) {
+        Ok(values) => values,
+        Err(LibrarySyntax(line)) => {
+            return Err(InvalidSyntax(line));
+        },
+        Err(_) => {
+            return Err(InputTooLarge);
+        }
+    };
+    let mut result: Vec<Entry> = [];
+    for (i in 0..values.len()) {
+        let entry = values[i];
+        result.push(Entry { section: entry.section, key: entry.key, value: entry.value });
+    }
+    Ok(result)
+}

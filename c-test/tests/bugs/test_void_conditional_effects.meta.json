@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "use_runtime": true,
+  "description": "Void conditional expressions evaluate exactly one arm without allocating a void result"
+}

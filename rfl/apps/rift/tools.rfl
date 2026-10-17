@@ -1,0 +1,207 @@
+import { Document, number } from "./files";
+import { Language, detect } from "./languages";
+import { Settings, env, template } from "./config";
+import { parent, joined } from "lib/path";
+import { replace, contains } from "std/string";
+import { executable, working_directory, change_directory, run_command, create_dir, remove_dir, remove_file, process_id, error_message, read_bytes, STDIN, set_permissions, Errno } from "std/posix";
+import { Screen } from "std/curses";
+export fn quote(value: String) -> String {
+    "'" + replace(value, "'", "'\\''") + "'"
+}
+
+export fn resolve(name: String) -> String {
+    if (name == "") {
+        return "";
+    }
+    let cwd = match working_directory() {
+        Ok(path) => path,
+        Err(_) => {
+            return "";
+        }
+    };
+    if (contains(name, "/")) {
+        let full = joined(cwd, name);
+        return match executable(full) {
+            Ok(true) => full,
+            _ => ""
+        };
+    }
+    let path = env("PATH", "/bin:/usr/bin");
+    let mut start: usize = 0;
+    for (i in 0..path.len() + 1) {
+        if (i == path.len() || path[i] == ':') {
+            let directory = if (i == start) {
+                "."
+            } else {
+                path[start..i]
+            };
+            let candidate = joined(cwd, directory + "/" + name);
+            match executable(candidate) {
+                Ok(true) => {
+                    return candidate;
+                },
+                _ => {}
+            }
+            start = i + 1;
+        }
+    }
+    ""
+}
+
+fn tool(language: Language) -> String {
+    if (language.variable == "") {
+        ""
+    } else {
+        env(language.variable, language.tool)
+    }
+}
+
+export fn available() -> Vec<String> {
+    let mut out: Vec<String> = [];
+    for (file in ["app.bf", "app.tcl", "app.awk", "app.sh", "Makefile", "app.m4", "app.dc", "app.c", "app.rfl", "app.py", "app.pas", "app.rs", "app.js", "app.lua"]) {
+        let language = detect(file);
+        let command = tool(language);
+        let path = resolve(command);
+        out.push(language.name + ": " + if (path == "") {
+            command + " (not installed)"
+        } else {
+            path
+        });
+    }
+    out
+}
+
+fn temporary(attempt: usize) -> Result<String, String> {
+    if (attempt == 100) {
+        return Err("Cannot reserve a private output directory");
+    }
+    let path = "/tmp/rift-" + number(process_id() as usize) + "-" + number(attempt);
+    match create_dir(path) {
+        Ok(_) => match set_permissions(path, 448) {
+            Ok(_) => Ok(path),
+            Err(error) => {
+                remove_dir(path);
+                Err(error_message(error))
+            }
+        },
+        Err(Errno(17)) => temporary(attempt + 1),
+        Err(error) => Err(error_message(error))
+    }
+}
+
+export fn launch(screen: &Screen, document: &Document, settings: &Settings) -> Result<i32, String> {
+    if (document.path == "" || !document.exists) {
+        return Err("Save the file before running it");
+    }
+    let cwd = match working_directory() {
+        Ok(path) => path,
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    let language = document.language;
+    let custom = template(settings, language.name);
+    let configured_tool = tool(language);
+    let resolved = resolve(configured_tool);
+    if (custom == "" && resolved == "") {
+        return Err(if (configured_tool == "") {
+            "No runner for " + language.name
+        } else {
+            "Tool not installed: " + configured_tool + "; configure [run] " + language.name
+        });
+    }
+    let pattern = if (custom == "") {
+        "{tool} " + language.arguments
+    } else {
+        custom
+    };
+    if (contains(pattern, "{tool}") && resolved == "") {
+        return Err("Configured tool is unavailable: " + configured_tool);
+    }
+    let directory = if (contains(pattern, "{output}")) {
+        temporary(0)?
+    } else {
+        ""
+    };
+    let output = directory + "/program";
+    // One-pass expansion: placeholder-looking bytes inside a filename remain literal.
+    let mut command = "";
+    let mut i: usize = 0;
+    while (i < pattern.len()) {
+        let mut found = false;
+        for (key in ["{file}", "{dir}", "{output}", "{tool}"]) {
+            if (!found && i + key.len() <= pattern.len() && pattern[i..i + key.len()] == key) {
+                command = command + quote(if (key == "{file}") {
+                    document.path
+                } else if (key == "{dir}") {
+                    parent(document.path)
+                } else if (key == "{output}") {
+                    output
+                } else {
+                    resolved
+                });
+                i += key.len();
+                found = true;
+            }
+        }
+        if (!found) {
+            command = command + from_char(pattern[i]);
+            i += 1;
+        }
+    }
+    screen.suspend();
+    println("Rift Run: " + command);
+    let result = match change_directory(parent(document.path)) {
+        Ok(_) => run_command(command),
+        Err(error) => Err(error)
+    };
+    let restored = change_directory(cwd);
+    let mut cleanup = "";
+    if (directory != "") {
+        match remove_file(output) {
+            Ok(_) => {},
+            Err(Errno(2)) => {},
+            Err(error) => {
+                cleanup = error_message(error);
+            }
+        }
+        match remove_dir(directory) {
+            Ok(_) => {},
+            Err(error) => {
+                cleanup = error_message(error);
+            }
+        }
+    }
+
+    match result {
+        Ok(status) => {
+            print("\nProgram wait status: ");
+            println(status);
+        },
+        Err(error) => {
+            println(error_message(error));
+        }
+    }
+    println("Press Enter to return to Rift");
+    read_bytes(STDIN, 1024);
+    let resumed = screen.resume();
+    match resumed {
+        Ok(_) => {},
+        Err(_) => {
+            return Err("Cannot restore terminal; quit and reopen Rift");
+        }
+    }
+    match restored {
+        Ok(_) => {},
+        Err(error) => {
+            return Err("Cannot restore working directory: " + error_message(error));
+        }
+    }
+    if (cleanup != "") {
+        return Err("Run ended; temporary cleanup failed: " + cleanup);
+    }
+    match result {
+        Ok(status) => Ok(status),
+        Err(error) => Err(error_message(error))
+    }
+}

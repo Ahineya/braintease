@@ -3,6 +3,12 @@
 
 #include <sys/types.h>
 
+#ifdef RIPPLE_MMU
+#include <socket-abi.h>
+int getsockopt(int, int, int, void *, int *);
+int socketpair(int, int, int, int [2]);
+#endif
+
 #define AF_INET		1
 
 #define SOCK_RAW	1

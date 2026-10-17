@@ -28,6 +28,14 @@ impl<'a> Checker<'a> {
             self.structs.push(StructInfo {
                 name: item.name.clone(),
                 fields: Vec::new(),
+                field_spans: if self.editor {
+                    item.fields
+                        .iter()
+                        .map(|field| (field.name.clone(), field.name_span))
+                        .collect()
+                } else {
+                    HashMap::new()
+                },
                 width: 0,
                 repr_c: item.repr_c,
             });
@@ -415,10 +423,23 @@ impl<'a> Checker<'a> {
         span: usize,
         base: &Expr,
         name: &str,
+        name_span: Span,
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let base = self.check_expr(base, None)?;
         let (offset, ty) = self.field_at(span, self.referent(base.ty), name)?;
+        if self.editor {
+            if let Ty::Struct { id, .. } = self.referent(base.ty) {
+                if let Some(def) = self.structs[id as usize].field_spans.get(name).copied() {
+                    self.uses.push(NameUse {
+                        span: name_span,
+                        def,
+                        def_file: None,
+                        ty: self.show(ty),
+                    });
+                }
+            }
+        }
         if let Some(want) = expected {
             if want != ty {
                 return Err(CompileError::at(

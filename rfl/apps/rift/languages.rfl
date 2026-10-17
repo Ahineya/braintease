@@ -1,0 +1,94 @@
+import { ends_with } from "std/string";
+import { basename } from "lib/path";
+export struct Language {
+    name: String,
+    lexer: u16,
+    tool: String,
+    variable: String,
+    arguments: String
+}
+
+fn language(name: String, lexer: u16, tool: String, variable: String, arguments: String) -> Language {
+    Language { name: name, lexer: lexer, tool: tool, variable: variable, arguments: arguments }
+}
+
+fn to_lower(value: String) -> String {
+    let mut out = "";
+    for (i in 0..value.len()) {
+        let ch = value[i];
+        out = out + from_char(if (ch >= 'A' && ch <= 'Z') {
+            (ch as u32 + 32) as char
+        } else {
+            ch
+        });
+    }
+    out
+}
+
+export fn detect(path: String) -> Language {
+    let name = to_lower(basename(path));
+    if (ends_with(name, ".bf") || ends_with(name, ".b")) {
+        return language("brainfuck", 8, "bf", "BF", "{file}");
+    }
+    if (ends_with(name, ".rfl")) {
+        return language("rfl", 1, "rfl", "RFL", "run {file}");
+    }
+    if (ends_with(name, ".tcl")) {
+        return language("tcl", 2, "tclsh", "TCLSH", "{file}");
+    }
+    if (ends_with(name, ".awk")) {
+        return language("awk", 2, "awk", "AWK", "-f {file}");
+    }
+    if (ends_with(name, ".sh") || name == ".profile" || name == ".shrc") {
+        return language("shell", 2, "sh", "SHELL", "{file}");
+    }
+    if (name == "makefile" || ends_with(name, ".mk")) {
+        return language("make", 9, "make", "MAKE", "-f {file}");
+    }
+    if (ends_with(name, ".m4")) {
+        return language("m4", 0, "m4", "M4", "{file}");
+    }
+    if (ends_with(name, ".dc")) {
+        return language("dc", 0, "dc", "DC", "< {file}");
+    }
+    if (ends_with(name, ".py")) {
+        return language("python", 3, "python3", "PYTHON", "{file}");
+    }
+    if (ends_with(name, ".lua")) {
+        return language("lua", 11, "lua", "LUA", "{file}");
+    }
+    if (ends_with(name, ".lisp") || ends_with(name, ".scm")) {
+        return language("lisp", 11, "", "", "");
+    }
+    if (ends_with(name, ".js")) {
+        return language("javascript", 1, "node", "NODE", "{file}");
+    }
+    if (ends_with(name, ".pas") || ends_with(name, ".pp")) {
+        return language("pascal", 4, "fpc", "FPC", "{file} -o{output} && {output}");
+    }
+    if (ends_with(name, ".c") || ends_with(name, ".h")) {
+        return language("c", 1, "cc", "CC", "{file} -o {output} && {output}");
+    }
+    if (ends_with(name, ".cc") || ends_with(name, ".cpp") || ends_with(name, ".hpp")) {
+        return language("cpp", 1, "c++", "CXX", "{file} -o {output} && {output}");
+    }
+    if (ends_with(name, ".rs")) {
+        return language("rust", 1, "rustc", "RUSTC", "{file} -o {output} && {output}");
+    }
+    if (ends_with(name, ".json")) {
+        return language("json", 5, "", "", "");
+    }
+    if (ends_with(name, ".ini") || ends_with(name, ".toml") || ends_with(name, ".conf")) {
+        return language("ini", 6, "", "", "");
+    }
+    if (ends_with(name, ".md")) {
+        return language("markdown", 7, "", "", "");
+    }
+    if (ends_with(name, ".html") || ends_with(name, ".htm") || ends_with(name, ".css")) {
+        return language("html", 10, "", "", "");
+    }
+    if (ends_with(name, ".asm") || ends_with(name, ".s")) {
+        return language("assembly", 12, "", "", "");
+    }
+    language("text", 0, "", "", "")
+}

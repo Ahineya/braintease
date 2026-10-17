@@ -4,8 +4,7 @@ use anyhow::{anyhow, Result};
 #[derive(Debug, Clone)]
 pub enum Directive {
     Include {
-        path: String,
-        is_system: bool,
+        operand: String,
     },
     Define {
         name: String,
@@ -139,34 +138,11 @@ impl Parser {
     }
     
     fn parse_include(&mut self) -> Result<Directive> {
-        self.skip_whitespace();
-        
-        let (path, is_system) = if self.check(&TokenType::Less) {
-            // System include <...>
-            self.advance();
-            let mut path = String::new();
-            while !self.is_at_end() && !self.check(&TokenType::Greater) {
-                if self.check(&TokenType::Newline) {
-                    return Err(anyhow!("Unterminated include directive"));
-                }
-                path.push_str(&self.advance().text);
-            }
-            if !self.check(&TokenType::Greater) {
-                return Err(anyhow!("Expected '>' in include directive"));
-            }
-            self.advance();
-            (path, true)
-        } else if let TokenType::StringLiteral(path) = &self.peek().token_type {
-            // User include "..."
-            let path = path.clone();
-            self.advance();
-            (path, false)
-        } else {
-            return Err(anyhow!("Invalid include directive"));
-        };
-        
+        // Resolve only when this directive executes: macros may be defined by
+        // earlier includes, and skipped conditional groups must not expand it.
+        let operand = self.collect_line()?;
         self.skip_to_newline();
-        Ok(Directive::Include { path, is_system })
+        Ok(Directive::Include { operand })
     }
     
     fn parse_define(&mut self) -> Result<Directive> {

@@ -31,7 +31,7 @@ fn select(mut objects: Vec<ObjectFile>, archives: Vec<Archive>) -> Vec<ObjectFil
             .collect();
         let mut needed: HashSet<_> = objects
             .iter()
-            .flat_map(|o| o.unresolved_references.values().map(|r| r.label.clone()))
+            .flat_map(|o| o.unresolved_references.values().map(|r| r.symbol().to_string()))
             .collect();
         for meta in objects.iter().filter_map(|o| o.rcc.as_ref()) {
             needed.extend(meta.symbols.values().flatten().cloned());

@@ -20,6 +20,7 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 | Document | Topic |
 |----------|-------|
 | [graphics/README.md](graphics/README.md) | FUZIX graphics, GX contract, resource budget, Nano-X audit and desktop milestones |
+| [fusede/README.md](fusede/README.md) | FuseDE direction: NXDSKTOP and companion apps first, Nuklear evaluation, custom desktop and file manager |
 | [fuse-x/README.md](fuse-x/README.md) | Fuse-X native hosted FUZIX direction, desktop integration, storage, networking, and roadmap |
 | [rfl/traits-printing.md](rfl/traits-printing.md) | Planned first RFL traits milestone: Printable-based library print/println |
 | [networking/README.md](networking/README.md) | Guest Ethernet, DHCP, UDP/DNS, running examples, tests and TCP/HTTP roadmap |

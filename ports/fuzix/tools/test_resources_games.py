@@ -150,13 +150,15 @@ with tempfile.TemporaryDirectory(prefix='fuzix-resources-games-') as tmp:
         subprocess.run(['node', '--input-type=module', '-e', '''
 import fs from 'node:fs';
 import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
 import {sokobanLevels} from './ports/fuzix/tools/sokoban.mjs';
-const name=process.argv[1], disk=fs.readFileSync(name), root=fatFile(disk,'ROOTFS.IMG');
+const name=process.argv[1], disk=openImage(name), root=fatFile(disk,'ROOTFS.IMG');
 const title='#####\\n#@Hi#\\n#####\\n\\n', puzzle='#######\\n#@ $ .#\\n#######\\n\\n';
 const files=[{name:'/usr/lib/sok/sok.levels',mode:0o100644,data:sokobanLevels(title+puzzle+puzzle)},
              {name:'/bad-levels',mode:0o100644,data:Buffer.alloc(1024,32)}];
-fs.writeFileSync(name,root.replace(installRoot(root.data,files)));
+atomicWrite(name,root.replace(installRoot(root.data,files)));
 ''', str(image)], cwd=ROOT, check=True)
         run(image, jit)
         live(image, jit)

@@ -175,10 +175,18 @@ struct tms {
 #define M_TIME 2
 #define C_TIME 4
 
-typedef int32_t off_t;	/* 32MB file and fs size limit */
+typedef int32_t off_t;	/* Signed file positions, measured in platform C characters. */
 typedef uint32_t uoff_t;	/* Internal use so we can keep the compiler happy */
 
+#ifdef CONFIG_RIPPLE
+typedef uint32_t blkno_t;
+#else
 typedef uint16_t blkno_t;    /* Can have 65536 512-byte blocks in filesystem */
+#endif
+#ifndef FS_DIRECT
+#define FS_DIRECT 18
+#define FS_LEVELS 2
+#endif
 #define NULLBLK ((blkno_t)-1)
 
 #if (BLKSIZE == 400)
@@ -189,7 +197,11 @@ typedef uint16_t blkno_t;    /* Can have 65536 512-byte blocks in filesystem */
 #include "blk512.h"
 #endif
 
-#define BLKOVERSIZE32	0xFE	/* Bits 25+ mean we exceeded the file size */
+#ifdef CONFIG_RIPPLE
+#define BLKOVERSIZE32 0x80 /* Signed 32-bit C-character offsets. */
+#else
+#define BLKOVERSIZE32 0xFE
+#endif
 
 /* State of the block. We have some free bits here if we need them */
 #define BF_FREE		0
@@ -257,7 +269,10 @@ typedef struct dinode {
     uint32_t   i_mtime;		/* Need to hide some extra bits ? */
     uint32_t   i_ctime;		/* 24 bytes */
     blkno_t  i_addr[20];
-} dinode;               /* Exactly 64 bytes long! */
+#ifdef CONFIG_RIPPLE
+    uint16_t i_reserved[12]; /* 64 C16 cells / 128 physical octets. */
+#endif
+} dinode; /* Ripple V3: 64 C16 cells; conventional platforms: 64 octets. */
 
 /* We use the Linux one for compatibility. There's no real Unix 'standard'
    for such things */
@@ -330,7 +345,7 @@ typedef struct cinode {
 #ifdef CONFIG_BLOCK_SLEEP
    uint16_t    c_lock;		/* inode lock state */
 #endif
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
    struct selmap c_select[3];  /* Separate from disk and pipe block pointers. */
 #endif
 } cinode, *inoptr;
@@ -354,7 +369,7 @@ typedef struct direct {
 typedef struct filesys { /* note: exists in mem and on disk */
     uint16_t      s_mounted;
     uint16_t      s_isize;
-    uint16_t      s_fsize;
+    blkno_t       s_fsize;
     uint16_t      s_nfree;
     blkno_t       s_free[FILESYS_TABSIZE];
     int16_t       s_ninode;
@@ -371,6 +386,7 @@ typedef struct filesys { /* note: exists in mem and on disk */
     uint16_t      s_tinode;
     uint8_t	  s_shift;	/* Extent size */
 } filesys, *fsptr;
+
 
 /*
  * Superblock with userspace fields that are not kept in the kernel
@@ -789,6 +805,7 @@ typedef struct {
 #define EDESTADDRREQ    57              /* No destination address specified */
 #define ENOBUFS		58		/* No buffer space available */
 #define EPROTONOSUPPORT	59		/* Protocol not supported */
+#define EOVERFLOW       60              /* Result does not fit caller ABI */
 
 /*
  * ioctls for kernel internal operations start at 0x8000 and cannot be issued
@@ -1057,9 +1074,9 @@ extern void i_deref(inoptr ino);
 extern void corrupt_fs(uint16_t devno);
 extern void wr_inode(inoptr ino);
 extern bool isdevice(inoptr ino);
-extern int f_trunc_blocks(inoptr ino, uint16_t nblock);
+extern int f_trunc_blocks(inoptr ino, blkno_t nblock);
 extern int f_trunc(inoptr ino);
-extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock);
+extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock);
 extern blkno_t bmap(inoptr ip, blkno_t bn, unsigned int rwflg);
 extern void validblk(uint16_t dev, blkno_t num);
 extern inoptr getinode(uint_fast8_t uindex);
@@ -1112,7 +1129,7 @@ extern uint_fast8_t dump_core(uint_fast8_t sig);
 #endif
 
 /* select.c */
-#ifdef CONFIG_LEVEL_2
+#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
 extern void seladdwait(struct selmap *s);
 extern void selrmwait(struct selmap *s);
 extern void selwake(struct selmap *s);
@@ -1121,6 +1138,9 @@ extern void selwake_inode(inoptr i, uint16_t mask);
 extern void selwake_pipe(inoptr i, uint16_t mask);
 extern void selwake_dev(uint_fast8_t major, uint_fast8_t minor, uint16_t mask);
 extern arg_t _select(void);
+#ifdef CONFIG_SELECT
+extern void ripple_select_exit(ptptr p);
+#endif
 #else
 #define selwait_inode(i,smask,setit) do {} while(0)
 #define selwake_inode(i,smask) do {} while(0)

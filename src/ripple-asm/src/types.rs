@@ -519,6 +519,8 @@ pub struct PendingReference {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReferenceType {
+    DataBank,
+    DataOffset,
     CodeBank,
     CodeOffset,
     Branch,
@@ -543,6 +545,9 @@ pub struct ObjectFile {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CompilerMetadata {
+    /// Every global address carries a relocatable bank component.
+    #[serde(default)]
+    pub banked_data: bool,
     pub symbols: HashMap<String, Vec<String>>,
     pub code: Vec<String>,
     pub roots: Vec<String>,
@@ -556,6 +561,13 @@ pub struct CompilerMetadata {
 pub struct UnresolvedReference {
     pub label: String,
     pub ref_type: String, // "branch", "absolute", "data"
+}
+impl UnresolvedReference {
+    pub fn symbol(&self) -> &str {
+        if matches!(self.ref_type.as_str(), "data_bank" | "data_offset") {
+            self.label.split_once('+').map_or(&self.label, |(symbol, _)| symbol)
+        } else { &self.label }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

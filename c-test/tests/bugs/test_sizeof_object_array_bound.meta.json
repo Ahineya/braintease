@@ -1,0 +1,5 @@
+{
+  "description": "Lynx-style array bounds accept sizeof known array objects",
+  "use_runtime": true,
+  "expected": "Y\n"
+}

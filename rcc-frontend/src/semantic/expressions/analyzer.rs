@@ -290,11 +290,47 @@ impl ExpressionAnalyzer {
 
                 self.check_boolean_context(condition)?;
 
-                // Result type is the common type of then and else expressions
+                // Unlike arithmetic conversions, C99 6.5.15 needs the operand
+                // expression to recognize a null pointer constant. Convert it
+                // before choosing the result type so codegen uses both pointer
+                // ABI cells. Arrays and function designators decay here first.
                 if let (Some(then_type), Some(else_type)) =
                     (&then_expr.expr_type, &else_expr.expr_type)
                 {
-                    self.type_analyzer.borrow().common_type(then_type, else_type)
+                    let analyzer = self.type_analyzer.borrow();
+                    let decay = |ty: &Type| {
+                        let resolved = analyzer.resolve_type(ty);
+                        match resolved.unqualified() {
+                            Type::Array { element_type, .. } => Type::Pointer {
+                                target: element_type.clone(), bank: None,
+                            },
+                            function @ Type::Function { .. } => Type::Pointer {
+                                target: Box::new(function.clone()), bank: None,
+                            },
+                            other => other.clone(),
+                        }
+                    };
+                    let then_type = decay(then_type);
+                    let else_type = decay(else_type);
+                    let null_operand = match (&then_type, &else_type) {
+                        (Type::Pointer { .. }, Type::Pointer { .. }) => None,
+                        (Type::Pointer { .. }, _) => Some((&then_type, &mut **else_expr)),
+                        (_, Type::Pointer { .. }) => Some((&else_type, &mut **then_expr)),
+                        _ => None,
+                    };
+                    if let Some((pointer_type, operand)) = null_operand {
+                        analyzer.convert_null_pointer_constant(pointer_type, operand);
+                        if !operand.expr_type.as_ref().is_some_and(|ty| analyzer.is_pointer(ty)) {
+                            return Err(CompilerError::semantic_error(
+                                "Conditional pointer operand requires a pointer or null pointer constant".to_string(),
+                                operand.span.start.clone(),
+                            ));
+                        }
+                    }
+                    analyzer.common_type(
+                        &decay(then_expr.expr_type.as_ref().unwrap()),
+                        &decay(else_expr.expr_type.as_ref().unwrap()),
+                    )
                 } else {
                     Type::Error
                 }

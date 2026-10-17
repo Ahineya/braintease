@@ -7,6 +7,7 @@ pub(super) const STR_DATA: i64 = 3;
 pub(super) fn emit_str(
     builder: &mut IrBuilder,
     proc: &Proc,
+    built: &Built,
     frame: &Value,
     dest: usize,
     bytes: &[u8],
@@ -16,6 +17,39 @@ pub(super) fn emit_str(
     if bytes.is_empty() {
         store_cell(builder, frame, base, Value::Constant(0))?;
         return store_cell(builder, frame, base + 1, Value::Constant(0));
+    }
+    if bytes.len() >= 8 {
+        let index = built
+            .cstrs
+            .iter()
+            .position(|found| {
+                found.len() == bytes.len()
+                    && found.iter().zip(bytes).all(|(a, b)| *a == u16::from(*b))
+            })
+            .ok_or_else(|| CompileError::plain("missing pooled string literal"))?;
+        let source = Value::FatPtr(FatPointer {
+            addr: Box::new(Value::Global(format!("__rfl_cstr_{index}"))),
+            bank: BankTag::Global,
+        });
+        let count = i32_const(builder, bytes.len() as i64)?;
+        let obj = call_helper(
+            builder,
+            "rfl_string_literal",
+            vec![source, count],
+            ptr_ty(),
+        )?;
+        let header = gep(builder, frame, base)?;
+        return store_vec_ptr(
+            builder,
+            &header,
+            &fat_temp(
+                match obj {
+                    Value::Temp(id) => id,
+                    _ => return Err(CompileError::plain("invalid string literal helper result")),
+                },
+                BankTag::Mixed,
+            ),
+        );
     }
     let len = Value::Constant(bytes.len() as i64);
     let words = builder

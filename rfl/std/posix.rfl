@@ -1,0 +1,512 @@
+// Guest POSIX services shared by FUZIX/Ripple and native Fuse-X.
+// Link with `rfl build --os fuzix` or `rfl build --os fuse-x`.
+extern "C" {
+    fn rfl_posix_chmod(path: *const u8, mode: u16) -> i16;
+    fn rfl_posix_executable(path: *const u8) -> i16;
+    fn rfl_posix_errno() -> i16;
+    fn rfl_posix_open(path: *const u8, kind: i16) -> i16;
+    fn rfl_posix_close(fd: i16) -> i16;
+    fn rfl_posix_dup(fd: i16) -> i16;
+    fn rfl_posix_read(fd: i16, bytes: *mut u8, count: usize) -> i32;
+    fn rfl_posix_write(fd: i16, bytes: *const u8, count: usize) -> i32;
+    fn rfl_posix_seek(fd: i16, offset: i32, origin: i16) -> i32;
+    fn rfl_posix_unlink(path: *const u8) -> i16;
+    fn rfl_posix_rename(from: *const u8, to: *const u8) -> i16;
+    fn rfl_posix_getpid() -> i16;
+    fn rfl_posix_argc() -> u16;
+    fn rfl_posix_argument(index: u16) -> *const u8;
+    fn rfl_posix_getenv(name: *const u8) -> *const u8;
+    fn rfl_posix_exit(status: i16);
+    fn rfl_posix_error_message(code: i16) -> *const u8;
+    fn rfl_posix_opendir(path: *const u8) -> *mut u16;
+    fn rfl_posix_closedir(directory: *mut u16) -> i16;
+    fn rfl_posix_readdir(directory: *mut u16, name: *mut u8) -> i16;
+    fn rfl_posix_metadata(path: *const u8, data: *mut u32) -> i16;
+    fn rfl_posix_mkdir(path: *const u8) -> i16;
+    fn rfl_posix_rmdir(path: *const u8) -> i16;
+    fn rfl_posix_chdir(path: *const u8) -> i16;
+    fn rfl_posix_cwd() -> *const u8;
+    fn rfl_posix_program(packed: *const u8, count: u16) -> i32;
+    fn rfl_posix_system(command: *const u8) -> i32;
+}
+
+/// A guest libc error number or a validated path, length, file-kind or write-progress error.
+export type IoError = Errno(i16) | InvalidPath | InvalidLength | WriteZero | UnsupportedFileType | SameFile;
+/// Standard input descriptor, including shell redirection and pipes.
+export const STDIN: i16 = 0;
+/// Standard output descriptor, including shell redirection and pipes.
+export const STDOUT: i16 = 1;
+/// Standard error descriptor.
+export const STDERR: i16 = 2;
+/// Seek relative to the beginning of a file.
+export const SEEK_SET: i16 = 0;
+/// Seek relative to the current file position.
+export const SEEK_CUR: i16 = 1;
+/// Seek relative to the end of a file.
+export const SEEK_END: i16 = 2;
+/// Maximum buffer length accepted by one `read_bytes` call: 65536 octets.
+export const MAX_READ: usize = 65536;
+/// Metadata kind for directories.
+export const DIRECTORY: u16 = 1;
+/// Metadata kind for regular files.
+export const REGULAR: u16 = 2;
+/// Metadata kind for symbolic links; metadata does not follow the link.
+export const SYMLINK: u16 = 3;
+/// File identity and size from guest `lstat`, without exposing a C struct layout.
+export struct Metadata {
+    /// `DIRECTORY`, `REGULAR`, `SYMLINK`, or zero for another kind.
+    kind: u16,
+    /// File length in octets.
+    size: u32,
+    /// Guest device identifier, used with `inode` to compare file identities.
+    device: u32,
+    /// Guest inode number, used with `device` to compare file identities.
+    inode: u32,
+    /// Unix permission and special mode bits (without the file type).
+    mode: u16
+}
+
+/// A directory entry and its metadata snapshot.
+export struct DirEntry {
+    /// Entry name without its parent path.
+    name: String,
+    /// Metadata snapshot; kind zero indicates inaccessible or unknown metadata.
+    info: Metadata
+}
+
+/// An owned guest file descriptor. Dropping it closes the descriptor once.
+export struct File {
+    /// Ownership state; use `descriptor`, `try_clone` and `close` rather than modifying it.
+    state: Owned<i16>
+}
+
+fn last_error() -> IoError {
+    Errno(rfl_posix_errno())
+}
+
+fn c_string(text: String) -> Result<Vec<u8>, IoError> {
+    if (text.len() > 4095) {
+        return Err(InvalidPath);
+    }
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..text.len()) {
+        let ch = text[i] as u32;
+        if (ch == 0 || ch > 255) {
+            return Err(InvalidPath);
+        }
+        bytes.push(ch as u8);
+    }
+    bytes.push(0);
+    Ok(bytes)
+}
+
+fn text_from_c(pointer: *const u8) -> String {
+    let mut text = "";
+    let mut i: usize = 0;
+    while (true) {
+        let byte = unsafe {
+            pointer[i]
+        };
+        if (byte == 0) {
+            return text;
+        }
+        text = text + from_byte(byte);
+        i += 1;
+    }
+    text
+}
+
+fn own_descriptor(fd: i16) -> Result<File, IoError> {
+    if (fd < 0) {
+        return Err(last_error());
+    }
+    Ok(File { state: owned(fd, fn(value: &mut i16) => {
+        if (*value >= 0) {
+            rfl_posix_close(*value);
+        }
+    }) })
+}
+
+fn open_file(path: String, kind: i16) -> Result<File, IoError> {
+    let bytes = c_string(path)?;
+    let fd = unsafe {
+        rfl_posix_open(&bytes[0], kind)
+    };
+    own_descriptor(fd)
+}
+
+/// Opens a guest file for reading. Paths are octet strings without embedded NULs.
+export fn open_read(path: String) -> Result<File, IoError> {
+    open_file(path, 0)
+}
+
+/// Creates or truncates a guest file for writing, requesting mode 0644 (subject to umask).
+export fn create(path: String) -> Result<File, IoError> {
+    open_file(path, 1)
+}
+
+/// Creates a new file exclusively; an existing name returns its guest errno.
+export fn create_new(path: String) -> Result<File, IoError> {
+    open_file(path, 3)
+}
+
+/// Opens or creates a guest file for append, requesting mode 0644 (subject to umask).
+export fn open_append(path: String) -> Result<File, IoError> {
+    open_file(path, 2)
+}
+
+/// Reads up to `limit` octets from a descriptor. An empty result means EOF (or a zero limit).
+/// Retries interrupted reads; limits above `MAX_READ` return `InvalidLength`.
+export fn read_bytes(fd: i16, limit: usize) -> Result<Vec<u8>, IoError> {
+    if (limit > MAX_READ) {
+        return Err(InvalidLength);
+    }
+    let mut bytes: Vec<u8> = [];
+    if (limit == 0) {
+        return Ok(bytes);
+    }
+    for (i in 0..limit) {
+        bytes.push(0);
+    }
+    let count = unsafe {
+        rfl_posix_read(fd, &mut bytes[0], limit)
+    };
+    if (count < 0) {
+        return Err(last_error());
+    }
+    while (bytes.len() > count as usize) {
+        bytes.pop();
+    }
+    Ok(bytes)
+}
+
+/// Writes every octet to a descriptor, handling partial and interrupted writes.
+/// A zero-progress write returns `WriteZero`; other syscall failures return `Errno`.
+export fn write_all(fd: i16, bytes: Vec<u8>) -> Result<unit, IoError> {
+    let mut at: usize = 0;
+    while (at < bytes.len()) {
+        let count = unsafe {
+            rfl_posix_write(fd, &bytes[at], bytes.len() - at)
+        };
+        if (count < 0) {
+            return Err(last_error());
+        }
+        if (count == 0) {
+            return Err(WriteZero);
+        }
+        at += count as usize;
+    }
+    Ok({})
+}
+
+/// Writes the indexed octets of `text` to a guest descriptor, without a newline.
+/// Returns `InvalidLength` if a character is outside the octet range.
+export fn write_text(fd: i16, text: String) -> Result<unit, IoError> {
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..text.len()) {
+        let ch = text[i] as u32;
+        if (ch > 255) {
+            return Err(InvalidLength);
+        }
+        bytes.push(ch as u8);
+    }
+    write_all(fd, bytes)
+}
+
+impl File {
+    /// Borrows the descriptor number; the `File` retains ownership.
+    export fn descriptor(&self) -> i16 {
+        let value = self.state.borrow();
+        *value
+    }
+    /// Duplicates the descriptor into a new owner. Both descriptors share the file position.
+    export fn try_clone(&self) -> Result<File, IoError> {
+        own_descriptor(rfl_posix_dup(self.descriptor()))
+    }
+    /// Reads at most `limit` octets, advancing the shared file position.
+    export fn read(&self, limit: usize) -> Result<Vec<u8>, IoError> {
+        read_bytes(self.descriptor(), limit)
+    }
+    /// Writes all octets, advancing the shared file position.
+    export fn write_all(&self, bytes: Vec<u8>) -> Result<unit, IoError> {
+        write_all(self.descriptor(), bytes)
+    }
+    /// Writes text without a newline, advancing the shared file position.
+    export fn write_text(&self, text: String) -> Result<unit, IoError> {
+        write_text(self.descriptor(), text)
+    }
+    /// Seeks using `SEEK_SET`, `SEEK_CUR` or `SEEK_END`, returning the new 32-bit file position.
+    export fn seek(&self, offset: i32, origin: i16) -> Result<i32, IoError> {
+        let position = rfl_posix_seek(self.descriptor(), offset, origin);
+        if (position < 0) {
+            Err(last_error())
+        } else {
+            Ok(position)
+        }
+    }
+    /// Consumes and closes the file, reporting errors that automatic drop would ignore.
+    export fn close(self) -> Result<unit, IoError> {
+        let mut owner = move(self);
+        let value = owner.state.borrow_mut();
+        let fd = *value;
+        *value = -1;
+        if (rfl_posix_close(fd) < 0) {
+            Err(last_error())
+        } else {
+            Ok({})
+        }
+    }
+}
+
+/// Removes a guest filesystem name. Open descriptors remain valid until closed.
+export fn remove_file(path: String) -> Result<unit, IoError> {
+    let bytes = c_string(path)?;
+    let status = unsafe {
+        rfl_posix_unlink(&bytes[0])
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok({})
+    }
+}
+
+/// Renames a guest filesystem name through libc; syscall errors preserve their errno.
+export fn rename(from: String, to: String) -> Result<unit, IoError> {
+    let old = c_string(from)?;
+    let new = c_string(to)?;
+    let status = unsafe {
+        rfl_posix_rename(&old[0], &new[0])
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok({})
+    }
+}
+
+/// Returns this guest process's PID, rather than the host's PID.
+export fn process_id() -> i16 {
+    rfl_posix_getpid()
+}
+
+/// Returns the guest argument vector, including the program name at index zero.
+export fn arguments() -> Vec<String> {
+    let mut args: Vec<String> = [];
+    let count = rfl_posix_argc() as usize;
+    for (i in 0..count) {
+        args.push(text_from_c(rfl_posix_argument(i as u16)));
+    }
+    args
+}
+
+/// Looks up an inherited guest environment variable, returning `None` if absent.
+export fn environment(name: String) -> Result<Option<String>, IoError> {
+    let bytes = c_string(name)?;
+    let pointer = unsafe {
+        rfl_posix_getenv(&bytes[0])
+    };
+    if (pointer.is_null()) {
+        Ok(None)
+    } else {
+        Ok(Some(text_from_c(pointer)))
+    }
+}
+
+/// Exits the guest process and flushes libc streams. RFL local destructors are not run.
+/// Prefer returning from `main` when automatic cleanup is needed.
+export fn exit(status: i16) {
+    rfl_posix_exit(status);
+}
+
+/// Returns a human-readable message for an RFL or guest libc I/O error.
+export fn error_message(error: IoError) -> String {
+    match error {
+        Errno(code) => text_from_c(rfl_posix_error_message(code)),
+        InvalidPath => "Invalid or non-octet path",
+        InvalidLength => "Invalid I/O length or non-octet text",
+        WriteZero => "Write made no progress",
+        UnsupportedFileType => "Unsupported file type",
+        SameFile => "Source and destination are the same file",
+    }
+}
+
+/// Reads metadata without following symbolic links, retaining device/inode identity.
+export fn metadata(path: String) -> Result<Metadata, IoError> {
+    let name = c_string(path)?;
+    let mut data: Vec<u32> = [0, 0, 0, 0, 0];
+    let status = unsafe {
+        rfl_posix_metadata(&name[0], &mut data[0])
+    };
+    if (status < 0) {
+        return Err(last_error());
+    }
+    Ok(Metadata { kind: data[0] as u16, size: data[1], device: data[2], inode: data[3], mode: data[4] as u16 })
+}
+
+/// Lists a directory, omitting `.` and `..`. The stream closes on every return path.
+/// Returns `InvalidLength` above 4096 entries; inaccessible entry metadata has kind zero.
+export fn read_dir(path: String) -> Result<Vec<DirEntry>, IoError> {
+    let name = c_string(path)?;
+    let raw = unsafe {
+        rfl_posix_opendir(&name[0])
+    };
+    if (raw.is_null()) {
+        return Err(last_error());
+    }
+    let guard = owned(raw, fn(p: &mut *mut u16) => {
+        rfl_posix_closedir(*p);
+    });
+    let view = guard.borrow();
+    let directory = *view;
+    let mut buffer: Vec<u8> = [];
+    for (i in 0..31) {
+        buffer.push(0);
+    }
+    let mut entries: Vec<DirEntry> = [];
+    while (true) {
+        let status = unsafe {
+            rfl_posix_readdir(directory, &mut buffer[0])
+        };
+        if (status < 0) {
+            return Err(last_error());
+        }
+        if (status == 0) {
+            return Ok(entries);
+        }
+        let entry = unsafe {
+            text_from_c(&buffer[0])
+        };
+        if (entry != "." && entry != "..") {
+            if (entries.len() == 4096) {
+                return Err(InvalidLength);
+            }
+            let full = path + "/" + entry;
+            let info = match metadata(full) {
+                Ok(info) => info,
+                Err(_) => Metadata { kind: 0, size: 0, device: 0, inode: 0, mode: 0 },
+            };
+            entries.push(DirEntry { name: entry, info: info });
+        }
+    }
+    Ok(entries)
+}
+
+/// Creates a guest directory, requesting mode 0755 (subject to umask).
+export fn create_dir(path: String) -> Result<unit, IoError> {
+    let name = c_string(path)?;
+    let status = unsafe {
+        rfl_posix_mkdir(&name[0])
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok({})
+    }
+}
+
+/// Removes an empty guest directory. Nonempty directories are rejected by the kernel.
+export fn remove_dir(path: String) -> Result<unit, IoError> {
+    let name = c_string(path)?;
+    let status = unsafe {
+        rfl_posix_rmdir(&name[0])
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok({})
+    }
+}
+
+/// Changes the process's guest working directory.
+export fn change_directory(path: String) -> Result<unit, IoError> {
+    let name = c_string(path)?;
+    let status = unsafe {
+        rfl_posix_chdir(&name[0])
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok({})
+    }
+}
+
+/// Returns the process's current guest working directory.
+export fn working_directory() -> Result<String, IoError> {
+    let pointer = rfl_posix_cwd();
+    if (pointer.is_null()) {
+        Err(last_error())
+    } else {
+        Ok(text_from_c(pointer))
+    }
+}
+
+/// Runs a command using the guest shell, returning its encoded wait status.
+/// Terminal applications should suspend curses first. No host shell is invoked.
+export fn run_command(command: String) -> Result<i32, IoError> {
+    let bytes = c_string(command)?;
+    let status = unsafe {
+        rfl_posix_system(&bytes[0])
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok(status)
+    }
+}
+
+/// Sets Unix permission bits on a guest path, following symbolic links.
+export fn set_permissions(path: String, mode: u16) -> Result<unit, IoError> {
+    let name = c_string(path)?;
+    let status = unsafe {
+        rfl_posix_chmod(&name[0], mode)
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok({})
+    }
+}
+
+/// Checks whether a path resolves to a regular file with execute permission.
+/// Symbolic links are followed. Missing/inaccessible metadata returns an error.
+export fn executable(path: String) -> Result<bool, IoError> {
+    let name = c_string(path)?;
+    let status = unsafe {
+        rfl_posix_executable(&name[0])
+    };
+    if (status < 0) {
+        Err(last_error())
+    } else {
+        Ok(status != 0)
+    }
+}
+
+/// Runs a guest program with literal arguments, without shell parsing, and waits
+/// in the foreground. The path is argv[0]; arguments excludes argv[0]. Relative
+/// paths use the current directory. Executable text files use the guest shell.
+/// Returns encoded wait status (exec failure: 126/127). Limits: 254 arguments,
+/// 4095 octets per argument/path, 64 KiB total, no embedded NUL.
+export fn run_program(path: String, arguments: Vec<String>) -> Result<i32, IoError> {
+    if (arguments.len() > 254) {
+        return Err(InvalidLength);
+    }
+    let mut packed = c_string(path)?;
+    for (i in 0..arguments.len()) {
+        let value = c_string(arguments[i])?;
+        if (packed.len() + value.len() > 65536) {
+            return Err(InvalidLength);
+        }
+        for (j in 0..value.len()) {
+            packed.push(value[j]);
+        }
+    }
+    let result = unsafe {
+        rfl_posix_program(&packed[0], (arguments.len() + 1) as u16)
+    };
+    if (result < 0) {
+        Err(last_error())
+    } else {
+        Ok(result)
+    }
+}

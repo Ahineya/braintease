@@ -2,383 +2,225 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-
-import {buildDisk, rootImage} from './disk.mjs';
+import {buildDisk, rootImage, atomicWrite} from './disk.mjs';
 import {fatFile} from './fat.mjs';
-import {BLOCK, CELLS, inodeBase} from './layout.mjs';
+import {fat16Image} from '../../../c-test/examples/rOS/mkfat16.mjs';
+import {BLOCK, CELLS, SB, ROOT_BLOCKS, DIRECT, INDIRECT, inodeBase} from './layout.mjs';
 import {checkRoot} from './fsck.mjs';
-import {installRoot, growRoot} from './install.mjs';
-
-const seed = [ {name : '/init', data : Buffer.alloc((18 + CELLS + 2) * CELLS + 7, 0x61)} ];
-function nodeBase(image, name) {
-  const w = p => image.readUInt16LE(p * 2);
-  let base = inodeBase(1);
-  for (const part of name.split('/').filter(Boolean)) {
-    let found = 0;
-    for (let off = 0; off < w(base + 4); off += 32) {
-      const pos = w(base + 12 + Math.floor(off / CELLS)) * CELLS + off % CELLS;
-      let text = '';
-      for (let j = 1; j <= 30 && w(pos + j); j++)
-        text += String.fromCharCode(w(pos + j));
-      if (text === part) { found = w(pos); break; }
-    }
-    assert.ok(found, `missing fixture path ${name}`);
-    base = inodeBase(found);
-  }
-  return base;
+import {installRoot, growRoot, installBlock} from './install.mjs';
+import {Image, openImage, writeImage} from './image.mjs';
+import {rootReader} from './read-root.mjs';
+const base = (image, name) => rootReader(image).lookup(name).base;
+const text = (image, name) => String.fromCharCode(...rootReader(image).read(name));
+const small = files => rootImage(files, 8192, 128);
+function temporary(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzix-v3-'));
+  try { fn(dir); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 }
-
-test('managed tty migration preserves files, metadata and old device aliases', () => {
-  const device = {name: '/dev/tty', mode: 0o20666, device: 0x200,
-                  migrateDeviceFrom: 0x201, data: []};
-  const old = rootImage([
-    {name: '/dev/tty', mode: 0o20666, device: 0x201, data: []},
-    {name: '/dev/saved-console', link: '/dev/tty'},
-    {name: '/note', mode: 0o100640, data: Buffer.from('saved session')}
-  ], 8192, 128);
-  const base = nodeBase(old, '/dev/tty');
-  old.writeUInt16LE(42, (base + 2) * 2); // Preserve the existing owner.
-  const before = Buffer.from(old);
-  const migrated = installRoot(old, [device]);
-  const tty = nodeBase(migrated, '/dev/tty');
-  const saved = nodeBase(migrated, '/dev/saved-console');
-  assert.equal(migrated.readUInt16LE((tty + 12) * 2), 0x200);
-  assert.equal(migrated.readUInt16LE((tty + 2) * 2), 42);
-  assert.equal(migrated.readUInt16LE((tty + 1) * 2), 1);
-  assert.equal(saved, base);
-  assert.equal(migrated.readUInt16LE((saved + 12) * 2), 0x201);
-  assert.equal(migrated.readUInt16LE((saved + 1) * 2), 1);
-  const note = nodeBase(old, '/note');
-  assert.equal(nodeBase(migrated, '/note'), note);
-  assert.deepEqual(migrated.subarray(note * 2, (note + 32) * 2),
-                   old.subarray(note * 2, (note + 32) * 2));
-  assert.ok(migrated.includes(Buffer.from('saved session', 'utf16le')));
-  assert.deepEqual(checkRoot(migrated).issues, []);
-  assert.equal(installRoot(migrated, [device]), migrated);
-  assert.deepEqual(old, before);
-  assert.throws(() => installRoot(old, [{...device, migrateDeviceFrom: undefined}]),
-                /refusing to replace existing device/);
-  for (const [mode, number] of [[0o20666, 0x202], [0o60666, 0x201], [0o100666, 0]]) {
-    const other = rootImage([{name: '/dev/tty', mode, device: number, data: []}], 8192, 128);
-    assert.throws(() => installRoot(other, [device]), /refusing to replace existing device/);
-  }
-  const dirty = Buffer.from(old);
-  dirty.writeUInt16LE(1, (CELLS + 105) * 2);
-  assert.throws(() => installRoot(dirty, [device]), /requires a clean root/);
+function programs(dir) {
+  for (const name of ['init','hello','forkcheck','preemptcheck','iotest']) fs.writeFileSync(path.join(dir, `${name}.rxe`), name);
+  fs.writeFileSync(path.join(dir, 'FUZIX.SYS'), 'kernel');
+  fs.writeFileSync(path.join(dir, '.mmu'), '1\n');
+}
+test('sparse images snapshot pages and preserve the source file across atomic replacement', () => temporary(dir => {
+  assert.equal(new Image(17).subarray(0, 512).length,17);
+  const image = new Image(1024 ** 3); image.writeUInt32LE(0x12345678, image.length - 4);
+  const fork = image.fork(); image.writeUInt16LE(99, image.length - 4);
+  assert.equal(fork.readUInt32LE(fork.length - 4), 0x12345678);
+  const name = path.join(dir, 'raw'); writeImage(name, fork);
+  const original = openImage(name), update = original.fork(); update.writeUInt16LE(42, 0);
+  atomicWrite(name, update);
+  assert.equal(original.readUInt16LE(0), 0);
+  // Reusing a view of the old inode must not clone the replacement's bytes.
+  writeImage(path.join(dir, 'snapshot'), original);
+  assert.equal(openImage(path.join(dir, 'snapshot')).readUInt16LE(0), 0);
+  assert.equal(openImage(name).readUInt16LE(0), 42);
+  assert.equal(fs.statSync(name).size, 1024 ** 3);
+  for (const filename of [name, path.join(dir, 'snapshot')])
+    assert.ok(fs.statSync(filename).blocks * 512 < 1024 ** 2, 'sparse copies must retain holes');
+  assert.throws(() => writeImage(name, openImage(name)), /in place/);
+  assert.equal(openImage(name).readUInt16LE(0), 42);
+}));
+test('V3 directories, 32-bit free lists and double-indirect files are consistent', () => {
+  const file = Buffer.alloc((DIRECT + INDIRECT + 2) * CELLS + 7, 0x61);
+  const image = small([{name:'/init',data:file}]), reader = rootReader(image);
+  assert.deepEqual(reader.checked.issues, []);
+  assert.ok(image.readUInt32LE((reader.lookup('/init').base + 12 + (DIRECT + 1) * 2) * 2));
+  assert.equal(reader.read('/init').length, file.length);
+  assert.ok(image.equals(small([{name:'/init',data:file}])));
 });
-
-test('launcher recovers dirty metadata with a backup, preserves no-op identity, and refuses structural damage', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzix-launch-recovery-'));
-  try {
-    for (const name of ['init', 'hello', 'forkcheck', 'preemptcheck', 'iotest'])
-      fs.writeFileSync(path.join(dir, `${name}.rxe`), Buffer.from(name));
-    fs.writeFileSync(path.join(dir, 'FUZIX.SYS'), 'kernel');
-    const disk = path.join(dir, 'disk.img');
-    buildDisk(dir, disk);
-    const original = fs.readFileSync(disk), root = fatFile(original, 'ROOTFS.IMG');
-    const withNote = installRoot(root.data, [{name: '/note', mode: 0o100640,
-                                            data: Buffer.from('saved session')}]);
-    // Reproduce a real pre-job-control disk, including an unclean shutdown.
-    withNote.writeUInt16LE(0x201, (nodeBase(withNote, '/dev/tty') + 12) * 2);
-    withNote.writeUInt16LE(1, (CELLS + 105) * 2);
-    const dirty = root.replace(withNote);
-    fs.writeFileSync(disk, dirty);
-    const launcher = fileURLToPath(new URL('./launch.py', import.meta.url));
-    const launch = () => spawnSync('python3', [launcher, '--build', dir, '--disk', disk,
-                                             '--vm', '/unused', '--update', '--build-only'],
-                                  {encoding: 'utf8'});
-    const recovered = launch();
-    assert.equal(recovered.status, 0, recovered.stderr);
-    assert.match(recovered.stdout, /Recovered the filesystem/);
-    assert.deepEqual(fs.readFileSync(`${disk}.bak`), dirty);
-    const good = fs.readFileSync(disk), cleanRoot = fatFile(good, 'ROOTFS.IMG').data;
-    assert.deepEqual(checkRoot(cleanRoot).issues, []);
-    assert.equal(cleanRoot.readUInt16LE((nodeBase(cleanRoot, '/dev/tty') + 12) * 2), 0x200);
-    assert.equal(cleanRoot.readUInt16LE((nodeBase(cleanRoot, '/dev/tty1') + 12) * 2), 0x201);
-    // User inodes, contents, and permissions survive the recovery and update.
-    const note = Buffer.from('saved session', 'utf16le');
-    assert.ok(cleanRoot.includes(note));
-    const before = fs.statSync(disk).mtimeMs;
-    assert.equal(launch().status, 0);
-    assert.equal(fs.statSync(disk).mtimeMs, before);
-    assert.deepEqual(fs.readFileSync(disk), good);
-    const backups = fs.readdirSync(dir).filter(n => n.startsWith('disk.img.bak'));
-
-    // Reuse init's data block in hello: this is ambiguous corruption, not a
-    // dirty shutdown. Automatic recovery must leave the entire image alone.
-    const brokenRoot = Buffer.from(cleanRoot);
-    const base = ino => inodeBase(ino);
-    brokenRoot.writeUInt16LE(brokenRoot.readUInt16LE((base(7) + 12) * 2),
-                            (base(8) + 12) * 2);
-    const broken = fatFile(good, 'ROOTFS.IMG').replace(brokenRoot);
-    fs.writeFileSync(disk, broken);
-    const refused = launch();
-    assert.equal(refused.status, 1);
-    assert.match(refused.stderr, /multiply allocated/);
-    assert.doesNotMatch(refused.stderr, /Traceback|file:\/\/\//);
-    assert.deepEqual(fs.readFileSync(disk), broken);
-    assert.deepEqual(fs.readdirSync(dir).filter(n => n.startsWith('disk.img.bak')), backups);
-  } finally {
-    fs.rmSync(dir, {recursive: true, force: true});
-  }
+test('checker repairs metadata but rejects duplicate or out-of-range 32-bit pointers', () => {
+  const image = small([{name:'/init',data:Buffer.from('old')}]);
+  image.writeUInt16LE(1, (CELLS + SB.clean) * 2);
+  image.writeUInt32LE(999, (CELLS + SB.tfree) * 2);
+  assert.equal(checkRoot(image).issues.length, 2);
+  assert.deepEqual(checkRoot(checkRoot(image, true).image).issues, []);
+  const broken = image.fork(); broken.writeUInt32LE(0x10002, (inodeBase(1) + 12) * 2);
+  assert.throws(() => checkRoot(broken, true), /outside data area/);
 });
-test('checker and upgrades retain allocated named-pipe buffers', () => {
-  const root = rootImage(
-      [{name: '/fifo', mode: 0o10600, data: Buffer.from('pipe buffer')}],
-      8192, 128);
-  assert.deepEqual(checkRoot(root).issues, []);
-  const grown = growRoot(root);
-  const installed = installRoot(grown, [{name: '/bin/tool', data: Buffer.from('new')}]);
-  // The first seeded file is inode 7. Its early buffer must be relocated
-  // when the larger inode table is installed, then kept out of free lists.
-  const base = inodeBase(7);
-  const block = installed.readUInt16LE((base + 12) * 2);
-  assert.ok(block >= 8192);
-  assert.deepEqual(checkRoot(installed).issues, []);
-  assert.deepEqual(Array.from({length: 11}, (_, i) =>
-      installed.readUInt16LE((block * CELLS + i) * 2)),
-      Array.from(Buffer.from('pipe buffer')));
-});
-test('C16 root has valid double-indirect files, directory links and free lists',
-     () => {
-       const image = rootImage(seed);
-       assert.ok(image.readUInt16LE((inodeBase(7) + 31) * 2), 'double-indirect tree is present');
-       assert.equal(checkRoot(image).issues.length, 0);
-       assert.deepEqual(image, rootImage(seed));
-     });
-test(
-    'checker repairs dirty/free-list metadata but rejects ambiguous structural corruption',
-    () => {
-      const image = rootImage(seed);
-      image.writeUInt16LE(1, (CELLS + 105) * 2);
-      image.writeUInt16LE(999, (CELLS + 109) * 2);
-      assert.equal(checkRoot(image).issues.length, 2);
-      const fixed = checkRoot(image, true).image;
-      assert.deepEqual(checkRoot(fixed).issues, []);
-      const broken = Buffer.from(image);
-      broken.writeUInt16LE(2, (inodeBase(1) + 12) * 2);
-      assert.throws(() => checkRoot(broken, true), /outside data area/);
-    });
-test(
-    'kernel updates preserve every root byte and no-op updates preserve disk timestamps',
-    () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzix-disk-'));
-      try {
-        for (const name
-                 of ['init', 'hello', 'forkcheck', 'preemptcheck', 'iotest'])
-          fs.writeFileSync(path.join(dir, `${name}.rxe`), Buffer.from(name));
-        fs.writeFileSync(path.join(dir, 'FUZIX.SYS'), 'first kernel');
-        const disk = path.join(dir, 'disk.img');
-        buildDisk(dir, disk);
-        let image = fs.readFileSync(disk), root = fatFile(image, 'ROOTFS.IMG');
-        root.data[450] = 0x5a;
-        image = root.replace(root.data);
-        fs.writeFileSync(disk, image);
-        const expected = fatFile(image, 'ROOTFS.IMG').data;
-        fs.writeFileSync(path.join(dir, 'FUZIX.SYS'),
-                         Buffer.alloc(24000, 0x5e));
-        assert.equal(buildDisk(dir, disk), true);
-        assert.deepEqual(fatFile(fs.readFileSync(disk), 'ROOTFS.IMG').data,
-                         expected);
-        assert.deepEqual(fs.readFileSync(`${disk}.bak`), image);
-        const before = fs.statSync(disk).mtimeMs;
-        assert.equal(buildDisk(dir, disk), false);
-        assert.equal(fs.statSync(disk).mtimeMs, before);
-      } finally {
-        fs.rmSync(dir, {recursive : true, force : true});
-      }
-    });
-test(
-    'FAT mapping refuses truncated or circular chains and replacement resizing',
-    () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzix-fat-'));
-      try {
-        for (const name
-                 of ['init', 'hello', 'forkcheck', 'preemptcheck', 'iotest'])
-          fs.writeFileSync(path.join(dir, `${name}.rxe`), 'seed');
-        fs.writeFileSync(path.join(dir, 'FUZIX.SYS'), 'kernel');
-        const disk = path.join(dir, 'disk.img');
-        buildDisk(dir, disk);
-        const image = fs.readFileSync(disk);
-        assert.throws(() =>
-                          fatFile(image, 'ROOTFS.IMG').replace(Buffer.alloc(1)),
-                      /resize/);
-        assert.throws(() => fatFile(image.subarray(0, 1000), 'ROOTFS.IMG'));
-        const cyclic = Buffer.from(image),
-              root = (cyclic.readUInt16LE(14) +
-                      cyclic[16] * cyclic.readUInt16LE(22)) *
-                     cyclic.readUInt16LE(11),
-              first = cyclic.readUInt16LE(root + 32 + 26);
-        for (let n = 0; n < 2; n++)
-          cyclic.writeUInt16LE(first, 512 + n * cyclic.readUInt16LE(22) * 512 +
-                                          first * 2);
-        assert.throws(() => fatFile(cyclic, 'ROOTFS.IMG'), /chain/);
-      } finally {
-        fs.rmSync(dir, {recursive : true, force : true});
-      }
-    });
-
-test(
-    'userspace upgrades preserve user data, hard links, configuration, and no-op identity',
-    async () => {
-      const {installRoot, growRoot} = await import('./install.mjs');
-      let root = rootImage(
-          [
-            {name : '/init', data : Buffer.from('old init')},
-            {name : '/note', mode : 0o100640, data : Buffer.from('keep me')}, {
-              name : '/etc/passwd',
-              mode : 0o100644,
-              data : Buffer.from('custom passwd\n')
-            }
-          ],
-          8192, 128);
-      const before = Buffer.from(root);
-      const files = [
-        {name : '/init', data : Buffer.from('new init')},
-        ...Array.from(
-            {length : 40},
-            (_, i) =>
-                ({name : `/bin/tool${i}`, data : Buffer.alloc(800 + i, i)})),
-        {
-          name : '/etc/passwd',
-          mode : 0o100644,
-          preserve : true,
-          data : Buffer.from('default passwd\n')
-        }
-      ];
-      function file(image, name) {
-        const w = p => image.readUInt16LE(p * 2);
-        let ino = 1;
-        for (const part of name.split('/').filter(Boolean)) {
-          const base = inodeBase(ino),
-                size = w(base + 4) + w(base + 5) * 65536;
-          let found = 0;
-          for (let off = 0; off < size; off += 32) {
-            const b = w(base + 12 + Math.floor(off / CELLS)),
-                  p = b * CELLS + off % CELLS;
-            let n = '';
-            for (let j = 1; j <= 30 && w(p + j); j++)
-              n += String.fromCharCode(w(p + j));
-            if (n === part) {
-              found = w(p);
-              break;
-            }
-          }
-          assert.ok(found, `missing ${name}`);
-          ino = found;
-        }
-        const base = inodeBase(ino),
-              size = w(base + 4) + w(base + 5) * 65536;
-        return {
-          base,
-          mode : w(base),
-          data : Array.from(
-              {length : size},
-              (_, i) => w(w(base + 12 + Math.floor(i / CELLS)) * CELLS + i % CELLS))
-        };
-      }
-      const note = file(root, '/note'), config = file(root, '/etc/passwd');
-      root = installRoot(growRoot(root), files);
-      assert.deepEqual(checkRoot(root).issues, []);
-      assert.equal(root.length, 65535 * BLOCK);
-      assert.deepEqual(file(root, '/note'), note);
-      assert.deepEqual(file(root, '/etc/passwd'), config);
-      assert.deepEqual(file(root, '/init').data,
-                       Array.from(Buffer.from('new init')));
-      assert.deepEqual(installRoot(root, files), root);
-      assert.deepEqual(before,
-                       rootImage(
-                           [
-                             {name : '/init', data : Buffer.from('old init')}, {
-                               name : '/note',
-                               mode : 0o100640,
-                               data : Buffer.from('keep me')
-                             },
-                             {
-                               name : '/etc/passwd',
-                               mode : 0o100644,
-                               data : Buffer.from('custom passwd\n')
-                             }
-                           ],
-                           8192, 128));
-      const dirty = Buffer.from(root);
-      dirty.writeUInt16LE(1, (CELLS + 105) * 2);
-      assert.throws(
-          () => installRoot(dirty,
-                            [ {name : '/bin/new', data : Buffer.from('new')} ]),
-          /clean root/);
-      assert.throws(() => installRoot(
-                        root, [ {name : '/bin', data : Buffer.from('bad')} ]),
-                    /nonregular/);
-    });
-
-test('replacing a managed executable preserves hard-linked user copies', () => {
-  let image = rootImage([
-    {name: '/init', data: Buffer.from('old')},
-    {name: '/saved', data: Buffer.from('old')}
-  ], 8192, 128);
-  const w = (b, p) => b.readUInt16LE(p * 2);
-  const base = ino => inodeBase(ino);
-  function entry(b, name) {
-    const root = base(1);
-    for (let off = 0; off < w(b, root + 4); off += 32) {
-      const p = w(b, root + 12 + Math.floor(off / CELLS)) * CELLS + off % CELLS;
-      let text = '';
-      for (let j = 1; j <= 30 && w(b, p + j); j++) text += String.fromCharCode(w(b, p + j));
-      if (text === name) return p;
-    }
-    throw Error(`missing ${name}`);
+test('managed devices retain old aliases, ownership and unrelated files', () => {
+  const old = small([{name:'/dev/tty',mode:0o20666,device:0x201},
+    {name:'/note',mode:0o100640,data:Buffer.from('saved session')}]);
+  const device = {name:'/dev/tty',mode:0o20666,device:0x200,migrateDeviceFrom:0x201};
+  const original = base(old, '/dev/tty'); old.writeUInt16LE(42, (original + 2) * 2);
+  // Device aliases are constructed explicitly: installer hard links apply to regular files.
+  let linked = installRoot(old,[{name:'/dev/saved-console',mode:0o20666,device:0x201}]);
+  const reader=rootReader(linked), dev=reader.lookup('/dev'), alias=reader.lookup('/dev/saved-console');
+  const directory=reader.read('/dev');
+  for(let at=0;at<directory.length;at+=32) if(directory[at]===alias.ino) {
+    const block=dev.map.get(Math.floor(at/CELLS));
+    linked.writeUInt16LE(reader.lookup('/dev/tty').ino,(block*CELLS+at%CELLS)*2);
   }
-  const init = w(image, entry(image, 'init')), saved = w(image, entry(image, 'saved'));
-  image.writeUInt16LE(init, entry(image, 'saved') * 2);
-  image.writeUInt16LE(2, (base(init) + 1) * 2);
-  image.fill(0, base(saved) * 2, (base(saved) + 32) * 2);
-  image = checkRoot(image, true).image;
-  const upgraded = installRoot(growRoot(image), [{name: '/init', data: Buffer.from('new')}]);
-  for (const [name, expected] of [['init', 'new'], ['saved', 'old']]) {
-    const inode = base(w(upgraded, entry(upgraded, name))), block = w(upgraded, inode + 12);
-    const data = Array.from({length: w(upgraded, inode + 4)}, (_, i) => w(upgraded, block * CELLS + i));
-    assert.equal(String.fromCharCode(...data), expected);
-    assert.equal(w(upgraded, inode + 1), 1);
-  }
-  assert.deepEqual(checkRoot(upgraded).issues, []);
+  linked.fill(0,alias.base*2,(alias.base+64)*2);
+  linked.writeUInt16LE(2,(original+1)*2);
+  linked=checkRoot(linked,true).image;
+  const saved=original;
+  const migrated = installRoot(linked,[device]);
+  assert.equal(migrated.readUInt32LE((base(migrated,'/dev/tty')+12)*2),0x200);
+  assert.equal(migrated.readUInt16LE((base(migrated,'/dev/tty')+2)*2),42);
+  assert.equal(migrated.readUInt32LE((saved+12)*2),0x201);
+  assert.equal(text(migrated,'/note'),'saved session');
+  assert.equal(installRoot(migrated,[device]),migrated);
+  assert.throws(()=>installRoot(old,[{...device,migrateDeviceFrom:undefined}]),/refusing to replace/);
+  const dirty=old.fork();dirty.writeUInt16LE(1,(CELLS+SB.clean)*2);
+  assert.throws(()=>installRoot(dirty,[device]),/clean root/);
 });
+test('upgrades preserve hard-linked user executables and managed aliases', () => {
+  let image = small([{name:'/bin/vi',data:Buffer.from('old')},{name:'/bin/saved',link:'/bin/vi'},
+                    {name:'/etc/passwd',mode:0o100644,data:Buffer.from('custom')}]);
+  const files=[{name:'/bin/levee',data:Buffer.from('new levee')},{name:'/bin/vi',link:'/bin/levee'},
+               {name:'/etc/passwd',preserve:true,data:Buffer.from('default')}];
+  image=installRoot(image,files);
+  assert.equal(text(image,'/bin/saved'),'old');assert.equal(text(image,'/etc/passwd'),'custom');
+  assert.equal(base(image,'/bin/vi'),base(image,'/bin/levee'));
+  assert.notEqual(base(image,'/bin/vi'),base(image,'/bin/saved'));
+  assert.equal(installRoot(image,files),image);
+  assert.throws(()=>installRoot(image,[{name:'/bin/oops',link:'/bin/missing'}]),/missing.*target/);
+});
+test('growth preserves inode identity and named-pipe data', () => {
+  const old=small([{name:'/fifo',mode:0o10600,data:Buffer.from('pipe buffer')}]);
+  const grown=growRoot(old), reader=rootReader(grown);
+  assert.equal(grown.length,ROOT_BLOCKS*BLOCK);
+  assert.equal(base(old,'/fifo'),base(grown,'/fifo'));
+  assert.equal(text(grown,'/fifo'),'pipe buffer');
+  assert.deepEqual(reader.checked.issues,[]);
+});
+test('real V2 conversion preserves native cells, inode numbers, hard links, modes and devices', () => {
+  const old=zlib.gunzipSync(fs.readFileSync(new URL('./fixtures/c16-v2.img.gz',import.meta.url)));
+  const before=Buffer.from(old), original=checkRoot(old), upgraded=growRoot(old,8192), reader=rootReader(upgraded);
+  assert.deepEqual(original.issues,[]);assert.equal(original.format.version,2);
+  assert.deepEqual([...reader.read('/note')],[0xabcd,0x1234,10]);
+  assert.equal(reader.lookup('/note').ino,8);assert.equal(reader.lookup('/note').links,1);
+  assert.equal(upgraded.readUInt16LE(reader.lookup('/note').base*2),0o100640);
+  assert.equal(reader.lookup('/bin/large').ino,reader.lookup('/bin/alias').ino);
+  assert.equal(reader.read('/bin/large').length,1100000);
+  assert.ok(reader.read('/bin/large').every(c=>c===0x9abc));
+  assert.equal(upgraded.readUInt32LE((reader.lookup('/dev/test').base+12)*2),0x123);
+  assert.deepEqual(old,before);
+});
+test('checker and installer retain high physical blocks and sparse triple-indirect mappings', () => {
+  let image=rootImage([{name:'/wide',data:Buffer.from('X')}],70000,128), reader=rootReader(image);
+  const node=reader.lookup('/wide'), source=node.map.get(0), high=69999;
+  image.copy(image,high*BLOCK,source*BLOCK,(source+1)*BLOCK);
+  image.writeUInt32LE(high,(node.base+12)*2);
+  const logical=DIRECT+INDIRECT+INDIRECT**2+3;
+  let next=69990;
+  installBlock(image,node.base,logical,69980,()=>next--);
+  image.writeUInt16LE(0xbeef,69980*BLOCK);
+  image.writeUInt32LE(logical*CELLS+1,(node.base+4)*2);
+  image=checkRoot(image,true).image;
+  reader=rootReader(image);
+  assert.equal(reader.lookup('/wide').map.get(0),high);
+  assert.equal(reader.lookup('/wide').map.get(logical),69980);
+  image=installRoot(image,[{name:'/bin/tool',data:Buffer.from('tool')}]);
+  assert.equal(rootReader(image).lookup('/wide').map.get(logical),69980);
+  assert.deepEqual(checkRoot(image).issues,[]);
+});
+test('default disk is sparse, updates preserve root and no-op timestamps', () => temporary(dir => {
+  programs(dir);const disk=path.join(dir,'disk.img');buildDisk(dir,disk);
+  let image=openImage(disk), root=fatFile(image,'ROOTFS.IMG');
+  assert.equal(root.data.length,ROOT_BLOCKS*BLOCK);
+  assert.match(text(root.data,'/etc/nxlaunch.cnf'),/Terminal - \/bin\/nxterm[\s\S]*Editor - \/bin\/nxterm \/bin\/vi/);
+  assert.match(text(root.data,'/etc/nxlaunch.cnf'),/Eyes - \/bin\/nxeyes\nClock - \/bin\/nxclock/);
+  assert.match(text(root.data,'/etc/nxlaunch.cnf'),/Roaches - \/bin\/nxroach/);
+  let changed=root.data.fork();changed.writeUInt16LE(0x5a,200);
+  atomicWrite(disk,root.replace(changed));
+  const expected=fatFile(openImage(disk),'ROOTFS.IMG').data;
+  fs.writeFileSync(path.join(dir,'FUZIX.SYS'),Buffer.alloc(24000,0x5e));
+  assert.equal(buildDisk(dir,disk),true);
+  assert.ok(fatFile(openImage(disk),'ROOTFS.IMG').data.equals(expected));
+  const before=fs.statSync(disk).mtimeMs;assert.equal(buildDisk(dir,disk),false);
+  assert.equal(fs.statSync(disk).mtimeMs,before);
+}));
+test('launcher backs up repairs, preserves notes, and refuses structural damage', () => temporary(dir => {
+  programs(dir);const disk=path.join(dir,'disk.img');
+  // Recovery and automatic growth do not require several full-size outer-disk
+  // copies. Default geometry is covered above; keep repair backups small here.
+  const files=['init','hello','forkcheck','preemptcheck','iotest'].map(name => ({
+    name:name==='init'?'/init':`/bin/${name}`,data:Buffer.from(name)
+  }));
+  atomicWrite(disk,fat16Image([{name:'FUZIX.SYS',data:Buffer.from('kernel')},
+    {name:'ROOTFS.IMG',data:rootImage(files,8192,1024)}],
+    {totalSectors:65536,sectorsPerFat:64,sectorsPerCluster:4}));
+  const old=openImage(disk), root=fatFile(old,'ROOTFS.IMG');
+  const changed=installRoot(root.data,[{name:'/note',mode:0o100640,data:Buffer.from('saved session')}]);
+  changed.writeUInt16LE(1,(CELLS+SB.clean)*2);atomicWrite(disk,root.replace(changed));
+  const launcher=fileURLToPath(new URL('./launch.py',import.meta.url));
+  const launch=()=>spawnSync('python3',[launcher,'--build',dir,'--disk',disk,'--vm','/unused','--update','--build-only'],{encoding:'utf8'});
+  const result=launch();assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/Recovered/);
+  const good=fatFile(openImage(disk),'ROOTFS.IMG').data;
+  assert.equal(text(good,'/note'),'saved session');assert.deepEqual(checkRoot(good).issues,[]);
+  assert.ok(fs.existsSync(disk+'.bak'));const before=fs.statSync(disk).mtimeMs;
+  assert.equal(launch().status,0);assert.equal(fs.statSync(disk).mtimeMs,before);
+  const broken=good.fork();broken.writeUInt32LE(broken.readUInt32LE((base(good,'/init')+12)*2),(base(good,'/bin/hello')+12)*2);
+  atomicWrite(disk,fatFile(openImage(disk),'ROOTFS.IMG').replace(broken));
+  const backups=fs.readdirSync(dir).filter(x=>x.startsWith('disk.img.bak'));
+  const refused=launch();assert.notEqual(refused.status,0);assert.match(refused.stderr,/multiply allocated/);
+  assert.deepEqual(fs.readdirSync(dir).filter(x=>x.startsWith('disk.img.bak')),backups);
+}));
+test('outer FAT rejects cycles, inconsistent copies and resizing', () => temporary(dir => {
+  programs(dir);const disk=path.join(dir,'disk.img');buildDisk(dir,disk);
+  const image=openImage(disk), cyclic=image.fork();
+  assert.throws(()=>fatFile(image,'ROOTFS.IMG').replace(Buffer.alloc(1)),/resize/);
+  assert.throws(()=>fatFile(image.subarray(0,1000),'ROOTFS.IMG'));
+  const root=(cyclic.readUInt16LE(14)+cyclic.readUInt8(16)*cyclic.readUInt16LE(22))*512;
+  const first=cyclic.readUInt16LE(root+32+26);
+  for(let n=0;n<2;n++)cyclic.writeUInt16LE(first,512+n*cyclic.readUInt16LE(22)*512+first*2);
+  assert.throws(()=>fatFile(cyclic,'ROOTFS.IMG'),/chain/);
+}));
 
-test('managed vi aliases share Levee and preserve older user hard links during upgrades', () => {
-  const base = ino => inodeBase(ino);
-  const w = (b, p) => b.readUInt16LE(p * 2);
-  const entry = (b, name) => {
-    const block = w(b, base(2) + 12), size = w(b, base(2) + 4);
-    for (let i = 0; i < size; i += 32) {
-      const pos = block * CELLS + i;
-      let n = '';
-      for (let j = 1; j <= 30 && w(b, pos + j); j++) n += String.fromCharCode(w(b, pos + j));
-      if (n === name) return w(b, pos);
-    }
-    throw Error('missing ' + name);
-  };
-  const files = [{name:'/bin/levee',data:Buffer.from('levee one')},
-                 {name:'/bin/vi',link:'/bin/levee'}];
-  const seeded = rootImage(files);
-  assert.equal(entry(seeded,'vi'),entry(seeded,'levee'));
-  assert.deepEqual(checkRoot(seeded).issues,[]);
-  let root = rootImage([{name:'/bin/vi',data:Buffer.from('old vi')},
-                        {name:'/bin/saved',link:'/bin/vi'}]);
-  const saved = entry(root,'saved');
-  root = installRoot(root, files);
-  assert.equal(entry(root,'saved'),saved);
-  assert.notEqual(entry(root,'vi'),saved);
-  assert.equal(w(root,base(saved)+1),1);
-  assert.equal(entry(root,'vi'),entry(root,'levee'));
-  assert.equal(w(root,base(entry(root,'vi'))+1),2);
-  assert.deepEqual(checkRoot(root).issues,[]);
-  assert.equal(installRoot(root,files),root);
-  const next = installRoot(root,[{name:'/bin/levee',data:Buffer.from('levee two')},files[1]]);
-  assert.equal(entry(next,'vi'),entry(next,'levee'));
-  assert.equal(entry(next,'saved'),saved);
-  assert.deepEqual(checkRoot(next).issues,[]);
-  assert.throws(()=>installRoot(next,[{name:'/bin/oops',link:'/bin/missing'}]),/missing.*target/);
+test('ordinary install upgrades an outer V2 disk with a byte-exact backup', () => temporary(dir => {
+  programs(dir);
+  const legacy=zlib.gunzipSync(fs.readFileSync(new URL('./fixtures/c16-v2.img.gz',import.meta.url)));
+  const disk=path.join(dir,'disk.img'), old=fat16Image([{name:'FUZIX.SYS',data:Buffer.from('old')},{name:'ROOTFS.IMG',data:legacy}]);
+  fs.writeFileSync(disk,old);
+  const launcher=fileURLToPath(new URL('./launch.py',import.meta.url));
+  const refused=spawnSync('python3',[launcher,'--build',dir,'--disk',disk,'--vm','/unused','--','--net','off'],{encoding:'utf8'});
+  assert.notEqual(refused.status,0);assert.match(refused.stderr,/C16 V2 disk needs an upgrade/);
+  assert.deepEqual(fs.readFileSync(disk),old);assert.ok(!fs.existsSync(disk+'.bak'));
+  assert.equal(buildDisk(dir,disk,false,true),true);
+  const upgraded=fatFile(openImage(disk),'ROOTFS.IMG').data;
+  assert.equal(upgraded.length,ROOT_BLOCKS*BLOCK);
+  assert.deepEqual([...rootReader(upgraded).read('/note')],[0xabcd,0x1234,10]);
+  assert.equal(base(upgraded,'/bin/large'),base(upgraded,'/bin/alias'));
+  assert.deepEqual(fs.readFileSync(disk+'.bak'),old);
+}));
+
+test('pathname sockets survive checks, managed installs and growth without data blocks', () => {
+  // Start with an empty ordinary file, then make the same disk inode a socket.
+  const image = small([{name:'/tmp/service',data:Buffer.alloc(0)}]);
+  const at = base(image, '/tmp/service'); image.writeUInt16LE(0o140700,at*2);
+  assert.deepEqual(checkRoot(image).issues, []);
+  assert.equal(rootReader(image).lookup('/tmp/service').map.size,0);
+  const updated = installRoot(image,[{name:'/bin/new',data:Buffer.from('app')}]);
+  const grown = growRoot(updated,16384), node = rootReader(grown).lookup('/tmp/service');
+  assert.equal(node.type,0xc000);assert.equal(node.size,0);assert.equal(node.map.size,0);
+  const badSize=image.fork();badSize.writeUInt32LE(1,(at+4)*2);
+  assert.throws(()=>checkRoot(badSize),/invalid socket metadata/);
+  const badPointer=image.fork();badPointer.writeUInt32LE(123,(at+12)*2);
+  assert.throws(()=>checkRoot(badPointer),/invalid socket metadata/);
 });

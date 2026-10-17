@@ -13,8 +13,10 @@ subset: license/readmes, build configuration, headers, engine, Nano-X and NX11
 sources, drivers, compiled fonts, documentation, Nano-X demos and nxroach image
 assets plus the dialog resource header included by nxroach. `UPSTREAM.json` records every extracted file, archive prefix and hash.
 Large optional font/dependency/data collections remain in the complete archive.
-This is an import and audit baseline, not a working RCC port. There are no
-Nano-X source patches in this batch.
+This is the pristine import and audit baseline. The C16 engine, server, client, NanoWM and launcher
+adaptations are maintained separately in `adapt.py`, `server_adapt.py`,
+`apps_adapt.py`, `roach_adapt.py` and `ripple/`; generated
+sources live in the build directory. See [port status](README.md).
 
 Verify offline:
 

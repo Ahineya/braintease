@@ -15,6 +15,7 @@ public final class EditorTest {
     public static void main(String[] args) throws Exception {
         lexer();
         rename();
+        formatting();
         traits();
         Path build = Path.of(args.length == 0 ? "build" : args[0]);
         Files.createDirectories(build);
@@ -27,7 +28,7 @@ public final class EditorTest {
                 for (Path path : files.sorted(Comparator.reverseOrder()).toList()) Files.delete(path);
             }
         }
-        System.out.println("Editor checks passed: lexer recovery/restarts, bracket/comment isolation, executable discovery.");
+        System.out.println("Editor checks passed: lexer recovery/restarts, bracket/comment isolation, LSP formatting, executable discovery.");
     }
 
     private static void lexer() {
@@ -51,6 +52,20 @@ public final class EditorTest {
             require(restarted.getTokenType() == full.getTokenType() && restarted.getTokenEnd() == full.getTokenEnd(), "lexer restart");
             full.advance();
         }
+    }
+
+    private static void formatting() {
+        var support = new RflLspCustomization().getFormattingCustomizer();
+        require(support instanceof com.intellij.platform.lsp.api.customization.LspFormattingSupport,
+            "native Reformat Code uses the language server formatter");
+        var formatter = (com.intellij.platform.lsp.api.customization.LspFormattingSupport) support;
+        var file = new com.intellij.testFramework.LightVirtualFile("example.rfl");
+        require(formatter.shouldFormatThisFileExclusivelyByServer(file, true, false), "prefer the shared formatter over IDE formatting");
+        require(formatter.shouldFormatThisFileExclusivelyByServer(file, false, true), "explicit server formatting selection");
+        require(formatter.shouldFormatThisFileExclusivelyByServer(file, false, false),
+            "RFL PSI without a built-in formatter or explicit server selection still uses LSP");
+        require(!formatter.shouldFormatThisFileExclusivelyByServer(
+            new com.intellij.testFramework.LightVirtualFile("other.txt"), true, true), "only claim RFL files");
     }
 
     private static void rename() {

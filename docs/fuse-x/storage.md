@@ -10,11 +10,14 @@ lets FUZIX retain its filesystem, system files, application installation, and
 guest device-file semantics. It also keeps a portable image usable with the
 Ripple port and existing image tooling, subject to executable-format differences.
 
-The hosted default uses 65,535 blocks, or 128 MiB minus 2 KiB of host storage,
-with 1,024 inodes. Normal application installation expands smaller clean roots
-to this geometry and keeps a backup. C16 V2 uses 16-bit block numbers, so larger
-single filesystems require a format change. Each ordinary file octet occupies
-one 16-bit cell on this image; host-folder files retain their normal octet layout.
+The hosted default uses 524,288 blocks: a sparse **1 GiB C16 V3** root with
+1,024 inodes. Installation expands smaller roots and converts C16 V2 while
+retaining inode identities, metadata, native cells and hard links, with a backup
+before replacement. V3 uses 32-bit block addresses, three indirect levels, and
+wide statistics/truncation. Host tools use bounded caches and changed-page
+updates. See the [shared filesystem specification](../arch/c16-filesystem.md).
+Ordinary file octets occupy 16-bit cells on this image; host-folder files
+retain their normal octet layout.
 
 The hosted storage adapter must define block/octet conversion, error reporting,
 flush behavior, and orderly shutdown. Give a writable image one session owner;

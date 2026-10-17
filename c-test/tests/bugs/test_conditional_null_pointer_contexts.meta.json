@@ -1,0 +1,5 @@
+{
+  "description": "Null-pointer conditionals preserve pointer types, decay, banks and lazy evaluation in both branch orders",
+  "expected": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n",
+  "use_runtime": true
+}

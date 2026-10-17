@@ -1,0 +1,5 @@
+{
+  "description": "Initialized and writable wide scalar fields at a global data bank boundary",
+  "expected": "YYYYY\n",
+  "use_runtime": true
+}

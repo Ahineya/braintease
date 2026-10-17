@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the text/pager utility batch and larger filesystem through real guests."""
 import argparse
+from root_reader import RootReader
 import json
 from pathlib import Path
 import subprocess
@@ -101,41 +102,7 @@ def run(image, jit):
 
 
 def read_files(image):
-    # Independent decoder for the V2 inode and indirect-pointer layout.
-    data = subprocess.check_output(['node', '--input-type=module', '-e', """
-import fs from 'node:fs';
-import {fatFile} from './ports/fuzix/tools/fat.mjs';
-process.stdout.write(fatFile(fs.readFileSync(process.argv[1]), 'ROOTFS.IMG').data);
-""", str(image)], cwd=ROOT)
-    def w(p):
-        return int.from_bytes(data[2*p:2*p+2], 'little')
-    def node(ino):
-        return (2 + ino // 32) * 1024 + (ino % 32) * 32
-    def cells(ino):
-        base = node(ino)
-        size = w(base + 4) + 65536 * w(base + 5)
-        def block(n):
-            if n < 18:
-                return w(base + 12 + n)
-            n -= 18
-            if n < 1024:
-                return w(w(base + 30) * 1024 + n)
-            n -= 1024
-            return w(w(w(base + 31) * 1024 + n // 1024) * 1024 + n % 1024)
-        return [w(block(i // 1024) * 1024 + i % 1024) if block(i // 1024) else 0 for i in range(size)]
-    def read(path):
-        ino = 1
-        for part in path.strip('/').split('/'):
-            directory = cells(ino)
-            for i in range(0, len(directory), 32):
-                name = ''.join(chr(v) for v in directory[i+1:i+31]).split('\0')[0]
-                if directory[i] and name == part:
-                    ino = directory[i]
-                    break
-            else:
-                raise AssertionError('missing ' + path)
-        return cells(ino)
-    return read
+    return RootReader(image).read
 
 
 with tempfile.TemporaryDirectory(prefix='fuzix-texttools-') as temporary:
@@ -167,9 +134,11 @@ with tempfile.TemporaryDirectory(prefix='fuzix-texttools-') as temporary:
         subprocess.run(['node', '--input-type=module', '-e', """
 import fs from 'node:fs';
 import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const disk = fs.readFileSync(process.argv[1]), root = fatFile(disk, 'ROOTFS.IMG');
-fs.writeFileSync(process.argv[1], root.replace(installRoot(root.data, JSON.parse(fs.readFileSync(process.argv[2])))));
+const disk = openImage(process.argv[1]), root = fatFile(disk, 'ROOTFS.IMG');
+atomicWrite(process.argv[1], root.replace(installRoot(root.data, JSON.parse(fs.readFileSync(process.argv[2])))));
 """, str(image), str(manifest)], cwd=ROOT, check=True)
         run(image, jit)
         read = read_files(image)
@@ -202,4 +171,4 @@ fs.writeFileSync(process.argv[1], root.replace(installRoot(root.data, JSON.parse
         assert text('empty-checksum').split()[:2] == ['4294967295', '0']
         assert read('/text/native-copy') == pattern
         assert read('/sparse-tail') == native and read('/sparse') == []
-        print(('JIT' if jit else 'Interpreter') + ': text utilities, redirected pagers and V2 disk I/O passed', flush=True)
+        print(('JIT' if jit else 'Interpreter') + ': text utilities, redirected pagers and V3 disk I/O passed', flush=True)

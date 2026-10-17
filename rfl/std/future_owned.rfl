@@ -3,7 +3,9 @@ import { Context } from "std/task";
 import { replace } from "std/mem";
 
 // Only the handle moves. The child is always polled in its Owned allocation.
+/// A move-only future wrapper that keeps its child at a stable owned allocation and cancels unfinished work when dropped.
 export type OwnedFuture<F:Future> = FutureRunning(Owned<F>) | FutureComplete | FutureCancelled;
+/// Moves a future into stable owned storage. Dropping unfinished work calls its cancellation method.
 export fn own_future<F:Future>(future:F)->OwnedFuture<F> {
     FutureRunning(owned(move(future),fn(future:&mut F)=>{future.cancel();}))
 }
@@ -38,7 +40,9 @@ impl<F:Future> Future for OwnedFuture<F> {
 }
 
 // Unlike the callback prototype, this can hold move-only output values.
+/// Internal state for a single-use future that can hold a move-only output.
 export type ReadyValue<T> = ValueWaiting(T) | ValueTaken;
+/// Builds an immediately ready owned future, including support for move-only outputs.
 export fn ready_owned<T>(value:T)->OwnedFuture<ReadyValue<T>> {
     own_future(ValueWaiting(move(value)))
 }

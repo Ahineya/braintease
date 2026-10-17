@@ -1678,35 +1678,87 @@
 +++ b/Applications/V7/cmd/sh/main.c
 @@ -4 +3,0 @@
 -#
-@@ -23 +22,5 @@
+@@ -23 +22,9 @@
 -#include	<readline/readline.h>
 +#include <termios.h>
 +#include <sys/wait.h>
 +#ifdef BUILD_FSH
 +#include <readline/readline.h>
++#include "shell-prompt.h"
++#define prompt_text(s) shell_prompt_expand((s), homenod.namval)
++#else
++#define prompt_text(s) (s)
 +#endif
-@@ -32,0 +36,5 @@
+@@ -32,0 +40,37 @@
++static BOOL shrc_read;
 +static struct termios terminal;
 +static int restore_terminal;
++
++/* Interactive startup uses the same parser/input stack as the dot builtin.
++ * Set the guard first so a syntax error can return to the prompt safely. */
++static void read_shrc(void)
++{
++    static char path[512];
++    const char *home = homenod.namval;
++    size_t n;
++    int fd;
++    struct stat st;
++
++    if (shrc_read || !(flags & prompt))
++        return;
++    shrc_read = TRUE;
++    if (!home || !*home)
++        return;
++    n = strlen(home);
++    if (n > sizeof(path) - sizeof("/.shrc"))
++        return;
++    memcpy(path, home, n);
++    strcpy(path + n, home[n - 1] == '/' ? ".shrc" : "/.shrc");
++    fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
++    if (fd < 0)
++        return;
++    if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode)) {
++        close(fd);
++        return;
++    }
++    execexp(0, fd);
++}
++
 +void shell_terminal_accept(void) {
 +    if (restore_terminal) tcgetattr(input, &terminal);
 +}
-@@ -35 +43 @@
+@@ -35 +79 @@
 -static char history[1024];
 +static char history[4096];
-@@ -80,0 +89 @@
+@@ -80,0 +125 @@
 +	if (bias) return bias;
-@@ -206 +215,3 @@
+@@ -206 +251,3 @@
 -	if (setjmp(errshell) && prof) {
 +	jobs_init();
 +	restore_terminal = (flags & prompt) && tcgetattr(input, &terminal) == 0;
 +    if (setjmp(errshell) && prof) {
-@@ -218,0 +230,5 @@
+@@ -215,0 +263,2 @@
++	if (!prof)
++		read_shrc();
+@@ -218,0 +268,5 @@
 +        jobs_prompt();
 +        if (restore_terminal)
 +            tcsetattr(input, TCSANOW, &terminal);
 +        if (getpid() == 1 || jobs_enabled())
 +            reapchildren();
+@@ -232 +286,2 @@
+-			if (line_input(ps1nod.namval) < 0)
++			const char *primary = prompt_text(ps1nod.namval);
++			if (line_input(primary) < 0)
+@@ -234 +289 @@
+-				prs(ps1nod.namval);
++				prs(primary);
+@@ -254,2 +309,3 @@
+-		if (line_input(ps2nod.namval) < 0)
+-			prs(ps2nod.namval);
++		const char *secondary = prompt_text(ps2nod.namval);
++		if (line_input(secondary) < 0)
++			prs(secondary);
 --- a/Applications/V7/cmd/sh/mode.h
 +++ b/Applications/V7/cmd/sh/mode.h
 @@ -4 +3,0 @@
@@ -1804,6 +1856,14 @@
 +		/* A foreground pipeline reports its final command's status,
 +		 * regardless of the order in which the children are reaped. */
 +		if (p == i || i <= 0)
+@@ -306,2 +356,5 @@
+-		if ( (argp = argp->argnxt) )
+-			trim(*comargn);
++		argp = argp->argnxt;
++		/* Expansion is complete for every argument, including argv[0].
++		 * Leaving quote bits on the command hides '/' from getpath(),
++		 * corrupts argv[0], and prevents quoted builtin recognition. */
++		trim(*comargn);
 --- a/Applications/V7/cmd/sh/sh.1
 +++ b/Applications/V7/cmd/sh/sh.1
 @@ -967,0 +968,11 @@
@@ -7972,34 +8032,61 @@
 +    if (word) wcount++;
 --- a/Kernel/blk512.c
 +++ b/Kernel/blk512.c
-@@ -4 +4 @@
+@@ -1,0 +2 @@
++#include "kdata.h"
+@@ -4 +5 @@
 -#if (BLKSIZE == 512)
 +#if (BLKSIZE == 512) || defined(CONFIG_RIPPLE)
-@@ -19 +19 @@
+@@ -19 +20 @@
 -    struct blkbuf *buf = bread(dev, (ino >> 3) + 2, 0);
 +    struct blkbuf *buf = bread(dev, (ino / INO_PER_BLOCK) + 2, 0);
-@@ -22 +22 @@
+@@ -22 +23 @@
 -    blktok(ptr, buf, sizeof(struct dinode) * (ino & 7), sizeof(struct dinode));
 +    blktok(ptr, buf, sizeof(struct dinode) * (ino % INO_PER_BLOCK), sizeof(struct dinode));
-@@ -30 +30 @@
+@@ -30 +31 @@
 -    struct blkbuf *buf = bread(ino->c_dev, (ino->c_num >> 3) + 2, 0);
 +    struct blkbuf *buf = bread(ino->c_dev, (ino->c_num / INO_PER_BLOCK) + 2, 0);
-@@ -33 +33 @@
+@@ -33 +34 @@
 -    blkfromk(&ino->c_node, buf, sizeof(struct dinode) * (ino->c_num & 0x07),
 +    blkfromk(&ino->c_node, buf, sizeof(struct dinode) * (ino->c_num % INO_PER_BLOCK),
-@@ -80,0 +81 @@
+@@ -80,0 +82 @@
 +    const unsigned indirect = BLKSIZE / sizeof(blkno_t);
-@@ -88 +89 @@
+@@ -85,14 +87,18 @@
+-    if (bn < 18)
+-        return ifetch(ip, bn, rwflg);
+-    bn -= 18;
 -    if (bn & 0xFF00) {
-+    if (bn >= indirect) {
-@@ -90 +91 @@
+-        /* The single-indirect range precedes the double-indirect tree. */
 -        bn -= 256;
-+        bn -= indirect;
-@@ -94,2 +95,2 @@
+-        blk = ifetch(ip, 19, rwflg);
+-        if (blk == NULLBLK)
+-            return blk;
 -        blk = bfetch(ip->c_dev, blk, bn >> 8, rwflg);
 -        bn &= 0xFF;
-+        blk = bfetch(ip->c_dev, blk, bn / indirect, rwflg);
-+        bn %= indirect;
+-    } else
+-        blk = ifetch(ip, 18, rwflg);
+-    if (blk == NULLBLK)
++    {
++        unsigned level, depth;
++        uint32_t span = 1;
++        if (bn < FS_DIRECT) return ifetch(ip, (unsigned)bn, rwflg);
++        bn -= FS_DIRECT;
++        for (depth = 1; depth <= FS_LEVELS; depth++) {
++            span *= indirect;
++            if (bn < span) break;
++            bn -= span;
++        }
++        if (depth > FS_LEVELS) { udata.u_error = EFBIG; return NULLBLK; }
++        blk = ifetch(ip, FS_DIRECT + depth - 1, rwflg);
++        for (level = depth; level; level--) {
++            if (blk == NULLBLK) return blk;
++            span /= indirect;
++            blk = bfetch(ip->c_dev, blk, (unsigned)(bn / span), rwflg);
++            bn %= span;
++        }
+@@ -100 +106 @@
+-    return bfetch(ip->c_dev, blk, bn, rwflg);
++    }
 --- a/Kernel/devio.c
 +++ b/Kernel/devio.c
 @@ -118,2 +118,2 @@
@@ -8033,6 +8120,9 @@
 +           Anonymous pipes also allocate here, without going through
 +           newfile(), so clear the complete recycled on-disk inode. */
 +        memset(&nindex->c_node, 0, sizeof(nindex->c_node));
+@@ -329 +333 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
 @@ -432,0 +437,3 @@
 +#ifdef CONFIG_RIPPLE
 +    curentry.d_padding = 0;
@@ -8043,6 +8133,9 @@
 @@ -668 +675 @@
 -    if(ino < 2 || ino >=(dev->s_isize-2)*8)
 +    if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
+@@ -770 +777 @@
+-            blkfromk(&dev->s_nfree, buf, 0, sizeof(int) + 50 * sizeof(blkno_t));
++            blkfromk(&dev->s_nfree, buf, 0, sizeof(dev->s_nfree) + FILESYS_TABSIZE * sizeof(blkno_t));
 @@ -872,2 +879,2 @@
 -    if (udata.u_cloexec & (1U << oldd))
 -	    udata.u_cloexec |= 1U << newd;
@@ -8058,13 +8151,92 @@
 +        return;
 +    }
 +#endif
-@@ -938,0 +955,7 @@
-+
+@@ -939,0 +956,7 @@
 +#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
 +    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
 +        ino->c_flags &= ~CDIRTY;
 +        return;
 +    }
++#endif
++
+@@ -967,38 +990,23 @@
+-int f_trunc_blocks(register inoptr ino, uint16_t nblock)
+-{
+-    register uint16_t dev;
+-    register int_fast8_t j;
+-    uint16_t indirect = BLKSIZE / sizeof(blkno_t);
+-    uint16_t map1 = 0, map2 = 0;
+-
+-    if (ino->c_flags & CRDONLY) {
+-        udata.u_error = EROFS;
+-        return -1;
+-    }
+-
+-    /* nblock counts retained data blocks: 18 direct, one indirect
+-       block, then the double-indirect tree. */
+-    if (nblock > 18)
+-        map1 = min(nblock - 18, indirect);
+-    if (nblock > 18 + indirect)
+-        map2 = nblock - 18 - indirect;
+-    dev = ino->c_dev;
+-
+-    freeblk(dev, ino->c_node.i_addr[19], 2, map2);
+-    if (!map2)
+-        ino->c_node.i_addr[19] = 0;
+-
+-    /* A retained double-indirect block implies the whole single
+-       indirect range is still live. */
+-    if (map1 < indirect)
+-        freeblk(dev, ino->c_node.i_addr[18], 1, map1);
+-    if (!map1)
+-        ino->c_node.i_addr[18] = 0;
+-
+-    /* Avoid narrowing a large retained count to signed int. */
+-    if (nblock < 18) {
+-        /* TODO: use a pointer here */
+-        for (j = 17; j >= (int)nblock; --j) {
+-            freeblk(dev, ino->c_node.i_addr[j], 0, 0);
+-            ino->c_node.i_addr[j] = 0;
+-        }
++int f_trunc_blocks(register inoptr ino, blkno_t nblock)
++{
++    unsigned level, j;
++    uint32_t indirect = BLKSIZE / sizeof(blkno_t), span = 1;
++    uint32_t start = FS_DIRECT, keep;
++    uint16_t dev = ino->c_dev;
++    if (ino->c_flags & CRDONLY) { udata.u_error = EROFS; return -1; }
++    for (level = 1; level <= FS_LEVELS; level++) {
++        span *= indirect;
++        start += span;
++    }
++    for (level = FS_LEVELS; level; level--) {
++        start -= span;
++        keep = nblock > start ? min(nblock - start, span) : 0;
++        j = FS_DIRECT + level - 1;
++        freeblk(dev, ino->c_node.i_addr[j], level, keep);
++        if (!keep) ino->c_node.i_addr[j] = 0;
++        span /= indirect;
++    }
++    for (j = FS_DIRECT; j > nblock; ) {
++        --j;
++        freeblk(dev, ino->c_node.i_addr[j], 0, 0);
++        ino->c_node.i_addr[j] = 0;
+@@ -1037 +1045 @@
+-void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock)
++void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock)
+@@ -1041 +1049,2 @@
+-    uint16_t span, first, keep;
++    uint32_t span = 1, first, keep;
++    unsigned depth;
+@@ -1055 +1064 @@
+-        span = level == 1 ? 1 : BLKSIZE / sizeof(blkno_t);
++        for (depth = 1; depth < level; depth++) span *= BLKSIZE / sizeof(blkno_t);
+@@ -1255,0 +1265,4 @@
++#ifdef CONFIG_RIPPLE
++    kprintf("fp->s_mounted=0x%x, fp->s_isize=0x%x, fp->s_fsize=0x%lx\n",
++    fp->s_mounted, fp->s_isize, (unsigned long)fp->s_fsize);
++#else
+@@ -1257,0 +1271 @@
 +#endif
 --- a/Kernel/include/kdata.h
 +++ b/Kernel/include/kdata.h
@@ -8092,7 +8264,27 @@
 +#else
 @@ -71,0 +86 @@
 +#endif
-@@ -200,0 +216,7 @@
+@@ -163 +178 @@
+-typedef int32_t off_t;	/* 32MB file and fs size limit */
++typedef int32_t off_t;	/* Signed file positions, measured in platform C characters. */
+@@ -165,0 +181,3 @@
++#ifdef CONFIG_RIPPLE
++typedef uint32_t blkno_t;
++#else
+@@ -166,0 +185,5 @@
++#endif
++#ifndef FS_DIRECT
++#define FS_DIRECT 18
++#define FS_LEVELS 2
++#endif
+@@ -177 +200,5 @@
+-#define BLKOVERSIZE32	0xFE	/* Bits 25+ mean we exceeded the file size */
++#ifdef CONFIG_RIPPLE
++#define BLKOVERSIZE32 0x80 /* Signed 32-bit C-character offsets. */
++#else
++#define BLKOVERSIZE32 0xFE
++#endif
+@@ -200,0 +228,7 @@
 +#if defined(CONFIG_RIPPLE) && RIPPLE_BULK_IO
 +#define blktok(kaddr,buf,off,len) \
 +    ripple_buffer_copy((kaddr), (buf)->__bf_data + (off), (len))
@@ -8100,33 +8292,62 @@
 +    ripple_buffer_copy((buf)->__bf_data + (off), (kaddr), (len))
 +#define blkzero(buf) ripple_buffer_zero((buf)->__bf_data)
 +#else
-@@ -204,0 +227,2 @@
+@@ -204,0 +239,2 @@
 +#define blkzero(buf)             memset(buf->__bf_data, 0, BLKSIZE)
 +#endif
-@@ -210 +233,0 @@
+@@ -210 +245,0 @@
 -#define blkzero(buf)		memset(buf->__bf_data, 0, BLKSIZE)
-@@ -320,0 +344,3 @@
+@@ -237 +272,4 @@
+-} dinode;               /* Exactly 64 bytes long! */
++#ifdef CONFIG_RIPPLE
++    uint16_t i_reserved[12]; /* 64 C16 cells / 128 physical octets. */
++#endif
++} dinode; /* Ripple V3: 64 C16 cells; conventional platforms: 64 octets. */
+@@ -310 +348 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
+@@ -320,0 +359,3 @@
 +#ifdef CONFIG_RIPPLE
 +    uint16_t d_padding; /* DIR_LEN characters, 64 physical octets */
 +#endif
-@@ -484,0 +511 @@
+@@ -331 +372 @@
+-    uint16_t      s_fsize;
++    blkno_t       s_fsize;
+@@ -347,0 +389 @@
++
+@@ -484,0 +527 @@
 +#define PFL_EXECED 32
-@@ -517 +544 @@
+@@ -517 +560 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -562,0 +590,3 @@
+@@ -562,0 +606,3 @@
 +#ifdef CONFIG_RIPPLE
 +    unsigned long u_sigtramp; /* RXE user signal entry in separate IMEM */
 +#endif
-@@ -582,0 +613,3 @@
+@@ -582,0 +629,3 @@
 +#if UFTSIZE > 16
 +    uint32_t    u_cloexec;       /* Close on exec flags, including high FDs. */
 +#else
-@@ -583,0 +617 @@
+@@ -583,0 +633 @@
 +#endif
-@@ -652 +686 @@
+@@ -652 +702 @@
 -#define _WSTOPPED	0xFF
 +#define _WSTOPPED	0x7F
+@@ -757,0 +808 @@
++#define EOVERFLOW       60              /* Result does not fit caller ABI */
+@@ -1026 +1077 @@
+-extern int f_trunc_blocks(inoptr ino, uint16_t nblock);
++extern int f_trunc_blocks(inoptr ino, blkno_t nblock);
+@@ -1028 +1079 @@
+-extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock);
++extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock);
+@@ -1081 +1132 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
+@@ -1089,0 +1141,3 @@
++#ifdef CONFIG_SELECT
++extern void ripple_select_exit(ptptr p);
++#endif
 --- a/Kernel/include/netdev.h
 +++ b/Kernel/include/netdev.h
 @@ -130,9 +130,9 @@
@@ -8185,10 +8406,76 @@
 +#endif
 --- a/Kernel/inode.c
 +++ b/Kernel/inode.c
-@@ -289 +289 @@
+@@ -33,12 +33,11 @@
+-	while (LOWORD(ino->c_node.i_size) > 8 * BLKSIZE) {
+-		if (ino->c_readers == 0) {	/* No readers */
+-			udata.u_done = (usize_t)-1;
+-			udata.u_error = EPIPE;
+-			ssig(udata.u_ptab, SIGPIPE);
+-			return 1;
+-		}
+-		/* Sleep if pipe full */
+-		if (psleep_flags(ino, flag))
+-		        return 1;
+-	}
+-	return 0;
++    for (;;) {
++        if (!ino->c_readers) {
++            if (!udata.u_done) udata.u_error = EPIPE;
++            ssig(udata.u_ptab, SIGPIPE);
++            return 1;
++        }
++        if (ino->c_node.i_size < 8UL * BLKSIZE) return 0;
++        /* A partial write returns progress rather than waiting indefinitely. */
++        if (udata.u_done) return 1;
++        if (psleep_flags(ino, flag)) return 1;
++    }
+@@ -61 +60 @@
+-static uint16_t mapcalc(inoptr ino, usize_t *size, uint_fast8_t m)
++static blkno_t mapcalc(inoptr ino, usize_t *size, uint_fast8_t m)
+@@ -148 +147 @@
+-			if (ispipe && LOWORD(udata.u_offset) >= 18 * BLKSIZE)
++			if (ispipe && LOWORD(udata.u_offset) >= FS_DIRECT * BLKSIZE)
+@@ -152,0 +152 @@
++                selwake_inode(ino, SELECT_OUT);
+@@ -173,0 +174 @@
++    unsigned syncflag;
+@@ -197 +198 @@
+-	      	flag = flag & O_SYNC ? 2 : 1;
++        syncflag = flag & O_SYNC ? 2 : 1;
+@@ -203,5 +204,7 @@
+-					return;
+-			}
+-			pblk = mapcalc(ino, &amount, 0);
+-
+-                        if (HIBYTE32(udata.u_offset) & BLKOVERSIZE32) {
++                    break;
++			}
++                        if ((HIBYTE32(udata.u_offset) & BLKOVERSIZE32)
++#ifdef CONFIG_RIPPLE
++                            || udata.u_count > 0x7fffffffUL - (uint32_t)udata.u_offset
++#endif
++                           ) {
+@@ -212,0 +216,3 @@
++            pblk = mapcalc(ino, &amount, 0);
++            if (ispipe && amount > 8UL * BLKSIZE - ino->c_node.i_size)
++                amount = 8UL * BLKSIZE - ino->c_node.i_size;
+@@ -226 +232 @@
+-			if (bfree(bp, flag))
++			if (bfree(bp, syncflag))
+@@ -231 +237 @@
+-				if (LOWORD(udata.u_offset) >= 18 * BLKSIZE)
++				if (LOWORD(udata.u_offset) >= FS_DIRECT * BLKSIZE)
+@@ -235,0 +242 @@
++                selwake_inode(ino, SELECT_IN);
+@@ -287,0 +295,3 @@
++    if (getmode(ino) == MODE_R(F_PIPE)) {
++        wakeup(ino);selwake_inode(ino, SELECT_IN|SELECT_OUT);
++    }
+@@ -289 +299 @@
 -	udata.u_cloexec &= ~(1 << uindex);
 +	udata.u_cloexec &= ~(1UL << uindex);
-@@ -400 +400,11 @@
+@@ -400 +410,11 @@
 -}
 +#ifdef CONFIG_RIPPLE
 +	/* Immediate metadata writes may leave no dirty guest buffers. The VM
@@ -8203,9 +8490,15 @@
 +}
 --- a/Kernel/kdata.c
 +++ b/Kernel/kdata.c
-@@ -124,0 +125,3 @@
+@@ -124,0 +125,9 @@
 +#elif defined(CONFIG_JOB_CONTROL)
-+    _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys,
++    _nosys, _nosys, _nosys, _nosys,
++#ifdef CONFIG_SELECT
++    _select,
++#else
++    _nosys,
++#endif
++    _nosys, _nosys, _nosys, _nosys,
 +    _setpgid, _setsid, _getsid,
 --- a/Kernel/process.c
 +++ b/Kernel/process.c
@@ -8286,14 +8579,19 @@
 @@ -819 +863 @@
 -		if (sig == SIGCONT) {
 +		if (sig == SIGCONT || sig == SIGKILL) {
-@@ -979,0 +1024,4 @@
+@@ -916,0 +961,4 @@
++#ifdef CONFIG_SELECT
++    ripple_select_exit(udata.u_ptab);
++#endif
++
+@@ -979,0 +1028,4 @@
 +#ifdef CONFIG_JOB_CONTROL
 +                if (udata.u_ptab->p_session == udata.u_ptab->p_pid &&
 +                    p->p_session == udata.u_ptab->p_session) {
 +#else
-@@ -980,0 +1029 @@
+@@ -980,0 +1033 @@
 +#endif
-@@ -1014,0 +1064,7 @@
+@@ -1014,0 +1068,7 @@
 +#ifdef CONFIG_RIPPLE
 +	/* A panic must never certify an inconsistent filesystem as clean. */
 +	{
@@ -8301,8 +8599,25 @@
 +		ripple_panic_stop();
 +	}
 +#else
-@@ -1015,0 +1072 @@
+@@ -1015,0 +1076 @@
 +#endif
+--- a/Kernel/select.c
++++ b/Kernel/select.c
+@@ -6 +6 @@
+-#ifdef CONFIG_LEVEL_2
++#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
+@@ -11,0 +12,3 @@
++#ifdef CONFIG_SELECT
++extern unsigned ripple_select_active;
++#endif
+@@ -73,0 +77,3 @@
++#ifdef CONFIG_SELECT
++    if(!ripple_select_active)return;
++#endif
+@@ -117,0 +124 @@
++#ifndef CONFIG_RIPPLE
+@@ -248,0 +256 @@
++#endif /* !CONFIG_RIPPLE: see ripple/selectwait.c */
 --- a/Kernel/start.c
 +++ b/Kernel/start.c
 @@ -1,0 +2 @@
@@ -8327,6 +8642,14 @@
 +#else
 @@ -13,0 +19 @@
 +#endif
+--- a/Kernel/syscall_fs2.c
++++ b/Kernel/syscall_fs2.c
+@@ -418,0 +419,5 @@
++#ifdef CONFIG_RIPPLE
++    /* Old statfs callers allocated the smaller V2 record. Reject them before
++     * copying the V3 structure, rather than overwriting their user stack. */
++    if (udata.u_argn2 != 0x7254) { udata.u_error = EOVERFLOW; return -1; }
++#endif
 --- a/Kernel/syscall_fs3.c
 +++ b/Kernel/syscall_fs3.c
 @@ -143 +143 @@
@@ -8341,6 +8664,29 @@
 @@ -296 +296 @@
 -			udata.u_cloexec &= ~(1U << fd);
 +			udata.u_cloexec &= ~(1UL << fd);
+@@ -458 +458,3 @@
+-	    (uint32_t)n > 65536UL * BLKSIZE ||
++#ifndef CONFIG_RIPPLE
++            (uint32_t)n > 65536UL * BLKSIZE ||
++#endif
+@@ -474 +476,5 @@
+-		if (keep <= UINT16_MAX && f_trunc_blocks(ino, keep))
++		if (
++#ifndef CONFIG_RIPPLE
++                    keep <= UINT16_MAX &&
++#endif
++                    f_trunc_blocks(ino, keep))
+@@ -476,0 +483,10 @@
++    /* Shrinking within a retained block must not expose old bytes on regrowth. */
++    if (n < ino->c_node.i_size && BLKOFF(n)) {
++        blkno_t b = bmap(ino, BLOCK((uint32_t)n), 1);
++        if (b != NULLBLK) {
++            bufptr bp = bread(ino->c_dev, b, 0);
++            if (!bp) return -1;
++            memset(blkptr(bp, BLKOFF(n), BLKSIZE - BLKOFF(n)), 0, BLKSIZE - BLKOFF(n));
++            bawrite(bp);
++        }
++    }
 --- a/Kernel/syscall_proc.c
 +++ b/Kernel/syscall_proc.c
 @@ -1,0 +2 @@
@@ -8402,7 +8748,10 @@
 +#endif
 --- a/Kernel/tty.c
 +++ b/Kernel/tty.c
-@@ -34,0 +35,15 @@
+@@ -30,0 +31,2 @@
++#elif defined(CONFIG_SELECT)
++#define tty_selwake(m,e) selwake_dev(2,m,e)
+@@ -34,0 +37,34 @@
 +/* Canonical input remains queued until a complete line (or EOF) exists. */
 +static int input_ready(uint_fast8_t minor) {
 +    struct s_queue *q = &ttyinq[minor];
@@ -8418,36 +8767,55 @@
 +    }
 +    return 0;
 +}
-@@ -47 +62 @@
++#ifdef CONFIG_SELECT
++/* Select observes the queue without removing characters or starting a read's
++ * inter-character timer. Canonical EOF is readiness even with no payload. */
++unsigned ripple_tty_status(unsigned minor) {
++    struct tty *t;struct s_queue *q;unsigned ready=0,minimum;
++    if(!minor||minor>NUM_DEV_TTY)return SELECT_IN|SELECT_OUT;
++    t=&ttydata[minor];q=&ttyinq[minor];
++    if(t->flag&TTYF_DEAD)return SELECT_IN|SELECT_OUT;
++    if(t->termios.c_lflag&ICANON) {
++        if(input_ready(minor))ready|=SELECT_IN;
++    } else {
++        minimum=t->termios.c_cc[VMIN];
++        if(t->termios.c_cc[VTIME])minimum=1;
++        if(q->q_count>=minimum)ready|=SELECT_IN;
++    }
++    if(!(t->flag&TTYF_STOP)&&tty_writeready(minor)!=TTY_READY_LATER)ready|=SELECT_OUT;
++    return ready;
++}
++#endif
+@@ -47 +83 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -53 +68 @@
+@@ -53 +89 @@
 -			if (remq(q, &c)) {
 +			if ((udata.u_done || input_ready(minor) || (t->flag & TTYF_DEAD)) && remq(q, &c)) {
-@@ -97,0 +113 @@
+@@ -97,0 +134 @@
 +    if (udata.u_done) goto out;
-@@ -115 +131 @@
+@@ -115 +152 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -172 +188 @@
+@@ -172 +209 @@
 -	if (minor > NUM_DEV_TTY) {
 +	if (!minor || minor > NUM_DEV_TTY) {
-@@ -235 +251,5 @@
+@@ -235 +272,5 @@
 -	if (!(t->flag & TTYF_DEAD) && !udata.u_ptab->p_tty && !t->pgrp && !(flag & O_NOCTTY)) {
 +	if (!(t->flag & TTYF_DEAD) && !udata.u_ptab->p_tty && !t->pgrp &&
 +#ifdef CONFIG_JOB_CONTROL
 +        udata.u_ptab->p_session == udata.u_ptab->p_pid &&
 +#endif
 +        !(flag & O_NOCTTY)) {
-@@ -238,0 +259,3 @@
+@@ -238,0 +280,3 @@
 +#ifdef CONFIG_JOB_CONTROL
 +        t->session = udata.u_ptab->p_session;
 +#endif
-@@ -254,0 +278,3 @@
+@@ -254,0 +299,3 @@
 +#ifdef CONFIG_JOB_CONTROL
 +    t->session = 0;
 +#endif
-@@ -264,4 +290,17 @@
+@@ -264,4 +311,17 @@
 -        uint_fast8_t t = udata.u_ptab->p_tty;
 -        uint16_t *pgrp = &ttydata[t].pgrp;
 -        if (t && *pgrp == udata.u_ptab->p_pgrp && *pgrp == udata.u_ptab->p_pid)
@@ -8469,29 +8837,46 @@
 +    if (minor && ttydata[minor].pgrp == udata.u_ptab->p_pgrp &&
 +        ttydata[minor].pgrp == udata.u_ptab->p_pid) ttydata[minor].pgrp = 0;
 +#endif
-@@ -283,0 +323,2 @@
+@@ -283,0 +344,2 @@
 +#endif
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -317 +358 @@
+@@ -296,0 +359,2 @@
++        tty_data_consumed(minor);
++        wakeup(&ttyinq[minor].q_count);
+@@ -317 +381 @@
 -		return uput(&ttyinq[minor].q_count, data, 2);
 +		return uput(&ttyinq[minor].q_count, data, sizeof(ttyinq[minor].q_count));
-@@ -341 +382 @@
+@@ -319,0 +384,2 @@
++        tty_data_consumed(minor);
++        wakeup(&ttyinq[minor].q_count);
+@@ -341 +407 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -348,0 +390,2 @@
+@@ -348,0 +415,2 @@
 +#endif
 +#ifdef CONFIG_LEVEL_2
-@@ -429,0 +473,3 @@
+@@ -429,0 +498,3 @@
 +        } else if (c && c == t->termios.c_cc[VSUSP]) {
 +            wr = SIGTSTP;
 +            goto sigout;
-@@ -470,0 +517,5 @@
+@@ -434,0 +506 @@
++            tty_data_consumed(minor);wakeup(&q->q_count);
+@@ -470,0 +543,5 @@
 +    /* Reserve the final slot for a line terminator. An overlong unfinished
 +     * canonical line must not deadlock both sides of a PTY. */
 +    if (canon && q->q_count >= q->q_size - 1 && !input_ready(minor) &&
 +        c != '\n' && c != t->termios.c_cc[VEOF] &&
 +        (!t->termios.c_cc[VEOL] || c != t->termios.c_cc[VEOL])) return 1;
-@@ -509,2 +560,6 @@
+@@ -472,3 +549,3 @@
+-	if (wr && (!canon || c != t->termios.c_cc[VEOF]))
+-		tty_echo(minor, c);
+-	else
++	if (wr) {
++        if (!canon || c != t->termios.c_cc[VEOF]) tty_echo(minor, c);
++    } else
+@@ -496,0 +574 @@
++	tty_data_consumed(minor);wakeup(&q->q_count);
+@@ -509,2 +587,6 @@
 -	if (ttydata[minor].termios.c_lflag & ECHO)
 -		tty_putc_wait(minor, c);
 +    if (ttydata[minor].termios.c_lflag & ECHO) {
@@ -8500,7 +8885,7 @@
 +#endif
 +        tty_putc_wait(minor, c);
 +    }
-@@ -514,0 +570,8 @@
+@@ -514,0 +597,8 @@
 +#ifdef CONFIG_RIPPLE
 +    if (minor > 1) {
 +        if (tty_writeready(minor) == TTY_READY_NOW) tty_putc(minor, '\b');
@@ -8523,6 +8908,12 @@
 @@ -125 +125 @@
 -	if (!valaddr_w(uaddr, 4, 4))
 +	if (!valaddr_w(uaddr, sizeof(uint32_t), sizeof(uint32_t)))
+--- a/Library/include/errno.h
++++ b/Library/include/errno.h
+@@ -74 +74,2 @@
+-#define __ERRORS	56
++#define EOVERFLOW       60              /* Result does not fit caller ABI */
++#define __ERRORS	61
 --- a/Library/include/net/if.h
 +++ b/Library/include/net/if.h
 @@ -1,0 +2 @@
@@ -8567,14 +8958,20 @@
 +#define ifr_mtu		ifr_ifru.u_mtu
 --- a/Library/include/sys/socket.h
 +++ b/Library/include/sys/socket.h
-@@ -4 +4 @@
+@@ -4 +4,7 @@
 -#include "types.h"
 +#include <sys/types.h>
-@@ -10,0 +11,3 @@
++
++#ifdef RIPPLE_MMU
++#include <socket-abi.h>
++int getsockopt(int, int, int, void *, int *);
++int socketpair(int, int, int, int [2]);
++#endif
+@@ -10,0 +17,3 @@
 +#define SHUT_RD 0
 +#define SHUT_WR 1
 +#define SHUT_RDWR 2
-@@ -37 +40 @@
+@@ -37 +46 @@
 -#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__)
 +#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__) || defined(RIPPLE_MMU)
 --- a/Library/libs/clock_gettime.c

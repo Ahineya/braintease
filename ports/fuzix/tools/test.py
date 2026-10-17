@@ -45,9 +45,9 @@ with tempfile.TemporaryDirectory(prefix='ripple-fuzix-test-') as temporary:
     assert output.index('child ran while parent computed') < output.index('parent computation finished'), output
     assert 'iotest created 77777 characters' in output, output
     clean(image)
-    before = hashlib.sha256(image.read_bytes()).digest()
+    before = hashlib.file_digest(image.open('rb'), 'sha256').digest()
     subprocess.run(['node', str(PORT/'tools/disk.mjs'), str(build), str(image)], check=True)
-    assert hashlib.sha256(image.read_bytes()).digest() == before
+    assert hashlib.file_digest(image.open('rb'), 'sha256').digest() == before
     output = run(image, 'cat /note\ncat /work/moved\niotest\nrm /note\nrm /work/moved\nrmdir /work\n'+'hello\n'*12+'shutdown\n', engines[-1])
     assert output.count('durable_one') == 2 and output.count('durable_two') == 2, output
     assert 'iotest verified, sought, truncated and deleted' in output, output

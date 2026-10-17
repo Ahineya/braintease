@@ -94,6 +94,7 @@ char *strerror(int e) {
     case EISCONN: return "Socket is already connected";
     case EDESTADDRREQ: return "Destination address required";
     case ENOBUFS: return "No buffer space available";
+    case EOVERFLOW: return "Value too large for caller ABI";
     case EPROTONOSUPPORT: return "Protocol not supported";
     default:
         return "System error";
@@ -234,15 +235,15 @@ int statvfs(const char *path, struct statvfs *v) {
     } k;
     if (_statfs(path, (uint8_t *)&k) < 0)
         return -1;
-    if (k.fs.s_mounted != 0x7253) {
+    if (k.fs.s_mounted != 0x7254) {
         errno = EINVAL;
         return -1;
     }
     v->f_bsize = v->f_frsize =
-        2048; /* C16 V2 physical octets, as expected by upstream df. */
+        2048; /* C16 V3 physical octets, as expected by upstream df. */
     v->f_blocks = k.fs.s_fsize - k.fs.s_isize;
     v->f_bfree = v->f_bavail = k.fs.s_tfree;
-    v->f_files = (k.fs.s_isize - 2) * 32;
+    v->f_files = (k.fs.s_isize - 2) * 16;
     v->f_ffree = v->f_favail = k.fs.s_tinode;
     v->f_fsid = 0;
     v->f_namemax = 30;
@@ -305,4 +306,13 @@ const char *strsignal(int sig) {
         "Alarm", "Terminated"
     };
     return sig >= 0 && sig < 16 ? names[sig] : names[0];
+}
+void __errput(const char *text) {
+    fputs(text, stderr);
+    fflush(stderr);
+}
+void __assert(const char *expression, const char *file, int line) {
+    fprintf(stderr, "%s:%d: assertion failed: %s\n", file, line, expression);
+    fflush(stderr);
+    abort();
 }

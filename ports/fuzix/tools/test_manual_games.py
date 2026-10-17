@@ -82,9 +82,11 @@ def seed(image):
     subprocess.run(['node', '--input-type=module', '-e', '''
 import fs from 'node:fs';
 import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const name=process.argv[1], disk=fs.readFileSync(name), root=fatFile(disk,'ROOTFS.IMG');
-fs.writeFileSync(name,root.replace(installRoot(root.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
+const name=process.argv[1], disk=openImage(name), root=fatFile(disk,'ROOTFS.IMG');
+atomicWrite(name,root.replace(installRoot(root.data,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));
 ''', str(image), str(manifest)], cwd=ROOT, check=True)
 
 

@@ -2,20 +2,31 @@ import { Reactor } from "std/executor";
 
 // Callbacks supply bounded external work. Service delays are relative to the
 // supplied `now`, not to the end of that callback. None still permits idle turns.
+/// A service callback's next step: `ContinueAfter` supplies an optional relative maintenance delay; `StopReactor` requests orderly shutdown.
 export type Service = ContinueAfter(Option<u32>) | StopReactor;
+/// Clock, idle, invalid-sample, quantum, or service-delay failure from a clocked reactor.
 export type ReactorError = ClockError(u16) | IdleError(u16) | InvalidClockSample | InvalidIdleQuantum | InvalidServiceDelay;
+/// A reactor driven by injectable clock, idle and bounded service callbacks. Copies share captured callback state.
 export struct ClockedReactor {
+    /// Callback returning wrapping monotonic milliseconds or a clock error.
     read_clock: fn()->Result<u32,ReactorError>,
+    /// Callback performing bounded idle waiting in milliseconds.
     idle: fn(u32)->Result<unit,ReactorError>,
+    /// Callback doing bounded external work and supplying the next maintenance delay.
     service: fn(u32)->Service,
+    /// Most recently accepted wrapping clock sample.
     time:u32,
+    /// Maximum idle duration in milliseconds, from 1 through 10.
     quantum:u32,
+    /// Whether orderly shutdown or a failure has stopped this reactor.
     stopped:bool,
+    /// Last recorded reactor failure, if any.
     failure:Option<ReactorError>,
 }
 
 // The injectable boundary is also useful for deterministic clocks and tests.
 // A quantum is never zero and never exceeds the host idle command's 10ms cap.
+/// Creates a reactor using injected callbacks. `quantum` must be 1–10 milliseconds; clock or service intervals must fit the wrapping clock's half range.
 export fn clocked_reactor(read_clock:fn()->Result<u32,ReactorError>,idle:fn(u32)->Result<unit,ReactorError>,service:fn(u32)->Service,quantum:u32)->Result<ClockedReactor,ReactorError> {
     if (quantum == 0 || quantum > 10) {return Err(InvalidIdleQuantum);}
     let now=read_clock()?;
@@ -26,7 +37,9 @@ fn remaining(now:u32,deadline:u32)->u32 {
     if (((now-deadline) as i32) >= 0) {0} else {deadline-now}
 }
 impl ClockedReactor {
+    /// Requests orderly shutdown; subsequent reactor turns return false.
     export fn stop(&mut self) {self.stopped=true;}
+    /// Returns the recorded clock, idle or service failure, if any.
     export fn error(&self)->Option<ReactorError> {self.failure}
     fn fail(&mut self,error:ReactorError)->bool {
         self.failure=Some(error);self.stopped=true;false

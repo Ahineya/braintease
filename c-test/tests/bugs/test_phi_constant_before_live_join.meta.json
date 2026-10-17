@@ -1,0 +1,5 @@
+{
+  "description": "A folded scalar Phi must not precede an unfurled Phi at a join",
+  "expected": "YY\n",
+  "use_runtime": true
+}

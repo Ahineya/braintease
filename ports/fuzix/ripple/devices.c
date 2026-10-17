@@ -13,7 +13,8 @@
 #include "graphics.h"
 static Fat16Fs outer;
 static Fat16DirEnt rootfile;
-static uint16_t clusters[16384];
+/* RCC pointer arithmetic carries across the 64,000-cell bank boundary. */
+#define clusters ((uint16_t *)((unsigned long)MMU_DISK_MAP_BANK << 16))
 static unsigned nclusters;
 static uint8_t ttybuf[4096];
 static uint16_t seen[4096];
@@ -32,7 +33,7 @@ int tty_carrier(uint_fast8_t m) {
     return m == 1 || ripple_pty_carrier(m);
 }
 void tty_sleeping(uint_fast8_t m) { used(m); }
-void tty_data_consumed(uint_fast8_t m) { if(m>1)ripple_gfx_wakeup(); }
+void tty_data_consumed(uint_fast8_t m) { if(m>1){ripple_gfx_wakeup();selwake_dev(3,m-2,SELECT_OUT);} }
 ttyready_t tty_writeready(uint_fast8_t m) {
     return m == 1 || ripple_pty_ready(m) ? TTY_READY_NOW : TTY_READY_LATER;
 }
@@ -63,10 +64,11 @@ void ripple_disk_init(void) {
         panic("ROOTFS.IMG missing");
     if (rootfile.size < 4UL * BLKSIZE || rootfile.size % (2UL * BLKSIZE))
         panic("root image size");
-    nclusters = (unsigned)((rootfile.size + outer.cluster_bytes - 1) /
-                           outer.cluster_bytes);
-    if (nclusters > 16384)
-        panic("root image too big");
+    {
+        unsigned long count = (rootfile.size - 1) / outer.cluster_bytes + 1;
+        if (count > 65518UL) panic("root image too big");
+        nclusters = (unsigned)count;
+    }
     c = rootfile.cluster;
     {
         unsigned i;
@@ -285,10 +287,11 @@ static int system_ioctl(uint_fast8_t m, uarg_t req, char *p) {
     return -1;
 }
 
+extern int ripple_console_ioctl(uint_fast8_t, uarg_t, char *);
 struct devsw dev_tab[] = {
     {root_open, no_close, root_read, root_write, root_ioctl},
     {system_open, no_close, system_read, system_write, system_ioctl},
-    {ripple_slave_open, ripple_slave_close, tty_read, tty_write, tty_ioctl},
+    {ripple_slave_open, ripple_slave_close, tty_read, tty_write, ripple_console_ioctl},
     {ripple_pty_open, ripple_pty_close, ripple_pty_read, ripple_pty_write, ripple_pty_ioctl},
     {ripple_gfx_open, ripple_gfx_close, no_rdwr, no_rdwr, ripple_gfx_ioctl}};
 bool validdev(uint16_t d) { return major(d) < 5; }

@@ -76,7 +76,12 @@ Acceptance checks cover console replay/reconnection and terminal restoration,
 shell respawn, orphan reaping, busy-loop Ctrl-C and stop/continue/termination,
 signal-handler longjmp, headless Telnet, image locking and clean shutdown.
 
-## First graphics window
+## First graphics window — implemented
+
+The hosted GX backend, native graphical terminal and Nano-X drawing/desktop
+builds are implemented. Runtime and real-kernel checks cover ownership, drawing,
+fork/exit/exec cleanup, PTYs, clients and session survival. Native Mac UI checks
+cover commands, New Terminal, closing all windows and reopening, and orderly Quit.
 
 Introduce the surface/window interface and one native graphics window. Use
 bitmap presentation first. Establish handles, input events, resize/focus/close
@@ -85,7 +90,13 @@ events, and a window lifecycle separate from session shutdown.
 Acceptance: a guest program draws and receives input through the new interface.
 Its window can close without treating every close request as a host-wide exit.
 
-## Multiple windows and desktop controls
+## Multiple windows and desktop controls — implemented
+
+Independent GX windows, the application bundle, Window/Dock lists, Command-N,
+last-window survival and orderly Quit are implemented. Each Nano-X top-level
+has a private native surface, correctly clipped children, independent input,
+resize, title and close handling. GUI clients release their launching terminal
+and survive its closure. Host settings menus remain open.
 
 Support separate terminal and GUI windows inside one Fuse-X application. Add
 the Window menu and a Finder-style Dock window list using the same registry.
@@ -127,8 +138,6 @@ surface interface across host and standalone presentation.
 | --- | --- |
 | Enforced user/kernel memory boundaries and process budgets | Untrusted applications |
 | Further libc and application-specific compatibility | Remaining application modes and options |
-| Graphical terminal hangup and GUI launch/detachment policy | Multiple independent windows |
-| Window command/event formats and buffer ownership | First graphics window |
 | Reopen behavior and final menu/shortcut layout | Desktop lifecycle completion |
 | Image format compatibility and host filesystem bridge semantics | Persistent storage and shared-folder mounts |
 | Network setting persistence and live attachment changes | Native Network controls |

@@ -71,6 +71,7 @@ pub struct RegisterPressureManager {
     
     /// Next available spill slot
     next_spill_slot: i16,
+    call_argument_slots: Vec<i16>,
     
     /// Lifetime information for values
     lifetimes: BTreeMap<TempId, ValueLifetime>,
@@ -143,6 +144,7 @@ impl RegisterPressureManager {
             clean_spills: BTreeMap::new(),
             resolved_banks: BTreeMap::new(),
             next_spill_slot: 0,
+            call_argument_slots: Vec::new(),
             lifetimes: BTreeMap::new(),
             instructions: Vec::new(),
             local_count,
@@ -300,6 +302,20 @@ impl RegisterPressureManager {
     /// Use FP + this value + 1 as the minimum SP before any CALL.
     pub fn frame_high_water(&self) -> i16 {
         self.local_count + self.next_spill_slot
+    }
+
+    /// Reusable private homes for large outgoing argument lists. Reserve them
+    /// before materialization so later register spills cannot overlap them.
+    pub(crate) fn call_argument_slots(&mut self, count: usize) -> Result<Vec<i16>, String> {
+        while self.call_argument_slots.len() < count {
+            let offset = self.local_count.checked_add(self.next_spill_slot)
+                .ok_or("call argument frame exceeds signed FP offsets")?;
+            offset.checked_add(1).ok_or("call argument frame exceeds signed FP offsets")?;
+            self.next_spill_slot = self.next_spill_slot.checked_add(1)
+                .ok_or("call argument spill space exhausted")?;
+            self.call_argument_slots.push(offset);
+        }
+        Ok(self.call_argument_slots[..count].to_vec())
     }
     
     /// Initialize SB for stack operations (called automatically when needed)

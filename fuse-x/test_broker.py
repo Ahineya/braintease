@@ -5,6 +5,7 @@ from pathlib import Path
 import pty
 import select
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,7 @@ def main():
                  "print('ready',flush=True)\n"
                  "for line in sys.stdin:\n"
                  " if line.strip()=='flood': print('F'*(9*1024*1024)+'flood-end',flush=True)\n"
+                 " elif line.strip()=='size': print('size:%d:%d'%tuple(reversed(os.get_terminal_size(0))),flush=True)\n"
                  " else: print('reply:'+line.strip(),flush=True)\n")
         server = subprocess.Popen([sys.executable, str(HERE/'session.py'), 'serve', '--state', str(state),
                                    '--', sys.executable, '-u', '-c', probe],
@@ -50,6 +52,15 @@ def main():
             receive(first,b'ready')
             first.sendall(b'one\n')
             receive(first,b'reply:one')
+            # Metadata is a separate connection, never guest keyboard bytes.
+            # Fragment the payload to exercise nonblocking request assembly.
+            with connect(state, b'W') as resize:
+                resize.sendall(struct.pack('!H', 31)); time.sleep(.05)
+                resize.sendall(struct.pack('!H', 97))
+                assert receive(resize, b'\n') == b'OK\n'
+            first.sendall(b'size\n'); receive(first, b'size:31:97')
+            with connect(state, b'W' + struct.pack('!HH', 0, 80)) as resize:
+                assert receive(resize,b'\n').startswith(b'ERROR')
             with connect(state,b'A') as duplicate:
                 assert receive(duplicate,b'\n').startswith(b'ERROR console already attached')
             first.close()
@@ -109,7 +120,7 @@ def main():
                 if running(state):
                     subprocess.run([sys.executable,str(HERE/'session.py'),'stop','--state',str(state)],
                                    check=True,timeout=10)
-    print('Fuse-X: console attach/detach, replay, exclusive ownership, startup authorization and orderly stop passed')
+    print('Fuse-X: console attach/detach, resize metadata, replay, exclusive ownership, startup authorization and orderly stop passed')
 
 
 if __name__=='__main__': main()

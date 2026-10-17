@@ -10,6 +10,11 @@ rvm = { path = "../rvm" }
 serde_json.workspace = true
 libloading = "0.8.8"
 libc = "0.2"
+pixels = "0.12"
+winit = "0.28"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
 
 [lints]
 workspace = true

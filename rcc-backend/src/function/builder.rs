@@ -316,6 +316,7 @@ impl FunctionBuilder {
             CallArg::Scalar(_) => 1,
             CallArg::FatPointer { .. } => 2,
             CallArg::I64 { .. } => 4,
+            CallArg::StackSlots(slots) => slots.len() as i16,
         }).sum::<i16>();
         debug!("  Call will use {stack_words} stack words");
         
@@ -356,6 +357,7 @@ impl FunctionBuilder {
             CallArg::Scalar(_) => 1,
             CallArg::FatPointer { .. } => 2,
             CallArg::I64 { .. } => 4,
+            CallArg::StackSlots(slots) => slots.len() as i16,
         }).sum::<i16>();
         
         trace!("  Pushing {stack_words} words to cleanup stack");

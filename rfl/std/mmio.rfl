@@ -7,7 +7,9 @@ extern "C" {
     fn mmio_write(addr: c_uint, value: c_uint);
 }
 
+/// Reads a 16-bit cell from the Ripple memory-mapped I/O address space.
 export fn read(addr: u16) -> u16 { mmio_read(addr) }
+/// Writes a 16-bit cell to the Ripple memory-mapped I/O address space.
 export fn write(addr: u16, value: u16) -> () { mmio_write(addr, value); }
 
 fn bit(value: u16, index: u16) -> bool {
@@ -15,88 +17,162 @@ fn bit(value: u16, index: u16) -> bool {
 }
 
 // Registers
+/// TTY output data register address.
 export const TTY_OUT: u16 = 0;
+/// TTY output status register address.
 export const TTY_STATUS: u16 = 1;
+/// TTY input data register address.
 export const TTY_IN: u16 = 2;
+/// TTY input availability register address.
 export const TTY_IN_STATUS: u16 = 3;
+/// Random-number data register address.
 export const RNG: u16 = 4;
+/// Random-number seed register address.
 export const RNG_SEED: u16 = 5;
+/// Display mode register address.
 export const DISP_MODE: u16 = 6;
+/// Display status register address.
 export const DISP_STATUS: u16 = 7;
+/// Display control register address.
 export const DISP_CTL: u16 = 8;
+/// Display flush request register address.
 export const DISP_FLUSH: u16 = 9;
 // Registers 10..15 are reserved (read zero, writes ignored).
+/// Packed display resolution register address.
 export const DISP_RESOLUTION: u16 = 16;
+/// Storage block selection register address.
 export const STORE_BLOCK: u16 = 17;
+/// Storage cell-address selection register address.
 export const STORE_ADDR: u16 = 18;
+/// Storage data register address.
 export const STORE_DATA: u16 = 19;
+/// Storage control/status register address.
 export const STORE_CTL: u16 = 20;
+/// Pending interrupt mask register address.
 export const IRQ_STATUS: u16 = 21;
+/// Interrupt-enable mask register address.
 export const IRQ_ENABLE: u16 = 22;
+/// Interrupt-handler busy/acknowledge register address.
 export const IRQ_BUSY: u16 = 23;
+/// Interrupt vector bank register address.
 export const IRQ_VECTOR_BANK: u16 = 24;
+/// Interrupt vector offset register address.
 export const IRQ_VECTOR_OFF: u16 = 25;
+/// Active interrupt cause register address.
 export const IRQ_CAUSE: u16 = 26;
+/// Device command descriptor bank register address.
 export const DEVICE_DESC_BANK: u16 = 27;
+/// Device command descriptor offset register address.
 export const DEVICE_DESC_OFF: u16 = 28;
+/// Device command submission register address.
 export const DEVICE_COMMAND: u16 = 29;
+/// Device command status register address.
 export const DEVICE_STATUS: u16 = 30;
+/// Device ABI version register address.
 export const DEVICE_VERSION: u16 = 31;
 
+/// Display mode value that disables display output.
 export const MODE_OFF: u16 = 0;
+/// Terminal display mode value.
 export const MODE_TTY: u16 = 1;
+/// 40×25 text display mode value.
 export const MODE_TEXT40: u16 = 2;
+/// RGB565 display mode value with packed 8-bit dimensions.
 export const MODE_RGB565: u16 = 3;
+/// Extended RGB565 display mode value.
 export const MODE_RGB565_EXT: u16 = 4;
 
+/// Number of columns in text mode: 40.
 export const TEXT40_COLS: u16 = 40;
+/// Number of rows in text mode: 25.
 export const TEXT40_ROWS: u16 = 25;
+/// Base memory-mapped address of the text cell buffer.
 export const TEXT40_BASE: u16 = 32;
 
+/// Text palette index for black.
 export const COLOR_BLACK: u16 = 0;
+/// Text palette index for dark blue.
 export const COLOR_DARK_BLUE: u16 = 1;
+/// Text palette index for dark purple.
 export const COLOR_DARK_PURPLE: u16 = 2;
+/// Text palette index for dark green.
 export const COLOR_DARK_GREEN: u16 = 3;
+/// Text palette index for brown.
 export const COLOR_BROWN: u16 = 4;
+/// Text palette index for dark gray.
 export const COLOR_DARK_GRAY: u16 = 5;
+/// Text palette index for light gray.
 export const COLOR_LIGHT_GRAY: u16 = 6;
+/// Text palette index for white.
 export const COLOR_WHITE: u16 = 7;
+/// Text palette index for red.
 export const COLOR_RED: u16 = 8;
+/// Text palette index for orange.
 export const COLOR_ORANGE: u16 = 9;
+/// Text palette index for yellow.
 export const COLOR_YELLOW: u16 = 10;
+/// Text palette index for green.
 export const COLOR_GREEN: u16 = 11;
+/// Text palette index for blue.
 export const COLOR_BLUE: u16 = 12;
+/// Text palette index for indigo.
 export const COLOR_INDIGO: u16 = 13;
+/// Text palette index for pink.
 export const COLOR_PINK: u16 = 14;
+/// Text palette index for peach.
 export const COLOR_PEACH: u16 = 15;
 
+/// Software interrupt mask bit.
 export const IRQ_SOFTWARE: u16 = 1;
+/// Device command status indicating that work is still pending.
 export const DEVICE_PENDING: u16 = 32768;
+/// Command identifier for querying device presence.
 export const DEVICE_PRESENT: u16 = 1;
+/// Command identifier for querying device capabilities.
 export const DEVICE_CAPS: u16 = 2;
+/// Command identifier for querying the next simulation tick.
 export const DEVICE_NEXT_TICK: u16 = 3;
+/// Command identifier for querying host time.
 export const DEVICE_GET_TIME: u16 = 4;
+/// Command identifier for consuming queued input events.
 export const DEVICE_INPUT_READ: u16 = 5;
+/// Command identifier for reading an input-state snapshot.
 export const DEVICE_INPUT_STATE: u16 = 6;
+/// Command identifier for configuring input delivery.
 export const DEVICE_INPUT_CONFIGURE: u16 = 7;
+/// Device capability bit for pointer input.
 export const CAP_POINTER: u16 = 64;
 // CAPS bit: live INPUT_READ/INPUT_STATE work independently of clock grants.
+/// Device capability bit for input polling.
 export const CAP_INPUT_POLL: u16 = 16;
+/// Device capability bit for guest networking.
 export const CAP_NETWORK: u16 = 32;
+/// Command identifier for querying network interface information.
 export const DEVICE_NET_INFO: u16 = 256;
+/// Command identifier for transmitting a network packet.
 export const DEVICE_NET_TX: u16 = 257;
+/// Command identifier for receiving a network packet.
 export const DEVICE_NET_RX: u16 = 258;
+/// Command identifier for querying network statistics.
 export const DEVICE_NET_STATS: u16 = 259;
+/// Network device status indicating success.
 export const NET_OK: u16 = 0;
+/// Network device status indicating that no receive packet is available.
 export const NET_EMPTY: u16 = 1;
+/// Network device status indicating that the operation would block.
 export const NET_WOULD_BLOCK: u16 = 2;
+/// Network device status indicating insufficient packet-buffer capacity.
 export const NET_BUFFER_TOO_SMALL: u16 = 3;
+/// Network device status indicating that the link is down.
 export const NET_LINK_DOWN: u16 = 4;
 
+/// Selects terminal display mode.
 export fn tty() -> () { write(DISP_MODE, MODE_TTY); }
 
+/// Writes one terminal output value to the TTY output register.
 export fn tty_put(ch: u16) -> () { write(TTY_OUT, ch); }
 
+/// Writes all indexed characters of a string to the TTY output register.
 export fn tty_write(text: String) -> () {
     let mut i: usize = 0;
     while (i < text.len()) {
@@ -105,64 +181,85 @@ export fn tty_write(text: String) -> () {
     }
 }
 
+/// Returns whether the terminal output status has its ready bit set.
 export fn tty_ready() -> bool { bit(read(TTY_STATUS), 0) }
 
+/// Reads the terminal input register; use `tty_has_byte` to check availability first.
 export fn tty_get() -> u16 { read(TTY_IN) }
 
+/// Returns whether a terminal input byte is available.
 export fn tty_has_byte() -> bool { bit(read(TTY_IN_STATUS), 0) }
 
+/// Reads the next value from the hardware random-number register.
 export fn rng_next() -> u16 { read(RNG) }
 
+/// Reads the current random-number generator seed register.
 export fn rng_seed() -> u16 { read(RNG_SEED) }
 
+/// Writes the random-number generator seed register.
 export fn rng_reseed(seed: u16) -> () { write(RNG_SEED, seed); }
 
+/// Reads the active display mode register.
 export fn mode() -> u16 { read(DISP_MODE) }
 
+/// Selects a display mode by its `MODE_*` register value.
 export fn set_mode(next: u16) -> () { write(DISP_MODE, next); }
 
+/// Returns whether the display status ready bit is set.
 export fn display_ready() -> bool { bit(read(DISP_STATUS), 0) }
 
+/// Returns whether the display status flush-complete bit is set.
 export fn display_flushed() -> bool { bit(read(DISP_STATUS), 1) }
 
+/// Enables the current display mode.
 export fn display_enable() -> () { write(DISP_CTL, 1); }
 
+/// Enables and clears the display through its control register.
 export fn display_clear() -> () { write(DISP_CTL, 3); }
 
+/// Requests a display flush.
 export fn display_flush() -> () { write(DISP_FLUSH, 1); }
 
 // Mode 3 keeps an 8-bit width in the high byte and height in the low byte.
+/// Packs width into the high byte and height into the low byte of the mode-3 resolution register; each dimension must fit in eight bits.
 export fn display_size(width: u16, height: u16) -> () {
     write(DISP_RESOLUTION, (width << 8) | height);
 }
 
+/// Selects and enables the 40×25 text display mode.
 export fn text40() -> () {
     set_mode(MODE_TEXT40);
     display_enable();
 }
 
+/// Selects and enables the packed-resolution RGB565 display mode.
 export fn rgb565() -> () {
     set_mode(MODE_RGB565);
     display_enable();
 }
 
+/// Selects and enables the extended RGB565 display mode.
 export fn rgb565_ext() -> () {
     set_mode(MODE_RGB565_EXT);
     display_enable();
 }
 
+/// Packs background and foreground 4-bit palette indices into one text attribute byte.
 export fn attr(fg: u16, bg: u16) -> u16 { (bg << 4) | fg }
 
+/// Returns the memory-mapped cell address for `(x, y)` in the 40×25 text display; does not check bounds.
 export fn text40_at(x: u16, y: u16) -> u16 {
     TEXT40_BASE + y * TEXT40_COLS + x
 }
 
+/// Writes a character and palette attributes to a text cell. Coordinates outside the 40×25 display are ignored.
 export fn text40_put(x: u16, y: u16, ch: u16, fg: u16, bg: u16) -> () {
     if (x < TEXT40_COLS && y < TEXT40_ROWS) {
         write(text40_at(x, y), (attr(fg, bg) << 8) | ch);
     }
 }
 
+/// Writes text on one text-display row, clipping at the right edge and ignoring invalid cell coordinates.
 export fn text40_write(x: u16, y: u16, text: String, fg: u16, bg: u16) -> () {
     let mut i: usize = 0;
     let mut col = x;
@@ -173,19 +270,27 @@ export fn text40_write(x: u16, y: u16, text: String, fg: u16, bg: u16) -> () {
     }
 }
 
+/// Reads a text cell's low character byte; returns zero for coordinates outside the display.
 export fn text40_char(x: u16, y: u16) -> u16 {
     if (x < TEXT40_COLS && y < TEXT40_ROWS) { read(text40_at(x, y)) & 255 } else { 0 }
 }
 
 // USB HID keyboard usages.
+/// USB HID usage for the UP key; pass to `key_down`.
 export const KEY_UP: u16 = 82; // USB HID usage
+/// USB HID usage for the DOWN key; pass to `key_down`.
 export const KEY_DOWN: u16 = 81; // USB HID usage
+/// USB HID usage for the LEFT key; pass to `key_down`.
 export const KEY_LEFT: u16 = 80; // USB HID usage
+/// USB HID usage for the RIGHT key; pass to `key_down`.
 export const KEY_RIGHT: u16 = 79; // USB HID usage
+/// USB HID usage for the Z key; pass to `key_down`.
 export const KEY_Z: u16 = 29; // USB HID usage
+/// USB HID usage for the X key; pass to `key_down`.
 export const KEY_X: u16 = 27; // USB HID usage
 
 // `which` is a USB HID usage. Ordinary snapshots preserve queued events.
+/// Checks a USB HID usage in an input-state snapshot without consuming queued events. Returns false for usages above 255 or device failure.
 export fn key_down(which: u16) -> bool {
     if (which >= 256) { return false; }
     let mut state: [u16; 28] = [1, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -197,43 +302,60 @@ export fn key_down(which: u16) -> bool {
     bit(state[12 + (which as usize) / 16], which % 16)
 }
 
+/// Packs 8-bit red, green and blue channel values into an RGB565 pixel by discarding low bits.
 export fn rgb565_color(red: u16, green: u16, blue: u16) -> u16 {
     ((red >> 3) << 11) | ((green >> 2) << 5) | (blue >> 3)
 }
 
+/// Selects a storage block and cell address for subsequent data-register access.
 export fn storage_select(block: u16, addr: u16) -> () {
     write(STORE_BLOCK, block);
     write(STORE_ADDR, addr);
 }
 
+/// Reads the storage data register.
 export fn storage_read() -> u16 { read(STORE_DATA) }
 
+/// Writes the storage data register.
 export fn storage_write(value: u16) -> () { write(STORE_DATA, value); }
 
+/// Reads the storage control/status register.
 export fn storage_status() -> u16 { read(STORE_CTL) }
 
+/// Returns whether the storage busy bit is set.
 export fn storage_busy() -> bool { bit(storage_status(), 0) }
 
+/// Returns whether the selected storage buffer is dirty.
 export fn storage_dirty() -> bool { bit(storage_status(), 1) }
 
+/// Requests a commit of the selected storage buffer.
 export fn storage_commit() -> () { write(STORE_CTL, 4); }
 
+/// Requests a commit of all dirty storage buffers.
 export fn storage_commit_all() -> () { write(STORE_CTL, 8); }
 
+/// Reads the pending interrupt mask.
 export fn irq_status() -> u16 { read(IRQ_STATUS) }
 
+/// Raises the interrupt bits specified by `bits`.
 export fn irq_raise(bits: u16) -> () { write(IRQ_STATUS, bits); }
 
+/// Reads the interrupt-enable mask.
 export fn irq_enabled() -> u16 { read(IRQ_ENABLE) }
 
+/// Replaces the interrupt-enable mask.
 export fn irq_set_enabled(mask: u16) -> () { write(IRQ_ENABLE, mask); }
 
+/// Returns whether an interrupt handler is currently active.
 export fn irq_busy() -> bool { read(IRQ_BUSY) != 0 }
 
+/// Acknowledges the active interrupt through the busy register.
 export fn irq_ack() -> () { write(IRQ_BUSY, 1); }
 
+/// Reads the active interrupt cause register.
 export fn irq_cause() -> u16 { read(IRQ_CAUSE) }
 
+/// Sets the interrupt handler's bank and offset registers.
 export fn irq_set_vector(bank: u16, offset: u16) -> () {
     write(IRQ_VECTOR_BANK, bank);
     write(IRQ_VECTOR_OFF, offset);
@@ -241,14 +363,18 @@ export fn irq_set_vector(bank: u16, offset: u16) -> () {
 
 // The descriptor is a run of cells the caller owns until the command returns.
 // `bank` is the pointer's bank cell and `offset` is its address cell.
+/// Submits a device command with a descriptor at `(bank, offset)`. The caller must keep the descriptor cells live until the command returns.
 export fn device_submit(command: u16, bank: u16, offset: u16) -> () {
     write(DEVICE_DESC_BANK, bank);
     write(DEVICE_DESC_OFF, offset);
     write(DEVICE_COMMAND, command);
 }
 
+/// Reads the most recent device command status.
 export fn device_status() -> u16 { read(DEVICE_STATUS) }
 
+/// Returns whether the device command status equals `DEVICE_PENDING`.
 export fn device_pending() -> bool { device_status() == DEVICE_PENDING }
 
+/// Reads the device ABI version register.
 export fn device_version() -> u16 { read(DEVICE_VERSION) }

@@ -1,0 +1,364 @@
+import { Screen, Window, TerminalError, InvalidWindow, BOLD, BACKSPACE, CLOSED, RESIZE, UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN } from "std/curses";
+import { open_read, IoError, read_bytes as read, write_text, STDIN, STDOUT, run_command, run_program, change_directory, metadata, read_dir, REGULAR, UnsupportedFileType, Errno } from "std/posix";
+import { ends_with } from "std/string";
+import { Theme } from "./theme";
+import { fitted, number } from "./format";
+
+struct Popup {
+    window: Window,
+    shadow: Window
+}
+
+fn popup(screen: &Screen, theme: &Theme, title: String, height: i16) -> Result<Popup, TerminalError> {
+    if (screen.rows() < 8 || screen.columns() < 20) {
+        return Err(InvalidWindow);
+    }
+    let width = if (screen.columns() > 80) {
+        76
+    } else {
+        screen.columns() - 4
+    };
+    let height = if (height < 6) {
+        6
+    } else {
+        height
+    };
+    let height = if (height > screen.rows() - 2) {
+        screen.rows() - 2
+    } else {
+        height
+    };
+    let row = (screen.rows() - height) / 2;
+    let column = (screen.columns() - width) / 2;
+    let shadow = screen.window(height, width, row + 1, column + 2)?;
+    let window = screen.window(height, width, row, column)?;
+    shadow.background(theme.shadow);
+    window.background(theme.dialog);
+    window.border(theme.dialog);
+    window.text(0, 2, fitted(" " + title + " ", width - 4), theme.dialog | BOLD);
+    Ok(Popup { window: move(window), shadow: move(shadow) })
+}
+
+fn present(screen: &Screen, panel: &Popup) {
+    screen.stage();
+    panel.shadow.stage();
+    panel.window.stage();
+    screen.present();
+}
+
+export fn prompt(screen: &Screen, theme: &Theme, title: String, initial: String) -> Option<String> {
+    let mut value = initial;
+    while (true) {
+        let panel = match popup(screen, theme, title, 7) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return None;
+            }
+        };
+        let width = panel.window.columns() - 4;
+        while (true) {
+            let label = title + ": " + value;
+            let visible = if (label.len() > width as usize) {
+                label[label.len() - width as usize..label.len()]
+            } else {
+                label
+            };
+            panel.window.fill(2, 2, width, ' ', theme.input);
+            panel.window.text(2, 2, visible, theme.input);
+            panel.window.text(4, 2, fitted("Enter: accept   Esc: cancel   Ctrl-U: clear", width), theme.dialog);
+            panel.window.cursor(2, 2 + visible.len() as i16, true);
+            present(screen, &panel);
+            let key = panel.window.key();
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == 27 || key == 3 || key == CLOSED) {
+                panel.window.cursor(0, 0, false);
+                return None;
+            }
+            if (key == 10 || key == 13) {
+                panel.window.cursor(0, 0, false);
+                return Some(value);
+            }
+            if ((key == BACKSPACE || key == 127 || key == 8) && value.len() > 0) {
+                value = value[0..value.len() - 1];
+            } else if (key == 21) {
+                value = "";
+            } else if (key >= 32 && key < 127 && value.len() < 255) {
+                value = value + from_char(key as char);
+            }
+        }
+    }
+    None
+}
+
+export fn confirm(screen: &Screen, theme: &Theme, question: String) -> bool {
+    while (true) {
+        let panel = match popup(screen, theme, "Confirm", 7) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return false;
+            }
+        };
+        panel.window.text(2, 2, fitted(question + " [y/N]", panel.window.columns() - 4), theme.dialog);
+        panel.window.text(4, 2, "y: confirm   n / Esc: cancel", theme.dialog | BOLD);
+        panel.window.cursor(0, 0, false);
+        present(screen, &panel);
+        while (true) {
+            let key = panel.window.key();
+            if (key == 121 || key == 89) {
+                return true;
+            }
+            if (key == 27 || key == 3 || key == 110 || key == 78 || key == 10 || key == 13 || key == CLOSED) {
+                return false;
+            }
+            if (key == RESIZE) {
+                break;
+            }
+        }
+    }
+    false
+}
+
+export fn choose(screen: &Screen, theme: &Theme) -> Option<String> {
+    let mut names = ["configured"];
+    match read_dir("/usr/share/mc/themes") {
+        Ok(entries) => {
+            for (i in 0..entries.len()) {
+                let name = entries[i].name;
+                if (entries[i].info.kind == REGULAR && ends_with(name, ".ini")) {
+                    names.push(name[0..name.len() - 4]);
+                }
+            }
+        },
+        Err(_) => {},
+    }
+    let mut selected: usize = 0;
+    let mut top: usize = 0;
+    while (true) {
+        let height = if (names.len() < 10) {
+            names.len() as i16 + 5
+        } else {
+            15
+        };
+        let panel = match popup(screen, theme, "Choose theme (session only)", height) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return None;
+            }
+        };
+        let rows = (panel.window.rows() - 4) as usize;
+        while (true) {
+            if (selected < top) {
+                top = selected;
+            }
+            if (selected >= top + rows) {
+                top = selected - rows + 1;
+            }
+            for (row in 0..rows) {
+                let i = top + row;
+                let style = if (i == selected) {
+                    theme.selected
+                } else {
+                    theme.dialog
+                };
+                panel.window.fill(row as i16 + 2, 2, panel.window.columns() - 4, ' ', style);
+                if (i < names.len()) {
+                    panel.window.text(row as i16 + 2, 2, names[i], style);
+                }
+            }
+            panel.window.cursor(0, 0, false);
+            present(screen, &panel);
+            let key = panel.window.key();
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == 27 || key == 3 || key == CLOSED) {
+                return None;
+            }
+            if (key == 10 || key == 13) {
+                return Some(names[selected]);
+            }
+            if (key == UP && selected > 0) {
+                selected -= 1;
+            }
+            if (key == DOWN && selected + 1 < names.len()) {
+                selected += 1;
+            }
+            if (key >= 32 && key < 127) {
+                for (i in 0..names.len()) {
+                    if (names[i].len() > 0 && names[i][0] as i16 == key) {
+                        selected = i;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoError> {
+    let info = metadata(path)?;
+    if (info.kind != REGULAR) {
+        return Err(UnsupportedFileType);
+    }
+    let file = open_read(path)?;
+    let bytes = file.read(16384)?;
+    let mut lines: Vec<String> = [];
+    let mut line = "";
+    for (i in 0..bytes.len()) {
+        let byte = bytes[i];
+        if (byte == 10) {
+            lines.push(line);
+            line = "";
+        } else if (byte == 9) {
+            line = line + "    ";
+        } else if (byte != 13) {
+            line = line + from_byte(byte);
+        }
+    }
+    lines.push(line);
+    let mut top: usize = 0;
+    while (true) {
+        let panel = match popup(screen, theme, "View: " + path, screen.rows() - 4) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return Ok({});
+            }
+        };
+        let height = (panel.window.rows() - 4) as usize;
+        while (true) {
+            for (row in 0..height) {
+                panel.window.fill(row as i16 + 1, 1, panel.window.columns() - 2, ' ', theme.dialog);
+                if (top + row < lines.len()) {
+                    panel.window.text(row as i16 + 1, 2, fitted(lines[top + row], panel.window.columns() - 4), theme.dialog);
+                }
+            }
+            panel.window.text(panel.window.rows() - 2, 2, fitted("Arrows/PgUp/PgDn | q/Esc close | First 16 KiB", panel.window.columns() - 4), theme.dialog | BOLD);
+            panel.window.cursor(0, 0, false);
+            present(screen, &panel);
+            let key = panel.window.key();
+            if (key == 113 || key == 27 || key == 3 || key == CLOSED) {
+                return Ok({});
+            }
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == UP || key == PAGE_UP) {
+                let distance = if (key == UP) {
+                    1 as usize
+                } else {
+                    height
+                };
+                top = if (top > distance) {
+                    top - distance
+                } else {
+                    0
+                };
+            } else if (key == DOWN || key == PAGE_DOWN) {
+                let distance = if (key == DOWN) {
+                    1 as usize
+                } else {
+                    height
+                };
+                let last = if (lines.len() > height) {
+                    lines.len() - height
+                } else {
+                    0
+                };
+                top = if (top + distance < last) {
+                    top + distance
+                } else {
+                    last
+                };
+            } else if (key == HOME) {
+                top = 0;
+            } else if (key == END) {
+                top = if (lines.len() > height) {
+                    lines.len() - height
+                } else {
+                    0
+                };
+            }
+        }
+    }
+    Ok({})
+}
+
+// The shell uses canonical input/echo. Browser state survives suspend/resume;
+// shell output stays visible until an empty line returns to the panels.
+export fn console(screen: &Screen, path: String) -> Result<unit, IoError> {
+    change_directory(path)?;
+    screen.clear();
+    screen.refresh();
+    screen.suspend();
+    write_text(STDOUT, "RFL Commander shell (empty line returns to panels)\n")?;
+    while (true) {
+        write_text(STDOUT, "rfl$ ")?;
+        let bytes = read(STDIN, 1024)?;
+        if (bytes.is_empty()) {
+            break;
+        }
+        let mut command = "";
+        for (i in 0..bytes.len()) {
+            if (bytes[i] != 10 && bytes[i] != 13) {
+                command = command + from_byte(bytes[i]);
+            }
+        }
+        if (command == "") {
+            break;
+        }
+        let status = run_command(command)?;
+        if (status != 0) {
+            write_text(STDOUT, "Command wait status: " + number(status as u32) + "\n")?;
+        }
+    }
+    Ok({})
+}
+
+export fn about(screen: &Screen, theme: &Theme) {
+    let lines = ["RFL Commander", "A two-panel file manager written in RFL.", "For FUZIX and Fuse-X; shared C16 curses.", "", "Enter: open directory / run program / view", "F3 View  F4 Edit  F5 Copy  F6 Move  r Rename", "F7 Mkdir  F8 Delete  F9 Theme  F10 Quit", "Tab: panel  Ctrl-O: shell  Ctrl-P: layout"];
+    while (true) {
+        let panel = match popup(screen, theme, "About RFL Commander", 14) {
+            Ok(panel) => move(panel),
+            Err(_) => {
+                return;
+            }
+        };
+        let rows = (panel.window.rows() - 4) as usize;
+        for (i in 0..lines.len()) {
+            if (i < rows) {
+                panel.window.text(i as i16 + 2, 2, fitted(lines[i], panel.window.columns() - 4), theme.dialog);
+            }
+        }
+        panel.window.text(panel.window.rows() - 2, 2, fitted("Enter / Esc: close", panel.window.columns() - 4), theme.dialog | BOLD);
+        panel.window.cursor(0, 0, false);
+        present(screen, &panel);
+        while (true) {
+            let key = panel.window.key();
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == 10 || key == 13 || key == 27 || key == 3 || key == CLOSED || key == 1) {
+                return;
+            }
+        }
+    }
+}
+
+// Returns with curses suspended; the controller resumes even on command/error.
+export fn external(screen: &Screen, directory: String, command: String, pause: bool) -> Result<i32, IoError> {
+    change_directory(directory)?;
+    screen.suspend();
+    let result = if (pause) {
+        run_program(command, [])
+    } else {
+        run_command(command)
+    };
+    if (pause) {
+        write_text(STDOUT, "\nPress Enter to return to Commander...")?;
+        read(STDIN, 1024)?;
+    }
+    result
+}

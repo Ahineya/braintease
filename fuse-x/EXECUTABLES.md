@@ -64,12 +64,18 @@ The package envelope contains:
 | 12 | Native payload length, little-endian u32 |
 | 16 | UTF-8 JSON manifest, followed by the native shared-object payload |
 
-The manifest records ABI version 1, CPU, host OS, entry token, function exports
+The manifest records ABI version 2, CPU, host OS, entry token, function exports
 and arities, required runtime helpers, global storage size, errno address, and
 global initializers including function-pointer relocations. The current package
-limit is 8 MiB. The kernel streams packages through a 4,096-cell buffer
+limit is 64 MiB. The kernel streams packages through a 4,096-cell buffer
 to process-owned host storage, rather than reserving the entire package in the
-shared guest arena. Application globals must fit in one 64,000-cell bank. All
+shared guest arena. Small applications retain globals in bank 1. Larger images
+automatically use banks 32–47, up to 1,024,000 cells including the reserved first
+cell. The manifest's `global_bank` selects the region; the loader validates all
+initializer spans and reserves it from the allocator. Globals are private after
+fork and reset on exec, including values that cross bank boundaries. Older ABI 1
+packages without `global_bank` still load with their original single-bank layout.
+All
 package octets occupy individual compatibility cells in the C16 filesystem.
 
 Host code relocation uses the platform dynamic loader. The runtime stages the

@@ -123,7 +123,13 @@ const syscall_t syscall_dispatch[FUZIX_SYSCALL_COUNT] = {
 	_setsid,		/* FUZIX system call 78 */
 	_getsid,		/* FUZIX system call 79 */
 #elif defined(CONFIG_JOB_CONTROL)
-    _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys, _nosys,
+    _nosys, _nosys, _nosys, _nosys,
+#ifdef CONFIG_SELECT
+    _select,
+#else
+    _nosys,
+#endif
+    _nosys, _nosys, _nosys, _nosys,
     _setpgid, _setsid, _getsid,
 #endif
 };

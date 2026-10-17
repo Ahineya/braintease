@@ -25,6 +25,8 @@ pub struct LoweringOptions {
     pub trace_spills: bool,
     /// Grow at function entry using the explicitly configured stack pool.
     pub segmented_stack: bool,
+    /// Materialize relocatable bank and offset components for global symbols.
+    pub banked_globals: bool,
 }
 
 impl Default for LoweringOptions {
@@ -34,6 +36,7 @@ impl Default for LoweringOptions {
             use_v2: true,
             trace_spills: false,
             segmented_stack: false,
+            banked_globals: true,
         }
     }
 }
@@ -44,5 +47,5 @@ pub fn lower_module_to_assembly_with_options(
     options: LoweringOptions,
 ) -> Result<Vec<rcc_codegen::AsmInst>, String> {
     // Always use v2 backend now that v1 is removed
-    crate::lower::module::lower_module_with_stack_mode(module, options.bank_size, options.trace_spills, options.segmented_stack)
+    crate::lower::module::lower_module_with_memory_mode(module, options.bank_size, options.trace_spills, options.segmented_stack, options.banked_globals)
 }

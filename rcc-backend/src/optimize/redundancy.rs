@@ -616,6 +616,7 @@ fn simplify_control_flow(function: &mut Function) {
             .filter(|p| cfg.reachable.contains(p))
             .map(|&p| labels[p])
             .collect();
+        let mut folded_phis = Vec::new();
         for inst in &mut block.instructions {
             if let I::Phi {
                 result,
@@ -629,9 +630,18 @@ fn simplify_control_flow(function: &mut Function) {
                     && incoming[0].0 != Value::Temp(*result)
                     && incoming.iter().all(|(v, _)| v == &incoming[0].0)
                 {
-                    *inst = copy(*result, incoming[0].0.clone(), result_type.clone());
+                    folded_phis.push(copy(*result, incoming[0].0.clone(), result_type.clone()));
+                    *inst = I::Comment("folded Phi".into());
                 }
             }
+        }
+        // Phi definitions are simultaneous at entry. Their typed replacement
+        // copies are ordinary instructions and must follow all remaining Phis.
+        if !folded_phis.is_empty() {
+            block.instructions.retain(|inst| !matches!(inst, I::Comment(text) if text == "folded Phi"));
+            let insertion = block.instructions.iter().take_while(|inst|
+                matches!(inst, I::Phi { .. } | I::Comment(_) | I::DebugLoc { .. })).count();
+            block.instructions.splice(insertion..insertion, folded_phis);
         }
     }
     let mut i = 0;

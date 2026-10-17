@@ -4,13 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {rootImage, atomicWrite} from '../ports/fuzix/tools/disk.mjs';
 import {fatFile} from '../ports/fuzix/tools/fat.mjs';
+import {openImage, writeImage} from '../ports/fuzix/tools/image.mjs';
+import {ROOT_BLOCKS} from '../ports/fuzix/tools/layout.mjs';
 import {installRoot, growRoot} from '../ports/fuzix/tools/install.mjs';
 import {manualFiles} from '../ports/fuzix/tools/manuals.mjs';
 import {sokobanFiles} from '../ports/fuzix/tools/sokoban.mjs';
+import {commanderFiles, riftFiles} from '../rfl/os/files.mjs';
+import {lynxFiles} from '../ports/lynx/files.mjs';
 
-// C16 V2 has 16-bit block numbers and 2,048 physical octets per block.
-// Leave application and scratch space within the existing filesystem format.
-const ROOT_BLOCKS = 65535;
+// C16 V3 shares the 1 GiB default and 32-bit block references with Ripple.
 
 const applications = [['/init','init'],['/bin/sh','sh'],['/bin/fxsh','sh'],['/bin/hello','hello'],['/bin/check','check']]
   .map(([name, id]) => ({name, mode: 0o100755, data: Buffer.from(`FXN1:${id}:1\n`)}));
@@ -33,19 +35,32 @@ try {
     const names=fs.existsSync(report)
       ? ['native-hello',...JSON.parse(fs.readFileSync(report,'utf8')).filter(a=>a.status==='built').map(a=>a.name)]
       : ['native-hello','cat','ls','cp','sh'];
+    for(const name of ['rfl-demo','rfl-fm','rift']) {
+      if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
+    }
+    for(const name of ['gterm','gxcheck','nano-X','nanowm','nxlaunch','nxterm','nxclock','nxeyes','nxcheck','nxhostcheck','startx','nxdraw']) {
+      if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
+    }
     for(const name of [...new Set(names)].sort()) {
-      if(!/^[a-z0-9-]+$/.test(name)) throw Error('invalid application name in build report');
+      if(!/^[a-zA-Z0-9-]+$/.test(name)) throw Error('invalid application name in build report');
       if(!fs.existsSync(path.join(appDirectory,`${name}.fxe`))) throw Error(`missing built application: ${name}`);
       if(name==='sh') {
         if(useBootstrap) continue;
         applications.splice(applications.findIndex(a=>a.name==='/bin/sh'),1);
       }
       applications.push({name:`/bin/${name}`,mode:0o100755,data:fs.readFileSync(`${appDirectory}/${name}.fxe`)});
+      if(name==='lynx') applications.push(...lynxFiles());
+      if(name==='rfl-fm') applications.push({name:'/bin/mc',link:'/bin/rfl-fm'});
     }
   }
   if(['create','install'].includes(command)) {
+    applications.push(...commanderFiles(), ...riftFiles());
     applications.push({name:'/mnt/host',directory:true,mode:0o40755});
+    if(appDirectory && fs.existsSync(path.join(appDirectory,'nano-X.fxe')))
+      applications.push({name:'/etc/nxlaunch.cnf',mode:0o100644,preserve:true,
+        data:Buffer.from('Terminal - /bin/nxterm\nMac-term - /bin/gterm\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nDraw - /bin/nxdraw\n')});
     applications.push({name:'/dev/tty',mode:0o20666,device:0x200,data:Buffer.alloc(0)});
+    applications.push({name:'/dev/gfx',mode:0o20666,device:0x400,data:Buffer.alloc(0)});
     for(let i=0;i<4;i++) applications.push(
       {name:`/dev/ptyp${i}`,mode:0o20600,device:0x300+i,data:Buffer.alloc(0)},
       {name:`/dev/ttyp${i}`,mode:0o20600,device:0x202+i,data:Buffer.alloc(0)});
@@ -72,12 +87,12 @@ try {
   }
   if(command==='put') applications.splice(0,applications.length,{name:destination,mode:0o100755,data:fs.readFileSync(extra)});
   if (command === 'install' || command==='put') {
-    const original = fs.readFileSync(source), updated = installRoot(
-      appDirectory ? growRoot(original, ROOT_BLOCKS) : original, applications);
+    const original = openImage(source), updated = installRoot(
+      growRoot(original, ROOT_BLOCKS), applications);
     if (!original.equals(updated)) {
       let backup = `${source}.bak`, serial = 0;
       while (fs.existsSync(backup)) backup = `${source}.bak.${++serial}`;
-      fs.copyFileSync(source, backup, fs.constants.COPYFILE_EXCL);
+      writeImage(backup, original, true);
       atomicWrite(source, updated);
       console.log(`Installed native programs; previous image: ${backup}`);
     }
@@ -86,8 +101,8 @@ try {
   const output = command === 'create' ? source : destination;
   const image = command === 'create'
     ? rootImage(applications, ROOT_BLOCKS, 1024)
-    : fatFile(fs.readFileSync(source), 'ROOTFS.IMG').data;
-  fs.writeFileSync(output, image, {flag: 'wx'});
+    : growRoot(fatFile(openImage(source), 'ROOTFS.IMG').data, ROOT_BLOCKS);
+  writeImage(output, image, true);
   console.log(`Created ${output}`);
 } catch (error) {
   console.error(error.message);

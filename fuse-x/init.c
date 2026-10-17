@@ -3,25 +3,31 @@
 
 extern unsigned fuse_headless, fuse_telnet, fuse_one_shot, fuse_stopping, fuse_console_closed;
 extern unsigned fuse_stop_tasks(unsigned);
+extern unsigned fuse_gui;
+extern unsigned fuse_new_terminals;
+static int graphics_service;
 
 static int start_program(unsigned console) {
     int pid=fx_fork(), group;
-    char *arguments[2];
-    char *environment[6];
+    char *arguments[3];
+    char *environment[7];
     if(pid) return pid;
     fx_call(35,SIGINT,0,0); fx_call(35,SIGQUIT,0,0);
     fx_call(35,SIGTTOU,1,0);
-    if(fx_call(77,0,0,0)<0) fx_error("init setpgid");
+    if(console==3) {if(fx_call(78,0,0,0)<0)fx_error("init graphics setsid");}
+    else if(fx_call(77,0,0,0)<0) fx_error("init setpgid");
     group=fx_call(18,0,0,0);
-    if(console && fx_call(29,0,TIOCSPGRP,(unsigned long)&group)<0) fx_error("init foreground group");
+    if(console==1 && fx_call(29,0,TIOCSPGRP,(unsigned long)&group)<0) fx_error("init foreground group");
     fx_call(35,SIGTTOU,0,0);
-    arguments[0]=console ? "sh" : "telnetd"; arguments[1]=NULL;
+    arguments[0]=console==3 ? "nano-X" : console==2 ? "gterm" : console ? "sh" : "telnetd";
+    arguments[1]=console==3 ? "-p" : NULL;arguments[2]=NULL;
     environment[0]="PATH=/bin:/usr/bin";
     environment[1]="HOME=/";
     environment[2]="TERM=vt100";
     environment[3]="SHELL=/bin/sh";
-    environment[4]="PS1=fuse-x# "; environment[5]=NULL;
-    fx_call(23,(unsigned long)(console ? "/bin/sh" : "/bin/telnetd"),
+    environment[4]="PS1=fuse-x# ";
+    environment[5]="EDITOR=/bin/vi"; environment[6]=NULL;
+    fx_call(23,(unsigned long)(console==3 ? "/bin/nano-X" : console==2 ? "/bin/gterm" : console ? "/bin/sh" : "/bin/telnetd"),
             (unsigned long)arguments,(unsigned long)environment);
     fx_error(arguments[0]); fx_exit(127);
     return -1;
@@ -30,6 +36,10 @@ static int start_program(unsigned console) {
 static int reap(int console) {
     int pid,status;
     while((pid=fx_call(55,-1UL,(unsigned long)&status,WNOHANG))>0) {
+        if(pid==graphics_service && !fuse_stopping) {
+            fx_puts("Fuse-X: Nano-X service stopped (status ");fx_number(status);fx_puts(")\n");
+            graphics_service=0;
+        }
         if(pid==console) {
             fx_puts("Fuse-X: shell stopped\n");
             console=0;
@@ -47,12 +57,18 @@ void fuse_init_entry(unsigned long argument) {
     fx_puts("Fuse-X: native /init running as PID 1\n");
     fx_call(35,SIGINT,1,0); fx_call(35,SIGQUIT,1,0);
     if(fuse_telnet && start_program(0)<0) fx_error("init telnetd fork");
+    if(fuse_gui && (graphics_service=start_program(3))<0) fx_error("init graphics service fork");
+    if(fuse_gui && start_program(2)<0) fx_error("init graphical terminal fork");
     if(!fuse_headless) {
         console=start_program(1);
         if(console<0) {fx_error("init shell fork");console=0;}
     }
     while(!fuse_stopping) {
         int previous=console;
+        if(fuse_new_terminals) {
+            --fuse_new_terminals;
+            if(start_program(2)<0)fx_error("new terminal fork");
+        }
         console=reap(console);
         if(previous && !console && fuse_one_shot) break;
         if(!console && !fuse_headless && !fuse_console_closed) {

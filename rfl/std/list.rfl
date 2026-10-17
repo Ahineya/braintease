@@ -1,8 +1,12 @@
+/// A persistent singly linked list: `Nil` is empty and `Cons(value, rest)` holds a head and tail.
 export type List<T> =
+    /// An empty list.
     | Nil
+    /// A head value followed by the remaining list.
     | Cons(T, List<T>);
 
 impl<T> List<T> {
+    /// Builds a list from a vector, preserving element order.
     export fn from(items: Vec<T>) -> List<T> {
         if (items.is_empty()) {
             Nil
@@ -17,6 +21,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns whether this list is `Nil`.
     export fn is_empty(self) -> bool {
         match self {
             Nil => true,
@@ -24,6 +29,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Counts the elements recursively; takes linear time in the list length.
     export fn len(self) -> usize {
         match self {
             Nil => 0,
@@ -34,6 +40,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns the first element, or `None` for an empty list.
     export fn head(self) -> Option<T> {
         match self {
             Nil => None,
@@ -41,6 +48,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns the list without its first element; the tail of `Nil` is `Nil`.
     export fn tail(self) -> List<T> {
         match self {
             Nil => Nil,
@@ -48,6 +56,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns the element at a zero-based index, or `None` if it is out of bounds.
     export fn nth(self, index: usize) -> Option<T> {
         match self {
             Nil => None,
@@ -55,6 +64,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns the last element, or `None` for an empty list.
     export fn last(self) -> Option<T> {
         match self {
             Nil => None,
@@ -62,6 +72,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Appends `other`, preserving order and rebuilding the left list's spine.
     export fn append(self, other: List<T>) -> List<T> {
         match self {
             Nil => other,
@@ -69,6 +80,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Reverses the element order into a new list.
     export fn reverse(self) -> List<T> {
         self.reversed(Nil)
     }
@@ -80,6 +92,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Transforms every element with `f`, preserving order.
     export fn map<U>(self, f: fn(T) -> U) -> List<U> {
         match self {
             Nil => Nil,
@@ -87,6 +100,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Keeps elements for which `predicate` returns true, preserving order.
     export fn filter(self, predicate: fn(T) -> bool) -> List<T> {
         match self {
             Nil => Nil,
@@ -97,6 +111,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Combines elements from left to right, starting with `initial`.
     export fn fold<U>(self, initial: U, f: fn(U, T) -> U) -> U {
         match self {
             Nil => initial,
@@ -104,6 +119,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns the first element satisfying `predicate`, or `None`.
     export fn find(self, predicate: fn(T) -> bool) -> Option<T> {
         match self {
             Nil => None,
@@ -111,6 +127,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns whether at least one element satisfies `predicate`; stops at the first match.
     export fn any(self, predicate: fn(T) -> bool) -> bool {
         match self {
             Nil => false,
@@ -118,6 +135,7 @@ impl<T> List<T> {
         }
     }
 
+    /// Returns whether every element satisfies `predicate`; an empty list returns true.
     export fn all(self, predicate: fn(T) -> bool) -> bool {
         match self {
             Nil => true,

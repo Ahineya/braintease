@@ -31,7 +31,7 @@ def adapt(unit, source):
               'if(fuse_host_inode(ino)){fuse_host_store(ino);return;}')
         enter('int f_trunc(register inoptr ino)',
               'if(fuse_host_inode(ino))return fuse_host_truncate(ino,0);')
-        enter('int f_trunc_blocks(register inoptr ino, uint16_t nblock)',
+        enter('int f_trunc_blocks(register inoptr ino, blkno_t nblock)',
               'if(fuse_host_inode(ino)){udata.u_error=EOPNOTSUPP;return -1;}')
         replace('    magic(inoindex);\n    return(inoindex);',
                 '    magic(inoindex);\n    if(fuse_host_inode(inoindex) && fuse_host_refresh(inoindex)<0)return NULLINODE;\n    return(inoindex);')

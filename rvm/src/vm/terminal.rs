@@ -87,6 +87,18 @@ impl VM {
                 KeyCode::Home => self.input_buffer.extend(b"\x1b[H"),
                 KeyCode::End => self.input_buffer.extend(b"\x1b[F"),
                 KeyCode::Delete => self.input_buffer.extend(b"\x1b[3~"),
+                KeyCode::Insert => self.input_buffer.extend(b"\x1b[2~"),
+                KeyCode::PageUp => self.input_buffer.extend(b"\x1b[5~"),
+                KeyCode::PageDown => self.input_buffer.extend(b"\x1b[6~"),
+                KeyCode::BackTab => self.input_buffer.extend(b"\x1b[Z"),
+                KeyCode::F(number @ 1..=12) => {
+                    let sequences: [&[u8]; 12] = [
+                        b"\x1bOP", b"\x1bOQ", b"\x1bOR", b"\x1bOS",
+                        b"\x1b[15~", b"\x1b[17~", b"\x1b[18~", b"\x1b[19~",
+                        b"\x1b[20~", b"\x1b[21~", b"\x1b[23~", b"\x1b[24~",
+                    ];
+                    self.input_buffer.extend(sequences[usize::from(number - 1)]);
+                }
                 KeyCode::Esc => self.input_buffer.push_back(27),
                 _ => {}
             }
@@ -271,6 +283,20 @@ mod tests {
         }
         assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(),
                    b"\t\x1b[A\x1b[B\x1b[C\x1b[D\x1b[H\x1b[F\x1b[3~");
+    }
+
+    #[test]
+    fn tty_function_and_paging_keys_reach_guest_applications() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        for number in 1..=12 {
+            vm.accept_terminal_key(KeyEvent::new(KeyCode::F(number), KeyModifiers::NONE));
+        }
+        for key in [KeyCode::PageUp, KeyCode::PageDown, KeyCode::Insert, KeyCode::BackTab] {
+            vm.accept_terminal_key(KeyEvent::new(key, KeyModifiers::NONE));
+        }
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(),
+            b"\x1bOP\x1bOQ\x1bOR\x1bOS\x1b[15~\x1b[17~\x1b[18~\x1b[19~\x1b[20~\x1b[21~\x1b[23~\x1b[24~\x1b[5~\x1b[6~\x1b[2~\x1b[Z");
+        assert!(!vm.terminal_quit_requested);
     }
 
     #[test]

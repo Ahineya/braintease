@@ -98,6 +98,7 @@ mod tests {
         let mut object = RippleAssembler::new(options).assemble(
             ".data\n__gp_fixture:\nunused:\n.space 24\nlive:\n.space 2\n.code\nmain:\nLI T0, live\nRET\n").unwrap();
         object.rcc = Some(CompilerMetadata {
+            banked_data: false,
             symbols: HashMap::from([(
                 "main".into(),
                 if pin_base {

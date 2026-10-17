@@ -1,0 +1,224 @@
+import { Buffer, buffer, hash } from "lib/text";
+import { Language, detect } from "./languages";
+import { parent, joined } from "lib/path";
+import { File, open_read, create_new, metadata, REGULAR, SYMLINK, Errno, error_message, remove_file, rename, set_permissions, process_id } from "std/posix";
+export struct Document {
+    buffer: Buffer,
+    path: String,
+    exists: bool,
+    fingerprint: u32,
+    mode: u16,
+    language: Language
+}
+
+export fn number(value: usize) -> String {
+    if (value == 0) {
+        return "0";
+    }
+    let mut n = value;
+    let mut out = "";
+    while (n > 0) {
+        out = from_char((48 + (n % 10)) as char) + out;
+        n = n / 10;
+    }
+    out
+}
+
+export fn empty(path: String) -> Result<Document, String> {
+    let b = buffer()?;
+    let language = detect(path);
+    b.language(language.lexer);
+    Ok(Document { buffer: move(b), path: path, exists: false, fingerprint: 2166136261, mode: 420, language: language })
+}
+
+export fn load(path: String) -> Result<Document, String> {
+    let info = match metadata(path) {
+        Ok(info) => info,
+        Err(Errno(2)) => {
+            return empty(path);
+        },
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    if (info.kind == SYMLINK) {
+        return Err("Open the symbolic link's target directly");
+    }
+    if (info.kind != REGULAR) {
+        return Err("Only regular text files can be edited");
+    }
+    if (info.size > 524288) {
+        return Err("File exceeds 512 KiB");
+    }
+    let file = match open_read(path) {
+        Ok(file) => move(file),
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    let mut document = empty(path)?;
+    let mut fingerprint: u32 = 2166136261;
+    while (true) {
+        let bytes = match file.read(4096) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return Err(error_message(error));
+            }
+        };
+        if (bytes.is_empty()) {
+            break;
+        }
+        fingerprint = hash(bytes, fingerprint);
+        document.buffer.append(bytes)?;
+    }
+    match move(file).close() {
+        Ok(_) => {},
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    }
+    document.exists = true;
+    document.fingerprint = fingerprint;
+    document.mode = info.mode & 511;
+    document.buffer.saved();
+    Ok(move(document))
+}
+
+export fn fingerprint(path: String) -> Result<u32, String> {
+    let info = match metadata(path) {
+        Ok(info) => info,
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    if (info.kind != REGULAR || info.size > 524288) {
+        return Err("Target changed type or exceeds 512 KiB");
+    }
+    let file = match open_read(path) {
+        Ok(file) => move(file),
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    let mut value: u32 = 2166136261;
+    let mut size: usize = 0;
+    while (true) {
+        let bytes = match file.read(4096) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return Err(error_message(error));
+            }
+        };
+        if (bytes.is_empty()) {
+            break;
+        }
+        size += bytes.len();
+        if (size > 524288) {
+            return Err("Target exceeds 512 KiB");
+        }
+        value = hash(bytes, value);
+    }
+    match move(file).close() {
+        Ok(_) => Ok(value),
+        Err(error) => Err(error_message(error))
+    }
+}
+
+export fn changed(document: &Document, path: String) -> Result<bool, String> {
+    match metadata(path) {
+        Ok(info) => {
+            if (info.kind != REGULAR) {
+                return Err("Save target must be a regular file, without a symbolic link");
+            }
+            if (path != document.path || !document.exists) {
+                Ok(true)
+            } else {
+                Ok(fingerprint(path)? != document.fingerprint)
+            }
+        },
+        Err(Errno(2)) => Ok(path == document.path && document.exists),
+        Err(error) => Err(error_message(error))
+    }
+}
+
+fn write_buffer(file: &File, buffer: &Buffer) -> Result<u32, String> {
+    let mut at: usize = 0;
+    let mut value: u32 = 2166136261;
+    while (at < buffer.len()) {
+        let n = if (buffer.len() - at > 4096) {
+            4096 as usize
+        } else {
+            buffer.len() - at
+        };
+        let bytes = buffer.bytes(at, n)?;
+        value = hash(bytes, value);
+        match file.write_all(bytes) {
+            Ok(_) => {},
+            Err(error) => {
+                return Err(error_message(error));
+            }
+        }
+        at += n;
+    }
+    Ok(value)
+}
+
+struct Temporary {
+    file: File,
+    path: String
+}
+
+fn temporary(path: String, attempt: usize) -> Result<Temporary, String> {
+    if (attempt >= 100) {
+        return Err("Cannot reserve a temporary file beside the document");
+    }
+    let candidate = joined(parent(path), ".rift-" + number(process_id() as usize) + "-" + number(attempt));
+    match create_new(candidate) {
+        Ok(file) => Ok(Temporary { file: move(file), path: candidate }),
+        Err(Errno(17)) => temporary(path, attempt + 1),
+        Err(error) => Err(error_message(error))
+    }
+}
+
+/// Exclusive sibling temporary plus atomic rename: a failed write never truncates the original.
+export fn save(document: &mut Document, path: String) -> Result<unit, String> {
+    let reserved = temporary(path, 0)?;
+    let Temporary { path: temporary, file: file } = move(reserved);
+    let result = write_buffer(&file, &document.buffer);
+    let close = move(file).close();
+    let value = match result {
+        Ok(value) => value,
+        Err(error) => {
+            remove_file(temporary);
+            return Err(error);
+        }
+    };
+    match close {
+        Ok(_) => {},
+        Err(error) => {
+            remove_file(temporary);
+            return Err(error_message(error));
+        }
+    }
+    match set_permissions(temporary, document.mode) {
+        Ok(_) => {},
+        Err(error) => {
+            remove_file(temporary);
+            return Err(error_message(error));
+        }
+    }
+    match rename(temporary, path) {
+        Ok(_) => {},
+        Err(error) => {
+            remove_file(temporary);
+            return Err(error_message(error));
+        }
+    }
+    document.path = path;
+    document.exists = true;
+    document.fingerprint = value;
+    document.language = detect(path);
+    document.buffer.language(document.language.lexer);
+    document.buffer.saved();
+    return Ok({});
+}

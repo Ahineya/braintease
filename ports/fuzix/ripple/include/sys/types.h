@@ -23,7 +23,7 @@ typedef unsigned uid_t;
 typedef unsigned nlink_t;
 typedef int pid_t;
 typedef unsigned ino_t;
-typedef unsigned fsblkcnt_t;
+typedef unsigned long fsblkcnt_t;
 typedef unsigned fsfilcnt_t;
 /* Current Ripple kernel exports a 32-bit epoch, with high bits reserved. */
 typedef unsigned long time_t;

@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "kdata.h"
 #include "printf.h"
 
 #if (BLKSIZE == 512) || defined(CONFIG_RIPPLE)
@@ -83,22 +84,26 @@ blkno_t bmap(register inoptr ip, blkno_t bn, unsigned rwflg)
     if(getmode(ip) == MODE_R(F_BDEV))
         return(bn);
 
-    if (bn < 18)
-        return ifetch(ip, bn, rwflg);
-    bn -= 18;
-    if (bn >= indirect) {
-        /* The single-indirect range precedes the double-indirect tree. */
-        bn -= indirect;
-        blk = ifetch(ip, 19, rwflg);
-        if (blk == NULLBLK)
-            return blk;
-        blk = bfetch(ip->c_dev, blk, bn / indirect, rwflg);
-        bn %= indirect;
-    } else
-        blk = ifetch(ip, 18, rwflg);
-    if (blk == NULLBLK)
+    {
+        unsigned level, depth;
+        uint32_t span = 1;
+        if (bn < FS_DIRECT) return ifetch(ip, (unsigned)bn, rwflg);
+        bn -= FS_DIRECT;
+        for (depth = 1; depth <= FS_LEVELS; depth++) {
+            span *= indirect;
+            if (bn < span) break;
+            bn -= span;
+        }
+        if (depth > FS_LEVELS) { udata.u_error = EFBIG; return NULLBLK; }
+        blk = ifetch(ip, FS_DIRECT + depth - 1, rwflg);
+        for (level = depth; level; level--) {
+            if (blk == NULLBLK) return blk;
+            span /= indirect;
+            blk = bfetch(ip->c_dev, blk, (unsigned)(bn / span), rwflg);
+            bn %= span;
+        }
         return blk;
-    return bfetch(ip->c_dev, blk, bn, rwflg);
+    }
 }
 
 #endif

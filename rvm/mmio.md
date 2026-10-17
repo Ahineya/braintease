@@ -289,6 +289,8 @@ Multiword integers use the low cell first.
 | INPUT_CONFIGURE | 7 | 4 | version, length, pointer mode (0 absolute, 1 relative), reserved=0 |
 | HOST_MONOTONIC | 8 | 10 | version, length, seconds (four output cells), nanoseconds (two output cells), resolution_ns (two output cells) |
 | HOST_REALTIME | 9 | 10 | same layout as HOST_MONOTONIC |
+| HOST_IDLE | 10 | 4 | version, length, requested milliseconds (0–10), reserved zero |
+| HOST_TERMINAL | 11 | 4 | version, length, rows, columns (payload zero on submission) |
 
 #### Worked example: a capabilities request in memory
 

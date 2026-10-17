@@ -14,7 +14,11 @@ static ptptr owner;
 static uint16_t owner_pid, width, height, head, queued, lost, closing;
 static uint32_t generation;
 static unsigned waiting;
-void ripple_gfx_wakeup(void) { if(waiting)wakeup(&waiting); }
+void ripple_gfx_wakeup(void) { if(waiting)wakeup(&waiting); if(owner)selwake_dev(4,0,SELECT_IN); }
+unsigned ripple_gfx_status(void) {
+    if(!owner||owner!=udata.u_ptab||owner_pid!=owner->p_pid)return SELECT_IN|SELECT_OUT;
+    return SELECT_OUT|((queued||lost||closing)?SELECT_IN:0);
+}
 static VmInputEvent events[EVENTS], incoming[8];
 static unsigned short fallback[640];
 static unsigned long address(unsigned long at) {

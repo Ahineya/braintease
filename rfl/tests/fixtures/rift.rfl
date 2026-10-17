@@ -1,0 +1,186 @@
+import {} from "std/result";
+import { buffer, octets, Buffer } from "lib/text";
+import { key, controls, view, Vi, View, reset } from "../../apps/rift/vi";
+import { Settings } from "../../apps/rift/config";
+import { detect } from "../../apps/rift/languages";
+import { joined, parent, basename } from "lib/path";
+fn settings() -> Settings {
+    Settings { tabstop: 4, expandtab: true, autoindent: true, numbers: true, runs: [], notice: "" }
+}
+
+fn keys(b: &Buffer, v: &mut View, vi: &mut Vi, input: String) {
+    let settings = settings();
+    for (i in 0..input.len()) {
+        key(b, v, vi, input[i] as i16, &settings, 19);
+    }
+}
+
+fn equal(b: &Buffer, text: String) -> bool {
+    let bytes = b.bytes(0, b.len()).unwrap();
+    let expected = octets(text).unwrap();
+    if (bytes.len() != expected.len()) {
+        return false;
+    }
+    for (i in 0..bytes.len()) {
+        if (bytes[i] != expected[i]) {
+            return false;
+        }
+    }
+    true
+}
+
+fn object_change() -> bool {
+    let b = buffer().unwrap();
+    b.append(octets("call(one, nested(two));\nnext\n").unwrap()).unwrap();
+    b.language(1);
+    b.saved();
+    let mut v = view();
+    let mut vi = controls();
+    keys(&b, &mut v, &mut vi, "f(ci)hello" + from_char(27 as char) + "");
+    if (!equal(&b, "call(hello);\nnext\n") || vi.mode != 0) {
+        println("ci) failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "u");
+    if (!equal(&b, "call(one, nested(two));\nnext\n") || b.modified()) {
+        println("undo failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "" + from_char(18 as char) + "");
+    if (!equal(&b, "call(hello);\nnext\n")) {
+        println("redo failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "u.");
+    if (!equal(&b, "call(hello);\nnext\n")) {
+        println("dot failed");
+        return false;
+    }
+    true
+}
+
+fn operations() -> bool {
+    let b = buffer().unwrap();
+    b.append(octets("one two three\nalpha\nbeta").unwrap()).unwrap();
+    b.saved();
+    let mut v = view();
+    let mut vi = controls();
+    keys(&b, &mut v, &mut vi, "d2w");
+    if (!equal(&b, "three\nalpha\nbeta")) {
+        println("d2w failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "u2dd");
+    if (!equal(&b, "beta")) {
+        println("2dd failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "uGdd");
+    if (!equal(&b, "one two three\nalpha")) {
+        println("last dd failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "u0viwdiOK" + from_char(27 as char) + "");
+    if (!equal(&b, "one two three\nalpha\nOK")) {
+        println("visual iw failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "u");
+    if (!equal(&b, "one two three\nalpha\n")) {
+        println("insert group failed");
+        return false;
+    }
+    true
+}
+
+fn indentation() -> bool {
+    let b = buffer().unwrap();
+    b.append(octets("  foo\r\nbar\r\n").unwrap()).unwrap();
+    b.saved();
+    let mut v = view();
+    let mut vi = controls();
+    keys(&b, &mut v, &mut vi, "A!\nnext" + from_char(27 as char) + "");
+    if (!equal(&b, "  foo!\r\n  next\r\nbar\r\n")) {
+        println("CRLF indent failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "u>>");
+    if (!equal(&b, "      foo\r\nbar\r\n")) {
+        println("indent failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "uOabove" + from_char(27 as char) + "");
+    if (!equal(&b, "  above\r\n  foo\r\nbar\r\n")) {
+        println("O failed");
+        return false;
+    }
+    true
+}
+
+fn lexing() -> bool {
+    let b = buffer().unwrap();
+    b.append(octets("/* hello\nworld */ let x = 42;\n").unwrap()).unwrap();
+    b.language(1);
+    let styles: Vec<u32> = [0, 256, 512, 768, 1024, 1280, 1536];
+    let cells = b.cells(1, 0, 32, 4, styles, 4096, 0, 0).unwrap();
+    if (cells[0] != (256 | 119) || cells[9] != (512 | 108)) {
+        return false;
+    }
+    b.begin(0);
+    b.replace(0, 2, octets("//").unwrap()).unwrap();
+    b.end(0);
+    let cells = b.cells(1, 0, 32, 4, styles, 4096, 0, 0).unwrap();
+    if (cells[0] != (0 | 119)) {
+        return false;
+    }
+    true
+}
+
+fn digit_and_paste() -> bool {
+    let b = buffer().unwrap();
+    b.append(octets("abc1def\nlast").unwrap()).unwrap();
+    b.saved();
+    let mut v = view();
+    let mut vi = controls();
+    keys(&b, &mut v, &mut vi, "f1r2");
+    if (!equal(&b, "abc2def\nlast")) {
+        println("digit target failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "uyyGp");
+    if (!equal(&b, "abc1def\nlast\nabc1def\n")) {
+        println("line paste failed");
+        return false;
+    }
+    if (v.cursor != 13) {
+        println("paste cursor failed");
+        return false;
+    }
+    true
+}
+
+fn main() -> i16 {
+    if (!object_change()) {
+        return 1;
+    }
+    if (!operations()) {
+        return 2;
+    }
+    if (!indentation()) {
+        return 3;
+    }
+    if (!digit_and_paste()) {
+        return 7;
+    }
+    if (!lexing()) {
+        return 4;
+    }
+    if (detect("Makefile").name != "make" || detect("HELLO.BF").lexer != 8 as u16 || detect("main.rfl").lexer != 1 as u16) {
+        return 5;
+    }
+    if (joined("/a/b", "../x") != "/a/x" || parent("/a") != "/" || basename("/a/b") != "b") {
+        return 6;
+    }
+    println("RIFT_CORE_OK");
+    0
+}

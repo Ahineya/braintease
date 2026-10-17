@@ -8,6 +8,8 @@
 #include <signal.h>
 #include <termios.h>
 #include <sys/wait.h>
+#include <sys/select.h>
+#include <time.h>
 #include <syscalls.h>
 #include <gx.h>
 extern long call(unsigned,long,long,long,long);
@@ -44,47 +46,47 @@ static void reply(struct vt *t,const char *s){(void)t;queue(s);}
 /* Shadow cells describe pixels already uploaded, independently of the VT's
  * current/alternate model. Only dirty rows are compared; typing paints two
  * cells (old/new cursor), while cleared space uses the host bulk fill. */
-static struct vt_cell painted[VT_ROWS*VT_COLS];
-static unsigned char painted_rows[VT_ROWS];
+static struct vt_cell painted[VT_MAX_ROWS*VT_MAX_COLS];
+static unsigned char painted_rows[VT_MAX_ROWS];
 static int painted_cursor=-1;
 static int cell_changed(struct vt_cell *cells,unsigned at,int cursor) {
-    return !painted_rows[at/VT_COLS] || cells[at].ch!=painted[at].ch ||
+    return !painted_rows[at/terminal.cols] || cells[at].ch!=painted[at].ch ||
         cells[at].colour!=painted[at].colour || (int)at==painted_cursor || (int)at==cursor;
 }
 static int draw(int show_cursor) {
     unsigned y,x,end,sy,sx,fg,bg,bits,at,span;struct vt_cell *cells=vt_cells(&terminal);
-    int cursor=show_cursor&&terminal.visible?(int)(terminal.y*VT_COLS+terminal.x):-1;
+    int cursor=show_cursor&&terminal.visible?(int)(terminal.y*terminal.cols+terminal.x):-1;
     struct gx_upload u;struct gx_fill f;
-    if(painted_cursor>=0)terminal.dirty[painted_cursor/VT_COLS]=1;
-    if(cursor>=0)terminal.dirty[cursor/VT_COLS]=1;
+    if(painted_cursor>=0)terminal.dirty[painted_cursor/terminal.cols]=1;
+    if(cursor>=0)terminal.dirty[cursor/terminal.cols]=1;
     memset(&u,0,sizeof(u));u.version=GX_VERSION;u.surface=window.surface;u.height=16;u.pixels=row_pixels;
     memset(&f,0,sizeof(f));f.version=GX_VERSION;f.surface=window.surface;f.height=16;
-    for(y=0;y<VT_ROWS;y++)if(terminal.dirty[y]) {
-        for(x=0;x<VT_COLS;x=end) {
-            at=y*VT_COLS+x;end=x+1;
+    for(y=0;y<terminal.rows;y++)if(terminal.dirty[y]) {
+        for(x=0;x<terminal.cols;x=end) {
+            at=y*terminal.cols+x;end=x+1;
             if(!cell_changed(cells,at,cursor))continue;
             bg=palette[(cells[at].colour>>4)&15];
             if(cells[at].ch==' '&&(int)at!=cursor) {
-                while(end<VT_COLS&&cells[y*VT_COLS+end].ch==' '&&
-                    palette[(cells[y*VT_COLS+end].colour>>4)&15]==bg&&(int)(y*VT_COLS+end)!=cursor)end++;
+                while(end<terminal.cols&&cells[y*terminal.cols+end].ch==' '&&
+                    palette[(cells[y*terminal.cols+end].colour>>4)&15]==bg&&(int)(y*terminal.cols+end)!=cursor)end++;
                 f.x=x*8;f.y=y*16;f.width=(end-x)*8;f.colour=bg;
                 if(request(GX_FILL,&f))return -1;
             } else {
-                while(end<VT_COLS&&cell_changed(cells,y*VT_COLS+end,cursor)&&cells[y*VT_COLS+end].ch!=' ')end++;
+                while(end<terminal.cols&&cell_changed(cells,y*terminal.cols+end,cursor)&&cells[y*terminal.cols+end].ch!=' ')end++;
                 span=(end-x)*8;
                 for(at=x;at<end;at++) {
-                    struct vt_cell *cell=cells+y*VT_COLS+at;
+                    struct vt_cell *cell=cells+y*terminal.cols+at;
                     fg=palette[cell->colour&15];bg=palette[(cell->colour>>4)&15];
                     for(sy=0;sy<16;sy++) {
                         bits=gx_font[(cell->ch&255)*16+sy];
-                        if((int)(y*VT_COLS+at)==cursor&&sy==15)bits=65535;
+                        if((int)(y*terminal.cols+at)==cursor&&sy==15)bits=65535;
                         for(sx=0;sx<8;sx++)row_pixels[sy*span+(at-x)*8+sx]=(bits&(0x8000U>>sx))?fg:bg;
                     }
                 }
                 u.x=x*8;u.y=y*16;u.width=u.stride=span;
                 if(request(GX_UPLOAD,&u))return -1;
             }
-            memcpy(painted+y*VT_COLS+x,cells+y*VT_COLS+x,(end-x)*sizeof(*cells));
+            memcpy(painted+y*terminal.cols+x,cells+y*terminal.cols+x,(end-x)*sizeof(*cells));
         }
         painted_rows[y]=1;terminal.dirty[y]=0;
     }
@@ -97,14 +99,14 @@ static void scroll_pixels(struct vt *t,int amount) {
     /* Complete pending text without copying a software cursor into the scroll. */
     t->dirty[t->y]=1;if(draw(0))return;
     memset(&c,0,sizeof(c));c.version=GX_VERSION;c.surface=window.surface;
-    c.width=640;c.height=h;c.sy=(t->top+(amount>0?n:0))*16;c.dy=(t->top+(amount<0?n:0))*16;
+    c.width=t->cols*8;c.height=h;c.sy=(t->top+(amount>0?n:0))*16;c.dy=(t->top+(amount<0?n:0))*16;
     if(h&&request(GX_COPY,&c))return;
-    memmove(painted+(t->top+(amount<0?n:0))*VT_COLS,
-        painted+(t->top+(amount>0?n:0))*VT_COLS,(unsigned long)(h/16)*VT_COLS*sizeof(*painted));
+    memmove(painted+(t->top+(amount<0?n:0))*terminal.cols,
+        painted+(t->top+(amount>0?n:0))*terminal.cols,(unsigned long)(h/16)*terminal.cols*sizeof(*painted));
     memmove(painted_rows+t->top+(amount<0?n:0),painted_rows+t->top+(amount>0?n:0),h/16);
     memset(painted_rows+(amount>0?t->bottom+1-n:t->top),0,n);
     memset(&f,0,sizeof(f));f.version=GX_VERSION;f.surface=window.surface;
-    f.y=(amount>0?t->bottom+1-n:t->top)*16;f.width=640;f.height=n*16;
+    f.y=(amount>0?t->bottom+1-n:t->top)*16;f.width=t->cols*8;f.height=n*16;
     f.colour=palette[t->reverse?t->fg:t->bg];request(GX_FILL,&f);
 }
 static int down(unsigned key){return held[key>>4]&(1U<<(key&15));}
@@ -141,31 +143,72 @@ static void key(unsigned code) {
     if(down(226)||down(230))queue("\033");
     queue(text);
 }
+static void usage(void) {
+    puts("usage: gterm [-g COLSxROWS] [--] [COMMAND [ARG...]]\n"
+         "Open a graphical terminal (default sh, 80x30).\n"
+         "--geometry COLSxROWS also sets the size; maximum 80x30 cells.\n"
+         "Requires RVM --visual. Example: gterm -g 64x20");
+}
+static int geometry(const char *s,unsigned *cols,unsigned *rows) {
+    unsigned c=0,r=0;
+    if(*s<'0'||*s>'9')return -1;
+    while(*s>='0'&&*s<='9'){c=c*10+*s++-'0';if(c>VT_MAX_COLS)return -1;}
+    if(*s++!='x'||*s<'0'||*s>'9')return -1;
+    while(*s>='0'&&*s<='9'){r=r*10+*s++-'0';if(r>VT_MAX_ROWS)return -1;}
+    if(*s||!c||!r)return -1;
+    *cols=c;*rows=r;return 0;
+}
 int main(int argc,char **argv) {
     char path[]="/dev/ptyp0",slave[]="/dev/ttyp0",output[512];char *sh[]={"sh",NULL};
-    unsigned i;int n,status=0,dirty;struct winsize size={VT_ROWS,VT_COLS,640,480};
-    struct gx_handle present;struct gx_event event;struct gx_wait wait;
-    if(argc>1&&!strcmp(argv[1],"--help")){puts("usage: gterm [COMMAND [ARG...]]\nOpen a graphical terminal (default sh). Requires RVM --visual.");return 0;}
+    unsigned i,cols=VT_DEFAULT_COLS,rows=VT_DEFAULT_ROWS;int n,status=0,dirty,command=1;
+    struct winsize size;
+    struct gx_handle present;struct gx_event event;
+    fd_set reads,writes;struct timeval timeout;struct timespec clock;
+    while(command<argc) {
+        const char *option=argv[command];
+        if(!strcmp(option,"--")){command++;break;}
+        if(!strcmp(option,"--help")){usage();return 0;}
+        if(!strcmp(option,"-g")||!strcmp(option,"--geometry")) {
+            if(++command>=argc||geometry(argv[command],&cols,&rows)) {
+                fputs("gterm: expected geometry COLSxROWS within 1x1..80x30\n",stderr);return 2;
+            }
+            command++;continue;
+        }
+        if(option[0]=='-'){fputs("gterm: unknown option (see --help)\n",stderr);return 2;}
+        break;
+    }
+    if(vt_init_size(&terminal,cols,rows))return 2;
+    size.ws_row=rows;size.ws_col=cols;size.ws_xpixel=cols*8;size.ws_ypixel=rows*16;
     trace_input=getenv("GTERM_TRACE_INPUT")!=NULL;
     gfx=open("/dev/gfx",O_RDWR|O_CLOEXEC);if(gfx<0){perror("gterm");return 1;}
     atexit(cleanup);
-    row_pixels=malloc(640UL*16*sizeof(*row_pixels));if(!row_pixels){perror("gterm");return 1;}
-    memset(&window,0,sizeof(window));window.version=GX_VERSION;window.width=640;window.height=480;window.format=GX_RGB565;strcpy(window.title,"Terminal");
+    row_pixels=malloc((unsigned long)cols*8*16*sizeof(*row_pixels));if(!row_pixels){perror("gterm");return 1;}
+    memset(&window,0,sizeof(window));window.version=GX_VERSION;window.width=cols*8;window.height=rows*16;window.format=GX_RGB565;strcpy(window.title,"Terminal");
     if(request(GX_CREATE,&window)){perror("gterm");return 1;}
     for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]=slave[9]='0'+i;master=open(path,O_RDWR|O_NONBLOCK|O_NOCTTY);if(master>=0)break;if(errno!=EBUSY){perror("gterm");return 1;}}
     if(master<0){fputs("gterm: no free terminals\n",stderr);return 1;}
-    ioctl(master,TIOCSWINSZ,&size);child=fork();
+    /* Keep the slave's advertised erase character aligned with HID Backspace,
+     * including applications that switch to raw mode and consult VERASE. */
+    {
+        struct termios settings;
+        if(tcgetattr(master,&settings)<0){perror("gterm terminal");return 1;}
+        settings.c_cc[VERASE]=127;
+        if(tcsetattr(master,TCSANOW,&settings)<0){perror("gterm terminal");return 1;}
+    }
+    if(ioctl(master,TIOCSWINSZ,&size)<0){perror("gterm size");return 1;}child=fork();
     if(child<0){perror("gterm");return 1;}
     if(!child) {
         int fd;close(gfx);close(master);if(setsid()<0)_exit(125);
         fd=open(slave,O_RDWR);if(fd<0)_exit(125);dup2(fd,0);dup2(fd,1);dup2(fd,2);
         for(i=3;i<32;i++)close(i);
         if(putenv("TERM=ansi"))_exit(125);
-        execvp(argc>1?argv[1]:"/bin/sh",argc>1?argv+1:sh);_exit(127);
+        execvp(command<argc?argv[command]:"/bin/sh",command<argc?argv+command:sh);_exit(127);
     }
-    vt_init(&terminal);terminal.scroll=scroll_pixels;terminal.reply=reply;
+    terminal.scroll=scroll_pixels;terminal.reply=reply;
     signal(SIGINT,caught);signal(SIGTERM,caught);signal(SIGHUP,caught);
     present.version=GX_VERSION;present.handle=window.window;
+    if(clock_gettime(CLOCK_MONOTONIC,&clock)<0)return 1;
+    now_ms=clock.tv_sec*1000UL+clock.tv_nsec/1000000UL;
     while(!stopping) {
         /* Bound each batch so continuous output cannot starve window input. */
         for(i=0;i<8;i++) {
@@ -192,17 +235,20 @@ int main(int argc,char **argv) {
             if(n>0){pending_head+=n;pending_count-=n;if(!pending_count)pending_head=0;}
             else if(n<0&&errno!=EAGAIN&&errno!=EINTR){result=1;break;}
         }
-        dirty=0;for(i=0;i<VT_ROWS;i++)dirty|=terminal.dirty[i];
+        dirty=0;for(i=0;i<terminal.rows;i++)dirty|=terminal.dirty[i];
         if(dirty&&(draw(1)||request(GX_PRESENT,&present)))break;
         if(waitpid(child,&status,WNOHANG)==child) {
             while((n=read(master,output,sizeof(output)))>0)vt_feed(&terminal,output,n);
             draw(1);request(GX_PRESENT,&present);child=0;break;
         }
-        memset(&wait,0,sizeof(wait));wait.version=GX_VERSION;wait.window=window.window;wait.master=master;
-        wait.flags=GX_READY_INPUT|GX_READY_READ|(pending_count?GX_READY_WRITE:0);
-        wait.timeout=repeat_key?1:10;
-        if(ioctl(gfx,GX_WAIT,&wait)<0){if(errno==EINTR)continue;result=1;break;}
-        now_ms=wait.milliseconds;
+        FD_ZERO(&reads);FD_ZERO(&writes);FD_SET(gfx,&reads);FD_SET(master,&reads);
+        if(pending_count)FD_SET(master,&writes);
+        timeout.tv_sec=repeat_key?0:1;timeout.tv_usec=repeat_key?100000UL:0;
+        if(select((gfx>master?gfx:master)+1,&reads,&writes,NULL,&timeout)<0) {
+            if(errno==EINTR)continue;result=1;break;
+        }
+        if(clock_gettime(CLOCK_MONOTONIC,&clock)<0){result=1;break;}
+        now_ms=clock.tv_sec*1000UL+clock.tv_nsec/1000000UL;
     }
     if(child) {
         kill(-child,SIGHUP);kill(-child,SIGCONT);

@@ -1,0 +1,49 @@
+import {} from "std/result";
+import { Config, Role, loader } from "lib/tui_theme";
+import { install } from "lib/tui_curses";
+import { Palette } from "lib/tui_dialog";
+import { Screen, BOLD, REVERSE, UNDERLINE } from "std/curses";
+import { env } from "./config";
+export struct Theme {
+    name: String,
+    styles: Vec<u32>,
+    notice: String
+}
+
+fn role(fg: i16, bg: i16, bold: bool) -> Role {
+    Role { foreground: fg, background: bg, bold: bold, reverse: false, underline: false }
+}
+
+fn defaults() -> Config {
+    Config { name: "Turbo Blue", lines: true, roles: [role(7, 4, false), role(6, 4, false), role(3, 4, true), role(6, 4, true), role(3, 4, false), role(7, 4, true), role(6, 4, true), role(0, 6, false), role(0, 7, false), role(0, 6, true), role(6, 4, false), role(0, 7, false), role(3, 4, true), role(7, 4, false), role(7, 1, true), role(0, 0, false)] }
+}
+
+export fn load(screen: &Screen, name: String) -> Theme {
+    let schema = ["text", "comment", "keyword", "string", "number", "operator", "type", "selection", "menu", "tab", "gutter", "dialog", "accent", "input", "error", "shadow"];
+    let theme = loader(defaults(), schema).unwrap();
+    let mut notice = "";
+    if (name == "configured") {
+        for (path in ["/etc/rift/theme.ini", env("HOME", "/") + "/.config/rift/theme.ini"]) {
+            match theme.file("/usr/share/rift/themes", path, true) {
+                Ok(_) => {},
+                Err(error) => {
+                    notice = error;
+                }
+            }
+        }
+    } else {
+        match theme.named("/usr/share/rift/themes", name) {
+            Ok(_) => {},
+            Err(error) => {
+                notice = error;
+            }
+        }
+    }
+    let config = theme.config();
+    let fallback: Vec<u32> = [0, 0, BOLD, 0, 0, 0, BOLD, REVERSE, REVERSE, REVERSE | BOLD, 0, REVERSE, BOLD, 0, REVERSE, 0];
+    Theme { name: config.name, styles: install(screen, config, 1, fallback).unwrap(), notice: notice }
+}
+
+export fn palette(theme: &Theme) -> Palette {
+    Palette { body: theme.styles[11], title: theme.styles[11] | BOLD, input: theme.styles[13], selected: theme.styles[7], shadow: theme.styles[15] }
+}

@@ -3,7 +3,7 @@
 #include <kdata.h>
 #include <string.h>
 
-/* Native globals use bank 1, continuation frames use 2..4. The heap window
+/* Small/legacy globals use bank 1; large images use 32..47. Frames use 2..4. The heap window
  * starts at 8 and argv/env live in 31. Kernel globals at 240 are never user-copy
  * destinations. This software contract is not a host privilege boundary. */
 usize_t valaddr(const uint8_t *base, usize_t size, usize_t need, uint_fast8_t write) {
@@ -16,6 +16,7 @@ usize_t valaddr(const uint8_t *base, usize_t size, usize_t need, uint_fast8_t wr
         if (bank >= 1 && bank <= 4) end = 5UL * 64000;
         else if (bank >= 8 && bank <= 23) end = 24UL * 64000;
         else if (bank == 31) end = 32UL * 64000;
+        else if (bank >= 32 && bank <= 47) end = 48UL * 64000;
         else { end = 0; size = 0; }
         ptr = bank * 64000UL + off;
         if (size && size > end - ptr) size = end - ptr;

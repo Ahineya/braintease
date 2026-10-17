@@ -220,7 +220,7 @@ pub(super) fn emit_insn(
             store_slot(builder, proc, frame, *slot, Value::Constant(*value))
         }
         Insn::CStr { dest, bytes } => emit_cstr(builder, proc, built, frame, *dest, bytes),
-        Insn::Str { dest, bytes } => emit_str(builder, proc, frame, *dest, bytes),
+        Insn::Str { dest, bytes } => emit_str(builder, proc, built, frame, *dest, bytes),
         Insn::StrConcat { dest, lhs, rhs } => {
             emit_str_concat(builder, proc, frame, *dest, *lhs, *rhs)
         }

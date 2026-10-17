@@ -6,6 +6,9 @@ mod devices;
 mod exports;
 mod files;
 mod host;
+mod hosted_graphics;
+#[cfg(target_os = "macos")]
+mod hosted_graphics_macos;
 mod hostfs;
 mod image_bindings;
 mod images;
@@ -42,7 +45,9 @@ pub struct Runtime {
     files: BTreeMap<u64, files::Stream>,
     root_image_lock: Option<std::fs::File>,
     hostfs: hostfs::HostFs,
+    graphics: hosted_graphics::Graphics,
     errno: u64,
+    extended_globals: Option<std::ops::Range<usize>>,
     clock_start: Option<std::time::Instant>,
     presentations: u64,
     frame_target: u64,
@@ -73,7 +78,9 @@ impl Runtime {
             files: BTreeMap::new(),
             root_image_lock: None,
             hostfs: hostfs::HostFs::default(),
+            graphics: hosted_graphics::Graphics::default(),
             errno: 0,
+            extended_globals: None,
             clock_start: None,
             presentations: 0,
             frame_target: std::env::var("RCC_NATIVE_FRAME_NUMBER")

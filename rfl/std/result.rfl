@@ -1,13 +1,16 @@
 impl<T, E> Result<T, E> {
     // Error values need no formatting bound. Failure does not unwind cleanup.
+    /// Returns the `Ok` payload; terminates execution on `Err` without requiring the error to be printable or unwinding cleanup.
     export fn unwrap(self) -> T {
         __expect_value(move(self), "called Result.unwrap() on Err")
     }
 
+    /// Returns the `Ok` payload; terminates execution with `message` on `Err`, without unwinding cleanup.
     export fn expect(self, message: String) -> T {
         __expect_value(move(self), message)
     }
 
+    /// Returns whether the result contains a successful value.
     export fn is_ok(self) -> bool {
         match self {
             Ok(_) => true,
@@ -15,6 +18,7 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    /// Returns whether the result contains an error.
     export fn is_err(self) -> bool {
         match self {
             Ok(_) => false,
@@ -22,6 +26,7 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    /// Returns the successful value or the already-evaluated `fallback`.
     export fn unwrap_or(self, fallback: T) -> T {
         match self {
             Ok(found) => found,
@@ -29,6 +34,7 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    /// Returns the successful value, or calls `fallback` with the error only for `Err`.
     export fn unwrap_or_else(self, fallback: fn(E) -> T) -> T {
         match self {
             Ok(found) => found,
@@ -36,6 +42,7 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    /// Transforms an `Ok` payload with `f`; preserves `Err` without calling `f`.
     export fn map<U>(self, f: fn(T) -> U) -> Result<U, E> {
         match self {
             Ok(found) => Ok(f(found)),
@@ -43,6 +50,7 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    /// Transforms an `Err` payload with `f`; preserves `Ok` without calling `f`.
     export fn map_err<F>(self, f: fn(E) -> F) -> Result<T, F> {
         match self {
             Ok(found) => Ok(found),
@@ -50,6 +58,7 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    /// Calls `f` on an `Ok` payload and returns its result; preserves `Err`.
     export fn and_then<U>(self, f: fn(T) -> Result<U, E>) -> Result<U, E> {
         match self {
             Ok(found) => f(found),
@@ -57,6 +66,7 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    /// Preserves `Ok`, or calls `fallback` with the error to produce a replacement result.
     export fn or_else<F>(self, fallback: fn(E) -> Result<T, F>) -> Result<T, F> {
         match self {
             Ok(found) => Ok(found),
@@ -65,12 +75,17 @@ impl<T, E> Result<T, E> {
     }
 }
 
+/// Returns whether the result contains a successful value.
 export fn is_ok<T, E>(value: Result<T, E>) -> bool { value.is_ok() }
 
+/// Returns whether the result contains an error.
 export fn is_err<T, E>(value: Result<T, E>) -> bool { value.is_err() }
 
+/// Returns the successful value or the already-evaluated `fallback`.
 export fn unwrap_or<T, E>(value: Result<T, E>, fallback: T) -> T { value.unwrap_or(fallback) }
 
+/// Transforms an `Ok` payload with `f`; preserves `Err` without calling `f`.
 export fn map<T, E, U>(value: Result<T, E>, f: fn(T) -> U) -> Result<U, E> { value.map(f) }
 
+/// Calls `f` on an `Ok` payload and returns its result; preserves `Err`.
 export fn and_then<T, E, U>(value: Result<T, E>, f: fn(T) -> Result<U, E>) -> Result<U, E> { value.and_then(f) }

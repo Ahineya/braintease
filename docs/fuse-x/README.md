@@ -18,6 +18,7 @@ direction, proposals, and implemented foundations are distinguished below.
 | --- | --- |
 | [Architecture](architecture.md) | Native execution, shared kernel state, process memory, and host boundaries |
 | [Desktop integration](desktop.md) | Terminal and GUI windows, Dock navigation, menus, and session lifetime |
+| [FuseDE](../fusede/README.md) | NXDSKTOP companion apps, shared widgets and the custom RVM desktop direction |
 | [Storage](storage.md) | Disk images, shared Mac folders, and filesystem integration questions |
 | [Networking](networking.md) | Headless access, host attachment, and network controls |
 | [Terminal browser](../networking/terminal-browser.md) | HTTP browser porting direction, curses prerequisites and shared select contract |
@@ -50,10 +51,9 @@ to select another folder or `--no-share` to disable it. The first filesystem bri
 guest descriptors and supports native executables in the export. Additional
 mount policies and broader metadata compatibility remain open. See [Storage](storage.md).
 
-Window command formats, GUI launch behavior, close handling, terminal session
-policy, and the menu layout still need implementation decisions. Dock window
-switching through the single application is the target behavior; the exact
-AppKit integration is an implementation choice.
+Native window switching, New Terminal, per-window close handling and GUI
+terminal-detachment policy are implemented. Clipboard integration, host settings
+menus and the Dock-click reopen policy remain open.
 
 A dark visual theme, consistent widgets, optional accelerated drawing, and a
 standalone desktop with its own chrome or dock remain later design ideas. The
@@ -78,9 +78,11 @@ detach/reconnect and headless startup. Its
 [application inventory](../../fuse-x/APPLICATIONS.md) builds the 113 ported
 programs and aliases; memory budgets remain future work. File persistence and host timers work through real kernel
 syscalls. The hosted network adapter reuses the guest IPv4 stack and provides
-independent Telnet shells through FUZIX PTYs. Desktop integration remains a later stage. The current
-native display host manages one RGB565 window and treats closure as shutdown;
-Fuse-X needs a different window/session lifecycle.
+independent Telnet shells through FUZIX PTYs. The first hosted GX backend now provides independent RGB565 Mac windows,
+per-window input, native Window/Dock menus, New Terminal and orderly Quit.
+Closing all windows preserves the session. Each native Nano-X top-level has its
+own Mac window and private canvas, including correct child rendering and live
+resize. The persistent server replaces the hosted NanoWM desktop. See [Desktop integration](desktop.md).
 
 Use [native process documentation](../../rcc-native/PROCESSES.md) for current
 APIs, limits, examples, and validation. Use [networking documentation](../networking/README.md)

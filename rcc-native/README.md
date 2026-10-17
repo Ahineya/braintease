@@ -93,7 +93,10 @@ are copied into logical memory.
 
 Host data layouts, direct native RFL calls, native pointers, aggregate ABI
 classification, host C interoperability, and cross-compilation are later work.
-The compatibility global bank and logical stack/heap limits still apply.
+Logical stack/heap limits still apply. Globals automatically extend from the
+legacy bank 1 into a separate region at banks 32–47 when necessary, up to
+1,024,000 cells including the reserved first cell. Allocation excludes that
+region; pointer representation and the compatibility C data model are unchanged.
 Dynamic `alloca` and Ripple inline assembly are rejected.
 
 ## Runtime and devices

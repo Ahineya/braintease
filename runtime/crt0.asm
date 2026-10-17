@@ -5,7 +5,7 @@
 ; Entry point - this is where execution begins
 _start:
     ; Initialize stack pointer
-    LI SB, 2        ; Stack bank = 2 (SB/R28 - stack bank id)
+    LI SB, __rcc_layout_stack_bank ; Linker places the stack after all global banks
     LI SP, 1     ; Stack pointer starts at the start of the bank (SP/R29) and grows upwards
     LI FP, 1     ; Frame pointer starts at the start of the bank (FP/R30) and grows upwards
     ; Initialize global pointer
@@ -31,3 +31,10 @@ _start:
 _exit:
     ; For now, just halt
     HALT
+
+; First heap bank follows globals and the stack, retaining bank 5 for small
+; programs. The return value uses the ordinary two-cell pointer ABI.
+__rcc_heap_start:
+    LI RV0, 0
+    LI RV1, __rcc_layout_heap_bank
+    RET

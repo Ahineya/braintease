@@ -1,0 +1,5 @@
+{
+  "description": "Lynx token pasting/stringization must use raw arguments before an object-like SELECT macro expands",
+  "expected": "Y\n",
+  "use_runtime": true
+}

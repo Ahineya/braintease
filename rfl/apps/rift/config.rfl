@@ -1,0 +1,140 @@
+import { Entry, parse_bytes } from "lib/ini";
+import { open_read, metadata, REGULAR, environment, Errno, error_message } from "std/posix";
+export struct Settings {
+    tabstop: u16,
+    expandtab: bool,
+    autoindent: bool,
+    numbers: bool,
+    runs: Vec<Entry>,
+    notice: String
+}
+
+export fn env(name: String, fallback: String) -> String {
+    match environment(name) {
+        Ok(Some(value)) => value,
+        _ => fallback
+    }
+}
+
+export fn decimal(value: String) -> Option<usize> {
+    if (value.is_empty()) {
+        return None;
+    }
+    let mut n: usize = 0;
+    for (i in 0..value.len()) {
+        if (value[i] < '0' || value[i] > '9' || n > 1000000) {
+            return None;
+        }
+        n = n * 10 + (value[i] as usize - 48);
+    }
+    Some(n)
+}
+
+fn entries(path: String) -> Result<Vec<Entry>, String> {
+    let info = match metadata(path) {
+        Ok(info) => info,
+        Err(Errno(2)) => {
+            return Ok([]);
+        },
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    if (info.kind != REGULAR || info.size > 65536) {
+        return Err("Config must be a regular file up to 64 KiB");
+    }
+    let file = match open_read(path) {
+        Ok(file) => move(file),
+        Err(Errno(2)) => {
+            return Ok([]);
+        },
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    let mut text: Vec<u8> = [];
+    while (true) {
+        let bytes = match file.read(1024) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return Err(error_message(error));
+            }
+        };
+        if (bytes.is_empty()) {
+            break;
+        }
+        if (text.len() + bytes.len() > 65536) {
+            return Err("Config exceeds 64 KiB");
+        }
+        for (i in 0..bytes.len()) {
+            text.push(bytes[i]);
+        }
+    }
+    match parse_bytes(text) {
+        Ok(entries) => Ok(entries),
+        Err(_) => Err("Invalid INI configuration")
+    }
+}
+
+fn layer(settings: &mut Settings, path: String) -> Result<unit, String> {
+    let values = entries(path)?;
+    for (i in 0..values.len()) {
+        let e = values[i];
+        if (e.section == "run") {
+            settings.runs.push(e);
+        } else if (e.section == "editor") {
+            if (e.key == "tabstop") {
+                let n = match decimal(e.value) {
+                    Some(n) => n,
+                    None => {
+                        return Err("tabstop must be 1..16");
+                    }
+                };
+                if (n < 1 || n > 16) {
+                    return Err("tabstop must be 1..16");
+                }
+                settings.tabstop = n as u16;
+            } else {
+                if (e.value != "true" && e.value != "false") {
+                    return Err("Editor flags must be true or false");
+                }
+                let enabled = e.value == "true";
+                if (e.key == "expandtab") {
+                    settings.expandtab = enabled;
+                } else if (e.key == "autoindent") {
+                    settings.autoindent = enabled;
+                } else if (e.key == "numbers") {
+                    settings.numbers = enabled;
+                } else {
+                    return Err("Unknown editor setting: " + e.key);
+                }
+            }
+        } else {
+            return Err("Unknown config section: " + e.section);
+        }
+    }
+    Ok({})
+}
+
+export fn configured() -> Settings {
+    let mut settings = Settings { tabstop: 4, expandtab: true, autoindent: true, numbers: true, runs: [], notice: "" };
+    for (path in ["/etc/rift.ini", env("HOME", "/") + "/.config/rift/config.ini"]) {
+        match layer(&mut settings, path) {
+            Ok(_) => {},
+            Err(error) => {
+                settings.notice = path + ": " + error;
+            }
+        }
+    }
+    settings
+}
+
+export fn template(settings: &Settings, language: String) -> String {
+    let mut value = "";
+    for (i in 0..settings.runs.len()) {
+        if (settings.runs[i].key == language) {
+            value = settings.runs[i].value;
+        }
+    }
+    env("RIFT_RUN_" + language, value)
+}

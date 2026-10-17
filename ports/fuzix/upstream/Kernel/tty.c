@@ -28,6 +28,8 @@ static void tty_selwake(uint_fast8_t minor, uint16_t event)
 		selwake_dev(2, minor, event);
 	}
 }
+#elif defined(CONFIG_SELECT)
+#define tty_selwake(m,e) selwake_dev(2,m,e)
 #else
 #define tty_selwake(a,b)	do {} while(0)
 #endif
@@ -47,6 +49,25 @@ static int input_ready(uint_fast8_t minor) {
     }
     return 0;
 }
+#ifdef CONFIG_SELECT
+/* Select observes the queue without removing characters or starting a read's
+ * inter-character timer. Canonical EOF is readiness even with no payload. */
+unsigned ripple_tty_status(unsigned minor) {
+    struct tty *t;struct s_queue *q;unsigned ready=0,minimum;
+    if(!minor||minor>NUM_DEV_TTY)return SELECT_IN|SELECT_OUT;
+    t=&ttydata[minor];q=&ttyinq[minor];
+    if(t->flag&TTYF_DEAD)return SELECT_IN|SELECT_OUT;
+    if(t->termios.c_lflag&ICANON) {
+        if(input_ready(minor))ready|=SELECT_IN;
+    } else {
+        minimum=t->termios.c_cc[VMIN];
+        if(t->termios.c_cc[VTIME])minimum=1;
+        if(q->q_count>=minimum)ready|=SELECT_IN;
+    }
+    if(!(t->flag&TTYF_STOP)&&tty_writeready(minor)!=TTY_READY_LATER)ready|=SELECT_OUT;
+    return ready;
+}
+#endif
 int tty_read(uint_fast8_t minor, uint_fast8_t rawflag, uint_fast8_t flag)
 {
 	uint_fast8_t c;
@@ -335,6 +356,8 @@ int tty_ioctl(uint_fast8_t minor, uarg_t request, char *data)
 		return uput(&t->termios, data, sizeof(struct termios));
 	case TCSETSF:
 		clrq(&ttyinq[minor]);
+        tty_data_consumed(minor);
+        wakeup(&ttyinq[minor].q_count);
 		/* Fall through for now */
 	case TCSETSW:
 		waito = 1;
@@ -358,6 +381,8 @@ int tty_ioctl(uint_fast8_t minor, uarg_t request, char *data)
 		return uput(&ttyinq[minor].q_count, data, sizeof(ttyinq[minor].q_count));
 	case TIOCFLUSH:
 		clrq(&ttyinq[minor]);
+        tty_data_consumed(minor);
+        wakeup(&ttyinq[minor].q_count);
                 tty_selwake(minor, SELECT_OUT);
 		break;
         case TIOCHANGUP:
@@ -478,6 +503,7 @@ uint_fast8_t tty_inproc(uint_fast8_t minor, register uint_fast8_t c)
 sigout:
 			sgrpsig(t->pgrp, wr);
 			clrq(q);
+            tty_data_consumed(minor);wakeup(&q->q_count);
 			t->flag &= ~(TTYF_STOP | TTYF_DISCARD);
 			return 1;
 		}
@@ -520,9 +546,9 @@ sigout:
         c != '\n' && c != t->termios.c_cc[VEOF] &&
         (!t->termios.c_cc[VEOL] || c != t->termios.c_cc[VEOL])) return 1;
 	wr = insq(q, c);
-	if (wr && (!canon || c != t->termios.c_cc[VEOF]))
-		tty_echo(minor, c);
-	else
+	if (wr) {
+        if (!canon || c != t->termios.c_cc[VEOF]) tty_echo(minor, c);
+    } else
 		tty_putc(minor, '\007');	/* Beep if no more room */
 
 	if (!canon || c == t->termios.c_cc[VEOL] || c == '\n'
@@ -545,6 +571,7 @@ eraseout:
                 if (wr == ECHOE)
                         break;
 	}
+	tty_data_consumed(minor);wakeup(&q->q_count);
 	return 1;
 }
 

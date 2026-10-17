@@ -5,9 +5,11 @@ import { replace } from "std/mem";
 
 // Children share the parent's wake capability. Spurious child polls are allowed;
 // each pending child does bounded work at most once per parent poll.
+/// An owned future that polls two children and returns their outputs as a pair.
 export type Join<A:Future,B:Future> =
     JoinRunning(OwnedFuture<A>,OwnedFuture<B>,Option<A::Output>,Option<B::Output>,bool)
     | JoinComplete | JoinCancelled;
+/// Joins two owned child futures. Both must finish; dropping unfinished work cancels the remaining children.
 export fn join<A:Future,B:Future>(left:A,right:B)->Join<A,B> {
     JoinRunning(own_future(move(left)),own_future(move(right)),None,None,false)
 }
@@ -53,9 +55,12 @@ impl<A:Future,B:Future> Future for Join<A,B> {
     fn cancel(&mut self) {drop(replace(self,JoinCancelled));}
 }
 
+/// Identifies which of two alternatives produced a value: `First` or `Second`.
 export type Either<A,B> = First(A) | Second(B);
+/// An owned future that completes when either child finishes and cancels the losing child.
 export type Race<A:Future,B:Future> = RaceRunning(OwnedFuture<A>,OwnedFuture<B>) | RaceComplete | RaceCancelled;
 // Left wins ties. If left is ready, right is cancelled without being polled.
+/// Races two futures, alternating poll order between turns. Cancels the loser when a child completes.
 export fn race<A:Future,B:Future>(left:A,right:B)->Race<A,B> {
     RaceRunning(own_future(move(left)),own_future(move(right)))
 }
@@ -83,10 +88,13 @@ impl<A:Future,B:Future> Future for Race<A,B> {
     fn cancel(&mut self) {drop(replace(self,RaceCancelled));}
 }
 
+/// The `Elapsed` error returned when a timeout's timer wins.
 export type TimeoutError = Elapsed;
+/// An owned race between a child future and a timer, producing `Ok(output)` or `Err(Elapsed)`.
 export type Timeout<F:Future> = TimeoutRunning(Race<F,CallbackFuture<unit>>) | TimeoutComplete | TimeoutCancelled;
 // Duration starts on first poll. Work wins when it and the timer are both ready.
 // Invalid durations still consume/cancel the supplied, never-polled work.
+/// Limits a future to `milliseconds`, measured from the timer's first poll. Invalid durations return a task error; expiry cancels the child.
 export fn timeout<F:Future>(future:F,milliseconds:u32)->Result<Timeout<F>,TaskError> {
     let work=own_future(move(future));
     let timer=sleep(milliseconds)?;

@@ -18,6 +18,10 @@ pub fn lower_module(module: &Module, bank_size: u16, trace_spills: bool) -> Resu
 }
 
 pub fn lower_module_with_stack_mode(module: &Module, bank_size: u16, trace_spills: bool, segmented_stack: bool) -> Result<Vec<AsmInst>, String> {
+    lower_module_with_memory_mode(module, bank_size, trace_spills, segmented_stack, true)
+}
+
+pub fn lower_module_with_memory_mode(module: &Module, bank_size: u16, trace_spills: bool, segmented_stack: bool, banked_globals: bool) -> Result<Vec<AsmInst>, String> {
     if module.target != rcc_ir::target::Target::Ripple {
         return Err("native IR cannot be lowered to Ripple; recompile source for --target ripple".into());
     }
@@ -39,15 +43,16 @@ pub fn lower_module_with_stack_mode(module: &Module, bank_size: u16, trace_spill
     let mut link_roots = Vec::new();
     
     // Create a global manager to handle global variable allocation
-    let mut global_manager = GlobalManager::with_module_and_bank_size(&module.name, bank_size);
-    
     // First pass: allocate addresses for all globals
     let total_words: u64 = module.globals.iter()
         .filter(|g| g.linkage != Linkage::Declaration)
-        .map(|g| g.var_type.size_in_words().unwrap_or(1)).sum();
-    if total_words > u16::MAX as u64 {
-        return Err(format!("translation unit global storage needs {total_words} cells, exceeds the 16-bit object offset space"));
+        .try_fold(0u64, |total, global| total.checked_add(global.var_type.size_in_words().unwrap_or(1)))
+        .ok_or("global storage size overflow")?;
+    let banked_globals = banked_globals || total_words.saturating_add(2) > u64::from(bank_size);
+    if total_words > u64::from(bank_size) * 16 {
+        return Err(format!("translation unit global storage needs {total_words} cells, exceeds 16 data banks"));
     }
+    let mut global_manager = GlobalManager::with_module_and_bank_size(&module.name, bank_size).with_banked_globals(banked_globals);
     for global in &module.globals {
         global_manager.allocate_global(global);
     }
@@ -164,6 +169,7 @@ pub fn lower_module_with_stack_mode(module: &Module, bank_size: u16, trace_spill
     let symbols: std::collections::BTreeMap<_, _> = link_symbols.into_iter()
         .map(|(name, refs)| (rename(&name), refs.iter().map(|n| rename(n)).collect::<Vec<_>>())).collect();
     let metadata = serde_json::json!({
+        "banked_data": banked_globals,
         "symbols": symbols,
         "code": link_code.iter().map(|n| rename(n)).collect::<Vec<_>>(),
         "roots": link_roots,
@@ -203,6 +209,14 @@ impl InternalSymbolRenamer {
     }
 
     fn assembly_label(&self, label: &str) -> Option<String> {
+        for projection in ["%data_offset(", "%data_bank("] {
+            if let Some(expression) = label.strip_prefix(projection).and_then(|s| s.strip_suffix(')')) {
+                let (name, displacement) = expression.split_once('+').unwrap_or((expression, "0"));
+                if let Some(unique) = self.symbols.get(name) {
+                    return Some(format!("{projection}{unique}+{displacement})"));
+                }
+            }
+        }
         let mut best = self.exact.get(label).map(|(index, value)| (*index, value.clone()));
         if let Some(block) = label.strip_prefix("L_") {
             for (offset, _) in block.match_indices('_') {

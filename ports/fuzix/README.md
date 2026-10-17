@@ -41,6 +41,42 @@ managed executables are updated while saved files are preserved. `MMU=1` and
 `--no-jit` selects RVM's interpreter. General RBF support elsewhere in the
 repository and the separate native Fuse-X platform are unaffected.
 
+## Descriptor readiness
+
+`select()` and the standard descriptor-set macros are available through
+`<sys/select.h>`. Programs can sleep until files, pipes, terminals, PTYs or
+sockets are ready, a monotonic timeout expires, or a signal interrupts the wait.
+RVM supports all 32 process descriptors; native Fuse-X currently supports 16,
+with the same 32-bit-capacity C16 set layout. TCP clients can inspect asynchronous
+connection completion using `getsockopt(SOL_SOCKET, SO_ERROR)`.
+
+RVM `gterm` uses select for graphics events and PTY I/O. The older `GX_WAIT`
+ioctl remains compatible. Unix-domain streams and `socketpair()` provide local
+IPC on both targets; multiple windows remain a separate Nano-X milestone. See the [API, semantics and tests](../../docs/networking/select.md).
+
+## RFL applications
+
+Normal builds install `rfl-demo` and `rfl-fm`, with `mc` as a short alias for
+Commander, sharing the same executable inode. Run `mc / /tmp` to open the
+two-panel RFL Commander: view/copy/move files, create directories and confirm
+deletions. Ctrl-P toggles one panel, Ctrl-O opens a guest command prompt with
+the panels hidden, and F10 quits. Its models, widgets and operations are RFL
+modules using the new `std/posix` and `std/curses` libraries.
+F9 selects a theme. The default Classic Blue uses ordinary dark blue and cyan
+selection, with line-drawn borders and floating dialogs. Themes live in
+`/usr/share/mc/themes`; `/etc/mc.ini` selects system defaults and
+`$HOME/.config/mc/config.ini` provides user inheritance/overrides. Both selection
+and scrolling remain visible in long listings. Ctrl-A/F1 opens About, F4 edits
+with VISUAL/EDITOR (default vi), `r` renames, and Enter runs executable files.
+Quitting restores the previous shell screen. INI and theme loading are reusable
+[application libraries](../../libraries/README.md), shared with C clients.
+
+Build another application on the host with
+`target/release/rfl build app.rfl --os fuzix -o app.rxe`.
+See [RFL OS builds and Commander](../../rfl/os/README.md) for SDK selection,
+installation, controls, architecture and limits. The `test-rfl` Make target
+checks guest execution and the live UI on a private disk.
+
 ## Networking and remote terminals
 
 On macOS, ordinary launches attach shared/NAT Ethernet with internet access:
@@ -74,7 +110,7 @@ shell, and `shutdown` to save and stop the whole guest.
 
 **Telnetd grants an unauthenticated root shell, and Telnet traffic is plaintext.**
 Use it on the trusted host-only link. It starts only when requested.
-Eight PTYs and four TCP connections are available,
+Eight PTYs and sixteen TCP connections are available,
 shared with local PTY sessions and outgoing connections; process slots can become the limiting resource first.
 
 The guest also has `telnet HOST [PORT]`. Press **Ctrl-^** (Ctrl-Shift-6 on
@@ -110,7 +146,10 @@ IPv4, ARP, ICMP echo, UDP and TCP run in the guest using the shared
 `runtime/net` implementation. The host transports Ethernet frames. The FUZIX
 socket layer supports stream/datagram reads and writes, bind/listen/accept,
 nonblocking I/O, half-close, descriptor sharing across fork, and bounded queues.
-Protocol state occupies reserved physical bank 5. Polling uses the host-clock
+Protocol state occupies reserved physical bank 5; sixteen internet endpoints
+use bank 6. Thirty-two guest-local stream endpoints occupy bank 7.
+Unix-domain sockets and `socketpair()` work offline and participate in `select()`.
+See [local IPC and capacity](../../docs/networking/local-ipc.md). Polling uses the host-clock
 timer at 10 ms resolution, and all protocol/device operations hold the kernel
 interrupt lock. Packet queues and stream buffers are deliberately small; this
 is a single-interface stack intended for interactive use and small transfers.
@@ -136,8 +175,9 @@ banks (32,000 KiB), and 32 process slots. It allows 32 descriptors per process,
 128 system-wide open files, and 128 cached inodes. A 16,000 KiB physical page pool
 backs user memory. Each process has up to 16 data/heap banks (1,024,000 C characters,
 roughly 2 MiB of physical memory) and a separate 64,000-cell stack. Static
-program globals still occupy one bank and RXE images retain their existing
-60,000-character initial-data limit. Actual allocations share the physical pool;
+globals can span this data window; the heap begins after them, so large tables
+reduce the remaining heap capacity. RXE initial data must leave at least one
+cell in the window. Actual allocations share the physical pool;
 32 processes cannot each consume their entire virtual capacity simultaneously.
 
 Process switches select maps instead of copying data and stack banks. `fork`
@@ -149,7 +189,7 @@ Invalid user accesses terminate the process with SIGSEGV. MMU/user privilege
 violations cannot write kernel tables or issue device commands.
 
 The physical layout is kernel GP 3, IRQ stack 4, network state 5, process kernel stacks 32–63,
-tables 64–95, page reference counts 96, saved task data 97, graphics scanout
+tables 64–95, page reference counts 96, saved task data 97, FAT chain 98–99, graphics scanout
 104–108, and user physical pages 128–255. User
 virtual code starts at bank 0, data/heap occupies 8–23, and stack uses 31.
 Supervisor data accesses in virtual banks 8–31 use the active process map;
@@ -161,6 +201,16 @@ paging from disk.
 
 Run `mmucheck` to exercise a large heap, COW, ten concurrent children and memory
 protection. The normal `forkcheck` and `preemptcheck` exercises also apply.
+RCC source and IR compilation use bank-aware globals by default, including
+large multi-file applications and the kernel. The explicit `--banked-globals`
+flag remains accepted; `--banked-globals=false` opts into legacy addressing
+for small units. Small
+legacy library objects stay at the start of GP; bank-aware objects follow them.
+The linker rejects fixed-bank references that would wrap. No pointer ABI or
+RXE relocation-format change is required. Rebuild the matching kernel/loader.
+`make -C ports/fuzix BUILD="$PWD/build/fuzix" test-global-banks` checks static
+initializers, wide values, cross-bank syscalls, heap separation, fork/COW and
+exec on a private disk. SYS1 boot images still require single-bank globals.
 The MMU requires an updated RVM and matching rebuilt userspace; existing disks
 keep user files while managed executables are updated. The non-MMU build is no
 longer supported.
@@ -235,6 +285,53 @@ an empty PID 1 prompt shuts down cleanly. Ctrl-C interrupts foreground programs
 and pipelines and returns to the prompt. Terminal settings are restored after
 commands, and PID 1 reaps adopted children. Ctrl-] is the emergency VM-stop key;
 use `shutdown` for a clean stop.
+
+Interactive shells read `$HOME/.shrc` once before the first prompt. This applies
+to the console, gterm, Telnet and interactive child shells. Ordinary scripts,
+piped shell input and `sh -c` skip it; explicit `sh -i` opts in. Missing files
+are ignored, and a syntax error returns to the interactive prompt so the file
+can be fixed. The historical login-only `.profile` hook is retained; an
+interactive login shell loads `.shrc` afterward. Ordinary Bourne subshells `( ... )` do not reload
+it. Only regular files are sourced.
+
+For a persistent prompt, edit `vi "$HOME/.shrc"` (currently `/.shrc` for root)
+and save, for example:
+
+```sh
+PS1='\[\e[1;32m\]\u@\h\[\e[0m\] \[\e[1;36m\]\w\[\e[0m\] \[\e[1;33m\]\$\[\e[0m\] '
+export PS1
+```
+
+Apply it immediately with `. "$HOME/.shrc"`. New interactive shells and future
+boots load it automatically. It is a user file on the persistent disk and is
+preserved by managed application upgrades. Separate assignment and `export`
+commands match this historical shell's syntax.
+
+The interactive `PS1` and continuation `PS2` prompts support common backslash
+escapes. For example:
+
+```sh
+PS1='\[\e[32m\]\u@\h:\w\[\e[0m\]\$ '
+PS2='continue> '
+```
+
+| Escape | Expansion |
+| --- | --- |
+| `\u`, `\h`, `\H` | User name, short host name, full guest host name |
+| `\w`, `\W` | Current directory, final directory component; the home directory becomes `~` |
+| `\$`, `\s` | `#` for effective UID zero, `$` otherwise; shell name `sh` |
+| `\t`, `\T`, `\A`, `\@` | 24-hour time with seconds, 12-hour time with seconds, 24-hour hours/minutes, 12-hour hours/minutes with AM/PM |
+| `\d` | Date such as `Sat Oct 17` |
+| `\e`, `\E`, `\nnn` | Escape character or an octet written using one to three octal digits |
+| `\n`, `\r`, `\a`, `\\` | Newline, carriage return, bell, literal backslash |
+| `\[`, `\]` | Enclose terminal control sequences that occupy no display columns |
+
+Values are refreshed for each prompt, while colors and multiline/wrapped prompts
+retain correct cursor editing. Clock escapes use guest local time, currently UTC.
+Unknown escapes are preserved literally. Rendered prompts are limited to 1,023
+characters; formatting uses fixed buffers and does not evaluate prompt text as
+shell commands or expand embedded variables. Quote assignments with single
+quotes so the shell stores the backslashes for prompt expansion.
 
 This is a historical Bourne shell, not a modern POSIX shell: shell functions,
 `$()`/arithmetic expansion and modern `set` options are not provided. Interactive terminal job control is available through
@@ -472,12 +569,15 @@ updates, VM execution, and offline checks.
 
 Smaller roots of the current filesystem version are expanded automatically, including their inode tables;
 early data blocks are relocated when necessary and the result is checked before
-writing. New/default disks are 256 MiB FAT16 images containing a
-65,535-block native root (just under 128 MiB) with at least 1,024 inodes. An old
+writing. New/default disks are sparse 2,047 MiB FAT16 images containing a
+524,288-block C16 V3 root (1 GiB) with at least 1,024 inodes. An old
 disk with additional outer FAT entries is refused during expansion to avoid
 losing them. Inner guest files are preserved within the current filesystem version.
 
-The larger C16 V2 blocks replace the earlier C16 V1 layout. V1 images need
+C16 V3 uses 32-bit block references and converts V2 roots automatically during
+normal installation, preserving saved files and a previous-disk backup.
+Host tools update pages without buffering the whole disk. See the
+[C16 V3 format and upgrade guide](../../docs/arch/c16-filesystem.md). V1 images need
 `scripts/run-fuzix.sh --fresh --build-only` to create a new disk; this saves the
 previous disk as a numbered backup. Existing V1 disks are rejected rather than
 silently converted. Executable RXE1 files and the C ABI are unchanged; no
@@ -568,7 +668,7 @@ as 2,048 physical little-endian octets. Inodes remain 32 cells / 64 octets;
 directory entries occupy 32 cells / 64 octets. The superblock uses the native
 Ripple structure layout. Files count C characters, and text is stored as 16-bit
 characters. RXE files contain one executable-format octet in each file character.
-A distinct superblock magic (`0x7253`) and `RIPPLE-FUZIX-C16-V2` signature prevent
+A distinct superblock magic (`0x7254`) and `RIPPLE-FUZIX-C16-V3` signature prevent
 confusion with conventional eight-bit FUZIX filesystems. Use the supplied image
 builder/checker rather than upstream host mkfs/fsck or ordinary FAT tools on the
 inner filesystem. The outer FAT16 filesystem uses its ordinary octet format.
@@ -621,6 +721,7 @@ make -C ports/fuzix test
 # Or for the launcher's output directory:
 python3 ports/fuzix/tools/test.py --build build/fuzix
 node --test ports/fuzix/tools/disk.test.mjs
+python3 ports/fuzix/tools/test_select.py --build build/fuzix
 python3 ports/fuzix/tools/test_terminal.py --build build/fuzix
 python3 ports/fuzix/tools/test_unix.py --build build/fuzix
 python3 ports/fuzix/tools/test_editor.py --build build/fuzix
@@ -965,3 +1066,8 @@ designed for RVM presentation and future Fuse-X native macOS windows. See the
 `make -C ports/fuzix BUILD=/absolute/build/path test-graphics` builds the opt-in
 graphics probe and runs JIT tests on private disks, including exact pixel
 comparison, MMU uploads, owner lifetime, high descriptors and PTY capacity.
+
+The C16 V3 large-filesystem probe is available with
+`make -C ports/fuzix BUILD="$PWD/build/fuzix" test-largefs`. It uses private JIT
+guests to verify allocation above 128 MiB, sparse triple-indirect mapping,
+32-bit statistics, reboot persistence, wide truncation and block reclamation.

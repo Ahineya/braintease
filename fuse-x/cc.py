@@ -23,12 +23,20 @@ def main():
     parser.add_argument('--compiler', type=Path, default=ROOT / 'target/release/rcc')
     parser.add_argument('--linker', type=Path)
     parser.add_argument('--build', type=Path, default=ROOT / 'fuse-x/build')
-    parser.add_argument('--float-format', action='store_true', help='enable floating point libc formatting for awk')
+    parser.add_argument('--float-format', action='store_true', help='enable floating point libc formatting and math')
+    parser.add_argument('--curses', action='store_true', help='link the shared C16 curses library')
+    parser.add_argument('--ini', action='store_true', help='link the shared INI reader')
+    parser.add_argument('--tui-theme', action='store_true', help='link curses plus the INI/theme companion libraries')
+    parser.add_argument('--object-ir', type=Path, action='append', default=[],
+                        help='link an additional native IR object (platform libraries)')
     args = parser.parse_args()
+    args.curses = args.curses or args.tui_theme
+    args.ini = args.ini or args.tui_theme
     compiler = args.compiler.resolve()
     linker = (args.linker or compiler).resolve()
     includes = [PORT / 'ripple/include', PORT / 'upstream/Library/include',
-                ROOT / 'runtime/include', PORT / 'ripple', ROOT / 'ports/graphics/include']
+                ROOT / 'runtime/include', PORT / 'ripple', ROOT / 'ports/graphics/include',
+                ROOT / 'libraries/ini', ROOT / 'libraries/tui-theme']
     flags = ['--target', 'native', '--bank-size', '64000', '-DRIPPLE_MMU=1', '-DNO_64BIT']
     if args.float_format:
         flags.remove('-DNO_64BIT')
@@ -36,15 +44,26 @@ def main():
         flags += ['-I', str(directory)]
     cache = args.build.resolve() / 'sdk'
     cache.mkdir(parents=True, exist_ok=True)
-    excluded = set('regerror malloc calloc realloc readline readline_fn __sin __cos '
+    excluded = set('regerror malloc calloc realloc readline readline_fn clock_gettime clock_getres __sin __cos '
                    '__rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow '
                    'sin cos atan atan2 strtod ecvt fmod frexp ldexp modf'.split())
     libraries = [PORT / f'ripple/libc/{name}.c'
-                 for name in 'syscalls stdio format dirent misc heap pipe sockets resolver'.split()]
+                 for name in 'syscalls stdio format scan wait clock dirent misc heap pipe sockets resolver search identity'.split()]
     libraries += sorted(p for p in (PORT / 'upstream/Library/libs').glob('*.c')
                         if p.stem not in excluded)
     libraries += [ROOT / 'fuse-x/libc/bridge.c', PORT / 'ripple/userlib.c']
+    if args.curses:
+        curses = PORT / 'upstream/Library/libs/curses'
+        flags += ['-I', str(curses)]
+        overrides = {'initscr', 'endwin', 'newwin', 'windel', 'wgetch', 'wgetstr', 'doupdt', 'refresh', 'winscrol'}
+        libraries += sorted(p for p in curses.glob('*.c') if p.stem not in overrides)
+        libraries += sorted((PORT / 'ripple/curses').glob('*.c'))
+    if args.ini:
+        libraries += [ROOT / 'libraries/ini/ini.c']
+    if args.tui_theme:
+        libraries += [ROOT / 'libraries/tui-theme/tui_theme.c', ROOT / 'libraries/tui-theme/tui_curses.c']
     if args.float_format:
+        libraries += [PORT / 'ripple/libc/math-bits.c']
         libraries += [PORT / f'upstream/Library/libs/{name}.c' for name in
                       '__sin __cos __rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow sin cos atan atan2 strtod ecvt fmod frexp ldexp modf'.split()]
     digest = hashlib.sha256()
@@ -118,7 +137,7 @@ def main():
         startup_ir = directory / 'startup.ir'
         startup_ir.write_bytes(result.stdout)
         subprocess.run([str(linker), 'link-app', str(startup_ir), *map(str, inputs),
-                        *map(str, library_ir), '-o', str(args.output)], check=True)
+                        *map(str, args.object_ir), *map(str, library_ir), '-o', str(args.output)], check=True)
     print(f'Built Fuse-X executable: {args.output}')
 
 

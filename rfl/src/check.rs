@@ -144,6 +144,8 @@ pub struct TypeMemberFact {
 }
 
 pub struct ProgramInfo {
+    /// Source-level names for editor display only. Type identities stay mangled.
+    pub display_names: HashMap<String, String>,
     pub facts: Vec<BindingFact>,
     pub uses: Vec<NameUse>,
     pub expr_types: Vec<ExprType>,
@@ -238,6 +240,7 @@ fn analyze_inner(
         declarations_active: HashSet::new(),
         loose_receiver: false,
         consts: HashMap::new(),
+        const_defs: HashMap::new(),
         structs: Vec::new(),
         struct_names: HashMap::new(),
         tuples: Vec::new(),
@@ -355,6 +358,7 @@ fn analyze_inner(
     })();
     checker.locate_prelude_uses(prelude_base);
     let info = ProgramInfo {
+        display_names: HashMap::new(),
         type_members: std::mem::take(&mut checker.type_members),
         trait_methods: std::mem::take(&mut checker.trait_methods),
         facts: std::mem::take(&mut checker.facts),
@@ -490,6 +494,8 @@ struct Checker<'a> {
     loose_receiver: bool,
     /// Module constants, in source order. A name maps to its type and value.
     consts: HashMap<String, (Ty, i64)>,
+    /// Declaration locations for editor navigation and documentation.
+    const_defs: HashMap<String, Span>,
     structs: Vec<StructInfo>,
     struct_names: HashMap<String, u32>,
     tuples: Vec<Vec<Ty>>,
@@ -524,6 +530,7 @@ struct Checker<'a> {
 struct StructInfo {
     name: String,
     fields: Vec<(String, Ty)>,
+    field_spans: HashMap<String, Span>,
     width: u16,
     repr_c: bool,
 }

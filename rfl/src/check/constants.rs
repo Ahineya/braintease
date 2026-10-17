@@ -44,6 +44,9 @@ impl<'a> Checker<'a> {
                 ));
             }
             self.consts.insert(item.name.clone(), (ty, value));
+            if self.editor {
+                self.const_defs.insert(item.name.clone(), item.name_span);
+            }
         }
         Ok(())
     }

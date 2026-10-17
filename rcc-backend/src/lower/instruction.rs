@@ -267,6 +267,11 @@ pub fn lower_instruction(
 
             let mut call_args = Vec::new();
             let mut reg_slot = 0usize;
+            let stack_words: usize = args[first_stack..].iter().map(|arg| ir_arg_abi_slots(mgr, naming, arg)).sum();
+            // Small calls retain the direct register-to-outgoing-stack path.
+            // Larger lists must not pin one physical register per argument.
+            let homes = if stack_words > 4 { mgr.call_argument_slots(stack_words)? } else { Vec::new() };
+            let mut home_cursor = 0;
             for (idx, arg) in args.iter().enumerate() {
                 let this_arg = match arg {
                     Value::Temp(t) => {
@@ -391,7 +396,18 @@ pub fn lower_instruction(
                     reg_slot += n;
                     call_args.push(parked);
                 } else {
-                    call_args.push(this_arg);
+                    if homes.is_empty() {
+                        call_args.push(this_arg);
+                    } else {
+                        let slots = homes[home_cursor..home_cursor + src_regs.len()].to_vec();
+                        home_cursor += src_regs.len();
+                        for (&register, &slot) in src_regs.iter().zip(&slots) {
+                            insts.push(AsmInst::AddI(Reg::Sc, Reg::Fp, slot));
+                            insts.push(AsmInst::Store(register, Reg::Sb, Reg::Sc));
+                            mgr.unpin_register(register);
+                        }
+                        call_args.push(CallArg::StackSlots(slots));
+                    }
                 }
             }
             
@@ -654,6 +670,7 @@ fn call_arg_slot_count(arg: &CallArg) -> usize {
         CallArg::Scalar(_) => 1,
         CallArg::FatPointer { .. } => 2,
         CallArg::I64 { .. } => 4,
+        CallArg::StackSlots(slots) => slots.len(),
     }
 }
 
@@ -662,6 +679,7 @@ fn call_arg_regs(arg: &CallArg) -> Vec<Reg> {
         CallArg::Scalar(r) => vec![*r],
         CallArg::FatPointer { addr, bank } => vec![*addr, *bank],
         CallArg::I64 { words } => words.to_vec(),
+        CallArg::StackSlots(_) => Vec::new(),
     }
 }
 
@@ -694,6 +712,7 @@ fn park_register_arg(insts: &mut Vec<AsmInst>, arg: CallArg, slot: usize) -> Cal
             }
             CallArg::I64 { words: dests }
         }
+        CallArg::StackSlots(_) => unreachable!("staged stack argument cannot occupy argument registers"),
     }
 }
 

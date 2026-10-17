@@ -141,7 +141,7 @@ arg_t _execve(void) {
     data = longat(16);
     nr = longat(20);
     if (!nins || nins > (unsigned long)(RIPPLE_CODE_BANKS - RIPPLE_CODE_FIRST) * BANK_CELLS ||
-        entry >= nins || data > 60000UL) {
+        entry >= nins || data >= 16UL * BANK_CELLS) {
         udata.u_error = ENOEXEC;
         goto bad;
     }
@@ -231,7 +231,7 @@ arg_t _execve(void) {
             bank++;
         }
     }
-    if (ripple_mmu_exec((unsigned)(udata.u_ptab-ptab))) {
+    if (ripple_mmu_exec_data((unsigned)(udata.u_ptab-ptab), data)) {
         tmpfree(abuf);
         tmpfree(ebuf);
         udata.u_error = ENOMEM;
@@ -243,7 +243,7 @@ arg_t _execve(void) {
     while (i < data) {
         pos = 24 + nins * 8 + i;
         if (fast_data) {
-            unsigned n, status, dest_bank=USER_GP, dest_off=(unsigned)i;
+            unsigned n, status, dest_bank, dest_off;
             unsigned run;
             unsigned long ptr;
             irqflags_t flags;
@@ -252,7 +252,8 @@ arg_t _execve(void) {
             n = stream_count - chunk_off;
             if ((unsigned long)n > data - i) n = (unsigned)(data - i);
             if (!n) panic("short exec data read");
-            if(ripple_mmu_span(PROGBASE+i,1,&dest_bank,&dest_off,&run))panic("exec destination");
+            if(ripple_mmu_span(((USER_GP + i / BANK_CELLS) << 16) | (i % BANK_CELLS),1,
+                               &dest_bank,&dest_off,&run))panic("exec destination");
             if(n>run)n=run;
             ptr = (unsigned long)(stream + chunk_off);
             flags = di();
@@ -264,14 +265,14 @@ arg_t _execve(void) {
                 panic("exec data transfer");
             fast_data = 0;
         }
-        dmem_store(USER_GP, (unsigned)i, byteat(pos));
+        dmem_store(USER_GP + (unsigned)(i / BANK_CELLS), (unsigned)(i % BANK_CELLS), byteat(pos));
         i++;
     }
     av = wargs((uint8_t *)PROGTOP, abuf, &argc);
     ev = wargs((uint8_t *)av, ebuf, NULL);
     udata.u_top = PROGTOP;
     udata.u_ptab->p_top = PROGTOP;
-    udata.u_break = PROGBASE + data;
+    udata.u_break = ((USER_GP + data / BANK_CELLS) << 16) | (data % BANK_CELLS);
     udata.u_codebase = PROGBASE;
     ripple_argc = argc;
     ripple_argv = (unsigned long)av;
@@ -300,7 +301,6 @@ arg_t _execve(void) {
     }
     udata.u_ptab->p_flags |= PFL_EXECED;
     memcpy(udata.u_ptab->p_name, udata.u_name, sizeof(udata.u_name));
-    udata.u_ptab->p_size = 250;
     tmpfree(abuf);
     tmpfree(ebuf);
     i_deref(ino);

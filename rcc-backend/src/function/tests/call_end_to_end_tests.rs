@@ -58,6 +58,10 @@ fn simulate_call_and_verify(
                     reg_slots_used = 4;
                 }
             }
+            CallArg::StackSlots(slots) => {
+                stack_words += slots.len();
+                reg_slots_used = 4;
+            }
         }
     }
     

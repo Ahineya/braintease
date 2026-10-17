@@ -8,6 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <utime.h>
+#include <sys/select.h>
 extern long call(unsigned, long, long, long, long);
 int errno;
 char **environ;
@@ -231,7 +232,7 @@ int fcntl(int fd, int cmd, ...) {
 int flock(int fd, int op) { return call(60, fd, op, 0, 0); }
 int getgroups(int n, gid_t *p) { return call(74, n, (long)p, 0, 0); }
 int _statfs(const char *p, uint8_t *b) {
-    return call(22, (long)p, (long)b, 0, 0);
+    return call(22, (long)p, (long)b, 0x7254, 0);
 }
 int _uname(struct _uzisysinfoblk *p, int len) {
     return call(54, (long)p, len, 0, 0);
@@ -282,4 +283,13 @@ int tcgetpgrp(int fd) {
 int tcsetpgrp(int fd, int group) {
     unsigned g = group;
     return ioctl(fd, 13, &g);
+}
+
+/* Keep validation and user-buffer access in the kernel, including EFAULT for
+ * invalid fd_set/timeval pointers. The public timeout is never modified. */
+int select(int nfds, fd_set *r, fd_set *w, fd_set *x, struct timeval *timeout) {
+    struct ripple_select_request req;
+    req.version=RIPPLE_SELECT_VERSION;
+    req.sets[0]=r;req.sets[1]=w;req.sets[2]=x;req.timeout=timeout;
+    return call(72,nfds,(long)&req,0,0);
 }

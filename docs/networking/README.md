@@ -20,7 +20,8 @@ rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 | [HTTP server](http-server.md) | Guest TCP listen/accept, hardcoded HTML, browser/curl and bounded request handling |
 | [HTTP client](http.md) | Streaming GET, bounded response parsing, guest DNS and the automatic host HTTP demo |
 | [Terminal browser plan](terminal-browser.md) | FUZIX/Fuse-X browser feasibility, HTTP targets, Lynx/Links decisions, curses and porting gates |
-| [select contract](select.md) | Planned descriptor readiness API, C16 ABI, scheduler/device integration and required tests |
+| [Local IPC and capacity](local-ipc.md) | Guest Unix stream sockets, socketpair, lifetime, readiness and larger TCP pools |
+| [select contract](select.md) | Implemented descriptor readiness, C16 ABI, graphics/PTY/socket integration and tests |
 | [TCP client](tcp.md) | Streams, retransmission, flow control, half-close and the automatic host echo demo |
 | [DHCP](dhcp.md) | Lease acquisition, renewal/rebinding, conflict detection, configuration changes and examples |
 | [Reliability and lifecycle](reliability.md) | Neighbor expiration/retry, link changes, pending sends and matched ICMP errors |

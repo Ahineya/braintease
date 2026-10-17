@@ -244,6 +244,17 @@ pub fn resolve_global_to_fatptr(
     let id = naming.new_internal_temp();
     let temp_name = naming.temp_name(id);
     let reg = mgr.get_register(temp_name.clone());
+    if global_manager.banked_globals() {
+        mgr.emit(AsmInst::LiLabel(reg, format!("%data_offset({name}+0)")));
+        mgr.pin_register(reg);
+        let bank_name = format!("{temp_name}__global_bank");
+        let bank = mgr.get_register(bank_name.clone());
+        mgr.emit(AsmInst::LiLabel(bank, format!("%data_bank({name}+0)")));
+        mgr.emit(AsmInst::Add(bank, bank, Reg::Gp));
+        mgr.unpin_register(reg);
+        mgr.set_pointer_bank(temp_name, BankInfo::Dynamic(bank_name));
+        return Ok(Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(id)), bank: BankTag::Mixed }));
+    }
     mgr.emit(AsmInst::LiLabel(reg, name.to_string()));
     mgr.set_pointer_bank(temp_name, BankInfo::Global);
     Ok(Value::FatPtr(FatPointer { addr: Box::new(Value::Temp(id)), bank: BankTag::Global }))
@@ -535,6 +546,15 @@ pub fn canonicalize_value(
         Value::FatPtr(fp) => match fp.addr.as_ref() {
             Value::Global(name) => resolve_global_to_fatptr(name, global_manager, mgr, naming),
             Value::Function(name) => Ok(materialize_function_pointer(name, mgr, naming)),
+            Value::Temp(id) if global_manager.banked_globals() && fp.bank == BankTag::Global
+                && mgr.get_pointer_bank(&naming.temp_name(*id)).is_some() => {
+                // Global provenance does not imply the first GP bank once
+                // static data spans banks. GEP already tracked the actual bank;
+                // preserve it for loads, stores, calls and pointer returns.
+                let mut pointer = fp.clone();
+                pointer.bank = BankTag::Mixed;
+                Ok(Value::FatPtr(pointer))
+            }
             _ => Ok(value.clone()),
         },
         _ => Ok(value.clone()),

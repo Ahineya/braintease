@@ -1,0 +1,29 @@
+import { IoError, Errno, open_read, create, arguments, process_id, write_all, STDOUT } from "std/posix";
+
+fn demo() -> Result<unit, IoError> {
+    println("Hello from RFL on FUZIX/Fuse-X!");
+    println(arguments());
+    println(process_id());
+    let file = create("/tmp/rfl-demo")?;
+    file.write_text("A guest file written by RFL.\n")?;
+    move(file).close()?;
+    let file = open_read("/tmp/rfl-demo")?;
+    write_all(STDOUT, file.read(128)?)?;
+    Ok({})
+}
+
+fn main() -> i16 {
+    match demo() {
+        Ok(_) => 0,
+        Err(error) => {
+            match error {
+                Errno(code) => {
+                    println("Guest I/O error:");
+                    println(code);
+                },
+                _ => println("Invalid I/O argument"),
+            }
+            1
+        },
+    }
+}

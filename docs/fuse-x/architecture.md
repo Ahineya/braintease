@@ -99,8 +99,9 @@ clients can detach/reconnect without changing the guest terminal or stopping
 its foreground program. PID 1 reaps children and restarts the console shell;
 headless mode omits that shell and can explicitly start Telnet. Host SIGTERM
 requests guest process cleanup and storage flush on the execution thread.
-Separate graphical terminal endpoints and host window event routing remain
-future work.
+Graphical terminals now use separate guest PTYs and owned GX windows. The Mac
+menu enqueues bounded New Terminal requests; PID 1 performs the guest fork/exec.
+Quit requests guest shutdown through the existing SIGTERM path.
 
 The application-facing surface API should also support a future backend that
 composites windows into one RVM display. Native macOS window management and a
@@ -117,8 +118,16 @@ standalone desktop can then share guest applications and GUI libraries.
 ## Shared graphics boundary
 
 The [GX architecture](../graphics/architecture.md) specifies shared window,
-surface and event operations for RVM and a future native hosted backend. The
-initial `gterm` uses the RVM MMU device and is excluded from the native app
-inventory until that backend exists. Nano-X source adaptation and native
-top-level lifecycle integration are described in the
-[graphics roadmap](../graphics/roadmap.md).
+surface and event operations for RVM and the native hosted backend. The
+hosted `/dev/gfx` now implements this interface through `rcc_hosted_gx`, with
+process ownership checked in FUZIX and bounded surface storage in the runtime.
+The private adapter uses twelve 32-bit request fields, counts memory in C16
+cells and copies borrowed buffers before returning. UI and guest threads share
+owned snapshots/events, never guest pointers. The native build includes `gterm`,
+the drawing engine, Nano-X server, launcher and clients. The native server
+allocates a private canvas and host window per top-level, shares that canvas
+with its child widgets, and routes host input only through that window tree.
+macOS supplies window management; hosted sessions do not start NanoWM. Resize,
+focus, title and close updates use the existing Nano-X client protocol.
+`--gui` starts the persistent server before the terminal; `startx` can start it
+on demand. Closing a client window does not stop the service or kernel. See [Desktop integration](desktop.md).

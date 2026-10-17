@@ -2,7 +2,7 @@
 //! compatibility globals and function tokens are private/relocated separately.
 use super::*;
 use libloading::Library;
-use rcc_ir::native_image::{Manifest, ABI, MAGIC, MAX_IMAGE_BYTES};
+use rcc_ir::native_image::{Manifest, ABI, LEGACY_ABI, MAGIC, MAX_IMAGE_BYTES};
 use std::{
     collections::BTreeSet,
     path::PathBuf,
@@ -11,6 +11,7 @@ use std::{
 
 pub(super) struct Loaded {
     pub template: Vec<u16>,
+    pub global_start: usize,
     pub errno: u64,
     tokens: BTreeMap<u32, u32>,
     library: Option<Library>,
@@ -60,17 +61,14 @@ impl Runtime {
         }
         let manifest: Manifest = serde_json::from_slice(&bytes[16..end])
             .map_err(|e| format!("invalid manifest: {e}"))?;
-        if manifest.abi != ABI
+        if !matches!(manifest.abi, ABI | LEGACY_ABI)
             || manifest.arch != std::env::consts::ARCH
             || manifest.os != std::env::consts::OS
         {
             return Err("incompatible native executable ABI, CPU or host OS".into());
         }
-        if manifest.global_cells == 0
-            || manifest.global_cells as usize >= BANK
-            || manifest.functions.is_empty()
-            || manifest.functions.len() > 65535
-        {
+        manifest.global_capacity()?;
+        if manifest.functions.is_empty() || manifest.functions.len() > 65535 {
             return Err("invalid application memory/function requirements".into());
         }
         let mut local = BTreeSet::new();
@@ -93,9 +91,7 @@ impl Runtime {
         {
             return Err("missing application entry".into());
         }
-        if manifest.errno != 0
-            && !(0x10001..0x10000 + u64::from(manifest.global_cells)).contains(&manifest.errno)
-        {
+        if manifest.errno != 0 && manifest.global_index(manifest.errno, 1).is_err() {
             return Err("invalid errno address".into());
         }
         let mut helpers = Vec::new();
@@ -113,9 +109,7 @@ impl Runtime {
         // Check all data writes before executing any code or changing process memory.
         for &(p, v, n, relocate) in &manifest.initializers {
             if !(1..=4).contains(&n)
-                || p >> 16 != 1
-                || p & 65535 == 0
-                || (p & 65535) + n > u64::from(manifest.global_cells)
+                || manifest.global_index(p, n).is_err()
                 || (relocate && (n != 2 || !local.contains(&(v as u32)) || v > u64::from(u32::MAX)))
             {
                 return Err("invalid global initializer/relocation".into());
@@ -132,13 +126,13 @@ impl Runtime {
             .enumerate()
             .map(|(i, f)| (f.token, first + i as u32))
             .collect();
-        let mut template = vec![0; BANK];
+        let mut template = vec![0; manifest.global_cells as usize];
         for &(p, mut v, n, relocate) in &manifest.initializers {
             if relocate {
                 v = u64::from(tokens[&(v as u32)]);
             }
             for i in 0..n as usize {
-                template[(p & 65535) as usize + i] = (v >> (16 * i)) as u16;
+                template[manifest.global_index(p, n)? + i] = (v >> (16 * i)) as u16;
             }
         }
         let directory = std::env::temp_dir().join(format!(
@@ -192,6 +186,7 @@ impl Runtime {
         let entry = tokens[&manifest.entry];
         let owner = Arc::new(Loaded {
             template,
+            global_start: manifest.global_bank as usize * BANK,
             errno: manifest.errno,
             tokens,
             library: Some(library),

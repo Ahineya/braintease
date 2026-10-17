@@ -416,6 +416,11 @@ arg_t _acct(void)
 
 arg_t _statfs(void)
 {
+#ifdef CONFIG_RIPPLE
+    /* Old statfs callers allocated the smaller V2 record. Reject them before
+     * copying the V3 structure, rather than overwriting their user stack. */
+    if (udata.u_argn2 != 0x7254) { udata.u_error = EOVERFLOW; return -1; }
+#endif
 	inoptr ino;
 	struct mount *m;
 

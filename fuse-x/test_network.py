@@ -94,7 +94,7 @@ def main():
         subprocess.run(['node', str(HERE / 'image.mjs'), 'create', str(image),
                         '--apps', str(build / 'apps')], check=True)
         check = directory / 'netcheck.fxe'
-        subprocess.run(['python3', str(HERE / 'cc.py'), str(PORT / 'tools/netcheck.c'),
+        subprocess.run(['python3', str(HERE / 'cc.py'), str(PORT / 'tools/netcheck.c'), '-DNETCHECK_NATIVE',
                         '--compiler', str(args.compiler.resolve()), '--build', str(build),
                         '-o', str(check)], check=True)
         subprocess.run(['node', str(HERE / 'image.mjs'), 'put', str(image), '/bin/netcheck', str(check)], check=True)

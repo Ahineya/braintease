@@ -32,6 +32,7 @@ pub(super) fn manifest(compiler: &Compiler, cells: u32) -> Result<Manifest, Stri
         os: std::env::consts::OS.into(),
         entry: compiler.codes["main"] as u32,
         global_cells: cells,
+        global_bank: compiler.global_bank as u32,
         errno: compiler.globals.get("errno").copied().unwrap_or(0),
         functions: compiler
             .ir
@@ -165,10 +166,10 @@ pub fn compile_application(modules: &[Module], output: &Path) -> Result<(), Stri
     let mut bytes = MAGIC.to_vec();
     bytes.extend_from_slice(&(json.len() as u32).to_le_bytes());
     bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
-    bytes.extend(json);
-    bytes.extend(payload);
+    bytes.extend_from_slice(&json);
+    bytes.extend_from_slice(&payload);
     if bytes.len() > MAX_IMAGE_BYTES {
-        return Err("hosted executable exceeds package size limit".into());
+        return Err(format!("hosted executable needs {} octets ({} manifest, {} code), exceeds package limit {MAX_IMAGE_BYTES}", bytes.len(), json.len(), payload.len()));
     }
     let temporary = directory.join("executable");
     std::fs::write(&temporary, bytes).map_err(|e| e.to_string())?;

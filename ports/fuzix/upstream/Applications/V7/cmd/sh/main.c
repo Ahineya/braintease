@@ -23,6 +23,10 @@
 #include <sys/wait.h>
 #ifdef BUILD_FSH
 #include <readline/readline.h>
+#include "shell-prompt.h"
+#define prompt_text(s) shell_prompt_expand((s), homenod.namval)
+#else
+#define prompt_text(s) (s)
 #endif
 
 UFD output = 2;
@@ -33,8 +37,40 @@ FILE standin = &stdfile;
 char* tempfile;
 
 static void exfile(BOOL);
+static BOOL shrc_read;
 static struct termios terminal;
 static int restore_terminal;
+
+/* Interactive startup uses the same parser/input stack as the dot builtin.
+ * Set the guard first so a syntax error can return to the prompt safely. */
+static void read_shrc(void)
+{
+    static char path[512];
+    const char *home = homenod.namval;
+    size_t n;
+    int fd;
+    struct stat st;
+
+    if (shrc_read || !(flags & prompt))
+        return;
+    shrc_read = TRUE;
+    if (!home || !*home)
+        return;
+    n = strlen(home);
+    if (n > sizeof(path) - sizeof("/.shrc"))
+        return;
+    memcpy(path, home, n);
+    strcpy(path + n, home[n - 1] == '/' ? ".shrc" : "/.shrc");
+    fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0)
+        return;
+    if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode)) {
+        close(fd);
+        return;
+    }
+    execexp(0, fd);
+}
+
 void shell_terminal_accept(void) {
     if (restore_terminal) tcgetattr(input, &terminal);
 }
@@ -224,6 +260,8 @@ static void exfile(BOOL prof)
 	iopend = 0;
 	if (input >= 0)
 		initf(input);
+	if (!prof)
+		read_shrc();
 
 	/* command loop */
 	for (;;) {
@@ -245,9 +283,10 @@ static void exfile(BOOL prof)
 				}
 				mailtime = statb.st_mtime;
 			}
-			if (line_input(ps1nod.namval) < 0)
+			const char *primary = prompt_text(ps1nod.namval);
+			if (line_input(primary) < 0)
 			{
-				prs(ps1nod.namval);
+				prs(primary);
 				alarm(TIMEOUT);
 			}
 			flags |= waiting;
@@ -267,8 +306,9 @@ static void exfile(BOOL prof)
 void chkpr(char eor)
 {
 	if ((flags & prompt) && standin->fstak == 0 && eor == NL) {
-		if (line_input(ps2nod.namval) < 0)
-			prs(ps2nod.namval);
+		const char *secondary = prompt_text(ps2nod.namval);
+		if (line_input(secondary) < 0)
+			prs(secondary);
 	}
 }
 

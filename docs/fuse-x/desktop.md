@@ -5,6 +5,42 @@ Terminal and GUI windows share one Dock icon. People switch between windows
 using a Finder-style Dock menu, the menu bar's Window menu, and normal macOS
 window controls.
 
+## Implemented native windows
+
+Run `scripts/run-fuse-x.sh --gui` for a native terminal and a persistent Nano-X
+service. Launch `nxclock &`, `nxeyes &`, or `nxterm &` from the shell; each
+Nano-X top-level becomes its own Mac window. `startx` also works from console
+mode: it ensures the service is running, opens Applications and Terminal, then
+returns to the shell. It reuses an existing service. No NanoWM or composite
+desktop is started in hosted mode. The RVM desktop keeps its own window manager.
+
+Multiple GX and Nano-X programs share one `Fuse-X.app` identity. File → New
+Terminal / Command-N creates a fresh PTY shell, including after the last window
+closes. Window and Dock lists activate and restore individual windows. Quit /
+Command-Q requests orderly guest shutdown. The reconnectable console remains
+available alongside the GUI.
+
+The hosted GX backend supports up to sixteen RGB565 surfaces. Native Nano-X
+uses one private canvas per top-level; child widgets draw and clip within that
+canvas. Overlapping virtual coordinates never make one Mac window obscure
+another's pixels. The virtual root is not displayed. Top-level placement belongs
+to macOS; guest top-level move requests are ignored, while child moves retain
+normal Nano-X semantics. Titles, map/unmap, reparent, destruction, focus and
+close requests are adapted at the server boundary. Explicit raise/focus
+requests activate the corresponding Mac window.
+
+Resizable Nano-X windows receive content-size updates, resize their canvases,
+and notify clients through normal Nano-X events. The maximum accepted size is
+1024×768; allocation failure restores the previous size. Terminal clients
+update their PTY rows/columns. Fixed-size clients such as Clock remain fixed.
+Standalone GX programs such as `gterm` keep their fixed guest resolution and
+scale on host resize. The four-PTY pool is shared by native terminals, Nano-X
+terminals and Telnet sessions; surfaces also consume bounded guest memory.
+
+Clipboard, host-folder/network menus, Finder launch configuration, shaped
+transparent host windows and a high-DPI layout policy remain follow-up work.
+See the [runtime guide](../../fuse-x/README.md#native-graphics) for checks.
+
 ## Launching and using windows
 
 Start the graphical session with a FUZIX terminal running a shell. A GUI program
@@ -21,10 +57,8 @@ Closing a window delivers a close request to its owner. Applications need an
 opportunity to handle unsaved work. Process exit releases its remaining windows;
 closing an arbitrary window must not stop the whole kernel.
 
-For the first graphics milestone, one window is enough. Establish window
-handles and event routing then, so supporting several windows extends the same
-interface. Begin with bitmap presentation, including RGB565. Add blitting or
-other accelerated drawing only through an explicit, measured graphics contract.
+Presentation uses RGB565 bitmap surfaces. Further drawing acceleration should
+follow measured needs and preserve this window/surface boundary.
 
 ## One Dock icon and a window list
 
@@ -64,10 +98,16 @@ New Terminal creates a separate terminal endpoint and a new FUZIX shell, rather
 than attaching several windows to one global input stream. Opening terminals
 must work after every earlier terminal window has closed.
 
-Closing all terminal windows leaves the kernel and detached GUI applications
-running. Terminal hangup rules, foreground jobs, and GUI detachment need an
-explicit policy so closing a shell does not accidentally end an independently
-launched GUI application.
+Closing all terminal windows leaves the kernel, persistent Nano-X service and
+GUI clients running. Native Clock, Eyes, Applications and Nano-X Terminal drop
+inherited terminal standard descriptors after connecting, replacing only TTY
+stdio with `/dev/null`; redirected files and pipes remain available. They ignore
+launching-shell hangup while keeping their original PID/job identity, so explicit
+termination still works. Nano-X Terminal restores normal hangup handling in its
+child shell. Its close button hangs up that shell and its jobs, while GUI clients
+launched there survive. Use `&` to return immediately to a launching shell.
+The `startx` supervisor also releases inherited TTY descriptors in its children.
+Set `NANOX_KEEP_TTY=1` to retain terminal diagnostics during development.
 
 Keep Fuse-X available with no open windows. The Dock's New Terminal command and
 the menu bar can create another terminal. Reopening Fuse-X from its Dock icon
@@ -106,8 +146,7 @@ acceleration remain separate design tasks.
 ## Shared graphics contract
 
 The [GX architecture](../graphics/architecture.md) defines the C16 guest-facing
-window/surface/event boundary and the first RVM terminal. Fuse-X should implement
-that contract with native top-level windows and capability discovery. Its native
-GX backend remains planned; importing Nano-X does not supply that backend. See
-the [milestones](../graphics/roadmap.md) for local IPC, multiple windows and
-Nano-X lifecycle adaptation.
+window/surface/event boundary and the first RVM terminal. Fuse-X implements
+native top-level windows, capability discovery, hidden creation, resize
+acknowledgement and activation. Native build adaptations are generated under
+`fuse-x/build/`; shared Nano-X and RVM application sources stay unchanged.

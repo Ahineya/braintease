@@ -1,0 +1,40 @@
+import { start, Screen, BOLD } from "std/curses";
+import { exit } from "std/posix";
+import {} from "std/option";
+import {} from "std/result";
+fn ensure(value: bool) {
+    if (!value) {
+        println("RFL_WINDOW_FAILED");
+        exit(1);
+    }
+}
+
+fn release(screen: Screen) {}
+
+fn main() -> i16 {
+    let screen = start().unwrap();
+    ensure(match screen.window(-1, 8, 0, 0) {
+        Err(_) => true,
+        Ok(_) => false
+    });
+    screen.suspend();
+    ensure(match start() {
+        Err(_) => true,
+        Ok(_) => false
+    });
+    screen.resume().unwrap();
+    screen.text(0, 0, "RFL_CURSES_FAILURE_TEST", 0);
+    screen.refresh();
+    let window = screen.window(4, 28, 1, 1).unwrap();
+    ensure(window.scroll_region(1, 2) && window.scroll(1) && window.scroll(-1));
+    ensure(window.move_to(2, 2) && !window.move_to(-1, 0));
+    release(move(screen));
+    ensure(match start() {
+        Err(_) => true,
+        Ok(_) => false
+    });
+    window.text(0, 0, "RFL_WINDOW_API_OK", BOLD);
+    window.key();
+    let missing: Option<i16> = None;
+    missing.unwrap()
+}

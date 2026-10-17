@@ -1,0 +1,55 @@
+/// Lexically normalizes an absolute guest path without resolving symbolic links.
+export fn normalize(path: String) -> String {
+    let mut parts: Vec<String> = [];
+    let mut start: usize = 0;
+    for (i in 0..path.len() + 1) {
+        if (i == path.len() || path[i] == '/') {
+            let part = path[start..i];
+            if (part == "..") {
+                parts.pop();
+            } else if (part != "" && part != ".") {
+                parts.push(part);
+            }
+            start = i + 1;
+        }
+    }
+    let mut result = "";
+    for (i in 0..parts.len()) {
+        result = result + "/" + parts[i];
+    }
+    if (result == "") {
+        "/"
+    } else {
+        result
+    }
+}
+
+/// Joins an absolute directory and a relative or absolute path, then normalizes.
+export fn joined(directory: String, path: String) -> String {
+    if (!path.is_empty() && path[0] == '/') {
+        normalize(path)
+    } else {
+        normalize(directory + "/" + path)
+    }
+}
+
+/// Parent directory of an absolute path.
+export fn parent(path: String) -> String {
+    joined(path, "..")
+}
+
+/// Last component of a normalized path, or / for the root.
+export fn basename(path: String) -> String {
+    let path = normalize(path);
+    let mut start: usize = 0;
+    for (i in 0..path.len()) {
+        if (path[i] == '/') {
+            start = i + 1;
+        }
+    }
+    if (start == path.len()) {
+        "/"
+    } else {
+        path[start..path.len()]
+    }
+}

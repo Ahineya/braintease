@@ -1,0 +1,416 @@
+import { start, Screen, RESIZE, NO_KEY } from "std/curses";
+import { IoError, arguments, working_directory, metadata, executable, DIRECTORY, create_dir, error_message } from "std/posix";
+import { Browser, active, destination, selected_path, joined, load_panel, enter, reload, select_by, select_name, keep_visible } from "./model";
+import { action, Navigate, First, Last, Enter, Parent, Switch, Reload, Copy, Move, Mkdir, Delete, View, Quit, Console, SinglePanel, NoAction, ThemeMenu, About, Edit, Rename } from "./keys";
+import { default_theme, choose_theme, Theme } from "./theme";
+import { render, visible_rows } from "./ui";
+import { number } from "./format";
+import { prompt, confirm, view, console, choose, about, external } from "./widgets";
+import { copy_file, move_path, delete_path, Moved, CopiedSourceRetained, editor_command } from "./actions";
+
+fn refresh(state: &mut Browser) {
+    match reload(&mut state.left) {
+        Ok(_) => {},
+        Err(error) => {
+            state.status = error_message(error);
+        }
+    }
+    match reload(&mut state.right) {
+        Ok(_) => {},
+        Err(error) => {
+            state.status = error_message(error);
+        }
+    }
+}
+
+fn operation(screen: &Screen, theme: &Theme, state: &mut Browser, copy: bool) -> Result<unit, IoError> {
+    let panel = active(&*state);
+    let entry = panel.entries[panel.selected];
+    if (entry.name == "..") {
+        state.status = "Select a file or directory first";
+        return Ok({});
+    }
+    let target = joined(destination(&*state), entry.name);
+    match prompt(screen, theme, if (copy) {
+        "Copy to"
+    } else {
+        "Move to"
+    }, target) {
+        None => {},
+        Some(path) => {
+            let target = joined(panel.path, path);
+            let exists = match metadata(target) {
+                Ok(_) => true,
+                Err(_) => false
+            };
+            if (exists && !confirm(screen, theme, "Overwrite " + target + "?")) {
+                return Ok({});
+            }
+            state.status = if (copy) {
+                "Copying..."
+            } else {
+                "Moving..."
+            };
+            render(screen, theme, &*state);
+            if (copy) {
+                let bytes = copy_file(selected_path(&*state), target)?;
+                state.status = "Copied " + number(bytes) + " bytes";
+            } else {
+                match move_path(selected_path(&*state), target)? {
+                    Moved => {
+                        state.status = "Moved successfully";
+                    },
+                    CopiedSourceRetained(error) => {
+                        state.status = "Copied; source kept: " + error_message(error);
+                    }
+                }
+            }
+            refresh(state);
+        },
+    }
+    Ok({})
+}
+
+fn rename_selected(screen: &Screen, theme: &Theme, state: &mut Browser) -> Result<unit, IoError> {
+    let panel = active(&*state);
+    let entry = panel.entries[panel.selected];
+    if (entry.name == "..") {
+        state.status = "Select a file or directory first";
+        return Ok({});
+    }
+    match prompt(screen, theme, "Rename", entry.name) {
+        None => {},
+        Some(name) => {
+            if (name == entry.name) {
+                state.status = "Name unchanged";
+                return Ok({});
+            }
+            let mut invalid = name == "" || name == "." || name == "..";
+            for (i in 0..name.len()) {
+                if (name[i] == '/') {
+                    invalid = true;
+                }
+            }
+            if (invalid) {
+                state.status = "Enter a filename without / (F6 moves to another path)";
+                return Ok({});
+            }
+            let target = joined(panel.path, name);
+            let exists = match metadata(target) {
+                Ok(_) => true,
+                Err(_) => false
+            };
+            if (exists && !confirm(screen, theme, "Overwrite " + target + "?")) {
+                return Ok({});
+            }
+            match move_path(selected_path(&*state), target)? {
+                Moved => {
+                    state.status = "Renamed successfully";
+                },
+                CopiedSourceRetained(error) => {
+                    state.status = "Copied; source kept: " + error_message(error);
+                }
+            }
+            refresh(state);
+            if (state.right_active) {
+                select_name(&mut state.right, name);
+            } else {
+                select_name(&mut state.left, name);
+            }
+        }
+    }
+    Ok({})
+}
+
+fn launch(screen: &Screen, state: &mut Browser, edit: bool) -> bool {
+    let panel = active(&*state);
+    let path = selected_path(&*state);
+    let command = if (edit) {
+        editor_command(path)
+    } else {
+        Ok(path)
+    };
+    let result = match command {
+        Ok(command) => external(screen, panel.path, command, !edit),
+        Err(error) => Err(error)
+    };
+    match screen.resume() {
+        Ok(_) => {},
+        Err(_) => {
+            return false;
+        }
+    }
+    refresh(state);
+    state.status = match result {
+        Ok(status) => if (status == 0) {
+            if (edit) {
+                "Returned from editor"
+            } else {
+                "Program finished"
+            }
+        } else {
+            "Program wait status: " + number(status as u32)
+        },
+        Err(error) => error_message(error)
+    };
+    true
+}
+
+fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
+    let mut theme = initial_theme;
+    let mut dirty = true;
+    while (true) {
+        let rows = visible_rows(screen);
+        keep_visible(&mut state.left, rows);
+        keep_visible(&mut state.right, rows);
+        if (dirty) {
+            render(screen, &theme, &*state);
+            dirty = false;
+        }
+        let key = screen.key();
+        if (key == NO_KEY) {
+            continue;
+        }
+        if (key == RESIZE) {
+            dirty = true;
+            continue;
+        }
+        dirty = true;
+        let command = action(key, rows as i16);
+        match command {
+            Quit => {
+                return;
+            },
+            Navigate(distance) => {
+                if (state.right_active) {
+                    select_by(&mut state.right, distance, rows);
+                } else {
+                    select_by(&mut state.left, distance, rows);
+                }
+            },
+            First => {
+                if (state.right_active) {
+                    state.right.selected = 0;
+                } else {
+                    state.left.selected = 0;
+                }
+            },
+            Last => {
+                if (state.right_active) {
+                    state.right.selected = state.right.entries.len() - 1;
+                } else {
+                    state.left.selected = state.left.entries.len() - 1;
+                }
+            },
+            Switch => {
+                state.right_active = !state.right_active;
+            },
+            Reload => {
+                refresh(state);
+                state.status = "Reloaded";
+            },
+            Parent => {
+                let panel = active(&*state);
+                match enter(state, joined(panel.path, "..")) {
+                    Ok(_) => {},
+                    Err(error) => {
+                        state.status = error_message(error);
+                    }
+                }
+            },
+            Enter => {
+                let panel = active(&*state);
+                let entry = panel.entries[panel.selected];
+                let path = selected_path(&*state);
+                let result = if (entry.info.kind == DIRECTORY) {
+                    enter(state, path)
+                } else {
+                    match executable(path) {
+                        Ok(true) => {
+                            if (!launch(screen, state, false)) {
+                                return;
+                            }
+                            Ok({})
+                        },
+                        Ok(false) => view(screen, &theme, path),
+                        Err(error) => Err(error)
+                    }
+                };
+                match result {
+                    Ok(_) => {},
+                    Err(error) => {
+                        state.status = error_message(error);
+                    }
+                }
+            },
+            View => {
+                let panel = active(&*state);
+                if (panel.entries[panel.selected].info.kind != DIRECTORY) {
+                    match view(screen, &theme, selected_path(&*state)) {
+                        Ok(_) => {},
+                        Err(error) => {
+                            state.status = error_message(error);
+                        }
+                    }
+                }
+            },
+            About => {
+                about(screen, &theme);
+            },
+            Edit => {
+                let panel = active(&*state);
+                if (panel.entries[panel.selected].info.kind != DIRECTORY) {
+                    if (!launch(screen, state, true)) {
+                        return;
+                    }
+                }
+            },
+            Rename => {
+                match rename_selected(screen, &theme, state) {
+                    Ok(_) => {},
+                    Err(error) => {
+                        state.status = error_message(error);
+                    }
+                }
+            },
+            Copy => {
+                match operation(screen, &theme, state, true) {
+                    Ok(_) => {},
+                    Err(error) => {
+                        state.status = error_message(error);
+                    }
+                }
+            },
+            Move => {
+                match operation(screen, &theme, state, false) {
+                    Ok(_) => {},
+                    Err(error) => {
+                        state.status = error_message(error);
+                    }
+                }
+            },
+            Mkdir => {
+                match prompt(screen, &theme, "New directory", "") {
+                    None => {},
+                    Some(name) => {
+                        if (name != "") {
+                            let panel = active(&*state);
+                            match create_dir(joined(panel.path, name)) {
+                                Ok(_) => {
+                                    state.status = "Directory created";
+                                    refresh(state);
+                                },
+                                Err(error) => {
+                                    state.status = error_message(error);
+                                },
+                            }
+                        }
+                    },
+                }
+            },
+            Delete => {
+                let panel = active(&*state);
+                let entry = panel.entries[panel.selected];
+                if (entry.name != ".." && confirm(screen, &theme, "Delete " + entry.name + "?")) {
+                    match delete_path(selected_path(&*state)) {
+                        Ok(_) => {
+                            state.status = "Deleted successfully";
+                            refresh(state);
+                        },
+                        Err(error) => {
+                            state.status = error_message(error);
+                        },
+                    }
+                }
+            },
+            Console => {
+                let panel = active(&*state);
+                let result = console(screen, panel.path);
+                match screen.resume() {
+                    Ok(_) => {},
+                    Err(_) => {
+                        return;
+                    }
+                }
+                match result {
+                    Ok(_) => {
+                        state.status = "Returned from guest shell";
+                    },
+                    Err(error) => {
+                        state.status = error_message(error);
+                    }
+                }
+                refresh(state);
+            },
+            SinglePanel => {
+                state.single = !state.single;
+            },
+            ThemeMenu => {
+                match choose(screen, &theme) {
+                    None => {},
+                    Some(name) => {
+                        match choose_theme(screen, name) {
+                            Ok(next) => {
+                                theme = next;
+                                state.status = "Theme: " + theme.name;
+                            },
+                            Err(error) => {
+                                state.status = error;
+                            },
+                        }
+                    },
+                }
+            },
+            NoAction => {},
+        }
+    }
+}
+
+fn main() -> i16 {
+    let cwd = match working_directory() {
+        Ok(path) => path,
+        Err(error) => {
+            println(error_message(error));
+            return 1;
+        }
+    };
+    let args = arguments();
+    let left_path = if (args.len() > 1) {
+        joined(cwd, args[1])
+    } else {
+        cwd
+    };
+    let right_path = if (args.len() > 2) {
+        joined(cwd, args[2])
+    } else {
+        cwd
+    };
+    let left = match load_panel(left_path) {
+        Ok(panel) => panel,
+        Err(error) => {
+            println(error_message(error));
+            return 1;
+        }
+    };
+    let right = match load_panel(right_path) {
+        Ok(panel) => panel,
+        Err(error) => {
+            println(error_message(error));
+            return 1;
+        }
+    };
+    let mut state = Browser { left: left, right: right, right_active: false, single: false, status: "Enter: open/run/view; F4 edit; r rename; Ctrl-A about" };
+    let screen = match start() {
+        Ok(screen) => move(screen),
+        Err(_) => {
+            println("Cannot initialize terminal");
+            return 1;
+        }
+    };
+    let theme = default_theme(&screen);
+    if (theme.notice != "") {
+        state.status = theme.notice;
+    }
+    run(&screen, theme, &mut state);
+    0
+}

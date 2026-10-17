@@ -1,23 +1,29 @@
+/// Returns whether `ch` is an ASCII digit (`0` through `9`).
 export fn is_digit(ch: char) -> bool {
     ch >= '0' && ch <= '9'
 }
 
+/// Returns whether `ch` is an ASCII letter (`A`–`Z` or `a`–`z`).
 export fn is_ascii_alpha(ch: char) -> bool {
     (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
 }
 
+/// Returns whether the character value is below 128.
 export fn is_ascii(ch: char) -> bool {
     (ch as i32) < 128
 }
 
+/// Converts ASCII uppercase letters to lowercase; leaves other characters unchanged.
 export fn to_lower(ch: char) -> char {
     if (ch >= 'A' && ch <= 'Z') { ((ch as i32) + 32) as char } else { ch }
 }
 
+/// Converts ASCII lowercase letters to uppercase; leaves other characters unchanged.
 export fn to_upper(ch: char) -> char {
     if (ch >= 'a' && ch <= 'z') { ((ch as i32) - 32) as char } else { ch }
 }
 
+/// Converts an ASCII digit to `Some(0..9)`; returns `None` for other characters.
 export fn digit(ch: char) -> Option<i16> {
     if (is_digit(ch)) { Some(((ch as i32) - 48) as i16) } else { None }
 }

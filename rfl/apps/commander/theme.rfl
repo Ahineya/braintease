@@ -1,0 +1,46 @@
+import {} from "std/result";
+import { install as install_styles } from "lib/tui_curses";
+import { Screen, REVERSE, UNDERLINE } from "std/curses";
+import { Config } from "lib/tui_theme";
+import { classic, configured, named } from "./theme_config";
+
+export struct Theme {
+    name: String,
+    notice: String,
+    lines: bool,
+    frame: u32,
+    title: u32,
+    selected: u32,
+    inactive: u32,
+    text: u32,
+    status: u32,
+    error: u32,
+    directory: u32,
+    dialog: u32,
+    input: u32,
+    accent: u32,
+    muted: u32,
+    shadow: u32
+}
+
+export fn install(screen: &Screen, config: Config, notice: String) -> Theme {
+    let fallback: Vec<u32> = [0, 0, 0, REVERSE, UNDERLINE, REVERSE, 0, 0, REVERSE, 0, 0, 0, 0];
+    let styles = install_styles(screen, config, 1, fallback).unwrap();
+    Theme { name: config.name, notice: notice, lines: config.lines, text: styles[0], frame: styles[1], title: styles[2], selected: styles[3], inactive: styles[4], status: styles[5], error: styles[6], directory: styles[7], dialog: styles[8], input: styles[9], accent: styles[10], muted: styles[11], shadow: styles[12] }
+}
+
+export fn default_theme(screen: &Screen) -> Theme {
+    match configured() {
+        Ok(config) => install(screen, config, ""),
+        Err(error) => install(screen, classic(), error),
+    }
+}
+
+export fn choose_theme(screen: &Screen, name: String) -> Result<Theme, String> {
+    let config = if (name == "configured") {
+        configured()?
+    } else {
+        named(name)?
+    };
+    Ok(install(screen, config, ""))
+}

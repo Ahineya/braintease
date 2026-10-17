@@ -1,0 +1,631 @@
+import {} from "std/result";
+import {} from "std/option";
+import { start, Screen, NO_KEY, CLOSED, RESIZE, function_key } from "std/curses";
+import { arguments, working_directory, error_message, read_dir, REGULAR } from "std/posix";
+import { trim, starts_with, ends_with } from "std/string";
+import { joined, basename } from "lib/path";
+import { prompt, choose, message } from "lib/tui_dialog";
+import { Document, empty, load, changed, save, number } from "./files";
+import { Theme, load as load_theme, palette } from "./theme";
+import { Settings, configured, decimal } from "./config";
+import { View, Vi, view, controls, key as vi_key, reset } from "./vi";
+import { replace } from "std/mem";
+import { render, visible, height, Paint, painting } from "./ui";
+import { available, launch } from "./tools";
+struct App {
+    documents: Vec<Document>,
+    views: Vec<View>,
+    active: usize,
+    vi: Vi,
+    directory: String,
+    settings: Settings,
+    quit: bool
+}
+
+fn draw(screen: &Screen, theme: &Theme, app: &mut App, old: &mut Paint, force: bool) {
+    let active = app.active;
+    let mut v = app.views[active];
+    visible(screen, &app.documents[active], &mut v, &app.vi, &app.settings);
+    app.views[active] = v;
+    render(screen, theme, &app.documents, active, v, &app.vi, &app.settings, old, force);
+}
+
+fn normal(app: &mut App) {
+    let active = app.active;
+    let mut v = app.views[active];
+    let mut vi = replace(&mut app.vi, controls());
+    reset(&app.documents[active].buffer, &mut v, &mut vi);
+    app.views[active] = v;
+    app.vi = vi;
+}
+
+fn open(screen: &Screen, theme: &Theme, app: &mut App, path: String) {
+    if (app.documents.len() >= 8) {
+        app.vi.status = "Close a tab first (maximum 8)";
+        return;
+    }
+    let path = joined(app.directory, path);
+    for (i in 0..app.documents.len()) {
+        if (app.documents[i].path == path) {
+            normal(app);
+            app.active = i;
+            return;
+        }
+    }
+    match load(path) {
+        Ok(document) => {
+            normal(app);
+            app.documents.push(move(document));
+            app.views.push(view());
+            app.active = app.documents.len() - 1;
+            app.vi.status = "Opened " + path;
+        },
+        Err(error) => {
+            app.vi.status = "Open failed: " + error;
+        }
+    }
+}
+
+fn new_file(app: &mut App) {
+    if (app.documents.len() == 8) {
+        app.vi.status = "Close a tab first (maximum 8)";
+        return;
+    }
+    match empty("") {
+        Ok(document) => {
+            normal(app);
+            app.documents.push(move(document));
+            app.views.push(view());
+            app.active = app.documents.len() - 1;
+            app.vi.status = "New buffer";
+        },
+        Err(error) => {
+            app.vi.status = error;
+        }
+    }
+}
+
+fn save_current(screen: &Screen, theme: &Theme, app: &mut App, save_as: bool) -> bool {
+    let active = app.active;
+    let original = app.documents[active].path;
+    let path = if (save_as || original == "") {
+        match prompt(screen, palette(theme), "Save as", original) {
+            Some(path) => path,
+            None => {
+                return false;
+            }
+        }
+    } else {
+        original
+    };
+    save_path(screen, theme, app, path)
+}
+
+fn save_path(screen: &Screen, theme: &Theme, app: &mut App, path: String) -> bool {
+    let active = app.active;
+    if (trim(path) == "") {
+        app.vi.status = "Save cancelled: empty filename";
+        return false;
+    }
+    let path = joined(app.directory, path);
+    for (i in 0..app.documents.len()) {
+        if (i != active && app.documents[i].path == path) {
+            app.vi.status = "File is already open in another tab";
+            return false;
+        }
+    }
+    let conflict = match changed(&app.documents[active], path) {
+        Ok(value) => value,
+        Err(error) => {
+            app.vi.status = "Save failed: " + error;
+            return false;
+        }
+    };
+    if (conflict) {
+        let answer = choose(screen, palette(theme), "File changed or exists: overwrite?", ["Overwrite", "Cancel"], 1);
+        match answer {
+            Some(0) => {},
+            _ => {
+                app.vi.status = "Save cancelled";
+                return false;
+            }
+        }
+    }
+    normal(app);
+    match save(&mut app.documents[active], path) {
+        Ok(_) => {
+            app.vi.status = "Saved " + path;
+            true
+        },
+        Err(error) => {
+            app.vi.status = "Save failed: " + error;
+            false
+        }
+    }
+}
+
+fn may_close(screen: &Screen, theme: &Theme, app: &mut App) -> bool {
+    if (!app.documents[app.active].buffer.modified()) {
+        return true;
+    }
+    match choose(screen, palette(theme), "Unsaved changes", ["Save", "Discard", "Cancel"], 2) {
+        Some(0) => save_current(screen, theme, app, false),
+        Some(1) => true,
+        _ => false
+    }
+}
+
+fn close_tab(screen: &Screen, theme: &Theme, app: &mut App, force: bool) {
+    if (!force && !may_close(screen, theme, app)) {
+        return;
+    }
+    normal(app);
+    if (app.documents.len() == 1) {
+        app.quit = true;
+        return;
+    }
+    let mut tail: Vec<Document> = [];
+    let mut views: Vec<View> = [];
+    while (app.documents.len() > app.active + 1) {
+        let d = app.documents.pop().unwrap();
+        tail.push(move(d));
+        views.push(app.views.pop().unwrap());
+    }
+    let gone = app.documents.pop();
+    drop(move(gone));
+    app.views.pop();
+    while (!tail.is_empty()) {
+        let d = tail.pop().unwrap();
+        app.documents.push(move(d));
+        app.views.push(views.pop().unwrap());
+    }
+    if (app.active >= app.documents.len()) {
+        app.active = app.documents.len() - 1;
+    }
+}
+
+fn quit(screen: &Screen, theme: &Theme, app: &mut App, force: bool) {
+    normal(app);
+    if (!force) {
+        let original = app.active;
+        for (i in 0..app.documents.len()) {
+            app.active = i;
+            let mut old = painting();
+            draw(screen, theme, app, &mut old, true);
+            if (!may_close(screen, theme, app)) {
+                app.active = original;
+                return;
+            }
+        }
+    }
+    app.quit = true;
+}
+
+fn help(screen: &Screen, theme: &Theme) {
+    message(screen, palette(theme), "Rift — programmer's editor", ["RFL interface and vi commands; portable C text engine.", "F10 menus: File, Edit, Search, Run, Tabs, Help.", "Ctrl-N New  Ctrl-O/F3 Open  Ctrl-S/F2 Save", "Ctrl-W Close tab  Ctrl-Q Quit  F4 Tabs", "F5 Save and Run  F6/F9 next/previous tab", "F7 Find  F8 Tools  F1 Help", "", "Normal: h j k l, arrows, w b e / W B E", "0 ^ $ gg G, counts (3w, 2dd, d2w), % brackets", "f/F/t/T character search; ; repeat, , reverse", "i a I A o O insert; Esc returns to Normal", "d/c/y + motion; dd cc yy; D C S; x X s r", "ci) ci] ci} ci\" ci' ciw; a) a] a} aw objects", "v/V visual selection; d c y > < act on selection", "p/P paste; u undo; Ctrl-R redo; . repeat change", ">> << indent; J join; Ctrl-W deletes insert word", "/ ? literal search, n/N repeat; : command prompt", "", ":w :w PATH :q :q! :wq :x :qa :qa!", ":e PATH :tabnew PATH :bn :bp :bd :NUMBER", ":set number/nonumber autoindent/noautoindent", ":set expandtab/noexpandtab tabstop=1..16", ":run :tools :theme :help", "", "Up to 8 tabs; 512 KiB/file; ASCII display/input.", "CRLF preserved. NUL/binary data is rejected.", "Changes outside Rift require overwrite confirmation.", "Runs use guest tools, PATH and [run] INI overrides.", "Compilers are usable only if installed in the guest.", "Plugins/completion/diagnostics/LSP are future work."]);
+}
+
+fn search(screen: &Screen, theme: &Theme, app: &mut App, backward: bool) {
+    normal(app);
+    match prompt(screen, palette(theme), if (backward) {
+        "Find backward (literal)"
+    } else {
+        "Find (literal)"
+    }, app.vi.search) {
+        None => {},
+        Some(query) => {
+            if (query == "") {
+                return;
+            }
+            app.vi.search = query;
+            app.vi.backward = backward;
+            let active = app.active;
+            let mut v = app.views[active];
+            match app.documents[active].buffer.find(v.cursor, query, backward) {
+                Ok(Some(at)) => {
+                    v.cursor = at;
+                    v.goal = app.documents[active].buffer.visual(at, app.settings.tabstop);
+                    app.views[active] = v;
+                    app.vi.status = "Found: " + query;
+                },
+                Ok(None) => {
+                    app.vi.status = "Pattern not found";
+                },
+                Err(error) => {
+                    app.vi.status = error;
+                }
+            }
+        }
+    }
+}
+
+fn switch(app: &mut App, next: bool) {
+    normal(app);
+    app.active = if (next) {
+        (app.active + 1) % app.documents.len()
+    } else {
+        (app.active + app.documents.len() - 1) % app.documents.len()
+    };
+}
+
+fn tabs(screen: &Screen, theme: &Theme, app: &mut App) {
+    let mut choices: Vec<String> = [];
+    for (i in 0..app.documents.len()) {
+        let d = &app.documents[i];
+        choices.push(number(i + 1) + ": " + if (d.path == "") {
+            "[Untitled]"
+        } else {
+            d.path
+        } + if (d.buffer.modified()) {
+            " *"
+        } else {
+            ""
+        });
+    }
+    match choose(screen, palette(theme), "Tabs", choices, app.active) {
+        Some(i) => {
+            normal(app);
+            app.active = i;
+        },
+        None => {}
+    }
+}
+
+fn run_file(screen: &Screen, theme: &Theme, app: &mut App) {
+    let active = app.active;
+    if (app.documents[active].buffer.modified() || !app.documents[active].exists) {
+        if (!save_current(screen, theme, app, false)) {
+            return;
+        }
+    }
+    normal(app);
+    match launch(screen, &app.documents[active], &app.settings) {
+        Ok(status) => {
+            app.vi.status = "Run finished; wait status " + number(status as usize);
+        },
+        Err(error) => {
+            app.vi.status = error;
+        }
+    }
+}
+
+fn tools(screen: &Screen, theme: &Theme) {
+    message(screen, palette(theme), "Guest development tools", available());
+}
+
+fn theme_menu(screen: &Screen, theme: &mut Theme) {
+    let mut names = ["configured"];
+    match read_dir("/usr/share/rift/themes") {
+        Ok(entries) => {
+            for (i in 0..entries.len()) {
+                let name = entries[i].name;
+                if (entries[i].info.kind == REGULAR && ends_with(name, ".ini")) {
+                    names.push(name[0..name.len() - 4]);
+                }
+            }
+        },
+        Err(_) => {}
+    }
+    match choose(screen, palette(&*theme), "Theme (session)", names, 0) {
+        Some(i) => {
+            *theme = load_theme(screen, names[i]);
+        },
+        None => {}
+    }
+}
+
+fn command(screen: &Screen, theme: &mut Theme, app: &mut App, input: String) {
+    let input = trim(input);
+    let mut cut = input.len();
+    for (i in 0..input.len()) {
+        if (input[i] == ' ') {
+            cut = i;
+            break;
+        }
+    }
+    let name = input[0..cut];
+    let argument = if (cut < input.len()) {
+        trim(input[cut + 1..input.len()])
+    } else {
+        ""
+    };
+    if (name == "w" || name == "write" || name == "wq" || name == "x") {
+        let saved = if (argument != "") {
+            save_path(screen, &*theme, app, argument)
+        } else {
+            save_current(screen, &*theme, app, false)
+        };
+        if (saved && (name == "wq" || name == "x")) {
+            close_tab(screen, &*theme, app, false);
+        }
+    } else if (name == "q" || name == "q!" || name == "bd" || name == "bd!") {
+        close_tab(screen, &*theme, app, name == "q!" || name == "bd!");
+    } else if (name == "qa" || name == "qa!") {
+        quit(screen, &*theme, app, name == "qa!");
+    } else if (name == "e" || name == "edit" || name == "tabnew") {
+        if (argument == "") {
+            new_file(app);
+        } else {
+            open(screen, &*theme, app, argument);
+        }
+    } else if (name == "bn" || name == "bnext") {
+        switch(app, true);
+    } else if (name == "bp" || name == "bprev") {
+        switch(app, false);
+    } else if (name == "run") {
+        run_file(screen, &*theme, app);
+    } else if (name == "tools") {
+        tools(screen, &*theme);
+    } else if (name == "help") {
+        help(screen, &*theme);
+    } else if (name == "theme") {
+        theme_menu(screen, theme);
+    } else if (name == "set") {
+        if (argument == "number") {
+            app.settings.numbers = true;
+        } else if (argument == "nonumber") {
+            app.settings.numbers = false;
+        } else if (argument == "expandtab") {
+            app.settings.expandtab = true;
+        } else if (argument == "noexpandtab") {
+            app.settings.expandtab = false;
+        } else if (argument == "autoindent") {
+            app.settings.autoindent = true;
+        } else if (argument == "noautoindent") {
+            app.settings.autoindent = false;
+        } else if (starts_with(argument, "tabstop=")) {
+            match decimal(argument[8..argument.len()]) {
+                Some(n) if (n >= 1 && n <= 16) => {
+                    app.settings.tabstop = n as u16;
+                },
+                _ => {
+                    app.vi.status = "tabstop must be 1..16";
+                }
+            }
+        } else {
+            app.vi.status = "Unknown setting";
+        }
+    } else {
+        match decimal(name) {
+            Some(n) if (n > 0) => {
+                let active = app.active;
+                let mut v = app.views[active];
+                v.cursor = app.documents[active].buffer.start(n - 1);
+                app.views[active] = v;
+            },
+            _ => {
+                app.vi.status = "Unknown command: " + name;
+            }
+        }
+    }
+}
+
+fn menu(screen: &Screen, theme: &mut Theme, app: &mut App) {
+    normal(app);
+    let category = match choose(screen, palette(&*theme), "Rift menu", ["File", "Edit", "Search", "Run", "Tabs", "Help"], 0) {
+        Some(i) => i,
+        None => {
+            return;
+        }
+    };
+    let items = if (category == 0) {
+        ["New  Ctrl-N", "Open  Ctrl-O / F3", "Save  Ctrl-S / F2", "Save as...", "Close tab  Ctrl-W", "Quit  Ctrl-Q"]
+    } else if (category == 1) {
+        ["Undo  u", "Redo  Ctrl-R", "Toggle line numbers", "Toggle tabs/spaces", "Choose theme"]
+    } else if (category == 2) {
+        ["Find  / / F7", "Find backward  ?", "Next match  n", "Previous match  N"]
+    } else if (category == 3) {
+        ["Save and Run  F5", "Installed tools  F8"]
+    } else if (category == 4) {
+        ["Choose tab  F4", "Next tab  F6", "Previous tab  F9"]
+    } else {
+        ["Controls and About  F1"]
+    };
+    let item = match choose(screen, palette(&*theme), "Select command", items, 0) {
+        Some(i) => i,
+        None => {
+            return;
+        }
+    };
+    if (category == 0) {
+        if (item == 0) {
+            new_file(app);
+        } else if (item == 1) {
+            match prompt(screen, palette(&*theme), "Open file (new tab)", "") {
+                Some(path) => {
+                    if (path != "") {
+                        open(screen, &*theme, app, path);
+                    }
+                },
+                None => {}
+            }
+        } else if (item == 2) {
+            save_current(screen, &*theme, app, false);
+        } else if (item == 3) {
+            save_current(screen, &*theme, app, true);
+        } else if (item == 4) {
+            close_tab(screen, &*theme, app, false);
+        } else {
+            quit(screen, &*theme, app, false);
+        }
+    } else if (category == 1) {
+        if (item < 2) {
+            edit(app, if (item == 0) {
+                117
+            } else {
+                18
+            }, height(screen));
+        } else if (item == 2) {
+            app.settings.numbers = !app.settings.numbers;
+        } else if (item == 3) {
+            app.settings.expandtab = !app.settings.expandtab;
+        } else {
+            theme_menu(screen, theme);
+        }
+    } else if (category == 2) {
+        if (item < 2) {
+            search(screen, &*theme, app, item == 1);
+        } else {
+            edit(app, if (item == 2) {
+                110
+            } else {
+                78
+            }, height(screen));
+        }
+    } else if (category == 3) {
+        if (item == 0) {
+            run_file(screen, &*theme, app);
+        } else {
+            tools(screen, &*theme);
+        }
+    } else if (category == 4) {
+        if (item == 0) {
+            tabs(screen, &*theme, app);
+        } else {
+            switch(app, item == 1);
+        }
+    } else {
+        help(screen, &*theme);
+    }
+}
+
+fn edit(app: &mut App, key: i16, rows: usize) {
+    let active = app.active;
+    let mut v = app.views[active];
+    let mut vi = replace(&mut app.vi, controls());
+    vi_key(&app.documents[active].buffer, &mut v, &mut vi, key, &app.settings, rows);
+    app.views[active] = v;
+    app.vi = vi;
+}
+
+fn run(screen: &Screen, initial: Theme, app: &mut App) {
+    let mut theme = initial;
+    let mut dirty = true;
+    let mut full = true;
+    let mut old = painting();
+    while (!app.quit) {
+        if (dirty) {
+            draw(screen, &theme, app, &mut old, full);
+            dirty = false;
+        }
+        let key = screen.key();
+        if (key == NO_KEY) {
+            continue;
+        }
+        dirty = true;
+        full = true;
+        if (key == CLOSED) {
+            return;
+        }
+        if (key == RESIZE) {
+            continue;
+        }
+        if (key == function_key(1)) {
+            help(screen, &theme);
+        } else if (key == 19 || key == function_key(2)) {
+            save_current(screen, &theme, app, false);
+        } else if (key == 15 || key == function_key(3)) {
+            normal(app);
+            match prompt(screen, palette(&theme), "Open file (new tab)", "") {
+                Some(path) => {
+                    if (path != "") {
+                        open(screen, &theme, app, path);
+                    }
+                },
+                None => {}
+            }
+        } else if (key == 14) {
+            new_file(app);
+        } else if (key == 23 && app.vi.mode != 1) {
+            close_tab(screen, &theme, app, false);
+        } else if (key == 17) {
+            quit(screen, &theme, app, false);
+        } else if (key == function_key(4)) {
+            normal(app);
+            tabs(screen, &theme, app);
+        } else if (key == function_key(5)) {
+            run_file(screen, &theme, app);
+        } else if (key == function_key(6)) {
+            switch(app, true);
+        } else if (key == function_key(9)) {
+            switch(app, false);
+        } else if (key == function_key(7)) {
+            search(screen, &theme, app, false);
+        } else if (key == function_key(8)) {
+            tools(screen, &theme);
+        } else if (key == function_key(10)) {
+            menu(screen, &mut theme, app);
+        } else if (app.vi.mode == 0 && app.vi.operator == 0 && app.vi.pending == 0 && (key == 58 || key == 47 || key == 63)) {
+            if (key == 58) {
+                normal(app);
+                match prompt(screen, palette(&theme), ": command", "") {
+                    Some(value) => {
+                        command(screen, &mut theme, app, value);
+                    },
+                    None => {}
+                }
+            } else {
+                search(screen, &theme, app, key == 63);
+            }
+        } else {
+            full = false;
+            edit(app, key, height(screen));
+        }
+    }
+}
+
+fn main() -> i16 {
+    let cwd = match working_directory() {
+        Ok(path) => path,
+        Err(error) => {
+            println(error_message(error));
+            return 1;
+        }
+    };
+    let settings = configured();
+    let mut app = App { documents: [], views: [], active: 0, vi: controls(), directory: cwd, settings: settings, quit: false };
+    let args = arguments();
+    if (args.len() > 9) {
+        println("Usage: rift [up to 8 text files]");
+        return 1;
+    }
+    for (i in 1..args.len()) {
+        let path = joined(cwd, args[i]);
+        match load(path) {
+            Ok(d) => {
+                app.documents.push(move(d));
+                app.views.push(view());
+            },
+            Err(error) => {
+                println(path + ": " + error);
+                return 1;
+            }
+        }
+    }
+    if (app.documents.is_empty()) {
+        let d = match empty("") {
+            Ok(d) => move(d),
+            Err(error) => {
+                println(error);
+                return 1;
+            }
+        };
+        app.documents.push(move(d));
+        app.views.push(view());
+    }
+    let screen = match start() {
+        Ok(screen) => move(screen),
+        Err(_) => {
+            println("Cannot initialize terminal");
+            return 1;
+        }
+    };
+    let theme = load_theme(&screen, "configured");
+    if (app.settings.notice != "") {
+        app.vi.status = app.settings.notice;
+    } else if (theme.notice != "") {
+        app.vi.status = theme.notice;
+    }
+    run(&screen, theme, &mut app);
+    0
+}

@@ -42,6 +42,7 @@ impl Checker<'_> {
         self.structs.push(StructInfo {
             name: name.clone(),
             fields: Vec::new(),
+            field_spans: HashMap::new(),
             width: 1,
             repr_c: false,
         });

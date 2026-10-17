@@ -1,0 +1,739 @@
+import { Buffer, Bounds, octets } from "lib/text";
+import { Settings } from "./config";
+import { UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, BACKSPACE } from "std/curses";
+export struct View {
+    cursor: usize,
+    goal: usize,
+    top: usize,
+    left: usize
+}
+
+export struct Vi {
+    mode: i16,
+    anchor: usize,
+    operator: i16,
+    pending: i16,
+    count: u16,
+    multiplier: u16,
+    register: Vec<u8>,
+    linewise: bool,
+    search: String,
+    backward: bool,
+    find: i16,
+    find_kind: i16,
+    status: String,
+    record: Vec<i16>,
+    last: Vec<i16>,
+    revision: u32,
+    overflow: bool
+}
+
+export fn view() -> View {
+    View { cursor: 0, goal: 0, top: 0, left: 0 }
+}
+
+export fn controls() -> Vi {
+    Vi { mode: 0, anchor: 0, operator: 0, pending: 0, count: 0, multiplier: 1, register: [], linewise: false, search: "", backward: false, find: 0, find_kind: 102, status: "", record: [], last: [], revision: 0, overflow: false }
+}
+
+fn min(a: usize, b: usize) -> usize {
+    if (a < b) {
+        a
+    } else {
+        b
+    }
+}
+
+fn max(a: usize, b: usize) -> usize {
+    if (a > b) {
+        a
+    } else {
+        b
+    }
+}
+
+export fn reset(buffer: &Buffer, v: &mut View, vi: &mut Vi) {
+    buffer.end(v.cursor);
+    vi.mode = 0;
+    vi.operator = 0;
+    vi.pending = 0;
+    vi.count = 0;
+    vi.multiplier = 1;
+    vi.record.clear();
+    clamp(buffer, v, false);
+}
+
+export fn clamp(b: &Buffer, v: &mut View, insert: bool) {
+    v.cursor = min(v.cursor, b.len());
+    let row = b.row(v.cursor);
+    let start = b.start(row);
+    let end = b.endline(row);
+    if (v.cursor > end) {
+        v.cursor = end;
+    }
+    if (!insert && end > start && v.cursor >= end) {
+        v.cursor = end - 1;
+    }
+}
+
+fn first(b: &Buffer, row: usize) -> usize {
+    let mut at = b.start(row);
+    while (at < b.endline(row) && (b.byte(at) == 32 || b.byte(at) == 9)) {
+        at += 1;
+    }
+    at
+}
+
+export fn selection(b: &Buffer, v: View, vi: &Vi) -> Bounds {
+    if (vi.mode == 2) {
+        Bounds { start: min(v.cursor, vi.anchor), end: min(max(v.cursor, vi.anchor) + 1, b.len()) }
+    } else if (vi.mode == 3) {
+        Bounds { start: b.start(min(b.row(v.cursor), b.row(vi.anchor))), end: b.start(max(b.row(v.cursor), b.row(vi.anchor)) + 1) }
+    } else {
+        Bounds { start: 0, end: 0 }
+    }
+}
+
+fn begin_insert(b: &Buffer, v: &View, vi: &mut Vi) {
+    b.begin(v.cursor);
+    vi.mode = 1;
+}
+
+fn range(b: &Buffer, v: &mut View, vi: &mut Vi, start: usize, end: usize, lines: bool) -> Result<unit, String> {
+    vi.register = b.bytes(start, end - start)?;
+    vi.linewise = lines;
+    if (vi.operator == 121) {
+        vi.status = "Yanked";
+        v.cursor = start;
+        vi.mode = 0;
+    } else {
+        b.begin(v.cursor);
+        b.replace(start, end - start, [])?;
+        v.cursor = start;
+        if (vi.operator == 99) {
+            vi.mode = 1;
+        } else {
+            b.end(v.cursor);
+            vi.mode = 0;
+        }
+    }
+    vi.operator = 0;
+    vi.pending = 0;
+    vi.count = 0;
+    vi.multiplier = 1;
+    Ok({})
+}
+
+fn lines(b: &Buffer, v: &mut View, vi: &mut Vi, first: usize, last: usize) -> Result<unit, String> {
+    if (vi.operator == 62 || vi.operator == 60) {
+        return Err("Internal indentation range");
+    }
+    let start = b.start(first);
+    let end = b.start(last + 1);
+    if (vi.operator == 99) {
+        return range(b, v, vi, start, b.endline(last), true);
+    }
+    // Removing the last unterminated line also removes its preceding line break.
+    if (end == b.len() && last + 1 >= b.lines() && start > 0 && vi.operator == 100) {
+        let previous = b.endline(first - 1);
+        vi.register = b.bytes(start, end - start)?;
+        vi.linewise = true;
+        b.begin(v.cursor);
+        b.replace(previous, end - previous, [])?;
+        v.cursor = b.start(first - 1);
+        b.end(v.cursor);
+        vi.operator = 0;
+        vi.mode = 0;
+        return Ok({});
+    }
+    range(b, v, vi, start, end, true)
+}
+
+fn apply_motion(b: &Buffer, v: &mut View, vi: &mut Vi, target: usize, inclusive: bool, linewise: bool, settings: &Settings) -> Result<unit, String> {
+    if (vi.operator == 0) {
+        v.cursor = target;
+        return Ok({});
+    }
+    let lo = min(b.row(v.cursor), b.row(target));
+    let hi = max(b.row(v.cursor), b.row(target));
+    if (vi.operator == 62 || vi.operator == 60) {
+        b.begin(v.cursor);
+        b.indent(lo, hi, settings.tabstop, vi.operator == 60, !settings.expandtab)?;
+        v.cursor = first(b, lo);
+        b.end(v.cursor);
+        vi.operator = 0;
+        vi.mode = 0;
+        return Ok({});
+    }
+    if (linewise) {
+        return lines(b, v, vi, lo, hi);
+    }
+    let start = min(v.cursor, target);
+    let end = min(max(v.cursor, target) + if (inclusive) {
+        1 as usize
+    } else {
+        0 as usize
+    }, b.len());
+    range(b, v, vi, start, end, false)
+}
+
+fn vertical(b: &Buffer, v: &mut View, vi: &mut Vi, delta: i32, settings: &Settings) -> Result<unit, String> {
+    let row = b.row(v.cursor) as i32;
+    let target = if (row + delta < 0) {
+        0 as usize
+    } else {
+        min((row + delta) as usize, b.lines() - 1)
+    };
+    let at = b.column(target, v.goal, settings.tabstop);
+    apply_motion(b, v, vi, at, false, true, settings)
+}
+
+fn paste(b: &Buffer, v: &mut View, vi: &mut Vi, before: bool, count: u16) -> Result<unit, String> {
+    if (vi.register.is_empty()) {
+        return Err("Register is empty");
+    }
+    let mut data: Vec<u8> = [];
+    let mut prefix: usize = 0;
+    let row = b.row(v.cursor);
+    let mut at = if (before) {
+        v.cursor
+    } else {
+        min(v.cursor + 1, b.endline(row))
+    };
+    if (vi.linewise) {
+        at = if (before) {
+            b.start(row)
+        } else {
+            b.start(row + 1)
+        };
+        let crlf = b.endline(0) + 1 < b.start(1);
+        if (!before && at == b.len() && at > 0 && b.byte(at - 1) != 10) {
+            if (crlf) {
+                data.push(13);
+            }
+            data.push(10);
+            prefix = data.len();
+        }
+        for (_ in 0..count as usize) {
+            for (i in 0..vi.register.len()) {
+                data.push(vi.register[i]);
+            }
+            if (vi.register[vi.register.len() - 1] != 10) {
+                if (crlf) {
+                    data.push(13);
+                }
+                data.push(10);
+            }
+        }
+    } else {
+        for (_ in 0..count as usize) {
+            for (i in 0..vi.register.len()) {
+                data.push(vi.register[i]);
+            }
+        }
+    }
+    b.begin(v.cursor);
+    b.replace(at, 0, data)?;
+    v.cursor = at + prefix;
+    b.end(v.cursor);
+    Ok({})
+}
+
+fn inserted(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings) -> Result<unit, String> {
+    if (key == 27 || key == 3) {
+        b.end(v.cursor);
+        vi.mode = 0;
+        if (v.cursor > b.start(b.row(v.cursor))) {
+            v.cursor -= 1;
+        }
+        return Ok({});
+    }
+    if (key == BACKSPACE || key == 127 || key == 8) {
+        if (v.cursor > 0) {
+            let n: usize = if (b.byte(v.cursor - 1) == 10 && v.cursor > 1 && b.byte(v.cursor - 2) == 13) {
+                2
+            } else {
+                1
+            };
+            b.replace(v.cursor - n, n, [])?;
+            v.cursor -= n;
+        }
+    } else if (key == 330) {
+        if (v.cursor < b.len()) {
+            let n: usize = if (b.byte(v.cursor) == 13 && b.byte(v.cursor + 1) == 10) {
+                2
+            } else {
+                1
+            };
+            b.replace(v.cursor, n, [])?;
+        }
+    } else if (key == 10 || key == 13) {
+        v.cursor = b.newline(v.cursor, settings.autoindent)?;
+    } else if (key == 9) {
+        let mut data: Vec<u8> = [];
+        if (settings.expandtab) {
+            let n = settings.tabstop as usize - b.visual(v.cursor, settings.tabstop) % settings.tabstop as usize;
+            for (_ in 0..n) {
+                data.push(32);
+            }
+        } else {
+            data.push(9);
+        }
+        b.replace(v.cursor, 0, data)?;
+        v.cursor += data.len();
+    } else if (key == 23) {
+        let at = max(b.word(v.cursor, 98, 1), b.start(b.row(v.cursor)));
+        b.replace(at, v.cursor - at, [])?;
+        v.cursor = at;
+    } else if (key >= 32 && key <= 255) {
+        b.replace(v.cursor, 0, [key as u8])?;
+        v.cursor += 1;
+    } else if (key == LEFT) {
+        if (v.cursor > 0) {
+            v.cursor -= 1;
+        }
+    } else if (key == RIGHT) {
+        if (v.cursor < b.len()) {
+            v.cursor += if (b.byte(v.cursor) == 13 && b.byte(v.cursor + 1) == 10) {
+                2 as usize
+            } else {
+                1 as usize
+            };
+        }
+    } else if (key == UP || key == DOWN) {
+        let row = b.row(v.cursor);
+        let target = if (key == UP) {
+            if (row > 0) {
+                row - 1
+            } else {
+                row
+            }
+        } else {
+            min(row + 1, b.lines() - 1)
+        };
+        v.cursor = b.column(target, v.goal, settings.tabstop);
+    } else if (key == HOME) {
+        v.cursor = b.start(b.row(v.cursor));
+    } else if (key == END) {
+        v.cursor = b.endline(b.row(v.cursor));
+    }
+    Ok({})
+}
+
+fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, rows: usize) -> Result<unit, String> {
+    if (vi.mode == 1) {
+        inserted(b, v, vi, key, settings)?;
+        if (key != UP && key != DOWN) {
+            v.goal = b.visual(v.cursor, settings.tabstop);
+        }
+        return Ok({});
+    }
+    if (key == 27 || key == 3) {
+        reset(b, v, vi);
+        return Ok({});
+    }
+    if (vi.pending == 0 && key >= 48 && key <= 57 && (key != 48 || vi.count > 0)) {
+        let next = vi.count as u32 * 10 + (key - 48) as u32;
+        if (next > 999) {
+            return Err("Count is limited to 999");
+        }
+        vi.count = next as u16;
+        return Ok({});
+    }
+    let count = if (vi.count > 0) {
+        vi.count
+    } else {
+        1 as u16
+    };
+    let counted = vi.count > 0;
+    let n = min(count as usize * vi.multiplier as usize, 999) as u16;
+    vi.count = 0;
+    let row = b.row(v.cursor);
+    let start = b.start(row);
+    let end = b.endline(row);
+    if (vi.pending == 105 || vi.pending == 97) {
+        let around = vi.pending == 97;
+        let bounds = b.object(v.cursor, key, around)?;
+        vi.pending = 0;
+        if (vi.operator != 0) {
+            range(b, v, vi, bounds.start, bounds.end, false)?;
+        } else {
+            v.cursor = bounds.end - if (bounds.end > bounds.start) {
+                1 as usize
+            } else {
+                0 as usize
+            };
+            vi.anchor = bounds.start;
+            vi.mode = 2;
+        }
+        return Ok({});
+    }
+    if (vi.pending == 114) {
+        vi.pending = 0;
+        if (key < 32 || key > 255) {
+            return Err("Replace expects a printable character");
+        }
+        let length = min(n as usize, end - v.cursor);
+        let mut data: Vec<u8> = [];
+        for (_ in 0..length) {
+            data.push(key as u8);
+        }
+        b.begin(v.cursor);
+        b.replace(v.cursor, length, data)?;
+        b.end(v.cursor);
+        return Ok({});
+    }
+    if (vi.pending == 102 || vi.pending == 70 || vi.pending == 116 || vi.pending == 84) {
+        let kind = vi.pending;
+        vi.pending = 0;
+        vi.find = key;
+        vi.find_kind = kind;
+        let target = match b.find_char(v.cursor, key, kind == 70 || kind == 84, kind == 116 || kind == 84, n) {
+            Some(at) => at,
+            None => {
+                return Err("Character not found on this line");
+            }
+        };
+        apply_motion(b, v, vi, target, true, false, settings)?;
+        return Ok({});
+    }
+    if (vi.pending == 103) {
+        vi.pending = 0;
+        if (key == 103) {
+            apply_motion(b, v, vi, b.start(if (counted) {
+                n as usize - 1
+            } else {
+                0 as usize
+            }), false, true, settings)?;
+        } else {
+            return Err("Expected gg");
+        }
+        return Ok({});
+    }
+    if (key == 105 || key == 97) {
+        if (vi.operator != 0 || vi.mode >= 2) {
+            vi.pending = key;
+            return Ok({});
+        }
+        begin_insert(b, &*v, vi);
+        if (key == 97) {
+            v.cursor = min(v.cursor + 1, end);
+        }
+        return Ok({});
+    }
+    if (key == 100 || key == 99 || key == 121 || key == 62 || key == 60) {
+        if (vi.mode >= 2) {
+            let bounds = selection(b, *v, &*vi);
+            let linewise = vi.mode == 3;
+            vi.operator = key;
+            if (key == 60 || key == 62) {
+                b.begin(v.cursor);
+                b.indent(b.row(bounds.start), b.row(if (bounds.end > bounds.start) {
+                    bounds.end - 1
+                } else {
+                    bounds.start
+                }), settings.tabstop, key == 60, !settings.expandtab)?;
+                v.cursor = bounds.start;
+                b.end(v.cursor);
+                reset(b, v, vi);
+            } else {
+                range(b, v, vi, bounds.start, bounds.end, linewise)?;
+            }
+            return Ok({});
+        }
+        if (vi.operator == key) {
+            if (key == 60 || key == 62) {
+                b.begin(v.cursor);
+                b.indent(row, min(row + n as usize - 1, b.lines() - 1), settings.tabstop, key == 60, !settings.expandtab)?;
+                v.cursor = first(b, row);
+                b.end(v.cursor);
+                vi.operator = 0;
+                vi.multiplier = 1;
+            } else {
+                lines(b, v, vi, row, min(row + n as usize - 1, b.lines() - 1))?;
+            }
+            return Ok({});
+        }
+        if (vi.operator != 0) {
+            return Err("Incomplete operator");
+        }
+        vi.operator = key;
+        vi.multiplier = n;
+        return Ok({});
+    }
+    if (key == 103 || key == 102 || key == 70 || key == 116 || key == 84 || key == 114) {
+        vi.pending = key;
+        vi.count = n;
+        return Ok({});
+    }
+    if (key == 104 || key == LEFT || key == BACKSPACE) {
+        let at = if (v.cursor - start > n as usize) {
+            v.cursor - n as usize
+        } else {
+            start
+        };
+        apply_motion(b, v, vi, at, false, false, settings)?;
+    } else if (key == 108 || key == RIGHT) {
+        let at = min(v.cursor + n as usize, end);
+        apply_motion(b, v, vi, at, false, false, settings)?;
+    } else if (key == 106 || key == DOWN || key == 10 || key == 13) {
+        vertical(b, v, vi, n as i32, settings)?;
+        return Ok({});
+    } else if (key == 107 || key == UP) {
+        vertical(b, v, vi, -(n as i32), settings)?;
+        return Ok({});
+    } else if (key == PAGE_DOWN || key == 6 || key == 4) {
+        let distance = if (key == 4) {
+            rows / 2
+        } else {
+            rows - 1
+        };
+        vertical(b, v, vi, (distance as i32) * (n as i32), settings)?;
+        return Ok({});
+    } else if (key == PAGE_UP || key == 2 || key == 21) {
+        let distance = if (key == 21) {
+            rows / 2
+        } else {
+            rows - 1
+        };
+        vertical(b, v, vi, -((distance as i32) * (n as i32)), settings)?;
+        return Ok({});
+    } else if (key == 119 || key == 98 || key == 101 || key == 87 || key == 66 || key == 69) {
+        let motion = if (vi.operator == 99 && (key == 119 || key == 87) && b.byte(v.cursor) > 32) {
+            if (key == 119) {
+                101
+            } else {
+                69
+            }
+        } else {
+            key
+        };
+        let at = b.word(v.cursor, motion, n);
+        apply_motion(b, v, vi, at, motion == 101 || motion == 69, false, settings)?;
+    } else if (key == 48 || key == HOME) {
+        apply_motion(b, v, vi, start, false, false, settings)?;
+    } else if (key == 94) {
+        apply_motion(b, v, vi, first(b, row), false, false, settings)?;
+    } else if (key == 36 || key == END) {
+        let target = b.endline(min(row + n as usize - 1, b.lines() - 1));
+        let at = if (vi.operator != 0) {
+            target
+        } else if (target > b.start(b.row(target))) {
+            target - 1
+        } else {
+            target
+        };
+        apply_motion(b, v, vi, at, false, false, settings)?;
+    } else if (key == 71) {
+        apply_motion(b, v, vi, b.start(if (counted) {
+            min(n as usize - 1, b.lines() - 1)
+        } else {
+            b.lines() - 1
+        }), false, true, settings)?;
+    } else if (key == 37) {
+        let at = match b.matching(v.cursor) {
+            Some(at) => at,
+            None => {
+                return Err("No matching bracket");
+            }
+        };
+        apply_motion(b, v, vi, at, true, false, settings)?;
+    } else if (key == 59 || key == 44) {
+        if (vi.find == 0) {
+            return Err("No character search yet");
+        }
+        let backward = if (key == 44) {
+            vi.find_kind != 70 && vi.find_kind != 84
+        } else {
+            vi.find_kind == 70 || vi.find_kind == 84
+        };
+        let at = match b.find_char(v.cursor, vi.find, backward, vi.find_kind == 116 || vi.find_kind == 84, n) {
+            Some(at) => at,
+            None => {
+                return Err("Character not found");
+            }
+        };
+        apply_motion(b, v, vi, at, true, false, settings)?;
+    } else if (key == 110 || key == 78) {
+        if (vi.search == "") {
+            return Err("No search pattern");
+        }
+        for (_ in 0..n as usize) {
+            let at = match b.find(v.cursor, vi.search, if (key == 78) {
+                !vi.backward
+            } else {
+                vi.backward
+            })? {
+                Some(at) => at,
+                None => {
+                    return Err("Pattern not found");
+                }
+            };
+            v.cursor = at;
+        }
+    } else if (vi.operator != 0) {
+        return Err("Unknown operator motion");
+    } else if (key == 118 || key == 86) {
+        vi.mode = if (vi.mode == 2 && key == 118 || vi.mode == 3 && key == 86) {
+            0
+        } else {
+            if (vi.mode < 2) {
+                vi.anchor = v.cursor;
+            }
+            if (key == 86) {
+                3
+            } else {
+                2
+            }
+        };
+    } else if (key == 73 || key == 65) {
+        begin_insert(b, &*v, vi);
+        v.cursor = if (key == 73) {
+            first(b, row)
+        } else {
+            end
+        };
+    } else if (key == 111 || key == 79) {
+        begin_insert(b, &*v, vi);
+        v.cursor = b.open_line(v.cursor, key == 79, settings.autoindent)?;
+    } else if (key == 120 || key == 88 || key == 115 || key == 330) {
+        if (vi.mode >= 2) {
+            let bounds = selection(b, *v, &*vi);
+            let linewise = vi.mode == 3;
+            vi.operator = if (key == 115) {
+                99
+            } else {
+                100
+            };
+            range(b, v, vi, bounds.start, bounds.end, linewise)?;
+        } else {
+            let at = if (key == 88) {
+                if (v.cursor - start > n as usize) {
+                    v.cursor - n as usize
+                } else {
+                    start
+                }
+            } else {
+                v.cursor
+            };
+            let to = if (key == 88) {
+                v.cursor
+            } else {
+                min(v.cursor + n as usize, end)
+            };
+            vi.operator = if (key == 115) {
+                99
+            } else {
+                100
+            };
+            range(b, v, vi, at, to, false)?;
+        }
+    } else if (key == 68 || key == 67 || key == 83) {
+        vi.operator = if (key == 68) {
+            100
+        } else {
+            99
+        };
+        let at = if (key == 83) {
+            start
+        } else {
+            v.cursor
+        };
+        range(b, v, vi, at, b.endline(min(row + n as usize - 1, b.lines() - 1)), key == 83)?;
+    } else if (key == 112 || key == 80) {
+        paste(b, v, vi, key == 80, n)?;
+    } else if (key == 117 || key == 18) {
+        for (_ in 0..n as usize) {
+            let at = if (key == 117) {
+                b.undo()
+            } else {
+                b.redo()
+            };
+            match at {
+                Some(at) => {
+                    v.cursor = at;
+                },
+                None => {
+                    vi.status = "No more history";
+                    break;
+                }
+            }
+        }
+    } else if (key == 74) {
+        b.begin(v.cursor);
+        for (_ in 0..n as usize) {
+            let row = b.row(v.cursor);
+            if (row + 1 >= b.lines()) {
+                break;
+            }
+            let at = b.endline(row);
+            let next = first(b, row + 1);
+            b.replace(at, next - at, [32 as u8])?;
+            v.cursor = at;
+        }
+        b.end(v.cursor);
+    } else if (key != 0) {
+        vi.status = "Unknown key; F1 for help";
+    }
+    v.goal = b.visual(v.cursor, settings.tabstop);
+    Ok({})
+}
+
+/// Routes a vi keystroke. Dot replays the last completed change, including insert text.
+export fn key(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, rows: usize) {
+    if (key == 46 && vi.mode == 0 && vi.operator == 0 && vi.pending == 0) {
+        if (vi.last.is_empty()) {
+            vi.status = "No change to repeat";
+            return;
+        }
+        let count = if (vi.count > 0) {
+            vi.count
+        } else {
+            1 as u16
+        };
+        vi.count = 0;
+        let keys = vi.last;
+        for (_ in 0..count as usize) {
+            for (i in 0..keys.len()) {
+                match raw(b, v, vi, keys[i], settings, rows) {
+                    Ok(_) => {},
+                    Err(error) => {
+                        vi.status = error;
+                        reset(b, v, vi);
+                        return;
+                    }
+                }
+                clamp(b, v, vi.mode == 1);
+            }
+        }
+        return;
+    }
+    if (vi.record.is_empty()) {
+        vi.revision = b.revision();
+        vi.overflow = false;
+    }
+    if (vi.record.len() < 4096) {
+        vi.record.push(key);
+    } else {
+        vi.overflow = true;
+    }
+    match raw(b, v, vi, key, settings, rows) {
+        Ok(_) => {},
+        Err(error) => {
+            vi.status = error;
+            reset(b, v, vi);
+        }
+    }
+    clamp(b, v, vi.mode == 1);
+    if (vi.mode == 0 && vi.operator == 0 && vi.pending == 0 && vi.count == 0) {
+        if (b.revision() != vi.revision && key != 117 && key != 18) {
+            if (!vi.overflow) {
+                vi.last = vi.record;
+            } else {
+                vi.last.clear();
+                vi.status = "Change saved; too long for dot repeat";
+            }
+        }
+        vi.record.clear();
+    }
+}

@@ -1,0 +1,154 @@
+--- a/Library/libs/curses/charpick.c
++++ b/Library/libs/curses/charpick.c
+@@ -9 +9 @@
+-int winch(WINDOW *win)
++chtype winch(WINDOW *win)
+@@ -11 +11 @@
+-  return((win->_line[win->_cury][win->_curx]) & 0xff);
++  return((win->_line[win->_cury][win->_curx]));
+@@ -19 +19 @@
+-int mvinch(int y, int x)
++chtype mvinch(int y, int x)
+@@ -22 +22 @@
+-  return((stdscr->_line[stdscr->_cury][stdscr->_curx]) & 0xff);
++  return((stdscr->_line[stdscr->_cury][stdscr->_curx]));
+@@ -30 +30 @@
+-int mvwinch(WINDOW *win, int y, int x)
++chtype mvwinch(WINDOW *win, int y, int x)
+@@ -33 +33 @@
+-  return((win->_line[win->_cury][win->_curx]) & 0xff);
++  return((win->_line[win->_cury][win->_curx]));
+--- a/Library/libs/curses/curspriv.h
++++ b/Library/libs/curses/curspriv.h
+@@ -21 +21 @@
+-#define	ATR_MSK	((int) 0xff00)		/* attribute mask */
++#define	ATR_MSK	((chtype) A_ATTRIBUTES)		/* attribute mask */
+--- a/Library/libs/curses/doupdt.c
++++ b/Library/libs/curses/doupdt.c
+@@ -61 +61 @@
+-	putchar(ch);
++	putchar(ch & CHR_MSK);
+--- a/Library/libs/curses/options.c
++++ b/Library/libs/curses/options.c
+@@ -51 +51 @@
+-  win->_nodelay = flag;
++  wtimeout(win, flag ? 0 : -1);
+@@ -58,0 +59 @@
++  win->_keypad = flag;
+--- a/Library/libs/curses/overlay.c
++++ b/Library/libs/curses/overlay.c
+@@ -30,3 +30,3 @@
+-  int *w1ptr;
+-  int *w2ptr;
+-  int attrs;
++  chtype *w1ptr;
++  chtype *w2ptr;
++  chtype attrs;
+@@ -80,3 +80,3 @@
+-  int *w1ptr;
+-  int *w2ptr;
+-  int attrs;
++  chtype *w1ptr;
++  chtype *w2ptr;
++  chtype attrs;
+--- a/Library/libs/curses/refresh.c
++++ b/Library/libs/curses/refresh.c
+@@ -8,0 +9 @@
++  if (isendwin() && reset_prog_mode() == ERR) return;
+--- a/Library/libs/curses/scan.c
++++ b/Library/libs/curses/scan.c
+@@ -18 +18 @@
+-  if (wgetstr(win, __printscanbuf) == ERR)	/* get string */
++  if (wgetnstr(win, __printscanbuf, 512) == ERR)	/* get string */
+@@ -34 +34 @@
+-  if (wgetstr(stdscr, __printscanbuf) == ERR)	/* get string */
++  if (wgetnstr(stdscr, __printscanbuf, 512) == ERR)	/* get string */
+@@ -52 +52 @@
+-  if (wgetstr(stdscr, __printscanbuf) == ERR)	/* get string */
++  if (wgetnstr(stdscr, __printscanbuf, 512) == ERR)	/* get string */
+@@ -70 +70 @@
+-  if (wgetstr(win, __printscanbuf) == ERR)	/* get string */
++  if (wgetnstr(win, __printscanbuf, 512) == ERR)	/* get string */
+--- a/Library/libs/curses/setterm.c
++++ b/Library/libs/curses/setterm.c
+@@ -22,3 +22,2 @@
+-  if (!_cursvar.echoit) {
+-	_tty.c_lflag &= ~(ECHO | ECHONL);
+-  }
++  /* Curses echoes through waddch; kernel echo would duplicate input. */
++  _tty.c_lflag &= ~(ECHO | ECHONL);
+@@ -33,0 +33 @@
++  _cursvar.halfdelay = 0;
+@@ -34,0 +35 @@
++  _cursvar.cbrkmode = FALSE;
+@@ -69,0 +71 @@
++  _cursvar.halfdelay = 0;
+@@ -70,0 +73 @@
++  _cursvar.rawmode = FALSE;
+@@ -82,0 +86,3 @@
++  if (n < 1 || n > 255) return;
++  _cursvar.cbrkmode = TRUE;
++  _cursvar.rawmode = FALSE;
+--- a/Library/libs/curses/waddch.c
++++ b/Library/libs/curses/waddch.c
+@@ -27 +27 @@
+-int waddch(WINDOW *win, int c)
++int waddch(WINDOW *win, chtype c)
+@@ -32 +32 @@
+-  int ch = c;
++  chtype ch = c;
+--- a/Library/libs/curses/wclrtobot.c
++++ b/Library/libs/curses/wclrtobot.c
+@@ -11 +11,2 @@
+-  int y, minx, startx, *ptr, *end, *maxx, blank;
++  int y, minx, startx;
++  chtype *ptr, *end, *maxx, blank;
+--- a/Library/libs/curses/wclrtoeol.c
++++ b/Library/libs/curses/wclrtoeol.c
+@@ -11 +11,2 @@
+-  int *maxx, *ptr, *end, y, x, minx, blank;
++  chtype *maxx, *ptr, *end, blank;
++  int y, x, minx;
+--- a/Library/libs/curses/wdelch.c
++++ b/Library/libs/curses/wdelch.c
+@@ -11,3 +11,3 @@
+-  int *temp1;
+-  int *temp2;
+-  int *end;
++  chtype *temp1;
++  chtype *temp2;
++  chtype *end;
+--- a/Library/libs/curses/wdeleteln.c
++++ b/Library/libs/curses/wdeleteln.c
+@@ -12 +12,2 @@
+-  int *end, *temp, y, blank;
++  chtype *end, *temp, blank;
++  int y;
+--- a/Library/libs/curses/werase.c
++++ b/Library/libs/curses/werase.c
+@@ -11 +11,2 @@
+-  int *end, *start, y, blank;
++  chtype *end, *start, blank;
++  int y;
+--- a/Library/libs/curses/winmove.c
++++ b/Library/libs/curses/winmove.c
+@@ -28 +28,3 @@
+-  if ((begy + win->_maxy) > (LINES - 1) || (begx + win->_maxx) > (COLS - 1))
++  if (!win || begy < 0 || begx < 0 || win->_children ||
++      ((win->_flags & _SUBWIN) && (begy != win->_begy || begx != win->_begx)) ||
++      ((long)begy + win->_maxy) > (LINES - 1) || ((long)begx + win->_maxx) > (COLS - 1))
+--- a/Library/libs/curses/winsch.c
++++ b/Library/libs/curses/winsch.c
+@@ -10,3 +10,3 @@
+-  int *temp1;
+-  int *temp2;
+-  int *end;
++  chtype *temp1;
++  chtype *temp2;
++  chtype *end;
+--- a/Library/libs/curses/winsertln.c
++++ b/Library/libs/curses/winsertln.c
+@@ -11 +11,2 @@
+-  int *temp, *end, y, blank;
++  chtype *temp, *end, blank;
++  int y;

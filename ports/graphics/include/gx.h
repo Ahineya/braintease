@@ -23,6 +23,11 @@
 #define GX_DESTROY 0x4708
 #define GX_TITLE 0x4709
 #define GX_WAIT 0x470a
+#define GX_CONFIGURE 0x470b
+#define GX_CREATE_HIDDEN 0x470c
+#define GX_ACTIVATE 0x470d
+#define GX_WINDOW_FIXED 1
+#define GX_WINDOW_HIDDEN 2
 #define GX_READY_INPUT 1
 #define GX_READY_READ 2
 #define GX_READY_WRITE 4
@@ -48,6 +53,12 @@ struct gx_window {
     char title[64];
 };
 struct gx_handle { uint16_t version; uint32_t handle; };
+/* GX_TITLE shares the handle prefix; the title is a bounded C16 C string. */
+struct gx_title { uint16_t version; uint32_t window; char title[64]; };
+/* Configure client pixels and native resize/visibility policy. Host resize
+ * requests arrive as GX_RESIZE with x/y = requested content width/height;
+ * the owner acknowledges by configuring its accepted dimensions. */
+struct gx_configure { uint16_t version; uint32_t window; uint16_t width, height, flags; };
 /* Atomically wait for this window and an owned PTY master. Timeout is in
  * deciseconds (0 polls); ready returns the requested ready bits. */
 struct gx_wait {

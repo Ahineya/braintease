@@ -1,0 +1,197 @@
+import { Entry } from "lib/ini";
+extern "C" {
+    fn tui_theme_new(name: *const u8, lines: i16) -> *mut u16;
+    fn tui_theme_free(theme: *mut u16);
+    fn tui_theme_define(theme: *mut u16, role: *const u8, fg: i16, bg: i16, flags: u16) -> i16;
+    fn tui_theme_apply(theme: *mut u16, section: *const u8, key: *const u8, value: *const u8) -> i16;
+    fn tui_theme_named(theme: *mut u16, directory: *const u8, name: *const u8) -> i16;
+    fn tui_theme_file(theme: *mut u16, directory: *const u8, path: *const u8, optional: i16) -> i16;
+    fn tui_theme_valid_name(name: *const u8) -> i16;
+    fn tui_theme_error(theme: *mut u16) -> *const u8;
+    fn tui_theme_name(theme: *mut u16) -> *const u8;
+    fn tui_theme_lines(theme: *mut u16) -> i16;
+    fn tui_theme_count(theme: *mut u16) -> u16;
+    fn tui_theme_fg(theme: *mut u16, index: u16) -> i16;
+    fn tui_theme_bg(theme: *mut u16, index: u16) -> i16;
+    fn tui_theme_flags(theme: *mut u16, index: u16) -> u16;
+}
+
+/// One semantic role, independent of a curses color-pair number.
+export struct Role {
+    /// Palette index -1 (default) or 0..255.
+    foreground: i16,
+    /// Palette index -1 (default) or 0..255.
+    background: i16,
+    /// Bold attribute.
+    bold: bool,
+    /// Reverse attribute.
+    reverse: bool,
+    /// Underline attribute.
+    underline: bool
+}
+
+/// A value snapshot of the effective theme. The application defines role order.
+export struct Config {
+    /// Display name.
+    name: String,
+    /// Values in application schema order, at most 63.
+    roles: Vec<Role>,
+    /// DEC line borders when true; ASCII otherwise.
+    lines: bool
+}
+
+/// An owned configuration loader. Dropping it frees its C state.
+export struct Loader {
+    /// Internal ownership; use loader methods rather than changing this field.
+    state: Owned<*mut u16>
+}
+
+fn bytes(value: String) -> Result<Vec<u8>, String> {
+    let mut out: Vec<u8> = [];
+    for (i in 0..value.len()) {
+        if (value[i] == '\0' || value[i] as u32 > 255) {
+            return Err("Invalid non-octet text or NUL");
+        }
+        out.push(value[i] as u8);
+    }
+    out.push(0);
+    Ok(out)
+}
+
+fn text(pointer: *const u8) -> String {
+    let mut value = "";
+    let mut i: usize = 0;
+    while (true) {
+        let byte = unsafe {
+            pointer[i]
+        };
+        if (byte == 0) {
+            return value;
+        }
+        value = value + from_byte(byte);
+        i += 1;
+    }
+    value
+}
+
+fn flags(role: Role) -> u16 {
+    (if (role.bold) {
+        1 as u16
+    } else {
+        0 as u16
+    }) | (if (role.reverse) {
+        2 as u16
+    } else {
+        0 as u16
+    }) | (if (role.underline) {
+        4 as u16
+    } else {
+        0 as u16
+    })
+}
+
+/// Creates a reusable loader from application defaults and matching role names.
+/// Paths, HOME lookup and configuration precedence remain application policy.
+export fn loader(defaults: Config, names: Vec<String>) -> Result<Loader, String> {
+    if (defaults.roles.len() != names.len() || names.len() > 63) {
+        return Err("Invalid theme role schema");
+    }
+    let name = bytes(defaults.name)?;
+    let pointer = unsafe {
+        tui_theme_new(&name[0], if (defaults.lines) {
+            1
+        } else {
+            0
+        })
+    };
+    if (pointer.is_null()) {
+        return Err("Cannot allocate theme or name too long");
+    }
+    let guard = owned(pointer, fn(value: &mut *mut u16) => {
+        tui_theme_free(*value);
+    });
+    for (i in 0..names.len()) {
+        let role = defaults.roles[i];
+        let name = bytes(names[i])?;
+        let result = unsafe {
+            tui_theme_define(pointer, &name[0], role.foreground, role.background, flags(role))
+        };
+        if (result < 0) {
+            return Err(text(tui_theme_error(pointer)));
+        }
+    }
+    Ok(Loader { state: move(guard) })
+}
+
+/// Checks a safe named-theme identifier (1..24 ASCII letters/digits/-/_).
+export fn valid_name(name: String) -> bool {
+    match bytes(name) {
+        Ok(value) => unsafe {
+            tui_theme_valid_name(&value[0]) != 0
+        },
+        Err(_) => false
+    }
+}
+
+impl Loader {
+    /// Loads a named theme and its base chain from directory/name.ini, resetting
+    /// to defaults first. On any error the previous theme remains intact.
+    export fn named(&self, directory: String, name: String) -> Result<unit, String> {
+        let directory = bytes(directory)?;
+        let name = bytes(name)?;
+        let p = self.state.borrow();
+        let result = unsafe {
+            tui_theme_named(*p, &directory[0], &name[0])
+        };
+        if (result < 0) {
+            Err(text(tui_theme_error(*p)))
+        } else {
+            Ok({})
+        }
+    }
+    /// Applies a configuration layer. A base resets to a named theme; no base
+    /// preserves preceding layers. Optional missing files are ignored. Atomic.
+    export fn file(&self, directory: String, path: String, optional: bool) -> Result<unit, String> {
+        let directory = bytes(directory)?;
+        let name = bytes(path)?;
+        let p = self.state.borrow();
+        let result = unsafe {
+            tui_theme_file(*p, &directory[0], &name[0], if (optional) {
+                1
+            } else {
+                0
+            })
+        };
+        if (result < 0) {
+            Err(path + ": " + text(tui_theme_error(*p)))
+        } else {
+            Ok({})
+        }
+    }
+    /// Applies an already parsed assignment. `base` is interpreted by file(),
+    /// not here; other keys and colors are strictly validated.
+    export fn assignment(&self, entry: Entry) -> Result<unit, String> {
+        let section = bytes(entry.section)?;
+        let key = bytes(entry.key)?;
+        let value = bytes(entry.value)?;
+        let p = self.state.borrow();
+        let result = unsafe {
+            tui_theme_apply(*p, &section[0], &key[0], &value[0])
+        };
+        if (result < 0) {
+            Err(text(tui_theme_error(*p)))
+        } else {
+            Ok({})
+        }
+    }
+    /// Copies the effective values into an independent RFL snapshot.
+    export fn config(&self) -> Config {
+        let p = self.state.borrow();
+        let mut roles: Vec<Role> = [];
+        for (i in 0..tui_theme_count(*p) as usize) {
+            let flags = tui_theme_flags(*p, i as u16);
+            roles.push(Role { foreground: tui_theme_fg(*p, i as u16), background: tui_theme_bg(*p, i as u16), bold: (flags & 1) != 0, reverse: (flags & 2) != 0, underline: (flags & 4) != 0 });
+        }
+        Config { name: text(tui_theme_name(*p)), roles: roles, lines: tui_theme_lines(*p) != 0 }
+    }
+}

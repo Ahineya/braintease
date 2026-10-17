@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include "host.h"
 #include "hostfs.h"
+#include "graphics.h"
 #include <kdata.h>
 #include <string.h>
 #include <native_hosted.h>
@@ -72,7 +73,7 @@ arg_t _execve(void) {
             if (ino->c_node.i_size == strlen(programs[i].manifest) && !strcmp(manifest,programs[i].manifest)) program=i;
         if (program==65535U) { udata.u_error=ENOEXEC; goto bad; }
     } else {
-        if (ino->c_node.i_size>8388608UL) {udata.u_error=ENOEXEC;goto bad;}
+        if (ino->c_node.i_size>67108864UL) {udata.u_error=ENOEXEC;goto bad;}
         /* A Bourne shell retries ordinary executable text as a script after
          * ENOEXEC. Reject it quietly before invoking the native loader. */
         udata.u_offset=0;udata.u_base=(void *)manifest;
@@ -103,6 +104,7 @@ arg_t _execve(void) {
     argv=(char **)wargs((void *)PROGTOP,args,&argc);
     envp=(char **)wargs((void *)argv,env,NULL);
     tmpfree(env); tmpfree(args);
+    ripple_gfx_exit(udata.u_ptab);
     for (i=0;i<UFTSIZE;i++) if (udata.u_cloexec & (1U<<i)) doclose(i);
     udata.u_cloexec=0;
     for (i=0;i<sizeof(udata.u_sigvec)/sizeof(udata.u_sigvec[0]);i++)

@@ -89,6 +89,14 @@ impl<'a> Checker<'a> {
                 }
                 let Some(id) = self.resolve(name) else {
                     if let Some((ty, value)) = self.consts.get(name).copied() {
+                        if let Some(def) = self.const_defs.get(name).copied() {
+                            self.uses.push(NameUse {
+                                span: expr.span,
+                                def,
+                                def_file: None,
+                                ty: self.show(ty),
+                            });
+                        }
                         if let Some(want) = expected {
                             if want != ty {
                                 return Err(CompileError::at(
@@ -284,7 +292,9 @@ impl<'a> Checker<'a> {
             ExprKind::StructLit { name, fields } => {
                 self.check_struct_lit(span, name, fields, expected)
             }
-            ExprKind::Field { base, name, .. } => self.check_field(span, base, name, expected),
+            ExprKind::Field {
+                base, name, name_span,
+            } => self.check_field(span, base, name, *name_span, expected),
             ExprKind::Range { .. } => Err(CompileError::at(
                 self.source,
                 span,

@@ -4,15 +4,21 @@ import { Future, Poll, Pending, Ready } from "std/future";
 // turn pumps bounded external work even with runnable tasks. Some(0) forbids
 // sleeping; other hints bound idle waiting. None still requires servicing I/O.
 // false requests orderly stop. now is wrapping, monotonic milliseconds.
+/// Supplies wrapping monotonic milliseconds and bounded I/O service/idle turns to an executor.
 export trait Reactor {
+    /// Returns wrapping monotonic milliseconds. Forward samples must stay within the half-range window.
     fn now(&self) -> u32;
+    /// Services bounded external work and optionally idles. `Some(0)` forbids sleeping; other hints bound waiting, and `None` still requires I/O service. Return false to stop.
     fn turn(&mut self, wait:Option<u32>) -> bool;
 }
+/// Executor failure: reactor stopped, turn budget exhausted, invalid clock sample, or unavailable task capacity.
 export type RunError = ReactorStopped | TurnBudgetExceeded | InvalidClock | TaskCapacity;
 
+/// Drives a borrowed future until completion, servicing the reactor between polls. Executor failure cancels the future and returns `RunError`.
 export fn block_on<F:Future, R:Reactor>(future:&mut F, reactor:&mut R) -> Result<F::Output, RunError> {
     drive(future, reactor, None)
 }
+/// Drives a future for at most `turns` reactor turns. Exhaustion cancels it and returns `TurnBudgetExceeded`.
 export fn block_on_with_budget<F:Future, R:Reactor>(future:&mut F, reactor:&mut R, turns:u32) -> Result<F::Output, RunError> {
     drive(future, reactor, Some(turns))
 }
@@ -41,6 +47,7 @@ fn drive<F:Future, R:Reactor>(future:&mut F, reactor:&mut R, limit:Option<u32>) 
 
 // Two independently scheduled roots; no type erasure, public trait objects,
 // suspended references, or requirement that their output types match.
+/// Drives two independently scheduled borrowed futures with alternating poll order. Returns both outputs, or cancels unfinished children on failure or budget exhaustion.
 export fn join_with_budget<A:Future, B:Future, R:Reactor>(left:&mut A, right:&mut B, reactor:&mut R, turns:u32) -> Result<(A::Output, B::Output), RunError> {
     let queue=match task_set(2, reactor.now()) { Ok(q)=>q, Err(_)=>{ left.cancel(); right.cancel(); return Err(TaskCapacity); } };
     let a=match queue.allocate() { Ok(w)=>w, Err(_)=>{ left.cancel(); right.cancel(); return Err(TaskCapacity); } };

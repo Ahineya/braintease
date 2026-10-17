@@ -1,7 +1,9 @@
+import {Image} from './image.mjs';
 // Locate an existing FAT16 root file without changing its allocation.
-export function fatFile(image, name) {
+export function fatFile(input, name) {
+  const image = Image.from(input);
   if (image.length < 512 || image.readUInt16LE(510) !== 0xaa55) throw Error('invalid FAT16 image');
-  const bps = image.readUInt16LE(11), spc = image[13], nf = image[16],
+  const bps = image.readUInt16LE(11), spc = image.readUInt8(13), nf = image.readUInt8(16),
         reserved = image.readUInt16LE(14), rootEntries = image.readUInt16LE(17),
         fatBytes = image.readUInt16LE(22) * bps;
   if (![512, 1024, 2048, 4096].includes(bps) || !spc || !nf || !fatBytes)
@@ -18,8 +20,8 @@ export function fatFile(image, name) {
   let found;
   for (let i = 0; i < rootEntries; i++) {
     const off = root + i * 32;
-    if (!image[off]) break;
-    if (image[off] === 0xe5 || image[off + 11] & 0x18) continue;
+    if (!image.readUInt8(off)) break;
+    if (image.readUInt8(off) === 0xe5 || image.readUInt8(off + 11) & 0x18) continue;
     if (image.toString('ascii', off, off + 11) === canonical) {
       if (found !== undefined) throw Error('duplicate FAT filename');
       found = off;
@@ -38,14 +40,37 @@ export function fatFile(image, name) {
     c = image.readUInt16LE(fat + c * 2);
   }
   if (size && c < 0xfff8) throw Error('FAT chain longer than file');
-  const contents = Buffer.alloc(size);
-  for (const {at, off, len} of regions) image.copy(contents, off, at, at + len);
+  const contents = new Image(size, {read(at, n) {
+    const buffer = Buffer.alloc(n);
+    let done = 0;
+    while (done < n && at + done < size) {
+      const region = regions[Math.floor((at + done) / clusterBytes)];
+      const within = at + done - region.off, take = Math.min(n - done, region.len - within);
+      image.subarray(region.at + within, region.at + within + take).copy(buffer, done);
+      done += take;
+    }
+    return buffer;
+  }});
   return {
     data: contents,
     replace(replacement) {
+      replacement = Image.from(replacement);
       if (replacement.length !== size) throw Error('cannot resize preallocated FAT file');
-      const result = Buffer.from(image);
-      for (const {at, off, len} of regions) replacement.copy(result, at, off, off + len);
+      if (replacement === contents && !contents.pages.size) return image;
+      const result = image.fork();
+      function transfer(off, buffer) {
+        let done = 0;
+        while (done < buffer.length && off + done < size) {
+          const region = regions[Math.floor((off + done) / clusterBytes)];
+          const within = off + done - region.off, n = Math.min(buffer.length - done, region.len - within);
+          result.set(buffer.subarray(done, done + n), region.at + within); done += n;
+        }
+      }
+      if (replacement.source === contents.source) {
+        for (const [index, page] of replacement.pages) transfer(index * 2048, page);
+      } else {
+        for (let at = 0; at < size; at += 65536) transfer(at, replacement.subarray(at, Math.min(size, at + 65536)));
+      }
       return result;
     }
   };

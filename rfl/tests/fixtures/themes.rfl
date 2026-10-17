@@ -1,0 +1,99 @@
+import { parse, InvalidSyntax } from "lib/ini";
+import { Config } from "lib/tui_theme";
+import { classic, entries, apply, named, configured, valid_name } from "../../apps/commander/theme_config";
+import { IoError, create, create_dir, remove_file, environment, exit } from "std/posix";
+
+fn ensure(value: bool, code: i16) {
+    if (!value) {
+        println("RFL_THEME_FAILED");
+        println(code);
+        exit(code);
+    }
+}
+
+fn config(result: Result<Config, String>) -> Config {
+    match result {
+        Ok(value) => value,
+        Err(error) => {
+            println(error);
+            ensure(false, 80);
+            classic()
+        },
+    }
+}
+
+fn write(path: String, text: String) -> Result<unit, IoError> {
+    let file = create(path)?;
+    file.write_text(text)?;
+    move(file).close()
+}
+
+export fn theme_checks() -> Result<unit, IoError> {
+    match parse("; comment\r\n[theme]\r\nname = \"My Theme\"\r\nname=Later\n") {
+        Ok(values) => {
+            ensure(values.len() == 2 && values[0].section == "theme" && values[0].value == "My Theme" && values[1].value == "Later", 81);
+        },
+        Err(_) => ensure(false, 82),
+    }
+    match parse("[theme]\nmissing equals\n") {
+        Err(InvalidSyntax(line)) => ensure(line == 2, 83),
+        _ => ensure(false, 84)
+    }
+    match parse("x=bad\0value") {
+        Err(InvalidSyntax(_)) => {},
+        _ => ensure(false, 85)
+    }
+    ensure(!valid_name("../escape") && valid_name("my-theme_2"), 86);
+    let base = config(named("classic"));
+    ensure(base.roles[0].background == 4 && base.roles[3].background == 6, 87);
+    let graphite = config(named("graphite"));
+    ensure(graphite.roles[0].background == 0 && graphite.roles[3].background == 7 && graphite.roles[6].background == 1, 88);
+    let mono = config(named("mono"));
+    ensure(!mono.lines && mono.roles[3].reverse && mono.roles[0].foreground == -1, 89);
+    let values = match entries("[colors]\nselected=black, white\nselected=yellow, blue, bold\n") {
+        Ok(values) => values,
+        Err(_) => {
+            ensure(false, 90);
+            []
+        }
+    };
+    let changed = config(apply(base, values));
+    ensure(changed.roles[3].foreground == 3 && changed.roles[3].background == 4 && changed.roles[3].bold, 91);
+    ensure(base.roles[3].background == 6, 92);
+    let values = match entries("[colors]\ntext=256, blue\n") {
+        Ok(values) => values,
+        Err(_) => []
+    };
+    match apply(base, values) {
+        Err(_) => {},
+        Ok(_) => ensure(false, 93)
+    }
+    match named("missing-theme") {
+        Err(_) => {},
+        Ok(_) => ensure(false, 94)
+    }
+    write("/usr/share/mc/themes/cycle-a.ini", "[theme]\nbase=cycle-b\n")?;
+    write("/usr/share/mc/themes/cycle-b.ini", "[theme]\nbase=cycle-a\n")?;
+    match named("cycle-a") {
+        Err(_) => {},
+        Ok(_) => ensure(false, 95)
+    }
+    remove_file("/usr/share/mc/themes/cycle-a.ini")?;
+    remove_file("/usr/share/mc/themes/cycle-b.ini")?;
+    let home = match environment("HOME")? {
+        Some(home) => home,
+        None => "/"
+    };
+    create_dir(home + "/.config")?;
+    create_dir(home + "/.config/mc")?;
+    let path = home + "/.config/mc/config.ini";
+    write(path, "[theme]\nbase=graphite\nname=User Theme\n[colors]\nselected=yellow, magenta\n")?;
+    let user = config(configured());
+    ensure(user.name == "User Theme" && user.roles[0].background == 0 && user.roles[3].background == 5, 96);
+    write(path, "[colors]\nselected=white, red\n")?;
+    let user = config(configured());
+    ensure(user.roles[0].background == 4 && user.roles[3].background == 1, 97);
+    remove_file(path)?;
+    println("RFL_THEMES_OK");
+    Ok({})
+}

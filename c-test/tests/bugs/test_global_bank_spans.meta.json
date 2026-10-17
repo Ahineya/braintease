@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYY\n",
+  "use_runtime": true,
+  "description": "Global arrays, wide data and static pointers span data banks without overlapping stack or heap"
+}

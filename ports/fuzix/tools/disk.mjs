@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Ripple FUZIX C16 V2 uses 2,048 physical octets per filesystem block.
+// Ripple FUZIX C16 V3 uses 2,048 physical octets per filesystem block.
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -7,182 +7,44 @@ import {fatFile} from './fat.mjs';
 import {installRoot, growRoot} from './install.mjs';
 import {manualFiles} from './manuals.mjs';
 import {sokobanFiles} from './sokoban.mjs';
+import {commanderFiles, riftFiles} from '../../../rfl/os/files.mjs';
+import {lynxFiles} from '../../lynx/files.mjs';
 import {
   fat16Image,
   updateFat16Image
 } from '../../../c-test/examples/rOS/mkfat16.mjs';
-import {BLOCK, CELLS, INODES_PER_BLOCK, MAGIC, SIGNATURE, inodeBase, DISK_GEOMETRY} from './layout.mjs';
-export function rootImage(files, blocks = 65535, inodeCount = 1024) {
-  // The bootstrap builder fills its five fixed directories directly. Let the
-  // normal installer create deeper trees instead of flattening them into /bin.
-  const fixed = ['/', '/bin', '/dev', '/etc', '/tmp'];
-  const nested = files.filter(f => f.directory ? !fixed.includes(f.name) :
-                                    !fixed.slice(0, 4).includes(path.dirname(f.name)));
-  files = files.filter(f => !nested.includes(f));
-  if (inodeCount < 16 || inodeCount % INODES_PER_BLOCK || inodeCount > 4096)
+import {BLOCK, CELLS, INODES_PER_BLOCK, MAGIC, SIGNATURE, SB, ROOT_BLOCKS, inodeBase, DISK_GEOMETRY, layout} from './layout.mjs';
+import {Image, openImage, writeImage} from './image.mjs';
+import {checkRoot} from './fsck.mjs';
+export function rootImage(files, blocks = ROOT_BLOCKS, inodeCount = 1024) {
+  if (!Number.isInteger(inodeCount) || inodeCount < 16 || inodeCount % INODES_PER_BLOCK || inodeCount > 65520)
     throw Error('invalid inode count');
-  if (blocks <= 2 + inodeCount / INODES_PER_BLOCK || blocks > 65535)
-    throw Error('invalid root size');
-  const image = Buffer.alloc(blocks * BLOCK), isize = 2 + inodeCount / INODES_PER_BLOCK;
-  let nextBlock = isize, nextInode = 1;
-  const nodes = [];
-  const word = (cell, v) => image.writeUInt16LE(v & 65535, cell * 2);
-  const wide = (cell, v) => {
-    word(cell, v);
-    word(cell + 1, v >>> 16);
-  };
-  function alloc() {
-    if (nextBlock >= blocks)
-      throw Error('root image full');
-    return nextBlock++;
+  const isize = 2 + inodeCount / INODES_PER_BLOCK;
+  if (!Number.isInteger(blocks) || blocks <= isize + 8 || blocks * BLOCK > 0xffffffff) throw Error('invalid root size');
+  const image = new Image(blocks * BLOCK), put = (p, v) => image.writeUInt16LE(v, p * 2);
+  image.write(SIGNATURE, 0, 'ascii'); put(CELLS, MAGIC); put(CELLS + SB.isize, isize);
+  image.writeUInt32LE(blocks, (CELLS + SB.blocks) * 2);
+  image.writeUInt32LE(1792108800, (CELLS + SB.time) * 2);
+  put(inodeBase(0), 0o100000); put(inodeBase(0) + 1, 1);
+  put(inodeBase(1), 0o40755); put(inodeBase(1) + 1, 2);
+  image.writeUInt32LE(64, (inodeBase(1) + 4) * 2);
+  image.writeUInt32LE(isize, (inodeBase(1) + 12) * 2);
+  for (const [at, name] of [[isize * CELLS, '.'], [isize * CELLS + 32, '..']]) {
+    put(at, 1); for (let j = 0; j < name.length; j++) put(at + 1 + j, 46);
   }
-  function inode(mode, data, links = 1, device = 0) {
-    const ino = nextInode++;
-    if (ino >= inodeCount)
-      throw Error('too many seed files');
-    const base = inodeBase(ino);
-    word(base, mode);
-    word(base + 1, links);
-    wide(base + 4, data.length);
-    const node = {ino, base, data, mode};
-    nodes.push(node);
-    if (mode & 0x2000) {
-      word(base + 12, device);
-      return node;
-    }
-    const list = [];
-    for (let start = 0; start < data.length; start += CELLS) {
-      const b = alloc();
-      list.push(b);
-      for (let j = 0; j < Math.min(CELLS, data.length - start); j++)
-        word(b * CELLS + j, data[start + j]);
-    }
-    for (let i = 0; i < Math.min(18, list.length); i++)
-      word(base + 12 + i, list[i]);
-    if (list.length > 18) {
-      const b = alloc();
-      word(base + 30, b);
-      for (let i = 18; i < Math.min((18 + CELLS), list.length); i++)
-        word(b * CELLS + i - 18, list[i]);
-    }
-    if (list.length > (18 + CELLS)) {
-      const root = alloc();
-      word(base + 31, root);
-      for (let i = (18 + CELLS); i < list.length; i += CELLS) {
-        const b = alloc();
-        word(root * CELLS + Math.floor((i - (18 + CELLS)) / CELLS), b);
-        for (let j = i; j < Math.min(i + CELLS, list.length); j++)
-          word(b * CELLS + j - i, list[j]);
-      }
-    }
-    return node;
-  }
-  // Allocate directories after numbering nodes: directory contents need inode
-  // IDs.
-  function directory(entries) {
-    const out = [];
-    for (const [name, ino] of entries) {
-      if (name.length > 30)
-        throw Error('name too long');
-      out.push(ino,
-               ...Array.from({length : 30}, (_, i) => name.charCodeAt(i) || 0),
-               0);
-    }
-    return out;
-  }
-  // Root inode #1, /bin #2, /dev #3. Fill their data later.
-  const root = inode(0o40755, [], 6), bin = inode(0o40755, [], 2),
-        dev = inode(0o40755, [], 2);
-  const tty = inode(0o20666, [], 1, 0x201);
-  const etc = inode(0o40755, [], 2), tmp = inode(0o41777, [], 2);
-  const entries =
-            [
-              [ '.', 1 ], [ '..', 1 ], [ 'bin', 2 ], [ 'dev', 3 ],
-              [ 'etc', etc.ino ], [ 'tmp', tmp.ino ]
-            ],
-        binaries = [ [ '.', 2 ], [ '..', 1 ] ],
-        config = [ [ '.', etc.ino ], [ '..', 1 ] ],
-        devices = [ [ '.', 3 ], [ '..', 1 ], [ 'tty1', tty.ino ] ];
-  const named = new Map();
-  for (const f of files) {
-    if (f.directory)
-      continue;
-    let node;
-    if (f.link) {
-      node = named.get(f.link);
-      if (!node) throw Error(`missing seed link target: ${f.link}`);
-      word(node.base + 1, image.readUInt16LE((node.base + 1) * 2) + 1);
-    } else node = inode(f.mode ?? 0o100755, Array.from(f.data), 1, f.device ?? 0);
-    named.set(f.name, node);
-    if (path.dirname(f.name) === '/')
-      entries.push([ path.basename(f.name), node.ino ]);
-    else if (path.dirname(f.name) === '/dev')
-      devices.push([ path.basename(f.name), node.ino ]);
-    else if (path.dirname(f.name) === '/etc')
-      config.push([ path.basename(f.name), node.ino ]);
-    else
-      binaries.push([ path.basename(f.name), node.ino ]);
-  }
-  const text =
-      'Welcome to FUZIX on Ripple.\nFiles created here survive normal launches and kernel rebuilds.\nUse shutdown to flush the filesystem before stopping.\n';
-  const readme = inode(0o100644, Array.from(text, c => c.charCodeAt(0)));
-  entries.push([ 'README', readme.ino ]);
-  for (const [node, items] of [
-           [ root, entries ], [ bin, binaries ], [ etc, config ],
-           [ tmp, [ [ '.', tmp.ino ], [ '..', 1 ] ] ], [ dev, devices ]]) {
-    const data = directory(items);
-    if (data.length > 18 * CELLS)
-      throw Error('seed directory too large');
-    wide(node.base + 4, data.length);
-    for (let off = 0; off < data.length; off += CELLS) {
-      const block = alloc();
-      word(node.base + 12 + off / CELLS, block);
-      data.slice(off, off + CELLS)
-          .forEach((v, i) => word(block * CELLS + i, v));
-    }
-  }
-  // Inode zero is reserved so the kernel's free-inode scan cannot allocate it.
-  word(2 * CELLS, 0o100000);
-  word(2 * CELLS + 1, 1);
-  let free = [ 0 ], tfree = 0;
-  for (let b = blocks - 1; b >= nextBlock; b--) {
-    if (free.length === 50) {
-      word(b * CELLS, 50);
-      free.forEach((v, i) => word(b * CELLS + i + 1, v));
-      free = [];
-    }
-    free.push(b);
-    tfree++;
-  }
-  const base = CELLS;
-  word(base, MAGIC);
-  word(base + 1, isize);
-  word(base + 2, blocks);
-  word(base + 3, free.length);
-  free.forEach((v, i) => word(base + 4 + i, v));
-  const unused = inodeCount - nextInode;
-  word(base + 54, Math.min(50, unused));
-  for (let i = 0; i < Math.min(50, unused); i++)
-    word(base + 55 + i, nextInode + i);
-  word(base + 105, 2);
-  wide(base + 107, 1792108800);
-  word(base + 109, tfree);
-  word(base + 110, unused);
-  word(base + 111, 0);
-  // Signature distinguishes this ABI from conventional eight-bit FUZIX images.
-  image.write(SIGNATURE, 0, 'ascii');
-  return nested.length ? installRoot(image, nested) : image;
+  const clean = checkRoot(image, true).image;
+  return installRoot(clean, [
+    ...['/bin', '/dev', '/etc', '/tmp'].map(name => ({name, directory: true, mode: name === '/tmp' ? 0o41777 : 0o40755})),
+    {name: '/dev/tty1', mode: 0o20666, device: 0x201},
+    ...files,
+    {name: '/README', mode: 0o100644, data: Buffer.from('Welcome to FUZIX on Ripple.\nFiles created here survive normal launches and kernel rebuilds.\nUse shutdown to flush the filesystem before stopping.\n')}
+  ]);
 }
 export function atomicWrite(filename, data) {
   fs.mkdirSync(path.dirname(filename), {recursive : true});
   const temporary = `${filename}.tmp-${process.pid}`;
-  let fd;
   try {
-    fd = fs.openSync(temporary, 'wx', 0o600);
-    fs.writeFileSync(fd, data);
-    fs.fsyncSync(fd);
-    fs.closeSync(fd);
-    fd = undefined;
+    writeImage(temporary, data, true);
     fs.renameSync(temporary, filename);
     const dir = fs.openSync(path.dirname(filename), 'r');
     try {
@@ -191,8 +53,6 @@ export function atomicWrite(filename, data) {
       fs.closeSync(dir);
     }
   } finally {
-    if (fd !== undefined)
-      fs.closeSync(fd);
     if (fs.existsSync(temporary))
       fs.unlinkSync(temporary);
   }
@@ -204,7 +64,7 @@ export function seedNames(build) {
              : [ 'init', 'hello', 'forkcheck', 'preemptcheck', 'iotest' ];
 }
 export function buildDisk(build, filename, fresh = false, install = false) {
-  const aliases = {vi: '/bin/levee', mv: '/bin/cp', ln: '/bin/cp',
+  const aliases = {vi: '/bin/levee', mc: '/bin/rfl-fm', mv: '/bin/cp', ln: '/bin/cp',
                    tcl: '/bin/picol', tclsh: '/bin/picol', sokoban: '/bin/sok'};
   // Switch aliases immediately after their target. This releases an older
   // shared executable before allocating the next large program during upgrades.
@@ -267,6 +127,8 @@ export function buildDisk(build, filename, fresh = false, install = false) {
        },
        {name: '/etc/resolv.conf', mode: 0o100644, preserve: true,
         data: Buffer.from('nameserver 1.1.1.1\nnameserver 8.8.8.8\n')},
+       {name: '/etc/nxlaunch.cnf', mode: 0o100644, preserve: true,
+        data: Buffer.from('Terminal - /bin/nxterm\nEditor - /bin/nxterm /bin/vi\nProcesses - /bin/nxterm /bin/top\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nRoaches - /bin/nxroach\n')},
        {name: '/etc/hosts', mode: 0o100644, preserve: true,
         data: Buffer.from('192.168.64.250 ripple fuzix\n')},
        {
@@ -281,6 +143,8 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          name: `/usr/lib/${name}`, mode: 0o100644, preserve: true,
          data: fs.readFileSync(fileURLToPath(new URL(`../upstream/Applications/MWC/cmd/${name}`, import.meta.url)))
        })),
+       ...commanderFiles(), ...riftFiles(),
+       ...(installedNames.includes('lynx') ? lynxFiles() : []),
        ...sokobanFiles(),
        ...manualFiles()];
   const kernel = {
@@ -289,25 +153,24 @@ export function buildDisk(build, filename, fresh = false, install = false) {
   };
   let disk;
   if (fs.existsSync(filename) && !fresh) {
-    const old = fs.readFileSync(filename);
+    const old = openImage(filename);
     const root = fatFile(old, 'ROOTFS.IMG').data;
-    if (root.toString('ascii', 0, 19) !== SIGNATURE)
-      throw Error(
-          'existing disk has incompatible root ABI; use a different disk or --fresh');
+    const format = layout(root);
+    if (format.version !== 3 && !install) throw Error('C16 V2 disk needs an install/upgrade before booting the V3 kernel');
     if (install) {
       const updated = installRoot(growRoot(root), seedFiles());
-      if (updated.length !== root.length) {
+      if (updated.length !== root.length || format.version !== 3) {
         // The original bootstrap disk was too small for Unix userspace. Keep
         // inode identities and file contents while expanding the native root.
         // Refuse unexpected outer layouts rather than dropping their entries.
         const bps = old.readUInt16LE(11),
               start =
-                  (old.readUInt16LE(14) + old[16] * old.readUInt16LE(22)) * bps;
+                  (old.readUInt16LE(14) + old.readUInt8(16) * old.readUInt16LE(22)) * bps;
         for (let i = 0; i < old.readUInt16LE(17); i++) {
           const at = start + i * 32;
-          if (!old[at])
+          if (!old.readUInt8(at))
             break;
-          if (old[at] === 0xe5 || old[at + 11] & 8)
+          if (old.readUInt8(at) === 0xe5 || old.readUInt8(at + 11) & 8)
             continue;
           const name = old.toString('ascii', at, at + 11);
           if (!['FUZIX   SYS', 'ROOTFS  IMG'].includes(name))
@@ -315,7 +178,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
                 'cannot expand a disk with additional outer FAT entries; use a new default image');
         }
         disk = fat16Image([ kernel, {name : 'ROOTFS.IMG', data : updated} ],
-                          DISK_GEOMETRY);
+                          {...DISK_GEOMETRY, imageFactory: size => new Image(size)});
       } else
         disk = updateFat16Image(fatFile(old, 'ROOTFS.IMG').replace(updated),
                                 [ kernel ]);
@@ -326,17 +189,17 @@ export function buildDisk(build, filename, fresh = false, install = false) {
     let backup = `${filename}.bak`, i = 1;
     while (fs.existsSync(backup))
       backup = `${filename}.bak.${i++}`;
-    fs.copyFileSync(filename, backup, fs.constants.COPYFILE_EXCL);
+    writeImage(backup, old, true);
   } else {
     const files = seedFiles();
     disk =
         fat16Image([ kernel, {name : 'ROOTFS.IMG', data : rootImage(files)} ],
-                   DISK_GEOMETRY);
+                   {...DISK_GEOMETRY, imageFactory: size => new Image(size)});
     if (fs.existsSync(filename)) {
       let backup = `${filename}.bak`, i = 1;
       while (fs.existsSync(backup))
         backup = `${filename}.bak.${i++}`;
-      fs.copyFileSync(filename, backup, fs.constants.COPYFILE_EXCL);
+      writeImage(backup, openImage(filename), true);
     }
   }
   atomicWrite(filename, disk);

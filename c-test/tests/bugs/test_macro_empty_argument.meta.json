@@ -1,0 +1,5 @@
+{
+  "expected": "Y\n",
+  "description": "One-parameter macros accept an empty argument as used by Lynx ATTR_TYPE()",
+  "use_runtime": true
+}

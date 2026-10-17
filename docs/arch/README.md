@@ -13,6 +13,7 @@ This folder is the **current** architectural specification for the Ripple VM, as
 | [mmio.md](mmio.md) | MMIO header summary; full device spec in `rvm/mmio.md` |
 | [stacks-and-interrupts.md](stacks-and-interrupts.md) | Growing C stacks, CPU trap state, timer, IRET |
 | [mmu.md](mmu.md) | Optional translation, user mode, faults, page tables and COW |
+| [c16-filesystem.md](c16-filesystem.md) | FUZIX/Fuse-X V3 disk format, sparse tools and upgrades |
 | [ros.md](ros.md) | rOS boot, SYS1/RXE1, banks, INT21, runtime split |
 
 Related (not duplicated here):

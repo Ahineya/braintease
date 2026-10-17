@@ -5,6 +5,7 @@
 #include <tty.h>
 #include <native_hosted.h>
 #include "pty.h"
+#include "graphics.h"
 
 static HostFile *disk;
 static unsigned writable;
@@ -12,9 +13,6 @@ static unsigned long disk_size;
 static unsigned char octets[2 * BLKSIZE];
 static uint8_t ttybuf[256];
 static unsigned input_eof;
-/* Shared PTYs also notify the Ripple graphics event waiter. The hosted
- * headless platform currently has no graphics waiter to wake. */
-void ripple_gfx_wakeup(void) {}
 extern int fuse_system_open(uint_fast8_t,uint16_t);
 extern int fuse_system_read(uint_fast8_t,uint_fast8_t,uint_fast8_t);
 extern int fuse_system_write(uint_fast8_t,uint_fast8_t,uint_fast8_t);
@@ -23,7 +21,8 @@ struct s_queue ttyinq[NUM_DEV_TTY + 1];
 tcflag_t termios_mask[NUM_DEV_TTY + 1] = {0, 65535U};
 
 void fuse_disk_open(const char *path, unsigned write) {
-    const char *signature = "RIPPLE-FUZIX-C16-V2";
+    if (sizeof(struct dinode) != 64 || sizeof(struct filesys) != 164) panic("Fuse-X: C16 V3 layout mismatch");
+    const char *signature = "RIPPLE-FUZIX-C16-V3";
     unsigned i;
     if(rcc_hosted_lock_image(path,write)) panic("Fuse-X: cannot open root image or image is already in use");
     disk = fopen(path, write ? "r+b" : "rb");
@@ -31,12 +30,12 @@ void fuse_disk_open(const char *path, unsigned write) {
     writable = write;
     if (fseek(disk, 0L, 2) || (long)(disk_size = ftell(disk)) < 0 ||
         disk_size < 8UL * BLKSIZE || disk_size % (2UL * BLKSIZE) ||
-        disk_size / (2UL * BLKSIZE) > 65535UL)
+        disk_size / (2UL * BLKSIZE) > 2097151UL)
         panic("Fuse-X: invalid root image size");
     if (fseek(disk, 0L, 0) || fread(octets, 1, 19, disk) != 19)
         panic("Fuse-X: root image header read failed");
     for (i = 0; i < 19; i++)
-        if (octets[i] != signature[i]) panic("Fuse-X: expected a raw C16 V2 root image");
+        if (octets[i] != signature[i]) panic("Fuse-X: expected a raw C16 V3 root image");
 }
 void fuse_disk_close(void) {
     if (fflush(disk) || fclose(disk)) panic("Fuse-X: root image close failed");
@@ -84,7 +83,7 @@ void tty_putc(uint_fast8_t minor, uint_fast8_t c) {
 void tty_setup(uint_fast8_t minor, uint_fast8_t flags) { used(minor); used(flags); }
 int tty_carrier(uint_fast8_t minor) { return minor == 1 || ripple_pty_carrier(minor); }
 void tty_sleeping(uint_fast8_t minor) { used(minor); }
-void tty_data_consumed(uint_fast8_t minor) { used(minor); }
+void tty_data_consumed(uint_fast8_t m) { if(m>1){ripple_gfx_wakeup();selwake_dev(3,m-2,SELECT_OUT);} }
 ttyready_t tty_writeready(uint_fast8_t minor) {
     return minor == 1 || ripple_pty_ready(minor) ? TTY_READY_NOW : TTY_READY_LATER;
 }
@@ -99,6 +98,9 @@ void fuse_poll_input(void) {
     /* Retain queue backpressure so piped commands are not silently dropped. */
     while (count++ < 32) {
         if (ttyinq[1].q_count >= ttyinq[1].q_size - 1) {
+            /* Raw/cbreak input has no line terminator to wait for. Leave the
+             * host backlog untouched until the reader frees queue space. */
+            if (!(ttydata[1].termios.c_lflag & ICANON)) return;
             unsigned i;
             uint8_t *p=ttyinq[1].q_head;
             for (i=0;i<ttyinq[1].q_count;i++) {
@@ -123,10 +125,12 @@ void device_init(void) {
     ripple_pty_init();
     ripple_network_init();
 }
+extern int ripple_console_ioctl(uint_fast8_t, uarg_t, char *);
 struct devsw dev_tab[] = {
     {root_open, no_close, root_read, root_write, root_ioctl},
     {fuse_system_open, no_close, fuse_system_read, fuse_system_write, fuse_system_ioctl},
-    {ripple_slave_open, ripple_slave_close, tty_read, tty_write, tty_ioctl},
-    {ripple_pty_open, ripple_pty_close, ripple_pty_read, ripple_pty_write, ripple_pty_ioctl}
+    {ripple_slave_open, ripple_slave_close, tty_read, tty_write, ripple_console_ioctl},
+    {ripple_pty_open, ripple_pty_close, ripple_pty_read, ripple_pty_write, ripple_pty_ioctl},
+    {ripple_gfx_open, ripple_gfx_close, no_rdwr, no_rdwr, ripple_gfx_ioctl}
 };
-bool validdev(uint16_t dev) { return major(dev) < 4; }
+bool validdev(uint16_t dev) { return major(dev) < 5; }

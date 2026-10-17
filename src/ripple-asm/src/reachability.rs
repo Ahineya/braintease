@@ -24,7 +24,7 @@ pub(crate) fn collect(objects: &mut [ObjectFile]) -> Result<(), Vec<String>> {
             roots.push(entry.clone());
         }
         let Some(meta) = &o.rcc else {
-            roots.extend(o.unresolved_references.values().map(|r| r.label.clone()));
+            roots.extend(o.unresolved_references.values().map(|r| r.symbol().to_string()));
             ranges.push(None);
             continue;
         };
@@ -88,7 +88,7 @@ pub(crate) fn collect(objects: &mut [ObjectFile]) -> Result<(), Vec<String>> {
             let refs = graph.entry(name.clone()).or_default();
             for index in *start..*end {
                 if let Some(r) = o.unresolved_references.get(&index) {
-                    refs.push(r.label.clone());
+                    refs.push(r.symbol().to_string());
                 }
                 let inst = o.instructions[index];
                 // Local symbolic calls are sometimes already resolved by rasm.
@@ -213,6 +213,7 @@ mod tests {
             .assemble(source)
             .unwrap();
         o.rcc = Some(CompilerMetadata {
+            banked_data: false,
             symbols: symbols
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))

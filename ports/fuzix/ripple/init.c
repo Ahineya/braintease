@@ -6,7 +6,7 @@
 int main(void) {
     char *args[] = {"sh", NULL};
     char *env[] = {"PATH=/bin", "HOME=/", "USER=root", "TERM=ansi",
-                   "PS1=fuzix# ", NULL};
+                   "PS1=fuzix# ", "SHELL=/bin/sh", "EDITOR=/bin/vi", NULL};
     if (open("/dev/tty1", O_RDWR) != 0 || dup(0) != 1 || dup(0) != 2)
         return 1;
     execve("/bin/sh", args, env);

@@ -5,9 +5,7 @@ int rfl_net_keep(RflNet *n) {
     ++n->refs; return NET_OK;
 }
 unsigned short *rfl_net_retain(unsigned short *handle) {
-    /* See tests/bugs/test_conditional_null_pointer_return: use a branch until fixed. */
-    if (rfl_net_keep((RflNet *)handle)) return 0;
-    return handle;
+    return rfl_net_keep((RflNet *)handle) ? 0 : handle;
 }
 void rfl_net_stop(unsigned short *handle) {
     RflNet *n = (RflNet *)handle;

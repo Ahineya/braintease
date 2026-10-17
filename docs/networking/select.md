@@ -1,9 +1,9 @@
 # select() implementation contract
 
-Planned FUZIX/Ripple and native Fuse-X prerequisite, recorded October 17, 2026.
-Nothing in this page marks the API implemented. The first consumer is the
-[terminal browser port](terminal-browser.md), but the interface should also
-serve terminal tools, chat clients and network servers.
+Implemented for FUZIX/Ripple and native Fuse-X on October 17, 2026. RVM's
+`gterm` uses this interface for graphics and PTY waiting. It is also shared
+groundwork for the [terminal browser](terminal-browser.md) and Nano-X; neither
+application port is completed by supplying readiness.
 
 ## What select does
 
@@ -36,32 +36,75 @@ bits to that count. Readability includes EOF; readiness does not guarantee a
 whole application message can be transferred. Use nonblocking I/O and handle
 partial progress and `EAGAIN` after wakeup when appropriate.
 
-## Current code and missing integration
+## Implementation
 
-- [Common configuration](../../ports/fuzix/ripple/config-common.h) enables
-  `CONFIG_JOB_CONTROL`, not `CONFIG_LEVEL_2`.
-- [Kernel syscall dispatch](../../ports/fuzix/upstream/Kernel/kdata.c) leaves
-  syscall 72 as `_nosys` under that configuration.
-- [Bundled select code](../../ports/fuzix/upstream/Kernel/select.c) is guarded
-  by `CONFIG_LEVEL_2`, is absent from the active kernel object list, and limits
-  `nfds` to 16 using single-word descriptor masks. It does not provide the
-  current socket bridge's readiness integration.
-- The RVM configuration permits 32 descriptors per process; the current native
-  configuration permits 16. Supporting only the old mask would silently exclude
-  valid RVM descriptors 16 through 31.
-- The library has an internal `_select(int, uint16_t *)` declaration, but no
-  public `sys/select.h` or working userspace `select()` wrapper in this port.
-  `poll.h` defines constants and `struct pollfd`; that is not an implementation
-  of `poll()`.
-- [Socket I/O](../../ports/fuzix/ripple/sockets.c),
-  [PTY I/O](../../ports/fuzix/ripple/pty.c) and
-  [TTY I/O](../../ports/fuzix/upstream/Kernel/tty.c) already have blocking,
-  queue and wakeup behavior to build on. Readiness waiters need to participate
-  in those same state transitions.
+`CONFIG_SELECT` enables descriptor readiness independently of `CONFIG_LEVEL_2`
+and preserves job control. Syscall 72 dispatches to
+[`ripple/selectwait.c`](../../ports/fuzix/ripple/selectwait.c). The upstream
+[`Kernel/select.c`](../../ports/fuzix/upstream/Kernel/select.c) supplies inode
+waiter maps and wake helpers; its legacy single-word syscall is excluded on
+Ripple. Both targets use the same guest wait core and socket bridge.
 
-Enabling all of `CONFIG_LEVEL_2` is not the implementation plan: that also
-enables unrelated kernel facilities. Extract or gate the needed readiness
-support explicitly and preserve existing job control.
+The public [`sys/select.h`](../../ports/fuzix/ripple/include/sys/select.h)
+provides the conventional API. `fd_set` has two 16-bit words and capacity 32.
+RVM accepts `nfds` through 32; native currently accepts through 16 and returns
+`EINVAL` above its active limit. Descriptor bits at or above `nfds` are ignored.
+`poll()` and `pselect()` remain unimplemented.
+
+Wait registrations live in in-memory inode maps, separate from filesystem
+metadata. Registration, readiness testing and entering sleep run under IRQ
+protection. Device/queue transitions wake interested processes, which recheck
+state; applications do not run a polling loop. Normal return clears all maps
+and the syscall timer. Exit also clears a killed selector's registrations
+before descriptors or process slots can be reused. A fast path avoids device
+inode scans when there are no selectors.
+
+[`select-abi.h`](../../ports/fuzix/ripple/select-abi.h) defines syscall 72's
+versioned request: one version cell followed by three descriptor-set pointers
+and a timeout pointer (nine C16 cells total). The first syscall argument is
+`nfds`; the second points at this request. Each non-null set points at two
+mask cells; a non-null timeout points at two 32-bit fields matching the target
+`timeval`. The kernel validates and copies these buffers before registering
+waits, so invalid public pointers return `EFAULT` instead of being dereferenced
+by the libc wrapper. Public timeout storage is never written.
+
+Timeout seconds accept `0..0x7fffffff`, and microseconds `0..999999`; wrapped
+negative assignments to the existing unsigned timeval fields are rejected.
+Finite waits use absolute deadlines from the host monotonic device,
+independently of calendar changes. A separate sorted deadline queue preserves
+full high/low seconds and nanoseconds, avoiding the legacy 16-bit decisecond
+timer and its 100 ms rounding/extra phase tick. Both runtimes currently expose
+1 ms clock resolution. Existing clock-update opportunities expire due waits;
+process scheduling and host/VM overhead can delay their return. Positive
+sub-resolution waits cross the next clock quantum; spurious wakes retain the
+original deadline. Select does not replace or consume process alarms. See
+[fine deadlines and guest clocks](../../ports/fuzix/TIMERS.md) for the internal
+queue, userspace clock ABI, measurements and tests.
+
+Sockets expose `getsockopt(SOL_SOCKET, SO_ERROR)` for asynchronous connection
+completion. A pending error is cleared only after successful validated output;
+repeated queries return zero until another error occurs. Other socket options
+return `EOPNOTSUPP`. Urgent data is unsupported and `exceptfds` stays empty.
+TCP write readiness follows connection state and send-buffer capacity. UDP/raw
+readiness observes shared transmit pressure and known ARP resolution state;
+a first send may initiate resolution and return `EAGAIN`, so callers retain
+normal nonblocking retry handling.
+
+RVM `/dev/gfx` is readable when the owning process has a queued event, overflow
+notice or close request; querying readiness does not dequeue it. Retrieve the
+event with `GX_EVENT`. Synchronous drawing requests make the graphics descriptor
+writable. A process without the lease is immediately ready for the operation's
+permission/handle error, rather than sleeping indefinitely. This is the current
+single-owner GX contract, not a multiwindow subscription API. Native Fuse-X
+currently has no graphics device.
+
+`gterm` rebuilds read sets for graphics and its PTY master, adds PTY write
+interest only while keyboard replies are pending, and uses a finite timeout
+for key-repeat/child checks. `GX_WAIT` remains available for older applications;
+new consumers should use descriptor readiness. Unix-domain local IPC now
+supplies service descriptors on both targets. Nano-X
+still needs protocol adaptation and several-window ownership/lifecycle work
+before a split desktop server.
 
 ## Interface and ABI decisions
 
@@ -73,9 +116,8 @@ support explicitly and preserve existing job control.
    The native kernel may reject `nfds > 16` until its descriptor limit grows;
    RVM must support its full 32. Do not shift a 16-bit `int` by 16 or more.
 3. Keep the public interface independent of the internal syscall representation.
-   Reuse syscall number 72 where practical, but replace the old 16-descriptor
-   payload and its byte-offset assumptions with an explicit C16 layout. Record
-   that layout in a shared header before implementation. No host `fd_set`,
+   Syscall 72 uses the versioned C16 pointer request described above, replacing
+   the old 16-descriptor payload and byte-offset assumptions. No host `fd_set`,
    `timeval`, pointer or structure layout crosses this boundary.
 4. Validate `nfds`, selected descriptors, timeout fields and all user buffers
    before registering waits. Reject negative or over-limit `nfds` and invalid
@@ -154,16 +196,16 @@ Cleanup must leave no waiter attached to a reused process, inode or endpoint.
 Use monotonic elapsed time, not the guest calendar. Validate microseconds
 against `0 <= tv_usec < 1000000`; audit the existing unsigned timeval field
 types so invalid negative assignments do not turn into accepted huge waits.
-Round positive sub-tick waits up to the supported timer resolution. Preserve
-the distinction between a zero timeout and an indefinite wait. Convert large
-timeouts with wide arithmetic and bounded chunks where necessary; avoid
-overflow, early expiry, and deadline extension after spurious wakeups.
+Preserve the distinction between a zero timeout and an indefinite wait.
+Represent large timeouts as absolute monotonic deadlines with checked carries;
+avoid overflow, early expiry, and deadline extension after spurious wakeups.
+Keep fine I/O expiry independent of decisecond accounting and alarm timers.
 
-## Implementation work map
+## Integration map
 
-| Layer | Required work |
+| Layer | Integrated support |
 | --- | --- |
-| Public libc | C16 descriptor sets/macros, declaration, wrapper, timeout validation/conversion and return count |
+| Public libc | C16 descriptor sets/macros and a thin syscall wrapper; kernel validates buffers and timeout, and counts ready bits |
 | Syscall ABI | Shared payload layout, syscall 72 wrapper/dispatch, bank-aware copy-in/out and pointer validation |
 | Kernel wait core | Full descriptor range, registrations, timers, signals and balanced cleanup |
 | Files/pipes | Immediate file results, pipe queue/EOF/broken-pipe transitions |
@@ -171,9 +213,9 @@ overflow, early expiry, and deadline extension after spurious wakeups.
 | Sockets | Readiness queries and wake notifications from guest network state changes |
 | Builds | Required sources/feature guards in RVM and native; no accidental dependency on all level-2 services |
 
-The bundled implementation is a useful starting point, especially for inode,
-pipe and TTY handling. Review its timeout units, mask width, user-copy offsets,
-registration lifecycle and supported inode types before reusing it.
+Only the bundled inode wait-map helpers are reused by Ripple. Its legacy
+syscall payload, timeout logic and device probing are replaced by the shared
+port implementation.
 
 ## Acceptance criteria
 
@@ -203,3 +245,39 @@ The final application-level check is a browser waiting for keyboard and HTTP
 input together: cancelling a slow response must work without disrupting the
 Telnet session or other processes. See the
 [browser acceptance gates](terminal-browser.md#implementation-order-and-acceptance-gates).
+
+## Reproducible verification
+
+```sh
+make -C ports/fuzix BUILD="$PWD/build/fuzix" images
+python3 ports/fuzix/tools/test_select.py --build build/fuzix
+make -C fuse-x all
+python3 ports/fuzix/tools/test_select.py --native
+python3 ports/fuzix/tools/test_deadlines.py
+python3 ports/fuzix/tools/test_deadlines.py --native
+FUZIX_TEST_BUILD="$PWD/build/fuzix" cargo test --release -p rvm --test fuzix_graphics -- --ignored --nocapture
+```
+
+The shared `selectcheck.c` probe and independent local Ethernet fixture cover
+API validation and mask counts, high descriptors, bank-spanning user buffers,
+regular-file EOF, pipe data/backpressure/last-close, duplicate/forked endpoints,
+independent waiters, finite/zero/indefinite waits, long timeouts interrupted by
+signals, alarm preservation, calendar changes, spurious wakes and killed-waiter
+reuse. PTY coverage includes canonical EOF, VMIN/VTIME modes, both queue
+directions and hangup. Live input and a two-second low-CPU wait are checked on
+both targets. Network coverage includes asynchronous connect success/refusal,
+SO_ERROR read/clear, TCP streams/EOF, UDP including empty datagrams, listener
+accept, reset and administratively dropping the interface. These tests use
+private disks and a local Ethernet peer; they need no internet access.
+
+The existing RVM framebuffer test injects real device events into a JIT guest
+and checks exact terminal pixels, scrolling, key repeat, focus loss and close.
+The graphics probe checks graphics-descriptor readiness alongside upload,
+ownership and PTY regressions. Job-control and ordinary filesystem integration
+checks remain separate regression suites. The acceptance criteria above are
+the contract; these probes are not an exhaustive proof of every possible
+interleaving or a completed browser/Nano-X integration test.
+
+Unix-domain stream sockets and `socketpair()` now share this readiness contract
+on both targets, independently of Ethernet. See [local IPC and expanded
+networking capacity](local-ipc.md) for queues, ownership and limits.

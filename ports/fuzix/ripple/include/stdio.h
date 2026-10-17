@@ -32,6 +32,7 @@ int ungetc(int, FILE *);
 #define ferror(f) ((f)->err)
 #define clearerr(f) ((void)((f)->eof = (f)->err = 0))
 FILE *fopen(const char *, const char *);
+FILE *tmpfile(void);
 FILE *fdopen(int, const char *);
 FILE *freopen(const char *, const char *, FILE *);
 FILE *popen(const char *, const char *);
@@ -60,6 +61,8 @@ int vprintf(const char *, va_list);
 int vfprintf(FILE *, const char *, va_list);
 int vsprintf(char *, const char *, va_list);
 int vsnprintf(char *, size_t, const char *, va_list);
+int sscanf(const char *, const char *, ...);
+int vsscanf(const char *, const char *, va_list);
 void perror(const char *);
 int rename(const char *, const char *);
 int remove(const char *);

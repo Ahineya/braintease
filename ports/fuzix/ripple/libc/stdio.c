@@ -132,6 +132,16 @@ FILE *freopen(const char *p, const char *m, FILE *f) {
         return NULL;
     return stream_init(f, fd, mode);
 }
+FILE *tmpfile(void) {
+    char name[] = "/tmp/rccstdioXXXXXX";
+    int fd = mkstemp(name), saved;
+    FILE *file;
+    if (fd < 0) return NULL;
+    if (unlink(name) < 0) { saved = errno; close(fd); errno = saved; return NULL; }
+    file = fdopen(fd, "w+");
+    if (!file) { saved = errno; close(fd); errno = saved; }
+    return file;
+}
 int fgetc(FILE *f) {
     ssize_t n;
     if (!f->used || !(f->flags & READING)) {

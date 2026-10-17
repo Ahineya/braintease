@@ -25,11 +25,64 @@ The default installation is `/Applications/IntelliJ IDEA.app`. Elsewhere, pass
 accepted. If the IDE has no compiler, set `JAVA_HOME` to a JDK 21 or later.
 
 In IDEA, open **Settings → Plugins → gear menu → Install Plugin from Disk** and
-select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.4.zip`. Restart
+select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.6.zip`. Restart
 if IDEA requests it, then open an `.rfl` file.
 
 To update an installed version, use the same **Install Plugin from Disk** action
 with the new ZIP. IDEA keeps the executable setting.
+
+## Format code
+
+Use **Code → Reformat Code** (**Option+Cmd+L** on macOS, **Ctrl+Alt+L** on
+Windows/Linux). Select text first to format only that selection; otherwise the
+whole file is formatted. IDEA uses the same formatter as `rfl fmt`, including
+unsaved text, with normal undo support. The language server must be running.
+You can also enable RFL reformatting through IDEA's **Actions on Save** settings.
+
+The style is fixed: four spaces, consistent operator spacing, multiline blocks
+and declarations, and no line-length wrapping. Comments and literal spellings
+are preserved. Syntax errors produce no formatting edits; unresolved names or
+imports do not prevent formatting. See the [formatter guide](../../formatting.md)
+for the CLI, selection behavior and examples.
+
+Rebuild the `rfl` executable and restart its language server after updating.
+If a release binary exists, automatic discovery prefers it over the debug build;
+use `cargo build --release -p rfl` or explicitly select the new debug executable.
+
+Plugin 0.2.6 fixes the 0.2.5 routing bug that could report an unformatted file
+as already formatted without calling the language server. If CLI
+`rfl fmt --check FILE` reports changes but IDEA does nothing, install 0.2.6
+and restart IDEA to load the corrected plugin.
+
+## Documentation on hover
+
+Hover over a declaration or a use of a function, type, constant, field or method
+to see its type/signature and attached `///` documentation. IDEA's **Quick
+Documentation** action displays the same Markdown, including paragraphs,
+headings and fenced examples. Imported aliases resolve to the original
+declaration's documentation. The standard library documents its exported API,
+struct fields and trait contracts.
+
+Write consecutive `///` lines immediately above a declaration:
+
+````rfl
+/// Returns twice the input.
+///
+/// # Example
+/// ```rfl
+/// let result = double(21);
+/// ```
+export fn double(value: i16) -> i16 { value * 2 }
+````
+
+Attributes and ordinary comments may appear between documentation and its
+declaration. `//`, `////`, `//!` and `/* ... */` remain ordinary comments.
+Formatting preserves documentation text. Hovers in the current file include
+unsaved documentation edits; imported documentation comes from the resolved
+source file on disk. Examples are displayed as Markdown, not run as tests.
+
+This uses the existing plugin's LSP hover integration. Rebuild/update `rfl` and
+use **Tools → Restart RFL Language Server**; no plugin update is required.
 
 ## Compile and run
 
@@ -125,6 +178,8 @@ restarts the server automatically.
 
 ## Features
 
+- Whole-file and selection formatting through native Reformat Code and Actions
+  on Save, using the shared RFL formatter.
 - Compiler diagnostics as you type, completion and hover documentation.
 - Prelude function completion (`print`, `println`, `putc`, `from_char`,
   `from_byte`) with signatures, available without imports.
@@ -141,6 +196,8 @@ restarts the server automatically.
   path to open the module file. Supports stdlib and relative imports. Builtin
   exports without a source declaration open their stdlib module.
 - Document symbols, parameter information, inlay hints and semantic highlighting.
+- Inferred types, hover, signature help and completion details use source-level
+  names and visible import aliases, rather than internal `m1$Type` module names.
 - Local syntax highlighting, comment/uncomment actions and paired brackets,
   including when the server is unavailable.
 - Run gutter and reusable configurations for running, compilation and checks,
@@ -178,8 +235,8 @@ project free functions are not suggested. This uses the existing extension-call
 semantics and does not require traits or changes to the stdlib's declarations.
 
 These actions require the updated **RFL executable**. The existing plugin already
-displays LSP quick fixes. Install plugin **0.2.4** for local `trait` keyword
-highlighting and correct rename token ranges; restart the language server after
+displays LSP quick fixes. Install plugin **0.2.6** for corrected formatting integration,
+local `trait` keyword highlighting and correct rename token ranges; restart the language server after
 updating its executable. If you installed an older `rfl` on PATH, rebuild it with `cargo build --release -p rfl`, then update
 that PATH installation or point **Languages & Frameworks → RFL → RFL executable**
 at the new `target/release/rfl`. Restart the language server through its editor
@@ -187,8 +244,8 @@ widget or **Tools → Restart RFL Language Server** after replacing the executab
 Leaving the setting empty still gives a PATH installation priority over local builds.
 
 Semantic features have the same scope and limitations as the existing RFL
-server. Compilation and execution use the existing CLI. Formatting and debugging
-are not provided. The local parser
+server. Compilation and execution use the existing CLI. Formatting uses the
+shared server formatter; debugging is not provided. The local parser
 creates a token-based PSI file for IntelliJ; syntax and type checking remain
 in the language server.
 

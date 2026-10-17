@@ -1,0 +1,131 @@
+import { File, IoError, Errno, UnsupportedFileType, SameFile, open_read, create_new, metadata, REGULAR, DIRECTORY, SYMLINK, process_id, set_permissions, environment, rename, remove_file, remove_dir } from "std/posix";
+import { joined } from "./model";
+import { number } from "./format";
+
+fn temporary(destination: String) -> Result<(File, String), IoError> {
+    let directory = joined(destination, "..");
+    for (i in 0..100) {
+        let path = joined(directory, ".rfl-copy-" + number(process_id() as u32) + "-" + number(i as u32));
+        match create_new(path) {
+            Ok(file) => {
+                return Ok((move(file), path));
+            },
+            Err(Errno(code)) => {
+                if (code != 17) {
+                    return Err(Errno(code));
+                }
+            },
+            Err(error) => {
+                return Err(error);
+            },
+        }
+    }
+    Err(Errno(17))
+}
+
+// Copy only regular files. Keep the destination intact until copying and close
+// succeed. An exclusive sibling temporary is removed on every error path.
+export fn copy_file(source: String, destination: String) -> Result<u32, IoError> {
+    let info = metadata(source)?;
+    if (info.kind != REGULAR) {
+        return Err(UnsupportedFileType);
+    }
+    match metadata(destination) {
+        Ok(other) => {
+            if (other.kind != REGULAR && other.kind != SYMLINK) {
+                return Err(UnsupportedFileType);
+            }
+            if (info.device == other.device && info.inode == other.inode) {
+                return Err(SameFile);
+            }
+        },
+        Err(Errno(2)) => {},
+        Err(error) => {
+            return Err(error);
+        },
+    }
+    let input = open_read(source)?;
+    let (output, path) = temporary(destination)?;
+    let guard = owned(path, fn(name: &mut String) => {
+        remove_file(*name);
+    });
+    let mut count: u32 = 0;
+    while (true) {
+        let bytes = input.read(4096)?;
+        if (bytes.is_empty()) {
+            break;
+        }
+        output.write_all(bytes)?;
+        count += bytes.len() as u32;
+    }
+    set_permissions(path, info.mode & 511)?;
+    move(output).close()?;
+    let name = guard.borrow();
+    rename(*name, destination)?;
+    Ok(count)
+}
+
+// A completed copy with failed source removal must not look like a lost file.
+export type MoveResult = Moved | CopiedSourceRetained(IoError);
+export fn move_path(source: String, destination: String) -> Result<MoveResult, IoError> {
+    if (source == destination) {
+        return Err(SameFile);
+    }
+    match rename(source, destination) {
+        Ok(_) => Ok(Moved),
+        Err(Errno(18)) => {
+            copy_file(source, destination)?;
+            match remove_file(source) {
+                Ok(_) => Ok(Moved),
+                Err(error) => Ok(CopiedSourceRetained(error))
+            }
+        },
+        Err(error) => Err(error)
+    }
+}
+
+// Treat the selected path as one literal shell argument, including quotes,
+// dollar signs and command substitutions in filenames.
+export fn shell_quote(value: String) -> String {
+    let mut result = "'";
+    for (i in 0..value.len()) {
+        result = result + if (value[i] == '\'') {
+            "'\"'\"'"
+        } else {
+            from_char(value[i])
+        };
+    }
+    result + "'"
+}
+
+export fn editor_command(path: String) -> Result<String, IoError> {
+    let mut editor = "vi";
+    match environment("EDITOR")? {
+        Some(value) => {
+            if (value != "") {
+                editor = value;
+            }
+        },
+        None => {}
+    }
+    match environment("VISUAL")? {
+        Some(value) => {
+            if (value != "") {
+                editor = value;
+            }
+        },
+        None => {}
+    }
+    Ok(editor + " " + shell_quote(path))
+}
+
+export fn delete_path(path: String) -> Result<unit, IoError> {
+    let info = metadata(path)?;
+    if (info.kind == DIRECTORY) {
+        remove_dir(path)
+    } else if (info.kind == REGULAR || info.kind == SYMLINK) {
+        remove_file(path)
+    } else {
+        Err(UnsupportedFileType)
+    }
+}

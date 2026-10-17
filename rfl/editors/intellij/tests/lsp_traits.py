@@ -89,7 +89,7 @@ def main():
         assert responses[14]["uri"] == library.as_uri()
         assert responses[14]["range"]["start"] == position(lib, lib.index("Read"))
         assert "fn(i16) -> i16" in responses[5]["contents"]["value"]
-        assert responses[6]["signatures"][0]["label"] == "fn(&m1$Value, i16) -> i16", responses[6]
+        assert responses[6]["signatures"][0]["label"] == "fn(&Value, i16) -> i16", responses[6]
         assert responses[6]["activeParameter"] == 1
         assert len(responses[7]) == 4, responses[7]
         assert responses[9] is None

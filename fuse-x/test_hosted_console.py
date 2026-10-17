@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Use the real launcher to detach/reconnect and boot a remote-only kernel."""
 import argparse
+import fcntl
 import os
 from pathlib import Path
 import pty
 import select
 import subprocess
+import struct
 import sys
 import tempfile
 import termios
@@ -53,21 +55,32 @@ def main():
             connection.sendall(b'echo '+marker+b'\n')
             receive(connection,b'\r\n'+marker+b'\r\n');receive(connection,b'fuse-x# ')
             return connection
-        try:
-            launch('--run-only','--disk',str(image),'--share',str(share),'--detach')
-            first=attach_console()
-            first.sendall(b'echo broker-note > /mnt/host/note\n')
-            receive(first,b'fuse-x# ')
-            assert (share/'note').read_bytes()==b'broker-note\n'
-            first.close();time.sleep(.15)
-            # The public attach command must restore its own terminal on Ctrl-].
+        def detach_client(*arguments):
             master,slave=pty.openpty();saved=termios.tcgetattr(slave)
-            client=subprocess.Popen([str(LAUNCHER),'--attach'],stdin=slave,stdout=slave,stderr=slave,env=environment)
+            fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',24,80,0,0))
+            # Exercise macOS's Bash 3.2 even when PATH selects a newer Bash.
+            client=subprocess.Popen(['/bin/bash',str(LAUNCHER),*arguments],stdin=slave,stdout=slave,stderr=slave,env=environment)
             try:
-                received=bytearray();deadline=time.monotonic()+10
-                while b'fuse-x# ' not in received:
-                    assert time.monotonic()<deadline,received
-                    if select.select([master],[],[],.1)[0]:received.extend(os.read(master,8192))
+                received=bytearray()
+                def expect(marker):
+                    deadline=time.monotonic()+15
+                    while marker not in received:
+                        assert time.monotonic()<deadline,received
+                        if select.select([master],[],[],.1)[0]: received.extend(os.read(master,8192))
+                        diagnostics=state/'supervisor.log'
+                        assert client.poll() is None,bytes(received)+(diagnostics.read_bytes() if diagnostics.exists() else b'')
+                    received.clear()
+                expect(b'fuse-x# ')
+                if arguments[0]=='--run-only':
+                    # Drive the real client -> broker PTY -> kernel size query
+                    # -> curses resize path, including an open floating window.
+                    os.write(master,b'mc / /tmp\r');expect(b'RFL Commander')
+                    os.write(master,b'\x1b[20~');expect(b'Choose theme')
+                    fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',6,30,0,0))
+                    expect(b'terminal needs')
+                    fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',24,80,0,0))
+                    expect(b'RFL Commander')
+                    os.write(master,b'\x1b[21~');expect(b'fuse-x# ')
                 os.write(master,b'\x1d')
                 assert client.wait(timeout=5)==0
                 restored=termios.tcgetattr(slave)
@@ -76,6 +89,20 @@ def main():
             finally:
                 if client.poll() is None:client.terminate();client.wait(timeout=5)
                 os.close(master);os.close(slave)
+        try:
+            # Default startup has no optional session flags. Bash 3.2 must
+            # reach the interactive console without expanding an empty array.
+            detach_client('--run-only','--disk',str(image),'--share',str(share))
+            time.sleep(.15)
+            launch('--stop')
+            launch('--run-only','--disk',str(image),'--share',str(share),'--detach')
+            first=attach_console()
+            first.sendall(b'echo broker-note > /mnt/host/note\n')
+            receive(first,b'fuse-x# ')
+            assert (share/'note').read_bytes()==b'broker-note\n'
+            first.close();time.sleep(.15)
+            # The public attach command must restore its own terminal on Ctrl-].
+            detach_client('--attach')
             time.sleep(.15)
             second=attach_console()
             second.sendall(b'exit\n')
@@ -111,7 +138,7 @@ def main():
         finally:
             if running(state):
                 subprocess.run([str(LAUNCHER),'--stop'],env=environment,capture_output=True,timeout=20)
-    print('Fuse-X: launcher detach/reconnect, terminal restore, shell respawn, shared folder, headless Telnet and orderly stop passed')
+    print('Fuse-X: Bash launcher startup, Commander resize through broker, detach/reconnect, terminal restore, shell respawn, shared folder, headless Telnet and orderly stop passed')
 
 
 if __name__=='__main__':main()

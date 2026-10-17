@@ -14,6 +14,7 @@ share_set=0
 session_action=""
 detach=0
 headless=0
+gui=0
 telnet=0
 one_shot=0
 option_count=$#
@@ -30,7 +31,8 @@ usage() {
 Usage: scripts/run-fuse-x.sh [options]
 
 Build Fuse-X, prepare its root image, and start the native FUZIX shell.
-Try help, ls, native-hello, check, and shutdown. Files persist across launches.
+Try help, ls, native-hello, lynx http://wiby.me/, and shutdown.
+Files persist across launches.
 Use shutdown for a clean exit. The Bourne shell supports scripts, pipelines,
 redirection and job control. Ripple RXE executables require native recompilation.
 
@@ -44,6 +46,7 @@ redirection and job control. Ripple RXE executables require native recompilation
   --attach             Reconnect to the running session without building
   --stop               Orderly shutdown of the running session without building
   --headless           Start in the background without a local shell
+  --gui                Also open a native graphical terminal window
   --telnet             Start the guest Telnet service (explicit opt-in)
   --one-shot           Exit when the first shell exits; no reconnectable session
   --from-ripple IMAGE  Extract ROOTFS.IMG from an existing Ripple FAT disk
@@ -89,6 +92,7 @@ while [[ $# -gt 0 ]]; do
         --install-apps) install_apps=1; shift ;;
         --detach) detach=1; shift ;;
         --headless) headless=1; detach=1; shift ;;
+        --gui) gui=1; shift ;;
         --telnet) telnet=1; shift ;;
         --one-shot) one_shot=1; shift ;;
         --attach|--stop) session_action="${1#--}"; shift ;;
@@ -121,9 +125,10 @@ if [[ -n "$session_action" ]]; then
     [[ "$option_count" == 1 ]] || fail '--attach and --stop must be used alone (set FUSE_X_BUILD for another session)'
     exec python3 "$ROOT/fuse-x/session.py" "$session_action" --state "$OUT/session"
 fi
-if [[ "$mode" != --run && ( "$detach" == 1 || "$headless" == 1 || "$telnet" == 1 || "$one_shot" == 1 ) ]]; then
+if [[ "$mode" != --run && ( "$detach" == 1 || "$headless" == 1 || "$gui" == 1 || "$telnet" == 1 || "$one_shot" == 1 ) ]]; then
     fail 'session options require --run'
 fi
+if [[ "$gui" == 1 && "$headless" == 1 ]]; then fail '--gui cannot be combined with --headless'; fi
 if [[ "$one_shot" == 1 && "$detach" == 1 ]]; then fail '--one-shot cannot be combined with --detach or --headless'; fi
 if [[ -n "$share" && "$mode" != --run ]]; then fail '--share requires --run'; fi
 if [[ -n "$timeout" ]]; then
@@ -194,23 +199,31 @@ if [[ "$build_only" == 1 ]]; then
     exit 0
 fi
 printf 'Running Fuse-X %s using %s\n' "$mode" "$disk" >&2
-export RCC_NATIVE_HEADLESS=1 RCC_NATIVE_NET="$network"
+export RCC_NATIVE_NET="$network"
+if [[ "$gui" == 1 ]]; then unset RCC_NATIVE_HEADLESS;
+elif [[ "$headless" == 1 || "$mode" != --run ]]; then export RCC_NATIVE_HEADLESS=1; fi
 if [[ -n "$timeout" ]]; then export RCC_NATIVE_TIMEOUT="$timeout"; else unset RCC_NATIVE_TIMEOUT; fi
 if [[ "$mode" == --run ]]; then
     if [[ "$share_set" == 0 ]]; then
         mkdir -p "$ROOT/fuse-x-shared"
         share="$(cd "$ROOT/fuse-x-shared" && pwd -P)"
     fi
-    arguments=("$OUT/fuse-x" "$mode" "$disk")
+    executable="$OUT/fuse-x"
+    if [[ -x "$OUT/Fuse-X.app/Contents/MacOS/fuse-x" && ! "$OUT/fuse-x" -nt "$OUT/Fuse-X.app/Contents/MacOS/fuse-x" ]]; then
+        executable="$OUT/Fuse-X.app/Contents/MacOS/fuse-x"
+    fi
+    arguments=("$executable" "$mode" "$disk")
     if [[ -n "$share" ]]; then arguments+=(--share "$share"); fi
     if [[ "$headless" == 1 ]]; then arguments+=(--headless); fi
+    if [[ "$gui" == 1 ]]; then arguments+=(--gui); fi
     if [[ "$telnet" == 1 ]]; then arguments+=(--telnet); fi
     if [[ "$one_shot" == 1 ]]; then
         exec python3 "$ROOT/fuse-x/console.py" "${arguments[@]}" --one-shot
     fi
-    session_options=()
-    if [[ "$detach" == 1 ]]; then session_options+=(--detach); fi
-    exec python3 "$ROOT/fuse-x/session.py" start --state "$OUT/session" "${session_options[@]}" -- "${arguments[@]}"
+    # Bash 3.2 treats an empty array as unset under set -u.
+    session_arguments=(start --state "$OUT/session")
+    if [[ "$detach" == 1 ]]; then session_arguments+=(--detach); fi
+    exec python3 "$ROOT/fuse-x/session.py" "${session_arguments[@]}" -- "${arguments[@]}"
 elif [[ "$mode" == --boot-check ]]; then
     exec "$OUT/fuse-x" "$mode" "$disk"
 else

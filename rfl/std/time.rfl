@@ -1,7 +1,18 @@
 // Full-width host samples. Monotonic time is independent of simulation ticks;
 // realtime is calendar time and must never drive async deadlines.
+/// A full-width host clock sample: split seconds, nanoseconds within the second, and reported resolution. Realtime samples must not drive async deadlines.
 #[repr(C)]
-export struct HostTime { seconds_low:u32, seconds_high:u32, nanoseconds:u32, resolution_ns:u32 }
+export struct HostTime {
+    /// Low 32 bits of the seconds count.
+    seconds_low:u32,
+    /// High 32 bits of the seconds count.
+    seconds_high:u32,
+    /// Nanoseconds within the current second; below 1000000000.
+    nanoseconds:u32,
+    /// Reported clock resolution in nanoseconds; 1–1000000000.
+    resolution_ns:u32
+}
+/// A host clock device error or an invalid clock sample/resolution.
 export type TimeError = ClockDeviceError(u16) | InvalidHostTime;
 import { rfl_host_clock_read } from "./host_support.c";
 fn read_time(calendar:bool)->Result<HostTime,TimeError> {
@@ -14,12 +25,16 @@ fn read_time(calendar:bool)->Result<HostTime,TimeError> {
     }
     Ok(sample)
 }
+/// Reads monotonic host time, independent of simulation ticks, for measuring elapsed time.
 export fn monotonic()->Result<HostTime,TimeError> {read_time(false)}
+/// Reads calendar time. Wall-clock adjustments make this unsuitable for async deadlines.
 export fn realtime()->Result<HostTime,TimeError> {read_time(true)}
 impl HostTime {
     // Intentionally modulo 2^32; high seconds contribute a multiple of 2^32.
+    /// Converts the sample to milliseconds modulo `2^32`; use half-range comparisons for deadlines.
     export fn wrapping_millis(&self)->u32 {self.seconds_low*1000+self.nanoseconds/1000000}
 }
+/// Reads monotonic host time and returns wrapping milliseconds modulo `2^32`.
 export fn monotonic_millis()->Result<u32,TimeError> {
     let sample=monotonic()?;Ok(sample.wrapping_millis())
 }

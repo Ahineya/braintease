@@ -8,6 +8,7 @@
 #include <timer.h>
 #include <vm_devices.h>
 #include "graphics.h"
+#include "selectwait.h"
 struct u_data udata;
 unsigned ripple_kernel_stack = 32;
 unsigned ripple_exec_bank, ripple_exec_pc, ripple_argc;
@@ -23,6 +24,8 @@ uaddr_t ramtop;
 static unsigned indexof(ptptr p) { return (unsigned)(p - ptab); }
 extern void ripple_code_init(void);
 void pagemap_init(void) {
+    if (sizeof(struct dinode) != 64 || sizeof(struct filesys) != 164 ||
+        offsetof(struct filesys, s_free) != 5) panic("C16 V3 layout mismatch");
     ripple_code_init();
     ripple_mmu_init();
     ramsize = MMU_RAM_BANKS * (unsigned long)BANK_CELLS / 512;
@@ -105,9 +108,11 @@ void sync_clock(void) {
     unsigned fraction, elapsed_fraction, remainder;
     irqflags_t flags = di();
     if (!clock_ready || vm_host_monotonic(&now) != VM_DEVICE_OK) {
+        if (clock_ready) ripple_select_clock(NULL);
         irqrestore(flags);
         return;
     }
+    ripple_select_clock(&now);
     seconds = now.seconds_low - host_seconds;
     fraction = now.nanoseconds / 10000000UL;
     if (fraction < host_fraction) {
@@ -155,7 +160,7 @@ void plt_idle(void) {
     /* No runnable process: yield the host briefly, while retaining fine input
      * polling and host-clock timeout progress rather than spinning billions
      * of guest instructions between terminal events. */
-    flags=di();vm_host_idle(1);irqrestore(flags);
+    flags=di();if(!nready)vm_host_idle(1);irqrestore(flags);
 }
 void ripple_shutdown(void) {
     unsigned i;

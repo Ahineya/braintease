@@ -30,18 +30,17 @@ static uint8_t wait_pipe_read(register inoptr ino, uint_fast8_t flag)
    a reader */
 static uint8_t wait_pipe_write(register inoptr ino, uint_fast8_t flag)
 {
-	while (LOWORD(ino->c_node.i_size) > 8 * BLKSIZE) {
-		if (ino->c_readers == 0) {	/* No readers */
-			udata.u_done = (usize_t)-1;
-			udata.u_error = EPIPE;
-			ssig(udata.u_ptab, SIGPIPE);
-			return 1;
-		}
-		/* Sleep if pipe full */
-		if (psleep_flags(ino, flag))
-		        return 1;
-	}
-	return 0;
+    for (;;) {
+        if (!ino->c_readers) {
+            if (!udata.u_done) udata.u_error = EPIPE;
+            ssig(udata.u_ptab, SIGPIPE);
+            return 1;
+        }
+        if (ino->c_node.i_size < 8UL * BLKSIZE) return 0;
+        /* A partial write returns progress rather than waiting indefinitely. */
+        if (udata.u_done) return 1;
+        if (psleep_flags(ino, flag)) return 1;
+    }
 }
 /* We need this because SDCC otherwise makes a right hash of it */
 static uint16_t uoff(void)
@@ -58,7 +57,7 @@ uint16_t umove(uint16_t n)
 	return udata.u_done;
 }
 
-static uint16_t mapcalc(inoptr ino, usize_t *size, uint_fast8_t m)
+static blkno_t mapcalc(inoptr ino, usize_t *size, uint_fast8_t m)
 {
 	*size = min(udata.u_count, BLKSIZE - uoff());
 	/* We know offset is positive at this point. The cast makes
@@ -145,11 +144,12 @@ void readi(register inoptr ino, uint_fast8_t flag)
 				brelse(bp);
 			}
 			umove(amount);
-			if (ispipe && LOWORD(udata.u_offset) >= 18 * BLKSIZE)
+			if (ispipe && LOWORD(udata.u_offset) >= FS_DIRECT * BLKSIZE)
 				udata.u_offset = 0;
 			if (ispipe) {
 				ino->c_node.i_size -= amount;
 				wakeup(ino);
+                selwake_inode(ino, SELECT_OUT);
 			}
 		}
 		/* Compute return value */
@@ -171,6 +171,7 @@ void writei(register inoptr ino, uint_fast8_t flag)
 	usize_t amount;
 	bufptr bp;
 	bool ispipe = false;
+    unsigned syncflag;
 	blkno_t pblk;
 	uint16_t dev;
 
@@ -194,22 +195,27 @@ void writei(register inoptr ino, uint_fast8_t flag)
 	case MODE_R(F_DIR):
 	case MODE_R(F_REG):
 	      loop:
-	      	flag = flag & O_SYNC ? 2 : 1;
+        syncflag = flag & O_SYNC ? 2 : 1;
 
 		while (udata.u_count) {
 			if (ispipe) {
 				/* Sleep if empty pipe */
 				if (wait_pipe_write(ino, flag))
-					return;
+                    break;
 			}
-			pblk = mapcalc(ino, &amount, 0);
-
-                        if (HIBYTE32(udata.u_offset) & BLKOVERSIZE32) {
+                        if ((HIBYTE32(udata.u_offset) & BLKOVERSIZE32)
+#ifdef CONFIG_RIPPLE
+                            || udata.u_count > 0x7fffffffUL - (uint32_t)udata.u_offset
+#endif
+                           ) {
                                 udata.u_error = EFBIG;
                                 ssig(udata.u_ptab, SIGXFSZ);
                                 break;
                         }
 
+            pblk = mapcalc(ino, &amount, 0);
+            if (ispipe && amount > 8UL * BLKSIZE - ino->c_node.i_size)
+                amount = 8UL * BLKSIZE - ino->c_node.i_size;
 			if (pblk == NULLBLK)
 				break;	/* No space to make more blocks */
 
@@ -223,16 +229,17 @@ void writei(register inoptr ino, uint_fast8_t flag)
 			ugetblk(bp, uoff(), amount);
 
 			/* O_SYNC */
-			if (bfree(bp, flag))
+			if (bfree(bp, syncflag))
 				break;
 
 			umove(amount);
 			if (ispipe) {
-				if (LOWORD(udata.u_offset) >= 18 * BLKSIZE)
+				if (LOWORD(udata.u_offset) >= FS_DIRECT * BLKSIZE)
 					udata.u_offset = 0;
 				ino->c_node.i_size += amount;
 				/* Wake up any readers */
 				wakeup(ino);
+                selwake_inode(ino, SELECT_IN);
 			}
 		}
 
@@ -285,6 +292,9 @@ int16_t doclose(uint_fast8_t uindex)
 		if (m != O_WRONLY)
 			ino->c_readers--;
 	}
+    if (getmode(ino) == MODE_R(F_PIPE)) {
+        wakeup(ino);selwake_inode(ino, SELECT_IN|SELECT_OUT);
+    }
 	udata.u_files[uindex] = NO_FILE;
 	udata.u_cloexec &= ~(1UL << uindex);
 	oft_deref(oftindex);

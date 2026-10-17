@@ -1,0 +1,258 @@
+import { Screen } from "std/curses";
+import { paint } from "lib/text_curses";
+import { fitted } from "lib/tui_dialog";
+import { basename } from "lib/path";
+import { Document, number } from "./files";
+import { View, Vi, selection, clamp } from "./vi";
+import { Theme } from "./theme";
+import { Settings } from "./config";
+// Retain the virtual screen between keys. Dialogs, tools, tabs and settings
+// invalidate it explicitly; a mutation repaints all visible text because its
+// lexical state can affect later lines.
+export struct Paint {
+    valid: bool,
+    width: i16,
+    rows: i16,
+    top: usize,
+    left: usize,
+    generation: u32,
+    lines: usize,
+    cursor: usize,
+    row: usize,
+    from: usize,
+    to: usize,
+    mode: i16,
+    modified: bool,
+    status: String,
+    operator: i16,
+    pending: i16,
+    count: u16
+}
+
+export fn painting() -> Paint {
+    Paint { valid: false, width: 0, rows: 0, top: 0, left: 0, generation: 0, lines: 0, cursor: 0, row: 0, from: 0, to: 0, mode: 0, modified: false, status: "", operator: 0, pending: 0, count: 0 }
+}
+
+export fn height(screen: &Screen) -> usize {
+    if (screen.rows() > 6) {
+        (screen.rows() - 5) as usize
+    } else {
+        1 as usize
+    }
+}
+
+export fn gutter(settings: &Settings) -> i16 {
+    if (settings.numbers) {
+        7
+    } else {
+        1
+    }
+}
+
+export fn visible(screen: &Screen, b: &Document, v: &mut View, vi: &Vi, settings: &Settings) {
+    clamp(&b.buffer, v, vi.mode == 1);
+    let row = b.buffer.row(v.cursor);
+    let rows = height(screen);
+    if (row < v.top) {
+        v.top = row;
+    } else if (row >= v.top + rows) {
+        v.top = row - rows + 1;
+    }
+    let column = b.buffer.visual(v.cursor, settings.tabstop);
+    let width = if (screen.columns() > gutter(settings) + 2) {
+        (screen.columns() - gutter(settings) - 1) as usize
+    } else {
+        1 as usize
+    };
+    if (column < v.left) {
+        v.left = column;
+    } else if (column >= v.left + width) {
+        v.left = column - width + 1;
+    }
+}
+
+export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, selected: usize, v: View, vi: &Vi, settings: &Settings, old: &mut Paint, force: bool) {
+    let colors = theme.styles;
+    let width = screen.columns();
+    let rows = screen.rows();
+    let full = force || !old.valid || width != old.width || rows != old.rows;
+    if (full) {
+        screen.background(colors[0]);
+    }
+    if (width < 40 || rows < 10) {
+        old.valid = false;
+        screen.clear();
+        screen.text(0, 0, fitted("Rift needs 40 columns and 10 rows", width), colors[12]);
+        screen.cursor(0, 0, false);
+        screen.refresh();
+        return;
+    }
+    let modified = documents[selected].buffer.modified();
+    if (full) {
+        screen.fill(0, 0, width, ' ', colors[8]);
+        screen.text(0, 1, fitted(" Rift  File  Edit  Search  Run  Tabs  Help", width - 2), colors[8]);
+    }
+    if (full || (modified && !old.modified || !modified && old.modified)) {
+        screen.fill(1, 0, width, ' ', colors[0]);
+        let mut x: i16 = 0;
+        let tab_width: i16 = if (documents.len() <= 3) {
+            24
+        } else {
+            16
+        };
+        let capacity = (width / tab_width) as usize;
+        let first = if (selected >= capacity) {
+            selected - capacity + 1
+        } else {
+            0 as usize
+        };
+        for (i in first..documents.len()) {
+            if (x + 4 >= width) {
+                break;
+            }
+            let d = &documents[i];
+            let label = " " + number(i + 1) + ":" + if (d.path == "") {
+                "Untitled"
+            } else {
+                basename(d.path)
+            } + if (d.buffer.modified()) {
+                " *"
+            } else {
+                ""
+            };
+            let size = if (x + tab_width > width) {
+                width - x
+            } else {
+                tab_width
+            };
+            let style = if (i == selected) {
+                colors[9]
+            } else {
+                colors[10]
+            };
+            screen.fill(1, x, size, ' ', style);
+            screen.text(1, x, fitted(label, size - 1), style);
+            x += size;
+        }
+    }
+    let document = &documents[selected];
+    let b = &document.buffer;
+    let margin = gutter(settings);
+    let columns = if (width - margin - 1 > 512) {
+        512
+    } else {
+        width - margin - 1
+    };
+    let selected_text = selection(b, v, vi);
+    let syntax = colors;
+    let generation = b.generation();
+    let line_count = b.lines();
+    let cursor_row = b.row(v.cursor);
+    let body = full || old.top != v.top || old.left != v.left;
+    let text_changed = body || generation != old.generation || selected_text.start != old.from || selected_text.end != old.to;
+    let painted_lines = if (body) {
+        height(screen)
+    } else {
+        let count = if (line_count > old.lines) {
+            line_count
+        } else {
+            old.lines
+        };
+        if (count > v.top + height(screen)) {
+            height(screen)
+        } else {
+            count - v.top
+        }
+    };
+    for (line in 0..painted_lines) {
+        let y = line as i16 + 2;
+        let row = v.top + line;
+        if (!text_changed && (row != cursor_row && row != old.row || cursor_row == old.row)) {
+            continue;
+        }
+        if (text_changed) {
+            screen.fill(y, 0, width, ' ', colors[0]);
+        } else {
+            screen.fill(y, 0, margin, ' ', colors[0]);
+        }
+        if (row < line_count) {
+            if (settings.numbers) {
+                let label = number(row + 1);
+                screen.text(y, 5 - label.len() as i16, label, if (row == cursor_row) {
+                    colors[12]
+                } else {
+                    colors[10]
+                });
+            }
+            if (text_changed) {
+                if (!paint(screen, b, y, margin, row, v.left, columns as u16, settings.tabstop, syntax, colors[7], selected_text.start, selected_text.end)) {
+                    screen.text(y, margin, "[render failed]", colors[14]);
+                }
+                let visual_end = b.visual(b.endline(row), settings.tabstop);
+                if (visual_end > v.left + columns as usize) {
+                    screen.text(y, width - 1, ">", colors[12]);
+                }
+            }
+        } else {
+            screen.text(y, 0, "~", colors[10]);
+        }
+    }
+    if (full || v.cursor != old.cursor || vi.mode != old.mode || (modified && !old.modified || !modified && old.modified) || generation != old.generation) {
+        let mode = if (vi.mode == 1) {
+            " INSERT "
+        } else if (vi.mode == 2) {
+            " VISUAL "
+        } else if (vi.mode == 3) {
+            " V-LINE "
+        } else {
+            " NORMAL "
+        };
+        screen.fill(rows - 3, 0, width, ' ', colors[8]);
+        let location = number(b.row(v.cursor) + 1) + ":" + number(b.visual(v.cursor, settings.tabstop) + 1) + "  " + document.language.name;
+        screen.text(rows - 3, 0, fitted(mode + if (document.path == "") {
+            "[Untitled]"
+        } else {
+            document.path
+        } + if (b.modified()) {
+            " [+]"
+        } else {
+            ""
+        }, width - location.len() as i16 - 2), colors[8]);
+        screen.text(rows - 3, width - location.len() as i16 - 1, location, colors[8]);
+    }
+    if (full || vi.status != old.status || vi.operator != old.operator || vi.pending != old.pending || vi.count != old.count) {
+        screen.fill(rows - 2, 0, width, ' ', colors[0]);
+        let pending = if (vi.operator != 0 || vi.pending != 0 || vi.count > 0) {
+            "  [" + if (vi.operator != 0) {
+                from_char(vi.operator as char)
+            } else {
+                ""
+            } + if (vi.count != 0) {
+                number(vi.count as usize)
+            } else {
+                ""
+            } + if (vi.pending != 0) {
+                from_char(vi.pending as char)
+            } else {
+                ""
+            } + "]"
+        } else {
+            ""
+        };
+        screen.text(rows - 2, 1, fitted(vi.status + pending, width - 2), colors[12]);
+    }
+    if (full) {
+        screen.fill(rows - 1, 0, width, ' ', colors[8]);
+        screen.text(rows - 1, 1, fitted("F1 Help  F2 Save  F3 Open  F4 Tabs  F5 Run  F10 Menu  i Insert  : Commands", width - 2), colors[8]);
+    }
+    if (full || vi.mode != old.mode) {
+        screen.cursor_shape(if (vi.mode == 1) {
+            3
+        } else {
+            1
+        });
+    };
+    *old = Paint { valid: true, width: width, rows: rows, top: v.top, left: v.left, generation: generation, lines: line_count, cursor: v.cursor, row: cursor_row, from: selected_text.start, to: selected_text.end, mode: vi.mode, modified: modified, status: vi.status, operator: vi.operator, pending: vi.pending, count: vi.count };
+    screen.cursor((b.row(v.cursor) - v.top) as i16 + 2, margin + (b.visual(v.cursor, settings.tabstop) - v.left) as i16, true);
+    screen.refresh();
+}

@@ -17,6 +17,7 @@ fn idle(milliseconds:u32)->Result<unit,ReactorError> {
 fn no_service(now:u32)->Service {ContinueAfter(None)}
 
 // Timer-only reactor. No network is initialized and no logical tick is granted.
+/// Creates a timer-only reactor using the host monotonic clock and a 10 ms idle quantum. Does not initialize networking.
 export fn host_reactor()->Result<ClockedReactor,ReactorError> {
     host_reactor_with(no_service,10)
 }
@@ -24,6 +25,7 @@ export fn host_reactor()->Result<ClockedReactor,ReactorError> {
 // supply an earlier maintenance deadline, or stop orderly. Protocol work must
 // be bounded; this hook does not install a networking stack by itself.
 // Return ContinueAfter(Some(0)) when service has just made a task runnable.
+/// Creates a host reactor with a bounded service callback and a 1–10 ms idle quantum. Service runs before and after idle; return `ContinueAfter(Some(0))` when work becomes runnable.
 export fn host_reactor_with(service:fn(u32)->Service,quantum:u32)->Result<ClockedReactor,ReactorError> {
     let reactor=clocked_reactor(read_clock,idle,service,quantum)?;
     // Detect an older host lacking idle support before accepting any work.

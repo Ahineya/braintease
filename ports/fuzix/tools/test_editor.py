@@ -140,15 +140,17 @@ with tempfile.TemporaryDirectory(prefix='fuzix-editor-') as temporary:
     fixtures = r"""
 import fs from 'node:fs';
 import {fatFile} from './ports/fuzix/tools/fat.mjs';
+import {openImage} from './ports/fuzix/tools/image.mjs';
+import {atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
-const file = process.argv[1], disk = fs.readFileSync(file), root = fatFile(disk, 'ROOTFS.IMG');
+const file = process.argv[1], disk = openImage(file), root = fatFile(disk, 'ROOTFS.IMG');
 const data = Array.from('line\n'.repeat(6000), c => c.charCodeAt(0));
 const updated = installRoot(root.data, [
   {name: '/limit', mode: 0o100644, data},
   {name: '/oversize', mode: 0o100644, data: [...data, 88]},
   {name: '/native-char', mode: 0o100644, data: [0x1234, 10]}
 ]);
-fs.writeFileSync(file, root.replace(updated));
+atomicWrite(file, root.replace(updated));
 """
     subprocess.run(['node', '--input-type=module', '-e', fixtures, str(image)], cwd=ROOT, check=True)
     exercise(image, engines[0])

@@ -1,0 +1,95 @@
+import {} from "../../libraries/ini/ini.c";
+extern "C" {
+    fn ini_reader(text: *const u8, length: usize) -> *mut u16;
+    fn ini_free(reader: *mut u16);
+    fn ini_next(reader: *mut u16) -> i16;
+    fn ini_line(reader: *mut u16) -> u32;
+    fn ini_section(reader: *mut u16) -> *const u8;
+    fn ini_key(reader: *mut u16) -> *const u8;
+    fn ini_value(reader: *mut u16) -> *const u8;
+}
+
+/// A one-based syntax error, input limit violation, or allocation failure.
+export type IniError = InvalidSyntax(u32) | InputTooLarge | OutOfMemory;
+/// An ordered INI assignment. Later assignments may override earlier ones.
+export struct Entry {
+    /// Section name, empty before the first section.
+    section: String,
+    /// Trimmed key.
+    key: String,
+    /// Trimmed value with optional matching outer quotes removed.
+    value: String
+}
+
+fn text(pointer: *const u8) -> String {
+    let mut value = "";
+    let mut i: usize = 0;
+    while (true) {
+        let byte = unsafe {
+            pointer[i]
+        };
+        if (byte == 0) {
+            return value;
+        }
+        value = value + from_byte(byte);
+        i += 1;
+    }
+    value
+}
+
+/// Parses octet INI using the shared C reader: sections, key=value, whole-line
+/// #/; comments and matching quotes; no escapes or inline comments. Limits:
+/// 64 KiB input, 1024 bytes per line, 256 assignments. Rejects embedded NUL.
+export fn parse(value: String) -> Result<Vec<Entry>, IniError> {
+    if (value.len() > 65536) {
+        return Err(InputTooLarge);
+    }
+    let mut bytes: Vec<u8> = [];
+    let mut line: u32 = 1;
+    for (i in 0..value.len()) {
+        if (value[i] as u32 > 255 || value[i] == '\0') {
+            return Err(InvalidSyntax(line));
+        }
+        if (value[i] == '\n') {
+            line += 1;
+        }
+        bytes.push(value[i] as u8);
+    }
+    parse_bytes(bytes)
+}
+
+/// Parses file octets directly, avoiding an intermediate String. Has the same
+/// syntax and limits as parse(), including embedded NUL rejection.
+export fn parse_bytes(value: Vec<u8>) -> Result<Vec<Entry>, IniError> {
+    if (value.len() > 65536) {
+        return Err(InputTooLarge);
+    }
+    let length = value.len();
+    let mut bytes = value;
+    // Also provide a valid pointer for empty input. The reader copies the bytes.
+    bytes.push(0);
+    let pointer = unsafe {
+        ini_reader(&bytes[0], length)
+    };
+    if (pointer.is_null()) {
+        return Err(OutOfMemory);
+    }
+    let guard = owned(pointer, fn(value: &mut *mut u16) => {
+        ini_free(*value);
+    });
+    let mut values: Vec<Entry> = [];
+    while (true) {
+        let status = ini_next(pointer);
+        if (status == 0) {
+            return Ok(values);
+        }
+        if (status == -1) {
+            return Err(InvalidSyntax(ini_line(pointer)));
+        }
+        if (status < 0) {
+            return Err(InputTooLarge);
+        }
+        values.push(Entry { section: text(ini_section(pointer)), key: text(ini_key(pointer)), value: text(ini_value(pointer)) });
+    }
+    Ok(values)
+}

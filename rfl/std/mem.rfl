@@ -4,22 +4,66 @@
 // A pointer from `&mut place` refers to that local. The read and write
 // functions are those operations for one value. `copy` and `fill` walk cells.
 
+/// Reads a `u8` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, initialized storage of the declared type.
 export fn read_u8(p: *const u8) -> u8 { unsafe { *p } }
+/// Writes a `u8` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, writable storage of the declared type.
 export fn write_u8(p: *mut u8, value: u8) -> () { unsafe { *p = value; } }
 
+/// Reads a `u16` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, initialized storage of the declared type.
 export fn read_u16(p: *const u16) -> u16 { unsafe { *p } }
+/// Writes a `u16` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, writable storage of the declared type.
 export fn write_u16(p: *mut u16, value: u16) -> () { unsafe { *p = value; } }
 
+/// Reads an `i16` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, initialized storage of the declared type.
 export fn read_i16(p: *const i16) -> i16 { unsafe { *p } }
+/// Writes an `i16` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, writable storage of the declared type.
 export fn write_i16(p: *mut i16, value: i16) -> () { unsafe { *p = value; } }
 
+/// Reads an `i32` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, initialized storage of the declared type.
 export fn read_i32(p: *const i32) -> i32 { unsafe { *p } }
+/// Writes an `i32` through a raw pointer.
+///
+/// # Safety
+/// `p` must refer to live, writable storage of the declared type.
 export fn write_i32(p: *mut i32, value: i32) -> () { unsafe { *p = value; } }
 
+/// Reads the `u16` at `p[index]`.
+///
+/// # Safety
+/// The indexed element must be within live, initialized storage.
 export fn read_at(p: *const u16, index: usize) -> u16 { unsafe { p[index] } }
 
+/// Writes the `u16` at `p[index]`.
+///
+/// # Safety
+/// The indexed element must be within live, writable storage.
 export fn write_at(p: *mut u16, index: usize, value: u16) -> () { unsafe { p[index] = value; } }
 
+/// Copies `count` consecutive `u16` elements forward from `src` to `dest`. This is not an overlap-safe move.
+///
+/// # Safety
+/// Both ranges must be valid, and the destination must be writable; avoid overlapping ranges.
 export fn copy(dest: *mut u16, src: *const u16, count: usize) -> () {
     let mut i: usize = 0;
     while (i < count) {
@@ -28,6 +72,10 @@ export fn copy(dest: *mut u16, src: *const u16, count: usize) -> () {
     }
 }
 
+/// Writes `value` into `count` consecutive `u16` elements.
+///
+/// # Safety
+/// The destination range must be live and writable.
 export fn fill(dest: *mut u16, count: usize, value: u16) -> () {
     let mut i: usize = 0;
     while (i < count) {
@@ -37,7 +85,9 @@ export fn fill(dest: *mut u16, count: usize, value: u16) -> () {
 }
 
 // Transfer initialized storage without copying resources or dropping the old value.
+/// Moves `value` into `place` and returns the previous value without dropping it or copying owned resources.
 export fn replace<T>(place: &mut T, value: T) -> T {
     __replace_value(place, move(value))
 }
+/// Replaces an option with `None` and returns its previous value.
 export fn take<T>(place: &mut Option<T>) -> Option<T> { replace(place, None) }

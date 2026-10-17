@@ -3,10 +3,13 @@ extern "C" {
     fn putchar(ch: c_int) -> c_int;
 }
 
+/// Reads one byte from standard input. Returns the C `getchar` result, including a negative value at end of input or on failure.
 export fn read_byte() -> c_int { getchar() }
 
+/// Writes one byte to standard output and returns the C `putchar` result.
 export fn write_byte(value: c_int) -> c_int { putchar(value) }
 
+/// Writes the indexed bytes of `text` to standard output without adding a newline.
 export fn write_text(text: String) -> () {
     let mut i: usize = 0;
     while (i < text.len()) {
@@ -17,11 +20,15 @@ export fn write_text(text: String) -> () {
 
 // Formatting is ordinary, statically dispatched RFL code. __write_value is the
 // compiler's scalar/text formatting leaf; it never calls print or println.
+/// Values that can write their representation to standard output through static dispatch.
 export trait Printable {
+    /// Writes this value to standard output without an automatic newline.
     fn print(&self);
 }
 
+/// Writes a value's `Printable` representation without adding a newline.
 export fn print<T: Printable>(value: T) -> unit { value.print(); }
+/// Writes a value's `Printable` representation followed by a newline.
 export fn println<T: Printable>(value: T) -> unit {
     value.print();
     putc('\n');

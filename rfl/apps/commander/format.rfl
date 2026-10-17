@@ -1,0 +1,24 @@
+export fn number(value: u32) -> String {
+    let mut n = value;
+    let mut text = "";
+    while (true) {
+        text = from_char((48 + n % 10) as char) + text;
+        n /= 10;
+        if (n == 0) {
+            return text;
+        }
+    }
+    text
+}
+
+export fn fitted(text: String, width: i16) -> String {
+    if (width < 1) {
+        return "";
+    }
+    let n = width as usize;
+    if (text.len() <= n) {
+        text
+    } else {
+        text[0..n]
+    }
+}

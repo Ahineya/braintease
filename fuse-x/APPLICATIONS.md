@@ -53,8 +53,8 @@ Ripple bank with an allocation in shared hosted kernel memory. Network polls
 run during idle and syscall entry/return. See [networking](README.md#networking-and-remote-shells)
 for launch settings and [the network tests](test_network.py) for runtime coverage.
 
-Current limits still include cooperative scheduling, 16 process slots, one
-64,000-cell global-data bank per program, a bounded heap window, and provisional
-RAM accounting. Native packages may reach 8 MiB and stream through a 4,096-cell
+Current limits still include cooperative scheduling, 16 process slots, up to
+sixteen 64,000-cell global banks per program, a bounded heap window, and
+provisional RAM accounting. Native packages may reach 64 MiB and stream through a 4,096-cell
 kernel buffer. Native code remains trusted host code; compatibility pointer
 checks are not host isolation.

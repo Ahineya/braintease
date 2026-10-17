@@ -559,13 +559,23 @@ stale listener generations, compact TIME_WAIT backpressure and duplicate FINs.
 The RFL import regression covers translation-unit static function/callback
 isolation and public global linkage. No routine RBF network run was added.
 
-Two compiler defects encountered while building the bridge have registered,
-correct-behavior RED regressions in `c-test/tests/bugs/`:
-`test_conditional_null_pointer_return` and `test_call_many_u32_arguments`.
-The first rejects a pointer/null conditional on return; the second exhausts
-pinned registers for a large non-inlined u32 call. The library uses an explicit
-branch and a compact options-array ABI respectively. Those tests remain open
-compiler work; the protocol/bridge passes do not claim they were fixed.
+The pointer/null conditional compiler defect is fixed, and the bridge now uses
+the ordinary conditional expression in `rfl_net_retain`. The registered
+`test_conditional_null_pointer_return` and `test_conditional_null_pointer_contexts`
+regressions cover pointer returns, both branch orders, constant-zero expressions,
+array/function decay, bank preservation and lazy branch evaluation. Frontend
+checks also reject runtime integers and nonzero/floating operands as null
+pointer constants.
+Both conditional regressions and the nearby pointer/ternary tests pass on native
+and RVM. All 144 C frontend tests pass, as do RFL C-import checks on both targets
+and the bridge's 35 ownership assertions. The native bridge check uses
+`NET_SOURCE=.../test_rfl_net_ownership.c NET_FAKE_NIC=1 scripts/build-net-ping.sh native`
+to link its guest protocol dependencies; the native single-file rct runner does
+not supply those modules.
+
+The separate `test_call_many_u32_arguments` regression remains RED: a large
+non-inlined u32 call exhausts pinned registers. The library still uses its
+compact options-array ABI; the conditional fix does not address that defect.
 
 
 The complete RFL release suite passed **359 tests, zero failures** with

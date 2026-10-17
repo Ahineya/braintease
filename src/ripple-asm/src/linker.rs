@@ -85,9 +85,27 @@ impl Linker {
         let placement = layout::place(&object_files, &layout, bank_size)?;
         let file_maps = &placement.maps;
 
-        // Concatenate data independently of code banking
+        // Fixed-bank legacy objects go first. Bank-aware objects may refer to
+        // any following bank without moving code or changing the pointer ABI.
         let mut all_data = Vec::new();
         let mut gp_extent = 0usize;
+        let mut legacy_extent = 0usize;
+        let mut data_starts = vec![0u32; object_files.len()];
+        let banked_data = object_files.iter().any(|o| o.rcc.as_ref().is_some_and(|m| m.banked_data));
+        for banked in [false, true] {
+            for (file, object) in object_files.iter().enumerate() {
+                if object.rcc.as_ref().is_some_and(|m| m.banked_data) != banked { continue; }
+                data_starts[file] = all_data.len() as u32;
+                let bias = object.data_labels.iter().find_map(|(name, &offset)|
+                    name.starts_with("__gp_").then_some(offset as usize)).unwrap_or(0);
+                if !object.data.is_empty() {
+                    let extent = all_data.len() + bias + object.data.len();
+                    gp_extent = gp_extent.max(extent);
+                    if !banked { legacy_extent = legacy_extent.max(extent); }
+                }
+                all_data.extend_from_slice(&object.data);
+            }
+        }
         // RCC's .space blocks reserve GP-bank addresses; they are initialized
         // by generated code, not by loading bytes into bank-zero legacy data.
         // Track this per object so mixing in a legacy .data object stays visible.
@@ -102,17 +120,7 @@ impl Linker {
         let mut relocs: Vec<Reloc> = Vec::new();
 
         for (file_idx, obj) in object_files.iter().enumerate() {
-            let file_data_start = all_data.len() as u32;
-            if !obj.data.is_empty() {
-                if let Some(base) = obj.data_labels.iter().find_map(|(name, &offset)|
-                    name.starts_with("__gp_").then_some(offset as usize))
-                {
-                    // Data label coordinates include rasm's origin (normally
-                    // two cells), while the reservation vector excludes it.
-                    gp_extent = gp_extent.max(file_data_start as usize + base + obj.data.len());
-                }
-            }
-            all_data.extend_from_slice(&obj.data);
+            let file_data_start = data_starts[file_idx];
 
             for (name, label) in &obj.labels {
                 let local_inst = (label.absolute_address / 4) as usize;
@@ -138,8 +146,12 @@ impl Linker {
         }
 
         let data_extent = all_data.len().max(gp_extent);
-        if data_extent > bank_size {
-            errors.push(format!("global data needs {} cells, exceeds GP bank capacity {} (would overlap the stack bank)", data_extent, bank_size));
+        let data_capacity = bank_size * if banked_data { 16 } else { 1 };
+        if data_extent > data_capacity {
+            errors.push(format!("global data needs {data_extent} cells, exceeds data capacity {data_capacity}; use --banked-globals when compiling a program with multiple global banks"));
+        }
+        if legacy_extent > bank_size {
+            errors.push(format!("fixed-bank data needs {legacy_extent} cells, exceeds GP bank capacity {bank_size}; recompile its translation units with --banked-globals"));
         }
         if !errors.is_empty() {
             return Err(errors);
@@ -172,6 +184,7 @@ impl Linker {
                     &global_labels,
                     &global_data_labels,
                     global_idx,
+                    data_extent,
                 ) {
                     errors.push(format!("File {}, instruction {}: {}", file_idx, local_idx, e));
                 } else if unresolved.ref_type == "absolute"
@@ -436,8 +449,24 @@ impl Linker {
         labels: &HashMap<String, Label>,
         data_labels: &HashMap<String, u32>,
         current_idx: usize,
+        data_extent: usize,
     ) -> Result<(), String> {
         match reference.ref_type.as_str() {
+            "data_bank" | "data_offset" => {
+                if instruction.opcode != Opcode::Li as u8 {
+                    return Err("data projections are only valid as LI immediates".into());
+                }
+                let base = data_labels.get(reference.symbol())
+                    .ok_or_else(|| format!("Undefined data label: {}", reference.symbol()))?;
+                let displacement = reference.label.split_once('+').map_or(Ok(0i64), |(_, n)| n.parse::<i64>())
+                    .map_err(|_| format!("Invalid data displacement: {}", reference.label))?;
+                let address = i64::from(*base).checked_add(displacement)
+                    .filter(|n| *n >= 0 && *n < i64::from(self.bank_size.max(1)) * 65536)
+                    .ok_or_else(|| format!("Data projection outside address space: {}", reference.label))?;
+                instruction.word2 = if reference.ref_type == "data_bank" {
+                    (address / i64::from(self.bank_size.max(1))) as u16
+                } else { (address % i64::from(self.bank_size.max(1))) as u16 };
+            }
             "code_bank" | "code_offset" => {
                 let label = labels.get(&reference.label)
                     .ok_or_else(|| format!("Undefined function label: {}", reference.label))?;
@@ -483,9 +512,18 @@ impl Linker {
                 }
             }
             "data" => {
+                if matches!(reference.label.as_str(), "__rcc_layout_stack_bank" | "__rcc_layout_heap_bank") {
+                    if instruction.opcode != Opcode::Li as u8 { return Err("layout constants require LI".into()); }
+                    let stack = 1 + data_extent.div_ceil(usize::from(self.bank_size.max(1))).max(1);
+                    instruction.word2 = if reference.label == "__rcc_layout_stack_bank" { stack } else { (stack + 1).max(5) } as u16;
+                    return Ok(());
+                }
                 // For data references (LOAD/STORE/LI with labels)
                 let data_addr = data_labels.get(&reference.label)
                     .ok_or_else(|| format!("Undefined data label: {}", reference.label))?;
+                if *data_addr >= u32::from(self.bank_size.max(1)) {
+                    return Err(format!("data label {} needs a bank component; use %data_offset and %data_bank", reference.label));
+                }
                 
                 // Check if this is an LI instruction (opcode 0x0E)
                 if instruction.opcode == 0x0E {

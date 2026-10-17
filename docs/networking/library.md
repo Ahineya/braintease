@@ -207,7 +207,10 @@ code call an optional internal driver rather than directly referencing TCP.
 
 `net_tcp_listen`, `net_tcp_listener_poll`, `net_tcp_accept` and
 `net_tcp_release` expose caller-owned bounded pools over the same stream core.
-The context supports two listeners and four live connections. Accepted pointers
+Standalone contexts support two listeners and four live connections. The FUZIX
+and Fuse-X kernel profile selects four listeners and sixteen live connections
+consistently across all network units; see [local IPC and capacity](local-ipc.md).
+Accepted pointers
 remain claimed through failure/close until explicit release. An optional
 caller-owned `NetTcpWaitTable` preserves 32 compact old tuples while releasing
 large TIME_WAIT buffers; no ordinary ping/DNS application allocates that table.

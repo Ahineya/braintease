@@ -94,6 +94,7 @@ pub(super) struct Machine {
     checkpoint_time: Option<Instant>,
     pub(super) hosted: bool,
     global_template: Vec<u16>,
+    extended_template: Option<(usize, Vec<u16>)>,
     active: Option<Process>,
     runnable: VecDeque<Process>,
     waiting: Vec<Process>,
@@ -484,11 +485,24 @@ impl Runtime {
                     }
                     let owner = self.images.owner(request.a as u32);
                     self.processes.discard_staged(request.a as u32);
-                    let template = owner
-                        .as_ref()
-                        .map(|m| m.template.as_slice())
-                        .unwrap_or(&self.processes.global_template);
-                    self.memory.write_from(BANK, template);
+                    if let Some(previous) = self.processes.active.as_ref().unwrap().module.as_ref()
+                    {
+                        self.memory.fill(
+                            previous.global_start..previous.global_start + previous.template.len(),
+                            0,
+                        );
+                    }
+                    self.memory
+                        .write_from(BANK, &self.processes.global_template);
+                    let mut global_range = None;
+                    if let Some(image) = &owner {
+                        self.memory.write_from(image.global_start, &image.template);
+                        global_range =
+                            Some(image.global_start..image.global_start + image.template.len());
+                    } else if let Some((start, template)) = &self.processes.extended_template {
+                        self.memory.write_from(*start, template);
+                        global_range = Some(*start..*start + template.len());
+                    }
                     self.errno = owner.as_ref().map_or(0, |m| m.errno);
                     self.processes.active.as_mut().unwrap().module = owner;
                     self.memory.fill(2 * BANK..5 * BANK, 0);
@@ -498,6 +512,9 @@ impl Runtime {
                         address_space::KERNEL_START - 5 * BANK - 1,
                     )]);
                     self.allocated.clear();
+                    if let Some(range) = global_range {
+                        self.exclude_globals(range);
+                    }
                     self.processes.active.as_mut().unwrap().frames =
                         vec![Frame::new(request.a as u32, vec![request.b], 0)];
                     self.processes.active.as_mut().unwrap().jumps.clear();
@@ -745,6 +762,13 @@ unsafe extern "C" fn rcc_native_process_start(
                 rt.memory.cells(BANK..2 * BANK).collect()
             } else {
                 Vec::new()
+            },
+            extended_template: if hosted != 0 {
+                rt.extended_globals
+                    .as_ref()
+                    .map(|range| (range.start, rt.memory.cells(range.clone()).collect()))
+            } else {
+                None
             },
             active: Some(Process {
                 pid: 1,
