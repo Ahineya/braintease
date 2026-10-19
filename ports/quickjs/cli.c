@@ -33,7 +33,7 @@ typedef struct {
     QJSSystem *system;
     uint64_t deadline;
     unsigned long time_limit;
-    int timed_out;
+    int timed_out, server;
 } Host;
 
 static void discard_exception(JSContext *ctx)
@@ -199,7 +199,8 @@ static JSModuleDef *load_module(JSContext *ctx, const char *name, void *opaque)
     JSValue compiled;
     JSModuleDef *module;
     (void)opaque;
-    if (!strcmp(name, "fuse:http")) return qjs_system_module(ctx, name);
+    if (!strcmp(name, "fuse:http") || !strcmp(name, "fuse:net") ||
+        !strcmp(name, "fuse:http-server")) return qjs_system_module(ctx, name);
     file = fopen(name, "rb");
     if (!file) {
         JS_ThrowReferenceError(ctx, "cannot open module '%s': %s", name, strerror(errno));
@@ -264,7 +265,7 @@ static int evaluate(JSContext *ctx, Host *host, const char *source, size_t lengt
     host->polls = 0;
     host->timed_out = 0;
     if (qjs_system_now(&now)) { fputs("js: monotonic clock failed\n", stderr); return 1; }
-    host->deadline = now + host->time_limit;
+    host->deadline = host->time_limit ? now + host->time_limit : 0;
     result = JS_Eval(ctx, source, length, filename, module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(result)) { evaluation_exception(ctx, host); status = 1; goto done; }
     /* Conversion can execute user code, enqueue timers or reject Promises.
@@ -280,18 +281,20 @@ static int evaluate(JSContext *ctx, Host *host, const char *source, size_t lengt
       /* Yield to ready OS work between bounded microtask batches. Neither a
        * Promise chain nor a busy file/pipe may starve timers indefinitely. */
       for (batch = 0; batch < 32 && JS_IsJobPending(JS_GetRuntime(ctx)); ++batch) {
-        if (jobs++ >= host->job_limit) {
+        if (host->job_limit && jobs++ >= host->job_limit) {
             fputs("js: pending-job budget exceeded\n", stderr); status = 1; goto done;
         }
+        if (host->server) host->polls = 0;
         rc = JS_ExecutePendingJob(JS_GetRuntime(ctx), &job_ctx);
         if (rc < 0) { evaluation_exception(job_ctx, host); status = 1; goto done; }
       }
       if (!JS_IsJobPending(JS_GetRuntime(ctx)) && !qjs_system_pending(host->system)) break;
-      if (qjs_system_now(&now) || now >= host->deadline) {
+      if (qjs_system_now(&now) || (host->deadline && now >= host->deadline)) {
           fputs("js: event-loop time budget exceeded\n", stderr); status = 1; goto done;
       }
+      if (host->server) host->polls = 0;
       if (qjs_system_step(host->system, JS_IsJobPending(JS_GetRuntime(ctx)) ? 0 :
-          (unsigned long)(host->deadline - now)) < 0) {
+          (host->deadline ? (unsigned long)(host->deadline - now) : 1000)) < 0) {
           evaluation_exception(ctx, host); status = 1; goto done;
       }
     }
@@ -360,6 +363,7 @@ static void usage(FILE *stream)
           "  -e code       execute JavaScript\n"
           "  -p code       execute and print the result\n"
           "  -m, --module  evaluate as an ES module\n"
+          "  --server      long-running mode; retain per-turn CPU and memory limits\n"
           "  -i            enter the line REPL after execution\n"
           "  --memory n    engine allocation limit (C16 cells on guests)\n"
           "  --max-polls n interrupt callback budget per evaluation\n"
@@ -393,7 +397,8 @@ int main(int argc, char **argv)
         if (*arg != '-' || !strcmp(arg, "-")) break;
         if (!strcmp(arg, "--help")) { usage(stdout); return 0; }
         if (!strcmp(arg, "--version")) { puts("QuickJS 2026-06-04 / portable terminal host"); return 0; }
-        if (!strcmp(arg, "-m") || !strcmp(arg, "--module")) module = 1;
+        if (!strcmp(arg, "--server")) { host.server = 1; host.time_limit = 0; host.job_limit = 0; }
+        else if (!strcmp(arg, "-m") || !strcmp(arg, "--module")) module = 1;
         else if (!strcmp(arg, "-i")) interactive = 1;
         else if (!strcmp(arg, "-e") || !strcmp(arg, "-p")) {
             display = !strcmp(arg, "-p");

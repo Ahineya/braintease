@@ -1,0 +1,54 @@
+{
+  "repository": "https://invent.kde.org/games/kolf.git",
+  "revision": "ce6379940d60ef11f7587e4162fd4d1f7439e9a0",
+  "course": {
+    "upstream": "courses/Practice",
+    "local": "courses/Practice.kolf",
+    "author": "Jason Katz-Brown",
+    "sha256": "6f78a59adcac4987f46188dbd9f82039efae7b4d79d5b348c00eb39f61e70f74"
+  },
+  "license": "GPL-2.0-or-later",
+  "reused": "Eight original courses and adapted putting/obstacle/terrain, shot checkpoint and water recovery rules; no Box2D, Qt, artwork or sound files included",
+  "courses": [
+    {
+      "upstream": "courses/Practice",
+      "local": "courses/Practice.kolf",
+      "sha256": "6f78a59adcac4987f46188dbd9f82039efae7b4d79d5b348c00eb39f61e70f74"
+    },
+    {
+      "upstream": "courses/ReallyEasy",
+      "local": "courses/ReallyEasy.kolf",
+      "sha256": "61be5a456fc5bff4f216b06f4915745874ffa56e348df46e0865e5a4362d0aac"
+    },
+    {
+      "upstream": "courses/Easy.kolf",
+      "local": "courses/Easy.kolf",
+      "sha256": "fc89afb526564486485d49380294c2cca9e550f16e88d430e9aef5c026f16761"
+    },
+    {
+      "upstream": "courses/Medium.kolf",
+      "local": "courses/Medium.kolf",
+      "sha256": "6004006aa09fa609d2693c106ab338e16e2cdece194994899b52440dffe8de03"
+    },
+    {
+      "upstream": "courses/Hard.kolf",
+      "local": "courses/Hard.kolf",
+      "sha256": "596be97666727c595f778ddce213a61a955bedab595bedebed1ccc11beb96dc5"
+    },
+    {
+      "upstream": "courses/Impossible",
+      "local": "courses/Impossible.kolf",
+      "sha256": "6b53644a83a79960d46faf9bd946dfa9dfb1b3191e3be942f92805ecd97101fe"
+    },
+    {
+      "upstream": "courses/Classic.kolf",
+      "local": "courses/Classic.kolf",
+      "sha256": "cfd6c7603687d5366d40939ddb1082242efd5ddb20ca25867feaa9ba42319d36"
+    },
+    {
+      "upstream": "courses/USApro",
+      "local": "courses/USApro.kolf",
+      "sha256": "e80fceda7f3d721f11fd9e9692c547b101134e7ebcd137ef346f6184ae5c0b50"
+    }
+  ]
+}

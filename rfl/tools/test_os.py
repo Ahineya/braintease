@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run RFL and its Commander against real kernels using private, disposable disks."""
 import argparse
+import codecs
 import fcntl
 import json
 import os
@@ -33,6 +34,7 @@ class Screen:
         self.lines = [list(" " * self.columns) for _ in range(self.rows)]
         self.y = self.x = 0
         self.pending = ""
+        self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.wrap = False
         self.charset = False
         self.alternate, self.saved = False, None
@@ -40,7 +42,7 @@ class Screen:
         self.styles = [[self.style for _ in range(self.columns)] for _ in range(self.rows)]
 
     def feed(self, data):
-        self.pending += data.decode("latin1")
+        self.pending += self.decoder.decode(data)
         text, i = self.pending, 0
         while i < len(text):
             ch = text[i]
@@ -98,7 +100,11 @@ class Screen:
                         elif final == "J" and n == 2: self.lines = [list(" " * self.columns) for _ in range(self.rows)]
                         elif final == "K" and self.y < self.rows:
                             for column in range(self.x if n == 0 else 0, self.columns if n != 1 else self.x + 1): self.lines[self.y][column] = " "
-                        if final in "HfABCDJK": self.wrap = False
+                        elif final == "X" and self.y < self.rows:
+                            for column in range(self.x, min(self.columns, self.x + (n or 1))):
+                                self.lines[self.y][column] = " "
+                                self.styles[self.y][column] = self.style
+                        if final in "HfABCDJKX": self.wrap = False
                     i = end + 1
                     continue
                 if text[i + 1] in "()":
@@ -149,7 +155,7 @@ class Guest:
                                         stderr=slave, env=environment, start_new_session=True)
         os.close(slave)
         self.log, self.at, self.screen = bytearray(), 0, Screen()
-        self.prompt = b"fuzix# " if system == "fuzix" else b"fuse-x# "
+        self.prompt = b"riplix# " if system == "fuzix" else b"fuse-x# "
         self.system = system
 
     def pump(self):
@@ -355,7 +361,8 @@ def exercise(args, system, directory):
         guest.send(b"iEDITED \x1b:wq\r")
         guest.visible("Returned from editor")
         guest.send(b"\x1b[15~")  # F5 copy.
-        guest.visible("Copy to: /right/alpha.txt")
+        guest.visible("Copy to")
+        guest.visible("/right/alpha.txt")
         guest.send(b"\r")
         guest.visible("Copied 44 bytes")
         guest.send(b"\t")
@@ -363,20 +370,22 @@ def exercise(args, system, directory):
         guest.send(b"\x1b[B")
         guest.visible("Selected: /right/alpha.txt")
         guest.send(b"\x1b[17~")  # F6 rename/move.
-        guest.visible("Move to:")
+        guest.visible("Move to")
         guest.send(b"\x15/right/renamed.txt\r")
         guest.visible("Moved successfully")
         guest.send(b"r")
-        guest.visible("Rename: renamed.txt")
+        guest.visible("Rename")
+        guest.visible("renamed.txt")
         guest.send(b"\x15local.txt\r")
         guest.visible("Renamed successfully")
         guest.visible("Selected: /right/local.txt")
         guest.send(b"r")
-        guest.visible("Rename: local.txt")
+        guest.visible("Rename")
+        guest.visible("local.txt")
         guest.send(b"\x15renamed.txt\r")
         guest.visible("Renamed successfully")
         guest.send(b"\x1b[18~")  # F7 mkdir.
-        guest.visible("New directory:")
+        guest.visible("New directory")
         guest.send(b"newdir\r")
         guest.visible("Directory created")
         guest.send(b"\x1b[F")

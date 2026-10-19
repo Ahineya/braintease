@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unicode TUI, shell and VT throughput on private FUZIX/Fuse-X disks."""
+"""Unicode TUI, shell and VT throughput on private Riplix/Fuse-X disks."""
 import argparse,fcntl,json,os,statistics,struct,sys,tempfile,time,termios
 from pathlib import Path
 from test_os import Guest,run,ROOT,PORT

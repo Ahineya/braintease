@@ -84,7 +84,7 @@ future is cancelled. The ISA and device contract are unchanged. The native input
 bridge currently treats host read failures as EOF. Guest-OS console adapters
 through POSIX/poll remain future work; Terminal is the standalone adapter.
 The guest-OS build helper rejects its host/MMIO input dependencies for both
-FUZIX and Fuse-X, rather than linking a service that bypasses the guest kernel.
+Riplix and Fuse-X, rather than linking a service that bypasses the guest kernel.
 
 LF, CR and CR/LF terminate lines. A CR remembers the optional LF for the next
 read, including when an intervening read is cancelled while waiting. UTF-8 bytes

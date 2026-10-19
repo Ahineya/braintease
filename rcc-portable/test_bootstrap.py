@@ -36,14 +36,14 @@ def verify_rvm(generation, work):
     text = (work / 'transcript.log').read_text().replace('\r\n', '\n')
     assert child.returncode == 0 and '\nGENERATION_STATUS:0\n' in text, text[-8000:]
     assert 'Compiled and linked entirely in the guest!' in text and 'Ripple: disk synced; power off.' in text, text[-8000:]
-    print('Rebuilt compiler generation executed and compiled working programs under FUZIX/RVM', flush=True)
+    print('Rebuilt compiler generation executed and compiled working programs under Riplix/RVM', flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workdir', type=Path, default=HERE / 'build/guest-bootstrap')
     parser.add_argument('--target', choices=['build', 'tools'], default='build')
-    parser.add_argument('--verify-rvm', type=Path, help='execute this complete compiler generation under FUZIX/RVM')
+    parser.add_argument('--verify-rvm', type=Path, help='execute this complete compiler generation under Riplix/RVM')
     args = parser.parse_args()
     work = args.workdir.resolve()
     if args.verify_rvm:

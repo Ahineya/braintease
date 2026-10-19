@@ -29,9 +29,9 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 
 | Document | Topic |
 |----------|-------|
-| [graphics/README.md](graphics/README.md) | FUZIX graphics, GX contract, resource budget, Nano-X audit and desktop milestones |
+| [graphics/README.md](graphics/README.md) | Riplix graphics, GX contract, resource budget, Nano-X audit and desktop milestones |
 | [fusede/README.md](fusede/README.md) | FuseDE direction: NXDSKTOP and companion apps first, Nuklear evaluation, custom desktop and file manager |
-| [fuse-x/README.md](fuse-x/README.md) | Fuse-X native hosted FUZIX direction, desktop integration, storage, networking, and roadmap |
+| [fuse-x/README.md](fuse-x/README.md) | Fuse-X native hosted Riplix direction, desktop integration, storage, networking, and roadmap |
 | [rfl/traits-printing.md](rfl/traits-printing.md) | Planned first RFL traits milestone: Printable-based library print/println |
 | [rfl/commander-rift-performance.md](rfl/commander-rift-performance.md) | Commander and Rift benchmarks, redraw costs and optimization priorities |
 | [rfl/wasm-browser.md](rfl/wasm-browser.md) | Accepted Wasm backend, low-crossing browser runtime, typed UI and parallel implementation plan |
@@ -47,7 +47,7 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 | [networking/terminal-browser.md](networking/terminal-browser.md) | Terminal browser feasibility, Lynx/Links porting decisions, curses and HTTP milestones |
 | [networking/select.md](networking/select.md) | Planned C16 select API, descriptor readiness, kernel wakeups and acceptance criteria |
 | [ir.md](ir.md) | Textual IR syntax, tutorials, and lowering rules |
-| [self-hosting/README.md](self-hosting/README.md) | Portable C compiler, cproc frontend, C11 direction and FUZIX/Fuse-X self-hosting plan |
+| [self-hosting/README.md](self-hosting/README.md) | Portable C compiler, cproc frontend, C11 direction and Riplix/Fuse-X self-hosting plan |
 | [c-testsuite.md](c-testsuite.md) | Vendored c-testsuite vs Ripple data model |
 | [compiler-trace-formats.md](compiler-trace-formats.md) | `rcc --trace` JSON |
 | [compiler-performance.md](compiler-performance.md) | RCC profiling results, preprocessor prototype and parallel compilation plan |

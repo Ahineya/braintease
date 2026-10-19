@@ -1,6 +1,6 @@
 # select() implementation contract
 
-Implemented for FUZIX/Ripple and native Fuse-X on October 17, 2026. RVM's
+Implemented for Riplix and native Fuse-X on October 17, 2026. RVM's
 `gterm` uses this interface for graphics and PTY waiting. It is also shared
 groundwork for the [terminal browser](terminal-browser.md) and Nano-X; neither
 application port is completed by supplying readiness.

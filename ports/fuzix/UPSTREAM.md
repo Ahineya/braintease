@@ -1,5 +1,12 @@
 # Upstream source
 
+The maintained kernel is named **Riplix**, derived from FUZIX. Its boot banner
+retains upstream copyright notices and explicitly acknowledges that ancestry.
+The supplied Riplix artwork is in `banner.tmp.txt`; `ripple/identity.h` carries
+the banner for all three boot profiles. Original source notices, the
+pinned archive and licenses remain intact. Full RVM/native images install kernel provenance,
+credits and license under `/usr/share/doc/riplix/`.
+
 - Project: [FUZIX](https://codeberg.org/EtchedPixels/FUZIX)
 - Branch: master
 - Revision: `0a2336cf8ce57cb94ad82f0c9f4cde2b4d578a78`
@@ -130,7 +137,7 @@ packing, bounded file/terminal input, checked record I/O and replacement saves,
 terminal setup/restoration and window dimensions.
 The port uses a 30,000-character core, with one character reserved by the
 upstream read/insert algorithms. Unused platform backends remain unmodified.
-FUZIX/Ripple now requires the MMU on RVM, with 64 process slots, selected page
+Riplix now requires the MMU on RVM, with 64 process slots, selected page
 maps, and COW user memory. One extra code-image record supports replacement
 execs. The compiler ABI is unchanged. The old non-MMU/RBF build, bank snapshots,
 one-bank allocator, and physical code-base relocations are retired; only the
@@ -357,7 +364,7 @@ wide operands. Legacy profiles retain their smaller tables. Saved task data and
 MMU metadata are relocated to reserved banks; the process page pool is unchanged.
 The local GX device and graphical PTY terminal are new port code. Nano-X is an
 independent pinned import under `ports/nanox`, with a separate C16 adaptation
-audit; the Nano-X server is not linked into FUZIX.
+audit; the Nano-X server is not linked into Riplix.
 
 `CONFIG_SELECT` enables inode waiter maps/helpers without the unrelated level-2
 facilities. Ripple's syscall 72 uses the shared versioned C16 request and wide
@@ -461,7 +468,7 @@ executable aliases now use guest symlinks. Host exports retain their separate
 no-host-symlinks policy. See the C16 filesystem specification and
 `tools/test_symlinks.py` for the contract and both-target acceptance coverage.
 
-Directory rename is supported in the shared kernel on both FUZIX/Ripple and
+Directory rename is supported in the shared kernel on both Riplix/Ripple and
 Fuse-X. Same-filesystem moves retain the tree's inodes, update `..` and parent
 link counts, and permit replacement of an empty directory. Destination ancestry
 is checked from the resolved parent to reject cycles even with relative paths.

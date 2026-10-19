@@ -4,13 +4,14 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 ROOT = Path(__file__).resolve().parents[2]
 PORT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'ports/tls'))
-from build import build as tls_build
+from build import build as tls_build, shared_library
 
 
 def main():
@@ -29,6 +30,7 @@ def main():
     with (tls / (a.target + '.lock')).open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         inputs = tls_build(tls, compiler, a.target, a.j)
+        tls_import = shared_library(inputs, sdk, compiler) if a.target == 'native' and os.environ.get('FUSE_X_SHARED_LIBRARIES', '1') != '0' else None
     includes = [ROOT / 'ports/tls', ROOT / 'ports/fuzix/ripple/include', ROOT / 'ports/fuzix/upstream/Library/include',
                 ROOT / 'runtime/include', ROOT / 'ports/fuzix/ripple']
     sources = [PORT / (n + '.c') for n in ('main', 'ui', 'composer', 'mentions', 'json', 'store', 'http', 'network', 'tools', 'tool_history')]
@@ -39,8 +41,11 @@ def main():
         command = [sys.executable, str(ROOT / 'fuse-x/cc.py'), *map(str, sources), '--curses',
                    '--compiler', str(compiler), '--build', str(sdk), '-o', str(artifact)]
         command += ['-I' + str(d) for d in includes]
-        for ir in inputs:
-            command += ['--object-ir', str(ir)]
+        if tls_import:
+            command += ['--library', tls_import]
+        else:
+            for ir in inputs:
+                command += ['--object-ir', str(ir)]
         subprocess.run(command, check=True)
     else:
         make = ['make', '-s', '--no-print-directory', '-C', str(ROOT / 'ports/fuzix'), f'BUILD={sdk}',
@@ -72,7 +77,7 @@ def main():
         with ThreadPoolExecutor(max_workers=a.j) as pool:
             objects = list(pool.map(lower, inputs))
         with output.with_suffix('.link.log').open('w') as log:
-            subprocess.run([str(assembler.with_name('rlink')), info['entry'], *map(str, objects), *info['libraries'],
+            subprocess.run([sys.executable, str(ROOT/'ports/fuzix/tools/shared-link.py'), '--build', str(sdk), '--linker', str(assembler.with_name('rlink')), '--compiler', str(compiler), '--', info['entry'], *map(str, objects), *info['libraries'],
                             '-f', 'rxe', '--bank-size', '64000', '-o', str(artifact)], stdout=log, stderr=log, check=True)
     artifact.replace(output)
     print(f'Built chat ({a.target}): {output}', flush=True)

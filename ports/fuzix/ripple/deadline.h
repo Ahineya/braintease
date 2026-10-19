@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "process-limits.h"
 
-/* Internal monotonic wait queue, independent of FUZIX decisecond accounting.
+/* Internal monotonic wait queue, independent of Riplix decisecond accounting.
  * All mutation is serialized by the kernel's IRQ/scheduler protection. Keeping
  * the core independent of ptab also permits exact C16 tests with a fake clock. */
 #define RIPPLE_DEADLINE_SLOTS RIPPLE_PROCESS_SLOTS

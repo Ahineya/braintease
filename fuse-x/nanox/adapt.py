@@ -34,7 +34,7 @@ def adapt(dest):
     path=dest/'nanox/client.c';text=path.read_text()
     text='#ifdef NXR_NATIVE_GUI\n#include "session.h"\n#endif\n'+text
     text=function(text,'GrOpen',lambda s:replace(s,'\n\treturn nxSocket;\n',
-        '#ifdef NXR_NATIVE_GUI\n    nxh_detach_terminal();\n#endif\n\treturn nxSocket;\n'))
+        '\n#ifdef NXR_NATIVE_GUI\n    nxh_detach_terminal();\n#endif\n\treturn nxSocket;\n'))
     path.write_text(text)
     text=(NX/'ripple/nxterm.c').read_text()
     text=replace(text,'signal(SIGHUP,caught);','signal(SIGHUP,SIG_IGN);')

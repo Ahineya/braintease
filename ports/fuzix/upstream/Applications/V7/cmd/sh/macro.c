@@ -191,10 +191,18 @@ char *macro(char *as)
 	FILEHDR fb;
 
 	push((void *)&fb);/*FIXME*/
-	estabf(as);
+	/* Expand only an unquoted leading ~ or ~/. Quote the inserted home so
+	 * spaces and wildcard characters in HOME remain literal pathname data. */
+	BOOL tilde = as[0] == '~' && (as[1] == 0 || as[1] == '/') &&
+	    homenod.namval && *homenod.namval;
+	estabf(tilde ? as + 1 : as);
 	usestak();
 	quote = 0;
 	quoted = 0;
+	if (tilde) {
+		const char *home = homenod.namval;
+		while (*home) pushstak(*home++ | QUOTE);
+	}
 	copyto(0);
 	pop();
 	if (quoted && (stakbot == staktop)) {

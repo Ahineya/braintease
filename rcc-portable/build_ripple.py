@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the portable Ripple backend for the host, Fuse-X or FUZIX/RVM."""
+"""Build the portable Ripple backend for the host, Fuse-X or Riplix/RVM."""
 import argparse
 import os
 from pathlib import Path
@@ -22,9 +22,9 @@ def main():
     parser.add_argument('--os',choices=['host','fuse-x','fuzix'],default='host')
     parser.add_argument('-o',type=Path)
     parser.add_argument('--build',type=Path)
-    parser.add_argument('--backend',choices=['rust','portable'],default='rust',help='backend used to compile the FUZIX tool itself')
+    parser.add_argument('--backend',choices=['rust','portable'],default='rust',help='backend used to compile the Riplix tool itself')
     args=parser.parse_args()
-    if args.backend=='portable' and args.os!='fuzix':parser.error('the portable backend currently builds FUZIX/Ripple executables')
+    if args.backend=='portable' and args.os!='fuzix':parser.error('the portable backend currently builds Riplix/Ripple executables')
     output=(args.o or HERE/('build/rcc-ripple' if args.os=='host' else 'build/apps/rcc-ripple.'+('fxe' if args.os=='fuse-x' else 'rxe'))).resolve()
     output.parent.mkdir(parents=True,exist_ok=True)
     sources=sorted((HERE/'ripple').glob('*.c'))

@@ -48,7 +48,7 @@ def main():
                             '--disk', str(image), '--memory', '16384000', '--net', 'off',
                             '--jit', '--timeout', '240']
             master, guest_input = pty.openpty()
-            program, pages, prompt = '/bin/lynx', '/www', b'fuzix# '
+            program, pages, prompt = '/bin/lynx', '/www', b'riplix# '
         guest = subprocess.Popen(command_line, stdin=guest_input, stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT,
                                  env=dict(os.environ, RCC_NATIVE_NET='off', RCC_NATIVE_HEADLESS='1',
@@ -113,7 +113,7 @@ def main():
             if master is not None:
                 os.close(master)
             log.write_bytes(transcript)
-    print(('Native Fuse-X' if native else 'RVM/FUZIX') + ': Lynx version and two local HTML dumps passed')
+    print(('Native Fuse-X' if native else 'RVM/Riplix') + ': Lynx version and two local HTML dumps passed')
 
 
 if __name__ == '__main__':

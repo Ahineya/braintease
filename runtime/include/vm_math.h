@@ -122,7 +122,7 @@ static unsigned vm_math_submit(volatile unsigned short *packet) {
 }
 #endif
 
-/* User libc hook stages the packet through the FUZIX kernel; native Fuse-X
+/* User libc hook stages the packet through the Riplix kernel; native Fuse-X
  * implements the same scalar contract as a direct host service. */
 #ifdef RIPPLE_MMU
 extern unsigned __rcc_float_accel(unsigned, unsigned long long,

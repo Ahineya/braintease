@@ -7,7 +7,7 @@ import { joined, basename, parent } from "lib/path";
 import { prompt, choose, message } from "lib/tui_dialog";
 import { OpenOptions, open_file } from "lib/tui_file_dialog";
 import { Document, empty, load, changed, save, number } from "./files";
-import { Theme, load as load_theme, palette } from "./theme";
+import { Theme, load as load_theme, palette, directory as theme_directory } from "./theme";
 import { Settings, configured, decimal, persist } from "./config";
 import { input_run, input_count, input_scalar } from "lib/text_curses";
 import { View, Vi, view, controls, event as vi_event, reset } from "./vi";
@@ -321,7 +321,7 @@ fn tools(screen: &Screen, theme: &Theme) {
 
 fn theme_menu(screen: &Screen, theme: &mut Theme) {
     let mut names = ["configured"];
-    match read_dir("/usr/share/rift/themes") {
+    match read_dir(theme_directory()) {
         Ok(entries) => {
             for (i in 0..entries.len()) {
                 let name = entries[i].name;

@@ -20,9 +20,9 @@ a=p.parse_args();build=a.build.resolve();native_build=a.native_build.resolve()
 PROMPT=r'\[\e[1;32m\]\u@\h\[\e[0m\] \[\e[1;36m\]\w\[\e[0m\] \[\e[1;33m\]\$\[\e[0m\] '
 CONFIG="PS1='"+PROMPT+"'\nexport PS1\nRC_SEEN=yes\necho loaded >> /tmp/shrc-count\n"
 COLOR='\x1b[1;32mroot@ripple\x1b[0m \x1b[1;36m~\x1b[0m \x1b[1;33m#\x1b[0m '
-SETUP="""cat > /.shrc <<'SHRC_END'
+SETUP="""cat > /root/.shrc <<'SHRC_END'
 """+CONFIG+"""SHRC_END
-cat > /.profile <<'PROFILE_END'
+cat > /root/.profile <<'PROFILE_END'
 echo UNEXPECTED_PROFILE
 PROFILE_END
 shutdown
@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='fuzix-shrc-') as temp:
     output=run('echo RESTART_RC:$RC_SEEN\nshutdown\n')
     assert COLOR in output and 'RESTART_RC:yes' in output,output
     if not a.native:
-        output=run("cp /.shrc /tmp/keep-shrc\ncat > /.shrc <<'GTERM_END'\necho GTERM_SHRC_OK > /tmp/gterm-rc\nexit\nGTERM_END\ngterm\necho GTERM_STATUS:$?\ncat /tmp/gterm-rc\ncp /tmp/keep-shrc /.shrc\nshutdown\n")
+        output=run("cp /root/.shrc /tmp/keep-shrc\ncat > /root/.shrc <<'GTERM_END'\necho GTERM_SHRC_OK > /tmp/gterm-rc\nexit\nGTERM_END\ngterm\necho GTERM_STATUS:$?\ncat /tmp/gterm-rc\ncp /tmp/keep-shrc /root/.shrc\nshutdown\n")
         assert 'GTERM_STATUS:0' in output and '\nGTERM_SHRC_OK\n' in output,output
         subprocess.run([sys.executable,str(PORT/'tools/fsck.py'),str(image)],check=True)
     else:

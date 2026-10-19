@@ -21,4 +21,9 @@ int ri_nano_draw_cached(const RiImage *,GR_DRAW_ID,GR_GC_ID,int,int,int,int,
                         const struct RiClip *,unsigned);
 void ri_nano_forget(const RiImage *);
 void ri_nano_clear(void);
+/* Draw atlas subrectangles through the same bounded retained-resource LRU.
+ * tint uses the GC foreground and preserves image alpha. The owner calls
+ * forget before modifying/freeing the atlas, as with any retained image. */
+struct fde_rect;
+int ri_nano_draw_rects(const RiImage *,GR_DRAW_ID,GR_GC_ID,const struct fde_rect *,unsigned,unsigned tint);
 #endif

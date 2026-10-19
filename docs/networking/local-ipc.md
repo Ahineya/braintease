@@ -1,8 +1,8 @@
-# FUZIX and Fuse-X local sockets
+# Riplix and Fuse-X local sockets
 
 Both execution targets implement guest Unix-domain stream sockets independently
 of Ethernet. This is the local transport for a separate graphics server and
-other guest services. It uses FUZIX descriptors, permissions, scheduling and
+other guest services. It uses Riplix descriptors, permissions, scheduling and
 `select()`; it does not expose macOS Unix sockets to guest programs.
 
 ```c
@@ -77,7 +77,7 @@ blocking operations with `EINTR`.
 
 ## Capacity and memory
 
-| Resource | FUZIX/Ripple and Fuse-X |
+| Resource | Riplix and Fuse-X |
 |---|---:|
 | Internet socket endpoints, all protocols | 64 |
 | Active TCP connections across listeners and outbound connections | 64 |

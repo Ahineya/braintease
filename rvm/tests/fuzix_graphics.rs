@@ -1,4 +1,4 @@
-//! Opt-in real FUZIX terminal regression and latency probe, using a private disk.
+//! Opt-in real Riplix terminal regression and latency probe, using a private disk.
 use rvm::{
     display_rgb565::RGB565Display,
     input_events::InputTransition,
@@ -76,7 +76,7 @@ fn expected_size(lines: &[String], cursor: (usize, usize), cols: usize, rows: us
 }
 
 #[test]
-#[ignore = "requires built FUZIX images; set FUZIX_TEST_BUILD and run with --ignored --nocapture"]
+#[ignore = "requires built Riplix images; set FUZIX_TEST_BUILD and run with --ignored --nocapture"]
 fn smaller_terminal_geometry_input_and_scrolling() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let build = std::env::var_os("FUZIX_TEST_BUILD")
@@ -103,7 +103,7 @@ fn smaller_terminal_geometry_input_and_scrolling() {
         .unwrap();
     vm.rgb565_display = Some(RGB565Display::new());
     vm.push_input_string("gterm -g 64x20\n");
-    await_pixels(&mut vm, &expected_size(&["fuzix# ".into()], (0, 7), 64, 20));
+    await_pixels(&mut vm, &expected_size(&["riplix# ".into()], (0, 8), 64, 20));
     {
         let state = vm.rgb565_display.as_ref().unwrap().get_state();
         let state = state.lock().unwrap();
@@ -112,7 +112,7 @@ fn smaller_terminal_geometry_input_and_scrolling() {
     text(&mut vm, "abcdefgh");
     await_pixels(
         &mut vm,
-        &expected_size(&["fuzix# abcdefgh".into()], (0, 15), 64, 20),
+        &expected_size(&["riplix# abcdefgh".into()], (0, 16), 64, 20),
     );
     vm.devices.accept_events([InputTransition::Key {
         key: 224,
@@ -123,12 +123,12 @@ fn smaller_terminal_geometry_input_and_scrolling() {
         key: 224,
         down: false,
     }]);
-    await_pixels(&mut vm, &expected_size(&["fuzix# ".into()], (0, 7), 64, 20));
+    await_pixels(&mut vm, &expected_size(&["riplix# ".into()], (0, 8), 64, 20));
     text(&mut vm, "seq 1 25");
     key(&mut vm, 40);
     let mut lines: Vec<String> = (7..=25).map(|n| n.to_string()).collect();
-    lines.push("fuzix# ".into());
-    await_pixels(&mut vm, &expected_size(&lines, (19, 7), 64, 20));
+    lines.push("riplix# ".into());
+    await_pixels(&mut vm, &expected_size(&lines, (19, 8), 64, 20));
     vm.devices.accept_events([InputTransition::Close]);
     vm.push_input_string("shutdown\n");
     let start = Instant::now();
@@ -163,7 +163,7 @@ fn await_pixels(vm: &mut VM, expected: &[u16]) -> Duration {
     }
 }
 #[test]
-#[ignore = "requires built FUZIX images; set FUZIX_TEST_BUILD and run with --ignored --nocapture"]
+#[ignore = "requires built Riplix images; set FUZIX_TEST_BUILD and run with --ignored --nocapture"]
 fn terminal_readiness_damage_scrolling_and_latency() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let build = std::env::var_os("FUZIX_TEST_BUILD")
@@ -191,14 +191,14 @@ fn terminal_readiness_damage_scrolling_and_latency() {
     vm.rgb565_display = Some(RGB565Display::new());
     vm.push_input_string("gterm\n");
     let startup = Instant::now();
-    let ready = await_pixels(&mut vm, &expected(&["fuzix# ".into()], (0, 7)));
+    let ready = await_pixels(&mut vm, &expected(&["riplix# ".into()], (0, 8)));
     println!(
         "terminal ready: {:.3}s; instructions={}; JIT={:?}",
         ready.as_secs_f64(),
         vm.executed_instructions,
         vm.jit_stats()
     );
-    let mut line = String::from("fuzix# ");
+    let mut line = String::from("riplix# ");
     let mut latency = Vec::new();
     for c in 'a'..='h' {
         key(&mut vm, rvm::devices::key_code(&c.to_string()).unwrap());
@@ -220,12 +220,12 @@ fn terminal_readiness_damage_scrolling_and_latency() {
         key: 224,
         down: false,
     }]);
-    await_pixels(&mut vm, &expected(&["fuzix# ".into()], (0, 7)));
+    await_pixels(&mut vm, &expected(&["riplix# ".into()], (0, 8)));
     text(&mut vm, "abc");
-    await_pixels(&mut vm, &expected(&["fuzix# abc".into()], (0, 10)));
+    await_pixels(&mut vm, &expected(&["riplix# abc".into()], (0, 11)));
     key(&mut vm, 80);
     key(&mut vm, 42);
-    await_pixels(&mut vm, &expected(&["fuzix# ac".into()], (0, 8)));
+    await_pixels(&mut vm, &expected(&["riplix# ac".into()], (0, 9)));
     vm.devices.accept_events([InputTransition::Key {
         key: 224,
         down: true,
@@ -235,12 +235,12 @@ fn terminal_readiness_damage_scrolling_and_latency() {
         key: 224,
         down: false,
     }]);
-    await_pixels(&mut vm, &expected(&["fuzix# ".into()], (0, 7)));
+    await_pixels(&mut vm, &expected(&["riplix# ".into()], (0, 8)));
     text(&mut vm, "seq 1 40");
     key(&mut vm, 40);
     let mut lines: Vec<String> = (12..=40).map(|n| n.to_string()).collect();
-    lines.push("fuzix# ".into());
-    await_pixels(&mut vm, &expected(&lines, (29, 7)));
+    lines.push("riplix# ".into());
+    await_pixels(&mut vm, &expected(&lines, (29, 8)));
     // Loss of focus must cancel repeat; a held key starts repeating only after
     // its deadline, independently of output/event frequency.
     vm.devices
@@ -248,13 +248,13 @@ fn terminal_readiness_damage_scrolling_and_latency() {
     await_pixels(
         &mut vm,
         &expected(
-            &[lines[..29].to_vec(), vec!["fuzix# a".into()]].concat(),
-            (29, 8),
+            &[lines[..29].to_vec(), vec!["riplix# a".into()]].concat(),
+            (29, 9),
         ),
     );
     let settled = expected(
-        &[lines[..29].to_vec(), vec!["fuzix# aa".into()]].concat(),
-        (29, 9),
+        &[lines[..29].to_vec(), vec!["riplix# aa".into()]].concat(),
+        (29, 10),
     );
     await_pixels(&mut vm, &settled);
     vm.devices

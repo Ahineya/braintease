@@ -1,6 +1,6 @@
 # Application libraries
 
-These optional C libraries sit above libc. They are shared by FUZIX and Fuse-X
+These optional C libraries sit above libc. They are shared by Riplix and Fuse-X
 and have RFL bindings in [`rfl/lib`](../rfl/lib/). Core curses owns cells,
 windows, terminal modes, attributes and color pairs. It does not read files or
 choose configuration paths, application roles, environment variables or themes.
@@ -34,6 +34,13 @@ sections, whitespace, whole-line `#`/`;` comments, and matching outer single or
 double quotes. It does not interpret escapes or inline comments. Empty values
 are allowed. Embedded NUL, malformed syntax, inputs over 64 KiB, lines over 1024
 bytes and more than 256 assignments are rejected. Parsing treats text as octets.
+
+Larger application files can use `ini_reader_with_limits(text, length,
+max_input, max_line, max_entries)`. The reader enforces each explicit budget;
+section storage grows to the smaller of the input and line budgets. Counters
+are 32-bit on C16. Existing callers keep the original defaults. RFL exposes
+`parse_bytes_with_limits(bytes, Limits { input, line, entries })` in `lib/ini`.
+The Kolf course loader uses 256 Ki input cells, 1024 per line and 16384 entries.
 
 ## Themes
 
@@ -82,7 +89,7 @@ tui_curses_install(theme, 1, styles, fallback);
 ```
 
 For a Fuse-X C application, `python3 fuse-x/cc.py app.c --tui-theme -o app.fxe`
-adds these headers and libraries plus curses. `--ini` adds only INI. For FUZIX,
+adds these headers and libraries plus curses. `--ini` adds only INI. For Riplix,
 `make -C ports/fuzix BUILD="$PWD/build/fuzix" config-sdk` builds
 `config-ini.pobj`, `config-theme.pobj` and `config-curses.pobj`; link these along
 with the existing curses and guest libc objects. The theme sources use relative
@@ -174,6 +181,18 @@ checked markers/tables, and fixes the imported SOS-header consumption bug.
 the shared DEFLATE extraction retains Joergen Ibsen's zlib license and its
 original notice. It derives from the existing C16 Telegram inflater.
 
+PNG decoding selects a predictor once per scanline, skips the no-filter pass,
+and uses contiguous 8-bit RGB/RGBA paths before falling back to the complete
+sample-depth/Adam7/transparency implementation. The shared inflater keeps its
+Huffman bit reader in scalar locals for a complete symbol, refilling only when
+needed; it does not prefetch across stored-block boundaries. These are portable
+guest algorithms, with the same CRC/Adler, truncation and allocation checks.
+`python3 libraries/tests/test_deflate.py` checks 41 independently generated zlib
+streams, including fixed/dynamic/stored blocks, sync-flush transitions, 66,000
+octet output, truncated/trailing input and undersized output buffers under UBSan.
+`libraries/tests/image_bench.c`, linked with `libraries/image/decode.c`, accepts
+an image path and iteration count to measure decoding inside either guest.
+
 `image/nano.h` and the separate `nano.c` adapter provide `ri_nano_draw` for
 Nano-X applications: scaled and repeated drawing into an explicit clipped
 rectangle, preserving the GC's additional clipping. It converts to RGB565 and
@@ -212,7 +231,7 @@ should pass the canvas to the Nano-X adapter rather than query every pixel.
 vectors, pixel hashes, JPEG comparison, bank-sized canvases, truncation,
 allocation failures, guarded buffers and mutated inputs under UBSan. The fixture
 generator needs `cjpeg`/`djpeg` (libjpeg). `--target both` additionally compiles
-and runs the same checks inside disposable Fuse-X and FUZIX/RVM kernels, then
+and runs the same checks inside disposable Fuse-X and Riplix/RVM kernels, then
 checks their filesystems. `--compiler` chooses RCC. The RFL wrapper is covered
 by `cargo test --release -p rfl --test image_library`. Actual graphics, clipping,
 scrolling and HTTP/HTTPS loading are covered by NetSurf's `tests/images.py`.

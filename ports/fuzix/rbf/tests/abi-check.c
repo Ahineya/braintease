@@ -28,11 +28,11 @@ int main(void) {
     check(ripple_syscall(&req)==1 && !req.error);
     fd=open("/BOOT",0);
     n=read(fd,local,sizeof(local));
-    check(fd==3 && n==35 && !memcmp(local,"FUZIX kernel running in Brainfuck.\n",35));
+    check(fd==3 && n==36 && !memcmp(local,"Riplix kernel running in Brainfuck.\n",36));
     check(read(fd,local,sizeof(local))==0 && close(fd)==0);
     for (i=0;i<8;++i) {
         fd=open("/BOOT",0); n=read(fd,global,sizeof(global));
-        if (fd!=3 || n!=35 || close(fd)) break;
+        if (fd!=3 || n!=36 || close(fd)) break;
     }
     check(i==8);
     fd=open("/README",0);

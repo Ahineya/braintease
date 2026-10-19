@@ -123,6 +123,19 @@ void *ripple_mmu_kernel_alloc(unsigned cells) {
     }
     return NULL;
 }
+void ripple_mmu_kernel_free(void *pointer, unsigned cells) {
+    unsigned long address=(unsigned long)pointer;
+    unsigned bank=address>>16, off=(unsigned)address, pages, id, i;
+    irqflags_t flags=di();
+    if(!cells || bank<MMU_POOL_BASE || bank>=MMU_RAM_BANKS || off%MMU_PAGE_CELLS ||
+       cells>BANK_CELLS-off) panic("kernel allocation free");
+    pages=(unsigned)(((unsigned long)cells+MMU_PAGE_CELLS-1)/MMU_PAGE_CELLS);
+    id=(bank-MMU_POOL_BASE)*MMU_BANK_PAGES+off/MMU_PAGE_CELLS;
+    for(i=0;i<pages;i++) if(refs()[id+i]!=KERNEL_PAGE) panic("kernel allocation owner");
+    for(i=0;i<pages;i++) refs()[id+i]=0;
+    used_pages-=pages;
+    irqrestore(flags);
+}
 /* Resolve a validated read-only user span to one physical page for DMA. */
 int ripple_mmu_span(unsigned long ptr,unsigned write,unsigned *bank,unsigned *off,unsigned *run) {
     unsigned *p=pte((unsigned)(udata.u_ptab-ptab),(unsigned)(ptr>>16),(unsigned)ptr);
@@ -224,6 +237,56 @@ int ripple_mmu_exec_data(unsigned task, unsigned long cells) {
     return 0;
 }
 int ripple_mmu_exec(unsigned task) { return ripple_mmu_exec_data(task, 0); }
+/* RXE2 keeps its private binding table in GP and bank-aligns module globals.
+ * Only populated pages are allocated; alignment holes consume no physical RAM. */
+int ripple_mmu_exec_layout(unsigned task,const unsigned *banks,const unsigned long *cells,unsigned count,unsigned bindings) {
+    unsigned available=MMU_POOL_PAGES-used_pages,needed=MMU_BANK_PAGES;
+    unsigned i,bank,off,limit,*p;
+    unsigned long n,end=(unsigned long)(USER_GP+1)<<16;
+    unsigned saved_code[RIPPLE_CODE_MAP_CELLS];
+    if(bindings>BANK_CELLS)return -1;
+    needed+=(bindings+MMU_PAGE_CELLS-1)/MMU_PAGE_CELLS;
+    for(i=0;i<count;i++) {
+        if(banks[i]<=USER_GP || banks[i]>USER_HEAP_LAST || cells[i]>(USER_HEAP_LAST+1UL-banks[i])*BANK_CELLS) return -1;
+        n=(cells[i]+MMU_PAGE_CELLS-1)/MMU_PAGE_CELLS;
+        if(n>MMU_POOL_PAGES-needed) return -1;
+        needed+=(unsigned)n;
+        if(cells[i]) end=((banks[i]+cells[i]/BANK_CELLS)<<16)|(cells[i]%BANK_CELLS);
+    }
+    if((end>>16)>USER_HEAP_LAST) return -1;
+    if(ready[task]) for(bank=USER_GP;bank<=USER_SB;bank++) {
+        limit=bank_limit(task,bank);
+        for(off=0;off<limit;off+=MMU_PAGE_CELLS) {
+            p=pte(task,bank,off);
+            if((p[2]&MP_PRESENT)&&refs()[pageid(p)]==1) ++available;
+        }
+    }
+    if(available<needed) return -1;
+    /* Keep the old instruction map visible until exec publishes its complete
+     * replacement. A transient empty map would discard still-valid JIT regions
+     * for the shared libraries, despite their instruction pages never changing. */
+    if(ripple_copy(saved_code,table(task,ILEAF),RIPPLE_CODE_MAP_CELLS))panic("save module code map");
+    ripple_mmu_free(task);ripple_mmu_alloc(task);
+    if(ripple_copy(table(task,ILEAF),saved_code,RIPPLE_CODE_MAP_CELLS))panic("restore module code map");
+    for(off=0;off<BANK_CELLS;off+=MMU_PAGE_CELLS)
+        if(newpage(task,USER_SB,off)) panic("module stack allocation");
+    for(off=0;off<bindings;off+=MMU_PAGE_CELLS)
+        if(newpage(task,USER_GP,off))panic("module bindings allocation");
+    for(i=0;i<count;i++) for(n=0;n<cells[i];n+=MMU_PAGE_CELLS)
+        if(newpage(task,banks[i]+(unsigned)(n/BANK_CELLS),(unsigned)(n%BANK_CELLS))) panic("module data allocation");
+    task_data_end[task]=end;ptab[task].p_size=task_pages[task];ripple_mmu_select(task);return 0;
+}
+void ripple_mmu_code_clear(unsigned task) {
+    if(ripple_zero(table(task,ILEAF),RIPPLE_CODE_MAP_CELLS)) panic("MMU code map");
+}
+void ripple_mmu_code_add(unsigned task,unsigned virtual_bank,unsigned base,unsigned long count) {
+    unsigned bank,banks=(unsigned)((count+BANK_CELLS-1UL)/BANK_CELLS);
+    if(virtual_bank>RIPPLE_CODE_MAP_CELLS/4U || banks>RIPPLE_CODE_MAP_CELLS/4U-virtual_bank) panic("MMU module code range");
+    for(bank=0;bank<banks;bank++) {
+        unsigned *p=table(task,ILEAF+(virtual_bank+bank)*4U);
+        p[0]=base+bank;p[1]=0;p[2]=MP_PRESENT|MP_READ|MP_EXEC|MP_USER;p[3]=0;
+    }
+}
 void ripple_mmu_code(unsigned task, unsigned base, unsigned long count) {
     unsigned bank;
     unsigned banks = (unsigned)((count + BANK_CELLS - 1UL) / BANK_CELLS);

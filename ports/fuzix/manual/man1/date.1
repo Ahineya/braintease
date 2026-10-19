@@ -10,7 +10,7 @@ The kernel clock and file timestamps remain UTC regardless of display timezone.
 .SH TIMEZONE
 The TZ environment variable overrides the first line of /etc/TZ. An unset TZ
 uses that system-wide file; an empty or invalid TZ selects UTC. Without either
-setting, UTC is used. New libc builds support these settings on both FUZIX/Ripple
+setting, UTC is used. New libc builds support these settings on both Riplix
 and Fuse-X; older statically linked programs need rebuilding to use them.
 .PP
 Use a POSIX-style rule: STDoffset, optionally followed by

@@ -1,0 +1,14 @@
+{
+  "project": "GNOME Klotski",
+  "version": "3.38.2",
+  "archive": "https://download.gnome.org/sources/gnome-klotski/3.38/gnome-klotski-3.38.2.tar.xz",
+  "archive_sha256": "91637845649f3ca709d29f71ee775b946d1112087209f32264e8fad21a0ca0e2",
+  "license": "GPL-3.0-or-later",
+  "files": {
+    "COPYING": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "data/assets.svg": "93390cb77dc02c90375a378c695358c6bd09bec676a319c8bb2209715747ce1e",
+    "src/klotski-window.vala": "91f95afc0cf08f16d9695b155e18d729f89cce92d834343f28e6d85d295e0126",
+    "src/puzzle-view.vala": "8c8831b2f9e8c966277d2a0dd92616f7792e562c11e79bbf09f163ddaa05e999",
+    "src/puzzle.vala": "fb71011faaca48822f7bdcfc5abcb76ef77422a7ac7ebd34052d31093b7e389a"
+  }
+}

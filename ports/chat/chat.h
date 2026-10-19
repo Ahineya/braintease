@@ -8,7 +8,7 @@
 #ifdef FUSE_X_USER
 #define CHAT_SYSTEM "native Fuse-X"
 #else
-#define CHAT_SYSTEM "FUZIX/RVM"
+#define CHAT_SYSTEM "Riplix/RVM"
 #endif
 #define CHAT_MAX 128
 #define CHAT_TEXT 131072UL

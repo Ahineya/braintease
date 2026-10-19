@@ -1,5 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include "user.h"
+#define RH_OPEN(p) fx_open(p,O_RDONLY,0)
+#define RH_READ(fd,p,n) fx_read(fd,p,n)
+#define RH_CLOSE(fd) fx_close(fd)
+#define RH_CHDIR(p) fx_call(10,(unsigned long)(p),0,0)
+#include "root-home.h"
 
 extern unsigned fuse_headless, fuse_telnet, fuse_one_shot, fuse_stopping, fuse_console_closed;
 extern unsigned fuse_stop_tasks(unsigned);
@@ -10,7 +15,7 @@ static int graphics_service;
 static int start_program(unsigned console) {
     int pid=fx_fork(), group;
     char *arguments[3];
-    char *environment[7];
+    char *environment[9];
     if(pid) return pid;
     fx_call(35,SIGINT,0,0); fx_call(35,SIGQUIT,0,0);
     fx_call(35,SIGTTOU,1,0);
@@ -22,11 +27,12 @@ static int start_program(unsigned console) {
     arguments[0]=console==3 ? "nano-X" : console==2 ? "gterm" : console ? "sh" : "telnetd";
     arguments[1]=console==3 ? "-p" : NULL;arguments[2]=NULL;
     environment[0]="PATH=/bin:/usr/bin";
-    environment[1]="HOME=/";
+    environment[1]=root_home_environment;
     environment[2]="TERM=vt100";
     environment[3]="SHELL=/bin/sh";
     environment[4]="PS1=fuse-x# ";
-    environment[5]="EDITOR=/bin/vi"; environment[6]=NULL;
+    environment[5]="EDITOR=/bin/vi"; environment[6]="USER=root";
+    environment[7]="LOGNAME=root"; environment[8]=NULL;
     fx_call(23,(unsigned long)(console==3 ? "/bin/nano-X" : console==2 ? "/bin/gterm" : console ? "/bin/sh" : "/bin/telnetd"),
             (unsigned long)arguments,(unsigned long)environment);
     fx_error(arguments[0]); fx_exit(127);
@@ -55,6 +61,7 @@ void fuse_init_entry(unsigned long argument) {
     if (fx_open("/dev/tty1",O_RDWR,0)!=0 || fx_call(17,0,0,0)!=1 || fx_call(17,0,0,0)!=2)
         fx_shutdown();
     fx_puts("Fuse-X: native /init running as PID 1\n");
+    if(root_home_start()<0)fx_puts("init: home unavailable; starting in /\n");
     fx_call(35,SIGINT,1,0); fx_call(35,SIGQUIT,1,0);
     if(fuse_telnet && start_program(0)<0) fx_error("init telnetd fork");
     if(fuse_gui && (graphics_service=start_program(3))<0) fx_error("init graphics service fork");
@@ -97,7 +104,7 @@ void fuse_init_entry(unsigned long argument) {
 void fuse_hello_entry(unsigned long argument) {
     struct fx_arguments *args=(void *)argument;
     unsigned i;
-    fx_puts("Hello from native FUZIX! PID "); fx_number(fx_call(18,0,0,0));
+    fx_puts("Hello from native Riplix! PID "); fx_number(fx_call(18,0,0,0));
     for (i=1;i<args->argc;i++) { fx_puts(" "); fx_puts(args->argv[i]); }
     fx_puts("\n"); fx_exit(0);
 }

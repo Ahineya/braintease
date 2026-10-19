@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and run the isolated FUZIX Brainfuck shell on a fresh disposable disk."""
+"""Build and run the isolated Riplix Brainfuck shell on a fresh disposable disk."""
 import argparse
 import fcntl
 import os
@@ -15,13 +15,13 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def main():
-    parser = argparse.ArgumentParser(prog='scripts/run-fuzix-bf.sh',
+    parser = argparse.ArgumentParser(prog='scripts/run-riplix-bf.sh',
         allow_abbrev=False, description=__doc__, epilog=(
         'Other options are passed to rbf. The default starts the tiny /init shell; '
         '--boot-check verifies PID 1, root mount and file reads, then halts. '
         'The maintained MMU/RVM build and its disks are untouched.'))
     parser.add_argument('--build', type=Path,
-                        default=Path(os.environ.get('FUZIX_BF_BUILD', ROOT / 'build/fuzix-rbf')))
+                        default=Path(os.environ.get('RIPLIX_BF_BUILD', os.environ.get('FUZIX_BF_BUILD', ROOT / 'build/fuzix-rbf'))))
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--build-only', action='store_true')
     mode.add_argument('--run-only', action='store_true')
@@ -46,14 +46,14 @@ def main():
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            print('Waiting for another FUZIX/BF build...', file=sys.stderr, flush=True)
+            print('Waiting for another Riplix/BF build...', file=sys.stderr, flush=True)
             fcntl.flock(lock, fcntl.LOCK_EX)
         env = os.environ.copy()
         xcode = '/Applications/Xcode.app/Contents/Developer'
         if 'DEVELOPER_DIR' not in env and Path(xcode).is_dir():
             env['DEVELOPER_DIR'] = xcode
         log = build / 'build.log'
-        print(f'Building minimal FUZIX/BF (log: {log})...', file=sys.stderr, flush=True)
+        print(f'Building minimal Riplix/BF (log: {log})...', file=sys.stderr, flush=True)
         result = subprocess.run([
             sys.executable, str(ROOT / 'scripts/build_progress.py'), '--log', str(log), '--',
             sys.executable, str(Path(__file__).with_name('build.py')), '--build', str(build),

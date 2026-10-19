@@ -28,7 +28,7 @@ function start(disk){
   if(data.type==='paused'){paused=true;$('pause').textContent='Resume';status('Paused');}
   if(data.type==='resumed'){paused=false;$('pause').textContent='Pause';status('Running');}
   if(data.type==='error'){booting=false;diskControls();status(data.message);term.writeln('\r\n\x1b[31m'+data.message+'\x1b[0m');}
-  if(data.type==='disk'){const url=URL.createObjectURL(new Blob([data.data],{type:'application/octet-stream'}));const a=document.createElement('a');a.href=url;a.download='fuzix-browser.img';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  if(data.type==='disk'){const url=URL.createObjectURL(new Blob([data.data],{type:'application/octet-stream'}));const a=document.createElement('a');a.href=url;a.download='riplix-browser.img';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  };
  worker.onerror=e=>{if(worker!==current)return;booting=false;diskControls();status('Machine stopped: '+e.message);};
  if(disk)worker.postMessage({type:'boot',disk},[disk]);else send({type:'boot'});

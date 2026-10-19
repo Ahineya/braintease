@@ -117,7 +117,7 @@ def main():
         actual = struct.unpack('<' + 'H' * len(expected), data)
         for i, (got, wanted) in enumerate(zip(actual, expected)):
             assert got == wanted, f'pixel ({i % WIDTH},{i // WIDTH}): {got:04x} != {wanted:04x}'
-        # Inject directly through RVM's live event API after readiness. FUZIX
+        # Inject directly through RVM's live event API after readiness. Riplix
         # uses its own timer device, not the legacy DEVICE presentation clock
         # used by --input-script / stepped execution.
         disk = image('events.img')

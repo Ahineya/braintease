@@ -21,8 +21,8 @@ const session=Buffer.alloc(328);session.write('FTG1');session.writeUInt32LE(1234
 session[8]=2;session[10]=1;session.fill(7,12,268);
 createHash('sha256').update(session.subarray(0,296)).digest().copy(session,296);
 if(variant==='corrupt')session[20]^=1;
-const login=[{name:'/etc/telegram.conf',mode:0o100600,data:config},
-  {name:'/telegram.session',mode:0o100600,data:session}];
+const login=[{name:variant==='modern'?'/root/.telegram.conf':'/etc/telegram.conf',mode:0o100600,data:config},
+  {name:variant==='modern'?'/root/.telegram.session':'/telegram.session',mode:0o100600,data:session}];
 writeImage(dir+'/source.img',rootImage(login,1024,128),true);
 if(variant==='different') {
   const other=Buffer.from(session);other[12]^=1;
@@ -57,9 +57,9 @@ function get(path) {
   }
   return {mode:checked.image.readUInt16LE(node.base*2),data:Buffer.from(Array.from({length:node.size},(_,i)=>cell(i)))};
 }
-assert.equal(get('/etc/telegram.conf').mode,0o100600);
-assert.equal(get('/telegram.session').mode,0o100600);
-assert.equal(get('/telegram.session').data.length,328);
+assert.equal(get('/root/.telegram.conf').mode,0o100600);
+assert.equal(get('/root/.telegram.session').mode,0o100600);
+assert.equal(get('/root/.telegram.session').data.length,328);
 assert.equal(get('/note').data.toString(),'keep my files');
 assert.equal(get('/note').mode,0o100640);
 assert.equal(get('/bin/telegram').mode,0o100755);
@@ -112,6 +112,16 @@ class InstallTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual((directory / 'disk.img').read_bytes(), before)
                 self.assertFalse(list(directory.glob('disk.img.bak*')))
+
+    def test_source_already_uses_home(self):
+        for target in ('native', 'ripple'):
+            with self.subTest(target=target), tempfile.TemporaryDirectory(prefix='tg-home-install-') as temporary:
+                directory = Path(temporary)
+                self.setup_image(directory, target, 'modern')
+                result = self.install(directory, target)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                subprocess.run(['node', '--input-type=module', '-e', VERIFY, str(directory), target],
+                               cwd=ROOT, check=True, capture_output=True)
 
 
 if __name__ == '__main__':

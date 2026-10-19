@@ -5,14 +5,14 @@ a browser plan with initial implementation work. The shared
 [`select()` prerequisite](select.md) and [C16 curses](../../ports/fuzix/CURSES.md)
 now pass guest tests on both targets. The [Lynx port](../../ports/lynx/README.md)
 compiles all 82 configured source units with RCC's own preprocessor. Both
-native Fuse-X and RVM/FUZIX link and run Lynx, passing version and two local HTML
+native Fuse-X and RVM/Riplix link and run Lynx, passing version and two local HTML
 dump tests. With guest TLS it uses roughly 308,000 static cells across five banks;
 the packages are about 39 MiB native and 43 MiB on RVM. Guest HTTP, forms and console/Telnet navigation
 now have an independent Ethernet acceptance harness. The port adds complete
 request writes, a 64 KiB response limit and small-cache defaults. Browser heap
 arena measurements are opt-in; stack peak and a broader hostile-HTML audit remain
 open.
-It covers both [FUZIX on RVM](../../ports/fuzix/README.md) and
+It covers both [Riplix on RVM](../../ports/fuzix/README.md) and
 [native Fuse-X](../../fuse-x/README.md).
 
 ## Current HTTP and HTTPS implementation
@@ -123,13 +123,13 @@ confuse those results with the host checks above.
 | Area | Foundation | Work needed for a browser |
 | --- | --- | --- |
 | Network | Guest IPv4, TCP, DNS, socket descriptors and nonblocking I/O | Browser-specific socket API audit and connection limits; shared select readiness now exists |
-| HTTP | Adapted FUZIX `htget` handles partial I/O, timeouts, chunking and redirects | Browser integration, forms, history and document/cache ownership |
+| HTTP | Adapted Riplix `htget` handles partial I/O, timeouts, chunking and redirects | Browser integration, forms, history and document/cache ownership |
 | Terminal | Termios, ANSI output, terminal dimensions, PTYs and job control | Screen library integration, key decoding, editing and resize behavior |
 | Memory | Bank-spanning heap; RVM MMU process data/heap window is up to 1,024,000 C cells | Measure renderer, tables, stack, cache and page limits |
 | Toolchain | Existing multi-file C applications run on RVM and native | Audit browser assumptions about integer widths, C bytes and library APIs |
 | TLS | Shared guest wolfSSL, HTTPS `htget` and Lynx; see [the TLS port](../../ports/tls/README.md) | Broader interoperability and hostile-input coverage |
 
-The FUZIX `htget` implementation and the freestanding runtime HTTP helper are
+The Riplix `htget` implementation and the freestanding runtime HTTP helper are
 different layers. Their feature sets and buffering limits are not interchangeable.
 A ported browser should normally use POSIX-style guest sockets with its own
 HTTP implementation, rather than being forced through the RFL buffered HTTP API.
@@ -294,7 +294,7 @@ tunnel only relays bytes and does not supply the missing TLS implementation.
 2. **Secure randomness.** The existing
    [socket code](../../ports/fuzix/ripple/sockets.c) explicitly describes the VM
    RNG as non-cryptographic. The [host entropy device](../arch/entropy.md)
-   now supplies OS cryptographic octets through `/dev/urandom` on RVM/FUZIX
+   now supplies OS cryptographic octets through `/dev/urandom` on RVM/Riplix
    and native Fuse-X, with failure and MMU/COW tests. Use that device to seed
    the cryptographic library; clocks and deterministic VM seeds are not
    adequate substitutes.

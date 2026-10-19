@@ -31,6 +31,8 @@ def application(args):
                    '--compiler', str(compiler), '--tls-build', str(args.tls_build.resolve()),
                    '--build-dir', str((args.build/('sdk-worker-'+args.target)).resolve()),
                    '-j', str(args.jobs), '-o', str(helper)]
+        if args.skip_sdk:
+            command.append('--skip-sdk')
         subprocess.run(command, check=True)
         web_ir=directory/('core-'+args.target)/'c16_http.ir'
         flags=['--target',args.target,'-DRIPPLE_MMU=1']
@@ -105,7 +107,7 @@ def application(args):
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
             inputs = list(pool.map(lower, [ir, *objects]))
         with output.with_suffix('.link.log').open('w') as log:
-            subprocess.run([str(assembler.with_name('rlink')), info['entry'], *map(str, inputs),
+            subprocess.run([sys.executable, str(ROOT/'ports/fuzix/tools/shared-link.py'), '--build', str(args.sdk.resolve()), '--linker', str(assembler.with_name('rlink')), '--compiler', str(compiler), '--', info['entry'], *map(str, inputs),
                             *info['libraries'], '-f', 'rxe', '--bank-size', '64000', '-o', str(output)],
                            stdout=log, stderr=log, check=True)
     print(f'Built {output}', flush=True)

@@ -341,7 +341,7 @@ export fn console(screen: &Screen, path: String) -> Result<unit, IoError> {
 }
 
 export fn about(screen: &Screen, theme: &Theme) {
-    let lines = ["RFL Commander", "A two-panel file manager written in RFL.", "For FUZIX and Fuse-X; shared C16 curses.", "", "Enter: open directory / run program / view", "F3 View  F4 Edit  F5 Copy  F6 Move  r Rename", "F7 Mkdir  F8 Delete  F9 Theme  F10 Quit", "Tab: panel  Ctrl-O: shell  Ctrl-P: layout"];
+    let lines = ["RFL Commander", "A two-panel file manager written in RFL.", "For Riplix and Fuse-X; shared C16 curses.", "", "Enter: open directory / run program / view", "F3 View  F4 Edit  F5 Copy  F6 Move  r Rename", "F7 Mkdir  F8 Delete  F9 Theme  F10 Quit", "Tab: panel  Ctrl-O: shell  Ctrl-P: layout"];
     while (true) {
         let panel = match popup(screen, theme, "About RFL Commander", 14) {
             Ok(panel) => move(panel),

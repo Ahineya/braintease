@@ -140,7 +140,7 @@ def host_storage(build, cc):
 def compile_gates(build, compiler, target):
     results = {}
     sdk_includes = [ROOT / 'ports/fuzix/ripple/include',
-                    ROOT / 'ports/fuzix/upstream/Library/include', ROOT / 'runtime/include']
+                    ROOT / 'ports/fuzix/upstream/Library/include', ROOT / 'runtime/include', ROOT / 'ports/fuzix/ripple']
     for profile, includes in [('unmodified', sdk_includes),
                               ('format-header', [PORT / 'config', *sdk_includes])]:
         results[profile] = {}
@@ -211,7 +211,7 @@ def guest_build(build, compiler, target, kind='foundation'):
         libraries = [p for p in info['libraries'] if not p.endswith('/libc/format.pobj')]
         libraries += floats['libraries']
         includes = [source, ROOT / 'ports/fuzix/ripple/include',
-                    ROOT / 'ports/fuzix/upstream/Library/include', ROOT / 'runtime/include']
+                    ROOT / 'ports/fuzix/upstream/Library/include', ROOT / 'runtime/include', ROOT / 'ports/fuzix/ripple']
         assembler = ROOT / 'src/ripple-asm/target/release/rasm'
         objects = []
         with log.open('a') as output:

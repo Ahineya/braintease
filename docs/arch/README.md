@@ -6,6 +6,7 @@ This folder is the **current** architectural specification for the Ripple VM, as
 |----------|----------|
 | [overview.md](overview.md) | 16-bit cells, banks, instruction vs data memory, toolchain |
 | [code-banks.md](code-banks.md) | Functions spanning code banks, branch relaxation and relocation |
+| [shared-libraries.md](shared-libraries.md) | RXE2 modules, shared instruction cache, private library state and linking |
 | [registers.md](registers.md) | 32-register file and symbolic names |
 | [isa.md](isa.md) | Encoding, opcodes, CALL/RET, HALT, LOAD/STORE pitfall |
 | [abi.md](abi.md) | C data model, calling convention, stack frames |
@@ -14,7 +15,7 @@ This folder is the **current** architectural specification for the Ripple VM, as
 | [crypto.md](crypto.md) | Optional ECC and public RSA accelerator, guest TLS and kernel interface |
 | [stacks-and-interrupts.md](stacks-and-interrupts.md) | Growing C stacks, CPU trap state, timer, IRET |
 | [mmu.md](mmu.md) | Optional translation, user mode, faults, page tables and COW |
-| [c16-filesystem.md](c16-filesystem.md) | FUZIX/Fuse-X V3 disk format, sparse tools and upgrades |
+| [c16-filesystem.md](c16-filesystem.md) | Riplix/Fuse-X V3 disk format, sparse tools and upgrades |
 | [ros.md](ros.md) | rOS boot, SYS1/RXE1, banks, INT21, runtime split |
 
 Related (not duplicated here):

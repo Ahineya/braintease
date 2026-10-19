@@ -38,7 +38,7 @@ Prefer the local `target/` binaries over copies in `/usr/local/bin`.
 
 ## Build artifacts and disk backups
 
-FUZIX, Fuse-X and rOS image updates retain **one previous image**, `DISK.bak`.
+Riplix, Fuse-X and rOS image updates retain **one previous image**, `DISK.bak`.
 Backups use sparse/clone-aware copies; successful updates remove older numbered
 and named snapshots in the same `DISK.bak.*` family. Set `RIPPLE_IMAGE_BACKUPS=2`
 to retain two recovery copies, or `0` to disable them. Unchanged images do not

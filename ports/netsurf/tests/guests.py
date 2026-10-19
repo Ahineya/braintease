@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run NetSurf dependency checks on disposable real FUZIX and Fuse-X disks."""
+"""Run NetSurf dependency checks on disposable real Riplix and Fuse-X disks."""
 import argparse
 import json
 from pathlib import Path
@@ -32,6 +32,13 @@ def image(system, build, apps, folder, extra=()):
     files += [{'name': '/bin/' + name, 'host': str(path)} for name, path in apps.items()]
     files += [{'name': '/dev/tty', 'mode': 0o20666, 'device': 0x200}]
     files += list(extra)
+    # Native fixtures must carry the libraries imported by current app builds.
+    # Installing a shared browser does not make the shell's libc available.
+    if system == 'fuse-x':
+        present={f['name'] for f in files}
+        files += [dict(name='/lib/fuse-x/'+p.name,host=str(p),mode=0o100644)
+                  for p in sorted((build/'lib').glob('*.fxl.[0-9]'))
+                  if '/lib/fuse-x/'+p.name not in present]
     manifest = folder / 'files.json'
     manifest.write_text(json.dumps(files))
     disk = folder / 'disk.img'
@@ -42,6 +49,9 @@ import fs from 'node:fs';
 import {rootImage,atomicWrite} from './ports/fuzix/tools/disk.mjs';
 import {fat16Image} from './c-test/examples/rOS/mkfat16.mjs';
 import {ptyDevices} from './ports/fuzix/tools/pty.mjs';
+import {netsurfFiles} from './ports/netsurf/files.mjs';
+import {tlsFiles} from './ports/tls/files.mjs';
+import {unicodeFiles} from './libraries/unicode/files.mjs';
 const [manifest,disk,build,native]=process.argv.slice(1);
 const files=JSON.parse(fs.readFileSync(manifest));
 for(const file of files){
@@ -50,7 +60,11 @@ for(const file of files){
 }
 files.push(...ptyDevices());
 const payload=files.reduce((sum,file)=>sum+(file.data?.length||0),0);
-const blocks=Math.max(32768,Math.ceil((2*payload+4*1024*1024)/(2048*1024))*1024);
+// The GUI installer adds these after creating this base image. Reserve their
+// actual C16 storage too; the font strikes alone exceed the old 4 MiB margin.
+const installPayload=files.some(file=>file.name==='/bin/netsurf')?
+  [...netsurfFiles(),...tlsFiles(),...unicodeFiles()].reduce((sum,file)=>sum+file.data.length,0):0;
+const blocks=Math.max(32768,Math.ceil((2*(payload+installPayload)+4*1024*1024)/(2048*1024))*1024);
 // V3 has 32-bit block references. Keep private fixtures within 256 MiB,
 // rather than retaining V2's obsolete 65,535-block ceiling.
 if(blocks>131072)throw new Error('NetSurf acceptance files exceed the private test disk budget');

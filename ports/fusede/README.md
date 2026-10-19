@@ -1,6 +1,6 @@
 # FuseDE foundation
 
-FuseDE is the custom RVM/FUZIX desktop. Shared application UI and the applications
+FuseDE is the custom RVM/Riplix desktop. Shared application UI and the applications
 bar must also compile for Fuse-X. The [implementation plan](../../docs/fusede/implementation-plan.md)
 records the asset research, current gaps, borderless/window roles, portable dock
 and next guest milestones.

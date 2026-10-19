@@ -42,7 +42,7 @@ def main():
         commands='proccheck\nfinecheck\nps -A\ntop -b -n 1\nfree\nuptime\n'
         commands+='for n in '+' '.join(map(str,range(40)))+'; do sleep 10 & done\njobs\nwait\necho JOB_CAPACITY_OK\nshutdown\n'
         env=dict(os.environ,RCC_NATIVE_HEADLESS='1',RCC_NATIVE_NET='off',RCC_NATIVE_TIMEOUT='180')
-        # The FUZIX process table is authoritative, regardless of a caller's
+        # The Riplix process table is authoritative, regardless of a caller's
         # standalone-runtime limit used for unrelated native compiler fixtures.
         env.pop('RCC_NATIVE_MAX_PROCESSES',None)
         if not a.native:command+=['--input',commands]
@@ -66,6 +66,6 @@ def main():
             check_root(image)
         else:
             subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
-        print(('Fuse-X' if a.native else 'RVM/FUZIX')+': 64 occupied processes, reports, high-slot timers, COW and two rounds of recovery passed')
+        print(('Fuse-X' if a.native else 'RVM/Riplix')+': 64 occupied processes, reports, high-slot timers, COW and two rounds of recovery passed')
 
 if __name__=='__main__':main()

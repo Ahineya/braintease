@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -24,7 +28,7 @@
 #define PATH_LIMIT 511
 #define RUN_TIMEOUT 30000UL
 
-enum Operation { READ_TEXT, READ_DIR, STAT_PATH, WRITE_TEXT, SLEEP, TIMER, RUN };
+enum Operation { READ_TEXT, READ_DIR, STAT_PATH, WRITE_TEXT, SLEEP, TIMER, RUN, NET_ACCEPT, NET_READ, NET_WRITE, NET_CONNECT };
 typedef struct { char *data; size_t size, capacity; } Buffer;
 typedef struct Task {
     enum Operation op;
@@ -38,15 +42,18 @@ typedef struct Task {
     pid_t pid;
     DIR *directory;
     Buffer data, output, error;
-    uint32_t entries, id;
+    uint32_t entries, id, socket_id;
     size_t output_limit;
     int binary, cancelled;
     uint64_t due;
     uint64_t sequence;
 } Task;
+typedef struct { uint32_t id; int fd, listener, reading, writing; } Socket;
 struct QJSSystem {
     JSContext *ctx;
     Task *tasks[TASKS];
+    Socket sockets[TASKS];
+    uint32_t next_socket;
     unsigned cursor;
     uint32_t next_id;
     uint64_t next_sequence;
@@ -98,11 +105,30 @@ static void kill_child(Task *t)
     }
 }
 
+static Socket *socket_find(QJSSystem *s, uint32_t id)
+{
+    unsigned i;
+    for (i = 0; i < TASKS; ++i) if (id && s->sockets[i].id == id) return &s->sockets[i];
+    return NULL;
+}
+static void socket_drop(Socket *socket)
+{
+    if (!socket) return;
+    close(socket->fd); memset(socket, 0, sizeof(*socket));
+}
 static void task_free(QJSSystem *s, Task *t)
 {
     JSContext *ctx = s->ctx;
     int i, saved;
     if (!t) return;
+    if (t->socket_id) {
+        Socket *socket = socket_find(s, t->socket_id);
+        if (socket) {
+            if (t->op == NET_CONNECT && t->entries != 2) socket_drop(socket);
+            else if (t->op == NET_WRITE || t->op == NET_CONNECT) socket->writing = 0;
+            else socket->reading = 0;
+        }
+    }
     if (t->fd >= 0) close(t->fd);
     for (i = 0; i < 3; ++i) if (t->streams[i] >= 0) close(t->streams[i]);
     if (t->directory) closedir(t->directory);
@@ -133,6 +159,7 @@ void qjs_system_cancel(QJSSystem *s)
         if (s->tasks[i] && s->tasks[i]->op == RUN) kill_child(s->tasks[i]);
         task_free(s, s->tasks[i]); s->tasks[i] = NULL;
     }
+    for (i = 0; i < TASKS; ++i) if (s->sockets[i].id) socket_drop(&s->sockets[i]);
 }
 
 void qjs_system_free(QJSSystem *s)
@@ -412,6 +439,18 @@ static JSValue decode_utf8(JSContext *ctx, JSValueConst self, int32_t argc, JSVa
     return JS_NewStringLen(ctx, (const char *)bytes, length);
 }
 
+static JSValue encode_utf8(JSContext *ctx, JSValueConst self, int32_t argc, JSValueConst *argv)
+{
+    const char *text; size_t length; JSValue result;
+    (void)self;
+    if (!argc || !JS_IsString(argv[0])) return JS_ThrowTypeError(ctx, "expected a string");
+    text = JS_ToCStringLen(ctx, &length, argv[0]);
+    if (!text) return JS_EXCEPTION;
+    result = length > TEXT_LIMIT ? JS_ThrowRangeError(ctx, "UTF-8 text exceeds 1 MiB") :
+        JS_NewArrayBufferCopy(ctx, (const uint8_t *)text, length);
+    JS_FreeCString(ctx, text); return result;
+}
+
 static JSValue monotonic_now(JSContext *ctx, JSValueConst self, int32_t argc, JSValueConst *argv)
 {
     uint64_t now;
@@ -424,8 +463,12 @@ JSModuleDef *qjs_system_module(JSContext *ctx, const char *name)
 {
     JSValue compiled;
     JSModuleDef *module;
-    if (strcmp(name, "fuse:http")) return NULL;
-    compiled = JS_Eval(ctx, qjs_http_source, sizeof(qjs_http_source) - 1, name,
+    const char *source; size_t length;
+    if (!strcmp(name, "fuse:http")) { source = qjs_http_source; length = sizeof(qjs_http_source) - 1; }
+    else if (!strcmp(name, "fuse:net")) { source = qjs_net_source; length = sizeof(qjs_net_source) - 1; }
+    else if (!strcmp(name, "fuse:http-server")) { source = qjs_server_source; length = sizeof(qjs_server_source) - 1; }
+    else return NULL;
+    compiled = JS_Eval(ctx, source, length, name,
                        JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     if (JS_IsException(compiled)) return NULL;
     module = JS_VALUE_GET_PTR(compiled);
@@ -453,6 +496,7 @@ static int32_t module_init(JSContext *ctx, JSModuleDef *m)
         exported(ctx, m, "run", run_async, 2) < 0 ||
         exported(ctx, m, "sleep", sleep_async, 1) < 0 ||
         exported(ctx, m, "decodeUTF8", decode_utf8, 1) < 0 ||
+        exported(ctx, m, "encodeUTF8", encode_utf8, 1) < 0 ||
         exported(ctx, m, "monotonicNow", monotonic_now, 0) < 0) return -1;
     return 0;
 }
@@ -463,9 +507,11 @@ static int global_function(JSContext *ctx, JSValueConst global, const char *name
     return JS_IsException(value) ? -1 : property(ctx, global, name, value);
 }
 
+static int socket_register(JSContext *ctx);
+
 QJSSystem *qjs_system_new(JSContext *ctx)
 {
-    static const char *names[] = {"readTextFile", "readDir", "stat", "writeTextFile", "getenv", "cwd", "run", "sleep", "decodeUTF8", "monotonicNow"};
+    static const char *names[] = {"readTextFile", "readDir", "stat", "writeTextFile", "getenv", "cwd", "run", "sleep", "decodeUTF8", "monotonicNow", "encodeUTF8"};
     QJSSystem *s;
     JSModuleDef *module;
     JSValue global;
@@ -476,7 +522,8 @@ QJSSystem *qjs_system_new(JSContext *ctx)
     s->ctx = ctx; JS_SetContextOpaque(ctx, s);
     module = JS_NewCModule(ctx, "fuse:system", module_init);
     if (!module) goto fail;
-    for (i = 0; i < 10; ++i) if (JS_AddModuleExport(ctx, module, names[i]) < 0) goto fail;
+    for (i = 0; i < 11; ++i) if (JS_AddModuleExport(ctx, module, names[i]) < 0) goto fail;
+    if (socket_register(ctx)) goto fail;
     global = JS_GetGlobalObject(ctx);
     failed = global_function(ctx, global, "setTimeout", set_timeout, 2) < 0 ||
              global_function(ctx, global, "clearTimeout", clear_timeout, 1) < 0;
@@ -515,6 +562,8 @@ static int descriptor(int fd)
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0 || fcntl(fd, F_SETFL, O_NONBLOCK) < 0) return -1;
     return 0;
 }
+
+#include "sockets.inc"
 
 static int spawn(Task *t)
 {
@@ -728,11 +777,21 @@ int qjs_system_step(QJSSystem *s, unsigned long max_wait_ms)
     if (qjs_system_now(&now)) return fail_loop(s, errno, "clock_gettime");
     FD_ZERO(&reads); FD_ZERO(&writes);
     for (i = 0; i < TASKS; ++i) if ((t = s->tasks[i])) {
-        if (t->op == TIMER || t->op == SLEEP || t->op == RUN) {
+        if (t->op == TIMER || t->op == SLEEP || t->op == RUN || t->op >= NET_ACCEPT) {
             if (t->due <= now) immediate = 1;
             else if (t->due - now < wait) wait = t->due - now;
         }
-        if (t->op == RUN) {
+        if (t->op >= NET_ACCEPT) {
+            Socket *socket = socket_find(s, t->socket_id);
+            if (!socket || t->failure || (t->op == NET_CONNECT && !t->entries) ||
+                (t->op == NET_WRITE && t->entries == t->data.size)) immediate = 1;
+            else {
+                if (t->op == NET_WRITE || t->op == NET_CONNECT) FD_SET(socket->fd, &writes);
+                else FD_SET(socket->fd, &reads);
+                if (socket->fd > maxfd) maxfd = socket->fd;
+            }
+            if (!JS_IsUndefined(t->value) && wait > 10) wait = 10;
+        } else if (t->op == RUN) {
             if (!t->pid || t->failure) immediate = 1;
             if (wait > 10) wait = 10; /* WNOHANG closes the exit/pipe EOF race. */
             for (j = 0; j < 3; ++j) if (t->streams[j] >= 0) {
@@ -766,7 +825,13 @@ int qjs_system_step(QJSSystem *s, unsigned long max_wait_ms)
         t = s->tasks[index];
         if (!t) continue;
         if ((t->op == TIMER || t->op == SLEEP) && (int)index != first_timer) continue;
-        is_ready = t->op == RUN || ((t->op == TIMER || t->op == SLEEP) ? now >= t->due :
+        if (t->op >= NET_ACCEPT) {
+            Socket *socket = socket_find(s, t->socket_id);
+            is_ready = !socket || now >= t->due || !JS_IsUndefined(t->value) ||
+                (t->op == NET_CONNECT && !t->entries) ||
+                (t->op == NET_WRITE && t->entries == t->data.size) ||
+                FD_ISSET(socket->fd, t->op == NET_WRITE || t->op == NET_CONNECT ? &writes : &reads);
+        } else is_ready = t->op == RUN || ((t->op == TIMER || t->op == SLEEP) ? now >= t->due :
                    (t->fd < 0 || FD_ISSET(t->fd, t->op == WRITE_TEXT ? &writes : &reads)));
         if (!is_ready) continue;
         s->cursor = (index + 1) % TASKS;
@@ -778,6 +843,7 @@ int qjs_system_step(QJSSystem *s, unsigned long max_wait_ms)
             if (JS_IsException(value)) return -1;
             JS_FreeValue(s->ctx, value); return 1;
         }
+        if (t->op >= NET_ACCEPT) return socket_step(s, index, &reads, &writes, now);
         if (t->op == RUN) return run_step(s, index, &reads, now);
         ready = t->op == WRITE_TEXT ? writes : reads;
         return file_step(s, index, &ready);

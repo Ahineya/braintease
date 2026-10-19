@@ -74,6 +74,9 @@ def link_fingerprint(ir, native, rcc, fuzix_build, fuse_x_build):
         inputs.update((ROOT / 'libraries/ini').glob('*.h'))
         inputs.update((ROOT / 'libraries/tui-theme').glob('*.h'))
     else:
+        digest.update(os.environ.get('RIPLIX_SHARED_LIBRARIES', '1').encode())
+        inputs.add(ROOT / 'ports/fuzix/tools/shared-link.py')
+        inputs.update((ROOT / 'ports/fuzix/tools/shared').glob('*.py'))
         sdk = compiler.run('make', '-s', '-C', ROOT / 'ports/fuzix', f'BUILD={fuzix_build}',
                            'rfl-sdk-info', capture_output=True, text=True)
         objects = json.loads(sdk.stdout.strip().splitlines()[-1])

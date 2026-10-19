@@ -109,7 +109,7 @@ struct Process {
     module: Option<std::sync::Arc<images::Loaded>>,
     staged: Option<(u32, std::sync::Arc<images::Loaded>)>,
     jumps: BTreeMap<u64, Jump>,
-    loading: Option<(usize, Vec<u8>)>,
+    loading: Option<images::Loading>,
     preparing: Option<images::Preparation>,
 }
 #[derive(Clone, Copy)]
@@ -184,7 +184,7 @@ impl Machine {
     pub(super) fn preparing(&mut self) -> &mut Option<images::Preparation> {
         &mut self.active.as_mut().unwrap().preparing
     }
-    pub(super) fn loading(&mut self) -> &mut Option<(usize, Vec<u8>)> {
+    pub(super) fn loading(&mut self) -> &mut Option<images::Loading> {
         &mut self.active.as_mut().unwrap().loading
     }
     pub(super) fn owns_image(&self, image: &std::sync::Arc<images::Loaded>) -> bool {

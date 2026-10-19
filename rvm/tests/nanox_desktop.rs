@@ -289,10 +289,10 @@ fn roaches_masks_animation_occlusion_and_cleanup() {
     g.until("desktop for live roaches", |g| {
         g.log.contains("ATLAS_STATUS:0")
             && g.log.contains("NXTERM_READY ")
-            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !locate(&g.pixels(), "riplix# ").is_empty()
     });
     g.settle(300);
-    let first = locate(&g.pixels(), "fuzix# ")[0];
+    let first = locate(&g.pixels(), "riplix# ")[0];
     g.drag(first.0 + 90, first.1 - 16, 72 - first.0, 80 - first.1);
     g.until("terminal in fixed position", |g| {
         empty_terminal(&g.pixels(), 72, 80)
@@ -418,7 +418,10 @@ fn locate(pixels: &[u16], s: &str) -> Vec<(i32, i32)> {
                         } else {
                             0
                         };
-                        pixels[(y + ry) * 640 + x + i * 8 + rx] == want
+                        let actual=pixels[(y + ry) * 640 + x + i * 8 + rx];
+                        // Levee places the terminal's steady underline cursor
+                        // on the first character after opening a file.
+                        actual == want || (i == 0 && ry == 15 && actual == 0xad55)
                     })
                 })
             });
@@ -434,7 +437,7 @@ fn locate(pixels: &[u16], s: &str) -> Vec<(i32, i32)> {
 // require the complete blank terminal plus its fresh prompt and cursor.
 fn empty_terminal(pixels: &[u16], x: i32, y: i32) -> bool {
     let font = font();
-    let prompt = b"fuzix# ";
+    let prompt = b"riplix# ";
     (0..320).all(|row| {
         (0..512).all(|col| {
             let glyph = row < 16
@@ -485,6 +488,19 @@ fn coloured_text(pixels: &[u16], text: &str, fg: u16, bg: u16) -> Vec<(i32, i32)
     found
 }
 
+fn desktop_app_count() -> usize {
+    include_str!("../../ports/nanox/ripple/nxdsktop-platform.h")
+        .split("static const char *apps[]=")
+        .nth(1)
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .matches('"')
+        .count()
+        / 2
+}
+
 fn desktop_menu(g: &mut Guest, item: usize) {
     let menus = g.log.matches("NXDSKTOP_MENU 1").count();
     g.click(24, 468);
@@ -494,16 +510,7 @@ fn desktop_menu(g: &mut Guest, item: usize) {
     g.until("NXDSKTOP menu pixels committed", |g| {
         !coloured_text(&g.pixels(), "About", 0xad75, 0x3186).is_empty()
     });
-    let count = include_str!("../../ports/nanox/ripple/nxdsktop-platform.h")
-        .split("static const char *apps[]=")
-        .nth(1)
-        .unwrap()
-        .split(';')
-        .next()
-        .unwrap()
-        .matches('"')
-        .count()
-        / 2;
+    let count = desktop_app_count();
     let top = 480 - 24 - ((count + 3) * 22 + 8);
     let y = if item < count {
         top + 4 + item * 22 + 11
@@ -561,10 +568,10 @@ fn tetris_gameplay_lines_pause_and_highscore() {
         output,
     };
     g.until("terminal and launcher", |g| {
-        !locate(&g.pixels(), "fuzix# ").is_empty()
+        !locate(&g.pixels(), "riplix# ").is_empty()
             && !coloured_text(&g.pixels(), "Tetris", 0, 0xce79).is_empty()
     });
-    let terminal = locate(&g.pixels(), "fuzix# ")[0];
+    let terminal = locate(&g.pixels(), "riplix# ")[0];
     g.click(550, 450);
     g.until("Tetris launcher and decorated window", |g| {
         g.log.contains("NXTETRIS_READY ")
@@ -669,7 +676,7 @@ fn tetris_gameplay_lines_pause_and_highscore() {
     g.until("desktop reopens and wide score fixture is saved", |g| {
         g.log.contains("TETRIS_SESSION:0")
             && g.log.matches("Nano-X ready").count() == 2
-            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !locate(&g.pixels(), "riplix# ").is_empty()
             && g.log.contains("NXDSKTOP_READY ")
             && !coloured_text(&g.pixels(), "Start", 0xad75, 0x3186).is_empty()
     });
@@ -711,7 +718,8 @@ fn nxdsktop_menu_dialogs_files_and_session() {
     vm.load_binary(&std::fs::read(build.join("bios.bin")).unwrap())
         .unwrap();
     vm.rgb565_display = Some(RGB565Display::new());
-    vm.push_input_string("nxdsktop --help\nNANOX_TRACE=1 startx\necho NXDESKTOP_STATUS:$?\ncat '/edit me;echo HACK'\nps\nNANOX_TRACE=1 startx\necho NXDESKTOP_REOPEN:$?\nshutdown\n");
+    // The file-selector fixture lives in /; init now starts shells in /root.
+    vm.push_input_string("nxdsktop --help\ncd /\nKLOTSKI_TRACE=1; export KLOTSKI_TRACE\nNANOX_TRACE=1 startx\necho NXDESKTOP_STATUS:$?\ncat '/edit me;echo HACK'\nps\nNANOX_TRACE=1 startx\necho NXDESKTOP_REOPEN:$?\nshutdown\n");
     let mut g = Guest {
         vm,
         log: String::new(),
@@ -719,14 +727,14 @@ fn nxdsktop_menu_dialogs_files_and_session() {
     };
     g.until("NXDSKTOP and initial terminal", |g| {
         g.log.contains("NXDSKTOP_READY ")
-            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !locate(&g.pixels(), "riplix# ").is_empty()
             && !coloured_text(&g.pixels(), "Start", 0xad75, 0x3186).is_empty()
     });
     g.snapshot("nxdsktop-first.ppm");
     desktop_menu(&mut g, 0);
     g.until("About dialog", |g| {
         g.log.contains("NXMSG_READY ")
-            && !coloured_text(&g.pixels(), "About NXDSKTOP", 0xad75, 0x2945).is_empty()
+            && !coloured_text(&g.pixels(), "About NX", 0xad75, 0x2945).is_empty()
     });
     g.settle(200);
     g.key(40);
@@ -736,7 +744,7 @@ fn nxdsktop_menu_dialogs_files_and_session() {
     desktop_menu(&mut g, 1);
     g.until("Help dialog", |g| {
         g.log.matches("NXMSG_READY ").count() == 2
-            && !coloured_text(&g.pixels(), "Desktop Help", 0xad75, 0x2945).is_empty()
+            && !coloured_text(&g.pixels(), "Desktop H", 0xad75, 0x2945).is_empty()
     });
     g.settle(200);
     g.key(41);
@@ -836,6 +844,12 @@ fn nxdsktop_menu_dialogs_files_and_session() {
         g.log.contains("NXVIEW_EXIT")
     });
     desktop_menu(&mut g, 11);
+    g.until("Klotski launched from Start", |g| {
+        g.log.contains("NXDSKTOP_LAUNCH /bin/klotski") && g.log.contains("KLOTSKI_READY ")
+    });
+    g.key(20);
+    g.until("Klotski closes without ending desktop", |g| g.log.contains("KLOTSKI_EXIT 0"));
+    desktop_menu(&mut g, desktop_app_count());
     g.until("sync dialog", |g| {
         g.log.matches("NXMSG_READY ").count() == 3
             && !coloured_text(&g.pixels(), "Sync disk", 0xad75, 0x2945).is_empty()
@@ -850,12 +864,12 @@ fn nxdsktop_menu_dialogs_files_and_session() {
         "resource status must refresh through timer events: {}",
         g.log
     );
-    desktop_menu(&mut g, 12);
+    desktop_menu(&mut g, desktop_app_count() + 1);
     g.until("desktop menu exits and session reopens", |g| {
         g.log.contains("NXDESKTOP_STATUS:0")
             && g.log.contains("changed safe filename")
             && g.log.matches("NXDSKTOP_READY ").count() == 2
-            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !locate(&g.pixels(), "riplix# ").is_empty()
     });
     let after = g.log.split("NXDESKTOP_STATUS:0").nth(1).unwrap();
     assert!(
@@ -865,7 +879,7 @@ fn nxdsktop_menu_dialogs_files_and_session() {
     desktop_menu(&mut g, 0);
     g.until("open dialog during desktop teardown", |g| {
         g.log.matches("NXMSG_READY ").count() == 4
-            && !coloured_text(&g.pixels(), "About NXDSKTOP", 0xad75, 0x2945).is_empty()
+            && !coloured_text(&g.pixels(), "About NX", 0xad75, 0x2945).is_empty()
     });
     g.vm.devices.accept_events([InputTransition::Close]);
     g.until("host close and clean shutdown", |g| {
@@ -902,11 +916,11 @@ fn desktop_clients_input_resize_and_recovery() {
         output,
     };
     g.until("first terminal prompt", |g| {
-        g.log.matches("NANOX_CLIENT_OK").count() == 2 && !locate(&g.pixels(), "fuzix# ").is_empty()
+        g.log.matches("NANOX_CLIENT_OK").count() == 2 && !locate(&g.pixels(), "riplix# ").is_empty()
     });
     assert!(
         g.log
-            .split("fuzix# nano-X")
+            .split("riplix# nano-X")
             .next()
             .unwrap()
             .contains("erase = ^?"),
@@ -918,9 +932,9 @@ fn desktop_clients_input_resize_and_recovery() {
     // the actual button before injecting a click into its future location.
     g.until("launcher Eyes button ready", |g| {
         !coloured_text(&g.pixels(), "Eyes", 0, 0xce79).is_empty()
-            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !locate(&g.pixels(), "riplix# ").is_empty()
     });
-    let first = locate(&g.pixels(), "fuzix# ")[0];
+    let first = locate(&g.pixels(), "riplix# ")[0];
     g.snapshot("desktop-first.ppm");
     // Real upstream GUI clients coexist with the terminal. Eyes uses a bitmap
     // window mask, pointer events and blink timers; the clock uses timed waits.
@@ -995,7 +1009,7 @@ fn desktop_clients_input_resize_and_recovery() {
     g.text("echo nanox-shell > /desktop-note");
     g.key(40);
     g.until("shell command completed", |g| {
-        locate(&g.pixels(), "fuzix# ")
+        locate(&g.pixels(), "riplix# ")
             .iter()
             .any(|&(x, y)| x == first.0 && y >= first.1 + 16)
     });
@@ -1009,7 +1023,7 @@ fn desktop_clients_input_resize_and_recovery() {
     g.text("vi /vi-note");
     g.key(40);
     g.until("Levee alternate screen", |g| {
-        locate(&g.pixels(), "fuzix# ").is_empty()
+        locate(&g.pixels(), "riplix# ").is_empty()
     });
     g.text("ihello-vix");
     g.until("Levee inserted text", |g| {
@@ -1024,7 +1038,7 @@ fn desktop_clients_input_resize_and_recovery() {
     g.settle(100);
     g.key(40);
     g.until("Levee saved after insert and command-line backspace", |g| {
-        !locate(&g.pixels(), "fuzix# ").is_empty()
+        !locate(&g.pixels(), "riplix# ").is_empty()
     });
     // cat uses canonical line editing rather than the shell's own raw editor.
     g.text("cat > /canonical-note");
@@ -1067,14 +1081,14 @@ fn desktop_clients_input_resize_and_recovery() {
     g.text("echo second-shell > /second-note");
     g.key(40);
     g.settle(500);
-    let prompts = locate(&g.pixels(), "fuzix# ");
+    let prompts = locate(&g.pixels(), "riplix# ");
     assert!(!prompts.is_empty(), "second terminal missing\n{}", g.log);
     g.snapshot("desktop-two.ppm");
     // Move and resize through NanoWM's actual non-client mouse handlers.
     g.drag(second.0 + 90, second.1 - 16, 40, 20);
     let moved = (second.0 + 40, second.1 + 20);
     g.until("NanoWM moved terminal", |g| {
-        locate(&g.pixels(), "fuzix# ").contains(&moved)
+        locate(&g.pixels(), "riplix# ").contains(&moved)
     });
     g.drag(moved.0 + 512, moved.1 + 320, -64, -32);
     g.until("resized terminal notification", |g| {
@@ -1084,7 +1098,7 @@ fn desktop_clients_input_resize_and_recovery() {
     g.text("stty -a > /term-size");
     g.key(40);
     g.until("resized PTY command completed", |g| {
-        locate(&g.pixels(), "fuzix# ")
+        locate(&g.pixels(), "riplix# ")
             .iter()
             .any(|&(x, y)| x == moved.0 && y >= moved.1 + 32)
     });
@@ -1113,7 +1127,7 @@ fn desktop_clients_input_resize_and_recovery() {
             >= 3
     });
     g.until("replacement terminal prompt", |g| {
-        !locate(&g.pixels(), "fuzix# ").is_empty()
+        !locate(&g.pixels(), "riplix# ").is_empty()
     });
     // Stop this display/session, check persistent files and start a fresh desktop.
     g.vm.devices.accept_events([InputTransition::Close]);
@@ -1129,7 +1143,7 @@ fn desktop_clients_input_resize_and_recovery() {
                 .any(|line| line.trim_end() == "shell-backspace")
             && g.log.lines().any(|line| line.trim_end() == "canonical")
             && g.log.matches("Nano-X ready").count() >= 3
-            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !locate(&g.pixels(), "riplix# ").is_empty()
     });
     g.vm.devices.accept_events([InputTransition::Close]);
     g.until("clean shutdown", |g| matches!(g.vm.state, VMState::Halted));

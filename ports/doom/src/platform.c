@@ -405,7 +405,7 @@ byte *I_ZoneBase(size_t *size)
 {
     byte *zone;
 #ifdef DOOM_GUEST
-    /* Leave room for renderer tables and stacks in FUZIX's user pool. */
+    /* Leave room for renderer tables and stacks in Riplix's user pool. */
     *size = 6UL * 1024UL * 1024UL;
 #else
     *size = 8UL * 1024UL * 1024UL;

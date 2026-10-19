@@ -1,4 +1,4 @@
-; Ripple FUZIX kernel entry and syscall vector. Kernel IMEM starts at bank 1.
+; Ripple Riplix kernel entry and syscall vector. Kernel IMEM starts at bank 1.
 ; Protected userspace always uses virtual stack bank 31 (USER_SB in mmu.h).
 ripple_syscall_vector:
     BEQ R0, R0, ripple_syscall_entry

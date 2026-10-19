@@ -1,6 +1,6 @@
 # Lynx C16 browser
 
-Lynx runs inside FUZIX on RVM and native Fuse-X, using guest libc, shared C16
+Lynx runs inside Riplix on RVM and native Fuse-X, using guest libc, shared C16
 curses and the guest's own DNS/TCP stack. The configured upstream Lynx/libwww
 units and small port adapter compile with RCC. HTTP rendering, link navigation,
 GET forms and Telnet browsing have actual guest acceptance tests. See the
@@ -9,7 +9,7 @@ including the optional [crypto accelerator](../../docs/arch/crypto.md).
 
 ## Build and test
 
-Normal `scripts/run-fuzix.sh` and `scripts/run-fuse-x.sh` builds include Lynx in
+Normal `scripts/run-riplix.sh` and `scripts/run-fuse-x.sh` builds include Lynx in
 their usual application inventory. They install `/bin/lynx`, its help page and
 license, and the default `/etc/lynx.cfg`, preserving an existing configuration.
 After starting the guest, run `lynx` or `lynx http://wiby.me/`.
@@ -35,7 +35,7 @@ The compiler selects the extended global region automatically. Native ABI 2
 supports sixteen global banks; ABI 1 packages remain loadable. Rebuild the
 kernel/runtime before running these larger packages.
 
-For RVM/FUZIX, build the normal kernel/userspace artifacts first, then:
+For RVM/Riplix, build the normal kernel/userspace artifacts first, then:
 
 ```sh
 make -C ports/fuzix BUILD="$PWD/build/fuzix" -j4 images
@@ -184,7 +184,7 @@ oversize rejection and error recovery) recorded:
 | Target | Static global cells | Heap arena high-water cells |
 | --- | ---: | ---: |
 | Native Fuse-X | 231,149 | 226,976 |
-| RVM/FUZIX | 231,107 | 226,971 |
+| RVM/Riplix | 231,107 | 226,971 |
 
 Each cell occupies two physical octets. The heap figures are about 443 KiB per
 target and describe this workload, not a worst-case bound for arbitrary HTML.

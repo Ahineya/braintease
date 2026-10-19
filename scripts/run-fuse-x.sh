@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and run hosted FUZIX and its native applications, preserving the root image.
+# Build and run hosted Riplix and its native applications, preserving the root image.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${FUSE_X_BUILD:-$ROOT/fuse-x/build}"
@@ -33,7 +33,7 @@ usage() {
     cat <<'HELP'
 Usage: scripts/run-fuse-x.sh [options]
 
-Build Fuse-X, prepare its root image, and start the native FUZIX shell.
+Build Fuse-X, prepare its root image, and start the native Riplix shell.
 Try help, ls, native-hello, telegram, music /music, lynx http://wiby.me/, and shutdown.
 Files persist across launches.
 Use shutdown for a clean exit. The Bourne shell supports scripts, pipelines,

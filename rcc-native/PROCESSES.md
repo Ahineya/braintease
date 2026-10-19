@@ -1,9 +1,9 @@
 # Native process continuations and scheduling checkpoints
 
-This compiler/runtime foundation is independent of the FUZIX port. Standalone
-C fixtures exercise the process model without building or changing FUZIX.
+This compiler/runtime foundation is independent of the Riplix port. Standalone
+C fixtures exercise the process model without building or changing Riplix.
 The separate [Fuse-X integration](../fuse-x/README.md) uses the hosted context
-API below to run FUZIX with its own scheduler and syscall interface.
+API below to run Riplix with its own scheduler and syscall interface.
 
 From the repository root:
 
@@ -111,8 +111,8 @@ The default capacity is **256 processes**, including unreaped zombies.
 
 Blocking host calls such as `getchar` still block the entire driver. Console
 output, host streams and devices are shared services, without per-process
-FUZIX descriptor or terminal semantics. Runtime faults still end the host
-program. Standalone processes do not provide guest signals or FUZIX descriptors.
+Riplix descriptor or terminal semantics. Runtime faults still end the host
+program. Standalone processes do not provide guest signals or Riplix descriptors.
 The hosted integration below supplies its own signals, executable loading and
 syscall adapters. A hosted console can accept network or graphical
 terminal backends independently.
@@ -143,7 +143,7 @@ RCC_NATIVE_HEADLESS=1 RCC_NATIVE_NET=off build/native-process-bench
 ```
 
 Time the executable separately from compilation. This workload measures both
-continuation and fork costs; it is not a prediction of hosted FUZIX performance.
+continuation and fork costs; it is not a prediction of hosted Riplix performance.
 
 On the development ARM64 Mac, seven alternating runs after one warm-up per
 executable gave median times of **306 ms before** and **55 ms after** these
@@ -227,7 +227,7 @@ along with process-private memory. Returning from an activation retires its
 buffers; exec discards every saved jump. Expired or foreign tokens fail with a
 runtime diagnostic instead of entering a stale host address.
 
-The hosted FUZIX adapter validates handler tokens against the current image and
+The hosted Riplix adapter validates handler tokens against the current image and
 calls handlers after completed syscalls and at user-code checkpoints. Handlers
 can make nested kernel calls, fork, exec or leave through `longjmp`. This does
 not add asynchronous host-stack unwinding or instruction-level preemption.

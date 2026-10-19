@@ -1,7 +1,7 @@
 # Fuse-X implementation roadmap
 
 Build Fuse-X in independently verifiable stages. Keep native compiler/runtime
-work separate from FUZIX platform integration when another change owns the
+work separate from Riplix platform integration when another change owns the
 port. These pages record the intended integration without changing port code.
 
 ## Available native foundation
@@ -10,7 +10,7 @@ The standalone native process milestone is implemented: resumable C calls,
 fork/yield/wait/exit, liveness-based continuation storage, copy-on-write private
 pages, and an explicit shared kernel arena. The current runtime defaults to
 256 process slots and supports a configurable limit; this is a prototype limit,
-not a promised FUZIX kernel capacity.
+not a promised Riplix kernel capacity.
 
 Validation includes private stack/global/heap state, shared kernel allocator
 state, recursive calls, indirect and variadic calls, device/file write paths,
@@ -21,7 +21,7 @@ limitations live in [native processes](../../rcc-native/PROCESSES.md).
 
 The first integrated [hosted kernel](../../fuse-x/README.md) boots native
 `/init`, starts the existing Bourne shell and runs independently compiled native applications.
-FUZIX owns process scheduling and lifetime; hosted runtime calls clone, select,
+Riplix owns process scheduling and lifetime; hosted runtime calls clone, select,
 discard and replace saved native continuations. Kernel globals use the shared
 arena and private application memory uses copy-on-write pages.
 
@@ -49,7 +49,7 @@ executable allocation is not yet implemented in the hosted platform.
 The hosted integration reuses the Ripple port's IPv4/TCP/UDP stack, resolver
 tools and Telnet server. Protocol state uses hosted shared kernel allocation;
 polling runs at idle and syscall boundaries. Remote connections use the existing
-FUZIX PTYs and independently loaded Bourne shells. The launcher exposes host-only,
+Riplix PTYs and independently loaded Bourne shells. The launcher exposes host-only,
 shared NAT, offline and external Ethernet attachment. Graphics work can proceed
 independently without changes to `ports/fuzix/` from this integration.
 

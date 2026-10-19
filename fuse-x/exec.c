@@ -21,6 +21,35 @@ static const struct native_program programs[] = {
 };
 struct native_arguments { unsigned argc; char **argv, **envp; };
 
+/* namei takes a user pointer. Borrow a scratch span without changing the
+ * calling program's argv/data if library resolution or exec later fails. */
+static inoptr native_library_open(const char *path) {
+    char saved[512];
+    char *scratch=(char *)(PROGBASE+1024);
+    inoptr ino;
+    memcpy(saved,scratch,sizeof(saved));
+    strcpy(scratch,path);
+    ino=n_open((void *)scratch,NULL);
+    memcpy(scratch,saved,sizeof(saved));
+    return ino;
+}
+
+static bool native_stream(inoptr ino, void *package, unsigned long *slice) {
+    if (ino->c_node.i_size<16 || ino->c_node.i_size>67108864UL) {udata.u_error=ENOEXEC;return false;}
+    if (!rcc_hosted_image_begin(ino->c_node.i_size)) {udata.u_error=ENOMEM;return false;}
+    udata.u_offset=0;
+    while (udata.u_offset<ino->c_node.i_size) {
+        unsigned long count=ino->c_node.i_size-udata.u_offset;
+        if (count>4096) count=4096;
+        udata.u_base=package;udata.u_count=count;udata.u_sysio=1;
+        readi(ino,0);
+        if (udata.u_done!=count) {udata.u_error=EIO;return false;}
+        if (!rcc_hosted_image_append(package,count)) {udata.u_error=ENOEXEC;return false;}
+        fuse_exec_yield(slice,0);
+    }
+    return true;
+}
+
 /* Validate before doing logical pointer arithmetic, including malformed argv
  * pointers. The portable rargs routine assumes a machine fault can recover an
  * invalid access; a hosted runtime fault would instead stop the session. */
@@ -56,6 +85,7 @@ arg_t _execve(void) {
     struct s_argblk saved_args, saved_env;
     struct native_arguments *context = (void *)(PROGBASE + 16);
     char manifest[32];
+    char library_path[512];
     unsigned i, program = 65535U;
     int argc;
     unsigned long entry=0, slice=0;
@@ -83,16 +113,22 @@ arg_t _execve(void) {
         if (memcmp(manifest,"FUSEX001",8)) {udata.u_error=ENOEXEC;goto bad;}
         package=rcc_process_kernel_alloc(4096);
         if (!package) {udata.u_error=ENOMEM;goto bad;}
-        if (!rcc_hosted_image_begin(ino->c_node.i_size)) {udata.u_error=ENOMEM;goto bad;}
-        udata.u_offset=0;
-        while (udata.u_offset<ino->c_node.i_size) {
-            unsigned long count=ino->c_node.i_size-udata.u_offset;
-            if (count>4096) count=4096;
-            udata.u_base=package;udata.u_count=count;udata.u_sysio=1;
-            readi(ino,0);
-            if (udata.u_done!=count) {udata.u_error=EIO;goto bad;}
-            if (!rcc_hosted_image_append(package,count)) {udata.u_error=ENOEXEC;goto bad;}
-            fuse_exec_yield(&slice,0);
+        if (!native_stream(ino,package,&slice)) goto bad;
+        for (;;) {
+            unsigned long needed=rcc_hosted_image_dependency(library_path,sizeof(library_path));
+            inoptr library;
+            bool loaded;
+            if (!needed) break;
+            if (needed==0xFFFFFFFFUL) {udata.u_error=ENOEXEC;goto bad;}
+            library=native_library_open(library_path);
+            if (!library) goto bad;
+            if (getmode(library)!=MODE_R(F_REG) || !(getperm(library)&OTH_RD) ||
+                (fs_tab[library->c_super].m_flags&MS_NOEXEC)) {
+                i_deref(library);udata.u_error=EACCES;goto bad;
+            }
+            loaded=rcc_hosted_image_reuse() || native_stream(library,package,&slice);
+            i_deref(library);
+            if (!loaded) goto bad;
         }
         rcc_process_kernel_free(package);package=NULL;
         if (!rcc_hosted_image_prepare()) {udata.u_error=ENOMEM;goto bad;}

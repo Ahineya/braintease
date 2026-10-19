@@ -151,7 +151,7 @@ independent of launched clients. The shell background/top bar remain RVM policy.
 RVM runs NXDSKTOP or the custom shell with a guest window manager inside its
 single host display. The shell reserves room for the top bar and dock. Closing
 that graphics session follows the established RVM teardown behavior without
-implicitly shutting down FUZIX.
+implicitly shutting down Riplix.
 
 Fuse-X keeps its existing native window model. Companion apps should launch
 directly as native top-levels, without a guest NanoWM or an obligatory nested

@@ -6,7 +6,7 @@ int tg_rpc(TgClient *c,unsigned kind) {
     tg_tl_init(&t,c->last_query,sizeof(c->last_query));
     if(!c->initialized){
         tg_w32(&t,TL_invokeWithLayer);tg_w32(&t,TG_LAYER);tg_w32(&t,TL_initConnection);tg_w32(&t,0);tg_w32(&t,c->api_id);
-        tg_wtext(&t,"C16 guest");tg_wtext(&t,"Fuse-X/FUZIX");tg_wtext(&t,"0.1");tg_wtext(&t,"en");tg_wtext(&t,"");tg_wtext(&t,"en");
+        tg_wtext(&t,"C16 guest");tg_wtext(&t,"Fuse-X/Riplix");tg_wtext(&t,"0.1");tg_wtext(&t,"en");tg_wtext(&t,"");tg_wtext(&t,"en");
     }
     if(kind==TG_REQ_EXPORT){tg_w32(&t,TL_auth_exportLoginToken);tg_w32(&t,c->api_id);tg_wtext(&t,c->api_hash);tg_w32(&t,0x1cb5c415UL);tg_w32(&t,0);}
     else if(kind==TG_REQ_IMPORT){tg_w32(&t,TL_auth_importLoginToken);tg_wbytes(&t,c->import_token,c->import_n);}

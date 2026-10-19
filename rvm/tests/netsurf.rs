@@ -211,7 +211,7 @@ fn browser_pixels_and_input() {
         log: String::new(),
         output,
     };
-    g.until("fuzix# ", 0);
+    g.until("riplix# ", 0);
     g.command("nano-X -p &\ns=$!\n", "Nano-X ready");
     if std::env::var_os("NETSURF_TEST_IMAGES").is_some() {
         g.command("netsurf --trace /images/index.html &\np=$!\n", "NETSURF_GUI_LOADED Image checks");
@@ -307,7 +307,7 @@ fn browser_pixels_and_input() {
         return;
     }
     g.command(
-        "netsurf --trace &\np=$!\n",
+        "netsurf --trace /usr/share/netsurf/index.html &\np=$!\n",
         "NETSURF_GUI_LOADED FuseDE Browser",
     );
     g.wait_pixels(

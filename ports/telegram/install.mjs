@@ -7,6 +7,7 @@ import {checkRoot} from '../fuzix/tools/fsck.mjs';
 import {installRoot} from '../fuzix/tools/install.mjs';
 import {atomicWrite} from '../fuzix/tools/disk.mjs';
 import {CELLS, BLOCK} from '../fuzix/tools/layout.mjs';
+import {rootHomeFiles} from '../fuzix/tools/home.mjs';
 
 function readFile(checked, pathname, required = true) {
   let node = checked.nodes.get(1);
@@ -41,13 +42,22 @@ function readFile(checked, pathname, required = true) {
   return data;
 }
 
+function loginFile(checked, modern, legacy, required = true) {
+  const current=readFile(checked,modern,false), previous=readFile(checked,legacy,false);
+  if(current && previous && !current.equals(previous))
+    throw Error(`different private login files at ${modern} and ${legacy}; both are preserved`);
+  if(!current && !previous && required)throw Error(`missing private login file: ${modern}`);
+  return current || previous;
+}
+
 try {
   const [target, source, destination, executable, ...rest] = process.argv.slice(2);
   if (rest.length || !['native', 'ripple'].includes(target) || !executable)
     throw Error('use ports/telegram/install.py with stopped source and destination images');
   const saved = checkRoot(openImage(source));
   if (saved.issues.length) throw Error('source filesystem needs a clean shutdown or offline repair');
-  const config = readFile(saved, '/etc/telegram.conf'), session = readFile(saved, '/telegram.session');
+  const config = loginFile(saved, '/root/.telegram.conf', '/etc/telegram.conf'),
+        session = loginFile(saved, '/root/.telegram.session', '/telegram.session');
   const lines = config.toString('ascii').split(/\r?\n/).filter(line => line && !line.startsWith('#'));
   const ids = lines.filter(line => /^api_id=[0-9]+$/.test(line));
   const hashes = lines.filter(line => /^api_hash=[a-fA-F0-9]{32}$/.test(line));
@@ -66,18 +76,19 @@ try {
   if (checkRoot(checked.image).issues.length) throw Error('destination filesystem repair failed');
   const files = [
     {name:'/bin/telegram', mode:0o100755, data:fs.readFileSync(executable)},
-    {name:'/etc/telegram.conf', mode:0o100600, data:config},
-    {name:'/telegram.session', mode:0o100600, data:session},
+    {name:'/root/.telegram.conf', mode:0o100600, data:config},
+    {name:'/root/.telegram.session', mode:0o100600, data:session},
   ];
   for (const file of files.slice(1)) {
-    const previous = readFile(checked, file.name, false);
+    const previous = loginFile(checked, file.name,
+      file.name.endsWith('.conf') ? '/etc/telegram.conf' : '/telegram.session', false);
     if (previous && !previous.equals(file.data))
       throw Error(`destination has a different login; preserving ${file.name}`);
   }
-  const installed = installRoot(checked.image, files);
+  const installed = installRoot(checked.image, [...rootHomeFiles(), ...files]);
   const verified = checkRoot(installed);
-  if (verified.issues.length || !readFile(verified, '/telegram.session').equals(session) ||
-      !readFile(verified, '/etc/telegram.conf').equals(config)) throw Error('installed login verification failed');
+  if (verified.issues.length || !readFile(verified, '/root/.telegram.session').equals(session) ||
+      !readFile(verified, '/root/.telegram.conf').equals(config)) throw Error('installed login verification failed');
   const updated = root.replace(installed);
   fs.chmodSync(destination, 0o600);
   if (original.equals(updated)) {

@@ -545,6 +545,10 @@ pub struct ObjectFile {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CompilerMetadata {
+    #[serde(default)]
+    pub types: HashMap<String, String>,
+    #[serde(default)]
+    pub exports: Vec<String>,
     /// Every global address carries a relocatable bank component.
     #[serde(default)]
     pub banked_data: bool,

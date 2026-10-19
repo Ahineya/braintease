@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare Fuzix bulk loading/process copies against BULK_IO=0.
+"""Compare Riplix bulk loading/process copies against BULK_IO=0.
 
 Build kernel/bios in a separate directory with BULK_IO=0, then pass it through
 --fallback-build. All disks are temporary; user disks are never opened.
@@ -80,4 +80,4 @@ with tempfile.TemporaryDirectory(prefix='fuzix-bulk-') as directory:
     for jit in engines:
         label = 'jit' if jit else 'interp'
         assert counts[f'bulk-{label}'] < counts[f'fallback-{label}'] * 0.5, counts
-    print('Fuzix bulk/fallback loading, nested fork, bank isolation, preemption, signals, user buffers and persistence passed; ' + engine_label)
+    print('Riplix bulk/fallback loading, nested fork, bank isolation, preemption, signals, user buffers and persistence passed; ' + engine_label)

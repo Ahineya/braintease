@@ -58,14 +58,30 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Link native-targeted IR translation units into a host executable
     /// Link application IR and guest libc into an independent Fuse-X executable
     LinkApp {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
         #[arg(short, long)]
         output: PathBuf,
+        /// Link a relocatable executable against HOST_PACKAGE=GUEST_PATH libraries
+        #[arg(long = "library")]
+        libraries: Vec<String>,
     },
+    /// Build a versioned guest shared library; exports default to public definitions
+    LinkShared {
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[arg(long)]
+        soname: String,
+        #[arg(long = "export")]
+        exports: Vec<String>,
+        #[arg(long = "library")]
+        libraries: Vec<String>,
+    },
+    /// Link native-targeted IR translation units into a host executable
     LinkNative {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
@@ -184,14 +200,32 @@ enum Commands {
     },
 }
 
+fn library_arguments(values: &[String]) -> Result<Vec<(PathBuf,String)>,String> {
+    values.iter().map(|value| {
+        let (host,guest)=value.split_once('=').ok_or("--library needs HOST_PACKAGE=GUEST_PATH")?;
+        if host.is_empty() || !guest.starts_with('/') {return Err("library needs a host package and absolute guest path".into());}
+        Ok((PathBuf::from(host),guest.into()))
+    }).collect()
+}
+
 fn main() {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::LinkApp { inputs, output } => {
+        Commands::LinkShared {inputs,output,soname,exports,libraries} => {
+            let result=(|| -> Result<(),Box<dyn std::error::Error>> {
+                let modules=inputs.iter().map(|p|rcc_ir::parse_module(&fs::read_to_string(p)?).map_err(Into::into)).collect::<Result<Vec<_>,Box<dyn std::error::Error>>>()?;
+                let dependencies=library_arguments(&libraries)?;
+                rcc_native::compile_module(&modules,&output,&soname,&exports,&dependencies)?;
+                Ok(())
+            })();
+            if let Err(error)=result {eprintln!("Shared library link failed: {error}");std::process::exit(1);}
+        },
+        Commands::LinkApp { inputs, output, libraries } => {
             let result = (|| -> Result<(),Box<dyn std::error::Error>> {
                 let modules=inputs.iter().map(|p| rcc_ir::parse_module(&fs::read_to_string(p)?).map_err(Into::into)).collect::<Result<Vec<_>,Box<dyn std::error::Error>>>()?;
-                rcc_native::compile_application(&modules,&output)?;
+                if libraries.is_empty() { rcc_native::compile_application(&modules,&output)?; }
+                else { rcc_native::compile_module(&modules,&output,"",&[],&library_arguments(&libraries)?)?; }
                 Ok(())
             })();
             if let Err(error)=result {eprintln!("Application link failed: {error}");std::process::exit(1);}

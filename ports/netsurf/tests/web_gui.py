@@ -32,6 +32,7 @@ def main():
     apps.update({n:build/('apps/'+n+suffix if native else n+suffix) for n in ['nano-X','kill','echo','sh']})
     files=[dict(name='/etc/ssl/cert.pem',path=str(ROOT/'ports/tls/roots/cert.pem')),
            dict(name='/dev/gfx',mode=0o20600,device=0x400)]
+    files.append(dict(name='/usr/share/netsurf/web.nfa',path=str(ROOT/'ports/netsurf/fonts/web.nfa')))
     with tempfile.TemporaryDirectory(prefix='netsurf-web-gui-') as temporary:
         work=Path(temporary);peer=Relay(work/'nic')
         if native:

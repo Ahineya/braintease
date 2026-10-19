@@ -7,15 +7,15 @@ including a telnet-style development console.
 ## Existing foundation
 
 The native runtime already participates in the shared Ethernet device protocol.
-Guest protocol libraries provide networking outside the hosted FUZIX integration.
+Guest protocol libraries provide networking outside the hosted Riplix integration.
 Use the existing [networking guide](../networking/README.md) and
 [host attachment instructions](../networking/running.md) for current capabilities
 and commands.
 
-The hosted kernel now enables the existing FUZIX socket/inode bridge and
+The hosted kernel now enables the existing Riplix socket/inode bridge and
 guest ARP/IPv4/ICMP/UDP/TCP stack. A generated build adaptation replaces the
 bridge's reserved physical banks with shared hosted kernel allocation. Kernel
-polling runs during idle and syscall boundaries; FUZIX still owns descriptors,
+polling runs during idle and syscall boundaries; Riplix still owns descriptors,
 blocking waits, terminal endpoints and process lifetime. The same transport sources serve both platforms. The existing socket and resolver libc supports the ten network tools.
 
 ## Headless terminal milestone
@@ -131,7 +131,7 @@ Both kernels now provide 64 internet endpoints, 64 active TCP
 connections, 16 TCP listeners, 16 bound UDP ports and 128 compact TIME_WAIT
 records. A separate pool of thirty-two Unix-domain
 stream endpoints supports pathname services and `socketpair()` even offline.
-These are guest endpoints governed by FUZIX descriptors and filesystem
+These are guest endpoints governed by Riplix descriptors and filesystem
 permissions; they do not bridge to Mac Unix sockets. They participate in the
 same `select()` loop as PTYs and internet sockets. See [local IPC and
 capacity](../networking/local-ipc.md) for buffer, backlog and lifetime rules.

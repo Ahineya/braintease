@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native FUZIX sockets and independent Telnet shells over real Ethernet frames."""
+"""Native Riplix sockets and independent Telnet shells over real Ethernet frames."""
 import argparse
 import os
 from pathlib import Path
@@ -15,7 +15,7 @@ PORT = HERE.parent / 'ports/fuzix'
 sys.path.insert(0, str(PORT / 'tools'))
 from network_peer import Peer, wire
 
-BINARY = bytes(range(256)) * 4 + b'Native FUZIX networking\n'
+BINARY = bytes(range(256)) * 4 + b'Native Riplix networking\n'
 
 
 class Services(Peer):
@@ -131,14 +131,14 @@ def main():
             def line(stream, command):
                 at = len(received(stream))
                 stream.queue(command + b'\r\n')
-                until(lambda: b'fuzix# ' in received(stream)[at:])
+                until(lambda: b'riplix# ' in received(stream)[at:])
                 return received(stream)[at:]
 
             def connect(port):
                 stream = peer.connect(23, port)
                 until(lambda: stream.established)
                 stream.queue(b'\xff\xfd\x01\xff\xfd\x03\xff\xfb\x1f')
-                until(lambda: b'fuzix# ' in received(stream))
+                until(lambda: b'riplix# ' in received(stream))
                 return stream
 
             try:
@@ -183,7 +183,7 @@ def main():
                 until(lambda: b'fg\n' in received(first)[at:])
                 spin(.2)
                 first.queue(b'\x03')
-                until(lambda: b'fuzix# ' in received(first)[at:])
+                until(lambda: b'riplix# ' in received(first)[at:])
                 assert b'INTERRUPTED:130\n' in line(first, b'echo INTERRUPTED:$?')
                 assert b'OTHER_SESSION_OK\n' in line(second, b'echo OTHER_SESSION_OK')
                 # An existing full-screen application must also work on a remote PTY.
@@ -191,7 +191,7 @@ def main():
                 until(lambda: b'\x1b[' in received(first)[at:])
                 spin(.2)
                 first.queue(b'iSaved over native telnet.\x1b:wq\r\n')
-                until(lambda: b'fuzix# ' in received(first)[at:])
+                until(lambda: b'riplix# ' in received(first)[at:])
                 assert b'Saved over native telnet.' in line(second, b'cat /network-edit')
                 at = len(received(first)); first.queue(b'telnet 192.168.64.1 2323\r\n')
                 until(lambda: b'REMOTE_ECHO_READY\n' in received(first)[at:])
@@ -199,7 +199,7 @@ def main():
                 until(lambda: b'CLIENT_WIRE_OK\n' in received(first)[at:])
                 first.queue(b'\x1e')
                 until(lambda: b'Connection closed.' in received(first)[at:]
-                      and b'fuzix# ' in received(first)[at:])
+                      and b'riplix# ' in received(first)[at:])
                 first.queue(b'exit\r\n'); until(lambda: first.closed)
                 for index in range(6):
                     session = connect(50100 + index)

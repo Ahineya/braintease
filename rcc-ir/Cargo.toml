@@ -5,11 +5,10 @@ edition = "2021"
 description = "Ripple compiler intermediate representation"
 
 [dependencies]
+sha2 = "0.10.9"
+serde_json.workspace = true
 rcc-common.workspace = true
 serde.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [lints]
 workspace = true

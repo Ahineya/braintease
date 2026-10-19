@@ -199,10 +199,10 @@ the same early attachment through `RCC_NATIVE_NET_EAGER=1`.
 The [Fuse-X launcher](../../fuse-x/README.md#networking-and-remote-shells) uses
 early attachment for interactive consoles and defaults to shared/NAT internet access
 on macOS (offline elsewhere).
-The FUZIX launcher uses
+The Riplix launcher uses
 this for host/shared policies, and defaults to shared/NAT with internet access. Use
-`--net off` for an offline FUZIX launch. See
-[FUZIX networking and remote terminals](../../ports/fuzix/README.md#networking-and-remote-terminals)
+`--net off` for an offline Riplix launch. See
+[Riplix networking and remote terminals](../../ports/fuzix/README.md#networking-and-remote-terminals)
 for guest `ping`, `ifconfig`, `telnet` and `telnetd` setup.
 
 Orderly exit detaches and stops the owned helper. If a guest process dies without

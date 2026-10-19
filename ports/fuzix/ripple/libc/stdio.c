@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 static FILE streams[16];
 FILE *stdin = streams, *stdout = streams + 1, *stderr = streams + 2;
 #define READING 1
@@ -223,31 +224,69 @@ int fputs(const char *s, FILE *f) {
 int puts(const char *s) {
     return fputs(s, stdout) < 0 ? EOF : fputc('\n', stdout);
 }
+/* Binary I/O must not use fgetc/fputc's int return as a data sentinel:
+ * on C16, the valid unsigned character 0xffff has the same bits as EOF. */
 size_t fread(void *p, size_t size, size_t count, FILE *f) {
-    size_t i, j;
-    char *d = p;
-    int c;
-    if (!size)
-        return 0;
-    for (i = 0; i < count; i++)
-        for (j = 0; j < size; j++) {
-            c = fgetc(f);
-            if (c == EOF)
-                return i;
-            *d++ = c;
+    size_t done = 0, total, n;
+    char *out = p;
+    ssize_t got;
+    if (!size || !count) return 0;
+    if (count > ULONG_MAX / size) { errno = EOVERFLOW; return 0; }
+    if (!f->used || !(f->flags & READING)) {
+        errno = EBADF; f->err = 1; return 0;
+    }
+    if ((f->flags & ACTIVE_WRITE) && fflush(f) < 0) return 0;
+    total = size * count;
+    if (f->pushed != EOF) {
+        out[done++] = f->pushed;
+        f->pushed = EOF;
+    }
+    while (done < total) {
+        if (f->pos == f->len) {
+            if (f->eof) break;
+            do { got = read(f->fd, f->buf, f->buffering == _IONBF ? 1 : BUFSIZ); }
+            while (got < 0 && errno == EINTR);
+            if (got <= 0) {
+                if (got < 0) f->err = 1; else f->eof = 1;
+                break;
+            }
+            f->pos = 0; f->len = got;
         }
-    return count;
+        n = f->len - f->pos;
+        if (n > total - done) n = total - done;
+        memcpy(out + done, f->buf + f->pos, n);
+        f->pos += n; done += n;
+    }
+    return done / size;
 }
 size_t fwrite(const void *p, size_t size, size_t count, FILE *f) {
-    size_t i, j;
-    const char *s = p;
-    if (!size)
-        return 0;
-    for (i = 0; i < count; i++)
-        for (j = 0; j < size; j++)
-            if (fputc(*s++, f) == EOF)
-                return i;
-    return count;
+    size_t done = 0, total, n, i;
+    const char *in = p;
+    if (!size || !count) return 0;
+    if (count > ULONG_MAX / size) { errno = EOVERFLOW; return 0; }
+    if (!f->used || !(f->flags & WRITING)) {
+        errno = EBADF; f->err = 1; return 0;
+    }
+    if (!(f->flags & ACTIVE_WRITE) && fflush(f) < 0) {
+        f->err = 1; return 0;
+    }
+    total = size * count;
+    while (done < total) {
+        f->flags |= ACTIVE_WRITE;
+        n = BUFSIZ - f->len;
+        if (n > total - done) n = total - done;
+        if (f->buffering == _IOLBF) {
+            for (i = 0; i < n; ++i) if (in[done + i] == '\n') { n = i + 1; break; }
+        }
+        memcpy(f->buf + f->len, in + done, n);
+        f->len += n;
+        if (f->len == BUFSIZ || f->buffering == _IONBF ||
+            (f->buffering == _IOLBF && in[done + n - 1] == '\n')) {
+            if (fflush(f) < 0) return done / size;
+        }
+        done += n;
+    }
+    return done / size;
 }
 long ftell(FILE *f) {
     long n = lseek(f->fd, 0, SEEK_CUR);

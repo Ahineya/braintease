@@ -23,7 +23,7 @@ by the guest acceptance test. Requests advance no simulation ticks, raise no
 IRQ, consume no input and publish no graphics frame. Entropy is deliberately
 not replayable; restoring a checkpoint does not reproduce earlier samples.
 
-## FUZIX and Fuse-X
+## Riplix and Fuse-X
 
 Both kernels expose read-only `/dev/urandom`, character device major 1,
 minor 4. Reads return at most 256 octets per call; callers fill larger buffers

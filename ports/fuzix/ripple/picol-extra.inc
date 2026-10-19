@@ -487,7 +487,7 @@ int main(int argc, char **argv) {
     if (argc > 1 && !strcmp(argv[1], "--help")) {
         puts("Usage: tcl [-c script | file [arguments...]]\nPicol Tcl subset: integer expressions, variables, procedures, loops, lists and file I/O.\nNo arguments: read standard input; interactive quit: exit."); return 0;
     }
-    if (argc > 1 && !strcmp(argv[1], "--version")) { puts("Picol (FUZIX/Ripple Tcl subset)"); return 0; }
+    if (argc > 1 && !strcmp(argv[1], "--version")) { puts("Picol (Riplix Tcl subset)"); return 0; }
     if (argc > 1 && !strcmp(argv[1], "-c")) {
         if (argc != 3) { fputs("tcl: -c needs one script\n", stderr); return 2; }
         code = picolEval(&interp, argv[2]);

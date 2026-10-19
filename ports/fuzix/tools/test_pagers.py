@@ -55,7 +55,7 @@ def exercise(image, jit):
 
     def shell(text):
         send(text.encode() + b'\r')
-        return until(b'fuzix# ')
+        return until(b'riplix# ')
 
     def less(command):
         send(command.encode() + b'\r')
@@ -65,10 +65,10 @@ def exercise(image, jit):
     def leave_less(key):
         send(key)
         until(b'\x1b[?1049l')
-        return until(b'fuzix# ')
+        return until(b'riplix# ')
 
     try:
-        until(b'fuzix# ')
+        until(b'riplix# ')
         shell('stty -g > /tty-before')
         first = less('env LINES=6 COLUMNS=40 less /pager-lines')
         assert b'LINE01' in first and b'LINE05' in first and b'LINE06' not in first, first
@@ -103,15 +103,15 @@ def exercise(image, jit):
         send(b'\r')
         assert b'LINE06' in until(b'--More--')
         send(b'q')
-        until(b'fuzix# ')
+        until(b'riplix# ')
         send(b'cat /pager-lines | env LINES=6 more\r')
         until(b'--More--')
         send(b'\x03')
-        until(b'fuzix# ')
+        until(b'riplix# ')
         shell('stty -g > /tty-after')
         assert b'TTY_RESTORED:0' in shell('cmp /tty-before /tty-after; echo TTY_RESTORED:$?')
         send(b'garbage\x15echo restored\r')
-        assert b'restored\n' in until(b'fuzix# ')
+        assert b'restored\n' in until(b'riplix# ')
         shell('echo pager_session > /pager-session')
         send(b'shutdown\r')
         until(b'Ripple: disk synced; power off.')

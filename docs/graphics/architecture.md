@@ -2,7 +2,7 @@
 
 ## Ownership and boundaries
 
-FUZIX owns processes, PTYs, permissions and window ownership. A graphics service
+Riplix owns processes, PTYs, permissions and window ownership. A graphics service
 owns surfaces and presentation. The host backend supplies display/input and,
 for Fuse-X, native window lifecycle. A terminal owns a PTY master; its child
 session owns the slave and runs the shell or foreground command. A GUI library
@@ -171,7 +171,7 @@ mask shifts use wide arithmetic. Kernel stacks occupy banks 32–95; packed MMU 
 96–117; reference counts 118; saved task data 119; FAT chain 120–121; scanout 122–126. User physical
 pages remain 128–255. Compile-time checks guard stack/table overlap and saved
 task-data size. Moving saved task data out of GP bank 3 leaves space for the
-larger process, inode, file and input tables. FUZIX/Ripple now supports only
+larger process, inode, file and input tables. Riplix now supports only
 MMU builds on RVM; the former non-MMU/RBF configuration is retired.
 
 These are finite capacities, not a promise that 64 maximum-size programs fit.
@@ -208,7 +208,7 @@ exercise the last heap bank, fork/COW isolation and shrinking that range.
 
 Fuse-X needs a window registry with owner, generation, dimensions, title,
 surface, event queue and host NSWindow reference. macOS owns decoration,
-placement, minimization and focus; FUZIX owns process and content lifetimes.
+placement, minimization and focus; Riplix owns process and content lifetimes.
 One Dock identity, native Window menu and New Terminal remain host policy.
 No new MMIO pins are necessary for this guest API. The native hosted backend
 is a separate implementation of GX, not an emulation requirement for DMA.

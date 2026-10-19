@@ -1,6 +1,6 @@
 # Ripple kernel scheduling and process costs
 
-The main MMU/RVM kernel enables `CONFIG_RIPPLE_SCHED`. FUZIX's process and signal
+The main MMU/RVM kernel enables `CONFIG_RIPPLE_SCHED`. Riplix's process and signal
 semantics remain, with port-local runnable/event queues and clock-based scheduling
 in `ripple/scheduler.c`. Native Fuse-X also uses these queues and budgets through
 its compiler checkpoints; the small Brainfuck profile retains its existing
@@ -34,7 +34,7 @@ readiness check before sleep.
 ## Slice and wakeup policy
 
 Existing host monotonic samples supply a default 20 ms slice, scaled by the
-process's FUZIX priority and bounded to 5–200 ms. A task waking another runnable
+process's Riplix priority and bounded to 5–200 ms. A task waking another runnable
 process can request rescheduling once the current slice has consumed 5 ms.
 Actual task selection remains FIFO. Switching tasks starts a fresh budget.
 Native Fuse-X overrides the base slice to 5 ms to retain its existing checkpoint

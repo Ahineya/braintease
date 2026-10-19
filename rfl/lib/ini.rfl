@@ -1,6 +1,7 @@
 import {} from "../../libraries/ini/ini.c";
 extern "C" {
     fn ini_reader(text: *const u8, length: usize) -> *mut u16;
+    fn ini_reader_with_limits(text: *const u8, length: usize, input: usize, line: usize, entries: u32) -> *mut u16;
     fn ini_free(reader: *mut u16);
     fn ini_next(reader: *mut u16) -> i16;
     fn ini_line(reader: *mut u16) -> u32;
@@ -11,6 +12,12 @@ extern "C" {
 
 /// A one-based syntax error, input limit violation, or allocation failure.
 export type IniError = InvalidSyntax(u32) | InputTooLarge | OutOfMemory;
+/// Explicit input, line and assignment budgets for a larger application file.
+export struct Limits {
+    input: usize,
+    line: usize,
+    entries: u32
+}
 /// An ordered INI assignment. Later assignments may override earlier ones.
 export struct Entry {
     /// Section name, empty before the first section.
@@ -61,7 +68,13 @@ export fn parse(value: String) -> Result<Vec<Entry>, IniError> {
 /// Parses file octets directly, avoiding an intermediate String. Has the same
 /// syntax and limits as parse(), including embedded NUL rejection.
 export fn parse_bytes(value: Vec<u8>) -> Result<Vec<Entry>, IniError> {
-    if (value.len() > 65536) {
+    parse_bytes_with_limits(value, Limits { input: 65536, line: 1024, entries: 256 })
+}
+
+/// Parses octets with caller-supplied budgets. Existing parse()/parse_bytes()
+/// retain their configuration-sized defaults. Syntax and ownership are shared.
+export fn parse_bytes_with_limits(value: Vec<u8>, limits: Limits) -> Result<Vec<Entry>, IniError> {
+    if (value.len() > limits.input) {
         return Err(InputTooLarge);
     }
     let length = value.len();
@@ -69,7 +82,7 @@ export fn parse_bytes(value: Vec<u8>) -> Result<Vec<Entry>, IniError> {
     // Also provide a valid pointer for empty input. The reader copies the bytes.
     bytes.push(0);
     let pointer = unsafe {
-        ini_reader(&bytes[0], length)
+        ini_reader_with_limits(&bytes[0], length, limits.input, limits.line, limits.entries)
     };
     if (pointer.is_null()) {
         return Err(OutOfMemory);

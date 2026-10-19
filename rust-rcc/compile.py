@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Experimental rustc MIR -> RCC -> FUZIX/Fuse-X compiler (one cell per Rust byte)."""
+"""Experimental rustc MIR -> RCC -> Riplix/Fuse-X compiler (one cell per Rust byte)."""
 import argparse
 import hashlib
 import json
@@ -116,7 +116,8 @@ def link(output, native, ir, compiler, fuzix_build, fuse_x_build, directory, log
     for name in ['rust', 'bridge']:
         stage(assembler, 'assemble', directory / f'{name}.asm', '--bank-size', '64000',
             '--max-immediate', '65535', '-o', directory / f'{name}.pobj')
-    stage(linker, objects['entry'], directory / 'rust.pobj', directory / 'bridge.pobj',
+    stage('python3', ROOT / 'ports/fuzix/tools/shared-link.py', '--build', fuzix_build,
+        '--linker', linker, '--compiler', compiler, '--', objects['entry'], directory / 'rust.pobj', directory / 'bridge.pobj',
         *objects['libraries'], '-f', 'rxe', '--bank-size', '64000', '-o', output)
 
 

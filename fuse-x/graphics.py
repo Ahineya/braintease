@@ -44,6 +44,7 @@ def main():
             digest.update(header.read_bytes())
     stamp = digest.digest()
     sdk = hashlib.sha256(Path(__file__).read_bytes() + (ROOT / 'fuse-x/cc.py').read_bytes())
+    sdk.update(os.environ.get('FUSE_X_SHARED_LIBRARIES', '1').encode())
     for path in [PORT / 'ripple/libc', PORT / 'upstream/Library/libs', PORT / 'ripple/include', PORT / 'upstream/Library/include', ROOT / 'fuse-x/libc', ROOT / 'fuse-x/include', ROOT / 'runtime/include', ROOT / 'libraries/unicode']:
         for file in sorted(path.rglob('*')):
             if file.suffix in ('.c', '.h', '.inc'):
@@ -56,13 +57,14 @@ def main():
 
     def compile_object(item):
         source, extra = item
-        digest = hashlib.sha256(stamp + str((source, extra)).encode())
+        unit_flags = [f for f in flags if f != '-DNO_64BIT'] if source.parent == ROOT / 'ports/kolf' else flags
+        digest = hashlib.sha256(stamp + str((source, extra, unit_flags)).encode())
         for dependency in c_dependencies(source, includes):
             digest.update(str(dependency).encode());digest.update(dependency.read_bytes())
         key = digest.hexdigest()[:24]
         output = build / 'nanox-native' / f'{source.stem}-{key}.ir'
         if not output.exists():
-            result = subprocess.run([str(compiler), 'compile', str(source), *flags, *extra, '--emit-ir'], capture_output=True)
+            result = subprocess.run([str(compiler), 'compile', str(source), *unit_flags, *extra, '--emit-ir'], capture_output=True)
             if result.returncode:
                 raise RuntimeError(f'{source}:\n{result.stderr.decode(errors="replace")}')
             output.write_bytes(result.stdout)
@@ -93,6 +95,8 @@ def main():
         ('nxcalc', generated / 'demos/nanox/nxcalc.c', client, ['-DNXR_NATIVE_GUI=1']),
         ('nxtetris', generated / 'demos/nanox/nxtetris.c', client, ['-DNXR_NATIVE_GUI=1']),
         ('nxview', NX / 'ripple/nxview.c', client + image, ['-DNXR_NATIVE_GUI=1']),
+        ('kolf', ROOT / 'ports/kolf/main.c', client + [ROOT / 'ports/kolf/engine.c', ROOT / 'ports/kolf/putting.c', ROOT / 'ports/kolf/course.c', ROOT / 'libraries/ini/ini.c', ROOT / 'libraries/deflate/deflate.c'], ['-DNXR_NATIVE_GUI=1']),
+        ('klotski', ROOT / 'ports/klotski/main.c', client + [ROOT / 'ports/klotski/engine.c', ROOT / 'ports/klotski/store.c'], ['-DNXR_NATIVE_GUI=1']),
         ('nxcheck', NX / 'ripple/nxcheck.c', client, []),
         ('nxhostcheck', ROOT / 'fuse-x/nanox/check.c', client, []),
         ('fdeshowcase', ROOT / 'ports/fusede/showcase.c', client, ['-DNXR_NATIVE_GUI=1']),
@@ -116,8 +120,11 @@ def main():
             command += ['-D', define]
         for obj in objects:
             command += ['--object-ir', str(obj)]
-        if name in ('nxeyes', 'nxcalc'):
+        if name in ('nxeyes', 'nxcalc', 'kolf'):
             command += ['--float-format']
+        if name in ('kolf', 'klotski'):
+            # Also run on images built before the shared-library SDK existed.
+            command += ['--static']
         key = hashlib.sha256(stamp + sdk.digest() + main_source.read_bytes() + str(command).encode())
         for obj in objects:
             key.update(obj.read_bytes())

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* FUZIX socket/inode bridge to the shared guest Ethernet/IP/TCP stack.
+/* Riplix socket/inode bridge to the shared guest Ethernet/IP/TCP stack.
  * The control table lives in bank 5; bank-local chunks hold larger pools.
  * Every stack operation and DEVICE transaction runs under di.
  * Packet callbacks only queue kernel data and wake tasks; never copy to users. */

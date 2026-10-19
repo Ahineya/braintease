@@ -149,7 +149,9 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
         ("rcc_native_ext_mmio_read", 1) => rcc_native_ext_mmio_read as *const () as usize,
         ("rcc_native_ext_mmio_write", 2) => rcc_native_ext_mmio_write as *const () as usize,
         ("rcc_native_ext_rfl_halt", 0) => rcc_native_ext_rfl_halt as *const () as usize,
-        ("rcc_native_ext___rcc_host_math", 3) => rcc_native_ext___rcc_host_math as *const () as usize,
+        ("rcc_native_ext___rcc_host_math", 3) => {
+            rcc_native_ext___rcc_host_math as *const () as usize
+        }
         ("rcc_native_ext___rfl_host_sin", 1) => rcc_native_ext___rfl_host_sin as *const () as usize,
         ("rcc_native_ext___rfl_host_cos", 1) => rcc_native_ext___rfl_host_cos as *const () as usize,
         ("rcc_native_ext___rcc_f64_floor", 1) => {
@@ -158,6 +160,9 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
         ("rcc_native_ext___rcc_f64_sqrt", 1) => rcc_native_ext___rcc_f64_sqrt as *const () as usize,
         ("rcc_native_image_token", 1) => {
             super::images::rcc_native_image_token as *const () as usize
+        }
+        ("rcc_native_image_global", 1) => {
+            super::images::rcc_native_image_global as *const () as usize
         }
         _ => return None,
     })

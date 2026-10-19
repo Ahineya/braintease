@@ -31,7 +31,7 @@ def guest(system, app, references, args):
         if system == 'fuzix':
             command = [ROOT / 'target/release/rvm', build / 'bios.bin', '--disk', image,
                        '--memory', '16384000', '--jit', '--net', 'off', '--audio', 'off', '--timeout', '240']
-            prompt, shutdown = b'fuzix# ', b'Halted.'
+            prompt, shutdown = b'riplix# ', b'Halted.'
         else:
             command = [build / 'fuse-x', '--run', image]
             prompt, shutdown = b'fuse-x# ', b'filesystem synced; session stopped'

@@ -64,7 +64,11 @@ export fn detect(path: String) -> Language {
         return language("lisp", 11, "", "", "");
     }
     if (ends_with(name, ".js") || ends_with(name, ".mjs") || ends_with(name, ".cjs")) {
-        return language("javascript", 14, "js", "JS", "{file}");
+        return language("javascript", 14, "js", "JS", if (ends_with(name, ".server.js") || ends_with(name, ".server.mjs")) {
+            "--server {file}"
+        } else {
+            "{file}"
+        });
     }
     if (ends_with(name, ".pas") || ends_with(name, ".pp")) {
         return language("pascal", 4, "fpc", "FPC", "{file} -o{output} && {output}");

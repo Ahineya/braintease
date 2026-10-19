@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise bank-spanning static data in a disposable RVM/FUZIX guest."""
+"""Exercise bank-spanning static data in a disposable RVM/Riplix guest."""
 import argparse
 import json
 import os
@@ -48,7 +48,7 @@ def main():
                     time.sleep(.05)
 
             try:
-                expect(b'fuzix# ')
+                expect(b'riplix# ')
                 os.write(master, b'/bin/globalcheck; echo GLOBAL_STATUS:$?\r')
                 content = expect(b'GLOBAL_STATUS:0\n')
                 assert b'GLOBAL_BANKS_OK ' in content and b'GLOBAL_BANKS_EXEC_OK' in content, content
@@ -59,7 +59,7 @@ def main():
                     guest.kill()
                     guest.wait()
                 os.close(master)
-    print('RVM/FUZIX: banked globals, wide values, heap, syscall spans, fork/COW and exec passed')
+    print('RVM/Riplix: banked globals, wide values, heap, syscall spans, fork/COW and exec passed')
 
 
 if __name__ == '__main__':

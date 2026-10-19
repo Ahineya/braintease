@@ -36,7 +36,7 @@ static unsigned __rcc_float_accel(unsigned op, unsigned long long a,
 #endif
 
 
-/* Floor is short enough to keep local in FUZIX. Its caller also has an
+/* Floor is short enough to keep local in Riplix. Its caller also has an
  * addressable libc implementation; the scalar service remains available. */
 #ifdef RIPPLE_MMU
 #define RCC_ACCEL_LOCAL_RETURN(op, a, b) do { } while (0)

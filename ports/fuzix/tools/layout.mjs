@@ -18,7 +18,7 @@ export function layout(image) {
     return {version: 2, cells: 32, inodes: 32, direct: 18, indirect: CELLS, step: 1,
       sb: {isize: 1, blocks: 2, nfree: 3, free: 4, ninode: 54, inode: 55, clean: 105, time: 107, tfree: 109, tinode: 110, shift: 111},
       ptr: p => image.readUInt16LE(p * 2)};
-  throw Error('incompatible Ripple FUZIX root; expected C16 V2 or V3');
+  throw Error('incompatible Riplix root; expected C16 V2 or V3');
 }
 export const baseFor = (ino, format) => (2 + Math.floor(ino / format.inodes)) * CELLS +
                                       (ino % format.inodes) * format.cells;

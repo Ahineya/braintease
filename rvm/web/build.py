@@ -21,6 +21,8 @@ output.mkdir()
 for name in ['index.html','page.mjs','worker.mjs','disk.mjs','style.css']:
  shutil.copyfile(SOURCE/name,output/name)
 shutil.copyfile(ROOT/'build/rvm-web/cargo/wasm32-unknown-unknown/release/rvm.wasm',output/'rvm.wasm')
+for source,name in [('LICENCE','kernel-COPYING.txt'),('CREDITS','kernel-CREDITS.txt')]:
+ shutil.copyfile(ROOT/'ports/fuzix/upstream'/source,output/name)
 vendor=output/'vendor';vendor.mkdir(exist_ok=True)
 package=SOURCE/'node_modules/@xterm/xterm'
 for source,name in [('lib/xterm.js','xterm.js'),('css/xterm.css','xterm.css'),('LICENSE','xterm.LICENSE')]:shutil.copyfile(package/source,vendor/name)

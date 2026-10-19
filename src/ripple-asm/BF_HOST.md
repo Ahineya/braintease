@@ -178,7 +178,7 @@ or BF output. The physical allocation becomes
 `N` RAM banks. An explicit reservation can exceed the default STORC limit,
 within the architectural 16-bit PC/PCB space. The retired full non-MMU FUZIX
 experiment used 68 code banks and 80 RAM banks for its disk loader. The current
-[minimal FUZIX boot profile](../../ports/fuzix/rbf/README.md) links its kernel
+[minimal Riplix boot profile](../../ports/fuzix/rbf/README.md) links its kernel
 directly into BF, uses four RAM banks and needs no dynamic code reservation.
 
 Interrupts are **compiled out by default**. Enable them when linking:

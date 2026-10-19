@@ -38,6 +38,7 @@ struct pane {
     unsigned x,y,w,h,shown,activity;
     char input[QUEUE]; unsigned queued;
     char directory[DIRECTORY_SIZE],restart[RESTART_SIZE];
+    unsigned long sync_since;
 };
 struct node { int used,pane,a,b,parent,vertical;unsigned ratio,x,y,w,h; };
 struct tab { int used,root,focus,zoom;char name[25]; };
@@ -54,6 +55,7 @@ static unsigned copied,prompt_len;
 static char endpoint[108];
 static struct vt_cell *screen,*painted;
 static unsigned screen_cols,screen_rows,scan,rendering,style=65535;
+static unsigned synchronized_output;
 static char outgoing[OUTPUT];static unsigned out_start,out_count;
 static volatile int terminated,resized,child_changed;
 static void notice(const char *text){snprintf(message,sizeof(message),"%s",text);dirty=1;}

@@ -147,71 +147,10 @@ static nserror plot_bitmap(const struct redraw_context *ctx, struct bitmap *b, i
         (f&BITMAPF_REPEAT_X?RI_REPEAT_X:0)|(f&BITMAPF_REPEAT_Y?RI_REPEAT_Y:0));
     return result==RI_OK?NSERROR_OK:result==RI_MEMORY?NSERROR_NOMEM:NSERROR_BAD_SIZE;
 }
-static nserror plot_text(const struct redraw_context *ctx, const plot_font_style_t *style,
-                         int x, int y, const char *s, size_t n)
-{
-    struct plot_context *p = ctx->priv;
-    char glyphs[128];
-    unsigned count, cells, row, column, glyph_count, columns, stride, i;
-    size_t offset = 0, next, at;
-    uint32_t scalar, cluster;
-    uint32_t codes[64];
-    unsigned widths[64];
-    GR_BITMAP bits[16*32];
-    if (y+4 <= p->limit.y0 || y-12 >= p->limit.y1) return NSERROR_OK;
-    GrSetGCForeground(gc, nano_colour(style->foreground));
-    while (offset < n && x < p->limit.x1) {
-        count = 0;
-        while (offset < n && count < 128) {
-            next = ru_next_grapheme((const unsigned char *)s, n, offset, &cells);
-            if (next != offset+1 || s[offset] < 32 || s[offset] >= 127) break;
-            glyphs[count++] = s[offset]; offset = next;
-        }
-        if (count) {
-            GrText(wid, gc, x, y, glyphs, count, GR_TFASCII | GR_TFBASELINE);
-            if (style->weight >= 600) GrText(wid, gc, x+1, y, glyphs, count, GR_TFASCII | GR_TFBASELINE);
-            x += count * 8; p->text_runs++;
-            continue;
-        }
-        /* The private Nano-X protocol intentionally accepts ASCII GrText
-         * only. Unicode uses the shared terminal font via audited bitmaps. */
-        columns = glyph_count = 0;
-        do {
-            at = offset;
-            cluster = ru_next((const unsigned char *)s, next, &at);
-            while (at < next) {
-                scalar = ru_next((const unsigned char *)s, next, &at);
-                cluster = ru_append(cluster, scalar);
-            }
-            codes[glyph_count] = cluster; widths[glyph_count++] = cells;
-            columns += cells; offset = next;
-            if (offset == n || glyph_count == 64) break;
-            next = ru_next_grapheme((const unsigned char *)s, n, offset, &cells);
-            if (next == offset+1 && s[offset] >= 32 && s[offset] < 127) break;
-        } while (columns + cells <= 64);
-        if (columns && x + (int)columns * 8 > p->limit.x0) {
-            stride = (columns + 1) / 2;
-            memset(bits, 0, 16 * stride * sizeof(*bits));
-            column = 0;
-            for (i = 0; i < glyph_count; i++) {
-                if (widths[i]) for (row = 0; row < 16; row++) {
-                    unsigned pixels = ru_font_row(codes[i], row);
-                    bits[row*stride+column/2] |= (column & 1) ? pixels >> 8 : pixels & 0xff00;
-                    if (widths[i] == 2) {
-                        unsigned right = column + 1;
-                        bits[row*stride+right/2] |= (right & 1) ? pixels & 255 : (pixels & 255) << 8;
-                    }
-                }
-                column += widths[i];
-            }
-            GrBitmap(wid, gc, x, y-12, columns*8, 16, bits);
-            if (style->weight >= 600) GrBitmap(wid, gc, x+1, y-12, columns*8, 16, bits);
-            p->text_runs++;
-        }
-        x += columns * 8;
-    }
-    return NSERROR_OK;
-}
+#include "font-paint.inc"
+static nserror plot_text(const struct redraw_context *ctx,const plot_font_style_t *style,
+                         int x,int y,const char *s,size_t n)
+{ return nf_paint(ctx,style,x,y,s,n); }
 static const struct plotter_table plotters = {
     .clip = plot_clip, .rectangle = plot_rectangle, .line = plot_line, .text = plot_text,
     .polygon = plot_polygon, .disc = plot_disc, .arc = plot_arc, .path = plot_path,

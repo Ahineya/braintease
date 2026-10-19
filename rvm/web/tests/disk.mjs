@@ -32,7 +32,7 @@ test('empty, oversized, unrelated, and truncated files are rejected',()=>{
 });
 test('missing system file and conflicting FAT copies are rejected',()=>{
   let image=fixture(),l=locations(image);image[l.root]=0xe5;
-  assert.throws(()=>validateDisk(image),/containing FUZIX/);
+  assert.throws(()=>validateDisk(image),/containing the kernel/);
   image=fixture();l=locations(image);image[l.fat+l.fatBytes+10]^=1;
   assert.throws(()=>validateDisk(image),/disagree/);
 });

@@ -43,7 +43,7 @@ void fuse_boot_check(void) {
         count = call(7, fd, (unsigned long)buffer, 1024);
         call(2, fd, 0, 0);
         if (count != strlen(fuse_value) || memcmp(buffer, fuse_value, count)) panic("Fuse-X: persistent file contents");
-        kputs("Fuse-X: file contents verified through FUZIX\n");
+        kputs("Fuse-X: file contents verified through Riplix\n");
     }
     if (vm_host_monotonic(&before) != VM_DEVICE_OK) panic("Fuse-X: clock read");
     start = ticks.full;

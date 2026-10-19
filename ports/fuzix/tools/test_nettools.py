@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FUZIX HTTP, DNS and UDP tools against independent Ethernet fixtures (JIT)."""
+"""Riplix HTTP, DNS and UDP tools against independent Ethernet fixtures (JIT)."""
 import argparse
 from launch import require_mmu
 import json
@@ -227,9 +227,9 @@ with tempfile.TemporaryDirectory(prefix='fuzix-nettools-') as directory:
         for path in ['NOTFOUND','BADLENGTH','BADHEADER','LONGHEADER','CHUNKBAD','GZIP','BAD204','LOOP']:
             assert f'FAIL_{path}:1\n' in text,(path,text[-10000:])
         assert text.count('KEEP_ORIGINAL\n')>=8,text[-8000:]
-        partial=text.split('HTTP_PARTIAL_FILE\n')[-1].split('fuzix# kill -2')[0]
+        partial=text.split('HTTP_PARTIAL_FILE\n')[-1].split('riplix# kill -2')[0]
         assert '.htget' in partial,partial
-        listing=text.split('fuzix# ls -a /')[-1]
+        listing=text.split('riplix# ls -a /')[-1]
         assert '.htget' not in listing,listing
         assert peer.fallbacks>=1 and ('chain.test',1) in peer.queries
     subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
@@ -239,4 +239,4 @@ with tempfile.TemporaryDirectory(prefix='fuzix-nettools-') as directory:
     assert reboot.returncode==0 and f'{check[0]} {len(BINARY)} /binary' in reboot.stdout and 'KEEP_ORIGINAL' in reboot.stdout,reboot.stdout
     assert 'nameserver 192.168.64.1' in reboot.stdout,reboot.stdout
     subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)
-print('FUZIX HTTP/DNS tools: binary/chunked downloads, redirects, failure safety, aliases, TCP DNS, NTP, interrupts and persistence passed')
+print('Riplix HTTP/DNS tools: binary/chunked downloads, redirects, failure safety, aliases, TCP DNS, NTP, interrupts and persistence passed')

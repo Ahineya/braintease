@@ -181,9 +181,9 @@ def study(canvas, theme, output):
             x += 8
     text(12, 4, 'FuseDE'); text(80, 4, 'Applications'); text(200, 4, 'Places'); text(280, 4, 'Session')
     text(560, 4, '14:32', 'muted')
-    text(450, 78, 'Terminal', 'muted'); text(446, 110, 'fuzix# ls', 'muted')
+    text(450, 78, 'Terminal', 'muted'); text(446, 110, 'riplix# ls', 'muted')
     text(446, 130, 'bin dev etc home', 'muted'); text(446, 150, 'mnt tmp usr', 'muted')
-    text(446, 190, 'fuzix# _', 'muted')
+    text(446, 190, 'riplix# _', 'muted')
     text(46, 54, 'Files - Home'); text(354, 54, '- [] x')
     text(60, 93, '/home/user', 'muted'); text(60, 133, 'Name', 'muted'); text(362, 133, 'Size', 'muted')
     for index, (name, size) in enumerate([('Projects', '<DIR>'), ('Documents', '<DIR>'), ('Pictures', '<DIR>'),

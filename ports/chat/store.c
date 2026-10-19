@@ -491,12 +491,12 @@ FILE *chat_request(Chat *c) {
                 "Report what you changed, what you ran, and failures honestly. "
                 "The guest has a small Bourne shell, not bash; inspect available programs before relying on tools. "
                 "Guest C development uses cc, which currently generates Ripple RXE binaries on both platforms. "
-                "These run on FUZIX/RVM; native Fuse-X still needs the host compiler for native FXE binaries. "
+                "These run on Riplix/RVM; native Fuse-X still needs the host compiler for native FXE binaries. "
                 "Shell/Tcl/BASIC and existing native programs can execute inside Fuse-X. "
                 "C uses 16-bit char/int cells and 32-bit long/pointers. Use paths and commands actually observed in this guest.",
                 c->workspace);
         } else
-            strcpy(instructions, "You are a helpful chat assistant running in a FUZIX terminal.");
+            strcpy(instructions, "You are a helpful chat assistant running in a Riplix terminal.");
         chat_path(c, path, ".instructions");
         if (!read_instructions(path, &custom, 1)) {
             strcpy(c->status, "Cannot read .instructions: need UTF-8 text up to 16 KiB");

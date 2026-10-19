@@ -31,7 +31,25 @@ static void parser(void) {
     for (i = 0; i < 257; ++i) memcpy(large + i * 4, "x=y\n", 4);
     r = ini_reader(large, 257 * 4);
     for (i = 0; i < 256; ++i) assert(ini_next(r) == 1);
-    assert(ini_next(r) == INI_LIMIT); ini_free(r); free(large);
+    assert(ini_next(r) == INI_LIMIT); ini_free(r);
+    r = ini_reader_with_limits(large, 257 * 4, 65536UL, 1024, 257);
+    for (i = 0; i < 257; ++i) assert(ini_next(r) == 1);
+    assert(ini_next(r) == 0); ini_free(r);
+    r = ini_reader_with_limits("x=y\n", 4, 3, 1024, 256);
+    assert(ini_next(r) == INI_LIMIT); ini_free(r);
+    r = ini_reader_with_limits("x=y\n", 4, 4, 2, 256);
+    assert(ini_next(r) == INI_LIMIT); ini_free(r);
+    r = ini_reader_with_limits("x=y\n", 4, 4, 3, 0);
+    assert(ini_next(r) == INI_LIMIT); ini_free(r);
+    r = ini_reader_with_limits(NULL, 0, 0, 0, 0);
+    assert(ini_next(r) == 0); ini_free(r);
+    /* Wider line budgets allocate section storage to the bounded input size. */
+    large[0]='[';memset(large+1,'s',2048);memcpy(large+2049,"]\nx=y",5);
+    r=ini_reader_with_limits(large,2054,4096,2050,1);
+    assert(ini_next(r)==1 && strlen(ini_section(r))==2048);
+    assert(ini_next(r)==0);ini_free(r);
+    r=ini_reader_with_limits(NULL,(size_t)-1,(size_t)-1,1024,256);
+    assert(ini_next(r)==INI_LIMIT);ini_free(r);free(large);
 }
 static void themes(const char *dir) {
     TuiTheme *t = tui_theme_new("Application defaults", 1);

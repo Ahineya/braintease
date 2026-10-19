@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the portable C frontend as an RXE inside FUZIX under RVM."""
+"""Run the portable C frontend as an RXE inside Riplix under RVM."""
 import argparse
 import json
 import os
@@ -36,7 +36,7 @@ def main():
         run([sys.executable, HERE / 'guest_build.py', '--os', 'fuzix', '--metrics',
              '--build', build, '-o', executable])
     binary = executable.read_bytes()
-    assert binary[:4] == b'RXE1'
+    assert binary[:4] in (b'RXE1', b'RXE2')
     entry, instructions, data_octets, relocations = struct.unpack_from('<IIII', binary, 8)
     print(f'compiler RXE: {instructions} instructions, {data_octets} data octets', flush=True)
     with tempfile.TemporaryDirectory(prefix='portable-rvm-') as temporary:
@@ -122,7 +122,7 @@ def main():
         (HERE / 'build/rvm-report.json').write_text(json.dumps(report, indent=2) + '\n')
         for name in ['rvm-mismatch.ir', 'rvm-reference.ir']:
             (HERE / 'build' / name).unlink(missing_ok=True)
-    print('FUZIX/RVM guest compiler: both IR targets, executable output and diagnostics passed', flush=True)
+    print('Riplix/RVM guest compiler: both IR targets, executable output and diagnostics passed', flush=True)
 
 
 if __name__ == '__main__':

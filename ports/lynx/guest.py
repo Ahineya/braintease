@@ -83,7 +83,7 @@ class Guest:
             command = [str(ROOT / 'target/release/rvm'), str(build / 'bios.bin'),
                        '--disk', str(image), '--memory', '16384000', '--net', network or str(directory / 'nic'),
                        '--jit', '--timeout', '900']
-            self.program, self.pages, self.prompt = '/bin/lynx', '/www', b'fuzix# '
+            self.program, self.pages, self.prompt = '/bin/lynx', '/www', b'riplix# '
         self.peer = peer
         self.log = bytearray()
         self.at = 0

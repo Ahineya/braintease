@@ -23,6 +23,9 @@ def main():
     parser.add_argument('--rebuild', action='store_true', help='bypass launcher cache and force Make recipes')
     args = parser.parse_args()
     build = args.build.resolve();build.mkdir(parents=True, exist_ok=True)
+    system = 'Riplix' if args.os == 'fuzix' else 'Fuse-X'
+    if args.os == 'fuse-x':
+        os.environ.setdefault('FUSE_X_SHARED_LIBRARIES', '1')
     print('Build: Checking expired artifact cleanup (at most once per day)', flush=True)
     cleanup = subprocess.run(['python3', str(ROOT / 'scripts/clean-artifacts.py'),
                               '--apply', '--daily', '--quiet'])
@@ -41,7 +44,7 @@ def main():
         inputs = sources(*rust, ROOT / 'scripts/build-os.py', ROOT / 'scripts/build_cache.py')
         settings = {key: os.environ.get(key) for key in ['RUSTFLAGS', 'CARGO_PROFILE_RELEASE_OPT_LEVEL',
                     'CC', 'CXX', 'CFLAGS', 'LDFLAGS', 'DEVELOPER_DIR', 'SDKROOT', 'MACOSX_DEPLOYMENT_TARGET',
-                    'CODE_BANKS', 'BULK_IO', 'MMU', 'MAKEFLAGS', 'RUSTUP_TOOLCHAIN',
+                    'CODE_BANKS', 'BULK_IO', 'MMU', 'MAKEFLAGS', 'RUSTUP_TOOLCHAIN', 'FUSE_X_SHARED_LIBRARIES', 'RIPLIX_SHARED_LIBRARIES',
                     'CARGO_ENCODED_RUSTFLAGS', 'RUSTC']}
         settings.update({key: value for key, value in os.environ.items()
                          if key.startswith('CARGO_PROFILE_RELEASE_')})
@@ -62,7 +65,7 @@ def main():
                               [args.os, settings, str(Path(__file__).resolve())], host_tools, tools,
                               force=args.rebuild)
         print('Host tools: '+('checked/updated' if changed else 'current'), flush=True)
-        print(f'Build: Checking {args.os} sources and cached outputs', flush=True)
+        print(f'Build: Checking {system} sources and cached outputs', flush=True)
         roots = [ROOT / 'ports/fuzix', ROOT / 'ports/basic', ROOT / 'runtime', ROOT / 'ports/nanox', ROOT / 'ports/graphics',
                  ROOT / 'ports/fusede', ROOT / 'ports/lynx', ROOT / 'ports/netsurf', ROOT / 'ports/tls', ROOT / 'ports/telegram', ROOT / 'ports/music', ROOT / 'ports/chat', ROOT / 'rfl',
                  ROOT / 'libraries', ROOT / 'rcc-portable', ROOT / 'c-test/examples/rOS',
@@ -74,12 +77,14 @@ def main():
             if args.os == 'fuzix':
                 files += [build / n for n in ['FUZIX.SYS', 'bios.bin', 'apps.json', '.mmu', '.code-banks', '.bulk-io']]
                 files += [build / (n+'.rxe') for n in json.loads((build / 'apps.json').read_text())]
+                files += list((build / 'lib').glob('*.rsl.[0-9]'))
             else:
                 files += [build / 'fuse-x', build / 'application-report.json', build / 'apps/telegram.fxe', build / 'apps/music.fxe', build / 'apps/wavplay.fxe', *(build / 'apps').glob('*.fxe')]
+                files += list((build / 'lib').glob('*.fxl.[0-9]'))
                 if os.uname().sysname == 'Darwin':files += [build / 'Fuse-X.app/Contents/MacOS/fuse-x', build / 'Fuse-X.app/Contents/Info.plist']
             return files
         def operating_system():
-            print(f'Build: Building {args.os} kernel, applications and guest C tools', flush=True)
+            print(f'Build: Building {system} kernel, applications and guest C tools', flush=True)
             command = ['make', '-C', ROOT / ('ports/fuzix' if args.os == 'fuzix' else 'fuse-x'),
                        f'BUILD={build}', '-j4']
             if args.rebuild:
@@ -96,7 +101,7 @@ def main():
         changed = cached_step(build / '.incremental-os.json', dependencies,
                               [args.os, str(build), settings], operating_system, artifacts,
                               force=args.rebuild)
-        print(args.os+': '+('updated' if changed else 'current (no compilation needed)'), flush=True)
+        print(system+': '+('updated' if changed else 'current (no compilation needed)'), flush=True)
 
 
 if __name__ == '__main__':main()

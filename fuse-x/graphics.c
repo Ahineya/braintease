@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Guest ownership and Unix waits stay in FUZIX; the host owns surface storage. */
+/* Guest ownership and Unix waits stay in Riplix; the host owns surface storage. */
 #include "host.h"
 #include <kdata.h>
 #include <native_hosted.h>
@@ -66,7 +66,13 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     }
     if(req==GX_INFO) {
         struct gx_info info={GX_VERSION,GX_CAP_COPY|GX_CAP_FILL|GX_CAP_INPUT|GX_CAP_MULTIWINDOW|GX_CAP_TITLE|GX_CAP_RESIZE|GX_CAP_DESKTOP_POINTER|GX_CAP_RASTER|GX_CAP_SCALED_UPLOAD|GX_CAP_INDEXED_UPLOAD|GX_CAP_CLIPBOARD,GX_HOSTED_MAX_WIDTH,GX_HOSTED_MAX_HEIGHT,WINDOWS,GX_RGB565,(unsigned long)GX_HOSTED_MAX_WIDTH*GX_HOSTED_MAX_HEIGHT};
+        if(rcc_hosted_gx(21,a)>=0)info.flags|=GX_CAP_TERMINAL;
         return uput(&info,user,sizeof(info));
+    }
+    if(req==GX_TERMINAL_METRICS){
+        struct gx_terminal_metrics t;
+        if(host(21,a)<0)return -1;
+        t.version=GX_VERSION;t.width=a[1];t.height=a[2];return uput(&t,user,sizeof(t));
     }
     if(req==GX_CREATE||req==GX_CREATE_HIDDEN) {
         struct gx_window w;unsigned i;
@@ -82,6 +88,16 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     if(handle.version!=GX_VERSION)return fail(EINVAL);
     lease=mine(handle.handle);if(!lease)return -1;
     a[0]=handle.handle;
+    if(req==GX_TERMINAL_DRAW){
+        struct gx_terminal_draw t;
+        if(uget(user,&t,sizeof(t)))return -1;
+        if(!t.cols||t.cols>240||!t.rows||t.rows>100||t.row>=t.rows||t.length>(unsigned long)t.cols*67||
+            t.cursor_visible>1||t.cursor_shape>6)return fail(EINVAL);
+        if(!valaddr_r(t.data,t.length,t.length))return -1;
+        a[1]=t.cols;a[2]=t.rows;a[3]=t.row;a[4]=(unsigned long)t.data;a[5]=t.length;
+        a[6]=t.cursor_x;a[7]=t.cursor_y;a[8]=t.cursor_visible;a[9]=t.cursor_shape;
+        return host(22,a)<0?-1:0;
+    }
     if(req==GX_CLIPBOARD_READ||req==GX_CLIPBOARD_WRITE) {
         struct gx_clipboard c;
         if(uget(user,&c,sizeof(c))||!valaddr_w(user,sizeof(c),sizeof(c)))return -1;

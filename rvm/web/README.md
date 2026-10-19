@@ -2,14 +2,14 @@
 
 The original Ripple interpreter, MMU, interrupt controller and bulk device
 validation compile to WebAssembly. A dedicated worker owns the machine, RAM
-disk and framebuffer. The page boots to an 80×30 FUZIX console. Run `startx`
+disk and framebuffer. The page boots to an 80×30 Riplix console. Run `startx`
 to open Nano-X, NanoWM and NXDSKTOP; leaving the desktop returns to the console.
 FuseDE is not included.
 
 ## Build and run
 
 Requirements: Rust with `wasm32-unknown-unknown`, Node/npm, Python 3, and
-the repository's RCC toolchain and compiled FUZIX application artifacts under
+the repository's RCC toolchain and compiled Riplix application artifacts under
 `build/fuzix`. The build compiles its own kernel and BIOS under
 `build/rvm-web/fuzix`; it does not boot, read or update a normal guest image.
 
@@ -38,7 +38,7 @@ The public deployment is
 Its existing Site identity is retained in `.openai/hosting.json`; reuse that
 project for updates rather than registering another Site.
 
-Publishing uses a separate Git checkout in `build/rvm-web/hosting`, containing
+Publishing uses a separate Git checkout in `build/riplix-site`, containing
 only its hosting manifest and the explicit browser assets under `dist/`.
 The main repository, normal guest disks, test exports, build caches, and source
 provenance files are not part of that checkout. Rebuild the browser bundle
@@ -51,6 +51,18 @@ Hosted verification on 2026-10-18 confirmed console boot, file I/O, manual
 desktop startup, graphical keyboard and mouse input, desktop exit, clean
 shutdown, browser disk download, and reimport with the saved file intact.
 No browser console warnings or errors were reported during those checks.
+
+The Riplix rename rebuilds the embedded kernel and application identities,
+uses the supplied banner, and retains the FUZIX ancestry notice and copyrights.
+Kernel credits and license are linked from About and installed in the guest at
+`/usr/share/doc/riplix/`. Browser disk formats and older exports remain compatible.
+
+Published the Riplix update on 2026-10-19 as Site version 2, retaining the
+existing URL and public audience. Rename verification passed native and Brainfuck JIT boot,
+RVM JIT identity/shutdown, the Wasm shell/editor/desktop smoke test, and the
+real worker export/reimport/reset test. Exact banner bytes and `uname` are
+asserted. The browser-control connection was unavailable for this update;
+DOM/file-chooser interaction was not rerun.
 
 ## Using the machine
 
@@ -66,10 +78,10 @@ No browser console warnings or errors were reported during those checks.
   Editor/file-manager themes and BASIC examples come from repository resources.
 - Pause suspends execution; Resume continues the same machine.
 - Files live only in this tab's RAM disk. Run `shutdown`, then **Export disk**
-  to download a clean FUZIX image containing your changes. Reset disk discards
+  to download a clean Riplix image containing your changes. Reset disk discards
   this tab's changes and boots the original seed. Closing/reloading loses
   unexported changes.
-- **Import disk** opens an exported Ripple/FUZIX `.img` file (up to 256 MiB).
+- **Import disk** opens an exported Ripple/Riplix `.img` file (up to 256 MiB).
   Format, FAT chains, kernel layout, and C16 V3 geometry are checked before
   asking to replace the current session. Cancelling or choosing an invalid
   file leaves the current machine running. The original file is never modified

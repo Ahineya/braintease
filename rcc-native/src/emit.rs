@@ -23,8 +23,25 @@ pub(super) struct Cg<'a, 'b> {
     pub(super) edges: Vec<(Block, u32, u32)>,
     pub(super) va_input: Option<ClValue>,
     pub(super) var_area: u64,
+    pub(super) bound_globals: BTreeMap<String, ClValue>,
 }
 impl Cg<'_, '_> {
+    pub(super) fn bind_globals(&mut self, function: &Function) -> Result<(), String> {
+        if self.compiler.dynamic.is_none() {
+            return Ok(());
+        }
+        // A process's module addresses cannot change during a continuation.
+        // Resolve once at the step entry, outside application loops, and do
+        // so again when a suspended frame resumes in its selected process.
+        for name in rcc_ir::link::function_symbols(function) {
+            if let Some(local) = self.compiler.globals.get(&name).copied() {
+                let local = self.k(local as i64);
+                let address = self.runtime("rcc_native_image_global", &[local])?;
+                self.bound_globals.insert(name, address);
+            }
+        }
+        Ok(())
+    }
     pub fn k(&mut self, value: i64) -> ClValue {
         self.b.ins().iconst(types::I64, value)
     }
@@ -39,8 +56,16 @@ impl Cg<'_, '_> {
                 self.b.use_var(var)
             }
             Value::Global(name) | Value::Function(name) => {
+                if let Some(value) = self.bound_globals.get(name) {
+                    return Ok(*value);
+                }
                 if let Some(n) = self.compiler.globals.get(name).copied() {
-                    self.k(n as i64)
+                    let n = self.k(n as i64);
+                    if self.compiler.dynamic.is_some() {
+                        self.runtime("rcc_native_image_global", &[n])?
+                    } else {
+                        n
+                    }
                 } else {
                     let code = self.compiler.function_token(name)?;
                     let value = self.k(code as i64);
@@ -54,6 +79,14 @@ impl Cg<'_, '_> {
             Value::FatPtr(pointer) => {
                 let addr = self.value(&pointer.addr)?;
                 if matches!(pointer.addr.as_ref(), Value::Constant(_)) {
+                    if self.compiler.dynamic.is_some() && matches!(pointer.bank, BankTag::Global) {
+                        let low = self.b.ins().band_imm_u(addr, 65535);
+                        let local = self
+                            .b
+                            .ins()
+                            .bor_imm_u(low, (self.compiler.global_bank << 16) as i64);
+                        return self.runtime("rcc_native_image_global", &[local]);
+                    }
                     let bank = match pointer.bank {
                         BankTag::Global => 1,
                         BankTag::Stack => 2,
@@ -240,7 +273,9 @@ pub(super) fn emit_direct_function(
             edges: Vec::new(),
             va_input,
             var_area,
+            bound_globals: BTreeMap::new(),
         };
+        cg.bind_globals(function)?;
         if owns_stack {
             cg.mark = cg.runtime("rcc_native_stack_mark", &[])?;
             let size = cg.k(i64::try_from(cells).map_err(|_| "native frame exceeds i64")?);

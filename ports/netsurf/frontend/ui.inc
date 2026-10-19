@@ -1,21 +1,38 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 static void fill(int x,int y,int w,int h,GR_COLOR c)
 { if(w>0&&h>0) { GrSetGCForeground(gc,c); GrFillRect(wid,gc,x,y,w,h); } }
+static plot_font_style_t ui_font(void)
+{
+    plot_font_style_t style;memset(&style,0,sizeof(style));
+    style.family=PLOT_FONT_FAMILY_SANS_SERIF;style.size=9984;style.weight=400;return style;
+}
+static size_t ui_prefix(const char *s,size_t n,int budget,int *pixels)
+{
+    plot_font_style_t style=ui_font();size_t at=0,next;int total=0;unsigned advance;
+    while(at<n) { advance=nf_advance(&style,s,n,at,&next);if(total+(long)advance>budget)break;total+=advance;at=next; }
+    *pixels=total;return at;
+}
 static void label(int x,int y,const char *s,int max,GR_COLOR c)
 {
     struct plot_context p;
     struct redraw_context redraw = { .plot = &plotters, .priv = &p };
-    plot_font_style_t style = { .foreground = c, .weight = 400 };
+    plot_font_style_t style = ui_font();
+    int pixels;
     size_t n = strlen(s), shown;
     if (max <= 0) return;
     if (max > 128) max = 128;
-    shown = ru_prefix((const unsigned char *)s, n, max);
+    shown = ui_prefix(s,n,max*8,&pixels);
     p.limit.x0 = p.limit.y0 = 0; p.limit.x1 = width; p.limit.y1 = height;
     p.clip = p.limit; p.text_runs = p.rectangles = 0;
     style.foreground = c & 0xffffffUL;
-    plot_text(&redraw, &style, x, y+12, s, shown);
+    {
+        nserror error=plot_text(&redraw,&style,x,y+12,s,shown);
+        if(tracing&&x>width-100)fprintf(stderr,"NETSURF_GUI_LABEL x=%d clip=%d bytes=%lu result=%d\n",x,p.clip.x1,(unsigned long)shown,error);
+    }
 }
 static int options_x(void) { return width>94?width-88:0; }
+enum { BACK_RIGHT=46, NEXT_RIGHT=86, RELOAD_RIGHT=142, HOME_RIGHT=182, RANDOM_RIGHT=238 };
+static bool random_visible(void) { return RANDOM_RIGHT<=options_x()-4; }
 static void close_menu(void) { if(menu_open) { menu_open=false;full_damage();chrome_dirty=true; } }
 static void update_transfer(void)
 {
@@ -75,19 +92,22 @@ static void paint_chrome(void)
     GrSetGCRegion(gc,0);
     fill(0,0,width,TOOLBAR,bg);
     label(10,7,"Back",4,browser_window_history_back_available(window.bw)?fg:muted);
-    label(62,7,"Next",4,browser_window_history_forward_available(window.bw)?fg:muted);
-    label(114,7,"Reload",6,fg); label(182,7,"Home",4,fg);
+    label(BACK_RIGHT+4,7,"Next",4,browser_window_history_forward_available(window.bw)?fg:muted);
+    label(NEXT_RIGHT+4,7,"Reload",6,fg); label(RELOAD_RIGHT+4,7,"Home",5,fg);
+    if(random_visible())label(HOME_RIGHT+4,7,"Random",7,fg);
     fill(options_x()-4,3,88,25,menu_open?GR_RGB(65,101,136):bg);
     label(options_x(),7,"Options",7,fg);
     label(width-20,7,"v",1,fg);
     fill(6,32,width-12,26,editing?GR_RGB(224,237,248):GR_RGB(244,246,248));
     if(select_address)fill(10,37,width-20,16,GR_RGB(65,101,136));
     {
-        int cap=(width-24)/8;
-        size_t n=strlen(address), start=0, count=ru_columns((const unsigned char *)address,n), shown=count;
-        if(editing)while(shown>(size_t)(cap>1?cap-1:0)) { unsigned cells; start=ru_next_grapheme((const unsigned char *)address,n,start,&cells); shown-=cells; }
+        int cap=(width-24)/8,pixels=0,total=0;plot_font_style_t style=ui_font();
+        size_t n=strlen(address),start=0,next,at=0;
+        while(at<n) { total+=nf_advance(&style,address,n,at,&next);at=next; }
+        if(editing)while(total>cap*8-2&&start<n) { total-=nf_advance(&style,address,n,start,&next);start=next; }
+        ui_prefix(address+start,n-start,cap*8,&pixels);
         label(10,37,address+start,cap,select_address?fg:GR_RGB(26,36,44));
-        if(editing&&!select_address)fill(10+shown*8,37,1,16,GR_RGB(26,36,44));
+        if(editing&&!select_address)fill(10+pixels,37,1,16,GR_RGB(26,36,44));
     }
     fill(0,height-STATUS,width,STATUS,bg);
     label(8,height-STATUS+3,transfer_text[0]?transfer_text:status_text,(width-16)/8,fg);
@@ -261,10 +281,11 @@ static void mouse_button(int x,int y,unsigned changed,unsigned modifiers,bool do
     if(y>=32&&y<TOOLBAR) { if(down)focus_address(); return; }
     if(y<32) {
         if(!down)return;
-        if(x<54)browser_window_history_back(window.bw,false);
-        else if(x<106)browser_window_history_forward(window.bw,false);
-        else if(x<174)browser_window_reload(window.bw,true);
-        else if(x<226)navigate(HOME);
+        if(x<BACK_RIGHT)browser_window_history_back(window.bw,false);
+        else if(x<NEXT_RIGHT)browser_window_history_forward(window.bw,false);
+        else if(x<RELOAD_RIGHT)browser_window_reload(window.bw,true);
+        else if(x<HOME_RIGHT)navigate(HOME);
+        else if(x<RANDOM_RIGHT&&random_visible())navigate(RANDOM_URL);
         return;
     }
     if(y>=height-STATUS)return;

@@ -7,7 +7,7 @@ static void disconnect(void){
     if(client>=0)close(client);client=-1;out_start=out_count=0;
     rx_head=rx_size=rx_used=rx_pos=0;prefix_pending=escape_state=0;mode=help=closing=0;
     paste_count=0;full=dirty=1;rendering=0;
-    save_reply=0;
+    save_reply=0;synchronized_output=0;
 }
 static void receive_request(void){
     int n;unsigned c;
@@ -118,6 +118,7 @@ static int server(char **command,unsigned w,unsigned h,int ready){
         layout();paste_more();escape_timeout();
         for(i=0;i<PANES;i++)if(panes[i].used){
             struct pane *p=&panes[i];
+            if(p->sync_since&&(long)(milliseconds()-p->sync_since)>=1000){p->vt.synchronized=0;p->sync_since=0;dirty=1;}
             if(p->queued){
                 n=write(p->fd,p->input,p->queued);
                 if(n>0){p->queued-=n;memmove(p->input,p->input+n,p->queued);}
@@ -127,6 +128,8 @@ static int server(char **command,unsigned w,unsigned h,int ready){
             n=read(p->fd,buffer,sizeof(buffer));
             if(n>0){
                 vt_feed(&p->vt,buffer,n);
+                if(!p->vt.synchronized)p->sync_since=0;
+                else if(!p->sync_since){p->sync_since=milliseconds();if(!p->sync_since)p->sync_since=1;}
                 if(p->tab!=current){if(!p->activity){p->activity=1;dirty=1;}}
                 else if(p->shown)dirty=1;
             }else if(!n||(n<0&&!retry_error()))p->eof=1;
@@ -163,7 +166,7 @@ static struct termios outer_saved;static int outer_changed,stdout_flags=-1;
 static void restore_terminal(void){
     if(stdout_flags>=0)fcntl(1,F_SETFL,stdout_flags);
     if(outer_changed){
-        static const char end[]="\033[0m\033(B\033[r\033[?7h\033[?25h\033[0 q\033[?1049l";
+        static const char end[]="\033[?2026l\033[0m\033(B\033[r\033[?7h\033[?25h\033[0 q\033[?1049l";
         unsigned at=0;int n;while(at<sizeof(end)-1){n=write(1,end+at,sizeof(end)-1-at);if(n>0)at+=n;else if(n<0&&errno==EINTR)continue;else break;}
         tcsetattr(0,TCSANOW,&outer_saved);outer_changed=0;
     }

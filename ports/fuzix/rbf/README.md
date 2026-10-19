@@ -1,6 +1,6 @@
-# FUZIX shell on the Brainfuck CPU
+# Riplix shell on the Brainfuck CPU
 
-This isolated physical-memory port boots the maintained FUZIX kernel, loads
+This isolated physical-memory port boots the maintained Riplix kernel, loads
 `/init` from disk and runs a tiny shell. The shell can fork, execute separate
 programs and wait for their exit. Both kernel and userspace instructions execute
 through the Brainfuck CPU; this is not a host-side shell simulation.
@@ -8,13 +8,13 @@ through the Brainfuck CPU; this is not a host-side shell simulation.
 From the repository root:
 
 ```sh
-scripts/run-fuzix-bf.sh
-scripts/run-fuzix-bf.sh --build-only
-scripts/run-fuzix-bf.sh --run-only
-scripts/run-fuzix-bf.sh --run-only --telemetry
+scripts/run-riplix-bf.sh
+scripts/run-riplix-bf.sh --build-only
+scripts/run-riplix-bf.sh --run-only
+scripts/run-riplix-bf.sh --run-only --telemetry
 ```
 
-The default enables the generic BF JIT and shows `fuzix-bf# ` after boot.
+The default enables the generic BF JIT and shows `riplix-bf# ` after boot.
 Telemetry is **off by default** so its dots and progress counters do not
 interleave with terminal output. Add `--telemetry` for lightweight BF progress.
 
@@ -35,9 +35,9 @@ shutdown
 ```
 
 `cat`, `ls` and `uname` are separate executables in `/bin`, launched through
-FUZIX fork/exec/wait. `cat` and the `uname` command use unchanged upstream utility
+Riplix fork/exec/wait. `cat` and the `uname` command use unchanged upstream utility
 sources with a small port libc; `ls` is a minimal directory listing program.
-`uname -a` prints `Fuzix 0.5 RCC-BF Ripple`: `Ripple` is the machine ISA and
+`uname -a` prints `Riplix 0.5 RCC-BF Ripple`: `Ripple` is the machine ISA and
 `RCC-BF` identifies this build. The upstream version field has room for seven
 characters plus its terminator.
 
@@ -55,8 +55,8 @@ Input uses `--tty-stdin` automatically unless an explicit input/display mode is
 selected. This also permits pipes:
 
 ```sh
-printf 'uname -a\nshutdown\n' | scripts/run-fuzix-bf.sh --run-only
-scripts/run-fuzix-bf.sh --run-only --input $'ls /dev\nshutdown\n'
+printf 'uname -a\nshutdown\n' | scripts/run-riplix-bf.sh --run-only
+scripts/run-riplix-bf.sh --run-only --input $'ls /dev\nshutdown\n'
 ```
 
 A shell session has no default timeout. `--timeout SECONDS` adds a wall-time
@@ -68,7 +68,7 @@ automatic stdin attachment; combine it with `--input` or an explicit
 ## Disposable writable disk
 
 Every shell launch, including `--run-only`, copies the built root image into a
-fresh private session directory. FUZIX mounts it read/write. Normal writes,
+fresh private session directory. Riplix mounts it read/write. Normal writes,
 closes and cache eviction use the block driver, including full C16 cell values.
 The root image is a raw C16 V3 filesystem with 1,024 blocks (2 MiB physically)
 and 32 inodes. No FAT BIOS stage or filesystem downgrade is required.
@@ -79,10 +79,11 @@ returns, including on interruption. The next launch starts fresh. The built
 root template and maintained MMU/RVM user disks are untouched. This launcher
 rejects `--disk`.
 
-Build progress streams live using the normal FUZIX launcher's reporter. It
+Build progress streams live using the normal Riplix launcher's reporter. It
 shows compilation, linking, BF export, disk creation and a heartbeat during
 quiet steps. Complete diagnostics remain in `build.log`. The default build
-directory is `build/fuzix-rbf`; `FUZIX_BF_BUILD` or `--build DIR` overrides it.
+directory is `build/fuzix-rbf`; `RIPLIX_BF_BUILD` or `--build DIR` overrides it.
+The older `FUZIX_BF_BUILD` variable is also accepted.
 Builds in the same directory are serialized. Use `--run-only` when restoring a
 checkpoint so its matching image is not rebuilt; the fresh disk still applies.
 
@@ -91,7 +92,7 @@ checkpoint so its matching image is not rebuilt; the fresh disk still applies.
 The kernel and programs are compiled to Ripple instructions. The standalone
 `.bf` contains a Brainfuck implementation of the CPU and the initial kernel
 image. Executables on disk are **SYS1 machine-code data**, rather than separate
-expanded Brainfuck files. The guest loader reads them through FUZIX and uses
+expanded Brainfuck files. The guest loader reads them through Riplix and uses
 existing `DEVICE_*` bulk transfers to put code and data onto the CPU's tape.
 The Brainfuck CPU then fetches and executes those instructions. Rust supplies
 peripherals and tape transfers; it does not execute the Ripple instructions.
@@ -147,7 +148,7 @@ instruction 1. The user wrapper calls that vector with the maintained
 saves user state, switches to the kernel stack, dispatches, restores state and
 returns. Supported calls are exit, open, close, read, write, chdir, dup, getpid,
 getppid, execve, getdirent, fork, uname, waitpid and PID1 shutdown. Unsupported
-calls return FUZIX `ENOSYS`.
+calls return Riplix `ENOSYS`.
 
 User-memory helpers validate banks and full spans before copies. Larger copies
 use the existing bulk device. These checks catch accidental invalid syscall
@@ -159,8 +160,8 @@ kernel RAM or issuing MMIO itself.
 The original milestone remains separately available:
 
 ```sh
-scripts/run-fuzix-bf.sh --run-only --boot-check
-scripts/run-fuzix-bf.sh --run-only --boot-check --no-jit
+scripts/run-riplix-bf.sh --run-only --boot-check
+scripts/run-riplix-bf.sh --run-only --boot-check --no-jit
 ```
 
 It checks the real read-only root mount, PID 1 and `/BOOT` contents, then halts
@@ -179,7 +180,7 @@ instruction starts, tape layout, JIT activity and execution time.
 
 IRQ polling, timer interrupts and preemption are compiled out of both images.
 The upstream `Enabling interrupts ... ok.` text refers to inert platform hooks.
-The tty uses FUZIX's sleep/wakeup path while `plt_idle()` polls input and uses a
+The tty uses Riplix's sleep/wakeup path while `plt_idle()` polls input and uses a
 bounded host idle call; no guest clock is advanced. This profile has no MMU,
 COW, general multitasking, networking, PTYs, graphics or audio. IRQ-based
 preemption and more processes are separate future milestones. The maintained

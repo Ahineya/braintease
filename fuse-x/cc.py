@@ -3,6 +3,7 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+import fcntl
 import os
 from pathlib import Path
 import re
@@ -18,7 +19,7 @@ from build_cache import c_dependencies
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('sources', type=Path, nargs='+')
+    parser.add_argument('sources', type=Path, nargs='*')
     parser.add_argument('-o', '--output', type=Path, required=True)
     parser.add_argument('-I', dest='includes', action='append', default=[])
     parser.add_argument('-D', dest='defines', action='append', default=[])
@@ -31,7 +32,14 @@ def main():
     parser.add_argument('--tui-theme', action='store_true', help='link curses plus the INI/theme companion libraries')
     parser.add_argument('--object-ir', type=Path, action='append', default=[],
                         help='link an additional native IR object (platform libraries)')
+    linking = parser.add_mutually_exclusive_group()
+    linking.add_argument('--shared', action='store_true', default=os.environ.get('FUSE_X_SHARED_LIBRARIES', '1') != '0', help='use versioned guest shared libc and companion libraries (default)')
+    linking.add_argument('--static', action='store_false', dest='shared', help='embed guest libraries using the legacy executable ABI')
+    parser.add_argument('--sdk-only', action='store_true', help='prepare shared SDK libraries without compiling an executable')
+    parser.add_argument('--library', action='append', default=[], metavar='HOST=GUEST', help='import a guest shared library interface')
     args = parser.parse_args()
+    if args.shared:
+        args.float_format = True
     args.curses = args.curses or args.tui_theme
     args.ini = args.ini or args.tui_theme
     compiler = args.compiler.resolve()
@@ -54,6 +62,7 @@ def main():
     libraries += sorted(p for p in (PORT / 'upstream/Library/libs').glob('*.c')
                         if p.stem not in excluded)
     libraries += [ROOT / 'fuse-x/libc/bridge.c', PORT / 'ripple/userlib.c', ROOT / 'libraries/unicode/unicode.c']
+    core_sources = set(libraries)
     if args.curses:
         curses = PORT / 'upstream/Library/libs/curses'
         flags += ['-I', str(curses)]
@@ -65,9 +74,11 @@ def main():
     if args.tui_theme:
         libraries += [ROOT / 'libraries/tui-theme/tui_theme.c', ROOT / 'libraries/tui-theme/tui_curses.c']
     if args.float_format:
-        libraries += [PORT / 'ripple/libc/math-bits.c', PORT / 'ripple/libc/math-host.c']
-        libraries += [PORT / f'upstream/Library/libs/{name}.c' for name in
-                      'scalbn strtod ecvt frexp ldexp modf'.split()]
+        floating = [PORT / 'ripple/libc/math-bits.c', PORT / 'ripple/libc/math-host.c']
+        floating += [PORT / f'upstream/Library/libs/{name}.c' for name in
+                     'scalbn strtod ecvt frexp ldexp modf'.split()]
+        libraries += floating
+        core_sources.update(floating)
     digest = hashlib.sha256()
     digest.update(str((compiler, compiler.stat().st_mtime_ns, flags)).encode())
     for directory in includes:
@@ -98,6 +109,42 @@ def main():
     print(f'Build: Preparing shared SDK for {args.output.name}', flush=True)
     with ThreadPoolExecutor(max_workers=4) as pool:
         library_ir = list(pool.map(compile_library, libraries))
+    shared_arguments = [item for value in args.library for item in ('--library', value)]
+    if args.shared:
+        shared_dir = args.build.resolve() / 'lib'
+        shared_dir.mkdir(parents=True, exist_ok=True)
+        core_ir = [ir for source, ir in zip(libraries, library_ir) if source in core_sources]
+        companions = [ir for source, ir in zip(libraries, library_ir) if source not in core_sources]
+        def shared_library(name, inputs, dependencies):
+            output = shared_dir / name
+            stamp = output.with_suffix(output.suffix + '.sha256')
+            digest = hashlib.sha256(str((linker, linker.stat().st_mtime_ns, dependencies)).encode())
+            for path in inputs:
+                digest.update(path.read_bytes())
+            for _, value in zip(dependencies[::2], dependencies[1::2]):
+                digest.update(Path(value.split('=',1)[0]).read_bytes())
+            key = digest.hexdigest()
+            with output.with_suffix(output.suffix + '.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                if not output.exists() or not stamp.exists() or stamp.read_text() != key:
+                    print(f'Build: Linking shared {name}', flush=True)
+                    subprocess.run([str(linker), 'link-shared', *map(str,inputs), '--soname', name,
+                                    *dependencies, '-o', str(output)], check=True,
+                                   env=dict(os.environ, RCC_NATIVE_PROGRESS='1'))
+                    stamp.write_text(key)
+            return ['--library', f'{output}=/lib/fuse-x/{name}']
+        shared_arguments += shared_library('libc.fxl.1', core_ir, [])
+        if companions:
+            # Split more finely as companion APIs stabilize; all still share libc.
+            name = 'libtui.fxl.1' if args.tui_theme else ('libcurses.fxl.1' if args.curses else 'libini.fxl.1')
+            shared_arguments += shared_library(name, companions, shared_arguments)
+        library_ir = []
+    if args.sdk_only:
+        if not args.shared:
+            parser.error('--sdk-only needs --shared')
+        return
+    if not args.sources:
+        parser.error('at least one application source is required')
     print(f'Build: Compiling {args.output.name} application inputs', flush=True)
     with tempfile.TemporaryDirectory(prefix='fuse-x-cc-') as temporary:
         directory = Path(temporary)
@@ -145,7 +192,7 @@ def main():
         startup_ir.write_bytes(result.stdout)
         print(f'Build: Linking {args.output.name} (native code generation)', flush=True)
         subprocess.run([str(linker), 'link-app', str(startup_ir), *map(str, inputs),
-                        *map(str, args.object_ir), *map(str, library_ir), '-o', str(args.output)], check=True,
+                        *map(str, args.object_ir), *map(str, library_ir), *shared_arguments, '-o', str(args.output)], check=True,
                        env=dict(os.environ, RCC_NATIVE_PROGRESS='1'))
     print(f'Built Fuse-X executable: {args.output}')
 

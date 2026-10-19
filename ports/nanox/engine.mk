@@ -1,4 +1,4 @@
-# Included by the FUZIX makefile; generated sources preserve the pinned import.
+# Included by the Riplix makefile; generated sources preserve the pinned import.
 NX := $(ROOT)/ports/nanox
 NX_SRC := $(BUILD)/nanox/src
 NX_NAMES := devopen devdraw devclip devrgn devblit devfont genfont rom8x16 screen nxdraw
@@ -15,7 +15,7 @@ $(BUILD)/nanox/%.asm: $(NX_SRC)/.stamp $(USERHEADERS) $(RCC) $(NX)/ripple/nxr_co
 $(BUILD)/nanox/screen.asm: $(NX)/ripple/screen.c
 $(BUILD)/nanox/nxdraw.asm: $(NX)/ripple/nxdraw.c
 $(BUILD)/nxdraw.rxe: $(BUILD)/user/entry.pobj $(NX_OBJS) $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
 userspace: $(BUILD)/nxdraw.rxe
 .PRECIOUS: $(BUILD)/nanox/%.asm $(BUILD)/nanox/%.pobj
 .PHONY: test-nanox

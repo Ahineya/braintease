@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in macOS vmnet test: host ping and TCP Telnet to a native FUZIX kernel.
+"""Opt-in macOS vmnet test: host ping and TCP Telnet to a native Riplix kernel.
 
 The existing vmnet helper needs sudo authorization. Uses a temporary guest disk,
 no internet service, and no persistent root image. Do not run another guest at
@@ -64,21 +64,21 @@ def main():
                     connection.settimeout(.1)
                     connection.sendall(b'\xff\xfd\x01\xff\xfd\x03\xff\xfb\x1f'
                                        b'\xff\xfa\x1f\0d\0(\xff\xf0')
-                    until(connection, b'fuzix# ')
+                    until(connection, b'riplix# ')
                     return connection
 
                 first, second = connect(), connect()
                 first.sendall(b'echo HOST_NATIVE_TCP > /host-note\r\n')
-                until(first, b'fuzix# ')
+                until(first, b'riplix# ')
                 second.sendall(b'cat /host-note\r\n')
-                assert b'HOST_NATIVE_TCP\n' in until(second, b'fuzix# ')
+                assert b'HOST_NATIVE_TCP\n' in until(second, b'riplix# ')
                 first.sendall(b'exit\r\n')
                 first.close()
                 third = connect()
                 third.sendall(b'stty -a\r\n')
-                assert b'40 rows 100 columns' in until(third, b'fuzix# ')
+                assert b'40 rows 100 columns' in until(third, b'riplix# ')
                 second.sendall(b'echo OTHER_HOST_SESSION\r\n')
-                assert b'OTHER_HOST_SESSION\n' in until(second, b'fuzix# ')
+                assert b'OTHER_HOST_SESSION\n' in until(second, b'riplix# ')
                 guest.stdin.write(b'shutdown\n'); guest.stdin.flush()
                 assert guest.wait(timeout=15) == 0, log.read_text()
                 assert b'session stopped' in log.read_bytes(), log.read_text()

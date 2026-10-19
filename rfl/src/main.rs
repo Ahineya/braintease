@@ -21,10 +21,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Build an application for the FUZIX or Fuse-X guest operating system
+    /// Build an application for Riplix, Fuse-X, or the macOS host
     Build {
         input: PathBuf,
-        #[arg(long, value_parser = ["fuzix", "fuse-x"])]
+        #[arg(long, value_parser = ["fuzix", "fuse-x", "macos"])]
         os: String,
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -94,8 +94,13 @@ fn run() -> Result<i32, rfl::CompileError> {
             build_dir,
             compiler,
         } => {
-            let output = output
-                .unwrap_or_else(|| input.with_extension(if os == "fuzix" { "rxe" } else { "fxe" }));
+            let output = output.unwrap_or_else(|| {
+                input.with_extension(match os.as_str() {
+                    "fuzix" => "rxe",
+                    "macos" => "native",
+                    _ => "fxe",
+                })
+            });
             let mut command = std::process::Command::new("python3");
             command
                 .arg(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/build_os.py"))

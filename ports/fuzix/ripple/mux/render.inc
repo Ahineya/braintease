@@ -100,6 +100,10 @@ static void compose(void){
     }
     for(i=0;i<PANES;i++)if(panes[i].used&&panes[i].shown){
         p=&panes[i];
+        /* Preserve the last composed pane until its application completes a
+         * synchronized frame. Forwarding an intermediate erase as a complete
+         * outer mux frame breaks both stable selection and atomic redraws. */
+        if(p->vt.synchronized&&!full)continue;
         for(y=0;y<p->h;y++)if(full||p->vt.dirty[y]||(mode==1&&p==focused())||mode==3){
             line=p->count+y;
             if((mode==1||mode==3)&&p==focused())line=copy_top+y;
@@ -145,8 +149,9 @@ static unsigned glyph(char *s,uint32_t c){
     return at;
 }
 static void render(void){
-    unsigned x,y,budget=1024,n,attr,fg,bg;char text[96];struct vt_cell c;struct pane *p;
+    unsigned x,y,budget=8192,n,attr,fg,bg,run;char text[96];struct vt_cell c;struct pane *p;
     if(client<0||!screen||!rendering)return;
+    if(!synchronized_output&&output_free()>100){emit("\033[?2026h",8);synchronized_output=1;}
     while(scan<cols*rows&&budget&&output_free()>100){
         y=scan/cols;
         if(!damaged[y]){scan=(y+1)*cols;continue;}
@@ -163,12 +168,25 @@ static void render(void){
                 n=snprintf(text,sizeof(text),"\033[0;%u;%um",fg<8?30+fg:90+fg-8,bg<8?40+bg:100+bg-8);emit(text,n);
                 if(attr&256)emit("\033[4m",4);if(attr&512)emit("\033[5m",4);style=attr;
             }
+            if(c.ch==' '){
+                for(run=1;scan+run<cols*rows&&(scan+run)/cols==y&&run<budget;run++){
+                    struct vt_cell next=screen[scan+run];
+                    if(next.ch!=' '||next.colour!=attr)break;
+                }
+                if(run>=8){
+                    n=snprintf(text,sizeof(text),"\033[%uX",run);emit(text,n);
+                    memcpy(painted+scan,screen+scan,run*sizeof(*screen));scan+=run;budget-=run;
+                    /* ECH does not move the cursor. The next run positions it. */
+                    break;
+                }
+            }
             n=glyph(text,c.ch);emit(text,n);painted[scan]=c;scan++;budget--;
         }
     }
     if(scan>=cols*rows&&output_free()>100){
         p=focused();x=p->x+p->vt.x;y=p->y+p->vt.y;
         n=snprintf(text,sizeof(text),"\033[%u;%uH\033[%u q\033[?25%c",y+1,x+1,p->vt.cursor_shape,(!help&&!mode&&p->vt.visible)?'h':'l');emit(text,n);
+        emit("\033[?2026l",8);synchronized_output=0;
         memset(damaged,0,rows);rendering=0;
     }
 }

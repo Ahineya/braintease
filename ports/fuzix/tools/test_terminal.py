@@ -51,7 +51,7 @@ for jit in ([True, False] if args.engine == 'both' else [args.engine == 'jit']):
             return result
 
         try:
-            until(b'fuzix# ')
+            until(b'riplix# ')
             busy = subprocess.run(command+['--headless', '--input', 'shutdown\n'], cwd=ROOT, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
             assert busy.returncode != 0 and 'already in use' in busy.stdout, busy.stdout
@@ -61,35 +61,35 @@ for jit in ([True, False] if args.engine == 'both' else [args.engine == 'jit']):
                 # as a newline, with no pop/enqueue race against timer IRQ input.
                 end = b'\r' if i % 2 else b'\n'
                 os.write(master, f'echo {text} > /tty-note'.encode()+end)
-                until(b'fuzix# ')
+                until(b'riplix# ')
                 os.write(master, b'cat /tty-note'+end)
-                output = until(b'fuzix# ')
+                output = until(b'riplix# ')
                 assert text.encode() in output, output
             os.write(master, b'nonsense\x15echo control_u_works\r')
-            output = until(b'fuzix# ')
+            output = until(b'riplix# ')
             assert b'control_u_works' in output and b'error ' not in output, output
             os.write(master, b'hello terminal-argument\r')
-            output = until(b'fuzix# ')
+            output = until(b'riplix# ')
             assert b'argument: terminal-argument' in output, output
             # Ctrl-C is a guest interrupt, never an ordinary VM exit.
             for _ in range(3):
                 os.write(master, b'ed\r')
                 until(b': ')
                 os.write(master, b'\x03')
-                output = until(b'fuzix# ')
+                output = until(b'riplix# ')
                 assert process.poll() is None, output
                 os.write(master, b'echo INTERRUPT:$?\r')
-                output = until(b'fuzix# ')
+                output = until(b'riplix# ')
                 assert b'INTERRUPT:130' in output, output
             # ed's explicit quit commands work with empty and modified buffers.
             os.write(master, b'ed\r')
             until(b': ')
             os.write(master, b'q\r')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             os.write(master, b'ed\r')
             until(b': ')
             os.write(master, b'a\rdiscard me\r.\rQ\r')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             # Both stages of a foreground pipeline must receive the interrupt.
             os.write(master, b"cat | sh -c 'echo PIPE_STARTED; exec cat'\r")
             until(b'\nPIPE_STARTED\r')
@@ -97,24 +97,24 @@ for jit in ([True, False] if args.engine == 'both' else [args.engine == 'jit']):
             until(b'pipeline_ready')
             until(b'pipeline_ready')
             os.write(master, b'\x03')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             os.write(master, b'echo PIPE_INTERRUPT:$?\r')
-            output = until(b'fuzix# ')
+            output = until(b'riplix# ')
             assert b'PIPE_INTERRUPT:130' in output, output
             # Pending signals also interrupt computation without a system call.
             os.write(master, b'preemptcheck\r')
             until(b'child ran while parent computed')
             os.write(master, b'\x03')
-            output = until(b'fuzix# ')
+            output = until(b'riplix# ')
             assert b'parent computation finished' not in output, output
             os.write(master, b'echo COMPUTE_INTERRUPT:$?\r')
-            output = until(b'fuzix# ')
+            output = until(b'riplix# ')
             assert b'COMPUTE_INTERRUPT:130' in output, output
             # Repeated interrupts must not leave zombies occupying process slots.
             os.write(master, b'seq 1 2 | cat | wc -l\r')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             os.write(master, b'echo PIPE_STATUS:$?\r')
-            output = until(b'fuzix# ')
+            output = until(b'riplix# ')
             assert b'PIPE_STATUS:0' in output, output
             # Ctrl-D at an empty prompt is a real guest EOF and clean shutdown.
             os.write(master, b'\x04')

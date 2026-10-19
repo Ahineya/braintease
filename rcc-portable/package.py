@@ -50,6 +50,10 @@ def main():
             environment = {name: os.environ.get(name) for name in
                            ['CC', 'CFLAGS', 'LDFLAGS', 'DEVELOPER_DIR', 'SDKROOT',
                             'MACOSX_DEPLOYMENT_TARGET', 'MMU', 'CODE_BANKS', 'BULK_IO']}
+            if args.os == 'fuse-x':
+                environment['FUSE_X_SHARED_LIBRARIES'] = os.environ.get('FUSE_X_SHARED_LIBRARIES', '1')
+            else:
+                environment['RIPLIX_SHARED_LIBRARIES'] = os.environ.get('RIPLIX_SHARED_LIBRARIES', '1')
             def step(name, inputs, command, outputs):
                 changed = cached_step(cache / (name + '.json'), inputs, [command, environment],
                                       lambda: run(*command), outputs,
@@ -65,6 +69,7 @@ def main():
                              ROOT / 'ports/fuzix/ripple/include', ROOT / 'ports/fuzix/ripple/libc',
                              ROOT / 'ports/fuzix/upstream/Library', ROOT / 'ports/fuzix/upstream/Kernel/include',
                              ROOT / 'ports/fuzix/Makefile', ROOT / 'ports/fuzix/ripple/float-format.inc',
+                             ROOT / 'ports/fuzix/tools/shared-link.py', ROOT / 'ports/fuzix/tools/shared',
                              ROOT / 'ports/fuzix/ripple/exec-args.h',
                              ROOT / 'ports/fuzix/ripple/user-entry.asm', ROOT / 'ports/fuzix/ripple/userlib.c',
                              ROOT / 'fuse-x/cc.py', ROOT / 'fuse-x/libc')

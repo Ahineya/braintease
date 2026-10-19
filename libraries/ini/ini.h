@@ -9,6 +9,11 @@ typedef struct IniReader IniReader;
 #define INI_LIMIT -2
 #define INI_MEMORY -3
 IniReader *ini_reader(const char *text, size_t length);
+/* Explicit application budgets; defaults above remain 64 Ki cells, 1024 per
+ * line and 256 assignments. Limits count addressable input cells, not storage
+ * bytes. Zero permits no input/line content/assignments respectively. */
+IniReader *ini_reader_with_limits(const char *text, size_t length,
+    size_t max_input, size_t max_line, unsigned long max_entries);
 void ini_free(IniReader *reader);
 int ini_next(IniReader *reader); /* 1 assignment, 0 EOF, negative error */
 unsigned long ini_line(const IniReader *reader);

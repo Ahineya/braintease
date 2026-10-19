@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build RFL applications against the shared FUZIX/Fuse-X guest libc."""
+"""Build RFL applications against the shared Riplix/Fuse-X guest libc."""
 import argparse
 import json
 import re
@@ -22,7 +22,7 @@ def run(arguments, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
-    parser.add_argument("--os", choices=("fuzix", "fuse-x"), required=True)
+    parser.add_argument("--os", choices=("fuzix", "fuse-x", "macos"), required=True)
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--rfl", type=Path, default=ROOT / "target/release/rfl")
     parser.add_argument("--rcc", type=Path, default=ROOT / "target/release/rcc")
@@ -31,6 +31,10 @@ def main():
     source, output = args.source.resolve(), args.output.resolve()
     if source == output:
         raise RuntimeError("output must not overwrite the RFL source")
+    if args.os == "macos":
+        from build_host import build_host
+        build_host(source, output, args.rfl.resolve(), args.rcc.resolve(), args.build_dir)
+        return
     build = (args.build_dir or ROOT / ("build/fuzix" if args.os == "fuzix" else "fuse-x/build")).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     # Keep a failed compilation from replacing a previously working executable.
@@ -80,10 +84,11 @@ def main():
                 run([ROOT / "src/ripple-asm/target/release/rasm", "assemble", assembly, "-o", obj,
                      "--bank-size", "64000", "--max-immediate", "65535"])
                 objects.append(obj)
-            run([ROOT / "src/ripple-asm/target/release/rlink", sdk["entry"], *objects,
+            run([sys.executable, ROOT / "ports/fuzix/tools/shared-link.py", "--build", build, "--compiler", args.rcc.resolve(), "--", sdk["entry"], *objects,
                  *sdk["libraries"], "-f", "rxe", "--bank-size", "64000", "-o", artifact])
         artifact.replace(output)
-    print(f"Built {args.os} application: {output}")
+    system = "Riplix" if args.os == "fuzix" else "Fuse-X"
+    print(f"Built {system} application: {output}")
 
 
 if __name__ == "__main__":

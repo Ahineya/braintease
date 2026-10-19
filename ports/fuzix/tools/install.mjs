@@ -96,6 +96,67 @@ export function installRoot(input, files) {
     writeNode(parent, directory);
   }
 
+  function findPath(pathname) {
+    let node = nodes.get(1), parent = null, entry = null;
+    for (const name of pathname.split('/').filter(Boolean)) {
+      if (name === '.' || name === '..' || name.length > 30)
+        throw Error('invalid migration path');
+      if ((w(node.base) & 0xf000) !== 0x4000) throw Error('non-directory in migration path');
+      parent = node; entry = lookup(parent, name);
+      if (!entry) return null;
+      node = nodes.get(entry.ino);
+    }
+    return {node, parent, entry};
+  }
+  function clearEntry(parent, offset) {
+    const data = Array.from(cells(parent));
+    data.fill(0, offset, offset + 32); writeNode(parent, data);
+  }
+  function removeNode(node) {
+    writeNode(node, []);
+    image.fill(0, node.base * 2, (node.base + INODE_CELLS) * 2);
+    nodes.delete(node.ino);
+  }
+  function moveEntry(sourceParent, sourceEntry, parent, name, pathname) {
+    const node = nodes.get(sourceEntry.ino), destination = lookup(parent, name);
+    const directory = (w(node.base) & 0xf000) === 0x4000;
+    if (destination) {
+      const target = nodes.get(destination.ino);
+      if (directory && (w(target.base) & 0xf000) === 0x4000) {
+        // Merge non-overlapping settings trees. Conflicting files abort the
+        // offline transaction rather than choosing one user's data over another.
+        const data = cells(node);
+        for (let at = 64; at < data.length; at += 32) {
+          if (!data[at]) continue;
+          let child = '';
+          for (let j = 1; j <= 30 && data[at + j]; j++) child += String.fromCharCode(data[at + j]);
+          moveEntry(node, {ino: data[at], offset: at}, target, child, `${pathname}/${child}`);
+        }
+        clearEntry(sourceParent, sourceEntry.offset);
+        put(sourceParent.base + 1, w(sourceParent.base + 1) - 1);
+        removeNode(node);
+      } else {
+        const targetData = cells(target);
+        if (directory || (w(node.base) & 0xf000) !== (w(target.base) & 0xf000) ||
+            w(node.base) !== w(target.base) || node.size !== target.size ||
+            !cells(node).every((c, i) => c === targetData[i]))
+          throw Error(`home migration conflict at ${pathname}; both files are preserved`);
+        clearEntry(sourceParent, sourceEntry.offset);
+        put(node.base + 1, w(node.base + 1) - 1);
+        if (!w(node.base + 1)) removeNode(node);
+      }
+    } else {
+      setEntry(parent, name, node.ino);
+      clearEntry(sourceParent, sourceEntry.offset);
+      if (directory) {
+        setEntry(node, '..', parent.ino, 32);
+        put(sourceParent.base + 1, w(sourceParent.base + 1) - 1);
+        put(parent.base + 1, w(parent.base + 1) + 1);
+      }
+    }
+    changed = true;
+  }
+
   for (const f of files) {
     const parts = f.name.split('/').filter(Boolean), name = parts.pop();
     if (!name || name.length > 30 || parts.some(n => n === '.' || n === '..'))
@@ -118,6 +179,15 @@ export function installRoot(input, files) {
       if ((w(nodes.get(entry.ino).base) & 0xf000) !== 0x4000)
         throw Error(`not an install directory: ${part}`);
       parent = nodes.get(entry.ino);
+    }
+    if (f.moveFrom !== undefined) {
+      const source = findPath(f.moveFrom);
+      if (!source) continue;
+      if (!source.parent || f.name === f.moveFrom || f.name.startsWith(f.moveFrom + '/'))
+        throw Error('invalid migration destination');
+      if (checked.issues.length) throw Error('home migration requires a clean root');
+      moveEntry(source.parent, source.entry, parent, name, f.name);
+      continue;
     }
     const entry = lookup(parent, name),
           old = entry ? nodes.get(entry.ino) : null;
@@ -205,7 +275,8 @@ export function installRoot(input, files) {
     if (symbolic && (typeof f.symlink !== 'string' || !f.symlink.length ||
         f.symlink.length >= 512 || f.symlink.includes('\0')))
       throw Error('invalid install symbolic link target');
-    const data = symbolic ? f.symlink.split('').map(c => c.charCodeAt(0)) : f.data,
+    const data = symbolic ? f.symlink.split('').map(c => c.charCodeAt(0)) :
+          (old && f.update ? f.update(Array.from(cells(old))) : f.data),
           mode = symbolic ? 0o120777 : (f.mode ?? 0o100755);
     if (old && w(old.base) === mode && old.size === data.length &&
         cells(old).every((c, i) => c === data[i]))

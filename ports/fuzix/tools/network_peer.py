@@ -1,4 +1,4 @@
-"""Independent bounded Ethernet peer for FUZIX integration tests, not a VM backend."""
+"""Independent bounded Ethernet peer for Riplix integration tests, not a VM backend."""
 import importlib.util
 from pathlib import Path
 import socket
@@ -156,7 +156,11 @@ class Peer:
             self.send(b'RNET\x01' + wire.GUEST_MAC + struct.pack('!H', 1500))
             return
         if frame == b'RNET\x02':
-            self.send(frame)
+            # A queued liveness probe can reach us after orderly shutdown has
+            # unlinked the guest endpoint. There is then nobody to ACK; data
+            # packets still report transport failures normally.
+            try:self.send(frame)
+            except (FileNotFoundError,ConnectionRefusedError):pass
             return
         if frame == b'RNET\x04':
             return

@@ -2731,6 +2731,7 @@ dependencies = [
  "rcc-common",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -2751,6 +2752,7 @@ dependencies = [
 name = "rcc-native-runtime"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "libc",
  "libloading 0.8.8",
  "objc",

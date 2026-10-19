@@ -75,7 +75,7 @@ print('Build: Exporting Brainfuck boot kernel', flush=True)
             stdout, stderr = child.communicate(timeout=10)
             self.assertEqual(child.returncode, 0, stderr.decode())
             terminal = (prefix + stderr).decode()
-            for phase in ('Building assembler and linker', 'Building FUZIX boot kernel and images',
+            for phase in ('Building assembler and linker', 'Building Riplix boot kernel and images',
                           'Linking reference kernel', 'Exporting Brainfuck boot kernel', 'Build complete'):
                 self.assertIn(phase, terminal)
             self.assertNotIn('private compiler detail', terminal)

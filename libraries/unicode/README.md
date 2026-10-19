@@ -1,6 +1,6 @@
 # Shared terminal Unicode
 
-FUZIX/RVM and Fuse-X use the same Unicode 16.0.0 implementation for UTF-8,
+Riplix/RVM and Fuse-X use the same Unicode 16.0.0 implementation for UTF-8,
 extended grapheme boundaries and terminal widths. Terminal text stays UTF-8
 through files, pipes, PTYs and application strings. A C16 character holding
 UTF-8 contains one octet; it is not UTF-16. Lengths and string cursor offsets
@@ -138,7 +138,7 @@ five-sample medians, RVM JIT enabled):
 | Guest | Original ASCII | Unicode ASCII | Original mixed octets | Unicode mixed text |
 | --- | ---: | ---: | ---: | ---: |
 | Fuse-X | 1,556 | 948 | 1,335 | 1,892 |
-| FUZIX/RVM | 4,049 | 3,567 | 3,726 | 4,785 |
+| Riplix/RVM | 4,049 | 3,567 | 3,726 | 4,785 |
 
 ASCII median time fell about 39% on Fuse-X and 12% on RVM after batching
 printable runs. Correct mixed-script processing added about 42% and 28%

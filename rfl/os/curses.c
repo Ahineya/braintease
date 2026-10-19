@@ -2,6 +2,12 @@
 #include <curses.h>
 #include <errno.h>
 static unsigned session_owners;
+#ifdef RIPPLE_CURSES_HOST
+extern int ripple_curses_input_closed(void);
+#define INPUT_CLOSED (feof(stdin) || ripple_curses_input_closed())
+#else
+#define INPUT_CLOSED feof(stdin)
+#endif
 void *rfl_curses_screen(void) { return stdscr; }
 int rfl_curses_begin(void) {
     if (session_owners || !isendwin() || !initscr()) return -1;
@@ -22,7 +28,7 @@ int rfl_curses_key(void) {
     int key;
     errno = 0;
     key = wgetch(stdscr);
-    if (key == ERR && (feof(stdin) || errno == EIO || errno == EBADF)) return -2;
+    if (key == ERR && (INPUT_CLOSED || errno == EIO || errno == EBADF)) return -2;
     return key;
 }
 void rfl_curses_timeout(int milliseconds) { wtimeout(stdscr, milliseconds); }
@@ -92,7 +98,7 @@ void rfl_curses_fill(void *window, int row, int col, int width, unsigned long ch
 /* -1 timeout, -2 terminal loss, 0 text, 1 function key. */
 int rfl_curses_event(void *window, uint32_t *value) {
     int result; errno = 0; result = wget_wch(target(window), value);
-    return result == ERR && (feof(stdin) || errno == EIO || errno == EBADF) ? -2 : result;
+    return result == ERR && (INPUT_CLOSED || errno == EIO || errno == EBADF) ? -2 : result;
 }
 void rfl_curses_border(void *window, int row, int col, int rows, int cols, unsigned long style) {
     WINDOW *w = target(window);
@@ -105,7 +111,7 @@ void rfl_curses_present(void) { doupdate(); }
 int rfl_curses_window_key(void *window) {
     int key;
     errno = 0; key = wgetch(target(window));
-    return key == ERR && (feof(stdin) || errno == EIO || errno == EBADF) ? -2 : key;
+    return key == ERR && (INPUT_CLOSED || errno == EIO || errno == EBADF) ? -2 : key;
 }
 void rfl_curses_window_cursor(void *window, int row, int col, int visible) {
     wmove(target(window), row, col); curs_set(visible);

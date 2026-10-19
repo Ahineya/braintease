@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "identity.h"
 #undef isascii
 int isascii(int c) { return (unsigned)c < 128; }
 int isupper(int c) { return c >= 'A' && c <= 'Z'; }
@@ -244,9 +245,9 @@ int statvfs(const char *path, struct statvfs *v) {
     return 0;
 }
 int uname(struct utsname *s) {
-    strcpy(s->sysname, "FUZIX");
+    strcpy(s->sysname, RIPLIX_SYSNAME);
     strcpy(s->nodename, "ripple");
-    strcpy(s->release, "0.5");
+    strcpy(s->release, RIPLIX_RELEASE);
     strcpy(s->version, "RCC");
     strcpy(s->machine, "Ripple");
     return 0;

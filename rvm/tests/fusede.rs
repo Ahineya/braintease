@@ -153,7 +153,7 @@ fn colour_resources_and_showcase() {
         log: String::new(),
         output,
     };
-    g.until("fuzix# ");
+    g.until("riplix# ");
     g.vm.push_input_string("FDE_TRACE=1\nexport FDE_TRACE\n");
     g.command("nano-X -p &\ns=$!\n", "Nano-X ready");
     g.command("fdeshowcase --check &\np=$!\n", "FDE_IMAGE_CHECKS_OK");

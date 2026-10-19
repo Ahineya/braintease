@@ -21,9 +21,9 @@
 #define MENU_WIDTH 184
 #define MENU_ITEM_HEIGHT 22
 #define MENU_ITEM_EXIT_HEIGHT 22
-static const char *apps[]={"About","Help","Calculator","Terminal","Edit file","Processes","Clock","Eyes","Roaches","Tetris","Image Viewer"};
+static const char *apps[]={"About","Help","Calculator","Terminal","Edit file","Processes","Clock","Eyes","Roaches","Tetris","Image Viewer","Klotski"};
 enum {MENU_ABOUT,MENU_HELP,MENU_CALCULATOR,MENU_TERMINAL,MENU_EDIT,MENU_PROCESSES,
-      MENU_CLOCK,MENU_EYES,MENU_ROACHES,MENU_TETRIS,MENU_IMAGES,MENU_APP_COUNT,
+      MENU_CLOCK,MENU_EYES,MENU_ROACHES,MENU_TETRIS,MENU_IMAGES,MENU_KLOTSKI,MENU_APP_COUNT,
       MENU_SYNC=MENU_APP_COUNT,MENU_EXIT,MENU_SHUTDOWN};
 static const char *sys[]={"Sync disk","Exit to terminal","Shut down"};
 #define APP_COUNT MENU_APP_COUNT

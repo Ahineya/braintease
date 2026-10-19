@@ -3,7 +3,7 @@
 export const applications = `
 init sh rift rfl-fm mux ptysh
 basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir
-touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr
+touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill pkill tr
 od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname
 date mkfifo mknod comm rev test ps vile levee find dd diff diffh diff3 tar
 cowsay picol more less mktemp groups logname nohup fmt column cksum stty join

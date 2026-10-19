@@ -25,10 +25,10 @@ import path from 'node:path';
 import {rootImage, atomicWrite} from './ports/fuzix/tools/disk.mjs';
 const directory = process.argv[1];
 for (const [name, files] of [
-  ['good', [{name:'/BOOT', mode:0o100444, data:Buffer.from('FUZIX kernel running in Brainfuck.\\n')}]],
+  ['good', [{name:'/BOOT', mode:0o100444, data:Buffer.from('Riplix kernel running in Brainfuck.\\n')}]],
   ['missing', []],
   ['wrong', [{name:'/BOOT', mode:0o100444, data:Buffer.from('not the expected boot file\\n')}]],
-  ['trailing', [{name:'/BOOT', mode:0o100444, data:Buffer.from('FUZIX kernel running in Brainfuck.\\nextra')}]],
+  ['trailing', [{name:'/BOOT', mode:0o100444, data:Buffer.from('Riplix kernel running in Brainfuck.\\nextra')}]],
 ]) atomicWrite(path.join(directory, name+'.img'), rootImage(files,128,32));
 ''', str(cls.directory)], cwd=ROOT, check=True)
         bad = bytearray((cls.directory / 'good.img').read_bytes())
@@ -63,6 +63,9 @@ for (const [name, files] of [
         self.assertEqual(reference.returncode, 0, reference.stderr)
         self.assertIn('Mounting root fs (root_dev=0, ro): OK', reference.stdout)
         self.assertIn(SUCCESS, reference.stdout)
+        banner=(ROOT / "ports/fuzix/banner.tmp.txt").read_text().rstrip("\n")
+        self.assertIn(banner, reference.stdout.replace("\r", ""))
+        self.assertIn("Derived from FUZIX.", reference.stdout)
         instruction_counts = []
         for jit in (False, True):
             with self.subTest(jit=jit):
@@ -129,7 +132,7 @@ for (const [name, files] of [
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             try:
                 self.assertTrue(select.select([child.stderr], [], [], 10)[0], 'launcher did not report waiting')
-                self.assertIn('Waiting for another FUZIX/BF build', child.stderr.readline())
+                self.assertIn('Waiting for another Riplix/BF build', child.stderr.readline())
                 self.assertEqual(log.read_text(), 'other build is still writing\n')
                 self.assertIsNone(child.poll())
                 self.assertFalse((build / 'kernel').exists())

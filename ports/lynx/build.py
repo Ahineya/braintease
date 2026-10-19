@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build pinned C16 Lynx for native Fuse-X or RVM/FUZIX."""
+"""Build pinned C16 Lynx for native Fuse-X or RVM/Riplix."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -51,12 +52,12 @@ def build_ripple(inputs, build, jobs, compiler, executable):
     # The floating formatter replaces the ordinary integer-only formatter.
     libraries = [p for p in sdk['libraries'] if Path(p) != build / 'libc/format.pobj']
     with (PORT / 'build/ripple-link.log').open('w') as log:
-        subprocess.run([str(linker), sdk['entry'], *objects, *floats['libraries'], *libraries,
+        subprocess.run([sys.executable, str(ROOT/'ports/fuzix/tools/shared-link.py'), '--build', str(build), '--linker', str(linker), '--compiler', str(compiler), '--', sdk['entry'], *objects, *floats['libraries'], *libraries,
                         '-f', 'rxe', '--bank-size', '64000', '-o', str(executable),
                         '--map', str(PORT / 'build/ripple-map.json')],
                        check=True, stdout=log, stderr=log)
     data = executable.read_bytes()
-    if data[:4] != b'RXE1':
+    if data[:4] not in (b'RXE1', b'RXE2'):
         raise RuntimeError('invalid linked executable envelope')
     # The RXE1 header puts instruction and cell counts after bank size and entry.
     code, cells = struct.unpack_from('<II', data, 12)
@@ -104,9 +105,16 @@ def build_browser(args):
         if args.target == 'ripple':
             report = build_ripple(inputs, build, args.j, compiler, executable)
         else:
+            library_args = []
+            if os.environ.get('FUSE_X_SHARED_LIBRARIES', '1') != '0':
+                tls_inputs=[Path(p) for p in json.loads((tls / args.target / 'objects.json').read_text())]
+                subprocess.run([sys.executable,str(ROOT/'ports/tls/build.py'),'--target','native',
+                                '--compiler',str(compiler),'--build',str(tls),'--shared-sdk',str(build)],check=True)
+                library_args=['--library',f'{build}/lib/libtls.fxl.1=/lib/fuse-x/libtls.fxl.1']
+                inputs=[p for p in inputs if p not in tls_inputs]
             subprocess.run([sys.executable, str(ROOT / 'fuse-x/cc.py'), *map(str, inputs),
                             '--curses', '--float-format', '--compiler', str(compiler),
-                            '--build', str(build), '-o', str(executable)], check=True)
+                            '--build', str(build), *library_args, '-o', str(executable)], check=True)
             data = executable.read_bytes()
             if data[:8] != b'FUSEX001':
                 raise RuntimeError('invalid linked executable envelope')

@@ -257,7 +257,7 @@
 <g id="node4" class="node">
 <title>fuz</title>
 <path fill="#e4f2e9" stroke="#9bbda8" d="M497.17,-150.44C497.17,-150.44 308.19,-150.44 308.19,-150.44 302.19,-150.44 296.19,-144.44 296.19,-138.44 296.19,-138.44 296.19,-113 296.19,-113 296.19,-107 302.19,-101 308.19,-101 308.19,-101 497.17,-101 497.17,-101 503.17,-101 509.17,-107 509.17,-113 509.17,-113 509.17,-138.44 509.17,-138.44 509.17,-144.44 503.17,-150.44 497.17,-150.44"/>
-<text xml:space="preserve" text-anchor="middle" x="402.68" y="-129.92" font-family="Arial" font-size="14.00">FUZIX on Ripple</text>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-129.92" font-family="Arial" font-size="14.00">Riplix on Ripple</text>
 <text xml:space="preserve" text-anchor="middle" x="402.68" y="-113.12" font-family="Arial" font-size="14.00">BIOS &#45;&gt; FUZIX.SYS &#45;&gt; init / sh</text>
 </g>
 <!-- rv&#45;&gt;fuz -->
@@ -293,7 +293,7 @@
 <title>fuse</title>
 <path fill="#e4f2e9" stroke="#9bbda8" d="M506.14,-83.44C506.14,-83.44 299.22,-83.44 299.22,-83.44 293.22,-83.44 287.22,-77.44 287.22,-71.44 287.22,-71.44 287.22,-46 287.22,-46 287.22,-40 293.22,-34 299.22,-34 299.22,-34 506.14,-34 506.14,-34 512.14,-34 518.14,-40 518.14,-46 518.14,-46 518.14,-71.44 518.14,-71.44 518.14,-77.44 512.14,-83.44 506.14,-83.44"/>
 <text xml:space="preserve" text-anchor="middle" x="402.68" y="-62.92" font-family="Arial" font-size="14.00">Fuse&#45;X</text>
-<text xml:space="preserve" text-anchor="middle" x="402.68" y="-46.12" font-family="Arial" font-size="14.00">native hosted FUZIX / FXE loader</text>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-46.12" font-family="Arial" font-size="14.00">native hosted Riplix / FXE loader</text>
 </g>
 <!-- fx&#45;&gt;fuse -->
 <g id="edge5" class="edge">
@@ -306,8 +306,8 @@
 <g id="node3" class="node">
 <title>src</title>
 <path fill="#edf3fa" stroke="#aec4db" d="M189.74,-144.44C189.74,-144.44 12,-144.44 12,-144.44 6,-144.44 0,-138.44 0,-132.44 0,-132.44 0,-107 0,-107 0,-101 6,-95 12,-95 12,-95 189.74,-95 189.74,-95 195.74,-95 201.74,-101 201.74,-107 201.74,-107 201.74,-132.44 201.74,-132.44 201.74,-138.44 195.74,-144.44 189.74,-144.44"/>
-<text xml:space="preserve" text-anchor="middle" x="100.87" y="-123.92" font-family="Arial" font-size="14.00">Shared FUZIX sources</text>
-<text xml:space="preserve" text-anchor="middle" x="100.87" y="-107.12" font-family="Arial" font-size="14.00">upstream kernel + local ports</text>
+<text xml:space="preserve" text-anchor="middle" x="100.87" y="-123.92" font-family="Arial" font-size="14.00">Shared Riplix sources</text>
+<text xml:space="preserve" text-anchor="middle" x="100.87" y="-107.12" font-family="Arial" font-size="14.00">FUZIX-derived + local ports</text>
 </g>
 <!-- src&#45;&gt;fuz -->
 <g id="edge1" class="edge">
@@ -476,7 +476,7 @@
 <title>unix</title>
 <path fill="#e4f2e9" stroke="#9bbda8" d="M764.19,-169.84C764.19,-169.84 619.55,-169.84 619.55,-169.84 613.55,-169.84 607.55,-163.84 607.55,-157.84 607.55,-157.84 607.55,-132.4 607.55,-132.4 607.55,-126.4 613.55,-120.4 619.55,-120.4 619.55,-120.4 764.19,-120.4 764.19,-120.4 770.19,-120.4 776.19,-126.4 776.19,-132.4 776.19,-132.4 776.19,-157.84 776.19,-157.84 776.19,-163.84 770.19,-169.84 764.19,-169.84"/>
 <text xml:space="preserve" text-anchor="middle" x="691.87" y="-149.32" font-family="Arial" font-size="14.00">Unix guest kernel</text>
-<text xml:space="preserve" text-anchor="middle" x="691.87" y="-132.52" font-family="Arial" font-size="14.00">FUZIX or native Fuse&#45;X</text>
+<text xml:space="preserve" text-anchor="middle" x="691.87" y="-132.52" font-family="Arial" font-size="14.00">Riplix or native Fuse&#45;X</text>
 </g>
 <!-- exec&#45;&gt;unix -->
 <g id="edge3" class="edge">
@@ -534,7 +534,7 @@
 <title>fs</title>
 <path fill="#eee8f6" stroke="#b7a7ce" d="M1091.46,-66.24C1091.46,-66.24 911.76,-66.24 911.76,-66.24 905.76,-66.24 899.76,-60.24 899.76,-54.24 899.76,-54.24 899.76,-12 899.76,-12 899.76,-6 905.76,0 911.76,0 911.76,0 1091.46,0 1091.46,0 1097.46,0 1103.46,-6 1103.46,-12 1103.46,-12 1103.46,-54.24 1103.46,-54.24 1103.46,-60.24 1097.46,-66.24 1091.46,-66.24"/>
 <text xml:space="preserve" text-anchor="middle" x="1001.61" y="-45.72" font-family="Arial" font-size="14.00">C16 V3 filesystem</text>
-<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-28.92" font-family="Arial" font-size="14.00">FUZIX disk image and tools</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-28.92" font-family="Arial" font-size="14.00">Riplix disk image and tools</text>
 <text xml:space="preserve" text-anchor="middle" x="1001.61" y="-12.12" font-family="Arial" font-size="14.00">Fuse&#45;X shared folder adapter</text>
 </g>
 <!-- unix&#45;&gt;fs -->
@@ -768,7 +768,7 @@
 <g id="node10" class="node">
 <title>guests</title>
 <path fill="#e4f2e9" stroke="#9bbda8" d="M721.26,-210.24C721.26,-210.24 500.32,-210.24 500.32,-210.24 494.32,-210.24 488.32,-204.24 488.32,-198.24 488.32,-198.24 488.32,-156 488.32,-156 488.32,-150 494.32,-144 500.32,-144 500.32,-144 721.26,-144 721.26,-144 727.26,-144 733.26,-150 733.26,-156 733.26,-156 733.26,-198.24 733.26,-198.24 733.26,-204.24 727.26,-210.24 721.26,-210.24"/>
-<text xml:space="preserve" text-anchor="middle" x="610.79" y="-189.72" font-family="Arial" font-size="14.00">Runs in FUZIX and Fuse&#45;X</text>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-189.72" font-family="Arial" font-size="14.00">Runs in Riplix and Fuse&#45;X</text>
 <text xml:space="preserve" text-anchor="middle" x="610.79" y="-172.92" font-family="Arial" font-size="14.00">emits Ripple RXE</text>
 <text xml:space="preserve" text-anchor="middle" x="610.79" y="-156.12" font-family="Arial" font-size="14.00">native FXE generation still host&#45;built</text>
 </g>
@@ -811,4 +811,4 @@
 </g>
 </g>
 </svg>
-<text x="45" y="930" font-size="17" fill="#41566d">C16 means 16-bit C cells across RCC targets. RXE and FXE are different formats. FUZIX on RBF is retired. The guide explains capability limits and sources.</text></svg>
+<text x="45" y="930" font-size="17" fill="#41566d">C16 means 16-bit C cells across RCC targets. RXE and FXE are different formats. Minimal Riplix boots on RBF. The guide explains capability limits and sources.</text></svg>

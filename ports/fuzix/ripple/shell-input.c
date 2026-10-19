@@ -121,7 +121,7 @@ static int blankchar(char c) { return c == ' ' || c == '\t'; }
 /* Decode only shell quoting; never evaluate expansions while completing. */
 static void complete(int again) {
     unsigned i = 0, len = 0, common, j, addlen = 0;
-    int quote = 0, command = 1, wascommand = 1, redir = 0, dirs = 0, unsafe = 0;
+    int quote = 0, command = 1, wascommand = 1, redir = 0, dirs = 0, unsafe = 0, tilde = 0;
     char c, *base, *slash, addition[LINE];
     const char *path;
     if (cursor < end && !blankchar(buf[cursor]) && !separator(buf[cursor])) { bell(); return; }
@@ -141,9 +141,10 @@ static void complete(int again) {
             }
             if (separator(c)) { command = 1; dirs = 0; }
             if (c == '<' || c == '>') redir = 1;
-            len = unsafe = 0; wascommand = command && !redir;
+            len = unsafe = tilde = 0; wascommand = command && !redir;
             continue;
         }
+        if (!len && !quote && c == '~') tilde = 1;
         if (c == '\\' && quote != '\'') {
             if (i == cursor) { bell(); return; }
             c = buf[i++];
@@ -160,7 +161,12 @@ static void complete(int again) {
     slash = strrchr(decoded, '/'); base = slash ? slash + 1 : decoded;
     if (slash) {
         unsigned d = slash - decoded + 1;
-        memcpy(dirname_buf, decoded, d); dirname_buf[d] = 0;
+        if (tilde && decoded[1] == '/' && homenod.namval && *homenod.namval) {
+            unsigned n = strlen(homenod.namval);
+            if (n + d >= LINE) { bell(); return; }
+            memcpy(dirname_buf, homenod.namval, n);
+            memcpy(dirname_buf + n, decoded + 1, d - 1); dirname_buf[n + d - 1] = 0;
+        } else { memcpy(dirname_buf, decoded, d); dirname_buf[d] = 0; }
         complete_dir(dirname_buf, base, 0, dirs && !redir);
     } else if (wascommand) {
         for (i = 0; commands[i].sysnam; i++) candidate(commands[i].sysnam, base, 0);

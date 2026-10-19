@@ -18,7 +18,7 @@ the pinned sources.
 implements the existing Ripple calling convention, ISA and linker metadata
 contract; it does not incorporate cproc's QBE backend.
 
-Guest builds link the existing FUZIX/Ripple startup and libc. `guest_build.py`
+Guest builds link the existing Riplix/Ripple startup and libc. `guest_build.py`
 generates an extended, namespaced copy of `ports/fuzix/ripple/libc/format.c`
 under `build/guest-support`, preserving its GPL-2.0-or-later notice and using
 the existing floating-point formatter include. Those sources retain their

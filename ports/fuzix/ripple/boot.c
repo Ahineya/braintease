@@ -18,7 +18,7 @@ static void ready(void) {
         within = 0;
     }
     if (cluster < 2 || cluster >= 0xfff0) {
-        puts("FUZIX boot: invalid chain");
+        puts("Riplix boot: invalid chain");
         boot_halt();
         for (;;)
             ;
@@ -47,7 +47,7 @@ int main(void) {
     unsigned n, status;
     unsigned long bytes;
     unsigned long entry, count, data, i;
-    puts("Ripple FUZIX BIOS");
+    puts("Ripple Riplix BIOS");
     if (fat16_mount(&fs) || fat16_lookup(&fs, 0, "FUZIX.SYS", &image)) {
         puts("FUZIX.SYS missing");
         return 1;
@@ -71,7 +71,7 @@ int main(void) {
         puts("bad kernel layout");
         return 1;
     }
-    puts("FUZIX.SYS loading");
+    puts("Riplix kernel loading");
     addr = 0;
     bank = cb;
     i = 0;
@@ -84,7 +84,7 @@ int main(void) {
             status = vm_bulk_read(fat16_cluster_off(&fs, cluster) + within,
                 bank, addr, n, VM_BULK_CODE_WORDS);
             if (!n || (status != VM_DEVICE_OK && status != VM_DEVICE_UNKNOWN_COMMAND && status != VM_DEVICE_UNSUPPORTED)) {
-                puts("FUZIX boot: code transfer failed"); return 1;
+                puts("Riplix boot: code transfer failed"); return 1;
             }
             if (status == VM_DEVICE_OK) {
                 bytes = (unsigned long)n * 8;
@@ -125,14 +125,14 @@ int main(void) {
                 continue;
             }
             if (status != VM_DEVICE_UNKNOWN_COMMAND && status != VM_DEVICE_UNSUPPORTED) {
-                puts("FUZIX boot: data transfer failed"); return 1;
+                puts("Riplix boot: data transfer failed"); return 1;
             }
             fast_data = 0;
         }
         dmem_store(gp, (unsigned)i, i < data ? next() : 0);
         i++;
     }
-    puts("FUZIX.SYS starting");
+    puts("Riplix kernel starting");
     ros_enter(cb + (unsigned)(entry / 64000UL), (unsigned)(entry % 64000UL), gp, sb);
     return 1;
 }

@@ -1,6 +1,6 @@
 # mux: terminal workspaces
 
-`mux` is a shared C application for FUZIX/Ripple and native Fuse-X. It runs
+`mux` is a shared C application for Riplix and native Fuse-X. It runs
 independent shells and full-screen applications in tabs and split panes inside
 an existing terminal. It works through the physical console, graphical
 terminals and Telnet; it has no graphics or VM-specific dependency.

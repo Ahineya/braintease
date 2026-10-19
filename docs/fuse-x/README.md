@@ -1,7 +1,7 @@
 # Fuse-X
 
-**Fuse-X** is the name for the planned native, hosted FUZIX environment, starting
-on macOS. FUZIX supplies the operating-system services and applications; the
+**Fuse-X** is the name for the planned native, hosted Riplix environment, starting
+on macOS. Riplix supplies the operating-system services and applications; the
 native host integrates its terminals and graphics windows with the Mac desktop.
 
 The intended experience is one persistent Fuse-X session. It starts with a
@@ -26,7 +26,7 @@ direction, proposals, and implemented foundations are distinguished below.
 
 ## Agreed direction
 
-- Use the name **Fuse-X** for native hosted FUZIX. Keep the existing Ripple FUZIX
+- Use the name **Fuse-X** for native hosted Riplix. Keep the existing Ripple Riplix
   port useful alongside the hosted platform.
 - Execute compiler-generated native code. Retain the current compatibility data
   layout initially, with explicit adapters for host facilities.
@@ -34,7 +34,7 @@ direction, proposals, and implemented foundations are distinguished below.
   is ready first.
 - Begin graphics with one window, while designing the interface to support
   independent terminal and GUI windows later.
-- Let macOS manage native window placement, focus, and chrome. FUZIX programs
+- Let macOS manage native window placement, focus, and chrome. Riplix programs
   supply their window contents.
 - Use one macOS application identity and Dock icon. Offer a window list like
   Finder's Dock menu; selecting an entry switches to that window. Separate
@@ -45,7 +45,7 @@ direction, proposals, and implemented foundations are distinguished below.
 
 ## Proposals to resolve
 
-Storage combines a FUZIX root disk image with the gitignored repo-root
+Storage combines a Riplix root disk image with the gitignored repo-root
 `fuse-x-shared/` folder mounted read/write at `/mnt/host` by default. Use `--share`
 to select another folder or `--no-share` to disable it. The first filesystem bridge preserves
 guest descriptors and supports native executables in the export. Additional
@@ -69,7 +69,7 @@ an explicit shared kernel arena. Standalone examples cover recursive calls,
 independent process memory, shared kernel state, and multiple live processes.
 
 The [hosted kernel](../../fuse-x/README.md) now boots native `/init` and the existing
-Bourne shell, with scripts, pipes, redirection, traps and terminal job control. FUZIX owns scheduling and process lifetime; native continuations
+Bourne shell, with scripts, pipes, redirection, traps and terminal job control. Riplix owns scheduling and process lifetime; native continuations
 provide fork, context switching and exec. Kernel globals are shared, while user
 memory uses copy-on-write pages. The native loader runs independently compiled
 application packages, alongside bootstrap programs selected through manifests.
@@ -80,7 +80,7 @@ detach/reconnect and headless startup. Its
 [application inventory](../../fuse-x/APPLICATIONS.md) builds the 113 ported
 programs and aliases; memory budgets remain future work. File persistence and host timers work through real kernel
 syscalls. The hosted network adapter reuses the guest IPv4 stack and provides
-independent Telnet shells through FUZIX PTYs. The first hosted GX backend now provides independent RGB565 Mac windows,
+independent Telnet shells through Riplix PTYs. The first hosted GX backend now provides independent RGB565 Mac windows,
 per-window input, native Window/Dock menus, New Terminal and orderly Quit.
 Closing all windows preserves the session. Each native Nano-X top-level has its
 own Mac window and private canvas, including correct child rendering and live
@@ -89,7 +89,7 @@ resize. The persistent server replaces the hosted NanoWM desktop. See [Desktop i
 Use [native process documentation](../../rcc-native/PROCESSES.md) for current
 APIs, limits, examples, and validation. Use [networking documentation](../networking/README.md)
 for the existing device and protocol foundations. The
-[FUZIX port](../../ports/fuzix/README.md) remains the source of port-specific
+[Riplix port](../../ports/fuzix/README.md) remains the source of port-specific
 build and runtime information.
 
 ## Maintaining this design

@@ -40,6 +40,7 @@
 extern void ripple_mmu_init(void);
 /* Permanent supervisor storage, at most one bank per object. Call under di(). */
 extern void *ripple_mmu_kernel_alloc(unsigned);
+extern void ripple_mmu_kernel_free(void *, unsigned);
 extern usize_t ripple_mmu_used(void);
 extern void ripple_mmu_usage(unsigned long *, unsigned long *);
 extern void ripple_mmu_task_usage(unsigned, unsigned long *, unsigned long *);
@@ -49,7 +50,10 @@ extern void ripple_mmu_free(unsigned);
 extern int ripple_mmu_fork(unsigned, unsigned);
 extern int ripple_mmu_exec(unsigned);
 extern int ripple_mmu_exec_data(unsigned, unsigned long);
+extern int ripple_mmu_exec_layout(unsigned, const unsigned *, const unsigned long *, unsigned, unsigned);
 extern void ripple_mmu_code(unsigned, unsigned, unsigned long);
+extern void ripple_mmu_code_clear(unsigned);
+extern void ripple_mmu_code_add(unsigned, unsigned, unsigned, unsigned long);
 extern usize_t ripple_mmu_validate(unsigned long, usize_t, unsigned);
 extern void ripple_mmu_roots(unsigned, unsigned);
 extern void ripple_mmu_flush(void);

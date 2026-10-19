@@ -122,6 +122,10 @@ def make(folder):
     data,rgba=png(19,13,depth,kind,interlace,kind in [0,2,3]);add(f'png-{kind}-{depth}-{int(interlace)}.png',data,rgba,19,13)
  for level in [0,1,9]:
   data,rgba=png(29,31,8,6,level=level);add(f'png-deflate-{level}.png',data,rgba,29,31)
+ # Exercise the contiguous RGB path without a colour key, including rows
+ # shorter than a predictor's byte stride and all five PNG filters.
+ for w,h in [(1,1),(1,7),(2,7),(128,128)]:
+  data,rgba=png(w,h,8,2);add(f'png-rgb-{w}-{h}.png',data,rgba,w,h)
  data,rgba=png(257,255,8,6);add('bank.png',data,rgba,257,255)
  for interlace in [False,True]:
   for local in [False,True]:

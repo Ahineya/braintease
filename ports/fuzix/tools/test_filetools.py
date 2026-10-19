@@ -49,7 +49,7 @@ def run(image,commands,jit):
         result=subprocess.run(command,stdout=stream,stderr=subprocess.STDOUT,text=True,timeout=370)
     text=log.read_text().replace('\r','').split('Starting /init\n')[-1]
     text='\n'.join(line for line in text.splitlines()
-                   if not line.startswith(('fuzix# ', '> ')))
+                   if not line.startswith(('riplix# ', '> ')))
     Path('/tmp/fuzix-filetools-output.log').write_text(text)
     assert result.returncode==0 and 'disk synced; power off.' in text,text
     assert 'panic:' not in text and 'FAILED' not in text and 'corrupt superblock' not in text,text

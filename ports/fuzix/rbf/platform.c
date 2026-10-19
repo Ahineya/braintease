@@ -60,7 +60,7 @@ void ripple_buffer_zero(void *p) { memset(p, 0, BLKSIZE); }
  * inode lookup and PID 1 initialization. Verify a regular file through readi,
  * rather than treating the sign-on banner as a successful boot. */
 void rbf_boot_complete(void) {
-    static const char expected[] = "FUZIX kernel running in Brainfuck.\n";
+    static const char expected[] = "Riplix kernel running in Brainfuck.\n";
     char buffer[sizeof(expected)];
     inoptr file;
     if (!root || root->c_num != ROOTINODE ||
@@ -99,7 +99,7 @@ void rbf_boot_complete(void) {
 #endif
 }
 int main(void) {
-    kputs("Ripple FUZIX / Brainfuck boot profile\n");
+    kputs("Riplix / Brainfuck boot profile\n");
     fuzix_main();
     panic("bootstrap returned");
     return 1;

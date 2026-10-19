@@ -88,7 +88,7 @@ guest pointer. No additional MMIO registers or capability bits are needed;
 
 `vm_tty_write()` exposes status and progress. Standalone `tty_write_bytes()`
 uses it with a legacy fallback, and `puts`/`printf` batch their text through it.
-Scalar `putchar` keeps the legacy host newline handling. FUZIX/Fuse-X libc keeps
+Scalar `putchar` keeps the legacy host newline handling. Riplix/Fuse-X libc keeps
 using ordinary `write`: the shared physical-console path stages 256 user cells
 in kernel RAM before DMA, preserving foreground checks, STOP/DISCARD and output
 processing. Characters requiring newline conversion use the existing scalar
@@ -134,7 +134,7 @@ tick and raises no device IRQ. Like the host clock, it samples live external
 state rather than deterministic replay state. Existing hosts can report an
 unknown command; clients retain a default or cached size.
 
-FUZIX and Fuse-X use this query for physical-console `TIOCGWINSZ`. A detected
+Riplix and Fuse-X use this query for physical-console `TIOCGWINSZ`. A detected
 change updates the console and sends guest `SIGWINCH`; PTYs keep client-set
 dimensions. Fuse-X's attached console client forwards initial and changed
 dimensions to the broker's kernel PTY through a separate control connection.
@@ -246,7 +246,7 @@ bank equals current SB; otherwise it uses the fallback path.
 ### Runtime and libc integration
 
 Standalone software float helpers try the atomic stack path, then the serialized
-physical mailbox, and retain integer-only fallbacks. FUZIX libc uses the atomic
+physical mailbox, and retain integer-only fallbacks. Riplix libc uses the atomic
 path and falls back to syscall 27 selector `0x4D41`: the kernel validates and
 stages the 16-cell user packet, submits it with IRQs disabled, then copies the
 successful result back. The fallback preserves errno. Native Fuse-X already
@@ -255,7 +255,7 @@ pure scalar `__rcc_host_math` service, including application-package bindings.
 
 The floating SDK supplies addressable C double functions for the QuickJS Math
 surface. Cheap fabs/copysign/floor/ceil/trunc stay local. Use `float-sdk` with
-FUZIX or `--float-format` with `fuse-x/cc.py`. Expanded libm requires an updated
+Riplix or `--float-format` with `fuse-x/cc.py`. Expanded libm requires an updated
 host; an unavailable operation returns a quiet NaN and guest `ENOSYS`. This is
 separate from the arithmetic helpers' software fallback. `RCC_SOFTWARE_FLOAT`
 disables automatic arithmetic acceleration for reference builds.

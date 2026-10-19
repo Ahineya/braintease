@@ -1,4 +1,4 @@
-// Private-disk support for test_rvm.py; never opens the user's FUZIX disk.
+// Private-disk support for test_rvm.py; never opens the user's Riplix disk.
 import fs from 'node:fs';
 import {fatFile} from '../ports/fuzix/tools/fat.mjs';
 import {openImage} from '../ports/fuzix/tools/image.mjs';

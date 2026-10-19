@@ -98,7 +98,7 @@ not copied into checkpoints.
 
 ## Unix PCM and WAV player
 
-Fuse-X and FUZIX/Ripple expose `/dev/pcm` through the shared driver in
+Fuse-X and Riplix expose `/dev/pcm` through the shared driver in
 `ports/fuzix/ripple/pcm.c`; the userspace contract is
 `ports/fuzix/ripple/include/sys/pcm.h`. Major 5, minor 0 provides an exclusive
 process-owned output lease with exit/exec cleanup. Inherited descriptors cannot
@@ -231,7 +231,7 @@ Validation:
 descriptor. Cells 2/3 return speaker-active/reserved-zero, 4–5 return recovered
 starvation events (u32), 6–9 return missing host output frames (u64), and 10–11
 return the longest recovered gap in milliseconds (u32). `vm_audio_output_stats`
-wraps it. FUZIX and Fuse-X expose the same data to the PCM owner through
+wraps it. Riplix and Fuse-X expose the same data to the PCM owner through
 `PCM_OUTPUT_STATS` and `struct pcm_output_stats`; the existing `PCM_STATE` ABI
 is unchanged.
 

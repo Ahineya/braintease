@@ -15,11 +15,11 @@ ROOT = Path(__file__).resolve().parents[3]
 
 class Guest:
     def __init__(self, directory, target, applications, files=(), peer=None, blocks=32768, reuse=False,
-                 disk_sectors=393216):
+                 disk_sectors=393216, build_override=None, code_memory=None):
         self.directory = Path(directory)
         self.target, self.peer = target, peer
         native = target == 'native'
-        build = ROOT / ('fuse-x/build' if native else 'build/fuzix')
+        build = Path(build_override).resolve() if build_override else ROOT / ('fuse-x/build' if native else 'build/fuzix')
         self.image = self.directory / 'disk.img'
         manifest = []
         for name in ('sh', 'echo', 'cat'):
@@ -28,6 +28,12 @@ class Guest:
         for name, path in applications.items():
             manifest.append(dict(name='/bin/' + name, mode=0o100755, path=str(Path(path).resolve())))
         manifest += list(files)
+        if (build / 'lib').exists():
+            installed = {item['name'] for item in manifest}
+            for library in sorted((build / 'lib').glob('*.fxl.[0-9]' if native else '*.rsl.[0-9]')):
+                name = ('/lib/fuse-x/' if native else '/lib/riplix/') + library.name
+                if name not in installed:
+                    manifest.append(dict(name=name, mode=0o100644, path=str(library)))
         builder = r'''
 import fs from 'node:fs';
 import {rootImage} from './ports/fuzix/tools/disk.mjs';
@@ -50,10 +56,11 @@ if(native==='1')writeImage(disk,root);else writeImage(disk,fat16Image([
                             str(self.image),str(build),'1' if native else '0',str(blocks),str(disk_sectors)],cwd=ROOT,check=True)
         network = str(self.directory / 'nic') if peer else 'off'
         if native:
-            command=[str(build/'fuse-x'),'--run',str(self.image)]
+            command=[os.environ.get('FUSE_X_TEST_KERNEL',str(build/'fuse-x')),'--run',str(self.image)]
         else:
             command=[os.environ.get('RIPPLE_TEST_RVM',str(ROOT/'target/release/rvm')),str(build/'bios.bin'),'--disk',str(self.image),
                      '--memory','16384000','--jit','--guest-ctrl-c','--net',network,'--timeout','900']
+            if code_memory is not None:command += ['--code-memory',str(code_memory)]
         self.master,slave=pty.openpty();tty.setraw(slave)
         fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack("HHHH",24,80,0,0))
         self.process=subprocess.Popen(command,stdin=slave,stdout=slave,stderr=slave,
@@ -61,7 +68,7 @@ if(native==='1')writeImage(disk,root);else writeImage(disk,fat16Image([
             start_new_session=True)
         os.close(slave)
         self.log=bytearray();self.at=0
-        self.prompt=b'fuse-x# ' if native else b'fuzix# '
+        self.prompt=b'fuse-x# ' if native else b'riplix# '
         (self.directory/'vm.pid').write_text(str(self.process.pid))
         try:
             self.read(self.prompt)
@@ -72,9 +79,11 @@ if(native==='1')writeImage(disk,root);else writeImage(disk,fat16Image([
     def pump(self):
         if self.peer:self.peer.pump()
         if select.select([self.master],[],[],.005)[0]:
-            try:self.log.extend(os.read(self.master,65536))
-            except OSError:pass
-        (self.directory/'guest.log').write_bytes(self.log)
+            try:data=os.read(self.master,65536)
+            except OSError:data=b''
+            if data:
+                self.log.extend(data)
+                (self.directory/'guest.log').write_bytes(self.log)
 
     def read(self,marker,seconds=180):
         until=time.monotonic()+seconds

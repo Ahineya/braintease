@@ -1,13 +1,13 @@
 # Nano-X on Ripple
 
-Nano-X now runs as a separate server on MMU FUZIX/RVM, with the upstream
+Nano-X now runs as a separate server on MMU Riplix/RVM, with the upstream
 client library, NanoWM and NXDSKTOP. `nxterm` connects the shared
 terminal model to Nano-X and a real guest PTY. RVM still presents one host
 window containing the whole guest desktop. Fuse-X provides native top-level
 windows and independently built companion apps, retaining macOS window
 management rather than running a guest desktop.
 
-Run `scripts/run-fuzix.sh --visual`, then `startx` at the guest console.
+Run `scripts/run-riplix.sh --visual`, then `startx` at the guest console.
 NanoWM uses Slate decorations and handles focus, stacking, title-bar dragging,
 minimize/maximize/close buttons and border resizing. Alt+Tab restores and switches
 between applications; Alt+Shift+Tab switches backwards. Border resizing commits
@@ -16,7 +16,7 @@ on release. `fdectl list` and its window actions expose the shared
 additional applications. Closing the last terminal leaves the desktop available.
 `startx --minimal` selects the original text-button `nxlaunch` instead. Closing the host
 display ends the graphics session and returns to the original console; use
-`shutdown` there to stop FUZIX cleanly. `gterm` and `nxdraw` remain available as
+`shutdown` there to stop Riplix cleanly. `gterm` and `nxdraw` remain available as
 standalone tools; close them before `startx`, since GX has one display lease.
 
 ## NXDSKTOP and companion apps
@@ -43,7 +43,7 @@ division by zero. These three clients currently use fixed window geometry.
 
 Exit to terminal ends the graphics session and returns to the original shell;
 Shut down invokes the guest's orderly filesystem shutdown. Ordinary window
-close actions do not stop FUZIX. Child reaping, signal wakeups and dialog
+close actions do not stop Riplix. Child reaping, signal wakeups and dialog
 results are handled outside signal handlers; desktop cleanup bounds termination
 of its remaining child applications.
 
@@ -89,6 +89,19 @@ repeatable piece sequence for testing.
 Existing launcher configurations are preserved. To add Tetris to an older
 minimal RVM launcher or Fuse-X Applications window, append
 `Tetris - /bin/nxtetris` to `/etc/nxlaunch.cnf`; new configurations include it.
+
+## Kolf mini golf
+
+Run `kolf &` in either graphical environment. This native C/Nano-X
+reimplementation embeds all eight original KDE Kolf courses (128 holes), with
+all eleven obstacle types, moving platforms/gates, bridge layers and warps.
+Press C to choose a course. Aim with the mouse towards the target, or use Left/Right (Shift/Ctrl for coarse/fine
+steps). Hold/release the mouse, Space or Down for a visible putting stroke;
+A toggles the circular three-click mode and Escape cancels a swing. Enter advances
+after a hole, R retries, N starts a new round, P pauses and F1 opens help.
+U or Ctrl-Z undoes the last shot, restoring scores and moving objects. Water
+offers a default drop outside the hazard or a rehit from the last location.
+The [port notes](../kolf/README.md) describe compatibility, physics and checks.
 
 ## Image viewer
 
@@ -191,7 +204,7 @@ sprite rectangles without creating a temporary full-screen window.
 verification commands. Keep `upstream/` pristine; place future source adaptations
 in an explicit patch layer and platform adapters alongside it.
 
-Run `scripts/run-fuzix.sh --visual`, then `nxdraw` at the original FUZIX console.
+Run `scripts/run-riplix.sh --visual`, then `nxdraw` at the original Riplix console.
 Escape, Q or closing the window returns to the console. Close `gterm`/the desktop first:
 the engine demo and graphical terminal currently share one exclusive display.
 

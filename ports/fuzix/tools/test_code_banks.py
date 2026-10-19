@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check bank-spanning RXE execution, code-pool exhaustion and reuse in FUZIX."""
+"""Check bank-spanning RXE execution, code-pool exhaustion and reuse in Riplix."""
 import argparse
 from launch import require_mmu
 import json

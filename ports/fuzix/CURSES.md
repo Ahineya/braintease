@@ -11,7 +11,7 @@ Only consumers link curses. For native programs:
 python3 fuse-x/cc.py --curses program.c -o /tmp/program.fxe
 ```
 
-For RVM, link `CURSES_OBJS` from the FUZIX Makefile alongside ordinary userspace
+For RVM, link `CURSES_OBJS` from the Riplix Makefile alongside ordinary userspace
 objects. `cursescheck.rxe` is an example target; the library/probe is not installed
 on normal disks automatically.
 

@@ -1,5 +1,5 @@
-// Guest POSIX services shared by FUZIX/Ripple and native Fuse-X.
-// Link with `rfl build --os fuzix` or `rfl build --os fuse-x`.
+// POSIX services for Riplix/Ripple, Fuse-X, and standalone macOS.
+// Link with `rfl build --os fuzix`, `--os fuse-x`, or `--os macos`.
 extern "C" {
     fn rfl_posix_chmod(path: *const u8, mode: u16) -> i16;
     fn rfl_posix_executable(path: *const u8) -> i16;
@@ -12,7 +12,8 @@ extern "C" {
     fn rfl_posix_seek(fd: i16, offset: i32, origin: i16) -> i32;
     fn rfl_posix_unlink(path: *const u8) -> i16;
     fn rfl_posix_rename(from: *const u8, to: *const u8) -> i16;
-    fn rfl_posix_getpid() -> i16;
+    fn rfl_posix_getpid() -> u32;
+    fn rfl_posix_name_capacity() -> u16;
     fn rfl_posix_argc() -> u16;
     fn rfl_posix_argument(index: u16) -> *const u8;
     fn rfl_posix_getenv(name: *const u8) -> *const u8;
@@ -323,8 +324,8 @@ export fn rename(from: String, to: String) -> Result<unit, IoError> {
     }
 }
 
-/// Returns this guest process's PID, rather than the host's PID.
-export fn process_id() -> i16 {
+/// Returns this process's PID on the selected platform.
+export fn process_id() -> u32 {
     rfl_posix_getpid()
 }
 
@@ -398,7 +399,11 @@ export fn read_dir(path: String) -> Result<Vec<DirEntry>, IoError> {
     let view = guard.borrow();
     let directory = *view;
     let mut buffer: Vec<u8> = [];
-    for (i in 0..31) {
+    let capacity = rfl_posix_name_capacity() as usize;
+    if (capacity < 2 || capacity > 4096) {
+        return Err(InvalidLength);
+    }
+    for (i in 0..capacity) {
         buffer.push(0);
     }
     let mut entries: Vec<DirEntry> = [];
@@ -479,8 +484,9 @@ export fn working_directory() -> Result<String, IoError> {
     }
 }
 
-/// Runs a command using the guest shell, returning its encoded wait status.
-/// Terminal applications should suspend curses first. No host shell is invoked.
+/// Runs a command using the selected platform's shell, returning encoded wait status.
+/// Terminal applications should suspend curses first. Guest builds use their guest shell;
+/// standalone macOS builds use the host shell.
 export fn run_command(command: String) -> Result<i32, IoError> {
     let bytes = c_string(command)?;
     let status = unsafe {

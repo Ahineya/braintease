@@ -6,7 +6,7 @@
 #include <sys/select.h>
 #include <pwd.h>
 #define UNIX 1
-#define SYSTEM_NAME "FUZIX C16"
+#define SYSTEM_NAME "Riplix C16"
 #define SIZEOF_INT 1
 #define SIZEOF_LONG 2
 #define SIZEOF_OFF_T 2

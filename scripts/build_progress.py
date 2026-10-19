@@ -101,7 +101,7 @@ def watch(command, logfile, output=None, heartbeat=10, activity_interval=1):
                 elif text.startswith('Build: '):
                     activity = text.removeprefix('Build: ')
                     report(activity)
-                elif text.startswith(('Host tools:', 'fuzix:', 'fuse-x:')):
+                elif text.startswith(('Host tools:', 'Riplix:', 'Fuse-X:', 'fuzix:', 'fuse-x:')):
                     activity = text
                     report(text)
                 elif ACTIVITY.search(text):

@@ -38,7 +38,10 @@ api_id=YOUR_APPLICATION_ID
 api_hash=YOUR_APPLICATION_HASH
 ```
 
-The guest defaults are `/etc/telegram.conf` and `/telegram.session`.
+The guest defaults are `$HOME/.telegram.conf` and `$HOME/.telegram.session`.
+For root these are `/root/.telegram.conf` and `/root/.telegram.session`.
+Normal image upgrades move the old `/etc/telegram.conf` and `/telegram.session`
+without changing the saved login. Explicit command-line paths still work.
 Alternatively run `telegram CONFIG_PATH SESSION_PATH`. An existing session
 must be a private regular file. Invalid or corrupt records fail closed.
 

@@ -186,7 +186,12 @@ impl Cg<'_, '_> {
                     .compiler
                     .ir
                     .get_function(n)
-                    .is_none_or(|f| f.is_external) =>
+                    .is_none_or(|f| f.is_external)
+                    && !self.compiler.dynamic.as_ref().is_some_and(|m| {
+                        m.imports
+                            .iter()
+                            .any(|i| i.symbol.function && i.symbol.name == *n)
+                    }) =>
             {
                 operation(n)
             }
@@ -230,7 +235,12 @@ fn suspends(compiler: &Compiler, instruction: &I) -> bool {
         Value::Global(n) | Value::Function(n) => {
             !compiler.direct_functions.contains_key(n)
                 && (operation(n).is_some()
-                    || compiler.ir.get_function(n).is_some_and(|f| !f.is_external))
+                    || compiler.ir.get_function(n).is_some_and(|f| !f.is_external)
+                    || compiler.dynamic.as_ref().is_some_and(|m| {
+                        m.imports
+                            .iter()
+                            .any(|i| i.symbol.function && i.symbol.name == *n)
+                    }))
         }
         _ => true,
     }
@@ -354,7 +364,9 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             edges: Vec::new(),
             va_input: None,
             var_area,
+            bound_globals: BTreeMap::new(),
         };
+        cg.bind_globals(function)?;
         let size = cg.k(i64::try_from(cells).map_err(|_| "native frame size overflow")?);
         cg.frame = cg.runtime("rcc_native_process_frame", &[size])?;
         for id in cg.vars.keys().copied().collect::<Vec<_>>() {

@@ -1,5 +1,23 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "nx_clipboard.h"
+/* Keep the selected line stable while repainting it in fragmented frames,
+ * moving the cursor, querying its position, and updating an unrelated row. */
+static int selection_check(const char *path) {
+    struct termios raw;unsigned ticks=0;int fd,n;char state[32],input[97];
+    if(tcgetattr(0,&raw))return 1;
+    raw.c_lflag&=~(ICANON|ECHO|ISIG);raw.c_cc[VMIN]=1;raw.c_cc[VTIME]=0;
+    if(tcsetattr(0,TCSANOW,&raw))return 1;
+    if(fcntl(0,F_SETFL,fcntl(0,F_GETFL,0)|O_NONBLOCK)<0)return 1;
+    fputs("\033[2J",stdout);
+    for(;;){
+        fputs("\033[?2026h\033[H\033[2K",stdout);fflush(stdout);usleep(5000);
+        printf("Clipboard Ж 🙂\033[5;1HBackground %u\033[6n\033[?2026l",++ticks);fflush(stdout);
+        fd=open(path,O_WRONLY|O_CREAT|O_TRUNC,0600);if(fd<0)return 1;
+        n=snprintf(state,sizeof(state),"TICKS %u\n",ticks);write(fd,state,n);close(fd);
+        while(read(0,input,sizeof(input))>0){}
+        usleep(50000);
+    }
+}
 static int paste_check(const char *path,unsigned long count,int bracketed) {
     struct termios raw;char buf[97],ready[128];int fd,n,marker;unsigned long got=0;
     if(tcgetattr(0,&raw))return 1;

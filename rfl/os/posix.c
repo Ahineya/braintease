@@ -43,7 +43,8 @@ int rfl_posix_unlink(const unsigned char *path) { return unlink((const char *)pa
 int rfl_posix_rename(const unsigned char *from, const unsigned char *to) {
     return rename((const char *)from, (const char *)to);
 }
-int rfl_posix_getpid(void) { return getpid(); }
+unsigned long rfl_posix_getpid(void) { return (unsigned)getpid(); }
+unsigned rfl_posix_name_capacity(void) { return 31; }
 unsigned rfl_posix_argc(void) { return (unsigned)_argc; }
 const unsigned char *rfl_posix_argument(unsigned index) {
     return index < (unsigned)_argc ? (const unsigned char *)_argv[index] : 0;

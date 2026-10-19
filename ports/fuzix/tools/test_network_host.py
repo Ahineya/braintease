@@ -63,15 +63,15 @@ with tempfile.TemporaryDirectory(prefix='fuzix-host-net-') as directory:
                     except socket.timeout:
                         pass
 
-            until(b'fuzix# ')
+            until(b'riplix# ')
             transcript.clear();connection.sendall(b'stty -a\r\n')
             until(b'40 rows 100 columns')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             transcript.clear();connection.sendall(b'echo HOST_TCP_OK > /host-note\r\n')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             transcript.clear();connection.sendall(b'cat /host-note\r\n')
             until(b'HOST_TCP_OK\n')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             connection.sendall(b'shutdown\r\n')
             assert guest.wait(timeout=30) == 0, log.read_text()
             assert 'disk synced; power off.' in log.read_text(), log.read_text()

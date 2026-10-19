@@ -26,7 +26,8 @@ def main():
             applications=['sh', 'cat', 'echo'],
             extra_files=[dict(name='/bin/js', source=str(a.js.resolve()))],
             extra_fixtures={'/tmp/script.mjs': source,
-                            '/tmp/broken.js': 'function broken( {\n'})
+                            '/tmp/broken.js': 'function broken( {\n',
+                            '/tmp/app.server.mjs': 'import {sleep} from \'fuse:system\'; console.log(\'RIFT_SERVER_RUNNING\'); await sleep(86400000);\n'})
         command = [build / 'fuse-x', '--run', image] if a.os == 'fuse-x' else [
             ROOT / 'target/release/rvm', build / 'bios.bin', '--disk', image,
             '--memory', '16384000', '--net', 'off', '--jit', '--guest-ctrl-c', '--timeout', '300']
@@ -44,6 +45,10 @@ def main():
             guest.send(b':'); guest.visible(': command'); guest.send(b'e /tmp/broken.js\r'); guest.visible('/tmp/broken.js')
             guest.at = len(guest.log); guest.send(F5); guest.raw(b'SyntaxError', seconds=120)
             guest.raw(b'Press Enter to return to Rift'); guest.send(b'\r'); guest.visible('Run finished; wait status')
+            guest.send(b':'); guest.visible(': command'); guest.send(b'e /tmp/app.server.mjs\r'); guest.visible('/tmp/app.server.mjs')
+            started = len(guest.log); guest.at = started; guest.send(F5); guest.raw(b'Rift Run:'); guest.raw(b'\nRIFT_SERVER_RUNNING', seconds=120)
+            assert b'--server' in guest.log[started:]
+            guest.send(b'\x03'); guest.raw(b'Press Enter to return to Rift'); guest.send(b'\r'); guest.visible('Run finished; wait status')
             guest.send(b':'); guest.visible(': command'); guest.send(b'qa!\r'); guest.raw(guest.prompt)
             guest.send(b'shutdown\r'); guest.process.wait(timeout=30); assert guest.process.returncode == 0
         finally:
@@ -60,7 +65,7 @@ def main():
             subprocess.run(['python3', str(ROOT / 'ports/fuzix/tools/fsck.py'), str(image)], check=True)
     report.write_text(json.dumps(dict(status='passed', system=a.os, cases=[
         'JS module detection', 'JS keyword highlighting', 'F8 PATH runner', 'F5 module execution',
-        'syntax error report', 'return to editor tabs', 'terminal restoration', 'clean filesystem'],
+        'syntax error report', 'F5 server mode and Ctrl-C', 'return to editor tabs', 'terminal restoration', 'clean filesystem'],
         rift_sha256=hashlib.sha256(a.rift.read_bytes()).hexdigest(),
         js_sha256=hashlib.sha256(a.js.read_bytes()).hexdigest()), indent=2) + '\n')
     print(a.os + ': Rift JavaScript workflow passed', flush=True)

@@ -46,7 +46,7 @@ def adapt_core(name, source):
         # Same C99 array-qualifier defect as the LibCSS bloom parameters.
         source = source.replace('[restrict]', '[]')
     if name == 'netsurf/utils/regex.h':
-        source = replace(source, '#define REG_NOMATCH 1', '''/* FUZIX exports the incompatible historical V8 regex API. */
+        source = replace(source, '#define REG_NOMATCH 1', '''/* Riplix exports the incompatible historical V8 regex API. */
 #define regcomp ns_port_regcomp
 #define regexec ns_port_regexec
 #define regerror ns_port_regerror
@@ -124,7 +124,83 @@ def adapt_core(name, source):
                          '#define LLCACHE_STORE_MAX_BANDWIDTH 1048576UL')
         source = replace(source, 'hlcache_parameters.llcache.store.limit = nsoption_uint(disc_cache_size);',
                          'hlcache_parameters.llcache.store.limit = C16_CACHE_LIMIT;')
+    if name == 'netsurf/content/hlcache.h':
+        source = source.rsplit('#endif', 1)[0] + """
+/* Share an image reference already owned by this HTML document. Normal cache
+ * retrieval remains the fallback; this must not be used across navigations. */
+nserror hlcache_handle_retrieve_shared_image(nsurl *, nsurl *,
+    hlcache_handle_callback, void *, hlcache_child_context *, hlcache_handle *,
+    hlcache_handle **);
+#endif
+"""
+    if name == 'netsurf/content/hlcache.c':
+        source = replace(source, 'nserror\nhlcache_handle_retrieve(nsurl *url,',
+                         '#include <c16-shared-image.inc>\nstatic nserror\nc16_hlcache_retrieve(nsurl *url,')
+        source = replace(source, 'hlcache_handle **result)\n{\n\thlcache_retrieval_ctx *ctx;',
+                         'hlcache_handle **result, hlcache_handle *shared)\n{\n\tllcache_handle *reuse = accepted_types == CONTENT_IMAGE && post == NULL ? c16_shared_image(shared, url, child) : NULL;\n\thlcache_retrieval_ctx *ctx;')
+        source = replace(source, 'error = llcache_handle_retrieve(url, flags, referer, post,\n\t\t\thlcache_llcache_callback, ctx,\n\t\t\t&ctx->llcache);',
+                         '''if (reuse != NULL) {
+        error = llcache_handle_clone_replay(reuse, &ctx->llcache);
+        if (error == NSERROR_OK)
+            llcache_handle_change_callback(ctx->llcache, hlcache_llcache_callback, ctx);
+    } else {
+        error = llcache_handle_retrieve(url, flags, referer, post,
+            hlcache_llcache_callback, ctx, &ctx->llcache);
+    }''')
+        source += """
+nserror hlcache_handle_retrieve(nsurl *url, uint32_t flags, nsurl *referer,
+    llcache_post_data *post, hlcache_handle_callback cb, void *pw,
+    hlcache_child_context *child, content_type types, hlcache_handle **out)
+{
+    return c16_hlcache_retrieve(url, flags, referer, post, cb, pw, child, types, out, NULL);
+}
+nserror hlcache_handle_retrieve_shared_image(nsurl *url, nsurl *referer,
+    hlcache_handle_callback cb, void *pw, hlcache_child_context *child,
+    hlcache_handle *shared, hlcache_handle **out)
+{
+    return c16_hlcache_retrieve(url, HLCACHE_RETRIEVE_SNIFF_TYPE, referer, NULL,
+                               cb, pw, child, CONTENT_IMAGE, out, shared);
+}
+"""
+    if name == 'netsurf/content/llcache.h':
+        source = source.rsplit('#endif', 1)[0] + """
+/* Attach to an explicitly supplied live object and replay its state on the
+ * next cache poll, without revalidation or a network request. */
+nserror llcache_handle_clone_replay(llcache_handle *, llcache_handle **);
+#endif
+"""
+    if name == 'netsurf/content/handlers/html/object.c':
+        source = replace(source, 'struct content_html_object *object;\n\thlcache_handle_callback object_callback;',
+                         'struct content_html_object *object, *prior;\n\thlcache_handle *shared = NULL;\n\thlcache_handle_callback object_callback;')
+        source = replace(source, '\terror = hlcache_handle_retrieve(url,\n\t\t\t\t\tHLCACHE_RETRIEVE_SNIFF_TYPE,', '''    /* Match only references owned by this document, including speculative
+     * image loads made before box construction. Keep each box's own handle. */
+    if (permitted_types == CONTENT_IMAGE) {
+        for (prior = c->object_list; prior != NULL; prior = prior->next) {
+            if (prior->content != NULL && prior->permitted_types == CONTENT_IMAGE &&
+                nsurl_compare(hlcache_handle_get_url(prior->content), url, NSURL_COMPLETE)) {
+                shared = prior->content;
+                break;
+            }
+        }
+    }
+    if (shared != NULL) {
+        error = hlcache_handle_retrieve_shared_image(url, content_get_url(&c->base),
+            object_callback, object, &child, shared, &object->content);
+    } else error = hlcache_handle_retrieve(url,
+                    HLCACHE_RETRIEVE_SNIFF_TYPE,''')
     if name == 'netsurf/content/llcache.c':
+        source += """
+nserror llcache_handle_clone_replay(llcache_handle *source, llcache_handle **out)
+{
+    nserror error = llcache_handle_clone(source, out);
+    if (error == NSERROR_OK) {
+        (*out)->state = LLCACHE_FETCH_INIT;
+        (*out)->bytes = 0;
+        llcache_users_not_caught_up();
+    }
+    return error;
+}
+"""
         source = replace(source, '#include "content/backing_store.h"',
                          '#include "content/backing_store.h"\n#include <c16-cache.h>')
         source = replace(source, 'object->source_len + len + 64 * 1024',
@@ -272,6 +348,15 @@ static const char *nslog_gettime(void)
 
 ''' + source[start:]
     if name == 'netsurf/content/fetchers/file/file.c':
+        # File validators use the SDK's supported 32-bit time_t formatter.
+        # Epoch zero is common in installed files and is a valid validator,
+        # not the absence of an If-None-Match request.
+        source = replace(source, '"ETag: \\"%10" PRId64 "\\""', '"ETag: \\"%10ld\\""', 2)
+        source = replace(source, '(int64_t) fdstat->st_mtime', '(long) fdstat->st_mtime', 2)
+        source = replace(source, 'time_t file_etag;', 'bool file_etag_set;\n\ttime_t file_etag;')
+        source = replace(source, 'if (ret != NSERROR_OK) {\n\t\t\t\tNSLOG(fetch, WARNING,',
+                         'if (ret == NSERROR_OK) ctx->file_etag_set = true;\n\t\t\tif (ret != NSERROR_OK) {\n\t\t\t\tNSLOG(fetch, WARNING,')
+        source = replace(source, 'ctx->file_etag != 0 &&', 'ctx->file_etag_set &&', 2)
         source = replace(source, '#define FETCH_FILE_MAX_BUF_SIZE (1024 * 1024)', '#define FETCH_FILE_MAX_BUF_SIZE 4096')
         source = replace(source, 'buf = malloc(buf_size);', 'buf = malloc(buf_size ? buf_size : 1);')
         source = replace(source, 'ssize_t tot_read = 0;', 'off_t tot_read = 0;')

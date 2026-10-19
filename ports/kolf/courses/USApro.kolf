@@ -1,0 +1,2290 @@
+[0-course@-50,-50]
+Name=USA Pro
+Name[ar]=محترفي الولايات المتحدة الأمريكية
+Name[bs]=USA Pro
+Name[ca]=USA Pro
+Name[ca@valencia]=USA Pro
+Name[cs]=USA Pro
+Name[da]=USA Pro
+Name[de]=USA Pro
+Name[el]=USA Pro
+Name[en_GB]=USA Pro
+Name[eo]=USA-Pro
+Name[es]=USA Pro
+Name[et]=USA Pro
+Name[eu]=USA Pro
+Name[fa]=حرفه‌ای آمریکا
+Name[fi]=USA Pro
+Name[fr]=USA Pro
+Name[ga]=Proifisiúnta S.A.M.
+Name[gl]=USA Pro
+Name[he]=אמריקאי מקצועי
+Name[hne]=यूएसए प्रो
+Name[hu]=USA pro
+Name[is]=USA Pro
+Name[it]=USA Pro
+Name[ja]=USA プロ
+Name[ka]=USA Pro
+Name[kk]=USA Pro
+Name[km]=USA Pro
+Name[ko]=미국 프로
+Name[lv]=USA Pro
+Name[nb]=USA Pro
+Name[nds]=USA-Pro
+Name[nl]=USA Pro
+Name[nn]=USA Pro
+Name[pl]=USA Pro
+Name[pt]=Pro EUA
+Name[pt_BR]=Pro EUA
+Name[ro]=SUA Pro
+Name[ru]=USA Pro
+Name[sa]=USA Pro
+Name[sk]=USA Pro
+Name[sl]=USA Pro
+Name[sr]=САД про
+Name[sr@ijekavian]=САД про
+Name[sr@ijekavianlatin]=SAD pro
+Name[sr@latin]=SAD pro
+Name[sv]=USA Pro
+Name[te]=యు ఎస్ ఎ ప్రొ
+Name[tr]=USA Pro
+Name[uk]=USA Pro
+Name[zh_CN]=美帝专家
+Name[zh_TW]=USA 專家
+author=Rob Kaper
+
+[1-ball@22,350]
+dummykey=true
+
+[1-bridge@306,87|2]
+botWallVisible=false
+height=212
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=false
+width=68
+
+[1-cup@78,38|9]
+dummykey=true
+
+[1-hole@-50,-50|0]
+borderWalls=false
+hasFinalLoad=false
+maxstrokes=10
+par=3
+
+[1-puddle@-4,79|10]
+changeEnabled=false
+changeEvery=50
+height=218
+width=98
+
+[1-puddle@171,196|1]
+changeEnabled=false
+changeEvery=50
+height=130
+width=596
+
+[1-sand@14,207|0]
+changeEnabled=false
+changeEvery=50
+height=216
+width=840
+
+[1-sign@4,371|14]
+Comment=Daytona Beach, FL
+Comment[ar]=دايتونا بيتش، فلوريدا
+Comment[bs]=Daytona Beach, FL
+Comment[ca]=Daytona Beach, FL
+Comment[ca@valencia]=Daytona Beach, FL
+Comment[cs]=Daytona Beach, FL
+Comment[da]=Daytona Beach, FL
+Comment[de]=Daytona Beach, FL
+Comment[el]=παραλία Ντεϊτόνα, FL
+Comment[en_GB]=Daytona Beach, FL
+Comment[eo]=Daytona Beach, FL
+Comment[es]=Playa de Daytona, FL
+Comment[et]=Daytona Beach, FL
+Comment[eu]=Daytona Beach, FL
+Comment[fi]=Daytona Beach, FL
+Comment[fr]=Daytona Beach, FL
+Comment[ga]=Daytona Beach, Florida
+Comment[gl]=Daytona Beach, Florida
+Comment[he]=חוף דייטונה, פלורידה
+Comment[hne]=डायटोना बीच, एफएल
+Comment[hu]=Daytona Beach, FL
+Comment[is]=Daytona Beach, FL
+Comment[it]=Daytona Beach, FL
+Comment[ja]=デイトナビーチ, FL
+Comment[ka]=დეიტონა ბიჩი, ფლორიდა
+Comment[kk]=Дайтона Бич, Флорида
+Comment[km]=ឆ្នេរ Daytona, FL
+Comment[ko]=데이토나 비치, 플로리다
+Comment[lv]=Deitonas pludmale, FL
+Comment[nb]=Daytona Beach, FL
+Comment[nds]=Daytona Beach, FL
+Comment[nl]=Daytona Beach, FL
+Comment[nn]=Daytona Beach, FL
+Comment[pl]=Daytona Beach, FL
+Comment[pt]=Daytona Beach, FL
+Comment[pt_BR]=Praia de Daytona, FL
+Comment[ro]=Daytona Beach, FL
+Comment[ru]=Дайтона Бич, Флорида
+Comment[sa]=Daytona समुद्रतट, FL
+Comment[sk]=Daytona Beach, FL
+Comment[sl]=Daytona Beach, Florida
+Comment[sr]=Дејтона бич, Флорида
+Comment[sr@ijekavian]=Дејтона бич, Флорида
+Comment[sr@ijekavianlatin]=Dejtona bič, Florida
+Comment[sr@latin]=Dejtona bič, Florida
+Comment[sv]=Daytona Beach, Florida
+Comment[te]=డెటొనా బీచ్, ఫ్లొ
+Comment[tr]=Daytona Sahili, FL
+Comment[uk]=Дейтона-Біч, Флорида
+Comment[zh_CN]=代托纳海滩，佛罗里达
+Comment[zh_TW]=Daytona 海灘，佛羅里達
+botWallVisible=false
+height=34
+leftWallVisible=true
+rightWallVisible=false
+topWallVisible=true
+width=411
+
+[1-slope@-3,-4|11]
+grade=5
+gradient=Horizontal
+height=131
+reversed=true
+stuckOnGround=false
+width=222
+
+[1-slope@139,282|7]
+grade=6
+gradient=Vertical
+height=117
+reversed=true
+stuckOnGround=false
+width=53
+
+[1-slope@215,273|8]
+grade=4
+gradient=Vertical
+height=132
+reversed=false
+stuckOnGround=false
+width=53
+
+[1-slope@247,2|12]
+grade=5
+gradient=Horizontal
+height=152
+reversed=false
+stuckOnGround=false
+width=56
+
+[1-slope@60,281|6]
+grade=4
+gradient=Vertical
+height=119
+reversed=false
+stuckOnGround=false
+width=54
+
+[1-wall@0,0|13]
+endPoint=328,387
+startPoint=38,387
+
+[1-wall@0,0|3]
+endPoint=374,299
+startPoint=328,387
+
+[1-wall@0,0|4]
+endPoint=297,3
+startPoint=374,87
+
+[1-wall@0,0|5]
+endPoint=297,3
+startPoint=32,3
+
+[10-ball@364,364]
+dummykey=true
+
+[10-blackhole@142,54|9]
+exit=372,376
+exitDeg=170
+maxspeed=5
+minspeed=5
+
+[10-blackhole@193,248|7]
+exit=196,175
+exitDeg=220
+maxspeed=1
+minspeed=1
+
+[10-bridge@169,235|11]
+botWallVisible=false
+height=95
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=false
+width=49
+
+[10-bumper@122,163|17]
+dummykey=true
+
+[10-bumper@127,179|16]
+dummykey=true
+
+[10-bumper@135,151|19]
+dummykey=true
+
+[10-bumper@136,195|15]
+dummykey=true
+
+[10-bumper@145,212|14]
+dummykey=true
+
+[10-bumper@151,140|20]
+dummykey=true
+
+[10-bumper@157,227|13]
+dummykey=true
+
+[10-bumper@167,130|21]
+dummykey=true
+
+[10-bumper@175,228|12]
+dummykey=true
+
+[10-bumper@195,226|8]
+dummykey=true
+
+[10-bumper@214,227|22]
+dummykey=true
+
+[10-bumper@219,130|28]
+dummykey=true
+
+[10-bumper@232,227|34]
+dummykey=true
+
+[10-bumper@233,143|27]
+dummykey=true
+
+[10-bumper@242,212|18]
+dummykey=true
+
+[10-bumper@246,156|26]
+dummykey=true
+
+[10-bumper@253,198|23]
+dummykey=true
+
+[10-bumper@260,168|25]
+dummykey=true
+
+[10-bumper@262,184|24]
+dummykey=true
+
+[10-cup@193,121|32]
+dummykey=true
+
+[10-hole@-50,-50|0]
+borderWalls=false
+hasFinalLoad=false
+maxstrokes=10
+par=2
+
+[10-puddle@14,152|30]
+changeEnabled=false
+changeEvery=50
+height=302
+width=184
+
+[10-puddle@140,286|29]
+changeEnabled=false
+changeEvery=50
+height=86
+width=622
+
+[10-puddle@357,89|31]
+changeEnabled=false
+changeEvery=50
+height=422
+width=130
+
+[10-sand@101,111|10]
+changeEnabled=false
+changeEvery=50
+height=90
+width=146
+
+[10-sand@258,141|41]
+changeEnabled=false
+changeEvery=50
+height=38
+width=36
+
+[10-sign@-1,360|42]
+Comment=Washington DC (Pentagon)
+Comment[ar]=واشنطن العاصمة (بانتغون)
+Comment[bs]=Vašington DC (Pentagon)
+Comment[ca]=Washington DC (Pentagon)
+Comment[ca@valencia]=Washington DC (Pentagon)
+Comment[cs]=Washington DC (Pentagon)
+Comment[da]=Washington DC (Pentagon)
+Comment[de]=Washington DC (Pentagon)
+Comment[el]=Ουάσιγκτον DC (πεντάγωνο)
+Comment[en_GB]=Washington DC (Pentagon)
+Comment[eo]=Vaŝingtono (Pentagono)
+Comment[es]=Washington DC (Pentágono)
+Comment[et]=Washington DC (Pentagon)
+Comment[eu]=Washington DC (Pentagonoa)
+Comment[fa]=واشنگتن (پنتاگون)
+Comment[fi]=Washington DC (Pentagon)
+Comment[fr]=Washington DC (Pentagone)
+Comment[ga]=Washington DC (Pentagon)
+Comment[gl]=Washington DC (Pentágono)
+Comment[he]=וושינגטון הבירה (פנטגון)
+Comment[hne]=वासिंगटन, डीसी (पेंटागन)
+Comment[hu]=Washington DC (Pentagon)
+Comment[is]=Washington DC (Pentagon)
+Comment[it]=Washington DC (Pentagono)
+Comment[ja]=ワシントン DC (ペンタゴン)
+Comment[ka]=ვაშინგტონი დი.სი. (პენტაგონი)
+Comment[kk]=Вашингтон, Дистрикт Колумбия (Пентагон)
+Comment[km]=វ៉ាស៊ីនតោន ឌីស៊ី (ប៉ង់​តាហ្គោន)
+Comment[ko]=워싱턴 DC (펜타곤)
+Comment[lv]=Vašingtona DC (Pentagons)
+Comment[nb]=Washington, DC (Pentagon)
+Comment[nds]=Washington DC (Pentagon)
+Comment[nl]=Washington DC (Pentagon)
+Comment[nn]=Washington DC (Pentagon)
+Comment[pl]=Washington DC (Pentagon)
+Comment[pt]=Washington DC (Pentágono)
+Comment[pt_BR]=Washington DC (Pentágono)
+Comment[ro]=Washington DC (Pentagon)
+Comment[ru]=Вашингтон, Округ Колумбия (Пентагон)
+Comment[sa]=वाशिङ्गटन डीसी (पञ्चकोण)
+Comment[sk]=Washington DC (Pentagon)
+Comment[sl]=Washington DC (Pentagon)
+Comment[sr]=Вашингтон (Пентагон)
+Comment[sr@ijekavian]=Вашингтон (Пентагон)
+Comment[sr@ijekavianlatin]=Vašington (Pentagon)
+Comment[sr@latin]=Vašington (Pentagon)
+Comment[sv]=Washington DC (Pentagon)
+Comment[te]=వాషింగ్టన్ డిసి (పెంటాగన్)
+Comment[tr]=Washington DC (Pentagon)
+Comment[uk]=Вашингтон, округ Колумбія (Пентагон)
+Comment[zh_CN]=华盛顿特区 (五角大楼)
+Comment[zh_TW]=華盛頓特區（五角大廈）
+botWallVisible=true
+height=49
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=189
+
+[10-slope@136,173|4]
+grade=4
+gradient=Opposite Diagonal
+height=40
+reversed=true
+stuckOnGround=false
+width=40
+
+[10-slope@138,131|5]
+grade=4
+gradient=Diagonal
+height=40
+reversed=false
+stuckOnGround=false
+width=40
+
+[10-slope@177,173|2]
+grade=4
+gradient=Vertical
+height=40
+reversed=true
+stuckOnGround=false
+width=40
+
+[10-slope@178,133|1]
+grade=4
+gradient=Vertical
+height=40
+reversed=false
+stuckOnGround=false
+width=40
+
+[10-slope@217,174|3]
+grade=4
+gradient=Diagonal
+height=40
+reversed=true
+stuckOnGround=false
+width=40
+
+[10-slope@218,133|6]
+grade=4
+gradient=Opposite Diagonal
+height=40
+reversed=true
+stuckOnGround=false
+width=40
+
+[10-wall@0,0|33]
+endPoint=259,167
+startPoint=283,136
+
+[10-wall@0,0|35]
+endPoint=283,136
+startPoint=130,25
+
+[10-wall@0,0|36]
+endPoint=118,161
+startPoint=130,25
+
+[10-wall@0,0|37]
+endPoint=169,330
+startPoint=215,392
+
+[10-wall@0,0|38]
+endPoint=215,392
+startPoint=384,392
+
+[10-wall@0,0|39]
+endPoint=384,392
+startPoint=384,331
+
+[10-wall@0,0|40]
+endPoint=384,331
+startPoint=218,330
+
+[11-ball@36,41]
+dummykey=true
+
+[11-blackhole@140,181|15]
+exit=114,265
+exitDeg=30
+maxspeed=3
+minspeed=1
+
+[11-blackhole@225,184|13]
+exit=77,64
+exitDeg=0
+maxspeed=9
+minspeed=4
+
+[11-blackhole@256,272|18]
+exit=195,249
+exitDeg=110
+maxspeed=3
+minspeed=3
+
+[11-bridge@18,22|16]
+botWallVisible=false
+height=41
+leftWallVisible=false
+rightWallVisible=false
+topWallVisible=false
+width=36
+
+[11-cup@183,170|0]
+dummykey=true
+
+[11-hole@-50,-50|0]
+borderWalls=false
+hasFinalLoad=false
+maxstrokes=10
+par=5
+
+[11-puddle@182,144|3]
+changeEnabled=false
+changeEvery=50
+height=30
+width=45
+
+[11-puddle@289,3|10]
+changeEnabled=false
+changeEvery=50
+height=58
+width=242
+
+[11-sand@17,316|17]
+changeEnabled=false
+changeEvery=50
+height=286
+width=318
+
+[11-sand@60,174|4]
+changeEnabled=false
+changeEvery=50
+height=174
+width=84
+
+[11-sign@-2,370|24]
+Comment=Palm Springs, CO
+Comment[ar]=بالم سبرينغز، كولورادو
+Comment[bs]=Palm Springs, CO
+Comment[ca]=Palm Springs, CO
+Comment[ca@valencia]=Palm Springs, CO
+Comment[cs]=Palm Springs, CO
+Comment[da]=Palm Springs, CO
+Comment[de]=Palm Springs, CO
+Comment[el]=Παλμ Σπρινγκς, CO
+Comment[en_GB]=Palm Springs, CO
+Comment[eo]=Palm Springs, CO
+Comment[es]=Palm Springs, CO
+Comment[et]=Palm Springs, CO
+Comment[eu]=Palm Springs, CO
+Comment[fi]=Palm Springs, CO
+Comment[fr]=Palm Springs, CO
+Comment[ga]=Palm Springs, Colorado
+Comment[gl]=Palm Springs, Colorado
+Comment[he]=פאלם ספרינגס, קולורדו
+Comment[hne]=पाम स्प्रिंग्स, सीओ
+Comment[hu]=Palm Springs, CO
+Comment[is]=Palm Springs, CO
+Comment[it]=Palm Springs, CO
+Comment[ja]=パームスプリング, CO
+Comment[ka]=პალმ სპრინგსი, კოლორადო
+Comment[kk]=Палм Спрингс, Колорадо
+Comment[km]=ផាម ស្ព្រីង, CO
+Comment[ko]=팜 스프링스, 콜로라도
+Comment[lv]=Palmspringsa, CO
+Comment[nb]=Palm Springs, CO
+Comment[nds]=Palm Springs, CO
+Comment[nl]=Palm Springs, CO
+Comment[nn]=Palm Springs, CO
+Comment[pl]=Palm Springs, CO
+Comment[pt]=Palm Springs, CO
+Comment[pt_BR]=Palm Springs, CO
+Comment[ro]=Palm Springs, CO
+Comment[ru]=Палм-Спрингс, Колумбия
+Comment[sa]=पाम स्प्रिंग्स, सीओ
+Comment[sk]=Palm Springs, CO
+Comment[sl]=Palm Springs, Kolorado
+Comment[sr]=Палм Спрингс, Колорадо
+Comment[sr@ijekavian]=Палм Спрингс, Колорадо
+Comment[sr@ijekavianlatin]=Palm Springs, Kolorado
+Comment[sr@latin]=Palm Springs, Kolorado
+Comment[sv]=Palm Springs, Colorado
+Comment[te]=పాం స్ప్రింగ్స్, కొ
+Comment[tr]=Palm Springs, CO
+Comment[uk]=Палм-Спрінґс, Колорадо
+Comment[zh_CN]=棕榈泉，科罗拉多
+Comment[zh_TW]=棕櫚泉，科羅拉多
+botWallVisible=true
+height=36
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=146
+
+[11-slope@109,150|2]
+grade=4
+gradient=Elliptic
+height=63
+reversed=true
+stuckOnGround=false
+width=63
+
+[11-slope@120,-2|12]
+grade=4
+gradient=Opposite Diagonal
+height=51
+reversed=true
+stuckOnGround=false
+width=46
+
+[11-slope@163,191|23]
+grade=2
+gradient=Elliptic
+height=40
+reversed=false
+stuckOnGround=false
+width=40
+
+[11-slope@165,8|11]
+grade=4
+gradient=Vertical
+height=40
+reversed=true
+stuckOnGround=false
+width=246
+
+[11-slope@195,152|1]
+grade=4
+gradient=Elliptic
+height=61
+reversed=true
+stuckOnGround=false
+width=61
+
+[11-slope@212,226|19]
+grade=8
+gradient=Elliptic
+height=91
+reversed=false
+stuckOnGround=false
+width=91
+
+[11-wall@0,0|14]
+endPoint=383,96
+startPoint=344,32
+
+[11-wall@0,0|20]
+endPoint=106,147
+startPoint=84,95
+
+[11-wall@0,0|21]
+endPoint=84,95
+startPoint=53,81
+
+[11-wall@0,0|22]
+endPoint=53,81
+startPoint=-1,88
+
+[11-wall@0,0|5]
+endPoint=189,108
+startPoint=106,147
+
+[11-wall@0,0|6]
+endPoint=189,108
+startPoint=277,180
+
+[11-wall@0,0|7]
+endPoint=277,180
+startPoint=181,283
+
+[11-wall@0,0|8]
+endPoint=181,283
+startPoint=345,375
+
+[11-wall@0,0|9]
+endPoint=345,375
+startPoint=383,96
+
+[2-ball@66,149]
+dummykey=true
+
+[2-bridge@-21,-1|1]
+botWallVisible=true
+height=19
+leftWallVisible=false
+rightWallVisible=false
+topWallVisible=false
+width=428
+
+[2-bumper@103,124|33]
+dummykey=true
+
+[2-bumper@118,101|32]
+dummykey=true
+
+[2-bumper@275,32|23]
+dummykey=true
+
+[2-bumper@276,81|18]
+dummykey=true
+
+[2-bumper@307,139|19]
+dummykey=true
+
+[2-bumper@349,141|27]
+dummykey=true
+
+[2-bumper@88,146|34]
+dummykey=true
+
+[2-cup@272,132|0]
+dummykey=true
+
+[2-hole@-50,-50|0]
+borderWalls=false
+hasFinalLoad=false
+maxstrokes=10
+par=4
+
+[2-puddle@257,212|11]
+changeEnabled=false
+changeEvery=50
+height=50
+width=52
+
+[2-sand@161,120|9]
+changeEnabled=false
+changeEvery=50
+height=38
+width=40
+
+[2-sand@162,201|8]
+changeEnabled=false
+changeEvery=50
+height=40
+width=38
+
+[2-sign@26,345|31]
+Comment=Las Vegas, NV
+Comment[ar]=لاس فيغاس، نيفادا
+Comment[bs]=Las Vegas, NV
+Comment[ca]=Las Vegas, NV
+Comment[ca@valencia]=Las Vegas, NV
+Comment[cs]=Las Vegas, NV
+Comment[da]=Las Vegas, NV
+Comment[de]=Las Vegas, NV
+Comment[el]=Λας Βέγκας, NV
+Comment[en_GB]=Las Vegas, NV
+Comment[eo]=Las Vegas, NV
+Comment[es]=Las Vegas, NV
+Comment[et]=Las Vegas, NV
+Comment[eu]=Las Vegas, NV
+Comment[fa]=لاس وگاس
+Comment[fi]=Las Vegas, NV
+Comment[fr]=Las Vegas, NV
+Comment[ga]=Las Vegas, Nevada
+Comment[gl]=Las Vegas, Nevada
+Comment[he]=לאס וגאס, נבדה
+Comment[hne]=लास वेगास, एनवी
+Comment[hu]=Las Vegas, NV
+Comment[is]=Las Vegas, NV
+Comment[it]=Las Vegas, NV
+Comment[ja]=ラスベガス, NV
+Comment[ka]=ლას ვეგასი, ნევადა
+Comment[kk]=Лас-Вегас, Невада
+Comment[km]=ឡាស វេហ្កាស, NV
+Comment[ko]=라스베가스, 네바다
+Comment[lt]=Las Vegas, NV
+Comment[lv]=Lasvegasa, NV
+Comment[nb]=Las Vegas, NV
+Comment[nds]=Las Vegas, NV
+Comment[nl]=Las Vegas, NV
+Comment[nn]=Las Vegas, NV
+Comment[pl]=Las Vegas, NV
+Comment[pt]=Las Vegas, NV
+Comment[pt_BR]=Las Vegas, NV
+Comment[ro]=Las Vegas, NV
+Comment[ru]=Лас-Вегас, Невада
+Comment[sa]=लास वेगास, एन.वी
+Comment[sk]=Las Vegas, NV
+Comment[sl]=Las Vegas, Nevada
+Comment[sr]=Лас Вегас, Невада
+Comment[sr@ijekavian]=Лас Вегас, Невада
+Comment[sr@ijekavianlatin]=Las Vegas, Nevada
+Comment[sr@latin]=Las Vegas, Nevada
+Comment[sv]=Las Vegas, Nevada
+Comment[te]=లాస్ వెగాస్, నె
+Comment[tr]=Las Vegas, NV
+Comment[uk]=Лас-Вегас, Невада
+Comment[zh_CN]=拉斯维加斯，内华达
+Comment[zh_TW]=拉斯維加斯，內華達
+botWallVisible=true
+height=34
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=157
+
+[2-slope@-1,296|25]
+grade=4
+gradient=Vertical
+height=109
+reversed=false
+stuckOnGround=false
+width=404
+
+[2-slope@140,140|4]
+grade=4
+gradient=Elliptic
+height=41
+reversed=true
+stuckOnGround=true
+width=41
+
+[2-slope@140,18|21]
+grade=6
+gradient=Horizontal
+height=84
+reversed=true
+stuckOnGround=false
+width=114
+
+[2-slope@181,98|5]
+grade=4
+gradient=Elliptic
+height=40
+reversed=true
+stuckOnGround=true
+width=40
+
+[2-slope@182,140|3]
+grade=2
+gradient=Elliptic
+height=40
+reversed=false
+stuckOnGround=true
+width=40
+
+[2-slope@182,181|7]
+grade=4
+gradient=Elliptic
+height=40
+reversed=true
+stuckOnGround=true
+width=40
+
+[2-slope@219,107|6]
+grade=4
+gradient=Elliptic
+height=73
+reversed=true
+stuckOnGround=true
+width=73
+
+[2-slope@25,19|30]
+grade=4
+gradient=Diagonal
+height=152
+reversed=true
+stuckOnGround=false
+width=43
+
+[2-slope@252,18|17]
+grade=4
+gradient=Opposite Diagonal
+height=64
+reversed=true
+stuckOnGround=false
+width=113
+
+[2-slope@27,166|24]
+grade=8
+gradient=Vertical
+height=28
+reversed=false
+stuckOnGround=false
+width=78
+
+[2-wall@0,0|10]
+endPoint=105,193
+startPoint=58,224
+
+[2-wall@0,0|12]
+endPoint=290,103
+startPoint=145,97
+
+[2-wall@0,0|13]
+endPoint=145,97
+startPoint=105,168
+
+[2-wall@0,0|14]
+endPoint=58,224
+startPoint=248,350
+
+[2-wall@0,0|15]
+endPoint=248,350
+startPoint=366,224
+
+[2-wall@0,0|16]
+endPoint=366,224
+startPoint=366,19
+
+[2-wall@0,0|2]
+endPoint=290,220
+startPoint=290,103
+
+[2-wall@0,0|20]
+endPoint=24,19
+startPoint=24,193
+
+[2-wall@0,0|22]
+endPoint=290,220
+startPoint=260,251
+
+[2-wall@0,0|26]
+endPoint=221,223
+startPoint=260,251
+
+[2-wall@0,0|28]
+endPoint=105,168
+startPoint=105,193
+
+[2-wall@0,0|29]
+endPoint=105,193
+startPoint=24,193
+
+[3-ball@334,12]
+dummykey=true
+
+[3-cup@366,146|1]
+dummykey=true
+
+[3-hole@-50,-50|0]
+borderWalls=false
+hasFinalLoad=false
+maxstrokes=10
+par=2
+
+[3-sign@-4,358|9]
+Comment=San Francisco, CA
+Comment[ar]=سان فرانسيسكو، كاليفورنيا
+Comment[bs]=San Francisko, CA
+Comment[ca]=San Francisco, CA
+Comment[ca@valencia]=San Francisco, CA
+Comment[cs]=San Francisco, CA
+Comment[da]=San Francisco, CA
+Comment[de]=San Francisco, CA
+Comment[el]=Σαν Φρανσίσκο, CA
+Comment[en_GB]=San Francisco, CA
+Comment[eo]=San Francisco, CA
+Comment[es]=San Francisco, CA
+Comment[et]=San Francisco, CA
+Comment[eu]=San Francisco, CA
+Comment[fa]=سان فرانسیسکو
+Comment[fi]=San Francisco, CA
+Comment[fr]=San Francisco, CA
+Comment[ga]=San Francisco, California
+Comment[gl]=San Francisco, California
+Comment[he]=סן פרנסיסקו, קליפורניה
+Comment[hne]=सान फ्रांसिस्को, सीए
+Comment[hu]=San Francisco, CA
+Comment[is]=San Francisco, CA
+Comment[it]=San Francisco, CA
+Comment[ja]=サンフランシスコ, CA
+Comment[ka]=სან-ფრანცისკო, კალიფორნია
+Comment[kk]=Сан-Франциско, Калифорния
+Comment[km]=ស៊ែន​ហ្វ្រែន​ស៊ីស្កូ, CA
+Comment[ko]=샌프란시스코, 캘리포니아
+Comment[lv]=Sanfrancisko, CA
+Comment[nb]=San Francisco, CA
+Comment[nds]=San Francisco, CA
+Comment[nl]=San Francisco, CA
+Comment[nn]=San Francisco, CA
+Comment[pl]=San Francisco, CA
+Comment[pt]=São Francisco, CA
+Comment[pt_BR]=São Francisco, CA
+Comment[ro]=San Francisco, CA
+Comment[ru]=Сан-Франциско, Калифорния
+Comment[sa]=सैनफ्रांसिस्को, सीए
+Comment[sk]=San Francisco, CA
+Comment[sl]=San Francisco, Kalifornija
+Comment[sr]=Сан Франциско, Калифорнија
+Comment[sr@ijekavian]=Сан Франциско, Калифорнија
+Comment[sr@ijekavianlatin]=San Francisko, Kalifornija
+Comment[sr@latin]=San Francisko, Kalifornija
+Comment[sv]=San Francisco, Kalifornien
+Comment[te]=సాన్ ఫ్రాంసిస్కొ, కా
+Comment[tr]=San Francisco, CA
+Comment[uk]=Сан-Франциско, Каліфорнія
+Comment[zh_CN]=旧金山，加利福尼亚
+Comment[zh_TW]=舊金山，加州
+botWallVisible=true
+height=48
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=436
+
+[3-slope@-163,-252|8]
+grade=4
+gradient=Elliptic
+height=384
+reversed=false
+stuckOnGround=false
+width=384
+
+[3-slope@1,139|6]
+grade=4
+gradient=Vertical
+height=104
+reversed=false
+stuckOnGround=false
+width=394
+
+[3-slope@195,-158|10]
+grade=4
+gradient=Elliptic
+height=273
+reversed=false
+stuckOnGround=false
+width=273
+
+[3-slope@32,280|7]
+grade=4
+gradient=Horizontal
+height=49
+reversed=true
+stuckOnGround=false
+width=232
+
+[3-wall@0,0|0]
+endPoint=389,383
+startPoint=389,27
+
+[3-wall@0,0|2]
+endPoint=389,27
+startPoint=261,279
+
+[3-wall@0,0|3]
+endPoint=261,279
+startPoint=99,279
+
+[3-wall@0,0|4]
+endPoint=32,329
+startPoint=261,329
+
+[3-wall@0,0|5]
+endPoint=32,329
+startPoint=32,24
+
+[4-ball@354,354]
+dummykey=true
+
+[4-bridge@-11,172|2]
+botWallVisible=false
+height=20
+leftWallVisible=false
+rightWallVisible=false
+topWallVisible=false
+width=472
+
+[4-cup@182,182|0]
+dummykey=true
+
+[4-hole@-50,-50|0]
+borderWalls=true
+hasFinalLoad=false
+maxstrokes=10
+par=3
+
+[4-sign@201,171|8]
+Comment=Grand Canyon
+Comment[ar]=جراند كانيون
+Comment[bs]=Veliki kanjon (Grand Canyon)
+Comment[ca]=Grand Canyon
+Comment[ca@valencia]=Grand Canyon
+Comment[cs]=Grand Canyon
+Comment[da]=Grand Canyon
+Comment[de]=Grand Canyon
+Comment[el]=Γκραν Κάνιον
+Comment[en_GB]=Grand Canyon
+Comment[eo]=Granda Kanjono
+Comment[es]=Gran Cañón
+Comment[et]=Grand Canyon
+Comment[eu]=Grand Canyon
+Comment[fi]=Grand Canyon
+Comment[fr]=Grand Canyon
+Comment[ga]=Grand Canyon
+Comment[gl]=Gran Canón
+Comment[he]=גרנד קניון
+Comment[hne]=ग्रांड केनयान
+Comment[hu]=Grand Canyon
+Comment[is]=Grand Canyon
+Comment[it]=Gran Canyon
+Comment[ja]=グランドキャニオン
+Comment[ka]=გრანდ კანიონი
+Comment[kk]=Үлкен каньон
+Comment[km]=ហ្គ្រែន ឃែន​យ៉ុន
+Comment[ko]=그랜드 캐년
+Comment[lt]=Didysis kanjonas
+Comment[lv]=Lielais kanjons
+Comment[mai]=ग्रैंड कैनियन
+Comment[nb]=Grand Canyon
+Comment[nds]=Grand Canyon
+Comment[nl]=Grand Canyon
+Comment[nn]=Grand Canyon
+Comment[pl]=Wielki Kanion
+Comment[pt]=Grand Canyon
+Comment[pt_BR]=Grand Canyon
+Comment[ro]=Marele Canion
+Comment[ru]=Великий каньон
+Comment[sa]=ग्राण्ड कैन्यन
+Comment[sk]=Grand Canyon
+Comment[sl]=Veliki kanjon
+Comment[sr]=Велики кањон
+Comment[sr@ijekavian]=Велики кањон
+Comment[sr@ijekavianlatin]=Veliki kanjon
+Comment[sr@latin]=Veliki kanjon
+Comment[sv]=Grand Canyon
+Comment[te]=గ్రాండ్ కెన్యన్
+Comment[tr]=Büyük Kanyon
+Comment[ug]=گىراند-كەنيون
+Comment[uk]=Великий каньйон
+Comment[wa]=Grand Canyon
+Comment[zh_CN]=大峡谷
+Comment[zh_TW]=大峽谷
+botWallVisible=true
+height=23
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=223
+
+[4-slope@-1,129|1]
+grade=4
+gradient=Vertical
+height=61
+reversed=true
+stuckOnGround=false
+width=416
+
+[4-slope@-14,192|3]
+grade=4
+gradient=Vertical
+height=38
+reversed=false
+stuckOnGround=false
+width=422
+
+[4-slope@-2,273|6]
+grade=4
+gradient=Vertical
+height=45
+reversed=false
+stuckOnGround=false
+width=445
+
+[4-slope@-2,44|7]
+grade=4
+gradient=Vertical
+height=53
+reversed=true
+stuckOnGround=false
+width=502
+
+[4-slope@-45,230|5]
+grade=4
+gradient=Vertical
+height=42
+reversed=true
+stuckOnGround=false
+width=454
+
+[4-slope@0,87|4]
+grade=4
+gradient=Vertical
+height=42
+reversed=false
+stuckOnGround=false
+width=432
+
+[5-ball@23,348]
+dummykey=true
+
+[5-bridge@107,258|9]
+botWallVisible=true
+height=26
+leftWallVisible=true
+rightWallVisible=false
+topWallVisible=true
+width=112
+
+[5-cup@120,271|0]
+dummykey=true
+
+[5-hole@-50,-50|0]
+borderWalls=true
+hasFinalLoad=false
+maxstrokes=10
+par=3
+
+[5-puddle@117,135|2]
+changeEnabled=false
+changeEvery=50
+height=84
+width=110
+
+[5-puddle@165,297|8]
+changeEnabled=false
+changeEvery=50
+height=214
+width=102
+
+[5-puddle@173,168|7]
+changeEnabled=false
+changeEvery=50
+height=108
+width=62
+
+[5-puddle@180,140|6]
+changeEnabled=false
+changeEvery=50
+height=50
+width=144
+
+[5-sand@65,346|1]
+changeEnabled=false
+changeEvery=50
+height=438
+width=48
+
+[5-sign@219,344|10]
+Comment=Lake Tahoe, CA/NV
+Comment[ar]=بحيرة تاهو كاليفورنيا/نفادا
+Comment[bs]=Jezero Tahoe, CA/NV
+Comment[ca]=Llac Tahoe, CA/NV
+Comment[ca@valencia]=Llac Tahoe, CA/NV
+Comment[cs]=Lake Tahoe, CA/NV
+Comment[da]=Lake Tahoe, CA/NV
+Comment[de]=Tahoesee, CA/NV
+Comment[el]=Λίμνη Ταχόη, CA/NV
+Comment[en_GB]=Lake Tahoe, CA/NV
+Comment[eo]=Lago Tahoe, CA/NV
+Comment[es]=Lago Tahoe, CA/NV
+Comment[et]=Lake Tahoe, CA/NV
+Comment[eu]=Lake Tahoe, CA/NV
+Comment[fi]=Lake Tahoe, CA/NV
+Comment[fr]=Lake Tahoe, CA/NV
+Comment[ga]=Lake Tahoe, California/Nevada
+Comment[gl]=Lago Tahoe, California/Nevada
+Comment[he]=אגם טאהו, קליפורניה/נבדה
+Comment[hne]=लेक ताहोए, सीए/एनवी
+Comment[hu]=Lake Tahoe, CA/NV
+Comment[is]=Lake Tahoe, CA/NV
+Comment[it]=Lago Tahoe, CA/NV
+Comment[ja]=レイク・タホ, CA/NV
+Comment[ka]=ტბა ტაჰოე, კალიფორნია/ნევადა
+Comment[kk]=Тахое көлі, Калифорния/Невада
+Comment[km]=ឡេក តាហូ, CA/NV
+Comment[ko]=타호 호, 캘리포니아/네바다
+Comment[lv]=Taho ezers, CA/NV
+Comment[nb]=Lake Tahoe, CA/NV
+Comment[nds]=Lake Tahoe, CA/NV
+Comment[nl]=Lake Tahoe, CA/NV
+Comment[nn]=Lake Tahoe, CA/NV
+Comment[pl]=Lake Tahoe, CA/NV
+Comment[pt]=Lago Tahoe, CA/NV
+Comment[pt_BR]=Lago Tahoe, CA/NV
+Comment[ro]=Lake Tahoe, CA/NV
+Comment[ru]=Озеро Тахоэ, Калифорния/Невада
+Comment[sa]=लेक ताहो, सीए / एनवी
+Comment[sk]=Lake Tahoe, CA/NV
+Comment[sl]=Jezero Tahoe, Kalifornija/Nevada
+Comment[sr]=Језеро Тахо, Калифорнија-Невада
+Comment[sr@ijekavian]=Језеро Тахо, Калифорнија-Невада
+Comment[sr@ijekavianlatin]=Jezero Taho, Kalifornija-Nevada
+Comment[sr@latin]=Jezero Taho, Kalifornija-Nevada
+Comment[sv]=Lake Tahoe, Kalifornien, Nevada
+Comment[te]=లేక్ టాహొ, కా/నె
+Comment[tr]=Tahoe Gölü, CA/NV
+Comment[uk]=Озеро Тахо, Каліфорнія/Невади
+Comment[zh_CN]=太浩湖，加利福尼亚/内华达
+Comment[zh_TW]=Lake Tahoe, 加州/內華達
+botWallVisible=true
+height=27
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=202
+
+[5-slope@10,9|4]
+grade=4
+gradient=Diagonal
+height=110
+reversed=true
+stuckOnGround=false
+width=113
+
+[5-slope@171,135|5]
+grade=4
+gradient=Horizontal
+height=268
+reversed=true
+stuckOnGround=false
+width=81
+
+[5-slope@261,9|11]
+grade=4
+gradient=Opposite Diagonal
+height=112
+reversed=true
+stuckOnGround=false
+width=129
+
+[5-slope@69,134|3]
+grade=5
+gradient=Horizontal
+height=281
+reversed=false
+stuckOnGround=false
+width=102
+
+[5-wall@0,0|12]
+endPoint=77,99
+startPoint=57,133
+
+[5-wall@0,0|13]
+endPoint=77,99
+startPoint=119,88
+
+[6-ball@102,35]
+dummykey=true
+
+[6-bridge@138,328|27]
+botWallVisible=false
+height=24
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=false
+width=23
+
+[6-bridge@168,127|8]
+botWallVisible=false
+height=92
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=false
+width=21
+
+[6-bridge@215,240|13]
+botWallVisible=false
+height=66
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=false
+width=21
+
+[6-bumper@190,182|15]
+dummykey=true
+
+[6-bumper@190,182|16]
+dummykey=true
+
+[6-cup@107,376|1]
+dummykey=true
+
+[6-hole@-50,-50|0]
+borderWalls=false
+hasFinalLoad=false
+maxstrokes=10
+par=4
+
+[6-puddle@-5,251|2]
+changeEnabled=false
+changeEvery=50
+height=296
+width=342
+
+[6-puddle@186,179|4]
+changeEnabled=false
+changeEvery=50
+height=68
+width=192
+
+[6-puddle@215,274|3]
+changeEnabled=false
+changeEvery=50
+height=64
+width=222
+
+[6-puddle@222,374|7]
+changeEnabled=false
+changeEvery=50
+height=76
+width=148
+
+[6-puddle@230,341|6]
+changeEnabled=false
+changeEvery=50
+height=20
+width=226
+
+[6-puddle@292,354|5]
+changeEnabled=false
+changeEvery=50
+height=152
+width=144
+
+[6-puddle@497,225|0]
+changeEnabled=false
+changeEvery=50
+height=508
+width=494
+
+[6-sand@86,349|34]
+changeEnabled=true
+changeEvery=51
+height=188
+width=368
+
+[6-sign@3,101|17]
+Comment=Florida Keys, FL
+Comment[ar]=فلوريدا كيز، فلوريدا
+Comment[bs]=Florida Keys, FL
+Comment[ca]=Els calls de Florida, FL
+Comment[ca@valencia]=Els calls de Florida, FL
+Comment[cs]=Florida Keys, FL
+Comment[da]=Florida Keys, FL
+Comment[de]=Florida Keys, FL
+Comment[el]=Φλώριδα Κιζ, FL
+Comment[en_GB]=Florida Keys, FL
+Comment[eo]=Florida Keys, FL
+Comment[es]=Cayos de Florida, FL
+Comment[et]=Florida Keys, FL
+Comment[eu]=Florida Keys, FL
+Comment[fi]=Florida Keys, FL
+Comment[fr]=Florida Keys, FL
+Comment[ga]=Florida Keys, Florida
+Comment[gl]=Florida Keys, Florida
+Comment[he]=פלורידה קיז, פלורידה
+Comment[hne]=फ्लोरिडा कीस, एफएल
+Comment[hu]=Florida Keys, FL
+Comment[is]=Florida Keys, FL
+Comment[it]=Florida Keys, FL
+Comment[ja]=フロリダキーズ, FL
+Comment[ka]=ფლორიდა კეისი, ფლორიდა
+Comment[kk]=Флорида Кейс, Флорида
+Comment[km]=ហ្វ្លរីដា ឃី, FL
+Comment[ko]=플로리다 키즈, FL
+Comment[lv]=Florida Keys, FL
+Comment[nb]=Florida Keys, FL
+Comment[nds]=Florida Keys, FL
+Comment[nl]=Florida Keys, FL
+Comment[nn]=Florida Keys, FL
+Comment[pl]=Florida Keys, FL
+Comment[pt]=Florida Keys, FL
+Comment[pt_BR]=Flórida Keys, FL
+Comment[ro]=Florida Keys, FL
+Comment[ru]=Флорида Кейс, Флорида
+Comment[sa]=फ्लोरिडा कीज, FL
+Comment[sk]=Florida Keys, FL
+Comment[sl]=Florida Keys, Florida
+Comment[sr]=Флорида Киз
+Comment[sr@ijekavian]=Флорида Киз
+Comment[sr@ijekavianlatin]=Florida Kiz
+Comment[sr@latin]=Florida Kiz
+Comment[sv]=Florida Keys, Florida
+Comment[te]=ఫ్లొరిడా కీస్, ఫ్లొ
+Comment[tr]=Florida Keys, FL
+Comment[uk]=Флорида-Кіс, Флорида
+Comment[zh_CN]=佛罗里达礁岛群，佛罗里达
+Comment[zh_TW]=Florida Keys, 佛羅里達
+botWallVisible=true
+height=40
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=117
+
+[6-slope@128,300|14]
+grade=4
+gradient=Horizontal
+height=42
+reversed=false
+stuckOnGround=false
+width=115
+
+[6-slope@158,216|23]
+grade=4
+gradient=Horizontal
+height=32
+reversed=true
+stuckOnGround=false
+width=99
+
+[6-slope@165,23|21]
+grade=4
+gradient=Vertical
+height=104
+reversed=false
+stuckOnGround=false
+width=28
+
+[6-slope@193,23|22]
+grade=4
+gradient=Horizontal
+height=31
+reversed=false
+stuckOnGround=false
+width=149
+
+[6-slope@193,53|35]
+grade=4
+gradient=Elliptic
+height=101
+reversed=false
+stuckOnGround=false
+width=101
+
+[6-wall@0,0|10]
+endPoint=177,244
+startPoint=215,240
+
+[6-wall@0,0|11]
+endPoint=236,240
+startPoint=224,213
+
+[6-wall@0,0|12]
+endPoint=224,213
+startPoint=189,219
+
+[6-wall@0,0|18]
+endPoint=338,24
+startPoint=189,127
+
+[6-wall@0,0|19]
+endPoint=58,19
+startPoint=168,127
+
+[6-wall@0,0|20]
+endPoint=58,19
+startPoint=338,24
+
+[6-wall@0,0|24]
+endPoint=236,306
+startPoint=221,332
+
+[6-wall@0,0|25]
+endPoint=215,306
+startPoint=152,310
+
+[6-wall@0,0|26]
+endPoint=221,332
+startPoint=161,328
+
+[6-wall@0,0|28]
+endPoint=152,310
+startPoint=138,328
+
+[6-wall@0,0|29]
+endPoint=121,396
+startPoint=161,352
+
+[6-wall@0,0|30]
+endPoint=121,396
+startPoint=39,396
+
+[6-wall@0,0|31]
+endPoint=39,396
+startPoint=94,373
+
+[6-wall@0,0|32]
+endPoint=94,373
+startPoint=127,347
+
+[6-wall@0,0|33]
+endPoint=127,347
+startPoint=138,352
+
+[6-wall@0,0|9]
+endPoint=177,244
+startPoint=168,219
+
+[7-ball@89,370]
+dummykey=true
+
+[7-cup@375,24|0]
+dummykey=true
+
+[7-hole@-50,-50|0]
+borderWalls=true
+hasFinalLoad=false
+maxstrokes=10
+par=3
+
+[7-puddle@215,236|1]
+changeEnabled=false
+changeEvery=50
+height=340
+width=224
+
+[7-puddle@245,87|3]
+changeEnabled=false
+changeEvery=50
+height=44
+width=150
+
+[7-puddle@68,170|2]
+changeEnabled=false
+changeEvery=50
+height=78
+width=178
+
+[7-bridge@11,116|7]
+botWallVisible=false
+height=97
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=false
+width=40
+
+[7-sign@135,364|25]
+Comment=San Francisco, CA
+Comment[ar]=سان فرانسيسكو، كاليفورنيا
+Comment[bs]=San Francisko, CA
+Comment[ca]=San Francisco, CA
+Comment[ca@valencia]=San Francisco, CA
+Comment[cs]=San Francisco, CA
+Comment[da]=San Francisco, CA
+Comment[de]=San Francisco, CA
+Comment[el]=Σαν Φρανσίσκο, CA
+Comment[en_GB]=San Francisco, CA
+Comment[eo]=San Francisco, CA
+Comment[es]=San Francisco, CA
+Comment[et]=San Francisco, CA
+Comment[eu]=San Francisco, CA
+Comment[fa]=سان فرانسیسکو
+Comment[fi]=San Francisco, CA
+Comment[fr]=San Francisco, CA
+Comment[ga]=San Francisco, California
+Comment[gl]=San Francisco, California
+Comment[he]=סן פרנסיסקו, קליפורניה
+Comment[hne]=सान फ्रांसिस्को, सीए
+Comment[hu]=San Francisco, CA
+Comment[is]=San Francisco, CA
+Comment[it]=San Francisco, CA
+Comment[ja]=サンフランシスコ, CA
+Comment[ka]=სან-ფრანცისკო, კალიფორნია
+Comment[kk]=Сан-Франциско, Калифорния
+Comment[km]=ស៊ែន​ហ្វ្រែន​ស៊ីស្កូ, CA
+Comment[ko]=샌프란시스코, 캘리포니아
+Comment[lv]=Sanfrancisko, CA
+Comment[nb]=San Francisco, CA
+Comment[nds]=San Francisco, CA
+Comment[nl]=San Francisco, CA
+Comment[nn]=San Francisco, CA
+Comment[pl]=San Francisco, CA
+Comment[pt]=São Francisco, CA
+Comment[pt_BR]=São Francisco, CA
+Comment[ro]=San Francisco, CA
+Comment[ru]=Сан-Франциско, Калифорния
+Comment[sa]=सैनफ्रांसिस्को, सीए
+Comment[sk]=San Francisco, CA
+Comment[sl]=San Francisco, Kalifornija
+Comment[sr]=Сан Франциско, Калифорнија
+Comment[sr@ijekavian]=Сан Франциско, Калифорнија
+Comment[sr@ijekavianlatin]=San Francisko, Kalifornija
+Comment[sr@latin]=San Francisko, Kalifornija
+Comment[sv]=San Francisco, Kalifornien
+Comment[te]=సాన్ ఫ్రాంసిస్కొ, కా
+Comment[tr]=San Francisco, CA
+Comment[uk]=Сан-Франциско, Каліфорнія
+Comment[zh_CN]=旧金山，加利福尼亚
+Comment[zh_TW]=舊金山，加州
+botWallVisible=true
+height=40
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=159
+
+[7-bridge@98,209|24]
+botWallVisible=true
+height=24
+leftWallVisible=false
+rightWallVisible=false
+topWallVisible=true
+width=241
+
+[7-slope@11,212|4]
+grade=6
+gradient=Elliptic
+height=74
+reversed=false
+stuckOnGround=false
+width=74
+
+[7-slope@13,313|23]
+grade=4
+gradient=Vertical
+height=34
+reversed=true
+stuckOnGround=false
+width=150
+
+[7-slope@17,23|5]
+grade=2
+gradient=Elliptic
+height=108
+reversed=false
+stuckOnGround=false
+width=108
+
+[7-slope@293,9|22]
+grade=6
+gradient=Opposite Diagonal
+height=94
+reversed=true
+stuckOnGround=false
+width=95
+
+[7-slope@333,49|21]
+grade=5
+gradient=Vertical
+height=339
+reversed=false
+stuckOnGround=false
+width=56
+
+[7-slope@55,211|6]
+grade=4
+gradient=Horizontal
+height=73
+reversed=true
+stuckOnGround=false
+width=78
+
+[7-wall@0,0|10]
+endPoint=88,294
+startPoint=153,386
+
+[7-wall@0,0|11]
+endPoint=120,132
+startPoint=51,116
+
+[7-wall@0,0|12]
+endPoint=120,132
+startPoint=169,71
+
+[7-wall@0,0|13]
+endPoint=169,71
+startPoint=249,59
+
+[7-wall@0,0|14]
+endPoint=249,59
+startPoint=322,74
+
+[7-wall@0,0|15]
+endPoint=322,74
+startPoint=321,99
+
+[7-wall@0,0|16]
+endPoint=321,99
+startPoint=292,107
+
+[7-wall@0,0|17]
+endPoint=292,107
+startPoint=322,165
+
+[7-wall@0,0|18]
+endPoint=339,209
+startPoint=322,165
+
+[7-wall@0,0|19]
+endPoint=339,232
+startPoint=317,325
+
+[7-wall@0,0|20]
+endPoint=317,325
+startPoint=270,388
+
+[7-wall@0,0|8]
+endPoint=98,209
+startPoint=51,213
+
+[7-wall@0,0|9]
+endPoint=98,232
+startPoint=88,294
+
+[8-ball@202,333]
+dummykey=true
+
+[8-cup@203,88|1]
+dummykey=true
+
+[8-hole@-50,-50|0]
+borderWalls=true
+hasFinalLoad=false
+maxstrokes=10
+par=2
+
+[8-puddle@205,213|0]
+changeEnabled=false
+changeEvery=50
+height=210
+width=76
+
+[8-sand@201,35|3]
+changeEnabled=false
+changeEvery=50
+height=40
+width=45
+
+[8-sand@202,363|2]
+changeEnabled=false
+changeEvery=50
+height=34
+width=98
+
+[8-sign@137,370|19]
+Comment=Washington DC
+Comment[ar]=واشنطن العاصمة
+Comment[bs]=Vašington DC
+Comment[ca]=Washington DC
+Comment[ca@valencia]=Washington DC
+Comment[cs]=Washington DC
+Comment[da]=Washington DC
+Comment[de]=Washington DC
+Comment[el]=Ουάσιγκτον DC
+Comment[en_GB]=Washington DC
+Comment[eo]=Washington DC
+Comment[es]=Washington DC
+Comment[et]=Washington DC
+Comment[eu]=Washington DC
+Comment[fa]=واشنگتن
+Comment[fi]=Washington DC
+Comment[fr]=Washington DC
+Comment[ga]=Washington DC
+Comment[gl]=Washington DC
+Comment[he]=וושינגטון הבירה
+Comment[hne]=वासिंगटन डीसी
+Comment[hu]=Washington DC
+Comment[ia]=Washington DC
+Comment[is]=Washington DC
+Comment[it]=Washington DC
+Comment[ja]=ワシントン DC
+Comment[ka]=ვაშინგტონი
+Comment[kk]=Вашингтон, Дистрикт Колумбия
+Comment[km]=វ៉ាស៊ីនតោន ឌីស៊ី
+Comment[ko]=워싱턴 DC
+Comment[lv]=Vašingtona, DC
+Comment[nb]=Washington DC
+Comment[nds]=Washington DC
+Comment[nl]=Washington DC
+Comment[nn]=Washington DC
+Comment[pl]=Washington DC
+Comment[pt]=Washington DC
+Comment[pt_BR]=Washington DC
+Comment[ro]=Washington DC
+Comment[ru]=Вашингтон, округ Колумбия
+Comment[sa]=वाशिंगटन डी.सी
+Comment[sk]=Washington DC
+Comment[sl]=Washington DC
+Comment[sr]=Вашингтон
+Comment[sr@ijekavian]=Вашингтон
+Comment[sr@ijekavianlatin]=Vašington
+Comment[sr@latin]=Vašington
+Comment[sv]=Washington DC
+Comment[te]=వాషింగ్టన్ డిసి
+Comment[tr]=Washington DC
+Comment[ug]=ۋاشىنگتون كولومبىيە ئالاھىدە رايون
+Comment[uk]=Вашингтон, Округ Колумбія
+Comment[zh_CN]=华盛顿特区
+Comment[zh_TW]=華盛頓特區
+botWallVisible=true
+height=28
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=131
+
+[8-slope@101,291|8]
+grade=4
+gradient=Elliptic
+height=59
+reversed=true
+stuckOnGround=false
+width=59
+
+[8-slope@11,11|4]
+grade=2
+gradient=Vertical
+height=376
+reversed=false
+stuckOnGround=false
+width=88
+
+[8-slope@136,8|18]
+grade=5
+gradient=Elliptic
+height=137
+reversed=true
+stuckOnGround=false
+width=137
+
+[8-slope@174,46|10]
+grade=5
+gradient=Elliptic
+height=61
+reversed=false
+stuckOnGround=false
+width=61
+
+[8-slope@244,9|7]
+grade=3
+gradient=Vertical
+height=381
+reversed=true
+stuckOnGround=false
+width=65
+
+[8-slope@245,291|9]
+grade=4
+gradient=Elliptic
+height=59
+reversed=true
+stuckOnGround=false
+width=59
+
+[8-slope@311,11|5]
+grade=2
+gradient=Vertical
+height=378
+reversed=false
+stuckOnGround=false
+width=75
+
+[8-slope@99,11|6]
+grade=3
+gradient=Vertical
+height=377
+reversed=true
+stuckOnGround=false
+width=65
+
+[8-wall@0,0|11]
+endPoint=140,296
+startPoint=175,108
+
+[8-wall@0,0|12]
+endPoint=172,108
+startPoint=235,108
+
+[8-wall@0,0|13]
+endPoint=237,108
+startPoint=264,297
+
+[8-wall@0,0|14]
+endPoint=70,54
+startPoint=33,91
+
+[8-wall@0,0|15]
+endPoint=175,108
+startPoint=142,123
+
+[8-wall@0,0|16]
+endPoint=271,128
+startPoint=235,108
+
+[8-wall@0,0|17]
+endPoint=368,128
+startPoint=326,182
+
+[9-ball@361,37]
+dummykey=true
+
+[9-bridge@184,29|27]
+botWallVisible=false
+height=26
+leftWallVisible=false
+rightWallVisible=false
+topWallVisible=true
+width=80
+
+[9-bridge@218,278|26]
+botWallVisible=true
+height=28
+leftWallVisible=false
+rightWallVisible=false
+topWallVisible=false
+width=80
+
+[9-cup@125,313|0]
+dummykey=true
+
+[9-hole@-50,-50|0]
+borderWalls=false
+hasFinalLoad=false
+maxstrokes=10
+par=3
+
+[9-puddle@128,389|12]
+changeEnabled=false
+changeEvery=50
+height=26
+width=28
+
+[9-puddle@166,379|13]
+changeEnabled=false
+changeEvery=50
+height=10
+width=88
+
+[9-puddle@216,370|14]
+changeEnabled=false
+changeEvery=50
+height=22
+width=30
+
+[9-puddle@220,8|25]
+changeEnabled=false
+changeEvery=50
+height=40
+width=18
+
+[9-puddle@222,46|24]
+changeEnabled=false
+changeEvery=50
+height=58
+width=20
+
+[9-puddle@223,356|15]
+changeEnabled=false
+changeEvery=50
+height=28
+width=18
+
+[9-puddle@225,82|23]
+changeEnabled=false
+changeEvery=50
+height=44
+width=18
+
+[9-puddle@227,121|22]
+changeEnabled=false
+changeEvery=50
+height=74
+width=14
+
+[9-puddle@231,152|21]
+changeEnabled=false
+changeEvery=50
+height=30
+width=45
+
+[9-puddle@240,335|16]
+changeEnabled=false
+changeEvery=50
+height=30
+width=45
+
+[9-puddle@254,171|20]
+changeEnabled=false
+changeEvery=50
+height=52
+width=36
+
+[9-puddle@256,302|17]
+changeEnabled=false
+changeEvery=50
+height=100
+width=24
+
+[9-puddle@257,205|19]
+changeEnabled=false
+changeEvery=50
+height=42
+width=22
+
+[9-puddle@262,246|18]
+changeEnabled=false
+changeEvery=50
+height=66
+width=20
+
+[9-sign@291,368|28]
+Comment=Niagara Falls, NY
+Comment[ar]=شلالات نياجرا، نيويورك
+Comment[bs]=Niagarini vodopadi, NY
+Comment[ca]=Cascades del Niàgara, NY
+Comment[ca@valencia]=Cascades del Niàgara, NY
+Comment[cs]=Niagara Falls, NY
+Comment[da]=Niagara Falls, NY
+Comment[de]=Niagara-Fälle, NY
+Comment[el]=Καταρράκτες Νιαγάρα, NY
+Comment[en_GB]=Niagara Falls, NY
+Comment[eo]=Niagaraj Akvofaloj, NY
+Comment[es]=Cataratas del Niágara, NY
+Comment[et]=Niagara Falls, NY
+Comment[eu]=Niagara Falls, NY
+Comment[fi]=Niagara Falls, NY
+Comment[fr]=Niagara Falls, NY
+Comment[ga]=Niagara Falls, Nua-Eabhrac
+Comment[gl]=Cataratas do Niágara, Nova York
+Comment[he]=מפלי הניאגרה, ניו יורק
+Comment[hne]=नियागरा फाल्स, एनवाई
+Comment[hu]=Niagara-vízesés, NY
+Comment[is]=Niagara Falls, NY
+Comment[it]=Cascate del Niagara, NY
+Comment[ja]=ナイアガラの滝, NY
+Comment[ka]=ნიაგარა ფოლსი, ნიუ იორკი
+Comment[kk]=Ниагара сарқырамасы, Нью-Йорк
+Comment[km]=នីញ៉ាហ្ការ៉ា ហ្វលស៍, NY
+Comment[ko]=나이아가라 폭포, 뉴욕
+Comment[lt]=Niagaros kriokliai, NY
+Comment[lv]=Niagāras ūdenskritums, NY
+Comment[nb]=Niagara Falls, NY
+Comment[nds]=Niagara-Fäll, NY
+Comment[nl]=Niagara Falls, NY
+Comment[nn]=Niagara Falls, NY
+Comment[pl]=Wodospad Niagara
+Comment[pt]=Cataratas do Niagara, NY
+Comment[pt_BR]=Cataratas do Niágara, NY
+Comment[ro]=Niagara Falls, NY
+Comment[ru]=Ниагарский водопад, Нью-Йорк
+Comment[sa]=नियाग्रा झरना, एनवाई
+Comment[sk]=Niagara Falls, NY
+Comment[sl]=Niagarski slapovi, New York
+Comment[sr]=Нијагарини водопади
+Comment[sr@ijekavian]=Нијагарини водопади
+Comment[sr@ijekavianlatin]=Nijagarini vodopadi
+Comment[sr@latin]=Nijagarini vodopadi
+Comment[sv]=Niagarafallen, New York
+Comment[te]=నైయాగరా ఫాల్స్, న్యు యార్క్
+Comment[tr]=Niagara Şelalesi, NY
+Comment[uk]=Ніагара-Фоллз, Нью-Йорк
+Comment[zh_CN]=尼亚加拉大瀑布，纽约
+Comment[zh_TW]=Niagara Falls, 紐約
+botWallVisible=true
+height=36
+leftWallVisible=true
+rightWallVisible=true
+topWallVisible=true
+width=112
+
+[9-slope@-3,148|11]
+grade=4
+gradient=Vertical
+height=57
+reversed=false
+stuckOnGround=false
+width=191
+
+[9-slope@-5,92|1]
+grade=4
+gradient=Vertical
+height=45
+reversed=false
+stuckOnGround=false
+width=232
+
+[9-slope@103,215|5]
+grade=4
+gradient=Vertical
+height=40
+reversed=false
+stuckOnGround=false
+width=40
+
+[9-slope@143,214|6]
+grade=4
+gradient=Opposite Diagonal
+height=40
+reversed=false
+stuckOnGround=false
+width=40
+
+[9-slope@144,254|2]
+grade=4
+gradient=Horizontal
+height=136
+reversed=true
+stuckOnGround=false
+width=42
+
+[9-slope@189,147|10]
+grade=4
+gradient=Opposite Diagonal
+height=63
+reversed=false
+stuckOnGround=false
+width=70
+
+[9-slope@226,93|7]
+grade=4
+gradient=Opposite Diagonal
+height=44
+reversed=false
+stuckOnGround=false
+width=184
+
+[9-slope@252,171|9]
+grade=4
+gradient=Diagonal
+height=40
+reversed=false
+stuckOnGround=false
+width=40
+
+[9-slope@291,172|8]
+grade=4
+gradient=Vertical
+height=41
+reversed=false
+stuckOnGround=false
+width=117
+
+[9-slope@333,9|29]
+grade=4
+gradient=Elliptic
+height=59
+reversed=true
+stuckOnGround=true
+width=59
+
+[9-slope@62,254|3]
+grade=4
+gradient=Opposite Diagonal
+height=133
+reversed=true
+stuckOnGround=false
+width=46
+
+[9-slope@63,214|4]
+grade=4
+gradient=Diagonal
+height=40
+reversed=false
+stuckOnGround=false
+width=40
+
+[9-wall@0,0|30]
+endPoint=138,14
+startPoint=4,65
+
+[9-wall@0,0|31]
+endPoint=138,14
+startPoint=184,29
+
+[9-wall@0,0|32]
+endPoint=264,29
+startPoint=361,8
+
+[9-wall@0,0|33]
+endPoint=361,8
+startPoint=393,22
+
+[9-wall@0,0|34]
+endPoint=393,22
+startPoint=393,129
+
+[9-wall@0,0|35]
+endPoint=393,129
+startPoint=393,171
+
+[9-wall@0,0|36]
+endPoint=393,171
+startPoint=392,214
+
+[9-wall@0,0|37]
+endPoint=337,305
+startPoint=392,214
+
+[9-wall@0,0|38]
+endPoint=337,305
+startPoint=298,305
+
+[9-wall@0,0|39]
+endPoint=4,208
+startPoint=4,65
+
+[9-wall@0,0|40]
+endPoint=4,208
+startPoint=46,394
+
+[9-wall@0,0|41]
+endPoint=46,394
+startPoint=108,385
+
+[9-wall@0,0|42]
+endPoint=108,385
+startPoint=124,371
+
+[9-wall@0,0|43]
+endPoint=124,371
+startPoint=142,370
+
+[9-wall@0,0|44]
+endPoint=190,371
+startPoint=218,305

@@ -2,7 +2,7 @@
 //! compatibility globals and function tokens are private/relocated separately.
 use super::*;
 use libloading::Library;
-use rcc_ir::native_image::{Manifest, ABI, LEGACY_ABI, MAGIC, MAX_IMAGE_BYTES};
+use rcc_ir::native_image::{Manifest, ABI, LEGACY_ABI, MAX_IMAGE_BYTES, MODULE_ABI};
 use std::{
     collections::BTreeSet,
     path::PathBuf,
@@ -21,6 +21,81 @@ pub(super) struct Loaded {
     library: Option<Library>,
     directory: PathBuf,
     collection_needed: Arc<AtomicBool>,
+    modules: Vec<modules::Instance>,
+    function_modules: BTreeMap<u32, usize>,
+}
+#[path = "modules.rs"]
+mod modules;
+
+pub(super) struct Loading {
+    expected: usize,
+    bytes: Vec<u8>,
+    libraries: Vec<Vec<u8>>,
+    waiting: bool,
+    cached: Vec<Arc<modules::Code>>,
+}
+impl Loading {
+    fn dependency(&mut self) -> Result<Option<rcc_ir::native_image::Dependency>, String> {
+        loop {
+            if self.bytes.len() != self.expected {
+                return Err("incomplete module package".into());
+            }
+            let packages: Vec<_> = self
+                .libraries
+                .iter()
+                .map(Vec::as_slice)
+                .chain(std::iter::once(self.bytes.as_slice()))
+                .collect();
+            let mut manifests = packages
+                .iter()
+                .map(|b| rcc_ir::native_image::decode(b).map(|v| v.0))
+                .collect::<Result<Vec<_>, _>>()?;
+            manifests.extend(self.cached.iter().map(|c| c.manifest().clone()));
+            if manifests.len() > 32 {
+                return Err("too many shared modules".into());
+            }
+            let mut names = BTreeSet::new();
+            for (index, m) in manifests.iter().enumerate() {
+                if let Some(module) = &m.module {
+                    modules::validate(m)?;
+                    if (index == 0) != module.name.is_empty()
+                        || (!module.name.is_empty() && !names.insert(module.name.clone()))
+                    {
+                        return Err("duplicate/invalid library package".into());
+                    }
+                } else if index != 0 {
+                    return Err("dependency is not a library".into());
+                }
+            }
+            let mut found = None;
+            for m in &manifests {
+                if let Some(module) = &m.module {
+                    for d in &module.dependencies {
+                        if !names.contains(&d.name) {
+                            found = Some(d);
+                            break;
+                        }
+                    }
+                }
+                if found.is_some() {
+                    break;
+                }
+            }
+            if let Some(dep) = found {
+                return Ok(Some(dep.clone()));
+            }
+            return Ok(None);
+        }
+    }
+    fn split(mut self) -> (Vec<u8>, Vec<Vec<u8>>, Vec<Arc<modules::Code>>) {
+        if self.libraries.is_empty() {
+            (self.bytes, vec![], self.cached)
+        } else {
+            self.libraries.push(self.bytes);
+            let root = self.libraries.remove(0);
+            (root, self.libraries, self.cached)
+        }
+    }
 }
 impl Drop for Loaded {
     fn drop(&mut self) {
@@ -77,6 +152,8 @@ impl Drop for Preparation {
 }
 struct Job {
     bytes: Vec<u8>,
+    libraries: Vec<Vec<u8>>,
+    cached: Vec<Arc<modules::Code>>,
     next: Arc<AtomicU32>,
     collection_needed: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
@@ -99,8 +176,13 @@ fn workers() -> Result<&'static mpsc::SyncSender<Job>, String> {
                             break;
                         };
                         if !job.cancelled.load(Ordering::Relaxed) {
-                            let prepared =
-                                prepare_image(&job.bytes, &job.next, job.collection_needed);
+                            let prepared = prepare_bundle(
+                                &job.bytes,
+                                &job.libraries,
+                                &job.next,
+                                job.collection_needed,
+                                &job.cached,
+                            );
                             // A disconnected receiver drops the library and its files.
                             let _ = job.result.send(prepared);
                         }
@@ -117,21 +199,11 @@ fn prepare_image(
     allocator: &AtomicU32,
     collection_needed: Arc<AtomicBool>,
 ) -> Result<Prepared, String> {
-    if bytes.len() < 16 || bytes.len() > MAX_IMAGE_BYTES || &bytes[..8] != MAGIC {
-        return Err("invalid executable header".into());
+    let (manifest, data, payload) = rcc_ir::native_image::decode(bytes)?;
+    if manifest.module.is_some() {
+        return Err("module needs dependency-aware loading".into());
     }
-    let json_size = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
-    let code_size = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
-    let end = 16usize
-        .checked_add(json_size)
-        .filter(|n| *n <= bytes.len())
-        .ok_or("invalid manifest length")?;
-    if code_size == 0 || code_size != bytes.len() - end {
-        return Err("invalid native code length".into());
-    }
-    let manifest: Manifest =
-        serde_json::from_slice(&bytes[16..end]).map_err(|e| format!("invalid manifest: {e}"))?;
-    if !matches!(manifest.abi, ABI | LEGACY_ABI)
+    if !matches!(manifest.abi, ABI | LEGACY_ABI | MODULE_ABI)
         || manifest.arch != std::env::consts::ARCH
         || manifest.os != std::env::consts::OS
     {
@@ -200,6 +272,9 @@ fn prepare_image(
         .map(|(i, f)| (f.token, first + i as u32))
         .collect();
     let mut template = vec![0; manifest.global_cells as usize];
+    for (i, word) in data.chunks_exact(2).enumerate() {
+        template[i] = u16::from_le_bytes([word[0], word[1]]);
+    }
     for &(p, mut v, n, relocate) in &manifest.initializers {
         if relocate {
             v = u64::from(tokens[&(v as u32)]);
@@ -231,7 +306,7 @@ fn prepare_image(
             .create_new(true)
             .open(&path)
             .map_err(|e| e.to_string())?;
-        file.write_all(&bytes[end..]).map_err(|e| e.to_string())?;
+        file.write_all(payload).map_err(|e| e.to_string())?;
         drop(file);
         // Packages contain trusted native code, not sandboxed bytecode.
         let library = unsafe { Library::new(&path) }.map_err(|e| format!("native loader: {e}"))?;
@@ -264,12 +339,29 @@ fn prepare_image(
         library: Some(library),
         directory,
         collection_needed,
+        modules: Vec::new(),
+        function_modules: BTreeMap::new(),
     });
     Ok(Prepared {
         entry,
         owner,
         functions: functions.into_iter(),
     })
+}
+fn prepare_bundle(
+    bytes: &[u8],
+    libraries: &[Vec<u8>],
+    allocator: &AtomicU32,
+    collection_needed: Arc<AtomicBool>,
+    cached: &[Arc<modules::Code>],
+) -> Result<Prepared, String> {
+    if rcc_ir::native_image::decode(bytes)?.0.module.is_some() {
+        modules::prepare(bytes, libraries, allocator, collection_needed, cached)
+    } else if libraries.is_empty() {
+        prepare_image(bytes, allocator, collection_needed)
+    } else {
+        Err("static executable cannot have dependencies".into())
+    }
 }
 impl Runtime {
     fn commit_image(&mut self, prepared: &mut Prepared, limit: usize) -> bool {
@@ -343,6 +435,8 @@ mod tests {
             library: None,
             directory,
             collection_needed: images.collection_needed.clone(),
+            modules: Vec::new(),
+            function_modules: BTreeMap::new(),
         })
     }
 
@@ -434,6 +528,8 @@ mod tests {
             .unwrap()
             .try_send(Job {
                 bytes: b"not an executable".to_vec(),
+                libraries: Vec::new(),
+                cached: Vec::new(),
                 result: send,
                 next: Arc::default(),
                 collection_needed: Arc::default(),
@@ -529,11 +625,22 @@ pub(super) unsafe extern "C" fn rcc_native_image_token(ctx: *mut Runtime, local:
         .owner(token)
         .unwrap_or_else(|| fatal("application token outside its image"));
     u64::from(
-        *owner
-            .tokens
-            .get(&(local as u32))
+        owner
+            .instance(token)
+            .and_then(|i| i.token(local as u32))
+            .or_else(|| owner.tokens.get(&(local as u32)).copied())
             .unwrap_or_else(|| fatal("unknown application function token")),
     )
+}
+#[no_mangle]
+pub(super) unsafe extern "C" fn rcc_native_image_global(ctx: *mut Runtime, local: u64) -> u64 {
+    let rt = unsafe { &mut *ctx };
+    let token = rt.processes.current_token();
+    rt.images
+        .owner(token)
+        .and_then(|m| m.instance(token).map(|i| i.global(local)))
+        .unwrap_or_else(|| fatal("global outside shared module"))
+        .unwrap_or_else(|_| fatal("invalid shared module global"))
 }
 #[no_mangle]
 unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_load(
@@ -587,7 +694,7 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_bind_syscall(ctx: *mut Runtime, e
 #[no_mangle]
 unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_begin(ctx: *mut Runtime, cells: u64) -> u64 {
     let rt = unsafe { &mut *ctx };
-    *rt.processes.loading() = None;
+    let previous = rt.processes.loading().take();
     *rt.processes.preparing() = None;
     if !rt.processes.hosted || !(16..=MAX_IMAGE_BYTES as u64).contains(&cells) {
         return 0;
@@ -596,7 +703,27 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_begin(ctx: *mut Runtime, ce
     if bytes.try_reserve_exact(cells as usize).is_err() {
         return 0;
     }
-    *rt.processes.loading() = Some((cells as usize, bytes));
+    let mut cached = vec![];
+    let libraries = if let Some(mut p) = previous.filter(|p| p.waiting) {
+        if p.libraries.len() >= 31
+            || p.libraries.iter().map(Vec::len).sum::<usize>() + p.bytes.len() + cells as usize
+                > 128 * 1024 * 1024
+        {
+            return 0;
+        }
+        cached = p.cached;
+        p.libraries.push(p.bytes);
+        p.libraries
+    } else {
+        vec![]
+    };
+    *rt.processes.loading() = Some(Loading {
+        expected: cells as usize,
+        bytes,
+        libraries,
+        waiting: false,
+        cached,
+    });
     1
 }
 
@@ -614,7 +741,10 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_append(
     if start < address_space::KERNEL_START || count > (CELLS - start) as u64 {
         return 0;
     }
-    let Some((expected, bytes)) = rt.processes.loading().as_ref() else {
+    let Some(Loading {
+        expected, bytes, ..
+    }) = rt.processes.loading().as_ref()
+    else {
         return 0;
     };
     if count > (expected - bytes.len()) as u64 {
@@ -629,7 +759,7 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_append(
         .loading()
         .as_mut()
         .unwrap()
-        .1
+        .bytes
         .extend(cells.into_iter().map(|c| c as u8));
     1
 }
@@ -637,14 +767,27 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_append(
 #[no_mangle]
 unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_finish(ctx: *mut Runtime) -> u64 {
     let rt = unsafe { &mut *ctx };
-    let Some((expected, bytes)) = rt.processes.loading().take() else {
+    let Some(loading) = rt.processes.loading().take() else {
         return 0;
     };
-    if bytes.len() != expected {
+    if loading.bytes.len() != loading.expected {
         return 0;
     }
-    match rt.load_image(&bytes) {
-        Ok(entry) => u64::from(entry),
+    let (bytes, libraries, cached) = loading.split();
+    let prepared = prepare_bundle(
+        &bytes,
+        &libraries,
+        &rt.images.next,
+        rt.images.collection_needed.clone(),
+        &cached,
+    );
+    match prepared {
+        Ok(mut prepared) => {
+            rt.commit_image(&mut prepared, usize::MAX);
+            let entry = prepared.entry;
+            rt.processes.stage_image(entry, prepared.owner);
+            u64::from(entry)
+        }
         Err(e) => {
             eprintln!("Fuse-X: executable rejected: {e}");
             0
@@ -663,16 +806,19 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_cancel(ctx: *mut Runtime) -
 #[no_mangle]
 unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_prepare(ctx: *mut Runtime) -> u64 {
     let rt = unsafe { &mut *ctx };
-    let Some((expected, bytes)) = rt.processes.loading().take() else {
+    let Some(loading) = rt.processes.loading().take() else {
         return 0;
     };
-    if bytes.len() != expected || rt.processes.preparing().is_some() {
+    if loading.bytes.len() != loading.expected || rt.processes.preparing().is_some() {
         return 0;
     }
     let (send, receive) = mpsc::channel();
     let cancelled = Arc::new(AtomicBool::new(false));
+    let (bytes, libraries, cached) = loading.split();
     let job = Job {
         bytes,
+        libraries,
+        cached,
         result: send,
         cancelled: cancelled.clone(),
         next: rt.images.next.clone(),
@@ -687,6 +833,66 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_prepare(ctx: *mut Runtime) 
         ready: None,
         cancelled,
     });
+    1
+}
+
+#[no_mangle]
+unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_dependency(
+    ctx: *mut Runtime,
+    output: u64,
+    capacity: u64,
+) -> u64 {
+    let rt = unsafe { &mut *ctx };
+    if !rt.processes.hosted || output > u64::from(u32::MAX) || output & 65535 >= BANK as u64 {
+        return u64::from(u32::MAX);
+    }
+    let start = memory::linear(output);
+    if start >= CELLS || capacity > (CELLS - start) as u64 {
+        return u64::from(u32::MAX);
+    }
+    let result = rt
+        .processes
+        .loading()
+        .as_mut()
+        .ok_or("no package under construction".into())
+        .and_then(Loading::dependency);
+    match result {
+        Ok(Some(dependency)) if dependency.path.len() + 1 <= capacity as usize => {
+            let cells: Vec<_> = dependency
+                .path
+                .bytes()
+                .map(u16::from)
+                .chain(std::iter::once(0))
+                .collect();
+            rt.memory.write_from(start, &cells);
+            rt.processes.loading().as_mut().unwrap().waiting = true;
+            dependency.path.len() as u64
+        }
+        Ok(None) => 0,
+        other => {
+            eprintln!("Fuse-X: library resolution failed: {other:?}");
+            u64::from(u32::MAX)
+        }
+    }
+}
+
+/// Called only after the kernel has opened the requested guest file and
+/// checked read permission and mount execution policy. Live SONAME/interface
+/// matches reuse immutable native code; process data is always initialized anew.
+#[no_mangle]
+unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_reuse(ctx: *mut Runtime) -> u64 {
+    let rt = unsafe { &mut *ctx };
+    let Some(loading) = rt.processes.loading().as_mut().filter(|p| p.waiting) else {
+        return 0;
+    };
+    let Ok(Some(dependency)) = loading.dependency() else {
+        return 0;
+    };
+    let Some(code) = modules::cached(&dependency.name, &dependency.interface) else {
+        return 0;
+    };
+    loading.cached.push(code);
+    loading.waiting = false;
     1
 }
 #[no_mangle]

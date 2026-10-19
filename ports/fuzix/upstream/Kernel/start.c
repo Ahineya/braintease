@@ -1,4 +1,4 @@
-/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration and Riplix identity. */
 #include <kernel.h>
 #include <process-state.h>
 #include <timer.h>
@@ -6,6 +6,9 @@
 #include <kdata.h>
 #include <printf.h>
 #include <tty.h>
+#ifdef CONFIG_RIPPLE
+#include "identity.h"
+#endif
 
 #define BAD_ROOT_DEV 0xFFFF
 
@@ -361,8 +364,16 @@ void fuzix_main(void)
 		panic(PANIC_NOTTY);
 
 	/* Sign on messages */
+#ifdef CONFIG_RIPPLE
+	kputs(RIPLIX_BANNER);
+#endif
 	kprintf(
+#ifdef CONFIG_RIPPLE
+			"Riplix version %s\n"
+			"Derived from FUZIX.\n"
+#else
 			"FUZIX version %s\n"
+#endif
 			"Copyright (c) 1988-2002 by H.F.Bower, D.Braun, S.Nitschke, H.Peraza\n"
 			"Copyright (c) 1997-2001 by Arcady Schekochikhin, Adriano C. R. da Cunha\n"
 			"Copyright (c) 2013-2015 Will Sowerbutts <will@sowerbutts.com>\n"

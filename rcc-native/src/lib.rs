@@ -16,6 +16,7 @@ mod process;
 mod suspension;
 mod units;
 pub use application::compile_application;
+pub use application::compile_module;
 pub use units::link_modules;
 
 use cranelift_codegen::ir::{types, AbiParam, Signature};
@@ -39,6 +40,7 @@ struct Compiler {
     application: bool,
     global_bank: u64,
     global_cells: u64,
+    dynamic: Option<rcc_ir::native_image::ModuleMetadata>,
 }
 
 impl Compiler {
@@ -93,6 +95,13 @@ impl Compiler {
         Ok(id)
     }
     fn function_token(&mut self, name: &str) -> Result<u64, String> {
+        if let Some(import) = self.dynamic.as_ref().and_then(|m| {
+            m.imports
+                .iter()
+                .find(|i| i.symbol.function && i.symbol.name == name)
+        }) {
+            return Ok(import.local);
+        }
         if self.resumable && self.ir.get_function(name).is_none_or(|f| f.is_external) {
             return Err(format!(
                 "resumable native code cannot take the address of runtime binding {name}"
@@ -152,6 +161,16 @@ fn compile_object_inner(
     kernel: &BTreeSet<String>,
     application: bool,
 ) -> Result<(Vec<u8>, Option<rcc_ir::native_image::Manifest>), String> {
+    compile_object_config(module, kernel, application, None, &["main".into()])
+}
+
+fn compile_object_config(
+    module: &Module,
+    kernel: &BTreeSet<String>,
+    application: bool,
+    dynamic: Option<rcc_ir::native_image::ModuleMetadata>,
+    roots: &[String],
+) -> Result<(Vec<u8>, Option<rcc_ir::native_image::Manifest>), String> {
     if module.target != Target::Native {
         return Err("native backend requires IR compiled for --target native".into());
     }
@@ -174,7 +193,8 @@ fn compile_object_inner(
     let started = std::time::Instant::now();
     progress("Preparing reachable IR");
     let mut ir = module.clone();
-    units::retain_reachable(&mut ir);
+    let roots: Vec<_> = roots.iter().map(String::as_str).collect();
+    rcc_ir::link::retain_reachable(&mut ir, &roots);
     units::hoist_static_allocas(&mut ir);
     progress("Optimizing IR");
     rcc_backend::optimize::optimize_module(&mut ir);
@@ -182,10 +202,17 @@ fn compile_object_inner(
         "IR optimized ({:.2}s); generating native functions",
         started.elapsed().as_secs_f64()
     ));
-    units::retain_reachable(&mut ir);
+    rcc_ir::link::retain_reachable(&mut ir, &roots);
     let resumable = application || process::enabled(&ir);
     if application {
         for f in ir.functions.iter().filter(|f| f.is_external) {
+            if dynamic.as_ref().is_some_and(|m| {
+                m.imports
+                    .iter()
+                    .any(|i| i.symbol.function && i.symbol.name == f.name)
+            }) {
+                continue;
+            }
             if f.name == "exit"
                 || ((f.name.starts_with("rcc_process_") || f.name.starts_with("rcc_hosted_"))
                     && f.name != "rcc_hosted_syscall")
@@ -230,18 +257,19 @@ fn compile_object_inner(
         application,
         global_bank: 1,
         global_cells: 1,
+        dynamic,
     };
     let global_cells = compiler
         .ir
         .globals
         .iter()
-        .filter(|g| !kernel.contains(&g.name))
+        .filter(|g| !kernel.contains(&g.name) && g.linkage != rcc_ir::ir::Linkage::Declaration)
         .try_fold(1u64, |size, g| {
             size.checked_add(Target::Native.layout().size_in_cells(&g.var_type)?)
                 .ok_or_else(|| "native globals size overflow".to_string())
         })?;
     let bank_cells = u64::from(Target::Native.layout().bank_cells);
-    if global_cells > bank_cells {
+    if global_cells > bank_cells || compiler.dynamic.is_some() {
         compiler.global_bank = u64::from(rcc_ir::native_image::GLOBAL_BANK);
     }
     compiler.global_cells = global_cells;
@@ -249,6 +277,14 @@ fn compile_object_inner(
     let mut kernel_offset = 1u64;
     for global in &compiler.ir.globals {
         if matches!(global.linkage, rcc_ir::ir::Linkage::Declaration) {
+            if let Some(import) = compiler.dynamic.as_ref().and_then(|m| {
+                m.imports
+                    .iter()
+                    .find(|i| !i.symbol.function && i.symbol.name == global.name)
+            }) {
+                compiler.globals.insert(global.name.clone(), import.local);
+                continue;
+            }
             return Err(format!(
                 "native external global {} needs an IR definition",
                 global.name
@@ -273,6 +309,13 @@ fn compile_object_inner(
         return Err(format!("native global capacity exceeded: {offset} application cells, {kernel_offset} kernel cells"));
     }
     for function in &compiler.ir.functions {
+        if compiler.dynamic.as_ref().is_some_and(|m| {
+            m.imports
+                .iter()
+                .any(|i| i.symbol.function && i.symbol.name == function.name)
+        }) {
+            continue;
+        }
         let name = if function.is_external {
             format!("rcc_native_ext_{}", function.name)
         } else {

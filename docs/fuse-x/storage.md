@@ -6,7 +6,7 @@ with macOS. The implemented model is **a root disk image plus one read/write hos
 ## Root disk image
 
 The hosted adapter uses the existing block-storage model with a host-backed image. This
-lets FUZIX retain its filesystem, system files, application installation, and
+lets Riplix retain its filesystem, system files, application installation, and
 guest device-file semantics. It also keeps a portable image usable with the
 Ripple port and existing image tooling, subject to executable-format differences.
 
@@ -40,12 +40,12 @@ Check modes leave the default folder unmounted. Example layout:
 
 | Guest path | Backing storage |
 | --- | --- |
-| `/` | FUZIX disk image |
+| `/` | Riplix disk image |
 | `/mnt/host` | Repo-root `fuse-x-shared/`, or the directory selected with `--share` |
 
 The bridge implements open/read/write/seek, directory enumeration, creation and
 removal, hard links, atomic rename, truncation, chmod and timestamps. Native
-Fuse-X packages can execute directly from the export. FUZIX retains path walking,
+Fuse-X packages can execute directly from the export. Riplix retains path walking,
 mount traversal, the inode/open-file tables, shared offsets across dup/fork,
 close-on-exec and descriptor cleanup. Build-generated hooks adapt seven canonical
 kernel units without editing `ports/fuzix/`; generation fails if a hook's source
@@ -66,7 +66,7 @@ not a claim of crash recovery. Descriptor operations refresh metadata for
 The initial contract is:
 
 - One export, at `/mnt/host`, configured only at launch. Its mountpoint is created
-  through normal FUZIX mkdir if absent. The mapping is not stored in the root image.
+  through normal Riplix mkdir if absent. The mapping is not stored in the root image.
 - Regular files and directories only. Symlinks, FIFOs, sockets and devices are
   not followed or exposed. Directory traversal uses opened directory handles
   and refuses directory handles that have moved outside the selected export.
@@ -76,7 +76,7 @@ The initial contract is:
 - Host user permissions apply, and lookups currently require read permission.
   Guest uid/gid are reported as zero. chmod maps ordinary permission bits;
   setuid/setgid and host ownership changes are not provided.
-- Signed 32-bit file offsets apply; existing FUZIX syscall limits still apply
+- Signed 32-bit file offsets apply; existing Riplix syscall limits still apply
   to truncation. Host identifiers map to bounded 16-bit guest inode numbers.
 - Cross-filesystem rename/link return `EXDEV`. Host filesystem capacity reporting
   returns unsupported. Multiple exports, read-only policy selection and live

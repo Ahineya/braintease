@@ -1,5 +1,5 @@
 #!/bin/js
-// A small system utility using the same host on Fuse-X and RVM/FUZIX.
+// A small system utility using the same host on Fuse-X and RVM/Riplix.
 import { cwd, getenv, readDir, readTextFile, stat, run, sleep, writeTextFile } from 'fuse:system';
 
 const directory = scriptArgs[1] || cwd();

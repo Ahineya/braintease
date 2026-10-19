@@ -1,6 +1,6 @@
 # Guest-native build coordination. All compiler stages run as guest processes.
 # build: one Ripple tool generation (also works in Fuse-X).
-# bootstrap: three generations, comparison and execution checks (FUZIX/RVM).
+# bootstrap: three generations, comparison and execution checks (Riplix/RVM).
 proc sameContents {path text} {
     if [file exists $path] {
         set f [open $path r]

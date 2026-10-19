@@ -101,9 +101,9 @@ int main(void) {
     char chunk[256];
     if (open("/dev/tty1",2)!=0 || call(17,0,0,0,0)!=1 || call(17,0,0,0,0)!=2)
         return 1;
-    out("\nFUZIX on Brainfuck.\nType help for commands.\n");
+    out("\nRiplix on Brainfuck.\nType help for commands.\n");
     for (;;) {
-        out("fuzix-bf# ");
+        out("riplix-bf# ");
         pos=0; overflow=0;
         do {
             count=read(0,chunk,sizeof(chunk));

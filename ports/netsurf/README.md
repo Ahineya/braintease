@@ -1,14 +1,14 @@
 # NetSurf: C16 port
 
 The port builds NetSurf 3.11's actual HTML/CSS browser engine for both
-FUZIX/RVM and native Fuse-X. `netsurf` now has a Nano-X graphical frontend:
+Riplix/RVM and native Fuse-X. `netsurf` now has a Nano-X graphical frontend:
 HTTP/HTTPS, local HTML/text files and `data:` pages, CSS colours and tables, links,
 editable text fields, history, address entry, viewport scrolling and resizing.
 It uses the same guest renderer on both systems.
 
 This is a **bounded graphical web browser** with verified guest TLS, external
 stylesheets, redirects, GET forms and bounded PNG/GIF/JPEG/BMP images. JavaScript, downloads,
-POST/uploads, multiple windows/tabs and advanced fonts are not enabled.
+POST/uploads, multiple windows/tabs and downloadable web fonts are not enabled.
 `netsurfcheck` and `netsurfcorecheck`
 are separate headless acceptance programs. See
 [the browser architecture and sequence](../../docs/networking/gui-browser.md).
@@ -80,7 +80,7 @@ Images and history thumbnails return unavailable; no replacement layout engine
 or host web renderer is involved.
 
 The conventional host passes **107 core checks, zero failures**. Native Fuse-X
-and real FUZIX/RVM JIT each pass **108 checks, zero failures**, including their
+and real Riplix/RVM JIT each pass **108 checks, zero failures**, including their
 extra heap-measurement check. Both programs return zero and both disposable
 filesystems pass consistency checks after shutdown. All three produce the
 same layout: the last text baseline moves from y=149 to y=212 when narrowing
@@ -111,7 +111,7 @@ historical declaration takes a 16-bit `int` length, conflicting with the
 fallback's 32-bit `size_t`. On RVM this mismatched call ABI corrupted copied
 URLs and HTTP header names, causing stylesheet rejection and repeated error-page
 loads. The private declaration and implementation consistently use `size_t`;
-substring and zero-length checks cover that bridge. Resource ETags and log
+substring and zero-length checks cover that bridge. Resource/file ETags and log
 timestamps use supported 32-bit `long` formatting instead of the SDK's absent
 `long long` printf conversion. This does not add general 64-bit printf support.
 
@@ -131,7 +131,8 @@ after shutdown. Native runtime faults still terminate the hosted session;
 per-application fault handling is separate platform work.
 
 The application driver builds a private userspace SDK by default. Pass `--sdk`
-to reuse another SDK; RVM's `--skip-sdk` skips rebuilding that SDK. Libraries
+to reuse another SDK; RVM's `--skip-sdk` skips rebuilding both the browser and
+worker SDKs, which must already be populated. Libraries
 are cached separately per backend with source/header/compiler fingerprints.
 Each failed compilation retains its diagnostic log next to the IR file.
 
@@ -144,7 +145,7 @@ pass is claimed for the 2026-10-18 validation.
 The guest runner builds the checks and a minimal shell/echo set in the private
 SDKs, then creates disposable root images, boots the real kernels, verifies
 the result and exit status, shuts down, and checks filesystem consistency.
-It requires the existing FUZIX kernel/BIOS/init in `build/fuzix/` and the
+It requires the existing Riplix kernel/BIOS/init in `build/fuzix/` and the
 Fuse-X kernel in `fuse-x/build/`; override with `--fuzix-build` and
 `--native-build`. `--os fuzix` or `--os fuse-x` selects one system.
 `--skip-build` reuses the test executables, with optional `--fuzix-shell` /
@@ -202,7 +203,7 @@ it does not resize the source image. The RVM package currently occupies about
 42 MiB of executable octets, and the independent HTTP/TLS worker another
 16 MiB. Each executable octet consumes a C16 filesystem cell, so allow over
 116 MiB of physical root space for these two files, plus filesystem overhead.
-The browser is also in the normal FUZIX and Fuse-X application inventories.
+The browser is also in the normal Riplix and Fuse-X application inventories.
 Normal system builds maintain `/bin/netsurf`, its showcase/gallery and the
 ordinary `/bin/htget` worker. Shared-folder experimental executables are not
 needed. Incremental builds reuse the shared NetSurf object cache.
@@ -220,12 +221,12 @@ node ports/netsurf/tests/install.mjs
 ```
 
 Boot the copy using `scripts/run-fuse-x.sh --run-only --disk /tmp/netsurf-native.img`
-or `scripts/run-fuzix.sh --run-only --visual --disk /tmp/netsurf-rvm.img`.
-Start Nano-X/FuseDE (`startx`), then launch `netsurf` from a guest shell. It opens the
-installed local showcase by default; `netsurf /path/to/page.html` opens another
-local file. For the real web, run `netsurf https://wiby.me/` or
-`netsurf http://wiby.me/`; the showcase includes both and Wiby's random-page
-link. Normal guest networking, DNS configuration and a current guest clock
+or `scripts/run-riplix.sh --run-only --visual --disk /tmp/netsurf-rvm.img`.
+Start Nano-X/FuseDE (`startx`), then launch `netsurf` from a guest shell. It opens
+`http://wiby.me/` by default. Pass a URL or local path to open another page;
+`netsurf /usr/share/netsurf/index.html` opens the installed local showcase,
+including the image gallery and Wiby's random-page link.
+Normal guest networking, DNS configuration and a current guest clock
 must be available, as for `htget`/Lynx. `netsurf --help` lists the controls:
 
 - Ctrl+L / Ctrl+O focuses and selects the address; type a hostname, absolute path or
@@ -237,7 +238,8 @@ must be available, as for `htget`/Lynx. `netsurf --help` lists the controls:
   Enter also operate the menu; Escape or a click outside dismisses it.
   JavaScript is shown disabled/unavailable: no script engine is linked.
 - Back/Next toolbar buttons or Alt+Left/Right navigate history. F5 reloads;
-  Home in the toolbar opens the showcase.
+  Home in the toolbar opens `http://wiby.me/`; Random opens
+  `http://wiby.me/surprise/` and follows its selected destination.
 - Arrow keys, PageUp/PageDown, Home/End, the mouse wheel and scrollbar track
   scroll the document when an HTML field does not consume those keys.
 - Click links and text inputs. Typing, deletion, selection and Tab are passed
@@ -261,7 +263,7 @@ copies are not yet implemented. CSS backgrounds are enabled in redraws while
 image fetching is enabled.
 
 Validated on 2026-10-18: the Fuse-X graphical pixel/resize/close test and the
-real FUZIX/RVM HID/navigation/form/Unicode-input/idle test pass, with zero exit statuses and
+real Riplix/RVM HID/navigation/form/Unicode-input/idle test pass, with zero exit statuses and
 clean post-shutdown filesystems. This is focused local-page acceptance, not a
 browser conformance or performance benchmark. The GUI executable contains
 about 5.4 million RVM instructions and occupies about 42 MiB of
@@ -270,15 +272,32 @@ sizes exclude guest runtime heap, stack and Nano-X backing storage. Cold RVM
 startup loads the browser and worker packages and can take tens of seconds; this work
 does not establish an interactive browser latency budget.
 
-ASCII drawing uses the existing fixed 8x16 ROM font, verified at startup.
-Other text uses the shared Unicode bitmap font, including Cyrillic/Ukrainian,
-Greek, Latin accents and combining marks. Grapheme boundaries and cell widths
-are shared by measurement, wrapping, hit testing, address editing and painting.
-Consecutive Unicode glyphs are packed into bounded monochrome bitmap requests;
-ASCII retains batched `GrText`. Missing glyphs retain their logical width and
-show a replacement. Complex shaping, bidi, a full CJK repertoire and colour
-emoji remain unsupported. Bold text is overprinted; font size/face/style changes
-are not faithfully rendered yet.
+The GUI uses **Ripple Web**, a redistributable bitmap subset of Liberation
+2.1.5, with sans, serif and monospace families and real regular/bold/italic/
+bold-italic faces. CSS font sizes map from points to 96-DPI pixels, bounded to
+8–64 pixels. Hinting and rasterization happen offline at 16 and 32 pixels;
+other sizes use integer bilinear resampling. Painting, wrapping, selection and
+hit testing share the same proportional advances and grapheme boundaries.
+The toolbar uses a compact sans face; address scrolling and its caret use
+pixel measurements rather than character counts.
+
+Four-bit antialiased coverage is alpha blended over the actual destination,
+including dark backgrounds and images. Three bounded client atlases share the
+ordinary image-resource LRU with photographs, with at most nine glyph
+rectangles per drawing request. Repaints reuse uploaded atlases; colours are
+applied by the GC without rebuilding the font. There are no host font calls,
+new MMIO commands, or guest TrueType dependencies.
+
+The installed `/usr/share/netsurf/web.nfa` contains 12 faces and two strikes
+for Latin, Greek, Cyrillic, combining marks and common punctuation. It takes
+about 3 MiB of file octets (twice that in physical C16 storage), loaded once
+per browser. The loader validates its version, record extents and every
+compressed glyph before use; missing or corrupt data gives an explicit
+reinstall diagnostic. Unicode outside the subset retains the shared bitmap
+fallback. Supported canonical combining pairs are composed for rendering;
+complex shaping, bidi, a full CJK repertoire, colour emoji, kerning, small caps
+and downloadable fonts remain future work. See [font provenance](fonts/README.md).
+
 The Nano-X input bridge decodes the server's UTF-8 octet stream before passing
 Unicode scalars to NetSurf. Polygon fills use bounded scanlines; arcs, paths,
 and SVG remain unsupported. Large pages remain subject to the
@@ -294,9 +313,11 @@ to avoid the separately recorded high-octet string-literal compiler defect.
 
 The core checks cover these cases on the host and both guest systems. The
 Fuse-X pixel test opens a real host-mounted UTF-8 file, compares Cyrillic
-glyphs against the bitmap font and checks reflow at 340, 600 and 1,200 pixels:
+glyphs against the antialiased strike and checks reflow at 340, 600 and 1,200 pixels:
 
 ```sh
+python3 ports/netsurf/tests/fonts.py
+python3 ports/netsurf/tests/fonts_gui.py
 python3 ports/netsurf/tests/text_gui.py
 # Optional local reproduction; the file is copied to a private test share.
 python3 ports/netsurf/tests/text_gui.py --article fuse-x-shared/article.txt
@@ -381,7 +402,7 @@ exclusion, forced fetch, clearing, and rejected wrong-host certificates. Storage
 checks exercise a 70,000-cell body, quota/slot eviction, active-buffer lifetime,
 corruption, truncation, write failure, directory locking and unavailable paths.
 
-Validated on 2026-10-18 on native Fuse-X and FUZIX/RVM JIT, with clean
+Validated on 2026-10-18 on native Fuse-X and Riplix/RVM JIT, with clean
 filesystems after both shutdowns. The large HTTP fixture crosses a C16 bank;
 Age/max-age and remaining freshness also exceed signed 16-bit range. The
 cache uses the existing NetSurf source cache, not a download shortcut around
@@ -425,6 +446,21 @@ Options dropdown, Escape, keyboard image enabling, scrolling and four direct
 image reloads. Native and RVM navigation/resize or input/idle regressions pass;
 native known/unknown-length progress is checked in actual pixels. All use
 private disks and finish with clean filesystems.
+
+Local-file validation uses the same supported `long` formatter. The file
+fetcher records whether `If-None-Match` was supplied separately from its value:
+mtime zero is valid for installed files. This lets unchanged local resources
+reuse their cache entry instead of fetching/decoding again and consuming the
+image quota twice. `tests/filecache.py` checks zero/current timestamps,
+unchanged-source sharing and replacement while the old source remains pinned.
+The graphical check loads four 128x128 images at the exact pixel-budget limit
+and requires one decode each, with no quota refusals:
+
+```sh
+python3 ports/netsurf/app.py --core --source ports/netsurf/tests/filecache.c --target native -o build/netsurf/filecachecheck.fxe
+python3 ports/netsurf/tests/filecache.py --target native
+python3 ports/netsurf/tests/bench_fetch.py --local --repeat 1 --output build/netsurf/local-image-check.json
+```
 
 ## Images
 
@@ -502,8 +538,8 @@ python3 ports/netsurf/tests/images.py --target native
 python3 ports/netsurf/tests/images.py --target ripple
 ```
 
-The decoder passes 57 independent format vectors: 463 checks on the host and
-464 on each C16 guest. Allocation-failure and mutation checks pass 17,303 cases
+The decoder passes 61 independent format vectors: 495 checks on the host and
+496 on each C16 guest. Allocation-failure and mutation checks pass 18,519 cases
 with guarded allocations and UBSan; no ASan result is claimed because this
 macOS runtime stalls in sanitizer initialization before `main`.
 Graphical tests verify exact RGB565 transparency, scaling, CSS tiling, ordinary
@@ -521,15 +557,30 @@ Captures and logs go under `build/netsurf/images-native/` and `images-ripple/`;
 
 ## HTTP and verified HTTPS
 
-`http/fetch.c` registers real NetSurf HTTP/HTTPS fetchers. They start the
-ordinary guest `/bin/htget --response URL -` executable with separate stdout
-and diagnostic pipes. The browser reads nonblocking pipes in bounded poll
-batches; DNS, TCP, TLS and certificate parsing run in the worker. Aborting,
-navigating away or quitting kills and reaps it. A short response is flushed
-before the worker waits for another network packet, so a slow server does not
-hold small chunks in its output buffer. At most two workers run per browser;
-the core queues additional stylesheets and other requests. TLS has a separate process
-heap rather than sharing the DOM/layout window.
+`http/fetch.c` registers real NetSurf HTTP/HTTPS fetchers. A browser keeps at
+most two independent `/bin/htget --worker` processes, with nonblocking request,
+response and diagnostic pipes. Workers survive successful requests, retaining
+parsed trust anchors and a connection to one origin. Reusing a verified TLS
+connection avoids another process load, trust parse and handshake for every
+image. The pool prefers an idle worker already connected to the requested
+origin. Additional requests remain in NetSurf's queue.
+
+The generic pipe protocol is documented in
+[`ripple_http.h`](../tls/ripple_http.h). It frames final HTTP headers, dechunked
+body chunks and an explicit success/error marker; process EOF is an error.
+Requests and responses can span several pipe reads/writes. Poll batches remain
+bounded, and available entity bytes are flushed before another network wait.
+The downloader's implementation lives in `ports/tls/ripple_http.c`; the
+imported `htget` command is a thin entry point to that shared implementation.
+Its file-download and single-response CLI modes remain available.
+
+Workers retain only fully consumed, unambiguous HTTP/1.1 responses. Explicit
+`Connection: close`, HTTP/1.0, close-delimited bodies, skipped redirect bodies
+and malformed framing discard the connection. A stale reused socket gets one
+fresh GET attempt only before any response octets arrive. Cancelling a fetch
+kills/reaps its worker, including buffered response bytes; quitting reaps the
+entire pool. Cookies and conditional headers belong to each request and do not
+leak into the next one. TLS stays in a separate process heap.
 
 This is also an explicit component boundary: imported NetSurf is GPLv2-only,
 whereas the pinned wolfSSL release offers GPLv3/commercial licensing. NetSurf
@@ -540,7 +591,9 @@ process pipes. Its normal file-download mode remains available.
 The worker verifies certificate chains, validity dates and SAN identity using
 the guest trust store, with SNI and TLS 1.2/1.3 from the existing TLS port.
 There is no certificate bypass. `netsurf --cacert FILE` chooses another guest
-trust file. Detailed certificate-chain UI/padlock metadata is not supplied by
+trust file. Existing TLS connections retain the policy with which they were
+verified; new connections check current trust-file contents before reusing
+parsed anchors. Detailed certificate-chain UI/padlock metadata is not supplied by
 this transport; the address shows the actual current scheme.
 
 HTTP status/headers, cookies, conditional request headers, chunk decoding and
@@ -571,6 +624,104 @@ python3 ports/netsurf/tests/internet.py --target ripple
 python3 ports/netsurf/tests/web_gui.py --target native
 python3 ports/netsurf/tests/web_gui.py --target ripple
 ```
+
+The persistent-worker tests exercise split records and a request larger than
+4 KiB, exact response boundaries, chunked trailers, cookie isolation, redirects
+with unread bodies, malformed framing, stale plaintext/TLS connections, and
+worker lifetime/shutdown. They use an independent OpenSSL Ethernet peer and
+private guest disks:
+
+```sh
+python3 ports/tls/app.py --tls-build build/tls --source ports/tls/tests/httpworker.c --target native -o build/netsurf/httpworker.fxe
+python3 ports/netsurf/app.py --web --source ports/netsurf/tests/reuse.c --target native -o build/netsurf/reusecheck.fxe
+python3 ports/tls/tests/test_httpworker.py --target native
+python3 ports/tls/tests/test_httpworker.py --target native --browser
+# Repeat builds/tests with --target ripple and .rxe outputs for RVM JIT.
+python3 ports/netsurf/tests/bench_fetch.py --full-trust --repeat 3 --output build/netsurf/fetch-timing.json
+```
+
+The timing fixture loads and renders eight PNGs through the actual Nano-X
+browser with disk caching disabled. It reports startup-through-document-ready
+wall time, TCP connection counts and TLS handshake counts, checks that every
+image decoded, and verifies a clean filesystem. `--build DIR` selects a saved
+browser/downloader pair for a baseline. Local fixture latency is not Internet
+latency, and these small images do not measure large-image decoding throughput.
+
+Performance validation on 2026-10-19 compared the saved original executables
+with this build under the same pinned Fuse-X kernel. A fresh browser rendered
+eight 32x32 PNGs per sample, with disk caching disabled and the complete public
+trust bundle plus the fixture CA. Medians of three runs, including browser
+startup through document-ready:
+
+| Transport | Original | Persistent workers | Connections | TLS handshakes |
+|---|---:|---:|---:|---:|
+| HTTP | 3.20 s | 2.02 s | 9 → 2 | 0 |
+| HTTPS | 5.53 s | 3.17 s | 9 → 2 | 9 → 2 |
+
+HTTP ranges were 2.50–3.64 / 1.70–2.51 seconds; HTTPS ranges were
+5.46–7.10 / 2.98–3.20 seconds. Other development builds were running, so these
+are indicative local timings. Request/connection counts were consistent in
+all samples. Every sample fetched all nine resources and decoded all eight
+images. Raw samples and executable/kernel hashes are saved in
+`build/netsurf/fetch-final-{before,after}.json` when reproducing this comparison.
+The benchmark pins executable contents for each run. `FUSE_X_TEST_KERNEL` can
+select an isolated native kernel while another build changes the main one.
+Native acceptance used the compatible pre-shared-library compiler snapshot;
+this comparison does not measure the concurrent shared-library work.
+
+Both targets pass 131 worker checks, 108 browser-reuse checks, 22 local-file
+cache checks and the complete 18-case HTTP/HTTPS regression. Native also passes
+the 29-check conditional-cache probe, ordinary downloader TLS/atomic-file and
+cancellation tests, exact-pixel image acceptance, and live scrolling/parallel
+fetch acceptance. Guest roots pass consistency checks after shutdown.
+The normal packages track the worker protocol header; update browser and
+`htget` together when changing it.
+
+Image decoding now chooses PNG predictors per row and has contiguous 8-bit
+RGB/RGBA paths; the shared DEFLATE reader keeps a symbol's bit state in locals.
+On the same saved native kernel, medians for 50 decodes of 128x128 images were
+1.47 → 0.71 seconds (unfiltered RGB), 6.65 → 2.53 (filtered RGB), and
+10.44 → 2.68 (filtered RGBA). These are decoder-only guest measurements, not
+whole-page timings. Other builds were active; raw three-run samples are in
+`build/netsurf/decode-pass/decode-matrix.json`. The decoder uses guest C code on
+both targets; no host codec or ISA extension is involved.
+
+HTML image references now explicitly share a handle already owned by that
+same document, including speculative pre-box loads. A new low-level handle
+replays headers/data asynchronously, letting the existing high-level cache
+find the already decoded content. Cancellation retains separate reference
+ownership. This does not make a `no-store` response fresh, persist it, or use a
+referring URL as a document identifier. An independent retrieval and a new
+navigation still go through normal HTTP cache policy.
+
+The `--no-store` timing fixture now requires exactly nine requests and eight
+decodes over both HTTP and HTTPS; previously it observed ten and nine.
+`tests/shared.c` also checks pending/late references, release before replay,
+URL isolation and two HTML navigations in one browser. Both documents fetch
+all their images again, including while the old document remains in history:
+
+```sh
+python3 ports/netsurf/app.py --web --images --source ports/netsurf/tests/shared.c --target native -o build/netsurf/sharedcheck.fxe
+python3 ports/netsurf/tests/shared.py --target native
+# Repeat the build/test with --target ripple and sharedcheck.rxe.
+python3 ports/netsurf/tests/bench_fetch.py --no-store --output build/netsurf/no-store.json
+```
+
+Native RAM scalars above bank zero bypass per-cell device routing. Wide
+accesses look up/detach each touched private page once; shared kernel RAM takes
+one lock. Bank-zero MMIO and display accesses retain ordered cell semantics,
+and page/bank/private-kernel crossings retain copy-on-write isolation. The
+runtime's common poll is an inline counter; clock/window/signal work remains
+on its original once-per-1024 slow path. Focused runtime tests cover the memory
+boundaries and devices. A manual comparison of generic versus RAM scalar
+routing is available with
+`cargo test --release -p rcc-native-runtime scalar_ram_throughput -- --ignored --nocapture`.
+Normal native builds relink the kernel/runtime as well as rebuilding NetSurf;
+the RVM uses the portable decoder/sharing changes with its existing runtime.
+
+Remaining targets: image-cache quota/eviction behavior, idle connection expiry
+without losing the worker's trust cache, and further compiler/address-space
+work on ordinary guest-memory accesses during layout and decoding.
 
 The deterministic peer checks HTTP, external CSS, redirects, meta-refresh,
 404 content, chunked bodies, malformed/truncated/oversized responses,
@@ -650,7 +801,7 @@ guest ABIs. This is focused acceptance coverage, not the complete upstream
 test suites or a demonstration that arbitrary pages fit memory.
 
 Validated on 2026-10-18: **273 checks, zero failures** on the host, native
-Fuse-X and FUZIX/RVM JIT. Both guest programs return zero and both temporary
+Fuse-X and Riplix/RVM JIT. Both guest programs return zero and both temporary
 filesystems pass consistency checks after shutdown. There are 441 dependency
 translation units, plus RVM's software arithmetic runtime. The test root has
 at least 64 MiB of physical storage and grows with the linked executables,

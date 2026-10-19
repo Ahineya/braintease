@@ -23,6 +23,28 @@ if (upper) files.push({name: '/bin/upper', mode: 0o100755, data: fs.readFileSync
 if (extras) for (const [name, entry] of Object.entries(JSON.parse(extras)))
   files.push({name, mode: typeof entry === 'string' ? 0o100755 : entry.mode,
     data: fs.readFileSync(typeof entry === 'string' ? entry : entry.source)});
+// Install only the dependency closure of these fixtures. A normal SDK can also
+// contain large TLS/browser libraries that no Rust probe uses.
+const present = new Set(files.map(file => file.name));
+for (let index = 0; index < files.length; index++) {
+  const data = files[index].data;
+  let dependencies = [];
+  if (data.subarray(0, 4).toString() === 'RXE2') {
+    const count = data.readUInt16LE(28);
+    for (let n = 0; n < count; n++) {
+      const start = 128 + n * 160;
+      dependencies.push(data.subarray(start + 28, start + 124).toString().split('\0')[0]);
+    }
+  } else if (data.subarray(0, 8).toString() === 'FUSEX001') {
+    const manifest = JSON.parse(data.subarray(16, 16 + data.readUInt32LE(8)).toString());
+    dependencies = (manifest.module?.dependencies || []).map(dependency => dependency.path);
+  }
+  for (const name of dependencies) {
+    if (present.has(name)) continue;
+    present.add(name);
+    files.push({name, mode: 0o100644, data: fs.readFileSync(path.join(build, 'lib', path.basename(name)))});
+  }
+}
 const root = rootImage(files, 24576, 256);
 const image = native ? root : fat16Image([
   {name: 'FUZIX.SYS', data: fs.readFileSync(path.join(build, 'FUZIX.SYS'))},

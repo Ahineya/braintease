@@ -24,7 +24,7 @@ chat \- Fuse Chat terminal client for ChatGPT
 .br
 .B chat --workspace DIR --ask TEXT
 .SH DESCRIPTION
-Fuse Chat runs on both FUZIX/RVM and native Fuse-X. It starts with empty,
+Fuse Chat runs on both Riplix/RVM and native Fuse-X. It starts with empty,
 independent local history. GPT-6.1 Sol Light uses model gpt-6.1-sol with
 low reasoning effort. It does not import existing ChatGPT conversations.
 .PP
@@ -121,7 +121,7 @@ stops after 32 tool rounds; a conversation supports 512 call records within
 the existing 4 MiB history limit. Start a new workspace conversation as needed.
 .PP
 The tools use installed guest programs. Guest cc currently emits Ripple RXE
-executables on both platforms: FUZIX/RVM can execute those, while Fuse-X still
+executables on both platforms: Riplix/RVM can execute those, while Fuse-X still
 needs the Mac-side compiler for native FXE output. Shell scripts and existing
 guest interpreters/programs run on either platform. No Mac command bridge or
 additional compiler backend is introduced by chat.

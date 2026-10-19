@@ -1,6 +1,6 @@
 # Ripple C16 V3 filesystem
 
-FUZIX/Ripple and native Fuse-X share this Unix filesystem format. Blocks retain
+Riplix and native Fuse-X share this Unix filesystem format. Blocks retain
 1,024 C16 characters (2,048 physical octets). Block numbers, indirect pointers,
 volume block counts and free-block counts are now unsigned 32-bit values.
 Open-file descriptor numbers and RCC's calling convention do not change.
@@ -147,7 +147,7 @@ the existing host flush barriers. This format does not add journaling.
 
 ## Upgrading
 
-Normal FUZIX installation recognizes C16 V2, validates or repairs its shutdown
+Normal Riplix installation recognizes C16 V2, validates or repairs its shutdown
 metadata under the image lock, and converts it to V3 before installing rebuilt
 programs. Conversion preserves inode identities, hard links, device numbers,
 permissions, timestamps, native characters and sparse mappings. It repacks data

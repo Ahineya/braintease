@@ -8,11 +8,17 @@ const [build, output, profile] = process.argv.slice(2);
 if (profile && profile !== '--engine') throw Error('unknown image profile');
 if (!build || !output) throw Error('usage: desktop-image.mjs BUILD OUTPUT');
 const names = profile === '--engine' ? ['init','sh','echo','cat','true','ifconfig','nxdraw'] : ['init', 'sh', 'echo', 'cat', 'ls', 'kill', 'sleep', 'stty', 'ps', 'true',
-               'vi', 'gterm', 'nano-X', 'nanowm', 'nxlaunch', 'nxterm', 'nxcheck', 'startx', 'nxeyes', 'nxclock', 'nxroach', 'nxroachcheck', 'nxdsktop', 'nxmsg', 'nxselect', 'nxcalc', 'nxtetris', 'nxview'];
+               'vi', 'gterm', 'nano-X', 'nanowm', 'nxlaunch', 'nxterm', 'nxcheck', 'startx', 'nxeyes', 'nxclock', 'nxroach', 'nxroachcheck', 'nxdsktop', 'nxmsg', 'nxselect', 'nxcalc', 'nxtetris', 'nxview', 'klotski'];
 const files = names.map(name => ({name: name === 'init' ? '/init' : `/bin/${name}`,
     // This test drives Levee's specific insert/:wq commands. Keep its fixture
     // independent of the user's default /bin/vi (currently Rift).
     data: fs.readFileSync(path.join(build, `${name === 'vi' ? 'levee' : name}.rxe`)), mode: 0o100755}));
+// Newly linked clients may use the shared SDK even when older fixture apps
+// are static. Carry their runtime modules into this private image as well.
+const libraryDirectory=path.join(build,'lib');
+if(fs.existsSync(libraryDirectory))for(const name of fs.readdirSync(libraryDirectory).sort())
+  if(/^[a-zA-Z0-9._-]+\.rsl\.[0-9]+$/.test(name))
+    files.push({name:`/lib/riplix/${name}`,mode:0o100644,data:fs.readFileSync(path.join(libraryDirectory,name))});
 if(profile !== '--engine')files.push(...fuseDEFiles(path.join(build,'fusede')));
 files.push({name: '/dev/tty', mode: 0o20666, device: 0x200},
     {name: '/edit me;echo HACK', mode: 0o100644, data: Buffer.from('safe filename\n')},

@@ -99,7 +99,7 @@ correctness or executable generation. Temporary probes are not a supported SDK.
    self-hosted RFL frontend is separate work using the same backend toolchain.
 
 Compiler self-hosting does not imply support for Rust or the ability to rebuild
-the macOS integration runtime inside FUZIX. Those are separate requirements.
+the macOS integration runtime inside Riplix. Those are separate requirements.
 Increase process memory limits when measured workloads require it; do not
 reduce the language goal to preserve today's limits.
 
@@ -117,7 +117,7 @@ addresses, default argument promotions, and linking the two frontends in both
 directions.
 
 Stage 2 now has guest frontend builds for both environments: FXE for native
-Fuse-X and RXE for FUZIX under RVM. The portable frontend compiles its own C16
+Fuse-X and RXE for Riplix under RVM. The portable frontend compiles its own C16
 sources for these packages. Portable preprocessing is now the default, and runs
 inside either guest: `rcc-c` accepts raw C and headers and can emit either Ripple
 or native RCC IR, or preprocessed text with `-E`. This stage originally relied
@@ -132,7 +132,7 @@ frontend's own expression parser. Function-local IR arenas reduced allocator
 overhead; that parser workload requested roughly 352,000 live C16 cells for
 preprocessed input and 446,000 cells for raw C with headers, excluding SDK
 allocations, allocation metadata, stack, globals and code.
-The FUZIX/RVM package spans multiple code banks and has a separate private-disk
+The Riplix/RVM package spans multiple code banks and has a separate private-disk
 execution/parity test. See the implementation README for commands and reports.
 
 The RVM bootstrap also exercises backend cases missed by the earlier small
@@ -169,7 +169,7 @@ Portable assembly and linking now run inside both guests as well. The compact
 RPO1/RPA1 formats allow the linker to stream code/data while retaining only
 symbols and dependencies in memory. A guest `cc` driver runs preprocessing,
 frontend, Ripple backend, assembly and linking as ordinary guest processes.
-FUZIX has compiled and executed an RXE entirely through that pipeline; Fuse-X
+Riplix has compiled and executed an RXE entirely through that pipeline; Fuse-X
 has cross-compiled RXE and bare Ripple programs. The initial SDK is converted
 from existing host objects by a bootstrap script. SDK rebuilding, subsequent
 compiler bootstrap generations and independent native code generation remain
@@ -177,7 +177,7 @@ the next major gates.
 
 A further bootstrap check rebuilt the assembler/linker from raw C entirely
 inside Fuse-X, using the portable frontend, Ripple backend, assembler and
-linker. That resulting RXE then ran under FUZIX/RVM, assembled and linked
+linker. That resulting RXE then ran under Riplix/RVM, assembled and linked
 another program, and executed it successfully. This verifies a guest-built
 generation of these tools. The complete generation described below extends
 that check to the frontend, preprocessor, backend and driver as well.
@@ -202,9 +202,9 @@ Compiler packages include `/usr/src/rcc` with raw sources, a Makefile and
 programs and compare generations two and three. Source/SDK/seed identities and
 flags invalidate cached outputs; unchanged builds retain their files. The
 complete portable-generated compiler has executed and compiled working programs
-under FUZIX/RVM. One full generation now rebuilds entirely inside Fuse-X, and
+under Riplix/RVM. One full generation now rebuilds entirely inside Fuse-X, and
 an unchanged second build preserves every generated file. Those newly rebuilt
-RXE tools then ran under FUZIX/RVM, compiled and linked the toolchain and SDK
+RXE tools then ran under Riplix/RVM, compiled and linked the toolchain and SDK
 interoperability fixtures, and executed both successfully. The rebuild exposed
 missing hexadecimal float conversion and excessive small-allocation overhead;
 compiler-local support, IR slabs, shared values/names and compact assembler

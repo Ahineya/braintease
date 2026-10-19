@@ -1,8 +1,8 @@
 # Fine I/O deadlines and guest clocks
 
-Implemented on October 17, 2026, for FUZIX on RVM and native Fuse-X. `select()`
+Implemented on October 17, 2026, for Riplix on RVM and native Fuse-X. `select()`
 and `usleep()` use absolute monotonic deadlines independently of the original
-FUZIX decisecond timer queue. They no longer round short waits to 100 ms or add
+Riplix decisecond timer queue. They no longer round short waits to 100 ms or add
 an extra decisecond for tick phase alignment.
 
 ## Clock, deadlines and scheduling

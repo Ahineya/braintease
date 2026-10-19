@@ -11,8 +11,8 @@ Neither approach requires changing the C ABI or adding language extensions.
 
 ## Where compilation time goes
 
-Three FUZIX translation units were compiled using a copy of the release RCC
-binary and their FUZIX include paths and defines. Driver progress messages were
+Three Riplix translation units were compiled using a copy of the release RCC
+binary and their Riplix include paths and defines. Driver progress messages were
 timestamped from process launch:
 
 | Source | Whole compilation | Time through preprocessing | Share |
@@ -72,7 +72,7 @@ on a host reporting 10 logical CPUs; exact hardware and peak memory were not
 recorded.
 
 These timings are **preprocessing only**, from a separate experiment from the
-whole-compiler table. They do not establish a 120× compiler or FUZIX build
+whole-compiler table. They do not establish a 120× compiler or Riplix build
 speedup. No complete compiler incorporating the candidate was benchmarked.
 
 Further preprocessor opportunities identified in the original investigation
@@ -108,7 +108,7 @@ changes must still invalidate affected outputs.
 
 ## Where Rayon fits
 
-[`run-fuzix.sh`](../scripts/run-fuzix.sh) already uses `make -j4`: separate source
+[`run-riplix.sh`](../scripts/run-riplix.sh) already uses `make -j4`: separate source
 files compile concurrently in separate RCC processes. Rayon would add
 parallelism **inside one compilation**.
 
@@ -230,7 +230,7 @@ and 11 C integration cases covering preprocessing, internal linkage, global
 initializers and banked pointers. A further 12 real translation units from
 the kernel, shell, libc, utilities, AWK and networking matched original
 preprocessor output, in addition to the three benchmark sources.
-Fresh FUZIX builds in separate temporary directories passed the JIT integration
+Fresh Riplix builds in separate temporary directories passed the JIT integration
 suite in both then-supported MMU=1 and MMU=0 profiles, covering fork/exec, preemption,
 indirect file I/O, reboot persistence, cleanup and offline dirty-disk recovery.
 The MMU profile also passed its heap/COW and privilege-protection checks.
@@ -269,7 +269,7 @@ literals or larger identifiers, recursive and nested expansion, argument
 rescanning, stringification, token pasting, redefinition, `#undef`, conditional
 includes, file/line builtins and malformed-input diagnostics. Compare outputs
 over a broader corpus, then run the relevant compiler and native tests and a
-FUZIX MMU build/boot check using JIT. Non-MMU FUZIX is retired and is no longer
+Riplix MMU build/boot check using JIT. Non-MMU Riplix is retired and is no longer
 a build or validation target.
 
 For trustworthy performance comparisons, pin dependencies and release settings,
@@ -283,7 +283,7 @@ replacement for that validation.
 ## Runtime foundations audit, 2026-10-18
 
 The standalone allocator in `runtime/malloc.c` already uses segregated free
-lists and physical neighbor links. FUZIX and Fuse-X applications link a different
+lists and physical neighbor links. Riplix and Fuse-X applications link a different
 allocator, `ports/fuzix/ripple/libc/heap.c`. That implementation still searched
 every live allocation on malloc/free and traversed the entire heap to coalesce
 after each free. It also called both sbrk and brk for each new allocation.
@@ -432,7 +432,7 @@ Implemented the first memory/pointer follow-up:
 
 - `memcpy`, `memset`, `strlen` and `strcmp` share internal bank-span routines in
   `runtime/include/__banked_memory.h`, used by both standalone `runtime/string.c`
-  and the FUZIX/Fuse-X guest `ripple/userlib.c`. Source and destination can reach
+  and the Riplix/Fuse-X guest `ripple/userlib.c`. Source and destination can reach
   bank boundaries at different times. Inner counters and offsets are 16-bit;
   banks and 32-bit remaining lengths change once per span. Standalone `memmove`
   also uses reverse spans for overlapping moves. Other string routines retain
@@ -506,7 +506,7 @@ checks, 25 native compiler/process integration tests, all 105 C memory-category
 cases on RVM, and the focused pointer/string
 regressions on RVM and native. The complete standalone string implementation was
 also compiled into a native test executable (so native service bindings did not
-bypass the implementation). Real FUZIX and Fuse-X guests passed the 65,550-cell
+bypass the implementation). Real Riplix and Fuse-X guests passed the 65,550-cell
 span/overlap checks, allocation reuse and fork COW isolation, followed by clean
 filesystem checks. The bank-alignment portion of this guest test also caught the
 unsigned-index bug as heap corruption before the native fix.

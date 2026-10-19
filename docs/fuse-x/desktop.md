@@ -10,7 +10,7 @@ window controls.
 Run `scripts/run-fuse-x.sh --gui` for a native terminal and a persistent Nano-X
 service. Launch `nxclock &`, `nxeyes &`, or `nxterm &` from the shell; each
 Nano-X top-level becomes its own Mac window. `startx` also works from console
-mode: it ensures the service is running, opens Applications and Terminal, then
+mode: it ensures the service is running, opens `gterm`, then
 returns to the shell. It reuses an existing service. No NanoWM or composite
 desktop is started in hosted mode. The RVM desktop keeps its own window manager.
 
@@ -106,9 +106,9 @@ and `python3 fuse-x/test_clipboard.py` against disposable guest disks.
 
 ## Launching and using windows
 
-Start the graphical session with a FUZIX terminal running a shell. A GUI program
+Start the graphical session with a Riplix terminal running a shell. A GUI program
 launched from that shell, or from another GUI program, creates its own native
-window. FUZIX owns the program and its content; macOS manages window placement,
+window. Riplix owns the program and its content; macOS manages window placement,
 focus, resizing, minimizing, and native chrome.
 
 Each window needs a stable handle, an owning process, a title, dimensions, a
@@ -157,7 +157,7 @@ and [Dock menu delegate API](https://developer.apple.com/documentation/appkit/ns
 
 ## Terminal and session lifetime
 
-New Terminal creates a separate terminal endpoint and a new FUZIX shell, rather
+New Terminal creates a separate terminal endpoint and a new Riplix shell, rather
 than attaching several windows to one global input stream. Opening terminals
 must work after every earlier terminal window has closed.
 

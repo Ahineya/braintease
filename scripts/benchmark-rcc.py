@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure a fixed FUZIX corpus, optionally alternating a saved baseline binary.
+"""Measure a fixed Riplix corpus, optionally alternating a saved baseline binary.
 
 Use release binaries built with the same Cargo.lock/profile. Runs are serial,
 warm-cache samples; this does not measure clean or incremental whole builds.

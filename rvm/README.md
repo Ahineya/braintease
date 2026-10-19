@@ -2,7 +2,7 @@
 
 A reference implementation of the Ripple VM architecture that executes programs produced by the ripple-asm assembler and linker.
 
-For the WebAssembly interpreter and isolated FUZIX browser demo, see
+For the WebAssembly interpreter and isolated Riplix browser demo, see
 [RVM in the browser](web/README.md). It boots to the console; `startx` opens
 NanoWM and NXDSKTOP on demand.
 
@@ -35,7 +35,7 @@ cargo build --release
 
 By default, Ctrl-C stops an interactive VM. `--guest-ctrl-c` instead delivers
 ASCII ETX to the guest TTY, allowing an operating system to interrupt foreground
-programs. In that mode, Ctrl-] remains an emergency host stop. The FUZIX launcher
+programs. In that mode, Ctrl-] remains an emergency host stop. The Riplix launcher
 selects this mode automatically; `shutdown` remains its clean way to stop.
 
 Normal CLI execution batches up to the next 1,024-instruction host-poll boundary.

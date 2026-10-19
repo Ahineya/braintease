@@ -20,13 +20,13 @@ class ProgressTests(unittest.TestCase):
             code = ('import time; print("Build: Building kernel", flush=True); '
                     'print("  RCC ripple/console.c", flush=True); '
                     'print("private compiler detail", flush=True); time.sleep(.2); '
-                    'print("fuzix: updated", flush=True)')
+                    'print("Riplix: updated", flush=True)')
             self.assertEqual(watch([sys.executable, '-c', code], log, output,
                                    heartbeat=.04, activity_interval=0), 0)
             terminal = output.getvalue()
             self.assertIn('RCC ripple/console.c', terminal)
             self.assertIn('Waiting for build output;', terminal)
-            self.assertIn('fuzix: updated', terminal)
+            self.assertIn('Riplix: updated', terminal)
             self.assertIn('Build complete', terminal)
             self.assertNotIn('private compiler detail', terminal)
             self.assertIn('private compiler detail', log.read_text())

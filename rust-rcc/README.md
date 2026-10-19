@@ -2,7 +2,7 @@
 
 Compile Rust through the real `rustc` frontend and typed MIR, legalize Rust
 memory to **one 16-bit cell per Rust octet**, then reuse RCC's Ripple and native
-backends to produce independent FUZIX RXE and Fuse-X FXE applications.
+backends to produce independent Riplix RXE and Fuse-X FXE applications.
 
 This is an experimental compiler driver, not a complete Rust port or a Cargo
 codegen-backend plugin yet. It lives in its own Cargo workspace so the normal
@@ -357,7 +357,7 @@ exclusive creation, path validation, saved errno, EOF, and descriptor cleanup.
 3. `layout.rs`, `memory.rs` and `lower.rs` produce normal RCC IR with the explicit
    memory legalization described above. This is not a textual MIR parser or a
    Rust-to-C transpiler.
-4. FUZIX uses the existing RCC assembler backend, assembler, RXE linker and
+4. Riplix uses the existing RCC assembler backend, assembler, RXE linker and
    guest libc. Fuse-X uses its existing `cc.py` SDK and FXE linker, preserving
    logical memory and resumable guest execution. No Rust-generated LLVM machine
    code or LLVM-built `core`/`alloc` object is linked into either executable.

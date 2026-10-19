@@ -9,6 +9,12 @@
 #include "curspriv.h"
 
 static int pushed[64], count, batching, paste_active, paste_match;
+#ifdef RIPPLE_CURSES_HOST
+static unsigned char host_input[4096];
+static unsigned host_at, host_used;
+static int host_closed;
+int ripple_curses_input_closed(void) { return host_closed; }
+#endif
 static int milliseconds(unsigned long *value) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) return ERR;
@@ -30,8 +36,13 @@ static int input(int delay) {
     fd_set readset;
     struct timeval timeout, *wait = NULL;
     int fd = fileno(stdin), n;
+#ifdef RIPPLE_CURSES_HOST
+    if (host_at < host_used) return host_input[host_at++];
+    if (host_closed) return ERR;
+#else
     if (stdin->pushed != EOF) { n = stdin->pushed; stdin->pushed = EOF; return n; }
     if (stdin->pos < stdin->len) return (unsigned char)stdin->buf[stdin->pos++];
+#endif
     if (fd < 0 || fd >= FD_SETSIZE) { errno = EBADF; return ERR; }
     FD_ZERO(&readset); FD_SET(fd, &readset);
     if (delay >= 0) {
@@ -41,10 +52,17 @@ static int input(int delay) {
     }
     n = select(fd + 1, &readset, NULL, NULL, wait);
     if (n <= 0) return ERR;
+#ifdef RIPPLE_CURSES_HOST
+    n = read(fd, host_input, batching ? sizeof(host_input) : 1);
+    if (n <= 0) { if (!n || errno == EIO) host_closed = 1; return ERR; }
+    host_at = 1; host_used = n;
+    return host_input[0];
+#else
     n = read(fd, stdin->buf, batching ? sizeof(stdin->buf) : 1);
     if (n <= 0) { if (!n) stdin->eof = 1; return ERR; }
     stdin->pos = 1; stdin->len = n;
     return (unsigned char)stdin->buf[0];
+#endif
 }
 static int sequence(const int *s, int n) {
     int last = s[n - 1], number = 0, i;
@@ -148,7 +166,11 @@ int wget_wch(WINDOW *w, uint32_t *value) {
     for (;;) {
         c = wgetch(w);
         if (c == ERR) {
-            if (feof(stdin) && w->_input_utf8.need) {
+            if ((feof(stdin)
+#ifdef RIPPLE_CURSES_HOST
+                 || host_closed
+#endif
+                ) && w->_input_utf8.need) {
                 w->_input_utf8.need = 0; *value = RU_REPLACEMENT; break;
             }
             _cursvar.echoit = echo; return ERR;

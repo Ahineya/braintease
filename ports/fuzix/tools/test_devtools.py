@@ -249,18 +249,18 @@ def live(image, jit):
     def send(data): os.write(master, data)
     def status():
         send(b'echo INTERRUPT:$?\r')
-        assert b'INTERRUPT:130' in until(b'fuzix# ')
+        assert b'INTERRUPT:130' in until(b'riplix# ')
     try:
-        until(b'fuzix# ')
+        until(b'riplix# ')
         send(b"awk 'BEGIN {print \"AWK_READY\"; fflush(); while(1) {}}'\r")
-        until(b'\nAWK_READY\r'); send(b'\x03'); until(b'fuzix# '); status()
+        until(b'\nAWK_READY\r'); send(b'\x03'); until(b'riplix# '); status()
         send(b'm4\r'); send(b"syscmd(`echo M4_READY')dnl\r")
-        until(b'\nM4_READY\r'); send(b'\x03'); until(b'fuzix# '); status()
+        until(b'\nM4_READY\r'); send(b'\x03'); until(b'riplix# '); status()
         send(b'dc\r'); send(b'42p\r')
-        until(b'\n42\r'); send(b'\x03'); until(b'fuzix# '); status()
+        until(b'\n42\r'); send(b'\x03'); until(b'riplix# '); status()
         send(b'make -f /live-makefile\r')
-        until(b'\nMAKE_READY\r'); send(b'\x03'); until(b'fuzix# '); status()
-        send(b'echo SHELL_ALIVE\r'); assert b'\nSHELL_ALIVE\n' in until(b'fuzix# ')
+        until(b'\nMAKE_READY\r'); send(b'\x03'); until(b'riplix# '); status()
+        send(b'echo SHELL_ALIVE\r'); assert b'\nSHELL_ALIVE\n' in until(b'riplix# ')
         send(b'shutdown\r'); until(b'disk synced; power off.'); assert proc.wait(timeout=10) == 0
     finally:
         Path('/tmp/fuzix-devtools-live-' + ('jit' if jit else 'interpreter') + '.log').write_bytes(transcript)

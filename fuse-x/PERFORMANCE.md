@@ -1,6 +1,6 @@
 # Native kernel and continuation performance
 
-Fuse-X uses the same runnable/event queues as FUZIX/RVM, with
+Fuse-X uses the same runnable/event queues as Riplix/RVM, with
 `CONFIG_RIPPLE_SCHED`. Host monotonic samples supply a native 5 ms slice,
 scaled by priority and bounded to 5–200 ms. Wakeups can request rescheduling
 after a minimum 5 ms slice. Native checkpoints still poll devices and deliver
@@ -193,3 +193,29 @@ large terminal requests and reboot/fsck; live Commander move/rename on both
 kernels; 64-process exhaustion/high-slot timers/recovery on both kernels;
 Bourne shell/jobs/editor, local IPC and host-folder integration on Fuse-X; and
 RVM shutdown/reboot with a live pipeline and no orphan disk inode.
+
+## Native terminal rendering
+
+The macOS `gterm` path sends changed text rows through the owned GX surface
+instead of rasterizing each glyph into guest RGB565 pixels. CoreText masks are
+cached per glyph; painting and presentation retain two-times-resolution RGBA.
+The renderer uses the default iTerm profile's font/palette. Other GX clients
+retain RGB565 semantics, including when an owner switches between text and
+pixel operations on one surface.
+
+A warm 160×55 frame using MesloLGS NF 13 measured about 6.8 ms in the release
+renderer test. Disposable-guest resizes measured 46–93 ms across runs for 100×30 through
+180×60 cells, including RGB screenshot generation and observation. These are
+fixture measurements, not a guarantee for every application or host load.
+The mux sparse-layout check sends a 240×60 screen in 2,238 ANSI octets across
+two bounded rounds and verifies every decoded character/style against the
+source grid. Blank-run compression and synchronized output avoid a visible
+row-by-row full redraw.
+
+Reproduce without touching an existing guest disk:
+
+```sh
+cargo test --release -p rcc-native-runtime hosted_terminal::tests -- --nocapture
+python3 fuse-x/test_terminal_native.py
+python3 ports/fuzix/tools/test_mux_render.py
+```

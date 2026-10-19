@@ -3,9 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Ripple · RVM in your browser</title>
+    <title>Ripple · Riplix on RVM</title>
     <meta name="description"
-          content="Explore the Ripple computer architecture through RVM, running FUZIX and a graphical desktop locally in your browser.">
+          content="Explore the Ripple computer architecture through RVM, running Riplix and a graphical desktop locally in your browser.">
     <link rel="stylesheet" href="vendor/xterm.css">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -13,7 +13,7 @@
 <main>
     <header>
         <div><span class="eyebrow">RVM · RIPPLE VIRTUAL MACHINE</span>
-            <p class="intro">Explore the Ripple computer architecture through RVM. Run FUZIX, use its Unix shell, and
+            <p class="intro">Explore the Ripple computer architecture through RVM. Run Riplix, use its Unix shell, and
                 launch a graphical desktop — all on a virtual CPU running locally in your browser.</p></div>
         <span id="status" role="status">Starting…</span></header>
     <nav aria-label="Machine controls">
@@ -29,12 +29,12 @@
         </div>
     </nav>
     <input id="disk-file" type="file" accept=".img,application/octet-stream"
-           aria-label="Choose a Ripple/FUZIX disk image" hidden>
+           aria-label="Choose a Riplix disk image" hidden>
     <p id="disk-error" role="alert" hidden></p>
-    <section id="console-view" aria-label="FUZIX console">
+    <section id="console-view" aria-label="Riplix console">
         <div id="terminal"></div>
     </section>
-    <section id="desktop-view" hidden aria-label="FUZIX desktop">
+    <section id="desktop-view" hidden aria-label="Riplix desktop">
         <canvas id="desktop" width="640" height="480" tabindex="0"
                 aria-label="NanoWM desktop. Click to focus keyboard input."></canvas>
     </section>
@@ -47,9 +47,11 @@
         <p>Ripple is the computer architecture. RVM is its virtual machine: it executes Ripple instructions and provides
             the memory and devices that let a complete operating system run. Here, RVM runs as WebAssembly inside your
             browser.</p>
-        <p>FUZIX provides the Unix environment. Nano-X, NanoWM, and NXDSKTOP provide the graphical desktop. The
+        <p>Riplix, derived from FUZIX, provides the Unix environment. Nano-X, NanoWM, and NXDSKTOP provide the graphical desktop. The
             operating system and its applications execute on the virtual Ripple CPU.</p>
-        <p><a href="vendor/xterm.LICENSE">Terminal license</a></p></details>
+        <p><a href="kernel-COPYING.txt">Kernel license</a> · <a href="kernel-CREDITS.txt">Kernel credits</a> ·
+            <a href="https://github.com/Ahineya/braintease">Source code</a> ·
+            <a href="vendor/xterm.LICENSE">Terminal license</a></p></details>
 </main>
 <script src="vendor/xterm.js"></script>
 <script type="module" src="page.mjs"></script>

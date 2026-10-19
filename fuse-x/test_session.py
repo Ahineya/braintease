@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise native applications through the real FUZIX process/syscall paths."""
+"""Exercise native applications through the real Riplix process/syscall paths."""
 import argparse
 import hashlib
 import mmap
@@ -39,7 +39,7 @@ def main():
         output = run(image, 'hello "two words" tail\ncheck\n'
                            'write /tmp/note "persistent value"\n'
                            'cat /tmp/note\nshutdown\n')
-        assert 'Hello from native FUZIX! PID 3 two words tail' in output, output
+        assert 'Hello from native Riplix! PID 3 two words tail' in output, output
         assert 'native process checks passed' in output, output
         assert 'persistent value\n' in output, output
         output = run(image, 'cat /tmp/note\nexit\n')
@@ -124,7 +124,7 @@ def main():
 
         try:
             expect(b'fuse-x# ')
-            # A real terminal sends CR; editing belongs to the FUZIX tty.
+            # A real terminal sends CR; editing belongs to the Riplix tty.
             os.write(master, b'echo terminal-ob\x7fk\r')
             expect(b'\r\nterminal-ok\r\n')
             os.write(master, b'exit\r')

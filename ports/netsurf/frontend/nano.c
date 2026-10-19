@@ -31,10 +31,10 @@
 #define TOOLBAR 64
 #define STATUS 22
 #define SCROLLBAR 14
-#define HOME "file:///usr/share/netsurf/index.html"
+#define HOME "http://wiby.me/"
+#define RANDOM_URL "http://wiby.me/surprise/"
 static GR_WINDOW_ID wid;
 static GR_GC_ID gc;
-static GR_FONT_ID font;
 static bool running = true, tracing, dirty = true, chrome_dirty = true, editing, select_address;
 static int width = 600, height = 420;
 static char address[1024], status_text[256];
@@ -56,6 +56,7 @@ static void copy_text(char *dest, size_t capacity, const char *text)
     if (n >= capacity) n = capacity-1;
     memcpy(dest,text ? text : "",n); dest[n]=0;
 }
+#include "font.inc"
 #include "common.inc"
 #include "plot.inc"
 static struct rect viewport(void)
@@ -193,16 +194,10 @@ int main(int argc, char **argv)
         else initial=argv[i];
     }
     if(GrOpen()<0) { fputs("netsurf: cannot connect to Nano-X (startx first)\n",stderr); return 1; }
-    opened=true; gc=GrNewGC(); font=GrCreateFontEx(GR_FONT_SYSTEM_FIXED,0,0,NULL);
-    if(!gc || !font)goto cleanup;
-    {
-        GR_FONT_INFO info;
-        GrGetFontInfo(font,&info);
-        if(info.maxwidth!=8||info.height!=16||info.baseline!=12||!info.fixed) {
-            fputs("netsurf: this profile requires the 8x16 fixed Nano-X font\n",stderr); goto cleanup;
-        }
-    }
-    GrSetGCFont(gc,font); GrSetGCUseBackground(gc,GR_FALSE);
+    opened=true; gc=GrNewGC();
+    if(!nf_load("/usr/share/netsurf/web.nfa")) { fputs("netsurf: missing or invalid /usr/share/netsurf/web.nfa; reinstall the browser data\n",stderr);goto cleanup; }
+    if(!gc)goto cleanup;
+    GrSetGCUseBackground(gc,GR_FALSE);
     if(netsurf_register(&tables)!=NSERROR_OK)goto cleanup;
     registered=true;
     if(nslog_init(NULL,&argc,argv)!=NSERROR_OK)goto cleanup;
@@ -247,10 +242,12 @@ cleanup:
     if(url)nsurl_unref(url);
     if(bw)browser_window_destroy(bw);
     if(initialized)netsurf_exit();
+    nf_atlas_clear();
     ri_nano_clear();
+    free(nf_data);nf_data=NULL;
     if(options)nsoption_finalise(NULL,NULL);
     if(registered)nslog_finalise();
-    if(opened) { if(font)GrDestroyFont(font); if(gc)GrDestroyGC(gc); if(clip_region)GrDestroyRegion(clip_region); GrClose(); }
+    if(opened) { if(gc)GrDestroyGC(gc); if(clip_region)GrDestroyRegion(clip_region); GrClose(); }
     if(result)fputs("netsurf: frontend initialization failed\n",stderr);
     return result;
 }

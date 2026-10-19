@@ -5,7 +5,7 @@ fn shared_ini_reader_runs_without_an_os_and_accepts_library_module_suffixes() {
     std::fs::create_dir_all(&root).unwrap();
     let path = root.join("main.rfl");
     std::fs::write(&path, r#"
-        import { parse, parse_bytes, InvalidSyntax } from "lib/ini.rfl";
+        import { parse, parse_bytes, parse_bytes_with_limits, Limits, InvalidSyntax, InputTooLarge } from "lib/ini.rfl";
         import {} from "std/result";
         fn main() -> i16 {
             let values = parse("[custom]\nkey=first\nkey='second'\n").unwrap();
@@ -14,6 +14,13 @@ fn shared_ini_reader_runs_without_an_os_and_accepts_library_module_suffixes() {
             let raw = parse_bytes(bytes).unwrap();
             if (raw.len() != 1 || raw[0].section != "x" || raw[0].key != "k" || raw[0].value != "v") { return 4; }
             if (!parse_bytes([]).unwrap().is_empty()) { return 5; }
+            let mut larger: Vec<u8> = [];
+            for (i in 0..300) {
+                larger.push(120); larger.push(61); larger.push(121); larger.push(10);
+            }
+            match parse_bytes(larger) { Err(InputTooLarge) => {}, _ => { return 7; } }
+            let expanded = parse_bytes_with_limits(larger, Limits { input: 1200, line: 3, entries: 300 }).unwrap();
+            if (expanded.len() != 300) { return 8; }
             match parse_bytes([91 as u8, 120, 93, 10, 107, 61, 0]) {
                 Err(InvalidSyntax(2)) => {},
                 _ => { return 6; }

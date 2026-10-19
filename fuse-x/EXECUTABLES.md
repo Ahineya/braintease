@@ -2,7 +2,7 @@
 
 Fuse-X applications can be compiled independently, installed in the guest
 filesystem, and executed without rebuilding the hosted kernel. The initial SDK
-reuses the existing FUZIX libc sources and retains RCC's compatibility data
+reuses the existing Riplix libc sources and retains RCC's compatibility data
 layout. Packages contain native code for the build host's CPU and operating
 system. macOS and Linux packages are distinct.
 
@@ -20,7 +20,7 @@ scripts/run-fuse-x.sh --run-only
 Run `outside some arguments` in the guest shell. The compiler accepts multiple
 C source files, `-I` include directories, and `-D` definitions. `main` may take
 zero arguments, argc/argv, or argc/argv/envp. The startup wrapper initializes
-libc, calls main, flushes stdio, and exits through FUZIX.
+libc, calls main, flushes stdio, and exits through Riplix.
 
 Install files while Fuse-X is stopped. `image.mjs put` saves the old image as
 `.bak` or `.bak.N` and atomically writes the updated filesystem. Use a separate
@@ -36,7 +36,7 @@ See [application coverage](APPLICATIONS.md).
 
 The SDK caches native IR from portable libc and its hosted syscall bridge.
 File operations, stdio, directory access, environment, formatting, allocation,
-and process operations enter the same FUZIX kernel as the bootstrap programs.
+and process operations enter the same Riplix kernel as the bootstrap programs.
 New SDK allocators opt into banks 48–239 on first growth: 12,288,000 C16 cells
 (24,000 KiB) of heap per process, disjoint from frames, argument storage,
 application globals and the shared kernel arena. Large individual requests can
@@ -46,7 +46,7 @@ Old packages retain their original banks 8–30 and allocator limits. The arena
 switch does not clear or merge storage in the intervening argument/global
 banks, and needs no package or C ABI change.
 Custom signal handlers
-run after completed system calls, following FUZIX's
+run after completed system calls, following Riplix's
 one-shot signal semantics. Continuation-aware `setjmp`/`longjmp` preserve live
 execution state across nested calls and fork. A handler may call the kernel or
 leave through `longjmp`. Signals are delivered after completed syscalls and at compiler-generated
@@ -61,6 +61,111 @@ The caller copies them before its next ordinary call; automatic timer callbacks
 are deferred across that return boundary so they cannot overwrite the result.
 
 ## Package and runtime interface
+
+### Guest shared libraries
+
+Native application builds use ABI 3 shared modules by default. Use `cc.py --static`
+for a self-contained package, or set `FUSE_X_SHARED_LIBRARIES=0` for an entire
+static build. `--shared` explicitly selects the default. Link-mode changes
+invalidate application caches, including graphics and guest compiler tools.
+Old kernels cannot load ABI 3; restart with the updated kernel before using
+shared packages.
+
+```sh
+python3 fuse-x/cc.py fuse-x/examples/hello.c --shared \
+  --build fuse-x/build/shared-test -o fuse-x/build/shared-test/hello.fxe
+```
+
+The SDK builds versioned `/lib/fuse-x/libc.fxl.1` and companion curses/INI/theme
+libraries. Native chat, htget and Lynx builds also
+use `/lib/fuse-x/libtls.fxl.1`. TLS exports the supported `ripple_tls_*`,
+`ripple_crypto_*`, and `ripple_http_*` interfaces; optional wolfSSL implementation
+APIs are not part of that shared-library contract. Source/IR SDK caches and
+shared library outputs are fingerprinted and reused across application builds.
+`image.mjs create/install --apps BUILD/apps` installs the versioned packages
+from `BUILD/lib` alongside applications. Stop the guest before updating its disk.
+Copying a shared executable alone to another guest requires installing its
+library dependencies there as well.
+
+Custom libraries can be built directly:
+
+```sh
+target/release/rcc link-shared library.ir --soname libexample.fxl.1 \
+  --export example_function --export example_global -o libexample.fxl.1
+python3 fuse-x/cc.py app.c --shared \
+  --library "$PWD/libexample.fxl.1=/lib/fuse-x/libexample.fxl.1" -o app.fxe
+```
+
+Omitting `--export` exports public definitions. Internal functions and data
+remain module-local. The linker checks declared signatures and call arities,
+including variadic packing. Dependency records contain SONAME, absolute guest
+path and a SHA-256 interface identity. Version the SONAME for incompatible
+changes, including layouts of structures accessed through pointers: pointer
+pointees are opaque in the scalar calling interface. No host library search
+path or host libc symbol resolution participates in guest linking.
+
+ABI 3 adds module exports/imports and pointer relocations. A dense little-endian
+initializer prefix sits between the JSON manifest and native payload; omitted
+trailing cells are zero. The payload length continues to count native code
+only. Initialized data/function pointers, imported globals and pointer addends
+are relocated at load time. ABI 1/2 envelopes retain their original layout.
+
+Native code is cached by package content and held while processes/staged loads
+reference it. A compatible live SONAME/interface can be reused without another
+payload read or native load, after the kernel opens and checks the requested
+guest file's permissions and mount policy. A live library therefore keeps its
+current code until its final owner exits; replacing the file does not hot-patch
+running programs. Host helper bindings contain no guest data addresses.
+
+Each executable load builds its own binding graph and private initial data.
+Application and dependencies use one libc instance per process, sharing its
+allocator, errno, environment, stdio and exit handlers. Fork retains code and
+shares data copy-on-write; exec resets every module's globals. Function pointers
+and callbacks use the continuation protocol across module boundaries. Failed
+dependency resolution does not replace the calling program's image.
+
+Current limits are 32 modules, at least one function definition per module,
+and the existing aggregate 16-bank global region
+per program. There is no guest `dlopen`/`dlsym`, ELF symbol interposition or
+automatic constructor/destructor protocol; startup performs libc initialization
+and normal `exit` runs registered handlers. Dependencies are resolved at exec.
+Riplix/RVM builds now use their own [RXE2 shared modules](../docs/arch/shared-libraries.md),
+with module-aware instruction mappings and private guest binding tables. Legacy
+static RXE1 programs remain supported. Native FXE libraries cannot be entered
+by the Ripple CPU.
+
+Validation and reproducible size reporting:
+
+```sh
+python3 fuse-x/test_shared_libraries.py --build fuse-x/build/shared-test
+python3 fuse-x/test_shared_tls.py --build fuse-x/build/shared-test
+python3 fuse-x/measure_libraries.py --capture-baseline fuse-x/build
+python3 fuse-x/measure_libraries.py --build fuse-x/build/shared-test
+```
+
+The size tool separates application files from the complete dependency closure,
+counting each shared library once. Its baseline JSON records host octet sizes;
+physical C16 disk storage uses two host octets per stored package octet.
+Capture the baseline before converting those application outputs.
+
+Measured macOS ARM64 build, 2026-10-19 (decimal host MB):
+
+| Application | Static FXE | Shared FXE | Application reduction |
+| --- | ---: | ---: | ---: |
+| chat | 9.103 | 2.206 | 75.8% |
+| htget | 6.589 | 0.020 | 99.7% |
+| Lynx | 34.723 | 25.971 | 25.2% |
+| gterm | 1.719 | 1.008 | 41.3% |
+| mux | 1.566 | 1.299 | 17.0% |
+
+Common libraries add 1.093 MB for libc, 0.352 MB for curses, and 5.691 MB for TLS,
+once per installation. The complete selected set drops from 53.700 to 37.641 MB
+(29.9%). Chat's JSON manifest drops from 1.320 MB to 25.5 KB, plus a 26.7 KB
+binary initialization prefix. These are package sizes, not measured resident
+memory or startup speed. The baseline captures the existing applications at
+the start of this change; exact future builds can differ with source/configuration.
+
+### Static packages
 
 `rcc link-app startup.ir application.ir libc.ir ... -o program.fxe` emits the
 package after linking application IR. Its startup `main` accepts one logical

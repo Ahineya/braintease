@@ -1,5 +1,5 @@
 # Real upstream Nano-X server/client split with the private C16 local protocol.
-# Register new clients here so adding one does not invalidate every FUZIX
+# Register new clients here so adding one does not invalidate every Riplix
 # application through the main Makefile dependency.
 FDE := $(ROOT)/ports/fusede
 APPS += nxroach nxdsktop nxmsg nxselect nxcalc nxtetris nxview fdeshowcase fdectl
@@ -49,7 +49,7 @@ $(BUILD)/nanox/desktop/%.pobj: $(BUILD)/nanox/desktop/%.asm $(RASM)
 $(BUILD)/nanox/client/%.pobj: $(BUILD)/nanox/client/%.asm $(RASM)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { tail -45 $@.log; exit 1; }
 $(BUILD)/nano-X.rxe: $(BUILD)/user/entry.pobj $(NX_SERVER_OBJS) $(NX_ENGINE_OBJS) $(BUILD)/nanox/client/nxdraw.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/nanox/desktop/%.asm $(BUILD)/nanox/desktop/%.pobj $(BUILD)/nanox/client/%.asm $(BUILD)/nanox/client/%.pobj
 
 NX_APP_NAMES := nanowm nxlaunch nxterm nxcheck startx nxeyes nxclock nxroach nxroachcheck nxdsktop nxmsg nxselect nxcalc nxtetris nxview fdeshowcase fdectl
@@ -83,24 +83,24 @@ $(addprefix $(BUILD)/nanox/image/,$(addsuffix .asm,decode nano)): $(BUILD)/nanox
 $(BUILD)/nanox/image/%.pobj: $(BUILD)/nanox/image/%.asm $(RASM)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { tail -45 $@.log; exit 1; }
 $(BUILD)/nxview.rxe: $(BUILD)/user/entry.pobj $(BUILD)/nanox/app/nxview.pobj $(BUILD)/nanox/image/decode.pobj $(BUILD)/nanox/image/nano.pobj $(NX_CLIENT_OBJS) $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/nanox/image/%.asm $(BUILD)/nanox/image/%.pobj
 $(BUILD)/nanox/app/%.pobj: $(BUILD)/nanox/app/%.asm $(RASM)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { tail -45 $@.log; exit 1; }
 $(BUILD)/nanowm.rxe: $(BUILD)/user/entry.pobj $(BUILD)/nanox/app/nanowm.pobj $(NX_WM_OBJS) $(NX_CLIENT_OBJS) $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
 $(BUILD)/nxlaunch.rxe $(BUILD)/nxterm.rxe $(BUILD)/nxcheck.rxe $(BUILD)/nxclock.rxe $(BUILD)/nxroachcheck.rxe $(BUILD)/nxdsktop.rxe $(BUILD)/nxmsg.rxe $(BUILD)/nxselect.rxe $(BUILD)/nxtetris.rxe $(BUILD)/fdeshowcase.rxe $(BUILD)/fdectl.rxe: $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/nanox/app/%.pobj $(NX_CLIENT_OBJS) $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
 $(BUILD)/nxeyes.rxe $(BUILD)/nxroach.rxe $(BUILD)/nxcalc.rxe: $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/nanox/app/%.pobj $(NX_CLIENT_OBJS) $(BUILD)/user/userlib.pobj $(FLOAT_LIB_OBJS) $(filter-out $(BUILD)/libc/format.pobj,$(LIBC_OBJS)) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
 $(BUILD)/startx.rxe: $(BUILD)/user/entry.pobj $(BUILD)/nanox/app/startx.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { tail -60 $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/nanox/app/%.asm $(BUILD)/nanox/app/%.pobj
 
 $(BUILD)/nanox/client/client-os.asm: $(NX)/ripple/client-os.c
 
 .PHONY: test-desktop test-roach test-nxdsktop test-tetris
-test-desktop test-roach test-nxdsktop test-tetris: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo cat ls kill sleep stty ps true vi levee gterm nano-X nanowm nxlaunch nxterm startx nxcheck nxeyes nxclock nxroach nxroachcheck nxdsktop nxmsg nxselect nxcalc nxtetris nxview))
+test-desktop test-roach test-nxdsktop test-tetris: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo cat ls kill sleep stty ps true vi levee gterm nano-X nanowm nxlaunch nxterm startx nxcheck nxeyes nxclock nxroach nxroachcheck nxdsktop nxmsg nxselect nxcalc nxtetris nxview klotski))
 test-desktop:
 	python3 $(NX)/tools/test_desktop.py --build $(BUILD)
 test-roach:
@@ -113,3 +113,5 @@ test-tetris:
 $(BUILD)/nanox/app/fdectl.asm: $(FDE)/workspace.c $(FDE)/tests/workspacecheck.inc $(FDE)/include/fde_workspace.h
 
 include $(ROOT)/ports/netsurf/package.mk
+include $(ROOT)/ports/kolf/package.mk
+include $(ROOT)/ports/klotski/package.mk

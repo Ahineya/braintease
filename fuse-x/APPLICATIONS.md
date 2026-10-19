@@ -1,6 +1,6 @@
 # Hosted application coverage
 
-The existing Ripple FUZIX application list is the source of the build inventory.
+The existing Ripple Riplix application list is the source of the build inventory.
 `apps.py` reads that list and provides native recipes for the utility, V7, MWC,
 editor, Tcl, awk, game, and network sources. It never generates files in
 `ports/fuzix/`.
@@ -45,13 +45,13 @@ The shared [BASIC interpreter](../ports/basic/README.md) installs as `basic`.
 It includes a terminal port of Granny Bingo and a small language example under
 `/usr/share/basic/`. Rift recognizes `.bas` files and runs them with F5. The
 integration suite tests language behavior, editing/running, and game persistence
-on disposable Fuse-X and FUZIX disks.
+on disposable Fuse-X and Riplix disks.
 
 The default `/bin/sh` is the existing Bourne shell. `/bin/fxsh` retains the
 bootstrap shell for debugging. One generated copy of the Bourne shell's main
 source replaces its V7 null-pointer decrement sentinel with an explicit pointer
 constant. All imported sources remain intact. Custom signal handlers and
-nonlocal jumps use native continuations, while FUZIX owns pipes, process groups,
+nonlocal jumps use native continuations, while Riplix owns pipes, process groups,
 wait/stop/continue behavior and the sixteen guest PTY pairs.
 
 Levee's native build also adapts its save routine to create temporary files in

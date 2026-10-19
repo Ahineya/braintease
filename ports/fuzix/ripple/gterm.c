@@ -33,22 +33,29 @@ static struct vt_selection selection;
 static unsigned held[16],repeat_key;
 static unsigned long now_ms,repeat_at;
 static unsigned max_cols,max_rows;
+static unsigned cell_width=8,cell_height=16,native_text;
+static uint16_t *text_row;
+static unsigned long sync_since;
+static unsigned long repaint_after;
+static void clear_selection(void);
 static void caught(int sig){stopping=sig;signal(sig,caught);}
 static int request(unsigned code,void *p) {
     if(ioctl(gfx,code,p)<0){result=1;stopping=SIGTERM;return -1;}return 0;
 }
 static void cleanup(void) {
+    vt_selection_clear(&selection);
     vt_destroy(&terminal);
     struct gx_handle h={GX_VERSION,0};
     if(gfx>=0&&window.window){h.handle=window.window;ioctl(gfx,GX_DESTROY,&h);}
     if(master>=0)close(master);
     if(gfx>=0)close(gfx);
-    free(row_pixels);free(pending.text);
+    free(row_pixels);free(text_row);free(pending.text);
 }
 static void queue(const char *s) {
+    clear_selection();
     if(vt_input_put(&pending,s,strlen(s)))fputs("gterm: input queue full\n",stderr);
 }
-static void reply(struct vt *t,const char *s){(void)t;queue(s);}
+static void reply(struct vt *t,const char *s){(void)t;if(vt_input_put(&pending,s,strlen(s)))fputs("gterm: input queue full\n",stderr);}
 /* Shadow cells describe pixels already uploaded, independently of the VT's
  * current/alternate model. Only dirty rows are compared; typing paints two
  * cells (old/new cursor), while cleared space uses the host bulk fill. */
@@ -56,12 +63,14 @@ static struct vt_cell painted[GRAPHICS_ROWS*GRAPHICS_COLS];
 static unsigned char painted_rows[GRAPHICS_ROWS];
 static int painted_cursor=-1;
 static void invalidate(void){memset(painted_rows,0,sizeof(painted_rows));vt_dirty(&terminal);}
+static void clear_selection(void){if(selection.active){vt_selection_clear(&selection);invalidate();}}
 static unsigned cell_colour(struct vt_cell *cells,unsigned at){return vt_selection_colour(&selection,at,cells[at].colour);}
 static void clipboard_action(unsigned action) {
     struct gx_clipboard c;size_t length=0;char *text;
-    if(action==GX_ACTION_SELECT_ALL){selection.active=1;selection.anchor=0;selection.end=terminal.cols*terminal.rows-1;invalidate();return;}
+    if(action==GX_ACTION_SELECT_ALL){if(!vt_selection_begin(&terminal,&selection,0)){selection.dragging=0;selection.end=terminal.cols*terminal.rows-1;}invalidate();return;}
     memset(&c,0,sizeof(c));c.version=GX_VERSION;c.window=window.window;c.capacity=GX_CLIPBOARD_MAX;
     if(action==GX_ACTION_PASTE) {
+        clear_selection();
         text=malloc(GX_CLIPBOARD_MAX+1);if(!text)return;c.text=text;
         if(ioctl(gfx,GX_CLIPBOARD_READ,&c)==0&&vt_input_paste(&pending,text,c.length,terminal.bracketed_paste))fputs("gterm: input queue full\n",stderr);
         free(text);
@@ -75,12 +84,40 @@ static int cell_changed(struct vt_cell *cells,unsigned at,int cursor) {
     return !painted_rows[at/terminal.cols] || cells[at].ch!=painted[at].ch ||
         cells[at].colour!=painted[at].colour || (int)at==painted_cursor || (int)at==cursor;
 }
+static int draw_native(int cursor){
+    struct vt_cell *cells=vt_cells(&terminal);struct gx_terminal_draw row;
+    unsigned y,x,i,j,n,used,width;unsigned char bytes[4];
+    memset(&row,0,sizeof(row));row.version=GX_VERSION;row.window=window.window;
+    row.cols=terminal.cols;row.rows=terminal.rows;row.data=text_row;
+    row.cursor_x=terminal.x;row.cursor_y=terminal.y;row.cursor_shape=terminal.cursor_shape;row.cursor_visible=cursor>=0;
+    for(y=0;y<terminal.rows;y++)if(terminal.dirty[y]){
+        for(x=0;x<terminal.cols;x++)if(cell_changed(cells,y*terminal.cols+x,cursor))break;
+        if(x<terminal.cols){
+            used=0;
+            for(x=0;x<terminal.cols;x++){
+                uint32_t glyph=cells[y*terminal.cols+x].ch;
+                text_row[used++]=cell_colour(cells,y*terminal.cols+x);
+                width=glyph==RU_CONTINUATION?0:ru_glyph_width(glyph)==2?2:1;
+                text_row[used++]=width;n=used++;text_row[n]=0;
+                if(width)for(i=0;i<ru_scalar_count(glyph);i++){
+                    unsigned length=ru_encode(ru_scalar(glyph,i),bytes);
+                    for(j=0;j<length;j++)text_row[used++]=bytes[j];text_row[n]+=length;
+                }
+            }
+            row.row=y;row.length=used;if(request(GX_TERMINAL_DRAW,&row))return -1;
+            memcpy(painted+y*terminal.cols,cells+y*terminal.cols,terminal.cols*sizeof(*cells));
+        }
+        painted_rows[y]=1;terminal.dirty[y]=0;
+    }
+    return 0;
+}
 static int draw(int show_cursor) {
     unsigned y,x,end,sy,sx,fg,bg,bits,at,span;struct vt_cell *cells=vt_cells(&terminal);
     int cursor=show_cursor&&terminal.visible?(int)(terminal.y*terminal.cols+terminal.x):-1;
     struct gx_upload u;struct gx_fill f;
     if(painted_cursor>=0)terminal.dirty[painted_cursor/terminal.cols]=1;
     if(cursor>=0)terminal.dirty[cursor/terminal.cols]=1;
+    if(native_text){int result=draw_native(cursor);painted_cursor=cursor;return result;}
     memset(&u,0,sizeof(u));u.version=GX_VERSION;u.surface=window.surface;u.height=16;u.pixels=row_pixels;
     memset(&f,0,sizeof(f));f.version=GX_VERSION;f.surface=window.surface;f.height=16;
     for(y=0;y<terminal.rows;y++)if(terminal.dirty[y]) {
@@ -120,6 +157,7 @@ static int draw(int show_cursor) {
 static void scroll_pixels(struct vt *t,int amount) {
     unsigned n=amount<0?-amount:amount,h=(t->bottom-t->top+1-n)*16;
     struct gx_copy c;struct gx_fill f;
+    if(native_text){unsigned y;for(y=t->top;y<=t->bottom;y++)t->dirty[y]=1;return;}
     /* Complete pending text without copying a software cursor into the scroll. */
     t->dirty[t->y]=1;if(draw(0))return;
     memset(&c,0,sizeof(c));c.version=GX_VERSION;c.surface=window.surface;
@@ -162,7 +200,7 @@ static void key(unsigned code) {
     if(!c)return;
     if(ctrl) {if((c>='a'&&c<='z')||(c>='@'&&c<='_'))c&=31;else if(c==' ')c=0;}
     if(!c){
-        char zero=0;if(vt_input_put(&pending,&zero,1))fputs("gterm: input queue full\n",stderr);return;
+        char zero=0;clear_selection();if(vt_input_put(&pending,&zero,1))fputs("gterm: input queue full\n",stderr);return;
     }
     text[0]=c;
     if(down(226)||down(230))queue("\033");
@@ -188,21 +226,24 @@ static void resize_terminal(long width,long height) {
     struct winsize size;
     unsigned cols,rows;
     if(width<=0||height<=0)return;
-    selection.active=selection.dragging=0;
-    cols=width/8;rows=height/16;
+    vt_selection_clear(&selection);
+    cols=width/cell_width;rows=height/cell_height;
     if(!cols)cols=1;if(!rows)rows=1;
     if(cols>max_cols)cols=max_cols;if(rows>max_rows)rows=max_rows;
     /* The model reserves both screens before changing dimensions. On failure
      * acknowledge the old geometry so a native gesture cannot kill the shell. */
     if(!vt_resize(&terminal,cols,rows)){
         memset(&size,0,sizeof(size));size.ws_col=cols;size.ws_row=rows;
-        size.ws_xpixel=cols*8;size.ws_ypixel=rows*16;
+        size.ws_xpixel=cols*cell_width;size.ws_ypixel=rows*cell_height;
         if(ioctl(master,TIOCSWINSZ,&size)<0){result=1;stopping=SIGTERM;return;}
     }
     accepted.version=GX_VERSION;accepted.window=window.window;
-    accepted.width=terminal.cols*8;accepted.height=terminal.rows*16;accepted.flags=0;
+    accepted.width=terminal.cols*cell_width;accepted.height=terminal.rows*cell_height;accepted.flags=0;
     if(request(GX_CONFIGURE,&accepted))return;
     window.width=accepted.width;window.height=accepted.height;
+    /* Give the foreground job one frame to respond to SIGWINCH, rather than
+     * publishing the old screen's resized overlap followed by its repaint. */
+    repaint_after=now_ms+30;
     memset(painted_rows,0,sizeof(painted_rows));painted_cursor=-1;vt_dirty(&terminal);
     if(trace_input)fprintf(stderr,"GTERM_SIZE %u %u\n",terminal.rows,terminal.cols);
 }
@@ -227,17 +268,25 @@ int main(int argc,char **argv) {
         break;
     }
     if(vt_init_size(&terminal,cols,rows))return 2;
-    size.ws_row=rows;size.ws_col=cols;size.ws_xpixel=cols*8;size.ws_ypixel=rows*16;
+    size.ws_row=rows;size.ws_col=cols;
     trace_input=getenv("GTERM_TRACE_INPUT")!=NULL;
     gfx=open("/dev/gfx",O_RDWR|O_CLOEXEC);if(gfx<0){perror("gterm");return 1;}
     atexit(cleanup);
     memset(&info,0,sizeof(info));info.version=GX_VERSION;
     if(request(GX_INFO,&info))return 1;
-    max_cols=info.max_width/8;max_rows=info.max_height/16;
+    if(info.flags&GX_CAP_TERMINAL){
+        struct gx_terminal_metrics m;m.version=GX_VERSION;
+        if(request(GX_TERMINAL_METRICS,&m))return 1;
+        if(!m.width||!m.height||m.width>64||m.height>128)return 1;
+        cell_width=m.width;cell_height=m.height;native_text=1;
+        text_row=malloc((unsigned long)GRAPHICS_COLS*67*sizeof(*text_row));if(!text_row)return 1;
+    }
+    size.ws_xpixel=cols*cell_width;size.ws_ypixel=rows*cell_height;
+    max_cols=info.max_width/cell_width;max_rows=info.max_height/cell_height;
     if(max_cols>GRAPHICS_COLS)max_cols=GRAPHICS_COLS;if(max_rows>GRAPHICS_ROWS)max_rows=GRAPHICS_ROWS;
     if(cols>max_cols||rows>max_rows){fputs("gterm: geometry exceeds this display's limits\n",stderr);return 2;}
-    row_pixels=malloc((unsigned long)max_cols*8*16*sizeof(*row_pixels));if(!row_pixels){perror("gterm");return 1;}
-    memset(&window,0,sizeof(window));window.version=GX_VERSION;window.width=cols*8;window.height=rows*16;window.format=GX_RGB565;strcpy(window.title,"Terminal");
+    if(!native_text){row_pixels=malloc((unsigned long)max_cols*8*16*sizeof(*row_pixels));if(!row_pixels){perror("gterm");return 1;}}
+    memset(&window,0,sizeof(window));window.version=GX_VERSION;window.width=cols*cell_width;window.height=rows*cell_height;window.format=GX_RGB565;strcpy(window.title,"Terminal");
     if(request(GX_CREATE,&window)){perror("gterm");return 1;}
     for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]=slave[9]=RIPPLE_PTY_DIGIT(i);master=open(path,O_RDWR|O_NONBLOCK|O_NOCTTY);if(master>=0)break;if(errno!=EBUSY){perror("gterm");return 1;}}
     if(master<0){fputs("gterm: no free terminals\n",stderr);return 1;}
@@ -267,8 +316,9 @@ int main(int argc,char **argv) {
         /* Bound each batch so continuous output cannot starve window input. */
         for(i=0;i<8;i++) {
             n=read(master,output,sizeof(output));
-            if(n>0){if(selection.active){selection.active=selection.dragging=0;invalidate();}vt_feed(&terminal,output,n);}else {if(!n)stopping=SIGHUP;else if(errno!=EAGAIN&&errno!=EINTR){result=1;stopping=SIGHUP;}break;}
+            if(n>0){vt_feed(&terminal,output,n);}else {if(!n)stopping=SIGHUP;else if(errno!=EAGAIN&&errno!=EINTR){result=1;stopping=SIGHUP;}break;}
         }
+        if(vt_selection_update(&terminal,&selection))invalidate();
         for(i=0;i<32;i++) {
             memset(&event,0,sizeof(event));event.version=GX_VERSION;event.window=window.window;
             if(request(GX_EVENT,&event)||!event.type)break;
@@ -276,11 +326,12 @@ int main(int argc,char **argv) {
             if(event.type==GX_CLOSE){stopping=SIGHUP;break;}
             if(event.type==GX_ACTION){clipboard_action(event.code);continue;}
             if(event.type==GX_BUTTON&&event.code==0) {
-                unsigned at=vt_selection_at(&terminal,event.x/8,event.y/16);
-                if(event.flags&GX_DOWN){selection.anchor=at;selection.active=selection.dragging=1;}
-                selection.end=at;if(!(event.flags&GX_DOWN))selection.dragging=0;invalidate();continue;
+                unsigned at=vt_selection_at(&terminal,event.x/cell_width,event.y/cell_height);
+                if(event.flags&GX_DOWN)vt_selection_begin(&terminal,&selection,at);
+                if(selection.active){selection.end=at;vt_selection_update(&terminal,&selection);if(!(event.flags&GX_DOWN))selection.dragging=0;}
+                invalidate();continue;
             }
-            if(event.type==GX_MOTION&&selection.dragging){selection.end=vt_selection_at(&terminal,event.x/8,event.y/16);invalidate();continue;}
+            if(event.type==GX_MOTION&&selection.dragging){selection.end=vt_selection_at(&terminal,event.x/cell_width,event.y/cell_height);invalidate();continue;}
             if(event.type==GX_RESIZE){resize_terminal(event.x,event.y);continue;}
             if(event.type==GX_OVERFLOW||(event.type==GX_FOCUS&&!(event.flags&GX_FOCUSED))){memset(held,0,sizeof(held));repeat_key=0;}
             if(event.type==GX_TEXT) {
@@ -303,7 +354,13 @@ int main(int argc,char **argv) {
             else if(n<0&&errno!=EAGAIN&&errno!=EINTR){result=1;break;}
         }
         dirty=0;for(i=0;i<terminal.rows;i++)dirty|=terminal.dirty[i];
-        if(dirty&&(draw(1)||request(GX_PRESENT,&present)))break;
+        if(!terminal.synchronized)sync_since=0;
+        else if(!sync_since)sync_since=now_ms?now_ms:1;
+        /* An interrupted writer cannot leave the screen frozen indefinitely. */
+        if(terminal.synchronized&&(long)(now_ms-sync_since)>=1000){terminal.synchronized=0;if(vt_selection_update(&terminal,&selection))invalidate();}
+        if(dirty&&!terminal.synchronized&&(!repaint_after||(long)(now_ms-repaint_after)>=0)){
+            repaint_after=0;if(draw(1)||request(GX_PRESENT,&present))break;
+        }
         if(waitpid(child,&status,WNOHANG)==child) {
             while((n=read(master,output,sizeof(output)))>0)vt_feed(&terminal,output,n);
             draw(1);request(GX_PRESENT,&present);child=0;break;
@@ -311,6 +368,7 @@ int main(int argc,char **argv) {
         FD_ZERO(&reads);FD_ZERO(&writes);FD_SET(gfx,&reads);FD_SET(master,&reads);
         if(pending.length)FD_SET(master,&writes);
         timeout.tv_sec=repeat_key?0:1;timeout.tv_usec=repeat_key?100000UL:0;
+        if(repaint_after&&(long)(repaint_after-now_ms)>0){timeout.tv_sec=0;timeout.tv_usec=(repaint_after-now_ms)*1000UL;}
         if(select((gfx>master?gfx:master)+1,&reads,&writes,NULL,&timeout)<0) {
             if(errno==EINTR)continue;result=1;break;
         }

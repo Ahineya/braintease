@@ -3,7 +3,7 @@
 #define NETSURF_C16_HTTP_H
 #include <stdbool.h>
 /* Register after netsurf_init(), before navigation. The optional CA pathname
- * is passed to the independent htget CLI; no TLS code is linked into NetSurf. */
+ * is passed to the independent persistent htget worker; no TLS code is linked into NetSurf. */
 struct netsurf_transfer {
     unsigned long received, total;
     bool active, known;

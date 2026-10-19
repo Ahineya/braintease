@@ -303,6 +303,9 @@ fn main() -> i16 {
             return 10;
         }
     }
+    if (detect("hello.server.mjs").arguments != "--server {file}" || detect("hello.server.js").arguments != "--server {file}" || detect("hello.mjs").arguments != "{file}") {
+        return 11;
+    }
     if (joined("/a/b", "../x") != "/a/x" || parent("/a") != "/" || basename("/a/b") != "b") {
         return 6;
     }

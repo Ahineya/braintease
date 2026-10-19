@@ -310,7 +310,7 @@ int main(int argc, char **argv) {
     }
     if (!fuse_running && (!strcmp(argv[1], "--boot-check") ? argc!=3 : argc!=4)) return 2;
     if (fuse_write_check || fuse_running) fuse_boot_parameters = "rw";
-    kputs("Fuse-X: native FUZIX kernel bootstrap\n");
+    kputs("Fuse-X: native Riplix kernel bootstrap\n");
     fuse_disk_open(argv[2], fuse_write_check || fuse_running);
     if (vm_host_monotonic(&now) != VM_DEVICE_OK) panic("Fuse-X: host clock unavailable");
     host_last = now.seconds_low * 100UL + now.nanoseconds / 10000000UL;

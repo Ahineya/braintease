@@ -141,7 +141,7 @@ static void menu_action(int y)
     else return;
     if(trace)fprintf(stderr,"NXDSKTOP_ACTION %d\n",item);
     switch(item){
-    case MENU_ABOUT:show_message("About NXDSKTOP","NXDSKTOP 1.1\nBy Anton Andreev\nFUZIX/Ripple adaptation\nNano-X window system");break;
+    case MENU_ABOUT:show_message("About NXDSKTOP","NXDSKTOP 1.1\nBy Anton Andreev\nRiplix adaptation\nNano-X window system");break;
     case MENU_HELP:show_message("Desktop Help","Start launches apps.\nMove: drag the title bar.\nResize: bottom-right corner.\nLevee: Esc, :wq, Enter saves/quits.\nExit ends desktop. Shutdown saves disk.");break;
     case MENU_CALCULATOR:single[0]="/bin/nxcalc";break;
     case MENU_TERMINAL:single[0]="/bin/nxterm";break;
@@ -152,6 +152,7 @@ static void menu_action(int y)
     case MENU_ROACHES:single[0]="/bin/nxroach";break;
     case MENU_TETRIS:single[0]="/bin/nxtetris";break;
     case MENU_IMAGES:single[0]="/bin/nxview";break;
+    case MENU_KLOTSKI:single[0]="/bin/klotski";break;
     case MENU_SYNC:sync();show_message("Sync disk","Files synchronized to disk.");break;
     case MENU_EXIT:stopping=1;break;
     case MENU_SHUTDOWN:uadmin(1,0,NULL);perror("nxdsktop: shutdown");break;

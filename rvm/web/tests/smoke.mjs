@@ -1,4 +1,4 @@
-// Real Wasm + real clean FUZIX image. Node supplies only clocks and entropy.
+// Real Wasm + real clean Riplix image. Node supplies only clocks and entropy.
 import fs from 'node:fs';import path from 'node:path';import zlib from 'node:zlib';import {randomFillSync} from 'node:crypto';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../..');
 const site=path.resolve(process.argv[2]??path.join(root,'build/rvm-web/site'));
@@ -21,8 +21,12 @@ async function until(predicate,seconds=90){const end=performance.now()+seconds*1
 }}
 async function shell(command){cursor=log.length;call(api.rvm_tty,new TextEncoder().encode(command+'\n'));await until(()=>log.slice(cursor).includes(prompt));return log.slice(cursor);}
 await until(()=>log.includes(prompt));
+const banner=fs.readFileSync(path.join(root,'ports/fuzix/banner.tmp.txt'),'utf8').trimEnd();
+if(!log.replaceAll('\r','').includes(banner)||!log.includes('Riplix version')||!log.includes('Derived from FUZIX.'))throw Error('kernel identity/banner missing: '+log.slice(0,2000));
+const identity=await shell('uname -s');if(!identity.includes('Riplix'))throw Error('uname identity: '+identity);
 if(api.rvm_frame_width()!==0)throw Error('desktop opened automatically');
 console.log('Console ready:',Math.round(performance.now()-started),'ms');
+const pkillHelp=await shell('pkill --help');if(!pkillHelp.includes('usage: pkill'))throw Error('pkill missing: '+pkillHelp);
 const check=await shell('echo WEB_ROUNDTRIP > /web-test; cat /web-test; echo FILE_STATUS:$?');if(!check.includes('WEB_ROUNDTRIP')||!check.includes('FILE_STATUS:0'))throw Error(check);
 const tools=await shell("seq 1 5 | awk '{s+=$1} END {print s}'; echo TOOL_STATUS:$?");
 if(!tools.includes('15')||!tools.includes('TOOL_STATUS:0'))throw Error('Unix tools failed: '+tools);

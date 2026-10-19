@@ -1,6 +1,6 @@
 # Rift
 
-Rift is a programmer's terminal editor for FUZIX/Ripple and Fuse-X. Its RFL
+Rift is a programmer's terminal editor for Riplix/Ripple and Fuse-X. Its RFL
 interface and command layer sit over a portable C text engine. The shell has
 Turbo-style menus, tabs and a muted blue palette; the editing surface uses vi
 commands. The command is `rift`; `vi` continues to launch Levee.
@@ -20,6 +20,55 @@ target/release/rfl build rfl/apps/rift/main.rfl --os fuse-x -o fuse-x/build/apps
 ```
 
 A standalone build produces the executable; it does not update a guest disk.
+
+## Standalone macOS
+
+Build Rift as a normal terminal application, without a kernel or disk image:
+
+```sh
+python3 rfl/apps/rift/build-macos.py
+build/rift-macos/bin/rift /path/to/a/file.txt
+```
+
+`build/rift-macos/Rift.command` also opens the editor in Terminal. Keep `bin/`
+and `share/` together when moving the application; no checkout or compiler is
+needed to run the resulting executable. The build runs on macOS and targets the
+build machine's architecture. `--prefix PATH` selects another output directory.
+
+The editor uses real host files, arguments, environment and terminal modes.
+Settings remain in `~/.riftrc` and `~/.config/rift/`. F5 runs installed host tools;
+the terminal is suspended for the child and restored when returning to Rift.
+`RIFT_DATA_DIR` overrides the bundled `share/rift` directory, and `RFL_DATA_DIR`
+can override its parent. Theme lookup otherwise follows the executable's location.
+The current editor limits (eight tabs and 512 KiB per file) still apply. The
+filesystem API rejects oversized metadata rather than silently truncating it;
+native directory entries retain full filenames up to 255 octets.
+
+The reusable build interface is:
+
+```sh
+target/release/rfl build rfl/apps/rift/main.rfl --os macos \
+  --build-dir build/rift-macos/sdk -o build/rift-macos/bin/rift
+```
+
+The convenience builder also stages themes/examples. The native backend keeps
+its compatibility memory layout; explicit copy adapters cross into macOS APIs.
+The RFL editor, portable text/INI libraries, and vi commands use the same sources
+as the guests. The shared curses and theme implementations compile with the host
+C compiler in the runtime's opt-in `host-tui` feature. A small cell adapter maps
+interned grapheme IDs between the two Unicode instances. No interpreter, hosted
+kernel, mounted disk, or system-wide installation is involved.
+
+Verify against an isolated HOME and disposable host files:
+
+```sh
+python3 rfl/tools/test_rift_macos.py
+cargo test --release -p rcc-native-runtime --features host-tui --lib native_os::tests
+```
+
+The terminal test covers UTF-8 paste, atomic saves, one-group undo/redo, resizing,
+long filenames, named themes, configuration reload, relocation, host commands,
+and terminal restoration on both normal exit and SIGTERM.
 
 ## Rendering and performance
 
@@ -269,7 +318,11 @@ F5 saves the active file and runs the guest `js` executable from PATH. Your
 `/bin/js` installation works directly; F8 shows whether it is available. Set
 `JS=/mnt/host/js` to try a shared build, or `JS=/path/to/interpreter` to select
 another runtime. `[run] javascript` and `RIFT_RUN_javascript` override the runner
-command. `.mjs` enables ES modules in our QuickJS host; `.cjs` gets JavaScript
+command. Files ending `.server.mjs` or `.server.js` add `--server`, enabling
+long-running server mode while retaining per-turn CPU and memory guards. F5
+then Ctrl-C/Enter runs and stops a server without leaving the editor. Try
+`/mnt/host/js-system/hello.server.mjs`. Custom runner templates must include
+`--server` themselves when desired. `.mjs` enables ES modules in our QuickJS host; `.cjs` gets JavaScript
 highlighting and a runner but does not add Node's CommonJS APIs.
 
 Try `rift /usr/share/rift/hello.mjs`, or open the shared

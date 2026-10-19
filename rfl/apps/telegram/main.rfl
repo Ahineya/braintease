@@ -1,5 +1,5 @@
 import { start, Screen, color_pair, BOLD, REVERSE, RESIZE, CLOSED, PAGE_UP, PAGE_DOWN, function_key } from "std/curses";
-import { arguments } from "std/posix";
+import { arguments, environment } from "std/posix";
 import { client, Client, QR_LOGIN, PASSWORD, READY, SENDING, FAILED } from "lib/telegram";
 import { encode, QrCode } from "lib/qr";
 import { loader, Config, Role } from "lib/tui_theme";
@@ -8,6 +8,13 @@ import { LineEdit, line_edit } from "lib/tui_input";
 import { fitted, number } from "lib/tui";
 import { Selection, selection } from "lib/tui_list";
 import {} from "std/result";
+
+fn home() -> String {
+    match environment("HOME") {
+        Ok(Some(value)) if (!value.is_empty()) => value,
+        _ => "/"
+    }
+}
 
 fn theme(screen: &Screen) -> Vec<u32> {
     let body = Role { foreground: 7, background: 0, bold: false, reverse: false, underline: false };
@@ -171,12 +178,12 @@ fn main() -> i16 {
     let config = if (args.len() > 1) {
         args[1]
     } else {
-        "/etc/telegram.conf"
+        home() + "/.telegram.conf"
     };
     let session = if (args.len() > 2) {
         args[2]
     } else {
-        "/telegram.session"
+        home() + "/.telegram.session"
     };
     let service = match client(config, session) {
         Ok(value) => move(value),

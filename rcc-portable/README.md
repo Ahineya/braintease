@@ -3,14 +3,14 @@
 The first implementation of the [self-hosting plan](../docs/self-hosting/README.md):
 a cproc-derived C16 frontend and portable C preprocessor, emitting RCC IR
 directly. The frontend, preprocessor and a baseline Ripple backend run inside
-FUZIX/RVM and Fuse-X. A portable assembler, streaming linker and `cc` driver complete the Ripple
+Riplix/RVM and Fuse-X. A portable assembler, streaming linker and `cc` driver complete the Ripple
 application pipeline inside either guest. Prebuilt SDK objects and native FXE
 code generation remain dependencies; full compiler self-hosting and full C11
 support remain later milestones.
 
 One complete Ripple compiler generation now rebuilds from raw C inside Fuse-X
 using guest Make, Tcl and the installed compiler tools. An unchanged second
-build preserves its outputs. Those rebuilt RXE tools have run under FUZIX/RVM,
+build preserves its outputs. Those rebuilt RXE tools have run under Riplix/RVM,
 compiled and linked the toolchain and SDK interoperability fixtures, and
 executed both successfully. Comparing subsequent compiler generations and
 rebuilding the initial SDK remain separate acceptance gates.
@@ -26,7 +26,7 @@ cc hello.c -o hello
 ./hello
 ```
 
-The output is a **Ripple RXE executable**, runnable in FUZIX/RVM. Inside Fuse-X,
+The output is a **Ripple RXE executable**, runnable in Riplix/RVM. Inside Fuse-X,
 `cc` currently cross-compiles the same RXE format; native FXE generation still
 requires the host compiler. Use the shared folder to transfer sources and results.
 Headers, startup objects and libraries live under `/usr/lib/rcc`; no extra
@@ -129,7 +129,7 @@ every input accepted by the Rust backend. The assembly retains metadata for the 
 portable tools use the chunk packing and relocation format described below.
 File output is published by rename only after successful generation.
 
-## FUZIX and Fuse-X programs
+## Riplix and Fuse-X programs
 
 These wrappers use the portable frontend for application sources and the
 selected backend, then existing startup/libc and host packaging tools to create
@@ -145,7 +145,7 @@ python3 rcc-portable/guest_build.py --os fuzix
 ```
 
 Both accept multiple source files, `-I`, `-D`, `--compiler`, `--build` and
-`--float-format`. FUZIX requires an existing MMU SDK build (normally
+`--float-format`. Riplix requires an existing MMU SDK build (normally
 `build/fuzix`); Fuse-X defaults to `fuse-x/build`. Outputs replace an existing
 package only after successful compilation and linking. No installed disk or
 kernel is modified by these commands.
@@ -161,7 +161,7 @@ rcc-c -E -I/include example.c -o example.i
 ```
 
 On Fuse-X it can run directly from a mounted Mac folder as
-`/mnt/host/rcc-c.fxe`. RXE is the executable format for FUZIX under RVM. The
+`/mnt/host/rcc-c.fxe`. RXE is the executable format for Riplix under RVM. The
 guest's execution environment and the IR target selected on the command line
 are independent: either frontend build can emit either IR target. The portable
 Ripple backend can lower Ripple IR inside either guest, and the portable assembler/linker can finish an RXE or bare Ripple image
@@ -232,7 +232,7 @@ chmod +x hello
 
 The driver supports `-I`, `-D`, `-U`, `-E`, `-S`, `-c`, multiple translation
 units, explicit object/archive inputs, and `-v`. `--bare` produces a bare
-Ripple image instead of a FUZIX executable. Native Fuse-X tools currently
+Ripple image instead of a Riplix executable. Native Fuse-X tools currently
 **cross-compile Ripple RXE programs**; independent native FXE emission is still
 future work. The Python packaging wrappers remain host bootstrap tools.
 
@@ -342,14 +342,14 @@ tcl /usr/src/rcc/bootstrap.tcl build /tmp/rcc-stage1
 ```
 
 On Fuse-X, use `/mnt/host/rcc-stage1` to retain output in the shared Mac folder.
-These builds produce RXE programs for FUZIX/RVM; Fuse-X cannot execute them yet.
+These builds produce RXE programs for Riplix/RVM; Fuse-X cannot execute them yet.
 `tools` builds only the assembler/linker and compiler driver. `check OUTPUT`
 uses `OUTPUT/bin` to compile and execute the toolchain and SDK interoperability
-fixtures, so run it under FUZIX/RVM. All stages run ordinary guest processes;
+fixtures, so run it under Riplix/RVM. All stages run ordinary guest processes;
 Python and host compiler services are absent from this guest build path.
 
 ```sh
-# FUZIX/RVM: three generations, program execution and stage-2/stage-3 comparison.
+# Riplix/RVM: three generations, program execution and stage-2/stage-3 comparison.
 tcl /usr/src/rcc/bootstrap.tcl bootstrap /tmp/rcc-bootstrap
 ```
 
@@ -393,9 +393,9 @@ python3 rcc-portable/test_asm.py
 python3 rcc-portable/test_toolchain.py
 # Check packages installed by the normal image builders, using default PATH/SDK.
 python3 rcc-portable/test_toolchain.py --skip-build --installed
-# Rebuild tools inside Fuse-X, then run those tools under FUZIX/RVM.
+# Rebuild tools inside Fuse-X, then run those tools under Riplix/RVM.
 python3 rcc-portable/test_toolchain.py --bootstrap-hosted
-# Slower: also perform the rebuild itself under FUZIX/RVM.
+# Slower: also perform the rebuild itself under Riplix/RVM.
 python3 rcc-portable/test_toolchain.py --guests fuzix --bootstrap
 
 # Build helpers and source/configuration invalidation.
@@ -416,23 +416,23 @@ python3 rcc-portable/test_rvm.py
 ```
 
 The complete toolchain checks compile and run a program with aggregates,
-variadic calls, 64-bit arithmetic and bank-crossing globals inside FUZIX.
+variadic calls, 64-bit arithmetic and bank-crossing globals inside Riplix.
 They also check SDK tagged-null interoperability. `--bootstrap-hosted` rebuilds
 the assembler/linker entirely inside Fuse-X, then executes that resulting RXE
-under FUZIX to assemble, link and run another program. The verified guest-built
+under Riplix to assemble, link and run another program. The verified guest-built
 tool is saved as `build/apps/rcc-as-guest.rxe`. This is a rebuilt assembler/linker
 generation. `test_bootstrap.py` extends this to the full compiler, backend,
 assembler/linker and driver, including an unchanged incremental rebuild.
 The three-generation compiler comparison remains pending.
 The full `test_bootstrap.py` generation and its `--verify-rvm` execution check
 have passed: every compiler stage rebuilt in Fuse-X, then the resulting tools
-compiled and executed both fixtures in FUZIX/RVM.
+compiled and executed both fixtures in Riplix/RVM.
 
 Tests use disposable output directories and disks. They verify nonzero main
 exit statuses, mixed-frontend scalar/aggregate/variadic ABI linking and global
 relocations, existing RCC regressions, and rejection of unsupported features
 without replacing an existing output. Interoperation runs on both backends with
-the portable frontend as caller and as callee. Tests do not modify FUZIX/Fuse-X disks.
+the portable frontend as caller and as callee. Tests do not modify Riplix/Fuse-X disks.
 Backend regressions also check inlined stack homes, full-width integer unary
 operations and values whose defining block appears later in the input layout.
 

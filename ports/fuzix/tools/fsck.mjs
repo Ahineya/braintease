@@ -1,4 +1,4 @@
-// Offline checker for the Ripple C16 FUZIX filesystem. Use fsck.py for locking.
+// Offline checker for the Ripple C16 Riplix filesystem. Use fsck.py for locking.
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -49,7 +49,7 @@ export function checkRoot(input, repair = false) {
     if (type === 0xc000 && (size || Array.from({length: 20}, (_, j) =>
         ptr(base + 12 + j * step)).some(Boolean)))
       throw Error(`inode ${ino}: invalid socket metadata`);
-    // FUZIX stores named-pipe buffers in ordinary filesystem blocks too.
+    // Riplix stores named-pipe buffers in ordinary filesystem blocks too.
     if (type === 0x8000 || type === 0x4000 || type === 0x1000 || type === 0xa000) {
       for (let j = 0; j < direct; j++) {
         const b = ptr(base + 12 + j * step);

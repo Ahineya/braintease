@@ -84,6 +84,19 @@ fn link_object(bytes: Vec<u8>, output: &Path) -> Result<(), String> {
         .arg(&runtime)
         .arg("-o")
         .arg(&executable);
+    // Optional host platform libraries. Each name is one literal linker
+    // argument; this is not a shell command or a route to a host C ABI call.
+    if let Ok(libraries) = std::env::var("RCC_NATIVE_LIBS") {
+        for name in libraries.split(',').filter(|s| !s.is_empty()) {
+            if !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+            {
+                return Err("RCC_NATIVE_LIBS must contain comma-separated library names".into());
+            }
+            command.arg(format!("-l{name}"));
+        }
+    }
     if cfg!(target_os = "macos") {
         // Match the selected developer toolchain's SDK. The driver's implicit
         // SDK can point at unrelated CommandLineTools installations.
@@ -105,6 +118,7 @@ fn link_object(bytes: Vec<u8>, output: &Path) -> Result<(), String> {
         for framework in [
             "CoreFoundation",
             "CoreGraphics",
+            "CoreText",
             "CoreAudio",
             "AudioToolbox",
             "AppKit",

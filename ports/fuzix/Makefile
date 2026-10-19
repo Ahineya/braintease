@@ -13,10 +13,13 @@ RFL ?= $(ROOT)/target/release/rfl
 RFL_SOURCES := $(shell find $(ROOT)/rfl/std $(ROOT)/rfl/lib $(ROOT)/libraries/ini $(ROOT)/libraries/tui-theme $(ROOT)/libraries/unicode -type f) $(ROOT)/rfl/os/posix.c $(ROOT)/rfl/tools/build_os.py
 RASM := $(ROOT)/src/ripple-asm/target/release/rasm
 RLINK := $(ROOT)/src/ripple-asm/target/release/rlink
+export RIPLIX_SHARED_LIBRARIES ?= 1
+RXELINK := python3 $(PORT)/tools/shared-link.py --build $(BUILD) --linker $(RLINK) --compiler $(RCC) --
+SHARED_MODE_FILE := $(shell python3 $(PORT)/tools/shared-link.py --build '$(BUILD)' --stamp-only)
 # Retained only to diagnose older build commands; there is one supported profile.
 MMU ?= 1
 ifneq ($(MMU),1)
-$(error Non-MMU FUZIX/Ripple is retired; remove MMU=$(MMU) and rebuild for RVM)
+$(error Non-MMU Riplix is retired; remove MMU=$(MMU) and rebuild for RVM)
 endif
 BULK_IO ?= 1
 CODE_BANKS ?= 1024
@@ -28,6 +31,8 @@ RUNTIME_HEADERS += $(addprefix $(R)/include/,$(addsuffix .h,net net_tcp vm_netwo
 U := $(PORT)/upstream/Library
 USERFLAGS := -DRIPPLE_MMU=1 --bank-size 64000 -I$(PORT)/ripple/include -I$(U)/include -I$(R)/include -I$(PORT)/ripple -I$(ROOT)/ports/graphics/include -DNO_64BIT
 USERHEADERS := $(BUILD)/.mmu $(shell find ripple/include $(U)/include -name '*.h') $(RUNTIME_HEADERS) $(K)/include/userstructs.h
+USERHEADERS += $(SHARED_MODE_FILE)
+$(BUILD)/user/init.asm $(BUILD)/apps/telnetd.asm: ripple/root-home.h
 LIBC_LOCAL := syscalls stdio format scan wait clock timezone dirent misc heap pipe sockets resolver search identity
 AWK_MATH_SRC := __sin __cos __rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow sin cos atan atan2 strtod ecvt fmod frexp ldexp modf
 LIBC_UPSTREAM := $(filter-out regerror malloc calloc realloc readline readline_fn clock_gettime clock_getres $(AWK_MATH_SRC),$(basename $(notdir $(wildcard upstream/Library/libs/*.c))))
@@ -37,7 +42,7 @@ LIBC_OBJS := $(addprefix $(BUILD)/libc/,$(addsuffix .pobj,$(LIBC_LOCAL))) $(addp
 rfl-sdk: $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
 rfl-sdk-info:
 	@python3 -c 'import json; print(json.dumps({"entry":"$(BUILD)/user/entry.pobj","libraries":"$(BUILD)/user/userlib.pobj $(if $(filter 1,$(RFL_CURSES)),$(CURSES_OBJS),$(if $(filter 1,$(RFL_UNICODE)),$(UNICODE_OBJS))) $(LIBC_OBJS)".split()}))'
-APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol more less mktemp groups logname nohup fmt column cksum stty join split tsort tty nice time clear pr col man wump hamurabi expr awk make m4 dc
+APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill pkill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol more less mktemp groups logname nohup fmt column cksum stty join split tsort tty nice time clear pr col man wump hamurabi expr awk make m4 dc
 APPS += free uptime sok top ptysh mux
 APPS += ifconfig ping telnet telnetd
 APPS += htget dig echoping ntpdate host
@@ -71,6 +76,7 @@ HEADERS += $(wildcard ripple/*.inc)
 USERHEADERS += ripple/select-abi.h ripple/clock-abi.h ripple/socket-abi.h ripple/mmu-profile.h ripple/resources.h ripple/pty-limits.h $(ROOT)/ports/graphics/include/gx.h
 USERHEADERS += ripple/process-limits.h ripple/process-report.h
 USERHEADERS += ripple/exec-args.h
+USERHEADERS += ripple/identity.h
 OBJS := $(addprefix $(BUILD)/kernel/,$(addsuffix .pobj,$(CORE)))
 .PHONY: all kernel-objects clean
 .PRECIOUS: $(BUILD)/kernel/%.asm
@@ -119,6 +125,7 @@ $(BUILD)/%.pobj: $(BUILD)/%.asm $(RASM)
 $(BUILD)/port/lowlevel.pobj: ripple/lowlevel.asm $(RASM) $(MMU_CONFIG) Makefile
 	@mkdir -p $(@D)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/port/exec.asm: ripple/shared-loader.inc
 $(BUILD)/kernel/memalloc_none.asm: $(K)/mm/memalloc_none.c $(HEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
@@ -136,7 +143,7 @@ $(BUILD)/bios.bin: $(BUILD)/port/boot-entry.pobj $(BUILD)/port/boot.pobj $(RT_OB
 # Preserve an explicit failure for old commands, even if a stale export exists.
 .PHONY: bf $(BUILD)/bios.bf
 bf $(BUILD)/bios.bf:
-	@echo "error: non-MMU FUZIX/RBF is retired; use images and run-fuzix.sh on RVM" >&2
+	@echo "error: non-MMU Riplix/RBF is retired; use images and run-fuzix.sh on RVM" >&2
 	@exit 1
 
 .PHONY: bios
@@ -149,8 +156,8 @@ $(BUILD)/user/%.asm: ripple/%.c ripple/user.h $(USERHEADERS) $(RCC) Makefile
 $(BUILD)/user/entry.pobj: ripple/user-entry.asm $(RASM) $(MMU_CONFIG) Makefile
 	@mkdir -p $(@D)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK) $(SHARED_MODE_FILE)
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PHONY: userspace images
 userspace: $(BUILD)/init.rxe $(BUILD)/hello.rxe $(BUILD)/forkcheck.rxe $(BUILD)/preemptcheck.rxe $(BUILD)/iotest.rxe $(BUILD)/libccheck.rxe $(BUILD)/mmucheck.rxe $(BUILD)/ttycheck.rxe
 $(BUILD)/rfl-demo.rxe: $(ROOT)/rfl/examples/posix.rfl $(RFL_SOURCES) $(RFL) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
@@ -177,11 +184,11 @@ $(BUILD)/music/%.asm: $(ROOT)/ports/music/%.c $(wildcard $(ROOT)/ports/music/*.h
 $(BUILD)/music/%.pobj: $(BUILD)/music/%.asm $(RASM)
 	$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/wavplay.rxe: $(BUILD)/user/entry.pobj $(addprefix $(BUILD)/music/,$(addsuffix .pobj,wavplay music wav)) $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/pcmcheck.rxe: $(ROOT)/ports/music/tests/pcmcheck.c $(USERHEADERS) $(RCC) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
 	$(RCC) compile $< -o $(BUILD)/pcmcheck.asm $(USERFLAGS)
 	$(RASM) assemble $(BUILD)/pcmcheck.asm -o $(BUILD)/pcmcheck.pobj --bank-size 64000 --max-immediate 65535
-	$(RLINK) $(BUILD)/user/entry.pobj $(BUILD)/pcmcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) -f rxe --bank-size 64000 -o $@
+	$(RXELINK) $(BUILD)/user/entry.pobj $(BUILD)/pcmcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) -f rxe --bank-size 64000 -o $@
 userspace: $(BUILD)/music.rxe $(BUILD)/wavplay.rxe
 .PHONY: test-rift
 test-rift: kernel bios $(BUILD)/rift.rxe
@@ -254,7 +261,7 @@ $(BUILD)/apps/%.asm: upstream/Applications/util/%.c $(USERHEADERS) $(RCC) Makefi
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -DUIDGID=0 $(if $(filter cut,$*),-Dwarn=cut_warn) $(if $(filter grep,$*),-Dregerror=grep_regerror) $(if $(filter vile,$*),-DRIPPLE) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(addprefix $(BUILD)/,$(addsuffix .rxe,$(filter-out chat basic levee awk lynx htget nxdraw nano-X nanowm nxlaunch nxterm startx nxeyes nxclock,$(APPS)))): $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/apps/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 userspace: $(addprefix $(BUILD)/,$(addsuffix .rxe,$(APPS)))
 
 $(BUILD)/apps/test.asm: upstream/Applications/MWC/cmd/test.c $(USERHEADERS) $(RCC) Makefile
@@ -289,7 +296,7 @@ $(BUILD)/sh/%.asm: $(SHELL_DIR)/%.c $(wildcard $(SHELL_DIR)/*.h) $(USERHEADERS) 
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -DBUILD_FSH >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/sh.rxe: $(BUILD)/user/entry.pobj $(SHELL_OBJS) $(BUILD)/sh/input.pobj $(BUILD)/sh/jobs.pobj $(BUILD)/sh/prompt.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/sh/%.asm
 
 $(BUILD)/vi.rxe: $(BUILD)/rift.rxe Makefile
@@ -313,7 +320,7 @@ $(BUILD)/levee/%.asm: $(LEVEE_DIR)/%.c $(wildcard $(LEVEE_DIR)/*.h) $(USERHEADER
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -DANSI=1 -DVT52=0 -DSIZE=30000 -DRIPPLE >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/levee.rxe: $(BUILD)/user/entry.pobj $(LEVEE_OBJS) $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/levee/%.asm
 
 $(BUILD)/sh/input.asm: ripple/shell-input.c $(wildcard $(SHELL_DIR)/*.h) $(USERHEADERS) $(RCC) Makefile
@@ -379,7 +386,7 @@ $(BUILD)/awk/softfloat.asm: $(R)/softfloat.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/awk.rxe: $(BUILD)/user/entry.pobj $(AWK_OBJS) $(BUILD)/user/userlib.pobj $(filter-out $(BUILD)/libc/format.pobj,$(LIBC_OBJS)) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/awk/%.asm $(BUILD)/math/%.asm
 
 BASIC_OBJS := $(addprefix $(BUILD)/basic/,$(addsuffix .pobj,main parse value run))
@@ -390,14 +397,14 @@ $(BUILD)/basic/%.asm: $(ROOT)/ports/basic/%.c $(ROOT)/ports/basic/basic.h $(USER
 $(BUILD)/basic/%.pobj: $(BUILD)/basic/%.asm $(RASM)
 	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/basic.rxe: $(BUILD)/user/entry.pobj $(BASIC_OBJS) $(FLOAT_LIB_OBJS) $(BUILD)/user/userlib.pobj $(filter-out $(BUILD)/libc/format.pobj,$(LIBC_OBJS)) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/basic/%.asm
 
 $(BUILD)/sh/jobs.asm: ripple/shell-jobs.c $(wildcard $(SHELL_DIR)/*.h) $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -I$(SHELL_DIR) -DBUILD_FSH >$@.log 2>&1 || { cat $@.log; exit 1; }
 
-$(addprefix $(BUILD)/apps/,$(addsuffix .asm,ps top ptysh)): $(BUILD)/apps/%.asm: ripple/%.c ripple/process-report.h $(USERHEADERS) $(RCC) Makefile
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,ps top ptysh pkill)): $(BUILD)/apps/%.asm: ripple/%.c ripple/process-report.h $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 
@@ -421,7 +428,7 @@ $(BUILD)/user/consolecheck.asm: tools/consolecheck.c $(USERHEADERS) $(RCC)
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/consolecheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/consolecheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 
 $(BUILD)/gfxcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/gfxcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
 
@@ -555,7 +562,7 @@ $(BUILD)/user/muxcheck.asm: tools/muxcheck.c ripple/pty-limits.h $(USERHEADERS) 
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/muxcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/muxcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
-	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PHONY: test-mux
 test-mux: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,mux muxcheck init ptysh sh cat echo sleep stty ps seq levee rift rfl-fm lynx))
 	python3 tools/test_mux.py --system fuzix --build $(BUILD)
@@ -583,3 +590,18 @@ $(BUILD)/chat.rxe: $(CHAT_SOURCES) $(TLS_SOURCES) $(USERHEADERS) $(RCC) $(RASM) 
 test-kernel-io: kernel bios rfl-sdk $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo))
 	python3 tools/test_kernel_io_unit.py
 	python3 tools/test_kernel_io.py --os fuzix --build $(BUILD) --output $(BUILD)/kernel-io-check
+
+# pkill signals real guest processes; use a private image for acceptance.
+$(BUILD)/user/pkillcheck.asm: tools/pkillcheck.c $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/pkillcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/pkillcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+	@$(RXELINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+.PHONY: test-pkill
+test-pkill: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo pkill))
+	python3 tools/test_pkill.py --build $(BUILD)
+
+# Link mode and packer changes must relink even when Make prunes intermediate
+# assembly/object chains. Aliases are refreshed from their rebuilt targets.
+SHARED_LINK_NAMES := $(APPS) $(NX_APP_NAMES) init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck sh rfl-demo rfl-fm mc rift telegram music wavplay mv ln vi tcl tclsh sokoban nslookup
+$(addprefix $(BUILD)/,$(addsuffix .rxe,$(SHARED_LINK_NAMES))): $(SHARED_MODE_FILE)

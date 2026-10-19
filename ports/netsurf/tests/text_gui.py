@@ -11,26 +11,13 @@ import time
 from gui import ROOT, AuditGuest, installed_image, frame, check_disk
 
 
-def font_rows(word):
-    source = (ROOT / 'libraries/unicode/font.inc').read_text()
-    codes, rows = source.split('static const uint16_t ru_font_rows[][16] = {')
-    codes = [int(v, 16) for v in re.findall(r'0x([0-9a-f]+)', codes)]
-    rows = [int(v, 16) for v in re.findall(r'0x([0-9a-f]+)', rows)]
-    return [rows[codes.index(ord(ch))*16:codes.index(ord(ch))*16+16] for ch in word]
+from font_reference import find_word
 
 
 def verify_word(rgb, width, word):
-    glyphs = font_rows(word)
-    def matches(x, y):
-        for i, rows in enumerate(glyphs):
-            for dy, bits in enumerate(rows):
-                for dx in range(8):
-                    p = ((y+dy)*width+x+i*8+dx)*3
-                    expected = 0 if bits & (0x8000 >> dx) else 255
-                    if any(value != expected for value in rgb[p:p+3]): return False
-        return True
-    assert any(matches(x, y) for y in range(64, 100) for x in range(2, 12)), \
-        'opening Cyrillic word does not match the Unicode font pixels'
+    assert find_word(rgb,width,len(rgb)//(width*3),word,faces=(8,),
+                     x_range=range(2,16),y_range=range(64,100)), \
+        'opening Cyrillic word does not match the antialiased font pixels'
 
 
 def main():

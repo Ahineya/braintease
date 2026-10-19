@@ -44,7 +44,7 @@ def image(config):
         manifest.append(dict(name='/bin/'+name,mode=0o100755,path=str(ROOT/'fuse-x/build/apps'/f'{name}.fxe')))
     for name,device,mode in [('tty',0x200,0o20666),('console',0x201,0o20600),('null',0x100,0o20666),('urandom',0x104,0o20444),('crypto',0x105,0o20600)]:
         manifest.append(dict(name='/dev/'+name,mode=mode,device=device))
-    manifest += [dict(name='/etc/telegram.conf',mode=0o100600,path=str(config)),
+    manifest += [dict(name='/root/.telegram.conf',mode=0o100600,path=str(config)),
                  dict(name='/etc/termcap',text='ansi|vt100|xterm:co#80:li#30:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:me=\\E[0m:\n'),
                  dict(name='/etc/resolv.conf',text='nameserver 192.168.64.1\n')]
     manifest_path=PRIVATE/'manifest.json'
@@ -55,6 +55,7 @@ import {rootImage} from './ports/fuzix/tools/disk.mjs';
 import {installRoot} from './ports/fuzix/tools/install.mjs';
 import {openImage,writeImage} from './ports/fuzix/tools/image.mjs';
 import {checkRoot} from './ports/fuzix/tools/fsck.mjs';
+import {rootHomeFiles} from './ports/fuzix/tools/home.mjs';
 const [manifest,disk]=process.argv.slice(1);
 const files=JSON.parse(fs.readFileSync(manifest)).map(f=>({...f,data:f.path?fs.readFileSync(f.path):Buffer.from(f.text||'')}));
 let image;
@@ -65,8 +66,8 @@ if(fs.existsSync(disk)) {
         writeImage(backup,original,true);fs.chmodSync(backup,0o600);
         if(checkRoot(checked.image).issues.length)throw Error('Private filesystem repair failed');
     }
-    image=installRoot(checked.image,files);
-} else image=rootImage(files,32768,256);
+    image=installRoot(checked.image,[...rootHomeFiles(),...files]);
+} else image=rootImage([...files,...rootHomeFiles()],32768,256);
 const temporary=disk+'.new';if(fs.existsSync(temporary))fs.unlinkSync(temporary);
 writeImage(temporary,image,true);fs.chmodSync(temporary,0o600);fs.renameSync(temporary,disk);
 '''

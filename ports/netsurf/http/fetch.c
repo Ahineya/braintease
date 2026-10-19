@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Asynchronous NetSurf adapter to the generic guest htget --response CLI.
+/* Asynchronous NetSurf adapter to the generic guest htget --worker protocol.
  * Standard pipes carry HTTP entity headers/body and diagnostics. TLS/crypto
  * objects live entirely in the exec'd worker, never in the browser ABI. */
 #include <netsurf_profile.h>
@@ -20,17 +20,27 @@
 #include "content/fetchers.h"
 #include "content/urldb.h"
 #include "fetch.h"
+#include "../../tls/ripple_http.h"
 #define WEB_HEADERS 4
 #define WEB_LINE 1024
 #define WEB_BODY_LIMIT 262144UL
 #define WEB_WORKERS 2
+struct web_worker {
+    pid_t pid;
+    int input,output,errors,status;
+    bool busy,exited;
+    char origin[1280];
+};
+static struct web_worker workers[WEB_WORKERS];
 struct web_fetch {
     struct web_fetch *next;
     struct fetch *parent;
     nsurl *url;
-    pid_t pid;
-    int output,errors,status;
-    bool started,aborted,locked,eof,exited,headers_done,progress,only_2xx,known;
+    struct web_worker *worker;
+    char *request;
+    unsigned request_size,request_sent,record_used,record_left,record_kind;
+    unsigned char record[3];
+    bool started,aborted,locked,eof,headers_done,progress,only_2xx,known;
     unsigned line_used,header_budget,header_count,error_used;
     unsigned long received,total,started_at;
     const char *failure;
@@ -56,19 +66,25 @@ static unsigned long now_ms(void)
     return (unsigned long)t.tv_sec*1000UL+(unsigned long)t.tv_nsec/1000000UL;
 }
 static void close_pipe(int *fd) { if(*fd>=0)close(*fd); *fd=-1; }
-static void kill_worker(struct web_fetch *c)
+static void stop_worker(struct web_worker *w)
 {
-    close_pipe(&c->output); close_pipe(&c->errors);
-    if(c->pid>0&&!c->exited)kill(c->pid,SIGKILL);
+    if(!w||w->pid<=0)return;
+    close_pipe(&w->input);close_pipe(&w->output);close_pipe(&w->errors);
+    if(!w->exited)kill(w->pid,SIGKILL);
 }
-static bool collect(struct web_fetch *c,bool block)
+static void kill_worker(struct web_fetch *c) { stop_worker(c->worker); }
+static bool reap_worker(struct web_worker *w,bool block)
 {
     pid_t result;
-    if(c->pid<=0||c->exited)return true;
-    do { result=waitpid(c->pid,&c->status,block?0:WNOHANG); } while(result<0&&errno==EINTR&&block);
-    if(result==c->pid) { c->exited=true; return true; }
-    if(result<0&&errno==ECHILD) { c->status=0x100; c->exited=true; return true; }
+    if(!w||w->pid<=0||w->exited)return true;
+    do { result=waitpid(w->pid,&w->status,block?0:WNOHANG); } while(result<0&&errno==EINTR&&block);
+    if(result==w->pid||(result<0&&errno==ECHILD)) { w->exited=true;return true; }
     return false;
+}
+static bool collect(struct web_fetch *c,bool block) { return reap_worker(c->worker,block); }
+static void release_worker(struct web_fetch *c)
+{
+    if(c->worker){c->worker->busy=false;c->worker=NULL;}
 }
 static void destroy(void *opaque)
 {
@@ -77,7 +93,7 @@ static void destroy(void *opaque)
     while(*at&&*at!=c)at=&(*at)->next;
     if(*at)*at=c->next;
     if(c->started)--active_count;
-    kill_worker(c); collect(c,true);
+    kill_worker(c); collect(c,true); release_worker(c);free(c->request);
     nsurl_unref(c->url); free(c->location);
     for(i=0;i<c->header_count;i++)free(c->headers[i]);
     free(c);
@@ -103,7 +119,7 @@ static void *setup(struct fetch *parent,nsurl *url,bool only_2xx,bool downgrade,
     struct web_fetch *c=calloc(1,sizeof(*c));
     unsigned i;
     if(!c)return NULL;
-    c->parent=parent; c->url=nsurl_ref(url); c->output=c->errors=-1; c->only_2xx=only_2xx;
+    c->parent=parent; c->url=nsurl_ref(url); c->only_2xx=only_2xx;
     c->header_budget=16384;
     c->next=jobs; jobs=c;
     if(!acceptable(url))c->failure="HTTP URL exceeds this browser's bounds";
@@ -119,48 +135,81 @@ static void *setup(struct fetch *parent,nsurl *url,bool only_2xx,bool downgrade,
     }
     return c;
 }
+/* Prefer an idle connection to this origin; workers retain only one origin.
+ * Failed/cancelled jobs discard their worker, including all buffered bytes. */
+static struct web_worker *available_worker(const char *url)
+{
+    struct web_worker *choice=NULL,*w;unsigned i,n;
+    const char *at=strstr(url,"://");
+    if(!at)return NULL;
+    at+=3;while(*at&&*at!='/'&&*at!='?'&&*at!='#')at++;
+    n=at-url;
+    for(i=0;i<WEB_WORKERS;i++) {
+        w=&workers[i];if(w->busy)continue;
+        if(w->pid>0&&reap_worker(w,false)) {stop_worker(w);w->pid=0;w->origin[0]=0;}
+        if(!choice||(!choice->pid&&w->pid>0))choice=w;
+        if(strlen(w->origin)==n&&!strncasecmp(w->origin,url,n)){choice=w;break;}
+    }
+    if(choice){memcpy(choice->origin,url,n);choice->origin[n]=0;}
+    return choice;
+}
+static bool spawn_worker(struct web_worker *w)
+{
+    int input[2]={-1,-1},out[2]={-1,-1},err[2]={-1,-1},fd;
+    if(pipe(input)<0||pipe(out)<0||pipe(err)<0)goto failed;
+    w->pid=fork();w->exited=false;
+    if(w->pid<0)goto failed;
+    if(!w->pid) {
+        char *args[5];unsigned count=0;
+        if(dup2(input[0],0)<0||dup2(out[1],1)<0||dup2(err[1],2)<0)_exit(126);
+        /* Never keep the browser's Nano-X/socket/files alive after exec. */
+        for(fd=3;fd<FD_SETSIZE;fd++)close(fd);
+        args[count++]="htget";args[count++]="--worker";
+        if(ca_path){args[count++]="--cacert";args[count++]=ca_path;}
+        args[count]=NULL;execv("/bin/htget",args);
+        write(2,"Unable to execute /bin/htget\n",sizeof("Unable to execute /bin/htget\n")-1);_exit(127);
+    }
+    close(input[0]);close(out[1]);close(err[1]);
+    w->input=input[1];w->output=out[0];w->errors=err[0];
+    if(fcntl(w->input,F_SETFL,O_NONBLOCK)<0||fcntl(w->output,F_SETFL,O_NONBLOCK)<0||
+       fcntl(w->errors,F_SETFL,O_NONBLOCK)<0){stop_worker(w);return false;}
+    return true;
+failed:
+    for(fd=0;fd<2;fd++){if(input[fd]>=0)close(input[fd]);if(out[fd]>=0)close(out[fd]);if(err[fd]>=0)close(err[fd]);}
+    w->pid=0;return false;
+}
 static bool start(void *opaque)
 {
     struct web_fetch *c=opaque;
-    int out[2]={-1,-1},err[2]={-1,-1},fd;
-    char *cookie;
+    char *cookie,*at;unsigned i,length;
+    struct web_worker *w;
     if(active_count==WEB_WORKERS)return false;
-    ++active_count; c->started=true; c->started_at=now_ms();
-    if(c->aborted||c->failure) { c->eof=true;return true; }
+    if(c->aborted||c->failure){++active_count;c->started=true;c->eof=true;return true;}
+    w=available_worker(nsurl_access(c->url));if(!w)return false;
+    ++active_count;c->started=true;c->started_at=now_ms();
     cookie=urldb_get_cookie(c->url,true);
     if(cookie) {
         size_t n=strlen(cookie);
         if(c->header_count==WEB_HEADERS||n>WEB_LINE-8)fail(c,"Cookie exceeds this browser's request bounds");
         else {
             char *s=malloc(n+9);
-            if(s) { strcpy(s,"Cookie: ");strcat(s,cookie);c->headers[c->header_count++]=s; }
+            if(s){strcpy(s,"Cookie: ");strcat(s,cookie);c->headers[c->header_count++]=s;}
             else fail(c,"Unable to allocate cookie header");
         }
         free(cookie);
     }
     if(c->failure)return true;
-    if(pipe(out)<0||pipe(err)<0)goto failed;
-    c->pid=fork();
-    if(c->pid<0)goto failed;
-    if(!c->pid) {
-        char *args[16]; unsigned count=0,i;
-        if(dup2(out[1],1)<0||dup2(err[1],2)<0)_exit(126);
-        /* Never keep the browser's Nano-X/socket/files alive after exec. */
-        for(fd=3;fd<FD_SETSIZE;fd++)close(fd);
-        args[count++]="htget";args[count++]="--response";
-        if(ca_path){args[count++]="--cacert";args[count++]=ca_path;}
-        for(i=0;i<c->header_count;i++){args[count++]="--header";args[count++]=c->headers[i];}
-        args[count++]=(char *)nsurl_access(c->url);args[count++]="-";args[count]=NULL;
-        execv("/bin/htget",args);
-        write(2,"Unable to execute /bin/htget\n",sizeof("Unable to execute /bin/htget\n")-1);_exit(127);
-    }
-    close(out[1]);out[1]=-1;close(err[1]);err[1]=-1;
-    c->output=out[0];c->errors=err[0];
-    if(fcntl(c->output,F_SETFL,O_NONBLOCK)<0||fcntl(c->errors,F_SETFL,O_NONBLOCK)<0)fail(c,"Unable to configure fetch pipes");
+    length=strlen(nsurl_access(c->url))+2;
+    for(i=0;i<c->header_count;i++)length+=strlen(c->headers[i])+1;
+    c->request=malloc(length+2);
+    if(!c->request){fail(c,"Unable to allocate HTTP worker request");return true;}
+    c->request[0]=length>>8;c->request[1]=length&255;
+    at=c->request+2;strcpy(at,nsurl_access(c->url));at+=strlen(at);*at++='\n';
+    for(i=0;i<c->header_count;i++){strcpy(at,c->headers[i]);at+=strlen(at);*at++='\n';}
+    *at='\n';c->request_size=length+2;
+    c->worker=w;w->busy=true;
+    if(!w->pid&&!spawn_worker(w))fail(c,"Unable to start guest HTTP worker");
     return true;
-failed:
-    for(fd=0;fd<2;fd++){if(out[fd]>=0)close(out[fd]);if(err[fd]>=0)close(err[fd]);}
-    c->pid=0;fail(c,"Unable to start guest HTTP worker");return true;
 }
 static void abort_fetch(void *opaque)
 {
@@ -226,26 +275,86 @@ static void process_line(struct web_fetch *c)
 static void drain_errors(struct web_fetch *c)
 {
     char buf[256];ssize_t got;unsigned i;
-    if(c->errors<0)return;
-    got=read(c->errors,buf,sizeof(buf));
+    if(!c->worker||c->worker->errors<0)return;
+    got=read(c->worker->errors,buf,sizeof(buf));
     if(got>0)for(i=0;i<(unsigned)got;i++) {
         unsigned ch=(unsigned char)buf[i];
         if(c->error_used+1<sizeof(c->error)&&ch>=32&&ch<=126)c->error[c->error_used++]=ch;
         else if((ch=='\n'||ch=='\r')&&c->error_used&&c->error[c->error_used-1]!=' '&&c->error_used+1<sizeof(c->error))c->error[c->error_used++]=' ';
         c->error[c->error_used]=0;
     }
-    else if(got==0)close_pipe(&c->errors);
-    else if(errno!=EAGAIN&&errno!=EINTR) { close_pipe(&c->errors); fail(c,"HTTP worker diagnostic pipe failed"); }
+    else if(got==0)close_pipe(&c->worker->errors);
+    else if(errno!=EAGAIN&&errno!=EINTR) { close_pipe(&c->worker->errors); fail(c,"HTTP worker diagnostic pipe failed"); }
+}
+static void response_data(struct web_fetch *c,const ns_octet_t *buf,unsigned got)
+{
+    unsigned i=0,n,kind;fetch_msg message;
+    while(i<got&&!c->eof&&!c->failure&&!c->aborted) {
+        if(c->record_used<3) {
+            if(buf[i]>255){fail(c,"Invalid HTTP worker record octet");break;}
+            c->record[c->record_used++]=buf[i++];
+            if(c->record_used<3)continue;
+            kind=c->record_kind=c->record[0];
+            c->record_left=(unsigned)c->record[1]*256+c->record[2];
+            if((kind==RIPPLE_HTTP_DONE&&c->record_left)||
+               (kind==RIPPLE_HTTP_HEADERS&&(!c->record_left||c->record_left>16384||c->headers_done))||
+               (kind==RIPPLE_HTTP_BODY&&(!c->headers_done||!c->record_left||c->record_left>4096))||
+               (kind==RIPPLE_HTTP_ERROR&&(!c->record_left||c->record_left>1024))||
+               (kind!=RIPPLE_HTTP_DONE&&kind!=RIPPLE_HTTP_HEADERS&&kind!=RIPPLE_HTTP_BODY&&kind!=RIPPLE_HTTP_ERROR)) {
+                fail(c,"Invalid HTTP worker record");break;
+            }
+            if(kind==RIPPLE_HTTP_DONE) {
+                if(!c->headers_done||(c->known&&c->received!=c->total&&fetch_http_code(c->parent)!=304&&
+                   fetch_http_code(c->parent)!=301&&fetch_http_code(c->parent)!=302&&fetch_http_code(c->parent)!=303&&
+                   fetch_http_code(c->parent)!=307&&fetch_http_code(c->parent)!=308)||i!=got) {
+                    fail(c,"Incomplete HTTP worker response");break;
+                }
+                c->eof=true;release_worker(c);break;
+            }
+            if(kind==RIPPLE_HTTP_ERROR){c->error_used=0;c->error[0]=0;}
+        }
+        n=got-i;if(n>c->record_left)n=c->record_left;
+        if(c->record_kind==RIPPLE_HTTP_HEADERS) {
+            unsigned end=i+n;
+            for(;i<end&&!c->failure&&!c->aborted;i++) {
+                if(c->headers_done||!c->header_budget--||c->line_used>=WEB_LINE+2){fail(c,"HTTP response headers exceed bounds");break;}
+                if(buf[i]=='\n'){process_line(c);c->line_used=0;}
+                else c->line[c->line_used++]=buf[i];
+            }
+        } else if(c->record_kind==RIPPLE_HTTP_BODY) {
+            c->received+=n;
+            if(c->received>WEB_BODY_LIMIT){fail(c,"HTTP response exceeds 256 KiB source limit");break;}
+            memset(&message,0,sizeof(message));message.type=FETCH_DATA;
+            message.data.header_or_data.buf=buf+i;message.data.header_or_data.len=n;
+            send_message(c,&message);i+=n;
+        } else {
+            unsigned end=i+n;
+            for(;i<end;i++)if(c->error_used+1<sizeof(c->error)) {
+                unsigned ch=buf[i];c->error[c->error_used++]=ch>=32&&ch<=126?ch:' ';
+            }
+            c->error[c->error_used]=0;
+        }
+        c->record_left-=n;
+        if(!c->record_left) {
+            if(c->record_kind==RIPPLE_HTTP_ERROR){fail(c,c->error[0]?c->error:"HTTP request failed");break;}
+            c->record_used=0;
+        }
+    }
 }
 static void poll_fetch(lwc_string *scheme)
 {
     struct web_fetch *c=jobs,*next;
-    ns_octet_t buf[2048];ssize_t got;unsigned round,i;
+    ns_octet_t buf[4096];ssize_t got;unsigned round,i;
     fetch_msg message;
+    /* Reap idle children too; an idle server may close its connection, but
+     * the worker normally stays alive to dial again for its next request. */
+    for(i=0;i<WEB_WORKERS;i++)if(!workers[i].busy&&workers[i].pid>0&&reap_worker(&workers[i],false)) {
+        stop_worker(&workers[i]);workers[i].pid=0;workers[i].origin[0]=0;
+    }
     for(;c;c=next) {
         next=c->next;
         if(c->locked)continue;
-        if(c->aborted) { if(collect(c,false))complete(c,FETCH_FINISHED,NULL);continue; }
+        if(c->aborted){if(collect(c,false))complete(c,FETCH_FINISHED,NULL);continue;}
         if(!c->started)continue;
         drain_errors(c);
         if(!c->progress) {
@@ -254,30 +363,21 @@ static void poll_fetch(lwc_string *scheme)
         }
         if(c->aborted)continue;
         if(now_ms()-c->started_at>240000UL)fail(c,"Network request exceeded 240 second deadline");
-        for(round=0;round<4&&!c->eof&&!c->aborted&&!c->failure;round++) {
-            got=read(c->output,buf,sizeof(buf));
-            if(!got) { c->eof=true;close_pipe(&c->output);break; }
-            if(got<0) { if(errno!=EAGAIN&&errno!=EINTR)fail(c,"HTTP worker output pipe failed");break; }
-            for(i=0;i<(unsigned)got&&!c->headers_done&&!c->failure&&!c->aborted;i++) {
-                if(!c->header_budget--||c->line_used>=WEB_LINE+1) { fail(c,"HTTP response headers exceed bounds");break; }
-                if(buf[i]=='\n') { process_line(c);c->line_used=0; }
-                else c->line[c->line_used++]=buf[i];
-            }
-            if(c->headers_done&&!c->failure&&!c->aborted&&i<(unsigned)got) {
-                c->received+=(unsigned)got-i;
-                if(c->received>WEB_BODY_LIMIT) { fail(c,"HTTP response exceeds 256 KiB source limit");break; }
-                memset(&message,0,sizeof(message));message.type=FETCH_DATA;
-                message.data.header_or_data.buf=buf+i;message.data.header_or_data.len=(unsigned)got-i;
-                send_message(c,&message);
-            }
+        if(c->worker&&!c->failure&&c->request_sent<c->request_size) {
+            got=write(c->worker->input,c->request+c->request_sent,c->request_size-c->request_sent);
+            if(got>0)c->request_sent+=got;
+            else if(!got||(errno!=EAGAIN&&errno!=EINTR))fail(c,"HTTP worker request pipe failed");
         }
-        if(c->failure&&!c->eof)kill_worker(c);
+        for(round=0;round<4&&!c->eof&&!c->aborted&&!c->failure;round++) {
+            got=read(c->worker->output,buf,sizeof(buf));
+            if(!got){fail(c,"HTTP worker exited before completing the response");break;}
+            if(got<0){if(errno!=EAGAIN&&errno!=EINTR)fail(c,"HTTP worker output pipe failed");break;}
+            response_data(c,buf,got);
+        }
         if((c->eof||c->failure)&&collect(c,false)) {
             long code=fetch_http_code(c->parent);
-            drain_errors(c);
             if(c->aborted)complete(c,FETCH_FINISHED,NULL);
-            else if(c->failure||!WIFEXITED(c->status)||WEXITSTATUS(c->status)!=0||!c->headers_done)
-                complete(c,FETCH_ERROR,c->failure?c->failure:c->error[0]?c->error:"HTTP worker failed or response was incomplete");
+            else if(c->failure)complete(c,FETCH_ERROR,c->failure);
             else if(code==301||code==302||code==303||code==307||code==308) {
                 nsurl *target=NULL;
                 if(c->location&&nsurl_join(c->url,c->location,&target)==NSERROR_OK) {
@@ -291,17 +391,19 @@ static void poll_fetch(lwc_string *scheme)
 }
 static int fdset(lwc_string *scheme,fd_set *reads,fd_set *writes,fd_set *errors)
 {
-    int max=-1;
-    struct web_fetch *c;
-    for(c=jobs;c;c=c->next)if(c->started&&!c->aborted) {
-        if(c->output>=0){FD_SET(c->output,reads);if(c->output>max)max=c->output;}
-        if(c->errors>=0){FD_SET(c->errors,reads);if(c->errors>max)max=c->errors;}
+    int max=-1;struct web_fetch *c;struct web_worker *w;
+    for(c=jobs;c;c=c->next)if(c->started&&!c->aborted&&(w=c->worker)!=NULL) {
+        if(w->output>=0){FD_SET(w->output,reads);if(w->output>max)max=w->output;}
+        if(w->errors>=0){FD_SET(w->errors,reads);if(w->errors>max)max=w->errors;}
+        if(w->input>=0&&c->request_sent<c->request_size){FD_SET(w->input,writes);if(w->input>max)max=w->input;}
     }
     return max;
 }
 static void finalise(lwc_string *scheme)
 {
+    unsigned i;
     while(jobs)destroy(jobs);
+    for(i=0;i<WEB_WORKERS;i++){stop_worker(&workers[i]);reap_worker(&workers[i],true);workers[i].pid=0;}
     free(ca_path);ca_path=NULL;
 }
 nserror netsurf_http_register(const char *ca_file)
@@ -311,6 +413,7 @@ nserror netsurf_http_register(const char *ca_file)
         .abort=abort_fetch,.free=destroy,.poll=poll_fetch,.fdset=fdset,.finalise=finalise,
     };
     const char *names[2]={"http","https"};unsigned i;nserror error;
+    signal(SIGPIPE,SIG_IGN);
     if(ca_file){ca_path=strdup(ca_file);if(!ca_path)return NSERROR_NOMEM;}
     for(i=0;i<2;i++) {
         lwc_string *scheme=NULL;

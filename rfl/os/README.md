@@ -1,9 +1,40 @@
-# RFL applications for FUZIX and Fuse-X
+# RFL applications for Riplix and Fuse-X
 
 RFL applications can be compiled on the host for both guest systems. They use
 the guest libc, process table, filesystem and terminal. Neither compiler needs
 to run in the guest. RFL Commander is the first modular terminal application
 using this path.
+
+## Standalone macOS platform
+
+`rfl build SOURCE --os macos -o OUTPUT` builds a host terminal application.
+Rift's convenience builder stages a relocatable distribution:
+
+```sh
+python3 rfl/apps/rift/build-macos.py
+build/rift-macos/bin/rift /path/to/file.txt
+```
+
+This platform uses the native backend and the runtime's opt-in `host-tui`
+feature. POSIX calls copy checked octet buffers to/from host descriptors;
+directory/window/theme objects use opaque compatibility handles. The editor's
+C engine keeps the compatibility ABI, while curses/themes compile with the
+host compiler behind explicit adapters. Host pointers never enter RFL memory.
+The builder selects a private runtime archive and adds the system termcap
+library through `RCC_NATIVE_LIBS=ncurses` at link time.
+
+In this mode `std/posix` accesses the host filesystem/environment and launches
+host commands. Native directory capacity is 256 octets including NUL, while
+guest builds keep 31. Host device/inode pairs map to stable process-local
+32-bit identities without truncating host inode numbers. File sizes above the
+32-bit metadata range return an overflow error. Process IDs are exposed as
+`u32` on all platforms. The existing editor's file-size/tab limits are unchanged.
+`RFL_DATA_DIR` defaults to `../share` relative to the executable's directory;
+applications retain their own resource/configuration policy.
+
+See [Rift's native guide](../apps/rift/README.md#standalone-macos) for controls,
+resources and isolated host/terminal checks. This build path never opens a guest
+disk, installs system files or depends on a guest kernel.
 
 ## Build and install
 
@@ -20,17 +51,17 @@ target/release/rfl build rfl/apps/commander/main.rfl --os fuse-x -o fuse-x/build
 
 `--build-dir PATH` selects an alternate OS SDK/build directory. Defaults are
 `build/fuzix` and `fuse-x/build`; pass the actual directory when using the
-FUZIX Makefile's separate `ports/fuzix/build` default. `--compiler PATH` selects
+Riplix Makefile's separate `ports/fuzix/build` default. `--compiler PATH` selects
 RCC. Omitting `-o` places an `.rxe` or `.fxe` next to the input. Python 3 is
 required, along with the existing OS toolchain (including `rasm`/`rlink` for
-FUZIX and a native linker for Fuse-X). Run from a checkout containing the SDK;
+Riplix and a native linker for Fuse-X). Run from a checkout containing the SDK;
 the compiler uses its build-time checkout path to locate the helper and libraries.
 
 Both normal OS builds include `rfl-demo` and `rfl-fm`, with `mc` as a short
 symbolic alias for Commander.
 Their normal offline image install/upgrade step installs these under `/bin`,
 preserving guest data.
-Rebuild with `scripts/run-fuzix.sh` or `scripts/run-fuse-x.sh` to make them
+Rebuild with `scripts/run-riplix.sh` or `scripts/run-fuse-x.sh` to make them
 available in the corresponding system. A standalone `rfl build` only produces
 the executable; it does not modify or restart an existing guest. Follow the OS
 launcher's usual rules for stopping a running session before upgrading its disk.
@@ -52,7 +83,7 @@ guest's current directory.
 
 ## Guest ABI and libraries
 
-The build emits RCC IR using the Ripple backend for FUZIX or the native backend
+The build emits RCC IR using the Ripple backend for Riplix or the native backend
 for Fuse-X, then links the matching guest entry point and libc. Ordinary RFL
 values, collections, strings, closures, modules and owned resource cleanup use
 the existing compiler. `println` and input use guest descriptors, so shell
@@ -205,7 +236,7 @@ error paths remove the temporary, and same-file copies are rejected. Copies
 preserve ordinary permission bits, including executability, and replace destination
 symlinks rather than following them. Ownership, special mode bits and timestamps
 are not preserved. Moves first try guest rename. Directory trees can be moved
-with F6 or renamed with `r` within the same filesystem on both FUZIX and Fuse-X.
+with F6 or renamed with `r` within the same filesystem on both Riplix and Fuse-X.
 These operations preserve the directory and file inodes, hard links, symlinks
 and open files; moving between parents also updates `..` and parent link counts.
 Moves into the directory's own descendants and replacement of nonempty

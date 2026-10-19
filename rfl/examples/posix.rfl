@@ -1,7 +1,7 @@
 import { IoError, Errno, open_read, create, arguments, process_id, write_all, STDOUT } from "std/posix";
 
 fn demo() -> Result<unit, IoError> {
-    println("Hello from RFL on FUZIX/Fuse-X!");
+    println("Hello from RFL on Riplix/Fuse-X!");
     println(arguments());
     println(process_id());
     let file = create("/tmp/rfl-demo")?;

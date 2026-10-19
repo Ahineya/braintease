@@ -1,7 +1,7 @@
-# BASIC for FUZIX and Fuse-X
+# BASIC for Riplix and Fuse-X
 
 `basic` is a terminal-first interpreter with QBasic-style syntax. Its portable C
-engine builds through RCC for Ripple/FUZIX and native Fuse-X. Granny Bingo is
+engine builds through RCC for Ripple/Riplix and native Fuse-X. Granny Bingo is
 its first application port. This is a growing system BASIC dialect, not a claim
 of complete QBasic compatibility.
 

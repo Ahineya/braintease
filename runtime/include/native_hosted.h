@@ -22,6 +22,12 @@ unsigned long rcc_hosted_image_finish(void);
  * a worker, and an unfinished image cannot be entered. */
 int rcc_hosted_image_prepare(void);
 unsigned long rcc_hosted_image_poll(void);
+/* After streaming a complete package, returns a missing library's absolute
+ * guest path, 0 when complete, or ~0UL on failure. A following image_begin
+ * appends that library to the pending graph; prepare consumes the whole graph. */
+unsigned long rcc_hosted_image_dependency(char *path, unsigned capacity);
+/* Kernel must open/check the requested file before trying session code reuse. */
+int rcc_hosted_image_reuse(void);
 void rcc_hosted_image_cancel(void);
 void rcc_hosted_bind_syscall(long (*entry)(unsigned long));
 /* Called at user-code checkpoints, never while a kernel callback is active.

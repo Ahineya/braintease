@@ -131,6 +131,7 @@ static void csi(struct vt *t,unsigned c) {
             case 7:t->wrap=on;t->pending=0;break;
             case 25:t->visible=on;break;
             case 2004:t->bracketed_paste=on;break;
+            case 2026:t->synchronized=on;break;
             case 47:case 1047:case 1049:
                 if(on&&!t->alternate) {
                     t->primary_x=t->x;t->primary_y=t->y;t->alternate=1;t->x=t->y=0;

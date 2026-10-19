@@ -169,11 +169,30 @@ pub fn lower_module_with_memory_mode(module: &Module, bank_size: u16, trace_spil
     };
     let symbols: std::collections::BTreeMap<_, _> = link_symbols.into_iter()
         .map(|(name, refs)| (rename(&name), refs.iter().map(|n| rename(n)).collect::<Vec<_>>())).collect();
+    let mut types = std::collections::BTreeMap::new();
+    let mut exports = Vec::new();
+    for function in &module.functions {
+        let signature = format!("fn({};{})->{}",
+            function.parameters.iter().map(|(_, ty)| shared_type(ty)).collect::<Vec<_>>().join(","),
+            function.is_vararg, shared_type(&function.return_type));
+        types.insert(rename(&function.name), signature);
+        if !function.is_external && !module.internal_functions.contains(&function.name) {
+            exports.push(rename(&function.name));
+        }
+    }
+    for global in &module.globals {
+        types.insert(rename(&global.name), shared_type(&global.var_type));
+        if !matches!(global.linkage, Linkage::Declaration | Linkage::Private | Linkage::Internal) {
+            exports.push(rename(&global.name));
+        }
+    }
     let metadata = serde_json::json!({
         "banked_data": banked_globals,
         "symbols": symbols,
         "code": link_code.iter().map(|n| rename(n)).collect::<Vec<_>>(),
         "roots": link_roots,
+        "types": types,
+        "exports": exports,
         "data": module.globals.iter().filter(|g| g.linkage != Linkage::Declaration)
             .map(|g| (rename(&g.name), g.var_type.size_in_words().unwrap_or(1)))
             .collect::<std::collections::BTreeMap<_, _>>(),
@@ -181,6 +200,16 @@ pub fn lower_module_with_memory_mode(module: &Module, bank_size: u16, trace_spil
     all_instructions.insert(0, AsmInst::Comment(format!("rcc-link-v1 {metadata}")));
     info!("V2: Module lowering complete, generated {} instructions", all_instructions.len());
     Ok(all_instructions)
+}
+
+fn shared_type(ty: &rcc_ir::ir::IrType) -> String {
+    use rcc_ir::ir::IrType;
+    match ty {
+        IrType::FatPtr(_) => "ptr".into(),
+        IrType::Array { size, element_type } => format!("array:{size}:{}", shared_type(element_type)),
+        IrType::Struct { fields, packed, .. } => format!("struct:{packed}:({})", fields.iter().map(shared_type).collect::<Vec<_>>().join(",")),
+        _ => ty.to_string(),
+    }
 }
 
 /// Build replacements once per translation unit. Block labels can contain

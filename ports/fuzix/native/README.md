@@ -1,8 +1,8 @@
-# Native hosted FUZIX: process prototype
+# Native hosted Riplix: process prototype
 
-This directory contains the first executable milestone toward running FUZIX as
+This directory contains the first executable milestone toward running Riplix as
 a host application. It proves the process mechanism with a standalone C program;
-it does **not** boot the FUZIX kernel yet.
+it does **not** boot the Riplix kernel yet.
 
 From the repository root:
 
@@ -68,14 +68,14 @@ Programs without process-service calls retain ordinary native code generation.
 
 Scheduling is cooperative, and a blocking host call such as `getchar` blocks
 the entire driver. Console output, host file handles and devices are shared
-host services; they do not yet implement FUZIX's per-process descriptor,
+host services; they do not yet implement Riplix's per-process descriptor,
 terminal or device semantics. Runtime faults still terminate the host program.
 There are no signals, timer preemption, `exec`, kernel/user distinction, or
 translation of existing Ripple executable files into native code.
 
 The next port needs a separate hosted platform alongside `ripple/`: kernel
 entry and syscall adapters, storage, executable loading, and a nonblocking
-console. The first FUZIX goal is a headless shell using the same kernel and
+console. The first Riplix goal is a headless shell using the same kernel and
 filesystem code. The console should accept a terminal backend independently
 of graphics; a network-backed terminal can come before a GUI once the kernel's
 networking path is ready. This prototype adds no telnet listener or GUI.

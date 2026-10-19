@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in Internet DNS/HTTP smoke test through FUZIX's default shared vmnet link.
+"""Opt-in Internet DNS/HTTP smoke test through Riplix's default shared vmnet link.
 
 Uses a private disk. The existing macOS helper needs sudo authorization.
 Makes DNS queries and one cleartext HTTP download from example.com.

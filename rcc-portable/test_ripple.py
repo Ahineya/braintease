@@ -174,7 +174,7 @@ def main():
             run(['node',HERE/'test_rvm_image.mjs','create',image2,install,manifest])
             result=rvm_boot(install,image2,['generated','echo EXECUTION_STATUS:$?'],'ripple-rvm-execution.log')
             assert '\nEXECUTION_STATUS:0\n' in result,result
-            print(f'FUZIX/RVM: {len(irfiles)*2} exact host assembly matches across both backend builds; raw C pipeline and guest RXE execution passed',flush=True)
+            print(f'Riplix/RVM: {len(irfiles)*2} exact host assembly matches across both backend builds; raw C pipeline and guest RXE execution passed',flush=True)
     print('portable Ripple backend checks passed',flush=True)
 
 if __name__=='__main__':main()

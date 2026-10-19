@@ -66,7 +66,7 @@ def main():
                         raise AssertionError(content.decode(errors='replace'))
                     time.sleep(.02)
             try:
-                wait(b'fuse-x# ' if args.native else b'fuzix# ')
+                wait(b'fuse-x# ' if args.native else b'riplix# ')
                 os.write(master, b'cursescheck; echo CURSES_STATUS:$?\r')
                 content = wait(b'CURSES_STATUS:0\n')
                 assert b'CURSES_OK ' in content and b'CURSES_FAILED' not in content, content

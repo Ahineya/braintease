@@ -97,14 +97,14 @@ def live(image, jit):
 
     def command_line(data):
         send(data + b'\r')
-        return until(b'fuzix# ')
+        return until(b'riplix# ')
 
     try:
-        until(b'fuzix# ')
+        until(b'riplix# ')
         send(b'ttycheck --wait\r')
         until(b'\nTTY_WAIT_READY\r')
         send(b'\x1a')
-        assert b'Stopped ttycheck --wait' in until(b'fuzix# ')
+        assert b'Stopped ttycheck --wait' in until(b'riplix# ')
         assert b'Stopped ttycheck --wait' in command_line(b'jobs')
         text = command_line(b'ps -el')
         assert re.search(rb'\bT\s+1\s+\d+:\d+:\d+.*ttycheck', text), text
@@ -112,7 +112,7 @@ def live(image, jit):
         send(b'fg\r')
         until(b'ttycheck --wait\r')
         send(b'\x03')
-        until(b'fuzix# ')
+        until(b'riplix# ')
         assert b'FG_STATUS:130\n' in command_line(b'echo FG_STATUS:$?')
         # Exercise Levee's suspend contract explicitly: vi may alias another editor.
         send(b'levee /job-note\r'); until(b'\x1b[?1049h')
@@ -120,18 +120,18 @@ def live(image, jit):
         send(b'iPreserved through suspend.\x1b')
         time.sleep(0.1)
         send(b'\x1a')
-        text = until(b'fuzix# ')
+        text = until(b'riplix# ')
         assert b'Stopped levee /job-note' in text and b'\x1b[?1049l' in text, text
         send(b'fg\r'); until(b'\x1b[?1049h')
-        send(b':wq\r'); until(b'fuzix# ')
+        send(b':wq\r'); until(b'riplix# ')
         assert b'Preserved through suspend.' in command_line(b'cat /job-note')
         # Wait for the final executable itself, rather than a shell message
         # before exec: Ctrl-C during that handoff can see shell signal policy.
         send(b'ttycheck --wait | ttycheck --wait\r')
         until(b'\nTTY_WAIT_READY\r')
         send(b'\x1a')
-        assert b'Stopped pipeline' in until(b'fuzix# ')
-        send(b'fg\r'); until(b'pipeline\r'); send(b'\x03'); until(b'fuzix# ')
+        assert b'Stopped pipeline' in until(b'riplix# ')
+        send(b'fg\r'); until(b'pipeline\r'); send(b'\x03'); until(b'riplix# ')
         assert b'PIPE_STATUS:130\n' in command_line(b'echo PIPE_STATUS:$?')
         command_line(b'stty tostop')
         command_line(b'echo BG_WRITE &')
@@ -148,22 +148,22 @@ def live(image, jit):
             time.sleep(0.1)
         send(b'fg\r'); until(b'cat\r'); send(b'PTY_CAT\r')
         until(b'PTY_CAT\r')
-        send(b'\x04'); until(b'fuzix# ')
+        send(b'\x04'); until(b'riplix# ')
         send(b'top\r'); until(b'CPU%')
         time.sleep(0.2); send(b'iPreserved through suspend.\x1b'); time.sleep(0.1); send(b'\x1a')
-        assert b'Stopped top' in until(b'fuzix# ')
+        assert b'Stopped top' in until(b'riplix# ')
         send(b'fg\r'); until(b'top\r'); send(b'q')
-        text = until(b'fuzix# ')
+        text = until(b'riplix# ')
         assert b'\x1b[?25h' in text and b'\x1b[?1049l' in text, text
         # Each nested host allocates a fresh master; its shell has an independent
         # session and controlling slave, including foreground Ctrl-C handling.
-        send(b'ptysh\r'); until(b'fuzix# ')
+        send(b'ptysh\r'); until(b'riplix# ')
         text = command_line(b'ps -ef')
         assert re.search(rb'\bS\s+2\s+\d+:\d+:\d+.*sh', text), text
-        send(b'ptysh\r'); until(b'fuzix# ')
+        send(b'ptysh\r'); until(b'riplix# ')
         text = command_line(b'ps -ef')
         assert re.search(rb'\bS\s+3\s+\d+:\d+:\d+.*sh', text), text
-        send(b'ttycheck --wait\r'); until(b'\nTTY_WAIT_READY\r'); send(b'\x03'); until(b'fuzix# ')
+        send(b'ttycheck --wait\r'); until(b'\nTTY_WAIT_READY\r'); send(b'\x03'); until(b'riplix# ')
         assert b'INNER_STATUS:130\n' in command_line(b'echo INNER_STATUS:$?')
         command_line(b'exit')
         command_line(b'exit')

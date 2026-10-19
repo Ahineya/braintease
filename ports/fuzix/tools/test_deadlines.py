@@ -67,7 +67,7 @@ def main():
                         raise AssertionError(content.decode(errors='replace'))
                     time.sleep(.02)
             try:
-                wait(b'fuse-x# ' if args.native else b'fuzix# ')
+                wait(b'fuse-x# ' if args.native else b'riplix# ')
                 os.write(master, b'finecheck; echo FINE_STATUS:$?\r')
                 content = wait(b'FINE_STATUS:0\n')
                 assert b'FINE_OK ' in content and b'FINE_FAILED' not in content, content

@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PORT = Path(__file__).resolve().parent
 SOURCES = ['wolfcrypt/src/' + n + '.c' for n in CRYPTO if n not in ('asn_orig', 'asn_tsp')]
 SOURCES += ['src/' + n + '.c' for n in ('ssl', 'tls', 'tls13', 'internal', 'keys', 'wolfio')]
-SOURCES += ['@/ripple_tls.c', '@/ripple_crypto.c']
+SOURCES += ['@/ripple_tls.c', '@/ripple_crypto.c', '@/ripple_http.c']
 
 
 def build(output, compiler, target='native', jobs=3, config=None):
@@ -65,16 +66,52 @@ def build(output, compiler, target='native', jobs=3, config=None):
     return result
 
 
+def shared_library(inputs, sdk, compiler, linker=None):
+    """Package TLS once; resolve its libc through the guest module ABI."""
+    linker = Path(linker or compiler).resolve()
+    sdk = Path(sdk).resolve()
+    subprocess.run([sys.executable, str(ROOT / 'fuse-x/cc.py'), '--shared', '--sdk-only',
+                    '--compiler', str(compiler), '--linker', str(linker), '--build', str(sdk),
+                    '-o', str(sdk / 'lib/libtls.fxl.1')], check=True)
+    libc = sdk / 'lib/libc.fxl.1'
+    output = sdk / 'lib/libtls.fxl.1'
+    key = hashlib.sha256(str((linker, linker.stat().st_mtime_ns)).encode())
+    key.update(libc.read_bytes())
+    # The supported guest API is the portable facade. Exporting every wolfSSL
+    # implementation symbol also roots optional APIs excluded by this port's
+    # configuration (and prevents whole-program elimination inside the library).
+    exports=sorted({name for header in PORT.glob('ripple_*.h')
+                    for name in re.findall(r'\b(ripple_(?:tls|crypto|http)_\w+)\s*\(',header.read_text())})
+    key.update(str(exports).encode())
+    for path in inputs:
+        key.update(Path(path).read_bytes())
+    stamp = output.with_suffix('.sha256')
+    digest = key.hexdigest()
+    if not output.exists() or not stamp.exists() or stamp.read_text() != digest:
+        print('Build: Linking shared libtls.fxl.1', flush=True)
+        subprocess.run([str(linker), 'link-shared', *map(str, inputs), '--soname', output.name,
+                        *[item for name in exports for item in ('--export',name)],
+                        '--library', f'{libc}=/lib/fuse-x/{libc.name}', '-o', str(output)],
+                       check=True, env=dict(os.environ, RCC_NATIVE_PROGRESS='1'))
+        stamp.write_text(digest)
+    return f'{output}=/lib/fuse-x/{output.name}'
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build', type=Path, default=ROOT / 'build/tls')
     parser.add_argument('--compiler', type=Path, default=ROOT / 'target/release/rcc')
     parser.add_argument('--target', choices=('native', 'ripple'), default='native')
     parser.add_argument('--config', type=Path, help='directory containing a matching user_settings.h')
+    parser.add_argument('--shared-sdk', type=Path, help='also build the native guest shared library for this SDK')
     parser.add_argument('-j', '--jobs', type=int, default=3)
     args = parser.parse_args()
     try:
-        build(args.build, args.compiler, args.target, args.jobs, args.config)
+        inputs = build(args.build, args.compiler, args.target, args.jobs, args.config)
+        if args.shared_sdk:
+            if args.target != 'native':
+                raise RuntimeError('shared TLS currently requires the native module loader')
+            shared_library(inputs,args.shared_sdk,args.compiler)
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         print(error, file=sys.stderr)
         sys.exit(1)

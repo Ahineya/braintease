@@ -19,6 +19,7 @@ struct vt {
     unsigned fg,bg,bold,reverse,visible,wrap,pending,alternate,appcursor;
     unsigned parser,private_mode,count,params[16],intermediate;
     unsigned underline,blink,cursor_shape,bracketed_paste;
+    unsigned synchronized;
     unsigned g0,g1,shift,charset_target;
     struct ru_decoder utf8;
     struct ru_break grapheme;

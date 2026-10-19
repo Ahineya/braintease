@@ -71,7 +71,7 @@ def native(args):
             guest.shell('NANOX_KEEP_TTY=1; export NANOX_KEEP_TTY')
             guest.shell('nano-X -p &'); guest.shell('s=$!')
             guest.wait(lambda: b'Nano-X ready' in guest.log, 'Nano-X ready')
-            guest.shell('netsurf --trace &'); guest.shell('p=$!')
+            guest.shell('netsurf --trace /usr/share/netsurf/index.html &'); guest.shell('p=$!')
             guest.wait(lambda: b'NETSURF_GUI_LOADED FuseDE Browser' in guest.log, 'browser loaded', seconds=120)
             _, before = frame(frames, 'NetSurf: FuseDE Browser', (600,420), args.output/'native-wide.png')
             wid = int(re.search(rb'NETSURF_GUI_READY (\d+)', guest.log).group(1))
@@ -115,17 +115,10 @@ def native(args):
 
 
 def verify_form(words):
-    # Read the existing ROM font as an independent expected bitmap. The test
-    # sends real HID keys, then recognises the resulting word in guest pixels.
-    source=(ROOT/'ports/nanox/upstream/src/fonts/compiled/rom8x16.c').read_bytes().decode('latin1')
-    bits=[int(s,16) for s in re.findall(r'^0x([0-9a-fA-F]{4}),',source,re.M)]
-    assert len(bits)==256*16
-    expected=[[bool(bits[ord(ch)*16+y] & (0x8000>>x)) for ch in 'world' for x in range(8)] for y in range(16)]
-    def matches(x,y):
-        # Text input foreground is black in the upstream default stylesheet.
-        return all((words[(y+dy)*640+x+dx]==0)==value
-                   for dy,row in enumerate(expected) for dx,value in enumerate(row))
-    assert any(matches(x,y) for y in range(255,280) for x in range(136,260)), 'typed HTML input does not contain world'
+    from font_reference import find_word
+    rgb=bytes(channel for value in words for channel in unpack565(value))
+    assert find_word(rgb,640,480,'world',faces=(0,4,8)), \
+        'typed HTML input does not contain world in the antialiased font'
 
 
 def rvm(args):
@@ -146,7 +139,7 @@ def rvm(args):
         data=source.read_bytes(); words=struct.unpack('<'+'H'*(len(data)//2),data)
         png(source.with_suffix('.png'),640,480,[(*unpack565(p),255) for p in words])
         if source.name=='rvm-form.rgb565': verify_form(words)
-    print('FUZIX/RVM: graphical browser acceptance and clean filesystem passed')
+    print('Riplix/RVM: graphical browser acceptance and clean filesystem passed')
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='netsurf-progress-') as name:
     apps={n:build/'apps'/(n+'.fxe') for n in ['nano-X','nxhostcheck','kill']}
     apps.update({n:ROOT/'build/netsurf'/(n+'.fxe') for n in ['netsurf','htget']})
     previous=dict(os.environ);os.environ.update(FUSE_X_FRAMES=str(work/'frames'),NANOX_KEEP_TTY='1')
-    try:g=Guest(work,'native',apps,[dict(name='/dev/gfx',mode=0o20600,device=0x400)],peer,blocks=131072)
+    try:g=Guest(work,'native',apps,[dict(name='/dev/gfx',mode=0o20600,device=0x400),dict(name='/usr/share/netsurf/web.nfa',path=str(ROOT/'ports/netsurf/fonts/web.nfa'))],peer,blocks=131072)
     finally:os.environ.clear();os.environ.update(previous)
     try:
         help_text=g.shell('netsurf --help; echo POLICY_HELP:$?')

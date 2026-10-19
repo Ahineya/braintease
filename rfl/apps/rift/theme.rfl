@@ -19,13 +19,18 @@ fn defaults() -> Config {
     Config { name: "Turbo Blue", lines: true, roles: [role(7, 4, false), role(6, 4, false), role(3, 4, true), role(6, 4, true), role(3, 4, false), role(7, 4, true), role(6, 4, true), role(0, 6, false), role(0, 7, false), role(0, 6, true), role(6, 4, false), role(0, 7, false), role(3, 4, true), role(7, 4, false), role(7, 1, true), role(0, 0, false)] }
 }
 
+export fn directory() -> String {
+    env("RIFT_DATA_DIR", env("RFL_DATA_DIR", "/usr/share") + "/rift") + "/themes"
+}
+
 export fn load(screen: &Screen, name: String) -> Theme {
+    let themes = directory();
     let schema = ["text", "comment", "keyword", "string", "number", "operator", "type", "selection", "menu", "tab", "gutter", "dialog", "accent", "input", "error", "shadow"];
     let theme = loader(defaults(), schema).unwrap();
     let mut notice = "";
     if (name == "configured") {
         for (path in ["/etc/rift/theme.ini", env("HOME", "/") + "/.config/rift/theme.ini"]) {
-            match theme.file("/usr/share/rift/themes", path, true) {
+            match theme.file(themes, path, true) {
                 Ok(_) => {},
                 Err(error) => {
                     notice = error;
@@ -33,7 +38,7 @@ export fn load(screen: &Screen, name: String) -> Theme {
             }
         }
     } else {
-        match theme.named("/usr/share/rift/themes", name) {
+        match theme.named(themes, name) {
             Ok(_) => {},
             Err(error) => {
                 notice = error;

@@ -12,7 +12,7 @@ def fnv(data):
     return value
 
 def main():
-    build=ROOT/'fuse-x/build';apps={n:build/'apps'/f'{n}.fxe' for n in ('nano-X','nxterm','gterm','nxhostcheck','netsurf','htget','kill')}
+    build=ROOT/'fuse-x/build';apps={n:build/'apps'/f'{n}.fxe' for n in ('nano-X','nxterm','gterm','mux','nxhostcheck','netsurf','htget','kill')}
     with tempfile.TemporaryDirectory(prefix='fuse-x-clipboard-') as folder:
         work=Path(folder);mailbox=work/'event.json';frames=work/'frames'
         saved=dict(os.environ);os.environ.update(FUSE_X_TEST_EVENT=str(mailbox),FUSE_X_FRAMES=str(frames),NANOX_KEEP_TTY='1')
@@ -60,6 +60,33 @@ def main():
                     assert 'CLIPBOARD_CHECK 0' in g.shell('nxhostcheck clipboard get /tmp/selection')
                     output=g.shell('cat /tmp/selection');assert 'Clipboard Ж 🙂' in output,output
                     event(wid,close=True);g.shell('wait $term')
+            # Select Unicode with real mouse input while ANSI frames and DSR
+            # replies continue. Cover the native terminal, Nano-X terminal,
+            # and an actual mux session rather than only static Select All.
+            for terminal,in_mux,columns,rows in (('gterm',False,80,30),('nxterm',False,64,20),('gterm',True,80,30)):
+                path=f'/tmp/live-{terminal}-{int(in_mux)}'
+                command='mux new selecting ' if in_mux else ''
+                g.shell(f'{terminal} {command}nxhostcheck selection-check {path} &');g.shell('term=$!')
+                w=window('Terminal');wid=w['id'];cw,ch=w['width']//columns,w['height']//rows
+                def ticks():
+                    output=g.shell('cat '+path);found=re.findall(r'TICKS (\d+)',output)
+                    return int(found[-1]) if found else 0
+                wait(lambda:ticks()>=4)
+                y=ch//2+(ch if in_mux else 0)
+                event(wid,input=dict(type='button',button=0,down=True,x=cw//2,y=y))
+                event(wid,input=dict(type='motion',x=13*cw+cw//2,y=y))
+                before=ticks();wait(lambda:ticks()>=before+6)
+                event(wid,action=1,clipboard='NOT_SELECTED')
+                assert 'CLIPBOARD_CHECK 0' in g.shell('nxhostcheck clipboard get /tmp/live-copy')
+                file('/tmp/live-copy','Clipboard Ж 🙂'.encode())
+                event(wid,input=dict(type='button',button=0,down=False,x=13*cw+cw//2,y=y))
+                before=ticks();wait(lambda:ticks()>=before+6)
+                event(wid,action=1,clipboard='NOT_SELECTED')
+                assert 'CLIPBOARD_CHECK 0' in g.shell('nxhostcheck clipboard get /tmp/live-copy')
+                file('/tmp/live-copy','Clipboard Ж 🙂'.encode())
+                event(wid,close=True);g.shell('wait $term')
+                if in_mux:g.shell('mux kill selecting')
+                print(f'{terminal}{" + mux" if in_mux else ""}: mouse drag and released selection survive live fragmented redraws; host clipboard matches',flush=True)
             g.shell('netsurf --trace /page.html &');g.shell('browser=$!')
             if b'NETSURF_GUI_LOADED Clipboard page' not in g.log:g.read(b'NETSURF_GUI_LOADED Clipboard page')
             wid=window('NetSurf: Clipboard page')['id']

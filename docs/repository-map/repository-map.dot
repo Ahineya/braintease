@@ -42,9 +42,9 @@ subgraph cluster_view1 {label="02   Execution platforms enable operating systems
 graph [rankdir=LR,bgcolor="white",fontname="Arial",fontsize=18,pad=.18,nodesep=.25,ranksep=.38,splines=polyline]; node [shape=box,style="rounded,filled",fontname="Arial",fontsize=14,margin=".15,.11",fillcolor="#edf3fa",color="#aec4db"]; edge [fontname="Arial",fontsize=11,color="#376a9b",arrowsize=.7,penwidth=1.3];
 p1_rv [label="RVM + MMU",fillcolor="#e4f2e9",color="#9bbda8"];
 p1_fx [label="Native runtime",fillcolor="#e4f2e9",color="#9bbda8"];
-p1_src [label="Shared FUZIX sources\nupstream kernel + local ports"];
-p1_fuz [label="FUZIX on Ripple\nBIOS -> FUZIX.SYS -> init / sh",fillcolor="#e4f2e9",color="#9bbda8"];
-p1_fuse [label="Fuse-X\nnative hosted FUZIX / FXE loader",fillcolor="#e4f2e9",color="#9bbda8"];
+p1_src [label="Shared Riplix sources\nFUZIX-derived + local ports"];
+p1_fuz [label="Riplix on Ripple\nBIOS -> FUZIX.SYS -> init / sh",fillcolor="#e4f2e9",color="#9bbda8"];
+p1_fuse [label="Fuse-X\nnative hosted Riplix / FXE loader",fillcolor="#e4f2e9",color="#9bbda8"];
 p1_ros [label="rOS on RVM\nIO.SYS -> KERNEL.SYS\nCOMMAND.COM + RXE apps",fillcolor="#e4f2e9",color="#9bbda8"];
 p1_sdk [label="Shared Unix SDK and APIs\nlibc / files / processes / PTYs\nsockets / select / curses",fillcolor="#eee8f6",color="#b7a7ce"];
 p1_tui [label="Terminal applications\nCommander / Rift / Telegram / music\nBourne sh / mux / Unix utilities\nawk / Tcl / BASIC / bf"];
@@ -71,14 +71,14 @@ graph [rankdir=LR,bgcolor="white",fontname="Arial",fontsize=18,pad=.18,nodesep=.
 p2_host [label="Host device implementations\nshared from rvm modules\nTTY / display / input / clocks\nNIC / RNG / crypto / audio",fillcolor="#eee8f6",color="#b7a7ce"];
 p2_exec [label="Unix execution platforms\nRVM / native runtime",fillcolor="#e4f2e9",color="#9bbda8"];
 p2_rbf [label="RBF device host\nfreestanding BF programs\nno PCM or OPL3",fillcolor="#e4f2e9",color="#9bbda8"];
-p2_unix [label="Unix guest kernel\nFUZIX or native Fuse-X",fillcolor="#e4f2e9",color="#9bbda8"];
+p2_unix [label="Unix guest kernel\nRiplix or native Fuse-X",fillcolor="#e4f2e9",color="#9bbda8"];
 p2_net [label="Guest networking\nEthernet -> IPv4 -> UDP / TCP / DNS\nuserspace TLS where required",fillcolor="#eee8f6",color="#b7a7ce"];
 p2_apps [label="Lynx / NetSurf / net tools\nTelegram uses guest MTProto\nno host Telegram or TLS proxy"];
 p2_pcm [label="/dev/pcm\nC WAV engine -> shared PCM sink",fillcolor="#eee8f6",color="#b7a7ce"];
 p2_music [label="RFL music UI + wavplay\n8 / 16 / 24-bit PCM WAV"];
 p2_ui [label="C libraries + RFL bindings\ntext / Unicode / INI / themes\nQR / image decoding / curses",fillcolor="#eee8f6",color="#b7a7ce"];
 p2_tui [label="Rift / Commander / Telegram\nwrapped text / QR login / 2FA"];
-p2_fs [label="C16 V3 filesystem\nFUZIX disk image and tools\nFuse-X shared folder adapter",fillcolor="#eee8f6",color="#b7a7ce"];
+p2_fs [label="C16 V3 filesystem\nRiplix disk image and tools\nFuse-X shared folder adapter",fillcolor="#eee8f6",color="#b7a7ce"];
 p2_data [label="Guest applications and tools\nnormal host octets converted\nexplicitly to C16 cells"];
 p2_host -> p2_exec [label="reused services",color="#79629e",style=dashed];
 p2_host -> p2_rbf [label="supported subset",color="#79629e",style=dashed];
@@ -103,7 +103,7 @@ p3_rbf [label="RBF\nreuses Rust 16-bit BF engine\noptional BF JIT",fillcolor="#e
 p3_driver [label="rcc / rfl / rct / rbt\nscripts / Make / image tooling\ntests / benchmarks / replay"];
 p3_core [label="Shared compiler pipelines\nRCC IR / backends / rasm / rlink"];
 p3_portable [label="Guest portable C toolchain\nrcc-c -> rcc-ripple\n-> rcc-as -> rcc-ld",style="rounded,filled,dashed",fillcolor="#fff4e3",color="#c99b5e"];
-p3_guests [label="Runs in FUZIX and Fuse-X\nemits Ripple RXE\nnative FXE generation still host-built",fillcolor="#e4f2e9",color="#9bbda8"];
+p3_guests [label="Runs in Riplix and Fuse-X\nemits Ripple RXE\nnative FXE generation still host-built",fillcolor="#e4f2e9",color="#9bbda8"];
 p3_wasm [label="Generated Wasm apps\nC browser bridge / RFL typed UI\nbatched DOM / timers / fetch"];
 p3_ports [label="Exploratory or future work\nRust subset / QuickJS guest engine\nNetSurf JS / Ogg or MP3 / FuseDE shell",style="rounded,filled,dashed",fillcolor="#fff4e3",color="#c99b5e"];
 p3_doom [label="Doom + standalone demos\nRVM and native paths\nexperimental BF launcher"];

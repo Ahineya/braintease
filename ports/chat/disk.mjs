@@ -7,8 +7,8 @@ import {installRoot} from '../fuzix/tools/install.mjs';
 import {layout} from '../fuzix/tools/layout.mjs';
 import {atomicWrite} from '../fuzix/tools/disk.mjs';
 try {
-  const [locked,action,image,file,state,...extra]=process.argv.slice(2);
-  if(locked!=='--locked'||extra.length||!['request','credentials'].includes(action)||!state.startsWith('/')||state.includes('..')) throw Error('Use disk.py');
+  const [locked,action,image,file,requestedState,...extra]=process.argv.slice(2);
+  if(locked!=='--locked'||extra.length||!['request','credentials'].includes(action)) throw Error('Use disk.py');
   const original=openImage(image);
   let fat,root=original;
   try {layout(original);} catch {
@@ -17,6 +17,22 @@ try {
   const reader=rootReader(root);
   if(reader.checked.issues.length) throw Error('Guest filesystem is not clean; shut down or check it first');
   const read=path=>String.fromCharCode(...reader.read(path));
+  let state=requestedState;
+  if(!state) {
+    let home='/root';
+    try {
+      const account=read('/etc/passwd').split('\n').map(line=>line.split(':'))
+        .find(fields=>fields[0]==='root'&&fields[2]==='0');
+      if(account?.[5]?.startsWith('/'))home=account[5];
+    } catch(error) {if(!error.message.startsWith('missing '))throw error;}
+    state=home.replace(/\/$/,'')+'/.chat';
+    // Also work with pre-home images which have no passwd entry.
+    try {reader.lookup(state);} catch(error) {
+      if(home==='/root') {try {reader.lookup('/.chat');state='/.chat';}catch {throw error;}}
+      else throw error;
+    }
+  }
+  if(!state.startsWith('/')||state.split('/').includes('..'))throw Error('Invalid guest state directory');
   const host=read(state+'/host-id');
   if(!/^urn:uuid:[0-9a-f-]{36}$/.test(host)) throw Error('Start chat once in this guest to create its host ID');
   if(action==='request') {

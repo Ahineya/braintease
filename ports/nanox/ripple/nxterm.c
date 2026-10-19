@@ -35,13 +35,15 @@ static const GR_COLOR palette[16]={
     GR_RGB(84,84,84),GR_RGB(255,84,84),GR_RGB(84,255,84),GR_RGB(255,255,84),
     GR_RGB(84,84,255),GR_RGB(255,84,255),GR_RGB(84,255,255),GR_RGB(255,255,255)};
 static void caught(int s){stopping=s;signal(s,caught);}
-static void queue(const char *s){if(vt_input_put(&pending,s,strlen(s)))fputs("nxterm: input queue full\n",stderr);}
-static void reply(struct vt *t,const char *s){queue(s);}
+static void clear_selection(void);
+static void queue(const char *s){clear_selection();if(vt_input_put(&pending,s,strlen(s)))fputs("nxterm: input queue full\n",stderr);}
+static void reply(struct vt *t,const char *s){if(vt_input_put(&pending,s,strlen(s)))fputs("nxterm: input queue full\n",stderr);}
 /* Last rendered cells let a keystroke repaint a short span, not 64 glyphs. */
 static struct vt_cell painted[GRAPHICS_COLS*GRAPHICS_ROWS];
 static unsigned char known[GRAPHICS_ROWS];
 static unsigned cursor_x,cursor_y,cursor_shown;
 static void invalidate(void){unsigned i;for(i=0;i<terminal.rows;i++){terminal.dirty[i]=1;known[i]=0;}}
+static void clear_selection(void){if(selection.active){vt_selection_clear(&selection);invalidate();}}
 #define CHANGED(x,y) (!known[y]||cells[(y)*terminal.cols+(x)].ch!=painted[(y)*terminal.cols+(x)].ch||cells[(y)*terminal.cols+(x)].colour!=painted[(y)*terminal.cols+(x)].colour||(cursor_shown&&moved&&(x)==cursor_x&&(y)==cursor_y))
 static int draw_cells(int show_cursor){
     unsigned y,x,end,colour,changed=0,moved=cursor_shown!=((unsigned)show_cursor&&terminal.visible)||cursor_x!=terminal.x||cursor_y!=terminal.y;
@@ -109,11 +111,12 @@ static void key(GR_EVENT_KEYSTROKE *e){
         case MWKEY_BACKSPACE:k=127;break;
     }
     if(k==NXR_KEY_PASTE||(e->modifiers&(MWKMOD_CTRL|MWKMOD_SHIFT))==(MWKMOD_CTRL|MWKMOD_SHIFT)&&(k=='v'||k=='V')) {
+        clear_selection();
         size_t length;char *text=nx_clipboard_get(window,&length);
         if(text){if(vt_input_paste(&pending,text,length,terminal.bracketed_paste))fputs("nxterm: paste too large or out of memory\n",stderr);free(text);}
         return;
     }
-    if(k==NXR_KEY_SELECT_ALL){selection.active=1;selection.anchor=0;selection.end=terminal.cols*terminal.rows-1;invalidate();return;}
+    if(k==NXR_KEY_SELECT_ALL){if(!vt_selection_begin(&terminal,&selection,0)){selection.dragging=0;selection.end=terminal.cols*terminal.rows-1;}invalidate();return;}
     if(k==NXR_KEY_COPY||k==NXR_KEY_CUT||((e->modifiers&(MWKMOD_CTRL|MWKMOD_SHIFT))==(MWKMOD_CTRL|MWKMOD_SHIFT)&&(k=='c'||k=='C'))) {
         size_t length;char *text=vt_selection_text(&terminal,&selection,&length);
         if(text){if(nx_clipboard_set(window,text,length))fputs("nxterm: cannot copy selection\n",stderr);free(text);}return;
@@ -121,7 +124,7 @@ static void key(GR_EVENT_KEYSTROKE *e){
     if(k>255)return;
     if(e->modifiers&MWKMOD_CTRL){if((k>='a'&&k<='z')||(k>='@'&&k<='_'))k&=31;else if(k==' ')k=0;}
     if(e->modifiers&MWKMOD_ALT)queue("\033");
-    if(k){s[0]=k;queue(s);}else {char zero=0;if(vt_input_put(&pending,&zero,1))fputs("nxterm: input queue full\n",stderr);}
+    if(k){s[0]=k;queue(s);}else {char zero=0;clear_selection();if(vt_input_put(&pending,&zero,1))fputs("nxterm: input queue full\n",stderr);}
 }
 static void event(GR_EVENT *e){
     struct winsize size;unsigned cols,rows;
@@ -129,14 +132,14 @@ static void event(GR_EVENT *e){
     else if(e->type==GR_EVENT_TYPE_KEY_DOWN)key(&e->keystroke);
     else if((e->type==GR_EVENT_TYPE_BUTTON_DOWN||e->type==GR_EVENT_TYPE_BUTTON_UP)&&(e->button.changebuttons&GR_BUTTON_L)) {
         unsigned at=vt_selection_at(&terminal,e->button.x/8,e->button.y/16);
-        if(e->type==GR_EVENT_TYPE_BUTTON_DOWN){selection.anchor=at;selection.active=selection.dragging=1;}
-        selection.end=at;if(e->type==GR_EVENT_TYPE_BUTTON_UP)selection.dragging=0;invalidate();
+        if(e->type==GR_EVENT_TYPE_BUTTON_DOWN)vt_selection_begin(&terminal,&selection,at);
+        if(selection.active){selection.end=at;vt_selection_update(&terminal,&selection);if(e->type==GR_EVENT_TYPE_BUTTON_UP)selection.dragging=0;}invalidate();
     } else if(e->type==GR_EVENT_TYPE_MOUSE_POSITION&&selection.dragging) {
         selection.end=vt_selection_at(&terminal,e->mouse.x/8,e->mouse.y/16);invalidate();
     }
     else if(e->type==GR_EVENT_TYPE_CLOSE_REQ)stopping=SIGHUP;
     else if(e->type==GR_EVENT_TYPE_UPDATE&&e->update.utype==GR_UPDATE_SIZE){
-        selection.active=selection.dragging=0;
+        vt_selection_clear(&selection);
         cols=e->update.width/8;rows=e->update.height/16;
         if(cols>GRAPHICS_COLS)cols=GRAPHICS_COLS;if(rows>GRAPHICS_ROWS)rows=GRAPHICS_ROWS;
         if(!cols)cols=1;if(!rows)rows=1;
@@ -150,7 +153,7 @@ static void event(GR_EVENT *e){
     }
 }
 static void cleanup(void){
-    vt_destroy(&terminal);free(pending.text);
+    vt_selection_clear(&selection);vt_destroy(&terminal);free(pending.text);
     unsigned i;int status;
     if(master>=0){close(master);master=-1;}
     if(child>0){
@@ -194,8 +197,9 @@ int main(int argc,char **argv){
     if(getenv("NANOX_TRACE"))fprintf(stderr,"NXTERM_READY %d %u\n",getpid(),window);
     while(!stopping){
         for(i=0;i<8;i++){
-            n=read(master,buf,sizeof(buf));if(n>0){if(selection.active){selection.active=selection.dragging=0;invalidate();}terminal.dirty[terminal.y]=1;vt_feed(&terminal,buf,n);}else{if(!n)stopping=SIGHUP;else if(errno!=EAGAIN&&errno!=EINTR)stopping=SIGTERM;break;}
+            n=read(master,buf,sizeof(buf));if(n>0){terminal.dirty[terminal.y]=1;vt_feed(&terminal,buf,n);}else{if(!n)stopping=SIGHUP;else if(errno!=EAGAIN&&errno!=EINTR)stopping=SIGTERM;break;}
         }
+        if(vt_selection_update(&terminal,&selection))invalidate();
         if(pending.length){n=write(master,pending.text+pending.head,pending.length>512?512:pending.length);if(n>0){vt_input_consume(&pending,n);}else if(n<0&&errno!=EAGAIN&&errno!=EINTR)stopping=SIGTERM;}
         draw();
         if(waitpid(child,&status,WNOHANG)==child){child=0;break;}

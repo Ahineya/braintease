@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import {ptyDevices} from './pty.mjs';
-// Ripple FUZIX C16 V3 uses 2,048 physical octets per filesystem block.
+import {kernelCredits} from './credits.mjs';
+// Ripple Riplix C16 V3 uses 2,048 physical octets per filesystem block.
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {fatFile} from './fat.mjs';
 import {installRoot, growRoot} from './install.mjs';
+import {rootHomeFiles} from './home.mjs';
 import {manualFiles} from './manuals.mjs';
 import {sokobanFiles} from './sokoban.mjs';
 import {commanderFiles, riftFiles} from '../../../rfl/os/files.mjs';
@@ -13,6 +15,8 @@ import {basicFiles} from '../../basic/files.mjs';
 import {lynxFiles} from '../../lynx/files.mjs';
 import {tlsFiles} from '../../tls/files.mjs';
 import {fuseDEFiles} from '../../fusede/files.mjs';
+import {kolfFiles} from '../../kolf/files.mjs';
+import {klotskiFiles} from '../../klotski/files.mjs';
 import {compilerFiles} from '../../../rcc-portable/files.mjs';
 import {unicodeFiles} from '../../../libraries/unicode/files.mjs';
 import {netsurfFiles} from '../../netsurf/files.mjs';
@@ -42,10 +46,10 @@ export function rootImage(files, blocks = ROOT_BLOCKS, inodeCount = 1024) {
   }
   const clean = checkRoot(image, true).image;
   return installRoot(clean, [
-    ...['/bin', '/dev', '/etc', '/tmp'].map(name => ({name, directory: true, mode: name === '/tmp' ? 0o41777 : 0o40755})),
+    ...['/bin', '/dev', '/etc', '/tmp', '/root'].map(name => ({name, directory: true, mode: name === '/tmp' ? 0o41777 : name === '/root' ? 0o40700 : 0o40755})),
     {name: '/dev/tty1', mode: 0o20666, device: 0x201},
     ...files,
-    {name: '/README', mode: 0o100644, data: Buffer.from('Welcome to FUZIX on Ripple.\nFiles created here survive normal launches and kernel rebuilds.\nUse shutdown to flush the filesystem before stopping.\n')}
+    {name: '/README', mode: 0o100644, data: Buffer.from('Welcome to Riplix on Ripple.\nDerived from FUZIX.\nFiles created here survive normal launches and kernel rebuilds.\nUse shutdown to flush the filesystem before stopping.\n')}
   ]);
 }
 export function atomicWrite(filename, data) {
@@ -88,6 +92,20 @@ export function buildDisk(build, filename, fresh = false, install = false) {
       if (target === `/bin/${name}` && installedNames.includes(alias))
         orderedNames.push(alias);
   }
+  // Staged test/install trees may link executables from their original build.
+  // Carry the corresponding versioned SDK packages into the guest image too.
+  const libraryDirectories=new Set([path.join(build,'lib')]);
+  for(const name of installedNames) {
+    const executable=path.join(build,`${name}.rxe`);
+    if(fs.existsSync(executable))libraryDirectories.add(path.join(path.dirname(fs.realpathSync(executable)),'lib'));
+  }
+  const sharedLibraries=new Map();
+  for(const directory of libraryDirectories) {
+    if(!fs.existsSync(directory))continue;
+    for(const name of fs.readdirSync(directory).sort())
+      if(/^[a-zA-Z0-9._-]+\.rsl\.[0-9]+$/.test(name)&&!sharedLibraries.has(name))
+        sharedLibraries.set(name,{name:`/lib/riplix/${name}`,mode:0o100644,data:fs.readFileSync(path.join(directory,name))});
+  }
   const seedFiles = () =>
       [...orderedNames.map(
            name => ({
@@ -120,7 +138,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          name : '/etc/passwd',
          mode : 0o100644,
          preserve : true,
-         data : Buffer.from('root:x:0:0:root:/:/bin/sh\n')
+         data : Buffer.from('root:x:0:0:root:/root:/bin/sh\n')
        },
        {
          name : '/etc/group',
@@ -132,14 +150,14 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          name : '/etc/mtab',
          mode : 0o100644,
          preserve : true,
-         data : Buffer.from('/dev/root / fuzix rw 0 0\n')
+         data : Buffer.from('/dev/root / riplix rw 0 0\n')
        },
        {name: '/etc/resolv.conf', mode: 0o100644, preserve: true,
         data: Buffer.from('nameserver 1.1.1.1\nnameserver 8.8.8.8\n')},
        {name: '/etc/nxlaunch.cnf', mode: 0o100644, preserve: true,
-        data: Buffer.from('Terminal - /bin/nxterm\nEditor - /bin/nxterm /bin/vi\nProcesses - /bin/nxterm /bin/top\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nRoaches - /bin/nxroach\nTetris - /bin/nxtetris\nImages - /bin/nxview\n')},
+        data: Buffer.from('Terminal - /bin/nxterm\nEditor - /bin/nxterm /bin/vi\nProcesses - /bin/nxterm /bin/top\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nRoaches - /bin/nxroach\nTetris - /bin/nxtetris\nImages - /bin/nxview\nKlotski - /bin/klotski\n')},
        {name: '/etc/hosts', mode: 0o100644, preserve: true,
-        data: Buffer.from('192.168.64.250 ripple fuzix\n')},
+        data: Buffer.from('192.168.64.250 ripple riplix\n')},
        {
          name: '/etc/termcap', mode: 0o100644, preserve: true,
          data: Buffer.from('ansi|vt100|xterm|xterm-256color|ripple:co#80:li#24:cl=\\E[H\\E[2J:ho=\\E[H:cm=\\E[%i%d;%dH:me=\\E[0m:md=\\E[1m:us=\\E[4m:ue=\\E[0m:ce=\\E[K:up=\\E[A:bc=^H:\n')
@@ -154,12 +172,14 @@ export function buildDisk(build, filename, fresh = false, install = false) {
        })),
        ...commanderFiles(), ...riftFiles(), ...unicodeFiles(),
        ...(installedNames.includes('basic') ? basicFiles() : []),
+       ...(installedNames.includes('kolf') ? kolfFiles() : []),
+       ...(installedNames.includes('klotski') ? klotskiFiles() : []),
        ...(installedNames.includes('lynx') ? lynxFiles() : []),
        ...(installedNames.includes('netsurf') ? netsurfFiles() : []),
        ...((installedNames.includes('htget') || installedNames.includes('lynx') || installedNames.includes('chat')) ? tlsFiles() : []),
        ...(installedNames.includes('fdeshowcase') ? fuseDEFiles(path.join(build,'fusede')) : []),
        ...sokobanFiles(),
-       ...manualFiles(), ...compiler];
+       ...sharedLibraries.values(), ...manualFiles(), ...kernelCredits(), ...compiler, ...rootHomeFiles()];
   const kernel = {
     name : 'FUZIX.SYS',
     data : fs.readFileSync(path.join(build, 'FUZIX.SYS'))

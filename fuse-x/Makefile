@@ -34,10 +34,15 @@ telegram: $(BUILD)/apps/telegram.fxe
 .PHONY: music
 music: $(BUILD)/apps/music.fxe $(BUILD)/apps/wavplay.fxe
 EXECUTABLES := $(addprefix $(BUILD)/apps/,$(addsuffix .fxe,$(APP_NAMES)))
+# Track mode changes without touching the stamp on unchanged builds.
+export FUSE_X_SHARED_LIBRARIES ?= 1
+LINK_MODE := $(shell python3 link_mode.py --build '$(BUILD)')
 SDK_SOURCES := $(wildcard $(ROOT)/libraries/unicode/*.[ch] $(ROOT)/libraries/unicode/*.inc) $(wildcard $(ROOT)/ports/fuzix/ripple/libc/*.c $(ROOT)/ports/fuzix/upstream/Library/libs/*.c) $(ROOT)/ports/fuzix/ripple/userlib.c libc/bridge.c cc.py
+SDK_SOURCES += $(LINK_MODE)
 SDK_HEADERS := $(K)/include/userstructs.h $(shell find $(ROOT)/ports/fuzix/ripple/include $(ROOT)/ports/fuzix/upstream/Library/include $(ROOT)/runtime/include -name '*.h')
 SDK_HEADERS += $(ROOT)/ports/fuzix/ripple/exec-args.h
 SDK_HEADERS += include/memory-layout.h
+SDK_HEADERS += $(ROOT)/ports/fuzix/ripple/identity.h
 all: $(BUILD)/fuse-x $(EXECUTABLES) applications
 all: graphics
 .PHONY: bundle
@@ -209,3 +214,8 @@ test-kernel-io: $(BUILD)/fuse-x $(BUILD)/apps/sh.fxe
 	python3 apps.py echo --compiler $(RCC) --build $(BUILD)
 	python3 $(ROOT)/ports/fuzix/tools/test_kernel_io_unit.py
 	python3 $(ROOT)/ports/fuzix/tools/test_kernel_io.py --native-build $(BUILD) --output $(BUILD)/kernel-io-check
+
+.PHONY: test-pkill
+test-pkill: $(BUILD)/fuse-x $(BUILD)/apps/sh.fxe
+	python3 apps.py pkill echo --compiler $(RCC) --build $(BUILD)
+	python3 $(ROOT)/ports/fuzix/tools/test_pkill.py --native --native-build $(BUILD)

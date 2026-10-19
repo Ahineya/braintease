@@ -127,7 +127,7 @@ def main():
                 remote=peer.connect(23,53000)
                 until(lambda:remote.established)
                 remote.queue(b'\xff\xfd\x01\xff\xfd\x03')
-                until(lambda:b'fuzix# ' in remote.received)
+                until(lambda:b'riplix# ' in remote.received)
                 remote.queue(b'echo HEADLESS_REMOTE_OK\r\n')
                 until(lambda:b'HEADLESS_REMOTE_OK\r\n' in remote.received)
                 remote.queue(b'exit\r\n');until(lambda:remote.closed)

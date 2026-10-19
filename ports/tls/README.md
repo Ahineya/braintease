@@ -1,6 +1,6 @@
 # Guest TLS for Ripple
 
-This port keeps TLS and certificate verification in FUZIX userspace.
+This port keeps TLS and certificate verification in Riplix userspace.
 The host supplies cryptographic entropy and optional public-key and AES-GCM record acceleration
 through bounded device requests. Software crypto remains available; there is
 no host TLS proxy or host socket shortcut.
@@ -19,7 +19,7 @@ The profile uses upstream `WC_16BIT_CPU` and `WOLFSSL_WIDE_BYTE` support.
 `SIZEOF_LONG`/`SIZEOF_LONG_LONG` follow wolfSSL's octet-based configuration
 convention, not RCC's `sizeof` result.
 
-`NO_64BIT` is required by the FUZIX userspace ABI: its system headers use it
+`NO_64BIT` is required by the Riplix userspace ABI: its system headers use it
 to select 32-bit `time_t`. It does not remove RCC's 64-bit integer support.
 The wide-byte wolfCrypt profile still uses a real 64-bit `long long` for
 arithmetic. Every library unit and consumer must use the same configuration;
@@ -181,6 +181,20 @@ entity bytes are flushed before waiting for another packet. The caller must
 check process exit status, not merely pipe EOF. See
 [NetSurf's transport boundary](../netsurf/README.md#http-and-verified-https).
 
+`htget --worker [--cacert FILE]` accepts repeated bounded GET requests through
+stdin and returns framed headers/body/completion records on stdout. The
+serialized octet protocol is defined in [`ripple_http.h`](ripple_http.h); no C
+structures or TLS objects cross it. It uses the same HTTP parser and limits
+as `--response`, while retaining one same-origin connection when framing
+permits. Error/cancellation paths close that connection. HTTP/1.0, explicit
+close, EOF framing and skipped redirect bodies are never retained. Stale
+connections can retry a GET once before any response octet is read. Idle stdin
+EOF releases the connection and exits; a truncated/invalid request exits with
+an error. Callers cancelling during a response must terminate/reap that worker.
+The original downloader entry point delegates to `ripple_http.c`, shared by
+both modes. See the [NetSurf tests](../netsurf/README.md#http-and-verified-https)
+for acceptance and image-page timing commands.
+
 The earlier `audit/` SHA-256-only profile and `probe.py` preserve the initial
 compile probe. They are not the production TLS configuration.
 
@@ -314,13 +328,14 @@ behavior, page size and rendering too. Raw local measurements are under
 missing trust files, hostname rejection, replacement while a verified session
 is alive, and fork isolation. It deliberately uses equal-size bundles so a
 size/mtime-only cache would fail. The first connection still parses PEM. Lynx
-and redirecting htget commands can reuse the context. NetSurf currently execs
-a new htget worker per request, so its workers benefit from record/network
-acceleration but do not share the per-process trust cache across requests.
+and redirecting htget commands can reuse the context. NetSurf uses up to two
+persistent `htget --worker` processes. Successful
+requests retain the parsed-anchor cache and may reuse the same verified
+HTTP/1.1 connection, avoiding both trust setup and a new handshake. A new
+connection still verifies its peer and checks the current trust-file contents.
 
-Further work includes a persistent worker or audited anchor snapshot for that
-cross-process case, streaming hash acceleration, and explicit peer/policy-keyed
-TLS session resumption. SHA-384 transcript work remains measurable even when
+Further work includes streaming hash acceleration and explicit peer/policy-keyed
+TLS session resumption for connections that cannot stay open. SHA-384 transcript work remains measurable even when
 only SHA-256 cipher suites are offered; do not globally disable SHA-384/512
 certificate support to remove it.
 

@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='fselect-',dir='/tmp') as temp:
             if a.native:guest.stdin.write(line.encode()+b'\n');guest.stdin.flush()
             else:os.write(master,line.encode()+b'\r')
         try:
-            until(b'fuse-x# ' if a.native else b'fuzix# ')
+            until(b'fuse-x# ' if a.native else b'riplix# ')
             if a.local:
                 send('localcheck; echo LOCAL_STATUS:$?')
                 until(b'LOCAL_STATUS:0\n',90);assert b'LOCAL_OK' in console(),console()

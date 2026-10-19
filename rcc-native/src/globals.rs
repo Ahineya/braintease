@@ -11,7 +11,19 @@ pub(super) fn initializers(compiler: &Compiler) -> Result<Vec<(u64, u64, u64)>, 
 pub(super) fn image_initializers(
     compiler: &Compiler,
 ) -> Result<Vec<(u64, u64, u64, bool)>, String> {
+    image_data(compiler).map(|v| v.0)
+}
+pub(super) fn image_data(
+    compiler: &Compiler,
+) -> Result<
+    (
+        Vec<(u64, u64, u64, bool)>,
+        Vec<rcc_ir::native_image::Relocation>,
+    ),
+    String,
+> {
     let mut output = Vec::new();
+    let mut relocations = Vec::new();
     for global in &compiler.ir.globals {
         if let Some(value) = &global.initializer {
             flatten(
@@ -20,10 +32,11 @@ pub(super) fn image_initializers(
                 &global.var_type,
                 value,
                 &mut output,
+                &mut relocations,
             )?;
         }
     }
-    Ok(output)
+    Ok((output, relocations))
 }
 fn offset(pointer: u64, cells: u64) -> Result<u64, String> {
     let layout = Target::Native.layout();
@@ -43,6 +56,14 @@ fn constant(compiler: &Compiler, value: &Value) -> Result<u64, String> {
             .globals
             .get(name)
             .or_else(|| compiler.codes.get(name))
+            .or_else(|| {
+                compiler.dynamic.as_ref().and_then(|m| {
+                    m.imports
+                        .iter()
+                        .find(|i| i.symbol.name == *name)
+                        .map(|i| &i.local)
+                })
+            })
             .copied()
             .ok_or_else(|| format!("unknown initializer symbol {name}")),
         Value::FatPtr(ptr) => {
@@ -83,6 +104,7 @@ fn flatten(
     ty: &IrType,
     value: &Value,
     out: &mut Vec<(u64, u64, u64, bool)>,
+    relocations: &mut Vec<rcc_ir::native_image::Relocation>,
 ) -> Result<(), String> {
     match (ty, value) {
         (IrType::Array { size, element_type }, Value::ConstantArray(values)) => {
@@ -97,6 +119,7 @@ fn flatten(
                     element_type,
                     &Value::Constant(*value),
                     out,
+                    relocations,
                 )?;
             }
         }
@@ -127,7 +150,14 @@ fn flatten(
                     } else {
                         IrType::I16
                     };
-                    flatten(compiler, offset(pointer, cell)?, &value_type, value, out)?;
+                    flatten(
+                        compiler,
+                        offset(pointer, cell)?,
+                        &value_type,
+                        value,
+                        out,
+                        relocations,
+                    )?;
                     cell += width;
                 }
                 return Ok(());
@@ -143,6 +173,7 @@ fn flatten(
                     element_type,
                     value,
                     out,
+                    relocations,
                 )?;
             }
         }
@@ -152,7 +183,7 @@ fn flatten(
             }
             let mut at = pointer;
             for (field, value) in fields.iter().zip(values) {
-                flatten(compiler, at, field, value, out)?;
+                flatten(compiler, at, field, value, out, relocations)?;
                 at = offset(at, Target::Native.layout().size_in_cells(field)?)?;
             }
         }
@@ -161,10 +192,65 @@ fn flatten(
             if words > 4 {
                 return Err(format!("unsupported native initializer {value:?} for {ty}"));
             }
+            if compiler.dynamic.is_some() {
+                fn reference(
+                    compiler: &Compiler,
+                    value: &Value,
+                ) -> Result<Option<(u64, bool, i64)>, String> {
+                    match value {
+                        Value::AddressOffset { base, cells } => {
+                            Ok(reference(compiler, base)?.map(|(p, f, a)| (p, f, a + cells)))
+                        }
+                        Value::FatPtr(p) => {
+                            if matches!(p.addr.as_ref(), Value::Constant(_))
+                                && matches!(p.bank, rcc_ir::BankTag::Global)
+                            {
+                                Ok(Some((constant(compiler, value)?, false, 0)))
+                            } else {
+                                reference(compiler, &p.addr)
+                            }
+                        }
+                        Value::Global(n) | Value::Function(n) => {
+                            let p = constant(compiler, value)?;
+                            let function = compiler.codes.contains_key(n)
+                                || compiler
+                                    .dynamic
+                                    .as_ref()
+                                    .unwrap()
+                                    .imports
+                                    .iter()
+                                    .any(|i| i.symbol.name == *n && i.symbol.function);
+                            Ok(Some((p, function, 0)))
+                        }
+                        _ => Ok(None),
+                    }
+                }
+                if let Some((target, function, addend)) = reference(compiler, value)? {
+                    if words != 2 || (function && addend != 0) {
+                        return Err("invalid module pointer initializer".into());
+                    }
+                    let index =
+                        ((pointer >> 16) - compiler.global_bank) * 64000 + (pointer & 65535);
+                    relocations.push(rcc_ir::native_image::Relocation {
+                        offset: index as u32,
+                        target,
+                        function,
+                        addend,
+                    });
+                    return Ok(());
+                }
+            }
             fn token(compiler: &Compiler, value: &Value) -> bool {
                 match value {
-                    Value::Global(n) | Value::Function(n) => compiler.codes.contains_key(n),
-                    Value::FatPtr(p) => token(compiler, &p.addr),
+                    Value::Global(n) | Value::Function(n) => {
+                        compiler.codes.contains_key(n) || compiler.dynamic.is_some()
+                    }
+                    Value::FatPtr(p) => {
+                        token(compiler, &p.addr)
+                            || (compiler.dynamic.is_some()
+                                && matches!(p.bank, rcc_ir::BankTag::Global))
+                    }
+                    Value::AddressOffset { base, .. } => token(compiler, base),
                     _ => false,
                 }
             }

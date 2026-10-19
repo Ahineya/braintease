@@ -40,7 +40,7 @@ def main():
             assert result.returncode == 0, result.stdout + result.stderr
 
         def compile_app(source, output):
-            result = subprocess.run(['python3', str(here / 'cc.py'), str(source), '-o', str(output),
+            result = subprocess.run(['python3', str(here / 'cc.py'), '--static', str(source), '-o', str(output),
                             '--compiler', str(compiler), '--build', str(executable.parent)],
                            capture_output=True, text=True)
             assert result.returncode == 0, result.stdout + result.stderr
@@ -110,7 +110,7 @@ def main():
         assert 'independent image checks passed' in output, output
         assert 'GLOBAL_BANKS_OK ' in output and 'GLOBAL_BANKS_EXEC_OK' in output, output
         assert 'GLOBAL_CHECK_FAILED' not in output, output
-        assert output.count('executable rejected:') == 8, output
+        assert output.count('executable rejected:') + output.count('library resolution failed:') == 8, output
         output = run('cat /tmp/copied\nshutdown\n')
         assert 'persistent native copy\n' in output, output
 

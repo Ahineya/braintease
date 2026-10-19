@@ -178,9 +178,13 @@ unsafe extern "C" fn rcc_native_load(ctx: *mut Runtime, ptr: u64, words: u64) ->
         fatal("native load out of bounds");
     }
     let mut value = 0u64;
-    if start >= address_space::KERNEL_START {
-        // Shared kernel RAM is not MMIO. Acquire its mutex once per scalar,
-        // preserving the lock and device semantics for all other accesses.
+    if start >= BANK {
+        // Only bank zero contains MMIO/display memory. Private process RAM
+        // needs neither device routing per cell nor repeated page lookups for
+        // a wide scalar. Shared kernel RAM similarly takes one lock.
+        if words == 1 {
+            return u64::from(runtime.memory.read(start));
+        }
         let mut cells = [0; 4];
         runtime
             .memory
@@ -209,7 +213,11 @@ unsafe extern "C" fn rcc_native_store(ctx: *mut Runtime, ptr: u64, value: u64, w
     {
         fatal("native store out of bounds");
     }
-    if start >= address_space::KERNEL_START {
+    if start >= BANK {
+        if words == 1 {
+            runtime.memory.write(start, value as u16);
+            return 0;
+        }
         let cells = [
             value as u16,
             (value >> 16) as u16,
@@ -293,6 +301,159 @@ unsafe extern "C" fn rcc_native_poll(ctx: *mut Runtime) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "manual scalar RAM throughput measurement"]
+    fn scalar_ram_throughput() {
+        use std::{hint::black_box, time::Instant};
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        // Model ordinary decoder state and pixel buffers in a forked process.
+        let parent = rt.memory.clone();
+        for repetition in 0..3 {
+            for words in 1..=4 {
+                for reference in [true, false] {
+                    type Load = unsafe extern "C" fn(*mut Runtime, u64, u64) -> u64;
+                    type Store = unsafe extern "C" fn(*mut Runtime, u64, u64, u64) -> u64;
+                    // Use the same indirect ABI calls as generated applications;
+                    // neither candidate may inline into the benchmark loop.
+                    let (load, store): (Load, Store) = if reference {
+                        (reference_load, reference_store)
+                    } else {
+                        (rcc_native_load, rcc_native_store)
+                    };
+                    let (load, store) = (black_box(load), black_box(store));
+                    let start = Instant::now();
+                    let mut checksum = 0;
+                    for i in 0..1_000_000u64 {
+                        let ptr = pointer(6 * BANK + (i as usize % 4096));
+                        unsafe {
+                            store(&mut rt, black_box(ptr), black_box(i), words);
+                            checksum ^= load(&mut rt, black_box(ptr), words);
+                        }
+                    }
+                    eprintln!("RAM_BENCH reference={reference} repetition={repetition} words={words} us={} checksum={checksum}", start.elapsed().as_micros());
+                    assert!(parent.cells(6 * BANK..6 * BANK + 4100).all(|v| v == 0));
+                }
+            }
+        }
+    }
+    #[inline(never)]
+    unsafe extern "C" fn reference_load(ctx: *mut Runtime, ptr: u64, words: u64) -> u64 {
+        let runtime = unsafe { &mut *ctx };
+        runtime.poll();
+        if !(1..=4).contains(&words) {
+            fatal("invalid native load width");
+        }
+        let start = linear(ptr);
+        if start
+            .checked_add(words as usize)
+            .is_none_or(|end| end > CELLS)
+        {
+            fatal("native load out of bounds");
+        }
+        let mut value = 0u64;
+        if start >= address_space::KERNEL_START {
+            let mut cells = [0; 4];
+            runtime
+                .memory
+                .read_into(start, &mut cells[..words as usize]);
+            for (i, cell) in cells[..words as usize].iter().enumerate() {
+                value |= u64::from(*cell) << (16 * i);
+            }
+            return value;
+        }
+        for i in 0..words as usize {
+            value |= u64::from(runtime.read(start + i)) << (16 * i);
+        }
+        value
+    }
+    #[inline(never)]
+    unsafe extern "C" fn reference_store(
+        ctx: *mut Runtime,
+        ptr: u64,
+        value: u64,
+        words: u64,
+    ) -> u64 {
+        let runtime = unsafe { &mut *ctx };
+        runtime.poll();
+        if !(1..=4).contains(&words) {
+            fatal("invalid native store width");
+        }
+        let start = linear(ptr);
+        if start
+            .checked_add(words as usize)
+            .is_none_or(|end| end > CELLS)
+        {
+            fatal("native store out of bounds");
+        }
+        if start >= address_space::KERNEL_START {
+            let cells = [
+                value as u16,
+                (value >> 16) as u16,
+                (value >> 32) as u16,
+                (value >> 48) as u16,
+            ];
+            runtime.memory.write_from(start, &cells[..words as usize]);
+        } else {
+            for i in 0..words as usize {
+                runtime.write(start + i, (value >> (16 * i)) as u16);
+            }
+        }
+        0
+    }
+
+    #[test]
+    fn scalar_ram_fast_path_matches_cells_and_preserves_fork_isolation() {
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        let parent = rt.memory.clone();
+        for start in [
+            BANK,
+            BANK + 511,
+            BANK * 2 - 1,
+            address_space::KERNEL_START - 2,
+            CELLS - 4,
+        ] {
+            for words in 1..=4usize {
+                let value = 0xfedc_ba98_7654_3210;
+                unsafe {
+                    rcc_native_store(&mut rt, pointer(start), value, words as u64);
+                    let mask = u64::MAX >> (64 - words * 16);
+                    assert_eq!(
+                        rcc_native_load(&mut rt, pointer(start), words as u64),
+                        value & mask
+                    );
+                }
+                for i in 0..words {
+                    assert_eq!(rt.memory.read(start + i), (value >> (16 * i)) as u16);
+                    assert_eq!(
+                        parent.read(start + i),
+                        if start + i < address_space::KERNEL_START {
+                            0
+                        } else {
+                            (value >> (16 * i)) as u16
+                        }
+                    );
+                }
+            }
+        }
+    }
+    #[test]
+    fn scalar_bank_zero_accesses_keep_device_order_and_display_semantics() {
+        let mut rt = Runtime::new();
+        unsafe {
+            // RNG and RNG_SEED must each retain their individual MMIO read.
+            let first = rcc_native_load(&mut rt, pointer(rvm::constants::HDR_RNG), 2);
+            let rng = 1u32.wrapping_mul(1664525).wrapping_add(1013904223);
+            assert_eq!(first, u64::from(rng >> 16) | (u64::from(rng as u16) << 16));
+            rt.write(rvm::constants::HDR_DISP_RESOLUTION, 0x0202);
+            rt.write(rvm::constants::HDR_DISP_MODE, rvm::constants::DISP_RGB565);
+            rcc_native_store(&mut rt, pointer(32), 0xabcd_1234, 2);
+            assert_eq!(rcc_native_load(&mut rt, pointer(32), 2), 0);
+            rcc_native_store(&mut rt, pointer(BANK - 1), 0x7654_3210, 2);
+            assert_eq!(rcc_native_load(&mut rt, pointer(BANK - 1), 2), 0x7654_3210);
+        }
+    }
     #[test]
     fn wide_shared_kernel_scalars_cross_bank_boundaries() {
         let mut rt = Runtime::new();

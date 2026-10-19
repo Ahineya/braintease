@@ -1,0 +1,60 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH PKILL 1 "Riplix" "Ripple"
+.SH NAME
+pkill \- signal processes by name
+.SH SYNOPSIS
+.B pkill
+.RB [ \-SIGNAL ]
+.RB [ \-x ]
+.RB [ \-e ]
+.RB [ \-\- ]
+.I PATTERN
+.SH DESCRIPTION
+Signal all live processes whose names match the regular expression PATTERN.
+The default signal is TERM. Without -x a matching substring is sufficient.
+Process names are the first eight characters reported by ps, not full command
+lines. PID 1, zombies, processes being forked, and pkill itself are excluded.
+The kernel applies the normal signal permission checks.
+.PP
+Patterns support anchors, dot, character classes, grouping, alternation,
+and *, + and ? repetition through the shared V8 regexp library. POSIX named
+character classes and brace-counted repetition are not supported. Patterns
+must be nonempty and at most 256 characters. Quote shell metacharacters.
+.SH OPTIONS
+.TP
+.B \-x
+Require the entire process name to match.
+.TP
+.B \-e
+Print each successfully signalled process name and PID. Normally success is silent.
+.TP
+.BI \- SIGNAL
+Use a numeric or symbolic signal, with optional SIG prefix. Names are case
+insensitive: -9, -KILL and -SIGKILL are equivalent. Signal 0 checks for a
+matching process that the caller may signal, without sending a signal.
+.TP
+.BI \-\-signal " SIGNAL"
+Select a signal. --signal=SIGNAL is also accepted.
+.TP
+.B \-l, \-\-list-signals
+List supported signals.
+.TP
+.B \-h, \-\-help
+Show usage.
+.TP
+.B \-\-
+End option parsing, allowing a pattern beginning with a dash.
+.SH EXAMPLES
+.nf
+pkill sleep
+pkill -x lynx
+pkill -HUP -x telnetd
+pkill -9 -e '^(lynx|netsurf)$'
+pkill -0 -x sleep; echo $?
+.fi
+.SH EXIT STATUS
+0: at least one process was successfully signalled or checked.
+1: no process could be signalled. 2: invalid arguments or regular expression.
+3: process information could not be read.
+.SH SEE ALSO
+kill(1), ps(1)

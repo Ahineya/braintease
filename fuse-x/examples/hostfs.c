@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Runs inside FUZIX: descriptor ownership must remain in the guest kernel. */
+/* Runs inside Riplix: descriptor ownership must remain in the guest kernel. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

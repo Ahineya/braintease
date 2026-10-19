@@ -59,7 +59,7 @@ For standalone programs, the linker supplies `__rcc_layout_stack_bank` and
 `__rcc_layout_heap_bank`: the stack follows all globals, and the heap starts in
 the next bank, with bank 5 as its minimum. Small programs retain the table above.
 Explicit segmented-stack pools must avoid globals; `rcc_stack_reserve` obtains
-its pool through this allocator. Protected FUZIX RXE loading instead uses its
+its pool through this allocator. Protected Riplix RXE loading instead uses its
 [own virtual layout](../../ports/fuzix/README.md#protected-memory). SYS1 boot
 images still require single-bank globals.
 

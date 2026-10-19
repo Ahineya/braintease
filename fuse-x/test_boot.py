@@ -34,7 +34,10 @@ def main():
         subprocess.run(["node", str(here / "image.mjs"), "create", str(root)], check=True)
         original = hashlib.file_digest(root.open('rb'), 'sha256').digest()
         output = run("--boot-check", root, contains="bootstrap check passed")
-        assert "FUZIX version" in output and "PID 1" in output, output
+        assert "Riplix version" in output and "PID 1" in output, output
+        banner = (here.parent / "ports/fuzix/banner.tmp.txt").read_text().rstrip("\n")
+        assert banner in output.replace("\r", ""), output
+        assert "Derived from FUZIX." in output and "Copyright (c) 2014-2026 Alan Cox" in output, output
         assert hashlib.file_digest(root.open('rb'), 'sha256').digest() == original, "read-only boot changed image"
         run("--write-check", root, "hello from the hosted kernel", contains="file contents verified")
         assert hashlib.file_digest(root.open('rb'), 'sha256').digest() != original, "write check did not persist"

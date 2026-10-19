@@ -214,6 +214,8 @@ mod tests {
             .unwrap();
         o.rcc = Some(CompilerMetadata {
             banked_data: false,
+            types: HashMap::new(),
+            exports: Vec::new(),
             symbols: symbols
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))

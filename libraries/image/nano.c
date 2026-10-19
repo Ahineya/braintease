@@ -145,6 +145,14 @@ static long tile_origin(int start,int origin,unsigned extent) {
     if(phase<0)phase+=extent;
     return (long)start-phase;
 }
+int ri_nano_draw_rects(const RiImage *im,GR_DRAW_ID target,GR_GC_ID gc,
+                      const struct fde_rect *rects,unsigned count,unsigned tint) {
+    struct retained *entry;
+    if(!im||!im->rgba||!im->width||!im->height||!rects||!count||count>9||tint>1)return RI_CORRUPT;
+    entry=retain_image(im,im->width,im->height,0);
+    if(!entry)return RI_LIMIT;
+    return fde_image_draw(entry->id,target,gc,rects,count,tint?FDE_IMAGE_TINT:0)<0?RI_LIMIT:RI_OK;
+}
 int ri_nano_draw_cached(const RiImage *im,GR_DRAW_ID target,GR_GC_ID gc,int x,int y,int w,int h,
                         const struct RiClip *clip,unsigned flags) {
     struct retained *entry;struct fde_rect rects[9];unsigned n=0;

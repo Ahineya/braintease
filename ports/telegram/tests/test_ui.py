@@ -28,7 +28,7 @@ def main():
         active=False
         try:
             guest=Guest(folder,'native',{'telegram':artifact},files=[
-                dict(name='/etc/telegram.conf',mode=0o100600,text='api_id=12345\napi_hash='+'0'*32+'\n'),
+                dict(name='/root/.telegram.conf',mode=0o100600,text='api_id=12345\napi_hash='+'0'*32+'\n'),
                 dict(name='/etc/termcap',text='ansi|vt100|xterm:co#80:li#30:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:me=\\E[0m:\n')],peer=peer)
             fcntl.ioctl(guest.master,termios.TIOCSWINSZ,struct.pack('HHHH',30,80,0,0))
             at=len(guest.log)

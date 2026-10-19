@@ -5,7 +5,7 @@ standard-library tests run on both guest targets; a supported embedding SDK
 is still being ported.** The adapted utility code,
 binary64 number conversion, Unicode/regexp libraries, inline value representation
 and embedding/platform hooks run as real C16 applications in both
-RVM/FUZIX and native Fuse-X. Neither `qjs` nor a replacement NetSurf JavaScript
+RVM/Riplix and native Fuse-X. Neither `qjs` nor a replacement NetSurf JavaScript
 adapter is installed in the user's images.
 Extracted core string, serialization and bytecode-optimizer routines also pass
 guest tests; these use test allocation/context plumbing, not a complete runtime.
@@ -33,7 +33,7 @@ python3 ports/quickjs/explore.py --target host
 python3 ports/quickjs/explore.py --target both
 ```
 
-The last command requires the existing FUZIX and Fuse-X kernels, shells, RVM,
+The last command requires the existing Riplix and Fuse-X kernels, shells, RVM,
 assembler/linker, and `target/release/rcc`. It builds SDKs and test applications,
 then boots disposable disk images. It never modifies `fuzix.img` or
 `ROOTFS.IMG`. On macOS, set `SDKROOT` if the default SDK cannot link host C code.
@@ -125,7 +125,7 @@ on C16), 10,000 interrupt polls per evaluation and 1,024 pending jobs. Adjust wi
 `--memory`, `--max-polls` and `--max-jobs`. `--max-time-ms` additionally bounds
 each evaluation/event loop to 60,000 ms by default. Poll counts are engine callbacks,
 not milliseconds or a precise instruction count. The terminal profile explicitly budgets 48,000 stack cells on C16, leaving
-16,000 cells of RVM/FUZIX's 64,000-cell stack bank for unchecked C callees,
+16,000 cells of RVM/Riplix's 64,000-cell stack bank for unchecked C callees,
 exception reporting and signals. The general embedding header retains its
 conservative 16,384-cell default. RVM's larger C spill frames made that default
 reject ordinary dynamic Function compilation; the terminal policy keeps checks
@@ -657,8 +657,14 @@ through the existing guest `htget --response` TLS worker. The
 caches UTF-8 JSON and launches a viewer. Rift detects `.js`/`.mjs`/`.cjs`, applies
 a dedicated JavaScript lexer and runs saved files through `js` from PATH.
 Curses and image decoding should likewise reuse existing libraries/services
-with coarse operations. Listening sockets and an Express-like routing layer
-remain a later milestone, with streaming/backpressure and lifecycle APIs first.
+with coarse operations. The `fuse:net` module now supplies nonblocking IPv4 TCP handles, accept/read/write
+Promises, cancellation and bounded writes that honor backpressure. A separate
+`fuse:http-server` module adds a small GET/POST router, named parameters, async
+middleware, JSON bodies/replies, connection bounds and graceful/forced shutdown.
+Run [hello.server.mjs](examples/hello.server.mjs) with `js --server`, or F5 in
+Rift (the `.server.mjs` suffix selects server mode). Each middleware stage yields
+to a Promise job, preserving RVM's native stack guard. HTTP streaming,
+keep-alive, inbound TLS and Node/Express package compatibility remain future work.
 
 NetSurf currently disables Duktape in `ports/netsurf/config/sources.mk`. Its
 existing DOM binding generator targets Duktape, so a QuickJS browser adapter

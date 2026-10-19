@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build and boot FUZIX/Ripple, preserving the writable filesystem.
+# Build and boot Riplix, preserving the writable filesystem.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${FUZIX_BUILD:-$ROOT/build/fuzix}"
+OUT="${RIPLIX_BUILD:-${FUZIX_BUILD:-$ROOT/build/fuzix}}"
 run_only=0
 build_only=0
 rebuild=0
@@ -13,9 +13,9 @@ disk=""
 args=()
 usage() {
     cat <<'HELP'
-Usage: scripts/run-fuzix.sh [options] [host options...]
+Usage: scripts/run-riplix.sh [options] [host options...]
 
-Boot FUZIX/Ripple. Try help, ls, cat README, echo hello > note, hello,
+Boot Riplix. Try help, ls, cat README, echo hello > note, hello,
 forkcheck, preemptcheck, telegram, music /music, lynx http://wiby.me/, and shutdown.
 Use shutdown before closing the VM.
 Files persist across launches and kernel rebuilds.
@@ -48,22 +48,22 @@ Image updates keep one previous disk in DISK.bak (RIPPLE_IMAGE_BACKUPS overrides
 Normal launches check the disk and back up and repair recoverable shutdown
 metadata and abandoned anonymous pipes before updating. Structural damage stops
 the update. --disk skips updates unless --install-apps is supplied. Set
-FUZIX_BUILD for another build directory. Root disks use the Ripple C16 filesystem ABI.
-FUZIX/Ripple requires the MMU. Non-MMU builds and the RBF backend are retired.
-For the separate boot-only Brainfuck experiment, use scripts/run-fuzix-bf.sh.
+RIPLIX_BUILD for another build directory (FUZIX_BUILD is also accepted). Root disks use the Ripple C16 filesystem ABI.
+Riplix requires the MMU. Non-MMU builds and the RBF backend are retired.
+For the separate boot-only Brainfuck experiment, use scripts/run-riplix-bf.sh.
 HELP
 }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
         --rvm) shift ;;
-        --rbf) echo 'error: non-MMU FUZIX/RBF is retired; use RVM' >&2; exit 1 ;;
+        --rbf) echo 'error: non-MMU Riplix/RBF is retired; use RVM' >&2; exit 1 ;;
         rvm|rbf)
             # A bare target precedes forwarded host options; their values may
             # themselves be "rvm" or "rbf" (for example --input rbf).
             if [[ ${#args[@]} == 0 ]]; then
                 if [[ "$1" == rbf ]]; then
-                    echo 'error: non-MMU FUZIX/RBF is retired; use RVM' >&2; exit 1
+                    echo 'error: non-MMU Riplix/RBF is retired; use RVM' >&2; exit 1
                 fi
             else args+=("$1"); fi
             shift ;;
@@ -96,14 +96,14 @@ if [[ "$run_only" == 0 ]]; then
     OUT="$(cd "$OUT" && pwd)"
     build_arguments=(fuzix --build "$OUT")
     if [[ "$rebuild" == 1 ]]; then build_arguments+=(--rebuild); fi
-    printf 'Checking changed FUZIX inputs (log: %s/build.log)...\n' "$OUT" >&2
+    printf 'Checking changed Riplix inputs (log: %s/build.log)...\n' "$OUT" >&2
     if ! python3 "$ROOT/scripts/build_progress.py" --log "$OUT/build.log" -- \
         python3 "$ROOT/scripts/build-os.py" "${build_arguments[@]}"; then
         exit 1
     fi
 fi
 if [[ ! -f "$OUT/.mmu" || "$(cat "$OUT/.mmu")" != 1 ]]; then
-    echo 'error: non-MMU or unmarked FUZIX artifacts are unsupported; rebuild without --run-only (MMU=0 is retired)' >&2
+    echo 'error: non-MMU or unmarked Riplix artifacts are unsupported; rebuild without --run-only (MMU=0 is retired)' >&2
     exit 1
 fi
 update=0

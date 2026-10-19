@@ -4,6 +4,12 @@
 and links a standalone host executable. Execution has no Ripple instruction
 fetch/decode loop. The default target remains `ripple` and its ISA is unchanged.
 
+Terminal applications can select the standalone macOS platform with
+`rfl build SOURCE --os macos -o OUTPUT`. This adds explicit host POSIX/terminal
+adapters while retaining the private native ABI described below. For a complete
+example, run `python3 rfl/apps/rift/build-macos.py`; see the
+[Rift macOS guide](../rfl/apps/rift/README.md#standalone-macos).
+
 From the repository root:
 
 ```sh
@@ -184,12 +190,12 @@ An opt-in cooperative process prototype is available through
 private pages, and provides an explicit shared kernel arena. Programs without
 these service calls keep flat RAM and ordinary native calls. See
 [native processes](PROCESSES.md) for standalone examples, the API, limits and
-tests; these do not require the FUZIX port.
+tests; these do not require the Riplix port.
 
 Hosted kernels can instead select contexts explicitly through
 `<native_hosted.h>` and link shared kernel globals with repeatable `--kernel IR`
-arguments. [Fuse-X](../fuse-x/README.md) uses this mode to boot native FUZIX into
-a shell. FUZIX owns scheduling; `link-app` builds independently loadable native
+arguments. [Fuse-X](../fuse-x/README.md) uses this mode to boot native Riplix into
+a shell. Riplix owns scheduling; `link-app` builds independently loadable native
 application packages. See [Fuse-X executables](../fuse-x/EXECUTABLES.md).
 
 Build the release runtime first, then:

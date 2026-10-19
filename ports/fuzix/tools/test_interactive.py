@@ -31,7 +31,7 @@ class Terminal:
         self.buffer = b''
         self.log = bytearray()
         self.jit = jit
-        self.until(b'fuzix# ')
+        self.until(b'riplix# ')
     def until(self, token, timeout=45):
         deadline = time.monotonic() + timeout
         while token not in self.buffer:
@@ -49,7 +49,7 @@ class Terminal:
     def send(self, data): os.write(self.master, data)
     def shell(self, data):
         self.send(data.encode() + b'\r' if isinstance(data, str) else data)
-        return self.until(b'fuzix# ')
+        return self.until(b'riplix# ')
     def edit(self, name, keys, command='levee'):
         print(('JIT' if self.jit else 'Interpreter') + ': ' + command + ' ' + name, flush=True)
         self.send((command + ' ' + name).encode() + b'\r')
@@ -57,10 +57,10 @@ class Terminal:
         self.until(b'\x1b[1;1H')
         self.send(keys)
         self.until(b'\x1b[?1049l')
-        return self.until(b'fuzix# ')
+        return self.until(b'riplix# ')
     def content(self, name):
         output = self.shell('cat ' + name)
-        return output.split(b'\n', 1)[1][:-len(b'fuzix# ')]
+        return output.split(b'\n', 1)[1][:-len(b'riplix# ')]
     def close(self):
         Path('/tmp/fuzix-interactive-' + ('jit' if self.jit else 'interpreter') + '.log').write_bytes(self.log)
         if self.proc.poll() is None: self.proc.kill(); self.proc.wait()
@@ -82,8 +82,8 @@ def exercise(image, jit):
         assert b'HEADER' not in output, output
         t.send(b'\r')
         assert b'\nabc\n' in t.until(color)
-        t.send(b"PS1='fuzix# '\r")
-        t.until(b'\r\nfuzix# ')
+        t.send(b"PS1='riplix# '\r")
+        t.until(b'\r\nriplix# ')
         assert b'argument: completion' in t.shell(b'hell\tcompletion\r')
         t.shell("echo FILE > /completion-note")
         assert b'\nFILE\n' in t.shell(b'cat /comple\t\r')
@@ -94,11 +94,11 @@ def exercise(image, jit):
         assert b'\nSPACE\n' in t.shell(b'cat /spa\t\r')
         t.shell('touch /ab-one /ab-two')
         t.send(b'echo /ab-\t\t')
-        t.until(b'ab-one'); t.until(b'ab-two'); t.until(b'fuzix# ')
-        t.send(b'\x03'); t.until(b'fuzix# ')
+        t.until(b'ab-one'); t.until(b'ab-two'); t.until(b'riplix# ')
+        t.send(b'\x03'); t.until(b'riplix# ')
         assert b'\n130\n' in t.shell('echo $?')
         t.shell("trap 'echo PROMPT_TRAP' 2")
-        t.send(b'not_a_command\x03'); t.until(b'\nPROMPT_TRAP'); t.until(b'fuzix# ')
+        t.send(b'not_a_command\x03'); t.until(b'\nPROMPT_TRAP'); t.until(b'riplix# ')
         t.shell('trap 2')
         t.shell('echo HISTORY_MARK')
         assert b'\nHISTORY_MARK\n' in t.shell(b'\x1b[A\r')
@@ -114,14 +114,14 @@ def exercise(image, jit):
         long = b'x' * 110
         assert b'\n' + long + b'Y\n' in t.shell(b'echo ' + long + b'Z\x1b[D\x1b[3~Y\r')
         t.shell('echo untouched > /cancelled')
-        t.send(b'echo BAD > /cancelled\x03'); t.until(b'fuzix# ')
+        t.send(b'echo BAD > /cancelled\x03'); t.until(b'riplix# ')
         assert t.content('/cancelled') == b'untouched\n'
         # Six pipeline children plus the shell exceeded the old four-slot pool.
         output = t.shell('seq 1 5 | cat | cat | cat | cat | wc -l; echo POOL:$?')
         assert b'5' in [line.strip() for line in output.splitlines()] and b'POOL:0' in output, output
         # An external process must receive canonical input after the line editor.
         t.send(b'cat > /raw-restored\r'); t.until(b'cat > /raw-restored')
-        t.send(b'guest line\r\x04'); t.until(b'fuzix# ')
+        t.send(b'guest line\r\x04'); t.until(b'riplix# ')
         assert t.content('/raw-restored') == b'guest line\n'
         print(('JIT' if jit else 'Interpreter') + ': shell input passed', flush=True)
         # Exercise Levee explicitly; the default vi now launches Rift.

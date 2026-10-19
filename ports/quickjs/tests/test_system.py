@@ -106,7 +106,7 @@ def main():
                    0, ['SYSTEM CHECKS'])
             invoke('system utility demo', ['--max-time-ms', '300000', prefix + '/demo.mjs', prefix,
                 prefix + '/demo.json', prefix + '/demo-report.json'], 0,
-                ['JavaScript on Fuse-X / FUZIX', 'Привет, мир!', 'Saved ' + prefix + '/demo-report.json'])
+                ['JavaScript on Fuse-X / Riplix', 'Привет, мир!', 'Saved ' + prefix + '/demo-report.json'])
             invoke('timer keeps script alive', ['-e', 'setTimeout(() => console.log("ALIVE"), 10)'], 0, ['ALIVE\n'])
             invoke('top-level await on timer', ['-m', '-e', 'import {sleep} from "fuse:system"; await sleep(10); console.log("AWAIT TIMER")'],
                    0, ['AWAIT TIMER\n'])

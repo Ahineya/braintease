@@ -1,0 +1,45 @@
+NetHack 3.6.7 for Fuse-X and Ripple
+
+Run /mnt/host/nethack.fxe from the shell, mux, or a desktop terminal.
+Keep the nethack-data folder beside nethack.fxe. Use a terminal at least
+80 columns wide and 24 rows tall. No graphical desktop is required.
+
+Graphical version: start the desktop with startx, then run
+/mnt/host/nethack-nx.fxe & from a terminal. It uses the same nethack-data
+folder (including nxtiles), options and saves. Resize the window as desired;
+the tiled viewport follows you on smaller screens.
+
+In graphical menus, arrows move and Enter or a letter chooses an item.
+Space toggles an item in multiple-selection menus; Enter accepts.
+Escape cancels. PageUp/PageDown scroll. Digits prefix an item count;
+: searches, . selects all, - clears selections, @ inverts them.
+Ctrl-P shows message history. F1 opens help. # enters an extended command.
+Closing the game window asks whether to save and exit.
+
+The game asks you to choose a character. You can let it choose randomly.
+
+Movement: arrow keys, or h left, j down, k up, l right.
+y/u/b/n move diagonally. Arrows also work when number_pad is enabled.
+. waits one turn. , picks up items. i opens inventory. d drops an item.
+< and > use stairs. e eats. q quaffs a potion. r reads. w wields.
+? opens help. / identifies a map symbol. : looks at your square.
+S saves and exits; restart the same player name to resume.
+#quit abandons the current game (you will be asked to confirm).
+NetHack has permanent character death. Take care down there!
+
+Saves, scores, bones, lock files and logs: $HOME/.nethack/
+Personal options: $HOME/.nethackrc
+For example, a .nethackrc can contain:
+OPTIONS=color,number_pad:1
+OPTIONS=catname:Mittens
+
+-d /some/data/directory or NETHACKDIR selects another game data folder.
+Player names are limited to 19 characters to fit C16 filesystem names.
+Native Fuse-X and RVM use the same C16 data layout. These saves and level
+files are specific to this port; ordinary host NetHack data is incompatible.
+Pattern options use NetHack's built-in wildcard matching implementation.
+
+This is a modified NetHack build. Copyright belongs to the NetHack authors;
+see nethack-LICENSE.txt (the NetHack General Public License).
+The game has no dependency on a host NetHack installation.
+Source and reproducible build instructions: ports/nethack in the repository.

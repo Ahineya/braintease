@@ -118,7 +118,7 @@ class LauncherTests(unittest.TestCase):
         (self.build / '.mmu').write_text('1\n')
         result = subprocess.run([*cmd, '--backend', 'rbf'], capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('FUZIX/RBF is retired', result.stderr)
+        self.assertIn('Riplix/RBF is retired', result.stderr)
         self.assertFalse(Path(str(disk) + '.lock').exists())
 
     def test_shell_retirement_and_argument_forwarding(self):
@@ -128,7 +128,7 @@ class LauncherTests(unittest.TestCase):
             result = subprocess.run([str(script), option, '--build-only'],
                 env=env, capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn('FUZIX/RBF is retired', result.stderr)
+            self.assertIn('Riplix/RBF is retired', result.stderr)
             self.assertNotIn('Checking compiler', result.stderr)
         (self.build / 'bios.bin').touch()
         result = subprocess.run([str(script), '--run-only', '--input', 'rbf'],

@@ -47,5 +47,25 @@ int main(void) {
     s.anchor=4;s.end=4;copied=vt_selection_text(&t,&s,&length);assert(copied&&length==3&&!memcmp(copied,"\344\270\255",3));free(copied);
     assert(vt_selected(&s,4)&&!vt_selected(&s,5)&&!vt_selected(&s,3));
     assert(vt_selection_colour(&s,4,0x17)==0x71);
+    assert(!vt_selection_begin(&t,&s,0));s.end=2;s.dragging=0;
+    vt_feed(&t,"\033[2;1Hbackground\033[1;1H\033[31m\033[6n",strlen("\033[2;1Hbackground\033[1;1H\033[31m\033[6n"));
+    assert(!vt_selection_update(&t,&s)&&s.active);
+    vt_cells(&t)[0].colour=0x24;assert(!vt_selection_update(&t,&s)&&s.active);
+    /* Mux may erase/repaint the selected row over several PTY packets. */
+    vt_feed(&t,"\033[?2026h\033[1;1H\033[2K",strlen("\033[?2026h\033[1;1H\033[2K"));
+    assert(!vt_selection_update(&t,&s)&&s.active);
+    copied=vt_selection_text(&t,&s,&length);
+    assert(copied&&!strcmp(copied,"A\320\226e\314\201"));free(copied);
+    vt_feed(&t,"A\320\226e\314\201\344\270\255Z\033[?2026l",strlen("A\320\226e\314\201\344\270\255Z\033[?2026l"));
+    assert(!vt_selection_update(&t,&s)&&s.active);
+    vt_feed(&t,"\033[1;1HX",7);assert(vt_selection_update(&t,&s)&&!s.active&&!s.snapshot);
+    /* Incoming output cannot abort an in-progress drag. */
+    assert(!vt_selection_begin(&t,&s,0));s.end=2;
+    vt_feed(&t,"\033[1;1HY",7);assert(!vt_selection_update(&t,&s)&&s.active&&s.dragging);
+    s.dragging=0;copied=vt_selection_text(&t,&s,&length);assert(copied&&copied[0]=='Y');free(copied);
+    assert(!vt_resize(&t,11,3));assert(vt_selection_update(&t,&s)&&!s.active);
+    assert(!vt_selection_begin(&t,&s,0));s.dragging=0;t.alternate=1;
+    assert(vt_selection_update(&t,&s)&&!s.active);
+    vt_selection_clear(&s);
     vt_destroy(&t);free(q.text);puts("clipboard: URL normalization, ordered large/partial pastes, controls, bracketed mode and Unicode selection passed");return 0;
 }

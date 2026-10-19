@@ -1,6 +1,6 @@
 # FuseDE desktop plan
 
-FuseDE is the planned custom desktop for FUZIX on RVM. Its shared application UI,
+FuseDE is the planned custom desktop for Riplix on RVM. Its shared application UI,
 applications and dock must also compile for Fuse-X. The agreed direction on
 October 17, 2026 is to port NXDSKTOP and its
 companion applications first, giving us a useful lightweight desktop while we

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real FUZIX sockets, ping and Telnet shells against an independent Ethernet peer."""
+"""Real Riplix sockets, ping and Telnet shells against an independent Ethernet peer."""
 import argparse
 from launch import require_mmu
 import json
@@ -98,14 +98,14 @@ with tempfile.TemporaryDirectory(prefix='fuzix-network-') as directory:
                 def line(stream, command):
                     at = len(received(stream))
                     stream.queue(command + b'\r\n')
-                    until(lambda: b'fuzix# ' in received(stream)[at:])
+                    until(lambda: b'riplix# ' in received(stream)[at:])
                     return received(stream)[at:]
 
                 def connect(local):
                     stream = peer.connect(23, local)
                     until(lambda: stream.established)
                     stream.queue(b'\xff\xfd\x01\xff\xfd\x03\xff\xfb\x1f')
-                    until(lambda: b'fuzix# ' in received(stream))
+                    until(lambda: b'riplix# ' in received(stream))
                     return stream
 
                 try:
@@ -134,7 +134,7 @@ with tempfile.TemporaryDirectory(prefix='fuzix-network-') as directory:
                     first.queue(b'ttycheck --wait\r\n')
                     until(lambda: b'TTY_WAIT_READY\n' in received(first)[at:])
                     first.queue(b'\x03')
-                    until(lambda: b'fuzix# ' in received(first)[at:])
+                    until(lambda: b'riplix# ' in received(first)[at:])
                     assert b'INTERRUPTED:130\n' in line(first, b'echo INTERRUPTED:$?')
                     assert b'STILL_ALIVE\n' in line(second, b'echo STILL_ALIVE')
                     print('Concurrent PTYs, Telnet negotiation and Ctrl-C passed', flush=True)
@@ -143,12 +143,12 @@ with tempfile.TemporaryDirectory(prefix='fuzix-network-') as directory:
                     until(lambda: b'\x1b[?1049h' in received(first)[at:])
                     spin(0.3);first.queue(b'iSaved over telnet.\x1b');spin(0.3)
                     first.queue(b'\x1a')
-                    until(lambda: b'fuzix# ' in received(first)[at:])
+                    until(lambda: b'riplix# ' in received(first)[at:])
                     assert b'Stopped levee /network-edit' in received(first)[at:]
                     at = len(received(first));first.queue(b'fg\r\n')
                     until(lambda: b'\x1b[?1049h' in received(first)[at:])
                     first.queue(b':wq\r\n')
-                    until(lambda: b'fuzix# ' in received(first)[at:])
+                    until(lambda: b'riplix# ' in received(first)[at:])
                     assert b'Saved over telnet.' in line(second, b'cat /network-edit')
                     print('Remote Levee suspend/resume and save passed', flush=True)
                     # The guest telnet client opens a second TCP stream through the same NIC.
@@ -157,7 +157,7 @@ with tempfile.TemporaryDirectory(prefix='fuzix-network-') as directory:
                     first.queue(b'CLIENT_WIRE\r\n')
                     until(lambda: b'CLIENT_WIRE_OK\n' in received(first)[at:])
                     first.queue(b'\x1e')
-                    until(lambda: b'Connection closed.' in received(first)[at:] and b'fuzix# ' in received(first)[at:])
+                    until(lambda: b'Connection closed.' in received(first)[at:] and b'riplix# ' in received(first)[at:])
                     print('Guest Telnet client passed', flush=True)
                     # Exit/reconnect beyond the passive pool capacity, retaining old tuples.
                     first.queue(b'exit\r\n');until(lambda: first.closed)
@@ -191,4 +191,4 @@ with tempfile.TemporaryDirectory(prefix='fuzix-network-') as directory:
         assert result.returncode == 0 and 'REMOTE_FILE' in result.stdout and 'Saved over telnet.' in result.stdout, result.stdout
         assert 'disk synced; power off.' in result.stdout, result.stdout
         subprocess.run(['python3', str(PORT / 'tools/fsck.py'), str(image)], check=True)
-        print(f'FUZIX sockets, bidirectional ping, Telnet client/server, remote jobs/editor and persistence passed (MMU=1, JIT={jit})')
+        print(f'Riplix sockets, bidirectional ping, Telnet client/server, remote jobs/editor and persistence passed (MMU=1, JIT={jit})')

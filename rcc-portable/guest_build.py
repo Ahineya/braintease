@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the C16 frontend itself as a Fuse-X or FUZIX/RVM executable.
+"""Build the C16 frontend itself as a Fuse-X or Riplix/RVM executable.
 
 The portable host frontend compiles every compiler source. The existing SDK
 still supplies startup/libc and the host backend packages the resulting FXE or RXE.
@@ -49,10 +49,10 @@ def main():
     parser.add_argument('--build', type=Path)
     parser.add_argument('--compiler', type=Path, default=ROOT / 'target/release/rcc')
     parser.add_argument('--metrics', action='store_true', help='report compiler heap requests and peak live cells')
-    parser.add_argument('--map', type=Path, help='write FUZIX/RVM RXE symbol locations as JSON')
+    parser.add_argument('--map', type=Path, help='write Riplix/RVM RXE symbol locations as JSON')
     args = parser.parse_args()
     if args.map and args.os != 'fuzix':
-        parser.error('--map applies to FUZIX/RVM RXE builds')
+        parser.error('--map applies to Riplix/RVM RXE builds')
     if args.build is None:
         args.build = ROOT / ('fuse-x/build' if args.os == 'fuse-x' else 'build/fuzix')
     if args.os == 'fuzix' and args.output == HERE / 'build/apps/rcc-c.fxe':

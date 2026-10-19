@@ -11,7 +11,7 @@ class Remote:
         self.pending = bytearray()
         guest.wait(lambda: self.stream.established, 'Telnet connection established')
         self.send(b'\xff\xfd\x01\xff\xfd\x03\xff\xfb\x1f\xff\xfa\x1f\0P\0\x18\xff\xf0')
-        self.raw(b'fuzix# ')
+        self.raw(b'riplix# ')
 
     def feed(self):
         self.pending.extend(self.stream.received[self.at:])
@@ -50,7 +50,7 @@ class Remote:
 
     def shell(self, command):
         self.send(command.encode() + b'\r\n')
-        return self.raw(b'fuzix# ')
+        return self.raw(b'riplix# ')
 
     def visible(self, text):
         def seen():

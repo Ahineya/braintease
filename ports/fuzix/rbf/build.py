@@ -15,7 +15,7 @@ def build_profile(build):
         ('Building assembler and linker',
          ['cargo', 'build', '--offline', '--release', '--jobs', '2', '--manifest-path',
           str(ROOT / 'src/ripple-asm/Cargo.toml'), '--bin', 'rasm', '--bin', 'rlink']),
-        ('Building FUZIX boot kernel and images',
+        ('Building Riplix boot kernel and images',
          ['make', '-C', str(ROOT / 'ports/fuzix/rbf'), '-j2', f'BUILD={build}']),
     ]
     for phase, command in steps:

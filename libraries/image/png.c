@@ -20,10 +20,31 @@ static unsigned sample(const RiByte *p,unsigned index,unsigned depth) {
     if(depth==8)return p[index];
     return (p[bit/8]>>(8-depth-bit%8))&((1U<<depth)-1);
 }
-static unsigned channel(unsigned value,unsigned depth) { return depth==16?value>>8:value*255/((1U<<depth)-1); }
+static unsigned channel(unsigned value,unsigned depth) { return depth==8?value:depth==16?value>>8:value*255/((1U<<depth)-1); }
 static unsigned paeth(unsigned a,unsigned b,unsigned c) {
     long p=(long)a+b-c,pa=labs(p-a),pb=labs(p-b),pc=labs(p-c);
     return pa<=pb&&pa<=pc?a:pb<=pc?b:c;
+}
+/* Choose the predictor once per scanline. In particular, filter zero must not
+ * read every byte of the previous row only to discard it. Keep reconstruction
+ * in place: later bytes in Sub/Average/Paeth depend on already restored bytes. */
+static void unfilter(RiByte *row,const RiByte *previous,unsigned size,unsigned bpp,unsigned filter) {
+    unsigned i,a,b,c;
+    if(filter==1) {
+        for(i=bpp;i<size;i++)row[i]=(row[i]+row[i-bpp])&255;
+    } else if(filter==2) {
+        if(previous)for(i=0;i<size;i++)row[i]=(row[i]+previous[i])&255;
+    } else if(filter==3) {
+        for(i=0;i<size;i++) {
+            a=i>=bpp?row[i-bpp]:0;b=previous?previous[i]:0;
+            row[i]=(row[i]+(a+b)/2)&255;
+        }
+    } else if(filter==4) {
+        for(i=0;i<size;i++) {
+            a=i>=bpp?row[i-bpp]:0;b=previous?previous[i]:0;c=previous&&i>=bpp?previous[i-bpp]:0;
+            row[i]=(row[i]+paeth(a,b,c))&255;
+        }
+    }
 }
 int ri_png(const RiByte *p,size_t n,const RiLimits *limits,RiImage **out) {
     size_t at=8,offset=0;uint32_t len,w=0,h=0,packed=0,total=0,rowsize,passw,passh,used;
@@ -109,12 +130,23 @@ int ri_png(const RiByte *p,size_t n,const RiLimits *limits,RiImage **out) {
         for(y=0;y<passh;y++) {
             filter=raw[offset++];row=raw+offset;offset+=rowsize;
             if(filter>4)goto done;
-            for(i=0;i<rowsize;i++) {
-                a=i>=bpp?row[i-bpp]:0;b=previous?previous[i]:0;gray=previous&&i>=bpp?previous[i-bpp]:0;
-                if(filter==1)row[i]=(row[i]+a)&255;
-                else if(filter==2)row[i]=(row[i]+b)&255;
-                else if(filter==3)row[i]=(row[i]+(a+b)/2)&255;
-                else if(filter==4)row[i]=(row[i]+paeth(a,b,gray))&255;
+            unfilter(row,previous,(unsigned)rowsize,bpp,filter);
+            /* Most web PNGs have contiguous 8-bit RGB/RGBA rows. Avoid
+             * per-channel sample/depth conversions and per-pixel wide address
+             * multiplication; Adam7 and colour-key transparency still use the
+             * general path below. memcpy counts C cells on both C8 and C16. */
+            if(!interlace&&depth==8&&(type==6||(type==2&&!transparency))) {
+                pixel=im->rgba+(size_t)y*w*4;
+                if(type==6)memcpy(pixel,row,(size_t)w*4);
+                else {
+                    const RiByte *rgb=row;
+                    for(x=0;x<w;x++) {
+                        pixel[0]=rgb[0];pixel[1]=rgb[1];pixel[2]=rgb[2];pixel[3]=255;
+                        pixel+=4;rgb+=3;
+                    }
+                }
+                previous=row;
+                continue;
             }
             for(x=0;x<passw;x++) {
                 a=255;

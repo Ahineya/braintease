@@ -60,14 +60,14 @@ def exercise(image, jit):
 
     def shell(text):
         send(text.encode() + b'\r')
-        return until(b'fuzix# ')
+        return until(b'riplix# ')
 
     def contents(path):
         command = 'cat ' + path
         output = shell(command)
         prefix = command.encode() + b'\n'
-        assert output.startswith(prefix) and output.endswith(b'fuzix# '), output
-        return output[len(prefix):-len(b'fuzix# ')]
+        assert output.startswith(prefix) and output.endswith(b'riplix# '), output
+        return output[len(prefix):-len(b'riplix# ')]
 
     def enter(text):
         print(('JIT' if jit else 'Interpreter') + ': ' + text, flush=True)
@@ -78,10 +78,10 @@ def exercise(image, jit):
     def leave(keys):
         send(keys)
         until(b'\x1b[?1049l')
-        return until(b'fuzix# ')
+        return until(b'riplix# ')
 
     try:
-        until(b'fuzix# ')
+        until(b'riplix# ')
         if not jit:
             assert contents('/edit-note') == b'Yello Ripple\n'
             assert contents('/named') == b'unnamed\nagain\n'
@@ -110,7 +110,7 @@ def exercise(image, jit):
 
         # Raw mode must end with the editor: canonical Ctrl-U works again.
         send(b'garbage\x15echo restored > /tty-after\r')
-        until(b'fuzix# ')
+        until(b'riplix# ')
         assert contents('/tty-after') == b'restored\n'
 
         enter('vile /limit')

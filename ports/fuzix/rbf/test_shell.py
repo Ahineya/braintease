@@ -86,7 +86,7 @@ class ShellTests(unittest.TestCase):
 import fs from 'node:fs';
 import {rootImage,atomicWrite} from './ports/fuzix/tools/disk.mjs';
 for(const item of JSON.parse(process.argv[2])) {
-  const files=[{name:'/BOOT',mode:0o100444,data:Buffer.from('FUZIX kernel running in Brainfuck.\\n')}];
+  const files=[{name:'/BOOT',mode:0o100444,data:Buffer.from('Riplix kernel running in Brainfuck.\\n')}];
   for(const [name,source] of Object.entries(JSON.parse(process.argv[3])))
     files.push({name:'/bin/'+name,mode:0o100555,data:fs.readFileSync(source)});
   files.push({name:'/bin/bad',mode:0o100555,data:Buffer.from('bad')});
@@ -122,7 +122,7 @@ for(const item of JSON.parse(process.argv[2])) {
                     'cd /dev\npwd\nps\nstatus\nshutdown\n')
         reference, _ = self.guest('good', commands=commands)
         self.assertEqual(reference.returncode, 0, reference.stderr)
-        for text in ('Fuzix 0.5 RCC-BF Ripple\n', '\nwritten-in-guest\nappended\n',
+        for text in ('Riplix 0.5 RCC-BF Ripple\n', '\nwritten-in-guest\nappended\n',
                      'cat\n', 'ls\n', 'uname\n', '/dev\n', 'shell pid 1\n', 'RBF shell shutdown.'):
             self.assertIn(text, reference.stdout)
         if 'rbf' not in BACKENDS: return
@@ -222,11 +222,11 @@ for(const item of JSON.parse(process.argv[2])) {
                 self.assertTrue(chunk, output.decode(errors='replace'))
                 output.extend(chunk)
         try:
-            until(b'fuzix-bf# ')
+            until(b'riplix-bf# ')
             child.stdin.write(b'echo delayed'); child.stdin.flush()
             until(b'echo delayed')
             self.assertIsNone(child.poll())
-            self.assertEqual(output.count(b'fuzix-bf# '), 1)
+            self.assertEqual(output.count(b'riplix-bf# '), 1)
             self.assertNotIn(b'\r\ndelayed\r\n', output)
             child.stdin.write(b'\nshutdown\n'); child.stdin.flush()
             tail, errors = child.communicate(timeout=180)

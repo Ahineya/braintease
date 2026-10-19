@@ -10,7 +10,7 @@ logical simulation ticks, PCM effects and optional OPL3 music. Development and t
 VM. An experimental Brainfuck launcher uses the same port and guest ISA;
 the regular port tests do not run it.
 
-## Fuse-X and FUZIX userspace builds
+## Fuse-X and Riplix userspace builds
 
 Doom also runs as an ordinary guest process, using filesystem WAD reads,
 `/dev/gfx` windows, HID keyboard events and the OS monotonic clock. These are
@@ -61,10 +61,10 @@ Available effects are precached before the first frame, avoiding file reads and
 allocation on the first gunshot or monster sound. Missing shareware effects are
 skipped during precaching.
 Use Doom's `-nosound`, `-nomusic` or `-nosfx` options to control playback, or
-`--no-audio` on the build command for a silent executable. FUZIX builds remain
+`--no-audio` on the build command for a silent executable. Riplix builds remain
 silent. Both guest builds retain fixed controls and lack saved configuration.
 
-Build the FUZIX/RVM executable without installing it into any image:
+Build the Riplix/RVM executable without installing it into any image:
 
 ```sh
 python3 ports/doom/guest/build.py fuzix
@@ -74,7 +74,7 @@ Outputs: `build/guest/fuse-x/doom.fxe` and `build/guest/fuzix/doom.rxe` beneath
 this directory. `--build PATH` chooses another guest output root;
 `--sdk-build PATH` selects an existing or new SDK output directory. `--compiler PATH`
 can select an isolated compiler during parallel toolchain work. Per-source
-objects are cached by compiler, flags, source and header content. The FUZIX
+objects are cached by compiler, flags, source and header content. The Riplix
 build links the banked renderer/fixed-point assembly kernels and floating-point
 support library; its build is checked separately from native Fuse-X playback.
 Neither command opens a normal guest disk.

@@ -2,7 +2,7 @@
 export const MAX_DISK_BYTES = 256 * 1024 * 1024;
 export function checkDiskSize(size) {
   if (!Number.isSafeInteger(size) || size < 512 || size > MAX_DISK_BYTES)
-    throw Error('Choose a Ripple/FUZIX .img disk no larger than 256 MiB.');
+    throw Error('Choose a Riplix .img disk no larger than 256 MiB.');
 }
 export function validateDisk(buffer) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
@@ -11,7 +11,7 @@ export function validateDisk(buffer) {
   const u16 = at => view.getUint16(at, true), u32 = at => view.getUint32(at, true);
   const text = (at, n) => String.fromCharCode(...bytes.subarray(at, at + n));
   const invalid = message => { throw Error(message); };
-  if (u16(510) !== 0xaa55) invalid('This is not a Ripple/FUZIX FAT16 disk image.');
+  if (u16(510) !== 0xaa55) invalid('This is not a Riplix FAT16 disk image.');
   const bps = u16(11), spc = bytes[13], reserved = u16(14), fats = bytes[16];
   const entries = u16(17), sectors = u16(19) || u32(32), spf = u16(22);
   if (![512,1024,2048,4096].includes(bps) || !spc || spc > 128 || (spc & (spc-1)) ||
@@ -37,7 +37,7 @@ export function validateDisk(buffer) {
         entry = at;
       }
     }
-    if (entry === undefined) invalid('Choose a Ripple/FUZIX disk containing FUZIX.SYS and ROOTFS.IMG.');
+    if (entry === undefined) invalid('Choose a Riplix disk containing the kernel and ROOTFS.IMG.');
     const size = u32(entry+28), chain = [];
     if (!size || size > bytes.length) invalid('A system file has an invalid size.');
     let cluster = u16(entry+26);

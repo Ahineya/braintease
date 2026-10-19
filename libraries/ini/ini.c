@@ -4,9 +4,11 @@
 #include <string.h>
 struct IniReader {
     char *text, *position, *end, *key, *value;
-    char section[1025];
+    char *section;
+    size_t max_line;
+    unsigned long max_entries;
     unsigned long line;
-    unsigned entries;
+    unsigned long entries;
     int error;
 };
 static int space(int c) { return c == ' ' || c == '\t' || c == '\r'; }
@@ -19,18 +21,25 @@ static char *trim(char *s) {
     return s;
 }
 IniReader *ini_reader(const char *text, size_t length) {
+    return ini_reader_with_limits(text, length, 65536UL, 1024, 256);
+}
+IniReader *ini_reader_with_limits(const char *text, size_t length,
+    size_t max_input, size_t max_line, unsigned long max_entries) {
     IniReader *r = calloc(1, sizeof(*r));
+    size_t section_size = max_line < length ? max_line : length;
     if (!r) return NULL;
-    if (length > 65536UL) { r->error = INI_LIMIT; return r; }
+    r->max_line = max_line; r->max_entries = max_entries;
+    if (length > max_input || length == (size_t)-1) { r->error = INI_LIMIT; return r; }
     if (!text && length) { r->error = INI_SYNTAX; return r; }
     r->text = malloc(length + 1);
-    if (!r->text) { free(r); return NULL; }
+    r->section = calloc(section_size + 1, 1);
+    if (!r->text || !r->section) { ini_free(r); return NULL; }
     if (length) memcpy(r->text, text, length);
     r->text[length] = 0;
     r->position = r->text; r->end = r->text + length;
     return r;
 }
-void ini_free(IniReader *r) { if (r) { free(r->text); free(r); } }
+void ini_free(IniReader *r) { if (r) { free(r->section); free(r->text); free(r); } }
 int ini_next(IniReader *r) {
     char *s, *end, *equal, *value;
     size_t length;
@@ -44,7 +53,7 @@ int ini_next(IniReader *r) {
             ++end;
         }
         length = end - s;
-        if (length > 1024) return r->error = INI_LIMIT;
+        if (length > r->max_line) return r->error = INI_LIMIT;
         r->position = end < r->end ? end + 1 : end;
         *end = 0; s = trim(s);
         if (!*s || *s == '#' || *s == ';') continue;
@@ -65,7 +74,7 @@ int ini_next(IniReader *r) {
                            (*value == '\'' && value[length - 1] == '\''))) {
             value[length - 1] = 0; ++value;
         }
-        if (r->entries == 256) return r->error = INI_LIMIT;
+        if (r->entries == r->max_entries) return r->error = INI_LIMIT;
         ++r->entries; r->value = value;
         return 1;
     }

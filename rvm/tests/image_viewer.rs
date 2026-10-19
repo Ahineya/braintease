@@ -159,7 +159,7 @@ fn image_viewer_pixels_controls_and_cleanup() {
         log: String::new(),
         output,
     };
-    g.until("fuzix# ", 0);
+    g.until("riplix# ", 0);
     g.command(
         "NANOX_TRACE=1; export NANOX_TRACE\nnano-X -p &\ns=$!\n",
         "Nano-X ready",

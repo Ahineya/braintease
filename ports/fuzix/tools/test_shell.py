@@ -95,7 +95,7 @@ def run(disk, commands, jit):
                                 text=True, timeout=130)
     output = log.read_text().replace('\r', '').split('Starting /init\n')[-1]
     output = '\n'.join(line for line in output.splitlines()
-                       if not line.startswith(('fuzix# ', '> ')))
+                       if not line.startswith(('riplix# ', '> ')))
     assert result.returncode == 0 and 'disk synced; power off.' in output, output
     assert 'WRONG' not in output and 'FAILED' not in output and 'panic:' not in output, output
     return output

@@ -210,7 +210,7 @@ code call an optional internal driver rather than directly referencing TCP.
 
 `net_tcp_listen`, `net_tcp_listener_poll`, `net_tcp_accept` and
 `net_tcp_release` expose caller-owned bounded pools over the same stream core.
-Standalone contexts support two listeners and four live connections. The FUZIX
+Standalone contexts support two listeners and four live connections. The Riplix
 and Fuse-X kernel profile selects sixteen listeners and sixty-four live connections
 consistently across all network units; see [local IPC and capacity](local-ipc.md).
 Accepted pointers

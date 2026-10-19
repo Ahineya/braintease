@@ -1,4 +1,4 @@
-# A graphical web browser for FUZIX and Fuse-X
+# A graphical web browser for Riplix and Fuse-X
 
 The next browser should remain a guest Nano-X application. RVM gets one
 composited desktop; Fuse-X can present the same client through its hosted
@@ -161,7 +161,7 @@ libcss and libdom (441 dependency translation units per backend, plus RVM's
 shared software floating-point runtime). The acceptance executable checks
 actual HTML tree construction and CSS parsing/selection, rather than a
 substitute renderer. All 273 acceptance checks pass on the host, native Fuse-X and real
-FUZIX/RVM JIT; both disposable guest filesystems pass post-shutdown checks.
+Riplix/RVM JIT; both disposable guest filesystems pass post-shutdown checks.
 The README records reproducible host/guest tests, compiler fixes,
 open compiler regressions and the intentionally excluded UTF-16 codec.
 
@@ -197,7 +197,7 @@ The last drawn text row
 changes from y=149 at a 480-pixel viewport to y=212 at 180 pixels. These are
 functional observations using the acceptance frontend's font metrics, not a
 graphical performance or typography benchmark. Native Fuse-X and real
-FUZIX/RVM JIT each pass 69 checks (the extra check measures heap growth),
+Riplix/RVM JIT each pass 69 checks (the extra check measures heap growth),
 return zero, and pass disposable-filesystem consistency checks after shutdown.
 Their layout geometry matches the host. The port README records build and
 execution commands.
@@ -213,7 +213,7 @@ budgets remain to be measured.
 The compatibility profile replaces iconv with the already tested ParserUtils
 codecs, uses monotonic timing, rejects compressed/oversized message records,
 and bounds frameset scratch storage. Its private regex fallback is namespaced
-because FUZIX's V8 regex API has incompatible signatures. The same approach
+because Riplix's V8 regex API has incompatible signatures. The same approach
 isolates NetSurf's `size_t`-length `strndup` implementation from the guest SDK's
 historical `int`-length declaration. That mismatch broke the RVM call ABI,
 corrupting copied URLs and header names; stylesheet failures then caused
@@ -268,13 +268,15 @@ step 3 above; the following milestone adds real network fetching.
 ## Guest HTTP/HTTPS milestone
 
 `ports/netsurf/http/fetch.c` supplies asynchronous HTTP and HTTPS fetchers to
-the real NetSurf core on both Fuse-X and FUZIX/RVM. A separate guest
-`/bin/htget --response URL -` process performs DNS, HTTP framing and verified
-TLS. Standard pipes carry final response headers, dechunked entity bytes and
-diagnostics. The frontend polls nonblocking pipes in bounded batches and stays
-available while the worker waits. Stop/navigation/exit kill and reap the
-worker; completion requires both valid framing and a successful worker exit.
-Up to two workers run concurrently; NetSurf queues additional requests.
+the real NetSurf core on both Fuse-X and Riplix/RVM. Up to two persistent guest
+`/bin/htget --worker` processes perform DNS, HTTP framing and verified TLS.
+Framed pipe records carry final response headers, dechunked entity bytes and
+an explicit success/error terminator; process EOF is a failure. The frontend
+polls nonblocking request/response pipes in bounded batches while the worker
+waits on the network. Successful fetches retain their worker and may reuse its
+same-origin HTTP/1.1 connection and parsed trust anchors. Cancellation discards
+and reaps that worker; browser exit reaps the whole pool. NetSurf queues
+additional requests. The standalone file-download CLI remains available.
 
 This division keeps wolfSSL's trust/record/crypto allocations outside the
 browser's DOM/layout process window. It also keeps GPLv2-only NetSurf separate

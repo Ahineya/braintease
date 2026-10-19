@@ -2,7 +2,7 @@
 """Actual guest tools over real HTTPS/SSE; an independent fixture plays the model.
 
 Uses disposable disks and fake credentials. No OpenAI inference or Mac commands
-are used by the guest. C is compiled in both guests and executed in FUZIX/RVM.
+are used by the guest. C is compiled in both guests and executed in Riplix/RVM.
 """
 import argparse
 import json

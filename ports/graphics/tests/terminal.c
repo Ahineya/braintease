@@ -51,6 +51,9 @@ static void sizes(void) {
     }
 }
 int main(void) {
+    init();feed("\033[?2026h");assert(t.synchronized);
+    feed("frame");assert(t.synchronized&&ch(0,0)=='f');
+    feed("\033[?2026l");assert(!t.synchronized);
     unsigned i;
     /* Each block occupies one cell, even across all possible read splits. */
     for(i=0;i<=9;i++) {

@@ -211,7 +211,7 @@ protection is acceptable. Changed configuration/link epochs invalidate old
 records. Ordinary UDP/DNS/ping clients allocate no table; the receive/port paths
 return immediately when no table is attached.
 
-The FUZIX/Fuse-X kernel profile keeps the 512-octet TX buffer and uses a
+The Riplix/Fuse-X kernel profile keeps the 512-octet TX buffer and uses a
 4096-octet RX ring with a 1460-octet advertised MSS. Its kernel drains a bounded
 sixteen-frame burst per poll and sends cumulative ACKs after that burst. Socket
 readiness and raw ICMP notifications remain per endpoint. These larger RX

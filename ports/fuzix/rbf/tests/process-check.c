@@ -24,7 +24,7 @@ int main(void) {
     }
     check(pid==2 && marker==7 && local==17);
     check(call(55,pid,(long)&status,0,0)==pid && status==(7<<8));
-    check(read(fd,bytes,sizeof(bytes))==29 && close(fd)==0);
+    check(read(fd,bytes,sizeof(bytes))==30 && close(fd)==0);
     check(call(55,pid,(long)&status,0,0)==-1 && ripple_error==10);
     for (i=0;i<4;++i) {
         pid=fork_child();

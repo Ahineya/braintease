@@ -147,7 +147,7 @@ def run(image, commands, jit, label):
     with log.open('w') as stream:
         result = subprocess.run(cmd,stdout=stream,stderr=subprocess.STDOUT,timeout=370)
     text = log.read_text().replace('\r','').split('Starting /init\n')[-1]
-    text = '\n'.join(line for line in text.splitlines() if not line.startswith(('fuzix# ', '> ')))
+    text = '\n'.join(line for line in text.splitlines() if not line.startswith(('riplix# ', '> ')))
     assert result.returncode == 0 and 'disk synced; power off.' in text, text
     assert 'panic:' not in text and 'Out of memory' not in text, text
     return text
@@ -175,20 +175,20 @@ def live(image, jit):
         return out.replace(b'\r',b'')
     def send(data): os.write(master,data)
     try:
-        until(b'fuzix# '); send(b'tcl\r'); until(b'tcl> ')
+        until(b'riplix# '); send(b'tcl\r'); until(b'tcl> ')
         send(b'expr {2 + 3 * 4}\r'); assert b'\n14\n' in until(b'tcl> ')
         send(b'proc greet {name} {\r'); until(b'> ')
         send(b'puts "hello $name"\r'); until(b'> ')
         send(b'}\r'); until(b'tcl> ')
         send(b'greet Ripple\r'); assert b'\nhello Ripple\n' in until(b'tcl> ')
         send(b'unknown_command\r'); assert b'No such command' in until(b'tcl> ')
-        send(b'exit\r'); until(b'fuzix# ')
-        send(b'tcl\r'); until(b'tcl> '); send(b'\x04'); until(b'fuzix# ')
-        send(b'tcl\r'); until(b'tcl> '); send(b'\x03'); until(b'fuzix# ')
-        send(b'echo INTERRUPT:$?\r'); assert b'INTERRUPT:130' in until(b'fuzix# ')
+        send(b'exit\r'); until(b'riplix# ')
+        send(b'tcl\r'); until(b'tcl> '); send(b'\x04'); until(b'riplix# ')
+        send(b'tcl\r'); until(b'tcl> '); send(b'\x03'); until(b'riplix# ')
+        send(b'echo INTERRUPT:$?\r'); assert b'INTERRUPT:130' in until(b'riplix# ')
         send(b"tcl -c 'puts COMPUTING; flush stdout; while {1} {}'\r")
-        until(b'\nCOMPUTING\r'); send(b'\x03'); until(b'fuzix# ')
-        send(b'echo COMPUTE:$?\r'); assert b'COMPUTE:130' in until(b'fuzix# ')
+        until(b'\nCOMPUTING\r'); send(b'\x03'); until(b'riplix# ')
+        send(b'echo COMPUTE:$?\r'); assert b'COMPUTE:130' in until(b'riplix# ')
         send(b'shutdown\r'); until(b'disk synced; power off.'); assert proc.wait(timeout=10)==0
     finally:
         Path('/tmp/fuzix-fun-live-'+('jit' if jit else 'interpreter')+'.log').write_bytes(transcript)

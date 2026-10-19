@@ -1,6 +1,6 @@
 # Building FuseDE
 
-FuseDE is the custom desktop for **FUZIX on RVM**. Its applications, shared
+FuseDE is the custom desktop for **Riplix on RVM**. Its applications, shared
 controls, artwork and dock must also build for Fuse-X. The desktop shell and
 window-manager policy belong to RVM; Fuse-X keeps its native window/session
 integration. This plan refines the [roadmap](roadmap.md) into the next deliverable

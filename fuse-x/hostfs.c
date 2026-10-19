@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* FUZIX owns names, descriptors, offsets and lifetime. The native service owns
+/* Riplix owns names, descriptors, offsets and lifetime. The native service owns
  * only host capabilities and octet conversion; its handles never become FDs. */
 #include "host.h"
 #include "hostfs.h"

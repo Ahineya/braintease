@@ -1,14 +1,30 @@
-# FUZIX on Ripple
+# Riplix
 
-This is a working initial port of the FUZIX kernel to RCC and RVM. It boots
+Riplix is our Unix kernel derived from FUZIX. It runs on Ripple/RVM, as the
+native hosted kernel in Fuse-X, and in a minimal Brainfuck profile. Upstream
+copyright and license notices are retained; see [provenance](UPSTREAM.md).
+
+The `ports/fuzix/` directory, `--os fuzix` toolchain selector, `FUZIX.SYS`
+boot filename and C16 filesystem signature remain compatibility names.
+Use `scripts/run-riplix.sh` or `scripts/run-riplix-bf.sh`; the old launcher
+names still work with the same disks and build directories. `RIPLIX_BUILD`
+and `RIPLIX_BF_BUILD` override build paths, with the old variables accepted.
+
+The RCC/RVM build boots
 from a FAT16 disk, runs separate RCC userspace executables, supports copy-on-write
 `fork`, `exec`, `waitpid`, and timer preemption, and provides a writable root
 filesystem that survives VM launches and kernel rebuilds.
 
+Application builds use [RXE2 shared libraries](../../docs/arch/shared-libraries.md)
+by default: libc, curses and TLS text is cached and reused, while each process
+keeps private library state. Versioned packages are installed under `/lib/riplix`.
+Legacy static RXE1 programs still run; `RIPLIX_SHARED_LIBRARIES=0` selects static
+output for host builds.
+
 Run from the repository root:
 
 ```sh
-scripts/run-fuzix.sh
+scripts/run-riplix.sh
 ```
 
 The launcher builds incrementally and enables the JIT by default. It checks
@@ -19,11 +35,11 @@ force rebuilding while preserving the disk, `--build-only` to build and update
 without booting, or `--run-only` to skip both building and installation.
 The terminal shows elapsed time, build stages and current compilation activity,
 with an update every ten seconds during quiet work or build-lock waits.
-Complete compiler output remains in `$FUZIX_BUILD/build.log` (default
+Complete compiler output remains in `$RIPLIX_BUILD/build.log` (default
 `build/fuzix/build.log`).
 
 Normal builds also install the [guest C toolchain](../../rcc-portable/README.md).
-Inside FUZIX, `cc hello.c -o hello` and `./hello` compile and run a C program
+Inside Riplix, `cc hello.c -o hello` and `./hello` compile and run a C program
 using the installed headers and libraries under `/usr/lib/rcc`.
 
 At the prompt:
@@ -31,7 +47,7 @@ At the prompt:
 ```text
 help
 ls
-cat README
+cat /README
 echo hello > note
 echo another session >> note
 cat note
@@ -47,8 +63,8 @@ Start it again and `cat note`. Use **shutdown** to save and stop normally.
 `sync` commits filesystem changes without stopping. `exit` shuts down PID 1;
 inside a child `sh`, it returns to its caller.
 
-FUZIX/Ripple is **MMU-only on RVM**. The old `MMU=0` bank-snapshot build and
-FUZIX/RBF export are retired. `make MMU=0`, `make bf`, and launcher `--rbf`
+Riplix is **MMU-only on RVM**. The old `MMU=0` bank-snapshot build and
+Riplix/RBF export are retired. `make MMU=0`, `make bf`, and launcher `--rbf`
 fail immediately; stale non-MMU or unmarked artifacts are rejected before disk
 updates. Rebuild with the ordinary launcher to migrate an old build directory;
 managed executables are updated while saved files are preserved. `MMU=1` and
@@ -96,7 +112,7 @@ checks guest execution and the live UI on a private disk.
 On macOS, ordinary launches attach shared/NAT Ethernet with internet access:
 
 ```sh
-scripts/run-fuzix.sh
+scripts/run-riplix.sh
 ```
 
 The host asks for administrator access to start its vmnet helper before the
@@ -104,7 +120,7 @@ guest starts accepting keyboard input. `--net host` selects a host-only link,
 `--net off` boots offline, and `--net /path/to/socket` attaches an external
 Ethernet peer. `RIPPLE_NET` overrides the default policy when no flag is given.
 
-Inside FUZIX:
+Inside Riplix:
 
 ```text
 ifconfig
@@ -161,7 +177,7 @@ a five-second timeout. `ntpdate SERVER` displays network time; `-s` updates
 only the guest's UTC calendar. `-o HOURS` adjusts display, not the clock update.
 
 IPv4, ARP, ICMP echo, UDP and TCP run in the guest using the shared
-`runtime/net` implementation. The host transports Ethernet frames. The FUZIX
+`runtime/net` implementation. The host transports Ethernet frames. The Riplix
 socket layer supports stream/datagram reads and writes, bind/listen/accept,
 nonblocking I/O, half-close, descriptor sharing across fork, and bounded queues.
 The control table occupies reserved physical bank 5; the first sixteen internet
@@ -249,7 +265,7 @@ longer supported.
 
 The image includes Unix utilities, scripting tools, graphics and games, built from the pinned
 upstream sources and adapted where needed, plus the upstream V7 Bourne shell at `/bin/sh`.
-They are real executables using FUZIX system calls:
+They are real executables using Riplix system calls:
 
 | Purpose | Commands |
 | --- | --- |
@@ -259,7 +275,7 @@ They are real executables using FUZIX system calls:
 | Terminal and paging | `more`, `less`, `clear`, `stty`, `tty` |
 | Networking | `ifconfig`, `ping`, `telnet`, `telnetd`, `htget`, `dig`, `host`, `nslookup`, `echoping`, `ntpdate` |
 | Editing | `ed`, `vi` (Rift), `levee`, `vile` |
-| Processes and environment | `ps`, `kill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs`, `time`, `nice`, `nohup`, `groups`, `logname`, `free`, `uptime` |
+| Processes and environment | `ps`, `kill`, `pkill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs`, `time`, `nice`, `nohup`, `groups`, `logname`, `free`, `uptime` |
 | Filesystem information | `df`, `du`, `sync` |
 | Manuals | `man` (57 installed manual pages) |
 | Fun and scripting | `basic`, `bf`, `cowsay`, `picol`, `tcl`, `tclsh`, `wump`, `hamurabi`, `sokoban`, `sok` |
@@ -316,6 +332,46 @@ and pipelines and returns to the prompt. Terminal settings are restored after
 commands, and PID 1 reaps adopted children. Ctrl-] is the emergency VM-stop key;
 use `shutdown` for a clean stop.
 
+### Home directories and app state
+
+Root's home is `/root`, mode `0700`. Local and Telnet login sessions start
+there with `HOME=/root`, `USER=root` and `LOGNAME=root`. A deliberately different
+absolute root home in `/etc/passwd` is honored. Child shells, mux panes and
+graphical terminals inherit their launching directory and environment.
+`cd` and `cd ~` return home; unquoted `~/path` works in command arguments,
+redirections and Tab completion. Quoted or escaped tildes stay literal.
+
+| Application | Personal files (relative to `$HOME`) |
+| --- | --- |
+| Bourne shell | `.shrc`, login-only `.profile` |
+| Rift | `.riftrc`, `.config/rift/` |
+| Commander | `.config/mc/config.ini` |
+| Music | `.musicrc` (playlist and settings) |
+| Telegram | `.telegram.conf`, `.telegram.session` (private, mode `0600`) |
+| Fuse Chat | `.chat/`, or explicit `CHAT_HOME` |
+| mux | `.muxrc`, `.mux/` (saved restart recipes); live sockets stay in `/tmp` |
+| NetSurf | `.netsurf-cache/` by default |
+| Lynx | Its upstream home settings/bookmarks, with `LYNX_SAVE_SPACE` overrides |
+| Sokoban / Nano-X Tetris | `.sokoban` / `.nxtetris-score` |
+
+System defaults and shared resources remain in `/etc` and `/usr/share`.
+Programs honor explicit command-line paths and their existing overrides.
+This home-directory change does not add ordinary-user login/authentication.
+
+Normal offline image upgrades update the old root account's `/` home to
+`/root` and move known personal dotfiles/settings trees there. This includes
+the former `/etc/telegram.conf` and `/telegram.session`, so the saved login is
+retained. Directory-entry moves preserve inodes, native character cells,
+ownership, permissions and hard links. Non-overlapping settings trees merge;
+conflicting files abort the transaction with the original image intact. Ordinary
+documents elsewhere in `/` are left in place. The existing launcher locks and
+image backup policy apply. `--run-only` skips this installation/migration step.
+The public browser seed gets a fresh `/root` with only its checked-in prompt;
+building it never reads personal images or credentials.
+
+Verify on disposable images with `node --test ports/fuzix/tools/home.test.mjs`
+and `python3 ports/fuzix/tools/test_home.py --target both`.
+
 Interactive shells read `$HOME/.shrc` once before the first prompt. This applies
 to the console, gterm, Telnet and interactive child shells. Ordinary scripts,
 piped shell input and `sh -c` skip it; explicit `sh -i` opts in. Missing files
@@ -324,7 +380,7 @@ can be fixed. The historical login-only `.profile` hook is retained; an
 interactive login shell loads `.shrc` afterward. Ordinary Bourne subshells `( ... )` do not reload
 it. Only regular files are sourced.
 
-For a persistent prompt, edit `vi "$HOME/.shrc"` (currently `/.shrc` for root)
+For a persistent prompt, edit `vi "$HOME/.shrc"` (`/root/.shrc` for root)
 and save, for example:
 
 ```sh
@@ -430,7 +486,7 @@ kernels. Start `mux`, then Ctrl-B followed by `?` for help. See
 
 The read-only `/dev/proc` ioctl `RIPPLE_PROCINFO` provides versioned records
 without kernel pointers, alongside `RIPPLE_SYSINFO`. Process groups and
-sessions use the existing FUZIX syscall numbers 61 and 77–79. No MMIO commands
+sessions use the existing Riplix syscall numbers 61 and 77–79. No MMIO commands
 or RCC ABI extensions are required.
 
 ## Full-screen editing
@@ -523,7 +579,7 @@ cowsay -W 20 'a longer message that wraps onto several lines'
 messages fail with a nonzero status. `--help` lists the designs.
 
 `picol`, `tcl`, and `tclsh` run the same **Picol Tcl subset**, derived from
-Salvatore Sanfilippo's implementation bundled with FUZIX. Start `tcl` for an
+Salvatore Sanfilippo's implementation imported from FUZIX. Start `tcl` for an
 interactive prompt, run `tcl filename arguments...`, pipe a script into it, or
 use `tcl -c 'script'`. `exit` returns to the shell; Ctrl-C interrupts the program.
 Interactive input supports multiple lines for braced procedure/loop bodies.
@@ -563,7 +619,7 @@ This is a small interpreter rather than a full Tcl distribution.
 `exec` runs one program with explicit arguments and captures stdout; it does
 not interpret shell metacharacters or pipeline syntax. External nonzero exit
 statuses become catchable errors. File writes and subprocesses use ordinary
-FUZIX system calls and the persistent filesystem.
+Riplix system calls and the persistent filesystem.
 Append `>@stdout 2>@stderr` to stream build output instead of capturing it;
 child failures set the `errorCode` list with status or signal details.
 
@@ -579,13 +635,13 @@ status without stopping the OS.
 ## Builds and persistent disks
 
 ```sh
-scripts/run-fuzix.sh --build-only
-scripts/run-fuzix.sh --run-only
-scripts/run-fuzix.sh --no-jit
-scripts/run-fuzix.sh --headless --input $'cat note\nshutdown\n'
+scripts/run-riplix.sh --build-only
+scripts/run-riplix.sh --run-only
+scripts/run-riplix.sh --no-jit
+scripts/run-riplix.sh --headless --input $'cat note\nshutdown\n'
 ```
 
-Artifacts live in `build/fuzix/` by default. Set `FUZIX_BUILD` to change that.
+Artifacts live in `build/fuzix/` by default. Set `RIPLIX_BUILD` to change that.
 Building in `ports/fuzix/` directly uses `ports/fuzix/build/` instead:
 
 ```sh
@@ -621,7 +677,7 @@ C16 V3 uses 32-bit block references and converts V2 roots automatically during
 normal installation, preserving saved files and a previous-disk backup.
 Host tools update pages without buffering the whole disk. See the
 [C16 V3 format and upgrade guide](../../docs/arch/c16-filesystem.md). V1 images need
-`scripts/run-fuzix.sh --fresh --build-only` to create a new disk; this saves the
+`scripts/run-riplix.sh --fresh --build-only` to create a new disk; this saves the
 previous disk as a numbered backup. Existing V1 disks are rejected rather than
 silently converted. Executable RXE1 files and the C ABI are unchanged; no
 executable compression or packing is involved.
@@ -630,7 +686,7 @@ executable compression or packing is involved.
 userspace on an explicit disk, with the VM stopped:
 
 ```sh
-scripts/run-fuzix.sh --disk path/to/image.img --install-apps --build-only
+scripts/run-riplix.sh --disk path/to/image.img --install-apps --build-only
 ```
 
 `--run-only` skips builds and updates. `--fresh` explicitly creates a fresh
@@ -662,7 +718,7 @@ python3 scripts/test-bulk-io.py
 ```
 
 The generic C helper test exercises RVM and RBF, with and without their JITs,
-using private temporary disks. The FUZIX comparison uses identical userspace
+using private temporary disks. The Riplix comparison uses identical userspace
 with MMU fast and scalar kernels under JIT by default; add `--engine both` for
 interpreter coverage. It checks execution counts, repeated nested forks,
 native-word data/stack isolation, large zero reads, preemption, signals,
@@ -681,7 +737,7 @@ flushes ordinary changes before writing and committing the clean superblock.
 It reports a failed barrier instead of claiming successful shutdown.
 
 This filesystem has no journal. A timeout, Ctrl-], SIGKILL, or host crash can
-leave it dirty; unsynced data may be lost. FUZIX mounts dirty roots read-only.
+leave it dirty; unsynced data may be lost. Riplix mounts dirty roots read-only.
 Normal launches recover repairable metadata automatically. `--run-only` skips
 that check/update step. With the VM stopped, manual checks are also available:
 
@@ -751,7 +807,7 @@ collection, swap, and disk-backed demand paging remain future work.
 Caught signals use validated IMEM code pointers and a user-stack register frame.
 The kernel enters a userspace trampoline after a syscall or timer preemption;
 return restores the interrupted state, while `longjmp` can abandon the frame.
-No suspended kernel call remains beneath a handler. `signal()` has the FUZIX
+No suspended kernel call remains beneath a handler. `signal()` has the Riplix
 one-shot semantics: a handler re-registers itself when needed. `setjmp`/`longjmp`
 preserve RCC callee state including stack/global banks.
 
@@ -946,7 +1002,7 @@ names use the whole trailing run of at least six `X` characters.
 
 `time`, `nice`, and `nohup` run separate programs and preserve useful exit
 statuses. `nohup` ignores SIGHUP and appends terminal output to `nohup.out`.
-`groups` and `logname` use the current FUZIX identity; the default session is
+`groups` and `logname` use the current Riplix identity; the default session is
 root, and the Level 1 kernel supplies its primary group. The clock used by
 `time` uses host elapsed time and sampled guest CPU counters.
 
@@ -1114,11 +1170,11 @@ inode numbers. The shared FAT builder retains its default rOS layout.
 
 ## First graphics terminal
 
-Run `scripts/run-fuzix.sh --visual`, then `gterm` at the console. This starts
+Run `scripts/run-riplix.sh --visual`, then `gterm` at the console. This starts
 an 80×30 PTY shell in an RGB565 window; `gterm COMMAND ARG...` runs a command.
 The protected profile has 64 process slots, 32 descriptors per process,
 192 system open-file slots, 128 cached inodes and sixteen PTYs. Closing the graphics window
-hangs up that terminal session while FUZIX remains available on the console.
+hangs up that terminal session while Riplix remains available on the console.
 `exit` returns to the console; `shutdown` saves the disk and stops the kernel.
 
 The first backend has one fixed 640×480 window. Nano-X is pinned for subsequent
@@ -1134,3 +1190,10 @@ The C16 V3 large-filesystem probe is available with
 `make -C ports/fuzix BUILD="$PWD/build/fuzix" test-largefs`. It uses private JIT
 guests to verify allocation above 128 MiB, sparse triple-indirect mapping,
 32-bit statistics, reboot persistence, wide truncation and block reclamation.
+
+## Signal processes by name
+
+`pkill sleep` sends TERM to matching processes; `pkill -x lynx` requires an
+exact name, and `pkill -9 -x lynx` sends KILL. Patterns are regular expressions
+over the eight-character names shown by `ps`, not full command lines.
+`pkill -e PATTERN` prints the selected names/PIDs; see `man pkill`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile portable-frontend C sources into FUZIX/Ripple RXE executables."""
+"""Compile portable-frontend C sources into Riplix/Ripple RXE executables."""
 import argparse
 import json
 import os
@@ -44,7 +44,7 @@ def main():
     build = args.build.resolve()
     marker = build / '.mmu'
     if not marker.exists() or marker.read_text().strip() != '1':
-        raise RuntimeError('build the FUZIX MMU profile first with scripts/run-fuzix.sh --build-only')
+        raise RuntimeError('build the Riplix MMU profile first with scripts/run-riplix.sh --build-only')
     make = ['make', '--no-print-directory', '-C', PORT, f'BUILD={build}', f'RCC={args.compiler.resolve()}']
     checked([*make, 'rfl-sdk', *(['float-sdk'] if args.float_format else [])])
     sdk = json.loads(checked([*make, '-s', 'rfl-sdk-info']))
@@ -81,7 +81,8 @@ def main():
             objects.append(obj)
         package = work / args.output.name
         map_args = ['--map', work / 'symbols.json'] if args.map else []
-        checked([assembler / 'rlink', sdk['entry'], *objects, *libraries,
+        checked([sys.executable, PORT / 'tools/shared-link.py', '--build', build,
+                 '--compiler', args.compiler.resolve(), '--', sdk['entry'], *objects, *libraries,
                  '-f', 'rxe', '--bank-size', '64000', '-o', package, *map_args])
         if args.map:
             args.map.parent.mkdir(parents=True, exist_ok=True)
@@ -94,12 +95,12 @@ def main():
                 temporary_map.unlink(missing_ok=True)
         package.chmod(package.stat().st_mode | 0o111)
         os.replace(package, args.output)
-    print(f'Built portable-frontend FUZIX executable: {args.output}')
+    print(f'Built portable-frontend Riplix executable: {args.output}')
 
 
 if __name__ == '__main__':
     try:
         main()
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        print(f'portable FUZIX compiler: {error}', file=sys.stderr)
+        print(f'portable Riplix compiler: {error}', file=sys.stderr)
         sys.exit(1)

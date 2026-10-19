@@ -227,7 +227,11 @@ static uint32_t tinf_getbits_base(struct tinf_data *d, int32_t num, int32_t base
 static int32_t tinf_decode_symbol(struct tinf_data *d, const struct tinf_tree *t)
 {
 	int32_t base = 0, offs = 0;
-	int32_t len;
+	int32_t len, count;
+	uint32_t tag = d->tag;
+	int32_t bits = d->bitcount;
+	const unsigned char *source = d->source;
+	const unsigned char *end = d->source_end;
 
 	/*
 	 * Get more bits while code index is above number of codes
@@ -243,15 +247,33 @@ static int32_t tinf_decode_symbol(struct tinf_data *d, const struct tinf_tree *t
 	 * of offs and add one more bit to it.
 	 */
 	for (len = 1; len <= 15; ++len) {
-		offs = 2 * offs + tinf_getbits(d, 1);
+		/* Keep the bit reader in scalar locals throughout this symbol.
+		 * The previous one-bit helper path read/wrote decoder memory for
+		 * every tree level. Refill only on demand, never read ahead into
+		 * the following block (which may be an uncompressed block). */
+		if (bits == 0) {
+			if (source == end) {
+				d->overflow = 1;
+				break;
+			}
+			tag = *source++;
+			bits = 8;
+		}
+		offs = 2 * offs + (tag & 1);
+		tag >>= 1;
+		--bits;
+		count = t->counts[len];
 
-		if (offs < t->counts[len]) {
+		if (offs < count) {
 			break;
 		}
 
-		base += t->counts[len];
-		offs -= t->counts[len];
+		base += count;
+		offs -= count;
 	}
+	d->tag = tag;
+	d->bitcount = bits;
+	d->source = source;
 
 	if (len > 15 || d->overflow || base + offs < 0 || base + offs >= 288) return -1;
 

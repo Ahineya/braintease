@@ -7,7 +7,7 @@ pagers or hardware-specific administration programs.
 
 This 2026-10-18 inventory compares the shared utility build list, existing build
 reports and image manifests with the complete pinned FUZIX archive. Priorities
-assume an interactive development system on both FUZIX/RVM and Fuse-X. This is
+assume an interactive development system on both Riplix/RVM and Fuse-X. This is
 a source and packaging audit; candidate effort estimates are not compilation or
 runtime acceptance results. No utilities were ported during the audit.
 
@@ -37,7 +37,7 @@ Already covered:
 | Comparison and checksums | `diff`, `diffh`, `diff3`, `cmp`, `od`, `sum`, `cksum` |
 | Shell and development | Bourne `sh`, `test`, `expr`, `make`, `m4`, `dc`, Tcl subset, guest `cc`, `rcc-c`, `rcc-ripple`, `rcc-as`, `rcc-ld` |
 | Terminal and editing | `stty`, `tty`, `clear`, `more`, `less`, `ed`, Levee/`vi`, `vile`, Rift, Commander/`mc`, terminal sessions and job control |
-| Process and system reports | `ps`, `top`, `kill`, `sleep`, `time`, `nice`, `nohup`, `free`, `uptime`, `df`, `du`, `sync`, `uname`, `date`, `id`, `whoami`, `groups`, `logname`, `env`, `printenv`, `which`, `xargs` |
+| Process and system reports | `ps`, `top`, `kill`, `pkill`, `sleep`, `time`, `nice`, `nohup`, `free`, `uptime`, `df`, `du`, `sync`, `uname`, `date`, `id`, `whoami`, `groups`, `logname`, `env`, `printenv`, `which`, `xargs` |
 | Networking | `ifconfig`, `ping`, `host`/`nslookup`, `dig`, `htget` with HTTPS, Lynx with HTTPS, `telnet`, `telnetd`, `echoping`, `ntpdate` |
 
 Shell builtins already supply `cd`, `read`, `wait`, `umask`, `trap`, `export`,
@@ -83,7 +83,7 @@ commands makes arbitrary modern `configure` scripts run unchanged.
 | 7 | `strings`, `file`, format-aware `size` | Useful when debugging imported files and generated programs. Add RXE/FXE/RPO/RPA recognition; upstream `size` understands older FUZIX/binflat formats, not ours. No general `file` or `strings` commands occur in the pinned application archive. Start with bounded identification rather than a large external magic database. |
 | 8 | `paste`, `fold`, `nl`, `unexpand` | Fills practical text-processing gaps at relatively low cost. None has a command source in the pinned archive; awk can cover many current use cases. |
 | 9 | `sha256sum`, `base64` | Useful for downloaded-source verification and binary/text interchange. Existing `sum`/`cksum` cover different roles. Reuse octet-aware hashing where suitable; these are new command ports, not entries waiting to be enabled in the FUZIX archive. |
-| 10 | `timeout`, `pgrep`, `pkill` | Helps guest test scripts and managing desktop services. Timers/signals/process reporting exist. Process matching must respect the currently exposed bounded process names; group cancellation and child cleanup need care. Do not substitute upstream's SysV `killall`. |
+| 10 | `timeout`, `pgrep` | Helps guest test scripts and managing desktop services. `pkill` now provides name matching and signals (see `man pkill`). Timers/signals/process reporting exist. Further process matching must respect the currently exposed bounded process names; group cancellation and child cleanup need care. Do not substitute upstream's SysV `killall`. |
 | 11 | `tree`, `cal`, corrected `getopt` | Useful, fairly contained upstream candidates. `tree` depends on `nftw`, which is not currently linked into this port. `getopt` is only 36 lines, but lacks an argc guard and prints arguments without safe quoting; fix those semantics. A proper shell `getopts` builtin is separate work and preferable for new scripts that can use it. |
 | 12 | `nc`/`netcat`, small `httpd` | Good local networking diagnostics and a way to serve guest files. The socket/select foundation exists. No netcat command is in the pinned archive, and its `httpd` is a stub rather than an HTTP implementation. Treat the server as new work with bounded parsing and file serving. |
 
@@ -112,7 +112,7 @@ duplicates a role already covered by shell `read`/existing filters. Import these
 for a particular feature, rather than to increase the installed-command count.
 
 `chmem`, legacy `size`, boot/root substitution commands and physical device
-tools have assumptions tied to other FUZIX platforms. `reboot` and `telinit`
+tools have assumptions tied to other upstream FUZIX platforms. `reboot` and `telinit`
 expect the upstream init-control protocol; our PID 1/host lifecycle is different.
 `swapon` requires swapping support. `netd`/SLIP should not replace the existing
 guest network stack merely to match upstream filenames.

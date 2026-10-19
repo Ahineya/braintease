@@ -20,6 +20,7 @@
 #define GX_CAP_SCALED_UPLOAD 256
 #define GX_CAP_INDEXED_UPLOAD 512
 #define GX_CAP_CLIPBOARD 1024
+#define GX_CAP_TERMINAL 2048
 #define GX_INFO 0x4700
 #define GX_CREATE 0x4701
 #define GX_UPLOAD 0x4702
@@ -45,6 +46,19 @@
 #define GX_CLIPBOARD_READ 0x4713
 #define GX_CLIPBOARD_WRITE 0x4714
 #define GX_CLIPBOARD_MAX 32768UL
+/* Optional hosted text renderer. Logical cell metrics preserve guest mouse/
+ * resize coordinates; the host may rasterize at Retina resolution. A row is
+ * an owned-on-call stream of colour, width (0/1/2), UTF-8 length, octet cells
+ * for each column, including zero-length continuation cells. No VT internals
+ * or process-local grapheme IDs cross the ABI. */
+#define GX_TERMINAL_METRICS 0x4715
+#define GX_TERMINAL_DRAW 0x4716
+struct gx_terminal_metrics { uint16_t version, width, height; };
+struct gx_terminal_draw {
+    uint16_t version;uint32_t window;
+    uint16_t cols,rows,row,cursor_x,cursor_y,cursor_shape,cursor_visible;
+    const uint16_t *data;uint32_t length;
+};
 #define GX_ACTION 12
 #define GX_ACTION_COPY 1
 #define GX_ACTION_PASTE 2

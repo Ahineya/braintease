@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* Ensure the native Nano-X service, then launch independent applications.
+/* Ensure the native Nano-X service, then open the native graphical terminal.
  * No guest window manager or desktop compositor is started in hosted mode. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +27,7 @@ static int launch(char *program,char *arg,int keep) {
 }
 int main(int argc,char **argv) {
     int ready[2],server,ok;char fdarg[32],c;fd_set fds;struct timeval timeout;
-    if(argc>1){puts("usage: startx\nOpen native Nano-X applications. The service remains available after its windows close.");return strcmp(argv[1],"--help")?2:0;}
+    if(argc>1){puts("usage: startx\nOpen gterm with Nano-X available for graphical applications. The service remains available after its windows close.");return strcmp(argv[1],"--help")?2:0;}
     putenv("NANOX_SESSION=1");
     if(!connected()) {
         if(pipe(ready)<0)return 1;
@@ -37,6 +37,6 @@ int main(int argc,char **argv) {
         ok=server>0&&select(ready[0]+1,&fds,NULL,NULL,&timeout)>0&&read(ready[0],&c,1)==1&&c=='R';close(ready[0]);
         if(!ok){if(server>0){kill(server,SIGTERM);waitpid(server,NULL,0);}fputs("startx: Nano-X did not start\n",stderr);return 1;}
     }
-    if(launch("/bin/nxlaunch",NULL,-1)<0||launch("/bin/nxterm",NULL,-1)<0)return 1;
-    puts("Native Nano-X applications started");return 0;
+    if(launch("/bin/gterm",NULL,-1)<0)return 1;
+    puts("Native graphical terminal started");return 0;
 }

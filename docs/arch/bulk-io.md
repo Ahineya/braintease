@@ -130,7 +130,7 @@ status = vm_bulk_copy((unsigned)(address >> 16), (unsigned)address,
 /* On success, normal branches/LOADC see the new instructions immediately. */
 ```
 
-## Fuzix integration
+## Riplix integration
 
 The BIOS loads each contiguous FAT-cluster span directly into kernel code or RAM,
 and clears the remaining data bank with FILL. The filesystem's block driver uses
@@ -139,14 +139,14 @@ RXE execution uploads instruction batches from its physical filesystem stream
 buffer. The guest still checks executable headers and relocation records and
 manages processes.
 
-FUZIX/Ripple requires RVM with MMU support. It switches process maps instead of
+Riplix requires RVM with MMU support. It switches process maps instead of
 copying user banks. Fork shares code and COW data/stack pages; a write to a shared page copies
 512 physical cells through the bulk RAM helper. Physical page initialization
 uses bulk FILL. Fork also clones the parent's physical kernel stack through the
 bank-copy helper.
 
 The loader maps executable code from virtual bank zero, without physical-base
-relocation. The old non-MMU/RBF FUZIX build and user-bank snapshots are retired.
+relocation. The old non-MMU/RBF Riplix build and user-bank snapshots are retired.
 
 Physical kernel-buffer and filesystem cache-buffer copies/clears of at least
 256 cells use bulk operations. User-buffer helpers validate mapped spans and
@@ -162,7 +162,7 @@ kernel when a physical page, task stack, or cache-buffer transfer cannot be
 trusted. Toggling bulk I/O changes copy cost without changing the MMU build's
 memory layout, the compiler ABI, or disk format.
 
-Build Fuzix with `BULK_IO=0` to force scalar transfers for comparison; the build
+Build Riplix with `BULK_IO=0` to force scalar transfers for comparison; the build
 records this setting and rebuilds affected objects. This flag does not disable
 the MMU. Fast/fallback builds must use matching MMU userspace. Unsupported bulk
 operations retain scalar fallbacks; both configurations require MMU-capable RVM.
@@ -173,14 +173,14 @@ Doom has not been switched to these helpers in this change.
 These historical results record the now-retired `MMU=0` bulk-I/O integration
 before the MMU/COW profile was added; this build is no longer an acceptance
 target. Instruction counts and timings are not benchmarks of the current profile. Its additional protection/COW checks are described
-in the [Fuzix validation guide](../../ports/fuzix/README.md#validation).
+in the [Riplix validation guide](../../ports/fuzix/README.md#validation).
 
 - 212 RVM/RBF unit and integration tests, 71 assembler/CPU unit tests, and eight
   native-runtime tests passed.
 - `python3 scripts/test-bulk-io.py` passed with the real C helpers in RVM and RBF,
   both with and without JIT. Coverage includes global/stack pointer resolution,
   disk-block crossings, cache coherence and execution of uploaded code.
-- Fuzix `tools/test.py` and `tools/test_unix.py` passed under both RVM engines,
+- Riplix `tools/test.py` and `tools/test_unix.py` passed under both RVM engines,
   including timer preemption, fork/exec, indirect file I/O, pipes, persistence,
   executable-slot reuse, clean shutdown and offline recovery.
 - The original loading-only workload used approximately 225 million guest
@@ -193,7 +193,7 @@ in the [Fuzix validation guide](../../ports/fuzix/README.md#validation).
   with bulk enabled versus 2,696,085,528 with `BULK_IO=0` (about 62% fewer).
 - A separate JIT boot/`hello coffee`/`hello`/shutdown run dropped from about 7.4 s
   to 3.8 s and from 983 million to 159 million guest instructions.
-- A bounded RBF/Fuzix smoke run completed BIOS bulk loading and reached the
+- A bounded RBF/Riplix smoke run completed BIOS bulk loading and reached the
   executing kernel's banner before its 90-second limit. A complete RBF shell
   session was not validated; focused CPU/C tests cover its transfer operations.
   After the process/cache-copy integration, a further 180-second run also

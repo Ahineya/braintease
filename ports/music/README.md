@@ -1,13 +1,13 @@
 # Unix music player
 
-`music` is a curses file browser, persistent playlist and WAV player for Fuse-X and FUZIX/Ripple.
+`music` is a curses file browser, persistent playlist and WAV player for Fuse-X and Riplix.
 The RFL interface uses the existing curses and file-panel libraries. Streaming,
 sample conversion, buffering and device control run in C inside the guest.
 `wavplay` uses the same engine without the screen interface.
 
 ## Use
 
-Boot either normal image with `scripts/run-fuse-x.sh` or `scripts/run-fuzix.sh`,
+Boot either normal image with `scripts/run-fuse-x.sh` or `scripts/run-riplix.sh`,
 then run these commands in its shell:
 
 ```sh
@@ -116,7 +116,7 @@ the existing host OPL3 synthesizer to OS applications such as Doom. Bank and MUS
 buffers are validated and copied into temporary kernel storage before submission;
 only the owning process can control or query music. Configuration and exit reset
 the synth with the PCM stream. Music is mixed on the ordinary PCM render timeline,
-so it follows the same output rate and speaker/capture device. FUZIX currently
+so it follows the same output rate and speaker/capture device. Riplix currently
 returns `ENOTTY` for these optional requests.
 
 Fuse-X's optional `PCM_MIX` is a bounded stateless effect mixer: up to 16 mono
@@ -174,7 +174,7 @@ A short quiet live speaker test can be run explicitly with
 `test_guest.py --target both --live build/music-tests/demo.wav`.
 
 On the development Mac, 15-second 44.1 and 48 kHz stereo WAVs played through
-FUZIX/RVM JIT with exact captures and zero missing frames. Native format/capture,
+Riplix/RVM JIT with exact captures and zero missing frames. Native format/capture,
 UI interaction and live speaker/drain checks also passed. Increasing kernel
 staging from 512 to 1,024 frames removed the RVM refill shortfall in these tests;
 this milestone did not require broad VM changes. These results do not guarantee
@@ -230,7 +230,7 @@ development Mac:
 | Runtime | Measured time | MDCT-only stereo budget at 44.1 kHz |
 |---|---:|---:|
 | Fuse-X native | 254 ms | 1.46× real time |
-| FUZIX / RVM JIT | 4,741 ms | 0.078× real time |
+| Riplix / RVM JIT | 4,741 ms | 0.078× real time |
 
 Two transforms produce 1,024 stereo frames. These measurements include the
 probe's coefficient filling and sparse checksum, and exclude Ogg parsing,

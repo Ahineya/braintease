@@ -1,14 +1,21 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* RXE1 loader for Ripple's separate instruction and data memories. */
+/* RXE1/RXE2 loader for Ripple's separate instruction and data memories. */
 #include "platform.h"
 #include "pcm.h"
 #include "graphics.h"
 #include <kdata.h>
 #include <printf.h>
 #include <vm_bulk.h>
-/* One spare code slot lets exec replace an image with every task occupied. */
-#define CODE_SLOTS (PTABSIZE + 1)
-static uint8_t code_refs[CODE_SLOTS];
+/* Modules need independent slots; reserve room for active graphs and exec. */
+#define CODE_SLOTS (PTABSIZE * 4 + 32)
+static void rx_reset_tasks(void);
+static void rx_drop(unsigned);
+static unsigned rx_reclaim(void);
+static unsigned rx_mode(unsigned);
+static int rx_valid(unsigned,uint32_t);
+static void rx_free_task(unsigned);
+static void rx_fork_task(unsigned,unsigned);
+static unsigned code_refs[CODE_SLOTS];
 static uint32_t code_size[CODE_SLOTS];
 static unsigned code_base[CODE_SLOTS], code_banks[CODE_SLOTS];
 static unsigned code_limit;
@@ -30,15 +37,18 @@ void ripple_code_init(void) {
     }
     if (code_limit < RIPPLE_CODE_FIRST) code_limit = RIPPLE_CODE_FIRST;
     for (i = 0; i < PTABSIZE; i++) task_code[i] = -1;
+    rx_reset_tasks();
 }
 /* First-fit contiguous extents allocate physical instruction storage.
  * Metadata slots track images, not fixed-size regions. Reserve before loading
  * so a sleeping exec cannot have its destination claimed by another task. */
 static int code_reserve(uint32_t count) {
-    unsigned slot, i, base = RIPPLE_CODE_FIRST;
+    unsigned slot, i, base, retried=0;
     unsigned banks = (unsigned)((count + BANK_CELLS - 1UL) / BANK_CELLS);
+retry:
+    base=RIPPLE_CODE_FIRST;
     for (slot = 0; slot < CODE_SLOTS && code_refs[slot]; slot++);
-    if (slot == CODE_SLOTS) return -1;
+    if (slot == CODE_SLOTS) goto reclaim;
     while (base <= code_limit && banks <= code_limit - base) {
         for (i = 0; i < CODE_SLOTS; i++) {
             if (code_refs[i] && base < code_base[i] + code_banks[i] &&
@@ -53,21 +63,21 @@ static int code_reserve(uint32_t count) {
         }
         base = code_base[i] + code_banks[i];
     }
+reclaim:
+    if(!retried && rx_reclaim()){retried=1;goto retry;}
     return -1;
 }
 static void code_drop(unsigned slot) {
     if (!--code_refs[slot]) {
+        rx_drop(slot);
         code_size[slot] = 0;
         code_base[slot] = code_banks[slot] = 0;
     }
 }
-static uint8_t stream[BLKSIZE];
-static uint32_t stream_base;
-static uint16_t stream_count;
-static inoptr stream_inode;
 int ripple_valid_code(unsigned long p) {
     int slot = task_code[(unsigned)(udata.u_ptab - ptab)];
     unsigned bank = p >> 16, off = (unsigned)p;
+    if(rx_mode((unsigned)(udata.u_ptab-ptab)))return rx_valid((unsigned)(udata.u_ptab-ptab),p);
     if (slot < 0 || off >= BANK_CELLS)
         return 0;
     return bank < code_banks[slot] &&
@@ -75,6 +85,7 @@ int ripple_valid_code(unsigned long p) {
 }
 void ripple_code_free(ptptr p) {
     unsigned i = (unsigned)(p - ptab);
+    if(rx_mode(i)){rx_free_task(i);return;}
     if (task_code[i] >= 0) {
         code_drop(task_code[i]);
         task_code[i] = -1;
@@ -82,36 +93,20 @@ void ripple_code_free(ptptr p) {
 }
 void ripple_code_fork(ptptr p) {
     int slot = task_code[(unsigned)(udata.u_ptab - ptab)];
+    if(rx_mode((unsigned)(udata.u_ptab-ptab))){rx_fork_task((unsigned)(udata.u_ptab-ptab),(unsigned)(p-ptab));return;}
     task_code[(unsigned)(p - ptab)] = slot;
     if (slot >= 0)
         ++code_refs[slot];
 }
-static void stream_reset(inoptr ino) {
-    stream_inode = ino;
-    stream_base = 0xffffffffUL;
-    stream_count = 0;
-}
-static unsigned byteat(uint32_t pos) {
-    uint32_t b = pos & ~(uint32_t)BLKMASK;
-    if (b != stream_base) {
-        udata.u_offset = b;
-        udata.u_count = BLKSIZE;
-        udata.u_base = stream;
-        udata.u_sysio = 1;
-        readi(stream_inode, 0);
-        stream_base = b;
-        stream_count = (uint16_t)udata.u_done;
-    }
-    if ((pos & BLKMASK) >= stream_count)
-        panic("short exec read");
-    return stream[(unsigned)pos & BLKMASK] & 255;
-}
-static uint16_t wordat(uint32_t p) { return byteat(p) | (byteat(p + 1) << 8); }
-static uint32_t longat(uint32_t p) {
-    uint32_t v = wordat(p);
-    return v | ((uint32_t)wordat(p + 2) << 16);
-}
+#include "shared-loader.inc"
+#define stream_reset(ino) rx_reset(&reader,(ino))
+#define byteat(pos) rx_byte(&reader,(pos))
+#define wordat(pos) rx_word(&reader,(pos))
+#define longat(pos) rx_long(&reader,(pos))
+#define stream reader.bytes
+#define stream_count reader.count
 arg_t _execve(void) {
+    struct rx_reader reader;
     inoptr ino;
     struct s_argblk *abuf, *ebuf;
     struct s_argblk saved_args, saved_env;
@@ -134,6 +129,7 @@ arg_t _execve(void) {
         goto bad;
     }
     stream_reset(ino);
+    if(wordat(0)==0x5852 && wordat(2)==0x3245)return rx_exec(ino);
     if (wordat(0) != 0x5852 || wordat(2) != 0x3145 || wordat(4) != 64000) {
         udata.u_error = ENOEXEC;
         goto bad;

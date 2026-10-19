@@ -14,6 +14,11 @@
 #include <arpa/inet.h>
 #include "telnet-protocol.h"
 #include "pty-limits.h"
+#define RH_OPEN(p) open(p,O_RDONLY)
+#define RH_READ(fd,p,n) read(fd,p,n)
+#define RH_CLOSE(fd) close(fd)
+#define RH_CHDIR(p) chdir(p)
+#include "root-home.h"
 extern long call(unsigned,long,long,long,long);
 static volatile int stopping;
 static int children[4];
@@ -43,7 +48,8 @@ static int session(int fd) {
     if(child<0){close(master);return 1;}
     if(!child) {
         char *args[]={"sh",NULL};
-        char *env[]={"PATH=/bin","HOME=/","USER=root","TERM=ansi","PS1=fuzix# ",NULL};
+        char *env[]={"PATH=/bin:/usr/bin",root_home_environment,"USER=root","TERM=ansi",
+                     "PS1=riplix# ","SHELL=/bin/sh","EDITOR=/bin/vi","LOGNAME=root",NULL};
         int slave;
         close(master);close(fd);
         if(setsid()<0)_exit(125);
@@ -51,12 +57,13 @@ static int session(int fd) {
         if(slave<0)_exit(125);
         if(dup2(slave,0)<0||dup2(slave,1)<0||dup2(slave,2)<0)_exit(125);
         for(i=3;i<16;i++)close(i);
+        if(root_home_start()<0)fputs("login: home unavailable; starting in /\n",stderr);
         execve("/bin/sh",args,env);_exit(127);
     }
     signal(SIGTERM,caught);signal(SIGHUP,caught);signal(SIGINT,caught);signal(SIGPIPE,SIG_IGN);
     signal(SIGCHLD,child_changed);stopping=0;
     fcntl(fd,F_SETFL,O_NONBLOCK);tn_init(&protocol,1);
-    tn_data(&protocol,(const unsigned char *)"\r\nFUZIX\r\n",9);
+    tn_data(&protocol,(const unsigned char *)"\r\nRiplix\r\n",10);
     while(!stopping) {
         progress=0;
         if(protocol.sent<protocol.used) {

@@ -1,8 +1,9 @@
-# Fuse-X hosted FUZIX
+# Fuse-X — hosted Riplix
 
-Fuse-X runs a native FUZIX kernel, bootstrap programs, and independently
+Fuse-X runs a native Riplix kernel, bootstrap programs, and independently
 compiled applications loaded from the guest filesystem. It boots `/init`, starts
-an interactive shell, and uses FUZIX's process table, scheduler, file descriptors and filesystem.
+an interactive shell, and uses the Riplix process, scheduler, descriptor and filesystem machinery.
+Riplix is derived from FUZIX; original source credits and licenses are retained.
 No Ripple instruction interpreter or host `fork` is involved.
 
 ## Build and run
@@ -24,7 +25,7 @@ only when its managed files change.
 
 The [guest C toolchain](../rcc-portable/README.md) is installed as `/bin/cc`
 with headers and libraries under `/usr/lib/rcc`. It currently produces Ripple
-RXE programs for FUZIX/RVM; native Fuse-X executable generation still uses the
+RXE programs for Riplix/RVM; native Fuse-X executable generation still uses the
 host compiler.
 
 The default shell is the existing FUZIX Bourne shell. Try `help`, `ls /bin`,
@@ -37,6 +38,10 @@ then use `scripts/run-fuse-x.sh --attach` to reconnect to the same terminal,
 including a running editor or foreground program. Closing the host terminal
 also detaches. Host terminal settings are restored when the client exits.
 The original small shell remains available as `/bin/fxsh` for debugging.
+
+Use `pkill sleep` to send TERM by process name, `pkill -x lynx` for an exact
+match, or `pkill -9 -e lynx` to send KILL and print affected names/PIDs.
+Matching uses the eight-character names shown by `ps`; see `man pkill`.
 
 The Bourne shell supports colored and dynamic `PS1`/`PS2` prompts, for example:
 
@@ -150,7 +155,7 @@ build subset. Compiler sources and their guest-only build coordinator are
 installed under `/usr/src/rcc`; see [guest source builds](../rcc-portable/README.md#guest-source-builds).
 Use the shared folder for build outputs that should survive a disk replacement.
 The portable backend currently produces Ripple RXE executables, which run in
-FUZIX/RVM; native FXE emission remains a separate self-hosting stage.
+Riplix/RVM; native FXE emission remains a separate self-hosting stage.
 
 The executable needs a raw C16 V3 `ROOTFS.IMG`, rather than the outer Ripple FAT
 disk. The signature and physical image size are checked before boot.
@@ -172,7 +177,7 @@ images separate from a simultaneously running Ripple instance.
 Applications can now be compiled independently and loaded from guest files.
 The build includes the ported application collection, the Bourne shell,
 and `native-hello`; [application coverage](APPLICATIONS.md) distinguishes build
-results from runtime checks. The shell runs these through FUZIX exec. Build and install
+results from runtime checks. The shell runs these through Riplix exec. Build and install
 your own program without relinking the kernel:
 
 ```sh
@@ -220,10 +225,10 @@ and filesystem capacity reporting are unsupported. Mounts last until shutdown;
 multiple exports and live mount/unmount controls remain future work. See
 [storage details](../docs/fuse-x/storage.md).
 
-FUZIX resolves paths and permissions and owns fork, scheduling, wait, exit,
+Riplix resolves paths and permissions and owns fork, scheduling, wait, exit,
 zombies, descriptors and terminal queues. The native runtime supplies clonable
 continuations and private copy-on-write memory. It resumes only the process
-selected by FUZIX. Kernel translation units are linked with `--kernel`, placing
+selected by Riplix. Kernel translation units are linked with `--kernel`, placing
 their globals in the shared kernel arena; application globals remain private.
 Successful exec replaces saved frames and initializes the selected program's
 globals. Failed loading leaves the calling program intact.
@@ -234,7 +239,7 @@ RXE files cannot run as Fuse-X native programs.
 
 ## Networking and remote shells
 
-The existing FUZIX socket bridge and guest IPv4/ARP/ICMP/UDP/TCP stack now run
+The existing Riplix socket bridge and guest IPv4/ARP/ICMP/UDP/TCP stack now run
 in shared hosted kernel memory. Native applications use the existing socket and
 resolver libc. `ifconfig`, `ping`, `host`, `nslookup`, `dig`, `echoping`,
 `ntpdate`, `htget`, `telnet`, and `telnetd` install with the other applications.
@@ -280,7 +285,7 @@ platform adapters, applications and separate build output live here. RCC retains
 the 16-bit cell and logical bank/offset pointer ABI while generating host machine
 code. Disk layout remains compatible with the Ripple C16 filesystem.
 
-The hosted configuration has 64 FUZIX process slots, including init, the shell
+The hosted configuration has 64 Riplix process slots, including init, the shell
 and unreaped children, with 192 system-wide open-file entries and 128 cached
 inodes. Private RAM uses 1 KiB copy-on-write pages. Banks 1–4
 hold small globals and continuation stacks, 31 holds arguments, and larger
@@ -344,12 +349,17 @@ local Ethernet fixture, with no internet dependency.
 ### Persistent shell settings
 
 Interactive Bourne shells load `$HOME/.shrc` once before the first prompt,
-including console and Telnet sessions. Root currently has `HOME=/`, so edit
-`/.shrc`. Scripts and ordinary `sh -c` do not source it. Put prompt assignments
+including console and Telnet sessions. Root starts in `/root` with `HOME=/root`,
+so edit `~/.shrc`. `cd` and `cd ~` return home; `~/path` also works in commands,
+redirections and filename completion. Scripts and ordinary `sh -c` do not source it. Put prompt assignments
 there, followed by a separate `export PS1` command, and use `. "$HOME/.shrc"`
 to apply changes in the current shell. See the
 [shared shell instructions](../ports/fuzix/README.md) for a colored example.
 The file survives session restarts and application upgrades.
+Image upgrades move the known personal dotfiles, app settings and saved Telegram
+login from their old root locations into `/root`, retaining their permissions
+and file identities. Conflicting old/new files stop the upgrade without changing
+the image. See [home directories and app state](../ports/fuzix/README.md#home-directories-and-app-state).
 
 ## Native graphics
 
@@ -370,7 +380,7 @@ and host-folder options; standalone Finder launch is not configured yet.
 The hosted `/dev/gfx` implements GX RGB565 creation, upload, fill, overlapping
 copy, presentation, titles, input/state, Unix readiness and destruction. Up to
 16 surfaces have independent input queues and opaque, non-reused handles.
-FUZIX checks process ownership; inherited descriptors cannot destroy a parent's
+Riplix checks process ownership; inherited descriptors cannot destroy a parent's
 windows. Successful exec and process exit release owned windows. Sixteen PTYs
 currently limit the total of native terminals, Nano-X terminals and Telnet
 shells. Nano-X windows resize their guest canvases and notify clients (up to
@@ -380,11 +390,34 @@ Resize with the normal Mac window edges/corners or the green window control.
 Fixed-size clients retain that restriction. Other GX programs must handle
 `GX_RESIZE` and acknowledge accepted dimensions through `GX_CONFIGURE`.
 
+On macOS, `gterm` uses cached CoreText glyphs and Retina-resolution frames.
+It reads the default iTerm2 profile's font and ANSI palette, including its
+separate light/dark colours. Without that profile it uses Menlo 13 and a muted
+palette. Host environment overrides are `FUSE_X_TERM_FONT='Menlo 14'` and
+`FUSE_X_TERM_APPEARANCE=dark` (or `light`); restart the hosted session after
+changing these. `FUSE_X_TERM_STYLE=classic` selects the bitmap renderer.
+`nxterm` and RVM keep their existing bitmap fonts. The shared VT still
+approximates extended colours to its sixteen-colour cell palette.
+
+Native text rows cross an optional `GX_CAP_TERMINAL` interface as bounded
+UTF-8 graphemes, widths and styles; guest font rasterization and per-glyph
+pixel uploads are bypassed. Font metrics determine resize and mouse mapping.
+Mux compresses blank runs and brackets redraws with synchronized-output
+markers, which `gterm` presents together. A one-second timeout recovers from
+an interrupted update; resizing briefly coalesces foreground SIGWINCH redraws.
+
+Drag with the mouse to select terminal text, then use **Command-C** or
+**Edit → Copy** to put UTF-8 text on the Mac clipboard. Background output,
+cursor reports and colour changes preserve the selection while its characters
+remain unchanged. Copy uses a text snapshot across fragmented synchronized
+redraws; mux also waits for complete pane frames. Typing, pasting, resizing,
+switching terminal screens or changing the selected characters clears it.
+
 Run `nxclock &`, `nxeyes &` or `nxterm &` in GUI mode: each Nano-X top-level
 opens its own Mac window with native chrome. Child widgets stay in their
 parent's private canvas; overlapping virtual coordinates do not overlap pixels
 across native windows. macOS owns top-level placement and window management.
-`startx` ensures the service exists, opens Applications and Terminal, and returns
+`startx` ensures the service exists, opens `gterm`, and returns
 to the shell. It reuses a running service and does not start NanoWM. Closing
 client windows leaves the service and kernel running. Native GUI clients release
 inherited terminal stdio and survive launching-terminal closure; redirected

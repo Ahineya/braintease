@@ -141,7 +141,7 @@ static int replace_file(const char *path, const char *text) {
     unsigned long n = strlen(text), at = 0, prefix = slash ? (unsigned long)(slash - path + 1) : 0;
     ssize_t count;
     if ((!exists && errno != ENOENT) || (exists && !S_ISREG(st.st_mode))) return 0;
-    /* Keep the temporary's basename within FUZIX's 30-cell directory limit. */
+    /* Keep the temporary's basename within Riplix's 30-cell directory limit. */
     if (prefix + sizeof(".chat-XXXXXX") > sizeof(temp)) return 0;
     memcpy(temp, path, prefix);
     strcpy(temp + prefix, ".chat-XXXXXX");

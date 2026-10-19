@@ -12,13 +12,13 @@ def require_mmu(build):
     """Reject obsolete artifacts before opening or updating any user disk."""
     profile = Path(build) / '.mmu'
     if not profile.is_file() or profile.read_text().strip() != '1':
-        raise SystemExit('Non-MMU or unmarked FUZIX artifacts are unsupported; '
+        raise SystemExit('Non-MMU or unmarked Riplix artifacts are unsupported; '
                          'rebuild for RVM without --run-only (MMU=0 is retired).')
 
 
 def require_backend(backend):
     if backend != 'rvm':
-        raise SystemExit('Non-MMU FUZIX/RBF is retired; use RVM (--backend rvm).')
+        raise SystemExit('Non-MMU Riplix/RBF is retired; use RVM (--backend rvm).')
 
 
 def host_command(args, image):

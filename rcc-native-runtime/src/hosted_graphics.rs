@@ -26,8 +26,16 @@ pub(super) struct Surface {
     configuration: u64,
     pointer_requested: bool,
     desktop_pointer: Option<(i32, i32)>,
+    #[cfg(target_os="macos")]
+    terminal: Option<super::hosted_terminal::Frame>,
 }
 impl Surface {
+    fn rgba(&self)->Option<Arc<Vec<u32>>>{
+        #[cfg(target_os="macos")]
+        if let Some(frame)=self.terminal.as_ref(){return Some(frame.front.clone());}
+        None
+    }
+    fn pixel_scale(&self)->u32{if self.rgba().is_some(){2}else{1}}
     // Hosted edit commands share the ordered input queue, but never manufacture
     // Ctrl+C (SIGINT) or a printable command-key letter in the guest.
     pub(super) fn action(&mut self, code: u16) {
@@ -159,6 +167,13 @@ fn test_event(shared: &Arc<Mutex<Shared>>) -> Result<()> {
 impl Runtime {
     fn graphics_call(&mut self, op: u64, a: &mut [u32; 12]) -> Result<u32> {
         let shared = self.graphics.shared.clone();
+        if op==21 {
+            #[cfg(target_os="macos")]
+            if std::env::var("FUSE_X_TERM_STYLE").as_deref()!=Ok("classic") {
+                let (width,height)=super::hosted_terminal::metrics();a[1]=width;a[2]=height;return Ok(0);
+            }
+            return Err(42);
+        }
         if matches!(op,8|10) { test_event(&shared)?; }
         if op == 11 {
             let mut s = shared.lock().unwrap();
@@ -254,6 +269,8 @@ impl Runtime {
                     configuration: 0,
                     pointer_requested: false,
                     desktop_pointer: None,
+                    #[cfg(target_os="macos")]
+                    terminal: None,
                 },
             );
             a[0] = id;
@@ -289,6 +306,37 @@ impl Runtime {
             return Ok(0);
         }
         let window = s.windows.get_mut(&a[0]).ok_or(22u16)?;
+        #[cfg(target_os="macos")]
+        if op==22 {
+            use super::hosted_terminal::{Cell,Frame};
+            let (cols,rows,row,length)=(a[1],a[2],a[3],a[5] as usize);
+            let (cw,ch)=super::hosted_terminal::metrics();
+            if cols==0||cols>240||rows==0||rows>100||row>=rows||length>cols as usize*67
+                ||window.width!=cols*cw||window.height!=rows*ch||a[8]>1||a[9]>6
+                ||(a[8]!=0&&(a[6]>=cols||a[7]>=rows)){return Err(22);}
+            let start=span(a[4],length)?;let mut data=vec![0;length];self.memory.read_into(start,&mut data);
+            let mut cells=Vec::with_capacity(cols as usize);let mut at=0;let mut continuation=false;
+            for x in 0..cols {
+                if at+3>length{return Err(22);}
+                let (colour,width,n)=(data[at],data[at+1],data[at+2] as usize);at+=3;
+                if colour>2047||width>2||n>64||at+n>length||(width==0)!=continuation
+                    ||(width==0&&n!=0)||(width!=0&&n==0)||(width==2&&x+1==cols){return Err(22);}
+                let bytes:Vec<u8>=data[at..at+n].iter().map(|&v|u8::try_from(v).map_err(|_|22u16)).collect::<Result<_>>()?;
+                let text=String::from_utf8(bytes).map_err(|_|22u16)?;
+                if text.chars().any(char::is_control){return Err(22);}
+                cells.push(Cell{text,width,colour});at+=n;continuation=width==2;
+            }
+            if at!=length{return Err(22);}
+            let frame=window.terminal.get_or_insert_with(||Frame::from_surface(window.width,window.height,&window.back,&window.front));
+            frame.row(row,&cells,(a[8]!=0).then_some((a[6],a[7],a[9])));
+            // Retain the logical RGB565 surface for screenshots and legacy GX
+            // clients. Presentation uses the full-resolution RGBA frame.
+            for y in row*ch..(row+1)*ch{for x in 0..window.width{
+                let p=frame.back[((y*2+1)*window.width*2+x*2+1) as usize].to_le_bytes();
+                window.back[(y*window.width+x) as usize]=((p[0] as u16>>3)<<11)|((p[1] as u16>>2)<<5)|(p[2] as u16>>3);
+            }}
+            return Ok(0);
+        }
         match op {
             17 | 18 => {
                 let (width, height, stride) = (a[3], a[4], a[5]);
@@ -316,6 +364,8 @@ impl Runtime {
                 vw = vw.max(1); vh = vh.max(1);
                 let (left, top) = ((window.width - vw) / 2, (window.height - vh) / 2);
                 let columns: Vec<_> = (0..vw).map(|x| (x * width / vw) as usize).collect();
+                #[cfg(target_os="macos")]
+                {window.terminal=None;}
                 window.back.fill(0);
                 for y in 0..vh {
                     let row = (y * height / vh * width) as usize;
@@ -361,6 +411,8 @@ impl Runtime {
                     {
                         return Err(22);
                     }
+                    #[cfg(target_os="macos")]
+                    {window.terminal=None;}
                     // Snapshot the whole source rectangle for overlapping copies.
                     let mut copy = Vec::with_capacity((w * h) as usize);
                     for row in 0..h {
@@ -373,6 +425,8 @@ impl Runtime {
                             .copy_from_slice(&copy[(row * w) as usize..((row + 1) * w) as usize]);
                     }
                 } else {
+                    #[cfg(target_os="macos")]
+                    {window.terminal=None;}
                     for row in 0..h {
                         for col in 0..w {
                             let colour = if let Some(start) = source {
@@ -386,6 +440,8 @@ impl Runtime {
                 }
             }
             4 => {
+                #[cfg(target_os="macos")]
+                if let Some(frame)=window.terminal.as_mut(){frame.front=Arc::new(frame.back.clone());}
                 window.front = Arc::new(window.back.clone());
                 window.sequence = window.sequence.wrapping_add(1);
                 if let Some(path) = std::env::var_os("FUSE_X_FRAME") {
@@ -474,6 +530,8 @@ impl Runtime {
                     return Err(22);
                 }
                 if (width, height) != (window.width, window.height) {
+                    #[cfg(target_os="macos")]
+                    {window.terminal=None;}
                     let mut pixels = vec![0; (width * height) as usize];
                     for row in 0..height.min(window.height) {
                         let count = width.min(window.width) as usize;
@@ -563,6 +621,7 @@ pub(super) fn run(
         resizable: bool,
         activation: u64,
         configuration: u64,
+        pixel_scale:u32,
     }
     let mut event_loop = EventLoopBuilder::new().build();
     #[cfg(target_os = "macos")]
@@ -596,6 +655,7 @@ pub(super) fn run(
                                     w.activation,
                                     w.configuration,
                                     w.resize.is_some() || w.resize_in_flight.is_some(),
+                                    w.pixel_scale(),
                                 )
                             })
                             .collect()
@@ -611,6 +671,7 @@ pub(super) fn run(
                         activation,
                         configuration,
                         resize_pending,
+                        pixel_scale,
                     ) in descriptions
                     {
                         if !views.contains_key(&id) {
@@ -624,8 +685,8 @@ pub(super) fn run(
                             window.set_ime_allowed(true);
                             let size = window.inner_size();
                             let pixels = Pixels::new(
-                                width,
-                                height,
+                                width*pixel_scale,
+                                height*pixel_scale,
                                 SurfaceTexture::new(size.width.max(1), size.height.max(1), &window),
                             )?;
                             views.insert(
@@ -640,6 +701,7 @@ pub(super) fn run(
                                     resizable,
                                     activation: 0,
                                     configuration,
+                                    pixel_scale,
                                 },
                             );
                         }
@@ -649,9 +711,10 @@ pub(super) fn run(
                             view.window.focus_window();
                             view.activation = activation;
                         }
-                        if view.dimensions != (width, height) {
-                            view.pixels.resize_buffer(width, height)?;
+                        if view.dimensions != (width, height)||view.pixel_scale!=pixel_scale {
+                            view.pixels.resize_buffer(width*pixel_scale, height*pixel_scale)?;
                             view.dimensions = (width, height);
+                            view.pixel_scale=pixel_scale;
                             view.sequence = 0;
                         }
                         if view.configuration != configuration {
@@ -697,7 +760,7 @@ pub(super) fn run(
                                     Err((x, y)) => (x as i32, y as i32),
                                 };
                                 if let Some(w) = shared.lock().unwrap().windows.get_mut(&id) {
-                                    w.desktop_pointer = Some((x, y));
+                                    w.desktop_pointer = Some((x/view.pixel_scale as i32, y/view.pixel_scale as i32));
                                 }
                             }
                         }
@@ -719,18 +782,22 @@ pub(super) fn run(
                         }
                         let frame = {
                             let s = shared.lock().unwrap();
-                            s.windows.get(&id).map(|w| (w.front.clone(), w.sequence, (w.width,w.height)))
+                            s.windows.get(&id).map(|w| (w.front.clone(),w.rgba(), w.sequence, (w.width,w.height),w.pixel_scale()))
                         };
-                        if let Some((frame, sequence, dimensions)) = frame {
+                        if let Some((frame,rgba, sequence, dimensions,pixel_scale)) = frame {
                             // The guest can accept another resize between the
                             // geometry pass and this redraw. Never reinterpret
                             // its new frame with the previous texture stride.
-                            if dimensions != view.dimensions {
+                            if dimensions != view.dimensions||pixel_scale!=view.pixel_scale {
                                 view.window.request_redraw();
                                 return Ok(());
                             }
                             if sequence != view.sequence {
-                                for (pixel, c) in view
+                                if let Some(rgba)=rgba {
+                                    for (pixel,c) in view.pixels.frame_mut().chunks_exact_mut(4).zip(rgba.iter()){
+                                        pixel.copy_from_slice(&c.to_le_bytes());
+                                    }
+                                }else{for (pixel, c) in view
                                     .pixels
                                     .frame_mut()
                                     .chunks_exact_mut(4)
@@ -738,7 +805,7 @@ pub(super) fn run(
                                 {
                                     let [r, g, b] = rvm::display_rgb565::rgb565_to_rgb888(*c);
                                     pixel.copy_from_slice(&[r, g, b, 255]);
-                                }
+                                }}
                                 view.sequence = sequence;
                             }
                             view.pixels.render()?;
@@ -850,7 +917,7 @@ pub(super) fn run(
                                     Ok((x, y)) => (x as i32, y as i32),
                                     Err((x, y)) => (x as i32, y as i32),
                                 };
-                                w.transition(InputTransition::Motion { x, y });
+                                w.transition(InputTransition::Motion { x:x/view.pixel_scale as i32, y:y/view.pixel_scale as i32 });
                             }
                             WindowEvent::MouseInput { state, button, .. } => {
                                 let button = match button {
@@ -935,6 +1002,37 @@ mod tests {
         a[2] = title;
         rt.graphics_call(1, &mut a).unwrap();
         a[0]
+    }
+    #[cfg(target_os="macos")]
+    #[test]
+    fn native_terminal_validates_complete_rows_and_publishes_atomically(){
+        let mut rt=Runtime::new();let (cw,ch)=super::super::hosted_terminal::metrics();
+        let id=create(&mut rt,4*cw,2*ch);let start=3*BANK-2;
+        let data=[7,1,1,b'A' as u16,0x14,2,4,0xf0,0x9f,0x99,0x82,7,0,0,7,1,1,b'B' as u16];
+        rt.memory.write_from(start,&data);
+        let mut a=[id,4,2,0,super::super::memory::pointer(start) as u32,data.len() as u32,0,0,0,0,0,0];
+        let shared=rt.graphics.shared.clone();
+        assert_eq!(rt.graphics_call(22,&mut a),Ok(0));
+        let front=shared.lock().unwrap().windows[&id].rgba().unwrap();
+        assert!(front.iter().all(|&p|p==0xff000000));
+        a[0]=id+1;assert_eq!(rt.graphics_call(22,&mut a),Err(22));a[0]=id;
+        // A bad final octet must not partially replace the earlier cells.
+        let before=shared.lock().unwrap().windows[&id].terminal.as_ref().unwrap().back.clone();
+        rt.memory.write(start+data.len()-1,0x100);
+        assert_eq!(rt.graphics_call(22,&mut a),Err(22));
+        assert_eq!(shared.lock().unwrap().windows[&id].terminal.as_ref().unwrap().back,before);
+        rt.memory.write(start+data.len()-1,b'B' as u16);
+        a[8]=1;a[6]=4;assert_eq!(rt.graphics_call(22,&mut a),Err(22));a[8]=0;
+        a[5]-=1;assert_eq!(rt.graphics_call(22,&mut a),Err(22));a[5]+=1;
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let after=shared.lock().unwrap().windows[&id].rgba().unwrap();
+        assert!(after.iter().any(|&p|p!=0xff000000));assert!(!Arc::ptr_eq(&front,&after));
+        let now=std::time::Instant::now();
+        for _ in 0..100 {rt.graphics_call(22,&mut a).unwrap();}
+        eprintln!("native terminal row (4 cells): {:?} average",now.elapsed()/100);
+        rt.graphics_call(5,&mut [id,0,0,4*cw,2*ch,0xf800,0,0,0,0,0,0]).unwrap();
+        assert!(shared.lock().unwrap().windows[&id].rgba().is_none());
+        assert!(shared.lock().unwrap().windows[&id].back.iter().all(|&p|p==0xf800));
     }
     #[test]
     fn clipboard_is_bounded_utf8_atomic_and_validated_before_guest_writes() {

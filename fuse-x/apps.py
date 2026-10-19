@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the existing Ripple FUZIX applications for the hosted native ABI.
+"""Build the existing Riplix applications for the hosted native ABI.
 
 --all records every result in build/application-report.json; build success is
 not a claim of runtime compatibility. No files in ports/fuzix are generated.
@@ -38,7 +38,8 @@ def recipe(name):
     base = PORT / 'upstream/Applications'
     flags = ['-DUIDGID=0']
     if name == 'netsurf':
-        roots = [PORT.parent / 'netsurf', HERE.parent / 'libraries/image', HERE.parent / 'libraries/unicode']
+        roots = [PORT.parent / 'netsurf', *[HERE.parent / 'libraries' / name
+                 for name in ('image', 'deflate', 'unicode')]]
         sources = [p for root in roots for p in root.rglob('*')
                    if p.is_file() and not {'__pycache__','tests'} & set(p.relative_to(root).parts) and
                    p.suffix in ('.c', '.h', '.inc', '.py', '.json', '.css', '.pl', '.gperf')]
@@ -47,6 +48,7 @@ def recipe(name):
         nx = PORT.parent / 'nanox'
         sources += [nx / 'clipboard_adapt.py', *[nx / 'ripple' / path for path in
                     ('nx_clipboard.h', 'clipboard-wire.h', 'clipboard-client.inc')]]
+        sources.append(PORT.parent / 'tls/ripple_http.h')
         return sources, []
     if name == 'rift':
         # Rift is an RFL application, built by its existing native recipe.
@@ -98,7 +100,7 @@ def recipe(name):
         source = base / 'V7/games/wump.c'
     elif name == 'picol':
         source = base / 'TCL/picol.c'
-    elif name in 'ps top ptysh mux ifconfig ping telnet telnetd host bf'.split():
+    elif name in 'ps top ptysh pkill mux ifconfig ping telnet telnetd host bf'.split():
         source = PORT / f'ripple/{name}.c'
     elif name in 'htget dig echoping ntpdate'.split():
         source = base / f'netd/{name}.c'
@@ -130,6 +132,7 @@ def main():
     (build / 'apps').mkdir(parents=True, exist_ok=True)
     (build / 'application-logs').mkdir(exist_ok=True)
     sdk = hashlib.sha256()
+    sdk.update(os.environ.get('FUSE_X_SHARED_LIBRARIES','1').encode())
     sdk.update(str((args.compiler.resolve(), args.compiler.stat().st_mtime_ns)).encode())
     sdk.update((HERE.parent / 'target/release/librcc_native_runtime.a').read_bytes())
     for path in sorted(set([HERE / 'cc.py', HERE / 'libc/bridge.c', HERE / 'include/memory-layout.h', PORT / 'ripple/userlib.c',
@@ -221,9 +224,12 @@ def main():
             original = build / 'application-logs' / (canonical + '.json')
             if original.exists():
                 previous = json.loads(original.read_text())
-                if previous.get('fingerprint') == key and previous['status'] == 'built':
-                    shutil.copy2(build / 'apps' / (canonical + '.fxe'), output)
-                    previous.update(name=name, runtime='not tested', log=str(log), seconds=0)
+                # Canonical packages were checked in the first pool pass.
+                # Sources may change during a long inventory build; the alias
+                # still needs to follow that successful canonical artifact.
+                if previous['status'] == 'built' and target.exists():
+                    shutil.copy2(target, output)
+                    previous.update(name=name, fingerprint=key, runtime='not tested', log=str(log), seconds=0)
                     log.write_text(f'Alias of {canonical}; identical sources and compile flags.\n')
                     stamp.write_text(json.dumps(previous, indent=2) + '\n')
                     print(f'{name}: built (alias of {canonical})', flush=True)

@@ -11,13 +11,13 @@ export function bootDisk(filename, executable) {
     data: fs.readFileSync(path.join(path.dirname(executable), 'bin', `${name}.sys`))
   })) : [];
   const root = rootImage([
-    {name: '/BOOT', mode: 0o100444, data: Buffer.from('FUZIX kernel running in Brainfuck.\n')},
+    {name: '/BOOT', mode: 0o100444, data: Buffer.from('Riplix kernel running in Brainfuck.\n')},
     ...(executable ? [{name: '/init', mode: 0o100555, data: fs.readFileSync(executable)}] : []),
     ...programs
   ], executable ? 1024 : 128, 32);
   atomicWrite(filename, installRoot(root, [{
     name: '/README', mode: 0o100444,
-    data: Buffer.from('FUZIX running on the Brainfuck CPU.\n' +
+    data: Buffer.from('Riplix running on the Brainfuck CPU.\n' +
       (executable ? 'Type help for commands. Use shutdown to exit.\n' +
         'Files are reset when you start a new session.\n' :
         'Read-only kernel boot check.\n'))

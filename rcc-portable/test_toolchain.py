@@ -31,8 +31,8 @@ def main():
     p.add_argument('--guests',choices=['none','fuse-x','fuzix','all'],default='all')
     p.add_argument('--skip-build',action='store_true')
     p.add_argument('--installed',action='store_true',help='use compiler packages installed by the normal image builders, with default PATH/SDK')
-    p.add_argument('--bootstrap',action='store_true',help='also rebuild assembler/linker sources inside FUZIX')
-    p.add_argument('--bootstrap-hosted',action='store_true',help='rebuild assembler/linker in Fuse-X, then execute that RXE in FUZIX (requires --guests all)')
+    p.add_argument('--bootstrap',action='store_true',help='also rebuild assembler/linker sources inside Riplix')
+    p.add_argument('--bootstrap-hosted',action='store_true',help='rebuild assembler/linker in Fuse-X, then execute that RXE in Riplix (requires --guests all)')
     p.add_argument('--workdir',type=Path,help='retain disposable test files here for diagnosis (must not exist)')
     args=p.parse_args()
     if args.bootstrap_hosted and args.guests!='all':p.error('--bootstrap-hosted requires --guests all')
@@ -145,7 +145,7 @@ def main():
                 verified=HERE/'build/apps/rcc-as-guest.rxe'
                 shutil.copy2(directory/'guest-as.rxe',verified)
                 verified.chmod(0o755)
-            print('FUZIX/RVM: complete guest-only compilation and Unix execution passed'+('; rebuilt assembler/linker executed successfully' if args.bootstrap or args.bootstrap_hosted else ''),flush=True)
+            print('Riplix/RVM: complete guest-only compilation and Unix execution passed'+('; rebuilt assembler/linker executed successfully' if args.bootstrap or args.bootstrap_hosted else ''),flush=True)
     print('portable toolchain checks passed',flush=True)
 
 if __name__=='__main__':main()

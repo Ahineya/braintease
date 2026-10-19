@@ -138,7 +138,7 @@ def main():
             first.send(b'q')
             first.visible('Are you sure')
             first.send(b'y')
-            assert b'REMOTE_STATUS:0' in first.raw(b'fuzix# ')
+            assert b'REMOTE_STATUS:0' in first.raw(b'riplix# ')
             assert b'REMOTE_RESTORED\n' in first.shell('echo REMOTE_RESTORED')
             first.send(b'exit\r\n')
             second.send(b'exit\r\n')

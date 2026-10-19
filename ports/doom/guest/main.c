@@ -22,7 +22,7 @@ int main(int argc, char **argv)
     char *slash, *default_wad;
     char **arguments;
     if (argc > 1 && !strcmp(argv[1], "--help")) {
-        puts("Doom for Fuse-X / FUZIX\n"
+        puts("Doom for Fuse-X / Riplix\n"
              "Usage: doom [-iwad PATH] [-warp 1 1] [Doom options]\n"
              "Defaults to doom1.wad beside the executable. Keyboard controls:\n"
              "arrows: move/turn, Ctrl: fire, Space: use, Shift: run, Esc: menu.\n"

@@ -1,4 +1,4 @@
-/* First hosted-FUZIX milestone: fork real native C continuations, including
+/* First hosted-Riplix milestone: fork real native C continuations, including
  * nested calls, live values, pointers into outer frames, and private heaps. */
 #include <native_process.h>
 #include <stdlib.h>

@@ -99,7 +99,7 @@ def batch(image, jit, label):
     with log.open('w') as stream:
         result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT, timeout=310)
     output = log.read_text().replace('\r', '').split('Starting /init\n')[-1]
-    output = '\n'.join(line for line in output.splitlines() if not line.startswith('fuzix# '))
+    output = '\n'.join(line for line in output.splitlines() if not line.startswith('riplix# '))
     assert result.returncode == 0 and 'disk synced; power off.' in output, output
     for expected in ('/usr/man/man1/sh.1', '/usr/man/man6/wump.6', '/usr/man/man1/tclsh.1',
                      'SYNOPSIS', 'Rift', 'Tcl subset',
@@ -156,21 +156,21 @@ def live(image, jit, label):
 
     def shell(command):
         send(command.encode() + b'\r')
-        return until(b'fuzix# ')
+        return until(b'riplix# ')
 
     try:
-        until(b'fuzix# ')
+        until(b'riplix# ')
         shell('stty -g > /tty-before-games')
         send(b'env LINES=6 man sh\r')
         until(b'--More--')
         send(b'q')
-        until(b'fuzix# ')
+        until(b'riplix# ')
         assert b'MAN_QUIT:0' in shell('echo MAN_QUIT:$?')
         send(b'env PAGER=less man intro\r')
         until(b'\x1b[?1049h'); until(b'-- less:')
-        send(b'q'); until(b'\x1b[?1049l'); until(b'fuzix# ')
+        send(b'q'); until(b'\x1b[?1049l'); until(b'riplix# ')
         send(b'env LINES=6 man sh\r'); until(b'--More--')
-        send(b'\x03'); until(b'fuzix# ')
+        send(b'\x03'); until(b'riplix# ')
         shell('echo AFTER_MAN')
         send(b'wump\r'); until(b'Instructions?')
         send(b'y\r')
@@ -180,9 +180,9 @@ def live(image, jit, label):
         send(b's 0\r')
         state = until_any([b'Move or shoot (m-s) ', b'Another game?'])
         send(b'n\r' if b'Another game?' in state else b'q\r')
-        until(b'fuzix# ')
+        until(b'riplix# ')
         send(b'wump\r'); until(b'Instructions?'); send(b'n\r')
-        until(b'Move or shoot (m-s) '); send(b'\x03'); until(b'fuzix# ')
+        until(b'Move or shoot (m-s) '); send(b'\x03'); until(b'riplix# ')
         assert b'WUMP_INTERRUPT:130' in shell('echo WUMP_INTERRUPT:$?')
         send(b'hamurabi\r'); until(b'How many acres do you wish to buy?')
         send(b'0\r'); until(b'How many acres do you wish to sell?')
@@ -191,9 +191,9 @@ def live(image, jit, label):
         until(b'acres)'); send(b'0\r')
         year2 = until(b'How many acres do you wish to buy?')
         assert b'in year 2,' in year2, year2
-        send(b'q\r'); until(b'fuzix# ')
+        send(b'q\r'); until(b'riplix# ')
         send(b'hamurabi\r'); until(b'How many acres do you wish to buy?')
-        send(b'\x03'); until(b'fuzix# ')
+        send(b'\x03'); until(b'riplix# ')
         assert b'HAM_INTERRUPT:130' in shell('echo HAM_INTERRUPT:$?')
         shell('stty -g > /tty-after-games')
         assert b'GAME_TTY:0' in shell('cmp /tty-before-games /tty-after-games; echo GAME_TTY:$?')

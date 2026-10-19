@@ -29,6 +29,7 @@ int main(int argc,char **argv) {
     int a;
     if(argc==3&&!strcmp(argv[1],"file-check"))return file_check(argv[2]);
     if(argc==5&&!strcmp(argv[1],"paste-check"))return paste_check(argv[2],strtoul(argv[3],NULL,10),atoi(argv[4]));
+    if(argc==3&&!strcmp(argv[1],"selection-check"))return selection_check(argv[2]);
     if(argc==3&&!strcmp(argv[1],"pty-size"))return sizes(argv[2]);
     if(argc<2||GrOpen()<0)return 1;
     if(!strcmp(argv[1],"clipboard"))return clipboard_check(argc,argv);

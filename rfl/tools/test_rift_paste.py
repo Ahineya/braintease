@@ -134,7 +134,7 @@ def exercise(system, artifact, directory, benchmark_only=False):
             assert bytes(disk_reader.read('/tmp/unformatted.txt')) == words
             assert bytes(disk_reader.read('/tmp/dot.txt')) == b'abcabc'
             assert bytes(disk_reader.read('/tmp/persisted.txt')) == expected
-            config = bytes(disk_reader.read('/.riftrc'))
+            config = bytes(disk_reader.read('/root/.riftrc'))
             assert b'textwidth=20\n' in config and b'formatoptions=t\n' in config
         finally:
             disk_reader.disk.close()

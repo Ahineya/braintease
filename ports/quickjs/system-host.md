@@ -1,6 +1,6 @@
 # JavaScript system host
 
-The experimental terminal host runs on both native Fuse-X and RVM/FUZIX.
+The experimental terminal host runs on both native Fuse-X and RVM/Riplix.
 It uses the same QuickJS engine and optional POSIX capability layer on each.
 The ordinary host reference builds against the pristine upstream engine.
 This is a small system runtime, not a Node-compatible implementation.
@@ -58,6 +58,7 @@ console.log(result.code, result.stdout);
 | `cwd()` | Current directory string. |
 | `getenv(name)` | Environment string or `undefined`. |
 | `run(program, args = [], options = {})` | Promise of `{ code, signal, stdout, stderr }`. A normal exit has numeric `code` and null `signal`; a signal exit has null `code` and a numeric signal. Nonzero exit codes resolve normally. |
+| `encodeUTF8(text)` | ArrayBuffer of logical UTF-8 octets, capped at 1 MiB. |
 | `decodeUTF8(arrayBuffer)` | UTF-8 text with replacement for malformed octets; embedded NUL is preserved. |
 | `monotonicNow()` | Monotonic milliseconds for local deadlines; not Unix time. |
 | `sleep(milliseconds)` | Promise settled after a monotonic deadline. |
@@ -164,11 +165,131 @@ updated; the browser builds already use this protocol. Each request currently
 pays process/loader and TLS trust preparation costs. This gives asynchronous
 client behavior without claiming an in-process nonblocking TLS facade.
 
-A future Express-like host needs a separate socket service: readiness-driven
-`listen`/`accept`, bounded streaming requests/responses, backpressure, connection
-and shutdown lifetimes, then routing and middleware. The reusable reactor,
-monotonic deadlines, cancellation and binary buffers added here are foundations
-for it. This milestone does not expose a server API.
+## TCP and a small HTTP server
+
+```js
+import { createApp, json, text } from 'fuse:http-server';
+import { sleep } from 'fuse:system';
+const app = createApp();
+app.use(async (request, next) => {
+    console.log(request.method, request.url);
+    return next();
+});
+app.get('/hello/:name', request => json({ hello: request.params.name }));
+app.post('/echo', async request => json(await request.json(), { status: 201 }));
+app.get('/slow', async () => { await sleep(1000); return text('done'); });
+const server = app.listen({ port: 8080 });
+console.log(server.address);
+await server.closed;
+```
+
+Run with `js --server file.server.mjs`. Server mode removes the default
+whole-evaluation wall-clock and Promise-job ceilings, while keeping the memory
+limit and applying `--max-polls` to each JS turn (initial evaluation, pending job
+or reactor callback). Promise jobs still yield to the reactor every 32 jobs.
+Explicit `--max-time-ms` and `--max-jobs` **after** `--server` impose finite
+whole-process budgets. Synchronous runaway code still hits its CPU budget.
+Ctrl-C cancels work, closes listeners/connections and exits with status 130.
+Ordinary script execution retains its previous limits.
+
+Rift adds `--server` when F5 runs a `.server.mjs` or `.server.js` file. Other
+JavaScript files retain normal script mode. Run
+`rift /mnt/host/js-system/hello.server.mjs`, then F5; Ctrl-C stops the server
+and Enter returns to the editor. `[run] javascript` still overrides the default
+command. The example serves `/`, `/hello/:name`, `/api/status`, `/api/slow` and
+JSON POST `/api/echo`; its optional first argument selects the port.
+
+The server module exports:
+
+- `serve(handler, options)` and `createApp().listen(options)`, returning a server
+  with `address: { hostname, port }`, `closed: Promise`, and `close({force:false})`.
+  Bind defaults to `0.0.0.0`, port zero chooses an available port.
+- `close()` stops accepts and allows in-flight responses to complete. Call it
+  without awaiting inside a handler; await `server.closed` separately to join
+  shutdown. `close({force:true})` closes active streams as well, waking pending
+  reads/writes. Accepted sockets that race with shutdown are closed.
+- `text(stringOrArrayBuffer, {status,headers})` and
+  `json(value, {status,headers})` build bounded replies. Framing headers are
+  owned by the server; Content-Length counts UTF-8 octets. HEAD suppresses the
+  body while retaining the corresponding length; 204/304 require empty bodies.
+- Requests expose `method`, `url` (origin-form target), `path`, read-only
+  `headers`, `query.get/getAll/has/entries`, `params`, `signal`, `bodyUsed`, and
+  one-shot asynchronous `text/json/arrayBuffer` methods. JSON parse errors
+  produce HTTP 400. The request signal is aborted on deadline or completion;
+  application code must cooperate with cancellation of its own asynchronous work.
+- The router provides chainable `get`, `post`, `route(METHOD, pattern, handler)`
+  and `use(async (request, next) => reply)`. Patterns match complete paths with
+  named `:parameters`. Route parameters and query components decode UTF-8;
+  repeated query values are retained. Middleware returns `next()` or a reply;
+  each middleware invocation may call `next` once. There are at most 64 routes
+  and 32 middleware stages. Dispatch yields a Promise job between stages so
+  RVM does not accumulate a native stack frame for every middleware hop.
+- Unmatched routes return 404; a matched path with another method returns 405
+  with Allow. HEAD can use a GET route. Handler exceptions produce 500 and are
+  logged; an already-started response is closed instead of writing a second
+  status line into its body.
+
+The first server intentionally handles **one request per connection**, with
+Connection: close. It accepts HTTP/1.0 and HTTP/1.1 origin-form requests,
+requires one nonempty Host in HTTP/1.1, rejects folded/control-character headers,
+duplicate Content-Length, ambiguous framing and unsupported Expect. Headers are
+limited to 16 KiB, 64 fields and 1,024 octets per line. Content-Length request
+bodies and buffered responses are limited to 64 KiB. Request chunking returns
+501; there is no keep-alive, upgrade/WebSocket, streaming HTTP body or inbound
+TLS profile yet. Existing `fuse:http` HTTPS clients continue using verified TLS.
+
+`timeoutMs` defaults to 30,000 for the request read, handler and response write;
+`maxBodyBytes` can lower the 64 KiB request cap. A stalled I/O operation closes
+its stream. A timed-out asynchronous handler receives an aborted signal and,
+when the connection remains writable, a 408 response. Synchronous JS is governed
+by the host CPU guard. Arbitrary handler work is not preempted or rolled back.
+`maxConnections` defaults to two and may be set to four, matching the guest
+accept pool. Outstanding JS allocations still share `--memory`; reducing
+concurrency or increasing that limit may be needed for large application data.
+
+### Raw TCP
+
+`fuse:net` is a reusable layer below HTTP:
+
+```js
+import { listen, connect } from 'fuse:net';
+const listener = listen({ hostname: '0.0.0.0', port: 8080 });
+try {
+    const connection = await listener.accept({ timeoutMs: 30000 });
+    try {
+        const bytes = await connection.read(2048);
+        if (bytes !== null) await connection.write(bytes);
+    } finally { connection.close(); }
+} finally { listener.close(); }
+```
+
+`connect({hostname,port,timeoutMs,signal})` asynchronously connects to a **numeric
+IPv4** address. DNS remains in the separate HTTP/TLS worker for outbound fetch.
+Listeners expose `address`, `accept(options)` and idempotent `close()`;
+connections expose `address`, `peer`, `read(maxBytes=2048, options)`,
+`write(stringOrArrayBufferOrView, options)` and `close()`.
+Read returns an ArrayBuffer up to the requested size (at most 16 KiB), or null
+at EOF. Write copies at most 64 KiB and settles only after all octets are accepted
+by the socket, honoring partial writes and TCP backpressure; it does not promise
+peer receipt. There may be one pending read and one pending write per connection,
+or one accept per listener. Extra overlapping operations throw EBUSY instead of
+building an unbounded queue. Options accept monotonic `timeoutMs` and a signal
+object with `aborted`; accept cancellation leaves the listener usable, while
+read/write/connect cancellation or failure closes the affected connection.
+
+Handles belong to the context, are explicitly closed, and use nonreused IDs so
+stale pending operations cannot act on reused descriptors. Collection of a JS
+wrapper does not itself close a socket: use finally and close. Context teardown
+and cancellation close all owned sockets. The ceiling is 32 handles and 32
+pending operations shared with the system APIs; OS socket/descriptor limits may
+be lower. An idle raw socket alone does not keep the event loop alive; queued
+accept/read/write work does. No raw file descriptor escapes through this API.
+This optional capability must not be inherited by browser scripts implicitly.
+
+This is the first routing layer toward an Express-like runtime, not Node or
+Express package compatibility. Next steps are bounded HTTP streaming and
+backpressure APIs, keep-alive/request lifecycle work, and then richer routing
+and middleware services.
 
 ## Event loop and limits
 
@@ -194,7 +315,7 @@ Regular file operations and directories are deferred and cooperative; they do
 not run in worker threads or a kernel asynchronous disk-I/O engine. Individual
 `open`, `stat`, `read`, `write` and `readdir` calls can still block on storage.
 File/module source loading before evaluation is synchronous. The readiness
-loop is reusable, but there is no general user-visible fd/socket API yet.
+loop is reusable, but raw sockets use the same readiness loop, as described above.
 
 Hard limits per context:
 
@@ -230,8 +351,8 @@ process-group termination and child reaping happen in ordinary host code.
 CLI, and use only the QuickJS public API and the existing POSIX SDK. Compile
 `system.c` with the generated engine headers for C16, or upstream headers for
 a normal host. Generate `qjs-http.inc` with `embed.prepare_http(build_dir)` and
-add that directory to the C include path. Forward `fuse:http` module-loader
-requests to `qjs_system_module(ctx, name)` as demonstrated by `cli.c`. No upstream engine files or `quickjs-libc.c` are modified.
+add that directory to the C include path. Forward optional module-loader
+requests (`fuse:http`, `fuse:net`, `fuse:http-server`) to `qjs_system_module(ctx, name)` as demonstrated by `cli.c`. No upstream engine files or `quickjs-libc.c` are modified.
 
 1. Create a QuickJS runtime/context and apply the embedding application's
    memory, stack and interrupt limits.
@@ -255,9 +376,9 @@ reaps owned immediate children during disposal. This is the first reusable
 system-capability layer, not yet a packaged RFL ownership wrapper or stable
 installed embedding SDK. Browser contexts must omit this module unless the
 embedding application intentionally grants its filesystem/process privileges.
-The optional HTTP module above uses this process capability. Listening sockets,
-environment mutation, broader process options, executable installation integration
-and RFL bindings remain separate work.
+Outbound HTTP uses the process capability; raw TCP and inbound HTTP use the
+shared socket reactor. Environment mutation, broader process options, installed
+embedding SDK integration and RFL bindings remain separate work.
 
 ## Validation
 
@@ -268,6 +389,18 @@ python3 ports/quickjs/tests/test_system.py --target host --binary build/quickjs-
 python3 ports/quickjs/tests/test_system.py --target native --binary build/quickjs-cli/native/js.fxe
 python3 ports/quickjs/tests/test_system.py --target ripple --binary build/quickjs-cli/ripple/js.rxe
 ```
+
+`tests/test_server.py --target host|native|ripple --binary PATH` exercises real
+TCP binary echo and partial writes, timer fairness, accept timeout/cancellation,
+stale-handle protection, read cancellation, Unicode routing and JSON, 24 async
+middleware hops, protocol rejection, simultaneous clients, deadlines, responses
+beyond TCP buffer capacity, disconnect recovery, and graceful/forced shutdown.
+`tests/test_server_lifecycle.py` verifies that SIGINT and whole-evaluation budget
+cancellation release listeners so a fresh process can rebind the same port.
+Guest tests use private Ethernet fixtures and disposable roots and require clean
+filesystem shutdown. CLI cases cover server mode's CPU guard, optional finite
+budgets and operation beyond the normal Promise-job cap. Rift's live test also
+checks F5 server-mode selection, Ctrl-C and restoration of editor tabs.
 
 For HTTP, run `tests/test_http.py --target native|ripple --binary PATH --htget PATH`
 with current target binaries. It creates its own OpenSSL CA/server and exercises

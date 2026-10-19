@@ -1,4 +1,4 @@
-/* Real loaded-image coverage of nonlocal jumps and FUZIX signal delivery. */
+/* Real loaded-image coverage of nonlocal jumps and Riplix signal delivery. */
 #include <setjmp.h>
 #include <signal.h>
 #include <unistd.h>

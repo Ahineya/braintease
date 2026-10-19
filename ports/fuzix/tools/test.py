@@ -78,4 +78,4 @@ with tempfile.TemporaryDirectory(prefix='ripple-fuzix-test-') as temporary:
     output = run(image, 'cat /crashnote\nrm /crashnote\nshutdown\n', engines[0])
     assert 'crash_safe' in output, output
     clean(image)
-print('FUZIX integration passed: fork/exec, timer preemption, indirect I/O, persistence, cleanup, offline recovery; ' + engine_label)
+print('Riplix integration passed: fork/exec, timer preemption, indirect I/O, persistence, cleanup, offline recovery; ' + engine_label)

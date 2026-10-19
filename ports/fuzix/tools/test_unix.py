@@ -24,12 +24,12 @@ def run(image,commands,jit):
     assert r.returncode==0 and 'Ripple: disk synced; power off.' in output,output
     output=output.split('Starting /init\n')[-1]
     output='\n'.join(line for line in output.splitlines()
-                     if not line.startswith(('fuzix# ', '> ')))
+                     if not line.startswith(('riplix# ', '> ')))
     assert 'FAILED' not in output and 'panic:' not in output,output
     return output
 
 def section(text,start,end):
-    return text.split(start+'\n',1)[1].split(end+'\n',1)[0].replace('fuzix# ','')
+    return text.split(start+'\n',1)[1].split(end+'\n',1)[0].replace('riplix# ','')
 
 def check_image(image):
     try:
@@ -131,7 +131,7 @@ shutdown
 """
     out=run(image,commands,engines[0])
     Path('/tmp/fuzix-unix-test-output.log').write_text(out)
-    for wanted in ['libccheck passed','/work/nested','alpha','Files are identical','/bin','hello','uid=0(root)','root','FUZIX','Ripple','/bin/sed','/bin/sh','STATUS:1','STATUS:0','TEST:0','TEST:1','CAT:1','No such file or directory','CHILD','SHELL:7','edited line','SLEPT:0','KILL:0','FIFO:0','MKNOD:0','UTC']:
+    for wanted in ['libccheck passed','/work/nested','alpha','Files are identical','/bin','hello','uid=0(root)','root','Riplix','Ripple','/bin/sed','/bin/sh','STATUS:1','STATUS:0','TEST:0','TEST:1','CAT:1','No such file or directory','CHILD','SHELL:7','edited line','SLEPT:0','KILL:0','FIFO:0','MKNOD:0','UTC']:
         assert wanted in out,(wanted,out)
     assert 'syntax error' not in out and '???' not in out,out
     assert ' ps\n' in out and ' sh\n' in out,out

@@ -102,7 +102,7 @@ def live(image, jit, resume=False):
         os.write(master, data)
 
     try:
-        until(b'fuzix# ')
+        until(b'riplix# ')
         send(b'sokoban\r')
         until(b'Sokoban - level ' + (b'2/2' if resume else b'1/2'))
         until(b'q: quit')
@@ -120,15 +120,15 @@ def live(image, jit, resume=False):
             send(b'q')
             until(b'Quit?')
             send(b'y')
-            until(b'fuzix# ')
+            until(b'riplix# ')
             send(b'cat /.sokoban\r')
-            assert b'2\n' in until(b'fuzix# ')
+            assert b'2\n' in until(b'riplix# ')
         else:
             send(b'\x03')
-            text = until(b'fuzix# ')
+            text = until(b'riplix# ')
             assert b'\x1b[?25h' in text and b'\x1b[?1049l' in text, text
         send(b'echo TERMINAL_OK\r')
-        assert b'TERMINAL_OK\n' in until(b'fuzix# ')
+        assert b'TERMINAL_OK\n' in until(b'riplix# ')
         send(b'shutdown\r')
         until(b'disk synced; power off.')
         assert proc.wait(timeout=15) == 0

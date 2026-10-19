@@ -177,7 +177,7 @@ def guest(system, app, upper, build, executable, output):
         if system == 'fuzix':
             command = [ROOT / 'target/release/rvm', build / 'bios.bin', '--disk', image,
                        '--memory', '16384000', '--jit', '--net', 'off', '--audio', 'off', '--timeout', '180']
-            prompt = b'fuzix# '
+            prompt = b'riplix# '
         else:
             command = [executable, '--run', image]
             prompt = b'fuse-x# '

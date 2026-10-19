@@ -158,7 +158,16 @@ fn value_symbols(value: &Value, symbols: &mut BTreeSet<String>) {
         _ => {}
     }
 }
-fn function_symbols(function: &Function) -> BTreeSet<String> {
+
+pub fn referenced_symbols(module: &Module) -> BTreeSet<String> {
+    let mut symbols = BTreeSet::new();
+    for function in &module.functions { symbols.extend(function_symbols(function)); }
+    for global in &module.globals {
+        if let Some(value) = &global.initializer { value_symbols(value, &mut symbols); }
+    }
+    symbols
+}
+pub fn function_symbols(function: &Function) -> BTreeSet<String> {
     let mut symbols = BTreeSet::new();
     for instruction in function.blocks.iter().flat_map(|b| &b.instructions) {
         let values: Vec<&Value> = match instruction {

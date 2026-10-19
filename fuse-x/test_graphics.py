@@ -208,25 +208,30 @@ def main():
                 path='/tmp/'+terminal+'-size'
                 command(f'{terminal} nxhostcheck pty-size {path} &')
                 command('sizing=$!')
-                window('Terminal')
+                geometry=window('Terminal')
+                cw,ch=geometry['width']//initial[0],geometry['height']//initial[1]
                 pty_size(path,*initial)
                 for width,height in ((1280,800),(320,192),(1800,960)):
                     host_event('Terminal',resize=[width,height])
-                    assert pty_size(path,width//8,height//16)>0
-                    assert (window('Terminal')['width'],window('Terminal')['height'])==(width,height)
+                    assert pty_size(path,width//cw,height//ch)>0
+                    assert (window('Terminal')['width'],window('Terminal')['height'])==(width//cw*cw,height//ch*ch)
                 host_event('Terminal',close=True)
                 command('wait $sizing')
-            # Native startx reuses the persistent service, starts independent
-            # clients, and returns to the calling shell without running NanoWM.
+            # Native startx reuses the service and opens only gterm, returning
+            # to the calling shell without starting a launcher or NanoWM.
             command('NANOX_TRACE=1')
             command('export NANOX_TRACE')
             command('NANOX_KEEP_TTY=1')
             command('export NANOX_KEEP_TTY')
-            command('startx', 'Native Nano-X applications started')
-            window('Applications')
+            command('startx', 'Native graphical terminal started')
             window('Terminal')
             processes = command('ps -A')
-            assert 'nanowm' not in processes, processes
+            # /dev/proc stores only eight characters of argv[0].
+            names={line.split()[-1] for line in processes.splitlines() if line.strip()}
+            assert names & {'gterm','/bin/gte'}, processes
+            assert not names & {'nanowm','/bin/nan','nxterm','/bin/nxt','nxlaunch','/bin/nxl'}, processes
+            command('nxlaunch &')
+            window('Applications')
             command('nxclock &')
             command('clock=$!')
             clock_sequence=window('Clock')['sequence']

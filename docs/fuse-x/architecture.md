@@ -1,6 +1,6 @@
 # Fuse-X architecture
 
-Fuse-X combines a native execution platform for FUZIX with a macOS application
+Fuse-X combines a native execution platform for Riplix with a macOS application
 that owns its windows and menus. A single session shares kernel state,
 filesystem state, and devices across its guest processes.
 
@@ -41,8 +41,8 @@ handles also live in shared storage, so exec cannot invalidate the root disk
 stream. Successful exec restores application global initializers and replaces
 the active continuation stack.
 
-FUZIX is the authority for scheduling and process lifetime. The runtime's hosted
-API only clones, saves, selects, discards and replaces contexts indexed by FUZIX
+Riplix is the authority for scheduling and process lifetime. The runtime's hosted
+API only clones, saves, selects, discards and replaces contexts indexed by Riplix
 process-table slot. It does not run its standalone scheduler in this mode.
 The loader validates native packages in the guest filesystem and loads their
 host code through an explicit runtime helper interface. Function tokens are
@@ -58,7 +58,7 @@ jumps and custom signal handlers support the existing Bourne shell and editors;
 handlers run after completed syscalls and user-code checkpoints. Newly compiled
 applications check loop edges and existing call continuations; a roughly 5 ms
 slice hands control to a registered kernel callback. That callback advances
-timers, polls input/networking, handles signals and invokes FUZIX's scheduler.
+timers, polls input/networking, handles signals and invokes Riplix's scheduler.
 The return-to-caller boundary defers callbacks until the caller continuation
 has copied aggregate return storage. Otherwise a callback could reuse the
 released callee frame before that copy.
@@ -85,7 +85,7 @@ Fuse-X.app
     immutable executable preparation; no guest/kernel memory access
               | owned results, bounded function-table installation
   guest execution worker
-    hosted FUZIX kernel and process continuations
+    hosted Riplix kernel and process continuations
     terminals, filesystems, networking, guest applications
               | explicit host adapters
     disk image, shared folders, Ethernet attachment, display services
@@ -114,7 +114,7 @@ Closing a terminal, creating a shell, and shutting down the kernel are distinct
 operations.
 
 The initial console uses a bounded host input queue and nonblocking polling.
-FUZIX terminal reads suspend the calling process through the kernel scheduler.
+Riplix terminal reads suspend the calling process through the kernel scheduler.
 A persistent host broker owns one console PTY and the native kernel. Console
 clients can detach/reconnect without changing the guest terminal or stopping
 its foreground program. PID 1 reaps children and restarts the console shell;
@@ -141,7 +141,7 @@ standalone desktop can then share guest applications and GUI libraries.
 The [GX architecture](../graphics/architecture.md) specifies shared window,
 surface and event operations for RVM and the native hosted backend. The
 hosted `/dev/gfx` now implements this interface through `rcc_hosted_gx`, with
-process ownership checked in FUZIX and bounded surface storage in the runtime.
+process ownership checked in Riplix and bounded surface storage in the runtime.
 The private adapter uses twelve 32-bit request fields, counts memory in C16
 cells and copies borrowed buffers before returning. UI and guest threads share
 owned snapshots/events, never guest pointers. The native build includes `gterm`,

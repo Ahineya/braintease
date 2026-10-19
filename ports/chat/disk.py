@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Transfer Fuse Chat sign-in files for a stopped FUZIX or Fuse-X guest.
+"""Transfer Fuse Chat sign-in files for a stopped Riplix or Fuse-X guest.
 
 Checks image locks and open handles before transfer. No tokens go to stdout.
 """
@@ -13,7 +13,7 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('action', choices=('request', 'credentials'))
 p.add_argument('image', type=Path)
 p.add_argument('file', type=Path)
-p.add_argument('--state', default='/.chat', help='guest chat directory (default root user HOME)')
+p.add_argument('--state', default='', help='guest chat directory (default: root account HOME/.chat)')
 a = p.parse_args()
 if not a.image.is_file():
     sys.exit('Guest disk does not exist')

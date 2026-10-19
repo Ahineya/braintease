@@ -1,5 +1,7 @@
 /* Optional text/curses adapter. The portable text engine has no terminal dependency. */
+#ifndef RFL_HOST_TEXT
 #include <curses.h>
+#endif
 #include "../../libraries/text/text.h"
 
 int rfl_text_paint(TextBuffer *buffer, int y, int x, unsigned long row,

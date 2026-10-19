@@ -101,6 +101,7 @@ def main():
   build=ROOT/('fuse-x/build' if native else 'build/fuzix')
   apps={n:args.build/(n+suffix) for n in ['netsurf','htget']};apps.update({n:build/('apps/'+n+suffix if native else n+suffix) for n in ['nano-X','sh','kill','echo']})
   files=[dict(name='/images/'+p.name,path=str(p)) for p in assets.iterdir() if p.suffix!='.ppm']
+  files += [dict(name='/usr/share/netsurf/web.nfa',path=str(ROOT/'ports/netsurf/fonts/web.nfa'))]
   files += [dict(name='/etc/ssl/cert.pem',path=str(certs/'ca.pem')),dict(name='/dev/gfx',mode=0o20600,device=0x400)]
   if native:
    apps['nxhostcheck']=build/'apps/nxhostcheck.fxe';old=dict(os.environ);os.environ.update(FUSE_X_FRAMES=str(work/'frames'),NANOX_KEEP_TTY='1')

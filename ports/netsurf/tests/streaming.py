@@ -54,7 +54,7 @@ class Services(HttpServices):
             mime=b'image/png';length=len(PNG)
             self.delayed.append((time.monotonic()+2,stream,PNG))
         else:raise AssertionError(path)
-        stream.queue(b'HTTP/1.1 200 OK\r\nContent-Type: '+mime+b'\r\n'+
+        stream.queue(b'HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: '+mime+b'\r\n'+
                      (b'Content-Length: '+str(length).encode()+b'\r\n' if length is not None else b'')+
                      b'\r\n'+body)
 
@@ -76,7 +76,8 @@ def main():
         work=Path(folder);peer=Services(work/'nic');guest_build=ROOT/('fuse-x/build' if native else 'build/fuzix')
         apps={n:build/(n+suffix) for n in ['htget','streamcheck','scrollcheck']}
         apps.update({n:guest_build/('apps/'+n+suffix if native else n+suffix) for n in ['nano-X','kill']})
-        files=[dict(name='/dev/gfx',mode=0o20600,device=0x400)]
+        files=[dict(name='/dev/gfx',mode=0o20600,device=0x400),
+               dict(name='/usr/share/netsurf/web.nfa',path=str(ROOT/'ports/netsurf/fonts/web.nfa'))]
         old=dict(os.environ)
         os.environ['NANOX_KEEP_TTY']='1'
         # Guest's fixture uses eight-sector FAT16 clusters. Keep the outer

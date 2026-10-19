@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Link the guest TLS consumer against the appropriate FUZIX userspace SDK."""
+"""Link the guest TLS consumer against the appropriate Riplix userspace SDK."""
 import argparse
 import fcntl
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
-from build import ROOT, PORT, build as build_library
+from build import ROOT, PORT, build as build_library, shared_library
 
 
 def main():
@@ -52,8 +53,11 @@ def build_application(args):
         # cc.py accepts attached -I/-D arguments so argparse does not consume
         # them as options to the frontend driver.
         command += ['-DWOLFSSL_USER_SETTINGS'] + ['-I' + str(p) for p in [PORT, config, tls / 'source']]
-        for ir in inputs:
-            command += ['--object-ir', str(ir)]
+        if os.environ.get('FUSE_X_SHARED_LIBRARIES', '1') != '0' and not args.test_crypto:
+            command += ['--library', shared_library(inputs,sdk,compiler,lowerer)]
+        else:
+            for ir in inputs:
+                command += ['--object-ir', str(ir)]
         subprocess.run(command, check=True)
     else:
         make = ['make', '-s', '--no-print-directory', '-C', str(ROOT / 'ports/fuzix'),
@@ -79,7 +83,7 @@ def build_application(args):
         with ThreadPoolExecutor(max_workers=args.j) as pool:
             objects = list(pool.map(lower, [application, *inputs]))
         with output.with_suffix('.link.log').open('w') as log:
-            subprocess.run([str(assembler.with_name('rlink')), info['entry'], *map(str, objects), *info['libraries'],
+            subprocess.run([sys.executable, str(ROOT/'ports/fuzix/tools/shared-link.py'), '--build', str(sdk), '--linker', str(assembler.with_name('rlink')), '--compiler', str(compiler), '--', info['entry'], *map(str, objects), *info['libraries'],
                             '-f', 'rxe', '--bank-size', '64000', '-o', str(output)], stdout=log, stderr=log, check=True)
     print(f'Built {output}', flush=True)
 

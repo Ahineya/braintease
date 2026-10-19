@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <unistd.h>
 #include <termcap.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>

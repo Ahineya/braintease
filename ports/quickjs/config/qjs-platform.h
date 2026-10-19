@@ -3,7 +3,7 @@
 #define QJS_C16_PLATFORM_H
 #include "quickjs.h"
 
-/* Terminal applications own a 64,000-cell stack bank on RVM/FUZIX. Use
+/* Terminal applications own a 64,000-cell stack bank on RVM/Riplix. Use
  * 48,000 cells for native distance + charged JS frames, retaining 16,000
  * cells for unchecked C callees, exception reporting and signal delivery.
  * The general embedding header keeps its smaller default; this is an

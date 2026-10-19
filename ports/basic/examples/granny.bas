@@ -1,4 +1,4 @@
-REM Granny Bingo, by Phillip Gervais. FUZIX/Fuse-X terminal port.
+REM Granny Bingo, by Phillip Gervais. Riplix/Fuse-X terminal port.
 DECLARE SUB BINGO (CASH, BING, BATH, BPP, health, VARD, EP, SLP2)
 RANDOMIZE TIMER
 CLS
